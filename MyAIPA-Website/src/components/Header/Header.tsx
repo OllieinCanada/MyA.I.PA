@@ -4,8 +4,8 @@ import { NavHashLink, HashLink } from 'react-router-hash-link'
 import { useState } from 'react'
 import Logo from '../../assets/logo.png'
 
-const DISPLAY_NUMBER = '(905) 555-1234'     // <- change to your real number
-const TEL_NUMBER = '+19055551234'           // <- E.164 format
+const DISPLAY_NUMBER = '365-601-AIPA'     // <- change to your real number
+const TEL_NUMBER = '+13656012472'           // <- E.164 format
 
 export function Header() {
   const [isActive, setActive] = useState(false)
@@ -30,7 +30,7 @@ export function Header() {
           <a
             href={`tel:${TEL_NUMBER}`}
             className="call-now"
-            aria-label={`Call ${DISPLAY_NUMBER} for live demo`}
+            aria-label={`Call ${DISPLAY_NUMBER} for a live demo`}
           >
             Call Now {DISPLAY_NUMBER} for Live Demo
           </a>

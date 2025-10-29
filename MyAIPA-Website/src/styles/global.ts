@@ -71,6 +71,8 @@ export const GlobalStyle = createGlobalStyle`
 
   html{
     font-size: 62.5%;
+    /* 👇 enables smooth scrolling to sections like #contact */
+    scroll-behavior: smooth;
   }
 
   body{
@@ -107,6 +109,11 @@ export const GlobalStyle = createGlobalStyle`
     cursor: not-allowed;
   }
 
+  #signup {
+  scroll-margin-top: -10rem; /* increase this number to scroll further down */
+  }
+
+
 
   .logo{
     font-size: 3rem;
@@ -115,4 +122,4 @@ export const GlobalStyle = createGlobalStyle`
     //   color: var(--green);
     // }
   }
-`
+`;
