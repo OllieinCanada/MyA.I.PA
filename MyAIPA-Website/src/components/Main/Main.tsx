@@ -1,7 +1,7 @@
 import Particles from "react-tsparticles"
 import { Container } from "./styles"
 import { Hero } from "../Hero/Hero"
-import { About } from "../Info/Info"
+import About from "../Info/Info";
 import Project from '../Demo/Demo';  // if Demo exports default
 import { Project as Contact } from '../Contact/Contact'; // if Contact exports { Project }
 

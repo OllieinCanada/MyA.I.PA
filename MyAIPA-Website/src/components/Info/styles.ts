@@ -1,105 +1,141 @@
-// File: src/components/About/styles.ts
 import styled from "styled-components";
 
 export const Container = styled.section`
-  --text: #f1f5f9;
-  --text-soft: #cbd5e1;
-  --brand: #0ea5e9;
-  --brand-strong: #ffffffff;
-  --accent: #22d3ee;
-  --white: #ffffff;
-
   position: relative;
-  min-height: 100vh;
-  width: 100%;
-  display: flex;
-  justify-content: center;
-  padding: 1rem 3rem 3rem 5.5rem;
-  background: linear-gradient(180deg, rgba(2, 8, 23, 0.95), rgba(15, 23, 42, 0.95));
-  color: var(--text);
-  margin-top: -120px;
+  text-align: center;
+  padding: 3rem 0 4rem;
+  color: #fff;
+  overflow: hidden;
 
-  .about-text {
-    width: 400%;
+  /* subtle overlay for readability */
+  &::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(1200px 480px at 50% 20%, rgba(0, 0, 0, 0.45), rgba(0, 0, 0, 0.65));
+    pointer-events: none;
+    z-index: 0;
   }
 
-  h2 {
-    font-size: 6.8rem;
-    margin-bottom: 5rem;
-    color: var(--brand);
+  > * {
+    position: relative;
+    z-index: 1;
   }
 
-  .section-title {
-    font-size: 4.5rem;
-    color: var(--brand-strong);
-    margin-bottom: 1rem;
+  .intro {
+    max-width: 900px;
+    margin: 0 auto 5.5rem;
   }
 
-  ul {
-    list-style: disc;
-    padding-left: 1.5rem;
+  .intro__title {
+    font-weight: 800;
+    font-size: clamp(3.6rem, 3vw, 15rem);
+    color: #F9FAFB;
+    margin-bottom: 0.6rem;
   }
 
-  li {
-    color: var(--text-soft);
-    font-size: 3.5rem;
-    margin-bottom: 0.75rem;
+  .intro__body {
+    font-size: clamp(2rem, 1.9vw, 1.9rem);
+    line-height: 1.55;
+    color: #f9f9faff
   }
 
-  .two-col {
+  .intro__body2 {
+    font-size: clamp(2rem, 1.9vw, 2.9rem);
+    line-height: 1.55;
+    color: #00C2CB;
+    margin-top: 10px;
+    margin-bottom: -23px;
+  }
+
+  .title {
+    font-size: clamp(1.1rem, 3.3vw, 3.55rem);
+    font-weight: 800;
+    color: #8fd0ff;
+    margin: 2.6rem 0 1rem;
+    margin-bottom: 10px;
+    margin-top: 50px;
+  }
+
+  /* --- ONE LINE, FIXED WIDTH GRID --- */
+  .flow-row {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 3rem;
-    align-items: start;
-    margin-top: -50px;
+    grid-template-columns: repeat(7, 1fr);
+    align-items: stretch;
+    justify-items: center;
+    max-width: 100%;
+    width: 100%;
+    margin: 0 auto;
+    gap: 0.6vw;
+    padding: 0 2vw;
   }
 
-  .col {
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(148, 163, 184, 0.12);
-    border-radius: 16px;
-    padding: 1.5rem 2rem;
-    display: flex;
-    flex-direction: column;
-    gap: 2rem;
-  }
-
-  .cta {
-    background: rgba(0, 0, 0, 0.75);
-    border: 1px solid rgba(148, 163, 184, 0.18);
-    border-radius: 16px;
-    padding: 2rem;
+  .step {
+    background: rgba(10, 18, 28, 0.8);
+    border: 1px solid rgba(140, 200, 255, 0.2);
+    border-radius: 14px;
+    padding: 1rem 0.75rem;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    width: clamp(180px, 20vw, 240px);
     text-align: center;
-    font-size: 3.2rem;
-    font-weight: 600;
-    color: var(--white);
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+    transition: transform 0.2s ease;
   }
 
-  .about-image,
-  .image-block {
-    display: none !important;
+  .step:hover {
+    transform: translateY(-4px);
   }
 
-  @media (max-width: 1024px) {
-    padding: 6rem 2rem 2rem 2rem;
+  .icon {
+    width: clamp(50px, 5vw, 70px);
+    height: clamp(50px, 5vw, 70px);
+    object-fit: contain;
+    margin-bottom: 0.6rem;
+  }
 
-    h2 {
-      font-size: 2.4rem;
+  h4 {
+    font-size: clamp(1.95rem, 1.1vw, 3.05rem);
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 0.4rem;
+  }
+
+  p {
+    font-size: clamp(1rem, 1.8vw, 1.9rem);
+    line-height: 1.45;
+    margin-bottom: -15px;
+    color: #dce7f7;
+  }
+
+  .arrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: clamp(1.5rem, 1.8vw, 2rem);
+    color: #4cb4ff;
+    text-shadow: 0 0 10px rgba(0, 100, 255, 0.5);
+  }
+
+  @media (max-width: 1080px) {
+    .step {
+      width: clamp(150px, 22vw, 200px);
+      padding: 0.8rem 0.6rem;
     }
-    .section-title {
-      font-size: 2rem;
+    .icon {
+      width: clamp(42px, 4.5vw, 60px);
+      height: clamp(42px, 4.5vw, 60px);
     }
-    li {
-      font-size: 1.2rem;
+    p {
+      font-size: 0.85rem;
     }
-    .two-col {
+  }
+
+  @media (max-width: 860px) {
+    .flow-row {
       grid-template-columns: 1fr;
-      margin-top: -30px;
+      gap: 1rem;
     }
-    .cta {
-      font-size: 1.4rem;
-      padding: 1rem;
+    .arrow {
+      display: none;
     }
   }
 `;

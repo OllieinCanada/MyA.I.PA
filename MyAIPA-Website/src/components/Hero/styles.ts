@@ -67,7 +67,7 @@ export const Container = styled.section`
   .brand2 {
     color: #00e0ff;
     font-weight: 600;
-    font-size: clamp(1.2rem, 2vw, 2.2rem);
+    font-size: clamp(1.5rem, 3vw, 1.5rem);
     letter-spacing: 0.22em;
     margin: 0;
     text-transform: uppercase;

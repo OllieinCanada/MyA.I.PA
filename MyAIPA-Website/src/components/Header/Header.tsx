@@ -4,7 +4,7 @@ import { NavHashLink, HashLink } from 'react-router-hash-link'
 import { useState } from 'react'
 import Logo from '../../assets/logo.png'
 
-const DISPLAY_NUMBER = '365-601-AIPA'     // <- change to your real number
+const DISPLAY_NUMBER = '365-601-AIPA(2472)'     // <- change to your real number
 const TEL_NUMBER = '+13656012472'           // <- E.164 format
 
 export function Header() {

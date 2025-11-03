@@ -35,7 +35,7 @@ export function Hero() {
           <h1 className="brand">
             MY <span className="ai">A</span>.<span className="ai">I</span>. PA
           </h1>
-          <h1 className="brand2">THE FUTURE OF TELEPHONE ANSWERING</h1>
+          <h1 className="brand2">The Futuristic AI Receptionist for Modern Businesses</h1>
 
           <div className="circle">
             <img src={NiceGirl} alt="Assistant representative" />
@@ -44,10 +44,10 @@ export function Hero() {
           <div className="tagline-block">
             <h2 className="tagline">NEVER MISS A CUSTOMER AGAIN!</h2>
             <ul className="bullets">
-              <li>INCREASE SALES</li>
-              <li>REDUCE INTERRUPTIONS</li>
-              <li>ENGAGE CUSTOMERS</li>
-              <li>IMPROVE COMPANY Image</li>
+              <li>INCREASE SALES BY PHONE</li>
+              <li>REDUCE PHONE INTERRUPTIONS</li>
+              <li>ENGAGE WITH CUSTOMERS 24/7</li>
+              <li>ELEVATE YOUR COMPANY'S PROFESSIONALISM</li>
             </ul>
           </div>
 
