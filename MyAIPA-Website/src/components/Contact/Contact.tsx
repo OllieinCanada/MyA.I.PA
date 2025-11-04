@@ -14,14 +14,12 @@ export function Project() {
   }, [plan]);
 
   return (
-    // 👇 this ID lets any button on your site scroll to this section
     <Container id="signup">
       <section className="panel">
         <ScrollAnimation animateIn="fadeInUp" animateOnce>
-          <h1 className="trial-title">Claim Your Chatbot For A 14 Day Free Trial </h1>
-          <p className="trial-sub">
-            Select the plan that fits your business best and get 14 days for free!
-          </p>
+          <h1 className="trial-title">14 DAY FREE TRIAL!</h1>
+          <p className="trial-sub large">No obligation - No CREDIT CARD</p>
+          <p className="trial-sub large">SIGN UP TODAY!</p>
 
           {!plan ? (
             <>
@@ -40,7 +38,6 @@ export function Project() {
                   <button
                     className="cta-stripe"
                     onClick={() => setPlan("tier1")}
-                    aria-label="Select Tier 1 plan and open signup form"
                   >
                     Select Tier 1
                     <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden>
@@ -65,7 +62,6 @@ export function Project() {
                   <button
                     className="cta-stripe"
                     onClick={() => setPlan("tier2")}
-                    aria-label="Select Tier 2 plan and open signup form"
                   >
                     Select Tier 2
                     <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden>
@@ -76,6 +72,14 @@ export function Project() {
                     </svg>
                   </button>
                 </article>
+              </div>
+
+              <div className="after-signup-box">
+                <h2 className="after-title">After sign up:</h2>
+                <p className="after-desc">
+                  <strong>15 minute consultation</strong> and you're on your way
+                  to a stress-free relationship with your business phone!!
+                </p>
               </div>
 
               <p className="contact-note">
@@ -106,13 +110,7 @@ export function Project() {
                 title="My AI PA Signup Form"
               />
 
-              <div
-                style={{
-                  display: "flex",
-                  gap: 12,
-                  justifyContent: "center",
-                }}
-              >
+              <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
                 <button
                   className="cta-stripe"
                   style={{ marginTop: 24 }}

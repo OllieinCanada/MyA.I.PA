@@ -24,11 +24,11 @@ export function CallFlow() {
         {/* Intro */}
         <section className="intro" aria-labelledby="intro-title">
           <h2 id="intro-title" className="intro__title">
-            What Is My Artificial Intelligence Personal Assistant?
+            What Is An Artificial Intelligence Personal Assistant?
           </h2>
           <p className="intro__body">
-            My AI PA uses cutting-edge AI (powered by Google) to create custom chatbots that answer your business calls
-            when you’re unavailable. Preventing missed opportunities and delivering a great customer
+            My AI PA uses cutting-edge artifical intelligence (AI), powered by Google, to create custom chatbots that answer your business calls
+            when you’re unavailable, preventing missed opportunities and delivering a great customer
             experience. It then instantly texts you the caller’s details for easy follow-up. 85% of callers don't call back if their call is not answered the first time. My AI PA solves this issue for your business
 
            </p>
@@ -44,7 +44,7 @@ export function CallFlow() {
           <div className="step">
             <img src={PhoneIcon} alt="" className="icon" />
             <h4>User Calls</h4>
-            <p>The customer reaches out by phone but the business is unavailable. The call is then forwarded to our AI office.</p>
+            <p>The customer reaches out by phone but no-one is available to take call after 3 rings. Call is forwarded to your AI assistant.</p>
           </div>
 
           <div className="arrow" aria-hidden>➜</div>
@@ -52,7 +52,7 @@ export function CallFlow() {
           <div className="step">
             <img src={AIAgentIcon} alt="" className="icon" />
             <h4>AI Assistant Immediately Takes The Call</h4>
-            <p>Answers on behalf of the unavailable business. Handles FAQs, bookings, and service requests.</p>
+            <p>Chatbot greets customer and engages them in light conversation. Answering FAQS and establishing a call back reason for caller.</p>
           </div>
 
           <div className="arrow" aria-hidden>➜</div>

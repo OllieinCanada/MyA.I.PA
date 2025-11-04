@@ -32,7 +32,6 @@ export const Container = styled.section`
     margin: 0 0 1rem 0;
     font-weight: 900;
     font-size: clamp(3rem, 6vw, 4.5rem);
-    letter-spacing: 0.5px;
     color: var(--text);
     text-shadow: 0 0 40px rgba(96, 165, 250, 0.35),
       0 0 28px rgba(0, 255, 157, 0.3);
@@ -45,6 +44,10 @@ export const Container = styled.section`
     font-weight: 700;
     font-size: clamp(1.4rem, 2.6vw, 1.8rem);
     line-height: 1.6;
+  }
+
+  .trial-sub.large {
+    font-size: clamp(1.8rem, 3vw, 2.4rem);
   }
 
   .tier-grid {
@@ -66,7 +69,6 @@ export const Container = styled.section`
     border-radius: 28px;
     padding: 4rem 3rem;
     text-align: center;
-    min-height: 250px;
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4),
       0 0 50px rgba(0, 255, 157, 0.25);
     transition: transform 0.25s ease-in-out, box-shadow 0.25s ease-in-out;
@@ -102,6 +104,31 @@ export const Container = styled.section`
     color: #e9f2ff;
     font-weight: 700;
     font-size: 1.5rem;
+    line-height: 1.6;
+  }
+
+  .after-signup-box {
+    margin-top: 3.5rem;
+    padding: 2rem 2.5rem;
+    border-radius: 20px;
+    background: rgba(0, 255, 157, 0.08);
+    box-shadow: 0 0 30px rgba(0, 255, 157, 0.2);
+    max-width: 850px;
+    margin-inline: auto;
+  }
+
+  .after-title {
+    font-size: clamp(2.2rem, 4vw, 3rem);
+    font-weight: 900;
+    color: #9adfff;
+    margin-bottom: 1.2rem;
+    text-shadow: 0 0 25px rgba(0, 255, 157, 0.25);
+  }
+
+  .after-desc {
+    font-size: clamp(1.4rem, 2.4vw, 1.8rem);
+    color: #e9f2ff;
+    font-weight: 700;
     line-height: 1.6;
   }
 
