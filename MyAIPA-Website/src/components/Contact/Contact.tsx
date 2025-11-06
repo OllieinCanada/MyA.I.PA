@@ -27,7 +27,7 @@ export function Project() {
                 {/* Tier 1 */}
                 <article className="tier-card">
                   <h2 className="tier-name">Light version</h2>
-                  <div className="tier-price">$79/mo</div>
+                  <div className="tier-price">$19.99/mo</div>
                   <ul className="bullets">
                     <li>24/7 Telephone Answering</li>
                     <li>Friendly, professional greeting</li>
@@ -52,24 +52,15 @@ export function Project() {
                 {/* Tier 2 */}
                 <article className="tier-card">
                   <h2 className="tier-name">Premium</h2>
-                  <div className="tier-price">$129/mo</div>
+                  <div className="tier-price">$39.99/mo</div>
                   <ul className="bullets">
                     <li>Everything in Tier 1</li>
                     <li>Calendar sync (Google / Outlook)</li>
                     <li>Auto-scheduling appointments and reminders</li>
                     <li>Personalized voice and assistant behavior</li>
                   </ul>
-                  <button
-                    className="cta-stripe"
-                    onClick={() => setPlan("tier2")}
-                  >
-                    Select Tier 2
-                    <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden>
-                      <path
-                        fill="currentColor"
-                        d="M13 5l7 7-7 7v-4H4v-6h9V5z"
-                      />
-                    </svg>
+                  <button className="cta-stripe disabled" disabled>
+                    Available Soon!
                   </button>
                 </article>
               </div>
@@ -77,8 +68,8 @@ export function Project() {
               <div className="after-signup-box">
                 <h2 className="after-title">After sign up:</h2>
                 <p className="after-desc">
-                  <strong>15 minute consultation</strong> and you're on your way
-                  to a stress-free relationship with your business phone!!
+                  You'll recieve<strong> email instructions and your MyAIPA number.</strong> Then you'll be on your way
+                  to a stress-free relationship with your business phone!
                 </p>
               </div>
 

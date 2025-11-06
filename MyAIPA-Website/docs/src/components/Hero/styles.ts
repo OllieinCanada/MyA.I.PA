@@ -28,7 +28,7 @@ export const Container = styled.section`
     inset: 0;
     background:
       linear-gradient(180deg, rgba(8,8,12,0.55) 0%, rgba(6,6,10,0.72) 100%),
-      url("https://cdn.pixabay.com/photo/2023/05/23/14/26/empty-8012889_1280.jpg")
+      url("https://st.hzcdn.com/simgs/2a61301804a6ee01_14-8351/_.jpg")
         center/cover no-repeat;
     background-size: cover;
     background-position: center;

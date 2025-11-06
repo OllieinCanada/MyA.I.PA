@@ -158,10 +158,26 @@ export const Container = styled.section`
       0 0 50px rgba(0, 255, 157, 0.65) inset;
   }
 
+  /* Disabled (Available Soon) Button */
+  .cta-stripe.disabled {
+    background: #333a44;
+    color: #9ca3af;
+    cursor: not-allowed;
+    box-shadow: none;
+    transform: none;
+    filter: brightness(0.9);
+  }
+
+  .cta-stripe.disabled:hover {
+    transform: none;
+    filter: none;
+    box-shadow: none;
+  }
+
   .contact-note {
     margin-top: 1rem;
     color: var(--muted);
-    font-size: 1.1rem;
+    font-size: 1.9rem;
   }
 
   .microcopy {

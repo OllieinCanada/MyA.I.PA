@@ -1,3 +1,4 @@
+// File: src/components/Info/styles.ts
 import styled from "styled-components";
 
 export const Container = styled.section`
@@ -37,7 +38,7 @@ export const Container = styled.section`
   .intro__body {
     font-size: clamp(2rem, 1.9vw, 1.9rem);
     line-height: 1.55;
-    color: #f9f9faff
+    color: #f9f9faff;
   }
 
   .intro__body2 {
@@ -71,6 +72,7 @@ export const Container = styled.section`
   }
 
   .step {
+    position: relative; /* for badge */
     background: rgba(10, 18, 28, 0.8);
     border: 1px solid rgba(140, 200, 255, 0.2);
     border-radius: 14px;
@@ -81,9 +83,23 @@ export const Container = styled.section`
     transition: transform 0.2s ease;
   }
 
-  .step:hover {
-    transform: translateY(-4px);
+  /* number badge (added) */
+  .badge {
+    position: absolute;
+    top: -10px;
+    left: -10px;
+    width: 34px;
+    height: 34px;
+    border-radius: 12px;
+    display: grid;
+    place-items: center;
+    background: #33cc88;
+    color: #0b1b13;
+    font-weight: 800;
+    box-shadow: 0 8px 18px rgba(0,0,0,0.35);
   }
+
+  .step:hover { transform: translateY(-4px); }
 
   .icon {
     width: clamp(50px, 5vw, 70px);
@@ -120,22 +136,12 @@ export const Container = styled.section`
       width: clamp(150px, 22vw, 200px);
       padding: 0.8rem 0.6rem;
     }
-    .icon {
-      width: clamp(42px, 4.5vw, 60px);
-      height: clamp(42px, 4.5vw, 60px);
-    }
-    p {
-      font-size: 0.85rem;
-    }
+    .icon { width: clamp(42px, 4.5vw, 70px); height: clamp(42px, 4.5vw, 60px); }
+    p { font-size: 0.85rem; }
   }
 
   @media (max-width: 860px) {
-    .flow-row {
-      grid-template-columns: 1fr;
-      gap: 1rem;
-    }
-    .arrow {
-      display: none;
-    }
+    .flow-row { grid-template-columns: 1fr; gap: 1rem; }
+    .arrow { display: none; }
   }
 `;

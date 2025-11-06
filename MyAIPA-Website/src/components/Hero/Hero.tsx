@@ -7,6 +7,7 @@ import NiceGirl from "../../assets/Nice_girl.png";
 export function Hero() {
   const [firstVisit, setFirstVisit] = useState(false);
   const [ctaClicked, setCtaClicked] = useState(false);
+  const [showPromo, setShowPromo] = useState(false);
 
   useEffect(() => {
     const seen = sessionStorage.getItem("hero_seen");
@@ -15,14 +16,19 @@ export function Hero() {
       sessionStorage.setItem("hero_seen", "1");
     }
     window.scrollTo(5, 0);
+
+    const t = window.setTimeout(() => setShowPromo(true), 5000);
+    return () => window.clearTimeout(t);
   }, []);
 
   const scrollToAbout = (e: React.MouseEvent<HTMLAnchorElement>) => {
     e.preventDefault();
     setCtaClicked(true);
-    const el = document.querySelector("#about");
-    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+    document.querySelector("#about")?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
+
+  const goToSignup = () =>
+    document.querySelector("#signup")?.scrollIntoView({ behavior: "smooth", block: "start" });
 
   const ctaLabel = ctaClicked
     ? "CLICK HERE FOR LIVE DEMO"
@@ -36,22 +42,39 @@ export function Hero() {
             MY <span className="ai">A</span>.<span className="ai">I</span>. PA
           </h1>
           <h1 className="brand2">AI TELEPHONE ANSWERING ASSISTANT</h1>
+          <p className="trade-line">Professional. Reliable. Built for The Trades.</p>
 
-          <div className="circle">
-            <img src={NiceGirl} alt="Assistant representative" />
+          <div className="hero-inline">
+            <div className="circle">
+              <img src={NiceGirl} alt="Assistant representative" />
+            </div>
+
+            <div className="hero-inline-text">
+              <p>
+                Our AI telephone assistant answers every call instantly, collects job details, and
+                keeps your business running smoothly
+                <span className="break-line">
+                  <span className="day">day☀️</span> or <span className="night">night.🌙</span>
+                </span>
+              </p>
+
+              <h3 className="why-title">Why Choose Our AI Assistant?</h3>
+            </div>
           </div>
 
           <div className="tagline-block">
-            <h2 className="tagline">NEVER MISS A CUSTOMER AGAIN!</h2>
-            <ul className="bullets">
-              <li>HANDLE MORE CALLS</li>
-              <li>INCREASE SALES</li>
-              <li>PRODUCE MORE PROFIT</li>
-              <li>ENGAGE WITH CUSTOMERS 24/7</li>
+            <h2 className="tagline">NEVER MISS A CUSTOMER'S CALL AGAIN!</h2>
+            <ul className="bullets two-col">
+              <li>Answers Phone 24/7</li>
+              <li>Handles Multiple Calls</li>
+              <li>Natural Conversations</li>
+              <li>Texts Job Details</li>
+              <li>Captures Leads</li>
+              <li>Provides Information</li>
+              <li>Hands-free Scheduling</li>
+              <li>Create First Impressions</li>
             </ul>
           </div>
-
-          <p className="bottom-line">ALL WHILE YOU'RE AWAY!</p>
         </ScrollAnimation>
 
         <a
@@ -69,6 +92,46 @@ export function Hero() {
             {ctaLabel}
           </span>
         </a>
+      </div>
+
+      {/* Bottom-left promo card */}
+      <div
+        className="promo-card"
+        data-show={showPromo}
+        role="dialog"
+        aria-labelledby="promo-title"
+        aria-describedby="promo-desc"
+      >
+        <button
+          className="promo-x"
+          aria-label="Dismiss"
+          type="button"
+          onClick={() => setShowPromo(false)}
+        >
+          ×
+        </button>
+
+        <div className="promo-chip">Limited-time</div>
+
+        <h3 id="promo-title" className="promo-title">Free Interactive Demo</h3>
+        <p id="promo-desc" className="promo-sub">
+          See how My AI PA answers calls and captures leads—live.
+        </p>
+
+        <button className="promo-cta" onClick={goToSignup} type="button">
+          Start Your Free Demo
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              d="M5 12h12m0 0-5-5m5 5-5 5"
+              stroke="currentColor"
+              strokeWidth="2"
+              fill="none"
+              strokeLinecap="round"
+            />
+          </svg>
+        </button>
+
+        <div className="promo-footer">No credit card • 2-minute setup</div>
       </div>
     </Container>
   );
