@@ -42,7 +42,7 @@ export function Hero() {
             MY <span className="ai">A</span>.<span className="ai">I</span>. PA
           </h1>
           <h1 className="brand2">AI TELEPHONE ANSWERING ASSISTANT</h1>
-          <p className="trade-line">Professional. Reliable. Built for The Trades.</p>
+          <p className="trade-line">Professional. Reliable. Built For Small Businesses.</p>
 
           <div className="hero-inline">
             <div className="circle">
@@ -51,8 +51,7 @@ export function Hero() {
 
             <div className="hero-inline-text">
               <p>
-                Our AI telephone assistant answers every call instantly, collects job details, and
-                keeps your business running smoothly
+                Our AI telephone assistant answers calls when you can't, collects the call details and sets you up for an easy call back.
                 <span className="break-line">
                   <span className="day">day☀️</span> or <span className="night">night.🌙</span>
                 </span>
@@ -63,16 +62,16 @@ export function Hero() {
           </div>
 
           <div className="tagline-block">
-            <h2 className="tagline">NEVER MISS A CUSTOMER'S CALL AGAIN!</h2>
+            <h2 className="tagline">NEVER MISS A CALL AGAIN!</h2>
             <ul className="bullets two-col">
-              <li>Answers Phone 24/7</li>
-              <li>Handles Multiple Calls</li>
-              <li>Natural Conversations</li>
-              <li>Texts Job Details</li>
-              <li>Captures Leads</li>
-              <li>Provides Information</li>
-              <li>Hands-free Scheduling</li>
-              <li>Create First Impressions</li>
+              <li>Always Answers 24/7</li>
+              <li>Handles Multiple Callers</li>
+              <li>Automates New Bookings</li>
+              <li>Answers Caller's Questions</li>
+              <li>Texts You The Call Details</li>
+              <li>Filters Out Timewasters</li>
+              <li>Sets You Up For Callbacks</li>
+              <li>Creates A Professional Image</li>
             </ul>
           </div>
         </ScrollAnimation>
