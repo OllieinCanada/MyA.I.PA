@@ -1,4 +1,3 @@
-// File: src/components/Info/styles.ts
 import styled from "styled-components";
 
 export const Container = styled.section`
@@ -13,7 +12,11 @@ export const Container = styled.section`
     content: "";
     position: absolute;
     inset: 0;
-    background: radial-gradient(1200px 480px at 50% 20%, rgba(0, 0, 0, 0.45), rgba(0, 0, 0, 0.65));
+    background: radial-gradient(
+      1200px 480px at 50% 20%,
+      rgba(0, 0, 0, 0.45),
+      rgba(0, 0, 0, 0.65)
+    );
     pointer-events: none;
     z-index: 0;
   }
@@ -23,6 +26,8 @@ export const Container = styled.section`
     z-index: 1;
   }
 
+  /* INTRO SECTION ------------------------------------------------------- */
+
   .intro {
     max-width: 900px;
     margin: 0 auto 5.5rem;
@@ -31,7 +36,7 @@ export const Container = styled.section`
   .intro__title {
     font-weight: 800;
     font-size: clamp(3.6rem, 3vw, 15rem);
-    color: #F9FAFB;
+    color: #f9fafb;
     margin-bottom: 0.6rem;
   }
 
@@ -44,46 +49,60 @@ export const Container = styled.section`
   .intro__body2 {
     font-size: clamp(2rem, 1.9vw, 2.9rem);
     line-height: 1.55;
-    color: #00C2CB;
-    margin-top: 10px;
-    margin-bottom: -23px;
+    color: #00c2cb;
+    margin-top: 28px;      /* more breathing room */
+    margin-bottom: 32px;
   }
 
   .title {
     font-size: clamp(1.1rem, 3.3vw, 3.55rem);
     font-weight: 800;
     color: #8fd0ff;
-    margin: 2.6rem 0 1rem;
-    margin-bottom: 10px;
-    margin-top: 50px;
+    margin: 2rem 0 1rem;
   }
 
-  /* --- ONE LINE, FIXED WIDTH GRID --- */
+  /* ---------------------- DESKTOP ROW OF BOXES ------------------------ */
+
   .flow-row {
-    display: grid;
-    grid-template-columns: repeat(7, 1fr);
+    display: flex;
     align-items: stretch;
-    justify-items: center;
-    max-width: 100%;
-    width: 100%;
+    justify-content: center;
+    gap: 1.5rem;
+    max-width: 1300px;
     margin: 0 auto;
-    gap: 0.6vw;
-    padding: 0 2vw;
+    padding: 0 1vw;
   }
 
   .step {
-    position: relative; /* for badge */
+    position: relative;
     background: rgba(10, 18, 28, 0.8);
     border: 1px solid rgba(140, 200, 255, 0.2);
     border-radius: 14px;
-    padding: 1rem 0.75rem;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
-    width: clamp(180px, 20vw, 240px);
+    padding: 1.2rem 1.2rem;
+    width: 260px;          /* wider cards */
+    max-width: 280px;
     text-align: center;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
     transition: transform 0.2s ease;
   }
 
-  /* number badge (added) */
+  .step:hover {
+    transform: translateY(-4px);
+  }
+
+  /* make sure arrows don’t eat too much space */
+  .arrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    font-size: clamp(1.5rem, 1.8vw, 2rem);
+    color: #4cb4ff;
+    text-shadow: 0 0 10px rgba(0, 100, 255, 0.5);
+  }
+
+  /* number badge */
+
   .badge {
     position: absolute;
     top: -10px;
@@ -96,16 +115,15 @@ export const Container = styled.section`
     background: #33cc88;
     color: #0b1b13;
     font-weight: 800;
-    box-shadow: 0 8px 18px rgba(0,0,0,0.35);
+    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.35);
   }
 
-  .step:hover { transform: translateY(-4px); }
-
   .icon {
-    width: clamp(50px, 5vw, 70px);
+    width: clamp(50px, 5vw, 100px);
     height: clamp(50px, 5vw, 70px);
-    object-fit: contain;
     margin-bottom: 0.6rem;
+    margin-left: 8.6rem;
+    object-fit: contain;
   }
 
   h4 {
@@ -116,32 +134,88 @@ export const Container = styled.section`
   }
 
   p {
-    font-size: clamp(1rem, 1.8vw, 1.9rem);
-    line-height: 1.45;
-    margin-bottom: -15px;
+    font-size: clamp(1rem, 1.4vw, 1.4rem);
+    line-height: 1.55;
     color: #dce7f7;
   }
 
-  .arrow {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: clamp(1.5rem, 1.8vw, 2rem);
-    color: #4cb4ff;
-    text-shadow: 0 0 10px rgba(0, 100, 255, 0.5);
+  /* tighten on smaller desktops so all 4 fit nicely -------------------- */
+  @media (max-width: 1200px) and (min-width: 861px) {
+    .flow-row {
+      gap: 1.1rem;
+      padding: 0 1rem;
+      max-width: 1150px;
+    }
+
+    .step {
+      width: 235px;
+      max-width: 240px;
+      padding: 1.1rem 1rem;
+    }
+
+    p {
+      font-size: 0.95rem;
+    }
   }
 
-  @media (max-width: 1080px) {
-    .step {
-      width: clamp(150px, 22vw, 200px);
-      padding: 0.8rem 0.6rem;
-    }
-    .icon { width: clamp(42px, 4.5vw, 70px); height: clamp(42px, 4.5vw, 60px); }
-    p { font-size: 0.85rem; }
-  }
+  /* -------------------------- MOBILE STACK ---------------------------- */
 
   @media (max-width: 860px) {
-    .flow-row { grid-template-columns: 1fr; gap: 1rem; }
-    .arrow { display: none; }
+    .intro {
+      margin: 0 1rem 3rem;
+      padding: 1.1rem 0.6rem;
+      border-radius: 14px;
+      background: rgba(10, 18, 28, 0.78);
+    }
+
+    .intro__title {
+      font-size: 2rem;
+      line-height: 1.2;
+    }
+
+    .intro__body {
+      font-size: 1rem;
+      line-height: 1.6;
+    }
+
+    .intro__body2 {
+      font-size: 1rem;
+      margin-bottom: 1rem;
+      margin-top: 1rem;
+    }
+
+    .title {
+      margin-top: 32px;
+      margin-bottom: 16px;
+    }
+
+    .flow-row {
+      flex-direction: column;
+      align-items: center;
+      gap: 1.4rem;
+      padding: 0 1rem;
+    }
+
+    .arrow {
+      display: none;
+    }
+
+    .step {
+      width: 100%;
+      max-width: 360px;
+      text-align: left;
+      align-items: center;
+      padding: 1.2rem 1rem;
+    }
+
+    .step p {
+      font-size: 0.95rem;
+      line-height: 1.5;
+    }
+
+    .badge {
+      top: -8px;
+      left: -8px;
+    }
   }
 `;

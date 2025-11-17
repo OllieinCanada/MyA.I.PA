@@ -31,7 +31,7 @@ export function Project() {
                   <ul className="bullets">
                     <li>24/7 Telephone Answering</li>
                     <li>Friendly, professional greeting</li>
-                    <li>Collects caller's information and job details</li>
+                    <li>Collects caller&apos;s information and job details</li>
                     <li>Text summary of call sent to owner</li>
                     <li>Thank-you text / reminder summary sent to caller</li>
                   </ul>
@@ -68,7 +68,7 @@ export function Project() {
               <div className="after-signup-box">
                 <h2 className="after-title">After sign up:</h2>
                 <p className="after-desc">
-                  You'll recieve<strong> email instructions and your MyAIPA number.</strong> Then you'll be on your way
+                  You&apos;ll recieve<strong> email instructions and your MyAIPA number.</strong> Then you&apos;ll be on your way
                   to a stress-free relationship with your business phone!
                 </p>
               </div>

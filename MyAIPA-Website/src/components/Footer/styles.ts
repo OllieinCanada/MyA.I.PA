@@ -1,61 +1,55 @@
+// src/components/Footer/styles.ts
 import styled from "styled-components";
 
-
 export const Container = styled.footer`
-  background-color: #2b2b2b;
-  padding: 3rem 15rem;
-  margin-top: 10rem;
+  width: 100%;
+  background-color: #111827;
+  color: #e5e7eb;
+  padding: 2.5rem clamp(1.5rem, 6vw, 6rem);
+  margin-top: 4rem;
+  box-shadow: 0 -4px 18px rgba(0, 0, 0, 0.45);
+
   display: flex;
-  align-items: center;
   justify-content: space-between;
+  align-items: center;
+  gap: 1.5rem;
 
-
-  .logo{
-    font-size: 2.8rem;
+  .logo {
+    font-size: 2.4rem;
+    font-weight: 700;
+    text-decoration: none;
+    color: #f9fafb;
+    letter-spacing: 0.08em;
+    white-space: nowrap;
   }
 
-  p{
-    letter-spacing: 0.2rem;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    img{
-      width: 2.6rem;
-      animation: spinning 5s infinite linear;
-    }
+  .copy p {
+    margin: 0;
+    font-size: 1.1rem;
+    letter-spacing: 0.08rem;
   }
-  .social-media{
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-
-    img,span{
-      font-size: 3rem;
-      width: 3rem;
-    }
-  }
-
 
   @keyframes spinning {
-    0%{
+    0% {
       transform: rotate(0);
     }
-    100%{
+    100% {
       transform: rotate(360deg);
     }
   }
 
-  @media(max-width: 800px){
-    padding: 4rem 10rem;
+  @media (max-width: 700px) {
     flex-direction: column;
-    gap: 2rem;
     text-align: center;
-  }
-  @media(max-width: 600px){
-    padding: 4rem 1rem;
-    p{
-      font-size: 1.2rem;
+    padding: 2rem 1.5rem;
+
+    .logo {
+      font-size: 2rem;
+    }
+
+    .copy p {
+      font-size: 1rem;
+      letter-spacing: 0.06rem;
     }
   }
-`
+`;

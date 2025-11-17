@@ -1,0 +1,63 @@
+/* Reset / base */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+/* React root */
+#root {
+  width: 100%;
+  max-width: 100%;
+}
+
+/* Main app wrapper
+   → FULL WIDTH ON DESKTOP
+*/
+.app {
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+/* Generic sections */
+section {
+  margin-bottom: 3rem;
+}
+
+/* Side-by-side rows (hero, info, etc.) */
+.section-row {
+  display: flex;
+  gap: 2rem;
+  align-items: center;
+}
+
+/* Images always scale */
+img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+/* MOBILE ONLY: nice padding + stacking */
+@media (max-width: 768px) {
+  .section-row {
+    flex-direction: column;
+    text-align: center;
+  }
+
+  .app {
+    padding: 1rem;       /* only add padding on small screens */
+  }
+}

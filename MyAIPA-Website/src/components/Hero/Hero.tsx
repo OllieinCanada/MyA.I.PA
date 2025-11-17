@@ -1,13 +1,14 @@
 // File: src/components/Hero/Hero.tsx
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Container } from "./styles";
-import ScrollAnimation from "react-animate-on-scroll";
 import NiceGirl from "../../assets/Nice_girl.png";
+import { useIsMobile } from "../../hooks/useIsMobile";
 
 export function Hero() {
   const [firstVisit, setFirstVisit] = useState(false);
   const [ctaClicked, setCtaClicked] = useState(false);
   const [showPromo, setShowPromo] = useState(false);
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     const seen = sessionStorage.getItem("hero_seen");
@@ -24,57 +25,72 @@ export function Hero() {
   const scrollToAbout = (e: React.MouseEvent<HTMLAnchorElement>) => {
     e.preventDefault();
     setCtaClicked(true);
-    document.querySelector("#about")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    document
+      .querySelector("#about")
+      ?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
   const goToSignup = () =>
-    document.querySelector("#signup")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    document
+      .querySelector("#signup")
+      ?.scrollIntoView({ behavior: "smooth", block: "start" });
 
   const ctaLabel = ctaClicked
     ? "CLICK HERE FOR LIVE DEMO"
     : "CLICK HERE TO FIND OUT HOW TO SAVE TIME AND MONEY!";
 
+  const secondaryTitle = isMobile
+    ? "AI CALL ANSWERING ASSISTANT"
+    : "AI TELEPHONE ANSWERING ASSISTANT";
+
   return (
     <Container id="home" className={firstVisit ? "first-visit" : ""}>
       <div className="poster">
-        <ScrollAnimation animateIn="fadeInUp" delay={40} animateOnce>
-          <h1 className="brand">
-            MY <span className="ai">A</span>.<span className="ai">I</span>. PA
-          </h1>
-          <h1 className="brand2">AI TELEPHONE ANSWERING ASSISTANT</h1>
-          <p className="trade-line">Professional. Reliable. Built For Small Businesses.</p>
+        {/* no ScrollAnimation – renders instantly */}
+        <h1 className="brand">
+          MY <span className="ai">A</span>.<span className="ai">I</span>. PA
+        </h1>
 
-          <div className="hero-inline">
-            <div className="circle">
-              <img src={NiceGirl} alt="Assistant representative" />
-            </div>
+        <h1 className="brand2">{secondaryTitle}</h1>
 
-            <div className="hero-inline-text">
-              <p>
-                Our AI telephone assistant answers calls when you can't, collects the call details and sets you up for an easy call back.
-                <span className="break-line">
-                  <span className="day">day☀️</span> or <span className="night">night.🌙</span>
-                </span>
-              </p>
+        <p className="trade-line">
+          {isMobile
+            ? "24/7 AI call answering for busy small business."
+            : "Professional. Reliable. Built For Small Business."}
+        </p>
 
-              <h3 className="why-title">Why Choose Our AI Assistant?</h3>
-            </div>
+        <div className="hero-inline">
+          <div className="circle">
+            <img src={NiceGirl} alt="Assistant representative" />
           </div>
 
-          <div className="tagline-block">
-            <h2 className="tagline">NEVER MISS A CALL AGAIN!</h2>
-            <ul className="bullets two-col">
-              <li>Always Answers 24/7</li>
-              <li>Handles Multiple Callers</li>
-              <li>Automates New Bookings</li>
-              <li>Answers Caller's Questions</li>
-              <li>Texts You The Call Details</li>
-              <li>Filters Out Timewasters</li>
-              <li>Sets You Up For Callbacks</li>
-              <li>Creates A Professional Image</li>
-            </ul>
+          <div className="hero-inline-text">
+            <p>
+              Our AI telephone assistant answers calls when you can't, collects
+              the call details and sets you up for an easy call back.
+              <span className="break-line">
+                <span className="day">day☀️</span> or{" "}
+                <span className="night">night.🌙</span>
+              </span>
+            </p>
+
+            <h3 className="why-title">Why Choose Our AI Assistant?</h3>
           </div>
-        </ScrollAnimation>
+        </div>
+
+        <div className="tagline-block">
+          <h2 className="tagline">NEVER MISS A CALL AGAIN!</h2>
+          <ul className="bullets two-col">
+            <li>Always Answers 24/7</li>
+            <li>Handles Multiple Callers</li>
+            <li>Increase Sales</li>
+            <li>Answers Caller's Questions</li>
+            <li>Texts You The Call Details</li>
+            <li>Filters Out Timewasters</li>
+            <li>Sets You Up For Callbacks</li>
+            <li>Creates A Professional Image</li>
+          </ul>
+        </div>
 
         <a
           href="#about"
@@ -93,10 +109,9 @@ export function Hero() {
         </a>
       </div>
 
-      {/* Bottom-left promo card */}
       <div
         className="promo-card"
-        data-show={showPromo}
+        data-show={showPromo && !isMobile}
         role="dialog"
         aria-labelledby="promo-title"
         aria-describedby="promo-desc"
@@ -112,7 +127,9 @@ export function Hero() {
 
         <div className="promo-chip">Limited-time</div>
 
-        <h3 id="promo-title" className="promo-title">Free Interactive Demo</h3>
+        <h3 id="promo-title" className="promo-title">
+          Free Interactive Demo
+        </h3>
         <p id="promo-desc" className="promo-sub">
           See how My AI PA answers calls and captures leads—live.
         </p>
@@ -130,7 +147,9 @@ export function Hero() {
           </svg>
         </button>
 
-        <div className="promo-footer">No credit card • 2-minute setup</div>
+        <div className="promo-footer">
+          No credit card • 2-minute setup
+        </div>
       </div>
     </Container>
   );

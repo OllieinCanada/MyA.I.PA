@@ -158,7 +158,6 @@ export const Container = styled.section`
       0 0 50px rgba(0, 255, 157, 0.65) inset;
   }
 
-  /* Disabled (Available Soon) Button */
   .cta-stripe.disabled {
     background: #333a44;
     color: #9ca3af;
@@ -187,5 +186,100 @@ export const Container = styled.section`
     line-height: 1.7;
     max-width: 860px;
     margin-inline: auto;
+  }
+
+  /* ----------------------- MOBILE TWEAKS ------------------------ */
+  @media (max-width: 768px) {
+    padding: 4rem 1.25rem;
+
+    .panel {
+      border-radius: 22px;
+      padding: 3rem 1.75rem;
+      text-align: left;
+    }
+
+    .trial-title {
+      font-size: clamp(2.2rem, 7vw, 2.8rem);
+      text-align: center;
+    }
+
+    .trial-sub {
+      font-size: 1.2rem;
+      margin: 0.75rem auto 2rem;
+      text-align: center;
+    }
+
+    .tier-grid {
+      grid-template-columns: 1fr; /* stack cards */
+      gap: 2.5rem;
+      margin-top: 1.5rem;
+    }
+
+    .tier-card {
+      padding: 2.2rem 1.6rem;
+      text-align: left;
+    }
+
+    .tier-name {
+      font-size: 1.6rem;
+    }
+
+    .tier-price {
+      font-size: 1.3rem;
+      margin-bottom: 1.1rem;
+    }
+
+    .bullets {
+      align-items: flex-start;
+      font-size: 1.05rem;
+      line-height: 1.5;
+      gap: 0.9rem;
+    }
+
+    .cta-stripe {
+      width: 100%;
+      justify-content: center;
+      padding: 1.1rem 1.6rem;
+      font-size: 1.15rem;
+    }
+
+    .after-signup-box {
+      padding: 1.8rem 1.5rem;
+      margin-top: 2.5rem;
+    }
+
+    .after-title {
+      font-size: 1.6rem;
+    }
+
+    .after-desc {
+      font-size: 1.05rem;
+    }
+
+    .contact-note {
+      font-size: 1.1rem;
+      text-align: center;
+    }
+
+    .microcopy {
+      font-size: 0.95rem;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .panel {
+      padding: 2.4rem 1.4rem;
+      border-radius: 18px;
+    }
+
+    .tier-card {
+      padding: 2rem 1.4rem;
+      border-radius: 22px;
+    }
+
+    .bullets {
+      font-size: 1rem;
+      gap: 0.75rem;
+    }
   }
 `;
