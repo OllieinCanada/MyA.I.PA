@@ -39,15 +39,12 @@ export function CallFlow() {
             texts you the call details  and customer's contact information
           </strong>{" "}
           for easy follow-up.
-          <strong>
+          <strong className="stat-highlight">
             {" "}
             85% of callers don’t call back if their call isn’t answered the
             first time.
           </strong>
           <strong> My AI PA makes sure your business is always there to respond.</strong>
-        </p>
-        <p className="intro__body2">
-          All For The Price Of A Cup Of Coffee A Day!
         </p>
       </section>
 
@@ -60,7 +57,7 @@ export function CallFlow() {
         <div className="step">
           <span className="badge">1</span>
           <img src={PhoneIcon} alt="" className="icon" />
-          <h4>User Calls</h4>
+          <h4>Customer Calls</h4>
           <p>
             The customer phones your business, but no one is available to take
             their call. After three rings, the call is forwarded to your AI
@@ -79,7 +76,7 @@ export function CallFlow() {
           <p>
             Greets the customer and engages them in light conversation while
             answering FAQs. The caller is then given the opportunity to state
-            their reason for calling.
+            their reason for calling The caller is then asked about the reason for the call.
           </p>
         </div>
 
@@ -92,9 +89,7 @@ export function CallFlow() {
           <img src={ClientIcon} alt="" className="icon" />
           <h4>Client Feels Heard</h4>
           <p>
-            Instead of a cold voicemail, the caller gets their needs met and
-            provides contact information while having a natural conversation
-            with the assistant.
+            Instead of a cold voicemail, callers get their concerns/questions answered and are asked to provide contact information. All during a natural conversation. Arrangments are made for a callback and the customer leaves feeling that he has accomplished what he set out to do.
           </p>
         </div>
 
@@ -107,8 +102,7 @@ export function CallFlow() {
           <img src={TextIcon} alt="" className="icon" />
           <h4>Acknowledgement Texts Sent</h4>
           <p>
-            A summary of the phone call is sent to both the client and the owner
-            by text for a convenient follow-up.
+           A summary of the key points of the phone call is sent to the owner immediately by texting along with the clients preferred time for a callback. A thank you text/reminder is sent to the caller outling the details of the conversation.
           </p>
         </div>
       </div>

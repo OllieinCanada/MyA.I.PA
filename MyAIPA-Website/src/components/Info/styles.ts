@@ -40,12 +40,22 @@ export const Container = styled.section`
     margin-bottom: 0.6rem;
   }
 
-  .intro__body {
+ .intro__body {
     font-size: clamp(2rem, 1.9vw, 1.9rem);
     line-height: 1.55;
     color: #f9f9faff;
   }
 
+  .intro__body strong {
+    font-weight: 700;
+  }
+
+  .intro__body .stat-highlight {
+    color: #7FFF5A; /* soft amber that stands out on dark bg */
+    text-shadow: 0 0 8px rgba(255, 179, 71, 0.35);
+    padding: 0 0.1em;
+    border-radius: 4px;
+  }
   .intro__body2 {
     font-size: clamp(2rem, 1.9vw, 2.9rem);
     line-height: 1.55;

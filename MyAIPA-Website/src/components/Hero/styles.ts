@@ -68,7 +68,7 @@ export const Container = styled.section`
   .brand2 {
     color: #00e0ff;
     font-weight: 600;
-    font-size: clamp(0.5rem, 2vw, 2.4rem);
+    font-size: clamp(0.5rem, 2vw, 2.0rem);
     letter-spacing: 0.22em;
     margin: 0;
     margin-top: -10px;
@@ -79,7 +79,7 @@ export const Container = styled.section`
   }
 
   .trade-line {
-    color: #ff6a00;
+    color: #ff0000ff;
     font-weight: 900;
     font-size: clamp(1rem, 2.4vw, 2.4rem);
     margin-top: 0.1rem;
@@ -225,12 +225,12 @@ export const Container = styled.section`
 
   .bullets.two-col li {
     color: #ffeb3be7;
-    font-weight: 700;
-    font-size: clamp(1.1rem, 2vw, 1.9rem);
+    font-weight: 650;
+    font-size: clamp(0.1rem, 1.95vw, 1.5rem);
     position: relative;
-    padding-left: 1.6rem;
+    padding-left: 2.0rem;
     text-transform: uppercase;
-    letter-spacing: 0.02em;
+    letter-spacing: 0.01em;
     text-shadow: 0 0 10px rgba(255, 235, 59, 0.75);
   }
 

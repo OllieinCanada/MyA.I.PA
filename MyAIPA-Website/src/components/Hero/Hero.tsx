@@ -41,7 +41,7 @@ export function Hero() {
 
   const secondaryTitle = isMobile
     ? "AI CALL ANSWERING ASSISTANT"
-    : "AI TELEPHONE ANSWERING ASSISTANT";
+    : "ARTIFICIAL INTELLIGENCE TELEPHONE ANSWERING ASSISTANT";
 
   return (
     <Container id="home" className={firstVisit ? "first-visit" : ""}>
@@ -56,7 +56,7 @@ export function Hero() {
         <p className="trade-line">
           {isMobile
             ? "24/7 AI call answering for busy small business."
-            : "Professional. Reliable. Built For Small Business."}
+            : "STOP MISSING CALLS!!!"}
         </p>
 
         <div className="hero-inline">
@@ -66,29 +66,28 @@ export function Hero() {
 
           <div className="hero-inline-text">
             <p>
-              Our AI telephone assistant answers calls when you can't, collects
-              the call details and sets you up for an easy call back.
+              Our artificial intelligence telephone assistant answers calls when you can't, engages customers in a professional conversation, and collects the details to set you up for an easy call back.
               <span className="break-line">
                 <span className="day">day☀️</span> or{" "}
                 <span className="night">night.🌙</span>
               </span>
             </p>
 
-            <h3 className="why-title">Why Choose Our AI Assistant?</h3>
+            <h3 className="why-title">What does an AI assistant do for you?</h3>
           </div>
         </div>
 
         <div className="tagline-block">
           <h2 className="tagline">NEVER MISS A CALL AGAIN!</h2>
           <ul className="bullets two-col">
-            <li>Always Answers 24/7</li>
-            <li>Handles Multiple Callers</li>
-            <li>Increase Sales</li>
-            <li>Answers Caller's Questions</li>
-            <li>Texts You The Call Details</li>
+            <li>Always Answers the phone 24/7</li>
+            <li>Boost Sales by reducing hangups</li>
+            <li>Takes Call After 3 Rings</li>
+            <li>Answers Frequently Asked Questions</li>
             <li>Filters Out Timewasters</li>
+            <li>Texts You The Call Details</li>
             <li>Sets You Up For Callbacks</li>
-            <li>Creates A Professional Image</li>
+            <li>Sends A Text Reminder To The Caller</li>
           </ul>
         </div>
 
