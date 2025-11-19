@@ -40,7 +40,7 @@ export const Container = styled.section`
     margin-bottom: 0.6rem;
   }
 
- .intro__body {
+  .intro__body {
     font-size: clamp(2rem, 1.9vw, 1.9rem);
     line-height: 1.55;
     color: #f9f9faff;
@@ -51,18 +51,26 @@ export const Container = styled.section`
   }
 
   .intro__body .stat-highlight {
-    color: #7FFF5A; /* soft amber that stands out on dark bg */
+    color: #7FFF5A;
     text-shadow: 0 0 8px rgba(255, 179, 71, 0.35);
     padding: 0 0.1em;
     border-radius: 4px;
   }
+
+  /* ⭐ NEW Coffee Price Highlight -------------------------------------- */
   .intro__body2 {
-    font-size: clamp(2rem, 1.9vw, 2.9rem);
-    line-height: 1.55;
-    color: #00c2cb;
-    margin-top: 28px;      /* more breathing room */
-    margin-bottom: 32px;
-  }
+  font-size: clamp(2rem, 1.9vw, 2.9rem);
+  line-height: 1.55;
+  color: #5CFAFF;
+  font-weight: 800;
+  text-shadow: 0 0 10px rgba(92, 250, 255, 0.55);
+  background: rgba(92, 250, 255, 0.10);
+  padding: 10px 18px;
+  border-radius: 14px;
+  margin-top: 28px;
+  margin-bottom: 32px;
+  display: inline-block;
+}
 
   .title {
     font-size: clamp(1.1rem, 3.3vw, 3.55rem);
@@ -70,6 +78,8 @@ export const Container = styled.section`
     color: #8fd0ff;
     margin: 2rem 0 1rem;
   }
+
+
 
   /* ---------------------- DESKTOP ROW OF BOXES ------------------------ */
 
@@ -89,7 +99,7 @@ export const Container = styled.section`
     border: 1px solid rgba(140, 200, 255, 0.2);
     border-radius: 14px;
     padding: 1.2rem 1.2rem;
-    width: 260px;          /* wider cards */
+    width: 260px;
     max-width: 280px;
     text-align: center;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
@@ -100,7 +110,6 @@ export const Container = styled.section`
     transform: translateY(-4px);
   }
 
-  /* make sure arrows don’t eat too much space */
   .arrow {
     display: flex;
     align-items: center;
@@ -110,8 +119,6 @@ export const Container = styled.section`
     color: #4cb4ff;
     text-shadow: 0 0 10px rgba(0, 100, 255, 0.5);
   }
-
-  /* number badge */
 
   .badge {
     position: absolute;
@@ -149,7 +156,10 @@ export const Container = styled.section`
     color: #dce7f7;
   }
 
-  /* tighten on smaller desktops so all 4 fit nicely -------------------- */
+
+
+  /* ------------------ Tighter for smaller desktops -------------------- */
+
   @media (max-width: 1200px) and (min-width: 861px) {
     .flow-row {
       gap: 1.1rem;
@@ -167,6 +177,8 @@ export const Container = styled.section`
       font-size: 0.95rem;
     }
   }
+
+
 
   /* -------------------------- MOBILE STACK ---------------------------- */
 
@@ -189,9 +201,11 @@ export const Container = styled.section`
     }
 
     .intro__body2 {
-      font-size: 1rem;
-      margin-bottom: 1rem;
+      font-size: 1.1rem;
+      padding: 10px 12px;
       margin-top: 1rem;
+      margin-bottom: 1rem;
+      text-shadow: 0 0 8px rgba(255, 208, 92, 0.4);
     }
 
     .title {

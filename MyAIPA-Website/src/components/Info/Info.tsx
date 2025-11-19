@@ -1,4 +1,3 @@
-// File: src/components/Info/Info.tsx
 import React, { useEffect, useState } from "react";
 import { Container } from "./styles";
 
@@ -46,6 +45,10 @@ export function CallFlow() {
           </strong>
           <strong> My AI PA makes sure your business is always there to respond.</strong>
         </p>
+
+        <p className="intro__body2">
+          <strong>For About The Price Of A Cup Of Coffee A Day!</strong>
+        </p>
       </section>
 
       <h3 className="title" id="how-it-works">
@@ -75,8 +78,7 @@ export function CallFlow() {
           <h4>AI Assistant Answers</h4>
           <p>
             Greets the customer and engages them in light conversation while
-            answering FAQs. The caller is then given the opportunity to state
-            their reason for calling The caller is then asked about the reason for the call.
+            answering FAQs. The caller is then asked about the reason for the call.
           </p>
         </div>
 
@@ -100,7 +102,7 @@ export function CallFlow() {
         <div className="step">
           <span className="badge">4</span>
           <img src={TextIcon} alt="" className="icon" />
-          <h4>Acknowledgement Texts Sent</h4>
+          <h4>Summary Texts Sent</h4>
           <p>
            A summary of the key points of the phone call is sent to the owner immediately by texting along with the clients preferred time for a callback. A thank you text/reminder is sent to the caller outling the details of the conversation.
           </p>

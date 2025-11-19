@@ -18,7 +18,7 @@ export function Hero() {
     }
     window.scrollTo(5, 0);
 
-    const t = window.setTimeout(() => setShowPromo(true), 5000);
+    const t = window.setTimeout(() => setShowPromo(true), 15000);
     return () => window.clearTimeout(t);
   }, []);
 
@@ -73,20 +73,20 @@ export function Hero() {
               </span>
             </p>
 
-            <h3 className="why-title">What does an AI assistant do for you?</h3>
+            <h3 className="why-title">NEVER MISS A CALL AGAIN!</h3>
           </div>
         </div>
 
         <div className="tagline-block">
-          <h2 className="tagline">NEVER MISS A CALL AGAIN!</h2>
+          <h2 className="tagline">WHAT DOES AN AI ASSISTANT DO FOR YOU?</h2>
           <ul className="bullets two-col">
-            <li>Always Answers the phone 24/7</li>
-            <li>Boost Sales by reducing hangups</li>
+            <li>Always Answers The Phone 24/7</li>
+            <li>Increases Sales By Reducing Hangups</li>
             <li>Takes Call After 3 Rings</li>
             <li>Answers Frequently Asked Questions</li>
             <li>Filters Out Timewasters</li>
             <li>Texts You The Call Details</li>
-            <li>Sets You Up For Callbacks</li>
+            <li>Sets You Up For An Easy Call Back</li>
             <li>Sends A Text Reminder To The Caller</li>
           </ul>
         </div>

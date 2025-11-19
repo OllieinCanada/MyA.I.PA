@@ -39,7 +39,7 @@ export function Project() {
                     className="cta-stripe"
                     onClick={() => setPlan("tier1")}
                   >
-                    Select Tier 1
+                    Select Light Plan
                     <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden>
                       <path
                         fill="currentColor"
