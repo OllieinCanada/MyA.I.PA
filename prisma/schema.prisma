@@ -1,0 +1,135 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum AfterHoursMode {
+  AI_ALWAYS_ON
+  AI_BUSINESS_HOURS_ONLY
+  VOICEMAIL_ONLY
+  FORWARD_TO_OWNER
+}
+
+enum CallStatus {
+  STARTED
+  COMPLETED
+  MISSED
+  ABANDONED
+  FAILED
+}
+
+enum LeadIntent {
+  GENERAL
+  BOOKING
+  QUOTE
+  SUPPORT
+  EMERGENCY
+  OTHER
+}
+
+enum LeadUrgency {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum LeadStatus {
+  NEW
+  REVIEWED
+  CONTACTED
+  WON
+  LOST
+  ARCHIVED
+}
+
+model Business {
+  id        Int        @id @default(autoincrement())
+  name      String
+  phone     String
+  timezone  String
+  createdAt DateTime   @default(now())
+  settings  Settings?
+  faqs      FAQ[]
+  calls     Call[]
+  leads     Lead[]
+}
+
+model Settings {
+  id               Int            @id @default(autoincrement())
+  businessId       Int            @unique
+  answerAfterRings Int            @default(3)
+  afterHoursMode   AfterHoursMode @default(AI_ALWAYS_ON)
+  ownerPhone       String
+  bookingLink      String?
+  createdAt        DateTime       @default(now())
+  business         Business       @relation(fields: [businessId], references: [id], onDelete: Cascade)
+}
+
+model Caller {
+  id        Int      @id @default(autoincrement())
+  phone     String   @unique
+  name      String?
+  createdAt DateTime @default(now())
+  calls     Call[]
+  leads     Lead[]
+}
+
+model Call {
+  id           Int       @id @default(autoincrement())
+  businessId   Int
+  callerId     Int
+  startedAt    DateTime
+  endedAt      DateTime?
+  durationSec  Int?
+  status       CallStatus
+  recordingUrl String?
+  transcript   String?
+  createdAt    DateTime  @default(now())
+  business     Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  caller       Caller    @relation(fields: [callerId], references: [id], onDelete: Cascade)
+  lead         Lead?
+
+  @@index([businessId, startedAt])
+  @@index([callerId, startedAt])
+  @@index([status])
+}
+
+model Lead {
+  id             Int         @id @default(autoincrement())
+  businessId     Int
+  callerId       Int
+  callId         Int?        @unique
+  intent         LeadIntent
+  urgency        LeadUrgency
+  summary        String
+  callbackNumber String
+  name           String
+  createdAt      DateTime    @default(now())
+  status         LeadStatus  @default(NEW)
+  business       Business    @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  caller         Caller      @relation(fields: [callerId], references: [id], onDelete: Cascade)
+  call           Call?       @relation(fields: [callId], references: [id], onDelete: SetNull)
+
+  @@index([businessId, createdAt])
+  @@index([intent])
+  @@index([urgency])
+  @@index([status])
+}
+
+model FAQ {
+  id         Int      @id @default(autoincrement())
+  businessId Int
+  question   String
+  answer     String
+  tags       String
+  updatedAt  DateTime @updatedAt
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId])
+  @@index([question])
+}

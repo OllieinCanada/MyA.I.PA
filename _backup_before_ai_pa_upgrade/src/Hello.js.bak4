@@ -1,0 +1,1666 @@
+// App.js
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import RoiCalculator, { RoiCalculatorResults } from "./RoiCalculator";
+
+/* ----------------- tiny helpers ----------------- */
+const clamp = (n, min, max) => Math.min(max, Math.max(min, n));
+const moneyUSD = (n) =>
+  new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }).format(Math.round(n || 0));
+const svgData = (svg) => `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+
+/* ----------------- UI bits ----------------- */
+const IconPhone = (props) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" {...props}>
+    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.86 19.86 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.86 19.86 0 0 1 2.08 4.18 2 2 0 0 1 4.06 2h3a2 2 0 0 1 2 1.72c.12.86.3 1.7.54 2.5a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.58-1.06a2 2 0 0 1 2.11-.45c.8.24 1.64.42 2.5.54A2 2 0 0 1 22 16.92Z" />
+  </svg>
+);
+
+const Chip = ({ children }) => (
+  <span className="inline-flex items-center gap-2 rounded-full bg-white/70 px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm ring-1 ring-slate-200">
+    {children}
+  </span>
+);
+
+const PrimaryButton = ({ children, className = "", ...props }) => (
+  <button
+    className={
+      "inline-flex items-center justify-center rounded-full bg-amber-400 px-6 py-3 text-sm font-extrabold text-slate-900 shadow-[0_12px_28px_-16px_rgba(0,0,0,0.35)] hover:bg-amber-300 active:scale-[0.99] " +
+      className
+    }
+    {...props}
+  >
+    {children}
+    <span className="ml-2">→</span>
+  </button>
+);
+
+const GhostButtonDark = ({ children, className = "", ...props }) => (
+  <button
+    className={
+      "inline-flex items-center justify-center rounded-full border border-white/25 bg-white/10 px-6 py-3 text-sm font-extrabold text-white hover:bg-white/15 " +
+      className
+    }
+    {...props}
+  >
+    {children}
+  </button>
+);
+
+const GhostButton = ({ children, className = "", ...props }) => (
+  <button
+    className={
+      "inline-flex items-center justify-center rounded-full border-2 border-emerald-900/70 bg-white/60 px-6 py-3 text-sm font-extrabold text-emerald-950 hover:bg-white " +
+      className
+    }
+    {...props}
+  >
+    {children}
+  </button>
+);
+
+const Card = ({ children, className = "" }) => (
+  <div className={"rounded-3xl bg-white/70 p-7 shadow-sm ring-1 ring-slate-200 " + className}>{children}</div>
+);
+
+const SectionTag = ({ icon, text }) => (
+  <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-4 py-2 text-sm font-extrabold text-emerald-800 ring-1 ring-emerald-100">
+    {icon}
+    {text}
+  </span>
+);
+
+/* ----------------- HERO: slideshow text (letters) ----------------- */
+function TextSlideshow({ slides, autoMs = 8000, className = "", onIndexChange }) {
+  const [i, setI] = useState(0);
+  const [prevPhrase, setPrevPhrase] = useState(null);
+  const timerRef = useRef(null);
+
+  const count = slides.length;
+  const animMs = 520;
+
+  const next = () => setI((x) => (x + 1) % count);
+  const go = (idx) => {
+    clearTimeout(timerRef.current);
+    setI(idx);
+  };
+
+  useEffect(() => {
+    onIndexChange?.(i);
+  }, [i, onIndexChange]);
+
+  const activeDuration = slides[i]?.duration ?? autoMs;
+
+  useEffect(() => {
+    if (count <= 1) return;
+    clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(next, activeDuration);
+    return () => clearTimeout(timerRef.current);
+  }, [count, activeDuration, i]);
+
+  useEffect(() => {
+    if (count <= 1) return;
+    const prevIdx = (i - 1 + count) % count;
+    setPrevPhrase(slides[prevIdx]?.phrase ?? null);
+  }, [i]);
+
+  useEffect(() => {
+    if (!prevPhrase) return;
+    const t = setTimeout(() => setPrevPhrase(null), animMs);
+    return () => clearTimeout(t);
+  }, [prevPhrase, animMs]);
+
+  const active = slides[i];
+
+  const renderLetters = (text, mode) => (
+    <span className="inline-block whitespace-normal">
+      {Array.from(text).map((ch, idx) => (
+        <span
+          key={mode + "-" + idx + "-" + ch}
+          className={"inline-block will-change-transform " + (mode === "in" ? "fallIn" : "fallOut")}
+          style={{ animationDelay: `${idx * 14}ms` }}
+        >
+          {ch === " " ? " " : ch}
+        </span>
+      ))}
+    </span>
+  );
+
+  return (
+    <div className={"relative " + className}>
+      <div key={"hero-" + i} className="heroPop">
+        <h1 className="text-5xl sm:text-6xl lg:text-7xl font-black leading-[1.02] tracking-tight text-white drop-shadow-[0_6px_20px_rgba(0,0,0,0.55)]">
+          Your AI agent that{" "}
+          <span className="relative inline-block align-baseline">
+            <span className="absolute -inset-x-2 inset-y-1 -skew-x-6 rounded-xl bg-amber-400/20 blur-[0.2px]" />
+            <span className="relative inline-block px-2">
+              {prevPhrase && <span className="absolute left-0 top-0">{renderLetters(prevPhrase, "out")}</span>}
+              <span className="inline-block">{renderLetters(active.phrase, "in")}</span>
+            </span>
+          </span>
+        </h1>
+
+        <div className="mt-7 max-w-xl text-lg sm:text-xl font-semibold leading-8 text-white/95 drop-shadow-[0_2px_10px_rgba(0,0,0,0.45)]">
+          {active.bullets?.map((b) => (
+            <div key={b} className="mt-3 first:mt-0">
+              • {b}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-9 flex items-center gap-2">
+        {slides.map((_, idx) => (
+          <button
+            key={idx}
+            type="button"
+            onClick={() => go(idx)}
+            className={
+              "h-2.5 w-2.5 rounded-full ring-1 ring-white/15 transition " +
+              (idx === i ? "bg-amber-400" : "bg-white/25")
+            }
+            aria-label={"Go to slide " + (idx + 1)}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ----------------- HERO: visual stack synced to slides ----------------- */
+function SlideVisual({ slides, activeIndex }) {
+  return (
+    <div className="relative mx-auto w-full max-w-[460px]">
+      <div key={"wipe-" + activeIndex} className="slideWipe pointer-events-none absolute -inset-6 z-30" />
+      <div className="pointer-events-none absolute -inset-8 rounded-[48px] bg-[radial-gradient(420px_260px_at_60%_35%,rgba(255,180,60,0.15),transparent_65%)] blur-xl" />
+
+      <div className="relative h-[520px]">
+        {slides.map((s, idx) => {
+          const isActive = idx === activeIndex;
+          const depth = idx - activeIndex;
+
+          const z = isActive ? 40 : 20 - Math.abs(depth);
+          const translate = isActive
+            ? "translate3d(0,0,0)"
+            : `translate3d(${10 + Math.abs(depth) * 10}px, ${10 + Math.abs(depth) * 12}px, 0)`;
+          const scale = isActive ? 1 : 0.98 - Math.min(0.03, Math.abs(depth) * 0.01);
+          const opacity = isActive ? 1 : 0.15;
+          const blur = isActive ? "blur(0px)" : "blur(1.5px)";
+
+          return (
+            <div
+              key={s.image + idx}
+              className="absolute inset-0 transition-all duration-500 ease-out"
+              style={{
+                zIndex: z,
+                transform: `${translate} scale(${scale})`,
+                opacity,
+                filter: blur,
+              }}
+            >
+              <div className="relative h-full overflow-hidden rounded-[36px] shadow-[0_30px_70px_-45px_rgba(0,0,0,0.8)] ring-1 ring-white/10">
+                {isActive ? (
+                  <img key={"active-" + activeIndex} src={s.image} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <img key={"inactive-" + idx} src={s.image} alt="" className="h-full w-full object-cover" />
+                )}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-black/0" />
+                {isActive &&
+                  s.avatars?.map((avatar, avatarIndex) => (
+                    <div
+                      key={avatar.src + avatarIndex}
+                      className="absolute z-20 -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-full shadow-[0_12px_26px_rgba(0,0,0,0.5)]"
+                      style={{
+                        left: `${avatar.x}%`,
+                        top: `${avatar.y}%`,
+                        width: `${avatar.size ?? 28}%`,
+                        height: `${avatar.size ?? 28}%`,
+                      }}
+                    >
+                      <img src={avatar.src} alt="" className="h-full w-full object-cover" />
+                    </div>
+                  ))}
+
+                
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="mt-4 flex items-center justify-end text-xs font-extrabold text-white/70">
+        <span className="text-white/60">
+          {activeIndex + 1}/{slides.length}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/* ----------------- page ----------------- */
+export default function App() {
+  const [missedCallsPerWeek, setMissedCallsPerWeek] = useState("6");
+  const [avgRevenuePerJob, setAvgRevenuePerJob] = useState("2550");
+  const [bookingRate, setBookingRate] = useState("35");
+
+  const missedCallsNum = clamp(Number(missedCallsPerWeek) || 0, 0, 50);
+  const avgRevenueNum = clamp(Number(avgRevenuePerJob) || 0, 0, 5000);
+  const bookingRateNum = clamp(Number(bookingRate) || 0, 0, 100);
+
+  const estimatedJobsLostPerMonth = missedCallsNum * 4.33 * (bookingRateNum / 100);
+  const estimatedRevenueLostPerMonth = estimatedJobsLostPerMonth * avgRevenueNum;
+
+  const [displayMonthlyLoss, setDisplayMonthlyLoss] = useState(0);
+  const [pulseRecover, setPulseRecover] = useState(false);
+  useEffect(() => {
+    let start = displayMonthlyLoss;
+    let end = estimatedRevenueLostPerMonth;
+    const duration = 450;
+    let startTime = null;
+
+    const animate = (t) => {
+      if (!startTime) startTime = t;
+      const p = Math.min((t - startTime) / duration, 1);
+      const v = start + (end - start) * p;
+      setDisplayMonthlyLoss(v);
+      if (p < 1) requestAnimationFrame(animate);
+    };
+
+    requestAnimationFrame(animate);
+  }, [estimatedRevenueLostPerMonth]);
+
+  useEffect(() => {
+    setPulseRecover(true);
+    const t = setTimeout(() => setPulseRecover(false), 420);
+    return () => clearTimeout(t);
+  }, [estimatedRevenueLostPerMonth]);
+
+  const displayWeeklyLoss = displayMonthlyLoss / 4.33;
+  const displayYearlyLoss = displayMonthlyLoss * 12;
+  const recoveredSeries = useMemo(() => {
+    const base = Math.max(0, displayMonthlyLoss || estimatedRevenueLostPerMonth);
+    const factors = [0.6, 0.75, 0.9, 1, 1.1, 1.25];
+    return factors.map((f) => base * f);
+  }, [displayMonthlyLoss, estimatedRevenueLostPerMonth]);
+
+  const recoveredChart = useMemo(() => {
+    const w = 320;
+    const h = 120;
+    const pad = 10;
+    const min = Math.min(...recoveredSeries);
+    const max = Math.max(...recoveredSeries);
+    const range = max - min || 1;
+    const points = recoveredSeries
+      .map((v, i) => {
+        const x = pad + (i / (recoveredSeries.length - 1)) * (w - pad * 2);
+        const y = h - pad - ((v - min) / range) * (h - pad * 2);
+        return `${x},${y}`;
+      })
+      .join(" ");
+    const area = `${pad},${h - pad} ${points} ${w - pad},${h - pad}`;
+    return { w, h, points, area };
+  }, [recoveredSeries]);
+  const heroSlides = [
+    {
+      phrase: "handles missed calls.",
+      bullets: [
+        "Always answers the phone when you're unavailable.",
+        "A professional voice with accurate company information.",
+        "Collects details for new jobs.",
+      ],
+      avatars: [
+        { src: "/NiceCaller.png", x: 22, y: 72, size: 34 },
+        { src: "/NiceGirl.png", x: 78, y: 72, size: 34 },
+      ],
+      image: svgData(`
+        <svg xmlns="http://www.w3.org/2000/svg" width="900" height="1200" viewBox="0 0 900 1200">
+          <defs>
+            <linearGradient id="g1" x1="0" x2="1" y1="0" y2="1">
+              <stop offset="0%" stop-color="#14213d"/>
+              <stop offset="100%" stop-color="#1f8a70"/>
+            </linearGradient>
+            <clipPath id="callerAvatarClip" clipPathUnits="userSpaceOnUse">
+              <circle cx="235" cy="975" r="28"/>
+            </clipPath>
+            <clipPath id="agentAvatarClip" clipPathUnits="userSpaceOnUse">
+              <circle cx="665" cy="975" r="28"/>
+            </clipPath>
+          </defs>
+          <style>
+            .bubble { opacity: 0; animation: chatPop 8s ease-out infinite; }
+            .b1 { animation-name: chatPop1; }
+            .b2 { animation-name: chatPop2; }
+            .b3 { animation-name: chatPop3; }
+            .b4 { animation-name: chatPop4; }
+            .b5 { animation-name: chatPop5; }
+            @keyframes chatPop1 {
+              0% { opacity: 0; }
+              8% { opacity: 1; }
+              22% { opacity: 1; }
+              28% { opacity: 0; }
+              100% { opacity: 0; }
+            }
+            @keyframes chatPop2 {
+              0% { opacity: 0; }
+              20% { opacity: 0; }
+              30% { opacity: 1; }
+              42% { opacity: 1; }
+              48% { opacity: 0; }
+              100% { opacity: 0; }
+            }
+            @keyframes chatPop3 {
+              0% { opacity: 0; }
+              40% { opacity: 0; }
+              50% { opacity: 1; }
+              62% { opacity: 1; }
+              68% { opacity: 0; }
+              100% { opacity: 0; }
+            }
+            @keyframes chatPop4 {
+              0% { opacity: 0; }
+              60% { opacity: 0; }
+              70% { opacity: 1; }
+              80% { opacity: 1; }
+              86% { opacity: 0; }
+              100% { opacity: 0; }
+            }
+            @keyframes chatPop5 {
+              0% { opacity: 0; }
+              80% { opacity: 0; }
+              90% { opacity: 1; }
+              96% { opacity: 1; }
+              100% { opacity: 0; }
+            }
+          </style>
+          <rect width="900" height="1200" fill="url(#g1)"/>
+          <circle cx="720" cy="210" r="170" fill="rgba(255,255,255,0.08)"/>
+
+          <g transform="translate(0,-120)">
+          
+
+          <g class="bubble b1">
+            <rect x="240" y="340" width="560" height="240" rx="72" fill="rgba(255,255,255,0.18)"/>
+            <circle cx="770" cy="560" r="20" fill="rgba(255,255,255,0.18)"/>
+            <circle cx="800" cy="580" r="12" fill="rgba(255,255,255,0.18)"/>
+            <text x="290" y="420" font-family="Arial, sans-serif" font-size="44" font-weight="600" fill="rgba(255,255,255,0.92)">
+              Thanks for calling into
+            </text>
+            <text x="290" y="470" font-family="Arial, sans-serif" font-size="44" font-weight="600" fill="rgba(255,255,255,0.92)">
+              the shop today,
+            </text>
+            <text x="290" y="520" font-family="Arial, sans-serif" font-size="44" font-weight="600" fill="rgba(255,255,255,0.92)">
+              how can I help today?
+            </text>
+          </g>
+
+          <g class="bubble b2">
+            <rect x="100" y="350" width="560" height="220" rx="70" fill="rgba(255,255,255,0.14)"/>
+            <circle cx="150" cy="560" r="18" fill="rgba(255,255,255,0.14)"/>
+            <circle cx="125" cy="580" r="10" fill="rgba(255,255,255,0.14)"/>
+            <text x="150" y="430" font-family="Arial, sans-serif" font-size="44" font-weight="600" fill="rgba(255,255,255,0.9)">
+              where is the owner?
+            </text>
+            <text x="150" y="480" font-family="Arial, sans-serif" font-size="44" font-weight="600" fill="rgba(255,255,255,0.9)">
+              They usually answer
+            </text>
+            <text x="150" y="530" font-family="Arial, sans-serif" font-size="44" font-weight="600" fill="rgba(255,255,255,0.9)">
+              the phone
+            </text>
+          </g>
+
+          <g class="bubble b3">
+            <rect x="220" y="340" width="600" height="180" rx="72" fill="rgba(255,255,255,0.18)"/>
+            <circle cx="800" cy="510" r="18" fill="rgba(255,255,255,0.18)"/>
+            <circle cx="830" cy="530" r="10" fill="rgba(255,255,255,0.18)"/>
+            <text x="250" y="420" font-family="Arial, sans-serif" font-size="44" font-weight="600" fill="rgba(255,255,255,0.92)">
+              They're away right now.
+            </text>
+            <text x="250" y="470" font-family="Arial, sans-serif" font-size="44" font-weight="600" fill="rgba(255,255,255,0.92)">
+              I can help in the meantime.
+            </text>
+          </g>
+
+          <g class="bubble b4">
+            <rect x="100" y="360" width="560" height="190" rx="70" fill="rgba(255,255,255,0.14)"/>
+            <circle cx="150" cy="550" r="18" fill="rgba(255,255,255,0.14)"/>
+            <circle cx="125" cy="570" r="10" fill="rgba(255,255,255,0.14)"/>
+            <text x="150" y="450" font-family="Arial, sans-serif" font-size="44" font-weight="600" fill="rgba(255,255,255,0.9)">
+              Can I place a service
+            </text>
+            <text x="150" y="495" font-family="Arial, sans-serif" font-size="44" font-weight="600" fill="rgba(255,255,255,0.9)">
+              request like usual?
+            </text>
+          </g>
+
+          <g class="bubble b5">
+            <rect x="220" y="340" width="600" height="260" rx="70" fill="rgba(255,255,255,0.18)"/>
+            <circle cx="800" cy="600" r="20" fill="rgba(255,255,255,0.18)"/>
+            <circle cx="830" cy="620" r="12" fill="rgba(255,255,255,0.18)"/>
+            <text x="270" y="420" font-family="Arial, sans-serif" font-size="44" font-weight="600" fill="rgba(255,255,255,0.92)">
+              Yes, of course!
+            </text>
+            <text x="270" y="465" font-family="Arial, sans-serif" font-size="44" font-weight="600" fill="rgba(255,255,255,0.92)">
+              I'll forward the job details
+            </text>
+            <text x="270" y="510" font-family="Arial, sans-serif" font-size="44" font-weight="600" fill="rgba(255,255,255,0.92)">
+              to the owner once I collect
+            </text>
+            <text x="270" y="555" font-family="Arial, sans-serif" font-size="44" font-weight="600" fill="rgba(255,255,255,0.92)">
+              the information.
+            </text>
+          </g>
+
+          <!-- avatars are overlaid in HTML, remove SVG circles -->
+          </g>
+        </svg>
+      `),
+      visualTitle: "In a consultation",
+      visualSub: "Qualifies callers before you pick up",
+    },
+    {
+      phrase: "answers 24/7.",
+      bullets: ["Answers instead of voicemail", "24/7 coverage for every call", "Never miss urgent requests"],
+      duration: 8000,
+      image: svgData(`
+        <svg xmlns="http://www.w3.org/2000/svg" width="900" height="1200" viewBox="0 0 900 1200">
+          <defs>
+            <linearGradient id="g2" x1="0" x2="1" y1="0" y2="1">
+              <stop offset="0%" stop-color="#1b1b3a"/>
+              <stop offset="100%" stop-color="#ff7f51"/>
+            </linearGradient>
+            <clipPath id="voicemailClip">
+              <circle cx="241" cy="260" r="26"/>
+            </clipPath>
+            <clipPath id="hangupClip">
+              <circle cx="539" cy="260" r="22"/>
+            </clipPath>
+            <clipPath id="answerClip">
+              <circle cx="539" cy="320" r="23"/>
+            </clipPath>
+          </defs>
+          <rect width="900" height="1200" fill="url(#g2)"/>
+          <circle cx="700" cy="250" r="140" fill="rgba(255,255,255,0.1)"/>
+          <circle cx="260" cy="260" r="90" fill="rgba(255,255,255,0.08)"/>
+          <rect x="170" y="350" width="560" height="520" rx="48" fill="rgba(0,0,0,0.22)" stroke="rgba(255,255,255,0.2)" stroke-width="2"/>
+          <circle cx="241" cy="260" r="27" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.6)" stroke-width="2"/>
+          <image
+            href="/voicemail.jpg"
+            x="215"
+            y="234"
+            width="52"
+            height="52"
+            clip-path="url(#voicemailClip)"
+            preserveAspectRatio="xMidYMid slice"
+          />
+          <g fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="282" y1="260" x2="516" y2="260"/>
+            <polygon points="516,260 506,265 508,254" fill="rgba(255,255,255,0.7)" stroke="none"/>
+          </g>
+          <image
+            href="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEBLAEsAAD/4QBWRXhpZgAATU0AKgAAAAgABAEaAAUAAAABAAAAPgEbAAUAAAABAAAARgEoAAMAAAABAAIAAAITAAMAAAABAAEAAAAAAAAAAAEsAAAAAQAAASwAAAAB/+0ALFBob3Rvc2hvcCAzLjAAOEJJTQQEAAAAAAAPHAFaAAMbJUccAQAAAgAEAP/hDIFodHRwOi8vbnMuYWRvYmUuY29tL3hhcC8xLjAvADw/eHBhY2tldCBiZWdpbj0n77u/JyBpZD0nVzVNME1wQ2VoaUh6cmVTek5UY3prYzlkJz8+Cjx4OnhtcG1ldGEgeG1sbnM6eD0nYWRvYmU6bnM6bWV0YS8nIHg6eG1wdGs9J0ltYWdlOjpFeGlmVG9vbCAxMC44MCc+CjxyZGY6UkRGIHhtbG5zOnJkZj0naHR0cDovL3d3dy53My5vcmcvMTk5OS8wMi8yMi1yZGYtc3ludGF4LW5zIyc+CgogPHJkZjpEZXNjcmlwdGlvbiByZGY6YWJvdXQ9JycKICB4bWxuczp0aWZmPSdodHRwOi8vbnMuYWRvYmUuY29tL3RpZmYvMS4wLyc+CiAgPHRpZmY6UmVzb2x1dGlvblVuaXQ+MjwvdGlmZjpSZXNvbHV0aW9uVW5pdD4KICA8dGlmZjpYUmVzb2x1dGlvbj4zMDAvMTwvdGlmZjpYUmVzb2x1dGlvbj4KICA8dGlmZjpZUmVzb2x1dGlvbj4zMDAvMTwvdGlmZjpZUmVzb2x1dGlvbj4KIDwvcmRmOkRlc2NyaXB0aW9uPgoKIDxyZGY6RGVzY3JpcHRpb24gcmRmOmFib3V0PScnCiAgeG1sbnM6eG1wTU09J2h0dHA6Ly9ucy5hZG9iZS5jb20veGFwLzEuMC9tbS8nPgogIDx4bXBNTTpEb2N1bWVudElEPmFkb2JlOmRvY2lkOnN0b2NrOjc0OGQxNWEwLTVjZWMtNDQzZS04YjIzLTFlYTQ2ZmRlMzRiZDwveG1wTU06RG9jdW1lbnRJRD4KICA8eG1wTU06SW5zdGFuY2VJRD54bXAuaWlkOjZkODBiNzkwLTlmMzgtNDI1NS1hMWY5LTc1ZWU5NTk1ZWVmYzwveG1wTU06SW5zdGFuY2VJRD4KIDwvcmRmOkRlc2NyaXB0aW9uPgo8L3JkZjpSREY+CjwveDp4bXBtZXRhPgogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIAo8P3hwYWNrZXQgZW5kPSd3Jz8+/9sAQwAFAwQEBAMFBAQEBQUFBgcMCAcHBwcPCwsJDBEPEhIRDxERExYcFxMUGhURERghGBodHR8fHxMXIiQiHiQcHh8e/9sAQwEFBQUHBgcOCAgOHhQRFB4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4e/8AAEQgBaAFoAwERAAIRAQMRAf/EAB0AAQACAgMBAQAAAAAAAAAAAAAHCAUGAQMEAgn/xABGEAABAwICCAIGCAQEBQUBAAAAAQIDBAUGEQcIEiExQVFhE3EUInKBkaEyM0JSYpKxsiND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"
+            x="517"
+            y="238"
+            width="44"
+            height="44"
+            clip-path="url(#hangupClip)"
+            preserveAspectRatio="xMidYMid slice"
+          />
+
+          <g>
+            <rect x="205" y="301" width="72" height="38" rx="10" fill="rgba(255,255,255,0.14)" stroke="rgba(255,255,255,0.55)" stroke-width="2"/>
+            <text x="241" y="327" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" font-weight="800" fill="rgba(255,255,255,0.9)">AI</text>
+          </g>
+          <g fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="282" y1="320" x2="516" y2="320"/>
+            <polygon points="516,320 506,325 508,314" fill="rgba(255,255,255,0.7)" stroke="none"/>
+          </g>
+          <image
+            href="data:image/jpeg;base64,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"
+            x="516"
+            y="297"
+            width="46"
+            height="46"
+            clip-path="url(#answerClip)"
+            preserveAspectRatio="xMidYMid slice"
+          />
+          <circle cx="450" cy="610" r="170" fill="none" stroke="#34c759" stroke-width="18"/>
+          <circle cx="450" cy="610" r="140" fill="rgba(255,255,255,0.95)" stroke="#34c759" stroke-width="6"/>
+
+          <g stroke="#34c759" stroke-width="6" stroke-linecap="round">
+            <line x1="450" y1="470" x2="450" y2="490" />
+            <line x1="450" y1="470" x2="450" y2="490" transform="rotate(30 450 610)" />
+            <line x1="450" y1="470" x2="450" y2="490" transform="rotate(60 450 610)" />
+            <line x1="450" y1="470" x2="450" y2="490" transform="rotate(90 450 610)" />
+            <line x1="450" y1="470" x2="450" y2="490" transform="rotate(120 450 610)" />
+            <line x1="450" y1="470" x2="450" y2="490" transform="rotate(150 450 610)" />
+            <line x1="450" y1="470" x2="450" y2="490" transform="rotate(180 450 610)" />
+            <line x1="450" y1="470" x2="450" y2="490" transform="rotate(210 450 610)" />
+            <line x1="450" y1="470" x2="450" y2="490" transform="rotate(240 450 610)" />
+            <line x1="450" y1="470" x2="450" y2="490" transform="rotate(270 450 610)" />
+            <line x1="450" y1="470" x2="450" y2="490" transform="rotate(300 450 610)" />
+            <line x1="450" y1="470" x2="450" y2="490" transform="rotate(330 450 610)" />
+          </g>
+
+          <g>
+            <circle
+              cx="450"
+              cy="610"
+              r="170"
+              fill="none"
+              stroke="#ff3b30"
+              stroke-width="18"
+              stroke-linecap="round"
+              stroke-dasharray="520 550"
+            />
+            <g transform="translate(280 610) rotate(180)">
+              <rect x="-12" y="-9" width="24" height="18" rx="9" fill="#ff3b30"/>
+              <polygon points="0,40 -20,0 20,0" fill="#ff3b30"/>
+            </g>
+            <g transform="translate(620 610)">
+              <rect x="-12" y="-9" width="24" height="18" rx="9" fill="#34c759"/>
+              <polygon points="0,40 -20,0 20,0" fill="#34c759"/>
+            </g>
+            <animateTransform
+              attributeName="transform"
+              type="rotate"
+              from="0 450 610"
+              to="360 450 610"
+              dur="4s"
+              repeatCount="indefinite"
+              calcMode="linear"
+            />
+          </g>
+
+          <text x="450" y="595" text-anchor="middle" font-family="Arial, sans-serif" font-size="44" font-weight="800" fill="rgba(40,40,40,0.9)">
+            3 minute
+          </text>
+          <text x="450" y="640" text-anchor="middle" font-family="Arial, sans-serif" font-size="44" font-weight="800" fill="rgba(40,40,40,0.9)">
+            calls
+          </text>
+          <text x="450" y="690" text-anchor="middle" font-family="Arial, sans-serif" font-size="44" font-weight="800" fill="#ff3b30">
+            24/7
+          </text>
+          <text x="450" y="920" font-family="Arial, sans-serif" font-size="64" font-weight="700" text-anchor="middle" fill="rgba(255,255,255,0.75)">
+            Unlimited coverage
+          </text>
+        </svg>
+      `),
+      visualTitle: "Answers after hours",
+      visualSub: "Especially on weekends!",
+    },
+    {
+      phrase: "captures leads fast.",
+      bullets: ["Instant lead summary by text", "Name, phone, service captured", "Clear follow-up details"],
+      image: svgData(`
+        <svg xmlns="http://www.w3.org/2000/svg" width="900" height="1200" viewBox="0 0 900 1200">
+          <defs>
+            <linearGradient id="g3" x1="0" x2="1" y1="0" y2="1">
+              <stop offset="0%" stop-color="#0f3d3e"/>
+              <stop offset="100%" stop-color="#f7b267"/>
+            </linearGradient>
+            <linearGradient id="imsgGreen" x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0%" stop-color="#45f169"/>
+              <stop offset="100%" stop-color="#12b655"/>
+            </linearGradient>
+            <linearGradient id="bubble" x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0%" stop-color="#f6f9ff" stop-opacity="0.95"/>
+              <stop offset="100%" stop-color="#e8f0ff" stop-opacity="0.9"/>
+            </linearGradient>
+            <clipPath id="imsgClip" clipPathUnits="userSpaceOnUse">
+              <rect x="350" y="400" width="200" height="200" rx="44"/>
+            </clipPath>
+          </defs>
+          <style>
+            .notif, .msg, .badge { transform-box: fill-box; transform-origin: center; }
+            .notif { animation: notifHold 8s ease-in-out infinite; }
+            .badge { animation: badgePop 8s ease-in-out infinite; }
+            .msg { animation: msgReveal 8s ease-in-out infinite; }
+            @keyframes notifHold {
+              0% { opacity: 1; transform: scale(1); }
+              25% { opacity: 1; transform: scale(1.02); }
+              38% { opacity: 0; transform: scale(0.9); }
+              100% { opacity: 0; transform: scale(0.9); }
+            }
+            @keyframes badgePop {
+              0% { opacity: 0; transform: scale(0.3); }
+              8% { opacity: 1; transform: scale(1.05); }
+              14% { opacity: 1; transform: scale(1); }
+              38% { opacity: 1; }
+              50% { opacity: 0; }
+              100% { opacity: 0; }
+            }
+            @keyframes msgReveal {
+              0% { opacity: 0; transform: scale(0.2); }
+              30% { opacity: 0; transform: scale(0.2); }
+              48% { opacity: 1; transform: scale(1.03); }
+              100% { opacity: 1; transform: scale(1); }
+            }
+          </style>
+
+          <rect width="900" height="1200" fill="url(#g3)"/>
+          <rect x="170" y="240" width="560" height="700" rx="42" fill="rgba(255,255,255,0.1)" stroke="rgba(255,255,255,0.25)" stroke-width="2"/>
+
+          <g class="notif">
+            <rect x="350" y="400" width="200" height="200" rx="44" fill="url(#imsgGreen)"/>
+            <image
+              href="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wCEAAoKCgoKCgsMDAsPEA4QDxYUExMUFiIYGhgaGCIzICUgICUgMy03LCksNy1RQDg4QFFeT0pPXnFlZXGPiI+7u/sBCgoKCgoKCwwMCw8QDhAPFhQTExQWIhgaGBoYIjMgJSAgJSAzLTcsKSw3LVFAODhAUV5PSk9ecWVlcY+Ij7u7+//CABEIAEEAQQMBIgACEQEDEQH/xAAbAAABBQEBAAAAAAAAAAAAAAAAAgMFBgcBBP/aAAgBAQAAAADS4JIHZWapqfZKdj44GJe19OQFbPPoPrATnCGNDkAG8ySxK394RSa7xpNl4Q/jE2epABN3iVyyNAf1l/8A/8QAGgEAAQUBAAAAAAAAAAAAAAAABQACAwQGAf/aAAoCAhADEAAAAAuS73rmQ2ycNUtp0hmdpCLF4xql0TmaYqSV0rY2suFJbIrOJETxM/8A/8QANxAAAgECAwMHCQkAAAAAAAAAAQIAAwQFERIhMVEGIDJBUmGBECIzNEJTcXKRExQVIyRiobHR/9oACAEBAAE/AMQxBqTGjROTDpNw7hGdmObMSe8zOZzOZwEjcTLLEXV1p1mzQ7Ax3ifeKPvVj1CzMx3kmapbWdzdAMi5J2m2CLgw9uu3gAI2DJ7Ndx8QDLjDrmgCwAqLxWapqmrvMLbTMKsRck1qozpKcgO0RAAAOZitgNDXNJciNrgf3NU1RmyzljSFG0t0HVTX+eayhgVO4jIyoNFSonZYj6GZxmzzmGXIubGg4O0KFbuK7ObVqpQpvVc5Kilj4RqpdmY9ZJ+s1QttMwnFTh9Y6gWov0hw7xKFxRuKa1KVRXQ9Y8ruqKXZgqgZknYBMbxlbv8ATWx/JB85+2f8mqaoxKsyneCQZqmHYpYYRbNp1V7moc3y81BwGZi8qr8Ek0aDDgQY/Kq/PQo0E8CZdYle3vrFw7gbl3KPATVNc+0HGcocHq0qz3lshek+2ooGZQ8fgZqzmqapqmqapg+EVsTrI7oVtVObv2/2rPwLDfcQzFPXKvzc229MnxEtvQUvkHk//8QAJREAAgEDAwIHAAAAAAAAAAAAAQIDAAQhEBEUMVESM0FCUmFx/9oACAECAQE/AJZWlYknHoKSCVxuExT28yZKY+qjkaNgVJrmntVpGJJNz0XOt5GEYMPdpayiKTPQ4rcHS7mWRgqnC6SxtE5VhXJlAVVbwgdqaaV8M5IpEaRgqjcmuA/zq/8ALX91sOr6f//EACcRAAIBAwIFBAMAAAAAAAAAAAECAwAEEQUhEBIVUXEiMUFTMjNh/9oACAEDAQE/ALm6e4kZix5c7D4AqKzuZhlYjjudqksbqIZaPI/m9QzyQOGRiO4+DXV2+pa0yBZ5yW3VBnHHVYFikSRRjnznyKzWnXK28/r/AAcYNAggEHIPDVLpJ5FSM5VM79yazVxBJbSsjj2Ox7ihf3KqiRvyKo2C1Jd3Eww8rEdqijkmcIi5Jro0/wBiVrX64vPHRPebwOH/2Q=="
+              x="350"
+              y="400"
+              width="200"
+              height="200"
+              preserveAspectRatio="xMidYMid slice"
+              clip-path="url(#imsgClip)"
+            />
+            <circle class="badge" cx="540" cy="420" r="28" fill="#ff3b30"/>
+            <text class="badge" x="540" y="430" text-anchor="middle" font-family="Arial, sans-serif" font-size="28" font-weight="800" fill="#ffffff">1</text>
+            <text x="450" y="628" text-anchor="middle" font-family="Arial, sans-serif" font-size="22" font-weight="700" fill="rgba(255,255,255,0.9)">
+              iMessage
+            </text>
+          </g>
+
+          <g class="msg">
+            <rect x="175" y="290" width="550" height="520" rx="52" fill="url(#imsgGreen)"/>
+            <path d="M235 730l-34 30 50-14" fill="url(#imsgGreen)"/>
+            <text x="235" y="385" font-family="Helvetica, Arial, sans-serif" font-size="34" font-weight="700" fill="#f2fff6">New lead captured!</text>
+            <text x="235" y="445" font-family="Helvetica, Arial, sans-serif" font-size="28" font-weight="600" fill="#f2fff6">Name: Jamie L.</text>
+            <text x="235" y="490" font-family="Helvetica, Arial, sans-serif" font-size="28" font-weight="600" fill="#f2fff6">Phone: (555) 123-4567</text>
+            <text x="235" y="535" font-family="Helvetica, Arial, sans-serif" font-size="28" font-weight="600" fill="#f2fff6">Service request: Hot tub installation</text>
+            <text x="235" y="580" font-family="Helvetica, Arial, sans-serif" font-size="28" font-weight="600" fill="#f2fff6">Date of job: Feb 13, 2026</text>
+            <text x="235" y="625" font-family="Helvetica, Arial, sans-serif" font-size="28" font-weight="600" fill="#f2fff6">Location: 1234 Yonge Street</text>
+            <text x="235" y="670" font-family="Helvetica, Arial, sans-serif" font-size="28" font-weight="600" fill="#f2fff6">Call back time: Today 3:30 PM</text>
+          </g>
+        </svg>
+      `),
+      visualTitle: "Lead capture",
+      visualSub: "Gets the info you need to close",
+    },
+    {
+      phrase: "books appointments.",
+      bullets: ["Auto-schedules callbacks", "Creates calendar reminders", "Sends client details"],
+      image: svgData(`
+        <svg xmlns="http://www.w3.org/2000/svg" width="900" height="1200" viewBox="0 0 900 1200">
+          <defs>
+            <linearGradient id="g4" x1="0" x2="1" y1="0" y2="1">
+              <stop offset="0%" stop-color="#2d3047"/>
+              <stop offset="100%" stop-color="#3a86ff"/>
+            </linearGradient>
+          </defs>
+          <style>
+            .check-anim { opacity: 0; }
+            .menu-card { opacity: 0; }
+            .menu-check { opacity: 0; }
+          </style>
+          <rect width="900" height="1200" fill="url(#g4)"/>
+          <rect x="160" y="240" width="580" height="700" rx="40" fill="rgba(255,255,255,0.1)" stroke="rgba(255,255,255,0.25)" stroke-width="2"/>
+          <rect x="160" y="240" width="580" height="130" rx="40" fill="rgba(255,255,255,0.18)"/>
+          <circle cx="270" cy="305" r="18" fill="rgba(0,0,0,0.35)"/>
+          <circle cx="630" cy="305" r="18" fill="rgba(0,0,0,0.35)"/>
+          <text x="450" y="325" font-family="Arial, sans-serif" font-size="40" font-weight="700" text-anchor="middle" fill="rgba(255,255,255,0.9)">Calendar</text>
+          <rect x="210" y="420" width="480" height="420" rx="20" fill="rgba(255,255,255,0.12)"/>
+          <g fill="rgba(255,255,255,0.22)">
+            <rect x="240" y="460" width="90" height="80" rx="12"/>
+            <rect x="350" y="460" width="90" height="80" rx="12"/>
+            <rect x="460" y="460" width="90" height="80" rx="12"/>
+            <rect x="570" y="460" width="90" height="80" rx="12"/>
+            <rect x="240" y="560" width="90" height="80" rx="12"/>
+            <rect x="350" y="560" width="90" height="80" rx="12"/>
+            <rect x="460" y="560" width="90" height="80" rx="12"/>
+            <rect x="570" y="560" width="90" height="80" rx="12"/>
+            <rect x="240" y="660" width="90" height="80" rx="12"/>
+            <rect x="350" y="660" width="90" height="80" rx="12"/>
+            <rect x="460" y="660" width="90" height="80" rx="12"/>
+            <rect x="570" y="660" width="90" height="80" rx="12"/>
+          </g>
+          <g>
+            <animateTransform attributeName="transform" type="translate" values="0 0;0 0;0 2;0 0" keyTimes="0;0.35;0.5;1" dur="4s" repeatCount="indefinite"/>
+            <animateTransform attributeName="transform" type="scale" additive="sum" values="1 1;1 1;0.985 0.985;1 1" keyTimes="0;0.35;0.5;1" dur="4s" repeatCount="indefinite"/>
+            <rect x="350" y="560" width="90" height="80" rx="12" fill="rgba(255,255,255,0.22)">
+              <animate attributeName="fill" values="rgba(255,255,255,0.22);rgba(255,255,255,0.22);#ffd166;#ffd166" keyTimes="0;0.4;0.45;1" dur="4s" repeatCount="indefinite"/>
+            </rect>
+            <path class="check-anim" d="M372 600l14 14 30-36" fill="none" stroke="#2d2d2d" stroke-width="8" stroke-linecap="round" stroke-linejoin="round">
+              <animate attributeName="opacity" values="0;0;1" keyTimes="0;0.4;1" dur="4s" repeatCount="indefinite"/>
+              <animate attributeName="stroke-dasharray" values="0 80;80 0;80 0" keyTimes="0;0.4;1" dur="4s" repeatCount="indefinite"/>
+            </path>
+          </g>
+          <g class="menu-card">
+            <rect x="420" y="300" width="440" height="320" rx="28" fill="#eef3ff" stroke="rgba(255,255,255,0.8)" stroke-width="1.5"/>
+            <rect x="420" y="300" width="440" height="72" rx="28" fill="#e1e8ff"/>
+            <text x="458" y="345" font-family="Arial, sans-serif" font-size="32" font-weight="700" fill="#2b2f3a">New job date</text>
+            <text x="458" y="435" font-family="Arial, sans-serif" font-size="26" font-weight="600" fill="#2b2f3a">Date: Fri 3:30 PM</text>
+            <text x="458" y="485" font-family="Arial, sans-serif" font-size="26" font-weight="600" fill="#2b2f3a">Notify: 30 min before</text>
+            <text x="458" y="535" font-family="Arial, sans-serif" font-size="26" font-weight="600" fill="#2b2f3a">Client: Jamie L.</text>
+            <animate attributeName="opacity" values="0;0;1;1" keyTimes="0;0.4;0.5;1" dur="4s" repeatCount="indefinite"/>
+          </g>
+        </svg>
+      `),
+      visualTitle: "Scheduling",
+      visualSub: "Turns calls into booked work",
+    },
+  ];
+
+  const [activeHeroIndex, setActiveHeroIndex] = useState(0);
+  useEffect(() => {
+    const elements = Array.from(document.querySelectorAll("[data-reveal]"));
+    if (!elements.length) return;
+
+    const prefersReduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (prefersReduced) {
+      elements.forEach((el) => el.classList.add("is-visible"));
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add("is-visible");
+            observer.unobserve(entry.target);
+          }
+        });
+      },
+      { threshold: 0.2, rootMargin: "0px 0px -10% 0px" }
+    );
+
+    elements.forEach((el) => observer.observe(el));
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div className="min-h-screen bg-[#fbfaf6] text-slate-900">
+      <style>{`
+        @keyframes letterRiseIn {
+          0% { transform: translateY(16px); opacity: 0; filter: blur(0.2px); }
+          70% { opacity: 1; }
+          100% { transform: translateY(0px); opacity: 1; filter: blur(0px); }
+        }
+        @keyframes letterFallOut {
+          0% { transform: translateY(0px); opacity: 1; }
+          100% { transform: translateY(16px); opacity: 0; }
+        }
+        @keyframes heroPopIn {
+          0% { transform: translateY(30px) scale(0.95); opacity: 0; filter: blur(2px); }
+          70% { opacity: 1; }
+          100% { transform: translateY(0px) scale(1); opacity: 1; filter: blur(0px); }
+        }
+        @keyframes slideWipe {
+          0% { transform: translateX(-130%); opacity: 0; }
+          20% { opacity: 0.8; }
+          100% { transform: translateX(130%); opacity: 0; }
+        }
+        .fallIn { animation: letterRiseIn 520ms cubic-bezier(.2,.9,.2,1) both; }
+        .fallOut { animation: letterFallOut 520ms cubic-bezier(.2,.9,.2,1) both; }
+        .heroPop { animation: heroPopIn 650ms cubic-bezier(.2,.9,.2,1) both; will-change: transform, opacity, filter; }
+        .slideWipe {
+          background: linear-gradient(120deg, transparent 0%, rgba(255,255,255,0.35) 45%, rgba(255,255,255,0.05) 60%, transparent 75%);
+          animation: slideWipe 900ms ease-out both;
+          border-radius: 56px;
+          mix-blend-mode: screen;
+        }
+        .reveal {
+          opacity: 0;
+          transform: translateY(28px) scale(0.985);
+          transition: transform 700ms cubic-bezier(.2,.9,.2,1), opacity 700ms ease;
+          will-change: transform, opacity;
+        }
+        .reveal.is-visible {
+          opacity: 1;
+          transform: translateY(0px) scale(1);
+        }
+        .reveal-delay-1 { transition-delay: 120ms; }
+        .reveal-delay-2 { transition-delay: 240ms; }
+      `}</style>
+
+      {/* Top Nav */}
+      <header className="sticky top-0 z-50 border-b border-white/20 bg-white/75 backdrop-blur">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
+          <div className="flex items-center gap-3">
+            <div className="grid h-10 w-10 place-items-center rounded-2xl bg-emerald-700 text-white shadow-[0_10px_24px_-16px_rgba(0,0,0,0.5)]">
+              <IconPhone className="h-5 w-5" />
+            </div>
+            <div className="flex flex-col">
+              <span className="text-lg font-extrabold tracking-tight text-slate-900">My AI PA</span>
+              <span className="text-[11px] font-bold uppercase tracking-[0.22em] text-emerald-700/80">AI Phone Agent</span>
+            </div>
+          </div>
+
+          <nav className="hidden items-center gap-8 text-sm font-semibold text-slate-600 md:flex">
+            {[
+              { label: "Features", href: "#features" },
+              { label: "How It Works", href: "#how" },
+              { label: "Pricing", href: "#pricing" },
+              { label: "About", href: "#about" },
+            ].map((x) => (
+              <a
+                key={x.label}
+                href={x.href}
+                className="relative hover:text-slate-900 after:absolute after:-bottom-1 after:left-0 after:h-0.5 after:w-0 after:bg-emerald-600 after:transition-all after:duration-300 hover:after:w-full"
+              >
+                {x.label}
+              </a>
+            ))}
+          </nav>
+
+          <div className="flex items-center gap-3">
+            <a href="#login" className="hidden text-sm font-bold text-slate-700 hover:text-slate-900 md:block">
+              Login
+            </a>
+            <button className="hidden rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-extrabold text-slate-700 hover:border-slate-300 hover:bg-slate-50 md:inline-flex">
+              Book a Demo
+            </button>
+            <PrimaryButton className="px-6 py-3 text-sm">Get Started Free</PrimaryButton>
+          </div>
+        </div>
+      </header>
+
+      {/* HERO */}
+      <section className="relative z-0 overflow-hidden">
+        <div className="absolute inset-0">
+          <div className="absolute inset-0 bg-[#0b0b12]" />
+          <div className="absolute inset-0 bg-[radial-gradient(1200px_600px_at_30%_30%,rgba(255,96,96,0.28),transparent_58%)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(900px_500px_at_75%_60%,rgba(255,180,60,0.14),transparent_60%)]" />
+          <div className="absolute inset-0 bg-gradient-to-b from-white/0 via-white/0 to-[#fbfaf6]" />
+        </div>
+
+        <div className="relative mx-auto max-w-6xl px-6 pt-12 pb-16">
+          <div className="grid gap-12 lg:grid-cols-2 lg:items-center">
+            <div className="relative text-left">
+              <div className="pointer-events-none absolute -inset-x-4 -inset-y-3 rounded-3xl bg-black/40 backdrop-blur-[1px]" />
+              <div className="relative z-10 max-w-[560px]">
+                <TextSlideshow slides={heroSlides} className="max-w-xl" onIndexChange={setActiveHeroIndex} />
+
+                <p className="mt-6 max-w-xl text-lg sm:text-xl font-semibold leading-8 text-white/90 drop-shadow-[0_2px_10px_rgba(0,0,0,0.45)]">
+                  Answer every call instantly, capture leads automatically, and follow up fast—without lifting a finger.
+                </p>
+
+                <div className="mt-8 flex flex-wrap items-center gap-4">
+                  <PrimaryButton className="px-7 py-3.5 text-base">Get Started, It&apos;s Free!</PrimaryButton>
+                  <GhostButtonDark className="border-white/10 bg-transparent text-white/70 hover:text-white hover:bg-white/5">
+                    See How It Works
+                  </GhostButtonDark>
+                </div>
+
+                <div className="mt-10 flex flex-wrap items-center gap-3 text-[11px] font-extrabold uppercase tracking-[0.18em] text-white/75">
+                  {["Plumbing", "Dental", "Legal", "HVAC", "Home Services"].map((label) => (
+                    <span key={label} className="rounded-full border border-white/20 px-3 py-1">
+                      {label}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="pb-4">
+              <SlideVisual slides={heroSlides} activeIndex={activeHeroIndex} />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* PROBLEM */}
+      <section className="mx-auto max-w-6xl px-6 py-16">
+        <div className="grid gap-10 md:grid-cols-2 lg:grid-cols-[1fr_1.15fr] md:items-start">
+          <div data-reveal className="reveal">
+            <div className="text-3xl font-black uppercase tracking-wide text-emerald-950">THE PROBLEM</div>
+            <h2 className="mt-5 text-5xl font-black leading-tight text-emerald-950">Missed Calls Are Lost Revenue</h2>
+            <p className="mt-4 text-lg font-semibold text-slate-700">
+              Customers want immediate help—and won&apos;t wait for voicemail callbacks.
+            </p>
+            <p className="mt-4 text-lg font-medium text-slate-600">
+              Every missed call can turn into a lost job. Use the calculator to estimate the revenue you&apos;re leaving on the
+              table each month.
+            </p>
+            <RoiCalculatorResults
+              estimatedJobsLostPerMonth={estimatedJobsLostPerMonth}
+              displayRevenuePerMonth={displayMonthlyLoss}
+              pulse={pulseRecover}
+              className="mt-10 max-w-sm lg:sticky lg:top-24"
+            />
+          </div>
+
+          <div data-reveal className="reveal reveal-delay-1">
+            <RoiCalculator
+              missedCallsPerWeek={missedCallsPerWeek}
+              setMissedCallsPerWeek={setMissedCallsPerWeek}
+              avgRevenuePerJob={avgRevenuePerJob}
+              setAvgRevenuePerJob={setAvgRevenuePerJob}
+              bookingRate={bookingRate}
+              setBookingRate={setBookingRate}
+            />
+          </div>
+        </div>
+      </section>
+
+      {/* SOLUTION */}
+      <section id="features" className="mx-auto max-w-6xl px-6 pb-16">
+        <div className="grid gap-10 md:grid-cols-2 md:items-center">
+          <div data-reveal className="reveal">
+            <SectionTag text="The Solution" icon={<span className="text-emerald-600">✦</span>} />
+            <h2 className="mt-5 text-6xl font-black leading-[1.02] text-emerald-950">Let&apos;s Fix It With AI</h2>
+            <p className="mt-5 text-lg font-medium text-slate-600">
+              My AI PA answers every call, takes messages, books appointments, and makes sure missed calls turn into
+              revenue—24 hours a day, 7 days a week.
+            </p>
+            <div className="mt-5 rounded-[24px] bg-slate-900 p-6 text-white shadow-[0_24px_60px_-40px_rgba(0,0,0,0.6)] ring-1 ring-black/10">
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-sm font-extrabold text-white/85">Recovered revenue (projected)</div>
+                <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-extrabold text-white/80 ring-1 ring-white/10">
+                  estimate
+                </span>
+              </div>
+              <div className="mt-1 text-xs font-semibold text-white/60">Based on your missed-call inputs</div>
+
+              <div className="mt-4 rounded-2xl bg-white/6 p-4 ring-1 ring-white/10">
+                <svg
+                  viewBox={`0 0 ${recoveredChart.w} ${recoveredChart.h}`}
+                  className="h-32 w-full"
+                  aria-label="Recovered revenue growth chart"
+                >
+                  <defs>
+                    <linearGradient id="recoveredArea" x1="0" x2="0" y1="0" y2="1">
+                      <stop offset="0%" stop-color="#34d399" stop-opacity="0.4" />
+                      <stop offset="100%" stop-color="#34d399" stop-opacity="0" />
+                    </linearGradient>
+                    <linearGradient id="recoveredLine" x1="0" x2="1" y1="0" y2="0">
+                      <stop offset="0%" stop-color="#34d399" />
+                      <stop offset="100%" stop-color="#22c55e" />
+                    </linearGradient>
+                  </defs>
+                  <path d={`M ${recoveredChart.area}`} fill="url(#recoveredArea)" />
+                  <polyline
+                    points={recoveredChart.points}
+                    fill="none"
+                    stroke="url(#recoveredLine)"
+                    strokeWidth="4"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+                <div className="mt-2 flex items-center justify-between text-xs font-semibold text-white/60">
+                  <span>Month 1</span>
+                  <span>Month 6</span>
+                </div>
+              </div>
+
+              <div className="mt-5 grid grid-cols-3 gap-3 text-xs font-semibold text-white/70">
+                <div>
+                  <div className="text-white/50">Monthly</div>
+                  <div className="mt-1 text-base font-extrabold text-white tabular-nums">
+                    {moneyUSD(displayMonthlyLoss)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-white/50">Weekly</div>
+                  <div className="mt-1 text-base font-extrabold text-white tabular-nums">
+                    {moneyUSD(displayWeeklyLoss)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-white/50">Yearly</div>
+                  <div className="mt-1 text-base font-extrabold text-white tabular-nums">
+                    {moneyUSD(displayYearlyLoss)}
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-4 text-sm font-semibold leading-6 text-white/70">
+                Shows projected growth as missed calls are recovered by My AI PA.
+              </div>
+            </div>
+
+            <ul className="mt-8 space-y-4 text-base font-semibold text-slate-700">
+              {[
+                "Answers every call on the first ring",
+                "Captures leads and contact information",
+                "Books appointments directly in your calendar",
+                "Sends instant call summaries to your inbox",
+                "Handles FAQs about your business",
+              ].map((t) => (
+                <li key={t} className="flex items-start gap-3">
+                  <span className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100">
+                    ✓
+                  </span>
+                  {t}
+                </li>
+              ))}
+            </ul>
+
+            <div className="mt-10">
+              <PrimaryButton>Start Your Free Trial</PrimaryButton>
+            </div>
+          </div>
+
+          <div data-reveal className="reveal reveal-delay-1 rounded-[44px] bg-emerald-50/70 p-8 ring-1 ring-emerald-100">
+            <div className="space-y-5">
+              <Card className="bg-white">
+                <div className="text-sm font-extrabold text-slate-700">Incoming Call</div>
+                <div className="mt-2 text-2xl font-black text-slate-900">+1 (555) 123-4567</div>
+                <div className="mt-1 text-sm font-semibold text-slate-500">Answered in 0.3 seconds</div>
+              </Card>
+
+              <Card className="bg-white">
+                <div className="text-sm font-extrabold text-slate-700">AI Response:</div>
+                <div className="mt-3 rounded-2xl bg-slate-50 p-4 text-base font-medium text-slate-700 ring-1 ring-slate-200">
+                  “Hello! Thank you for calling. How can I help you today?”
+                </div>
+              </Card>
+
+              <Card className="bg-white">
+                <div className="text-sm font-extrabold text-slate-700">Lead Captured</div>
+                <div className="mt-4 grid grid-cols-2 gap-6 text-sm font-semibold text-slate-700">
+                  <div>
+                    <div className="text-slate-500">Name</div>
+                    <div className="mt-1 font-extrabold">John Smith</div>
+                  </div>
+                  <div>
+                    <div className="text-slate-500">Service</div>
+                    <div className="mt-1 font-extrabold">Emergency Repair</div>
+                  </div>
+                </div>
+              </Card>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Value Props Grid */}
+      <section className="mx-auto max-w-6xl px-6 py-16">
+        <div data-reveal className="reveal text-center">
+          <h2 className="text-5xl font-black leading-tight text-emerald-950">
+            The Smartest Investment for <br /> Your Business
+          </h2>
+          <p className="mx-auto mt-4 max-w-2xl text-lg font-medium text-slate-600">
+            Powered by advanced AI, My AI PA helps your callers get instant help—better than any voicemail or traditional
+            answering service.
+          </p>
+        </div>
+
+        <div data-reveal className="reveal reveal-delay-1 mt-12 grid gap-6 md:grid-cols-3">
+          {[
+            {
+              title: "Increased Revenue",
+              desc: "Capture every lead that calls. Convert missed opportunities into booked appointments and paying customers.",
+              icon: (
+                <div className="relative h-6 w-6 text-emerald-700">
+                  <span className="absolute left-1/2 top-0 -translate-x-1/2 text-[10px] font-normal leading-none">
+                    $
+                  </span>
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    className="absolute -bottom-1 left-1/2 h-[28px] w-[28px] -translate-x-1/2"
+                  >
+                    <path d="M3 17l5-4 3 2 7-4" />
+                    <path d="M15 9h6v6" />
+                  </svg>
+                </div>
+              ),
+            },
+            {
+              title: "24/7 Availability",
+              desc: "Never miss a call again—even at 3 AM. Your AI assistant handles inquiries around the clock.",
+              icon: (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-7 w-7 text-emerald-700">
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M12 7v6l4 2" />
+                </svg>
+              ),
+            },
+            {
+              title: "Better Customer Experience",
+              desc: "Professional, instant responses that make every caller feel valued and heard.",
+              icon: (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-6 w-6 text-emerald-700">
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M8 15c1.2 1.3 2.6 2 4 2s2.8-.7 4-2" />
+                  <circle cx="9" cy="10" r="1" fill="currentColor" stroke="none" />
+                  <circle cx="15" cy="10" r="1" fill="currentColor" stroke="none" />
+                </svg>
+              ),
+            },
+            {
+              title: "Reduced Costs",
+              desc: "Save thousands monthly compared to hiring a receptionist or answering service.",
+              icon: (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-6 w-6 text-emerald-700">
+                  <path d="M20 12l-8 8-8-8 8-8z" />
+                  <path d="M9 12h6" />
+                  <path d="M12 9v6" />
+                </svg>
+              ),
+            },
+            {
+              title: "Reliable & Consistent",
+              desc: "No sick days, no training required. Consistent quality on every single call.",
+              icon: (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-6 w-6 text-emerald-700">
+                  <path d="M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6l7-3z" />
+                  <path d="M9 12l2 2 4-4" />
+                </svg>
+              ),
+            },
+            {
+              title: "Instant Setup",
+              desc: "Get started in minutes. No complex integrations or technical knowledge required.",
+              icon: (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-6 w-6 text-emerald-700">
+                  {/* phone */}
+                  <rect x="3" y="4" width="8" height="16" rx="2" />
+                  <circle cx="7" cy="17" r="0.7" fill="currentColor" stroke="none" />
+                  {/* link line */}
+                  <path d="M11 9h4" />
+                  {/* AI box */}
+                  <rect x="15" y="7" width="6" height="6" rx="1.2" />
+                  <text x="16.3" y="11.2" fontSize="4" fontWeight="700" fill="currentColor" stroke="none">
+                    AI
+                  </text>
+                </svg>
+              ),
+            },
+          ].map((x) => (
+            <div key={x.title} className="rounded-3xl bg-white/70 p-8 ring-1 ring-slate-200 shadow-sm">
+              <div className="mb-5 grid h-12 w-12 place-items-center rounded-2xl bg-emerald-50 ring-1 ring-emerald-100">
+                {x.icon}
+              </div>
+              <div className="text-lg font-extrabold">{x.title}</div>
+              <p className="mt-2 text-sm font-semibold leading-6 text-slate-600">{x.desc}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* How it works */}
+      <section id="how" className="mx-auto max-w-6xl px-6 py-16">
+        <div data-reveal className="reveal text-center">
+          <SectionTag text="How It Works" icon={<span className="text-emerald-600">✓</span>} />
+          <h2 className="mt-4 text-5xl font-black text-emerald-950">Get Started in Three Simple Steps</h2>
+          <p className="mx-auto mt-4 max-w-2xl text-lg font-medium text-slate-600">
+            Setting up My AI PA is quick and easy. You&apos;ll be up and running in minutes—no technical skills required.
+          </p>
+        </div>
+
+        <div data-reveal className="reveal reveal-delay-1 mt-12 grid gap-6 md:grid-cols-3">
+          {[
+            {
+              n: "01",
+              title: "Train Your AI in 5 Minutes",
+              desc: "Provide your business details, set your hours, choose natural AI voices, and customize how calls are handled.",
+              icon: (
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="h-7 w-7 text-emerald-800"
+                >
+                  <line x1="6" y1="5" x2="18" y2="5" />
+                  <circle cx="9" cy="5" r="2" fill="currentColor" stroke="none" />
+                  <line x1="6" y1="12" x2="18" y2="12" />
+                  <circle cx="15" cy="12" r="2" fill="currentColor" stroke="none" />
+                  <line x1="6" y1="19" x2="18" y2="19" />
+                  <circle cx="11" cy="19" r="2" fill="currentColor" stroke="none" />
+                </svg>
+              ),
+            },
+            {
+              n: "02",
+              title: "Forward Your Business Number",
+              desc: "Simply forward your existing phone number to My AI PA. No new numbers needed—keep the one your customers know.",
+              icon: (
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="h-7 w-7 text-emerald-800"
+                >
+                  <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.86 19.86 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.86 19.86 0 0 1 2.08 4.18 2 2 0 0 1 4.06 2h3a2 2 0 0 1 2 1.72c.12.86.3 1.7.54 2.5a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.58-1.06a2 2 0 0 1 2.11-.45c.8.24 1.64.42 2.5.54A2 2 0 0 1 22 16.92Z" />
+                  <path d="M13 4h7v7" />
+                  <path d="M20 4l-6 6" />
+                </svg>
+              ),
+            },
+            {
+              n: "03",
+              title: "AI Answers & Captures Leads",
+              desc: "My AI PA answers calls instantly, handles inquiries, captures lead information, and sends you detailed summaries.",
+              icon: (
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="h-7 w-7 text-emerald-800"
+                >
+                  <path d="M4 6h16v9H9l-5 4v-4H4z" />
+                  <path d="M9 11l2 2 4-4" />
+                </svg>
+              ),
+            },
+          ].map((x) => (
+            <div key={x.n} className="relative rounded-3xl bg-white/70 p-8 ring-1 ring-slate-200 shadow-sm">
+              <div className="absolute -top-4 left-6 grid h-12 w-12 place-items-center rounded-2xl bg-emerald-700 text-sm font-black text-white shadow-sm">
+                {x.n}
+              </div>
+              <div className="mt-6 grid h-14 w-14 place-items-center rounded-2xl bg-emerald-50 ring-1 ring-emerald-100">
+                {x.icon}
+              </div>
+              <div className="mt-6 text-lg font-extrabold">{x.title}</div>
+              <p className="mt-2 text-sm font-semibold leading-6 text-slate-600">{x.desc}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-10 flex justify-center">
+          <PrimaryButton>Get Started Today</PrimaryButton>
+        </div>
+      </section>
+
+      {/* Features Grid */}
+      <section className="mx-auto max-w-6xl px-6 py-16">
+        <div data-reveal className="reveal text-center">
+          <h2 className="text-5xl font-black text-emerald-950">Everything You Need to Never Miss a Call</h2>
+          <p className="mx-auto mt-3 max-w-2xl text-lg font-medium text-slate-600">
+            My AI PA is packed with powerful features designed to capture every lead and delight every customer.
+          </p>
+        </div>
+
+        <div data-reveal className="reveal reveal-delay-1 mt-12 grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+          {[
+            {
+              title: "Answers Every Call",
+              desc: "Instantly answers on the first ring. No customer left waiting.",
+              icon: (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" className="h-5 w-5 text-emerald-700">
+                  <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.86 19.86 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.86 19.86 0 0 1 2.08 4.18 2 2 0 0 1 4.06 2h3a2 2 0 0 1 2 1.72c.12.86.3 1.7.54 2.5a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.58-1.06a2 2 0 0 1 2.11-.45c.8.24 1.64.42 2.5.54A2 2 0 0 1 22 16.92Z" />
+                </svg>
+              ),
+            },
+            {
+              title: "Natural Conversations",
+              desc: "Human-like AI that understands context and speaks naturally.",
+              icon: (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" className="h-5 w-5 text-emerald-700">
+                  <path d="M4 6h16v9H9l-5 4v-4H4z" />
+                </svg>
+              ),
+            },
+            {
+              title: "Appointment Scheduling",
+              desc: "Books appointments directly into your calendar system.",
+              icon: (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" className="h-5 w-5 text-emerald-700">
+                  <rect x="3" y="5" width="18" height="16" rx="2" />
+                  <path d="M8 3v4M16 3v4M3 10h18" />
+                </svg>
+              ),
+            },
+            {
+              title: "Instant Summaries",
+              desc: "Get detailed call summaries, transcripts, and recordings.",
+              icon: (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" className="h-5 w-5 text-emerald-700">
+                  <rect x="5" y="3" width="14" height="18" rx="2" />
+                  <path d="M8 8h8M8 12h8M8 16h6" />
+                </svg>
+              ),
+            },
+            {
+              title: "Multilingual Support",
+              desc: "Speaks English, French, Spanish, and more languages.",
+              icon: (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" className="h-5 w-5 text-emerald-700">
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18" />
+                </svg>
+              ),
+            },
+            {
+              title: "Lead Capture",
+              desc: "Collects contact info and qualifies leads automatically.",
+              icon: (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" className="h-5 w-5 text-emerald-700">
+                  <circle cx="9" cy="8" r="3" />
+                  <path d="M3 20a6 6 0 0 1 12 0" />
+                  <path d="M17 7h4M19 5v4" />
+                </svg>
+              ),
+            },
+            {
+              title: "Instant Notifications",
+              desc: "Email and SMS alerts for every call received.",
+              icon: (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" className="h-5 w-5 text-emerald-700">
+                  <path d="M18 8a6 6 0 1 0-12 0c0 7-3 7-3 7h18s-3 0-3-7" />
+                  <path d="M9.5 19a2.5 2.5 0 0 0 5 0" />
+                </svg>
+              ),
+            },
+            {
+              title: "Natural AI Voices",
+              desc: "Choose from 6+ professional AI voices for your brand.",
+              icon: (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" className="h-5 w-5 text-emerald-700">
+                  <path d="M12 3v18" />
+                  <path d="M8 7v10M16 9v6" />
+                </svg>
+              ),
+            },
+            {
+              title: "24/7 Availability",
+              desc: "Never miss a call—even nights, weekends, and holidays.",
+              icon: (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" className="h-5 w-5 text-emerald-700">
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M12 7v6l4 2" />
+                </svg>
+              ),
+            },
+            {
+              title: "CRM Integration",
+              desc: "Connects with your existing tools and workflows.",
+              icon: (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" className="h-5 w-5 text-emerald-700">
+                  <rect x="4" y="5" width="8" height="8" rx="2" />
+                  <rect x="12" y="11" width="8" height="8" rx="2" />
+                  <path d="M12 9h2M10 13v2" />
+                </svg>
+              ),
+            },
+            {
+              title: "Two-Way SMS",
+              desc: "Customers can text, and AI responds instantly.",
+              icon: (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" className="h-5 w-5 text-emerald-700">
+                  <rect x="4" y="3" width="16" height="18" rx="2" />
+                  <path d="M8 7h8M8 11h5" />
+                </svg>
+              ),
+            },
+            {
+              title: "Easy Setup",
+              desc: "Get started in minutes with no technical skills required.",
+              icon: (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" className="h-5 w-5 text-emerald-700">
+                  <circle cx="12" cy="12" r="3" />
+                  <path d="M19.4 15a7.9 7.9 0 0 0 .1-2l2-1.2-2-3.4-2.2.7a7.4 7.4 0 0 0-1.6-.9l-.3-2.3H8.6l-.3 2.3a7.4 7.4 0 0 0-1.6.9l-2.2-.7-2 3.4 2 1.2a7.9 7.9 0 0 0 .1 2l-2 1.2 2 3.4 2.2-.7a7.4 7.4 0 0 0 1.6.9l.3 2.3h6.8l.3-2.3a7.4 7.4 0 0 0 1.6-.9l2.2.7 2-3.4z" />
+                </svg>
+              ),
+            },
+          ].map((x) => (
+            <div key={x.title} className="rounded-3xl border border-emerald-100 bg-white/80 p-6 shadow-[0_16px_40px_-30px_rgba(15,23,42,0.3)]">
+              <div className="mb-4 grid h-12 w-12 place-items-center rounded-2xl bg-emerald-50 text-emerald-800 ring-1 ring-emerald-100">
+                {x.icon}
+              </div>
+              <div className="text-base font-extrabold text-emerald-950">{x.title}</div>
+              <p className="mt-2 text-sm font-semibold leading-6 text-slate-600">{x.desc}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Comparison */}
+      <section className="mx-auto max-w-6xl px-6 py-16">
+        <div data-reveal className="reveal text-center">
+          <h2 className="text-5xl font-black text-emerald-950">Why Choose My AI PA?</h2>
+          <p className="mx-auto mt-3 max-w-2xl text-lg font-medium text-slate-600">
+            See how we compare to traditional voicemail and expensive receptionist services.
+          </p>
+        </div>
+
+        <div data-reveal className="reveal reveal-delay-1 mt-10 overflow-hidden rounded-3xl bg-white/60 ring-1 ring-slate-200/60">
+          <div className="grid grid-cols-4 border-b border-slate-200/70 bg-white/60 px-6 py-7 text-sm font-extrabold text-slate-700">
+            <div />
+            <div className="text-center">
+              <div className="mx-auto mb-2 grid h-12 w-12 place-items-center rounded-2xl bg-emerald-700 text-white shadow-sm">
+                <IconPhone className="h-5 w-5" />
+              </div>
+              My AI PA
+              <div className="text-xs font-black text-emerald-700">From $49/mo</div>
+            </div>
+            <div className="text-center">
+              <div className="mx-auto mb-2 grid h-12 w-12 place-items-center rounded-2xl bg-rose-50 text-rose-600 ring-1 ring-rose-100">
+                <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor" aria-hidden="true">
+                  <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.86 19.86 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.86 19.86 0 0 1 2.08 4.18 2 2 0 0 1 4.06 2h3a2 2 0 0 1 2 1.72c.12.86.3 1.7.54 2.5a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.58-1.06a2 2 0 0 1 2.11-.45c.8.24 1.64.42 2.5.54A2 2 0 0 1 22 16.92Z" />
+                </svg>
+              </div>
+              Voicemail <div className="text-xs font-black text-slate-600">Free</div>
+            </div>
+            <div className="text-center">
+              <div className="mx-auto mb-2 grid h-12 w-12 place-items-center rounded-2xl bg-violet-50 text-violet-600 ring-1 ring-violet-100">
+                <svg viewBox="0 0 24 24" className="h-6 w-6" fill="currentColor">
+                  <circle cx="12" cy="8" r="3.5" />
+                  <path d="M5 20c0-4 3.5-6 7-6s7 2 7 6" />
+                </svg>
+              </div>
+              Receptionist <div className="text-xs font-black text-slate-600">$2,500+/mo</div>
+            </div>
+          </div>
+
+          {[
+            ["24/7 Call Answering", true, false, false],
+            ["Answers Questions About Your Business", true, false, true],
+            ["Books Appointments Automatically", true, false, true],
+            ["Takes Detailed Messages", true, true, true],
+            ["Instant Call Summaries & Transcripts", true, false, false],
+            ["Multilingual Support", true, false, false],
+            ["Affordable Monthly Price", true, true, false],
+            ["No Training Required", true, true, false],
+          ].map((row, idx) => (
+            <div
+              key={row[0]}
+              className={
+                "grid grid-cols-4 border-b border-slate-200/70 px-6 py-5 text-sm font-semibold text-slate-700 last:border-b-0 " +
+                (idx % 2 === 0 ? "bg-amber-50/40" : "bg-white/70")
+              }
+            >
+              <div className="font-extrabold text-slate-900">{row[0]}</div>
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="text-center text-lg">
+                  {row[i] ? (
+                    <span className={i === 1 ? "text-emerald-700" : "text-slate-600"}>✓</span>
+                  ) : (
+                    <span className="text-rose-400">✕</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Testimonials */}
+      <section className="mx-auto max-w-6xl px-6 py-16">
+        <div data-reveal className="reveal text-center">
+          <SectionTag text="Testimonials" icon={<span className="text-emerald-600">★</span>} />
+          <h2 className="mt-4 text-5xl font-black text-emerald-950">Trusted by 500+ Businesses</h2>
+          <p className="mx-auto mt-3 max-w-2xl text-lg font-medium text-slate-600">
+            Don&apos;t just take our word for it. See what business owners say about My AI PA.
+          </p>
+        </div>
+
+        <div data-reveal className="reveal reveal-delay-1 mt-10 grid gap-6 md:grid-cols-3">
+          {[
+            {
+              quote:
+                "My AI PA has been a game-changer for our plumbing business. We used to miss at least 10 calls a day. Now every single one is answered, and our leads have increased by 40%.",
+              name: "Mike Johnson",
+              role: "Owner, Johnson's Plumbing Services",
+              initials: "M",
+            },
+            {
+              quote:
+                "I was skeptical about AI answering my calls, but the voice sounds so natural that customers don't even realize it's not a real person. The call summaries save me hours every week.",
+              name: "Sarah Chen",
+              role: "Director, Premier Dental Care",
+              initials: "S",
+            },
+            {
+              quote:
+                "As a solo attorney, I can't answer calls during client meetings. My AI PA handles everything professionally and books consultations directly into my calendar. Worth every penny.",
+              name: "David Martinez",
+              role: "Attorney, Martinez Law Firm",
+              initials: "D",
+            },
+          ].map((t) => (
+            <div key={t.name} className="rounded-3xl bg-white/70 p-8 ring-1 ring-slate-200 shadow-sm">
+              <div className="mb-4 text-amber-400">★★★★★</div>
+              <p className="text-sm font-semibold leading-7 text-slate-700">“{t.quote}”</p>
+              <div className="mt-6 flex items-center gap-3">
+                <div className="grid h-10 w-10 place-items-center rounded-full bg-emerald-50 font-black text-emerald-900 ring-1 ring-emerald-100">
+                  {t.initials}
+                </div>
+                <div>
+                  <div className="text-sm font-extrabold">{t.name}</div>
+                  <div className="text-xs font-semibold text-slate-500">{t.role}</div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Pricing */}
+      <section id="pricing" className="mx-auto max-w-6xl px-6 py-16">
+        <div data-reveal className="reveal rounded-[48px] bg-emerald-50/70 p-10 ring-1 ring-emerald-100 md:p-14">
+          <div className="grid gap-10 md:grid-cols-2 md:items-center">
+            <div>
+              <SectionTag text="Simple Pricing" icon={<span className="text-emerald-600">✦</span>} />
+              <h2 className="mt-4 text-5xl font-black leading-tight text-emerald-950">
+                Start Free. Scale As <br /> You Grow.
+              </h2>
+              <p className="mt-4 text-lg font-medium text-slate-600">
+                No hidden fees. No per-minute charges. Just one simple monthly price with unlimited calls included.
+              </p>
+
+              <ul className="mt-8 space-y-3 text-sm font-semibold text-slate-700">
+                {[
+                  "Unlimited incoming calls",
+                  "24/7 availability",
+                  "Natural AI voice",
+                  "Lead capture & summaries",
+                  "Calendar integration",
+                  "14-day free trial",
+                ].map((x) => (
+                  <li key={x} className="flex items-center gap-3">
+                    <span className="grid h-6 w-6 place-items-center rounded-full bg-white text-emerald-700 ring-1 ring-emerald-100">
+                      ✓
+                    </span>
+                    {x}
+                  </li>
+                ))}
+              </ul>
+
+              <div className="mt-10 flex flex-wrap gap-4">
+                <PrimaryButton>Start 14-Day Free Trial</PrimaryButton>
+                <GhostButton className="bg-transparent">View Full Pricing</GhostButton>
+              </div>
+            </div>
+
+            <div className="mx-auto w-full max-w-md rounded-3xl bg-white p-10 shadow-[0_25px_60px_-40px_rgba(0,0,0,0.35)] ring-1 ring-slate-200">
+              <div className="text-center">
+                <div className="text-sm font-bold text-slate-500">Starting at</div>
+                <div className="mt-3 text-6xl font-black">
+                  $49<span className="text-lg font-extrabold text-slate-500">/month</span>
+                </div>
+                <div className="mt-2 text-sm font-semibold text-slate-500">Billed monthly • Cancel anytime</div>
+
+                <div className="mt-8 rounded-2xl bg-emerald-50 px-5 py-4 text-sm font-extrabold text-emerald-800 ring-1 ring-emerald-100">
+                  All plans include unlimited minutes!
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Big CTA + Footer */}
+      <section className="mt-10 bg-emerald-800">
+        <div data-reveal className="reveal mx-auto max-w-6xl px-6 py-20 text-center text-white">
+          <div className="mx-auto inline-flex items-center rounded-full bg-white/10 px-4 py-2 text-sm font-extrabold">
+            ✦ Ready to Transform Your Business?
+          </div>
+          <h2 className="mt-6 text-5xl font-black leading-tight md:text-6xl">
+            Stop Losing Customers to <br /> Voicemail
+          </h2>
+          <p className="mx-auto mt-5 max-w-3xl text-lg font-semibold text-white/80">
+            Join 500+ businesses already using My AI PA to capture every lead, delight every customer, and grow their
+            revenue—without ever missing a call again.
+          </p>
+
+          <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
+            <PrimaryButton className="bg-amber-400 hover:bg-amber-300">Get Started Free</PrimaryButton>
+            <button className="inline-flex items-center justify-center rounded-full border-2 border-white/40 bg-white/5 px-6 py-3 text-sm font-extrabold text-white hover:bg-white/10">
+              <IconPhone className="mr-2 h-4 w-4" /> Talk to Sales
+            </button>
+          </div>
+
+          <div className="mt-5 text-sm font-semibold text-white/70">No credit card required • 14-day free trial • Cancel anytime</div>
+        </div>
+
+        <footer id="about" className="border-t border-white/10">
+          <div className="mx-auto grid max-w-6xl gap-10 px-6 py-12 md:grid-cols-4">
+            <div className="text-white">
+              <div className="flex items-center gap-3">
+                <div className="grid h-10 w-10 place-items-center rounded-2xl bg-white/10 text-white">
+                  <IconPhone className="h-5 w-5" />
+                </div>
+                <span className="text-lg font-extrabold">My AI PA</span>
+              </div>
+              <p className="mt-4 text-sm font-semibold text-white/75">
+                Your AI-powered phone assistant that answers calls 24/7, captures leads, and ensures you never miss a
+                business opportunity.
+              </p>
+              <div className="mt-5 space-y-2 text-sm font-semibold text-white/75">
+                <div>hello@myaipa.com</div>
+                <div>1-800-MY-AI-PA</div>
+              </div>
+            </div>
+
+            {[
+              { title: "Product", links: ["Features", "How It Works", "Pricing", "Integrations"] },
+              { title: "Company", links: ["About Us", "Blog", "Careers", "Contact"] },
+              { title: "Legal", links: ["Privacy Policy", "Terms of Service", "Cookie Policy"] },
+            ].map((col) => (
+              <div key={col.title} className="text-white">
+                <div className="text-sm font-extrabold">{col.title}</div>
+                <ul className="mt-4 space-y-3 text-sm font-semibold text-white/75">
+                  {col.links.map((l) => (
+                    <li key={l}>
+                      <a href="#/" className="hover:text-white">
+                        {l}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+
+          <div className="border-t border-white/10 py-6 text-center text-xs font-semibold text-white/60">
+            © {new Date().getFullYear()} My AI PA. All rights reserved.
+          </div>
+        </footer>
+      </section>
+    </div>
+  );
+}
+
+
+
+
+
+
+
+
+
+
