@@ -1,10 +1,9 @@
 import React from "react";
 import ReactDOM from "react-dom";
 import App from "./App";
-import LegacyApp from "./Hello";
 import Signup from "./Signup";
-import AdminDashboard from "./AdminDashboard";
-import VoiceAssistant from "./components/VoiceAssistant";
+import Privacy from "./Privacy";
+import Terms from "./Terms";
 import "./style.css";
 
 const getRoute = () => {
@@ -29,15 +28,10 @@ function RouterRoot() {
 
   let page = <App />;
   if (route === "signup") page = <Signup />;
-  else if (route === "admin") page = <AdminDashboard />;
-  else if (route === "hello" || route === "legacy") page = <LegacyApp />;
+  else if (route === "privacy") page = <Privacy />;
+  else if (route === "terms") page = <Terms />;
 
-  return (
-    <>
-      {page}
-      {route !== "home" ? <VoiceAssistant placement="bottom-right" /> : null}
-    </>
-  );
+  return page;
 }
 
 ReactDOM.render(<RouterRoot />, document.getElementById("root"));

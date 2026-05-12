@@ -1,82 +1,169 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
-
-const API_BASE = (process.env.REACT_APP_API_BASE_URL || "http://localhost:8787").replace(/\/+$/, "");
-
-const coreBullets = [
-  "• Answers call when you can’t",
-  "• talk to customers",
-  "• Answers any FAQs",
-  "• Collects details of the call and texts them to your phone for easy call back.",
+import React, { useEffect, useRef, useState } from "react";
+const proofFeatureCards = [
+  {
+    eyebrow: "Fast onboarding",
+    title: "Easy 5-minute setup",
+    body: "Fast onboarding. No technical hassle.",
+    icon: "clock",
+  },
+  {
+    eyebrow: "Keep your number",
+    title: "Keep your existing business number",
+    body: "No need to change the number your customers already know.",
+    icon: "phone",
+  },
 ];
 
-const benefitBullets = [
-  "• Answer phone 24/7",
-  "• Takes call after 3 Rings",
-  "• Sends a thank you text to the caller",
+const heroCallTranscript = [
+  {
+    time: "6:42 PM",
+    speaker: "Caller",
+    accent: "bg-[#9fb4cf]",
+    text: "Hi, I need someone to wire up my hot tub. I didn't expect anyone to pick up since I'm calling after hours",
+  },
+  {
+    time: "6:42 PM",
+    speaker: "My AI PA",
+    accent: "bg-[#66e7b4]",
+    text: "At Tim's Electrical we're always here to help. I'll text these details to the appropriate staff member for a call back ASAP",
+  },
 ];
 
-const heroRotatingHighlights = [
-  { label: "Answers calls 24/7.", icon: "clock", tone: "bg-cyan-100 text-cyan-700" },
-  { label: "Picks up after 3 rings.", icon: "phone", tone: "bg-blue-100 text-blue-700" },
-  { label: "Filters time-wasters.", icon: "filter", tone: "bg-indigo-100 text-indigo-700" },
-  { label: "Sets up easy callbacks.", icon: "callback", tone: "bg-emerald-100 text-emerald-700" },
-  { label: "Cuts hangups, boosts sales.", icon: "growth", tone: "bg-amber-100 text-amber-700" },
-  { label: "Handles FAQs instantly.", icon: "faq", tone: "bg-violet-100 text-violet-700" },
-  { label: "Texts call details fast.", icon: "text", tone: "bg-sky-100 text-sky-700" },
-  { label: "Sends caller reminders.", icon: "bell", tone: "bg-teal-100 text-teal-700" },
-  { label: "Prioritizes urgent callers.", icon: "growth", tone: "bg-rose-100 text-rose-700" },
+const problemMoments = [
+  {
+    body: "A caller has a problem and is looking for solutions.",
+    bodyLines: ["A caller has a problem", "and is looking for solutions."],
+    art: "problem",
+  },
+  {
+    body: "Your professional AI agent engages the customer and collects details for easy follow-up.",
+    bodyLines: [
+      "Your professional AI agent",
+      "engages the customer",
+      "and collects details that are",
+      "sent by text to your phone",
+    ],
+    art: "agent",
+  },
+  {
+    body: "With a clear plan, the customer feels heard and is more open to a future callback.",
+    bodyLines: [
+      "With a clear plan, the customer",
+      "feels heard and is now open",
+      "to a future callback.",
+    ],
+    art: "callback",
+    artClassName: "h-[94px] w-[146px]",
+  },
 ];
 
-function NavButton({ onClick, children, primary }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={
-        "rounded-full px-5 py-3 text-sm font-black uppercase tracking-[0.14em] transition " +
-        (primary
-          ? "bg-gradient-to-r from-emerald-700 to-amber-500 text-white shadow-[0_18px_30px_-18px_rgba(16,185,129,0.85)]"
-          : "border border-white/25 bg-white/5 text-white/80 hover:bg-white/10")
-      }
-    >
-      {children}
-    </button>
-  );
-}
+const benefitCards = [
+  {
+    code: "EL",
+    eyebrow: "Electrical",
+    accent: "from-blue-600 to-blue-500",
+    glow: "shadow-[0_18px_40px_-30px_rgba(56,189,248,0.42)]",
+    title: "Catch wiring, service, and quote calls while you are on-site.",
+    body: "Panel upgrades, hot tub wiring, breaker issues, and estimate requests still get handled when your hands are full or you are driving between jobs.",
+  },
+  {
+    code: "PL",
+    eyebrow: "Plumbing",
+    accent: "from-blue-400 to-blue-500",
+    glow: "shadow-[0_18px_40px_-30px_rgba(96,165,250,0.42)]",
+    title: "Plumbing calls answered fast",
+    body: "Burst pipes, drain calls, fixture installs, and emergency-service requests stay moving while you're on the job so no plumbing lead gets left waiting.",
+  },
+  {
+    code: "HV",
+    eyebrow: "HVAC",
+    accent: "from-emerald-500 to-emerald-400",
+    glow: "shadow-[0_18px_40px_-30px_rgba(52,211,153,0.42)]",
+    title: "Handle repair calls even after-hours or in peak season.",
+    body: "Furnace, AC, and maintenance callers can get a real response, leave the right details, and stay warm instead of calling the next company.",
+  },
+  {
+    code: "RF",
+    eyebrow: "Roofing & Exterior",
+    accent: "from-orange-500 to-orange-400",
+    glow: "shadow-[0_18px_40px_-30px_rgba(250,204,21,0.34)]",
+    title: "Keep storm, repair, and estimate calls organized.",
+    body: "When you are on a roof or a site visit, our system makes sure homeowner leads get answered, details captured, and follow-ups never fall through.",
+  },
+];
 
-function ChatBubble({ role, children }) {
-  const isUser = role === "user";
-  return (
-    <div className={"flex " + (isUser ? "justify-end" : "justify-start")}>
-      <div
-        className={
-          "max-w-[92%] rounded-2xl px-4 py-3 text-sm font-semibold leading-snug " +
-          (isUser
-            ? "bg-gradient-to-r from-emerald-700 to-amber-500 text-white"
-            : "border border-white/10 bg-black/25 text-white/85")
-        }
-      >
-        {children}
-      </div>
-    </div>
-  );
-}
+const transcriptMoments = [
+  { start: 0, end: 13, speaker: "AI assistant", text: "Thanks for calling Tim's Electrical Services. We handle residential and commercial electrical work. How can I help today?" },
+  { start: 13, end: 30, speaker: "Caller", text: "I am wondering about your hours and whether someone can call me back about maintenance work." },
+  { start: 30, end: 56, speaker: "AI assistant", text: "We are open from 9 a.m. to 6 p.m. I can also collect your details now so the team can follow up with context." },
+  { start: 56, end: 97, speaker: "Caller", text: "I need maintenance for flickering lights at 63 York Street sometime next week." },
+  { start: 97, end: 144, speaker: "AI assistant", text: "Got it. I have the address. What is the best phone number and time of day to reach you?" },
+  { start: 144, end: 180, speaker: "AI assistant", text: "Thanks for calling. A summary has been sent to the service team and a confirmation text has been sent to your phone." },
+];
 
-function SourceBadge({ children }) {
-  return (
-    <span className="inline-flex items-center rounded-full border border-emerald-200/20 bg-emerald-200/10 px-2 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-emerald-100/85">
-      {children}
-    </span>
-  );
-}
+const waveformBars = [
+  0.12, 0.18, 0.24, 0.36, 0.22, 0.4, 0.52, 0.34, 0.21, 0.18, 0.28, 0.42,
+  0.31, 0.16, 0.1, 0.22, 0.48, 0.58, 0.46, 0.24, 0.18, 0.2, 0.39, 0.54,
+  0.32, 0.18, 0.14, 0.26, 0.44, 0.5, 0.28, 0.16, 0.12, 0.34, 0.56, 0.62,
+  0.48, 0.27, 0.18, 0.14, 0.22, 0.4, 0.55, 0.37, 0.19, 0.12, 0.2, 0.35,
+];
 
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
+const pricingCards = [
+  {
+    name: "Light",
+    price: "$19.99",
+    suffix: "/month",
+    eyebrow: "Current live plan",
+    featured: true,
+    points: ["24/7 call answering", "Lead summary text to the owner", "Caller confirmation text", "Basic FAQ handling", "14-day free trial with no card required"],
+  },
+  {
+    name: "Premium",
+    price: "$29.99",
+    suffix: "/month",
+    eyebrow: "Preview",
+    featured: false,
+    comingSoon: true,
+    points: ["Advanced call routing", "Priority urgency tagging", "Expanded script and FAQ controls", "Enhanced owner notifications", "Built for teams ready to scale call handling"],
+  },
+];
 
-function clamp(n, min, max) {
-  return Math.max(min, Math.min(max, n));
-}
+const setupSteps = [
+  "Click on the free trial button and fill in your business' info. Then set your custom greeting and common questions.",
+  "Run a test call, listen back, and go live when you are comfortable.",
+  "Keep your current number and forward calls to your My AI PA number.",
+];
+
+const testimonialCards = [
+  {
+    quote: "I am usually on a job and not in a position to answer every call. Now people get a proper response and I get the details by text instead of chasing voicemails later.",
+    name: "Mark S.",
+    role: "Carpentry contractor",
+  },
+  {
+    quote: "Evening rental inquiries used to sit until morning. Now callers get an immediate response and our team wakes up to clean lead details instead of a pile of missed calls.",
+    name: "David A.",
+    role: "Property manager, St. Catharines",
+  },
+  {
+    quote: "Roof repair calls used to interrupt me while I was on ladders or meeting homeowners. Now the caller gets helped and I get the job details by text.",
+    name: "Lisa S.",
+    role: "Roofing contractor",
+  },
+  {
+    quote: "Service calls come in while we are driving between plumbing jobs. My AI PA keeps the lead warm, answers basics, and sends us the follow-up details.",
+    name: "Anthony R.",
+    role: "Plumbing contractor",
+  },
+];
+
+const faqs = [
+  { q: "Will callers know they are speaking with an AI assistant?", a: "Yes. The goal is to sound clear, professional, and helpful while answering questions and collecting the right job details." },
+  { q: "Do I have to change my business number?", a: "No. Keep your current number and forward calls to your My AI PA number." },
+  { q: "What if someone calls after hours?", a: "Your AI assistant can still answer, help the caller, and send both sides a text follow-up." },
+  { q: "Can I control what it says?", a: "Yes. You set the custom greeting and common questions so it fits your business." },
+  { q: "How hard is setup?", a: "It is meant to be simple: fill in your business info, test a call, then go live with no downtime." },
+];
 
 function formatClock(totalSeconds) {
   const safe = Math.max(0, Math.floor(Number(totalSeconds) || 0));
@@ -85,1611 +172,54 @@ function formatClock(totalSeconds) {
   return `${minutes}:${seconds}`;
 }
 
-function buildSpectrumPath(values, width = 1200, height = 120, baseline = 65) {
-  const points = (values || []).map((v, i) => {
-    const x = (i / Math.max(1, values.length - 1)) * width;
-    const amp = clamp(v, 0, 1) * 34;
-    const y = baseline - amp + Math.sin(i * 0.9) * 6;
-    return [x, y];
-  });
-  if (!points.length) return `M0,${baseline} L${width},${baseline}`;
-
-  let d = `M ${points[0][0].toFixed(2)},${points[0][1].toFixed(2)}`;
-  for (let i = 1; i < points.length; i += 1) {
-    const [x0, y0] = points[i - 1];
-    const [x1, y1] = points[i];
-    const cx = ((x0 + x1) / 2).toFixed(2);
-    d += ` Q ${cx},${y0.toFixed(2)} ${x1.toFixed(2)},${y1.toFixed(2)}`;
-  }
-  return d;
-}
-
-function buildWaveAreaPath(values, width = 1200, height = 120, centerY = 60, scale = 38) {
-  if (!values?.length) {
-    return `M 0,${centerY} L ${width},${centerY} L ${width},${centerY} L 0,${centerY} Z`;
-  }
-  const top = values.map((v, i) => {
-    const x = (i / Math.max(1, values.length - 1)) * width;
-    const amp = clamp(v, 0, 1) * scale;
-    return [x, centerY - amp];
-  });
-  const bottom = values
-    .map((v, i) => {
-      const x = (i / Math.max(1, values.length - 1)) * width;
-      const amp = clamp(v, 0, 1) * scale;
-      return [x, centerY + amp];
-    })
-    .reverse();
-
-  const pts = [...top, ...bottom];
-  let d = `M ${pts[0][0].toFixed(2)},${pts[0][1].toFixed(2)}`;
-  for (let i = 1; i < pts.length; i += 1) {
-    d += ` L ${pts[i][0].toFixed(2)},${pts[i][1].toFixed(2)}`;
-  }
-  d += " Z";
-  return d;
-}
-
-function estimateSpeechDurationSec(text, speaker) {
-  const normalized = String(text || "").trim();
-  if (!normalized) return 1.2;
-  if (speaker === "SYSTEM") return 1.6;
-  const words = normalized.split(/\s+/).filter(Boolean).length;
-  const commas = (normalized.match(/,/g) || []).length;
-  const sentenceStops = (normalized.match(/[.!?]/g) || []).length;
-  // Intentionally conservative pace so transcript does not jump ahead of speech.
-  // AI voice lines in the sample audio speak slower than casual reading speed.
-  const isAi = speaker === "AI";
-  const isCaller = speaker === "CALLER";
-  const secondsPerWord = isAi ? 0.46 : isCaller ? 0.43 : 0.34;
-  const base = 1.2 + words * secondsPerWord + commas * 0.22 + sentenceStops * 0.38;
-  const tailHold = isAi ? 0.55 : isCaller ? 0.45 : 0.2;
-  const minHold = isAi ? 2.5 : isCaller ? 2.4 : 1.4;
-  return Math.max(minHold, Math.min(base + tailHold, 20));
-}
-
-function ConciergeWidget({ sections, mode = "floating", onFocusChange, onClose }) {
-  const [input, setInput] = useState("");
-  const [autoSpeak, setAutoSpeak] = useState(true);
-  const [agentStatus, setAgentStatus] = useState("Ready");
-  const [isBusy, setIsBusy] = useState(false);
-  const [faqHealth, setFaqHealth] = useState("unknown");
-  const [messages, setMessages] = useState([
-    {
-      id: 1,
-      role: "assistant",
-      text: "I can find anything on this page for you and jump to it. Ask about pricing, benefits, setup, admin, or call handling.",
-    },
-  ]);
-
-  const sectionIndex = useMemo(() => {
-    return sections.map((section) => ({
-      ...section,
-      haystack: `${section.title} ${section.summary} ${section.keywords.join(" ")}`.toLowerCase(),
-    }));
-  }, [sections]);
-
-  const performAction = (action) => {
-    if (!action) return;
-    if (action.sectionId && onFocusChange) {
-      const focused = sections.find((s) => s.id === action.sectionId);
-      if (focused) onFocusChange(focused, { reason: "action" });
-    }
-    if (action.type === "scroll" && action.ref?.current) {
-      action.ref.current.scrollIntoView({ behavior: "smooth", block: "start" });
-      return;
-    }
-    if (action.type === "route" && action.hash) {
-      window.location.hash = action.hash;
-    }
-  };
-
-  const answerQuery = (raw) => {
-    const q = String(raw || "").trim();
-    if (!q) return null;
-    const query = q.toLowerCase();
-
-    if (query.includes("signup") || query.includes("sign up") || query.includes("setup")) {
-      return {
-        text: "I can take you straight to the setup flow where you search your Google Business Profile and continue onboarding.",
-        focusSectionId: "setup",
-        actions: [{ label: "Open setup flow", action: { type: "route", hash: "/signup", sectionId: "setup" } }],
-      };
-    }
-
-    if (query.includes("admin") || query.includes("dashboard")) {
-      return {
-        text: "The admin dashboard is for reviewing leads/calls, editing FAQs, and changing answering settings.",
-        focusSectionId: "data",
-        actions: [{ label: "Open admin dashboard", action: { type: "route", hash: "/admin", sectionId: "data" } }],
-      };
-    }
-
-    const matches = sectionIndex
-      .map((section) => ({ section, score: scoreSectionMatch(section, query) }))
-      .filter((x) => x.score > 0)
-      .sort((a, b) => b.score - a.score);
-
-    if (matches.length > 0) {
-      const best = matches[0].section;
-      return {
-        text: best.summary,
-        focusSectionId: best.id,
-        actions: [
-          { label: `Jump to ${best.title}`, action: { type: "scroll", ref: best.ref, sectionId: best.id } },
-          ...(best.extraActions || []),
-        ],
-      };
-    }
-
-    return {
-      text: "I couldn’t find an exact match yet. Try asking about benefits, call handling, tools, data storage, setup, or admin.",
-      focusSectionId: "overview",
-      actions: [
-        { label: "Show benefits", action: { type: "scroll", ref: sections.find((s) => s.id === "benefits")?.ref, sectionId: "benefits" } },
-        { label: "Show call flow", action: { type: "scroll", ref: sections.find((s) => s.id === "call-flow")?.ref, sectionId: "call-flow" } },
-      ].filter((x) => x.action.ref),
-    };
-  };
-
-  const searchFaqBackend = async (q) => {
-    try {
-      const response = await fetch(`${API_BASE}/api/faqs/search?q=${encodeURIComponent(q)}&businessId=1&limit=3`);
-      if (!response.ok) {
-        setFaqHealth("offline");
-        return { error: `FAQ service returned ${response.status}` };
-      }
-      const data = await response.json();
-      setFaqHealth("connected");
-      const result = data?.results?.[0];
-      if (!result) return { noMatch: true };
-      return {
-        text: `I found an FAQ answer: ${result.answer}`,
-        source: "faq",
-        focusSectionId: "overview",
-        actions: [
-          { label: "Jump to overview", action: { type: "scroll", ref: sections.find((s) => s.id === "overview")?.ref, sectionId: "overview" } },
-          { label: "Open admin dashboard", action: { type: "route", hash: "/admin", sectionId: "data" } },
-        ].filter((x) => x.action.type === "route" || x.action.ref),
-      };
-    } catch (_err) {
-      setFaqHealth("offline");
-      return { error: "FAQ service unavailable" };
-    }
-  };
-
-  const buildReply = async (q) => {
-    const localReply = answerQuery(q);
-    const lower = String(q || "").toLowerCase();
-    const faqLike =
-      lower.includes("?") ||
-      lower.includes("hours") ||
-      lower.includes("estimate") ||
-      lower.includes("book") ||
-      lower.includes("price");
-
-    if (faqLike) {
-      const faqReply = await searchFaqBackend(q);
-      if (faqReply?.source === "faq") return faqReply;
-      if (faqReply?.error) {
-        return {
-          text: `I tried to check the FAQ service but it is unavailable right now (${faqReply.error}). I can still guide you through the page.`,
-          focusSectionId: "overview",
-          actions: [
-            { label: "Show benefits", action: { type: "scroll", ref: sections.find((s) => s.id === "benefits")?.ref, sectionId: "benefits" } },
-            { label: "Open admin dashboard", action: { type: "route", hash: "/admin", sectionId: "data" } },
-          ].filter((x) => x.action.type === "route" || x.action.ref),
-        };
-      }
-      if (faqReply?.noMatch) {
-        return {
-          text: "I checked the FAQ data but did not find a direct answer for that question yet. You can add it in the FAQ Editor.",
-          focusSectionId: "data",
-          actions: [
-            { label: "Open admin dashboard", action: { type: "route", hash: "/admin", sectionId: "data" } },
-            { label: "Jump to overview", action: { type: "scroll", ref: sections.find((s) => s.id === "overview")?.ref, sectionId: "overview" } },
-          ].filter((x) => x.action.type === "route" || x.action.ref),
-        };
-      }
-    }
-
-    if (localReply?.text?.includes("I couldn’t find an exact match yet.")) {
-      const faqReply = await searchFaqBackend(q);
-      if (faqReply?.source === "faq") return faqReply;
-    }
-
-    return localReply;
-  };
-
-  const streamAssistantText = async (messageId, fullText) => {
-    const chars = Array.from(fullText || "");
-    let current = "";
-    for (let i = 0; i < chars.length; i += 1) {
-      current += chars[i];
-      setMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, text: current } : m)));
-      if (i < chars.length - 1) await sleep(i < 50 ? 9 : 5);
-    }
-  };
-
-  const submit = async (value) => {
-    const q = String(value || "").trim();
-    if (!q || isBusy) return;
-    setIsBusy(true);
-    const userId = Date.now();
-    const assistantId = userId + 1;
-    setMessages((prev) => [
-      ...prev,
-      { id: userId, role: "user", text: q },
-      { id: assistantId, role: "assistant", text: "...", actions: [], isTyping: true, source: null },
-    ]);
-    setInput("");
-    setAgentStatus("Searching page");
-    await sleep(150);
-    const reply = await buildReply(q);
-    setAgentStatus("Updating screen");
-    if (reply?.focusSectionId && onFocusChange) {
-      const focused = sections.find((s) => s.id === reply.focusSectionId);
-      if (focused) onFocusChange(focused, { reason: "query", query: q, replyText: reply.text });
-    }
-    await sleep(120);
-    setAgentStatus("Typing response");
-    setMessages((prev) =>
-      prev.map((m) =>
-        m.id === assistantId ? { ...m, text: "", actions: reply.actions || [], isTyping: false, source: reply.source || null } : m
-      )
-    );
-    await streamAssistantText(assistantId, reply.text || "");
-    setAgentStatus("Done");
-    setTimeout(() => setAgentStatus("Ready"), 800);
-    setIsBusy(false);
-  };
-
-  const isFloating = mode === "floating";
-  const latestAssistantMessage =
-    [...messages].reverse().find((message) => message.role === "assistant")?.text ||
-    "Hi, I’m My AI PA. Tell me what you need and I’ll help one step at a time.";
-  const chatStatus = isBusy ? "Busy" : "Idle";
-  const charCount = input.length;
-
-  return (
-    <div
-      className={
-        (isFloating
-          ? "fixed bottom-5 right-5 z-40 w-[min(420px,calc(100vw-24px))]"
-          : "relative w-full") + ""
-      }
-    >
-      <div
-        className={
-          (isFloating
-            ? "overflow-hidden rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(8,10,16,0.97),rgba(6,8,14,0.99))] shadow-[0_35px_90px_-45px_rgba(0,0,0,0.95)] ring-1 ring-black/20 backdrop-blur"
-            : "rounded-[20px] border border-white/12 bg-[linear-gradient(180deg,rgba(12,14,20,0.6),rgba(10,12,18,0.78))] p-4 shadow-[0_20px_50px_-35px_rgba(0,0,0,0.85)] backdrop-blur-sm") + ""
-        }
-      >
-        <div className="flex items-start justify-between gap-3 px-4 py-3">
-          <div>
-            <div className="text-xs font-bold uppercase tracking-[0.32em] text-white/55">MY AI PA</div>
-            <div className="text-3xl leading-none font-extrabold text-white">Website Assistant</div>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm leading-none font-medium text-white/90">{chatStatus}</div>
-            {onClose ? (
-              <button
-                type="button"
-                onClick={onClose}
-                className="rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm font-black uppercase tracking-[0.14em] text-white/80 hover:bg-white/10"
-                aria-label="Close assistant chat"
-              >
-                ×
-              </button>
-            ) : null}
-          </div>
-        </div>
-        <div className="h-px bg-white/10" />
-
-        <div className="px-4 py-3">
-          <div className="rounded-[22px] border border-white/10 bg-white/5 px-4 py-3 text-[16px] leading-relaxed text-white/95">
-            {latestAssistantMessage}
-          </div>
-        </div>
-
-        <div className="h-px bg-white/10" />
-
-        <div className="px-4 py-3">
-          <div className="mb-4 flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              className="rounded-full border border-emerald-300/25 bg-emerald-300/12 px-4 py-2 text-sm leading-none text-emerald-100"
-            >
-              Website sync on
-            </button>
-            <button
-              type="button"
-              onClick={() => setAutoSpeak((v) => !v)}
-              className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm leading-none text-white/85"
-            >
-              <span
-                className={
-                  "grid h-5 w-5 place-items-center rounded " +
-                  (autoSpeak ? "bg-emerald-500 text-white" : "bg-white/10 text-white/55")
-                }
-              >
-                ✓
-              </span>
-              Auto-speak replies
-            </button>
-          </div>
-
-          <form
-            className="flex items-center gap-3"
-            onSubmit={(e) => {
-              e.preventDefault();
-              submit(input);
-            }}
-          >
-            <input
-              type="text"
-              value={input}
-              maxLength={2000}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Ask My AI PA..."
-              disabled={isBusy}
-              className="w-full rounded-[16px] border border-white/10 bg-black/45 px-4 py-4 text-[32px] leading-none text-white placeholder:text-white/35 outline-none focus:border-emerald-300/30 disabled:opacity-60"
-            />
-            <button
-              type="submit"
-              disabled={isBusy || !input.trim()}
-              className="rounded-[16px] bg-gradient-to-r from-emerald-700 to-amber-500 px-6 py-4 text-[32px] leading-none font-semibold text-white disabled:opacity-45"
-            >
-              Send
-            </button>
-          </form>
-
-          <div className="mt-4 flex flex-wrap gap-3">
-            <button
-              type="button"
-              className="rounded-[14px] border border-white/15 bg-white/6 px-4 py-3 text-[20px] leading-none font-semibold text-white/95"
-            >
-              Record
-            </button>
-            <button
-              type="button"
-              className="rounded-[14px] border border-white/15 bg-white/6 px-4 py-3 text-[20px] leading-none text-white/90"
-            >
-              Stop speaking
-            </button>
-          </div>
-
-          <p className="mt-4 text-base leading-tight text-white/55">
-            Firefox fallback mode: record, transcribe, then send automatically.
-          </p>
-          <p className="mt-3 text-sm leading-none text-white/50">{charCount}/2000 characters</p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function scoreSectionMatch(section, query) {
-  const haystack =
-    typeof section?.haystack === "string"
-      ? section.haystack
-      : `${section?.title || ""} ${section?.summary || ""} ${Array.isArray(section?.keywords) ? section.keywords.join(" ") : ""}`.toLowerCase();
-  const stopWords = new Set([
-    "what",
-    "are",
-    "is",
-    "the",
-    "a",
-    "an",
-    "your",
-    "you",
-    "do",
-    "does",
-    "how",
-    "to",
-    "me",
-    "show",
-    "tell",
-    "about",
-    "tomorrow",
-  ]);
-  let score = 0;
-  if (haystack.includes(query)) score += 10;
-  for (const word of query.split(/\s+/).filter(Boolean)) {
-    if (word.length < 2) continue;
-    if (stopWords.has(word)) continue;
-    if (haystack.includes(word)) score += 1;
-  }
-  return score;
-}
-
-function AgentFocusPanel({ focus, onJump }) {
-  if (!focus) return null;
-  return (
-    <div className="mt-6 rounded-2xl border border-white/25 bg-white/10 px-4 py-4 shadow-[0_20px_50px_-36px_rgba(0,0,0,0.45)] backdrop-blur">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-[0.22em] text-white/55">Agent Focus</p>
-          <p className="mt-1 text-lg font-extrabold text-white">{focus.displayTitle}</p>
-        </div>
-        <button
-          type="button"
-          onClick={onJump}
-          className="rounded-full border border-white/30 bg-white/15 px-4 py-2 text-xs font-black uppercase tracking-[0.16em] text-white hover:bg-white/20"
-        >
-          Show This
-        </button>
-      </div>
-      <p className="mt-2 text-sm font-semibold leading-snug text-white/85">{focus.summary}</p>
-      {focus.lastUserPrompt ? (
-        <div className="mt-3 rounded-xl border border-white/15 bg-white/10 px-3 py-2 text-xs font-semibold text-white/75">
-          Based on: "{focus.lastUserPrompt}"
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function AiOpsPanel({ callFlowRef, toolsRef, dataRef, floating = false }) {
-  const [open, setOpen] = useState(!floating);
-  const wrapperClass = floating
-    ? "fixed bottom-5 left-5 z-40 w-[min(420px,calc(100vw-24px))]"
-    : "relative";
-
-  return (
-    <div className={wrapperClass}>
-      {floating ? (
-        <div className="mb-3 flex justify-start">
-          <button
-            type="button"
-            onClick={() => setOpen((v) => !v)}
-            className="rounded-full border border-white/20 bg-[linear-gradient(180deg,rgba(10,12,18,0.86),rgba(8,10,16,0.95))] px-4 py-2 text-xs font-black uppercase tracking-[0.16em] text-white/85 shadow-[0_18px_36px_-24px_rgba(0,0,0,0.9)]"
-          >
-            {open ? "Hide How It Works" : "How It Works"}
-          </button>
-        </div>
-      ) : null}
-      {open ? (
-        <>
-          <div className="pointer-events-none absolute -inset-3 rounded-[34px] bg-[radial-gradient(60%_70%_at_20%_10%,rgba(255,255,255,0.35),transparent_70%)] opacity-70" />
-          <div className="relative overflow-hidden rounded-[32px] border border-white/25 bg-[linear-gradient(180deg,rgba(10,12,18,0.78),rgba(8,10,16,0.92))] p-6 shadow-[0_45px_120px_-60px_rgba(0,0,0,0.85)] ring-1 ring-black/25">
-            <div className="rounded-[22px] border border-white/10 bg-white/5 p-5">
-              <p className="text-xs font-bold uppercase tracking-[0.28em] text-white/60">How Calls Get Handled</p>
-              <div className="mt-4 space-y-4">
-                <div ref={callFlowRef} className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                  <p className="text-xs font-bold uppercase tracking-[0.2em] text-white/50">Caller Experience</p>
-                  <p className="mt-2 text-sm font-semibold text-white/85">
-                    Calls are answered quickly, common questions get handled, and urgent requests are captured cleanly.
-                  </p>
-                </div>
-                <div ref={toolsRef} className="rounded-2xl border border-emerald-300/20 bg-emerald-200/10 p-4">
-                  <p className="text-xs font-bold uppercase tracking-[0.2em] text-emerald-100/80">Owner Experience</p>
-                  <ul className="mt-2 space-y-1 text-sm font-semibold text-emerald-50/90">
-                    <li>Lead details are captured automatically</li>
-                    <li>Important calls can be flagged by urgency</li>
-                    <li>Follow-up info is ready for quick callbacks</li>
-                    <li>FAQ answers stay consistent</li>
-                  </ul>
-                </div>
-                <div ref={dataRef} className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                  <p className="text-xs font-bold uppercase tracking-[0.2em] text-white/50">What You See In Admin</p>
-                  <p className="mt-2 text-sm font-semibold text-white/80">
-                    Calls, leads, FAQs, and settings are all managed in one dashboard so you can monitor and improve performance.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </>
-      ) : null}
-    </div>
-  );
-}
-
-function DemoModal({ open, onClose, onStartSetup }) {
-  const [scenario, setScenario] = useState("emergency");
-  const [messages, setMessages] = useState([]);
-  const [running, setRunning] = useState(false);
-
-  const scripts = {
-    emergency: [
-      { role: "caller", text: "Hi, I have a leaking water heater and need help tonight." },
-      { role: "assistant", text: "I can help. Is water actively leaking right now and causing damage?" },
-      { role: "caller", text: "Yes, it is." },
-      { role: "assistant", text: "Got it. I marked this urgent, captured your callback details, and sent the lead to the owner right now." },
-    ],
-    faq: [
-      { role: "caller", text: "What are your hours tomorrow and can I book?" },
-      { role: "assistant", text: "I can help with that. I can answer the basics and collect your info for a callback booking." },
-      { role: "caller", text: "Please have someone call me in the morning." },
-      { role: "assistant", text: "Done. Your request is captured and the owner has been notified." },
-    ],
-  };
-
-  const runDemo = async () => {
-    if (running) return;
-    setRunning(true);
-    setMessages([]);
-    for (const line of scripts[scenario]) {
-      await sleep(420);
-      setMessages((prev) => [...prev, line]);
-    }
-    setRunning(false);
-  };
-
-  if (!open) return null;
-
-  return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/55 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-2xl rounded-[28px] border border-white/20 bg-[linear-gradient(180deg,rgba(10,12,18,0.92),rgba(8,10,16,0.97))] p-5 shadow-[0_60px_140px_-60px_rgba(0,0,0,0.95)]">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.24em] text-white/55">Demo Call Simulation</p>
-            <h3 className="mt-2 text-2xl font-extrabold text-white">CALL THE DEMO</h3>
-            <p className="mt-2 text-sm font-semibold text-white/70">
-              Simulate how the AI answers, handles questions, and captures a lead before you start setup.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-full border border-white/15 bg-white/5 px-3 py-2 text-xs font-black uppercase tracking-[0.14em] text-white/80"
-          >
-            Close
-          </button>
-        </div>
-
-        <div className="mt-4 flex flex-wrap gap-2">
-          {[
-            ["emergency", "Urgent Service Call"],
-            ["faq", "FAQ + Lead Capture"],
-          ].map(([key, label]) => (
-            <button
-              key={key}
-              type="button"
-              onClick={() => setScenario(key)}
-              className={
-                "rounded-full px-3 py-2 text-xs font-bold " +
-                (scenario === key ? "bg-gradient-to-r from-emerald-700 to-amber-500 text-white" : "border border-white/10 bg-white/5 text-white/75")
-              }
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
-        <div className="mt-4 rounded-2xl border border-white/10 bg-black/20 p-4">
-          <div className="flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              onClick={runDemo}
-              disabled={running}
-              className="rounded-full bg-gradient-to-r from-emerald-700 to-amber-500 px-5 py-3 text-sm font-black uppercase tracking-[0.14em] text-white disabled:opacity-50"
-            >
-              {running ? "Running..." : "Run Demo"}
-            </button>
-            <button
-              type="button"
-              onClick={onStartSetup}
-              className="rounded-full border border-white/15 bg-white/5 px-4 py-3 text-sm font-bold text-white/85"
-            >
-              Start setup after demo
-            </button>
-          </div>
-
-          <div className="mt-4 space-y-3 rounded-xl border border-white/10 bg-[#090b10] p-4">
-            {messages.length === 0 ? (
-              <p className="text-sm font-semibold text-white/55">Pick a scenario and run the demo to see a simulated caller conversation.</p>
-            ) : null}
-            {messages.map((m, idx) => (
-              <div key={`${m.role}-${idx}`} className={"flex " + (m.role === "caller" ? "justify-start" : "justify-end")}>
-                <div
-                  className={
-                    "max-w-[85%] rounded-2xl px-4 py-3 text-sm font-semibold " +
-                    (m.role === "caller" ? "border border-white/10 bg-white/5 text-white/85" : "bg-gradient-to-r from-emerald-700 to-amber-500 text-white")
-                  }
-                >
-                  <div className="mb-1 text-[10px] font-black uppercase tracking-[0.16em] opacity-75">
-                    {m.role === "caller" ? "Caller" : "AI Assistant"}
-                  </div>
-                  {m.text}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-export default function LandingPage() {
-  const heroRef = useRef(null);
-  const setupSectionRef = useRef(null);
-  const pricingRef = useRef(null);
-  const proofRef = useRef(null);
-  const complianceRef = useRef(null);
-  const industryRef = useRef(null);
-  const infoRef = useRef(null);
-  const comparisonRef = useRef(null);
-  const overviewRef = useRef(null);
-  const benefitsRef = useRef(null);
-  const callFlowRef = useRef(null);
-  const toolsRef = useRef(null);
-  const dataRef = useRef(null);
-  const heroAudioRef = useRef(null);
-  const audioCtxRef = useRef(null);
-  const analyserRef = useRef(null);
-  const audioSourceRef = useRef(null);
-  const audioRafRef = useRef(null);
-  const spectrumDataRef = useRef(new Array(40).fill(0.08));
-  const resumeDemoAfterTextRef = useRef(false);
-  const [agentFocus, setAgentFocus] = useState({
-    id: "overview",
-    displayTitle: "Quick overview",
-    summary: "Ask the concierge a question and this panel will update with the exact part of the page that matters.",
-    lastUserPrompt: "",
-    ref: overviewRef,
-  });
-  const [demoOpen, setDemoOpen] = useState(false);
-  const [chatOpen, setChatOpen] = useState(false);
-  const [showTopHeader, setShowTopHeader] = useState(false);
-  const [heroAudioPlaying, setHeroAudioPlaying] = useState(false);
-  const [heroAudioStarted, setHeroAudioStarted] = useState(false);
-  const [heroAudioTime, setHeroAudioTime] = useState(0);
-  const [heroAudioDurationSec, setHeroAudioDurationSec] = useState(0);
-  const [showDemoTextsSide, setShowDemoTextsSide] = useState(false);
-  const [spectrumValues, setSpectrumValues] = useState(() => new Array(40).fill(0.08));
-  const [heroHighlightPageIdx, setHeroHighlightPageIdx] = useState(0);
-  const [heroHighlightPaused, setHeroHighlightPaused] = useState(false);
-  const [skepticOpenIdx, setSkepticOpenIdx] = useState(0);
-  const [roiMissedCalls, setRoiMissedCalls] = useState(8);
-  const [roiCloseRate, setRoiCloseRate] = useState(35);
-  const [roiJobValue, setRoiJobValue] = useState(450);
-  const heroHighlightPageCount = Math.ceil(heroRotatingHighlights.length / 3);
-  const visibleHeroHighlights = useMemo(
-    () => {
-      const start = heroHighlightPageIdx * 3;
-      return heroRotatingHighlights.slice(start, start + 3);
-    },
-    [heroHighlightPageIdx]
-  );
-  const heroHighlightsFrozen = heroHighlightPaused || heroAudioPlaying;
-  const monthlyOpportunityLoss = Math.max(
-    0,
-    Math.round((Number(roiMissedCalls) || 0) * ((Number(roiCloseRate) || 0) / 100) * (Number(roiJobValue) || 0) * 4.3)
-  );
-  const skepticFaqs = useMemo(
-    () => [
-      {
-        q: "What exactly is included in the $19.99/month Light Version?",
-        a: "Light Version includes live call answering, FAQ handling, lead capture, and instant owner text summaries. It is designed to replace missed-call voicemail with real-time call handling and clear follow-up details.",
-      },
-      {
-        q: "Do I need a credit card to start, and am I locked into a contract?",
-        a: "No credit card is required to start your 14-day free trial. There are no long-term obligations, and you can cancel easily if it is not a fit.",
-      },
-      {
-        q: "Are there setup fees or hidden charges after I go live?",
-        a: "No setup-fee surprises. Plan pricing is clear before launch, and usage-related costs are shown upfront so you can make a confident decision before publishing.",
-      },
-      {
-        q: "Can I keep my current business number?",
-        a: "Yes. You can keep your current number and route calls so My AI PA answers when your team is unavailable, then sends your follow-up details right away.",
-      },
-      {
-        q: "What happens if a caller is urgent or the conversation is too complex?",
-        a: "You set clear escalation rules. My AI PA can transfer or route calls to your team when needed, while still handling routine questions and intake automatically.",
-      },
-      {
-        q: "Can it handle after-hours and multiple calls at the same time?",
-        a: "Yes. It is built for 24/7 coverage and can handle overlapping inbound calls, so you are not forced into voicemail during busy periods.",
-      },
-      {
-        q: "Is this just another software bill, or can it actually recover revenue?",
-        a: "The goal is faster lead response and fewer missed opportunities. My AI PA answers immediately, captures intent and urgency, and texts callback-ready details so your team can respond with context instead of starting from zero.",
-      },
-      {
-        q: "How quickly can I prove this works before committing long term?",
-        a: "Run the 14-day free trial on real calls and track callback speed, lead quality, and conversion lift. Most owners can quickly tell whether it is outperforming voicemail.",
-      },
-      {
-        q: "How do you handle privacy, security, and Canadian compliance?",
-        a: "My AI PA uses PIPEDA-aware workflow controls, encryption in transit and at rest, and role-based admin access controls, with clear visibility into transcript and lead data access.",
-      },
-    ],
-    []
-  );
-  const industryScrollerItems = useMemo(
-    () => [
-      {
-        name: "Electricians",
-        body: "Capture urgent outage calls, filter quote requests, and route high-priority jobs quickly.",
-        icon: "⚡",
-      },
-      {
-        name: "HVAC",
-        body: "Handle after-hours no-heat/no-cool calls and collect equipment and issue details for dispatch.",
-        icon: "❄",
-      },
-      {
-        name: "Plumbing",
-        body: "Prioritize leak emergencies, gather location details, and text owners actionable summaries.",
-        icon: "🔧",
-      },
-      {
-        name: "Roofing",
-        body: "Capture storm-damage inquiries fast and route urgent leak calls before jobs are lost.",
-        icon: "🏠",
-      },
-      {
-        name: "Landscaping",
-        body: "Handle estimate requests, seasonal service calls, and maintenance follow-up without voicemail backlog.",
-        icon: "🌿",
-      },
-      {
-        name: "Pest Control",
-        body: "Triage urgent infestations and collect site details so technicians arrive prepared.",
-        icon: "🛡",
-      },
-      {
-        name: "Auto Repair",
-        body: "Capture breakdown and booking requests while your team is on the shop floor.",
-        icon: "🚗",
-      },
-      {
-        name: "Cleaning Services",
-        body: "Qualify residential or commercial requests and send clear service notes for scheduling.",
-        icon: "🧼",
-      },
-      {
-        name: "Property Management",
-        body: "Route tenant maintenance calls by urgency and keep owner communication organized.",
-        icon: "🏢",
-      },
-      {
-        name: "Carpentry Contractors",
-        body: "Capture renovation leads while crews are on-site and send callback-ready project details.",
-        icon: "🪚",
-      },
-      {
-        name: "Physiotherapy Clinics",
-        body: "Handle appointment inquiries and callback requests when staff are with patients.",
-        icon: "🩺",
-      },
-      {
-        name: "Dental Clinics",
-        body: "Answer after-hours appointment requests and collect patient call context for front desk follow-up.",
-        icon: "🦷",
-      },
-    ],
-    []
-  );
-
-  useEffect(() => {
-    const onScroll = () => {
-      setShowTopHeader((window.scrollY || 0) > 20);
-    };
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
-
-  useEffect(() => {
-    if (heroHighlightsFrozen) return undefined;
-    const timer = setInterval(() => {
-      setHeroHighlightPageIdx((prev) => (prev + 1) % heroHighlightPageCount);
-    }, 4800);
-    return () => clearInterval(timer);
-  }, [heroHighlightsFrozen, heroHighlightPageCount]);
-
-  const sections = useMemo(
-    () => [
-      {
-        id: "hero",
-        title: "top section",
-        summary: "This section explains the main value: an AI telephone assistant that prevents missed calls and lost revenue.",
-        keywords: ["top", "headline", "hero", "missed calls", "what is this", "telephone assistant"],
-        ref: heroRef,
-      },
-      {
-        id: "overview",
-        title: "overview",
-        summary: "This section outlines what the assistant does: handle calls, talk to customers, answer FAQs, and send call details for callback.",
-        keywords: ["overview", "what does it do", "features", "faq", "call details"],
-        ref: overviewRef,
-      },
-      {
-        id: "benefits",
-        title: "benefits",
-        summary: "This section shows benefits like 24/7 answering, answering after three rings, and sending a thank-you text.",
-        keywords: ["benefits", "24/7", "three rings", "thank you text", "advantages"],
-        ref: benefitsRef,
-      },
-      {
-        id: "pricing",
-        title: "pricing",
-        summary: "This section compares starter, growth, and pro plans and explains the pilot-first approach.",
-        keywords: ["pricing", "plans", "cost", "monthly", "pilot", "trial"],
-        ref: pricingRef,
-      },
-      {
-        id: "proof",
-        title: "customer proof",
-        summary: "This section shows customer proof, testimonial quotes, and operational outcomes.",
-        keywords: ["testimonial", "proof", "results", "case study", "reviews"],
-        ref: proofRef,
-      },
-      {
-        id: "security",
-        title: "security and reliability",
-        summary: "This section explains data protection, access control, and call handling reliability.",
-        keywords: ["security", "privacy", "reliability", "encryption", "compliance"],
-        ref: complianceRef,
-      },
-      {
-        id: "industries",
-        title: "industries",
-        summary: "This section shows how My AI PA is used for electricians, HVAC, and plumbing businesses.",
-        keywords: ["industry", "electrician", "hvac", "plumbing", "use cases"],
-        ref: industryRef,
-      },
-      {
-        id: "call-flow",
-        title: "call flow",
-        summary: "This section shows the voice-first workflow from voice webhook to FAQ search, lead capture, and owner notification.",
-        keywords: ["call flow", "how does it work", "workflow", "webhook", "notification"],
-        ref: callFlowRef,
-      },
-      {
-        id: "tools",
-        title: "tools",
-        summary: "This section lists the master tools available to the AI system, including lead creation, FAQ search, and notifications.",
-        keywords: ["tools", "functions", "lead", "log call", "search faq", "owner sms"],
-        ref: toolsRef,
-      },
-      {
-        id: "data",
-        title: "data storage",
-        summary: "This section explains that business, settings, callers, calls, leads, and FAQs are stored in SQLite using Prisma.",
-        keywords: ["data", "database", "sqlite", "prisma", "storage"],
-        ref: dataRef,
-        extraActions: [{ label: "Open admin dashboard", action: { type: "route", hash: "/admin" } }],
-      },
-      {
-        id: "setup",
-        title: "setup flow",
-        summary: "The setup flow lets you search your Google Business Profile and configure the AI assistant onboarding.",
-        keywords: ["setup", "signup", "onboarding", "google business", "register"],
-        ref: setupSectionRef,
-        extraActions: [{ label: "Open setup flow", action: { type: "route", hash: "/signup" } }],
-      },
-    ],
-    []
-  );
-
-  const sectionById = useMemo(() => Object.fromEntries(sections.map((s) => [s.id, s])), [sections]);
-
-  const focusViews = useMemo(
-    () => ({
-      overview: {
-        eyebrow: "Agent View",
-        title: "What this does for a business owner",
-        body: "This setup answers missed calls, handles common questions, and captures the caller details you need for a fast callback.",
-        bullets: [
-          "Keeps calls from falling through when you are busy",
-          "Handles common questions consistently",
-          "Collects caller details and reason for calling",
-        ],
-        sideTitle: "Best next step",
-        sideBody: "Use the concierge on the right to ask about benefits, setup, or call handling. The left side will keep updating.",
-        ctaHint: "Ask the concierge anything and this page will adapt to the answer.",
-      },
-      benefits: {
-        eyebrow: "Agent View",
-        title: "Why the benefits matter day-to-day",
-        body: "The biggest win is consistency: calls get answered quickly, customers get information, and you get a clean lead to follow up.",
-        bullets: [
-          "24/7 coverage reduces missed opportunities",
-          "Answering after 3 rings feels responsive",
-          "Thank-you texts improve caller confidence",
-        ],
-        sideTitle: "What to review",
-        sideBody: "Check the benefits section and compare it to your current missed-call process. Then test the setup flow.",
-        ctaHint: "This is the outcome-focused view business owners usually care about first.",
-      },
-      pricing: {
-        eyebrow: "Agent View",
-        title: "Pricing built for risk-conscious owners",
-        body: "Plans are structured so you can start with one line, validate results, and only scale once call quality and lead capture prove out.",
-        bullets: [
-          "Starter, Growth, and Pro tiers",
-          "Transparent monthly base pricing",
-          "Pilot-first rollout before full commitment",
-        ],
-        sideTitle: "Decision shortcut",
-        sideBody: "Compare monthly plan fit, then run one demo call and verify setup before you publish.",
-        ctaHint: "Use pricing to qualify budget quickly, then move to setup.",
-      },
-      proof: {
-        eyebrow: "Agent View",
-        title: "Proof that addresses buyer skepticism",
-        body: "This section reinforces trust with testimonial voice, operational visibility, and practical outcomes owners care about.",
-        bullets: [
-          "Named customer testimonial",
-          "Transcript and lead visibility",
-          "Operational impact framing",
-        ],
-        sideTitle: "What to validate",
-        sideBody: "Confirm the testimonial language, then add your own performance snapshots as more accounts go live.",
-        ctaHint: "Proof removes doubt more effectively than feature lists.",
-      },
-      security: {
-        eyebrow: "Agent View",
-        title: "How reliability and data protection are handled",
-        body: "This section gives buyers confidence that call handling and customer data are managed with clear safeguards.",
-        bullets: [
-          "Encryption for data transfer and storage",
-          "Role-based admin access",
-          "Audit-friendly logging and fallback paths",
-        ],
-        sideTitle: "Buyer concern addressed",
-        sideBody: "Security and reliability are typically final blockers. This section handles those blockers directly.",
-        ctaHint: "Keep this section concise and specific so it feels credible.",
-      },
-      industries: {
-        eyebrow: "Agent View",
-        title: "Industry-fit messaging",
-        body: "Vertical examples help visitors quickly see themselves in the product and picture their own call scenarios.",
-        bullets: [
-          "Electrician emergency calls",
-          "HVAC after-hours triage",
-          "Plumbing leak and dispatch capture",
-        ],
-        sideTitle: "Best next upgrade",
-        sideBody: "Turn each card into a dedicated landing page once you have vertical-specific proof and scripts.",
-        ctaHint: "Industry relevance increases conversion quality.",
-      },
-      "call-flow": {
-        eyebrow: "Agent View",
-        title: "How the assistant handles a call",
-        body: "A call is answered, common questions are handled, and the important details are captured so the owner can respond fast.",
-        bullets: [
-          "Quick pickup experience for the caller",
-          "Question handling before escalation",
-          "Lead details captured for follow-up",
-        ],
-        sideTitle: "What to ask next",
-        sideBody: "Ask the concierge about urgent calls, after-hours behavior, or how leads show up in admin.",
-        ctaHint: "Great topic for demos because people can picture the caller experience immediately.",
-      },
-      setup: {
-        eyebrow: "Agent View",
-        title: "What setup looks like",
-        body: "Setup starts by finding the business, then configuring how calls should be handled and where leads should be routed.",
-        bullets: [
-          "Search the business from Google",
-          "Confirm details and preferences",
-          "Set owner phone and call handling rules",
-        ],
-        sideTitle: "Fast action",
-        sideBody: "Use the primary CTA to go to setup. The onboarding flow is where the demo becomes practical.",
-        ctaHint: "Ready to try it? Use Call The Demo or ask the concierge to open setup.",
-      },
-      data: {
-        eyebrow: "Agent View",
-        title: "What you can monitor after launch",
-        body: "You can review captured calls and leads, refine FAQs, and tune settings so the assistant gets better over time.",
-        bullets: [
-          "Leads and calls in one dashboard",
-          "FAQ edits improve future conversations",
-          "Settings control answer timing and routing",
-        ],
-        sideTitle: "Where this lives",
-        sideBody: "Open Admin to review stored leads, transcripts, and settings from one place.",
-        ctaHint: "This is the operations side of the product, useful after the first demo.",
-      },
-      tools: {
-        eyebrow: "Agent View",
-        title: "How this helps you operate faster",
-        body: "Behind the scenes, the system is built to capture, organize, and route the information you need from each call.",
-        bullets: [
-          "Lead capture stays structured",
-          "Responses stay consistent",
-          "Follow-up actions are easier to trigger",
-        ],
-        sideTitle: "Business takeaway",
-        sideBody: "You do not need to manage technical details. The value is faster response and fewer missed opportunities.",
-        ctaHint: "Use the concierge to jump between business outcomes and setup steps.",
-      },
-      hero: {
-        eyebrow: "Agent View",
-        title: "Start with the core value",
-        body: "This page is built to show one thing clearly: missed calls cost money, and the assistant exists to stop that.",
-        bullets: [
-          "Immediate positioning and problem statement",
-          "Single primary CTA to drive action",
-          "Concierge helps visitors navigate without scrolling",
-        ],
-        sideTitle: "Suggested next step",
-        sideBody: "Ask about benefits or setup to see the page adapt to your question.",
-        ctaHint: "Try the concierge on the right and watch the left side switch context.",
-      },
-    }),
-    []
-  );
-
-  const heroModes = useMemo(
-    () => ({
-      overview: {
-        heading: "My A.I PA",
-        descriptor: "Artificial Intelligence Telephone Answering Assistant",
-        underlineHeading: true,
-        subline: "STOP MISSING CALLS TODAY!",
-        warningSubline: true,
-      },
-      benefits: {
-        heading: "24/7 call coverage that protects your revenue",
-        subline: "Faster answers = more chances to win the job",
-      },
-      "call-flow": {
-        heading: "A better caller experience from the first ring",
-        subline: "Handled questions. Captured details. Faster follow-up.",
-      },
-      setup: {
-        heading: "Set up your AI phone assistant in a guided flow",
-        subline: "Connect your business details and get ready to take calls",
-      },
-      data: {
-        heading: "See every lead and call in one dashboard",
-        subline: "Monitor performance and improve how calls are handled",
-      },
-      tools: {
-        heading: "Built to capture, organize, and route call details",
-        subline: "Less manual back-and-forth after every missed call",
-      },
-      hero: {
-        heading: "My A.I PA",
-        descriptor: "Artificial Intelligence Telephone Answering Assistant",
-        underlineHeading: true,
-        subline: "STOP MISSING CALLS TODAY!",
-        warningSubline: true,
-      },
-    }),
-    []
-  );
-
-  const applyAgentFocus = (section, meta = {}) => {
-    if (!section) return;
-    setAgentFocus({
-      id: section.id,
-      displayTitle: section.title.charAt(0).toUpperCase() + section.title.slice(1),
-      summary: meta.replyText || section.summary,
-      lastUserPrompt: meta.query || "",
-      ref: section.ref,
-    });
-  };
-
-  useEffect(() => {
-    const handleVoiceQuery = (event) => {
-      const q = String(event?.detail?.query || "").trim();
-      if (!q) return;
-      const query = q.toLowerCase();
-
-      let nextSection = null;
-
-      if (query.includes("setup") || query.includes("sign up") || query.includes("signup") || query.includes("google business")) {
-        nextSection = sectionById.setup;
-      } else if (query.includes("benefit") || query.includes("24/7") || query.includes("thank you text") || query.includes("three ring")) {
-        nextSection = sectionById.benefits;
-      } else if (
-        query.includes("admin") ||
-        query.includes("dashboard") ||
-        query.includes("lead") ||
-        query.includes("calls table")
-      ) {
-        nextSection = sectionById.data;
-      } else if (
-        query.includes("call flow") ||
-        query.includes("how does it handle calls") ||
-        query.includes("how it works") ||
-        (query.includes("call") && (query.includes("handle") || query.includes("work")))
-      ) {
-        nextSection = sectionById["call-flow"];
-      } else if (query.includes("tool") || query.includes("function") || query.includes("faq search")) {
-        nextSection = sectionById.tools;
-      } else {
-        const matches = sections
-          .map((section) => ({ section, score: scoreSectionMatch(section, query) }))
-          .filter((x) => x.score > 0)
-          .sort((a, b) => b.score - a.score);
-        nextSection = matches[0]?.section || sectionById.overview;
-      }
-
-      applyAgentFocus(nextSection, { reason: "voice-widget", query: q, replyText: nextSection.summary });
-      window.dispatchEvent(
-        new CustomEvent("myaipa:voice-focus-result", {
-          detail: {
-            query: q,
-            sectionId: nextSection.id,
-            title: nextSection.title,
-            summary: nextSection.summary,
-          },
-        })
-      );
-    };
-
-    window.addEventListener("myaipa:voice-query", handleVoiceQuery);
-    return () => window.removeEventListener("myaipa:voice-query", handleVoiceQuery);
-  }, [applyAgentFocus, sectionById, sections]);
-
-  const activeFocusView = focusViews[agentFocus?.id] || focusViews.overview;
-  const activeHeroMode = heroModes[agentFocus?.id] || heroModes.overview;
-  const studioScenarios = useMemo(
-    () => ({
-      overview: {
-        caller: "Hello. I'm just wondering about your hours of operation.",
-        transcript: [
-          ["AI", "Hello. Thank you for contacting Tim's Electrical Services. We handle residential and commercial electrical work. How are you today?"],
-          ["CALLER", "Hello. I'm doing good. How are you?"],
-          ["AI", "I'm doing well. Thank you for asking. Are you looking for new installation, repairs or maintenance today?"],
-          ["CALLER", "I'm just wondering about your hours of operation."],
-          ["AI", "Tim's hours of operation is from 9 a.m. to 6 p.m. Are you looking for new installation, repairs or maintenance today?"],
-          ["CALLER", "Well, what type of services does Tim Electrical provide?"],
-          ["AI", "We do residential, commercial and specialty. Everything related to electrical including office, building wiring and maintenance, ceiling fan installation and smart home device setup."],
-          ["SYSTEM", "Intent detected: maintenance inquiry"],
-          ["AI", "Hi. My name is Claire and I'll be your virtual assistant on this call. May I ask you for your first name?"],
-          ["CALLER", "Brian."],
-          ["AI", "Now since you said maintenance, Brian, what type of electrical work do you need done specifically?"],
-          ["CALLER", "I have a few light bulbs flickering. I need some maintenance done on it."],
-          ["AI", "Okay. You need to have maintenance done on flickering light bulbs. What is the address where the work needs to be completed?"],
-          ["CALLER", "The offices are over at 63 York Street."],
-          ["AI", "When would you like the work to be completed?"],
-          ["CALLER", "Sometime next week, November 12th."],
-          ["AI", "What is the best phone number to reach you at?"],
-          ["CALLER", "905-123-4567."],
-          ["AI", "What is the best time of day to reach you at?"],
-          ["CALLER", "Around this time, 7 o'clock p.m."],
-          ["SYSTEM", "Lead captured + owner/service team message sent"],
-        ],
-        timedTranscript: [
-          { t: 0, end: 10, speaker: "AI", text: "Hello. Thank you for contacting Tim's Electrical Services. We handle residential and commercial electrical work. How are you today?" },
-          { t: 10, end: 13, speaker: "CALLER", text: "Hello. I'm doing good. How are you?" },
-          { t: 13, end: 21, speaker: "AI", text: "I'm doing well. Thank you for asking. Are you looking for new installation, repairs or maintenance today?" },
-          { t: 21, end: 25, speaker: "CALLER", text: "I'm just wondering about your hours of operation." },
-          { t: 26, end: 30, speaker: "AI", text: "Tim's hours of operation is from 9 a.m. to 6 p.m." },
-          { t: 30, end: 34, speaker: "AI", text: "Are you looking for new installation, repairs or maintenance today?" },
-          { t: 34, end: 39, speaker: "CALLER", text: "Well, what type of services does Tim Electrical provide?" },
-          { t: 41, end: 44, speaker: "AI", text: "We do residential, commercial and specialty." },
-          { t: 44, end: 52, speaker: "AI", text: "Everything related to electrical including office, building wiring and maintenance, ceiling fan installation and smart home device setup." },
-          { t: 52, end: 56, speaker: "AI", text: "Are you looking for new installation, repairs or maintenance today?" },
-          { t: 56, end: 59, speaker: "CALLER", text: "Now that you mention it, I need some maintenance done." },
-          { t: 61, end: 64, speaker: "AI", text: "Maintenance. Did I understand that correctly?" },
-          { t: 64, end: 65, speaker: "CALLER", text: "Yes." },
-          { t: 68, end: 75, speaker: "AI", text: "Hi. My name is Claire and I'll be your virtual assistant on this call. May I ask you for your first name?" },
-          { t: 75, end: 76, speaker: "CALLER", text: "Brian." },
-          { t: 76, end: 83, speaker: "AI", text: "Hi Brian. Now since you said maintenance, Brian, what type of electrical work do you need done specifically?" },
-          { t: 83, end: 87, speaker: "CALLER", text: "I have a few light bulbs flickering. I need some maintenance done on it." },
-          { t: 90, end: 97, speaker: "AI", text: "Okay. You need to have maintenance done on flickering light bulbs. What is the address where the work needs to be completed?" },
-          { t: 97, end: 101, speaker: "CALLER", text: "The offices are over at 63 York Street." },
-          { t: 101, end: 104, speaker: "AI", text: "63 York Street. Did I get that right?" },
-          { t: 104, end: 105, speaker: "CALLER", text: "Yes." },
-          { t: 108, end: 111, speaker: "AI", text: "When would you like the work to be completed?" },
-          { t: 111, end: 114, speaker: "CALLER", text: "Sometime next week, November 12th." },
-          { t: 116, end: 119, speaker: "AI", text: "What is the best phone number to reach you at?" },
-          { t: 119, end: 125, speaker: "CALLER", text: "905-123-4567." },
-          { t: 125, end: 130, speaker: "AI", text: "905-123-4567." },
-          { t: 133, end: 138, speaker: "AI", text: "905-123-4567. Is that correct?" },
-          { t: 138, end: 139, speaker: "CALLER", text: "Correct." },
-          { t: 141, end: 144, speaker: "AI", text: "What is the best time of day to reach you at?" },
-          { t: 144, end: 147, speaker: "CALLER", text: "Around this time, 7 o'clock p.m." },
-          { t: 148, end: 155, speaker: "AI", text: "Thanks for calling Tim's Electrical. A message has been sent to our service team outlining the key points to this call." },
-          { t: 155, end: 162, speaker: "AI", text: "A message has also been sent to your phone confirming the follow-up call to finalize details and to list pricing." },
-          { t: 162, end: 169, speaker: "AI", text: "Please visit our website at www.timselectricalservices.ca. Have a great day." },
-          { t: 169, end: 171, speaker: "CALLER", text: "Thanks. You too." },
-          { t: 177, end: 180, speaker: "AI", text: "www.timselectricalservices.ca" },
-        ],
-        timingCalibration: {
-          anchor: 76,
-          offset: 0.42,
-          scale: 1.004,
-          speakerOffsets: { AI: 0.1, CALLER: 0.02, SYSTEM: 0.04 },
-          phases: [
-            {
-              anchor: 90,
-              offset: 1.35,
-              scale: 1.024,
-            },
-          ],
-        },
-        lead: { intent: "Electrical Maintenance", urgency: "Normal", callback: "905-123-4567", nextStep: "Send owner text summary" },
-      },
-      benefits: {
-        caller: "Do you answer after hours, and will I get a text back?",
-        transcript: [
-          ["CALLER", "I’m calling late. Can this still be handled?"],
-          ["AI", "Yes. Calls can be answered anytime and common questions can be handled."],
-          ["SYSTEM", "FAQ matched + after-hours response"],
-          ["AI", "I can collect your details and send them to the owner for follow-up."],
-        ],
-        lead: { intent: "FAQ + Lead", urgency: "Low", callback: "Requested", nextStep: "Queue thank-you text" },
-      },
-      "call-flow": {
-        caller: "How does the call actually get handled from start to finish?",
-        transcript: [
-          ["CALLER", "I need to understand the call workflow."],
-          ["AI", "I’ll answer what I can and collect key details for the owner."],
-          ["SYSTEM", "Call received -> FAQ search -> lead capture"],
-          ["AI", "If this is urgent, I can flag it right away."],
-        ],
-        lead: { intent: "Call Flow Demo", urgency: "Medium", callback: "Optional", nextStep: "Show admin lead record" },
-      },
-      setup: {
-        caller: "Can you help me set this up for my business today?",
-        transcript: [
-          ["CALLER", "I want to get started."],
-          ["AI", "Great. The setup starts by finding your Google Business Profile."],
-          ["SYSTEM", "Routing user to onboarding flow"],
-          ["AI", "Then you set answering rules and where leads should go."],
-        ],
-        lead: { intent: "Onboarding", urgency: "High", callback: "Immediate", nextStep: "Open setup flow" },
-      },
-      data: {
-        caller: "Where do I see the calls and lead details after launch?",
-        transcript: [
-          ["CALLER", "I want to see what gets captured."],
-          ["AI", "Calls and leads are stored so you can review them in one admin dashboard."],
-          ["SYSTEM", "Prepared route: /admin"],
-          ["AI", "You can also update FAQs and settings there."],
-        ],
-        lead: { intent: "Admin Review", urgency: "Low", callback: "N/A", nextStep: "Open admin dashboard" },
-      },
-      tools: {
-        caller: "What does the AI do behind the scenes during a call?",
-        transcript: [
-          ["CALLER", "What happens in the system while it talks?"],
-          ["AI", "It can search FAQs, capture a lead, and route key information."],
-          ["SYSTEM", "Tool chain ready: FAQ, lead, notify"],
-          ["AI", "The owner gets a clean summary for quick follow-up."],
-        ],
-        lead: { intent: "System Demo", urgency: "Normal", callback: "Optional", nextStep: "Highlight workflow tools" },
-      },
-      hero: {
-        caller: "What happens if I miss a call while I’m working?",
-        transcript: [
-          ["CALLER", "I miss calls when I’m on jobs."],
-          ["AI", "I can answer, collect details, and prepare a callback summary."],
-          ["SYSTEM", "Missed-call recovery mode"],
-          ["AI", "You stay focused while the caller still gets a response."],
-        ],
-        lead: { intent: "Missed Call Recovery", urgency: "Normal", callback: "Captured", nextStep: "Text owner summary" },
-      },
-    }),
-    []
-  );
-  const activeStudio = studioScenarios[agentFocus?.id] || studioScenarios.overview;
-  const timedStudioRows = Array.isArray(activeStudio?.timedTranscript) ? activeStudio.timedTranscript : null;
-  const timedStudioCalibration = activeStudio?.timingCalibration || null;
-  const hasTimedStudio = Boolean(timedStudioRows);
-  const useTimedStudioPlayback = Boolean(timedStudioRows && heroAudioPlaying);
-  const timedStudioWindows = useMemo(() => {
-    if (!timedStudioRows) return null;
-    const calibrateTime = (time, speaker) => {
-      const t = Number(time ?? 0);
-      if (!timedStudioCalibration || !Number.isFinite(t)) return t;
-      const anchor = Number(timedStudioCalibration.anchor ?? 0);
-      const offset = Number(timedStudioCalibration.offset ?? 0);
-      const scale = Number(timedStudioCalibration.scale ?? 1);
-      const speakerOffset = Number(timedStudioCalibration.speakerOffsets?.[speaker] ?? 0);
-      let adjusted = t;
-      if (t >= anchor) {
-        adjusted = anchor + (t - anchor) * scale + offset + speakerOffset;
-      }
-      const phases = Array.isArray(timedStudioCalibration.phases) ? timedStudioCalibration.phases : [];
-      for (const phase of phases) {
-        const phaseAnchor = Number(phase?.anchor ?? NaN);
-        if (!Number.isFinite(phaseAnchor) || t < phaseAnchor) continue;
-        const phaseOffset = Number(phase?.offset ?? 0);
-        const phaseScale = Number(phase?.scale ?? 1);
-        adjusted += phaseOffset + (t - phaseAnchor) * (phaseScale - 1);
-      }
-      return adjusted;
-    };
-    return timedStudioRows.map((row, idx) => {
-      const rawNextStart = timedStudioRows[idx + 1]?.t ?? Number.POSITIVE_INFINITY;
-      const hasExactEnd = Number.isFinite(row.end);
-      const estimatedEnd = hasExactEnd ? Number(row.end) : row.t + estimateSpeechDurationSec(row.text, row.speaker);
-      const overrunCap =
-        row.speaker === "AI" ? 0.9 : row.speaker === "CALLER" ? 0.55 : 0.25;
-      const start = calibrateTime(row.t, row.speaker);
-      const nextStart = Number.isFinite(rawNextStart)
-        ? calibrateTime(rawNextStart, timedStudioRows[idx + 1]?.speaker)
-        : Number.POSITIVE_INFINITY;
-      const exactEnd = hasExactEnd ? calibrateTime(estimatedEnd, row.speaker) : estimatedEnd;
-      return {
-        ...row,
-        start,
-        end:
-          hasExactEnd
-            ? exactEnd
-            : idx === timedStudioRows.length - 1
-            ? exactEnd + 0.4
-            : Math.min(Math.max(nextStart, exactEnd), nextStart + overrunCap),
-      };
-    });
-  }, [timedStudioRows, timedStudioCalibration]);
-  const activeTimedStudioIndex = useTimedStudioPlayback
-    ? ((timedStudioWindows || []).findIndex((row) => heroAudioTime >= row.start && heroAudioTime < row.end) >= 0
-      ? (timedStudioWindows || []).findIndex((row) => heroAudioTime >= row.start && heroAudioTime < row.end)
-      : (timedStudioWindows || []).length
-        ? (timedStudioWindows || []).reduce((acc, row, idx) => (heroAudioTime >= row.start ? idx : acc), -1)
-        : -1)
-    : -1;
-  const activeTimedStudioRow = activeTimedStudioIndex >= 0 ? timedStudioWindows[activeTimedStudioIndex] : null;
-  const timedPlaceholderText =
-    heroAudioStarted && heroAudioTime > 0.05
-      ? "Click the play button to resume the live example transcript"
-      : "Click the play button to hear a live example transcript";
-  const studioTranscriptRows = (() => {
-    if (activeTimedStudioRow) return [[activeTimedStudioRow.speaker, activeTimedStudioRow.text]];
-    if (hasTimedStudio) {
-      if (!heroAudioStarted || heroAudioTime <= 0.05) return [["SYSTEM", timedPlaceholderText]];
-      return [["SYSTEM", "Playback paused. Press play to continue the live transcript."]];
-    }
-    return activeStudio.transcript?.length ? [activeStudio.transcript[0]] : [["SYSTEM", timedPlaceholderText]];
-  })();
-  const activeStudioRowIndex = 0;
-  const syncedCallerLine = activeTimedStudioRow?.speaker === "CALLER"
-    ? activeTimedStudioRow.text
-    : activeStudio.caller;
-  const heroAudioDuration = (() => {
-    const fromState = Number(heroAudioDurationSec || 0);
-    if (Number.isFinite(fromState) && fromState > 0) return fromState;
-    const fromRef = Number(heroAudioRef.current?.duration || 0);
-    if (Number.isFinite(fromRef) && fromRef > 0) return fromRef;
-    return 180;
-  })();
-  const playbackProgress = Math.max(0, Math.min(1, heroAudioTime / Math.max(1, heroAudioDuration)));
-  const formattedHeroAudioTime = formatClock(heroAudioTime);
-  const formattedHeroAudioDuration = formatClock(heroAudioDuration);
-  const showHeroDemoCover = !heroAudioStarted;
-  const liveSpeaker = activeTimedStudioRow?.speaker || "SYSTEM";
-  const processSteps = ["Answered", "FAQ", "Captured", "Texted"];
-  const processStepIndex = (() => {
-    const t = heroAudioTime;
-    if (t < 25) return 0;
-    if (t < 70) return 1;
-    if (t < 148) return 2;
-    return 3;
-  })();
-
-  useEffect(() => {
-    return () => {
-      if (audioRafRef.current) cancelAnimationFrame(audioRafRef.current);
-      if (audioCtxRef.current && audioCtxRef.current.state !== "closed") {
-        audioCtxRef.current.close().catch(() => {});
-      }
-    };
-  }, []);
-
-  const stopSpectrumLoop = () => {
-    if (audioRafRef.current) {
-      cancelAnimationFrame(audioRafRef.current);
-      audioRafRef.current = null;
-    }
-  };
-
-  const startSpectrumLoop = () => {
-    const analyser = analyserRef.current;
-    if (!analyser) return;
-    const timeData = new Uint8Array(analyser.fftSize);
-
-    const tick = () => {
-      const audioEl = heroAudioRef.current;
-      if (audioEl && !Number.isNaN(audioEl.currentTime)) {
-        setHeroAudioTime(audioEl.currentTime);
-      }
-      analyser.getByteTimeDomainData(timeData);
-      const next = new Array(40).fill(0).map((_, i) => {
-        const start = Math.floor((i / 40) * timeData.length);
-        const end = Math.max(start + 1, Math.floor(((i + 1) / 40) * timeData.length));
-        let sum = 0;
-        for (let j = start; j < end; j += 1) {
-          const centered = (timeData[j] - 128) / 128;
-          sum += Math.abs(centered);
-        }
-        const avgAmp = sum / (end - start);
-        const eased = 0.06 + clamp(avgAmp * 2.3, 0, 1) * 0.94;
-        return clamp(eased, 0.06, 1);
-      });
-
-      // light smoothing so it feels like a demo waveform, not jittery bars
-      const smoothed = next.map((v, i) => {
-        const prev = spectrumDataRef.current[i] ?? 0.08;
-        return prev * 0.65 + v * 0.35;
-      });
-      spectrumDataRef.current = smoothed;
-      setSpectrumValues(smoothed);
-      audioRafRef.current = requestAnimationFrame(tick);
-    };
-
-    stopSpectrumLoop();
-    audioRafRef.current = requestAnimationFrame(tick);
-  };
-
-  const resetSpectrum = () => {
-    const base = new Array(40).fill(0).map((_, i) => 0.04 + (Math.sin(i * 0.7) + 1) * 0.012);
-    spectrumDataRef.current = base;
-    setSpectrumValues(base);
-  };
-
-  const startHeroSampleAudio = async () => {
-    try {
-      const audioEl = heroAudioRef.current;
-      if (!audioEl) return;
-
-      if (!audioCtxRef.current) {
-        const Ctx = window.AudioContext || window.webkitAudioContext;
-        if (!Ctx) return;
-        audioCtxRef.current = new Ctx();
-      }
-      if (audioCtxRef.current.state === "suspended") {
-        await audioCtxRef.current.resume();
-      }
-
-      if (!audioSourceRef.current) {
-        audioSourceRef.current = audioCtxRef.current.createMediaElementSource(audioEl);
-        analyserRef.current = audioCtxRef.current.createAnalyser();
-        analyserRef.current.fftSize = 1024;
-        analyserRef.current.smoothingTimeConstant = 0.82;
-        audioSourceRef.current.connect(analyserRef.current);
-        analyserRef.current.connect(audioCtxRef.current.destination);
-      }
-
-      audioEl.currentTime = 0;
-      await audioEl.play();
-      setHeroAudioPlaying(true);
-      startSpectrumLoop();
-    } catch (_err) {
-      // If playback is blocked, keep the static visual.
-    }
-  };
-
-  const playHeroSampleAudio = async () => {
-    try {
-      const audioEl = heroAudioRef.current;
-      if (!audioEl) return;
-      if (audioEl.currentTime <= 0.01 || audioEl.ended) {
-        await startHeroSampleAudio();
-        return;
-      }
-      if (audioCtxRef.current?.state === "suspended") {
-        await audioCtxRef.current.resume();
-      }
-      await audioEl.play();
-      setHeroAudioPlaying(true);
-      startSpectrumLoop();
-    } catch (_err) {
-      // no-op
-    }
-  };
-
-  const pauseHeroSampleAudio = () => {
-    const audioEl = heroAudioRef.current;
-    if (!audioEl) return;
-    audioEl.pause();
-    setHeroAudioPlaying(false);
-    setHeroAudioTime(audioEl.currentTime || 0);
-    // Keep currentTime / started state so play resumes exactly where it was paused.
-    stopSpectrumLoop();
-  };
-
-  const stopHeroSampleAudio = () => {
-    const audioEl = heroAudioRef.current;
-    if (!audioEl) return;
-    audioEl.pause();
-    audioEl.currentTime = 0;
-    setHeroAudioPlaying(false);
-    setHeroAudioStarted(false);
-    setHeroAudioTime(0);
-    stopSpectrumLoop();
-    resetSpectrum();
-  };
-
-  const seekHeroSampleAudio = (nextTimeSeconds) => {
-    const audioEl = heroAudioRef.current;
-    if (!audioEl) return;
-    const duration = Number(audioEl.duration || heroAudioDurationSec || 0);
-    const maxTime = Number.isFinite(duration) && duration > 0 ? duration : Math.max(1, heroAudioDuration);
-    const nextTime = clamp(Number(nextTimeSeconds) || 0, 0, maxTime);
-    audioEl.currentTime = nextTime;
-    setHeroAudioTime(nextTime);
-    if (nextTime > 0.05) setHeroAudioStarted(true);
-    if (heroAudioPlaying) startSpectrumLoop();
-  };
-
-  const toggleHeroSampleAudio = () => {
-    if (heroAudioPlaying) {
-      pauseHeroSampleAudio();
-      return;
-    }
-    playHeroSampleAudio();
-  };
-
-  const toggleDemoTextsSide = () => {
-    if (!showDemoTextsSide) {
-      resumeDemoAfterTextRef.current = heroAudioPlaying;
-      if (heroAudioPlaying) pauseHeroSampleAudio();
-      setShowDemoTextsSide(true);
-      return;
-    }
-    setShowDemoTextsSide(false);
-    if (resumeDemoAfterTextRef.current) {
-      resumeDemoAfterTextRef.current = false;
-      playHeroSampleAudio();
-    }
-  };
-
-  const renderHeroHighlightIcon = (icon) => {
-    switch (icon) {
-      case "clock":
+function ProblemMomentArt({ scene }) {
+  const shell =
+    "h-[88px] w-[132px] overflow-hidden rounded-[20px] border border-white/12 bg-[linear-gradient(180deg,rgba(18,31,52,0.98),rgba(12,22,38,0.96))] shadow-[0_18px_38px_-26px_rgba(7,13,24,0.82)]";
+
+  const iconTone =
+    scene === "missed" ? "text-rose-300 border-rose-300/30 bg-rose-300/10" :
+    scene === "answer" ? "text-cyan-200 border-cyan-200/30 bg-cyan-200/10" :
+    scene === "captured" ? "text-emerald-200 border-emerald-200/30 bg-emerald-200/10" :
+    "text-sky-200 border-sky-200/30 bg-sky-200/10";
+
+  const renderIcon = () => {
+    switch (scene) {
+      case "missed":
         return (
-          <svg viewBox="0 0 20 20" className="h-3.5 w-3.5" aria-hidden="true">
-            <circle cx="10" cy="10" r="6.1" fill="none" stroke="currentColor" strokeWidth="1.5" />
-            <path d="M10 10V6.9M10 10l2.5 1.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          <svg viewBox="0 0 24 24" className="h-7 w-7" fill="none" aria-hidden="true">
+            <circle cx="8.1" cy="12.2" r="3.2" stroke="currentColor" strokeWidth="1.8" />
+            <circle cx="15.9" cy="12.2" r="3.2" stroke="currentColor" strokeWidth="1.8" />
+            <path d="M11.3 12.2h1.4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+            <path d="M18.9 7.9l1.8-1.8" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+            <circle cx="20.8" cy="6.1" r="1.2" fill="currentColor" opacity="0.9" />
           </svg>
         );
-      case "phone":
+      case "answer":
         return (
-          <svg viewBox="0 0 20 20" className="h-3.5 w-3.5" aria-hidden="true">
-            <path d="M6.2 4.8 8 6.6l-2 2a1.2 1.2 0 0 0 0 1.7l3.6 3.6a1.2 1.2 0 0 0 1.7 0l2-2 1.8 1.8-2.1 2.1a2 2 0 0 1-2.8 0L4.1 9.7a2 2 0 0 1 0-2.8Z" fill="currentColor" />
-            <path d="M12.2 4.3h3.6v3.6" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-            <path d="M15.8 4.3 11.7 8.4" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+          <svg viewBox="0 0 24 24" className="h-7 w-7" fill="none" aria-hidden="true">
+            <path d="M6.2 7.8h8.8a2.3 2.3 0 0 1 2.3 2.3v4.1a2.3 2.3 0 0 1-2.3 2.3h-3.3l-2.6 2.1v-2.1H6.2a2.3 2.3 0 0 1-2.3-2.3v-4.1a2.3 2.3 0 0 1 2.3-2.3Z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+            <path d="M7.8 11h5.2M7.8 13.5h3.6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+            <path d="M5.3 18.7 18.8 5.2" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
           </svg>
         );
-      case "filter":
+      case "captured":
         return (
-          <svg viewBox="0 0 20 20" className="h-3.5 w-3.5" aria-hidden="true">
-            <path d="M3.8 5h12.4l-4.6 5v4.2l-2.8 1.6V10z" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+          <svg viewBox="0 0 24 24" className="h-7 w-7" fill="none" aria-hidden="true">
+            <path d="M4.8 12.1c0-3.4 2.4-6.1 5.4-6.1s5.4 2.7 5.4 6.1" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+            <rect x="4.8" y="12" width="1.3" height="3.3" rx=".65" fill="currentColor" />
+            <rect x="14.3" y="12" width="1.3" height="3.3" rx=".65" fill="currentColor" />
+            <circle cx="10.2" cy="13.1" r="3.4" stroke="currentColor" strokeWidth="1.6" />
+            <path d="M8.9 12.4h.01M11.5 12.4h.01" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+            <path d="M9 14.6c.7.7 1.9.7 2.6 0" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+            <path d="M17.1 8.3h2.8M17.1 11.2h2.8M17.1 14.1h2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
           </svg>
         );
-      case "callback":
+      case "notified":
         return (
-          <svg viewBox="0 0 20 20" className="h-3.5 w-3.5" aria-hidden="true">
-            <path d="M14.8 6.2V3.8h-2.4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-            <path d="M14.8 3.8 10.7 7.9" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-            <path d="M6.2 4.8 8 6.6l-2 2a1.2 1.2 0 0 0 0 1.7l3.6 3.6a1.2 1.2 0 0 0 1.7 0l2-2 1.8 1.8-2.1 2.1a2 2 0 0 1-2.8 0L4.1 9.7a2 2 0 0 1 0-2.8Z" fill="currentColor" />
-          </svg>
-        );
-      case "growth":
-        return (
-          <svg viewBox="0 0 20 20" className="h-3.5 w-3.5" aria-hidden="true">
-            <path d="M4 14.6h12" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-            <path d="M5.1 12.6 8.1 9.7l2.2 1.9 4.6-4.7" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-            <path d="M13.5 6.9h2.7v2.7" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        );
-      case "faq":
-        return (
-          <svg viewBox="0 0 20 20" className="h-3.5 w-3.5" aria-hidden="true">
-            <path d="M3.4 5.6h13.2v8.2H9.4l-3.2 2.4v-2.4h-2.8z" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
-            <path d="M9 8.1a1.8 1.8 0 1 1 2.6 1.6c-.7.3-1 .7-1 1.4" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-            <circle cx="10.6" cy="12.8" r=".7" fill="currentColor" />
-          </svg>
-        );
-      case "text":
-        return (
-          <svg viewBox="0 0 20 20" className="h-3.5 w-3.5" aria-hidden="true">
-            <path d="M3.4 5.6h13.2v8.2H9.4l-3.2 2.4v-2.4h-2.8z" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
-            <path d="M6.1 8.5h7.8M6.1 10.8h5.6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-          </svg>
-        );
-      case "bell":
-        return (
-          <svg viewBox="0 0 20 20" className="h-3.5 w-3.5" aria-hidden="true">
-            <path d="M10 4.9a3.3 3.3 0 0 0-3.3 3.3v2.1L5.2 12v1.1h9.6V12l-1.5-1.7V8.2A3.3 3.3 0 0 0 10 4.9Z" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
-            <path d="M8.5 14.2a1.5 1.5 0 0 0 3 0" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+          <svg viewBox="0 0 24 24" className="h-7 w-7" fill="none" aria-hidden="true">
+            <rect x="5" y="5.3" width="11.4" height="13.8" rx="2.2" stroke="currentColor" strokeWidth="1.7" />
+            <path d="M8.2 9.2h5.1M8.2 12.1h5.6M8.2 15h4.2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+            <path d="m14.8 16.7 2.4 2.3 3.8-4.4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         );
       default:
@@ -1697,1571 +227,1976 @@ export default function LandingPage() {
     }
   };
 
-  const llamaHeroLayers = [
-    { w: 520, h: 180, x: -210, color: "rgba(255,255,255,0.16)", blur: 0, delay: "0s", z: 1 },
-    { w: 450, h: 168, x: -145, color: "rgba(15,23,42,0.35)", blur: 0, delay: "0.25s", z: 2 },
-    { w: 392, h: 156, x: -86, color: "rgba(15,23,42,0.52)", blur: 0, delay: "0.5s", z: 3 },
-    { w: 336, h: 146, x: -25, color: "rgba(255,255,255,0.90)", blur: 0, delay: "0.75s", glow: true, z: 6 },
-    { w: 302, h: 140, x: 38, color: "rgba(251,146,60,0.78)", blur: 0, delay: "1s", z: 7 },
-    { w: 260, h: 134, x: 102, color: "rgba(217,70,239,0.92)", blur: 0, delay: "1.25s", z: 8 },
-    { w: 230, h: 128, x: 158, color: "rgba(147,51,234,0.86)", blur: 0, delay: "1.5s", z: 9 },
-  ];
-  const scrollToSection = (sectionRef) => {
-    if (!sectionRef?.current) return;
-    sectionRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+  const renderMiniContent = () => {
+    switch (scene) {
+      case "missed":
+        return (
+          <div className="flex flex-1 items-center justify-end">
+            <svg viewBox="0 0 30 30" className="h-8 w-8" fill="none" aria-hidden="true">
+              <path d="M8 15c0-3.7 3-6.7 6.7-6.7" stroke="rgba(251,191,36,0.86)" strokeWidth="2" strokeLinecap="round" />
+              <path d="M14.7 8.3h5.4v5.4" stroke="rgba(251,191,36,0.86)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M14.9 15.1 20.1 9.9" stroke="rgba(254,240,138,0.94)" strokeWidth="2.1" strokeLinecap="round" />
+              <circle cx="22.9" cy="8.1" r="2.3" fill="rgba(251,113,133,0.95)" />
+            </svg>
+          </div>
+        );
+      case "answer":
+        return (
+          <div className="flex flex-1 items-center justify-end">
+            <svg viewBox="0 0 36 30" className="h-8 w-9" fill="none" aria-hidden="true">
+              <path d="M8.4 9.4h10.4a2.2 2.2 0 0 1 2.2 2.2v3.2a2.2 2.2 0 0 1-2.2 2.2h-2.5l-2.4 2v-2H8.4a2.2 2.2 0 0 1-2.2-2.2v-3.2a2.2 2.2 0 0 1 2.2-2.2Z" stroke="rgba(125,211,252,0.8)" strokeWidth="1.6" strokeLinejoin="round" />
+              <path d="M10.6 12.8h5.6M10.6 15h3.8" stroke="rgba(186,230,253,0.95)" strokeWidth="1.7" strokeLinecap="round" />
+              <path d="M22.8 10.1 29 16.3" stroke="rgba(248,113,113,0.84)" strokeWidth="1.8" strokeLinecap="round" />
+              <path d="M29 10.1 22.8 16.3" stroke="rgba(248,113,113,0.84)" strokeWidth="1.8" strokeLinecap="round" />
+            </svg>
+          </div>
+        );
+      case "captured":
+        return (
+          <div className="flex flex-1 items-center justify-end">
+            <svg viewBox="0 0 34 30" className="h-8 w-9" fill="none" aria-hidden="true">
+              <path d="M7.2 15c0-3.1 2.3-5.6 5.2-5.6s5.2 2.5 5.2 5.6" stroke="rgba(125,211,252,0.55)" strokeWidth="1.8" strokeLinecap="round" />
+              <rect x="7.2" y="14.8" width="1.4" height="3.1" rx=".7" fill="rgba(125,211,252,0.88)" />
+              <rect x="16.2" y="14.8" width="1.4" height="3.1" rx=".7" fill="rgba(125,211,252,0.88)" />
+              <path d="M21.4 11.1h5.2M21.4 14.6h5.2M21.4 18.1h3.8" stroke="rgba(110,231,183,0.9)" strokeWidth="2.1" strokeLinecap="round" />
+            </svg>
+          </div>
+        );
+      case "notified":
+        return (
+          <div className="flex flex-1 items-center justify-end">
+            <svg viewBox="0 0 34 30" className="h-8 w-9" fill="none" aria-hidden="true">
+              <rect x="5.8" y="6.8" width="12.8" height="15.4" rx="2.4" stroke="rgba(186,230,253,0.92)" strokeWidth="1.7" />
+              <path d="M9.2 10.8h5.6M9.2 14.1h6.2M9.2 17.4h4.3" stroke="rgba(186,230,253,0.94)" strokeWidth="1.8" strokeLinecap="round" />
+              <path d="m23 16.2 2.3 2.2 3.8-4.3" stroke="rgba(110,231,183,0.95)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </div>
+        );
+      default:
+        return (
+          <div className="flex flex-1 items-center justify-end">
+            <span className="h-3 w-3 rounded-full bg-white/20" />
+          </div>
+        );
+    }
   };
-  const headerNavItems = [
-    { label: "Main", ref: heroRef },
-    { label: "Info", ref: infoRef },
-    { label: "Comparsion", ref: comparisonRef },
-    { label: "Pricing", ref: pricingRef },
-    { label: "Testimonials", ref: proofRef },
-    { label: "Privacy", ref: complianceRef },
-    { label: "How it Works", ref: callFlowRef },
-    { label: "Set Up Flow", ref: setupSectionRef },
+
+  return (
+    <div className={shell}>
+      <div className="flex h-full flex-col justify-between p-3.5">
+        <div className="flex items-center justify-between">
+          <span className="h-2 w-2 rounded-full bg-white/30" />
+          <span className="h-2 w-2 rounded-full bg-white/12" />
+        </div>
+        <div className="flex items-center gap-3">
+          <div className={"grid h-12 w-12 place-items-center rounded-2xl border " + iconTone}>
+            {renderIcon()}
+          </div>
+          {renderMiniContent()}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StoryMiniArt({ kind, className = "" }) {
+  const artMap = {
+    problem: {
+      src: "/illustrations/phone-call.svg",
+      className: "scale-[1.06]",
+    },
+    agent: {
+      src: "/illustrations/active-support.svg",
+      className: "scale-[1.08]",
+    },
+    callback: {
+      src: "/illustrations/events-calendar.svg",
+      className: "scale-[1.08]",
+    },
+  };
+
+  const art = artMap[kind];
+
+  return (
+    <div className={`flex h-[108px] w-[164px] items-center justify-center overflow-hidden rounded-[24px] border border-white/12 bg-[radial-gradient(circle_at_top_left,rgba(111,161,255,0.16),transparent_42%),linear-gradient(180deg,rgba(245,249,255,0.98),rgba(235,243,255,0.98))] shadow-[0_18px_38px_-26px_rgba(7,13,24,0.82)] ${className}`}>
+      {art ? (
+        <img
+          src={art.src}
+          alt=""
+          aria-hidden="true"
+          className={`h-full w-full object-contain p-2.5 ${art.className}`}
+          loading="lazy"
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function ProofFeatureIcon({ kind }) {
+  switch (kind) {
+    case "clock":
+      return (
+        <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" aria-hidden="true">
+          <circle cx="12" cy="12" r="8.2" stroke="currentColor" strokeWidth="1.8" />
+          <path d="M12 7.8v4.6l3 1.8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    case "phone":
+      return (
+        <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" aria-hidden="true">
+          <path d="M7.2 4.8h2.1c.5 0 1 .3 1.2.8l1 2.3c.2.5.1 1.1-.3 1.5l-1.3 1.3c1 2 2.7 3.7 4.7 4.7l1.3-1.3c.4-.4 1-.5 1.5-.3l2.3 1c.5.2.8.7.8 1.2v2.1c0 .9-.7 1.6-1.6 1.6C9.7 20 4 14.3 4 7.2c0-.9.7-1.6 1.6-1.6h1.6Z" fill="currentColor" />
+        </svg>
+      );
+    default:
+      return null;
+  }
+}
+
+function ProofFeatureCard({ eyebrow, title, icon }) {
+  return (
+    <article className="group relative flex h-[76px] overflow-hidden rounded-[30px] border border-[#8b5cff]/55 bg-[radial-gradient(circle_at_top_left,rgba(139,92,246,0.24),transparent_38%),radial-gradient(circle_at_bottom_right,rgba(75,55,170,0.20),transparent_42%),linear-gradient(180deg,rgba(12,8,25,0.96),rgba(5,4,12,0.98))] px-3.5 py-1.5 shadow-[0_0_0_1px_rgba(255,255,255,0.04)_inset,0_18px_44px_-30px_rgba(139,92,246,0.44)] transition-all duration-300 hover:-translate-y-1 hover:border-[#a78bfa]/80 hover:bg-[radial-gradient(circle_at_top_left,rgba(167,139,250,0.28),transparent_38%),radial-gradient(circle_at_bottom_right,rgba(83,63,190,0.22),transparent_42%),linear-gradient(180deg,rgba(14,9,30,0.98),rgba(5,4,12,0.98))] hover:shadow-[0_0_0_1px_rgba(167,139,250,0.18)_inset,0_24px_60px_-26px_rgba(139,92,246,0.58)] focus-within:-translate-y-1 focus-within:border-[#a78bfa]/80 focus-within:shadow-[0_0_0_1px_rgba(167,139,250,0.18)_inset,0_24px_60px_-26px_rgba(139,92,246,0.58)] sm:h-[82px] sm:px-4 sm:py-2">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.10),transparent_40%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,rgba(139,92,246,0.18),transparent_40%,rgba(40,23,92,0.22)_100%)] opacity-90" />
+      <div className="pointer-events-none absolute inset-0 bg-[#8b5cff]/10 opacity-70 blur-2xl transition-opacity duration-300 group-hover:opacity-100" />
+      <div className="relative flex h-full w-full items-center gap-2.5">
+        <div className="mt-0 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-[#a78bfa]/45 bg-[#120b28]/78 text-[#e9ddff] shadow-[0_0_18px_rgba(139,92,246,0.22),inset_0_1px_0_rgba(255,255,255,0.08)] transition duration-300 group-hover:border-[#c4b5fd]/75 group-hover:bg-[#201044] group-hover:text-white sm:h-10 sm:w-10">
+          <ProofFeatureIcon kind={icon} />
+        </div>
+        <div className="min-w-0">
+          <p className="text-[0.62rem] font-bold uppercase tracking-[0.24em] text-[#c4b5fd]">{eyebrow}</p>
+          <h3 className="mt-1 max-w-[15ch] text-[1.06rem] font-black leading-[0.96] tracking-[-0.04em] text-white sm:text-[1.18rem]">
+            {title}
+          </h3>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function BenefitSymbol({ code }) {
+  switch (code) {
+    case "EL":
+      return (
+        <svg viewBox="0 0 24 24" className="h-8 w-8" fill="none" aria-hidden="true">
+          <path d="M13.2 2.8 6.8 13h4.2L10 21.2 17.2 11h-4.4z" fill="currentColor" />
+        </svg>
+      );
+    case "PL":
+      return (
+        <svg viewBox="0 0 24 24" className="h-8 w-8" fill="none" aria-hidden="true">
+          <path d="M5 7.5h8.2a3.3 3.3 0 0 1 3.3 3.3v5.7" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M8.2 4.8v5.4M13 16.5h7" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M3.8 5.2h4.4v4.6H3.8zM15.6 14.2h4.6v4.6h-4.6z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+        </svg>
+      );
+    case "HV":
+      return (
+        <svg viewBox="0 0 24 24" className="h-8 w-8" fill="none" aria-hidden="true">
+          <path d="M12 2.8v4.1M12 17.1v4.1M4.6 12h4.1M15.3 12h4.1M6.8 6.8l2.9 2.9M14.3 14.3l2.9 2.9M17.2 6.8l-2.9 2.9M9.7 14.3l-2.9 2.9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+          <circle cx="12" cy="12" r="2.7" stroke="currentColor" strokeWidth="1.8" />
+        </svg>
+      );
+    case "RF":
+      return (
+        <svg viewBox="0 0 24 24" className="h-8 w-8" fill="none" aria-hidden="true">
+          <path d="M4.8 11.6 12 6l7.2 5.6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M7.1 10.7v7.5h9.8v-7.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M9.8 18.2v-4.1h4.4v4.1" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    default:
+      return null;
+  }
+}
+
+function SectionHeader({ eyebrow, title, body, dark = false, align = "left" }) {
+  const textAlign = align === "center" ? "text-center" : "text-left";
+  const maxWidth = align === "center" ? "mx-auto max-w-3xl" : "max-w-3xl";
+
+  return (
+    <div className={`${textAlign} ${maxWidth}`}>
+      {eyebrow ? <p className={"text-xs font-black uppercase tracking-[0.18em] " + (dark ? "text-[#eef6f1]" : "text-[#e2f0fa]")}>{eyebrow}</p> : null}
+      <h2 className={"mt-3 text-3xl font-black leading-tight tracking-[-0.04em] sm:text-4xl " + (dark ? "text-white" : "text-[#f7fbff]")}>{title}</h2>
+      {body ? <p className={"mt-4 text-base font-medium leading-7 sm:text-lg " + (dark ? "text-[#eef6f1]" : "text-[#eef6ff]")}>{body}</p> : null}
+    </div>
+  );
+}
+
+function PrimaryButton({ children, onClick, className = "" }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={
+        "inline-flex items-center justify-center rounded-full bg-[#1d7df2] px-6 py-3.5 text-sm font-black uppercase tracking-[0.14em] text-white shadow-[0_18px_40px_-24px_rgba(29,125,242,0.75)] transition hover:-translate-y-0.5 hover:bg-[#146fdf] sm:text-[0.95rem] " +
+        className
+      }
+    >
+      {children}
+    </button>
+  );
+}
+
+function SecondaryButton({ children, onClick, dark = false, className = "" }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={
+        "inline-flex items-center justify-center rounded-full border px-6 py-3.5 text-sm font-black uppercase tracking-[0.14em] transition sm:text-[0.95rem] " +
+        (dark ? "border-white/45 bg-[#1a2942] text-white hover:bg-[#233755]" : "border-white/40 bg-[#1a2942] text-white hover:bg-[#233755]") +
+        " " +
+        className
+      }
+    >
+      {children}
+    </button>
+  );
+}
+
+function HeroLogoMark() {
+  return (
+    <div className="flex items-center gap-3">
+      <div className="relative grid h-[52px] w-[52px] place-items-center text-[#07142a] xl:h-14 xl:w-14">
+        <svg viewBox="0 0 72 72" className="h-full w-full" fill="none" aria-hidden="true">
+          <g transform="translate(2 0)">
+            <path d="M14 40v-6C14 21.8 23.8 12 36 12s22 9.8 22 22v6" stroke="currentColor" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M14 37h7v18h-7a5 5 0 0 1-5-5v-8a5 5 0 0 1 5-5Z" fill="currentColor" />
+            <path d="M58 37h-7v18h7a5 5 0 0 0 5-5v-8a5 5 0 0 0-5-5Z" fill="currentColor" />
+            <path d="M52 54c0 6.2-5.7 10-13.2 10" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
+            <path d="M36 64h-5.5" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
+          </g>
+          {[21, 26, 31, 36, 41, 46, 51].map((x, index) => {
+            const heights = [15, 22, 28, 32, 28, 22, 15];
+            const height = heights[index];
+            return (
+              <rect key={x} x={x} y={36 - height / 2} width="3.6" height={height} rx="1.8" fill="#ff7a00" />
+            );
+          })}
+        </svg>
+      </div>
+      <div className="text-[2.1rem] font-black leading-none tracking-[-0.045em] text-[#07142a] sm:text-[2.45rem] xl:text-[2.65rem]">
+        My <span className="bg-[linear-gradient(90deg,#2563eb,#8fbfff)] bg-clip-text text-transparent">AI PA</span>
+      </div>
+    </div>
+  );
+}
+
+function HeroIcon({ type, className = "h-6 w-6" }) {
+  if (type === "phone") {
+    return (
+      <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
+        <path d="M22 16.9v2.5a2 2 0 0 1-2.2 2 19.5 19.5 0 0 1-8.5-3 19 19 0 0 1-5.8-5.8 19.5 19.5 0 0 1-3-8.5A2 2 0 0 1 4.5 2h2.6a2 2 0 0 1 2 1.7c.1.9.3 1.7.6 2.5a2 2 0 0 1-.5 2.1l-1.1 1.1a15.5 15.5 0 0 0 5.7 5.7l1.1-1.1a2 2 0 0 1 2.1-.5c.8.3 1.6.5 2.5.6a2 2 0 0 1 1.7 1.8Z" />
+      </svg>
+    );
+  }
+  if (type === "people") {
+    return (
+      <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
+        <circle cx="8" cy="9" r="3" />
+        <circle cx="16" cy="9" r="3" />
+        <path d="M3 20c.6-3.2 2.4-5 5-5s4.4 1.8 5 5" />
+        <path d="M11 20c.6-3.2 2.4-5 5-5s4.4 1.8 5 5" />
+      </svg>
+    );
+  }
+  if (type === "chat") {
+    return (
+      <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
+        <path d="M5 17.6 4 21l3.6-1A8.8 8.8 0 1 0 5 17.6Z" />
+        <path d="M8 12h.01M12 12h.01M16 12h.01" strokeLinecap="round" />
+      </svg>
+    );
+  }
+  if (type === "user") {
+    return (
+      <svg viewBox="0 0 24 24" className={className} fill="currentColor" aria-hidden="true">
+        <circle cx="12" cy="7.4" r="4.2" />
+        <path d="M4.5 21c.9-4.2 3.5-6.4 7.5-6.4s6.6 2.2 7.5 6.4H4.5Z" />
+      </svg>
+    );
+  }
+  if (type === "briefcase") {
+    return (
+      <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
+        <rect x="4" y="7" width="16" height="13" rx="2" />
+        <path d="M9 7V5h6v2M9 13h6" />
+      </svg>
+    );
+  }
+  if (type === "pin") {
+    return (
+      <svg viewBox="0 0 24 24" className={className} fill="currentColor" aria-hidden="true">
+        <path d="M12 22s7-6.1 7-13a7 7 0 1 0-14 0c0 6.9 7 13 7 13Z" />
+        <circle cx="12" cy="9" r="2.4" fill="#f8fbff" />
+      </svg>
+    );
+  }
+  if (type === "clock") {
+    return (
+      <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 7v5l3 2" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+  if (type === "check") {
+    return (
+      <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+        <path d="m5 12 4.5 4.5L20 6.5" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+  if (type === "bolt") {
+    return (
+      <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2.1" aria-hidden="true">
+        <path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+  if (type === "faucet") {
+    return (
+      <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2.1" aria-hidden="true">
+        <path d="M5 10h9a4 4 0 0 1 4 4v1" />
+        <path d="M6 6h7v4H6zM9 6V3h5" />
+        <path d="M18 15c-1.8 1.8-1.8 3.8 0 5.5 1.8-1.7 1.8-3.7 0-5.5Z" />
+      </svg>
+    );
+  }
+  if (type === "fan") {
+    return (
+      <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2.1" aria-hidden="true">
+        <circle cx="12" cy="12" r="2.2" />
+        <path d="M12 9.8C9.2 4.6 12.8 2 16 4.2c2.7 1.9.4 5.6-4 5.6ZM14.1 13.1c5.8.2 6.4 4.6 2.8 6.2-3 1.4-5-2.6-2.8-6.2ZM9.8 13.1c-3 5-7 3.7-7.1-.2-.1-3.3 4.5-3.6 7.1.2Z" />
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2.1" aria-hidden="true">
+      <path d="M4 19V9l8-6 8 6v10" />
+      <path d="M9 19v-6h6v6" />
+    </svg>
+  );
+}
+
+function HeroWave({ small = false }) {
+  const bars = small ? [4, 7, 10, 6, 13, 18, 9, 24, 13, 8, 16, 10] : [12, 18, 26, 16, 34, 48, 22, 60, 34, 20, 44, 26, 14, 30, 18, 10, 24, 38, 18, 12];
+  return (
+    <div className={(small ? "h-7" : "h-12") + " flex items-center justify-center gap-1"}>
+      {bars.map((height, index) => (
+        <span key={`hero-wave-${index}`} className={(small ? "w-[2px]" : "w-[3px]") + " rounded-full bg-[#9edaff]"} style={{ height }} />
+      ))}
+    </div>
+  );
+}
+
+function HeroPhoneMockup() {
+  return (
+    <div className="landing-phone relative mx-auto -mt-12 h-[623px] w-full max-w-[375px] rounded-[38px] border-[5px] border-[#35373e] bg-[#050912] p-2 shadow-[0_30px_80px_-34px_rgba(0,0,0,1),0_0_0_1px_rgba(255,255,255,0.22)_inset] 2xl:-mt-14 2xl:h-[646px] 2xl:max-w-[385px]">
+      <div className="absolute left-1/2 top-3 z-10 h-5 w-16 -translate-x-1/2 rounded-full bg-black" />
+      <div className="flex h-full flex-col overflow-hidden rounded-[30px] bg-[radial-gradient(circle_at_50%_0%,rgba(8,90,158,0.34),transparent_36%),linear-gradient(180deg,#061b34_0%,#020814_100%)] px-5 pb-3 pt-4">
+        <div className="flex items-center justify-between text-xs font-black text-white">
+          <span>9:41</span>
+          <span className="flex items-center gap-1.5">
+            <span className="h-2 w-4 rounded-sm border border-white/80" />
+            <span className="h-2.5 w-5 rounded-sm border border-white/80 bg-white/20" />
+          </span>
+        </div>
+        <div className="-mt-2 text-center">
+          <p className="text-[1.35rem] font-black tracking-[-0.03em] text-white">Live Call</p>
+          <p className="mt-1 text-[1.25rem] font-black text-[#ff7a00]">00:32</p>
+          <HeroWave small />
+        </div>
+
+        <div className="mt-2 rounded-[20px] border border-white/14 bg-white/[0.08] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+          <div className="flex gap-3">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white text-[#0c1726]">
+              <HeroIcon type="user" className="h-6 w-6" />
+            </span>
+            <div>
+              <p className="text-base font-black text-white">Customer</p>
+              <p className="mt-1 text-[0.95rem] font-medium leading-[1.45] text-white">Hi, I need someone to wire up my hot tub.</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-2 rounded-[20px] border border-[#1d78ff]/45 bg-[linear-gradient(145deg,#063a83,#0050c9)] p-3 shadow-[0_18px_46px_-28px_rgba(0,80,201,0.95),inset_0_1px_0_rgba(255,255,255,0.12)]">
+          <div className="flex gap-3">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white text-[#063a83]">
+              <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
+                <rect x="6" y="8" width="12" height="9" rx="3" />
+                <path d="M9 8V5.5a3 3 0 0 1 6 0V8M9.5 12h.01M14.5 12h.01M10 15c1.2.8 2.8.8 4 0" />
+              </svg>
+            </span>
+            <div>
+              <p className="text-base font-black text-white">My AI PA</p>
+              <p className="mt-1 text-[0.95rem] font-medium leading-[1.45] text-white">
+                Got it! Please state your name, phone number, location of service and best call back time. I&apos;ll then text the call details to the owner.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-2 rounded-[20px] border border-white/14 bg-white/[0.08] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+          <div className="flex gap-3">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white text-[#0c1726]">
+              <HeroIcon type="user" className="h-6 w-6" />
+            </span>
+            <div>
+              <p className="text-base font-black text-white">Customer</p>
+              <p className="mt-1 text-[0.95rem] font-medium leading-[1.45] text-white">
+                Sure. It&apos;s Brian, 905-123-4567, 63 York Street. Best call back time is 7:00 PM.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-auto flex items-center justify-between px-8 pt-2">
+          <span className="grid h-10 w-10 place-items-center rounded-full bg-white/14 text-white">
+            <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
+              <path d="M12 3v10" />
+              <rect x="8" y="3" width="8" height="13" rx="4" />
+              <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
+            </svg>
+          </span>
+          <span className="grid h-11 w-11 place-items-center rounded-full bg-[#ff392e] text-white">
+            <HeroIcon type="phone" className="h-6 w-6 rotate-[135deg]" />
+          </span>
+          <span className="grid h-10 w-10 place-items-center rounded-full bg-white/14 text-white">
+            <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
+              <path d="M4 9v6h4l5 4V5L8 9H4Z" />
+              <path d="M16.5 9.5a4 4 0 0 1 0 5M19 7a8 8 0 0 1 0 10" />
+            </svg>
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function HeroSummaryStack() {
+  const rows = [
+    ["user", "Customer Name", "Brian"],
+    ["phone", "Phone", "905-123-4567"],
+    ["briefcase", "Job Type", "Hot tub setup"],
+    ["pin", "Address", "63 York Street"],
+    ["clock", "Best Call Back Time", "7:00 PM"],
   ];
 
   return (
-    <main className="min-h-screen overflow-x-hidden bg-[#93a3b8] text-white">
-      <div className="relative min-h-screen">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(880px_520px_at_12%_8%,rgba(59,130,246,0.10),transparent_62%)]" />
-        <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(188,200,216,0.78),rgba(147,163,184,0.97))]" />
-        <div className="pointer-events-none absolute inset-0 opacity-[0.05] [background-image:linear-gradient(to_right,rgba(0,0,0,0.25)_1px,transparent_1px),linear-gradient(to_bottom,rgba(0,0,0,0.16)_1px,transparent_1px)] [background-size:42px_42px]" />
+    <div className="landing-summary space-y-4">
+      <div className="relative overflow-hidden rounded-[26px] border border-white/70 bg-[linear-gradient(145deg,#fffaf3_0%,#fff7ed_54%,#f6fbff_100%)] p-6 text-[#081123] shadow-[0_30px_88px_-42px_rgba(255,255,255,0.86),inset_0_1px_0_rgba(255,255,255,0.95)] 2xl:p-7">
+        <span className="absolute left-6 right-6 top-0 h-[3px] rounded-full bg-[linear-gradient(90deg,#ff7a00,#2563eb)] opacity-80" />
+        <h3 className="text-2xl font-black tracking-[-0.04em] 2xl:text-3xl">Texted to the owner</h3>
+        <div className="mt-4 divide-y divide-slate-300/80">
+          {rows.map(([icon, label, value]) => (
+            <div key={label} className="grid grid-cols-[30px_minmax(0,1fr)_auto] items-center gap-3 py-2.5 text-lg 2xl:grid-cols-[34px_minmax(0,1fr)_auto] 2xl:text-xl">
+              <span className="text-[#071226]">
+                <HeroIcon type={icon} className="h-5 w-5 2xl:h-6 2xl:w-6" />
+              </span>
+              <span className="font-medium">{label}</span>
+              <span className="text-right font-semibold">{value}</span>
+            </div>
+          ))}
+        </div>
+      </div>
 
-        {showTopHeader ? (
-          <div className="fixed left-0 right-0 top-0 z-50 overflow-hidden border border-cyan-100/45 bg-white shadow-[0_18px_40px_-28px_rgba(0,0,0,0.28)]">
-            <div className="relative border-b border-cyan-200/35 bg-[linear-gradient(90deg,#06213f_0%,#0a3a73_46%,#0e5da1_100%)] px-4 py-2">
-              <div className="relative flex flex-wrap items-center justify-center gap-3 text-center text-xs font-black tracking-[0.05em] text-cyan-50 sm:text-sm">
-                <span>All plans include unlimited minutes</span>
-                <span className="text-cyan-200/70">|</span>
-                <span className="inline-flex items-center gap-2">
-                  <span>Call Our AI Now:</span>
-                  <a
-                    href="tel:3656012472"
-                    className="rounded-full border border-cyan-100/45 bg-cyan-300/15 px-3 py-1 font-black tracking-[0.03em] text-white shadow-[0_12px_24px_-18px_rgba(34,211,238,0.85)] transition hover:bg-cyan-300/25"
-                    aria-label="Call 365-601-AIPA-2472"
+      <div className="relative overflow-hidden rounded-[24px] border border-[#d7e7fb] bg-[linear-gradient(145deg,#fbfdff_0%,#eef6ff_100%)] p-5 text-[#081123] shadow-[0_24px_78px_-42px_rgba(148,190,255,0.95),inset_0_1px_0_rgba(255,255,255,0.9)]">
+        <span className="absolute inset-x-5 top-0 h-[3px] rounded-full bg-[linear-gradient(90deg,#2563eb,#8fd3ff)] opacity-75" />
+        <div className="flex gap-4">
+          <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-[linear-gradient(145deg,#0d5dc1,#0b408d)] text-white shadow-[0_14px_28px_-18px_rgba(13,93,193,0.9)]">
+            <HeroIcon type="chat" className="h-5 w-5" />
+          </span>
+          <p className="text-[1.08rem] font-medium leading-7 2xl:text-lg 2xl:leading-8">
+            <span className="text-lg font-black tracking-[-0.02em]">Texted to the customer</span>
+            <br />
+            Thanks for calling Tim&apos;s Electrical. We got your request and will follow up shortly.
+          </p>
+        </div>
+      </div>
+
+    </div>
+  );
+}
+
+function HeroTradeStrip() {
+  const trades = [
+    ["bolt", "Electricians"],
+    ["faucet", "Plumbers"],
+    ["fan", "HVAC"],
+    ["contractor", "Contractors"],
+  ];
+
+  return (
+    <div className="landing-trade-strip grid overflow-hidden rounded-[22px] border border-white/18 bg-white/[0.045] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] sm:grid-cols-2 lg:grid-cols-4">
+      {trades.map(([icon, label], index) => (
+        <div key={label} className={"trade-item flex items-center justify-center gap-4 px-5 py-3 " + (index ? "border-t border-white/12 sm:border-l sm:border-t-0" : "")}>
+          <span className="grid h-12 w-12 place-items-center rounded-full border border-[#3d8fff]/55 bg-[#063170] text-white shadow-[0_0_32px_-16px_rgba(59,130,246,1)] 2xl:h-14 2xl:w-14">
+            <HeroIcon type={icon} className="h-6 w-6 2xl:h-7 2xl:w-7" />
+          </span>
+          <span className="text-lg font-black text-white 2xl:text-xl">{label}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function VoicemailLossesArtboard() {
+  const voicemailProblems = [
+    ["Customers want help", "right as they're calling"],
+    ["If you don't answer,", "they will call someone else"],
+    ["Missed calls = Missed jobs"],
+    ["Voicemail can't answer", "customer questions"],
+  ];
+
+  const assistantBenefits = [
+    ["Always responds instantly", "(24/7)"],
+    ["Engages callers by", "handling their inquiry"],
+    ["Answers every call", "after 3 rings"],
+    ["Answers customer's", "questions naturally"],
+  ];
+
+  const processCards = [
+    {
+      number: "1",
+      y: 145,
+      lines: [
+        "A caller has a problem",
+        "and needs help fast.",
+        "By the 2nd ring, they start",
+        "wondering if",
+        "anyone will answer.",
+      ],
+      image: "/illustrations/phone-call.svg",
+    },
+    {
+      number: "2",
+      y: 380,
+      lines: [
+        "Your AI assistant answers",
+        "right on the 3rd ring.",
+        "It uses your business info",
+        "to answer questions, collect",
+        "job details, and text both sides.",
+      ],
+      image: "/illustrations/active-support.svg",
+    },
+    {
+      number: "3",
+      y: 630,
+      lines: [
+        "The customer gets a clear",
+        "text confirmation right away.",
+        "They feel heard and",
+        "stop searching elsewhere,",
+        "expecting your callback next.",
+      ],
+      image: "/illustrations/events-calendar.svg",
+    },
+  ];
+
+  return (
+    <section className="overflow-hidden bg-transparent py-2">
+      <div className="mx-auto w-full max-w-5xl px-4 py-8 lg:hidden">
+        <div className="text-left">
+          <h2 className="text-[clamp(2.25rem,9vw,4rem)] font-black leading-[1.05] tracking-[-0.05em] text-[#07142a]">
+            Relax! Let your <span className="bg-[linear-gradient(180deg,#dffcf2,#38d8d0_55%,#2563eb)] bg-clip-text text-transparent">A.I</span>
+            <span className="block bg-[linear-gradient(180deg,#2f8de6,#0b3b7a)] bg-clip-text text-transparent">Personal assistant</span>
+            <span className="block">take the call.</span>
+          </h2>
+          <div className="mt-3 h-1.5 w-32 rounded-full bg-[#ff8a13]" />
+        </div>
+
+        <div className="mt-8 rounded-[28px] border border-[#c4d6eb] bg-[linear-gradient(180deg,#183962,#071a36)] p-4 shadow-[0_24px_70px_-45px_rgba(7,20,42,0.75)] sm:p-6">
+          <div className="mx-auto max-w-md rounded-full border border-[#b7d9ff]/70 bg-[#12325e] px-5 py-3 text-center text-[1rem] font-black uppercase tracking-[0.16em] text-white">
+            Why Voicemail Loses
+          </div>
+
+          <div className="mt-5 grid gap-4 md:grid-cols-2">
+            <div className="rounded-[24px] border border-rose-400/70 bg-[linear-gradient(180deg,#7d1c3b,#3b1027)] p-5 text-white">
+              <p className="text-center text-[1.05rem] font-black uppercase tracking-[0.2em]">Voicemail</p>
+              <h3 className="mx-auto mt-3 max-w-sm text-center text-[1.7rem] font-black leading-tight">Voicemail creates real problems</h3>
+              <div className="mt-5 h-px bg-rose-300/70" />
+              <div className="mt-5 space-y-4">
+                {voicemailProblems.map((lines) => (
+                  <div key={lines.join(" ")} className="flex gap-3">
+                    <span className="mt-1 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-rose-400 text-white">
+                      <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+                        <path d="M6.5 6.5 17.5 17.5M17.5 6.5 6.5 17.5" strokeLinecap="round" />
+                      </svg>
+                    </span>
+                    <p className="text-[1.12rem] font-medium leading-7">{lines.join(" ")}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-[24px] border border-emerald-300/70 bg-[linear-gradient(180deg,#0f806f,#074337)] p-5 text-white">
+              <p className="text-center text-[1.05rem] font-black uppercase tracking-[0.2em]">AI Assistant</p>
+              <h3 className="mx-auto mt-3 max-w-sm text-center text-[1.7rem] font-black leading-tight">Let your agent take the call 24/7</h3>
+              <div className="mt-5 h-px bg-emerald-300/70" />
+              <div className="mt-5 space-y-4">
+                {assistantBenefits.map((lines) => (
+                  <div key={lines.join(" ")} className="flex gap-3">
+                    <span className="mt-1 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-emerald-300 text-[#06352d]">
+                      <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+                        <path d="m5 12 4 4 10-10" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </span>
+                    <p className="text-[1.12rem] font-medium leading-7">{lines.join(" ")}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-6 rounded-[22px] border border-white/30 bg-[#071832]/80 px-4 py-4 text-center">
+            <p className="text-[1.45rem] font-black leading-tight text-white">How AI Converts <span className="text-[#ff9d22]">cold callers into customers</span></p>
+          </div>
+
+          <div className="mt-4 grid gap-4">
+            {processCards.map((item) => (
+              <div key={item.number} className="grid gap-4 rounded-[24px] border border-white/28 bg-[linear-gradient(145deg,rgba(13,33,62,0.96),rgba(8,24,48,0.98))] p-4 text-white sm:grid-cols-[76px_1fr_170px] sm:items-center">
+                <div className="grid h-16 w-16 place-items-center rounded-full border border-[#9edaff] bg-[linear-gradient(145deg,#73c7ff,#2563eb)] text-[2rem] font-black">
+                  {item.number}
+                </div>
+                <p className="text-[1.18rem] font-black leading-8 tracking-[-0.02em]">{item.lines.join(" ")}</p>
+                <div className="flex h-36 items-center justify-center rounded-[20px] bg-[linear-gradient(180deg,#f7fbff,#e7f1ff)] sm:h-32">
+                  <img src={item.image} alt="" aria-hidden="true" className="h-full w-full object-contain p-4" loading="lazy" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="mx-auto hidden w-[calc(100vw-1rem)] max-w-[min(1672px,calc(178.25svh-2rem))] lg:block">
+        <svg viewBox="0 0 1672 938" className="block h-auto w-full" role="img" aria-label="AI assistant comparison showing why voicemail loses and how AI converts callers into customers">
+          <defs>
+            <linearGradient id="vmBlueText" x1="0" x2="0" y1="105" y2="175" gradientUnits="userSpaceOnUse">
+              <stop stopColor="#2f8de6" />
+              <stop offset="1" stopColor="#0b3b7a" />
+            </linearGradient>
+            <linearGradient id="vmAiArtifactText" x1="540" x2="720" y1="25" y2="112" gradientUnits="userSpaceOnUse">
+              <stop stopColor="#dffcf2" />
+              <stop offset="0.35" stopColor="#8deecf" />
+              <stop offset="0.68" stopColor="#38d8d0" />
+              <stop offset="1" stopColor="#7d75d8" />
+            </linearGradient>
+            <linearGradient id="vmCardBlue" x1="0" x2="0" y1="0" y2="1">
+              <stop stopColor="#183962" stopOpacity="0.92" />
+              <stop offset="1" stopColor="#071a36" stopOpacity="0.96" />
+            </linearGradient>
+            <linearGradient id="vmRose" x1="0" x2="0" y1="0" y2="1">
+              <stop stopColor="#7d1c3b" />
+              <stop offset="1" stopColor="#3b1027" />
+            </linearGradient>
+            <linearGradient id="vmGreen" x1="0" x2="0" y1="0" y2="1">
+              <stop stopColor="#0f806f" />
+              <stop offset="1" stopColor="#074337" />
+            </linearGradient>
+            <linearGradient id="vmNumber" x1="0" x2="1" y1="0" y2="1">
+              <stop stopColor="#8be1ff" />
+              <stop offset="1" stopColor="#2563eb" />
+            </linearGradient>
+            <filter id="vmShadow" x="-20%" y="-20%" width="140%" height="150%">
+              <feDropShadow dx="0" dy="18" stdDeviation="24" floodColor="#000000" floodOpacity="0.38" />
+            </filter>
+            <filter id="vmTextShadow" x="-10%" y="-10%" width="120%" height="140%">
+              <feDropShadow dx="0" dy="7" stdDeviation="0" floodColor="#22344f" floodOpacity="0.85" />
+            </filter>
+            <filter id="vmAiArtifactGlow" x="-45%" y="-80%" width="190%" height="260%">
+              <feDropShadow dx="0" dy="0" stdDeviation="1.2" floodColor="#d8fff2" floodOpacity="0.45" />
+              <feDropShadow dx="0" dy="0" stdDeviation="4" floodColor="#4dffe7" floodOpacity="0.28" />
+              <feDropShadow dx="0" dy="0" stdDeviation="9" floodColor="#1d65bd" floodOpacity="0.20" />
+            </filter>
+            <filter id="vmGlowRose" x="-40%" y="-40%" width="180%" height="180%">
+              <feDropShadow dx="0" dy="22" stdDeviation="26" floodColor="#fb7185" floodOpacity="0.34" />
+            </filter>
+            <filter id="vmGlowGreen" x="-40%" y="-40%" width="180%" height="180%">
+              <feDropShadow dx="0" dy="22" stdDeviation="26" floodColor="#2dd4bf" floodOpacity="0.34" />
+            </filter>
+          </defs>
+
+          <rect width="1672" height="938" fill="transparent" />
+
+          <g fontFamily="Arial, Helvetica, sans-serif">
+            <text x="55" y="88" fill="#07142a" fontSize="72" fontWeight="900" letterSpacing="-3">
+              Relax! Let your
+            </text>
+            <text x="622" y="88" fill="url(#vmAiArtifactText)" stroke="#0b3b7a" strokeOpacity="0.45" strokeWidth="0.55" fontSize="72" fontWeight="900" letterSpacing="3" filter="url(#vmAiArtifactGlow)">
+              A.I
+            </text>
+            <text x="55" y="172" fill="url(#vmBlueText)" fontSize="72" fontWeight="900" letterSpacing="-3">
+              Personal assistant
+            </text>
+            <text x="55" y="242" fill="#07142a" fontSize="66" fontWeight="900" letterSpacing="-3">
+              take the call.
+            </text>
+          </g>
+          <path d="M38 106C92 100 161 100 254 106" fill="none" stroke="#ff8a13" strokeWidth="5" strokeLinecap="round" />
+
+          <rect x="28" y="280" width="800" height="626" rx="24" fill="url(#vmCardBlue)" stroke="#c4d6eb" strokeOpacity="0.55" strokeWidth="1.3" filter="url(#vmShadow)" />
+          <rect x="242" y="250" width="430" height="64" rx="32" fill="#12325e" stroke="#b7d9ff" strokeOpacity="0.7" strokeWidth="1.2" />
+          <text x="457" y="291" textAnchor="middle" fill="#ffffff" fontFamily="Arial, Helvetica, sans-serif" fontSize="23" fontWeight="900" letterSpacing="5">
+            WHY VOICEMAIL LOSES
+          </text>
+
+          <g filter="url(#vmGlowRose)">
+            <rect x="40" y="319" width="350" height="557" rx="28" fill="url(#vmRose)" stroke="#ff6977" strokeWidth="1.3" />
+            <circle cx="221.5" cy="383" r="43" fill="#9e2943" fillOpacity="0.32" stroke="#ff6977" strokeOpacity="0.7" />
+            <circle cx="211" cy="383" r="11" fill="none" stroke="#ffffff" strokeWidth="4.5" />
+            <circle cx="233" cy="383" r="11" fill="none" stroke="#ffffff" strokeWidth="4.5" />
+            <path d="M211 394h22" stroke="#ffffff" strokeWidth="4.5" strokeLinecap="round" />
+            <text x="221.5" y="452" textAnchor="middle" fill="#ffffff" fontFamily="Arial, Helvetica, sans-serif" fontSize="21" fontWeight="900" letterSpacing="8">
+              VOICEMAIL
+            </text>
+            <text x="221.5" y="498" textAnchor="middle" fill="#ffffff" fontFamily="Arial, Helvetica, sans-serif" fontSize="27" fontWeight="900">
+              <tspan x="221.5">Voicemail creates</tspan>
+              <tspan x="221.5" dy="35">real problems</tspan>
+            </text>
+            <line x1="96" y1="560" x2="334" y2="560" stroke="#ff6977" strokeWidth="1.5" />
+            {voicemailProblems.map((lines, index) => {
+              const y = 612 + index * 62;
+              return (
+                <g key={lines.join(" ")}>
+                  <circle cx="112" cy={y + 4} r="14" fill="#ef5e62" />
+                  <path d={`M107 ${y - 1}l10 10M117 ${y - 1}l-10 10`} stroke="#ffffff" strokeWidth="3" strokeLinecap="round" />
+                  <text x="136" y={y + 1} fill="#ffffff" fontFamily="Arial, Helvetica, sans-serif" fontSize="19" fontWeight="600">
+                    {lines.map((line, lineIndex) => (
+                      <tspan key={line} x="136" dy={lineIndex ? 24 : 0}>
+                        {line}
+                      </tspan>
+                    ))}
+                  </text>
+                </g>
+              );
+            })}
+          </g>
+
+          <circle cx="415" cy="587" r="38" fill="#09264b" stroke="#9edaff" strokeWidth="2" filter="url(#vmShadow)" />
+          <path d="M397 587h33M420 576l12 11-12 11" fill="none" stroke="#ffffff" strokeWidth="3.6" strokeLinecap="round" strokeLinejoin="round" />
+
+          <g filter="url(#vmGlowGreen)">
+            <rect x="455" y="319" width="357" height="557" rx="28" fill="url(#vmGreen)" stroke="#42dac4" strokeWidth="1.3" />
+            <circle cx="623.5" cy="383" r="43" fill="#71e9d1" fillOpacity="0.14" stroke="#78ffe7" strokeOpacity="0.55" />
+            <rect x="604" y="373" width="39" height="29" rx="10" fill="none" stroke="#ffffff" strokeWidth="5" />
+            <path d="M614 373v-10M633 373v-10M623.5 363v-7" stroke="#ffffff" strokeWidth="4" strokeLinecap="round" />
+            <circle cx="616" cy="387" r="2.8" fill="#ffffff" />
+            <circle cx="631" cy="387" r="2.8" fill="#ffffff" />
+            <path d="M617 395c4.5 3.6 9 3.6 13.5 0" stroke="#ffffff" strokeWidth="4" strokeLinecap="round" />
+            <text x="623.5" y="452" textAnchor="middle" fill="#ffffff" fontFamily="Arial, Helvetica, sans-serif" fontSize="21" fontWeight="900" letterSpacing="8">
+              AI ASSISTANT
+            </text>
+            <text x="623.5" y="486" textAnchor="middle" fill="#ffffff" fontFamily="Arial, Helvetica, sans-serif" fontSize="24" fontWeight="900">
+              <tspan x="623.5">Let your agent take</tspan>
+              <tspan x="623.5" dy="30">the call 24 hours,</tspan>
+              <tspan x="623.5" dy="30">7 days a week!</tspan>
+            </text>
+            <line x1="491" y1="575" x2="756" y2="575" stroke="#55e6cf" strokeWidth="1.5" />
+            {assistantBenefits.map((lines, index) => {
+              const y = 612 + index * 62;
+              return (
+                <g key={lines.join(" ")}>
+                  <circle cx="486" cy={y + 4} r="15" fill="#62e8c7" />
+                  <path d={`M479 ${y + 3}l5 5 10-12`} fill="none" stroke="#064438" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                  <text x="524" y={y + 1} fill="#ffffff" fontFamily="Arial, Helvetica, sans-serif" fontSize="19" fontWeight="600">
+                    {lines.map((line, lineIndex) => (
+                      <tspan key={line} x="524" dy={lineIndex ? 24 : 0}>
+                        {line}
+                      </tspan>
+                    ))}
+                  </text>
+                </g>
+              );
+            })}
+          </g>
+
+          <rect x="980" y="41" width="680" height="83" rx="28" fill="#071832" fillOpacity="0.82" stroke="#ffffff" strokeOpacity="0.62" strokeWidth="1.2" />
+          <text x="1320" y="97" textAnchor="middle" fill="#ffffff" fontFamily="Arial, Helvetica, sans-serif" fontSize="27" fontWeight="900">
+            How AI Converts <tspan fill="#ff9d22">cold callers into customers</tspan>
+          </text>
+
+          {processCards.map((item) => (
+            <g key={item.number}>
+              <rect x="1015" y={item.y} width="627" height="215" rx="28" fill="url(#vmCardBlue)" stroke="#ffffff" strokeOpacity="0.42" strokeWidth="1.2" filter="url(#vmShadow)" />
+              <circle cx="1066" cy={item.y + 80} r="30" fill="url(#vmNumber)" stroke="#9edaff" strokeWidth="1.4" />
+              <text x="1066" y={item.y + 91} textAnchor="middle" fill="#ffffff" fontFamily="Arial, Helvetica, sans-serif" fontSize="36" fontWeight="900">
+                {item.number}
+              </text>
+              <line x1="1110" y1={item.y + 47} x2="1110" y2={item.y + 140} stroke="#ffffff" strokeOpacity="0.28" strokeWidth="1.4" />
+              <text x="1112" y={item.y + 58} fill="#ffffff" fontFamily="Arial, Helvetica, sans-serif" fontSize="18" fontWeight="900">
+                {item.lines.map((line, index) => (
+                  <tspan key={line} x="1112" dy={index ? 24 : 0}>
+                    {line}
+                  </tspan>
+                ))}
+              </text>
+              <rect x="1432" y={item.y + 15} width="188" height="186" rx="20" fill="#f4f8ff" />
+              <image href={item.image} x="1442" y={item.y + 30} width="168" height="156" preserveAspectRatio="xMidYMid meet" />
+            </g>
+          ))}
+        </svg>
+      </div>
+    </section>
+  );
+}
+
+function LandingPage() {
+  const demoRef = useRef(null);
+  const pricingRef = useRef(null);
+  const faqRef = useRef(null);
+  const audioRef = useRef(null);
+
+  const [audioPlaying, setAudioPlaying] = useState(false);
+  const [audioTime, setAudioTime] = useState(0);
+  const [audioDuration, setAudioDuration] = useState(180);
+  const [openFaq, setOpenFaq] = useState(0);
+  const [showHeader, setShowHeader] = useState(false);
+  const headerHideTimerRef = useRef(null);
+
+  const activeTranscript =
+    transcriptMoments.find((item) => audioTime >= item.start && audioTime < item.end) || transcriptMoments[transcriptMoments.length - 1];
+
+  const goToSignup = () => {
+    window.location.hash = "/signup";
+  };
+
+  const scrollToRef = (ref) => {
+    ref.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const playDemo = async () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    scrollToRef(demoRef);
+    try {
+      await audio.play();
+      setAudioPlaying(true);
+    } catch (_err) {}
+  };
+
+  const toggleAudio = async () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    if (audio.paused) {
+      try {
+        await audio.play();
+        setAudioPlaying(true);
+      } catch (_err) {}
+      return;
+    }
+
+    audio.pause();
+    setAudioPlaying(false);
+  };
+
+  const handleScrub = (event) => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    const nextTime = Number(event.target.value || 0);
+    audio.currentTime = nextTime;
+    setAudioTime(nextTime);
+  };
+
+  const playbackProgress = Math.max(0, Math.min(1, audioTime / Math.max(audioDuration, 1)));
+
+  useEffect(() => {
+    const hideAfterIdle = () => {
+      if (headerHideTimerRef.current) {
+        window.clearTimeout(headerHideTimerRef.current);
+      }
+
+      headerHideTimerRef.current = window.setTimeout(() => {
+        setShowHeader(false);
+      }, 1500);
+    };
+
+    const onScroll = () => {
+      if (window.scrollY > 40) {
+        setShowHeader(true);
+        hideAfterIdle();
+      } else {
+        setShowHeader(false);
+        if (headerHideTimerRef.current) {
+          window.clearTimeout(headerHideTimerRef.current);
+        }
+      }
+    };
+
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      if (headerHideTimerRef.current) {
+        window.clearTimeout(headerHideTimerRef.current);
+      }
+    };
+  }, []);
+
+  return (
+    <main className="min-h-screen bg-[linear-gradient(180deg,#ffffff_0%,#f7fbff_7%,#eaf6ff_22%,#dff1ff_100%)] text-[#07142a]">
+      <header
+        className={
+          "fixed inset-x-0 top-0 z-40 border-b border-[#d7e7fb] bg-white/92 backdrop-blur transition-all duration-300 " +
+          (showHeader ? "translate-y-0 opacity-100" : "pointer-events-none -translate-y-full opacity-0")
+        }
+      >
+        <div className="mx-auto grid w-full max-w-[1660px] grid-cols-[auto_1fr_auto] items-center gap-4 px-5 py-4 sm:px-8 lg:px-10">
+          <HeroLogoMark />
+
+          <div className="hidden justify-self-center text-center lg:block">
+            <p className="text-sm font-black uppercase tracking-[0.14em] text-[#334155]">Hear the agent live right now:</p>
+            <a href="tel:+19055550137" className="mt-1 block text-xl font-black tracking-[-0.02em] text-[#ff9a22] transition hover:text-[#ffb35c]">
+              (905) 555-0137
+            </a>
+          </div>
+
+          <div className="flex items-center gap-5">
+            <button
+              type="button"
+              onClick={goToSignup}
+              className="rounded-xl bg-[linear-gradient(180deg,#ff7a00,#ff6500)] px-5 py-3 text-sm font-black text-white shadow-[0_18px_42px_-24px_rgba(255,106,0,0.95)] transition hover:-translate-y-0.5 hover:brightness-110 sm:px-6 sm:text-base 2xl:px-7 2xl:py-4 2xl:text-xl"
+            >
+              Start Free Trial
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <section className="relative overflow-hidden bg-transparent">
+        <style>{`
+          @media (min-width: 1024px) and (max-height: 900px) {
+            .landing-hero-shell {
+              padding-top: 1.25rem;
+              padding-bottom: 1.5rem;
+            }
+            .landing-hero-grid {
+              gap: 2rem;
+              padding-top: 2.2rem;
+              padding-bottom: 2.5rem;
+            }
+            .landing-hero-title {
+              font-size: clamp(3.1rem, 3.47vw, 3.94rem);
+              line-height: 1.03;
+            }
+            .landing-hero-kicker {
+              margin-top: 0.85rem;
+              font-size: 1.65rem;
+            }
+            .landing-hero-copy {
+              margin-top: 0.9rem;
+              max-width: 43rem;
+              font-size: 1.22rem;
+              line-height: 1.55;
+            }
+            .landing-hero-points {
+              margin-top: 1.35rem;
+              gap: 0.9rem;
+            }
+            .landing-hero-point {
+              font-size: 1.24rem;
+            }
+            .landing-hero-point-icon {
+              width: 2.55rem;
+              height: 2.55rem;
+            }
+            .landing-hero-ctas {
+              margin-top: 1.55rem;
+            }
+            .landing-hero-cta {
+              min-height: 3.65rem;
+              padding-left: 2rem;
+              padding-right: 2rem;
+              font-size: 1.18rem;
+            }
+            .landing-hero-footnote {
+              margin-top: 1.15rem;
+              font-size: 1.08rem;
+            }
+            .landing-phone {
+              height: 603px;
+              margin-top: -3rem;
+              max-width: 360px;
+            }
+            .landing-summary {
+              transform: none;
+            }
+          }
+        `}</style>
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_16%_18%,rgba(187,222,255,0.74),transparent_30%),radial-gradient(circle_at_78%_12%,rgba(213,235,255,0.70),transparent_32%),linear-gradient(180deg,#ffffff_0%,#f6fbff_28%,#e9f6ff_100%)]" />
+        <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgba(37,99,235,0.06)_1px,transparent_1px),linear-gradient(rgba(37,99,235,0.045)_1px,transparent_1px)] bg-[size:76px_76px] opacity-[0.32]" />
+
+        <div className="landing-hero-shell relative z-10 mx-auto flex w-full max-w-[1660px] flex-col px-5 py-6 sm:px-8 lg:min-h-screen lg:px-10 lg:py-7 2xl:px-12 2xl:py-8">
+          <nav className="grid shrink-0 gap-5 lg:grid-cols-[auto_1fr_auto] lg:items-center">
+            <HeroLogoMark />
+            <div className="hidden justify-self-center text-center lg:block">
+              <p className="text-sm font-black uppercase tracking-[0.14em] text-[#334155]">Hear the agent live right now:</p>
+              <a href="tel:+19055550137" className="mt-1 block text-xl font-black tracking-[-0.02em] text-[#ff9a22] transition hover:text-[#ffb35c]">
+                (905) 555-0137
+              </a>
+            </div>
+            <div className="flex flex-wrap items-center gap-3 sm:gap-5 lg:justify-end">
+              <button
+                type="button"
+                onClick={goToSignup}
+                className="rounded-xl bg-[linear-gradient(180deg,#ff7a00,#ff6500)] px-5 py-3 text-base font-black text-white shadow-[0_18px_42px_-24px_rgba(255,106,0,0.95)] transition hover:-translate-y-0.5 hover:brightness-110 sm:px-6 sm:py-3.5 sm:text-lg 2xl:px-7 2xl:py-4 2xl:text-xl"
+              >
+                Start Free Trial
+              </button>
+            </div>
+          </nav>
+
+          <div className="landing-hero-grid grid flex-1 gap-9 py-9 lg:grid-cols-[minmax(0,1fr)_375px] lg:items-center xl:grid-cols-[minmax(640px,1fr)_375px_340px] 2xl:grid-cols-[minmax(680px,1fr)_385px_360px] 2xl:gap-10 2xl:py-10">
+            <div className="min-w-0 max-w-[800px] xl:max-w-none lg:-translate-y-6 2xl:-translate-y-8">
+              <div className="mt-3 inline-flex rounded-full border border-[#b9d8ff] bg-white/72 px-4 py-2 text-lg font-semibold text-[#0b3b7a] shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_18px_42px_-34px_rgba(37,99,235,0.7)] 2xl:px-5 2xl:text-xl">
+                AI Phone Answering Assistant
+              </div>
+
+              <h1 className="landing-hero-title mt-5 text-[clamp(2.65rem,12vw,4.07rem)] font-black leading-[1.03] tracking-[-0.055em] text-[#07142a] 2xl:text-[4.32rem]">
+                <span className="block xl:whitespace-nowrap drop-shadow-[0_3px_0_rgba(148,190,255,0.45)]">Answers the phone</span>
+                <span className="block pb-2 bg-[linear-gradient(180deg,#ff9a22,#ff6b00)] bg-clip-text text-transparent drop-shadow-[0_4px_0_rgba(255,107,0,0.16)]">
+                  when you can&apos;t.
+                </span>
+              </h1>
+
+              <p className="landing-hero-kicker mt-2 text-[1.6rem] font-black leading-tight tracking-[-0.045em] text-[#62e6a5] drop-shadow-[0_0_18px_rgba(98,230,165,0.18)] sm:text-[1.78rem] 2xl:text-[1.95rem]">Never Miss A Call Again!</p>
+              <p className="landing-hero-copy mt-3 max-w-[700px] text-[1.2rem] font-medium leading-8 text-[#243044] sm:text-[1.28rem] 2xl:text-[1.34rem] 2xl:leading-9">
+                24/7 AI call answering for busy trades businesses.
+                <br />
+                Works with your existing business number.
+              </p>
+
+              <div className="landing-hero-points mt-6 space-y-3.5">
+                {[
+                  ["phone", "Speaks with callers"],
+                  ["people", "Eliminates voicemail hangups"],
+                  ["chat", "Sends you a text summary for easy follow-up"],
+                ].map(([icon, label]) => (
+                  <div key={label} className="landing-hero-point flex items-center gap-4 text-[1.28rem] font-medium text-[#16243a] 2xl:text-[1.36rem]">
+                    <span className="landing-hero-point-icon grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[#0c4da0] text-white shadow-[0_10px_28px_-16px_rgba(59,130,246,1)]">
+                      <HeroIcon type={icon} className="h-5 w-5" />
+                    </span>
+                    <span>{label}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="landing-hero-ctas mt-7 flex flex-col gap-4 sm:flex-row">
+                <button
+                  type="button"
+                  onClick={goToSignup}
+                  className="landing-hero-cta inline-flex min-h-[62px] items-center justify-center rounded-xl bg-[linear-gradient(180deg,#ff8a13,#ff6900)] px-10 text-[1.2rem] font-black text-white shadow-[0_22px_46px_-26px_rgba(255,106,0,1)] transition hover:-translate-y-0.5 hover:brightness-110 2xl:min-h-[66px] 2xl:text-[1.28rem]"
+                >
+                  Start Free Trial
+                </button>
+                <button
+                  type="button"
+                  onClick={playDemo}
+                  className="landing-hero-cta inline-flex min-h-[62px] items-center justify-center rounded-xl border-2 border-[#1d5ea8]/70 bg-white/50 px-10 text-[1.2rem] font-black text-[#0b3b7a] transition hover:bg-white 2xl:min-h-[66px] 2xl:text-[1.28rem]"
+                >
+                  Play Demo
+                </button>
+              </div>
+
+              <p className="landing-hero-footnote mt-5 text-lg font-medium text-[#334155] 2xl:text-xl">PIPEDA Compliant&nbsp;&nbsp;&bull;&nbsp;&nbsp;14-day free trial&nbsp;&nbsp;&bull;&nbsp;&nbsp;No credit card / No obligation needed!</p>
+            </div>
+
+            <div className="relative lg:-translate-y-2 2xl:translate-y-0">
+              <HeroPhoneMockup />
+            </div>
+
+            <div className="hidden xl:block xl:self-center">
+              <HeroSummaryStack />
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <section className="hidden">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_74%_20%,rgba(112,70,255,0.30),transparent_28%),radial-gradient(circle_at_58%_84%,rgba(93,76,255,0.42),transparent_22%),radial-gradient(circle_at_94%_70%,rgba(207,79,255,0.22),transparent_24%),linear-gradient(180deg,#030106_0%,#05040d_58%,#020106_100%)]" />
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-48 bg-[radial-gradient(ellipse_at_center,rgba(119,74,255,0.32),transparent_52%)]" />
+
+        <div className="relative z-10 mx-auto grid w-full max-w-6xl gap-10 px-4 pb-12 pt-10 sm:px-6 sm:pb-14 sm:pt-12 lg:grid-cols-[0.92fr_1.08fr] lg:items-center lg:px-8 lg:pt-8">
+          <div className="-translate-y-6 lg:-translate-x-16 lg:-translate-y-10 xl:-translate-x-28 xl:-translate-y-12 2xl:-translate-x-36">
+            <div className="inline-flex max-w-full translate-y-7 flex-nowrap items-baseline gap-3 rounded-full border border-[#7d58ff]/70 bg-black/34 px-5 py-3 shadow-[0_0_30px_rgba(120,84,255,0.22)]">
+              <p className="text-[1.32rem] font-bold leading-none tracking-[-0.04em] text-white sm:text-[1.52rem]">
+                My <span className="bg-[linear-gradient(135deg,#58c9ff_0%,#4f7cff_100%)] bg-clip-text text-transparent">AI PA</span>
+              </p>
+              <p className="text-[0.82rem] font-bold uppercase tracking-[0.18em] text-[#f3f0ff] sm:text-[0.94rem]">
+                - Telephone Answering Assistant
+              </p>
+            </div>
+
+            <h1 className="mt-8 max-w-3xl text-[3rem] font-black uppercase leading-[0.9] tracking-[-0.06em] text-white sm:text-[4.25rem] sm:leading-[0.88] lg:text-[5rem]">
+              <span className="block sm:whitespace-nowrap">Answers the phone</span>
+              <span className="block bg-[linear-gradient(135deg,#8b5cff_0%,#6e7dff_46%,#39b9ff_100%)] bg-clip-text text-transparent">
+                when you can&apos;t
+              </span>
+            </h1>
+
+            <p className="mt-2 text-[2rem] font-black leading-tight tracking-[-0.04em] text-[#ff5757] sm:text-[2.35rem]">
+              Never Miss A Call Again!
+            </p>
+            <div className="mt-6 space-y-3.5">
+              <div className="flex items-start gap-3">
+                <span className="mt-2.5 h-2.5 w-2.5 rounded-full bg-[#a78bfa] shadow-[0_0_16px_rgba(167,139,250,0.85)]" />
+                <p className="text-[1.1rem] font-medium leading-8 text-[#e8e4ff] sm:text-[1.25rem]">Speaks with callers</p>
+              </div>
+              <div className="flex items-start gap-3">
+                <span className="mt-2.5 h-2.5 w-2.5 rounded-full bg-[#a78bfa] shadow-[0_0_16px_rgba(167,139,250,0.85)]" />
+                <p className="text-[1.1rem] font-medium leading-8 text-[#e8e4ff] sm:text-[1.25rem]">Eliminates voicemail hangups</p>
+              </div>
+              <div className="flex items-start gap-3">
+                <span className="mt-2.5 h-2.5 w-2.5 rounded-full bg-[#a78bfa] shadow-[0_0_16px_rgba(167,139,250,0.85)]" />
+                <p className="text-[1.1rem] font-medium leading-8 text-[#e8e4ff] sm:text-[1.25rem]">Sends you a text summary for easy follow-up</p>
+              </div>
+            </div>
+
+            <div className="relative mt-9 sm:min-h-[146px] sm:max-w-[640px]">
+              <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
+                <button
+                  type="button"
+                  onClick={goToSignup}
+                  className="inline-flex items-center justify-center rounded-[14px] bg-[linear-gradient(135deg,#7b6cff_0%,#6b29ff_100%)] px-7 py-4 text-[0.95rem] font-black uppercase tracking-[0.16em] text-white shadow-[0_18px_46px_-18px_rgba(118,87,255,0.95),0_0_0_1px_rgba(255,255,255,0.1)_inset] transition hover:-translate-y-0.5"
+                >
+                  Start Free Trial
+                </button>
+                <button
+                  type="button"
+                  onClick={playDemo}
+                  className="inline-flex items-center justify-center rounded-full border border-[#966cff]/70 bg-black/35 px-7 py-3.5 text-[0.95rem] font-black uppercase tracking-[0.16em] text-white transition hover:bg-[#20113f]"
+                >
+                  Play Demo
+                </button>
+              </div>
+
+              <div className="mt-4 rounded-[22px] border border-[#c78c52]/45 bg-[rgba(199,140,82,0.14)] px-4 py-3 text-sm font-black uppercase leading-6 tracking-[0.08em] text-[#ffe1bb] shadow-[0_20px_40px_-28px_rgba(199,140,82,0.55)] sm:hidden">
+                Free 14 day trial: No credit card and no obligations REQUIRED
+              </div>
+
+              <svg
+                viewBox="0 0 340 140"
+                className="pointer-events-none absolute left-0 top-[10px] hidden h-[140px] w-[340px] text-[#b895ff] opacity-80 sm:block"
+                aria-hidden="true"
+              >
+                <defs>
+                  <marker
+                    id="hero-cta-arrowhead"
+                    markerWidth="18"
+                    markerHeight="18"
+                    refX="13.5"
+                    refY="8"
+                    orient="auto"
+                    markerUnits="userSpaceOnUse"
                   >
-                    365-601-AIPA(2472)
-                  </a>
+                    <path d="M0 0L14 8L0 16" fill="none" stroke="currentColor" strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </marker>
+                </defs>
+                <path
+                  d="M176 118C140 131 107 139 76 137C40 134 20 114 19 79C18 57 22 42 34 29"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="5"
+                  strokeLinecap="round"
+                  markerEnd="url(#hero-cta-arrowhead)"
+                />
+              </svg>
+
+              <div className="hidden rounded-[18px] border border-[#8b5cff]/50 bg-[#10091e]/85 px-4 py-3 text-sm font-black uppercase leading-6 tracking-[0.08em] text-[#eadcff] shadow-[0_20px_50px_-24px_rgba(139,92,246,0.65)] sm:absolute sm:left-[182px] sm:top-[84px] sm:block sm:max-w-[360px]">
+                  Free 14 day trial: No credit card and no obligations REQUIRED
+              </div>
+            </div>
+
+            <div className="mt-6 grid gap-3 sm:grid-cols-2 sm:gap-4">
+              {proofFeatureCards.map((item) => (
+                <ProofFeatureCard
+                  key={item.title}
+                  eyebrow={item.eyebrow}
+                  title={item.title}
+                  icon={item.icon}
+                />
+              ))}
+            </div>
+          </div>
+
+          <div className="relative z-10 lg:-translate-x-16 lg:-translate-y-10 xl:-translate-x-20 xl:-translate-y-12">
+            <div className="flex justify-center lg:justify-start">
+                  <div className="relative w-full max-w-[390px] translate-y-5 rotate-0 rounded-[42px] border border-white/25 bg-[linear-gradient(135deg,#2a2932,#05050a_22%,#0c0914_70%,#302944)] p-3 shadow-[0_36px_80px_-28px_rgba(0,0,0,0.95),0_0_56px_rgba(119,74,255,0.34)]">
+                    <div className="absolute left-1/2 top-3 h-6 w-24 -translate-x-1/2 rounded-b-2xl bg-black" />
+                    <div className="w-full rounded-[32px] border border-white/8 bg-[radial-gradient(circle_at_top,rgba(111,81,255,0.30),rgba(4,4,12,0.98)_44%),linear-gradient(180deg,#090812_0%,#030308_100%)] px-4 pb-5 pt-7">
+                      <div className="mt-0.5 px-1">
+                        <div className="mt-2 space-y-3">
+                          {heroCallTranscript.map((item) => {
+                            const isCaller = item.speaker === "Caller";
+                            const bubbleStyles = isCaller
+                              ? "border-[#d6dbe5] bg-[#eef1f6] text-[#0f172a] shadow-[0_1px_0_rgba(255,255,255,0.7)_inset,0_8px_18px_-18px_rgba(15,23,42,0.22)]"
+                              : "border-[#875cff] bg-[linear-gradient(135deg,#6e55ff,#8a35ff)] text-white shadow-[0_0_28px_rgba(128,91,255,0.35)]";
+                            const labelStyles = isCaller ? "text-[#53617a]" : "text-white/86";
+                            const timeStyles = isCaller ? "text-[#6f7d95]" : "text-white/82";
+                            const dotStyles = isCaller ? "bg-[#8ea0b8]" : "bg-white/88";
+                            const tailColor = isCaller ? "#eef1f6" : "#7a48ff";
+                            const tailBorder = isCaller ? "#d6dbe5" : "#875cff";
+
+                            return (
+                              <div
+                                key={`${item.time}-${item.speaker}-${item.text}`}
+                                className={"relative overflow-visible rounded-[28px] border px-4 py-3.5 " + bubbleStyles}
+                              >
+                                <div
+                                  aria-hidden="true"
+                                  className={
+                                    "pointer-events-none absolute bottom-0 h-7 w-7 overflow-hidden " +
+                                    (isCaller ? "-left-[10px]" : "-right-[10px]")
+                                  }
+                                >
+                                  <div
+                                    className={
+                                      "absolute bottom-[-4px] h-8 w-8 rotate-[-45deg] rounded-bl-[18px] rounded-tr-[18px] border-l border-b " +
+                                      (isCaller ? "left-[3px]" : "right-[3px] scale-x-[-1]")
+                                    }
+                                    style={{ backgroundColor: tailColor, borderColor: tailBorder }}
+                                  />
+                                </div>
+                                <div className="relative z-10">
+                                  <div className="flex items-center gap-2.5">
+                                    <span className={`h-2.5 w-2.5 rounded-full ${dotStyles}`} />
+                                    <p className={"text-[10px] font-black uppercase tracking-[0.16em] " + labelStyles}>{item.speaker}</p>
+                                    <span className={"h-px flex-1 " + (isCaller ? "bg-[#cad3df]" : "bg-white/22")} />
+                                    <p className={"text-[10px] font-black uppercase tracking-[0.14em] " + timeStyles}>{item.time}</p>
+                                  </div>
+                                  <p className={"mt-2 text-[0.94rem] font-semibold leading-6 " + (isCaller ? "text-[#101828]" : "text-white")}>{item.text}</p>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="pointer-events-none absolute left-full top-1/2 hidden -translate-x-24 -translate-y-1/2 pl-5 lg:block xl:-translate-x-20">
+                      <div className="flex items-center gap-2">
+                        <svg viewBox="0 0 72 18" className="h-5 w-14 -rotate-6 text-[#c7e6ff] [filter:drop-shadow(0_0_3px_rgba(143,209,255,0.32))]" fill="none" aria-hidden="true">
+                          <path d="M70 9H10" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="0 0" />
+                          <path d="M10 9 18 4.5M10 9 18 13.5" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                        <p className="inline-block max-w-[18rem] rounded-2xl border border-[#8b5cff]/70 bg-black/70 px-4 py-3 text-[0.9rem] font-black uppercase leading-tight tracking-[0.02em] text-white shadow-[0_0_28px_rgba(139,92,246,0.34)]">
+                          <span className="block whitespace-nowrap">Example of one</span>
+                          <span className="block whitespace-nowrap">of many natural</span>
+                          <span className="block whitespace-nowrap">conversations!</span>
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+            </div>
+
+            <div className="relative mt-3">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-[24px] border border-[#8b5cff]/70 bg-[linear-gradient(180deg,rgba(20,15,39,0.98),rgba(8,7,18,0.98))] px-3.5 py-3 shadow-[0_34px_80px_-22px_rgba(139,92,246,0.68)] ring-2 ring-[#8b5cff]/18">
+                  <div className="flex justify-center">
+                    <p className="text-center text-[0.98rem] font-black uppercase tracking-[0.22em] text-white sm:text-[1.08rem]">Caller text</p>
+                  </div>
+                  <div className="mt-1 rounded-2xl border border-[#7d65ff]/50 bg-[#151126] px-4 py-2.5 text-[0.98rem] font-medium leading-7 text-[#ffffff] shadow-[inset_0_1px_0_rgba(255,255,255,0.1),0_0_24px_rgba(139,92,246,0.16)]">
+                    Thanks for calling Tim's Electrical, Brian! We received your hot tub setup request, and we'll get back to you shortly with pricing and scheduling.
+                  </div>
+                </div>
+
+                <div className="rounded-[24px] border border-[#8b5cff]/70 bg-[linear-gradient(180deg,rgba(20,15,39,0.98),rgba(8,7,18,0.98))] px-3.5 py-3 shadow-[0_36px_84px_-22px_rgba(139,92,246,0.55)] ring-2 ring-[#8b5cff]/18">
+                  <div className="flex justify-center">
+                    <p className="whitespace-nowrap text-center text-[0.85rem] font-black uppercase tracking-[0.16em] text-white sm:text-[0.98rem]">Owner summary</p>
+                  </div>
+                  <div className="mt-2 rounded-2xl border border-[#7d65ff]/50 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.025))] px-3.5 py-3 space-y-2 text-[0.98rem] font-semibold leading-7 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.1),0_0_26px_rgba(139,92,246,0.16)]">
+                    <p>Callers Name Is Brian</p>
+                    <p>Phone: 905-123-4567</p>
+                    <p>Job: Hot tub setup</p>
+                    <p>Address: 63 York Street</p>
+                    <p className="whitespace-nowrap text-[0.9rem] leading-6 tracking-[-0.01em] sm:text-[0.95rem]">
+                      Best Call Back Time: 7PM
+                    </p>
+                  </div>
+                </div>
+
+              </div>
+
+              <div className="pointer-events-none absolute right-[-1rem] top-[-2.2rem] hidden translate-x-16 -translate-y-8 lg:block xl:translate-x-20">
+                <div className="flex items-start gap-3">
+                  <svg viewBox="0 0 96 72" className="h-[5.8rem] w-[7.6rem] text-[#c7e6ff] [filter:drop-shadow(0_0_4px_rgba(143,209,255,0.34))]" fill="none" aria-hidden="true">
+                    <path d="M88 10C79 13 71 19 63 25C55 32 48 39 39 45C32 50 23 54 12 56" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" />
+                    <path d="M12 56L18 50.6M12 56L18.6 57.4" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  <p className="inline-block max-w-[18rem] -translate-x-3 -translate-y-7 rounded-2xl border border-[#8b5cff]/70 bg-black/70 px-4 py-3 text-[0.9rem] font-black uppercase leading-tight tracking-[0.02em] text-white shadow-[0_0_28px_rgba(139,92,246,0.34)]">
+                    <span className="block whitespace-nowrap">Instant text messages</span>
+                    <span className="block whitespace-nowrap">sent after each</span>
+                    <span className="block whitespace-nowrap">Interaction!</span>
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-1 inline-flex max-w-full rounded-full bg-[#8b5cff] p-[2px] shadow-[0_28px_70px_-30px_rgba(139,92,246,0.62)]">
+              <div className="inline-flex max-w-full items-center justify-center rounded-full bg-white px-9 py-3.5">
+                <p
+                  className="whitespace-nowrap text-center text-[1.45rem] font-black uppercase leading-none tracking-[-0.05em] sm:text-[1.95rem]"
+                  style={{ color: "#16a34a", textShadow: "0 0 12px rgba(74,222,128,0.42), 0 0 24px rgba(34,197,94,0.28)" }}
+                >
+                  MISSED CALLS = LOST REVENUE
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <VoicemailLossesArtboard />
+
+      <section className="hidden overflow-hidden bg-[radial-gradient(circle_at_94%_92%,rgba(0,88,184,0.42),transparent_34%),linear-gradient(135deg,#06152a_0%,#071932_52%,#06152a_100%)]">
+        <div className="mx-auto grid w-full max-w-[1672px] gap-8 px-5 py-8 sm:px-7 xl:grid-cols-[minmax(0,0.98fr)_minmax(0,0.9fr)] xl:items-start min-[1700px]:min-h-[940px] min-[1700px]:grid-cols-[800px_774px] min-[1700px]:gap-[42px] min-[1700px]:py-[30px]">
+          <div>
+            <h2 className="max-w-[790px] text-[clamp(3.25rem,5.15vw,5.25rem)] font-black leading-[0.86] tracking-[-0.055em] text-white drop-shadow-[0_4px_0_rgba(255,255,255,0.14)]">
+              <span className="relative inline-block">
+                Relax!
+                <svg viewBox="0 0 270 20" className="absolute -bottom-3 left-[-12px] h-5 w-[270px] text-[#ff8a13]" fill="none" aria-hidden="true">
+                  <path d="M5 12c54-9 105-12 161-6 28 3 58 6 99-1" stroke="currentColor" strokeWidth="6" strokeLinecap="round" />
+                  <path d="M117 14c22 4 50 4 75-1" stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
+                </svg>
+              </span>{" "}
+              Let your
+              <span className="block bg-[linear-gradient(180deg,#d9f0ff_0%,#58aaff_100%)] bg-clip-text text-transparent">professional assistant</span>
+              <span className="block">take the call.</span>
+            </h2>
+
+            <div className="relative mt-10 rounded-[24px] border border-white/40 bg-[linear-gradient(145deg,rgba(14,36,66,0.78),rgba(6,20,40,0.86))] p-5 pt-10 shadow-[0_30px_90px_-50px_rgba(0,0,0,1),inset_0_1px_0_rgba(255,255,255,0.08)] min-[1700px]:mt-[48px] min-[1700px]:h-[628px] min-[1700px]:p-[30px] min-[1700px]:pt-[38px]">
+              <div className="absolute left-1/2 top-[-24px] -translate-x-1/2 whitespace-nowrap rounded-full border border-[#b7d9ff]/70 bg-[#12325e] px-6 py-3 text-[clamp(1rem,1.35vw,1.45rem)] font-black uppercase tracking-[0.12em] text-white shadow-[0_18px_44px_-24px_rgba(37,99,235,0.85)] min-[1700px]:px-9">
+                WHY VOICEMAIL LOSES
+              </div>
+
+              <div className="grid h-full items-center gap-5 lg:grid-cols-[minmax(0,1fr)_58px_minmax(0,1fr)] min-[1700px]:grid-cols-[323px_72px_338px] min-[1700px]:gap-[26px]">
+                <div className="min-h-[500px] rounded-[28px] border border-rose-400/70 bg-[linear-gradient(180deg,rgba(115,28,48,0.9),rgba(49,11,26,0.92))] p-6 text-white shadow-[0_32px_80px_-44px_rgba(244,63,94,1),inset_0_1px_0_rgba(255,255,255,0.10)] min-[1700px]:h-[558px] min-[1700px]:p-9">
+                  <div className="mx-auto grid h-[76px] w-[76px] place-items-center rounded-full border border-rose-300/70 bg-rose-300/10 text-white shadow-[0_0_40px_-18px_rgba(248,113,113,1)] min-[1700px]:h-[86px] min-[1700px]:w-[86px]">
+                    <svg viewBox="0 0 48 48" className="h-10 w-10 min-[1700px]:h-12 min-[1700px]:w-12" fill="none" aria-hidden="true">
+                      <path d="M11 24c0-5 4-9 9-9s9 4 9 9-4 9-9 9-9-4-9-9Zm9 9h8c5 0 9-4 9-9s-4-9-9-9h-8" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </div>
+                  <p className="mt-5 text-center text-lg font-black uppercase tracking-[0.18em] min-[1700px]:mt-6 min-[1700px]:text-xl">Voicemail</p>
+                  <p className="mx-auto mt-4 max-w-[280px] text-center text-[clamp(1.45rem,1.9vw,2rem)] font-black leading-[1.12] tracking-[-0.035em]">Voicemail is a dead end for callers</p>
+                  <div className="mx-auto mt-7 h-px max-w-[260px] bg-rose-300/70" />
+                  <div className="mt-7 space-y-5 text-[clamp(1.05rem,1.3vw,1.36rem)] font-medium leading-7 text-[#fff1f4] min-[1700px]:mt-8 min-[1700px]:space-y-6 min-[1700px]:leading-8">
+                    <div className="flex gap-5">
+                      <span className="mt-1 grid h-9 w-9 shrink-0 place-items-center rounded-full bg-rose-400 text-white">
+                        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+                          <path d="M6.5 6.5 17.5 17.5M17.5 6.5 6.5 17.5" strokeLinecap="round" />
+                        </svg>
+                      </span>
+                      <p>Customers want to talk to someone now</p>
+                    </div>
+                    <div className="flex gap-5">
+                      <span className="mt-1 grid h-9 w-9 shrink-0 place-items-center rounded-full bg-rose-400 text-white">
+                        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+                          <path d="M6.5 6.5 17.5 17.5M17.5 6.5 6.5 17.5" strokeLinecap="round" />
+                        </svg>
+                      </span>
+                      <p>If they can&apos;t reach you, they may call someone else</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-center">
+                  <div className="grid h-14 w-14 place-items-center rounded-full border-2 border-[#9edaff]/80 bg-[#09264b] text-white shadow-[0_0_40px_-16px_rgba(125,211,252,0.85)] min-[1700px]:h-20 min-[1700px]:w-20">
+                    <svg viewBox="0 0 42 20" className="h-6 w-9 min-[1700px]:h-8 min-[1700px]:w-12" fill="none" aria-hidden="true">
+                      <path d="M3 10h28" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+                      <path d="m24 3.5 7.5 6.5-7.5 6.5" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </div>
+                </div>
+
+                <div className="min-h-[500px] rounded-[28px] border border-emerald-300/70 bg-[linear-gradient(180deg,rgba(10,113,102,0.9),rgba(8,55,45,0.96))] p-6 text-white shadow-[0_32px_80px_-44px_rgba(45,212,191,1),inset_0_1px_0_rgba(255,255,255,0.12)] min-[1700px]:h-[558px] min-[1700px]:p-9">
+                  <div className="mx-auto grid h-[76px] w-[76px] place-items-center rounded-full border border-emerald-200/70 bg-emerald-200/12 text-white shadow-[0_0_40px_-18px_rgba(45,212,191,1)] min-[1700px]:h-[86px] min-[1700px]:w-[86px]">
+                    <svg viewBox="0 0 48 48" className="h-10 w-10 min-[1700px]:h-12 min-[1700px]:w-12" fill="none" aria-hidden="true">
+                      <rect x="10" y="16" width="28" height="20" rx="8" stroke="currentColor" strokeWidth="4" />
+                      <path d="M18 16v-5M30 16v-5M17 26h.01M31 26h.01M20 31c2.5 2 5.5 2 8 0" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
+                    </svg>
+                  </div>
+                  <p className="mt-5 text-center text-lg font-black uppercase tracking-[0.18em] min-[1700px]:mt-6 min-[1700px]:text-xl">AI Assistant</p>
+                  <p className="mx-auto mt-4 max-w-[320px] text-center text-[clamp(1.45rem,1.9vw,2rem)] font-black leading-[1.12] tracking-[-0.035em]">Let your assistant take their call 24/7</p>
+                  <div className="mx-auto mt-7 h-px max-w-[300px] bg-emerald-300/70" />
+                  <div className="mt-7 space-y-4 text-[clamp(1rem,1.2vw,1.28rem)] font-medium leading-7 text-[#eafff9] min-[1700px]:leading-8">
+                    {[
+                      "Responds instantly",
+                      "Engages callers and answers questions",
+                      "Answers every call after 2 rings",
+                      "Talks to customers naturally",
+                      "Collects job details for easy follow-up",
+                    ].map((item) => (
+                      <div key={item} className="flex gap-4">
+                        <span className="mt-1 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-emerald-300 text-[#06352d]">
+                          <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+                            <path d="m5 12 4 4 10-10" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        </span>
+                        <p>{item}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="min-w-0 pt-0 min-[1700px]:pt-[10px]">
+            <div className="min-h-[76px] rounded-[28px] border border-white/55 bg-[#071832]/80 px-5 py-5 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] min-[1700px]:h-[84px] min-[1700px]:px-12 min-[1700px]:py-6">
+              <p className="text-[clamp(1.35rem,2vw,2rem)] font-black leading-tight tracking-[-0.04em] text-white">
+                How AI Converts <span className="text-[#ff9d22]">cold callers into customers</span>
+              </p>
+            </div>
+
+            <div className="mt-5 space-y-5">
+              {[
+                {
+                  number: "1",
+                  text: "A caller has a problem and needs help fast. By the 2nd ring, they start wondering if anyone will answer.",
+                  image: "/illustrations/phone-call.svg",
+                },
+                {
+                  number: "2",
+                  text: "Your AI assistant answers on the 3rd ring, uses your business info, collects job details, and texts both sides.",
+                  image: "/illustrations/active-support.svg",
+                },
+                {
+                  number: "3",
+                  text: "The customer gets a clear confirmation, feels heard, stops searching elsewhere, and expects your callback next.",
+                  image: "/illustrations/events-calendar.svg",
+                },
+              ].map((item) => (
+                <div key={item.number} className="grid min-h-[190px] items-center gap-5 rounded-[28px] border border-white/28 bg-[linear-gradient(145deg,rgba(13,33,62,0.96),rgba(8,24,48,0.98))] px-5 py-5 shadow-[0_24px_70px_-44px_rgba(0,0,0,0.95),inset_0_1px_0_rgba(255,255,255,0.06)] md:grid-cols-[72px_minmax(0,1fr)_220px] min-[1700px]:h-[216px] min-[1700px]:grid-cols-[112px_1fr_300px] min-[1700px]:gap-8 min-[1700px]:px-8 min-[1700px]:py-6">
+                  <div className="grid h-16 w-16 place-items-center rounded-full border border-[#9edaff] bg-[linear-gradient(145deg,#73c7ff,#2563eb)] text-[2rem] font-black text-white shadow-[0_0_34px_-14px_rgba(96,165,250,1)] min-[1700px]:h-[70px] min-[1700px]:w-[70px] min-[1700px]:text-[2.4rem]">
+                    {item.number}
+                  </div>
+                  <div className="border-l border-white/22 pl-5 min-[1700px]:pl-9">
+                    <p className="max-w-[470px] text-[clamp(1.08rem,1.45vw,1.45rem)] font-black leading-[1.42] tracking-[-0.035em] text-white">{item.text}</p>
+                  </div>
+                  <div className="flex h-[128px] items-center justify-center overflow-hidden rounded-[22px] bg-[linear-gradient(180deg,#f7fbff,#e7f1ff)] shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] min-[1700px]:h-[150px]">
+                    <img src={item.image} alt="" aria-hidden="true" className="h-full w-full object-contain p-4" loading="lazy" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="bg-[#fbfaf9]">
+        <div className="mx-auto w-full max-w-[1308px] px-5 py-16 sm:px-8 lg:py-20">
+          <div className="mx-auto max-w-6xl text-center">
+            <p className="text-[1.18rem] font-black uppercase tracking-[0.22em] text-[#7378e8]">Tomorrow&apos;s Technology</p>
+            <h2 className="mx-auto mt-5 max-w-[1100px] text-[clamp(2.15rem,8vw,3.55rem)] font-black leading-[1.05] text-[#07142a] xl:whitespace-nowrap">Designed for Leading Edge Contractors</h2>
+            <p className="mt-5 text-[clamp(1.2rem,1.55vw,1.55rem)] font-medium leading-8 text-[#7b8392]">Electrical, Plumbing, HVAC, Landscaping, Renovations, Builders</p>
+          </div>
+
+          <div className="mt-12 grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+            {benefitCards.map((item) => (
+              <div
+                key={item.title}
+                className={
+                  "flex min-h-[500px] flex-col rounded-[22px] border border-[#e6e8ee] bg-white px-7 py-8 shadow-[0_24px_70px_-46px_rgba(15,23,42,0.22)] " +
+                  item.glow
+                }
+              >
+                <div className={`h-1.5 w-20 rounded-full bg-gradient-to-r ${item.accent}`} />
+                <div className="mt-9 flex items-center gap-5">
+                  <div className={`grid h-[78px] w-[78px] shrink-0 place-items-center rounded-[22px] bg-gradient-to-br ${item.accent} text-white opacity-90 shadow-[0_18px_42px_-34px_rgba(15,23,42,0.4)]`}>
+                    <BenefitSymbol code={item.code} />
+                  </div>
+                  <p className={`min-w-0 text-[1.08rem] font-black uppercase tracking-[0.18em] bg-gradient-to-r ${item.accent} bg-clip-text text-transparent`}>{item.eyebrow}</p>
+                </div>
+                <h3 className="mt-8 flex min-h-[160px] items-start text-[clamp(1.55rem,1.72vw,1.88rem)] font-black leading-[1.2] text-[#07142a]">
+                  {item.title}
+                </h3>
+                <p className="mt-3 text-[1.13rem] font-medium leading-8 text-[#243044]">{item.body}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section ref={demoRef} className="bg-[#eef4fb]">
+        <div className="mx-auto grid w-full max-w-[1220px] gap-6 px-4 py-6 sm:px-6 lg:grid-cols-[0.9fr_1fr] lg:px-8">
+          <div>
+            <h2 className="max-w-[540px] text-[clamp(1.9rem,2.9vw,2.55rem)] font-black leading-[1.08] tracking-[-0.035em] text-[#07142a]">
+              Hear a real example of one of our agent&apos;s taking a customer&apos;s inquiry
+            </h2>
+            <div className="mt-3 h-1 w-14 rounded-full bg-[#c9862f]" />
+            <p className="mt-3 max-w-[560px] text-[1.16rem] font-medium leading-8 text-[#334155]">
+              Hear a sample of a real-life conversation. The caller is engaged in meaningful dialogue, gets FAQs answered, and is prompted to provide job details along with an expected callback.
+            </p>
+
+            <div className="mt-5 rounded-[18px] border border-[#c3d4ea] bg-white p-4 shadow-[0_18px_50px_-38px_rgba(15,23,42,0.35)]">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex gap-3">
+                  <span className="mt-1 grid h-10 w-10 shrink-0 place-items-center rounded-full border border-[#a9c8ef] bg-[#eaf3ff] text-[#1d65bd]">
+                    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                      <path d="M4 13a8 8 0 0 1 16 0" strokeLinecap="round" />
+                      <path d="M4 13v4a2 2 0 0 0 2 2h2v-6H6a2 2 0 0 0-2 2Zm16 0v4a2 2 0 0 1-2 2h-2v-6h2a2 2 0 0 1 2 2Z" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </span>
+                  <div>
+                    <p className="text-[0.92rem] font-black uppercase tracking-[0.14em] text-[#8a5a18]">Real call example</p>
+                    <p className="mt-1 text-[1.42rem] font-black leading-tight tracking-[-0.025em] text-[#07142a]">Electrical Setup Lead</p>
+                    <p className="mt-1 max-w-[410px] text-[1.08rem] font-medium leading-7 text-[#475569]">
+                      A homeowner calls after hours about a hot tub setup. The assistant answers questions, collects the job details, and texts both the owner and customer.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={toggleAudio}
+                  className="inline-flex min-h-[52px] items-center justify-center gap-3 rounded-lg border border-[#a66b23] bg-[#b9782c] px-7 text-base font-black uppercase tracking-[0.12em] text-white shadow-[0_12px_28px_-20px_rgba(120,72,20,0.7)] transition hover:-translate-y-0.5 hover:bg-[#a86b27]"
+                >
+                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor" aria-hidden="true">
+                    <path d={audioPlaying ? "M7 5h3v14H7V5Zm7 0h3v14h-3V5Z" : "M8 5.8v12.4L18 12 8 5.8Z"} />
+                  </svg>
+                  {audioPlaying ? "Pause Call" : "Play Call"}
+                </button>
+              </div>
+
+              <div className="mt-4 rounded-[14px] border border-[#c9d8e9] bg-[#f8fbff] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
+                <div className="flex items-center gap-4">
+                  <button
+                    type="button"
+                    onClick={toggleAudio}
+                    className="grid h-14 w-14 shrink-0 place-items-center rounded-full border border-[#c9862f] bg-[#b9782c] text-white shadow-[0_10px_24px_-18px_rgba(120,72,20,0.85)]"
+                    aria-label={audioPlaying ? "Pause demo audio" : "Play demo audio"}
+                  >
+                    <svg viewBox="0 0 24 24" className="h-6 w-6" fill="currentColor" aria-hidden="true">
+                      <path d={audioPlaying ? "M7 5h3v14H7V5Zm7 0h3v14h-3V5Z" : "M8 5.8v12.4L18 12 8 5.8Z"} />
+                    </svg>
+                  </button>
+                  <div className="flex h-14 flex-1 items-center gap-1.5">
+                    {waveformBars.map((bar, index) => {
+                      const played = index / Math.max(waveformBars.length - 1, 1) <= playbackProgress;
+                      return (
+                        <span
+                          key={`bar-${index}`}
+                          className={"w-full rounded-full transition-all duration-300 " + (played ? "bg-[#b9782c]" : "bg-[#a8b7ca]")}
+                          style={{ height: `${8 + bar * 38}px` }}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+                <div className="mt-3 flex items-center gap-3">
+                  <span className="w-12 text-sm font-black text-[#334155]">{formatClock(audioTime)}</span>
+                  <input
+                    type="range"
+                    min="0"
+                    max={audioDuration}
+                    step="0.1"
+                    value={audioTime}
+                    onChange={handleScrub}
+                    className="h-1.5 flex-1 accent-[#b9782c]"
+                    aria-label="Scrub demo audio"
+                  />
+                  <span className="w-12 text-right text-sm font-black text-[#334155]">{formatClock(audioDuration)}</span>
+                </div>
+              </div>
+
+              <div className="mt-3 rounded-[14px] border border-[#c9d8e9] bg-[#f8fbff] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <span className="grid h-8 w-8 place-items-center rounded-full border border-[#a9c8ef] bg-[#eaf3ff] text-[#1d65bd]">
+                      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                        <path d="M5 5h14v10H8l-3 3V5Z" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </span>
+                    <p className="text-[0.92rem] font-black uppercase tracking-[0.14em] text-[#1d65bd]">Live transcript</p>
+                  </div>
+                  <span className="rounded-full border border-[#a9c8ef] bg-[#eaf3ff] px-3 py-1 text-xs font-black uppercase tracking-[0.12em] text-[#1d65bd]">
+                    {activeTranscript.speaker}
+                  </span>
+                </div>
+                <p className="mt-3 pl-11 text-[1.08rem] font-medium leading-7 text-[#1f2937]">{activeTranscript.text}</p>
+              </div>
+            </div>
+
+            <audio
+              ref={audioRef}
+              src="/MyAIPA-Website_public_voice.m4a"
+              preload="auto"
+              className="hidden"
+              onPlay={() => setAudioPlaying(true)}
+              onPause={() => setAudioPlaying(false)}
+              onEnded={() => {
+                setAudioPlaying(false);
+                setAudioTime(0);
+              }}
+              onTimeUpdate={(event) => setAudioTime(event.currentTarget.currentTime || 0)}
+              onLoadedMetadata={(event) => {
+                const duration = Number(event.currentTarget.duration || 180);
+                setAudioDuration(Number.isFinite(duration) && duration > 0 ? duration : 180);
+              }}
+            />
+          </div>
+
+          <div className="space-y-4">
+            <div className="overflow-hidden rounded-[18px] border border-[#d8bf8f] bg-white shadow-[0_18px_50px_-38px_rgba(15,23,42,0.35)]">
+              <div className="flex items-center gap-3 bg-[linear-gradient(90deg,#fff3d8,#ffffff)] px-4 py-3">
+                <span className="grid h-9 w-9 place-items-center rounded-full border border-[#d9b36d] bg-white text-[#9b661d] shadow-[0_10px_24px_-20px_rgba(120,72,20,0.8)]">
+                  <svg viewBox="0 0 24 24" className="h-4.5 w-4.5" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                    <path d="M20 21a8 8 0 0 0-16 0" strokeLinecap="round" />
+                    <circle cx="12" cy="7" r="4" />
+                  </svg>
+                </span>
+                <p className="text-[0.95rem] font-black uppercase tracking-[0.14em] text-[#8a5a18]">Owner gets this text summary</p>
+              </div>
+              <div className="m-4 rounded-[14px] border border-[#ecd9b7] bg-[linear-gradient(180deg,#fffaf0,#fff5df)] p-4 text-[#1f2937] shadow-[inset_0_1px_0_rgba(255,255,255,0.95)]">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-[0.86rem] font-black uppercase tracking-[0.14em] text-[#8a5a18]">Service lead summary</p>
+                  <span className="rounded-full bg-[#f0c56f] px-3 py-1 text-xs font-black uppercase tracking-[0.12em] text-[#4c320a]">Texted</span>
+                </div>
+                <div className="mt-3 divide-y divide-[#e7d7ba] text-[1.08rem] font-medium">
+                  {[
+                    ["Name", "Brian"],
+                    ["Phone", "905-123-4567"],
+                    ["Service", "Electrical maintenance"],
+                    ["Address", "63 York Street"],
+                    ["Best callback time", "Around 7 PM"],
+                  ].map(([label, value]) => (
+                    <div key={label} className="flex items-center gap-3 py-2">
+                      <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-[#fff0c8] text-[#9b661d]">
+                        <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                          <circle cx="12" cy="12" r="8" />
+                        </svg>
+                      </span>
+                      <p><span className="font-black text-[#07142a]">{label}:</span> {value}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="overflow-hidden rounded-[18px] border border-[#b9d8d4] bg-white shadow-[0_18px_50px_-38px_rgba(15,23,42,0.35)]">
+              <div className="flex items-center gap-3 bg-[linear-gradient(90deg,#dcfaf4,#ffffff)] px-4 py-3">
+                <span className="grid h-9 w-9 place-items-center rounded-full border border-[#93cfc7] bg-white text-[#08776f] shadow-[0_10px_24px_-20px_rgba(8,119,111,0.7)]">
+                  <svg viewBox="0 0 24 24" className="h-4.5 w-4.5" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                    <path d="M5 5h14v14H5V5Z" />
+                    <path d="m8 12 3 3 5-6" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </span>
+                <p className="text-[0.95rem] font-black uppercase tracking-[0.14em] text-[#08776f]">Caller gets this confirmation</p>
+              </div>
+              <div className="m-4 flex items-center gap-4 rounded-[14px] border border-[#b9d8d4] bg-[linear-gradient(180deg,#edfbf7,#e4f8f2)] p-4 text-[#12302d] shadow-[inset_0_1px_0_rgba(255,255,255,0.95)]">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-[0.86rem] font-black uppercase tracking-[0.14em] text-[#08776f]">Follow-up text</p>
+                    <span className="rounded-full bg-[#a8e8db] px-3 py-1 text-xs font-black uppercase tracking-[0.12em] text-[#064c47]">Confirmed</span>
+                  </div>
+                  <p className="mt-2 text-[1.08rem] font-medium leading-7 text-[#12302d]">
+                    Thanks for calling Tim&apos;s Electrical. Your maintenance request has been sent to the team and a callback will follow based on the details you provided.
+                  </p>
+                </div>
+                <span className="grid h-14 w-14 shrink-0 place-items-center rounded-full border border-[#93cfc7] bg-white text-[#08776f] shadow-[0_12px_28px_-22px_rgba(8,119,111,0.5)]">
+                  <svg viewBox="0 0 24 24" className="h-8 w-8" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                    <path d="M5 5h14v10H8l-3 3V5Z" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="m9 11 2 2 4-5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
                 </span>
               </div>
             </div>
 
-            <div className="px-4 py-1">
-              <div className="flex flex-wrap items-center justify-between gap-4">
-                <div className="flex items-center border-r border-black/10 pr-4">
-                  <img
-                    src="/MyAIPA_logo.png"
-                    alt="MyAIPA logo"
-                    className="h-14 w-auto object-contain sm:h-16 lg:h-20"
-                    loading="eager"
-                    decoding="async"
-                  />
-                </div>
-                <div className="hidden flex-1 items-center gap-6 px-4 text-sm font-semibold text-black/90 lg:flex">
-                  {headerNavItems.map((item) => (
-                    <button
-                      key={item.label}
-                      type="button"
-                      onClick={() => scrollToSection(item.ref)}
-                      className="whitespace-nowrap transition hover:text-cyan-700"
-                    >
-                      {item.label}
-                    </button>
-                  ))}
-                </div>
-                <div className="flex items-center gap-2 sm:gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setDemoOpen(true)}
-                    className="border border-black/10 bg-white px-4 py-2 text-xs font-black uppercase tracking-[0.16em] text-black sm:px-5 sm:text-sm"
-                  >
-                    Call The Demo
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      window.location.hash = "/signup";
-                    }}
-                    className="bg-black px-4 py-2 text-xs font-black uppercase tracking-[0.16em] text-white sm:px-5 sm:text-sm"
-                  >
-                    See Setup Flow
-                  </button>
-                </div>
+            <div className="rounded-[18px] border border-[#bad6c7] bg-white p-4 shadow-[0_18px_50px_-38px_rgba(15,23,42,0.35)]">
+              <div className="flex items-center gap-3">
+                <span className="grid h-8 w-8 place-items-center rounded-full border border-[#95c9aa] bg-[#eefaf3] text-[#1d7a47]">
+                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                    <path d="M12 3 19 6v5c0 4.4-2.8 7.6-7 9-4.2-1.4-7-4.6-7-9V6l7-3Z" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="m9 12 2 2 4-5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </span>
+                <p className="text-[0.95rem] font-black uppercase tracking-[0.14em] text-[#1d7a47]">Why trades teams trust it</p>
+              </div>
+              <div className="mt-3 flex items-center gap-4 rounded-[14px] border border-[#bad6c7] bg-[#f1fbf5] p-4">
+                <p className="min-w-0 flex-1 text-[1.08rem] font-medium leading-7 text-[#173826]">
+                  A contractor can hear the call experience, see the owner summary, and understand exactly what the customer receives next. It feels practical, real, and easy to picture on a busy job day.
+                </p>
+                <span className="grid h-14 w-14 shrink-0 place-items-center rounded-full border border-[#95c9aa] bg-white text-[#1d7a47] shadow-[0_12px_28px_-22px_rgba(29,122,71,0.5)]">
+                  <svg viewBox="0 0 24 24" className="h-8 w-8" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
+                    <path d="M12 3 19 6v5c0 4.4-2.8 7.6-7 9-4.2-1.4-7-4.6-7-9V6l7-3Z" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="m8.8 12.2 2.2 2.2 4.7-5.2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </span>
               </div>
             </div>
           </div>
-        ) : null}
+        </div>
+      </section>
 
-        <section ref={heroRef} className="relative z-10 w-full px-0 pt-0 pb-12 sm:pb-16 lg:pb-20">
-          <div className="relative">
-            <div className="pointer-events-none absolute -left-20 top-[-20%] h-72 w-72 rounded-full bg-[radial-gradient(circle,rgba(255,244,205,0.45),rgba(255,244,205,0)_72%)]" />
-            <div className="pointer-events-none absolute right-[-8%] top-[8%] h-80 w-80 rounded-full bg-[radial-gradient(circle,rgba(17,24,39,0.22),rgba(17,24,39,0)_70%)]" />
-            <div className="pointer-events-none absolute inset-0 opacity-[0.08] [background-image:radial-gradient(rgba(255,255,255,0.95)_0.8px,transparent_0.8px)] [background-size:14px_14px]" />
+      <section ref={pricingRef} className="bg-transparent">
+        <div className="mx-auto w-full max-w-6xl px-4 py-16 sm:px-6 lg:px-8 lg:py-20">
+          <div className="mx-auto max-w-4xl text-center">
+            <h2 className="mt-3 text-[clamp(2.4rem,3.6vw,4rem)] font-black leading-[1.08] tracking-[-0.04em] text-[#07142a]">Clear pricing for businesses that just want calls handled properly.</h2>
+            <p className="mx-auto mt-5 max-w-[900px] text-[1.32rem] font-medium leading-9 text-[#334155]">
+              Start with one plan that feels right according to your current operation. Then enjoy 14 days free!
+            </p>
+          </div>
 
-            <div className="relative grid gap-16 border border-black/10 bg-white px-6 py-6 lg:grid-cols-[minmax(0,1fr)_40rem] lg:items-start lg:gap-10 lg:px-8 lg:py-8 xl:grid-cols-[minmax(0,1fr)_44rem] xl:gap-14">
+          <div className="mt-10 grid gap-5 lg:grid-cols-2">
+            {pricingCards.map((plan) => (
               <div
+                key={plan.name}
                 className={
-                  "pointer-events-none absolute inset-y-0 left-0 hidden transition-opacity duration-300 lg:block lg:right-[40rem] xl:right-[44rem] " +
-                  (heroAudioPlaying ? "bg-slate-950/28 opacity-100" : "bg-slate-950/0 opacity-0")
-                }
-              />
-              <div
-                className="relative mx-auto mt-[-14px] w-full min-w-0 max-w-6xl space-y-8 text-center lg:mx-0 lg:mt-[-28px] lg:max-w-none lg:pt-0 lg:text-left"
-              >
-                <div className="relative px-1 py-1 sm:px-2 sm:py-2 lg:px-2 lg:py-2">
-                  <div className="mx-auto flex w-full max-w-[31rem] items-center justify-start gap-1.5 rounded-full border border-black/10 bg-white px-2 py-1 shadow-[0_10px_24px_-18px_rgba(0,0,0,0.2)] sm:px-2.5 lg:mx-0">
-                    <div className="flex -space-x-1.5">
-                      {[
-                        { id: "a1", src: "https://i.pravatar.cc/80?img=12", alt: "Customer avatar 1" },
-                        { id: "a2", src: "https://i.pravatar.cc/80?img=32", alt: "Customer avatar 2" },
-                        { id: "a3", src: "https://i.pravatar.cc/80?img=47", alt: "Customer avatar 3" },
-                        { id: "a4", src: "https://i.pravatar.cc/80?img=56", alt: "Customer avatar 4" },
-                        { id: "a5", src: "https://i.pravatar.cc/80?img=68", alt: "Customer avatar 5" },
-                      ].map((avatar) => (
-                        <img
-                          key={avatar.id}
-                          src={avatar.src}
-                          alt={avatar.alt}
-                          className="h-6 w-6 rounded-full border-2 border-white object-cover shadow-[0_8px_14px_-10px_rgba(0,0,0,0.45)]"
-                          loading="lazy"
-                          decoding="async"
-                          referrerPolicy="no-referrer"
-                          onError={(e) => {
-                            e.currentTarget.src = "/NiceCaller.png";
-                          }}
-                        />
-                      ))}
-                    </div>
-                    <div className="min-w-0 text-left leading-tight">
-                      <div className="flex items-center gap-1 text-blue-600">
-                        {["★", "★", "★", "★", "★"].map((star, idx) => (
-                          <span key={idx} className="text-[11px] leading-none sm:text-xs">
-                            {star}
-                          </span>
-                        ))}
-                      </div>
-                      <p className="mt-0.5 text-xs font-semibold text-slate-700 sm:text-sm">
-                        Trusted by businesses across North America
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="relative pt-1 sm:pt-3">
-                    <h1
-                      className={
-                        "relative mx-auto max-w-6xl text-balance text-[62px] font-black leading-[0.88] tracking-[-0.06em] text-[#090b10] transition-all duration-300 sm:text-[96px] lg:mx-0 lg:max-w-4xl lg:text-[118px] xl:text-[132px] " +
-                        (agentFocus?.id && agentFocus.id !== "overview" ? "drop-shadow-[0_14px_34px_rgba(0,0,0,0.2)]" : "")
-                      }
-                    >
-                      {activeHeroMode.heading === "My A.I PA" ? (
-                          <span className="inline-block">
-                            <span className="text-[#090b10]">My </span>
-                            <span className="bg-[linear-gradient(95deg,#22d3ee_0%,#38bdf8_26%,#3b82f6_58%,#4f46e5_100%)] bg-clip-text text-transparent drop-shadow-[0_10px_28px_rgba(37,99,235,0.28)]">
-                              A.I PA
-                            </span>
-                          </span>
-                      ) : (
-                        <span className={activeHeroMode.underlineHeading ? "underline decoration-white/45 decoration-[2px] underline-offset-[14px]" : ""}>
-                          {activeHeroMode.heading}
-                        </span>
-                      )}
-                    </h1>
-                    {activeHeroMode.descriptor ? (
-                      <p className="mx-auto mt-10 max-w-5xl text-xl font-medium leading-[1.35] tracking-[-0.02em] text-slate-700 sm:text-[1.9rem] lg:mx-0 lg:max-w-3xl lg:text-[1.55rem]">
-                        {activeHeroMode.descriptor}
-                      </p>
-                    ) : null}
-                    <p
-                      className={
-                        "mx-auto mt-8 max-w-4xl text-2xl font-semibold leading-snug tracking-[-0.02em] sm:text-3xl lg:mx-0 lg:max-w-3xl lg:text-[2rem] transition-all duration-300 " +
-                        (activeHeroMode.warningSubline
-                          ? "font-black bg-gradient-to-r from-emerald-700 via-green-600 to-lime-600 bg-clip-text text-transparent [-webkit-text-stroke:0.5px_rgba(6,95,70,0.55)] drop-shadow-[0_10px_24px_rgba(16,185,129,0.45)]"
-                          : "text-[#111827]")
-                      }
-                    >
-                      {activeHeroMode.subline}
-                    </p>
-
-                    <div className="mt-8 flex flex-col items-center gap-3 lg:flex-row lg:items-start lg:justify-start">
-                      <div className="flex flex-wrap items-center justify-center gap-4 lg:justify-start">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setDemoOpen(true);
-                          }}
-                          className="rounded-full bg-gradient-to-r from-cyan-400 via-blue-500 to-indigo-500 px-10 py-5 text-base font-black uppercase tracking-[0.14em] text-white shadow-[0_24px_44px_-20px_rgba(59,130,246,0.65)] ring-1 ring-white/15 transition hover:scale-[1.01] sm:text-lg"
-                        >
-                          Call The Demo
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setupSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-                          }}
-                          className="rounded-full border border-slate-300/80 bg-slate-100 px-8 py-5 text-[1.05rem] font-extrabold text-slate-900 shadow-[0_14px_28px_-18px_rgba(0,0,0,0.26)] transition hover:bg-white sm:px-10"
-                        >
-                          See Setup Flow
-                        </button>
-                      </div>
-                      <div className="w-full max-w-xl text-left lg:mt-4 lg:max-w-[23rem]">
-                        <p className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-500">Privacy and compliance</p>
-                        <div className="mt-2 space-y-2">
-                          {[
-                            "PIPEDA-aware workflow controls",
-                            "Encryption in transit and at rest",
-                            "Role-based admin access controls",
-                          ].map((line) => (
-                            <div key={line} className="flex items-start gap-2.5 text-sm font-semibold text-slate-800">
-                              <span className="mt-[2px] inline-flex h-5 w-5 items-center justify-center rounded-full bg-violet-100 text-violet-700">
-                                {renderHeroHighlightIcon("filter")}
-                              </span>
-                              <span>{line}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                    <style>{`
-                      @keyframes heroHighlightsSwap {
-                        0% { opacity: 0; transform: translateY(6px); }
-                        100% { opacity: 1; transform: translateY(0); }
-                      }
-                    `}</style>
-                    <div
-                      className="mx-auto mt-5 w-full max-w-6xl overflow-hidden rounded-2xl border border-black/10 bg-white/85 px-4 py-4 text-xs font-semibold text-slate-800 shadow-[0_20px_45px_-35px_rgba(0,0,0,0.18)] backdrop-blur sm:text-sm lg:mx-0 lg:max-w-none"
-                      onMouseEnter={() => setHeroHighlightPaused(true)}
-                      onMouseLeave={() => setHeroHighlightPaused(false)}
-                    >
-                      <div
-                        key={heroHighlightPageIdx}
-                        className="grid w-full grid-cols-[max-content_auto_max-content_auto_max-content] items-center justify-center gap-x-2"
-                        style={{ animation: "heroHighlightsSwap 420ms ease" }}
-                      >
-                        {visibleHeroHighlights.map((item, idx) => (
-                          <React.Fragment key={item.label}>
-                            <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
-                              <span className={`inline-flex h-4 w-4 items-center justify-center rounded-full ${item.tone}`}>{renderHeroHighlightIcon(item.icon)}</span>
-                              <span>{item.label}</span>
-                            </span>
-                            {idx < visibleHeroHighlights.length - 1 ? <span className="text-black/20">/</span> : null}
-                          </React.Fragment>
-                        ))}
-                      </div>
-                    </div>
-
-                    <audio
-                      ref={heroAudioRef}
-                      src="/MyAIPA-Website_public_voice.m4a"
-                      preload="auto"
-                      className="hidden"
-                      onEnded={() => {
-                        setHeroAudioPlaying(false);
-                        setHeroAudioStarted(false);
-                        setHeroAudioTime(0);
-                        stopSpectrumLoop();
-                        resetSpectrum();
-                      }}
-                      onPause={() => {
-                        setHeroAudioPlaying(false);
-                        stopSpectrumLoop();
-                      }}
-                      onTimeUpdate={(e) => {
-                        setHeroAudioTime(e.currentTarget.currentTime || 0);
-                      }}
-                      onLoadedMetadata={(e) => {
-                        const duration = Number(e.currentTarget.duration || 0);
-                        if (Number.isFinite(duration) && duration > 0) {
-                          setHeroAudioDurationSec(duration);
-                        }
-                      }}
-                      onPlay={() => {
-                        setHeroAudioPlaying(true);
-                        setHeroAudioStarted(true);
-                      }}
-                    />
-
-                    <p className="mx-auto mt-4 max-w-5xl text-center text-xl font-medium leading-relaxed text-slate-700 sm:text-2xl lg:mx-0 lg:max-w-3xl lg:text-left">
-                      My AI PA uses{" "}
-                      <span className="inline-flex items-center rounded-full border border-slate-300/80 bg-[linear-gradient(180deg,#f8fafc_0%,#e2e8f0_100%)] px-2.5 py-0.5 text-[0.88em] font-semibold tracking-[0.01em] text-slate-800 shadow-[inset_0_1px_0_rgba(255,255,255,0.7),0_1px_3px_rgba(15,23,42,0.08)]">
-                        OpenAI-powered
-                      </span>{" "}
-                      voice AI to answer missed calls, handle customer conversations professionally, and text you key caller details for fast follow-up.{" "}
-                      <span className="inline-block bg-gradient-to-r from-cyan-500 via-blue-500 to-indigo-600 bg-clip-text font-extrabold text-transparent drop-shadow-[0_6px_18px_rgba(37,99,235,0.35)]">
-                        Get the AI Advantage today!
-                      </span>
-                    </p>
-
-                  </div>
-                </div>
-
-                <AgentFocusPanel
-                  focus={agentFocus}
-                  onJump={() => {
-                    if (agentFocus?.ref?.current) {
-                      agentFocus.ref.current.scrollIntoView({ behavior: "smooth", block: "start" });
-                    }
-                  }}
-                />
-              </div>
-
-              <div className="relative isolate mx-auto w-full max-w-6xl space-y-5 sm:px-3 lg:mx-0 lg:-mt-6 lg:w-[40rem] lg:max-w-none lg:justify-self-end xl:-mt-8 xl:w-[44rem]">
-                <div className="relative overflow-hidden rounded-[38px] border border-cyan-300/20 bg-[linear-gradient(180deg,rgba(15,23,42,0.9),rgba(2,6,23,0.97))] p-5 shadow-[0_55px_120px_-72px_rgba(0,0,0,0.95)] ring-1 ring-cyan-200/10 sm:p-6">
-                  <div className="pointer-events-none absolute inset-0 opacity-[0.08] [background-image:radial-gradient(rgba(255,255,255,0.85)_0.8px,transparent_0.8px)] [background-size:16px_16px]" />
-                  <style>{`
-                    @keyframes heroPlayPulse {
-                      0% { box-shadow: 0 0 0 0 rgba(56,189,248,0.42); }
-                      70% { box-shadow: 0 0 0 18px rgba(56,189,248,0); }
-                      100% { box-shadow: 0 0 0 0 rgba(56,189,248,0); }
-                    }
-                    .hero-demo-slider {
-                      -webkit-appearance: none;
-                      appearance: none;
-                      height: 6px;
-                      border-radius: 999px;
-                      outline: none;
-                    }
-                    .hero-demo-slider::-webkit-slider-thumb {
-                      -webkit-appearance: none;
-                      appearance: none;
-                      width: 14px;
-                      height: 14px;
-                      border-radius: 999px;
-                      background: #22d3ee;
-                      border: 2px solid #0f172a;
-                      box-shadow: 0 0 0 2px rgba(255,255,255,0.2);
-                      cursor: pointer;
-                    }
-                    .hero-demo-slider::-moz-range-thumb {
-                      width: 14px;
-                      height: 14px;
-                      border-radius: 999px;
-                      background: #22d3ee;
-                      border: 2px solid #0f172a;
-                      box-shadow: 0 0 0 2px rgba(255,255,255,0.2);
-                      cursor: pointer;
-                    }
-                    .hero-demo-flip-scene {
-                      perspective: 1800px;
-                    }
-                    .hero-demo-flip-inner {
-                      position: relative;
-                      min-height: 392px;
-                      transform-style: preserve-3d;
-                      transition: transform 720ms cubic-bezier(0.22, 0.61, 0.36, 1);
-                    }
-                    .hero-demo-flip-inner.is-flipped {
-                      transform: rotateY(180deg);
-                    }
-                    .hero-demo-face {
-                      position: absolute;
-                      inset: 0;
-                      -webkit-backface-visibility: hidden;
-                      backface-visibility: hidden;
-                      border-radius: 14px;
-                      overflow: hidden;
-                    }
-                    .hero-demo-face-back {
-                      transform: rotateY(180deg);
-                    }
-                    @media (min-width: 640px) {
-                      .hero-demo-flip-inner {
-                        min-height: 440px;
-                      }
-                    }
-                  `}</style>
-                  <div className="relative">
-                    <div className="mb-4 flex items-start justify-between gap-3">
-                      <div className="min-w-0 pr-2">
-                        <p className="text-xs font-black uppercase tracking-[0.2em] text-cyan-100/92 sm:text-sm">Live Call Demo Studio</p>
-                        <p className="mt-1 text-[11px] font-semibold text-white/62 sm:text-xs">
-                          {showHeroDemoCover
-                            ? "Press play to launch the demo and watch transcript + lead stages update in real time."
-                            : "Playback is synced to transcript and stage progress so owners can see the full flow."}
-                        </p>
-                      </div>
-                      <div className="ml-2 flex shrink-0 items-center gap-2">
-                        <span
-                          className={
-                            "rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em] sm:text-xs " +
-                            (showDemoTextsSide
-                              ? "border-violet-300/45 bg-violet-300/16 text-violet-100"
-                              : heroAudioPlaying
-                                ? "border-emerald-300/40 bg-emerald-300/14 text-emerald-100"
-                                : showHeroDemoCover
-                                  ? "border-cyan-300/30 bg-cyan-300/10 text-cyan-100/90"
-                                  : "border-white/15 bg-white/5 text-white/75")
-                          }
-                        >
-                          {showDemoTextsSide ? "Text view" : heroAudioPlaying ? "Live now" : showHeroDemoCover ? "Ready to play" : "Paused"}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={toggleDemoTextsSide}
-                          className={
-                            "inline-flex h-11 w-28 items-center justify-center rounded-full border px-2 text-center text-[10px] font-black uppercase leading-[1.05] tracking-[0.08em] transition sm:text-[10px] " +
-                            (showDemoTextsSide
-                              ? "border-violet-300/35 bg-violet-300/12 text-violet-100 hover:bg-violet-300/20"
-                              : "border-cyan-300/35 bg-cyan-300/12 text-cyan-100 hover:bg-cyan-300/20")
-                          }
-                          aria-label={showDemoTextsSide ? "Back to live chat board" : "Go to text board"}
-                        >
-                          {showDemoTextsSide ? "Back to live chat board" : "Go to text board"}
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="hero-demo-flip-scene relative w-full overflow-hidden rounded-2xl border border-cyan-200/15 bg-[linear-gradient(180deg,rgba(4,9,21,0.88),rgba(5,10,24,0.95))] p-3 sm:p-4">
-                      <div className={"hero-demo-flip-inner " + (showDemoTextsSide ? "is-flipped" : "")}>
-                        <div className="hero-demo-face hero-demo-face-front">
-                          <div className="relative h-full">
-                            <div className={"transition-all duration-500 " + (showHeroDemoCover ? "scale-[0.995] opacity-25 blur-[1px]" : "scale-100 opacity-100 blur-0")}>
-                              <div className="relative h-20 overflow-hidden rounded-xl border border-cyan-200/15 bg-[linear-gradient(180deg,#040915,#070d1f)] sm:h-24">
-                                <div className="pointer-events-none absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-cyan-200/25" />
-                                <svg viewBox="0 0 1200 120" className="h-full w-full" preserveAspectRatio="none" aria-hidden="true">
-                                  <defs>
-                                    <linearGradient id="pulseLayerA" x1="0%" y1="0%" x2="100%" y2="0%">
-                                      <stop offset="0%" stopColor="rgba(56,189,248,0)" />
-                                      <stop offset="22%" stopColor="rgba(56,189,248,0.45)" />
-                                      <stop offset="50%" stopColor="rgba(37,99,235,0.6)" />
-                                      <stop offset="78%" stopColor="rgba(45,212,191,0.42)" />
-                                      <stop offset="100%" stopColor="rgba(56,189,248,0)" />
-                                    </linearGradient>
-                                    <linearGradient id="pulseLayerB" x1="0%" y1="0%" x2="100%" y2="0%">
-                                      <stop offset="0%" stopColor="rgba(59,130,246,0)" />
-                                      <stop offset="26%" stopColor="rgba(14,165,233,0.35)" />
-                                      <stop offset="54%" stopColor="rgba(30,64,175,0.6)" />
-                                      <stop offset="82%" stopColor="rgba(6,182,212,0.34)" />
-                                      <stop offset="100%" stopColor="rgba(59,130,246,0)" />
-                                    </linearGradient>
-                                    <linearGradient id="pulseStrokeHeroBoard" x1="0%" y1="0%" x2="100%" y2="0%">
-                                      <stop offset="0%" stopColor="rgba(56,189,248,0)" />
-                                      <stop offset="20%" stopColor="#22d3ee" />
-                                      <stop offset="50%" stopColor="#60a5fa" />
-                                      <stop offset="80%" stopColor="#2dd4bf" />
-                                      <stop offset="100%" stopColor="rgba(56,189,248,0)" />
-                                    </linearGradient>
-                                  </defs>
-                                  <path d={buildWaveAreaPath(spectrumValues.map((v, i) => clamp(v * (1 + Math.sin(i * 0.24) * 0.22), 0, 1)), 1200, 120, 60, 30)} fill="url(#pulseLayerA)" />
-                                  <path d={buildWaveAreaPath(spectrumValues.map((v, i) => clamp(v * (0.78 + Math.cos(i * 0.31) * 0.18), 0, 1)), 1200, 120, 60, 24)} fill="url(#pulseLayerB)" />
-                                  <path
-                                    d={buildSpectrumPath(spectrumValues.map((v, i) => clamp(v * (0.86 + Math.sin(i * 0.42) * 0.1), 0, 1)), 1200, 120, 60)}
-                                    fill="none"
-                                    stroke="url(#pulseStrokeHeroBoard)"
-                                    strokeWidth="2.4"
-                                    strokeLinecap="round"
-                                  />
-                                </svg>
-                              </div>
-
-                              <div className="mt-5 grid gap-4 lg:grid-cols-[1.7fr_0.9fr]">
-                                <div className="rounded-2xl border border-white/10 bg-black/20 p-4 sm:p-5">
-                                  <p className="mb-3 text-xs font-black uppercase tracking-[0.16em] text-white/55">Live Transcript Lane</p>
-                                  <div className="space-y-2.5">
-                                    {(studioTranscriptRows || []).map((row, idx) => {
-                                      const speaker = row?.[0] || row?.speaker || "SYSTEM";
-                                      const text = row?.[1] || row?.text || "";
-                                      const isAi = speaker === "AI";
-                                      const isCaller = speaker === "CALLER";
-                                      return (
-                                        <div
-                                          key={`${speaker}-${idx}-${text.slice(0, 24)}`}
-                                          className={
-                                            "rounded-xl px-3 py-2 text-sm font-semibold leading-snug sm:text-base " +
-                                            (isAi
-                                              ? "ml-8 bg-blue-500/20 text-blue-100"
-                                              : isCaller
-                                                ? "mr-8 bg-white/10 text-white/90"
-                                                : "bg-black/30 text-white/65")
-                                          }
-                                        >
-                                          <span className="mr-2 text-[10px] font-black uppercase tracking-[0.14em] text-white/45">{speaker === "AI" ? "MY AI PA" : speaker}</span>
-                                          {text}
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                </div>
-
-                                <div className="space-y-4">
-                                  <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                                    <p className="mb-2 text-xs font-black uppercase tracking-[0.16em] text-white/55">Stage Progress</p>
-                                    <div className="space-y-2">
-                                      {processSteps.map((stage, idx) => {
-                                        const active = idx <= processStepIndex;
-                                        return (
-                                          <div
-                                            key={stage}
-                                            className={
-                                              "rounded-lg border px-3 py-2 text-sm font-bold " +
-                                              (active
-                                                ? "border-cyan-300/35 bg-cyan-300/12 text-cyan-100"
-                                                : "border-white/10 bg-white/5 text-white/55")
-                                            }
-                                          >
-                                            {stage}
-                                          </div>
-                                        );
-                                      })}
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-
-                            {showHeroDemoCover && !showDemoTextsSide ? (
-                              <div className="absolute inset-0 z-20 flex items-center justify-center">
-                                <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_20%,rgba(56,189,248,0.24),rgba(2,6,23,0.94)_72%)]" />
-                                <div className="relative mx-auto max-w-md px-4 text-center">
-                                  <span className="inline-flex rounded-full border border-cyan-200/30 bg-cyan-300/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.15em] text-cyan-100/90 sm:text-xs">
-                                    Interactive demo
-                                  </span>
-                                  <p className="mt-4 text-xl font-black tracking-[-0.02em] text-white sm:text-2xl">Hear how My AI PA handles a real missed call.</p>
-                                  <p className="mt-2 text-sm font-semibold text-white/70 sm:text-base">Play to reveal live transcript and stage progress in sync with the audio.</p>
-                                  <button
-                                    type="button"
-                                    onClick={playHeroSampleAudio}
-                                    className="mt-6 inline-flex items-center gap-3 rounded-full border border-cyan-300/40 bg-gradient-to-r from-cyan-400 to-blue-500 px-5 py-3 text-sm font-black uppercase tracking-[0.14em] text-white shadow-[0_24px_40px_-22px_rgba(56,189,248,0.75)] transition hover:brightness-105 sm:px-6"
-                                    aria-label="Play live call demo"
-                                  >
-                                    <span
-                                      className="grid h-10 w-10 place-items-center rounded-full bg-[#0b1328] text-cyan-200"
-                                      style={{ animation: "heroPlayPulse 2s infinite" }}
-                                    >
-                                      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor" aria-hidden="true">
-                                        <path d="M8 6.2v11.6a.8.8 0 0 0 1.2.69l9.2-5.8a.8.8 0 0 0 0-1.36L9.2 5.51A.8.8 0 0 0 8 6.2z" />
-                                      </svg>
-                                    </span>
-                                    Play demo
-                                  </button>
-                                </div>
-                              </div>
-                            ) : null}
-                          </div>
-                        </div>
-
-                        <div className="hero-demo-face hero-demo-face-back border border-violet-300/20 bg-[linear-gradient(180deg,rgba(20,12,35,0.94),rgba(8,6,20,0.96))] p-3 sm:p-4">
-                          <div className="h-full rounded-xl border border-white/12 bg-black/25 p-3 sm:p-4">
-                            <div className="flex items-center justify-between gap-2">
-                              <p className="text-xs font-black uppercase tracking-[0.18em] text-violet-100/90 sm:text-sm">Text Delivery Preview</p>
-                              <span className="rounded-full border border-violet-300/35 bg-violet-300/12 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-violet-100/90">
-                                Sent instantly
-                              </span>
-                            </div>
-                            <p className="mt-1 text-xs font-semibold text-white/65 sm:text-sm">
-                              Customer receives a confirmation text. Owner receives the lead summary with contact details.
-                            </p>
-                            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                              <figure className="overflow-hidden rounded-xl border border-white/10 bg-[#060a17] p-2">
-                                <figcaption className="mb-2 text-[11px] font-black uppercase tracking-[0.14em] text-cyan-100/85">Customer text</figcaption>
-                                <img
-                                  src="/customer_text.png"
-                                  alt="Customer text message preview"
-                                  className="h-56 w-full rounded-lg object-contain sm:h-64"
-                                  loading="lazy"
-                                  decoding="async"
-                                />
-                              </figure>
-                              <figure className="overflow-hidden rounded-xl border border-white/10 bg-[#060a17] p-2">
-                                <figcaption className="mb-2 text-[11px] font-black uppercase tracking-[0.14em] text-emerald-100/85">Owner text</figcaption>
-                                <img
-                                  src="/owner_text.png"
-                                  alt="Owner text message summary preview"
-                                  className="h-56 w-full rounded-lg object-contain sm:h-64"
-                                  loading="lazy"
-                                  decoding="async"
-                                />
-                              </figure>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className={"mt-10 w-full rounded-xl border border-white/12 bg-black/45 px-3 py-3 transition sm:mt-12 " + (showDemoTextsSide ? "opacity-85" : "")}>
-                      <div className="flex items-center gap-2 sm:gap-3">
-                        <button
-                          type="button"
-                          onClick={toggleHeroSampleAudio}
-                          className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-white/8 text-white/95 transition hover:bg-white/14"
-                          aria-label={heroAudioPlaying ? "Pause live demo audio" : "Play live demo audio"}
-                        >
-                          {heroAudioPlaying ? (
-                            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor" aria-hidden="true">
-                              <path d="M7 5h3v14H7zm7 0h3v14h-3z" />
-                            </svg>
-                          ) : (
-                            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor" aria-hidden="true">
-                              <path d="M8 6.2v11.6a.8.8 0 0 0 1.2.69l9.2-5.8a.8.8 0 0 0 0-1.36L9.2 5.51A.8.8 0 0 0 8 6.2z" />
-                            </svg>
-                          )}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={stopHeroSampleAudio}
-                          className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-white/8 text-white/85 transition hover:bg-white/14 hover:text-white"
-                          aria-label="Stop and reset live demo audio"
-                        >
-                          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor" aria-hidden="true">
-                            <rect x="7" y="7" width="10" height="10" rx="1.5" />
-                          </svg>
-                        </button>
-                        <span className="min-w-[94px] shrink-0 text-[11px] font-bold tabular-nums text-white/70 sm:text-xs">
-                          {formattedHeroAudioTime} / {formattedHeroAudioDuration}
-                        </span>
-                        <div className="flex-1">
-                          <input
-                            type="range"
-                            min={0}
-                            max={Math.max(1, heroAudioDuration)}
-                            step={0.1}
-                            value={Math.min(heroAudioTime, Math.max(1, heroAudioDuration))}
-                            onChange={(e) => seekHeroSampleAudio(Number(e.target.value))}
-                            className="hero-demo-slider w-full cursor-pointer"
-                            aria-label="Seek live demo audio"
-                            style={{
-                              background: `linear-gradient(to right, #22d3ee 0%, #22d3ee ${Math.round(playbackProgress * 100)}%, rgba(255,255,255,0.16) ${Math.round(playbackProgress * 100)}%, rgba(255,255,255,0.16) 100%)`,
-                            }}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="hidden grid gap-4 sm:grid-cols-2">
-                  <div className="rounded-[24px] border border-white/25 bg-white/10 p-4 backdrop-blur">
-                    <p className="text-xs font-black uppercase tracking-[0.22em] text-white/55">What are the benefits?</p>
-                    <div className="mt-3 space-y-2 text-sm font-semibold text-white/90">
-                      {benefitBullets.map((line) => (
-                        <div key={line}>{line}</div>
-                      ))}
-                    </div>
-                    <p className="mt-4 border-t border-white/15 pt-3 text-sm font-extrabold text-white/95">
-                      Every call captured. Every lead texted to you.
-                    </p>
-                  </div>
-
-                  <div className="rounded-[24px] border border-white/20 bg-[linear-gradient(180deg,rgba(10,12,18,0.72),rgba(8,10,16,0.86))] p-4 shadow-[0_24px_60px_-36px_rgba(0,0,0,0.8)] ring-1 ring-black/20">
-                    <p className="text-xs font-bold uppercase tracking-[0.28em] text-white/60">{activeFocusView.sideTitle}</p>
-                    <p className="mt-3 text-sm font-semibold leading-snug text-white/85">{activeFocusView.sideBody}</p>
-                    <div className="mt-4 grid gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          applyAgentFocus(sectionById.benefits, { reason: "quick", query: "benefits" });
-                          benefitsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-                        }}
-                        className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm font-bold text-white/85 hover:bg-white/10"
-                      >
-                        Show benefits mode
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          applyAgentFocus(sectionById.setup, { reason: "quick", query: "setup" });
-                        }}
-                        className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm font-bold text-white/85 hover:bg-white/10"
-                      >
-                        Show setup mode
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (agentFocus?.ref?.current) {
-                            agentFocus.ref.current.scrollIntoView({ behavior: "smooth", block: "start" });
-                          }
-                        }}
-                        className="rounded-xl border border-emerald-300/20 bg-emerald-300/10 px-3 py-2 text-sm font-bold text-emerald-50 hover:bg-emerald-300/15"
-                      >
-                        Jump to focused section
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-
-            <div className="hidden relative mt-6 grid gap-5 lg:grid-cols-[1.12fr_0.88fr]">
-              <div
-                ref={overviewRef}
-                className={
-                  "overflow-hidden rounded-[28px] border border-white/20 bg-[linear-gradient(180deg,rgba(10,12,18,0.78),rgba(8,10,16,0.9))] p-6 shadow-[0_40px_110px_-65px_rgba(0,0,0,0.9)] ring-1 ring-black/20 backdrop-blur " +
-                  (agentFocus?.id === "overview" ? "ring-2 ring-emerald-300/35 border-emerald-200/25" : "")
+                  "rounded-[30px] border p-6 shadow-[0_24px_70px_-46px_rgba(15,23,42,0.24)] " +
+                  (plan.featured ? "border-[#a9c8ef] bg-white" : "border-[#d7e7fb] bg-white/84")
                 }
               >
-                <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-xs font-bold uppercase tracking-[0.28em] text-white/60">{activeFocusView.eyebrow}</p>
-                    <p className="mt-3 text-2xl font-extrabold text-white sm:text-3xl">{activeFocusView.title}</p>
+                    <p className="text-[1rem] font-black uppercase tracking-[0.16em] text-[#2563eb]">{plan.eyebrow}</p>
+                    <h3 className="mt-3 text-[2.35rem] font-black tracking-[-0.04em] text-[#07142a]">{plan.name}</h3>
                   </div>
-                  <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-                    <p className="text-sm font-extrabold text-white">The future of customer service</p>
-                    <p className="mt-1 text-sm font-bold text-white/85">Our AI telephone assistant</p>
-                  </div>
+                  {plan.featured ? (
+                    <span className="rounded-full bg-[#143d36] px-4 py-1.5 text-sm font-black uppercase tracking-[0.14em] text-white">
+                      Recommended
+                    </span>
+                  ) : null}
+                  {plan.comingSoon ? (
+                    <span className="rounded-full border border-white/18 bg-[#243754] px-4 py-1.5 text-sm font-black uppercase tracking-[0.14em] text-[#edf5fc]">
+                      Coming soon
+                    </span>
+                  ) : null}
                 </div>
-                <p className="mt-4 text-base font-semibold leading-snug text-white/85">{activeFocusView.body}</p>
 
-                <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                  {activeFocusView.bullets.map((line, idx) => (
-                    <div key={line} className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white/85">
-                      <span className="mr-2 inline-flex h-6 w-6 items-center justify-center rounded-full border border-white/10 bg-black/20 text-xs font-black text-white/80">
-                        {idx + 1}
-                      </span>
-                      {line}
+                <div className="mt-6 flex items-end gap-2">
+                  <span className="text-[clamp(3.25rem,14vw,4.2rem)] font-black tracking-[-0.05em] text-[#07142a]">{plan.price}</span>
+                  <span className="pb-2 text-lg font-bold uppercase tracking-[0.14em] text-[#475569]">{plan.suffix}</span>
+                </div>
+
+                <div className="mt-6 space-y-4">
+                  {plan.points.map((point) => (
+                    <div key={point} className="flex items-start gap-3">
+                      <span className="mt-2.5 h-3 w-3 rounded-full bg-[#c78c52]" />
+                      <p className="text-[1.2rem] font-medium leading-8 text-[#334155]">{point}</p>
                     </div>
                   ))}
                 </div>
 
-                <div className="mt-5 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (agentFocus?.ref?.current) {
-                        agentFocus.ref.current.scrollIntoView({ behavior: "smooth", block: "start" });
-                      }
-                    }}
-                    className="rounded-full border border-white/15 bg-white/5 px-3 py-2 text-xs font-bold text-white/85 hover:bg-white/10"
-                  >
-                    Jump to focused section
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      applyAgentFocus(sectionById.overview, { reason: "manual-reset" });
-                    }}
-                    className="rounded-full border border-white/15 bg-white/5 px-3 py-2 text-xs font-bold text-white/75 hover:bg-white/10"
-                  >
-                    Reset view
-                  </button>
-                  <NavButton
-                    onClick={() => {
-                      window.location.hash = "/admin";
-                    }}
-                  >
-                    Open Admin
-                  </NavButton>
-                  <NavButton
-                    onClick={() => {
-                      window.location.hash = "/legacy";
-                    }}
-                  >
-                    View Current Demo
-                  </NavButton>
-                </div>
+                {!plan.comingSoon ? (
+                  <PrimaryButton onClick={goToSignup} className="mt-8 w-full text-lg">
+                    Start Free Trial
+                  </PrimaryButton>
+                ) : (
+                  <SecondaryButton onClick={() => scrollToRef(faqRef)} className="mt-8 w-full text-lg">
+                    Ask Before You Upgrade
+                  </SecondaryButton>
+                )}
               </div>
+            ))}
+          </div>
 
-              <div
-                ref={benefitsRef}
-                className={
-                  "rounded-[28px] border border-white/25 bg-white/10 p-6 shadow-[0_28px_70px_-42px_rgba(0,0,0,0.6)] backdrop-blur " +
-                  (agentFocus?.id === "benefits" ? "ring-2 ring-emerald-300/35 border-emerald-200/25" : "")
-                }
+          <div className="mt-6 rounded-[24px] border border-[#d7e7fb] bg-white/78 px-6 py-5 text-[1.13rem] font-semibold leading-8 text-[#334155]">
+            The live plan is designed to make the buying decision simple: try it on one line, listen to real calls, and keep going only if it feels useful in the real world.
+          </div>
+        </div>
+      </section>
+
+      <section className="overflow-hidden bg-[radial-gradient(circle_at_82%_86%,rgba(255,164,92,0.18),transparent_26%),radial-gradient(circle_at_18%_14%,rgba(187,222,255,0.54),transparent_30%),linear-gradient(135deg,#eef8ff_0%,#dff1ff_100%)]">
+        <div className="mx-auto grid w-full max-w-[1440px] gap-12 px-5 py-16 sm:px-8 lg:grid-cols-[0.86fr_1.14fr] lg:items-center lg:py-20">
+          <div className="relative pt-3 pl-2 lg:-translate-x-12 xl:-translate-x-20">
+            <h2 className="max-w-[760px] overflow-visible text-[clamp(2.55rem,11vw,5.2rem)] font-black leading-[1.04] tracking-[-0.055em] text-[#07142a] drop-shadow-[0_8px_0_rgba(148,190,255,0.38)]">
+              <span className="block whitespace-nowrap">You can be <span className="inline-block pr-3 -mr-3 bg-[linear-gradient(180deg,#a9e8ff_0%,#2288ff_100%)] bg-clip-text text-transparent">live</span></span>
+              <span className="block">without any downtime to</span>
+              <span className="relative inline-block">
+                your business.
+                <svg viewBox="0 0 520 26" className="absolute -bottom-3 left-[15%] h-6 w-[74%] text-[#ff8b1f]" fill="none" aria-hidden="true">
+                  <path d="M6 17c132-13 300-15 508-2" stroke="currentColor" strokeWidth="7" strokeLinecap="round" />
+                </svg>
+              </span>
+            </h2>
+            <p className="mt-9 max-w-[590px] text-[clamp(1.2rem,1.7vw,1.65rem)] font-medium leading-[1.58] text-[#334155]">
+              With this easy to follow set up guide, we&apos;ll have your business up and running with an AI agent in no time. Causing no interference with your current work.
+            </p>
+
+          </div>
+
+          <div>
+            <div className="relative space-y-8">
+              <div className="absolute bottom-[88px] left-[60px] top-[88px] hidden w-px bg-[#2b7dff] shadow-[0_0_18px_rgba(55,142,255,0.95)] md:block" aria-hidden="true" />
+              {setupSteps.map((step, index) => {
+                const iconType = index === 0 ? "chat" : index === 1 ? "headset" : "phone";
+                return (
+                  <div key={step} className="relative grid items-center gap-5 rounded-[22px] border border-[#236dff]/65 bg-[linear-gradient(135deg,rgba(8,31,68,0.88),rgba(8,20,43,0.94))] px-5 py-6 shadow-[0_20px_60px_-46px_rgba(23,111,255,0.85),inset_0_1px_0_rgba(255,255,255,0.08)] md:grid-cols-[74px_110px_1px_minmax(0,1fr)] md:px-6 md:py-7">
+                    <span className="relative z-10 grid h-16 w-16 place-items-center rounded-full border border-[#8be2ff] bg-[linear-gradient(180deg,#78e2ff,#176bff)] text-[2.1rem] font-black text-white shadow-[0_0_34px_-8px_rgba(59,165,255,1)]">
+                      {index + 1}
+                    </span>
+                    <span className="hidden h-24 w-24 place-items-center rounded-full border border-[#5880c1]/60 bg-[#071a36]/80 text-[#58b7ff] md:grid">
+                      {iconType === "phone" ? (
+                        <svg viewBox="0 0 24 24" className="h-12 w-12" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                          <path d="M22 16.92v2a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.12 3.2 2 2 0 0 1 4.11 1h2a2 2 0 0 1 2 1.72c.12.9.32 1.78.59 2.63a2 2 0 0 1-.45 2.11L7.4 8.31a16 16 0 0 0 6.29 6.29l.85-.85a2 2 0 0 1 2.11-.45c.85.27 1.73.47 2.63.59A2 2 0 0 1 22 16.92Z" strokeLinecap="round" strokeLinejoin="round" />
+                          <path d="M15 5a5 5 0 0 1 4 4M15 1a9 9 0 0 1 8 8" strokeLinecap="round" />
+                        </svg>
+                      ) : iconType === "chat" ? (
+                        <svg viewBox="0 0 24 24" className="h-12 w-12" fill="currentColor" aria-hidden="true">
+                          <path d="M4 5.5A3.5 3.5 0 0 1 7.5 2h9A3.5 3.5 0 0 1 20 5.5v6A3.5 3.5 0 0 1 16.5 15H12l-5 5v-5A3.5 3.5 0 0 1 4 11.5v-6Zm4.5 4.25a1.25 1.25 0 1 0 0-2.5 1.25 1.25 0 0 0 0 2.5Zm3.5 0a1.25 1.25 0 1 0 0-2.5 1.25 1.25 0 0 0 0 2.5Zm3.5 0a1.25 1.25 0 1 0 0-2.5 1.25 1.25 0 0 0 0 2.5Z" />
+                        </svg>
+                      ) : (
+                        <svg viewBox="0 0 24 24" className="h-12 w-12" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                          <path d="M4 13a8 8 0 0 1 16 0" strokeLinecap="round" />
+                          <path d="M4 13v4a2 2 0 0 0 2 2h2v-6H6a2 2 0 0 0-2 2Zm16 0v4a2 2 0 0 1-2 2h-2v-6h2a2 2 0 0 1 2 2Z" strokeLinecap="round" strokeLinejoin="round" />
+                          <path d="M14 20h-2" strokeLinecap="round" />
+                        </svg>
+                      )}
+                    </span>
+                    <span className="hidden h-24 w-px bg-white/20 md:block" aria-hidden="true" />
+                    <p className="text-[clamp(1.35rem,2vw,1.8rem)] font-black leading-[1.25] tracking-[-0.035em] text-white">{step}</p>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="mt-10 grid gap-5 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={goToSignup}
+                className="inline-flex min-h-[74px] items-center justify-center gap-5 rounded-full border border-[#77d8ff]/90 bg-[linear-gradient(180deg,#2db4ff,#176bff)] px-8 text-[1.25rem] font-black uppercase tracking-[0.16em] text-white shadow-[0_0_36px_-8px_rgba(38,150,255,1),inset_0_1px_0_rgba(255,255,255,0.36)] transition hover:-translate-y-0.5"
               >
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-lg font-black text-white sm:text-xl">Outcome Snapshot</p>
-                  <div className="rounded-full border border-white/15 bg-black/15 px-3 py-2 text-xs font-black uppercase tracking-[0.14em] text-white/80">
-                    {agentFocus?.displayTitle || "Overview"}
-                  </div>
-                </div>
-                <p className="mt-3 text-base font-semibold leading-snug text-white/90">{activeFocusView.sideBody}</p>
+                Start Free Trial
+                <svg viewBox="0 0 28 20" className="h-5 w-8" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden="true">
+                  <path d="M2 10h22M17 3l7 7-7 7" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                onClick={playDemo}
+                className="inline-flex min-h-[74px] items-center justify-center gap-5 rounded-full border border-[#92caff]/80 bg-[#081b38]/75 px-8 text-[1.25rem] font-black uppercase tracking-[0.16em] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_0_38px_-24px_rgba(255,126,44,0.95)] transition hover:-translate-y-0.5 hover:border-[#ff9955]"
+              >
+                Play Demo
+                <svg viewBox="0 0 28 20" className="h-5 w-8" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden="true">
+                  <path d="M2 10h22M17 3l7 7-7 7" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
 
-                <div className="mt-5 space-y-3">
-                  <div className="rounded-2xl border border-white/10 bg-black/15 p-4">
-                    <p className="text-xs font-bold uppercase tracking-[0.2em] text-white/55">Core value delivered</p>
-                    <div className="mt-3 space-y-2 text-sm font-semibold text-white/90">
-                      {coreBullets.map((line) => (
-                        <div key={line}>{line}</div>
-                      ))}
-                    </div>
-                  </div>
+      <section className="bg-[#fbfaf9]">
+        <div className="mx-auto w-full max-w-6xl px-4 py-16 sm:px-6 lg:px-8 lg:py-20">
+          <div className="mx-auto max-w-4xl text-center">
+            <h2 className="mt-3 text-[clamp(2.45rem,3.6vw,4rem)] font-black leading-[1.08] tracking-[-0.04em] text-[#07142a]">Read reviews from our current customers</h2>
+            <p className="mx-auto mt-5 max-w-[900px] text-[1.32rem] font-medium leading-9 text-[#334155]">
+              These business owners were more than happy to share their experiences with my AI PA and how it benefitted them.
+            </p>
+          </div>
 
-                  <div className="rounded-2xl border border-emerald-300/15 bg-emerald-300/5 p-4">
-                    <p className="text-xs font-bold uppercase tracking-[0.2em] text-emerald-100/70">Best next prompt</p>
-                    <p className="mt-2 text-sm font-semibold text-white/90">
-                      Ask the assistant a real customer question and watch the page switch context automatically.
-                    </p>
-                  </div>
+          <div className="mt-10 grid items-start gap-5 lg:grid-cols-[1fr_1fr_0.92fr]">
+            <div className="grid gap-5 md:grid-cols-2 lg:col-span-2">
+            {testimonialCards.map((item) => (
+              <div key={item.name} className="flex min-h-[330px] flex-col rounded-[30px] border border-white/18 bg-[rgba(19,33,56,0.94)] p-7">
+                <p className="text-[1.28rem] font-medium leading-9 text-white">"{item.quote}"</p>
+                <div className="mt-auto pt-7">
+                  <p className="text-[1.08rem] font-black uppercase tracking-[0.14em] text-white">{item.name}</p>
+                  <p className="mt-1 text-[1.05rem] font-semibold text-[#eef6ff]">{item.role}</p>
                 </div>
               </div>
+            ))}
             </div>
 
-          </div>
-        </section>
-        <section ref={infoRef} className="relative z-10 w-full pb-14 sm:pb-16 lg:pb-20">
-          <style>{`
-            @keyframes builtWithTicker {
-              0% { transform: translateX(0%); }
-              100% { transform: translateX(-50%); }
-            }
-          `}</style>
-          <div className="relative overflow-hidden rounded-[26px] border border-white/10 bg-[linear-gradient(90deg,#0a0b10_0%,#0b0d13_50%,#0a0b10_100%)] px-5 py-10 shadow-[0_30px_90px_-62px_rgba(0,0,0,0.75)] sm:px-7 sm:py-12 lg:px-10 lg:py-14">
-            <div className="pointer-events-none absolute inset-0 opacity-[0.06] [background-image:linear-gradient(to_right,rgba(255,255,255,0.7)_1px,transparent_1px)] [background-size:88px_100%]" />
-            <div className="relative mx-auto w-full max-w-6xl">
-              <p className="text-center text-xs font-black uppercase tracking-[0.22em] text-white/48 sm:text-sm">
-                Built with trusted infrastructure
-              </p>
-              <p className="mx-auto mt-3 max-w-3xl text-center text-lg font-semibold text-white/60 sm:text-xl">
-                My AI PA runs on reliable providers and tools we use every day.
-              </p>
-
-              <div className="mt-9 mx-auto w-full max-w-4xl overflow-hidden rounded-lg border border-white/5 bg-black/10">
-                <div className="flex w-max items-center gap-4 px-4 py-3" style={{ animation: "builtWithTicker 32s linear infinite" }}>
-                  {[
-                    {
-                      name: "Twilio",
-                      logoUrl: "https://brandslogos.com/wp-content/uploads/images/large/twilio-logo.png",
-                      fallbackLogoUrl: "https://cdn.simpleicons.org/twilio/B7BDC8",
-                      accent: "#F22F46",
-                    },
-                    {
-                      name: "OpenAI",
-                      logoUrl: "https://upload.wikimedia.org/wikipedia/commons/4/4d/OpenAI_Logo.svg",
-                      fallbackLogoUrl: "https://upload.wikimedia.org/wikipedia/commons/4/4d/OpenAI_Logo.svg",
-                      hideTextLabel: true,
-                      accent: "#10A37F",
-                    },
-                    { name: "Stripe", logo: "stripe", accent: "#635BFF", iconHex: "635BFF" },
-                    { name: "Google Cloud", logo: "googlecloud", accent: "#4285F4", iconHex: "4285F4" },
-                    { name: "Node.js", logo: "nodedotjs", accent: "#5FA04E", iconHex: "5FA04E" },
-                    { name: "React", logo: "react", accent: "#61DAFB", iconHex: "61DAFB" },
-                    { name: "Cloudflare", logo: "cloudflare", accent: "#F38020", iconHex: "F38020" },
-                  ].concat([
-                    {
-                      name: "Twilio",
-                      logoUrl: "https://brandslogos.com/wp-content/uploads/images/large/twilio-logo.png",
-                      fallbackLogoUrl: "https://cdn.simpleicons.org/twilio/B7BDC8",
-                      accent: "#F22F46",
-                    },
-                    {
-                      name: "OpenAI",
-                      logoUrl: "https://upload.wikimedia.org/wikipedia/commons/4/4d/OpenAI_Logo.svg",
-                      fallbackLogoUrl: "https://upload.wikimedia.org/wikipedia/commons/4/4d/OpenAI_Logo.svg",
-                      hideTextLabel: true,
-                      accent: "#10A37F",
-                    },
-                    { name: "Stripe", logo: "stripe", accent: "#635BFF", iconHex: "635BFF" },
-                    { name: "Google Cloud", logo: "googlecloud", accent: "#4285F4", iconHex: "4285F4" },
-                    { name: "Node.js", logo: "nodedotjs", accent: "#5FA04E", iconHex: "5FA04E" },
-                    { name: "React", logo: "react", accent: "#61DAFB", iconHex: "61DAFB" },
-                    { name: "Cloudflare", logo: "cloudflare", accent: "#F38020", iconHex: "F38020" },
-                  ]).map((item, idx) => (
-                    <div
-                      key={`${item.name}-${idx}`}
-                      className="flex h-12 shrink-0 items-center justify-center gap-3 rounded-md border px-4 py-2 text-center font-black text-white/65 transition"
-                      style={{
-                        borderColor: `${item.accent}33`,
-                        background: `linear-gradient(180deg, ${item.accent}12, rgba(255,255,255,0.02))`,
-                        boxShadow: `0 0 0 1px ${item.accent}14 inset, 0 12px 30px -24px ${item.accent}66`,
-                      }}
-                    >
-                      <img
-                        src={item.logoUrl || `https://cdn.simpleicons.org/${item.logo}/${item.iconHex || "64748B"}`}
-                        alt={`${item.name} logo`}
-                        className={
-                          (item.hideTextLabel ? "h-8 w-24 " : "h-5 w-8 ") +
-                          "object-contain opacity-85 " +
-                          (item.name === "OpenAI" ? "invert brightness-125 contrast-125" : "")
-                        }
-                        loading="lazy"
-                        decoding="async"
-                        referrerPolicy="no-referrer"
-                        onError={(e) => {
-                          if (item.fallbackLogoUrl && e.currentTarget.src !== item.fallbackLogoUrl) {
-                            e.currentTarget.src = item.fallbackLogoUrl;
-                          }
-                        }}
-                      />
-                      {!item.hideTextLabel ? (
-                        <span className="text-[1.1rem] tracking-[-0.01em] sm:text-[1.2rem]" style={{ color: item.accent }}>
-                          {item.name}
-                        </span>
-                      ) : null}
-                    </div>
-                  ))}
+            <div className="rounded-[30px] border border-[#315148] bg-[#183329] p-7">
+              <p className="text-[1rem] font-black uppercase tracking-[0.14em] text-white">Local-business credibility</p>
+              <div className="mt-4 space-y-4">
+                <div className="rounded-[22px] bg-[#21453f] px-5 py-5">
+                  <p className="text-[1.04rem] font-black uppercase tracking-[0.12em] text-white">Ontario-first</p>
+                  <p className="mt-3 text-[1.02rem] font-medium leading-7 text-[#eef6ff]">
+                    We are founded in Ontario and are currently making a name within the local region with satisified customers.
+                  </p>
+                </div>
+                <div className="rounded-[22px] bg-[#21453f] px-5 py-5">
+                  <p className="text-[1.04rem] font-black uppercase tracking-[0.12em] text-white">Canada-ready privacy</p>
+                  <p className="mt-3 text-[1.02rem] font-medium leading-7 text-[#eef6ff]">
+                    Built around Canadian privacy expectations, including PIPEDA principles for consent, safeguards, limited use, and accountable handling of caller information.
+                  </p>
+                </div>
+                <div className="rounded-[22px] bg-[#21453f] px-5 py-5">
+                  <p className="text-[1.04rem] font-black uppercase tracking-[0.12em] text-white">Proof before hype</p>
+                  <p className="mt-3 text-[1.02rem] font-medium leading-7 text-[#eef6ff]">
+                    With live demo calls, recorded demo audio, transcript and pics of text follow-up. We do more work than abstract AI claims.
+                  </p>
                 </div>
               </div>
             </div>
           </div>
-        </section>
-        <section data-section="owner-questions-third" className="relative z-10 w-full pb-14 sm:pb-16 lg:pb-20">
-          <div className="relative overflow-hidden rounded-[28px] border border-black/10 bg-white px-6 py-10 shadow-[0_28px_80px_-56px_rgba(0,0,0,0.24)] sm:px-8 sm:py-12 lg:px-10 lg:py-14">
-            <div className="pointer-events-none absolute inset-0 opacity-[0.05] [background-image:radial-gradient(rgba(0,0,0,0.85)_0.8px,transparent_0.8px)] [background-size:14px_14px]" />
-            <div className="relative mx-auto w-full max-w-6xl">
-              <h3 className="mt-3 max-w-4xl text-3xl font-black leading-tight tracking-[-0.03em] text-[#0b1324] sm:text-4xl">
-                Questions every careful business owner asks before spending money.
-              </h3>
-              <p className="mt-4 max-w-4xl text-lg font-semibold leading-relaxed text-slate-600 sm:text-xl">
-                If you are skeptical, that is good. Here is the practical view: cost clarity, control, reliability, and measurable return.
-              </p>
+        </div>
+      </section>
 
-              <div className="mt-8 grid gap-5 lg:grid-cols-[1.2fr_0.8fr]">
-                <div className="space-y-3">
-                  {skepticFaqs.map((item, idx) => {
-                    const open = idx === skepticOpenIdx;
-                    return (
-                      <div key={item.q} className="rounded-2xl border border-slate-200 bg-slate-50/80">
-                        <button
-                          type="button"
-                          onClick={() => setSkepticOpenIdx(open ? -1 : idx)}
-                          className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
-                        >
-                          <span className="text-sm font-black text-slate-900 sm:text-base">{item.q}</span>
-                          <span className="text-lg font-black text-slate-500">{open ? "−" : "+"}</span>
-                        </button>
-                        {open ? <p className="border-t border-slate-200 px-4 py-3 text-sm font-semibold leading-relaxed text-slate-600 sm:text-base">{item.a}</p> : null}
-                      </div>
-                    );
-                  })}
-                </div>
-
-                <div className="space-y-4">
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50/90 p-4">
-                    <p className="text-xs font-black uppercase tracking-[0.14em] text-slate-500">Quick ROI Reality Check</p>
-                    <div className="mt-3 grid gap-2 sm:grid-cols-3">
-                      <label className="text-xs font-bold text-slate-600">
-                        Missed calls/week
-                        <input
-                          type="number"
-                          min="0"
-                          value={roiMissedCalls}
-                          onChange={(e) => setRoiMissedCalls(e.target.value)}
-                          className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm font-bold text-slate-900"
-                        />
-                      </label>
-                      <label className="text-xs font-bold text-slate-600">
-                        Close rate (%)
-                        <input
-                          type="number"
-                          min="0"
-                          max="100"
-                          value={roiCloseRate}
-                          onChange={(e) => setRoiCloseRate(e.target.value)}
-                          className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm font-bold text-slate-900"
-                        />
-                      </label>
-                      <label className="text-xs font-bold text-slate-600">
-                        Avg job value ($)
-                        <input
-                          type="number"
-                          min="0"
-                          value={roiJobValue}
-                          onChange={(e) => setRoiJobValue(e.target.value)}
-                          className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm font-bold text-slate-900"
-                        />
-                      </label>
-                    </div>
-                    <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-black text-amber-900">
-                      Potential monthly opportunity loss: ${monthlyOpportunityLoss.toLocaleString()}
-                    </div>
-                  </div>
-
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50/90 p-4">
-                    <p className="text-sm font-black uppercase tracking-[0.12em] text-slate-900">Risk Reversal</p>
-                    <p className="mt-2 text-sm font-semibold leading-relaxed text-slate-600">
-                      Start with one phone line and evaluate real calls before scaling. Keep control over tone, routing, and escalation from day one.
-                    </p>
-                  </div>
-
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50/90 p-4">
-                    <p className="text-sm font-black uppercase tracking-[0.12em] text-slate-900">Control & Safety</p>
-                    <p className="mt-2 text-sm font-semibold leading-relaxed text-slate-600">
-                      Script guardrails, transfer rules, and transcript logging are all visible so you can trust what happens on every call.
-                    </p>
-                  </div>
-
-                  <div className="flex flex-wrap gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setDemoOpen(true)}
-                      className="rounded-full bg-gradient-to-r from-cyan-500 via-blue-500 to-indigo-500 px-6 py-3 text-xs font-black uppercase tracking-[0.14em] text-white shadow-[0_18px_30px_-18px_rgba(59,130,246,0.6)] sm:text-sm"
-                    >
-                      Call The Demo
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        window.location.hash = "/signup";
-                      }}
-                      className="rounded-full border border-slate-300 bg-white px-6 py-3 text-xs font-black uppercase tracking-[0.14em] text-slate-900 shadow-[0_12px_24px_-18px_rgba(0,0,0,0.2)] sm:text-sm"
-                    >
-                      See Setup Flow
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
+      <section ref={faqRef} className="bg-transparent">
+        <div className="mx-auto w-full max-w-5xl px-4 py-16 sm:px-6 lg:px-8 lg:py-20">
+          <div className="mx-auto max-w-4xl text-center">
+            <h2 className="mt-3 text-[clamp(2.45rem,3.6vw,4rem)] font-black leading-[1.08] tracking-[-0.04em] text-[#07142a]">Frequently Asked Questions</h2>
+            <p className="mx-auto mt-5 max-w-[900px] text-[1.32rem] font-medium leading-9 text-[#334155]">
+              Quick answers to the questions business owners usually ask before trying My AI PA.
+            </p>
           </div>
-        </section>
-        <section ref={comparisonRef} className="relative z-10 w-full pb-14 sm:pb-16 lg:pb-20">
-          <style>{`
-            @keyframes whyGridShift {
-              0% { transform: translateY(0px); }
-              50% { transform: translateY(-6px); }
-              100% { transform: translateY(0px); }
-            }
-            @keyframes compareGlow {
-              0%, 100% { opacity: 0.35; }
-              50% { opacity: 0.72; }
-            }
-          `}</style>
-          <div className="relative overflow-hidden rounded-[34px] border border-sky-100/35 bg-[linear-gradient(180deg,#8fd5ef_0%,#7aa8e7_42%,#b194ef_100%)] px-6 py-12 sm:px-8 sm:py-14 lg:px-10 lg:py-16">
-            <div className="pointer-events-none absolute inset-0 opacity-35 [background-image:linear-gradient(to_right,rgba(255,255,255,0.16)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.12)_1px,transparent_1px)] [background-size:68px_100%,100%_68px]" style={{ animation: "whyGridShift 8s ease-in-out infinite" }} />
-            <div className="pointer-events-none absolute inset-x-0 top-0 h-[26%] bg-white/10" />
-            <div className="pointer-events-none absolute left-[-8%] top-[18%] h-44 w-44 rounded-full bg-cyan-100/35 blur-3xl" />
-            <div className="pointer-events-none absolute right-[-6%] bottom-[8%] h-52 w-52 rounded-full bg-indigo-200/35 blur-3xl" />
 
-            <div className="relative mx-auto w-full max-w-6xl text-[#081223]">
-              <p className="inline-flex rounded-full border border-[#0f203f]/15 bg-white/55 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-[#11244a]">
-                My AI PA vs Voicemail
-              </p>
-              <h2 className="mt-5 max-w-4xl text-4xl font-black leading-[1.02] tracking-[-0.04em] sm:text-5xl lg:text-[3.4rem]">
-                See the difference between live AI call handling and traditional voicemail.
-              </h2>
-              <p className="mt-5 max-w-3xl text-base font-semibold leading-relaxed text-[#1a2b4f]/85 sm:text-lg">
-                Voicemail stores messages. My AI PA qualifies leads, routes urgency, and helps your team respond faster.
-              </p>
-
-              <div className="relative mt-8 overflow-hidden rounded-[26px] border border-white/35 bg-[#0a1631]/70 backdrop-blur">
-                <div
-                  className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_72%_18%,rgba(70,170,255,0.28),rgba(70,170,255,0)_48%)]"
-                  style={{ animation: "compareGlow 3.8s ease-in-out infinite" }}
-                />
-
-                <div className="relative hidden border-b border-white/15 md:grid md:grid-cols-[1.1fr_1fr_1fr]">
-                  <div className="px-6 py-4 text-xs font-black uppercase tracking-[0.16em] text-slate-300/85">Comparison Point</div>
-                  <div className="border-l border-white/10 bg-emerald-400/10 px-6 py-4 text-xs font-black uppercase tracking-[0.16em] text-emerald-200">
-                    My AI PA
-                  </div>
-                  <div className="border-l border-white/10 px-6 py-4 text-xs font-black uppercase tracking-[0.16em] text-slate-300/85">Voicemail</div>
-                </div>
-
-                <div className="relative space-y-3 p-3 sm:p-4">
-                  {[
-                    {
-                      label: "Response when a customer calls",
-                      ai: "Answers in seconds with a professional greeting, 24/7.",
-                      vm: "Plays a recording and asks the caller to leave a message.",
-                    },
-                    {
-                      label: "Lead qualification quality",
-                      ai: "Captures service type, urgency, and callback details in a structured format.",
-                      vm: "Caller leaves an unstructured message, often missing key details.",
-                    },
-                    {
-                      label: "Owner follow-up speed",
-                      ai: "Sends callback-ready SMS summaries right after each call.",
-                      vm: "Team must listen, decode, and sort messages before responding.",
-                    },
-                    {
-                      label: "Escalation & live handoff",
-                      ai: "Can transfer urgent or complex calls to your team using your rules.",
-                      vm: "No live triage or transfer path from the voicemail prompt.",
-                    },
-                    {
-                      label: "Risk to get started",
-                      ai: "14-day free trial, no credit card required, cancel anytime.",
-                      vm: "No trial decision needed, but missed-call loss continues unchanged.",
-                    },
-                    {
-                      label: "Visibility & optimization",
-                      ai: "Transcript and call data show what to improve and where leads are lost.",
-                      vm: "Limited insight beyond raw audio messages.",
-                    },
-                  ].map((item) => (
-                    <div
-                      key={item.label}
-                      className="overflow-hidden rounded-2xl border border-white/12 bg-white/[0.04] shadow-[0_18px_36px_-26px_rgba(4,9,22,0.85)]"
-                    >
-                      <div className="grid gap-3 p-4 md:grid-cols-[1.1fr_1fr_1fr] md:items-center md:gap-0 md:p-0">
-                        <div className="md:px-6 md:py-4">
-                          <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-300/70 md:hidden">Comparison Point</p>
-                          <p className="mt-1 text-base font-black text-white md:mt-0">{item.label}</p>
-                        </div>
-                        <div className="rounded-xl border border-emerald-300/22 bg-emerald-400/10 p-3 md:rounded-none md:border-y-0 md:border-l md:border-r md:border-white/10 md:bg-emerald-400/8 md:px-6 md:py-4">
-                          <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-200/90 md:hidden">My AI PA</p>
-                          <p className="mt-1 text-sm font-semibold leading-relaxed text-emerald-100 md:mt-0 md:text-[0.95rem]">{item.ai}</p>
-                        </div>
-                        <div className="md:px-6 md:py-4">
-                          <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-300/70 md:hidden">Voicemail</p>
-                          <p className="mt-1 text-sm font-semibold leading-relaxed text-slate-200/90 md:mt-0 md:text-[0.95rem]">{item.vm}</p>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-        <section className="relative z-10 w-full pb-14 sm:pb-16 lg:pb-20">
-          <div className="relative overflow-hidden rounded-[26px] border border-cyan-200/35 bg-[linear-gradient(120deg,#0c1c3b_0%,#10234a_45%,#0f2a54_100%)] px-6 py-8 shadow-[0_35px_80px_-55px_rgba(14,30,68,0.85)] sm:px-8 sm:py-10">
-            <div className="pointer-events-none absolute inset-0 opacity-[0.08] [background-image:linear-gradient(to_right,rgba(255,255,255,0.7)_1px,transparent_1px)] [background-size:72px_100%]" />
-            <div className="relative mx-auto flex w-full max-w-6xl flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-              <div className="max-w-3xl">
-                <p className="text-xs font-black uppercase tracking-[0.2em] text-cyan-100/75">Risk Reversal</p>
-                <h3 className="mt-2 text-2xl font-black leading-tight tracking-[-0.02em] text-white sm:text-3xl">
-                  Start with a 14-day free trial before committing long term.
-                </h3>
-                <p className="mt-3 text-base font-semibold leading-relaxed text-cyan-100/80 sm:text-lg">
-                  No obligations, easy cancellation after 14 days. No credit card required.
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-3">
-                <button
-                  type="button"
-                  onClick={() => setDemoOpen(true)}
-                  className="rounded-full bg-gradient-to-r from-cyan-500 via-blue-500 to-indigo-500 px-7 py-3 text-xs font-black uppercase tracking-[0.14em] text-white shadow-[0_20px_34px_-18px_rgba(59,130,246,0.65)] sm:text-sm"
-                >
-                  Call The Demo
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    window.location.hash = "/signup";
-                  }}
-                  className="rounded-full border border-cyan-200/40 bg-white/10 px-7 py-3 text-xs font-black uppercase tracking-[0.14em] text-white sm:text-sm"
-                >
-                  See Setup Flow
-                </button>
-              </div>
-            </div>
-          </div>
-        </section>
-        <section ref={pricingRef} className="relative z-10 w-full pb-14 sm:pb-16 lg:pb-20">
-          <div className="relative overflow-hidden rounded-[28px] border border-black/10 bg-white px-6 py-10 shadow-[0_28px_80px_-56px_rgba(0,0,0,0.24)] sm:px-8 sm:py-12 lg:px-10 lg:py-14">
-            <div className="pointer-events-none absolute inset-0 opacity-[0.05] [background-image:radial-gradient(rgba(0,0,0,0.85)_0.8px,transparent_0.8px)] [background-size:14px_14px]" />
-            <div className="relative mx-auto w-full max-w-6xl">
-              <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">Pricing Preview</p>
-              <h3 className="mt-3 max-w-4xl text-3xl font-black leading-tight tracking-[-0.03em] text-[#0b1324] sm:text-4xl">
-                Clear plans so owners can decide fast.
-              </h3>
-              <p className="mt-4 max-w-4xl text-lg font-semibold leading-relaxed text-slate-600 sm:text-xl">
-                Start small, prove value with real calls, then scale when the results are obvious.
-              </p>
-
-              <div className="mt-8 grid gap-4 md:grid-cols-2">
-                {[
-                  {
-                    name: "Light Version",
-                    price: "$19.99/mo",
-                    subtitle: "Available now",
-                    points: ["Live call answering", "Lead summary SMS to owner", "Basic FAQs", "Great for getting started quickly"],
-                    featured: true,
-                  },
-                  {
-                    name: "Premium",
-                    price: "$29.99/mo",
-                    subtitle: "Coming soon",
-                    points: ["Advanced call routing", "Priority lead tagging + urgency", "Expanded FAQ + script controls", "Enhanced owner notifications"],
-                    comingSoon: true,
-                  },
-                ].map((plan) => (
-                  <div
-                    key={plan.name}
-                    className={
-                      "rounded-2xl border p-5 " +
-                      (plan.comingSoon
-                        ? "border-dashed border-slate-300 bg-slate-100/75"
-                        : plan.featured
-                        ? "border-cyan-300 bg-cyan-50/70 shadow-[0_24px_45px_-34px_rgba(59,130,246,0.45)]"
-                        : "border-slate-200 bg-slate-50/80")
-                    }
+          <div className="mt-10 space-y-4">
+            {faqs.map((item, index) => {
+              const isOpen = openFaq === index;
+              return (
+                <div key={item.q} className="rounded-[26px] border border-[#d7e7fb] bg-white/84 shadow-[0_16px_36px_-32px_rgba(18,32,51,0.18)]">
+                  <button
+                    type="button"
+                    onClick={() => setOpenFaq(isOpen ? -1 : index)}
+                    className="flex w-full items-center justify-between gap-5 px-7 py-5 text-left"
                   >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-black uppercase tracking-[0.14em] text-slate-900">{plan.name}</p>
-                        <p className="mt-1 text-sm font-semibold text-slate-500">{plan.subtitle}</p>
-                      </div>
-                      {plan.featured ? <span className="rounded-full bg-cyan-500 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-white">Live Now</span> : null}
-                      {plan.comingSoon ? <span className="rounded-full border border-slate-400 bg-slate-200 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-slate-700">Coming Soon</span> : null}
+                    <span className="text-[1.25rem] font-black leading-8 text-[#07142a]">{item.q}</span>
+                    <span className="text-[2rem] font-black leading-none text-[#2563eb]">{isOpen ? "-" : "+"}</span>
+                  </button>
+                  {isOpen ? (
+                    <div className="border-t border-[#d7e7fb] px-7 py-5">
+                      <p className="text-[1.18rem] font-medium leading-8 text-[#334155]">{item.a}</p>
                     </div>
-                    <p className="mt-5 text-4xl font-black tracking-[-0.03em] text-[#0b1324]">{plan.price}</p>
-                    <p className="mt-1 text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
-                      {plan.comingSoon ? "premium package preview" : "No obligations. No credit card required."}
-                    </p>
-                    <div className="mt-5 space-y-2">
-                      {plan.points.map((point) => (
-                        <p key={point} className="text-sm font-semibold text-slate-700">
-                          {point}
-                        </p>
-                      ))}
-                    </div>
-                    {!plan.comingSoon ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          window.location.hash = "/signup";
-                        }}
-                        className="mt-5 rounded-full bg-gradient-to-r from-cyan-500 via-blue-500 to-indigo-500 px-5 py-2.5 text-xs font-black uppercase tracking-[0.14em] text-white shadow-[0_16px_28px_-18px_rgba(59,130,246,0.6)] sm:text-sm"
-                      >
-                        Start Free Trial for Light Version
-                      </button>
-                    ) : null}
-                  </div>
-                ))}
-              </div>
-              <p className="mt-5 text-sm font-semibold text-slate-500">
-                Current live package is $19.99/month. Premium package at $29.99/month is coming soon.
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      <section className="bg-transparent">
+        <div className="mx-auto w-full max-w-6xl px-4 pb-16 sm:px-6 lg:px-8 lg:pb-20">
+          <div className="rounded-[34px] border border-[#d7e7fb] bg-white/84 px-6 py-10 shadow-[0_28px_80px_-48px_rgba(18,32,51,0.28)] sm:px-8 sm:py-12 lg:px-10">
+            <div className="max-w-4xl text-left">
+              <h2 className="mt-3 text-[clamp(2.45rem,3.7vw,4.1rem)] font-black leading-[1.08] tracking-[-0.04em] text-[#07142a]">Stop letting missed calls decide where the next job goes.</h2>
+              <p className="mt-5 max-w-[900px] text-[1.32rem] font-medium leading-9 text-[#334155]">
+                Try My AI PA free, hear how it sounds, and see how quickly missed calls can turn into clean follow-up opportunities.
               </p>
             </div>
-          </div>
-        </section>
-        <section ref={proofRef} className="relative z-10 w-full pb-14 sm:pb-16 lg:pb-20">
-          <div className="relative overflow-hidden rounded-[28px] border border-black/10 bg-white px-6 py-10 shadow-[0_28px_80px_-56px_rgba(0,0,0,0.24)] sm:px-8 sm:py-12 lg:px-10 lg:py-14">
-            <div className="pointer-events-none absolute inset-0 opacity-[0.05] [background-image:radial-gradient(rgba(0,0,0,0.85)_0.8px,transparent_0.8px)] [background-size:14px_14px]" />
-            <div className="relative mx-auto w-full max-w-6xl">
-              <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">Proof</p>
-              <h3 className="mt-3 max-w-4xl text-3xl font-black leading-tight tracking-[-0.03em] text-[#0b1324] sm:text-4xl">
-                Real owner concerns answered with practical proof.
-              </h3>
 
-              <div className="mt-8 grid gap-4 lg:grid-cols-[1.2fr_0.8fr_0.8fr]">
-                <div className="rounded-2xl border border-slate-200 bg-slate-50/85 p-5">
-                  <p className="text-xs font-black uppercase tracking-[0.14em] text-slate-500">Customer Testimonial</p>
-                  <p className="mt-4 text-lg font-bold leading-relaxed text-slate-800">
-                    "Before My AI PA, evening rental inquiries kept going to voicemail. Now callers get an immediate response, and we get clean lead details by text so follow-up is faster the next morning."
-                  </p>
-                  <p className="mt-4 text-sm font-black text-slate-900">David A, First Class Rentals, St. Catharines</p>
-                </div>
-                <div className="rounded-2xl border border-slate-200 bg-slate-50/85 p-5">
-                  <p className="text-xs font-black uppercase tracking-[0.14em] text-slate-500">Customer Testimonial</p>
-                  <p className="mt-3 text-sm font-semibold leading-relaxed text-slate-700">
-                    "I am often in treatment sessions and cannot stop to answer the phone. My AI PA greets callers professionally, gathers the reason for the call, and texts me clear notes so I can return calls between clients."
-                  </p>
-                  <p className="mt-4 text-sm font-black text-slate-900">Lisa P, Occupational Therapist</p>
-                </div>
-                <div className="rounded-2xl border border-slate-200 bg-slate-50/85 p-5">
-                  <p className="text-xs font-black uppercase tracking-[0.14em] text-slate-500">Customer Testimonial</p>
-                  <p className="mt-3 text-sm font-semibold leading-relaxed text-slate-700">
-                    "When I am on-site doing carpentry work, I miss calls. My AI PA now screens and captures serious leads, records urgency, and sends me callback-ready details so I can quote faster and stop losing jobs to voicemail."
-                  </p>
-                  <p className="mt-4 text-sm font-black text-slate-900">Mark S, Carpentry Contractor</p>
-                </div>
-              </div>
+            <div className="mt-9 flex flex-col gap-4 sm:flex-row">
+              <PrimaryButton onClick={goToSignup} className="text-lg">Start Free Trial</PrimaryButton>
+              <SecondaryButton onClick={playDemo} dark className="text-lg">
+                Play Demo
+              </SecondaryButton>
             </div>
           </div>
-        </section>
-        <section ref={complianceRef} className="relative z-10 w-full pb-14 sm:pb-16 lg:pb-20">
-          <div className="relative overflow-hidden rounded-[28px] border border-cyan-200/35 bg-[linear-gradient(130deg,#0a1630_0%,#0f2547_52%,#103253_100%)] px-6 py-9 shadow-[0_32px_80px_-58px_rgba(8,20,44,0.95)] sm:px-8 sm:py-11 lg:px-10 lg:py-12">
-            <div className="pointer-events-none absolute inset-0 opacity-[0.08] [background-image:linear-gradient(to_right,rgba(255,255,255,0.8)_1px,transparent_1px)] [background-size:72px_100%]" />
-            <div className="pointer-events-none absolute inset-0 opacity-[0.06] [background-image:radial-gradient(rgba(255,255,255,0.95)_0.8px,transparent_0.8px)] [background-size:16px_16px]" />
-            <div className="relative mx-auto w-full max-w-6xl">
-              <p className="text-xs font-black uppercase tracking-[0.2em] text-cyan-100/75">Canadian Security & Privacy</p>
-              <h3 className="mt-3 max-w-4xl text-3xl font-black leading-tight tracking-[-0.03em] text-white sm:text-4xl">
-                Built with Canadian privacy requirements in mind.
-              </h3>
-              <p className="mt-4 max-w-4xl text-base font-semibold leading-relaxed text-cyan-100/80 sm:text-lg">
-                My AI PA is designed to support{" "}
-                <span className="font-black text-cyan-100">PIPEDA (Personal Information Protection and Electronic Documents Act)</span>,{" "}
-                CASL messaging controls, and provincial privacy expectations such as Québec Law 25 and BC/Alberta PIPA.
-              </p>
 
-              <div className="mt-5 flex flex-wrap gap-2">
-                {[
-                  { label: "PIPEDA", note: "Federal private-sector privacy law" },
-                  { label: "CASL", note: "Commercial electronic message rules" },
-                  { label: "Québec Law 25", note: "Modernized privacy obligations" },
-                  { label: "BC/AB PIPA", note: "Provincial private-sector privacy" },
-                  { label: "PHIPA-ready", note: "Healthcare workflow controls" },
-                ].map((item) => (
-                  <div
-                    key={item.label}
-                    className="inline-flex items-center gap-2 rounded-full border border-cyan-200/30 bg-cyan-200/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-cyan-50 sm:text-xs"
-                    title={item.note}
-                  >
-                    <span className="h-1.5 w-1.5 rounded-full bg-cyan-200" />
-                    {item.label}
-                  </div>
-                ))}
-              </div>
-
-              <div className="mt-8">
-                <div className="grid gap-4 md:grid-cols-2">
-                  {[
-                    {
-                      icon: "faq",
-                      title: "PIPEDA-aligned data handling",
-                      body: "Encryption in transit and at rest, least-privilege access, and configurable retention windows for operational records.",
-                    },
-                    {
-                      icon: "text",
-                      title: "CASL-aware messaging controls",
-                      body: "Owner and caller SMS workflows can include consent language, opt-out handling, and delivery traceability.",
-                    },
-                    {
-                      icon: "callback",
-                      title: "Audit-ready activity trail",
-                      body: "Call transcripts, lead capture actions, and admin changes are logged for review and operational accountability.",
-                    },
-                    {
-                      icon: "filter",
-                      title: "Role-based admin controls",
-                      body: "Permission tiers keep sensitive lead and transcript access limited to authorized staff members.",
-                    },
-                    {
-                      icon: "growth",
-                      title: "Reliability and fallback paths",
-                      body: "Configurable escalation and backup routing help prevent dropped opportunities during busy periods.",
-                    },
-                    {
-                      icon: "bell",
-                      title: "Incident visibility and alerts",
-                      body: "Operational notifications and review workflows help teams respond quickly to exceptions or delivery issues.",
-                    },
-                  ].map((item) => (
-                    <div key={item.title} className="rounded-2xl border border-white/12 bg-white/[0.08] p-4 shadow-[0_18px_36px_-28px_rgba(3,8,20,0.95)]">
-                      <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-cyan-200/35 bg-cyan-300/14 text-cyan-100">
-                        {renderHeroHighlightIcon(item.icon)}
-                      </div>
-                      <p className="mt-3 text-sm font-black uppercase tracking-[0.12em] text-white">{item.title}</p>
-                      <p className="mt-2 text-sm font-semibold leading-relaxed text-cyan-100/75">{item.body}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="mt-6 rounded-2xl border border-cyan-200/25 bg-cyan-200/10 px-4 py-3 text-sm font-semibold leading-relaxed text-cyan-50/95">
-                Compliance note: these controls are built to support Canadian privacy obligations. Final legal compliance depends on your configured workflows, policies, and legal review.
-              </div>
+          <footer className="flex flex-col gap-4 px-1 pt-7 text-[1.05rem] font-semibold leading-7 text-[#334155] sm:flex-row sm:items-center sm:justify-between">
+            <p className="inline-flex items-center gap-2">
+              <span>My AI PA is positioned for Ontario first. Made and Loved in Canada</span>
+              <span className="text-[1.35rem] leading-none" aria-hidden="true">🍁</span>
+            </p>
+            <div className="flex items-center gap-4">
+              <a href="#/privacy" className="transition hover:text-[#2563eb]">
+                Privacy
+              </a>
+              <a href="#/terms" className="transition hover:text-[#2563eb]">
+                Terms
+              </a>
             </div>
-          </div>
-        </section>
-        <section ref={industryRef} className="relative z-10 w-full pb-14 sm:pb-16 lg:pb-20">
-          <style>{`
-            @keyframes industryTickerRight {
-              0% { transform: translateX(-50%); }
-              100% { transform: translateX(0%); }
-            }
-          `}</style>
-          <div className="relative overflow-hidden rounded-[28px] border border-black/10 bg-white px-6 py-10 shadow-[0_28px_80px_-56px_rgba(0,0,0,0.24)] sm:px-8 sm:py-12 lg:px-10 lg:py-14">
-            <div className="pointer-events-none absolute inset-0 opacity-[0.05] [background-image:radial-gradient(rgba(0,0,0,0.85)_0.8px,transparent_0.8px)] [background-size:14px_14px]" />
-            <div className="relative mx-auto w-full max-w-6xl">
-              <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">By Industry</p>
-              <h3 className="mt-3 max-w-4xl text-3xl font-black leading-tight tracking-[-0.03em] text-[#0b1324] sm:text-4xl">
-                Built for service businesses that cannot afford missed calls.
-              </h3>
-              <p className="mt-4 max-w-3xl text-base font-semibold leading-relaxed text-slate-600 sm:text-lg">
-                Potential business types that use My AI PA, scrolling live from left to right.
-              </p>
-
-              <div className="mt-8 overflow-hidden rounded-3xl border border-slate-200 bg-slate-50/70 p-3 sm:p-4">
-                <div
-                  className="flex w-max items-stretch gap-4"
-                  style={{ animation: "industryTickerRight 46s linear infinite" }}
-                >
-                  {industryScrollerItems.concat(industryScrollerItems).map((item, idx) => (
-                    <div key={`${item.name}-${idx}`} className="w-[260px] shrink-0 rounded-2xl border border-slate-200 bg-white/90 p-5 sm:w-[300px]">
-                      <div className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-100 text-lg text-cyan-700">{item.icon}</div>
-                      <p className="mt-3 text-lg font-black text-slate-900">{item.name}</p>
-                      <p className="mt-2 text-sm font-semibold leading-relaxed text-slate-600">{item.body}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-        <section ref={callFlowRef} className="relative z-10 w-full pb-14 sm:pb-16 lg:pb-20">
-          <div className="relative overflow-hidden rounded-[28px] border border-black/10 bg-white px-6 py-10 shadow-[0_28px_80px_-56px_rgba(0,0,0,0.24)] sm:px-8 sm:py-12 lg:px-10 lg:py-14">
-            <div className="pointer-events-none absolute inset-0 opacity-[0.05] [background-image:radial-gradient(rgba(0,0,0,0.85)_0.8px,transparent_0.8px)] [background-size:14px_14px]" />
-            <div className="relative mx-auto w-full max-w-6xl">
-              <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">How It Works</p>
-              <h3 className="mt-3 max-w-3xl text-3xl font-black leading-tight tracking-[-0.03em] text-[#0b1324] sm:text-4xl">
-                From incoming call to owner follow-up in four clear steps.
-              </h3>
-              <p className="mt-4 max-w-3xl text-lg font-semibold leading-relaxed text-slate-600 sm:text-xl">
-                My AI PA answers immediately, handles the conversation professionally, captures key details, and sends a summary so you can call back fast.
-              </p>
-
-              <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                {[
-                  {
-                    title: "1. Customer calls",
-                    body: "Your business line rings and My AI PA picks up quickly so opportunities are not missed.",
-                    icon: "📞",
-                    iconTone: "bg-cyan-100 text-cyan-700",
-                  },
-                  {
-                    title: "2. AI assistant answers",
-                    body: "It greets the caller, asks qualifying questions, and handles common FAQs in a natural tone.",
-                    icon: "🤝",
-                    iconTone: "bg-blue-100 text-blue-700",
-                  },
-                  {
-                    title: "3. Lead details captured",
-                    body: "Intent, urgency, and callback details are structured automatically during the call.",
-                    icon: "🧾",
-                    iconTone: "bg-indigo-100 text-indigo-700",
-                  },
-                  {
-                    title: "4. Instant owner text",
-                    body: "A concise summary is texted to you so you can prioritize and return the call confidently.",
-                    icon: "💬",
-                    iconTone: "bg-emerald-100 text-emerald-700",
-                  },
-                ].map((step) => (
-                  <div key={step.title} className="rounded-2xl border border-slate-200 bg-slate-50/80 p-5">
-                    <div className="mb-3 flex items-center gap-2">
-                      <span className={`inline-flex h-8 w-8 items-center justify-center rounded-xl text-lg ${step.iconTone}`}>{step.icon}</span>
-                      <span className="text-xs font-black uppercase tracking-[0.12em] text-slate-500">Step</span>
-                    </div>
-                    <p className="text-sm font-black uppercase tracking-[0.12em] text-slate-900">{step.title}</p>
-                    <p className="mt-3 text-sm font-semibold leading-relaxed text-slate-600 sm:text-base">{step.body}</p>
-                  </div>
-                ))}
-              </div>
-
-              <div className="mt-8">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDemoOpen(true);
-                  }}
-                  className="rounded-full bg-gradient-to-r from-cyan-500 via-blue-500 to-indigo-500 px-8 py-4 text-sm font-black uppercase tracking-[0.14em] text-white shadow-[0_20px_34px_-18px_rgba(59,130,246,0.6)] sm:text-base"
-                >
-                  Call The Demo
-                </button>
-              </div>
-            </div>
-          </div>
-        </section>
-        <section ref={setupSectionRef} className="relative z-10 w-full pb-14 sm:pb-16 lg:pb-20">
-          <div className="relative overflow-hidden rounded-[28px] border border-black/10 bg-white px-6 py-10 shadow-[0_28px_80px_-56px_rgba(0,0,0,0.28)] sm:px-8 sm:py-12 lg:px-10 lg:py-14">
-            <div className="pointer-events-none absolute inset-0 opacity-[0.05] [background-image:radial-gradient(rgba(0,0,0,0.85)_0.8px,transparent_0.8px)] [background-size:14px_14px]" />
-            <div className="relative mx-auto w-full max-w-6xl">
-              <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">Setup Flow</p>
-              <h3 className="mt-3 max-w-3xl text-3xl font-black leading-tight tracking-[-0.03em] text-[#0b1324] sm:text-4xl">
-                How to get My AI PA live in a few guided steps.
-              </h3>
-              <p className="mt-4 max-w-3xl text-lg font-semibold leading-relaxed text-slate-600 sm:text-xl">
-                Search your business profile, confirm call-handling preferences, and publish your assistant so it can start answering calls.
-              </p>
-
-              <div className="mt-8 grid gap-4 md:grid-cols-3">
-                {[
-                  {
-                    title: "1. Find your business",
-                    body: "Use Google Business Profile or enter your business details manually to get started quickly.",
-                    icon: "🏢",
-                    iconTone: "bg-cyan-100 text-cyan-700",
-                  },
-                  {
-                    title: "2. Configure call behavior",
-                    body: "Set greeting tone, FAQ behavior, escalation rules, and where callback details should be delivered.",
-                    icon: "🎛",
-                    iconTone: "bg-indigo-100 text-indigo-700",
-                  },
-                  {
-                    title: "3. Go live",
-                    body: "Publish the setup and test one call to confirm transcript quality, lead capture, and text delivery.",
-                    icon: "🚀",
-                    iconTone: "bg-emerald-100 text-emerald-700",
-                  },
-                ].map((step) => (
-                  <div key={step.title} className="rounded-2xl border border-slate-200 bg-slate-50/80 p-5">
-                    <div className="mb-3 flex items-center gap-2">
-                      <span className={`inline-flex h-8 w-8 items-center justify-center rounded-xl text-lg ${step.iconTone}`}>{step.icon}</span>
-                      <span className="text-xs font-black uppercase tracking-[0.12em] text-slate-500">Step</span>
-                    </div>
-                    <p className="text-sm font-black uppercase tracking-[0.12em] text-slate-900">{step.title}</p>
-                    <p className="mt-3 text-sm font-semibold leading-relaxed text-slate-600 sm:text-base">{step.body}</p>
-                  </div>
-                ))}
-              </div>
-
-              <div className="mt-8">
-                <button
-                  type="button"
-                  onClick={() => {
-                    window.location.hash = "/signup";
-                  }}
-                  className="rounded-full border border-slate-300 bg-white px-8 py-4 text-sm font-black uppercase tracking-[0.14em] text-slate-900 shadow-[0_12px_24px_-18px_rgba(0,0,0,0.2)] sm:text-base"
-                >
-                  See Setup Flow
-                </button>
-              </div>
-            </div>
-          </div>
-        </section>
-        <section className="relative z-10 w-full pb-14 sm:pb-16 lg:pb-20">
-          <div className="relative overflow-hidden rounded-[28px] border border-black/10 bg-white px-6 py-10 shadow-[0_28px_80px_-56px_rgba(0,0,0,0.24)] sm:px-8 sm:py-12 lg:px-10 lg:py-14">
-            <div className="pointer-events-none absolute inset-0 opacity-[0.05] [background-image:radial-gradient(rgba(0,0,0,0.85)_0.8px,transparent_0.8px)] [background-size:14px_14px]" />
-            <div className="relative mx-auto flex w-full max-w-6xl flex-col items-start justify-between gap-6 lg:flex-row lg:items-center">
-              <div>
-                <h3 className="max-w-3xl text-3xl font-black leading-tight tracking-[-0.03em] text-[#0b1324] sm:text-4xl">
-                  Wait are you waiting for
-                </h3>
-                <p className="mt-3 max-w-2xl text-base font-semibold leading-relaxed text-slate-600 sm:text-lg">
-                  Run one call demo first, then launch when you are confident with the script and lead capture.
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-3">
-                <button
-                  type="button"
-                  onClick={() => setDemoOpen(true)}
-                  className="rounded-full bg-gradient-to-r from-cyan-500 via-blue-500 to-indigo-500 px-8 py-4 text-sm font-black uppercase tracking-[0.14em] text-white shadow-[0_20px_34px_-18px_rgba(59,130,246,0.6)] sm:text-base"
-                >
-                  Call The Demo
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    window.location.hash = "/signup";
-                  }}
-                  className="rounded-full border border-slate-300 bg-white px-8 py-4 text-sm font-black uppercase tracking-[0.14em] text-slate-900 shadow-[0_12px_24px_-18px_rgba(0,0,0,0.2)] sm:text-base"
-                >
-                  See Setup Flow
-                </button>
-              </div>
-            </div>
-          </div>
-        </section>
-        <footer className="relative z-10 w-full pb-10">
-          <div className="mx-auto w-full max-w-6xl border-t border-slate-200/90 pt-5">
-            <div className="flex flex-col gap-3 text-sm font-semibold text-slate-500 sm:flex-row sm:items-center sm:justify-between">
-              <p>© MyAIPA All rights reserved. Made in Canada</p>
-              <div className="flex items-center gap-6">
-                <a href="#/privacy" className="transition hover:text-slate-700">
-                  Privacy Policy
-                </a>
-                <a href="#/terms" className="transition hover:text-slate-700">
-                  Terms of Service
-                </a>
-              </div>
-            </div>
-          </div>
-        </footer>
-        {!chatOpen ? (
-          <button
-            type="button"
-            onClick={() => setChatOpen(true)}
-            className="fixed bottom-5 right-5 z-40 rounded-full bg-gradient-to-r from-emerald-700 to-amber-500 px-5 py-3 text-sm font-black uppercase tracking-[0.14em] text-white shadow-[0_25px_45px_-20px_rgba(0,0,0,0.65)]"
-          >
-            Chat
-          </button>
-        ) : null}
-        {chatOpen ? (
-          <ConciergeWidget
-            sections={sections}
-            mode="floating"
-            onClose={() => setChatOpen(false)}
-            onFocusChange={(section, meta) => {
-              applyAgentFocus(sectionById[section.id] || section, meta);
-            }}
-          />
-        ) : null}
-        {false ? <AiOpsPanel callFlowRef={callFlowRef} toolsRef={toolsRef} dataRef={dataRef} floating /> : null}
-        <DemoModal
-          open={demoOpen}
-          onClose={() => setDemoOpen(false)}
-          onStartSetup={() => {
-            setDemoOpen(false);
-            window.location.hash = "/signup";
-          }}
-        />
-      </div>
+          </footer>
+        </div>
+      </section>
     </main>
   );
 }
+
+export default LandingPage;
