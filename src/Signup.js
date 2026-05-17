@@ -373,8 +373,8 @@ function Icon({ name, className = "h-6 w-6" }) {
 
 function BrandLogo() {
   return (
-    <div className="flex items-center gap-3">
-      <span className="grid h-[52px] w-[52px] place-items-center text-white xl:h-14 xl:w-14">
+    <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
+      <span className="grid h-11 w-11 shrink-0 place-items-center text-white sm:h-[52px] sm:w-[52px] xl:h-14 xl:w-14">
         <svg viewBox="0 0 72 72" className="h-full w-full" fill="none" aria-hidden="true">
           <g transform="translate(2 0)">
             <path d="M14 40v-6C14 21.8 23.8 12 36 12s22 9.8 22 22v6" stroke="currentColor" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
@@ -392,7 +392,7 @@ function BrandLogo() {
           })}
         </svg>
       </span>
-      <span className="text-[2.1rem] font-black leading-none tracking-[-0.045em] text-white sm:text-[2.45rem] xl:text-[2.65rem]">
+      <span className="min-w-0 text-[1.75rem] font-black leading-none tracking-[-0.045em] text-white sm:text-[2.45rem] xl:text-[2.65rem]">
         My <span className="bg-[linear-gradient(90deg,#2563eb,#8fbfff)] bg-clip-text text-transparent">AI PA</span>
       </span>
     </div>
@@ -410,10 +410,10 @@ function Benefit({ icon, children }) {
 
 function Stepper({ currentStep }) {
   return (
-    <div className="mx-auto mt-5 flex w-full max-w-[590px] items-center justify-start gap-3 overflow-x-auto px-1 pb-2 sm:justify-center sm:overflow-visible sm:px-3 sm:pb-0">
+    <div className="mx-auto mt-5 flex w-full max-w-full snap-x items-center justify-start gap-2 overflow-x-auto px-1 pb-2 sm:max-w-[590px] sm:justify-center sm:gap-3 sm:overflow-visible sm:px-3 sm:pb-0">
       {SETUP_STEPS.map((step, index) => (
         <React.Fragment key={step.number}>
-          <div className="flex items-center gap-3">
+          <div className="flex shrink-0 snap-center items-center gap-2 sm:gap-3">
             <span
               className={
                 "grid h-9 w-9 place-items-center rounded-full text-sm font-bold shadow-sm " +
@@ -441,7 +441,7 @@ function TradeCard({ trade, selected, onClick }) {
       type="button"
       onClick={onClick}
       className={
-        "relative grid min-h-[82px] min-w-0 place-items-center rounded-xl border bg-white px-2 py-3 text-center transition " +
+        "relative grid min-h-[82px] min-w-0 place-items-center rounded-xl border bg-white px-2 py-3 text-center transition sm:min-h-[86px] " +
         (selected
           ? "border-blue-600 shadow-[0_18px_34px_-24px_rgba(37,99,235,0.9),0_0_0_1px_rgba(124,58,237,0.38)_inset]"
           : "border-slate-200 shadow-sm hover:border-blue-300 hover:shadow-md")
@@ -455,7 +455,7 @@ function TradeCard({ trade, selected, onClick }) {
       <span className={selected ? "text-blue-600 drop-shadow-[0_0_12px_rgba(37,99,235,0.22)]" : "text-slate-800"}>
         <Icon name={trade.icon} className="h-7 w-7" />
       </span>
-      <span className="text-sm font-semibold leading-none text-slate-950">{trade.label}</span>
+      <span className="text-[0.82rem] font-semibold leading-tight text-slate-950 sm:text-sm">{trade.label}</span>
     </button>
   );
 }
@@ -466,7 +466,7 @@ function AreaChip({ area, selected, onClick }) {
       type="button"
       onClick={onClick}
       className={
-        "min-h-[44px] rounded-xl border px-5 py-2 text-base font-semibold transition " +
+        "min-h-[44px] rounded-xl border px-4 py-2 text-sm font-semibold transition sm:px-5 sm:text-base " +
         (selected
           ? "border-blue-500 bg-white text-blue-600 shadow-[0_10px_26px_-18px_rgba(37,99,235,0.9),0_0_0_1px_rgba(99,102,241,0.16)_inset]"
           : "border-slate-200 bg-white text-slate-700 hover:border-blue-300")
@@ -483,7 +483,7 @@ function SpecializationCard({ item, selected, onClick }) {
       type="button"
       onClick={onClick}
       className={
-        "relative flex min-h-[108px] min-w-0 flex-col items-center justify-center gap-2 rounded-xl border bg-white px-3 py-4 text-center transition " +
+        "relative flex min-h-[104px] min-w-0 flex-col items-center justify-center gap-2 rounded-xl border bg-white px-2.5 py-3 text-center transition sm:min-h-[108px] sm:px-3 sm:py-4 " +
         (selected
           ? "border-blue-600 bg-blue-50/35 shadow-[0_18px_34px_-24px_rgba(37,99,235,0.9),0_0_0_1px_rgba(124,58,237,0.32)_inset]"
           : "border-slate-200 shadow-sm hover:border-blue-300 hover:bg-slate-50/80 hover:shadow-md")
@@ -560,7 +560,7 @@ function SpecializationPreview({ selectedLabels }) {
 function OpeningDialoguePanel({ selectedDialogueId, onSelectDialogue, notes, onNotesChange }) {
   return (
     <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white/96 shadow-[0_34px_90px_-70px_rgba(15,23,42,0.8)]">
-      <div className="p-5 sm:p-6">
+      <div className="p-4 sm:p-6">
         <div className="flex items-start gap-4">
           <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-blue-100 text-blue-600 shadow-[0_18px_34px_-24px_rgba(37,99,235,0.9)]">
             <span className="grid h-9 w-9 place-items-center rounded-xl bg-blue-600 text-white">
@@ -568,7 +568,7 @@ function OpeningDialoguePanel({ selectedDialogueId, onSelectDialogue, notes, onN
             </span>
           </span>
           <div>
-            <h2 className="text-[26px] font-black leading-tight tracking-[-0.03em] text-slate-950">2. Anything you would like to add?</h2>
+            <h2 className="text-[1.45rem] font-black leading-tight tracking-[-0.03em] text-slate-950 sm:text-[26px]">2. Anything you would like to add?</h2>
             <p className="mt-1.5 text-base font-medium leading-6 text-blue-700/75">Add any extra details that will help your AI assistant.</p>
           </div>
         </div>
@@ -619,7 +619,7 @@ function OpeningDialoguePanel({ selectedDialogueId, onSelectDialogue, notes, onN
         </div>
       </div>
 
-      <div className="border-t border-slate-200 bg-slate-50/50 px-5 py-4 sm:px-6">
+      <div className="border-t border-slate-200 bg-slate-50/50 px-4 py-4 sm:px-6">
         <div className="flex items-center gap-3 text-sm font-medium text-blue-700/75">
           <Icon name="info" className="h-5 w-5 shrink-0 text-blue-600" />
           <span>You can update this later anytime in your settings.</span>
@@ -648,7 +648,7 @@ function VoiceDemoStep({ agent }) {
   return (
     <section className="mt-5 grid gap-6">
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white/96 shadow-[0_34px_90px_-70px_rgba(15,23,42,0.8)]">
-        <div className="p-5 sm:p-6">
+        <div className="p-4 sm:p-6">
           <div className="flex items-start gap-4">
             <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-blue-100 text-blue-600 shadow-[0_18px_34px_-24px_rgba(37,99,235,0.9)]">
               <span className="grid h-9 w-9 place-items-center rounded-xl bg-blue-600 text-white">
@@ -656,12 +656,12 @@ function VoiceDemoStep({ agent }) {
               </span>
             </span>
             <div>
-              <h2 className="text-[26px] font-black leading-tight tracking-[-0.03em] text-slate-950">3. Hear your agent's voice</h2>
+              <h2 className="text-[1.45rem] font-black leading-tight tracking-[-0.03em] text-slate-950 sm:text-[26px]">3. Hear your agent's voice</h2>
               <p className="mt-1.5 text-base font-medium leading-6 text-blue-700/75">Play the Vapi voice demo before launch.</p>
             </div>
           </div>
 
-          <div className="mt-6 rounded-2xl border border-blue-100 bg-blue-50/70 p-5">
+          <div className="mt-6 rounded-2xl border border-blue-100 bg-blue-50/70 p-4 sm:p-5">
             <div className="text-xs font-black uppercase tracking-[0.16em] text-blue-600/70">Official Vapi voice sample</div>
             <div className="mt-2 text-xl font-black text-slate-950">{agent.label}</div>
             {agent.sampleSrc ? (
@@ -677,7 +677,7 @@ function VoiceDemoStep({ agent }) {
           </div>
         </div>
 
-        <div className="border-t border-slate-200 bg-slate-50/50 px-5 py-4 sm:px-6">
+        <div className="border-t border-slate-200 bg-slate-50/50 px-4 py-4 sm:px-6">
           <div className="flex items-center gap-3 text-sm font-medium text-blue-700/75">
             <Icon name="info" className="h-5 w-5 shrink-0 text-blue-600" />
             <span>The live agent will use your configured greeting, not Vapi's public sample script.</span>
@@ -700,7 +700,7 @@ function ReviewPanel({ trade, areas, specializations, voice, details, phoneSetup
   ];
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white/96 p-5 shadow-[0_34px_90px_-70px_rgba(15,23,42,0.8)] sm:p-6">
+    <div className="rounded-2xl border border-slate-200 bg-white/96 p-4 shadow-[0_34px_90px_-70px_rgba(15,23,42,0.8)] sm:p-6">
       <h2 className="text-xl font-black tracking-[-0.02em] text-slate-950">Review your setup</h2>
       <p className="mt-1 text-sm font-medium text-slate-500">Confirm the basics before we send the setup brief.</p>
       <div className="mt-5 grid gap-3 sm:grid-cols-2">
@@ -721,7 +721,7 @@ function TrialButton({ disabled, busy, label = "Start free trial" }) {
       type="submit"
       disabled={disabled || busy}
       className={
-        "mx-auto mt-5 flex h-14 w-full max-w-[500px] items-center justify-center gap-4 rounded-xl text-xl font-black text-white transition " +
+        "mx-auto mt-5 flex h-14 w-full max-w-[500px] items-center justify-center gap-3 rounded-xl text-base font-black text-white transition sm:gap-4 sm:text-xl " +
         (disabled || busy
           ? "cursor-not-allowed bg-slate-300"
           : "bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 shadow-[0_26px_65px_-34px_rgba(79,70,229,0.95)] hover:-translate-y-0.5 hover:brightness-110")
@@ -880,14 +880,14 @@ export default function Signup() {
   return (
     <main className="min-h-screen bg-[linear-gradient(135deg,#f8fbff_0%,#ffffff_45%,#edf4ff_100%)] text-slate-950">
       <header className="min-h-16 bg-[#020918] shadow-[0_24px_60px_-48px_rgba(15,23,42,0.85)]">
-        <div className="mx-auto flex min-h-16 max-w-[1440px] items-center px-5 py-3 sm:px-12">
+        <div className="mx-auto flex min-h-16 max-w-[1440px] items-center px-4 py-3 sm:px-12">
           <BrandLogo />
         </div>
       </header>
 
-      <form onSubmit={submitSignup} className="mx-auto max-w-[1160px] px-4 pb-8 pt-5 sm:px-8">
+      <form onSubmit={submitSignup} className="mx-auto max-w-[1160px] px-3 pb-8 pt-5 sm:px-6 lg:px-8">
         <section className="text-center">
-          <h1 className="text-[clamp(2rem,9vw,2.75rem)] font-black leading-tight tracking-[-0.04em] text-slate-950">
+          <h1 className="text-[clamp(1.85rem,8vw,2.75rem)] font-black leading-tight tracking-[-0.04em] text-slate-950">
             Create your AI phone assistant
           </h1>
           <p className="mt-1 text-base font-medium text-slate-600 sm:text-lg">Set up your business assistant in minutes.</p>
@@ -903,10 +903,10 @@ export default function Signup() {
 
         {currentStep === 1 ? (
           <section className="mt-5 grid gap-6">
-            <div className="rounded-2xl border border-slate-200 bg-white/96 p-5 shadow-[0_34px_90px_-70px_rgba(15,23,42,0.8)] sm:p-6">
+            <div className="rounded-2xl border border-slate-200 bg-white/96 p-4 shadow-[0_34px_90px_-70px_rgba(15,23,42,0.8)] sm:p-6">
               <section>
                 <h2 className="text-xl font-black tracking-[-0.02em] text-slate-950">1. Choose your trade</h2>
-                <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+                <div className="mt-3 grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3 xl:grid-cols-6">
                   {TRADE_OPTIONS.map((trade) => (
                     <TradeCard
                       key={trade.id}
@@ -921,7 +921,7 @@ export default function Signup() {
               <section className="mt-4">
                 <h2 className="text-xl font-black tracking-[-0.02em] text-slate-950">2. Service area</h2>
                 <p className="mt-0.5 text-sm font-medium text-slate-500">Select the Southern Ontario areas you serve.</p>
-                <div className="mt-3 flex flex-wrap gap-3">
+                <div className="mt-3 flex flex-wrap gap-2.5 sm:gap-3">
                   {AREA_OPTIONS.map((area) => (
                     <AreaChip key={area} area={area} selected={selectedAreas.includes(area)} onClick={() => toggleArea(area)} />
                   ))}
@@ -998,11 +998,11 @@ export default function Signup() {
 
         {currentStep === 2 ? (
           <section className="mt-5 grid gap-6">
-            <div className="rounded-2xl border border-slate-200 bg-white/96 p-5 shadow-[0_34px_90px_-70px_rgba(15,23,42,0.8)] sm:p-6">
+            <div className="rounded-2xl border border-slate-200 bg-white/96 p-4 shadow-[0_34px_90px_-70px_rgba(15,23,42,0.8)] sm:p-6">
               <section>
                 <h2 className="text-xl font-black tracking-[-0.02em] text-slate-950">1. Areas of specialization</h2>
                 <p className="mt-1 text-sm font-medium text-slate-500">Select all that apply.</p>
-                <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
+                <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3 xl:grid-cols-5">
                   {SPECIALIZATION_OPTIONS.map((item) => (
                     <SpecializationCard
                       key={item.id}
@@ -1072,7 +1072,7 @@ export default function Signup() {
           label={currentStep === 4 ? "Start free trial" : "Save & continue"}
         />
 
-        <div className="mt-3 flex items-center justify-center gap-2 text-center text-base font-medium text-slate-500">
+        <div className="mt-3 flex items-center justify-center gap-2 text-center text-sm font-medium text-slate-500 sm:text-base">
           <Icon name="lock" className="h-4 w-4" />
           Your data is secure and will never be shared.
         </div>

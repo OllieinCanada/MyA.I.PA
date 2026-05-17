@@ -41,6 +41,7 @@ const sections = [
     title: "6. Text Messages, Calls, and Consent",
     body: [
       "The service may send text messages or other electronic messages to business owners, staff, callers, or customers. You are responsible for ensuring that message recipients have provided any required consent and that messages include required identification, contact, opt-out, and other compliance information where applicable.",
+      "Where required by law or messaging-provider rules, caller-facing texts should include a clear way to opt out, such as replying STOP, and your business must honor opt-out requests promptly.",
       "You are responsible for call recording and disclosure requirements. If your jurisdiction or use case requires notice or consent before recording, transcribing, or analyzing calls, you must configure your greetings, workflows, and business practices accordingly.",
     ],
   },
@@ -110,9 +111,9 @@ function Terms() {
       <section className="border-b border-white/10 bg-[radial-gradient(circle_at_20%_0%,rgba(255,106,0,0.22),transparent_32%),linear-gradient(180deg,#081832,#07142a)]">
         <div className="mx-auto w-full max-w-5xl px-4 py-9 sm:px-8 lg:py-14">
           <a href="#/" className="text-base font-black uppercase tracking-[0.16em] text-[#ffb36b] transition hover:text-white">My AI PA</a>
-          <h1 className="mt-6 text-[clamp(2.3rem,10vw,4.5rem)] font-black leading-tight tracking-[-0.05em]">Terms of Service</h1>
-          <p className="mt-4 max-w-3xl text-xl font-medium leading-8 text-[#d8e7f7]">Effective date: May 11, 2026</p>
-          <p className="mt-4 max-w-3xl text-lg font-medium leading-8 text-[#c8d7ea]">
+          <h1 className="mt-6 text-[clamp(2rem,9vw,4.5rem)] font-black leading-tight tracking-[-0.05em]">Terms of Service</h1>
+          <p className="mt-4 max-w-3xl text-lg font-medium leading-8 text-[#d8e7f7] sm:text-xl">Effective date: May 11, 2026</p>
+          <p className="mt-4 max-w-3xl text-base font-medium leading-7 text-[#c8d7ea] sm:text-lg sm:leading-8">
             These terms are designed for an AI phone answering service used by trades and local service businesses.
           </p>
         </div>
@@ -122,10 +123,10 @@ function Terms() {
         <div className="space-y-5">
           {sections.map((section) => (
             <article key={section.title} className="rounded-[24px] border border-white/12 bg-white/[0.045] p-5 shadow-[0_22px_60px_-46px_rgba(0,0,0,0.9)] sm:p-6">
-              <h2 className="text-[1.4rem] font-black tracking-[-0.02em] text-white">{section.title}</h2>
+              <h2 className="text-[1.25rem] font-black tracking-[-0.02em] text-white sm:text-[1.4rem]">{section.title}</h2>
               <div className="mt-3 space-y-3">
                 {section.body.map((paragraph) => (
-                  <p key={paragraph} className="text-lg font-medium leading-8 text-[#d8e7f7]">{paragraph}</p>
+                  <p key={paragraph} className="text-base font-medium leading-7 text-[#d8e7f7] sm:text-lg sm:leading-8">{paragraph}</p>
                 ))}
               </div>
             </article>

@@ -19,13 +19,13 @@ const heroCallTranscript = [
     time: "6:42 PM",
     speaker: "Caller",
     accent: "bg-[#9fb4cf]",
-    text: "Hi, I need someone to wire up my hot tub. I didn't expect anyone to pick up since I'm calling after hours",
+    text: "Hi, I need someone to wire up my hot tub. I didn't expect anyone to pick up since I'm calling after hours.",
   },
   {
     time: "6:42 PM",
     speaker: "My AI PA",
     accent: "bg-[#66e7b4]",
-    text: "At Tim's Electrical we're always here to help. I'll text these details to the appropriate staff member for a call back ASAP",
+    text: "At Tim's Electrical we're always here to help. Got it. I'll forward the details to our service team.",
   },
 ];
 
@@ -63,32 +63,32 @@ const benefitCards = [
     eyebrow: "Electrical",
     accent: "from-blue-600 to-blue-500",
     glow: "shadow-[0_18px_40px_-30px_rgba(56,189,248,0.42)]",
-    title: "Catch wiring, service, and quote calls while you are on-site.",
-    body: "Panel upgrades, hot tub wiring, breaker issues, and estimate requests still get handled when your hands are full or you are driving between jobs.",
+    title: "Catch repair and estimate calls while you are on-site.",
+    body: "Panel upgrades, hot tub wiring, breaker issues, and quote requests still get answered while your hands are full, with job details texted to you for follow-up.",
   },
   {
     code: "PL",
     eyebrow: "Plumbing",
     accent: "from-blue-400 to-blue-500",
     glow: "shadow-[0_18px_40px_-30px_rgba(96,165,250,0.42)]",
-    title: "Plumbing calls answered fast",
-    body: "Burst pipes, drain calls, fixture installs, and emergency-service requests stay moving while you're on the job so no plumbing lead gets left waiting.",
+    title: "Keep urgent plumbing calls from going to voicemail.",
+    body: "Burst pipes, drain calls, fixture installs, and emergency-service requests stay moving after hours or while you are on another job.",
   },
   {
     code: "HV",
     eyebrow: "HVAC",
     accent: "from-emerald-500 to-emerald-400",
     glow: "shadow-[0_18px_40px_-30px_rgba(52,211,153,0.42)]",
-    title: "Handle repair calls even after-hours or in peak season.",
-    body: "Furnace, AC, and maintenance callers can get a real response, leave the right details, and stay warm instead of calling the next company.",
+    title: "Handle HVAC repair calls after hours and in peak season.",
+    body: "Furnace, AC, and maintenance callers get a real response, leave the right job details, and stay with you instead of calling the next company.",
   },
   {
-    code: "RF",
-    eyebrow: "Roofing & Exterior",
+    code: "GC",
+    eyebrow: "General Contractors",
     accent: "from-orange-500 to-orange-400",
     glow: "shadow-[0_18px_40px_-30px_rgba(250,204,21,0.34)]",
-    title: "Keep storm, repair, and estimate calls organized.",
-    body: "When you are on a roof or a site visit, our system makes sure homeowner leads get answered, details captured, and follow-ups never fall through.",
+    title: "Keep larger project and estimate calls organized.",
+    body: "Renovations, additions, repairs, and site-visit requests get answered while you are managing crews, with project details sent cleanly to your phone.",
   },
 ];
 
@@ -110,28 +110,46 @@ const waveformBars = [
 
 const pricingCards = [
   {
-    name: "Light",
-    price: "$19.99",
+    name: "Essential",
+    price: "$49",
     suffix: "/month",
     eyebrow: "Current live plan",
     featured: true,
-    points: ["24/7 call answering", "Lead summary text to the owner", "Caller confirmation text", "Basic FAQ handling", "14-day free trial with no card required"],
+    accent: "from-[#2db4ff] via-[#2563eb] to-[#ff8b1f]",
+    tint: "bg-[linear-gradient(145deg,#ffffff_0%,#f7fbff_58%,#fff6eb_100%)]",
+    minuteNote: "Includes 60 AI call minutes. Extra minutes billed clearly as usage.",
+    points: ["24/7 AI answering", "60 minutes included", "Text summaries for both sides"],
   },
   {
-    name: "Premium",
-    price: "$29.99",
+    name: "Growth",
+    price: "$99",
     suffix: "/month",
     eyebrow: "Preview",
     featured: false,
     comingSoon: true,
-    points: ["Advanced call routing", "Priority urgency tagging", "Expanded script and FAQ controls", "Enhanced owner notifications", "Built for teams ready to scale call handling"],
+    accent: "from-[#38d8d0] via-[#2db4ff] to-[#2563eb]",
+    tint: "bg-[linear-gradient(145deg,#f7fcff_0%,#eaf7ff_58%,#eefcf9_100%)]",
+    minuteNote: "Planned: 200 AI call minutes for busier service teams.",
+    points: ["200 minutes included", "Urgency tagging", "Expanded FAQ controls"],
+  },
+  {
+    name: "Pro",
+    price: "$199",
+    suffix: "/month",
+    eyebrow: "Preview",
+    featured: false,
+    comingSoon: true,
+    accent: "from-[#ff8b1f] via-[#2db4ff] to-[#38d8d0]",
+    tint: "bg-[linear-gradient(145deg,#f8fcff_0%,#eaf6ff_56%,#fff7ed_100%)]",
+    minuteNote: "Planned: 500 AI call minutes for higher call volume.",
+    points: ["500 minutes included", "Advanced call routing", "Team notifications"],
   },
 ];
 
 const setupSteps = [
-  "Click on the free trial button and fill in your business' info. Then set your custom greeting and common questions.",
-  "Run a test call, listen back, and go live when you are comfortable.",
-  "Keep your current number and forward calls to your My AI PA number.",
+  "Click Start Free Trial, add your business info, then set your greeting and common questions.",
+  "Run a test call, listen back, and turn it on when you are comfortable.",
+  "Keep your current business number and forward calls to My AI PA.",
 ];
 
 const testimonialCards = [
@@ -163,6 +181,21 @@ const faqs = [
   { q: "What if someone calls after hours?", a: "Your AI assistant can still answer, help the caller, and send both sides a text follow-up." },
   { q: "Can I control what it says?", a: "Yes. You set the custom greeting and common questions so it fits your business." },
   { q: "How hard is setup?", a: "It is meant to be simple: fill in your business info, test a call, then go live with no downtime." },
+];
+
+const trustCards = [
+  {
+    title: "Transparent AI calls",
+    body: "Callers can be told they are speaking with an AI assistant, and the service focuses on answering questions and collecting job details.",
+  },
+  {
+    title: "Privacy and terms published",
+    body: "The Privacy Policy and Terms explain call audio, transcripts, summaries, text messages, service providers, retention, and AI limitations.",
+  },
+  {
+    title: "Consent-aware messaging",
+    body: "Owner alerts and caller confirmations are treated as service messages, with SMS consent and opt-out expectations covered before launch.",
+  },
 ];
 
 function formatClock(totalSeconds) {
@@ -396,12 +429,14 @@ function BenefitSymbol({ code }) {
           <circle cx="12" cy="12" r="2.7" stroke="currentColor" strokeWidth="1.8" />
         </svg>
       );
-    case "RF":
+    case "GC":
       return (
         <svg viewBox="0 0 24 24" className="h-8 w-8" fill="none" aria-hidden="true">
-          <path d="M4.8 11.6 12 6l7.2 5.6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-          <path d="M7.1 10.7v7.5h9.8v-7.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-          <path d="M9.8 18.2v-4.1h4.4v4.1" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M4.5 18.4h15" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
+          <path d="M7 18.2v-7.1l5-3.7 5 3.7v7.1" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+          <path d="M10.1 18.2v-4.6h3.8v4.6" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+          <path d="M6.3 9.8h11.4M8.2 7.2l2-2.7h3.6l2 2.7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M16.7 5.2h2.1l.9 1.7-1.5 1.4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       );
     default:
@@ -590,80 +625,116 @@ function HeroWave({ small = false }) {
   );
 }
 
+function CustomerAvatar({ compact = false }) {
+  return (
+    <span className={(compact ? "h-8 w-8" : "h-9 w-9") + " grid shrink-0 place-items-center rounded-full bg-[linear-gradient(145deg,#ffe8c7,#ffffff)] text-[#12324f] shadow-[inset_0_1px_0_rgba(255,255,255,0.96),0_8px_18px_-16px_rgba(255,184,90,0.95)]"}>
+      <svg viewBox="0 0 28 28" className={compact ? "h-8 w-8" : "h-[34px] w-[34px]"} fill="none" aria-hidden="true">
+        <path d="M5.6 23.5c1.25-5 4.1-7.45 8.4-7.45s7.15 2.45 8.4 7.45" fill="#12324f" />
+        <circle cx="14" cy="10.35" r="5.15" fill="#12324f" />
+        <path d="M6.6 9.15c2.35-5.1 10.35-6.5 14.75-.75-3.9-.95-6.75-.55-8.75.85-1.8 1.25-3.5 1.3-6 .0Z" fill="#ff9a22" />
+        <circle cx="16.7" cy="8.6" r="1.4" fill="#ffffff" opacity="0.9" />
+      </svg>
+    </span>
+  );
+}
+
+function AiAssistantAvatar({ compact = false }) {
+  return (
+    <span className={(compact ? "h-8 w-8" : "h-9 w-9") + " grid shrink-0 place-items-center rounded-full bg-[linear-gradient(145deg,#dff8ff,#ffffff)] text-[#063a83] shadow-[inset_0_1px_0_rgba(255,255,255,0.96),0_0_18px_-10px_rgba(72,255,123,0.95)]"}>
+      <svg viewBox="0 0 28 28" className={compact ? "h-8 w-8" : "h-[34px] w-[34px]"} fill="none" aria-hidden="true">
+        <rect x="6" y="8.2" width="16" height="13" rx="4.7" fill="#063a83" />
+        <path d="M9.1 8.2V5.5a4.9 4.9 0 0 1 9.8 0v2.7" stroke="#063a83" strokeWidth="2.4" strokeLinecap="round" />
+        <circle cx="11.4" cy="14.5" r="1.45" fill="#dff8ff" />
+        <circle cx="16.6" cy="14.5" r="1.45" fill="#dff8ff" />
+        <path d="M11.7 17.6c1.45 1.1 3.15 1.1 4.6 0" stroke="#dff8ff" strokeWidth="1.9" strokeLinecap="round" />
+        <path d="M22.3 11.6h2.1M22.3 17.1h2.1M3.6 11.6h2.1M3.6 17.1h2.1" stroke="#39ff6a" strokeWidth="2.2" strokeLinecap="round" />
+        <circle cx="22.5" cy="6.2" r="2.55" fill="#39ff6a" />
+      </svg>
+    </span>
+  );
+}
+
 function HeroPhoneMockup() {
   return (
     <div className="landing-phone relative mx-auto -mt-12 h-[623px] w-full max-w-[375px] rounded-[38px] border-[5px] border-[#35373e] bg-[#050912] p-2 shadow-[0_30px_80px_-34px_rgba(0,0,0,1),0_0_0_1px_rgba(255,255,255,0.22)_inset] 2xl:-mt-14 2xl:h-[646px] 2xl:max-w-[385px]">
       <div className="absolute left-1/2 top-3 z-10 h-5 w-16 -translate-x-1/2 rounded-full bg-black" />
       <div className="flex h-full flex-col overflow-hidden rounded-[30px] bg-[radial-gradient(circle_at_50%_0%,rgba(8,90,158,0.34),transparent_36%),linear-gradient(180deg,#061b34_0%,#020814_100%)] px-5 pb-3 pt-4">
-        <div className="flex items-center justify-between text-xs font-black text-white">
-          <span>9:41</span>
+        <div className="flex items-center justify-between text-white">
+          <span className="text-[0.96rem] font-black tracking-[-0.02em]">After-hours</span>
           <span className="flex items-center gap-1.5">
             <span className="h-2 w-4 rounded-sm border border-white/80" />
             <span className="h-2.5 w-5 rounded-sm border border-white/80 bg-white/20" />
           </span>
         </div>
-        <div className="-mt-2 text-center">
-          <p className="text-[1.35rem] font-black tracking-[-0.03em] text-white">Live Call</p>
+        <div className="mt-0.5 text-center">
+          <div className="inline-flex items-center gap-2 rounded-full border border-[#48ff7b]/60 bg-[#043d1c]/88 px-3 py-1 text-[0.74rem] font-black uppercase tracking-[0.14em] text-[#b9ffc9] shadow-[0_0_18px_-8px_rgba(72,255,123,0.9)]">
+            <span className="h-2 w-2 rounded-full bg-[#39ff6a] shadow-[0_0_12px_rgba(57,255,106,0.95)]" />
+            AI speaking now
+          </div>
+          <p className="mt-1 text-[1.35rem] font-black tracking-[-0.03em] text-white">Live Call</p>
           <p className="mt-1 text-[1.25rem] font-black text-[#ff7a00]">00:32</p>
           <HeroWave small />
         </div>
 
-        <div className="mt-2 rounded-[20px] border border-white/14 bg-white/[0.08] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
-          <div className="flex gap-3">
-            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white text-[#0c1726]">
-              <HeroIcon type="user" className="h-6 w-6" />
-            </span>
+        <div className="mt-1.5 rounded-[20px] border border-white/14 bg-white/[0.08] px-3 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+          <div className="flex gap-2.5">
+            <CustomerAvatar />
             <div>
-              <p className="text-base font-black text-white">Customer</p>
-              <p className="mt-1 text-[0.95rem] font-medium leading-[1.45] text-white">Hi, I need someone to wire up my hot tub.</p>
+              <p className="text-[0.96rem] font-black leading-tight text-white">Customer</p>
+              <p className="mt-0.5 text-[0.85rem] font-medium leading-[1.28] text-white">Hi, I need someone to wire up my hot tub this week.</p>
             </div>
           </div>
         </div>
 
-        <div className="mt-2 rounded-[20px] border border-[#1d78ff]/45 bg-[linear-gradient(145deg,#063a83,#0050c9)] p-3 shadow-[0_18px_46px_-28px_rgba(0,80,201,0.95),inset_0_1px_0_rgba(255,255,255,0.12)]">
-          <div className="flex gap-3">
-            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white text-[#063a83]">
-              <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
-                <rect x="6" y="8" width="12" height="9" rx="3" />
-                <path d="M9 8V5.5a3 3 0 0 1 6 0V8M9.5 12h.01M14.5 12h.01M10 15c1.2.8 2.8.8 4 0" />
-              </svg>
-            </span>
+        <div className="mt-1.5 rounded-[20px] border border-[#1d78ff]/45 bg-[linear-gradient(145deg,#063a83,#0050c9)] px-3 py-2 shadow-[0_18px_46px_-28px_rgba(0,80,201,0.95),inset_0_1px_0_rgba(255,255,255,0.12)]">
+          <div className="flex gap-2.5">
+            <AiAssistantAvatar />
             <div>
-              <p className="text-base font-black text-white">My AI PA</p>
-              <p className="mt-1 text-[0.95rem] font-medium leading-[1.45] text-white">
-                Got it! Please state your name, phone number, location of service and best call back time. I&apos;ll then text the call details to the owner.
+              <p className="text-[0.96rem] font-black leading-tight text-white">My AI PA</p>
+              <p className="mt-0.5 text-[0.85rem] font-medium leading-[1.28] text-white">
+                Yes. I can collect the details so the team can follow up.
               </p>
             </div>
           </div>
         </div>
 
-        <div className="mt-2 rounded-[20px] border border-white/14 bg-white/[0.08] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
-          <div className="flex gap-3">
-            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white text-[#0c1726]">
-              <HeroIcon type="user" className="h-6 w-6" />
-            </span>
+        <div className="mt-1.5 rounded-[20px] border border-white/14 bg-white/[0.08] px-3 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+          <div className="flex gap-2.5">
+            <CustomerAvatar />
             <div>
-              <p className="text-base font-black text-white">Customer</p>
-              <p className="mt-1 text-[0.95rem] font-medium leading-[1.45] text-white">
-                Sure. It&apos;s Brian, 905-123-4567, 63 York Street. Best call back time is 7:00 PM.
+              <p className="text-[0.96rem] font-black leading-tight text-white">Customer</p>
+              <p className="mt-0.5 text-[0.85rem] font-medium leading-[1.28] text-white">
+                Brian, 905-123-4567, 63 York Street. Best time is 7:00 PM.
               </p>
             </div>
           </div>
         </div>
 
-        <div className="mt-auto flex items-center justify-between px-8 pt-2">
-          <span className="grid h-10 w-10 place-items-center rounded-full bg-white/14 text-white">
-            <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
+        <div className="mt-1.5 rounded-[20px] border border-[#1d78ff]/45 bg-[linear-gradient(145deg,#063a83,#0050c9)] px-3 py-2 shadow-[0_18px_46px_-28px_rgba(0,80,201,0.95),inset_0_1px_0_rgba(255,255,255,0.12)]">
+          <div className="flex gap-2">
+            <AiAssistantAvatar compact />
+            <div>
+              <p className="text-[0.96rem] font-black leading-tight text-white">My AI PA</p>
+              <p className="mt-0.5 text-[0.85rem] font-medium leading-[1.28] text-white">
+                Got It! I&apos;ll forward the details of this call to our service team, and we will get back regarding pricing and scheduling.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-auto flex items-center justify-between px-10 pt-1">
+          <span className="grid h-8 w-8 place-items-center rounded-full bg-white/14 text-white">
+            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
               <path d="M12 3v10" />
               <rect x="8" y="3" width="8" height="13" rx="4" />
               <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
             </svg>
           </span>
-          <span className="grid h-11 w-11 place-items-center rounded-full bg-[#ff392e] text-white">
-            <HeroIcon type="phone" className="h-6 w-6 rotate-[135deg]" />
+          <span className="grid h-9 w-9 place-items-center rounded-full bg-[#ff392e] text-white">
+            <HeroIcon type="phone" className="h-5 w-5 rotate-[135deg]" />
           </span>
-          <span className="grid h-10 w-10 place-items-center rounded-full bg-white/14 text-white">
-            <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
+          <span className="grid h-8 w-8 place-items-center rounded-full bg-white/14 text-white">
+            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
               <path d="M4 9v6h4l5 4V5L8 9H4Z" />
               <path d="M16.5 9.5a4 4 0 0 1 0 5M19 7a8 8 0 0 1 0 10" />
             </svg>
@@ -684,37 +755,45 @@ function HeroSummaryStack() {
   ];
 
   return (
-    <div className="landing-summary space-y-4">
-      <div className="relative overflow-hidden rounded-[26px] border border-white/70 bg-[linear-gradient(145deg,#fffaf3_0%,#fff7ed_54%,#f6fbff_100%)] p-6 text-[#081123] shadow-[0_30px_88px_-42px_rgba(255,255,255,0.86),inset_0_1px_0_rgba(255,255,255,0.95)] 2xl:p-7">
-        <span className="absolute left-6 right-6 top-0 h-[3px] rounded-full bg-[linear-gradient(90deg,#ff7a00,#2563eb)] opacity-80" />
-        <h3 className="text-2xl font-black tracking-[-0.04em] 2xl:text-3xl">Texted to the owner</h3>
-        <div className="mt-4 divide-y divide-slate-300/80">
-          {rows.map(([icon, label, value]) => (
-            <div key={label} className="grid grid-cols-[30px_minmax(0,1fr)_auto] items-center gap-3 py-2.5 text-lg 2xl:grid-cols-[34px_minmax(0,1fr)_auto] 2xl:text-xl">
-              <span className="text-[#071226]">
-                <HeroIcon type={icon} className="h-5 w-5 2xl:h-6 2xl:w-6" />
-              </span>
-              <span className="font-medium">{label}</span>
-              <span className="text-right font-semibold">{value}</span>
+    <div className="landing-summary mx-auto w-full max-w-[430px] space-y-1.5 md:grid md:max-w-[900px] md:grid-cols-2 md:gap-4 md:space-y-0 xl:block xl:max-w-none xl:space-y-1.5">
+      <div className="rounded-[34px] border-[5px] border-[#27313f] bg-[#07111f] p-2 shadow-[0_30px_88px_-42px_rgba(7,17,31,0.9)]">
+        <div className="relative overflow-hidden rounded-[26px] bg-[#f8fbff] px-4 pb-2 pt-8 text-[#081123]">
+          <span className="absolute left-1/2 top-2 h-4 w-20 -translate-x-1/2 rounded-full bg-[#111827]" />
+          <div className="flex items-center justify-between gap-3 border-b border-[#dbe6f3] pb-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-[0.68rem] font-black uppercase tracking-[0.16em] text-[#2563eb]">Messages</p>
+              <h3 className="whitespace-nowrap text-[0.86rem] font-black leading-tight tracking-[-0.045em] sm:text-[1.02rem]">My AI PA - TIM&apos;S ELECTRICAL</h3>
+              <p className="mt-0.5 text-[0.78rem] font-black uppercase tracking-[0.12em] text-[#64748b]">Texted to owner</p>
             </div>
-          ))}
+            <span className="shrink-0 rounded-full bg-[#00b84a] px-2.5 py-1 text-[0.68rem] font-black uppercase tracking-[0.12em] text-white shadow-[0_0_16px_-8px_rgba(0,184,74,0.95)] sm:px-3 sm:text-xs">Now</span>
+          </div>
+          <div className="mt-4 rounded-[22px] bg-[#dbeafe] px-4 py-3 shadow-[0_8px_20px_-18px_rgba(15,23,42,0.5)]">
+            <p className="text-[0.92rem] font-black text-[#0b3b7a]">New service lead</p>
+            <div className="mt-2 space-y-1.5 text-[0.98rem] font-semibold leading-6 text-[#10233f]">
+              {rows.map(([, label, value]) => (
+                <p key={label}><span className="font-black">{label}:</span> {value}</p>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 
-      <div className="relative overflow-hidden rounded-[24px] border border-[#d7e7fb] bg-[linear-gradient(145deg,#fbfdff_0%,#eef6ff_100%)] p-5 text-[#081123] shadow-[0_24px_78px_-42px_rgba(148,190,255,0.95),inset_0_1px_0_rgba(255,255,255,0.9)]">
-        <span className="absolute inset-x-5 top-0 h-[3px] rounded-full bg-[linear-gradient(90deg,#2563eb,#8fd3ff)] opacity-75" />
-        <div className="flex gap-4">
-          <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-[linear-gradient(145deg,#0d5dc1,#0b408d)] text-white shadow-[0_14px_28px_-18px_rgba(13,93,193,0.9)]">
-            <HeroIcon type="chat" className="h-5 w-5" />
-          </span>
-          <p className="text-[1.08rem] font-medium leading-7 2xl:text-lg 2xl:leading-8">
-            <span className="text-lg font-black tracking-[-0.02em]">Texted to the customer</span>
-            <br />
+      <div className="rounded-[30px] border-[4px] border-[#27313f] bg-[#07111f] p-2 shadow-[0_24px_78px_-42px_rgba(7,17,31,0.85)]">
+        <div className="relative overflow-hidden rounded-[23px] bg-[#f8fbff] px-4 pb-2 pt-7 text-[#081123]">
+          <span className="absolute left-1/2 top-2 h-3 w-16 -translate-x-1/2 rounded-full bg-[#111827]" />
+          <div className="flex items-center justify-between gap-3 border-b border-[#dbe6f3] pb-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-[0.68rem] font-black uppercase tracking-[0.16em] text-[#2563eb]">Messages</p>
+              <h3 className="whitespace-nowrap text-[0.84rem] font-black leading-tight tracking-[-0.04em] sm:text-[0.98rem]">My AI PA - TIM&apos;S ELECTRICAL</h3>
+              <p className="mt-0.5 text-[0.74rem] font-black uppercase tracking-[0.12em] text-[#64748b]">Texted to customer</p>
+            </div>
+            <span className="shrink-0 rounded-full bg-[#00b84a] px-2.5 py-1 text-[0.68rem] font-black uppercase tracking-[0.12em] text-white shadow-[0_0_16px_-8px_rgba(0,184,74,0.95)] sm:px-3 sm:text-xs">Now</span>
+          </div>
+          <div className="mt-4 max-w-[92%] rounded-[22px] bg-[#e5e7eb] px-4 py-3 text-[0.98rem] font-semibold leading-6 text-[#111827]">
             Thanks for calling Tim&apos;s Electrical. We got your request and will follow up shortly.
-          </p>
+          </div>
         </div>
       </div>
-
     </div>
   );
 }
@@ -743,17 +822,16 @@ function HeroTradeStrip() {
 
 function VoicemailLossesArtboard() {
   const voicemailProblems = [
-    ["Customers want help", "right as they're calling"],
-    ["If you don't answer,", "they will call someone else"],
-    ["Missed calls = Missed jobs"],
-    ["Voicemail can't answer", "customer questions"],
+    ["Customers want help", "right away"],
+    ["If nobody answers,", "they may call someone else"],
+    ["Missed calls become", "missed repair jobs"],
+    ["Voicemail can't answer", "questions or collect details"],
   ];
 
   const assistantBenefits = [
-    ["Always responds instantly", "(24/7)"],
-    ["Engages callers by", "handling their inquiry"],
-    ["Answers every call", "after 3 rings"],
-    ["Answers customer's", "questions naturally"],
+    ["Always Responds", "After 3 Rings"],
+    ["Always answers when", "you can't - 24/7"],
+    ["Engages customers,", "answers questions,", "collects job details."],
   ];
 
   const processCards = [
@@ -761,11 +839,11 @@ function VoicemailLossesArtboard() {
       number: "1",
       y: 145,
       lines: [
-        "A caller has a problem",
-        "and needs help fast.",
-        "By the 2nd ring, they start",
-        "wondering if",
-        "anyone will answer.",
+        "A customer needs help",
+        "right away.",
+        "If nobody answers,",
+        "they may call the",
+        "next contractor.",
       ],
       image: "/illustrations/phone-call.svg",
     },
@@ -774,10 +852,10 @@ function VoicemailLossesArtboard() {
       y: 380,
       lines: [
         "Your AI assistant answers",
-        "right on the 3rd ring.",
-        "It uses your business info",
-        "to answer questions, collect",
-        "job details, and text both sides.",
+        "after around 3 rings.",
+        "It answers questions,",
+        "engages the caller, and",
+        "collects the job details.",
       ],
       image: "/illustrations/active-support.svg",
     },
@@ -785,11 +863,11 @@ function VoicemailLossesArtboard() {
       number: "3",
       y: 630,
       lines: [
-        "The customer gets a clear",
-        "text confirmation right away.",
-        "They feel heard and",
-        "stop searching elsewhere,",
-        "expecting your callback next.",
+        "The owner and customer",
+        "both get clear text",
+        "messages on their",
+        "cellphones for easy",
+        "follow-up.",
       ],
       image: "/illustrations/events-calendar.svg",
     },
@@ -851,7 +929,7 @@ function VoicemailLossesArtboard() {
           </div>
 
           <div className="mt-6 rounded-[22px] border border-white/30 bg-[#071832]/80 px-4 py-4 text-center">
-            <p className="text-[1.45rem] font-black leading-tight text-white">How AI Converts <span className="text-[#ff9d22]">cold callers into customers</span></p>
+            <p className="text-[1.45rem] font-black leading-tight text-white">How AI Converts <span className="text-[#ff9d22]">missed callers into customers</span></p>
           </div>
 
           <div className="mt-4 grid gap-4">
@@ -974,9 +1052,6 @@ function VoicemailLossesArtboard() {
             })}
           </g>
 
-          <circle cx="415" cy="587" r="38" fill="#09264b" stroke="#9edaff" strokeWidth="2" filter="url(#vmShadow)" />
-          <path d="M397 587h33M420 576l12 11-12 11" fill="none" stroke="#ffffff" strokeWidth="3.6" strokeLinecap="round" strokeLinejoin="round" />
-
           <g filter="url(#vmGlowGreen)">
             <rect x="455" y="319" width="357" height="557" rx="28" fill="url(#vmGreen)" stroke="#42dac4" strokeWidth="1.3" />
             <circle cx="623.5" cy="383" r="43" fill="#71e9d1" fillOpacity="0.14" stroke="#78ffe7" strokeOpacity="0.55" />
@@ -985,24 +1060,23 @@ function VoicemailLossesArtboard() {
             <circle cx="616" cy="387" r="2.8" fill="#ffffff" />
             <circle cx="631" cy="387" r="2.8" fill="#ffffff" />
             <path d="M617 395c4.5 3.6 9 3.6 13.5 0" stroke="#ffffff" strokeWidth="4" strokeLinecap="round" />
-            <text x="623.5" y="452" textAnchor="middle" fill="#ffffff" fontFamily="Arial, Helvetica, sans-serif" fontSize="21" fontWeight="900" letterSpacing="8">
+            <text x="623.5" y="452" textAnchor="middle" fill="#ffffff" fontFamily="Arial, Helvetica, sans-serif" fontSize="21" fontWeight="900" letterSpacing="5">
               AI ASSISTANT
             </text>
             <text x="623.5" y="486" textAnchor="middle" fill="#ffffff" fontFamily="Arial, Helvetica, sans-serif" fontSize="24" fontWeight="900">
-              <tspan x="623.5">Let your agent take</tspan>
-              <tspan x="623.5" dy="30">the call 24 hours,</tspan>
-              <tspan x="623.5" dy="30">7 days a week!</tspan>
+              <tspan x="623.5">AI answers when</tspan>
+              <tspan x="623.5" dy="30">you can&apos;t, 24/7.</tspan>
             </text>
             <line x1="491" y1="575" x2="756" y2="575" stroke="#55e6cf" strokeWidth="1.5" />
             {assistantBenefits.map((lines, index) => {
-              const y = 612 + index * 62;
+              const y = 625 + index * 78;
               return (
                 <g key={lines.join(" ")}>
                   <circle cx="486" cy={y + 4} r="15" fill="#62e8c7" />
                   <path d={`M479 ${y + 3}l5 5 10-12`} fill="none" stroke="#064438" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-                  <text x="524" y={y + 1} fill="#ffffff" fontFamily="Arial, Helvetica, sans-serif" fontSize="19" fontWeight="600">
+                  <text x="524" y={y + 1} fill="#ffffff" fontFamily="Arial, Helvetica, sans-serif" fontSize="18" fontWeight="700">
                     {lines.map((line, lineIndex) => (
-                      <tspan key={line} x="524" dy={lineIndex ? 24 : 0}>
+                      <tspan key={line} x="524" dy={lineIndex ? 23 : 0}>
                         {line}
                       </tspan>
                     ))}
@@ -1012,9 +1086,14 @@ function VoicemailLossesArtboard() {
             })}
           </g>
 
-          <rect x="980" y="41" width="680" height="83" rx="28" fill="#071832" fillOpacity="0.82" stroke="#ffffff" strokeOpacity="0.62" strokeWidth="1.2" />
-          <text x="1320" y="97" textAnchor="middle" fill="#ffffff" fontFamily="Arial, Helvetica, sans-serif" fontSize="27" fontWeight="900">
-            How AI Converts <tspan fill="#ff9d22">cold callers into customers</tspan>
+          <g filter="url(#vmShadow)">
+            <circle cx="423" cy="587" r="34" fill="#09264b" stroke="#9edaff" strokeWidth="2.3" />
+            <path d="M406 587h29M426 577l11 10-11 10" fill="none" stroke="#ffffff" strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round" />
+          </g>
+
+          <rect x="940" y="41" width="720" height="83" rx="28" fill="#071832" fillOpacity="0.82" stroke="#ffffff" strokeOpacity="0.62" strokeWidth="1.2" />
+          <text x="1300" y="94" textAnchor="middle" fill="#ffffff" fontFamily="Arial, Helvetica, sans-serif" fontSize="24" fontWeight="900">
+            How AI Converts <tspan fill="#ff9d22">missed callers into customers</tspan>
           </text>
 
           {processCards.map((item) => (
@@ -1167,6 +1246,84 @@ function LandingPage() {
 
       <section className="relative overflow-hidden bg-transparent">
         <style>{`
+          .marker-highlight {
+            border-radius: 0.2em;
+            box-decoration-break: clone;
+            -webkit-box-decoration-break: clone;
+            color: #07142a;
+            font-weight: 900;
+            padding: 0.08em 0.22em;
+            background-image: linear-gradient(104deg, rgba(255, 240, 74, 0) 0%, #fff04a 10%, #fff04a 92%, rgba(255, 240, 74, 0) 100%);
+            background-repeat: no-repeat;
+            background-size: 0% 72%;
+            background-position: 0 72%;
+            animation: markerSwipe 0.95s cubic-bezier(0.2, 0.72, 0.18, 1) 1.2s forwards;
+          }
+          .marker-highlight--second {
+            animation-delay: 1.55s;
+          }
+          @keyframes markerSwipe {
+            from {
+              background-size: 0% 72%;
+            }
+            to {
+              background-size: 100% 72%;
+            }
+          }
+          .pricing-card {
+            position: relative;
+            overflow: hidden;
+            isolation: isolate;
+            transition: transform 0.28s ease, box-shadow 0.28s ease, border-color 0.28s ease;
+          }
+          .pricing-card:hover {
+            transform: translateY(-6px);
+            box-shadow: 0 30px 85px -46px rgba(15, 23, 42, 0.42), 0 18px 48px -38px rgba(45, 180, 255, 0.72);
+          }
+          .pricing-card::after {
+            content: "";
+            pointer-events: none;
+            position: absolute;
+            inset: 1px;
+            z-index: -1;
+            border-radius: 29px;
+            background:
+              linear-gradient(118deg, rgba(255,255,255,0.92) 0%, rgba(255,255,255,0.22) 22%, rgba(255,255,255,0) 38%),
+              radial-gradient(circle at 16% 0%, rgba(45,180,255,0.20), transparent 34%),
+              radial-gradient(circle at 94% 10%, rgba(255,139,31,0.13), transparent 28%);
+            opacity: 0.82;
+            transition: opacity 0.28s ease, transform 0.28s ease;
+          }
+          .pricing-card:hover::after {
+            opacity: 1;
+            transform: scale(1.015);
+          }
+          .pricing-card::before {
+            content: "";
+            pointer-events: none;
+            position: absolute;
+            inset: 0;
+            border-radius: 30px;
+            padding: 3px;
+            background:
+              linear-gradient(90deg, #2db4ff 50%, transparent 0) 0 0 / 0% 3px no-repeat,
+              linear-gradient(180deg, #2db4ff 50%, transparent 0) 100% 0 / 3px 0% no-repeat,
+              linear-gradient(270deg, #ff8b1f 50%, transparent 0) 100% 100% / 0% 3px no-repeat,
+              linear-gradient(0deg, #ff8b1f 50%, transparent 0) 0 100% / 3px 0% no-repeat;
+            transition:
+              background-size 0.16s cubic-bezier(0.35, 0, 0.2, 1) 0.33s,
+              background-size 0.16s cubic-bezier(0.35, 0, 0.2, 1) 0.22s,
+              background-size 0.16s cubic-bezier(0.35, 0, 0.2, 1) 0.11s,
+              background-size 0.16s cubic-bezier(0.35, 0, 0.2, 1) 0s;
+          }
+          .pricing-card:hover::before {
+            background-size: 100% 3px, 3px 100%, 100% 3px, 3px 100%;
+            transition:
+              background-size 0.16s cubic-bezier(0.35, 0, 0.2, 1) 0s,
+              background-size 0.16s cubic-bezier(0.35, 0, 0.2, 1) 0.11s,
+              background-size 0.16s cubic-bezier(0.35, 0, 0.2, 1) 0.22s,
+              background-size 0.16s cubic-bezier(0.35, 0, 0.2, 1) 0.33s;
+          }
           @media (min-width: 1024px) and (max-height: 900px) {
             .landing-hero-shell {
               padding-top: 1.25rem;
@@ -1183,7 +1340,7 @@ function LandingPage() {
             }
             .landing-hero-kicker {
               margin-top: 0.85rem;
-              font-size: 1.65rem;
+              font-size: 2.05rem;
             }
             .landing-hero-copy {
               margin-top: 0.9rem;
@@ -1261,18 +1418,18 @@ function LandingPage() {
                 </span>
               </h1>
 
-              <p className="landing-hero-kicker mt-2 text-[1.6rem] font-black leading-tight tracking-[-0.045em] text-[#62e6a5] drop-shadow-[0_0_18px_rgba(98,230,165,0.18)] sm:text-[1.78rem] 2xl:text-[1.95rem]">Never Miss A Call Again!</p>
+              <p className="landing-hero-kicker mt-3 text-[clamp(2.05rem,7vw,3.35rem)] font-black leading-[0.98] tracking-[-0.055em] text-[#e93621] drop-shadow-[0_4px_0_rgba(255,169,92,0.34)] 2xl:text-[3.55rem]">Never Miss A Call Again!</p>
               <p className="landing-hero-copy mt-3 max-w-[700px] text-[1.2rem] font-medium leading-8 text-[#243044] sm:text-[1.28rem] 2xl:text-[1.34rem] 2xl:leading-9">
-                24/7 AI call answering for busy trades businesses.
+                <span className="marker-highlight">24/7 AI call answering</span> for busy trades businesses.
                 <br />
-                Works with your existing business number.
+                Sends you an <span className="marker-highlight marker-highlight--second">instant text summary after every call.</span>
               </p>
 
               <div className="landing-hero-points mt-6 space-y-3.5">
                 {[
                   ["phone", "Speaks with callers"],
                   ["people", "Eliminates voicemail hangups"],
-                  ["chat", "Sends you a text summary for easy follow-up"],
+                  ["chat", "Works with your current number and texts you the details"],
                 ].map(([icon, label]) => (
                   <div key={label} className="landing-hero-point flex items-center gap-4 text-[1.28rem] font-medium text-[#16243a] 2xl:text-[1.36rem]">
                     <span className="landing-hero-point-icon grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[#0c4da0] text-white shadow-[0_10px_28px_-16px_rgba(59,130,246,1)]">
@@ -1296,7 +1453,7 @@ function LandingPage() {
                   onClick={playDemo}
                   className="landing-hero-cta inline-flex min-h-[62px] items-center justify-center rounded-xl border-2 border-[#1d5ea8]/70 bg-white/50 px-10 text-[1.2rem] font-black text-[#0b3b7a] transition hover:bg-white 2xl:min-h-[66px] 2xl:text-[1.28rem]"
                 >
-                  Play Demo
+                  Hear Agent&apos;s Voice
                 </button>
               </div>
 
@@ -1307,7 +1464,11 @@ function LandingPage() {
               <HeroPhoneMockup />
             </div>
 
-            <div className="hidden xl:block xl:self-center">
+            <div className="xl:hidden lg:col-span-2 lg:pt-1">
+              <HeroSummaryStack />
+            </div>
+
+            <div className="hidden xl:block xl:self-start xl:-translate-y-3">
               <HeroSummaryStack />
             </div>
           </div>
@@ -1369,7 +1530,7 @@ function LandingPage() {
                   onClick={playDemo}
                   className="inline-flex items-center justify-center rounded-full border border-[#966cff]/70 bg-black/35 px-7 py-3.5 text-[0.95rem] font-black uppercase tracking-[0.16em] text-white transition hover:bg-[#20113f]"
                 >
-                  Play Demo
+                  Hear Agent&apos;s Voice
                 </button>
               </div>
 
@@ -1691,7 +1852,7 @@ function LandingPage() {
           <div className="mx-auto max-w-6xl text-center">
             <p className="text-[1.18rem] font-black uppercase tracking-[0.22em] text-[#7378e8]">Tomorrow&apos;s Technology</p>
             <h2 className="mx-auto mt-5 max-w-[1100px] text-[clamp(2.15rem,8vw,3.55rem)] font-black leading-[1.05] text-[#07142a] xl:whitespace-nowrap">Designed for Leading Edge Contractors</h2>
-            <p className="mt-5 text-[clamp(1.2rem,1.55vw,1.55rem)] font-medium leading-8 text-[#7b8392]">Electrical, Plumbing, HVAC, Landscaping, Renovations, Builders</p>
+            <p className="mt-5 text-[clamp(1.2rem,1.55vw,1.55rem)] font-medium leading-8 text-[#7b8392]">Electrical, Plumbing, HVAC, General Contractors</p>
           </div>
 
           <div className="mt-12 grid gap-5 md:grid-cols-2 xl:grid-cols-4">
@@ -1704,11 +1865,11 @@ function LandingPage() {
                 }
               >
                 <div className={`h-1.5 w-20 rounded-full bg-gradient-to-r ${item.accent}`} />
-                <div className="mt-9 flex items-center gap-5">
+                <div className="mt-9 flex items-center gap-4">
                   <div className={`grid h-[78px] w-[78px] shrink-0 place-items-center rounded-[22px] bg-gradient-to-br ${item.accent} text-white opacity-90 shadow-[0_18px_42px_-34px_rgba(15,23,42,0.4)]`}>
                     <BenefitSymbol code={item.code} />
                   </div>
-                  <p className={`min-w-0 text-[1.08rem] font-black uppercase tracking-[0.18em] bg-gradient-to-r ${item.accent} bg-clip-text text-transparent`}>{item.eyebrow}</p>
+                  <p className={`min-w-0 break-words text-[clamp(0.86rem,0.92vw,1rem)] font-black uppercase leading-[1.35] tracking-[0.14em] bg-gradient-to-r ${item.accent} bg-clip-text text-transparent`}>{item.eyebrow}</p>
                 </div>
                 <h3 className="mt-8 flex min-h-[160px] items-start text-[clamp(1.55rem,1.72vw,1.88rem)] font-black leading-[1.2] text-[#07142a]">
                   {item.title}
@@ -1849,28 +2010,24 @@ function LandingPage() {
                 </span>
                 <p className="text-[0.95rem] font-black uppercase tracking-[0.14em] text-[#8a5a18]">Owner gets this text summary</p>
               </div>
-              <div className="m-4 rounded-[14px] border border-[#ecd9b7] bg-[linear-gradient(180deg,#fffaf0,#fff5df)] p-4 text-[#1f2937] shadow-[inset_0_1px_0_rgba(255,255,255,0.95)]">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-[0.86rem] font-black uppercase tracking-[0.14em] text-[#8a5a18]">Service lead summary</p>
-                  <span className="rounded-full bg-[#f0c56f] px-3 py-1 text-xs font-black uppercase tracking-[0.12em] text-[#4c320a]">Texted</span>
-                </div>
-                <div className="mt-3 divide-y divide-[#e7d7ba] text-[1.08rem] font-medium">
-                  {[
-                    ["Name", "Brian"],
-                    ["Phone", "905-123-4567"],
-                    ["Service", "Electrical maintenance"],
-                    ["Address", "63 York Street"],
-                    ["Best callback time", "Around 7 PM"],
-                  ].map(([label, value]) => (
-                    <div key={label} className="flex items-center gap-3 py-2">
-                      <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-[#fff0c8] text-[#9b661d]">
-                        <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                          <circle cx="12" cy="12" r="8" />
-                        </svg>
-                      </span>
-                      <p><span className="font-black text-[#07142a]">{label}:</span> {value}</p>
+              <div className="m-4 mx-auto max-w-[420px] rounded-[32px] border-[5px] border-[#263241] bg-[#07111f] p-2 shadow-[0_18px_46px_-32px_rgba(15,23,42,0.7)]">
+                <div className="relative overflow-hidden rounded-[24px] bg-[#f7fbff] px-4 pb-5 pt-8 text-[#1f2937]">
+                  <span className="absolute left-1/2 top-2 h-4 w-20 -translate-x-1/2 rounded-full bg-[#111827]" />
+                  <div className="flex items-center justify-between border-b border-[#d9e5f3] pb-3">
+                    <div>
+                      <p className="text-[0.74rem] font-black uppercase tracking-[0.16em] text-[#8a5a18]">My AI PA</p>
+                      <p className="text-[1.08rem] font-black text-[#07142a]">Service lead summary</p>
                     </div>
-                  ))}
+                    <span className="rounded-full bg-[#f0c56f] px-3 py-1 text-xs font-black uppercase tracking-[0.12em] text-[#4c320a]">Texted</span>
+                  </div>
+                  <div className="mt-4 rounded-[22px] bg-[#dbeafe] px-4 py-3 text-[1.03rem] font-medium leading-7 text-[#10233f]">
+                    <p className="font-black text-[#07142a]">New service lead</p>
+                    <p><span className="font-black">Name:</span> Brian</p>
+                    <p><span className="font-black">Phone:</span> 905-123-4567</p>
+                    <p><span className="font-black">Service:</span> Electrical maintenance</p>
+                    <p><span className="font-black">Address:</span> 63 York Street</p>
+                    <p><span className="font-black">Best callback:</span> Around 7 PM</p>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1885,22 +2042,20 @@ function LandingPage() {
                 </span>
                 <p className="text-[0.95rem] font-black uppercase tracking-[0.14em] text-[#08776f]">Caller gets this confirmation</p>
               </div>
-              <div className="m-4 flex items-center gap-4 rounded-[14px] border border-[#b9d8d4] bg-[linear-gradient(180deg,#edfbf7,#e4f8f2)] p-4 text-[#12302d] shadow-[inset_0_1px_0_rgba(255,255,255,0.95)]">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-[0.86rem] font-black uppercase tracking-[0.14em] text-[#08776f]">Follow-up text</p>
+              <div className="m-4 mx-auto max-w-[420px] rounded-[32px] border-[5px] border-[#263241] bg-[#07111f] p-2 shadow-[0_18px_46px_-32px_rgba(15,23,42,0.7)]">
+                <div className="relative overflow-hidden rounded-[24px] bg-[#f7fbff] px-4 pb-5 pt-8 text-[#12302d]">
+                  <span className="absolute left-1/2 top-2 h-4 w-20 -translate-x-1/2 rounded-full bg-[#111827]" />
+                  <div className="flex items-center justify-between border-b border-[#d9e5f3] pb-3">
+                    <div>
+                      <p className="text-[0.74rem] font-black uppercase tracking-[0.16em] text-[#08776f]">Tim&apos;s Electrical</p>
+                      <p className="text-[1.08rem] font-black text-[#07142a]">Confirmation text</p>
+                    </div>
                     <span className="rounded-full bg-[#a8e8db] px-3 py-1 text-xs font-black uppercase tracking-[0.12em] text-[#064c47]">Confirmed</span>
                   </div>
-                  <p className="mt-2 text-[1.08rem] font-medium leading-7 text-[#12302d]">
+                  <p className="mt-4 max-w-[92%] rounded-[22px] bg-[#e5e7eb] px-4 py-3 text-[1.08rem] font-medium leading-7 text-[#12302d]">
                     Thanks for calling Tim&apos;s Electrical. Your maintenance request has been sent to the team and a callback will follow based on the details you provided.
                   </p>
                 </div>
-                <span className="grid h-14 w-14 shrink-0 place-items-center rounded-full border border-[#93cfc7] bg-white text-[#08776f] shadow-[0_12px_28px_-22px_rgba(8,119,111,0.5)]">
-                  <svg viewBox="0 0 24 24" className="h-8 w-8" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-                    <path d="M5 5h14v10H8l-3 3V5Z" strokeLinecap="round" strokeLinejoin="round" />
-                    <path d="m9 11 2 2 4-5" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </span>
               </div>
             </div>
 
@@ -1935,46 +2090,51 @@ function LandingPage() {
           <div className="mx-auto max-w-4xl text-center">
             <h2 className="mt-3 text-[clamp(2.4rem,3.6vw,4rem)] font-black leading-[1.08] tracking-[-0.04em] text-[#07142a]">Clear pricing for businesses that just want calls handled properly.</h2>
             <p className="mx-auto mt-5 max-w-[900px] text-[1.32rem] font-medium leading-9 text-[#334155]">
-              Start with one plan that feels right according to your current operation. Then enjoy 14 days free!
+              Plans include monthly AI call minutes so business owners can understand what they are paying for. Extra usage is handled clearly.
             </p>
           </div>
 
-          <div className="mt-10 grid gap-5 lg:grid-cols-2">
+          <div className="mt-10 grid gap-5 lg:grid-cols-3">
             {pricingCards.map((plan) => (
               <div
                 key={plan.name}
                 className={
-                  "rounded-[30px] border p-6 shadow-[0_24px_70px_-46px_rgba(15,23,42,0.24)] " +
-                  (plan.featured ? "border-[#a9c8ef] bg-white" : "border-[#d7e7fb] bg-white/84")
+                  "pricing-card rounded-[30px] border p-6 shadow-[0_24px_70px_-46px_rgba(15,23,42,0.24)] " +
+                  (plan.featured ? "border-[#a9c8ef] " : "border-[#d7e7fb] ") +
+                  plan.tint
                 }
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
+                <div className={`absolute inset-x-6 top-0 h-1.5 rounded-b-full bg-gradient-to-r ${plan.accent}`} aria-hidden="true" />
+                <div className="pointer-events-none absolute right-5 top-5 h-24 w-24 rounded-full bg-white/34 blur-2xl" aria-hidden="true" />
+                <div className="pointer-events-none absolute -right-10 -top-10 h-36 w-36 rounded-full bg-[#2db4ff]/12 blur-3xl" aria-hidden="true" />
+                {plan.featured ? (
+                  <span className="absolute right-6 top-6 z-10 inline-flex h-10 w-[178px] items-center justify-center whitespace-nowrap rounded-full border border-[#7dff9e]/70 bg-[#00b84a] text-[0.82rem] font-black uppercase tracking-[0.12em] text-white shadow-[0_0_18px_-8px_rgba(57,255,106,0.95)]">
+                    Recommended
+                  </span>
+                ) : null}
+                {plan.comingSoon ? (
+                  <span className="absolute right-6 top-6 z-10 inline-flex h-10 w-[178px] items-center justify-center whitespace-nowrap rounded-full border border-[#7dff9e]/70 bg-[#00b84a] text-[0.82rem] font-black uppercase tracking-[0.12em] text-white shadow-[0_0_18px_-8px_rgba(57,255,106,0.95)]">
+                    Coming soon
+                  </span>
+                ) : null}
+                <div className="flex items-start justify-between gap-3 pr-[188px]">
+                  <div className="min-w-0">
                     <p className="text-[1rem] font-black uppercase tracking-[0.16em] text-[#2563eb]">{plan.eyebrow}</p>
                     <h3 className="mt-3 text-[2.35rem] font-black tracking-[-0.04em] text-[#07142a]">{plan.name}</h3>
                   </div>
-                  {plan.featured ? (
-                    <span className="rounded-full bg-[#143d36] px-4 py-1.5 text-sm font-black uppercase tracking-[0.14em] text-white">
-                      Recommended
-                    </span>
-                  ) : null}
-                  {plan.comingSoon ? (
-                    <span className="rounded-full border border-white/18 bg-[#243754] px-4 py-1.5 text-sm font-black uppercase tracking-[0.14em] text-[#edf5fc]">
-                      Coming soon
-                    </span>
-                  ) : null}
                 </div>
 
                 <div className="mt-6 flex items-end gap-2">
-                  <span className="text-[clamp(3.25rem,14vw,4.2rem)] font-black tracking-[-0.05em] text-[#07142a]">{plan.price}</span>
+                  <span className="text-[clamp(3rem,10vw,3.85rem)] font-black tracking-[-0.05em] text-[#07142a]">{plan.price}</span>
                   <span className="pb-2 text-lg font-bold uppercase tracking-[0.14em] text-[#475569]">{plan.suffix}</span>
                 </div>
+                <p className="mt-3 rounded-[16px] border border-[#d7e7fb] bg-white/64 px-4 py-3 text-[1.05rem] font-black leading-7 text-[#0b3b7a] shadow-[inset_0_1px_0_rgba(255,255,255,0.85),0_16px_42px_-36px_rgba(37,99,235,0.55)] backdrop-blur">{plan.minuteNote}</p>
 
                 <div className="mt-6 space-y-4">
                   {plan.points.map((point) => (
                     <div key={point} className="flex items-start gap-3">
                       <span className="mt-2.5 h-3 w-3 rounded-full bg-[#c78c52]" />
-                      <p className="text-[1.2rem] font-medium leading-8 text-[#334155]">{point}</p>
+                      <p className="text-[1.08rem] font-medium leading-7 text-[#334155]">{point}</p>
                     </div>
                   ))}
                 </div>
@@ -1999,64 +2159,65 @@ function LandingPage() {
       </section>
 
       <section className="overflow-hidden bg-[radial-gradient(circle_at_82%_86%,rgba(255,164,92,0.18),transparent_26%),radial-gradient(circle_at_18%_14%,rgba(187,222,255,0.54),transparent_30%),linear-gradient(135deg,#eef8ff_0%,#dff1ff_100%)]">
-        <div className="mx-auto grid w-full max-w-[1440px] gap-12 px-5 py-16 sm:px-8 lg:grid-cols-[0.86fr_1.14fr] lg:items-center lg:py-20">
-          <div className="relative pt-3 pl-2 lg:-translate-x-12 xl:-translate-x-20">
-            <h2 className="max-w-[760px] overflow-visible text-[clamp(2.55rem,11vw,5.2rem)] font-black leading-[1.04] tracking-[-0.055em] text-[#07142a] drop-shadow-[0_8px_0_rgba(148,190,255,0.38)]">
-              <span className="block whitespace-nowrap">You can be <span className="inline-block pr-3 -mr-3 bg-[linear-gradient(180deg,#a9e8ff_0%,#2288ff_100%)] bg-clip-text text-transparent">live</span></span>
-              <span className="block">without any downtime to</span>
-              <span className="relative inline-block">
-                your business.
-                <svg viewBox="0 0 520 26" className="absolute -bottom-3 left-[15%] h-6 w-[74%] text-[#ff8b1f]" fill="none" aria-hidden="true">
-                  <path d="M6 17c132-13 300-15 508-2" stroke="currentColor" strokeWidth="7" strokeLinecap="round" />
+        <div className="mx-auto grid w-full max-w-[1500px] gap-8 px-5 py-14 sm:px-8 lg:grid-cols-[0.96fr_1.04fr] lg:items-center lg:py-12 xl:gap-10">
+          <div className="relative pt-3 pl-2 lg:-translate-x-4 xl:-translate-x-8">
+            <h2 className="max-w-[880px] overflow-visible text-[clamp(2.05rem,7.35vw,4.55rem)] font-black leading-[1.04] tracking-[-0.055em] text-[#07142a] drop-shadow-[0_8px_0_rgba(148,190,255,0.38)]">
+              <span className="block sm:whitespace-nowrap">You can <span className="inline-block pr-3 -mr-3 bg-[linear-gradient(180deg,#a9e8ff_0%,#2288ff_100%)] bg-clip-text text-transparent">GO LIVE</span></span>
+              <span className="block sm:whitespace-nowrap">in under 5 minutes and</span>
+              <span className="relative inline-block sm:whitespace-nowrap">
+                never miss a call again!
+                <svg viewBox="0 0 620 42" className="absolute -bottom-8 left-[-9%] h-9 w-[118%] text-[#ff8b1f]" fill="none" aria-hidden="true">
+                  <path d="M12 25C154 10 400 8 608 24" stroke="rgba(148,190,255,0.48)" strokeWidth="9" strokeLinecap="round" />
+                  <path d="M10 20C158 7 398 6 610 20" stroke="currentColor" strokeWidth="7" strokeLinecap="round" />
                 </svg>
               </span>
             </h2>
-            <p className="mt-9 max-w-[590px] text-[clamp(1.2rem,1.7vw,1.65rem)] font-medium leading-[1.58] text-[#334155]">
-              With this easy to follow set up guide, we&apos;ll have your business up and running with an AI agent in no time. Causing no interference with your current work.
+            <p className="mt-12 max-w-[820px] text-[clamp(1.18rem,1.55vw,1.48rem)] font-medium leading-[1.58] text-[#334155]">
+              Setup is simple, and your current business does not need to stop. Keep your existing number, forward calls to My AI PA, and test the experience before you turn it on.
             </p>
 
           </div>
 
           <div>
-            <div className="relative space-y-8">
-              <div className="absolute bottom-[88px] left-[60px] top-[88px] hidden w-px bg-[#2b7dff] shadow-[0_0_18px_rgba(55,142,255,0.95)] md:block" aria-hidden="true" />
+            <div className="relative space-y-5">
+              <div className="absolute bottom-[70px] left-[60px] top-[70px] hidden w-px bg-[#2b7dff] shadow-[0_0_18px_rgba(55,142,255,0.95)] md:block" aria-hidden="true" />
               {setupSteps.map((step, index) => {
                 const iconType = index === 0 ? "chat" : index === 1 ? "headset" : "phone";
                 return (
-                  <div key={step} className="relative grid items-center gap-5 rounded-[22px] border border-[#236dff]/65 bg-[linear-gradient(135deg,rgba(8,31,68,0.88),rgba(8,20,43,0.94))] px-5 py-6 shadow-[0_20px_60px_-46px_rgba(23,111,255,0.85),inset_0_1px_0_rgba(255,255,255,0.08)] md:grid-cols-[74px_110px_1px_minmax(0,1fr)] md:px-6 md:py-7">
+                  <div key={step} className="relative grid items-center gap-4 rounded-[22px] border border-[#236dff]/65 bg-[linear-gradient(135deg,rgba(8,31,68,0.88),rgba(8,20,43,0.94))] px-5 py-4 shadow-[0_20px_60px_-46px_rgba(23,111,255,0.85),inset_0_1px_0_rgba(255,255,255,0.08)] md:grid-cols-[64px_88px_1px_minmax(0,1fr)] md:px-5 md:py-4 xl:grid-cols-[74px_100px_1px_minmax(0,1fr)] xl:px-6 xl:py-5">
                     <span className="relative z-10 grid h-16 w-16 place-items-center rounded-full border border-[#8be2ff] bg-[linear-gradient(180deg,#78e2ff,#176bff)] text-[2.1rem] font-black text-white shadow-[0_0_34px_-8px_rgba(59,165,255,1)]">
                       {index + 1}
                     </span>
-                    <span className="hidden h-24 w-24 place-items-center rounded-full border border-[#5880c1]/60 bg-[#071a36]/80 text-[#58b7ff] md:grid">
+                    <span className="hidden h-20 w-20 place-items-center rounded-full border border-[#5880c1]/60 bg-[#071a36]/80 text-[#58b7ff] md:grid xl:h-24 xl:w-24">
                       {iconType === "phone" ? (
-                        <svg viewBox="0 0 24 24" className="h-12 w-12" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" className="h-10 w-10 xl:h-12 xl:w-12" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
                           <path d="M22 16.92v2a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.12 3.2 2 2 0 0 1 4.11 1h2a2 2 0 0 1 2 1.72c.12.9.32 1.78.59 2.63a2 2 0 0 1-.45 2.11L7.4 8.31a16 16 0 0 0 6.29 6.29l.85-.85a2 2 0 0 1 2.11-.45c.85.27 1.73.47 2.63.59A2 2 0 0 1 22 16.92Z" strokeLinecap="round" strokeLinejoin="round" />
                           <path d="M15 5a5 5 0 0 1 4 4M15 1a9 9 0 0 1 8 8" strokeLinecap="round" />
                         </svg>
                       ) : iconType === "chat" ? (
-                        <svg viewBox="0 0 24 24" className="h-12 w-12" fill="currentColor" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" className="h-10 w-10 xl:h-12 xl:w-12" fill="currentColor" aria-hidden="true">
                           <path d="M4 5.5A3.5 3.5 0 0 1 7.5 2h9A3.5 3.5 0 0 1 20 5.5v6A3.5 3.5 0 0 1 16.5 15H12l-5 5v-5A3.5 3.5 0 0 1 4 11.5v-6Zm4.5 4.25a1.25 1.25 0 1 0 0-2.5 1.25 1.25 0 0 0 0 2.5Zm3.5 0a1.25 1.25 0 1 0 0-2.5 1.25 1.25 0 0 0 0 2.5Zm3.5 0a1.25 1.25 0 1 0 0-2.5 1.25 1.25 0 0 0 0 2.5Z" />
                         </svg>
                       ) : (
-                        <svg viewBox="0 0 24 24" className="h-12 w-12" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" className="h-10 w-10 xl:h-12 xl:w-12" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
                           <path d="M4 13a8 8 0 0 1 16 0" strokeLinecap="round" />
                           <path d="M4 13v4a2 2 0 0 0 2 2h2v-6H6a2 2 0 0 0-2 2Zm16 0v4a2 2 0 0 1-2 2h-2v-6h2a2 2 0 0 1 2 2Z" strokeLinecap="round" strokeLinejoin="round" />
                           <path d="M14 20h-2" strokeLinecap="round" />
                         </svg>
                       )}
                     </span>
-                    <span className="hidden h-24 w-px bg-white/20 md:block" aria-hidden="true" />
-                    <p className="text-[clamp(1.35rem,2vw,1.8rem)] font-black leading-[1.25] tracking-[-0.035em] text-white">{step}</p>
+                    <span className="hidden h-20 w-px bg-white/20 md:block xl:h-24" aria-hidden="true" />
+                    <p className="max-w-[28rem] text-[clamp(1.08rem,1.26vw,1.36rem)] font-black leading-[1.25] tracking-[-0.02em] text-white xl:max-w-[31rem]">{step}</p>
                   </div>
                 );
               })}
             </div>
 
-            <div className="mt-10 grid gap-5 sm:grid-cols-2">
+            <div className="mt-6 grid gap-4 sm:grid-cols-2">
               <button
                 type="button"
                 onClick={goToSignup}
-                className="inline-flex min-h-[74px] items-center justify-center gap-5 rounded-full border border-[#77d8ff]/90 bg-[linear-gradient(180deg,#2db4ff,#176bff)] px-8 text-[1.25rem] font-black uppercase tracking-[0.16em] text-white shadow-[0_0_36px_-8px_rgba(38,150,255,1),inset_0_1px_0_rgba(255,255,255,0.36)] transition hover:-translate-y-0.5"
+                className="inline-flex min-h-[60px] items-center justify-center gap-3 rounded-full border border-[#77d8ff]/90 bg-[linear-gradient(180deg,#2db4ff,#176bff)] px-6 text-[1rem] font-black uppercase tracking-[0.14em] text-white shadow-[0_0_36px_-8px_rgba(38,150,255,1),inset_0_1px_0_rgba(255,255,255,0.36)] transition hover:-translate-y-0.5 xl:min-h-[66px] xl:text-[1.08rem]"
               >
                 Start Free Trial
                 <svg viewBox="0 0 28 20" className="h-5 w-8" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden="true">
@@ -2066,9 +2227,9 @@ function LandingPage() {
               <button
                 type="button"
                 onClick={playDemo}
-                className="inline-flex min-h-[74px] items-center justify-center gap-5 rounded-full border border-[#92caff]/80 bg-[#081b38]/75 px-8 text-[1.25rem] font-black uppercase tracking-[0.16em] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_0_38px_-24px_rgba(255,126,44,0.95)] transition hover:-translate-y-0.5 hover:border-[#ff9955]"
+                className="inline-flex min-h-[60px] items-center justify-center gap-3 rounded-full border border-[#92caff]/80 bg-[#081b38]/75 px-6 text-[1rem] font-black uppercase tracking-[0.14em] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_0_38px_-24px_rgba(255,126,44,0.95)] transition hover:-translate-y-0.5 hover:border-[#ff9955] xl:min-h-[66px] xl:text-[1.08rem]"
               >
-                Play Demo
+                Hear Agent&apos;s Voice
                 <svg viewBox="0 0 28 20" className="h-5 w-8" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden="true">
                   <path d="M2 10h22M17 3l7 7-7 7" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
@@ -2162,19 +2323,56 @@ function LandingPage() {
       </section>
 
       <section className="bg-transparent">
+        <div className="mx-auto w-full max-w-6xl px-4 pb-14 sm:px-6 lg:px-8">
+          <div className="rounded-[30px] border border-[#d7e7fb] bg-[linear-gradient(145deg,rgba(255,255,255,0.86),rgba(236,247,255,0.88))] px-6 py-8 shadow-[0_24px_70px_-50px_rgba(18,32,51,0.28)] sm:px-8">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <p className="text-[0.95rem] font-black uppercase tracking-[0.18em] text-[#2563eb]">Trust and transparency</p>
+                <h2 className="mt-3 max-w-3xl text-[clamp(2rem,3vw,3.1rem)] font-black leading-[1.08] tracking-[-0.04em] text-[#07142a]">Clear rules for calls, texts, and customer details.</h2>
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <a href="#/privacy" className="rounded-full border border-[#9ecaff] bg-white px-5 py-3 text-sm font-black uppercase tracking-[0.14em] text-[#0b3b7a] transition hover:-translate-y-0.5 hover:border-[#2563eb]">
+                  Privacy Policy
+                </a>
+                <a href="#/terms" className="rounded-full border border-[#ffd1a6] bg-white px-5 py-3 text-sm font-black uppercase tracking-[0.14em] text-[#8a4b07] transition hover:-translate-y-0.5 hover:border-[#ff8b1f]">
+                  Terms
+                </a>
+              </div>
+            </div>
+
+            <div className="mt-7 grid gap-4 md:grid-cols-3">
+              {trustCards.map((item) => (
+                <article key={item.title} className="rounded-[22px] border border-white/70 bg-white/78 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.86),0_18px_50px_-42px_rgba(37,99,235,0.42)]">
+                  <div className="grid h-10 w-10 place-items-center rounded-full bg-[#00b84a] text-white shadow-[0_0_18px_-8px_rgba(57,255,106,0.95)]">
+                    <HeroIcon type="check" className="h-5 w-5" />
+                  </div>
+                  <h3 className="mt-4 text-[1.18rem] font-black leading-tight tracking-[-0.02em] text-[#07142a]">{item.title}</h3>
+                  <p className="mt-3 text-[1.02rem] font-medium leading-7 text-[#334155]">{item.body}</p>
+                </article>
+              ))}
+            </div>
+
+            <p className="mt-6 text-[0.98rem] font-semibold leading-7 text-[#475569]">
+              External verification badges, Google ownership tokens, SMS sender registration, and payment-provider trust marks should only be added after those accounts issue real approvals or tokens.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section className="bg-transparent">
         <div className="mx-auto w-full max-w-6xl px-4 pb-16 sm:px-6 lg:px-8 lg:pb-20">
           <div className="rounded-[34px] border border-[#d7e7fb] bg-white/84 px-6 py-10 shadow-[0_28px_80px_-48px_rgba(18,32,51,0.28)] sm:px-8 sm:py-12 lg:px-10">
             <div className="max-w-4xl text-left">
               <h2 className="mt-3 text-[clamp(2.45rem,3.7vw,4.1rem)] font-black leading-[1.08] tracking-[-0.04em] text-[#07142a]">Stop letting missed calls decide where the next job goes.</h2>
               <p className="mt-5 max-w-[900px] text-[1.32rem] font-medium leading-9 text-[#334155]">
-                Try My AI PA free, hear how it sounds, and see how quickly missed calls can turn into clean follow-up opportunities.
+                Never miss a call again. Try My AI PA free, hear how it sounds, and see how quickly missed calls can turn into clean follow-up opportunities.
               </p>
             </div>
 
             <div className="mt-9 flex flex-col gap-4 sm:flex-row">
               <PrimaryButton onClick={goToSignup} className="text-lg">Start Free Trial</PrimaryButton>
               <SecondaryButton onClick={playDemo} dark className="text-lg">
-                Play Demo
+                Hear Agent&apos;s Voice
               </SecondaryButton>
             </div>
           </div>
@@ -2185,6 +2383,9 @@ function LandingPage() {
               <span className="text-[1.35rem] leading-none" aria-hidden="true">🍁</span>
             </p>
             <div className="flex items-center gap-4">
+              <a href="mailto:hello@myaipa.com" className="transition hover:text-[#2563eb]">
+                hello@myaipa.com
+              </a>
               <a href="#/privacy" className="transition hover:text-[#2563eb]">
                 Privacy
               </a>
