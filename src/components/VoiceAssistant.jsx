@@ -40,6 +40,16 @@ function AudioWave({ active = false, tone = "speaking" }) {
   );
 }
 
+function ChatLauncherIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5H7l-4 3v-6A8.5 8.5 0 1 1 21 11.5Z" />
+      <path d="M8.5 10h7" />
+      <path d="M8.5 14h4.5" />
+    </svg>
+  );
+}
+
 async function parseApiResponse(response, fallbackLabel) {
   const rawText = await response.text();
   let data = {};
@@ -60,7 +70,17 @@ async function parseApiResponse(response, fallbackLabel) {
   return data;
 }
 
-export default function VoiceAssistant({ placement = "bottom-right" }) {
+function normalizeVoiceServiceError(err) {
+  const message = String(err?.message || "").trim();
+  if (!message) return "Voice input is unavailable right now. Please type your answer instead.";
+  if (/networkerror|failed to fetch|load failed|fetch resource/i.test(message)) {
+    return "Voice input could not reach the transcription service. Please type your answer instead.";
+  }
+  return message;
+}
+
+export default function VoiceAssistant({ placement = "bottom-right", launcherVariant = "icon" }) {
+  const [isOpen, setIsOpen] = React.useState(false);
   const [messages, setMessages] = React.useState([
     {
       id: 1,
@@ -266,19 +286,23 @@ export default function VoiceAssistant({ placement = "bottom-right" }) {
       reader.readAsDataURL(blob);
     });
 
-    const response = await fetch(`${API_BASE}/api/assistant/transcribe`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        audioBase64,
-        mimeType: blob.type || "audio/webm",
-      }),
-    });
+    try {
+      const response = await fetch(`${API_BASE}/api/assistant/transcribe`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          audioBase64,
+          mimeType: blob.type || "audio/webm",
+        }),
+      });
 
-    const data = await parseApiResponse(response, "Transcription failed");
-    const transcript = typeof data.transcript === "string" ? data.transcript.trim() : "";
-    if (!transcript) throw new Error("Transcription returned empty text.");
-    return transcript;
+      const data = await parseApiResponse(response, "Transcription failed");
+      const transcript = typeof data.transcript === "string" ? data.transcript.trim() : "";
+      if (!transcript) throw new Error("Transcription returned empty text.");
+      return transcript;
+    } catch (err) {
+      throw new Error(normalizeVoiceServiceError(err));
+    }
   }, []);
 
   const sendMessage = React.useCallback(
@@ -460,9 +484,41 @@ export default function VoiceAssistant({ placement = "bottom-right" }) {
         ? "pointer-events-none fixed inset-x-0 bottom-0 z-[70] sm:inset-x-auto sm:bottom-auto sm:right-12 md:right-16 lg:right-24 xl:right-32 sm:top-28"
         : "pointer-events-none fixed inset-x-0 bottom-0 z-[70] sm:inset-x-auto sm:bottom-4 sm:right-4";
 
+  if (!isOpen) {
+    const isPillLauncher = launcherVariant === "pill";
+    return (
+      <div className={placementClass}>
+        <div className="pointer-events-auto mx-2 mb-2 flex justify-end sm:mx-0 sm:mb-0">
+          <button
+            type="button"
+            onClick={() => setIsOpen(true)}
+            aria-label="Open website assistant"
+            className={
+              (isPillLauncher
+                ? "inline-flex h-12 items-center gap-2 rounded-full border border-cyan-100/16 bg-[#06141b]/82 px-4 text-sm font-black uppercase tracking-[0.16em] text-cyan-50/82 backdrop-blur-xl hover:border-cyan-100/30 hover:bg-[#0a1b24]/90"
+                : "inline-flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-r from-emerald-600 to-amber-500 text-white") +
+              " justify-center shadow-[0_20px_44px_-26px_rgba(34,211,238,0.72)] transition hover:scale-[1.02] hover:shadow-[0_24px_52px_-28px_rgba(34,211,238,0.82)]"
+            }
+          >
+            {isPillLauncher ? (
+              <>
+                <span className="grid h-8 w-8 place-items-center rounded-full border border-cyan-100/12 bg-cyan-300/10 text-[#95f0ff]">
+                  <ChatLauncherIcon />
+                </span>
+                <span>Chat</span>
+              </>
+            ) : (
+              <ChatLauncherIcon />
+            )}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={placementClass}>
-      <div className="pointer-events-auto mx-2 mb-2 rounded-2xl border border-white/10 bg-neutral-950/95 shadow-2xl shadow-black/40 backdrop-blur sm:mx-0 sm:mb-0 sm:w-[380px]">
+      <div className="pointer-events-auto mx-2 mb-2 max-h-[calc(100svh-1rem)] w-[calc(100vw-1rem)] overflow-hidden rounded-2xl border border-white/10 bg-neutral-950/95 shadow-2xl shadow-black/40 backdrop-blur sm:mx-0 sm:mb-0 sm:w-[380px]">
         <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/60">My AI PA</p>
@@ -473,10 +529,18 @@ export default function VoiceAssistant({ placement = "bottom-right" }) {
             <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium ${getStatusClasses(status)}`}>
               {status}
             </span>
+            <button
+              type="button"
+              onClick={() => setIsOpen(false)}
+              aria-label="Close website assistant"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/5 text-sm text-white/80 transition hover:bg-white/10 hover:text-white"
+            >
+              ×
+            </button>
           </div>
         </div>
 
-        <div ref={chatLogRef} className="max-h-72 space-y-2 overflow-y-auto px-3 py-3 sm:max-h-80">
+        <div ref={chatLogRef} className="max-h-[34svh] space-y-2 overflow-y-auto px-3 py-3 sm:max-h-80">
           {visibleMessages.map((msg) => {
             const isUser = msg.role === "user";
             return (

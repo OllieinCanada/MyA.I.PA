@@ -1,10 +1,12 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 
 const API_BASE =
   process.env.REACT_APP_API_BASE_URL ||
-  (typeof window !== "undefined" && /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname)
+  (typeof window !== "undefined" && (window.location.protocol === "file:" || /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname))
     ? "http://localhost:8787"
     : "");
+const MAKE_SIGNUP_WEBHOOK_URL = process.env.REACT_APP_MAKE_SIGNUP_WEBHOOK_URL || "";
+const SIGNUP_SUBMIT_URL = MAKE_SIGNUP_WEBHOOK_URL || `${API_BASE}/api/integrations/signup-complete`;
 
 const TRADE_OPTIONS = [
   {
@@ -105,10 +107,11 @@ const SETUP_STEPS = [
   { number: 3, label: "Hear voice" },
   { number: 4, label: "Review & launch" },
 ];
-const VAPI_AGENT = {
+const ASSISTANT_SAMPLE_AUDIO_SRC = `${process.env.PUBLIC_URL || ""}/Assistant_Testing.wav`;
+const ASSISTANT_AGENT = {
   value: "elliot",
   label: "My AI PA Agent",
-  sampleSrc: process.env.REACT_APP_VAPI_SAMPLE_AUDIO_URL || "",
+  sampleSrc: ASSISTANT_SAMPLE_AUDIO_SRC,
 };
 const SPECIALIZATION_OPTIONS = [
   { id: "residential", label: "Residential", icon: "home" },
@@ -154,6 +157,37 @@ async function parseApiResponse(response, fallbackLabel) {
   }
 
   return data;
+}
+
+function getSignupSuccess(data) {
+  if (data?.success === false || data?.ok === false) return false;
+  return data?.success === true || data?.ok === true;
+}
+
+function getTwilioPhoneNumber(data) {
+  return String(
+    data?.twilioPhoneNumber ||
+      data?.twilio_phone_number ||
+      data?.phoneNumber ||
+      data?.assignedPhoneNumber ||
+      data?.assigned_number ||
+      data?.number ||
+      data?.data?.twilioPhoneNumber ||
+      data?.data?.phoneNumber ||
+      ""
+  ).trim();
+}
+
+function formatPhoneNumber(value) {
+  const raw = String(value || "").trim();
+  const digits = raw.replace(/\D/g, "");
+  if (digits.length === 11 && digits.startsWith("1")) {
+    return `+1 (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
+  }
+  if (digits.length === 10) {
+    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+  }
+  return raw;
 }
 
 function Icon({ name, className = "h-6 w-6" }) {
@@ -352,6 +386,13 @@ function Icon({ name, className = "h-6 w-6" }) {
     return (
       <svg viewBox="0 0 24 24" className={className} fill="currentColor">
         <path d="M8 5v14l11-7L8 5Z" />
+      </svg>
+    );
+  }
+  if (name === "pause") {
+    return (
+      <svg viewBox="0 0 24 24" className={className} fill="currentColor">
+        <path d="M7 5h4v14H7V5Zm6 0h4v14h-4V5Z" />
       </svg>
     );
   }
@@ -644,7 +685,66 @@ function WaveBars({ side }) {
   );
 }
 
+function VoiceVisualizer({ active }) {
+  const bars = [22, 36, 52, 31, 64, 44, 72, 38, 58, 26, 48, 68, 34, 54, 28, 46, 62, 32, 50, 24];
+  return (
+    <div className="relative overflow-hidden rounded-2xl border border-blue-100 bg-white/90 px-4 py-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)]">
+      <style>
+        {`
+          @keyframes assistantVoiceBar {
+            0%, 100% { transform: scaleY(0.38); opacity: 0.58; }
+            45% { transform: scaleY(1); opacity: 1; }
+          }
+          @keyframes assistantVoiceGlow {
+            0%, 100% { transform: translateX(-18%); opacity: 0.2; }
+            50% { transform: translateX(18%); opacity: 0.42; }
+          }
+        `}
+      </style>
+      <div
+        className={`pointer-events-none absolute inset-y-0 left-0 w-2/3 bg-gradient-to-r from-transparent via-blue-200/70 to-transparent blur-xl ${
+          active ? "" : "opacity-0"
+        }`}
+        style={active ? { animation: "assistantVoiceGlow 2.6s ease-in-out infinite" } : undefined}
+      />
+      <div className="relative flex h-24 items-center justify-center gap-1.5">
+        {bars.map((height, index) => (
+          <span
+            key={`voice-bar-${index}`}
+            className={`w-1.5 origin-center rounded-full bg-gradient-to-b from-blue-500 via-indigo-500 to-violet-500 shadow-[0_8px_20px_-12px_rgba(37,99,235,0.95)] ${
+              active ? "" : "opacity-45"
+            }`}
+            style={{
+              height,
+              transform: active ? undefined : "scaleY(0.45)",
+              animation: active ? `assistantVoiceBar ${760 + (index % 5) * 90}ms ease-in-out infinite` : undefined,
+              animationDelay: `${index * 52}ms`,
+            }}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function VoiceDemoStep({ agent }) {
+  const audioRef = useRef(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [audioTime, setAudioTime] = useState(0);
+  const [audioDuration, setAudioDuration] = useState(0);
+  const progress = audioDuration ? Math.min(100, Math.max(0, (audioTime / audioDuration) * 100)) : 0;
+
+  const togglePlayback = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    if (audio.paused) {
+      audio.play().catch(() => setIsPlaying(false));
+    } else {
+      audio.pause();
+    }
+  };
+
   return (
     <section className="mt-5 grid gap-6">
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white/96 shadow-[0_34px_90px_-70px_rgba(15,23,42,0.8)]">
@@ -657,30 +757,52 @@ function VoiceDemoStep({ agent }) {
             </span>
             <div>
               <h2 className="text-[1.45rem] font-black leading-tight tracking-[-0.03em] text-slate-950 sm:text-[26px]">3. Hear your agent's voice</h2>
-              <p className="mt-1.5 text-base font-medium leading-6 text-blue-700/75">Play the Vapi voice demo before launch.</p>
+              <p className="mt-1.5 text-base font-medium leading-6 text-blue-700/75">Preview the assistant voice before launch.</p>
             </div>
           </div>
 
           <div className="mt-6 rounded-2xl border border-blue-100 bg-blue-50/70 p-4 sm:p-5">
-            <div className="text-xs font-black uppercase tracking-[0.16em] text-blue-600/70">Official Vapi voice sample</div>
+            <div className="text-xs font-black uppercase tracking-[0.16em] text-blue-600/70">Assistant voice sample</div>
             <div className="mt-2 text-xl font-black text-slate-950">{agent.label}</div>
-            {agent.sampleSrc ? (
-              <audio className="mt-5 w-full" controls preload="metadata" src={agent.sampleSrc}>
-                Your browser does not support audio playback.
-              </audio>
-            ) : (
-              <div className="mt-5 rounded-xl border border-blue-100 bg-white px-4 py-4 text-sm font-semibold leading-6 text-slate-600">
-                Add a custom Vapi-generated greeting clip with <span className="font-black text-blue-700">REACT_APP_VAPI_SAMPLE_AUDIO_URL</span>.
-                The client demo will not use Vapi's generic "welcome to Vapi" sample.
-              </div>
-            )}
+            <div className="mt-5 grid gap-4 lg:grid-cols-[auto_1fr] lg:items-center">
+              <button
+                type="button"
+                onClick={togglePlayback}
+                className="group grid h-20 w-20 place-items-center rounded-2xl bg-gradient-to-br from-blue-600 to-violet-600 text-white shadow-[0_22px_45px_-24px_rgba(37,99,235,0.95)] transition hover:-translate-y-0.5 hover:shadow-[0_30px_54px_-24px_rgba(37,99,235,1)] focus:outline-none focus:ring-4 focus:ring-blue-200"
+                aria-label={isPlaying ? "Pause voice sample" : "Play voice sample"}
+              >
+                <Icon name={isPlaying ? "pause" : "play"} className={`h-8 w-8 ${isPlaying ? "" : "ml-1"}`} />
+              </button>
+              <VoiceVisualizer active={isPlaying} />
+            </div>
+            <div className="mt-4 h-2 overflow-hidden rounded-full bg-white shadow-[inset_0_1px_2px_rgba(15,23,42,0.1)]">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-blue-600 to-violet-600 transition-[width] duration-200"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+            <audio
+              ref={audioRef}
+              preload="metadata"
+              src={agent.sampleSrc}
+              onPlay={() => setIsPlaying(true)}
+              onPause={() => setIsPlaying(false)}
+              onEnded={() => {
+                setIsPlaying(false);
+                setAudioTime(0);
+              }}
+              onTimeUpdate={(event) => setAudioTime(event.currentTarget.currentTime || 0)}
+              onLoadedMetadata={(event) => setAudioDuration(event.currentTarget.duration || 0)}
+            >
+              Your browser does not support audio playback.
+            </audio>
           </div>
         </div>
 
         <div className="border-t border-slate-200 bg-slate-50/50 px-4 py-4 sm:px-6">
           <div className="flex items-center gap-3 text-sm font-medium text-blue-700/75">
             <Icon name="info" className="h-5 w-5 shrink-0 text-blue-600" />
-            <span>The live agent will use your configured greeting, not Vapi's public sample script.</span>
+            <span>This live assistant's voice is subject to change due to how cellular voice is transferred in your area.</span>
           </div>
         </div>
       </div>
@@ -688,15 +810,14 @@ function VoiceDemoStep({ agent }) {
   );
 }
 
-function ReviewPanel({ trade, areas, specializations, voice, details, phoneSetup }) {
+function ReviewPanel({ trade, areas, specializations, voice, details }) {
   const reviewItems = [
     ["Trade", trade.label],
     ["Service area", areas.join(", ")],
     ["Specializations", specializations.join(", ")],
-    ["Vapi voice", voice.label],
+    ["Assistant voice", voice.label],
     ["Business", details.businessName || "Not added yet"],
     ["Owner", details.ownerName || "Not added yet"],
-    ["Call forwarding", phoneSetup ? "Set up now" : "Skip for now"],
   ];
 
   return (
@@ -715,21 +836,124 @@ function ReviewPanel({ trade, areas, specializations, voice, details, phoneSetup
   );
 }
 
-function TrialButton({ disabled, busy, label = "Start free trial" }) {
+function TrialButton({ disabled, busy, finalStep = false, label = "Start free trial" }) {
+  const isBlocked = !finalStep && disabled;
+
   return (
     <button
       type="submit"
-      disabled={disabled || busy}
+      disabled={isBlocked || busy}
       className={
         "mx-auto mt-5 flex h-14 w-full max-w-[500px] items-center justify-center gap-3 rounded-xl text-base font-black text-white transition sm:gap-4 sm:text-xl " +
-        (disabled || busy
+        (isBlocked
           ? "cursor-not-allowed bg-slate-300"
-          : "bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 shadow-[0_26px_65px_-34px_rgba(79,70,229,0.95)] hover:-translate-y-0.5 hover:brightness-110")
+          : "bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 shadow-[0_26px_65px_-34px_rgba(79,70,229,0.95)] hover:-translate-y-0.5 hover:brightness-110 disabled:cursor-wait disabled:hover:translate-y-0 disabled:hover:brightness-100")
       }
     >
       {busy ? "Sending setup..." : label}
       <Icon name="arrow" className="h-6 w-6" />
     </button>
+  );
+}
+
+function SignupSuccessPage({ result, onStartAnother }) {
+  const businessName = result?.businessName || "your business";
+  const assignedNumber = result?.twilioPhoneNumber || "";
+  const [progress, setProgress] = useState(12);
+  const [showNumber, setShowNumber] = useState(false);
+
+  useEffect(() => {
+    const progressTimer = window.setInterval(() => {
+      setProgress((value) => Math.min(assignedNumber ? 100 : 88, value + 11));
+    }, 420);
+    const revealTimer = window.setTimeout(() => {
+      if (assignedNumber) {
+        setProgress(100);
+        setShowNumber(true);
+      }
+    }, 4200);
+
+    return () => {
+      window.clearInterval(progressTimer);
+      window.clearTimeout(revealTimer);
+    };
+  }, [assignedNumber]);
+
+  return (
+    <main className="min-h-screen bg-[linear-gradient(135deg,#f8fbff_0%,#ffffff_45%,#edf4ff_100%)] text-slate-950">
+      <header className="min-h-16 bg-[#020918] shadow-[0_24px_60px_-48px_rgba(15,23,42,0.85)]">
+        <div className="mx-auto flex min-h-16 max-w-[1440px] items-center px-4 py-3 sm:px-12">
+          <BrandLogo />
+        </div>
+      </header>
+
+      <section className="mx-auto grid min-h-[calc(100vh-64px)] w-full max-w-5xl place-items-center px-4 py-10 sm:px-6">
+        <div className="w-full overflow-hidden rounded-[28px] border border-blue-100 bg-white/96 shadow-[0_34px_100px_-70px_rgba(15,23,42,0.86)]">
+          <div className="bg-[radial-gradient(circle_at_20%_10%,rgba(96,165,250,0.26),transparent_34%),linear-gradient(135deg,#07142a,#0b3b7a)] px-5 py-7 text-white sm:px-8 sm:py-9">
+            <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-[#00b84a] text-white shadow-[0_0_30px_-10px_rgba(0,184,74,1)]">
+              <Icon name="check" className="h-8 w-8" />
+            </div>
+            <h1 className="mt-5 text-[clamp(2rem,9vw,3.75rem)] font-black leading-tight tracking-[-0.05em]">
+              Thanks, {businessName}.
+            </h1>
+            <p className="mt-3 max-w-3xl text-base font-medium leading-7 text-blue-50 sm:text-xl sm:leading-8">
+              Your AI phone assistant signup is in motion. We created your handoff and sent the setup details for review.
+            </p>
+          </div>
+
+          <div className="grid gap-5 p-5 sm:p-8 lg:grid-cols-[1fr_0.9fr]">
+            <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-5 sm:p-6">
+              <p className="text-sm font-black uppercase tracking-[0.16em] text-blue-600">Your new My AI PA number</p>
+              {showNumber && assignedNumber ? (
+                <a href={`tel:${assignedNumber.replace(/[^\d+]/g, "")}`} className="mt-3 block break-words text-[clamp(2rem,9vw,3.25rem)] font-black tracking-[-0.05em] text-[#07142a]">
+                  {formatPhoneNumber(assignedNumber)}
+                </a>
+              ) : (
+                <div className="mt-5">
+                  <p className="text-[1.28rem] font-black leading-tight tracking-[-0.03em] text-[#07142a]">
+                    Securing your forwarding number...
+                  </p>
+                  <div className="mt-4 h-3 overflow-hidden rounded-full bg-white shadow-[inset_0_1px_2px_rgba(15,23,42,0.12)]">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 transition-all duration-500"
+                      style={{ width: `${progress}%` }}
+                      role="progressbar"
+                      aria-valuemin="0"
+                      aria-valuemax="100"
+                      aria-valuenow={progress}
+                    />
+                  </div>
+                  <p className="mt-3 text-sm font-semibold text-slate-500">
+                    {assignedNumber ? "Final check in progress. Your number will appear here shortly." : "Waiting for the phone number assignment to finish."}
+                  </p>
+                </div>
+              )}
+              <p className="mt-3 text-base font-medium leading-7 text-slate-600">
+                Use this as the forwarding destination once you are ready to send missed calls to My AI PA.
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
+              <h2 className="text-xl font-black tracking-[-0.02em] text-slate-950">What happens next</h2>
+              <div className="mt-4 space-y-3 text-base font-medium leading-7 text-slate-600">
+                <p>We will use your business details, trade, service area, greeting, and selected voice to prepare the assistant.</p>
+                <p>Keep your current business number. Forward calls to the new number when you are ready to test it live.</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="border-t border-slate-100 bg-slate-50/70 px-5 py-5 sm:px-8">
+            <button
+              type="button"
+              onClick={onStartAnother}
+              className="inline-flex min-h-[48px] w-full items-center justify-center rounded-xl border border-blue-200 bg-white px-5 text-base font-black text-blue-700 transition hover:border-blue-400 hover:bg-blue-50 sm:w-auto"
+            >
+              Start another signup
+            </button>
+          </div>
+        </div>
+      </section>
+    </main>
   );
 }
 
@@ -740,10 +964,10 @@ export default function Signup() {
   const [selectedSpecializationIds, setSelectedSpecializationIds] = useState(["residential", "commercial", "specialty"]);
   const [selectedDialogueId, setSelectedDialogueId] = useState("help-today");
   const [specializationNotes, setSpecializationNotes] = useState("");
-  const [phoneSetup, setPhoneSetup] = useState(true);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [signupResult, setSignupResult] = useState(null);
   const [details, setDetails] = useState({
     ownerName: "",
     businessName: "",
@@ -764,12 +988,11 @@ export default function Signup() {
     () => OPENING_DIALOGUE_OPTIONS.find((dialogue) => dialogue.id === selectedDialogueId)?.text || OPENING_DIALOGUE_OPTIONS[0].text,
     [selectedDialogueId]
   );
-  const selectedAgent = VAPI_AGENT;
+  const selectedAgent = ASSISTANT_AGENT;
 
   const businessStepDisabled = !details.ownerName.trim() || !details.businessName.trim() || !details.phone.trim() || !isValidEmailAddress(details.email);
   const specializationStepDisabled = selectedSpecializationIds.length === 0;
   const voiceStepDisabled = false;
-  const launchDisabled = businessStepDisabled || specializationStepDisabled || voiceStepDisabled;
 
   const updateDetails = (field) => (event) => {
     setDetails((prev) => ({ ...prev, [field]: event.target.value }));
@@ -793,6 +1016,27 @@ export default function Signup() {
     });
   };
 
+  const resetSignup = () => {
+    setCurrentStep(1);
+    setSelectedTradeId("electrician");
+    setSelectedAreas(["Niagara Falls"]);
+    setSelectedSpecializationIds(["residential", "commercial", "specialty"]);
+    setSelectedDialogueId("help-today");
+    setSpecializationNotes("");
+    setStatus("");
+    setError("");
+    setBusy(false);
+    setSignupResult(null);
+    setDetails({
+      ownerName: "",
+      businessName: "",
+      phone: "",
+      email: "",
+      address: "",
+    });
+    window.scrollTo?.({ top: 0, behavior: "smooth" });
+  };
+
   const submitSignup = async (event) => {
     event.preventDefault();
     if (busy) return;
@@ -814,12 +1058,7 @@ export default function Signup() {
       window.scrollTo?.({ top: 0, behavior: "smooth" });
       return;
     }
-    if (currentStep === 4) {
-      setError("");
-      setStatus("Submission is disabled for now. This review step will not send a webhook request.");
-      return;
-    }
-    if (launchDisabled) return;
+    if (currentStep !== 4) return;
 
     setBusy(true);
     setError("");
@@ -827,55 +1066,67 @@ export default function Signup() {
 
     const serviceArea = selectedAreas.join(", ");
     const greeting = selectedDialogueText;
+    const formData = {
+      country: "ca",
+      selectedPlace: null,
+      businessProfile: {
+        businessName: details.businessName.trim(),
+        phone: details.phone.trim(),
+        address: details.address.trim(),
+        website: "",
+        hours: "Monday-Friday 9:00 AM-5:00 PM",
+        services: selectedTrade.services,
+      },
+      setupDetails: {
+        ownerName: details.ownerName.trim(),
+        ownerEmail: details.email.trim(),
+        ownerPhone: details.phone.trim(),
+        businessType: selectedTrade.businessType,
+        serviceArea,
+        callForwardingNumber: details.phone.trim(),
+        bookingPreference: "Text owner first",
+        notificationPreference: "SMS",
+        aiTone: "Professional",
+        assistantVoice: selectedAgent.value,
+        assistantVoiceLabel: selectedAgent.label,
+        voiceSampleUrl: selectedAgent.sampleSrc,
+        openingDialogue: selectedDialogueText,
+        specializations: selectedSpecializationLabels,
+        specializationNotes: specializationNotes.trim(),
+        aiGoals: `Answer calls, capture lead details, text the owner, and help callers in ${serviceArea}. The business handles ${selectedSpecializationLabels.join(", ").toLowerCase()} work.${specializationNotes.trim() ? ` Notes: ${specializationNotes.trim()}` : ""}`,
+        faq: selectedTrade.faq,
+        greetingScript: greeting,
+        emergencyAfterHoursAvailable: true,
+        emergencyRules: "Escalate urgent safety or service requests to the owner.",
+      },
+    };
 
     try {
-      const response = await fetch(`${API_BASE}/api/integrations/signup-complete`, {
+      const response = await fetch(SIGNUP_SUBMIT_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          country: "ca",
-          selectedPlace: null,
-          businessProfile: {
-            businessName: details.businessName.trim(),
-            phone: details.phone.trim(),
-            address: details.address.trim(),
-            website: "",
-            hours: "Monday-Friday 9:00 AM-5:00 PM",
-            services: selectedTrade.services,
-          },
-          setupDetails: {
-            ownerName: details.ownerName.trim(),
-            ownerEmail: details.email.trim(),
-            ownerPhone: details.phone.trim(),
-            businessType: selectedTrade.businessType,
-            serviceArea,
-            callForwardingNumber: phoneSetup ? details.phone.trim() : "",
-            bookingPreference: phoneSetup ? "Text owner first" : "Take message only",
-            notificationPreference: "SMS",
-            aiTone: "Professional",
-            vapiVoice: selectedAgent.value,
-            vapiVoiceLabel: selectedAgent.label,
-            voiceSampleUrl: selectedAgent.sampleSrc,
-            openingDialogue: selectedDialogueText,
-            specializations: selectedSpecializationLabels,
-            specializationNotes: specializationNotes.trim(),
-            aiGoals: `Answer calls, capture lead details, text the owner, and help callers in ${serviceArea}. The business handles ${selectedSpecializationLabels.join(", ").toLowerCase()} work.${specializationNotes.trim() ? ` Notes: ${specializationNotes.trim()}` : ""}`,
-            faq: selectedTrade.faq,
-            greetingScript: greeting,
-            emergencyAfterHoursAvailable: phoneSetup,
-            emergencyRules: phoneSetup ? "Escalate urgent safety or service requests to the owner." : "",
-          },
-        }),
+        body: JSON.stringify(formData),
       });
 
-      await parseApiResponse(response, "Signup handoff failed");
-      setStatus("Your AI phone assistant setup has been sent.");
+      const result = await parseApiResponse(response, "Signup handoff failed");
+      if (!getSignupSuccess(result)) {
+        throw new Error(result?.error || "Signup handoff failed.");
+      }
+      setSignupResult({
+        businessName: details.businessName.trim(),
+        twilioPhoneNumber: getTwilioPhoneNumber(result),
+      });
+      window.scrollTo?.({ top: 0, behavior: "smooth" });
     } catch (submitError) {
       setError(submitError?.message || "Signup handoff failed.");
     } finally {
       setBusy(false);
     }
   };
+
+  if (signupResult) {
+    return <SignupSuccessPage result={signupResult} onStartAnother={resetSignup} />;
+  }
 
   return (
     <main className="min-h-screen bg-[linear-gradient(135deg,#f8fbff_0%,#ffffff_45%,#edf4ff_100%)] text-slate-950">
@@ -971,27 +1222,6 @@ export default function Signup() {
                 </div>
                 <p className="mt-1.5 text-xs font-medium text-slate-500">City, province and postal code help us serve your callers better.</p>
               </section>
-
-              <section className="mt-4 flex flex-col gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <h2 className="text-xl font-black tracking-[-0.02em] text-slate-950">4. Call forwarding (phone setup)</h2>
-                  <p className="mt-1 text-sm font-medium text-slate-600">We'll give you a unique number to forward your calls to your AI assistant.</p>
-                </div>
-                <div className="flex flex-wrap items-center gap-4">
-                  <span className="text-sm font-medium text-slate-500">Set up call forwarding now</span>
-                  <button
-                    type="button"
-                    aria-pressed={phoneSetup}
-                    onClick={() => setPhoneSetup((value) => !value)}
-                    className={
-                      "relative h-8 w-14 rounded-full transition " +
-                      (phoneSetup ? "bg-gradient-to-r from-blue-500 to-violet-500 shadow-lg shadow-indigo-500/20" : "bg-slate-300")
-                    }
-                  >
-                    <span className={(phoneSetup ? "translate-x-7" : "translate-x-1") + " absolute left-0.5 top-1 h-6 w-6 rounded-full bg-white shadow transition"} />
-                  </button>
-                </div>
-              </section>
             </div>
           </section>
         ) : null}
@@ -1048,7 +1278,6 @@ export default function Signup() {
               specializations={selectedSpecializationLabels}
               voice={selectedAgent}
               details={details}
-              phoneSetup={phoneSetup}
             />
           </section>
         ) : null}
@@ -1067,8 +1296,9 @@ export default function Signup() {
         ) : null}
 
         <TrialButton
-          disabled={currentStep === 1 ? businessStepDisabled : currentStep === 2 ? specializationStepDisabled : currentStep === 3 ? voiceStepDisabled : true}
+          disabled={currentStep === 1 ? businessStepDisabled : currentStep === 2 ? specializationStepDisabled : currentStep === 3 ? voiceStepDisabled : false}
           busy={busy}
+          finalStep={currentStep === 4}
           label={currentStep === 4 ? "Start free trial" : "Save & continue"}
         />
 

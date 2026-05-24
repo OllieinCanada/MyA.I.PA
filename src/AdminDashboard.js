@@ -2,12 +2,12 @@ import React, { useEffect, useMemo, useState } from "react";
 
 const API_BASE = (process.env.REACT_APP_API_BASE_URL || "http://localhost:8787").replace(/\/+$/, "");
 
-function api(path, { method = "GET", password, body } = {}) {
+function api(path, { method = "GET", body } = {}) {
   const headers = { "Content-Type": "application/json" };
-  if (password) headers["x-admin-password"] = password;
   return fetch(`${API_BASE}${path}`, {
     method,
     headers,
+    credentials: "include",
     body: body ? JSON.stringify(body) : undefined,
   }).then(async (res) => {
     const text = await res.text();
@@ -34,7 +34,7 @@ function Shell({ children }) {
       <div className="relative min-h-screen overflow-x-hidden">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(900px_500px_at_12%_12%,rgba(255,245,210,0.28),transparent_60%)]" />
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(800px_540px_at_80%_22%,rgba(11,18,30,0.22),transparent_70%)]" />
-        <div className="relative z-10 mx-auto max-w-7xl px-6 py-10">{children}</div>
+        <div className="relative z-10 mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-10">{children}</div>
       </div>
     </main>
   );
@@ -91,7 +91,8 @@ function Textarea(props) {
 }
 
 export default function AdminDashboard() {
-  const [password, setPassword] = useState("");
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authChecked, setAuthChecked] = useState(false);
   const [candidate, setCandidate] = useState("");
   const [activeTab, setActiveTab] = useState("leads");
   const [loading, setLoading] = useState(false);
@@ -122,7 +123,7 @@ export default function AdminDashboard() {
     if (leadFilters.status) p.set("status", leadFilters.status);
     if (leadFilters.intent) p.set("intent", leadFilters.intent);
     if (leadFilters.urgency) p.set("urgency", leadFilters.urgency);
-    const data = await api(`/api/admin/leads${p.toString() ? `?${p}` : ""}`, { password });
+    const data = await api(`/api/admin/leads${p.toString() ? `?${p}` : ""}`);
     setLeads(data.leads || []);
   };
 
@@ -130,22 +131,22 @@ export default function AdminDashboard() {
     const p = new URLSearchParams();
     if (callFilters.status) p.set("status", callFilters.status);
     if (callFilters.minDuration) p.set("minDuration", callFilters.minDuration);
-    const data = await api(`/api/admin/calls${p.toString() ? `?${p}` : ""}`, { password });
+    const data = await api(`/api/admin/calls${p.toString() ? `?${p}` : ""}`);
     setCalls(data.calls || []);
   };
 
   const loadFaqs = async () => {
-    const data = await api("/api/admin/faqs", { password });
+    const data = await api("/api/admin/faqs");
     setFaqs(data.faqs || []);
   };
 
   const loadSettings = async () => {
-    const data = await api("/api/admin/settings", { password });
+    const data = await api("/api/admin/settings");
     setSettings(data.settings || null);
   };
 
   const refresh = async () => {
-    if (!password) return;
+    if (!isAuthenticated) return;
     setLoading(true);
     setError("");
     try {
@@ -161,8 +162,28 @@ export default function AdminDashboard() {
   };
 
   useEffect(() => {
+    let alive = true;
+    api("/api/admin/session")
+      .then(() => {
+        if (!alive) return;
+        setIsAuthenticated(true);
+      })
+      .catch(() => {
+        if (!alive) return;
+        setIsAuthenticated(false);
+      })
+      .finally(() => {
+        if (alive) setAuthChecked(true);
+      });
+
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
     refresh();
-  }, [password, activeTab, leadFilters.status, leadFilters.intent, leadFilters.urgency, callFilters.status, callFilters.minDuration]);
+  }, [isAuthenticated, activeTab, leadFilters.status, leadFilters.intent, leadFilters.urgency, callFilters.status, callFilters.minDuration]);
 
   const unlock = async (e) => {
     e.preventDefault();
@@ -170,7 +191,8 @@ export default function AdminDashboard() {
     setError("");
     try {
       await api("/api/admin/login", { method: "POST", body: { password: candidate } });
-      setPassword(candidate);
+      setIsAuthenticated(true);
+      setCandidate("");
     } catch (err) {
       setError(err.message);
     } finally {
@@ -178,11 +200,26 @@ export default function AdminDashboard() {
     }
   };
 
+  const lock = async () => {
+    setError("");
+    try {
+      await api("/api/admin/logout", { method: "POST" });
+    } catch (_err) {
+      // no-op
+    } finally {
+      setIsAuthenticated(false);
+      setLeads([]);
+      setCalls([]);
+      setFaqs([]);
+      setSettings(null);
+    }
+  };
+
   const createFaq = async (e) => {
     e.preventDefault();
     setError("");
     try {
-      await api("/api/admin/faqs", { method: "POST", password, body: { businessId: 1, ...faqDraft } });
+      await api("/api/admin/faqs", { method: "POST", body: { businessId: 1, ...faqDraft } });
       setFaqDraft({ question: "", answer: "", tags: "" });
       await loadFaqs();
     } catch (err) {
@@ -192,7 +229,7 @@ export default function AdminDashboard() {
 
   const updateFaq = async (faq) => {
     try {
-      await api(`/api/admin/faqs/${faq.id}`, { method: "PUT", password, body: faq });
+      await api(`/api/admin/faqs/${faq.id}`, { method: "PUT", body: faq });
       await loadFaqs();
     } catch (err) {
       setError(err.message);
@@ -201,7 +238,7 @@ export default function AdminDashboard() {
 
   const removeFaq = async (id) => {
     try {
-      await api(`/api/admin/faqs/${id}`, { method: "DELETE", password });
+      await api(`/api/admin/faqs/${id}`, { method: "DELETE" });
       await loadFaqs();
     } catch (err) {
       setError(err.message);
@@ -214,7 +251,6 @@ export default function AdminDashboard() {
     try {
       const data = await api("/api/admin/settings", {
         method: "PUT",
-        password,
         body: {
           businessId: settings.businessId || 1,
           answerAfterRings: Number(settings.answerAfterRings || 3),
@@ -229,14 +265,25 @@ export default function AdminDashboard() {
     }
   };
 
-  if (!password) {
+  if (!authChecked) {
+    return (
+      <Shell>
+        <Panel>
+          <div className="text-xs font-bold uppercase tracking-[0.28em] text-white/60">Admin Session</div>
+          <p className="mt-3 text-sm font-semibold text-white/75">Checking your admin session...</p>
+        </Panel>
+      </Shell>
+    );
+  }
+
+  if (!isAuthenticated) {
     return (
       <Shell>
         <div className="grid gap-8 lg:grid-cols-[1.05fr_0.95fr]">
           <div>
             <div className="inline-flex items-center rounded-full border border-white/35 bg-white/10 px-4 py-2 text-xs font-bold uppercase tracking-[0.3em] text-white/90">Admin Dashboard</div>
-            <h1 className="mt-6 font-serif text-[48px] font-semibold leading-[0.95] text-white sm:text-[64px]">My AI PA control center</h1>
-            <p className="mt-6 max-w-2xl text-xl font-bold leading-snug text-[#0c1736]">
+            <h1 className="mt-6 font-serif text-[clamp(2.7rem,12vw,4rem)] font-semibold leading-[0.95] text-white">My AI PA control center</h1>
+            <p className="mt-6 max-w-2xl text-lg font-bold leading-snug text-[#0c1736] sm:text-xl">
               Enter the admin password to manage leads, calls, FAQs, and answering settings.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
@@ -246,8 +293,8 @@ export default function AdminDashboard() {
           </div>
           <Panel>
             <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
-              <div className="text-xs font-bold uppercase tracking-[0.28em] text-white/60">Password Gate</div>
-              <p className="mt-3 text-sm font-semibold text-white/75">Checks backend `ADMIN_PASSWORD` via `/api/admin/login`.</p>
+              <div className="text-xs font-bold uppercase tracking-[0.28em] text-white/60">Secure Sign In</div>
+              <p className="mt-3 text-sm font-semibold text-white/75">Enter the admin password once. The dashboard then uses a secure session cookie.</p>
               <form className="mt-4 space-y-4" onSubmit={unlock}>
                 <Labeled label="Admin Password">
                   <Input type="password" value={candidate} onChange={(e) => setCandidate(e.target.value)} placeholder="Enter ADMIN_PASSWORD" />
@@ -269,12 +316,12 @@ export default function AdminDashboard() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="text-xs font-bold uppercase tracking-[0.28em] text-white/70">My AI PA Admin</div>
-          <h1 className="mt-1 font-serif text-4xl font-semibold text-white sm:text-5xl">Voice Ops Dashboard</h1>
+          <h1 className="mt-1 font-serif text-[clamp(2.25rem,10vw,3rem)] font-semibold text-white">Voice Ops Dashboard</h1>
           <p className="mt-2 text-sm font-semibold text-white/65">Backend: <code>{API_BASE}</code></p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-3">
           <button type="button" onClick={() => (window.location.hash = "/")} className="rounded-full border border-white/20 bg-white/5 px-4 py-2 text-sm font-bold text-white/80">Site</button>
-          <button type="button" onClick={() => setPassword("")} className="rounded-full border border-white/20 bg-white/5 px-4 py-2 text-sm font-bold text-white/80">Lock</button>
+          <button type="button" onClick={lock} className="rounded-full border border-white/20 bg-white/5 px-4 py-2 text-sm font-bold text-white/80">Lock</button>
         </div>
       </div>
 
@@ -357,7 +404,7 @@ export default function AdminDashboard() {
                 <tbody>
                   {calls.length ? calls.map((call) => (
                     <tr key={call.id} className="border-t border-white/5 align-top">
-                      <td className="px-4 py-3">{dt(call.startedAt)}</td><td className="px-4 py-3">{call.status}</td><td className="px-4 py-3">{call.durationSec ?? "—"}</td><td className="px-4 py-3">{call.caller?.phone || "—"}</td><td className="px-4 py-3">{call.transcript ? String(call.transcript).slice(0, 120) : "—"}</td>
+                      <td className="px-4 py-3">{dt(call.startedAt)}</td><td className="px-4 py-3">{call.status}</td><td className="px-4 py-3">{call.durationSec ?? "—"}</td><td className="px-4 py-3">{call.caller?.phone || "—"}</td><td className="px-4 py-3">{call.transcript ? String(call.transcript).slice(0, 120) : call.transcriptProtected ? "Stored (protected)" : "—"}</td>
                     </tr>
                   )) : <tr><td colSpan="5" className="px-4 py-4 text-white/55">No calls found.</td></tr>}
                 </tbody>

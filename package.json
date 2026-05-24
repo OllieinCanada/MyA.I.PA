@@ -17,6 +17,7 @@
     "dev": "concurrently -k \"npm run server\" \"npm start\"",
     "server": "node server/index.js",
     "db:generate": "prisma generate",
+    "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
     "db:seed": "node prisma/seed.js",
     "start": "cross-env PORT=3000 react-scripts start",

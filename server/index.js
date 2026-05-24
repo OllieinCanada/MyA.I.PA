@@ -1,5 +1,6 @@
 require("dotenv").config();
 
+const crypto = require("crypto");
 const cors = require("cors");
 const express = require("express");
 const { prisma } = require("./prisma");
@@ -18,8 +19,25 @@ const assistantRateLimit = new Map();
 const ASSISTANT_MAX_CHARS = 2000;
 const ASSISTANT_WINDOW_MS = 60 * 1000;
 const ASSISTANT_MAX_REQUESTS_PER_WINDOW = 12;
+const WEBSITE_FETCH_TIMEOUT_MS = 8000;
+const WEBSITE_MAX_HTML_CHARS = 250000;
+const WEBSITE_MAX_EXTRA_PAGES = 3;
+const ADMIN_SESSION_COOKIE = "myaipa_admin_session";
+const ADMIN_SESSION_TTL_MS = 1000 * 60 * 60 * 12;
+const EXPOSE_CALL_TRANSCRIPTS_IN_ADMIN = /^(1|true|yes|on)$/i.test(String(process.env.EXPOSE_CALL_TRANSCRIPTS_IN_ADMIN || ""));
+const EXPOSE_RECORDING_URLS_IN_ADMIN = /^(1|true|yes|on)$/i.test(String(process.env.EXPOSE_RECORDING_URLS_IN_ADMIN || ""));
+const CALL_TRANSCRIPT_RETENTION_DAYS = Math.max(0, Number(process.env.CALL_TRANSCRIPT_RETENTION_DAYS || 0) || 0);
+const CALL_RECORDING_RETENTION_DAYS = Math.max(0, Number(process.env.CALL_RECORDING_RETENTION_DAYS || 0) || 0);
+const SENSITIVE_CALL_CLEANUP_INTERVAL_MS = 1000 * 60 * 60 * 6;
 
-app.use(cors());
+app.use(
+  cors({
+    origin(origin, callback) {
+      callback(null, origin || true);
+    },
+    credentials: true,
+  })
+);
 app.use(express.json({ limit: "15mb" }));
 
 function asyncRoute(handler) {
@@ -32,16 +50,238 @@ function parsePositiveInt(value, fallback) {
   return Number.isInteger(n) && n > 0 ? n : fallback;
 }
 
-function requireAdmin(req, res, next) {
+function parseCookies(req) {
+  const raw = String(req.headers.cookie || "").trim();
+  if (!raw) return {};
+  return raw.split(/;\s*/).reduce((acc, part) => {
+    const idx = part.indexOf("=");
+    if (idx === -1) return acc;
+    const key = part.slice(0, idx).trim();
+    const value = part.slice(idx + 1).trim();
+    if (key) acc[key] = decodeURIComponent(value);
+    return acc;
+  }, {});
+}
+
+function getAdminPassword() {
   const expected = process.env.ADMIN_PASSWORD;
   if (!expected) {
-    return res.status(500).json({ error: "ADMIN_PASSWORD is not set on the backend." });
+    const err = new Error("ADMIN_PASSWORD is not set on the backend.");
+    err.statusCode = 500;
+    throw err;
   }
+  return expected;
+}
+
+function getAdminSessionSecret() {
+  return process.env.ADMIN_SESSION_SECRET || `${getAdminPassword()}:session`;
+}
+
+function signAdminSessionPayload(payload) {
+  return crypto.createHmac("sha256", getAdminSessionSecret()).update(payload).digest("hex");
+}
+
+function createAdminSessionToken() {
+  const payload = Buffer.from(
+    JSON.stringify({
+      exp: Date.now() + ADMIN_SESSION_TTL_MS,
+    })
+  ).toString("base64url");
+  return `${payload}.${signAdminSessionPayload(payload)}`;
+}
+
+function hasValidAdminSession(req) {
+  const token = parseCookies(req)[ADMIN_SESSION_COOKIE];
+  if (!token || !token.includes(".")) return false;
+  const [payload, signature] = token.split(".");
+  if (!payload || !signature) return false;
+
+  const expectedSignature = signAdminSessionPayload(payload);
+  const providedBuffer = Buffer.from(signature);
+  const expectedBuffer = Buffer.from(expectedSignature);
+  if (
+    providedBuffer.length !== expectedBuffer.length ||
+    !crypto.timingSafeEqual(providedBuffer, expectedBuffer)
+  ) {
+    return false;
+  }
+
+  try {
+    const data = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+    return Number(data?.exp || 0) > Date.now();
+  } catch (_err) {
+    return false;
+  }
+}
+
+function setAdminSessionCookie(res, token) {
+  const cookie = [
+    `${ADMIN_SESSION_COOKIE}=${encodeURIComponent(token)}`,
+    "Path=/",
+    "HttpOnly",
+    "SameSite=Lax",
+    `Max-Age=${Math.floor(ADMIN_SESSION_TTL_MS / 1000)}`,
+  ];
+  if (process.env.NODE_ENV === "production") {
+    cookie.push("Secure");
+  }
+  res.setHeader("Set-Cookie", cookie.join("; "));
+}
+
+function clearAdminSessionCookie(res) {
+  const cookie = [
+    `${ADMIN_SESSION_COOKIE}=`,
+    "Path=/",
+    "HttpOnly",
+    "SameSite=Lax",
+    "Max-Age=0",
+  ];
+  if (process.env.NODE_ENV === "production") {
+    cookie.push("Secure");
+  }
+  res.setHeader("Set-Cookie", cookie.join("; "));
+}
+
+function hasValidAdminPassword(req) {
   const supplied = req.headers["x-admin-password"] || req.body?.password || req.query.password;
-  if (supplied !== expected) {
-    return res.status(401).json({ error: "Invalid admin password." });
+  return supplied === getAdminPassword();
+}
+
+function getMakeSignupWebhookConfig() {
+  return {
+    url: String(process.env.MAKE_SIGNUP_WEBHOOK_URL || "").trim(),
+    apiKey: String(process.env.MAKE_SIGNUP_WEBHOOK_API_KEY || "").trim(),
+  };
+}
+
+function isValidEmailAddress(value) {
+  const email = String(value || "").trim();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function compactObject(value) {
+  if (Array.isArray(value)) {
+    const items = value
+      .map((item) => compactObject(item))
+      .filter((item) => item != null && item !== "" && !(typeof item === "object" && !Array.isArray(item) && !Object.keys(item).length));
+    return items.length ? items : undefined;
   }
-  next();
+
+  if (value && typeof value === "object") {
+    const entries = Object.entries(value).reduce((acc, [key, item]) => {
+      const compacted = compactObject(item);
+      if (compacted == null || compacted === "") return acc;
+      if (typeof compacted === "object" && !Array.isArray(compacted) && !Object.keys(compacted).length) {
+        return acc;
+      }
+      acc[key] = compacted;
+      return acc;
+    }, {});
+    return Object.keys(entries).length ? entries : undefined;
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed || undefined;
+  }
+
+  return value == null ? undefined : value;
+}
+
+function parseJsonObject(rawText) {
+  try {
+    const data = rawText ? JSON.parse(rawText) : {};
+    return data && typeof data === "object" ? data : {};
+  } catch (_err) {
+    return {};
+  }
+}
+
+function getMakeSignupSuccess(data) {
+  if (data?.success === false || data?.ok === false) return false;
+  return data?.success === true || data?.ok === true || !Object.keys(data || {}).length;
+}
+
+function getMakeTwilioPhoneNumber(data) {
+  return String(
+    data?.twilioPhoneNumber ||
+      data?.twilio_phone_number ||
+      data?.phoneNumber ||
+      data?.assignedPhoneNumber ||
+      data?.assigned_number ||
+      data?.number ||
+      data?.data?.twilioPhoneNumber ||
+      data?.data?.phoneNumber ||
+      ""
+  ).trim();
+}
+
+function getMakeTwilioPhoneNumberFromText(rawText) {
+  const text = String(rawText || "");
+  const fieldMatch = text.match(/"twilioPhoneNumber"\s*:\s*"([^"\r\n]+)/i);
+  if (fieldMatch?.[1]) return fieldMatch[1].trim();
+
+  const phoneMatch = text.match(/(?:\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}/);
+  return phoneMatch?.[0]?.trim() || "";
+}
+
+async function sendMakeSignupCompleted(payload) {
+  const { url, apiKey } = getMakeSignupWebhookConfig();
+  if (!url) {
+    const err = new Error("MAKE_SIGNUP_WEBHOOK_URL is not configured on the backend.");
+    err.statusCode = 500;
+    throw err;
+  }
+
+  const headers = {
+    "Content-Type": "application/json",
+  };
+
+  if (apiKey) {
+    headers["x-make-apikey"] = apiKey;
+  }
+
+  let response;
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload),
+    });
+  } catch (error) {
+    console.error("[make:signup] webhook request failed", { message: error?.message || String(error) });
+    const err = new Error("Make webhook could not be reached.");
+    err.statusCode = 502;
+    throw err;
+  }
+
+  const rawText = await response.text();
+  if (!response.ok) {
+    console.error("[make:signup] webhook rejected request", {
+      status: response.status,
+      body: rawText.slice(0, 500),
+    });
+    const err = new Error("Make webhook rejected the signup handoff.");
+    err.statusCode = 502;
+    throw err;
+  }
+
+  return {
+    status: response.status,
+    body: rawText,
+    data: parseJsonObject(rawText),
+  };
+}
+
+function requireAdmin(req, res, next) {
+  try {
+    if (hasValidAdminSession(req) || hasValidAdminPassword(req)) {
+      return next();
+    }
+    return res.status(401).json({ error: "Invalid admin password." });
+  } catch (err) {
+    return res.status(err.statusCode || 500).json({ error: err.message || "Admin authentication failed." });
+  }
 }
 
 function getClientIp(req) {
@@ -50,6 +290,69 @@ function getClientIp(req) {
     return forwarded.split(",")[0].trim();
   }
   return req.ip || req.socket?.remoteAddress || "unknown";
+}
+
+function sanitizeAdminCall(call) {
+  if (!call) return call;
+  const transcript = typeof call.transcript === "string" ? call.transcript : null;
+  const recordingUrl = typeof call.recordingUrl === "string" ? call.recordingUrl : null;
+  return {
+    ...call,
+    transcript: EXPOSE_CALL_TRANSCRIPTS_IN_ADMIN ? transcript : null,
+    transcriptAvailable: Boolean(transcript),
+    transcriptProtected: Boolean(transcript) && !EXPOSE_CALL_TRANSCRIPTS_IN_ADMIN,
+    recordingUrl: EXPOSE_RECORDING_URLS_IN_ADMIN ? recordingUrl : null,
+    recordingAvailable: Boolean(recordingUrl),
+    recordingProtected: Boolean(recordingUrl) && !EXPOSE_RECORDING_URLS_IN_ADMIN,
+  };
+}
+
+function sanitizeAdminLead(lead) {
+  if (!lead) return lead;
+  return {
+    ...lead,
+    call: sanitizeAdminCall(lead.call),
+  };
+}
+
+async function cleanupSensitiveCallData() {
+  const jobs = [];
+  const now = Date.now();
+
+  if (CALL_TRANSCRIPT_RETENTION_DAYS > 0) {
+    const cutoff = new Date(now - CALL_TRANSCRIPT_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+    jobs.push(
+      prisma.call.updateMany({
+        where: {
+          transcript: { not: null },
+          startedAt: { lt: cutoff },
+        },
+        data: { transcript: null },
+      }).then((result) => ({ key: "transcripts", count: result?.count || 0 }))
+    );
+  }
+
+  if (CALL_RECORDING_RETENTION_DAYS > 0) {
+    const cutoff = new Date(now - CALL_RECORDING_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+    jobs.push(
+      prisma.call.updateMany({
+        where: {
+          recordingUrl: { not: null },
+          startedAt: { lt: cutoff },
+        },
+        data: { recordingUrl: null },
+      }).then((result) => ({ key: "recordings", count: result?.count || 0 }))
+    );
+  }
+
+  if (!jobs.length) return;
+  const results = await Promise.all(jobs);
+  const transcriptResult = results.find((item) => item.key === "transcripts");
+  const recordingResult = results.find((item) => item.key === "recordings");
+  console.log("[call-data-cleanup]", {
+    transcriptsCleared: transcriptResult?.count || 0,
+    recordingUrlsCleared: recordingResult?.count || 0,
+  });
 }
 
 function enforceAssistantRateLimit(req, res, next) {
@@ -77,6 +380,327 @@ function enforceAssistantRateLimit(req, res, next) {
   }
 
   next();
+}
+
+function normalizeWebsiteUrl(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  if (/^https?:\/\//i.test(raw)) return raw;
+  return `https://${raw.replace(/^\/+/, "")}`;
+}
+
+function decodeHtmlEntities(value) {
+  return String(value || "")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&#(\d+);/g, (_match, code) => {
+      const n = Number(code);
+      return Number.isFinite(n) ? String.fromCharCode(n) : "";
+    });
+}
+
+function cleanText(value) {
+  return decodeHtmlEntities(
+    String(value || "")
+      .replace(/\s+/g, " ")
+      .replace(/\u00a0/g, " ")
+      .trim()
+  );
+}
+
+function stripHtml(html) {
+  return cleanText(
+    String(html || "")
+      .replace(/<script[\s\S]*?<\/script>/gi, " ")
+      .replace(/<style[\s\S]*?<\/style>/gi, " ")
+      .replace(/<noscript[\s\S]*?<\/noscript>/gi, " ")
+      .replace(/<svg[\s\S]*?<\/svg>/gi, " ")
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<\/(p|div|section|article|li|h1|h2|h3|h4|h5|h6)>/gi, "\n")
+      .replace(/<[^>]+>/g, " ")
+  );
+}
+
+function uniqueStrings(values) {
+  const seen = new Set();
+  const result = [];
+  for (const value of values || []) {
+    const cleaned = cleanText(value);
+    if (!cleaned) continue;
+    const key = cleaned.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(cleaned);
+  }
+  return result;
+}
+
+function extractEmails(text) {
+  return uniqueStrings(
+    (String(text || "").match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi) || []).filter(
+      (email) => !/\.(png|jpg|jpeg|gif|webp|svg)$/i.test(email)
+    )
+  );
+}
+
+function formatPhone(rawPhone) {
+  const raw = cleanText(rawPhone);
+  const digits = raw.replace(/\D/g, "");
+  if (digits.length < 10 || digits.length > 15) return "";
+  if (digits.length === 10) {
+    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+  }
+  if (digits.length === 11 && digits.startsWith("1")) {
+    return `+1 ${digits.slice(1, 4)}-${digits.slice(4, 7)}-${digits.slice(7)}`;
+  }
+  return raw;
+}
+
+function extractPhones(text) {
+  const matches = String(text || "").match(/(?:\+?\d[\d\s().-]{7,}\d)/g) || [];
+  return uniqueStrings(matches.map(formatPhone).filter(Boolean));
+}
+
+function extractMetaDescription(html) {
+  const metaMatch = String(html || "").match(
+    /<meta[^>]+(?:name|property)=["'](?:description|og:description)["'][^>]+content=["']([^"']+)["'][^>]*>/i
+  );
+  return cleanText(metaMatch?.[1] || "");
+}
+
+function extractJsonLdBlocks(html) {
+  const blocks = [];
+  const regex = /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+  let match;
+  while ((match = regex.exec(String(html || "")))) {
+    const raw = cleanText(match[1]);
+    if (!raw) continue;
+    try {
+      blocks.push(JSON.parse(raw));
+    } catch (_error) {
+      // Ignore malformed structured data blocks.
+    }
+  }
+  return blocks;
+}
+
+function formatAddress(addressNode) {
+  if (!addressNode || typeof addressNode !== "object") return "";
+  const parts = [
+    addressNode.streetAddress,
+    addressNode.addressLocality,
+    addressNode.addressRegion,
+    addressNode.postalCode,
+    addressNode.addressCountry,
+  ];
+  return uniqueStrings(parts).join(", ");
+}
+
+function formatOpeningHours(spec) {
+  if (!spec || typeof spec !== "object") return "";
+  const days = Array.isArray(spec.dayOfWeek) ? spec.dayOfWeek : [spec.dayOfWeek];
+  const shortDays = days
+    .filter(Boolean)
+    .map((day) => String(day).split("/").pop())
+    .map((day) => day.replace(/^https?:/i, ""))
+    .map((day) => day.replace(/^\/+/, ""))
+    .map((day) => day.replace(/^([A-Z])/, (m) => m.toUpperCase()));
+  const opens = cleanText(spec.opens || "");
+  const closes = cleanText(spec.closes || "");
+  if (!shortDays.length && !opens && !closes) return "";
+  return `${shortDays.join(", ")}${opens || closes ? ` ${opens}-${closes}` : ""}`.trim();
+}
+
+function collectStructuredData(node, collector) {
+  if (!node) return;
+  if (Array.isArray(node)) {
+    node.forEach((item) => collectStructuredData(item, collector));
+    return;
+  }
+  if (typeof node !== "object") return;
+
+  if (node.email) collector.emails.push(node.email);
+  if (node.telephone) collector.phones.push(node.telephone);
+  if (node.description && !collector.description) collector.description = cleanText(node.description);
+  if (node.address && !collector.address) collector.address = formatAddress(node.address);
+  if (node.openingHours && !collector.hours) {
+    collector.hours = Array.isArray(node.openingHours) ? node.openingHours.join(" | ") : cleanText(node.openingHours);
+  }
+  if (node.openingHoursSpecification && !collector.hours) {
+    const specs = Array.isArray(node.openingHoursSpecification) ? node.openingHoursSpecification : [node.openingHoursSpecification];
+    collector.hours = uniqueStrings(specs.map(formatOpeningHours).filter(Boolean)).join(" | ");
+  }
+  if (!collector.ownerName) {
+    const ownerCandidate = node.founder?.name || node.founders?.[0]?.name || node.employee?.name || node.contactPoint?.name;
+    if (ownerCandidate) collector.ownerName = cleanText(ownerCandidate);
+  }
+
+  for (const value of Object.values(node)) {
+    collectStructuredData(value, collector);
+  }
+}
+
+function extractRelevantLinks(html, websiteUrl) {
+  const links = [];
+  const baseUrl = new URL(websiteUrl);
+  const regex = /<a[^>]+href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+  let match;
+  while ((match = regex.exec(String(html || "")))) {
+    const href = cleanText(match[1]);
+    const text = cleanText(match[2]);
+    if (!href || href.startsWith("#") || /^mailto:|^tel:/i.test(href)) continue;
+    const relevance = `${href} ${text}`.toLowerCase();
+    if (!/(contact|about|service|services|hours|location|team|staff)/.test(relevance)) continue;
+    try {
+      const absolute = new URL(href, websiteUrl);
+      if (absolute.origin !== baseUrl.origin) continue;
+      links.push(absolute.toString());
+    } catch (_error) {
+      // Ignore invalid URLs.
+    }
+  }
+  return uniqueStrings(links).slice(0, WEBSITE_MAX_EXTRA_PAGES);
+}
+
+function extractHoursFromText(text) {
+  const lines = uniqueStrings(
+    String(text || "")
+      .split(/\n+/)
+      .map(cleanText)
+      .filter((line) => /(mon|tue|wed|thu|fri|sat|sun|monday|tuesday|wednesday|thursday|friday|saturday|sunday|hours)/i.test(line))
+      .filter((line) => line.length >= 8 && line.length <= 120)
+  );
+  return lines.slice(0, 3).join(" | ");
+}
+
+function extractOwnerNameFromText(text) {
+  const match = String(text || "").match(
+    /(?:owner|founder|president|ceo|director)\s*[:\-]\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2})/
+  );
+  return cleanText(match?.[1] || "");
+}
+
+function extractServicesFromHtml(html, fallbackDescription) {
+  const candidates = [];
+  const headingRegex = /<(h1|h2|h3|li|p)[^>]*>([\s\S]*?)<\/\1>/gi;
+  let match;
+  while ((match = headingRegex.exec(String(html || "")))) {
+    const text = cleanText(match[2]);
+    if (!text || text.length < 8 || text.length > 120) continue;
+    if (/(contact|about|home|blog|login|read more|privacy|terms)/i.test(text)) continue;
+    if (/(service|services|repair|install|installation|maintenance|cleaning|inspection|emergency|quote|appointment|support)/i.test(text)) {
+      candidates.push(text);
+    }
+  }
+  const uniqueCandidates = uniqueStrings(candidates);
+  if (uniqueCandidates.length) return uniqueCandidates.slice(0, 5).join(", ");
+  return cleanText(fallbackDescription || "");
+}
+
+async function fetchWebsiteHtml(url) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), WEBSITE_FETCH_TIMEOUT_MS);
+  try {
+    const response = await fetch(url, {
+      redirect: "follow",
+      signal: controller.signal,
+      headers: {
+        Accept: "text/html,application/xhtml+xml",
+        "User-Agent": "MyAIPA/1.0 Website Enrichment",
+      },
+    });
+    if (!response.ok) {
+      throw new Error(`Website request failed (${response.status})`);
+    }
+    const contentType = response.headers.get("content-type") || "";
+    if (!/text\/html|application\/xhtml\+xml/i.test(contentType)) {
+      return "";
+    }
+    const html = await response.text();
+    return html.slice(0, WEBSITE_MAX_HTML_CHARS);
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+function extractWebsiteProfileFromHtml(html) {
+  const text = stripHtml(html);
+  const structuredData = { emails: [], phones: [], address: "", hours: "", description: "", ownerName: "" };
+  extractJsonLdBlocks(html).forEach((block) => collectStructuredData(block, structuredData));
+
+  return {
+    emails: uniqueStrings([...structuredData.emails, ...extractEmails(html), ...extractEmails(text)]),
+    phones: uniqueStrings([...structuredData.phones, ...extractPhones(html), ...extractPhones(text)]),
+    address: structuredData.address,
+    hours: structuredData.hours || extractHoursFromText(text),
+    description: structuredData.description || extractMetaDescription(html),
+    ownerName: structuredData.ownerName || extractOwnerNameFromText(text),
+    services: extractServicesFromHtml(html, structuredData.description || extractMetaDescription(html)),
+  };
+}
+
+function mergeEnrichmentProfiles(profiles) {
+  const merged = {
+    emails: [],
+    phones: [],
+    address: "",
+    hours: "",
+    description: "",
+    ownerName: "",
+    services: "",
+    sourceUrls: [],
+  };
+
+  for (const profile of profiles) {
+    if (!profile) continue;
+    merged.emails = uniqueStrings([...merged.emails, ...(profile.emails || [])]);
+    merged.phones = uniqueStrings([...merged.phones, ...(profile.phones || [])]);
+    if (!merged.address && profile.address) merged.address = profile.address;
+    if (!merged.hours && profile.hours) merged.hours = profile.hours;
+    if (!merged.description && profile.description) merged.description = profile.description;
+    if (!merged.ownerName && profile.ownerName) merged.ownerName = profile.ownerName;
+    if (!merged.services && profile.services) merged.services = profile.services;
+    merged.sourceUrls = uniqueStrings([...merged.sourceUrls, ...(profile.sourceUrls || [])]);
+  }
+
+  return merged;
+}
+
+async function enrichBusinessFromWebsite({ website }) {
+  const normalizedWebsite = normalizeWebsiteUrl(website);
+  if (!normalizedWebsite) {
+    return { emails: [], phones: [], address: "", hours: "", services: "", description: "", ownerName: "", sourceUrls: [] };
+  }
+
+  const homepageHtml = await fetchWebsiteHtml(normalizedWebsite);
+  const homepageProfile = extractWebsiteProfileFromHtml(homepageHtml);
+  const extraUrls = extractRelevantLinks(homepageHtml, normalizedWebsite);
+  const extraProfiles = [];
+
+  for (const url of extraUrls) {
+    try {
+      const html = await fetchWebsiteHtml(url);
+      extraProfiles.push({ ...extractWebsiteProfileFromHtml(html), sourceUrls: [url] });
+    } catch (_error) {
+      // Ignore secondary page failures.
+    }
+  }
+
+  return mergeEnrichmentProfiles([{ ...homepageProfile, sourceUrls: [normalizedWebsite] }, ...extraProfiles]);
+}
+
+function logOpenAiProviderError(operation, response, data) {
+  console.error(`[openai:${operation}] upstream request failed`, {
+    status: response?.status || null,
+    code: data?.error?.code || null,
+    type: data?.error?.type || null,
+    param: data?.error?.param || null,
+    message: data?.error?.message || null,
+  });
 }
 
 async function getOpenAiAssistantReply(message) {
@@ -117,9 +741,16 @@ async function getOpenAiAssistantReply(message) {
   const data = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    const msg =
-      data?.error?.message ||
-      `OpenAI request failed (${response.status}).`;
+    logOpenAiProviderError("assistant", response, data);
+    const providerCode = String(data?.error?.code || "").toLowerCase();
+    const providerMessage = String(data?.error?.message || "");
+    const isQuotaIssue =
+      response.status === 429 ||
+      providerCode === "insufficient_quota" ||
+      /quota|billing|rate limit/i.test(providerMessage);
+    const msg = isQuotaIssue
+      ? "AI responses are temporarily unavailable right now. Please try again shortly."
+      : `AI request failed (${response.status}).`;
     const err = new Error(msg);
     err.statusCode = 502;
     throw err;
@@ -184,7 +815,16 @@ async function getOpenAiTranscription({ audioBase64, mimeType, detailed = false 
 
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const msg = data?.error?.message || `OpenAI transcription failed (${response.status}).`;
+    logOpenAiProviderError("transcription", response, data);
+    const providerCode = String(data?.error?.code || "").toLowerCase();
+    const providerMessage = String(data?.error?.message || "");
+    const isQuotaIssue =
+      response.status === 429 ||
+      providerCode === "insufficient_quota" ||
+      /quota|billing|rate limit/i.test(providerMessage);
+    const msg = isQuotaIssue
+      ? "Voice input is temporarily unavailable right now. Please type your answer instead."
+      : `Voice transcription failed (${response.status}).`;
     const err = new Error(msg);
     err.statusCode = 502;
     throw err;
@@ -221,6 +861,68 @@ async function getOpenAiTranscription({ audioBase64, mimeType, detailed = false 
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true, service: "my-ai-pa-api", time: new Date().toISOString() });
 });
+
+app.post(
+  "/api/business/enrich",
+  asyncRoute(async (req, res) => {
+    const body = req.body || {};
+    const website = normalizeWebsiteUrl(body.website);
+
+    if (!website) {
+      return res.json({
+        ok: true,
+        enrichment: {
+          website: "",
+          phone: "",
+          ownerPhone: "",
+          email: "",
+          ownerEmail: "",
+          address: "",
+          hours: "",
+          services: "",
+          ownerName: "",
+          sourceUrls: [],
+        },
+      });
+    }
+
+    try {
+      const enrichment = await enrichBusinessFromWebsite({ website });
+      res.json({
+        ok: true,
+        enrichment: {
+          website,
+          phone: enrichment.phones[0] || "",
+          ownerPhone: enrichment.phones[0] || "",
+          email: enrichment.emails[0] || "",
+          ownerEmail: enrichment.emails[0] || "",
+          address: enrichment.address || "",
+          hours: enrichment.hours || "",
+          services: enrichment.services || enrichment.description || "",
+          ownerName: enrichment.ownerName || "",
+          sourceUrls: enrichment.sourceUrls || [],
+        },
+      });
+    } catch (error) {
+      res.json({
+        ok: true,
+        enrichment: {
+          website,
+          phone: "",
+          ownerPhone: "",
+          email: "",
+          ownerEmail: "",
+          address: "",
+          hours: "",
+          services: "",
+          ownerName: "",
+          sourceUrls: [],
+        },
+        warning: error?.message || "Website enrichment failed.",
+      });
+    }
+  })
+);
 
 app.post(
   "/api/assistant",
@@ -357,9 +1059,109 @@ app.post(
 );
 
 app.post(
+  "/api/integrations/signup-complete",
+  asyncRoute(async (req, res) => {
+    const body = req.body || {};
+    const businessProfile = body.businessProfile || {};
+    const setupDetails = body.setupDetails || {};
+    const businessName = String(businessProfile.businessName || "").trim();
+    const ownerName = String(setupDetails.ownerName || "").trim();
+    const ownerEmail = String(setupDetails.ownerEmail || "").trim();
+    const countryCode = String(body.country || "").trim().toLowerCase();
+    const googlePlaceId = String(body.selectedPlace?.place_id || body.selectedPlace?.placeId || "").trim();
+
+    if (!businessName) {
+      return res.status(400).json({ error: "businessProfile.businessName is required." });
+    }
+
+    if (!ownerName || !ownerEmail) {
+      return res.status(400).json({ error: "Owner name and owner email are required." });
+    }
+
+    if (!isValidEmailAddress(ownerEmail)) {
+      return res.status(400).json({ error: "Owner email must be a valid email address." });
+    }
+
+    const payload = compactObject({
+      event: "signup.completed",
+      submittedAt: new Date().toISOString(),
+      source: {
+        app: "my-ai-pa-signup",
+        countryCode,
+        country: countryCode === "ca" ? "Canada" : countryCode === "us" ? "United States" : undefined,
+      },
+      business: {
+        name: businessName,
+        phone: String(businessProfile.phone || "").trim(),
+        address: String(businessProfile.address || "").trim(),
+        website: String(businessProfile.website || "").trim(),
+        googlePlaceId,
+        hours: String(businessProfile.hours || "").trim(),
+        services: String(businessProfile.services || "").trim(),
+      },
+      owner: {
+        name: ownerName,
+        email: ownerEmail,
+        phone: String(setupDetails.ownerPhone || "").trim(),
+      },
+      aiAssistant: {
+        goals: String(setupDetails.aiGoals || "").trim(),
+        businessType: String(setupDetails.businessType || "").trim(),
+        serviceArea: String(setupDetails.serviceArea || "").trim(),
+        callForwardingNumber: String(setupDetails.callForwardingNumber || "").trim(),
+        bookingPreference: String(setupDetails.bookingPreference || "").trim(),
+        notificationPreference: String(setupDetails.notificationPreference || "").trim(),
+        tone: String(setupDetails.aiTone || "").trim(),
+        assistantVoice: String(setupDetails.assistantVoice || setupDetails.voice || "").trim(),
+        emergencyAfterHoursAvailable: Boolean(setupDetails.emergencyAfterHoursAvailable),
+        emergencyRules: String(setupDetails.emergencyRules || "").trim(),
+        faq: String(setupDetails.faq || "").trim(),
+        greetingScript: String(setupDetails.greetingScript || "").trim(),
+        intakeQuestions: String(setupDetails.intakeQuestions || "").trim(),
+        escalationRules: String(setupDetails.escalationRules || "").trim(),
+        doNotHandle: String(setupDetails.doNotHandle || "").trim(),
+      },
+    });
+
+    const makeResult = await sendMakeSignupCompleted(payload);
+    const makeData = makeResult.data || {};
+    if (!getMakeSignupSuccess(makeData)) {
+      return res.status(502).json({ error: makeData?.error || "Make webhook did not complete the signup." });
+    }
+
+    res.json({
+      success: true,
+      ok: true,
+      businessName,
+      twilioPhoneNumber: getMakeTwilioPhoneNumber(makeData) || getMakeTwilioPhoneNumberFromText(makeResult.body),
+      makeStatus: makeResult.status,
+    });
+  })
+);
+
+app.post(
   "/api/admin/login",
+  asyncRoute(async (req, res) => {
+    if (!hasValidAdminPassword(req)) {
+      return res.status(401).json({ error: "Invalid admin password." });
+    }
+    setAdminSessionCookie(res, createAdminSessionToken());
+    res.json({ ok: true });
+  })
+);
+
+app.get(
+  "/api/admin/session",
   requireAdmin,
   asyncRoute(async (_req, res) => {
+    res.json({ ok: true });
+  })
+);
+
+app.post(
+  "/api/admin/logout",
+  asyncRoute(async (_req, res) => {
+    clearAdminSessionCookie(res);
     res.json({ ok: true });
   })
 );
@@ -378,7 +1180,7 @@ app.get(
       orderBy: { createdAt: "desc" },
       take: 200,
     });
-    res.json({ ok: true, leads });
+    res.json({ ok: true, leads: leads.map(sanitizeAdminLead) });
   })
 );
 
@@ -398,7 +1200,7 @@ app.get(
       orderBy: { startedAt: "desc" },
       take: 200,
     });
-    res.json({ ok: true, calls });
+    res.json({ ok: true, calls: calls.map(sanitizeAdminCall) });
   })
 );
 
@@ -530,6 +1332,16 @@ app.use((err, _req, res, _next) => {
   }
   res.status(status).json({ error: message });
 });
+
+cleanupSensitiveCallData().catch((err) => {
+  console.error("[call-data-cleanup] initial run failed", err);
+});
+
+setInterval(() => {
+  cleanupSensitiveCallData().catch((err) => {
+    console.error("[call-data-cleanup] scheduled run failed", err);
+  });
+}, SENSITIVE_CALL_CLEANUP_INTERVAL_MS);
 
 app.listen(PORT, () => {
   console.log(`My AI PA API listening on http://localhost:${PORT}`);

@@ -1,5 +1,10 @@
 const { prisma } = require("./prisma");
 
+const STORE_CALL_TRANSCRIPTS = /^(1|true|yes|on)$/i.test(String(process.env.STORE_CALL_TRANSCRIPTS || ""));
+const STORE_CALL_RECORDING_URLS = /^(1|true|yes|on)$/i.test(String(process.env.STORE_CALL_RECORDING_URLS || ""));
+const MAX_STORED_TRANSCRIPT_CHARS = Math.max(0, Math.min(20000, Number(process.env.MAX_STORED_TRANSCRIPT_CHARS || 4000) || 4000));
+const MAX_LEAD_SUMMARY_CHARS = Math.max(100, Math.min(4000, Number(process.env.MAX_LEAD_SUMMARY_CHARS || 1000) || 1000));
+
 function assertString(value, field) {
   if (typeof value !== "string" || !value.trim()) {
     const err = new Error(`${field} is required`);
@@ -7,6 +12,25 @@ function assertString(value, field) {
     throw err;
   }
   return value.trim();
+}
+
+function optionalString(value, maxLength) {
+  if (value == null) return null;
+  const trimmed = String(value).trim();
+  if (!trimmed) return null;
+  return maxLength ? trimmed.slice(0, maxLength) : trimmed;
+}
+
+function sanitizeTranscript(value) {
+  if (!STORE_CALL_TRANSCRIPTS) return null;
+  return optionalString(value, MAX_STORED_TRANSCRIPT_CHARS);
+}
+
+function sanitizeRecordingUrl(value) {
+  if (!STORE_CALL_RECORDING_URLS) return null;
+  const raw = optionalString(value, 2000);
+  if (!raw) return null;
+  return /^https?:\/\//i.test(raw) ? raw : null;
 }
 
 function toEnum(value, allowed, fallback, field) {
@@ -40,10 +64,10 @@ async function upsertCaller({ phone, name }) {
   const normalizedPhone = assertString(phone, "caller phone");
   return prisma.caller.upsert({
     where: { phone: normalizedPhone },
-    update: name ? { name: String(name).trim() } : {},
+    update: name ? { name: optionalString(name, 120) } : {},
     create: {
       phone: normalizedPhone,
-      name: name ? String(name).trim() : null,
+      name: optionalString(name, 120),
     },
   });
 }
@@ -76,8 +100,8 @@ async function logCall(payload) {
           startedAt,
           endedAt,
           durationSec: payload.durationSec == null ? existing.durationSec : Number(payload.durationSec),
-          transcript: payload.transcript == null ? existing.transcript : String(payload.transcript),
-          recordingUrl: payload.recordingUrl == null ? existing.recordingUrl : String(payload.recordingUrl),
+          transcript: payload.transcript == null ? existing.transcript : sanitizeTranscript(payload.transcript),
+          recordingUrl: payload.recordingUrl == null ? existing.recordingUrl : sanitizeRecordingUrl(payload.recordingUrl),
           callerId: caller.id,
           businessId: business.id,
         },
@@ -95,8 +119,8 @@ async function logCall(payload) {
       endedAt,
       durationSec: payload.durationSec == null ? null : Number(payload.durationSec),
       status,
-      transcript: payload.transcript ? String(payload.transcript) : null,
-      recordingUrl: payload.recordingUrl ? String(payload.recordingUrl) : null,
+      transcript: sanitizeTranscript(payload.transcript),
+      recordingUrl: sanitizeRecordingUrl(payload.recordingUrl),
     },
     include: { caller: true },
   });
@@ -126,9 +150,9 @@ async function createLead(payload) {
   const intent = toEnum(payload.intent, ["GENERAL", "BOOKING", "QUOTE", "SUPPORT", "EMERGENCY", "OTHER"], "GENERAL", "intent");
   const urgency = toEnum(payload.urgency, ["LOW", "MEDIUM", "HIGH", "URGENT"], "MEDIUM", "urgency");
   const status = toEnum(payload.status, ["NEW", "REVIEWED", "CONTACTED", "WON", "LOST", "ARCHIVED"], "NEW", "status");
-  const summary = assertString(payload.summary, "summary");
-  const callbackNumber = assertString(payload.callbackNumber || caller.phone, "callbackNumber");
-  const name = assertString(payload.name || caller.name || "Unknown Caller", "name");
+  const summary = assertString(payload.summary, "summary").slice(0, MAX_LEAD_SUMMARY_CHARS);
+  const callbackNumber = assertString(payload.callbackNumber || caller.phone, "callbackNumber").slice(0, 40);
+  const name = assertString(payload.name || caller.name || "Unknown Caller", "name").slice(0, 120);
 
   const lead = await prisma.lead.create({
     data: {

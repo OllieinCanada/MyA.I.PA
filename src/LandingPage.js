@@ -29,6 +29,8 @@ const heroCallTranscript = [
   },
 ];
 
+const demoCallAudioSrc = `${process.env.PUBLIC_URL || ""}/tims-electrical-2.wav`;
+
 const problemMoments = [
   {
     body: "A caller has a problem and is looking for solutions.",
@@ -93,12 +95,14 @@ const benefitCards = [
 ];
 
 const transcriptMoments = [
-  { start: 0, end: 13, speaker: "AI assistant", text: "Thanks for calling Tim's Electrical Services. We handle residential and commercial electrical work. How can I help today?" },
-  { start: 13, end: 30, speaker: "Caller", text: "I am wondering about your hours and whether someone can call me back about maintenance work." },
-  { start: 30, end: 56, speaker: "AI assistant", text: "We are open from 9 a.m. to 6 p.m. I can also collect your details now so the team can follow up with context." },
-  { start: 56, end: 97, speaker: "Caller", text: "I need maintenance for flickering lights at 63 York Street sometime next week." },
-  { start: 97, end: 144, speaker: "AI assistant", text: "Got it. I have the address. What is the best phone number and time of day to reach you?" },
-  { start: 144, end: 180, speaker: "AI assistant", text: "Thanks for calling. A summary has been sent to the service team and a confirmation text has been sent to your phone." },
+  { start: 0, end: 12, speaker: "AI assistant", text: "Thanks for calling Tim's Electrical. We help with residential and commercial electrical work. How can I help today?" },
+  { start: 12, end: 27, speaker: "Caller", text: "Hi, I need someone to wire up my hot tub. I didn't expect anyone to pick up since I'm calling after hours." },
+  { start: 27, end: 45, speaker: "AI assistant", text: "No problem. I can collect the details and send them to the team. Is this for a new hot tub installation or a repair?" },
+  { start: 45, end: 61, speaker: "Caller", text: "It's a new install. The tub is already delivered, but I need the electrical run from the panel to the backyard." },
+  { start: 61, end: 82, speaker: "AI assistant", text: "Got it. Do you know if the hot tub needs a dedicated GFCI breaker, and what address should the electrician use for the estimate?" },
+  { start: 82, end: 101, speaker: "Caller", text: "Yes, it needs a dedicated breaker. The address is 63 York Street, and mornings are usually best for a callback." },
+  { start: 101, end: 119, speaker: "AI assistant", text: "Thanks. I have the hot tub setup, dedicated breaker, 63 York Street, and morning callback preference. What is the best phone number to reach you?" },
+  { start: 119, end: 135.14, speaker: "AI assistant", text: "Perfect. I have sent the job summary to Tim's Electrical and texted you a confirmation so the team can follow up." },
 ];
 
 const waveformBars = [
@@ -1129,7 +1133,8 @@ function LandingPage() {
 
   const [audioPlaying, setAudioPlaying] = useState(false);
   const [audioTime, setAudioTime] = useState(0);
-  const [audioDuration, setAudioDuration] = useState(180);
+  const [audioDuration, setAudioDuration] = useState(135.14);
+  const [audioError, setAudioError] = useState("");
   const [openFaq, setOpenFaq] = useState(0);
   const [showHeader, setShowHeader] = useState(false);
   const headerHideTimerRef = useRef(null);
@@ -1150,9 +1155,12 @@ function LandingPage() {
     if (!audio) return;
     scrollToRef(demoRef);
     try {
+      setAudioError("");
       await audio.play();
       setAudioPlaying(true);
-    } catch (_err) {}
+    } catch (_err) {
+      setAudioError("The demo audio could not start. Please tap play again or refresh the page.");
+    }
   };
 
   const toggleAudio = async () => {
@@ -1161,9 +1169,12 @@ function LandingPage() {
 
     if (audio.paused) {
       try {
+        setAudioError("");
         await audio.play();
         setAudioPlaying(true);
-      } catch (_err) {}
+      } catch (_err) {
+        setAudioError("The demo audio could not start. Please tap play again or refresh the page.");
+      }
       return;
     }
 
@@ -1960,6 +1971,7 @@ function LandingPage() {
                   />
                   <span className="w-12 text-right text-sm font-black text-[#334155]">{formatClock(audioDuration)}</span>
                 </div>
+                {audioError ? <p className="mt-3 text-sm font-bold text-rose-600">{audioError}</p> : null}
               </div>
 
               <div className="mt-3 rounded-[14px] border border-[#c9d8e9] bg-[#f8fbff] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
@@ -1982,7 +1994,7 @@ function LandingPage() {
 
             <audio
               ref={audioRef}
-              src="/MyAIPA-Website_public_voice.m4a"
+              src={demoCallAudioSrc}
               preload="auto"
               className="hidden"
               onPlay={() => setAudioPlaying(true)}
@@ -1993,9 +2005,11 @@ function LandingPage() {
               }}
               onTimeUpdate={(event) => setAudioTime(event.currentTarget.currentTime || 0)}
               onLoadedMetadata={(event) => {
-                const duration = Number(event.currentTarget.duration || 180);
-                setAudioDuration(Number.isFinite(duration) && duration > 0 ? duration : 180);
+                setAudioError("");
+                const duration = Number(event.currentTarget.duration || 135.14);
+                setAudioDuration(Number.isFinite(duration) && duration > 0 ? duration : 135.14);
               }}
+              onError={() => setAudioError("The demo audio file could not be loaded.")}
             />
           </div>
 
