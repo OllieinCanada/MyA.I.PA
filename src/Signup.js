@@ -1,13 +1,23 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 
+const RAW_API_BASE = process.env.REACT_APP_API_BASE_URL || "";
+const MAKE_SIGNUP_WEBHOOK_URL = process.env.REACT_APP_MAKE_SIGNUP_WEBHOOK_URL || "";
+const SIGNUP_API_PATH = "/api/integrations/signup-complete";
+const IS_MAKE_WEBHOOK = /^https:\/\/hook\.[^/]+\.make\.com\//.test(RAW_API_BASE);
+
 const API_BASE =
-  process.env.REACT_APP_API_BASE_URL ||
+  RAW_API_BASE ||
   (typeof window !== "undefined" && (window.location.protocol === "file:" || /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname))
     ? "http://localhost:8787"
     : "");
-const MAKE_SIGNUP_WEBHOOK_URL = process.env.REACT_APP_MAKE_SIGNUP_WEBHOOK_URL || "";
-const SIGNUP_API_PATH = "/api/integrations/signup-complete";
-const SIGNUP_SUBMIT_URL = MAKE_SIGNUP_WEBHOOK_URL || (API_BASE ? `${API_BASE.replace(/\/+$/, "")}${SIGNUP_API_PATH}` : "");
+
+const SIGNUP_SUBMIT_URL = MAKE_SIGNUP_WEBHOOK_URL
+  ? MAKE_SIGNUP_WEBHOOK_URL.replace(/\/+$/, "")
+  : IS_MAKE_WEBHOOK
+    ? RAW_API_BASE.replace(/\/+$/, "")
+    : API_BASE
+      ? `${API_BASE.replace(/\/+$/, "")}${SIGNUP_API_PATH}`
+      : "";
 
 const TRADE_OPTIONS = [
   {
@@ -150,14 +160,14 @@ async function parseApiResponse(response, fallbackLabel) {
   try {
     data = rawText ? JSON.parse(rawText) : {};
   } catch (_err) {
-    data = {};
+    data = rawText ? { message: rawText } : {};
   }
 
   if (!response.ok) {
     throw new Error(data?.error || `${fallbackLabel} (${response.status})`);
   }
 
-  return data;
+  return { ok: true, ...data };
 }
 
 function getSignupSuccess(data) {
@@ -1104,7 +1114,7 @@ export default function Signup() {
 
     try {
       if (!SIGNUP_SUBMIT_URL) {
-        throw new Error("Signup is not connected yet. Set REACT_APP_API_BASE_URL to your deployed backend URL and rebuild.");
+        throw new Error("Signup is not connected yet. Set REACT_APP_API_BASE_URL to your Make webhook URL and rebuild.");
       }
 
       const response = await fetch(SIGNUP_SUBMIT_URL, {
