@@ -6,7 +6,8 @@ const API_BASE =
     ? "http://localhost:8787"
     : "");
 const MAKE_SIGNUP_WEBHOOK_URL = process.env.REACT_APP_MAKE_SIGNUP_WEBHOOK_URL || "";
-const SIGNUP_SUBMIT_URL = MAKE_SIGNUP_WEBHOOK_URL || `${API_BASE}/api/integrations/signup-complete`;
+const SIGNUP_API_PATH = "/api/integrations/signup-complete";
+const SIGNUP_SUBMIT_URL = MAKE_SIGNUP_WEBHOOK_URL || (API_BASE ? `${API_BASE.replace(/\/+$/, "")}${SIGNUP_API_PATH}` : "");
 
 const TRADE_OPTIONS = [
   {
@@ -1102,6 +1103,10 @@ export default function Signup() {
     };
 
     try {
+      if (!SIGNUP_SUBMIT_URL) {
+        throw new Error("Signup is not connected yet. Set REACT_APP_API_BASE_URL to your deployed backend URL and rebuild.");
+      }
+
       const response = await fetch(SIGNUP_SUBMIT_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
