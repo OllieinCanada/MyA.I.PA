@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 
-const RAW_API_BASE = process.env.REACT_APP_API_BASE_URL || "";
+const DEFAULT_SIGNUP_WEBHOOK_URL = "https://hook.us2.make.com/bg30xcgcluakdcf3u2jtw1h9186gbq7m";
+const RAW_API_BASE = process.env.REACT_APP_API_BASE_URL || DEFAULT_SIGNUP_WEBHOOK_URL;
 const MAKE_SIGNUP_WEBHOOK_URL = process.env.REACT_APP_MAKE_SIGNUP_WEBHOOK_URL || "";
 const SIGNUP_API_PATH = "/api/integrations/signup-complete";
 const IS_MAKE_WEBHOOK = /^https:\/\/hook\.[^/]+\.make\.com\//.test(RAW_API_BASE);
@@ -10,7 +11,6 @@ const API_BASE =
   (typeof window !== "undefined" && (window.location.protocol === "file:" || /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname))
     ? "http://localhost:8787"
     : "");
-
 const SIGNUP_SUBMIT_URL = MAKE_SIGNUP_WEBHOOK_URL
   ? MAKE_SIGNUP_WEBHOOK_URL.replace(/\/+$/, "")
   : IS_MAKE_WEBHOOK
