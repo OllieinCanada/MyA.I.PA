@@ -966,9 +966,18 @@ function SignupSuccessPage({ result, onStartAnother }) {
             <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-5 sm:p-6">
               <p className="text-sm font-black uppercase tracking-[0.16em] text-blue-600">Your new My AI PA number</p>
               {showNumber && assignedNumber ? (
-                <a href={`tel:${assignedNumber.replace(/[^\d+]/g, "")}`} className="mt-3 block break-words text-[clamp(2rem,9vw,3.25rem)] font-black tracking-[-0.05em] text-[#07142a]">
-                  {formatPhoneNumber(assignedNumber)}
-                </a>
+                <div className="mt-5">
+                  <a
+                    href={`tel:${assignedNumber.replace(/[^\d+]/g, "")}`}
+                    aria-label={`Call ${formatPhoneNumber(assignedNumber)}`}
+                    className="inline-flex max-w-full items-center rounded-xl text-[#07142a] transition hover:text-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-200"
+                  >
+                    <span className="block max-w-full whitespace-nowrap text-[clamp(1.55rem,7vw,3rem)] font-black leading-none tabular-nums">
+                      {formatPhoneNumber(assignedNumber)}
+                    </span>
+                  </a>
+                  <p className="mt-2 text-xs font-bold uppercase text-blue-600/70">Tap or click to call</p>
+                </div>
               ) : numberMissing ? (
                 <div className="mt-5">
                   <p className="text-[1.28rem] font-black leading-tight tracking-[-0.03em] text-[#07142a]">
