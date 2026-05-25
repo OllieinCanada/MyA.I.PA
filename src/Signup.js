@@ -176,18 +176,63 @@ function getSignupSuccess(data) {
   return data?.success === true || data?.ok === true;
 }
 
+function parseMaybeJson(value) {
+  if (typeof value !== "string") return value;
+  try {
+    return JSON.parse(value);
+  } catch (_err) {
+    return value;
+  }
+}
+
+function extractPhoneFromText(value) {
+  const match = String(value || "").match(/(?:\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}/);
+  return match?.[0]?.trim() || "";
+}
+
 function getTwilioPhoneNumber(data) {
-  return String(
-    data?.twilioPhoneNumber ||
-      data?.twilio_phone_number ||
-      data?.phoneNumber ||
-      data?.assignedPhoneNumber ||
-      data?.assigned_number ||
-      data?.number ||
-      data?.data?.twilioPhoneNumber ||
-      data?.data?.phoneNumber ||
-      ""
-  ).trim();
+  const phoneKeys = new Set([
+    "twiliophonenumber",
+    "twilio_phone_number",
+    "phonenumber",
+    "assignedphonenumber",
+    "assigned_number",
+    "number",
+  ]);
+  const seen = new Set();
+
+  const visit = (value, key = "") => {
+    const parsed = parseMaybeJson(value);
+    if (parsed && typeof parsed === "object") {
+      if (seen.has(parsed)) return "";
+      seen.add(parsed);
+
+      if (Array.isArray(parsed)) {
+        for (const item of parsed) {
+          const found = visit(item, key);
+          if (found) return found;
+        }
+        return "";
+      }
+
+      for (const [entryKey, entryValue] of Object.entries(parsed)) {
+        const normalizedKey = entryKey.toLowerCase().replace(/[^a-z0-9_]/g, "");
+        if (phoneKeys.has(normalizedKey)) {
+          const directPhone = extractPhoneFromText(entryValue);
+          if (directPhone) return directPhone;
+        }
+
+        const found = visit(entryValue, entryKey);
+        if (found) return found;
+      }
+      return "";
+    }
+
+    const normalizedKey = String(key || "").toLowerCase().replace(/[^a-z0-9_]/g, "");
+    return phoneKeys.has(normalizedKey) ? extractPhoneFromText(parsed) : "";
+  };
+
+  return visit(data) || extractPhoneFromText(JSON.stringify(data || {}));
 }
 
 function formatPhoneNumber(value) {
@@ -871,25 +916,29 @@ function TrialButton({ disabled, busy, finalStep = false, label = "Start free tr
 function SignupSuccessPage({ result, onStartAnother }) {
   const businessName = result?.businessName || "your business";
   const assignedNumber = result?.twilioPhoneNumber || "";
+  const numberMissing = !assignedNumber;
   const [progress, setProgress] = useState(12);
   const [showNumber, setShowNumber] = useState(false);
 
   useEffect(() => {
+    if (numberMissing) {
+      setProgress(100);
+      return undefined;
+    }
+
     const progressTimer = window.setInterval(() => {
-      setProgress((value) => Math.min(assignedNumber ? 100 : 88, value + 11));
+      setProgress((value) => Math.min(100, value + 11));
     }, 420);
     const revealTimer = window.setTimeout(() => {
-      if (assignedNumber) {
-        setProgress(100);
-        setShowNumber(true);
-      }
+      setProgress(100);
+      setShowNumber(true);
     }, 4200);
 
     return () => {
       window.clearInterval(progressTimer);
       window.clearTimeout(revealTimer);
     };
-  }, [assignedNumber]);
+  }, [numberMissing]);
 
   return (
     <main className="min-h-screen bg-[linear-gradient(135deg,#f8fbff_0%,#ffffff_45%,#edf4ff_100%)] text-slate-950">
@@ -920,6 +969,15 @@ function SignupSuccessPage({ result, onStartAnother }) {
                 <a href={`tel:${assignedNumber.replace(/[^\d+]/g, "")}`} className="mt-3 block break-words text-[clamp(2rem,9vw,3.25rem)] font-black tracking-[-0.05em] text-[#07142a]">
                   {formatPhoneNumber(assignedNumber)}
                 </a>
+              ) : numberMissing ? (
+                <div className="mt-5">
+                  <p className="text-[1.28rem] font-black leading-tight tracking-[-0.03em] text-[#07142a]">
+                    Setup complete. Number pending.
+                  </p>
+                  <p className="mt-3 text-sm font-semibold leading-6 text-slate-500">
+                    The handoff finished, but the response did not include a readable forwarding number yet.
+                  </p>
+                </div>
               ) : (
                 <div className="mt-5">
                   <p className="text-[1.28rem] font-black leading-tight tracking-[-0.03em] text-[#07142a]">
