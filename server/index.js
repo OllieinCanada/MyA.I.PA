@@ -16,9 +16,18 @@ const {
 const app = express();
 const PORT = Number(process.env.PORT || 8787);
 const assistantRateLimit = new Map();
+const signupIpRateLimit = new Map();
+const signupIdentityRateLimit = new Map();
+const signupDuplicateSubmissions = new Map();
 const ASSISTANT_MAX_CHARS = 2000;
 const ASSISTANT_WINDOW_MS = 60 * 1000;
 const ASSISTANT_MAX_REQUESTS_PER_WINDOW = 12;
+const SIGNUP_IP_WINDOW_MS = parsePositiveInt(process.env.SIGNUP_IP_WINDOW_MS, 15 * 60 * 1000);
+const SIGNUP_IP_MAX_REQUESTS = parsePositiveInt(process.env.SIGNUP_IP_MAX_REQUESTS, 5);
+const SIGNUP_IDENTITY_WINDOW_MS = parsePositiveInt(process.env.SIGNUP_IDENTITY_WINDOW_MS, 60 * 60 * 1000);
+const SIGNUP_IDENTITY_MAX_REQUESTS = parsePositiveInt(process.env.SIGNUP_IDENTITY_MAX_REQUESTS, 2);
+const SIGNUP_DUPLICATE_WINDOW_MS = parsePositiveInt(process.env.SIGNUP_DUPLICATE_WINDOW_MS, 10 * 60 * 1000);
+const SIGNUP_MIN_ELAPSED_MS = parsePositiveInt(process.env.SIGNUP_MIN_ELAPSED_MS, 2500);
 const WEBSITE_FETCH_TIMEOUT_MS = 8000;
 const WEBSITE_MAX_HTML_CHARS = 250000;
 const WEBSITE_MAX_EXTRA_PAGES = 3;
@@ -157,6 +166,137 @@ function getMakeSignupWebhookConfig() {
 function isValidEmailAddress(value) {
   const email = String(value || "").trim();
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function isEnabled(value) {
+  return /^(1|true|yes|on)$/i.test(String(value || ""));
+}
+
+function normalizeForKey(value) {
+  return String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function hashKey(value) {
+  return crypto.createHash("sha256").update(String(value || "")).digest("hex").slice(0, 32);
+}
+
+function getClientIp(req) {
+  const forwarded = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
+  return forwarded || req.socket?.remoteAddress || req.ip || "unknown";
+}
+
+function checkWindowLimit(store, key, maxRequests, windowMs) {
+  const now = Date.now();
+  const record = store.get(key);
+  if (!record || record.resetAt <= now) {
+    store.set(key, { count: 1, resetAt: now + windowMs });
+    return { allowed: true, remaining: Math.max(0, maxRequests - 1) };
+  }
+
+  record.count += 1;
+  store.set(key, record);
+  return {
+    allowed: record.count <= maxRequests,
+    remaining: Math.max(0, maxRequests - record.count),
+    retryAfterMs: Math.max(0, record.resetAt - now),
+  };
+}
+
+function rememberDuplicateSignup(key) {
+  const now = Date.now();
+  const previous = signupDuplicateSubmissions.get(key);
+  signupDuplicateSubmissions.set(key, now + SIGNUP_DUPLICATE_WINDOW_MS);
+  for (const [storedKey, expiresAt] of signupDuplicateSubmissions.entries()) {
+    if (expiresAt <= now) signupDuplicateSubmissions.delete(storedKey);
+  }
+  return Boolean(previous && previous > now);
+}
+
+async function verifyTurnstileToken(token, ip) {
+  const secret = String(process.env.TURNSTILE_SECRET_KEY || "").trim();
+  if (!secret) return { ok: true, skipped: true };
+  if (!token) return { ok: false, reason: "missing_captcha" };
+
+  const body = new URLSearchParams();
+  body.set("secret", secret);
+  body.set("response", token);
+  if (ip && ip !== "unknown") body.set("remoteip", ip);
+
+  try {
+    const response = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+      method: "POST",
+      body,
+    });
+    const data = await response.json().catch(() => ({}));
+    return { ok: Boolean(data?.success), reason: data?.["error-codes"]?.join(",") || "" };
+  } catch (error) {
+    console.error("[signup:security] captcha verification failed", { message: error?.message || String(error) });
+    return { ok: false, reason: "captcha_unreachable" };
+  }
+}
+
+async function getSignupSecurityDecision(req, body, fields) {
+  const security = body.security || {};
+  const ip = getClientIp(req);
+  const reasons = [];
+  const reviewReasons = [];
+
+  if (String(security.companyWebsite || "").trim()) {
+    reasons.push("bot_trap_filled");
+  }
+
+  const elapsedMs = Number(security.clientElapsedMs || 0);
+  if (elapsedMs > 0 && elapsedMs < SIGNUP_MIN_ELAPSED_MS) {
+    reviewReasons.push("submitted_too_fast");
+  }
+
+  const captcha = await verifyTurnstileToken(String(security.turnstileToken || ""), ip);
+  if (!captcha.ok) {
+    reasons.push(captcha.reason || "captcha_failed");
+  }
+
+  const ipLimit = checkWindowLimit(signupIpRateLimit, hashKey(ip), SIGNUP_IP_MAX_REQUESTS, SIGNUP_IP_WINDOW_MS);
+  if (!ipLimit.allowed) {
+    reasons.push("ip_rate_limit");
+  }
+
+  const identityKey = hashKey([fields.ownerEmail, fields.ownerPhone, fields.businessName].map(normalizeForKey).join("|"));
+  const identityLimit = checkWindowLimit(signupIdentityRateLimit, identityKey, SIGNUP_IDENTITY_MAX_REQUESTS, SIGNUP_IDENTITY_WINDOW_MS);
+  if (!identityLimit.allowed) {
+    reasons.push("identity_rate_limit");
+  }
+
+  const duplicateKey = hashKey([fields.ownerEmail, fields.ownerPhone, fields.businessName, fields.businessPhone].map(normalizeForKey).join("|"));
+  if (rememberDuplicateSignup(duplicateKey)) {
+    reviewReasons.push("duplicate_submission");
+  }
+
+  const disposableDomains = new Set(["mailinator.com", "tempmail.com", "10minutemail.com", "guerrillamail.com", "yopmail.com"]);
+  const emailDomain = normalizeForKey(fields.ownerEmail.split("@")[1] || "");
+  if (disposableDomains.has(emailDomain)) {
+    reviewReasons.push("disposable_email");
+  }
+
+  if (!fields.ownerPhone || !fields.businessPhone || !fields.businessAddress) {
+    reviewReasons.push("missing_contact_detail");
+  }
+
+  if (isEnabled(process.env.SIGNUP_REQUIRE_MANUAL_APPROVAL)) {
+    reviewReasons.push("manual_approval_enabled");
+  }
+
+  if (isEnabled(process.env.SIGNUP_REQUIRE_VERIFICATION)) {
+    reviewReasons.push("verification_required");
+  }
+
+  return {
+    ip,
+    blocked: reasons.length > 0,
+    reviewRequired: reviewReasons.length > 0,
+    reasons,
+    reviewReasons,
+    captchaSkipped: Boolean(captcha.skipped),
+  };
 }
 
 function compactObject(value) {
@@ -1065,8 +1205,11 @@ app.post(
     const businessProfile = body.businessProfile || {};
     const setupDetails = body.setupDetails || {};
     const businessName = String(businessProfile.businessName || "").trim();
+    const businessPhone = String(businessProfile.phone || "").trim();
+    const businessAddress = String(businessProfile.address || "").trim();
     const ownerName = String(setupDetails.ownerName || "").trim();
     const ownerEmail = String(setupDetails.ownerEmail || "").trim();
+    const ownerPhone = String(setupDetails.ownerPhone || "").trim();
     const countryCode = String(body.country || "").trim().toLowerCase();
     const googlePlaceId = String(body.selectedPlace?.place_id || body.selectedPlace?.placeId || "").trim();
 
@@ -1082,6 +1225,23 @@ app.post(
       return res.status(400).json({ error: "Owner email must be a valid email address." });
     }
 
+    const securityDecision = await getSignupSecurityDecision(req, body, {
+      businessName,
+      businessPhone,
+      businessAddress,
+      ownerEmail,
+      ownerPhone,
+    });
+
+    if (securityDecision.blocked) {
+      console.warn("[signup:security] blocked signup", {
+        reasons: securityDecision.reasons,
+        ipHash: hashKey(securityDecision.ip),
+        emailHash: hashKey(ownerEmail),
+      });
+      return res.status(429).json({ error: "Signup could not be completed right now. Please try again later." });
+    }
+
     const payload = compactObject({
       event: "signup.completed",
       submittedAt: new Date().toISOString(),
@@ -1089,11 +1249,22 @@ app.post(
         app: "my-ai-pa-signup",
         countryCode,
         country: countryCode === "ca" ? "Canada" : countryCode === "us" ? "United States" : undefined,
+        ipHash: hashKey(securityDecision.ip),
+      },
+      security: {
+        reviewRequired: securityDecision.reviewRequired,
+        reviewReasons: securityDecision.reviewReasons,
+        captchaSkipped: securityDecision.captchaSkipped,
+        browserTimezone: String(body.security?.timezone || "").trim(),
+      },
+      verification: {
+        emailVerified: false,
+        smsVerified: false,
       },
       business: {
         name: businessName,
-        phone: String(businessProfile.phone || "").trim(),
-        address: String(businessProfile.address || "").trim(),
+        phone: businessPhone,
+        address: businessAddress,
         website: String(businessProfile.website || "").trim(),
         googlePlaceId,
         hours: String(businessProfile.hours || "").trim(),
@@ -1102,7 +1273,7 @@ app.post(
       owner: {
         name: ownerName,
         email: ownerEmail,
-        phone: String(setupDetails.ownerPhone || "").trim(),
+        phone: ownerPhone,
       },
       aiAssistant: {
         goals: String(setupDetails.aiGoals || "").trim(),
@@ -1122,6 +1293,21 @@ app.post(
         doNotHandle: String(setupDetails.doNotHandle || "").trim(),
       },
     });
+
+    if (securityDecision.reviewRequired) {
+      console.warn("[signup:security] held signup for review", {
+        reviewReasons: securityDecision.reviewReasons,
+        ipHash: hashKey(securityDecision.ip),
+        emailHash: hashKey(ownerEmail),
+      });
+      return res.status(202).json({
+        success: true,
+        ok: true,
+        reviewRequired: true,
+        businessName,
+        message: "Signup received for review.",
+      });
+    }
 
     const makeResult = await sendMakeSignupCompleted(payload);
     const makeData = makeResult.data || {};

@@ -4,6 +4,7 @@ const DEFAULT_SIGNUP_WEBHOOK_URL = "https://hook.us2.make.com/bg30xcgcluakdcf3u2
 const RAW_API_BASE = process.env.REACT_APP_API_BASE_URL || DEFAULT_SIGNUP_WEBHOOK_URL;
 const MAKE_SIGNUP_WEBHOOK_URL = process.env.REACT_APP_MAKE_SIGNUP_WEBHOOK_URL || "";
 const MAKE_SIGNUP_WEBHOOK_API_KEY = process.env.REACT_APP_MAKE_SIGNUP_WEBHOOK_API_KEY || "";
+const TURNSTILE_SITE_KEY = process.env.REACT_APP_TURNSTILE_SITE_KEY || "";
 const SIGNUP_API_PATH = "/api/integrations/signup-complete";
 const IS_MAKE_WEBHOOK = /^https:\/\/hook\.[^/]+\.make\.com\//.test(RAW_API_BASE);
 
@@ -150,6 +151,33 @@ const OPENING_DIALOGUE_OPTIONS = [
     text: "Welcome, and thanks for calling. Please let me know what you need.",
   },
 ];
+
+const SIGNUP_ATTEMPT_STORAGE_KEY = "myaipa_signup_attempts_v1";
+const SIGNUP_ATTEMPT_WINDOW_MS = 60 * 60 * 1000;
+const SIGNUP_ATTEMPT_LIMIT = 3;
+
+function getBrowserSignupAttempts() {
+  if (typeof window === "undefined") return [];
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(SIGNUP_ATTEMPT_STORAGE_KEY) || "[]");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (_err) {
+    return [];
+  }
+}
+
+function rememberBrowserSignupAttempt() {
+  if (typeof window === "undefined") return;
+  const now = Date.now();
+  const attempts = getBrowserSignupAttempts().filter((timestamp) => now - Number(timestamp) < SIGNUP_ATTEMPT_WINDOW_MS);
+  attempts.push(now);
+  window.localStorage.setItem(SIGNUP_ATTEMPT_STORAGE_KEY, JSON.stringify(attempts));
+}
+
+function hasTooManyBrowserSignupAttempts() {
+  const now = Date.now();
+  return getBrowserSignupAttempts().filter((timestamp) => now - Number(timestamp) < SIGNUP_ATTEMPT_WINDOW_MS).length >= SIGNUP_ATTEMPT_LIMIT;
+}
 
 function isValidEmailAddress(value) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim());
@@ -913,6 +941,57 @@ function TrialButton({ disabled, busy, finalStep = false, label = "Start free tr
   );
 }
 
+function TurnstileCheck({ siteKey, onVerify }) {
+  const containerRef = useRef(null);
+  const widgetIdRef = useRef(null);
+
+  useEffect(() => {
+    if (!siteKey || typeof window === "undefined") return undefined;
+
+    let cancelled = false;
+    let pollTimer = null;
+
+    const renderWidget = () => {
+      if (cancelled || !containerRef.current || !window.turnstile || widgetIdRef.current != null) return;
+      widgetIdRef.current = window.turnstile.render(containerRef.current, {
+        sitekey: siteKey,
+        callback: (token) => onVerify(token || ""),
+        "expired-callback": () => onVerify(""),
+        "error-callback": () => onVerify(""),
+      });
+    };
+
+    if (!document.querySelector('script[src="https://challenges.cloudflare.com/turnstile/v0/api.js"]')) {
+      const script = document.createElement("script");
+      script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js";
+      script.async = true;
+      script.defer = true;
+      script.onload = renderWidget;
+      document.body.appendChild(script);
+    }
+
+    pollTimer = window.setInterval(renderWidget, 250);
+    renderWidget();
+
+    return () => {
+      cancelled = true;
+      if (pollTimer) window.clearInterval(pollTimer);
+      if (window.turnstile && widgetIdRef.current != null) {
+        window.turnstile.remove(widgetIdRef.current);
+      }
+      widgetIdRef.current = null;
+    };
+  }, [siteKey, onVerify]);
+
+  if (!siteKey) return null;
+
+  return (
+    <div className="mt-5 flex justify-center">
+      <div ref={containerRef} />
+    </div>
+  );
+}
+
 function SignupSuccessPage({ result, onStartAnother }) {
   const businessName = result?.businessName || "your business";
   const assignedNumber = result?.twilioPhoneNumber || "";
@@ -1037,6 +1116,7 @@ function SignupSuccessPage({ result, onStartAnother }) {
 }
 
 export default function Signup() {
+  const signupStartedAtRef = useRef(Date.now());
   const [currentStep, setCurrentStep] = useState(1);
   const [selectedTradeId, setSelectedTradeId] = useState("electrician");
   const [selectedAreas, setSelectedAreas] = useState(["Niagara Falls"]);
@@ -1047,6 +1127,8 @@ export default function Signup() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [signupResult, setSignupResult] = useState(null);
+  const [botTrap, setBotTrap] = useState("");
+  const [turnstileToken, setTurnstileToken] = useState("");
   const [details, setDetails] = useState({
     ownerName: "",
     businessName: "",
@@ -1072,6 +1154,7 @@ export default function Signup() {
   const businessStepDisabled = !details.ownerName.trim() || !details.businessName.trim() || !details.phone.trim() || !isValidEmailAddress(details.email);
   const specializationStepDisabled = selectedSpecializationIds.length === 0;
   const voiceStepDisabled = false;
+  const securityStepDisabled = Boolean(TURNSTILE_SITE_KEY && !turnstileToken);
 
   const updateDetails = (field) => (event) => {
     setDetails((prev) => ({ ...prev, [field]: event.target.value }));
@@ -1106,6 +1189,9 @@ export default function Signup() {
     setError("");
     setBusy(false);
     setSignupResult(null);
+    setBotTrap("");
+    setTurnstileToken("");
+    signupStartedAtRef.current = Date.now();
     setDetails({
       ownerName: "",
       businessName: "",
@@ -1138,6 +1224,16 @@ export default function Signup() {
       return;
     }
     if (currentStep !== 4) return;
+
+    if (hasTooManyBrowserSignupAttempts()) {
+      setError("Too many signup attempts from this browser. Please try again later.");
+      return;
+    }
+
+    if (botTrap.trim()) {
+      setStatus("Signup received.");
+      return;
+    }
 
     setBusy(true);
     setError("");
@@ -1178,6 +1274,13 @@ export default function Signup() {
         emergencyAfterHoursAvailable: true,
         emergencyRules: "Escalate urgent safety or service requests to the owner.",
       },
+      security: {
+        companyWebsite: botTrap,
+        clientElapsedMs: Date.now() - signupStartedAtRef.current,
+        turnstileToken,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "",
+        pageUrl: typeof window !== "undefined" ? window.location.href : "",
+      },
     };
 
     try {
@@ -1198,6 +1301,7 @@ export default function Signup() {
       if (!getSignupSuccess(result)) {
         throw new Error(result?.error || "Signup handoff failed.");
       }
+      rememberBrowserSignupAttempt();
       setSignupResult({
         businessName: details.businessName.trim(),
         twilioPhoneNumber: getTwilioPhoneNumber(result),
@@ -1382,11 +1486,26 @@ export default function Signup() {
         ) : null}
 
         <TrialButton
-          disabled={currentStep === 1 ? businessStepDisabled : currentStep === 2 ? specializationStepDisabled : currentStep === 3 ? voiceStepDisabled : false}
+          disabled={currentStep === 1 ? businessStepDisabled : currentStep === 2 ? specializationStepDisabled : currentStep === 3 ? voiceStepDisabled : securityStepDisabled}
           busy={busy}
           finalStep={currentStep === 4}
           label={currentStep === 4 ? "Start free trial" : "Save & continue"}
         />
+
+        <label className="sr-only" aria-hidden="true">
+          Company website
+          <input
+            name="companyWebsite"
+            type="text"
+            tabIndex="-1"
+            autoComplete="off"
+            value={botTrap}
+            onChange={(event) => setBotTrap(event.target.value)}
+            className="absolute -left-[10000px] top-auto h-px w-px opacity-0"
+          />
+        </label>
+
+        {currentStep === 4 ? <TurnstileCheck siteKey={TURNSTILE_SITE_KEY} onVerify={setTurnstileToken} /> : null}
 
         <div className="mt-3 flex items-center justify-center gap-2 text-center text-sm font-medium text-slate-500 sm:text-base">
           <Icon name="lock" className="h-4 w-4" />
