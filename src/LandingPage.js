@@ -29,7 +29,7 @@ const heroCallTranscript = [
   },
 ];
 
-const demoCallAudioSrc = `${process.env.PUBLIC_URL || ""}/tims-electrical-2.wav`;
+const demoCallAudioSrc = `${process.env.PUBLIC_URL || ""}/tims-electrical-2.wav?v=20260613-new`;
 
 const problemMoments = [
   {
@@ -95,14 +95,13 @@ const benefitCards = [
 ];
 
 const transcriptMoments = [
-  { start: 0, end: 12, speaker: "AI assistant", text: "Thanks for calling Tim's Electrical. We help with residential and commercial electrical work. How can I help today?" },
-  { start: 12, end: 27, speaker: "Caller", text: "Hi, I need someone to wire up my hot tub. I didn't expect anyone to pick up since I'm calling after hours." },
-  { start: 27, end: 45, speaker: "AI assistant", text: "No problem. I can collect the details and send them to the team. Is this for a new hot tub installation or a repair?" },
-  { start: 45, end: 61, speaker: "Caller", text: "It's a new install. The tub is already delivered, but I need the electrical run from the panel to the backyard." },
-  { start: 61, end: 82, speaker: "AI assistant", text: "Got it. Do you know if the hot tub needs a dedicated GFCI breaker, and what address should the electrician use for the estimate?" },
-  { start: 82, end: 101, speaker: "Caller", text: "Yes, it needs a dedicated breaker. The address is 63 York Street, and mornings are usually best for a callback." },
-  { start: 101, end: 119, speaker: "AI assistant", text: "Thanks. I have the hot tub setup, dedicated breaker, 63 York Street, and morning callback preference. What is the best phone number to reach you?" },
-  { start: 119, end: 135.14, speaker: "AI assistant", text: "Perfect. I have sent the job summary to Tim's Electrical and texted you a confirmation so the team can follow up." },
+  { start: 0, end: 25, speaker: "Call opening", text: "AI: Thanks for contacting Tim's Electrical. We handle residential and commercial work. Caller: I'm okay, thanks. I was wondering about your hours of operation." },
+  { start: 25, end: 50, speaker: "Service request", text: "AI: We are open from 8:00 a.m. to 5:00 p.m., Monday to Friday. Caller: I'm looking for assistance with a new installation." },
+  { start: 50, end: 75, speaker: "Job details", text: "AI: What type of installation are you looking for? Caller: I need someone to wire up my hot tub on my back deck." },
+  { start: 75, end: 100, speaker: "Contact details", text: "AI: Got it. Can I get your first name and the address for the work? Caller: Brian, 63 York Street in St. Catharines." },
+  { start: 100, end: 125, speaker: "Callback info", text: "AI: What is the best phone number and callback time? Caller: 905-123-4567, and around 7:00 p.m. works best." },
+  { start: 125, end: 150, speaker: "Confirmation", text: "AI: To confirm, that's 63 York Street in St. Catharines. Our service manager will follow up to review the job details and rates." },
+  { start: 150, end: 174.1, speaker: "Call wrap-up", text: "AI: I forwarded the call details and sent a text summary with the key points. Thanks for calling Tim's Electrical." },
 ];
 
 const waveformBars = [
@@ -1133,7 +1132,7 @@ function LandingPage() {
 
   const [audioPlaying, setAudioPlaying] = useState(false);
   const [audioTime, setAudioTime] = useState(0);
-  const [audioDuration, setAudioDuration] = useState(135.14);
+  const [audioDuration, setAudioDuration] = useState(174.1);
   const [audioError, setAudioError] = useState("");
   const [openFaq, setOpenFaq] = useState(0);
   const [showHeader, setShowHeader] = useState(false);
@@ -1993,6 +1992,7 @@ function LandingPage() {
             </div>
 
             <audio
+              key={demoCallAudioSrc}
               ref={audioRef}
               src={demoCallAudioSrc}
               preload="auto"
