@@ -1,16 +1,22 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 
 const DEFAULT_SIGNUP_WEBHOOK_URL = "https://hook.us2.make.com/bg30xcgcluakdcf3u2jtw1h9186gbq7m";
-const RAW_API_BASE = process.env.REACT_APP_API_BASE_URL || DEFAULT_SIGNUP_WEBHOOK_URL;
+const IS_LOCAL_BROWSER =
+  typeof window !== "undefined" &&
+  (window.location.protocol === "file:" || /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname));
+const RAW_API_BASE = process.env.REACT_APP_API_BASE_URL || (IS_LOCAL_BROWSER ? "" : DEFAULT_SIGNUP_WEBHOOK_URL);
 const MAKE_SIGNUP_WEBHOOK_URL = process.env.REACT_APP_MAKE_SIGNUP_WEBHOOK_URL || "";
 const MAKE_SIGNUP_WEBHOOK_API_KEY = process.env.REACT_APP_MAKE_SIGNUP_WEBHOOK_API_KEY || "";
+const GOOGLE_RECAPTCHA_TEST_SITE_KEY = "6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI";
+const RECAPTCHA_SITE_KEY = IS_LOCAL_BROWSER ? GOOGLE_RECAPTCHA_TEST_SITE_KEY : process.env.REACT_APP_RECAPTCHA_SITE_KEY || "";
 const TURNSTILE_SITE_KEY = process.env.REACT_APP_TURNSTILE_SITE_KEY || "";
+const CAPTCHA_PROVIDER = RECAPTCHA_SITE_KEY ? "recaptcha" : TURNSTILE_SITE_KEY ? "turnstile" : "";
 const SIGNUP_API_PATH = "/api/integrations/signup-complete";
 const IS_MAKE_WEBHOOK = /^https:\/\/hook\.[^/]+\.make\.com\//.test(RAW_API_BASE);
 
 const API_BASE =
   RAW_API_BASE ||
-  (typeof window !== "undefined" && (window.location.protocol === "file:" || /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname))
+  (IS_LOCAL_BROWSER
     ? "http://localhost:8787"
     : "");
 const SIGNUP_SUBMIT_URL = MAKE_SIGNUP_WEBHOOK_URL
@@ -116,9 +122,8 @@ const AREA_OPTIONS = [
 ];
 const SETUP_STEPS = [
   { number: 1, label: "Your business" },
-  { number: 2, label: "Specializations" },
-  { number: 3, label: "Hear voice" },
-  { number: 4, label: "Review & launch" },
+  { number: 2, label: "Hear voice" },
+  { number: 3, label: "Review & launch" },
 ];
 const ASSISTANT_SAMPLE_AUDIO_SRC = `${process.env.PUBLIC_URL || ""}/Assistant_Testing.wav`;
 const ASSISTANT_AGENT = {
@@ -181,6 +186,52 @@ function hasTooManyBrowserSignupAttempts() {
 
 function isValidEmailAddress(value) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim());
+}
+
+function hasPlaceholderText(value) {
+  return /\b(e\.?g\.?|example|test|asdf|yourbusiness|main st|jamie smith|smith electrical|555-?1234)\b/i.test(String(value || ""));
+}
+
+function getPhoneDigits(value) {
+  const digits = String(value || "").replace(/\D/g, "");
+  return digits.length === 11 && digits.startsWith("1") ? digits.slice(1) : digits;
+}
+
+function validateBusinessDetails(details) {
+  const ownerName = details.ownerName.trim();
+  const businessName = details.businessName.trim();
+  const phone = details.phone.trim();
+  const email = details.email.trim();
+  const address = details.address.trim();
+  const phoneDigits = getPhoneDigits(phone);
+
+  const errors = {
+    ownerName:
+      ownerName.split(/\s+/).filter(Boolean).length < 2 || ownerName.length < 5 || hasPlaceholderText(ownerName)
+        ? "Enter the owner's first and last name."
+        : "",
+    businessName:
+      businessName.length < 4 || hasPlaceholderText(businessName)
+        ? "Enter the real business name."
+        : "",
+    phone:
+      phoneDigits.length !== 10 || /^(\d)\1{9}$/.test(phoneDigits) || hasPlaceholderText(phone)
+        ? "Enter a real 10-digit business phone number."
+        : "",
+    email:
+      !isValidEmailAddress(email) || hasPlaceholderText(email)
+        ? "Enter a real business email address."
+        : "",
+    address:
+      address.length < 12 || !/\d/.test(address) || !/[A-Za-z]/.test(address) || !/,\s*[A-Za-z]/.test(address) || hasPlaceholderText(address)
+        ? "Enter the full business address, including street, city, and province."
+        : "",
+  };
+
+  return {
+    errors,
+    isValid: Object.values(errors).every((message) => !message),
+  };
 }
 
 async function parseApiResponse(response, fallbackLabel) {
@@ -628,20 +679,35 @@ function SpecializationCard({ item, selected, onClick }) {
   );
 }
 
-function LabeledInput({ label, icon, value, onChange, placeholder, type = "text", className = "" }) {
+function LabeledInput({ label, icon, value, onChange, onBlur, placeholder, type = "text", className = "", error = "" }) {
+  const inputId = `${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-input`;
+  const errorId = `${inputId}-error`;
+
   return (
     <label className={className}>
       <span className="mb-1.5 block text-sm font-semibold leading-none text-slate-700">{label}</span>
-      <span className="flex min-h-[48px] items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 shadow-[0_1px_0_rgba(15,23,42,0.02)] transition focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-500/10">
+      <span
+        className={
+          "flex min-h-[48px] items-center gap-3 rounded-lg border bg-white px-3 shadow-[0_1px_0_rgba(15,23,42,0.02)] transition focus-within:ring-4 " +
+          (error
+            ? "border-rose-300 focus-within:border-rose-500 focus-within:ring-rose-500/10"
+            : "border-slate-200 focus-within:border-blue-500 focus-within:ring-blue-500/10")
+        }
+      >
         <Icon name={icon} className="h-4 w-4 shrink-0 text-slate-600" />
         <input
+          id={inputId}
           type={type}
           value={value}
           onChange={onChange}
+          onBlur={onBlur}
           placeholder={placeholder}
+          aria-invalid={Boolean(error)}
+          aria-describedby={error ? errorId : undefined}
           className="min-w-0 flex-1 bg-transparent text-base font-medium text-slate-950 outline-none placeholder:text-slate-400"
         />
       </span>
+      {error ? <span id={errorId} className="mt-1.5 block text-xs font-semibold text-rose-600">{error}</span> : null}
     </label>
   );
 }
@@ -683,52 +749,11 @@ function SpecializationPreview({ selectedLabels }) {
   );
 }
 
-function OpeningDialoguePanel({ selectedDialogueId, onSelectDialogue, notes, onNotesChange }) {
+function OpeningDialoguePanel({ notes, onNotesChange }) {
   return (
     <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white/96 shadow-[0_34px_90px_-70px_rgba(15,23,42,0.8)]">
       <div className="p-4 sm:p-6">
-        <div className="flex items-start gap-4">
-          <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-blue-100 text-blue-600 shadow-[0_18px_34px_-24px_rgba(37,99,235,0.9)]">
-            <span className="grid h-9 w-9 place-items-center rounded-xl bg-blue-600 text-white">
-              <Icon name="chat" className="h-5 w-5" />
-            </span>
-          </span>
-          <div>
-            <h2 className="text-[1.45rem] font-black leading-tight tracking-[-0.03em] text-slate-950 sm:text-[26px]">2. Anything you would like to add?</h2>
-            <p className="mt-1.5 text-base font-medium leading-6 text-blue-700/75">Add any extra details that will help your AI assistant.</p>
-          </div>
-        </div>
-
-        <div className="mt-7">
-          <div className="text-base font-black text-slate-950">Helpful opening dialogue examples</div>
-          <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            {OPENING_DIALOGUE_OPTIONS.map((dialogue) => {
-              const selected = selectedDialogueId === dialogue.id;
-              return (
-                <button
-                  key={dialogue.id}
-                  type="button"
-                  onClick={() => onSelectDialogue(dialogue.id)}
-                  className={
-                    "min-h-[126px] rounded-2xl border p-4 text-left transition " +
-                    (selected
-                      ? "border-blue-500 bg-blue-50/60 shadow-[0_18px_34px_-24px_rgba(37,99,235,0.9),0_0_0_1px_rgba(124,58,237,0.18)_inset]"
-                      : "border-slate-200 bg-slate-50/70 hover:border-blue-300 hover:bg-blue-50/35 hover:shadow-md")
-                  }
-                >
-                  <div className="flex h-full gap-3">
-                    <span className={(selected ? "bg-blue-600 text-white" : "bg-blue-100 text-blue-600") + " mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full"}>
-                      <Icon name="chat" className="h-4 w-4" />
-                    </span>
-                    <span className="text-base font-semibold leading-7 text-slate-900">{dialogue.text}</span>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        <label className="mt-7 block">
+        <label className="block">
           <span className="text-base font-black text-slate-950">Extra notes</span>
           <textarea
             value={notes}
@@ -992,12 +1017,98 @@ function TurnstileCheck({ siteKey, onVerify }) {
   );
 }
 
+function RecaptchaCheck({ siteKey, onVerify }) {
+  const containerRef = useRef(null);
+  const widgetIdRef = useRef(null);
+  const renderingRef = useRef(false);
+
+  useEffect(() => {
+    if (!siteKey || typeof window === "undefined") return undefined;
+
+    let cancelled = false;
+    let pollTimer = null;
+    const callbackName = `onRecaptchaReady_${Math.random().toString(36).slice(2)}`;
+
+    const renderWidget = () => {
+      if (
+        cancelled ||
+        !containerRef.current ||
+        !window.grecaptcha ||
+        typeof window.grecaptcha.render !== "function" ||
+        widgetIdRef.current != null ||
+        renderingRef.current
+      ) {
+        return;
+      }
+
+      renderingRef.current = true;
+      widgetIdRef.current = window.grecaptcha.render(containerRef.current, {
+        sitekey: siteKey,
+        callback: (token) => onVerify(token || ""),
+        "expired-callback": () => onVerify(""),
+        "error-callback": () => onVerify(""),
+      });
+      renderingRef.current = false;
+    };
+
+    window[callbackName] = renderWidget;
+
+    if (!document.querySelector('script[src^="https://www.google.com/recaptcha/api.js"]')) {
+      const script = document.createElement("script");
+      script.src = `https://www.google.com/recaptcha/api.js?onload=${callbackName}&render=explicit`;
+      script.async = true;
+      script.defer = true;
+      script.onload = renderWidget;
+      document.body.appendChild(script);
+    }
+
+    pollTimer = window.setInterval(renderWidget, 250);
+    renderWidget();
+
+    return () => {
+      cancelled = true;
+      if (pollTimer) window.clearInterval(pollTimer);
+      if (window.grecaptcha && typeof window.grecaptcha.reset === "function" && widgetIdRef.current != null) {
+        window.grecaptcha.reset(widgetIdRef.current);
+      }
+      delete window[callbackName];
+      widgetIdRef.current = null;
+      renderingRef.current = false;
+    };
+  }, [siteKey, onVerify]);
+
+  if (!siteKey) return null;
+
+  return (
+    <div className="mt-5 rounded-2xl border border-blue-100 bg-white/80 px-4 py-4 shadow-[0_18px_50px_-42px_rgba(37,99,235,0.9)]">
+      <div className="flex flex-col items-center gap-3">
+        <p className="text-center text-sm font-black uppercase tracking-[0.12em] text-blue-700">
+          Security check required
+        </p>
+        <div ref={containerRef} />
+      </div>
+    </div>
+  );
+}
+
+function HumanVerificationCheck({ provider, recaptchaSiteKey, turnstileSiteKey, onVerify }) {
+  if (provider === "recaptcha") {
+    return <RecaptchaCheck siteKey={recaptchaSiteKey} onVerify={onVerify} />;
+  }
+  if (provider === "turnstile") {
+    return <TurnstileCheck siteKey={turnstileSiteKey} onVerify={onVerify} />;
+  }
+  return null;
+}
+
 function SignupSuccessPage({ result, onStartAnother }) {
   const businessName = result?.businessName || "your business";
   const assignedNumber = result?.twilioPhoneNumber || "";
+  const reviewRequired = Boolean(result?.reviewRequired);
   const numberMissing = !assignedNumber;
   const [progress, setProgress] = useState(12);
   const [showNumber, setShowNumber] = useState(false);
+  const [copiedNumber, setCopiedNumber] = useState(false);
 
   useEffect(() => {
     if (numberMissing) {
@@ -1019,43 +1130,87 @@ function SignupSuccessPage({ result, onStartAnother }) {
     };
   }, [numberMissing]);
 
+  const copyAssignedNumber = async () => {
+    if (!assignedNumber || typeof navigator === "undefined" || !navigator.clipboard) return;
+    await navigator.clipboard.writeText(formatPhoneNumber(assignedNumber));
+    setCopiedNumber(true);
+    window.setTimeout(() => setCopiedNumber(false), 1800);
+  };
+
   return (
-    <main className="min-h-screen bg-[linear-gradient(135deg,#f8fbff_0%,#ffffff_45%,#edf4ff_100%)] text-slate-950">
+    <main className="min-h-screen bg-[linear-gradient(135deg,#eef6ff_0%,#ffffff_42%,#f3f7ff_100%)] text-slate-950">
       <header className="min-h-16 bg-[#020918] shadow-[0_24px_60px_-48px_rgba(15,23,42,0.85)]">
         <div className="mx-auto flex min-h-16 max-w-[1440px] items-center px-4 py-3 sm:px-12">
           <BrandLogo />
         </div>
       </header>
 
-      <section className="mx-auto grid min-h-[calc(100vh-64px)] w-full max-w-5xl place-items-center px-4 py-10 sm:px-6">
-        <div className="w-full overflow-hidden rounded-[28px] border border-blue-100 bg-white/96 shadow-[0_34px_100px_-70px_rgba(15,23,42,0.86)]">
-          <div className="bg-[radial-gradient(circle_at_20%_10%,rgba(96,165,250,0.26),transparent_34%),linear-gradient(135deg,#07142a,#0b3b7a)] px-5 py-7 text-white sm:px-8 sm:py-9">
-            <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-[#00b84a] text-white shadow-[0_0_30px_-10px_rgba(0,184,74,1)]">
+      <section className="mx-auto grid min-h-[calc(100vh-64px)] w-full max-w-6xl place-items-center px-4 py-8 sm:px-6">
+        <div className="w-full overflow-hidden rounded-[28px] border border-blue-100 bg-white/98 shadow-[0_34px_100px_-70px_rgba(15,23,42,0.86)]">
+          <div className="bg-[linear-gradient(135deg,#07142a_0%,#0b3b7a_58%,#1357af_100%)] px-5 py-7 text-white sm:px-8 sm:py-10">
+            <div className="inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-[#00c853] text-white shadow-[0_0_36px_-12px_rgba(0,200,83,1)]">
               <Icon name="check" className="h-8 w-8" />
             </div>
-            <h1 className="mt-5 text-[clamp(2rem,9vw,3.75rem)] font-black leading-tight tracking-[-0.05em]">
+            <p className="mt-5 text-sm font-black uppercase tracking-[0.18em] text-[#9edaff]">
+              Setup milestone unlocked
+            </p>
+            <h1 className="mt-2 text-[clamp(2.1rem,8vw,4.6rem)] font-black leading-tight tracking-[-0.055em]">
               Thanks, {businessName}.
             </h1>
             <p className="mt-3 max-w-3xl text-base font-medium leading-7 text-blue-50 sm:text-xl sm:leading-8">
-              Your AI phone assistant signup is in motion. We created your handoff and sent the setup details for review.
+              {reviewRequired
+                ? "Your signup was received, but it needs review before the workflow continues."
+                : assignedNumber
+                  ? "Your AI phone assistant is ready for testing. Your forwarding number is below."
+                  : "Your AI phone assistant signup is in motion. We created your handoff and sent the setup details for review."}
             </p>
           </div>
 
-          <div className="grid gap-5 p-5 sm:p-8 lg:grid-cols-[1fr_0.9fr]">
-            <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-5 sm:p-6">
-              <p className="text-sm font-black uppercase tracking-[0.16em] text-blue-600">Your new My AI PA number</p>
-              {showNumber && assignedNumber ? (
+          <div className="grid gap-5 p-5 sm:p-8 lg:grid-cols-[1.18fr_0.82fr]">
+            <div className="rounded-3xl border border-blue-200 bg-[linear-gradient(180deg,#f7fbff,#edf5ff)] p-5 shadow-[0_30px_80px_-60px_rgba(37,99,235,0.9)] sm:p-7">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="text-sm font-black uppercase tracking-[0.2em] text-blue-600">Your new My AI PA number</p>
+                {assignedNumber && !reviewRequired ? (
+                  <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-black uppercase tracking-[0.12em] text-emerald-700">
+                    Ready
+                  </span>
+                ) : null}
+              </div>
+              {reviewRequired ? (
+                <div className="mt-5">
+                  <p className="text-[1.28rem] font-black leading-tight tracking-[-0.03em] text-[#07142a]">
+                    Signup received for review.
+                  </p>
+                  <p className="mt-3 text-sm font-semibold leading-6 text-slate-500">
+                    The workflow has not been called yet because this submission was flagged for review.
+                  </p>
+                </div>
+              ) : showNumber && assignedNumber ? (
                 <div className="mt-5">
                   <a
                     href={`tel:${assignedNumber.replace(/[^\d+]/g, "")}`}
                     aria-label={`Call ${formatPhoneNumber(assignedNumber)}`}
-                    className="inline-flex max-w-full items-center rounded-xl text-[#07142a] transition hover:text-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-200"
+                    className="inline-flex max-w-full items-center rounded-2xl text-[#07142a] transition hover:text-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-200"
                   >
-                    <span className="block max-w-full whitespace-nowrap text-[clamp(1.55rem,7vw,3rem)] font-black leading-none tabular-nums">
+                    <span className="block max-w-full whitespace-nowrap text-[clamp(2.4rem,9vw,5rem)] font-black leading-none tracking-[-0.055em] tabular-nums">
                       {formatPhoneNumber(assignedNumber)}
                     </span>
                   </a>
-                  <p className="mt-2 text-xs font-bold uppercase text-blue-600/70">Tap or click to call</p>
+                  <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+                    <a
+                      href={`tel:${assignedNumber.replace(/[^\d+]/g, "")}`}
+                      className="inline-flex min-h-[52px] items-center justify-center rounded-xl bg-[#07142a] px-5 text-base font-black text-white transition hover:bg-blue-800"
+                    >
+                      Call the number
+                    </a>
+                    <button
+                      type="button"
+                      onClick={copyAssignedNumber}
+                      className="inline-flex min-h-[52px] items-center justify-center rounded-xl border border-blue-200 bg-white px-5 text-base font-black text-blue-700 transition hover:border-blue-400 hover:bg-blue-50"
+                    >
+                      {copiedNumber ? "Copied" : "Copy number"}
+                    </button>
+                  </div>
                 </div>
               ) : numberMissing ? (
                 <div className="mt-5">
@@ -1087,15 +1242,25 @@ function SignupSuccessPage({ result, onStartAnother }) {
                 </div>
               )}
               <p className="mt-3 text-base font-medium leading-7 text-slate-600">
-                Use this as the forwarding destination once you are ready to send missed calls to My AI PA.
+                This is the forwarding destination for missed calls. Keep your current business number and forward calls here when you are ready to test live.
               </p>
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
+            <div className="rounded-3xl border border-slate-200 bg-white p-5 sm:p-6">
               <h2 className="text-xl font-black tracking-[-0.02em] text-slate-950">What happens next</h2>
-              <div className="mt-4 space-y-3 text-base font-medium leading-7 text-slate-600">
-                <p>We will use your business details, trade, service area, greeting, and selected voice to prepare the assistant.</p>
-                <p>Keep your current business number. Forward calls to the new number when you are ready to test it live.</p>
+              <div className="mt-5 space-y-3">
+                {[
+                  "Call your new number and hear the assistant answer.",
+                  "Forward missed calls from your current business number.",
+                  "Use the setup details to fine-tune the assistant.",
+                ].map((item) => (
+                  <div key={item} className="flex gap-3 rounded-2xl border border-slate-100 bg-slate-50/80 p-4 text-sm font-bold leading-6 text-slate-700">
+                    <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-emerald-100 text-emerald-700">
+                      <Icon name="check" className="h-4 w-4" />
+                    </span>
+                    <span>{item}</span>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
@@ -1128,7 +1293,9 @@ export default function Signup() {
   const [busy, setBusy] = useState(false);
   const [signupResult, setSignupResult] = useState(null);
   const [botTrap, setBotTrap] = useState("");
-  const [turnstileToken, setTurnstileToken] = useState("");
+  const [captchaToken, setCaptchaToken] = useState("");
+  const [businessStepAttempted, setBusinessStepAttempted] = useState(false);
+  const [touchedDetails, setTouchedDetails] = useState({});
   const [details, setDetails] = useState({
     ownerName: "",
     businessName: "",
@@ -1150,16 +1317,26 @@ export default function Signup() {
     [selectedDialogueId]
   );
   const selectedAgent = ASSISTANT_AGENT;
+  const businessValidation = useMemo(() => validateBusinessDetails(details), [details]);
 
-  const businessStepDisabled = !details.ownerName.trim() || !details.businessName.trim() || !details.phone.trim() || !isValidEmailAddress(details.email);
+  const businessStepDisabled = !businessValidation.isValid || selectedAreas.length === 0;
   const specializationStepDisabled = selectedSpecializationIds.length === 0;
   const voiceStepDisabled = false;
-  const securityStepDisabled = Boolean(TURNSTILE_SITE_KEY && !turnstileToken);
+  const securityStepDisabled = Boolean(CAPTCHA_PROVIDER && !captchaToken);
 
   const updateDetails = (field) => (event) => {
     setDetails((prev) => ({ ...prev, [field]: event.target.value }));
     setStatus("");
     setError("");
+  };
+
+  const markDetailTouched = (field) => () => {
+    setTouchedDetails((prev) => ({ ...prev, [field]: true }));
+  };
+
+  const getBusinessFieldError = (field) => {
+    if (!businessStepAttempted && !touchedDetails[field] && !details[field].trim()) return "";
+    return businessValidation.errors[field] || "";
   };
 
   const toggleArea = (area) => {
@@ -1190,7 +1367,9 @@ export default function Signup() {
     setBusy(false);
     setSignupResult(null);
     setBotTrap("");
-    setTurnstileToken("");
+    setCaptchaToken("");
+    setBusinessStepAttempted(false);
+    setTouchedDetails({});
     signupStartedAtRef.current = Date.now();
     setDetails({
       ownerName: "",
@@ -1206,24 +1385,24 @@ export default function Signup() {
     event.preventDefault();
     if (busy) return;
     if (currentStep === 1) {
-      if (businessStepDisabled) return;
+      if (businessStepDisabled) {
+        setBusinessStepAttempted(true);
+        setTouchedDetails({ ownerName: true, businessName: true, phone: true, email: true, address: true });
+        setError("Please complete the business details properly before continuing.");
+        return;
+      }
+      setBusinessStepAttempted(false);
       setCurrentStep(2);
       window.scrollTo?.({ top: 0, behavior: "smooth" });
       return;
     }
     if (currentStep === 2) {
-      if (specializationStepDisabled) return;
+      if (voiceStepDisabled) return;
       setCurrentStep(3);
       window.scrollTo?.({ top: 0, behavior: "smooth" });
       return;
     }
-    if (currentStep === 3) {
-      if (voiceStepDisabled) return;
-      setCurrentStep(4);
-      window.scrollTo?.({ top: 0, behavior: "smooth" });
-      return;
-    }
-    if (currentStep !== 4) return;
+    if (currentStep !== 3) return;
 
     if (hasTooManyBrowserSignupAttempts()) {
       setError("Too many signup attempts from this browser. Please try again later.");
@@ -1277,7 +1456,10 @@ export default function Signup() {
       security: {
         companyWebsite: botTrap,
         clientElapsedMs: Date.now() - signupStartedAtRef.current,
-        turnstileToken,
+        captchaProvider: CAPTCHA_PROVIDER,
+        captchaToken,
+        recaptchaToken: CAPTCHA_PROVIDER === "recaptcha" ? captchaToken : "",
+        turnstileToken: CAPTCHA_PROVIDER === "turnstile" ? captchaToken : "",
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "",
         pageUrl: typeof window !== "undefined" ? window.location.href : "",
       },
@@ -1305,6 +1487,7 @@ export default function Signup() {
       setSignupResult({
         businessName: details.businessName.trim(),
         twilioPhoneNumber: getTwilioPhoneNumber(result),
+        reviewRequired: Boolean(result?.reviewRequired),
       });
       window.scrollTo?.({ top: 0, behavior: "smooth" });
     } catch (submitError) {
@@ -1371,35 +1554,44 @@ export default function Signup() {
 
               <section className="mt-4">
                 <h2 className="text-xl font-black tracking-[-0.02em] text-slate-950">3. Business details</h2>
+                <p className="mt-0.5 text-sm font-medium text-slate-500">Enter real, complete business details. These are required before you can continue.</p>
                 <div className="mt-3 grid gap-3 sm:grid-cols-2">
                   <LabeledInput
                     label="Business owner's name"
                     icon="user"
                     value={details.ownerName}
                     onChange={updateDetails("ownerName")}
+                    onBlur={markDetailTouched("ownerName")}
                     placeholder="e.g., Jamie Smith"
+                    error={getBusinessFieldError("ownerName")}
                   />
                   <LabeledInput
                     label="Business name"
                     icon="briefcase"
                     value={details.businessName}
                     onChange={updateDetails("businessName")}
+                    onBlur={markDetailTouched("businessName")}
                     placeholder={`e.g., ${selectedTrade.label === "Electrician" ? "Smith Electrical Services" : `${selectedTrade.label} Services`}`}
+                    error={getBusinessFieldError("businessName")}
                   />
                   <LabeledInput
                     label="Business phone number"
                     icon="phone"
                     value={details.phone}
                     onChange={updateDetails("phone")}
+                    onBlur={markDetailTouched("phone")}
                     placeholder="(416) 555-1234"
+                    error={getBusinessFieldError("phone")}
                   />
                   <LabeledInput
                     label="Email address"
                     icon="mail"
                     value={details.email}
                     onChange={updateDetails("email")}
+                    onBlur={markDetailTouched("email")}
                     placeholder="you@yourbusiness.com"
                     type="email"
+                    error={getBusinessFieldError("email")}
                   />
                   <LabeledInput
                     className="sm:col-span-2"
@@ -1407,7 +1599,9 @@ export default function Signup() {
                     icon="pin"
                     value={details.address}
                     onChange={updateDetails("address")}
+                    onBlur={markDetailTouched("address")}
                     placeholder="123 Main St, Toronto, ON, Canada"
+                    error={getBusinessFieldError("address")}
                   />
                 </div>
                 <p className="mt-1.5 text-xs font-medium text-slate-500">City, province and postal code help us serve your callers better.</p>
@@ -1417,50 +1611,10 @@ export default function Signup() {
         ) : null}
 
         {currentStep === 2 ? (
-          <section className="mt-5 grid gap-6">
-            <div className="rounded-2xl border border-slate-200 bg-white/96 p-4 shadow-[0_34px_90px_-70px_rgba(15,23,42,0.8)] sm:p-6">
-              <section>
-                <h2 className="text-xl font-black tracking-[-0.02em] text-slate-950">1. Areas of specialization</h2>
-                <p className="mt-1 text-sm font-medium text-slate-500">Select all that apply.</p>
-                <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3 xl:grid-cols-5">
-                  {SPECIALIZATION_OPTIONS.map((item) => (
-                    <SpecializationCard
-                      key={item.id}
-                      item={item}
-                      selected={selectedSpecializationIds.includes(item.id)}
-                      onClick={() => toggleSpecialization(item.id)}
-                    />
-                  ))}
-                </div>
-                <div className="mt-4 flex items-start gap-2 text-xs font-medium leading-5 text-slate-500">
-                  <Icon name="info" className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
-                  <span>Select the types of work your business provides so the AI can answer accurately.</span>
-                </div>
-              </section>
-            </div>
-
-            <OpeningDialoguePanel
-              selectedDialogueId={selectedDialogueId}
-              onSelectDialogue={(id) => {
-                setSelectedDialogueId(id);
-                setStatus("");
-                setError("");
-              }}
-              notes={specializationNotes}
-              onNotesChange={(event) => {
-                setSpecializationNotes(event.target.value);
-                setStatus("");
-                setError("");
-              }}
-            />
-          </section>
-        ) : null}
-
-        {currentStep === 3 ? (
           <VoiceDemoStep agent={selectedAgent} />
         ) : null}
 
-        {currentStep === 4 ? (
+        {currentStep === 3 ? (
           <section className="mt-5">
             <ReviewPanel
               trade={selectedTrade}
@@ -1485,11 +1639,20 @@ export default function Signup() {
           </button>
         ) : null}
 
+        {currentStep === 3 ? (
+          <HumanVerificationCheck
+            provider={CAPTCHA_PROVIDER}
+            recaptchaSiteKey={RECAPTCHA_SITE_KEY}
+            turnstileSiteKey={TURNSTILE_SITE_KEY}
+            onVerify={setCaptchaToken}
+          />
+        ) : null}
+
         <TrialButton
-          disabled={currentStep === 1 ? businessStepDisabled : currentStep === 2 ? specializationStepDisabled : currentStep === 3 ? voiceStepDisabled : securityStepDisabled}
+          disabled={currentStep === 1 ? businessStepDisabled : currentStep === 2 ? voiceStepDisabled : securityStepDisabled}
           busy={busy}
-          finalStep={currentStep === 4}
-          label={currentStep === 4 ? "Start free trial" : "Save & continue"}
+          finalStep={currentStep === 3}
+          label={currentStep === 3 ? "Start free trial" : "Save & continue"}
         />
 
         <label className="sr-only" aria-hidden="true">
@@ -1504,8 +1667,6 @@ export default function Signup() {
             className="absolute -left-[10000px] top-auto h-px w-px opacity-0"
           />
         </label>
-
-        {currentStep === 4 ? <TurnstileCheck siteKey={TURNSTILE_SITE_KEY} onVerify={setTurnstileToken} /> : null}
 
         <div className="mt-3 flex items-center justify-center gap-2 text-center text-sm font-medium text-slate-500 sm:text-base">
           <Icon name="lock" className="h-4 w-4" />

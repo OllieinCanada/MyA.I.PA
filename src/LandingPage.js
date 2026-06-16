@@ -29,7 +29,7 @@ const heroCallTranscript = [
   },
 ];
 
-const demoCallAudioSrc = `${process.env.PUBLIC_URL || ""}/tims-electrical-2.wav?v=20260613-new`;
+const demoCallAudioSrc = `${process.env.PUBLIC_URL || ""}/tims-electrical-2.wav?v=20260614-trim`;
 
 const problemMoments = [
   {
@@ -95,13 +95,18 @@ const benefitCards = [
 ];
 
 const transcriptMoments = [
-  { start: 0, end: 25, speaker: "Call opening", text: "AI: Thanks for contacting Tim's Electrical. We handle residential and commercial work. Caller: I'm okay, thanks. I was wondering about your hours of operation." },
-  { start: 25, end: 50, speaker: "Service request", text: "AI: We are open from 8:00 a.m. to 5:00 p.m., Monday to Friday. Caller: I'm looking for assistance with a new installation." },
-  { start: 50, end: 75, speaker: "Job details", text: "AI: What type of installation are you looking for? Caller: I need someone to wire up my hot tub on my back deck." },
-  { start: 75, end: 100, speaker: "Contact details", text: "AI: Got it. Can I get your first name and the address for the work? Caller: Brian, 63 York Street in St. Catharines." },
-  { start: 100, end: 125, speaker: "Callback info", text: "AI: What is the best phone number and callback time? Caller: 905-123-4567, and around 7:00 p.m. works best." },
-  { start: 125, end: 150, speaker: "Confirmation", text: "AI: To confirm, that's 63 York Street in St. Catharines. Our service manager will follow up to review the job details and rates." },
-  { start: 150, end: 174.1, speaker: "Call wrap-up", text: "AI: I forwarded the call details and sent a text summary with the key points. Thanks for calling Tim's Electrical." },
+  { start: 0, end: 12, speaker: "Live caption", text: "AI: Hello, thank you for contacting Tim's Electrical. We handle residential and commercial work. How are you today? Caller: I'm okay. How about yourself?" },
+  { start: 12, end: 24, speaker: "Live caption", text: "AI: I'm doing well, thank you. Are you looking for a new installation, repairs, or maintenance today? Caller: I was just wondering about your hours of operation." },
+  { start: 24, end: 40, speaker: "Live caption", text: "AI: We are open from 8:00 a.m. to 5:00 p.m., Monday to Friday. What can we help you with? Caller: I'm looking for assistance for a new installation." },
+  { start: 40, end: 52, speaker: "Live caption", text: "AI: A new installation. Okay, what type of installation are you looking for? Caller: I need someone to wire up my hot tub on my back deck." },
+  { start: 52, end: 60, speaker: "Live caption", text: "AI: You need someone to wire your hot tub on your back deck. Got it. Can I get your first name? Caller: Brian." },
+  { start: 60, end: 72, speaker: "Live caption", text: "AI: Thanks, Brian. What's the address where the work needs to be completed? Caller: 63 York Street. AI: 63 York Street, and which city is this in?" },
+  { start: 72, end: 84, speaker: "Live caption", text: "Caller: St. Catharines. AI: What is the best phone number to reach you at? Caller: 905-123-4567." },
+  { start: 84, end: 96, speaker: "Live caption", text: "AI: Repeating that back, 905-123-4567. Is that correct? Caller: Yes." },
+  { start: 96, end: 108, speaker: "Live caption", text: "AI: Thank you. What's the best time to reach you in case we miss you on the callback? Caller: Around 7:00 p.m. AI: To confirm, that's 63 York Street." },
+  { start: 108, end: 120, speaker: "Live caption", text: "AI: Our service manager will get right back to you to go over the job details and our rates. Perfect, I have forwarded this call to him and sent you a text outlining the key points of this call." },
+  { start: 120, end: 132, speaker: "Live caption", text: "AI: Feel free to visit our website at timselectrical.com. Thanks for calling. Caller: Great, I got the text. You too." },
+  { start: 132, end: 133, speaker: "Live caption", text: "AI: Have a great day." },
 ];
 
 const waveformBars = [
@@ -659,7 +664,7 @@ function AiAssistantAvatar({ compact = false }) {
 
 function HeroPhoneMockup() {
   return (
-    <div className="landing-phone relative mx-auto -mt-12 h-[623px] w-full max-w-[375px] rounded-[38px] border-[5px] border-[#35373e] bg-[#050912] p-2 shadow-[0_30px_80px_-34px_rgba(0,0,0,1),0_0_0_1px_rgba(255,255,255,0.22)_inset] 2xl:-mt-14 2xl:h-[646px] 2xl:max-w-[385px]">
+    <div className="landing-phone relative mx-auto mt-0 h-[623px] w-full max-w-[375px] rounded-[38px] border-[5px] border-[#35373e] bg-[#050912] p-2 shadow-[0_30px_80px_-34px_rgba(0,0,0,1),0_0_0_1px_rgba(255,255,255,0.22)_inset] 2xl:h-[646px] 2xl:max-w-[385px]">
       <div className="absolute left-1/2 top-3 z-10 h-5 w-16 -translate-x-1/2 rounded-full bg-black" />
       <div className="flex h-full flex-col overflow-hidden rounded-[30px] bg-[radial-gradient(circle_at_50%_0%,rgba(8,90,158,0.34),transparent_36%),linear-gradient(180deg,#061b34_0%,#020814_100%)] px-5 pb-3 pt-4">
         <div className="flex items-center justify-between text-white">
@@ -1132,7 +1137,7 @@ function LandingPage() {
 
   const [audioPlaying, setAudioPlaying] = useState(false);
   const [audioTime, setAudioTime] = useState(0);
-  const [audioDuration, setAudioDuration] = useState(174.1);
+  const [audioDuration, setAudioDuration] = useState(133);
   const [audioError, setAudioError] = useState("");
   const [openFaq, setOpenFaq] = useState(0);
   const [showHeader, setShowHeader] = useState(false);
@@ -1381,10 +1386,12 @@ function LandingPage() {
             .landing-hero-footnote {
               margin-top: 1.15rem;
               font-size: 1.08rem;
+              position: relative;
+              z-index: 2;
             }
             .landing-phone {
               height: 603px;
-              margin-top: -3rem;
+              margin-top: 0;
               max-width: 360px;
             }
             .landing-summary {
@@ -1416,7 +1423,7 @@ function LandingPage() {
           </nav>
 
           <div className="landing-hero-grid grid flex-1 gap-9 py-9 lg:grid-cols-[minmax(0,1fr)_375px] lg:items-center xl:grid-cols-[minmax(640px,1fr)_375px_340px] 2xl:grid-cols-[minmax(680px,1fr)_385px_360px] 2xl:gap-10 2xl:py-10">
-            <div className="min-w-0 max-w-[800px] xl:max-w-none lg:-translate-y-6 2xl:-translate-y-8">
+            <div className="relative z-10 min-w-0 max-w-[800px] xl:max-w-none lg:-translate-y-6 2xl:-translate-y-8">
               <div className="mt-3 inline-flex rounded-full border border-[#b9d8ff] bg-white/72 px-4 py-2 text-lg font-semibold text-[#0b3b7a] shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_18px_42px_-34px_rgba(37,99,235,0.7)] 2xl:px-5 2xl:text-xl">
                 AI Phone Answering Assistant
               </div>
@@ -1470,7 +1477,7 @@ function LandingPage() {
               <p className="landing-hero-footnote mt-5 text-lg font-medium text-[#334155] 2xl:text-xl">PIPEDA Compliant&nbsp;&nbsp;&bull;&nbsp;&nbsp;14-day free trial&nbsp;&nbsp;&bull;&nbsp;&nbsp;No credit card / No obligation needed!</p>
             </div>
 
-            <div className="relative lg:-translate-y-2 2xl:translate-y-0">
+            <div className="relative z-0 mt-8 lg:mt-0 lg:-translate-y-2 2xl:translate-y-0">
               <HeroPhoneMockup />
             </div>
 

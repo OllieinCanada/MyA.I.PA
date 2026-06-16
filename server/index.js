@@ -19,6 +19,7 @@ const assistantRateLimit = new Map();
 const signupIpRateLimit = new Map();
 const signupIdentityRateLimit = new Map();
 const signupDuplicateSubmissions = new Map();
+const GOOGLE_RECAPTCHA_TEST_SECRET_KEY = "6LeIxAcTAAAAAGG-vFI1TnRWxMZNFuojJ4WifJWe";
 const ASSISTANT_MAX_CHARS = 2000;
 const ASSISTANT_WINDOW_MS = 60 * 1000;
 const ASSISTANT_MAX_REQUESTS_PER_WINDOW = 12;
@@ -172,6 +173,15 @@ function isEnabled(value) {
   return /^(1|true|yes|on)$/i.test(String(value || ""));
 }
 
+function isLocalPageUrl(value) {
+  try {
+    const url = new URL(String(value || ""));
+    return /^(localhost|127\.0\.0\.1)$/.test(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
 function normalizeForKey(value) {
   return String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
 }
@@ -235,6 +245,53 @@ async function verifyTurnstileToken(token, ip) {
   }
 }
 
+async function verifyRecaptchaToken(token, ip, options = {}) {
+  const secret = options.useTestSecret
+    ? GOOGLE_RECAPTCHA_TEST_SECRET_KEY
+    : String(process.env.RECAPTCHA_SECRET_KEY || process.env.GOOGLE_RECAPTCHA_SECRET_KEY || "").trim();
+  if (!secret) return { ok: true, skipped: true };
+  if (!token) return { ok: false, reason: "missing_captcha" };
+
+  const body = new URLSearchParams();
+  body.set("secret", secret);
+  body.set("response", token);
+  if (ip && ip !== "unknown") body.set("remoteip", ip);
+
+  try {
+    const response = await fetch("https://www.google.com/recaptcha/api/siteverify", {
+      method: "POST",
+      body,
+    });
+    const data = await response.json().catch(() => ({}));
+    return { ok: Boolean(data?.success), reason: data?.["error-codes"]?.join(",") || "" };
+  } catch (error) {
+    console.error("[signup:security] recaptcha verification failed", { message: error?.message || String(error) });
+    return { ok: false, reason: "captcha_unreachable" };
+  }
+}
+
+async function verifySignupCaptcha(security, ip) {
+  const provider = String(security.captchaProvider || "").trim().toLowerCase();
+  const genericToken = String(security.captchaToken || "").trim();
+  const recaptchaToken = String(security.recaptchaToken || "").trim();
+  const turnstileToken = String(security.turnstileToken || "").trim();
+  const useLocalRecaptchaTestKey = isLocalPageUrl(security.pageUrl);
+
+  if (provider === "recaptcha" || recaptchaToken) {
+    return verifyRecaptchaToken(recaptchaToken || genericToken, ip, { useTestSecret: useLocalRecaptchaTestKey });
+  }
+
+  if (provider === "turnstile" || turnstileToken) {
+    return verifyTurnstileToken(turnstileToken || genericToken, ip);
+  }
+
+  if (process.env.RECAPTCHA_SECRET_KEY || process.env.GOOGLE_RECAPTCHA_SECRET_KEY) {
+    return verifyRecaptchaToken(genericToken, ip, { useTestSecret: useLocalRecaptchaTestKey });
+  }
+
+  return verifyTurnstileToken(genericToken, ip);
+}
+
 async function getSignupSecurityDecision(req, body, fields) {
   const security = body.security || {};
   const ip = getClientIp(req);
@@ -250,7 +307,7 @@ async function getSignupSecurityDecision(req, body, fields) {
     reviewReasons.push("submitted_too_fast");
   }
 
-  const captcha = await verifyTurnstileToken(String(security.turnstileToken || ""), ip);
+  const captcha = await verifySignupCaptcha(security, ip);
   if (!captcha.ok) {
     reasons.push(captcha.reason || "captcha_failed");
   }
@@ -267,7 +324,7 @@ async function getSignupSecurityDecision(req, body, fields) {
   }
 
   const duplicateKey = hashKey([fields.ownerEmail, fields.ownerPhone, fields.businessName, fields.businessPhone].map(normalizeForKey).join("|"));
-  if (rememberDuplicateSignup(duplicateKey)) {
+  if (rememberDuplicateSignup(duplicateKey) && isEnabled(process.env.SIGNUP_REVIEW_DUPLICATES)) {
     reviewReasons.push("duplicate_submission");
   }
 
@@ -1252,6 +1309,7 @@ app.post(
         ipHash: hashKey(securityDecision.ip),
       },
       security: {
+        captchaProvider: String(body.security?.captchaProvider || "").trim(),
         reviewRequired: securityDecision.reviewRequired,
         reviewReasons: securityDecision.reviewReasons,
         captchaSkipped: securityDecision.captchaSkipped,
