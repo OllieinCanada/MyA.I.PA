@@ -9,6 +9,7 @@ const MAKE_SIGNUP_WEBHOOK_URL = process.env.REACT_APP_MAKE_SIGNUP_WEBHOOK_URL ||
 const MAKE_SIGNUP_WEBHOOK_API_KEY = process.env.REACT_APP_MAKE_SIGNUP_WEBHOOK_API_KEY || "";
 const GOOGLE_RECAPTCHA_TEST_SITE_KEY = "6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI";
 const RECAPTCHA_SITE_KEY = IS_LOCAL_BROWSER ? GOOGLE_RECAPTCHA_TEST_SITE_KEY : process.env.REACT_APP_RECAPTCHA_SITE_KEY || "";
+const USE_RECAPTCHA_ENTERPRISE = Boolean(RECAPTCHA_SITE_KEY && !IS_LOCAL_BROWSER);
 const TURNSTILE_SITE_KEY = process.env.REACT_APP_TURNSTILE_SITE_KEY || "";
 const CAPTCHA_PROVIDER = RECAPTCHA_SITE_KEY ? "recaptcha" : TURNSTILE_SITE_KEY ? "turnstile" : "";
 const SIGNUP_API_PATH = "/api/integrations/signup-complete";
@@ -1017,7 +1018,7 @@ function TurnstileCheck({ siteKey, onVerify }) {
   );
 }
 
-function RecaptchaCheck({ siteKey, onVerify }) {
+function RecaptchaCheck({ siteKey, enterprise = false, onVerify }) {
   const containerRef = useRef(null);
   const widgetIdRef = useRef(null);
   const renderingRef = useRef(false);
@@ -1028,13 +1029,15 @@ function RecaptchaCheck({ siteKey, onVerify }) {
     let cancelled = false;
     let pollTimer = null;
     const callbackName = `onRecaptchaReady_${Math.random().toString(36).slice(2)}`;
+    const scriptBaseUrl = enterprise ? "https://www.google.com/recaptcha/enterprise.js" : "https://www.google.com/recaptcha/api.js";
 
     const renderWidget = () => {
+      const recaptchaApi = enterprise ? window.grecaptcha?.enterprise : window.grecaptcha;
       if (
         cancelled ||
         !containerRef.current ||
-        !window.grecaptcha ||
-        typeof window.grecaptcha.render !== "function" ||
+        !recaptchaApi ||
+        typeof recaptchaApi.render !== "function" ||
         widgetIdRef.current != null ||
         renderingRef.current
       ) {
@@ -1042,7 +1045,7 @@ function RecaptchaCheck({ siteKey, onVerify }) {
       }
 
       renderingRef.current = true;
-      widgetIdRef.current = window.grecaptcha.render(containerRef.current, {
+      widgetIdRef.current = recaptchaApi.render(containerRef.current, {
         sitekey: siteKey,
         callback: (token) => onVerify(token || ""),
         "expired-callback": () => onVerify(""),
@@ -1053,9 +1056,9 @@ function RecaptchaCheck({ siteKey, onVerify }) {
 
     window[callbackName] = renderWidget;
 
-    if (!document.querySelector('script[src^="https://www.google.com/recaptcha/api.js"]')) {
+    if (!document.querySelector(`script[src^="${scriptBaseUrl}"]`)) {
       const script = document.createElement("script");
-      script.src = `https://www.google.com/recaptcha/api.js?onload=${callbackName}&render=explicit`;
+      script.src = `${scriptBaseUrl}?onload=${callbackName}&render=explicit`;
       script.async = true;
       script.defer = true;
       script.onload = renderWidget;
@@ -1068,14 +1071,15 @@ function RecaptchaCheck({ siteKey, onVerify }) {
     return () => {
       cancelled = true;
       if (pollTimer) window.clearInterval(pollTimer);
-      if (window.grecaptcha && typeof window.grecaptcha.reset === "function" && widgetIdRef.current != null) {
-        window.grecaptcha.reset(widgetIdRef.current);
+      const recaptchaApi = enterprise ? window.grecaptcha?.enterprise : window.grecaptcha;
+      if (recaptchaApi && typeof recaptchaApi.reset === "function" && widgetIdRef.current != null) {
+        recaptchaApi.reset(widgetIdRef.current);
       }
       delete window[callbackName];
       widgetIdRef.current = null;
       renderingRef.current = false;
     };
-  }, [siteKey, onVerify]);
+  }, [siteKey, enterprise, onVerify]);
 
   if (!siteKey) return null;
 
@@ -1091,9 +1095,9 @@ function RecaptchaCheck({ siteKey, onVerify }) {
   );
 }
 
-function HumanVerificationCheck({ provider, recaptchaSiteKey, turnstileSiteKey, onVerify }) {
+function HumanVerificationCheck({ provider, recaptchaSiteKey, useRecaptchaEnterprise, turnstileSiteKey, onVerify }) {
   if (provider === "recaptcha") {
-    return <RecaptchaCheck siteKey={recaptchaSiteKey} onVerify={onVerify} />;
+    return <RecaptchaCheck siteKey={recaptchaSiteKey} enterprise={useRecaptchaEnterprise} onVerify={onVerify} />;
   }
   if (provider === "turnstile") {
     return <TurnstileCheck siteKey={turnstileSiteKey} onVerify={onVerify} />;
@@ -1643,6 +1647,7 @@ export default function Signup() {
           <HumanVerificationCheck
             provider={CAPTCHA_PROVIDER}
             recaptchaSiteKey={RECAPTCHA_SITE_KEY}
+            useRecaptchaEnterprise={USE_RECAPTCHA_ENTERPRISE}
             turnstileSiteKey={TURNSTILE_SITE_KEY}
             onVerify={setCaptchaToken}
           />
