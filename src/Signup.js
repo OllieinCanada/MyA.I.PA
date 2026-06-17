@@ -9,7 +9,8 @@ const MAKE_SIGNUP_WEBHOOK_URL = process.env.REACT_APP_MAKE_SIGNUP_WEBHOOK_URL ||
 const MAKE_SIGNUP_WEBHOOK_API_KEY = process.env.REACT_APP_MAKE_SIGNUP_WEBHOOK_API_KEY || "";
 const GOOGLE_RECAPTCHA_TEST_SITE_KEY = "6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI";
 const RECAPTCHA_SITE_KEY = IS_LOCAL_BROWSER ? GOOGLE_RECAPTCHA_TEST_SITE_KEY : process.env.REACT_APP_RECAPTCHA_SITE_KEY || "";
-const USE_RECAPTCHA_ENTERPRISE = Boolean(RECAPTCHA_SITE_KEY && !IS_LOCAL_BROWSER);
+const RECAPTCHA_MODE = IS_LOCAL_BROWSER ? "checkbox" : process.env.REACT_APP_RECAPTCHA_MODE || "score";
+const USE_RECAPTCHA_ENTERPRISE = /^(1|true|yes|on)$/i.test(String(process.env.REACT_APP_RECAPTCHA_ENTERPRISE || ""));
 const TURNSTILE_SITE_KEY = process.env.REACT_APP_TURNSTILE_SITE_KEY || "";
 const CAPTCHA_PROVIDER = RECAPTCHA_SITE_KEY ? "recaptcha" : TURNSTILE_SITE_KEY ? "turnstile" : "";
 const SIGNUP_API_PATH = "/api/integrations/signup-complete";
@@ -1018,10 +1019,15 @@ function TurnstileCheck({ siteKey, onVerify }) {
   );
 }
 
-function RecaptchaCheck({ siteKey, enterprise = false, onVerify }) {
+function RecaptchaCheck({ siteKey, mode = "checkbox", enterprise = false, onVerify }) {
   const containerRef = useRef(null);
   const widgetIdRef = useRef(null);
   const renderingRef = useRef(false);
+  const [scriptReady, setScriptReady] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [verified, setVerified] = useState(false);
+  const [verificationError, setVerificationError] = useState("");
+  const isScoreMode = mode === "score";
 
   useEffect(() => {
     if (!siteKey || typeof window === "undefined") return undefined;
@@ -1033,6 +1039,10 @@ function RecaptchaCheck({ siteKey, enterprise = false, onVerify }) {
 
     const renderWidget = () => {
       const recaptchaApi = enterprise ? window.grecaptcha?.enterprise : window.grecaptcha;
+      if (recaptchaApi && typeof recaptchaApi.ready === "function") {
+        setScriptReady(true);
+      }
+      if (isScoreMode) return;
       if (
         cancelled ||
         !containerRef.current ||
@@ -1058,7 +1068,9 @@ function RecaptchaCheck({ siteKey, enterprise = false, onVerify }) {
 
     if (!document.querySelector(`script[src^="${scriptBaseUrl}"]`)) {
       const script = document.createElement("script");
-      script.src = `${scriptBaseUrl}?onload=${callbackName}&render=explicit`;
+      script.src = isScoreMode
+        ? `${scriptBaseUrl}?render=${encodeURIComponent(siteKey)}`
+        : `${scriptBaseUrl}?onload=${callbackName}&render=explicit`;
       script.async = true;
       script.defer = true;
       script.onload = renderWidget;
@@ -1079,9 +1091,35 @@ function RecaptchaCheck({ siteKey, enterprise = false, onVerify }) {
       widgetIdRef.current = null;
       renderingRef.current = false;
     };
-  }, [siteKey, enterprise, onVerify]);
+  }, [siteKey, enterprise, isScoreMode, onVerify]);
 
   if (!siteKey) return null;
+
+  const verifyScoreCaptcha = () => {
+    const recaptchaApi = enterprise ? window.grecaptcha?.enterprise : window.grecaptcha;
+    if (!recaptchaApi || typeof recaptchaApi.ready !== "function" || typeof recaptchaApi.execute !== "function") {
+      setVerificationError("Security check is still loading. Please try again in a moment.");
+      return;
+    }
+
+    setVerifying(true);
+    setVerificationError("");
+    recaptchaApi.ready(() => {
+      recaptchaApi
+        .execute(siteKey, { action: "signup" })
+        .then((token) => {
+          onVerify(token || "");
+          setVerified(Boolean(token));
+          if (!token) setVerificationError("Security check did not return a valid token. Please try again.");
+        })
+        .catch(() => {
+          onVerify("");
+          setVerified(false);
+          setVerificationError("Security check failed to complete. Please refresh and try again.");
+        })
+        .finally(() => setVerifying(false));
+    });
+  };
 
   return (
     <div className="mt-5 rounded-2xl border border-blue-100 bg-white/80 px-4 py-4 shadow-[0_18px_50px_-42px_rgba(37,99,235,0.9)]">
@@ -1089,15 +1127,34 @@ function RecaptchaCheck({ siteKey, enterprise = false, onVerify }) {
         <p className="text-center text-sm font-black uppercase tracking-[0.12em] text-blue-700">
           Security check required
         </p>
-        <div ref={containerRef} />
+        {isScoreMode ? (
+          <>
+            <button
+              type="button"
+              onClick={verifyScoreCaptcha}
+              disabled={verifying || verified || !scriptReady}
+              className={
+                "inline-flex min-h-[48px] min-w-[220px] items-center justify-center rounded-xl px-5 text-base font-black transition " +
+                (verified
+                  ? "bg-emerald-100 text-emerald-700"
+                  : "bg-[#07142a] text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600")
+              }
+            >
+              {verified ? "Security verified" : verifying ? "Verifying..." : scriptReady ? "Verify security check" : "Loading security check..."}
+            </button>
+            {verificationError ? <p className="max-w-md text-center text-sm font-semibold text-rose-600">{verificationError}</p> : null}
+          </>
+        ) : (
+          <div ref={containerRef} />
+        )}
       </div>
     </div>
   );
 }
 
-function HumanVerificationCheck({ provider, recaptchaSiteKey, useRecaptchaEnterprise, turnstileSiteKey, onVerify }) {
+function HumanVerificationCheck({ provider, recaptchaSiteKey, recaptchaMode, useRecaptchaEnterprise, turnstileSiteKey, onVerify }) {
   if (provider === "recaptcha") {
-    return <RecaptchaCheck siteKey={recaptchaSiteKey} enterprise={useRecaptchaEnterprise} onVerify={onVerify} />;
+    return <RecaptchaCheck siteKey={recaptchaSiteKey} mode={recaptchaMode} enterprise={useRecaptchaEnterprise} onVerify={onVerify} />;
   }
   if (provider === "turnstile") {
     return <TurnstileCheck siteKey={turnstileSiteKey} onVerify={onVerify} />;
@@ -1647,6 +1704,7 @@ export default function Signup() {
           <HumanVerificationCheck
             provider={CAPTCHA_PROVIDER}
             recaptchaSiteKey={RECAPTCHA_SITE_KEY}
+            recaptchaMode={RECAPTCHA_MODE}
             useRecaptchaEnterprise={USE_RECAPTCHA_ENTERPRISE}
             turnstileSiteKey={TURNSTILE_SITE_KEY}
             onVerify={setCaptchaToken}
