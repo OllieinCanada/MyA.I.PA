@@ -1242,8 +1242,8 @@ function LandingPage() {
 
           <div className="hidden justify-self-center text-center lg:block">
             <p className="text-sm font-black uppercase tracking-[0.14em] text-[#334155]">Hear the agent live right now:</p>
-            <a href="tel:+19055550137" className="mt-1 block text-xl font-black tracking-[-0.02em] text-[#ff9a22] transition hover:text-[#ffb35c]">
-              (905) 555-0137
+            <a href="tel:+12495033301" className="mt-1 block text-xl font-black tracking-[-0.02em] text-[#ff9a22] transition hover:text-[#ffb35c]">
+              (249) 503-3301
             </a>
           </div>
 
@@ -1407,8 +1407,8 @@ function LandingPage() {
             <HeroLogoMark />
             <div className="hidden justify-self-center text-center lg:block">
               <p className="text-sm font-black uppercase tracking-[0.14em] text-[#334155]">Hear the agent live right now:</p>
-              <a href="tel:+19055550137" className="mt-1 block text-xl font-black tracking-[-0.02em] text-[#ff9a22] transition hover:text-[#ffb35c]">
-                (905) 555-0137
+              <a href="tel:+12495033301" className="mt-1 block text-xl font-black tracking-[-0.02em] text-[#ff9a22] transition hover:text-[#ffb35c]">
+                (249) 503-3301
               </a>
             </div>
             <div className="flex flex-wrap items-center gap-3 sm:gap-5 lg:justify-end">
