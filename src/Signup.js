@@ -158,6 +158,21 @@ const OPENING_DIALOGUE_OPTIONS = [
     text: "Welcome, and thanks for calling. Please let me know what you need.",
   },
 ];
+const CANADIAN_PROVINCES = [
+  { value: "AB", label: "Alberta" },
+  { value: "BC", label: "British Columbia" },
+  { value: "MB", label: "Manitoba" },
+  { value: "NB", label: "New Brunswick" },
+  { value: "NL", label: "Newfoundland and Labrador" },
+  { value: "NS", label: "Nova Scotia" },
+  { value: "NT", label: "Northwest Territories" },
+  { value: "NU", label: "Nunavut" },
+  { value: "ON", label: "Ontario" },
+  { value: "PE", label: "Prince Edward Island" },
+  { value: "QC", label: "Quebec" },
+  { value: "SK", label: "Saskatchewan" },
+  { value: "YT", label: "Yukon" },
+];
 
 const SIGNUP_ATTEMPT_STORAGE_KEY = "myaipa_signup_attempts_v1";
 const SIGNUP_ATTEMPT_WINDOW_MS = 60 * 60 * 1000;
@@ -199,13 +214,24 @@ function getPhoneDigits(value) {
   return digits.length === 11 && digits.startsWith("1") ? digits.slice(1) : digits;
 }
 
+function formatBusinessAddress(details) {
+  return [details.streetAddress, details.city, details.province, details.postalCode]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+    .join(", ");
+}
+
 function validateBusinessDetails(details) {
   const ownerName = details.ownerName.trim();
   const businessName = details.businessName.trim();
   const phone = details.phone.trim();
   const email = details.email.trim();
-  const address = details.address.trim();
+  const streetAddress = details.streetAddress.trim();
+  const city = details.city.trim();
+  const province = details.province.trim();
+  const postalCode = details.postalCode.trim();
   const phoneDigits = getPhoneDigits(phone);
+  const postalCodePattern = /^[A-Za-z]\d[A-Za-z][ -]?\d[A-Za-z]\d$/;
 
   const errors = {
     ownerName:
@@ -224,9 +250,21 @@ function validateBusinessDetails(details) {
       !isValidEmailAddress(email) || hasPlaceholderText(email)
         ? "Enter a real business email address."
         : "",
-    address:
-      address.length < 12 || !/\d/.test(address) || !/[A-Za-z]/.test(address) || !/,\s*[A-Za-z]/.test(address) || hasPlaceholderText(address)
-        ? "Enter the full business address, including street, city, and province."
+    streetAddress:
+      streetAddress.length < 6 || !/\d/.test(streetAddress) || !/[A-Za-z]/.test(streetAddress) || hasPlaceholderText(streetAddress)
+        ? "Enter the street address."
+        : "",
+    city:
+      city.length < 2 || !/^[A-Za-z][A-Za-z\s.'-]+$/.test(city) || hasPlaceholderText(city)
+        ? "Enter the city."
+        : "",
+    province:
+      !CANADIAN_PROVINCES.some((item) => item.value === province)
+        ? "Select a province."
+        : "",
+    postalCode:
+      !postalCodePattern.test(postalCode) || hasPlaceholderText(postalCode)
+        ? "Enter a valid postal code."
         : "",
   };
 
@@ -620,21 +658,21 @@ function TradeCard({ trade, selected, onClick }) {
       type="button"
       onClick={onClick}
       className={
-        "relative grid min-h-[82px] min-w-0 place-items-center rounded-xl border bg-white px-2 py-3 text-center transition sm:min-h-[86px] " +
+        "relative grid min-h-[112px] min-w-0 place-items-center rounded-2xl border bg-white px-3 py-4 text-center transition sm:min-h-[124px] xl:min-h-[138px] " +
         (selected
           ? "border-blue-600 shadow-[0_18px_34px_-24px_rgba(37,99,235,0.9),0_0_0_1px_rgba(124,58,237,0.38)_inset]"
           : "border-slate-200 shadow-sm hover:border-blue-300 hover:shadow-md")
       }
     >
       {selected ? (
-        <span className="absolute right-2 top-2 grid h-6 w-6 place-items-center rounded-full bg-gradient-to-br from-blue-600 to-violet-600 text-white shadow-lg shadow-blue-500/25">
-          <Icon name="shield" className="h-3.5 w-3.5" />
+        <span className="absolute right-3 top-3 grid h-8 w-8 place-items-center rounded-full bg-gradient-to-br from-blue-600 to-violet-600 text-white shadow-lg shadow-blue-500/25">
+          <Icon name="shield" className="h-4 w-4" />
         </span>
       ) : null}
       <span className={selected ? "text-blue-600 drop-shadow-[0_0_12px_rgba(37,99,235,0.22)]" : "text-slate-800"}>
-        <Icon name={trade.icon} className="h-7 w-7" />
+        <Icon name={trade.icon} className="h-9 w-9" />
       </span>
-      <span className="text-[0.82rem] font-semibold leading-tight text-slate-950 sm:text-sm">{trade.label}</span>
+      <span className="text-base font-bold leading-tight text-slate-950 sm:text-lg">{trade.label}</span>
     </button>
   );
 }
@@ -645,7 +683,7 @@ function AreaChip({ area, selected, onClick }) {
       type="button"
       onClick={onClick}
       className={
-        "min-h-[44px] rounded-xl border px-4 py-2 text-sm font-semibold transition sm:px-5 sm:text-base " +
+        "min-h-[54px] rounded-2xl border px-5 py-3 text-base font-bold transition sm:px-6 sm:text-lg " +
         (selected
           ? "border-blue-500 bg-white text-blue-600 shadow-[0_10px_26px_-18px_rgba(37,99,235,0.9),0_0_0_1px_rgba(99,102,241,0.16)_inset]"
           : "border-slate-200 bg-white text-slate-700 hover:border-blue-300")
@@ -708,6 +746,43 @@ function LabeledInput({ label, icon, value, onChange, onBlur, placeholder, type 
           aria-describedby={error ? errorId : undefined}
           className="min-w-0 flex-1 bg-transparent text-base font-medium text-slate-950 outline-none placeholder:text-slate-400"
         />
+      </span>
+      {error ? <span id={errorId} className="mt-1.5 block text-xs font-semibold text-rose-600">{error}</span> : null}
+    </label>
+  );
+}
+
+function LabeledSelect({ label, icon, value, onChange, onBlur, options, className = "", error = "" }) {
+  const inputId = `${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-select`;
+  const errorId = `${inputId}-error`;
+
+  return (
+    <label className={className}>
+      <span className="mb-1.5 block text-sm font-semibold leading-none text-slate-700">{label}</span>
+      <span
+        className={
+          "flex min-h-[48px] items-center gap-3 rounded-lg border bg-white px-3 shadow-[0_1px_0_rgba(15,23,42,0.02)] transition focus-within:ring-4 " +
+          (error
+            ? "border-rose-300 focus-within:border-rose-500 focus-within:ring-rose-500/10"
+            : "border-slate-200 focus-within:border-blue-500 focus-within:ring-blue-500/10")
+        }
+      >
+        <Icon name={icon} className="h-4 w-4 shrink-0 text-slate-600" />
+        <select
+          id={inputId}
+          value={value}
+          onChange={onChange}
+          onBlur={onBlur}
+          aria-invalid={Boolean(error)}
+          aria-describedby={error ? errorId : undefined}
+          className="min-w-0 flex-1 bg-transparent text-base font-medium text-slate-950 outline-none"
+        >
+          {options.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.value} - {option.label}
+            </option>
+          ))}
+        </select>
       </span>
       {error ? <span id={errorId} className="mt-1.5 block text-xs font-semibold text-rose-600">{error}</span> : null}
     </label>
@@ -922,14 +997,13 @@ function VoiceDemoStep({ agent }) {
   );
 }
 
-function ReviewPanel({ trade, areas, specializations, voice, details }) {
-  const reviewItems = [
-    ["Trade", trade.label],
-    ["Service area", areas.join(", ")],
-    ["Specializations", specializations.join(", ")],
-    ["Assistant voice", voice.label],
-    ["Business", details.businessName || "Not added yet"],
-    ["Owner", details.ownerName || "Not added yet"],
+function ReviewPanel({ trade, areas, specializations, voice, details, onUpdateDetails, onEditBusinessSlide, onEditVoice, getFieldError, onFieldBlur }) {
+  const businessAddress = formatBusinessAddress(details);
+  const optionItems = [
+    ["Trade", trade.label, () => onEditBusinessSlide?.(1)],
+    ["Service area", areas.join(", "), () => onEditBusinessSlide?.(2)],
+    ["Specializations", specializations.join(", "), null],
+    ["Assistant voice", voice.label, onEditVoice],
   ];
 
   return (
@@ -937,12 +1011,127 @@ function ReviewPanel({ trade, areas, specializations, voice, details }) {
       <h2 className="text-xl font-black tracking-[-0.02em] text-slate-950">Review your setup</h2>
       <p className="mt-1 text-sm font-medium text-slate-500">Confirm the basics before we send the setup brief.</p>
       <div className="mt-5 grid gap-3 sm:grid-cols-2">
-        {reviewItems.map(([label, value]) => (
+        {optionItems.map(([label, value, onEdit]) => (
           <div key={label} className="rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3">
-            <div className="text-xs font-black uppercase tracking-[0.14em] text-slate-400">{label}</div>
-            <div className="mt-1 text-sm font-bold text-slate-950">{value}</div>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-xs font-black uppercase tracking-[0.14em] text-slate-400">{label}</div>
+                <div className="mt-1 text-sm font-bold text-slate-950">{value || "Not added yet"}</div>
+              </div>
+              {onEdit ? (
+                <button
+                  type="button"
+                  onClick={onEdit}
+                  className="rounded-lg border border-blue-100 bg-white px-3 py-1 text-xs font-black uppercase tracking-[0.08em] text-blue-600 transition hover:border-blue-300 hover:bg-blue-50"
+                >
+                  Change
+                </button>
+              ) : null}
+            </div>
           </div>
         ))}
+
+        {onUpdateDetails ? (
+          <>
+            <LabeledInput
+              label="Business name"
+              icon="briefcase"
+              value={details.businessName}
+              onChange={onUpdateDetails("businessName")}
+              onBlur={onFieldBlur?.("businessName")}
+              placeholder="e.g., Smith Electrical Services"
+              error={getFieldError?.("businessName") || ""}
+            />
+            <LabeledInput
+              label="Owner"
+              icon="user"
+              value={details.ownerName}
+              onChange={onUpdateDetails("ownerName")}
+              onBlur={onFieldBlur?.("ownerName")}
+              placeholder="e.g., Jamie Smith"
+              error={getFieldError?.("ownerName") || ""}
+            />
+            <LabeledInput
+              label="Phone"
+              icon="phone"
+              value={details.phone}
+              onChange={onUpdateDetails("phone")}
+              onBlur={onFieldBlur?.("phone")}
+              placeholder="(416) 555-1234"
+              error={getFieldError?.("phone") || ""}
+            />
+            <LabeledInput
+              label="Email"
+              icon="mail"
+              value={details.email}
+              onChange={onUpdateDetails("email")}
+              onBlur={onFieldBlur?.("email")}
+              placeholder="you@yourbusiness.com"
+              type="email"
+              error={getFieldError?.("email") || ""}
+            />
+            <LabeledInput
+              className="sm:col-span-2"
+              label="Street address"
+              icon="pin"
+              value={details.streetAddress}
+              onChange={onUpdateDetails("streetAddress")}
+              onBlur={onFieldBlur?.("streetAddress")}
+              placeholder="123 Main St"
+              error={getFieldError?.("streetAddress") || ""}
+            />
+            <LabeledInput
+              label="City"
+              icon="pin"
+              value={details.city}
+              onChange={onUpdateDetails("city")}
+              onBlur={onFieldBlur?.("city")}
+              placeholder="Toronto"
+              error={getFieldError?.("city") || ""}
+            />
+            <LabeledSelect
+              label="Province"
+              icon="pin"
+              value={details.province}
+              onChange={onUpdateDetails("province")}
+              onBlur={onFieldBlur?.("province")}
+              options={CANADIAN_PROVINCES}
+              error={getFieldError?.("province") || ""}
+            />
+            <LabeledInput
+              label="Postal code"
+              icon="pin"
+              value={details.postalCode}
+              onChange={onUpdateDetails("postalCode")}
+              onBlur={onFieldBlur?.("postalCode")}
+              placeholder="M5V 2T6"
+              error={getFieldError?.("postalCode") || ""}
+            />
+          </>
+        ) : (
+          <>
+            <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3">
+              <div className="text-xs font-black uppercase tracking-[0.14em] text-slate-400">Business</div>
+              <div className="mt-1 text-sm font-bold text-slate-950">{details.businessName || "Not added yet"}</div>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3">
+              <div className="text-xs font-black uppercase tracking-[0.14em] text-slate-400">Owner</div>
+              <div className="mt-1 text-sm font-bold text-slate-950">{details.ownerName || "Not added yet"}</div>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3">
+              <div className="text-xs font-black uppercase tracking-[0.14em] text-slate-400">Phone</div>
+              <div className="mt-1 text-sm font-bold text-slate-950">{details.phone || "Not added yet"}</div>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3">
+              <div className="text-xs font-black uppercase tracking-[0.14em] text-slate-400">Email</div>
+              <div className="mt-1 text-sm font-bold text-slate-950">{details.email || "Not added yet"}</div>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3 sm:col-span-2">
+              <div className="text-xs font-black uppercase tracking-[0.14em] text-slate-400">Address</div>
+              <div className="mt-1 text-sm font-bold text-slate-950">{businessAddress || "Not added yet"}</div>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -956,7 +1145,7 @@ function TrialButton({ disabled, busy, finalStep = false, label = "Start free tr
       type="submit"
       disabled={isBlocked || busy}
       className={
-        "mx-auto mt-5 flex h-14 w-full max-w-[500px] items-center justify-center gap-3 rounded-xl text-base font-black text-white transition sm:gap-4 sm:text-xl " +
+        "mx-auto flex h-16 w-full max-w-[620px] items-center justify-center gap-3 rounded-2xl text-base font-black text-white transition sm:gap-4 sm:text-xl " +
         (isBlocked
           ? "cursor-not-allowed bg-slate-300"
           : "bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 shadow-[0_26px_65px_-34px_rgba(79,70,229,0.95)] hover:-translate-y-0.5 hover:brightness-110 disabled:cursor-wait disabled:hover:translate-y-0 disabled:hover:brightness-100")
@@ -1344,6 +1533,7 @@ function SignupSuccessPage({ result, onStartAnother }) {
 export default function Signup() {
   const signupStartedAtRef = useRef(Date.now());
   const [currentStep, setCurrentStep] = useState(1);
+  const [businessSlide, setBusinessSlide] = useState(1);
   const [selectedTradeId, setSelectedTradeId] = useState("electrician");
   const [selectedAreas, setSelectedAreas] = useState(["Niagara Falls"]);
   const [selectedSpecializationIds, setSelectedSpecializationIds] = useState(["residential", "commercial", "specialty"]);
@@ -1357,12 +1547,16 @@ export default function Signup() {
   const [captchaToken, setCaptchaToken] = useState("");
   const [businessStepAttempted, setBusinessStepAttempted] = useState(false);
   const [touchedDetails, setTouchedDetails] = useState({});
+  const [returnToReviewAfterEdit, setReturnToReviewAfterEdit] = useState(false);
   const [details, setDetails] = useState({
     ownerName: "",
     businessName: "",
     phone: "",
     email: "",
-    address: "",
+    streetAddress: "",
+    city: "",
+    province: "ON",
+    postalCode: "",
   });
 
   const selectedTrade = useMemo(
@@ -1381,6 +1575,24 @@ export default function Signup() {
   const businessValidation = useMemo(() => validateBusinessDetails(details), [details]);
 
   const businessStepDisabled = !businessValidation.isValid || selectedAreas.length === 0;
+  const businessSlideDisabled =
+    currentStep === 1 &&
+    ((businessSlide === 2 && selectedAreas.length === 0) || (businessSlide === 3 && !businessValidation.isValid));
+  const businessSlideLabel =
+    businessSlide === 1
+      ? "Next: Service area"
+      : businessSlide === 2
+        ? "Next: Business details"
+        : businessSlide === 3
+          ? "Review details"
+          : "Continue to voice";
+  const businessSlideTabs = [
+    { number: 1, label: "Trade" },
+    { number: 2, label: "Area" },
+    { number: 3, label: "Details" },
+    { number: 4, label: "Review" },
+  ];
+  const maxBusinessSlide = businessValidation.isValid && selectedAreas.length > 0 ? 4 : selectedAreas.length > 0 ? 3 : 2;
   const specializationStepDisabled = selectedSpecializationIds.length === 0;
   const voiceStepDisabled = false;
   const securityStepDisabled = Boolean(CAPTCHA_PROVIDER && !captchaToken);
@@ -1409,6 +1621,30 @@ export default function Signup() {
     });
   };
 
+  const selectTradeAndAdvance = (tradeId) => {
+    setSelectedTradeId(tradeId);
+    setError("");
+    if (returnToReviewAfterEdit) {
+      setReturnToReviewAfterEdit(false);
+      setBusinessSlide(4);
+      return;
+    }
+    setBusinessSlide(2);
+  };
+
+  const editBusinessSlideFromReview = (slideNumber) => {
+    setReturnToReviewAfterEdit(true);
+    setError("");
+    setBusinessSlide(slideNumber);
+  };
+
+  const editVoiceFromReview = () => {
+    setReturnToReviewAfterEdit(true);
+    setError("");
+    setCurrentStep(2);
+    window.scrollTo?.({ top: 0, behavior: "smooth" });
+  };
+
   const toggleSpecialization = (id) => {
     setSelectedSpecializationIds((prev) => {
       if (prev.includes(id)) return prev.length === 1 ? prev : prev.filter((item) => item !== id);
@@ -1418,6 +1654,7 @@ export default function Signup() {
 
   const resetSignup = () => {
     setCurrentStep(1);
+    setBusinessSlide(1);
     setSelectedTradeId("electrician");
     setSelectedAreas(["Niagara Falls"]);
     setSelectedSpecializationIds(["residential", "commercial", "specialty"]);
@@ -1431,13 +1668,17 @@ export default function Signup() {
     setCaptchaToken("");
     setBusinessStepAttempted(false);
     setTouchedDetails({});
+    setReturnToReviewAfterEdit(false);
     signupStartedAtRef.current = Date.now();
     setDetails({
       ownerName: "",
       businessName: "",
       phone: "",
       email: "",
-      address: "",
+      streetAddress: "",
+      city: "",
+      province: "ON",
+      postalCode: "",
     });
     window.scrollTo?.({ top: 0, behavior: "smooth" });
   };
@@ -1446,19 +1687,56 @@ export default function Signup() {
     event.preventDefault();
     if (busy) return;
     if (currentStep === 1) {
-      if (businessStepDisabled) {
+      if (businessSlide === 1) {
+        setBusinessSlide(2);
+        return;
+      }
+      if (businessSlide === 2) {
+        if (selectedAreas.length === 0) {
+          setError("Select at least one service area before continuing.");
+          return;
+        }
+        setError("");
+        if (returnToReviewAfterEdit) {
+          setReturnToReviewAfterEdit(false);
+          setBusinessSlide(4);
+          return;
+        }
+        setBusinessSlide(3);
+        return;
+      }
+      if (businessSlide === 3 && !businessValidation.isValid) {
         setBusinessStepAttempted(true);
-        setTouchedDetails({ ownerName: true, businessName: true, phone: true, email: true, address: true });
+        setTouchedDetails({ ownerName: true, businessName: true, phone: true, email: true, streetAddress: true, city: true, province: true, postalCode: true });
         setError("Please complete the business details properly before continuing.");
         return;
       }
+      if (businessSlide === 3) {
+        setBusinessStepAttempted(false);
+        setError("");
+        if (returnToReviewAfterEdit) {
+          setReturnToReviewAfterEdit(false);
+          setBusinessSlide(4);
+          return;
+        }
+        setBusinessSlide(4);
+        return;
+      }
       setBusinessStepAttempted(false);
+      setError("");
       setCurrentStep(2);
       window.scrollTo?.({ top: 0, behavior: "smooth" });
       return;
     }
     if (currentStep === 2) {
       if (voiceStepDisabled) return;
+      if (returnToReviewAfterEdit) {
+        setReturnToReviewAfterEdit(false);
+        setCurrentStep(1);
+        setBusinessSlide(4);
+        window.scrollTo?.({ top: 0, behavior: "smooth" });
+        return;
+      }
       setCurrentStep(3);
       window.scrollTo?.({ top: 0, behavior: "smooth" });
       return;
@@ -1475,19 +1753,34 @@ export default function Signup() {
       return;
     }
 
+    if (!businessValidation.isValid || selectedAreas.length === 0) {
+      setCurrentStep(1);
+      setBusinessSlide(!selectedAreas.length ? 2 : 4);
+      setBusinessStepAttempted(true);
+      setTouchedDetails({ ownerName: true, businessName: true, phone: true, email: true, streetAddress: true, city: true, province: true, postalCode: true });
+      setError(!selectedAreas.length ? "Select at least one service area before continuing." : "Please complete the business details properly before continuing.");
+      window.scrollTo?.({ top: 0, behavior: "smooth" });
+      return;
+    }
+
     setBusy(true);
     setError("");
     setStatus("");
 
     const serviceArea = selectedAreas.join(", ");
     const greeting = selectedDialogueText;
+    const businessAddress = formatBusinessAddress(details);
     const formData = {
       country: "ca",
       selectedPlace: null,
       businessProfile: {
         businessName: details.businessName.trim(),
         phone: details.phone.trim(),
-        address: details.address.trim(),
+        address: businessAddress,
+        streetAddress: details.streetAddress.trim(),
+        city: details.city.trim(),
+        province: details.province.trim(),
+        postalCode: details.postalCode.trim().toUpperCase(),
         website: "",
         hours: "Monday-Friday 9:00 AM-5:00 PM",
         services: selectedTrade.services,
@@ -1496,6 +1789,11 @@ export default function Signup() {
         ownerName: details.ownerName.trim(),
         ownerEmail: details.email.trim(),
         ownerPhone: details.phone.trim(),
+        businessAddress,
+        streetAddress: details.streetAddress.trim(),
+        city: details.city.trim(),
+        province: details.province.trim(),
+        postalCode: details.postalCode.trim().toUpperCase(),
         businessType: selectedTrade.businessType,
         serviceArea,
         callForwardingNumber: details.phone.trim(),
@@ -1564,20 +1862,84 @@ export default function Signup() {
 
   return (
     <main className="min-h-screen bg-[linear-gradient(135deg,#f8fbff_0%,#ffffff_45%,#edf4ff_100%)] text-slate-950">
+      <style>
+        {`
+          @keyframes businessSlideIn {
+            0% {
+              opacity: 0;
+              transform: translateX(46px);
+              filter: blur(5px);
+            }
+            58% {
+              opacity: 0.82;
+              filter: blur(1.2px);
+            }
+            100% {
+              opacity: 1;
+              transform: translateX(0);
+              filter: blur(0);
+            }
+          }
+
+          @keyframes businessSandSweep {
+            0% {
+              opacity: 0;
+              transform: translateX(-125%) skewX(-14deg);
+            }
+            24% {
+              opacity: 0.7;
+            }
+            78% {
+              opacity: 0.28;
+            }
+            100% {
+              opacity: 0;
+              transform: translateX(125%) skewX(-14deg);
+            }
+          }
+
+          .business-slide-window {
+            animation: businessSlideIn 780ms cubic-bezier(.16,.84,.22,1) both;
+            isolation: isolate;
+          }
+
+          .business-slide-window::after {
+            content: "";
+            position: absolute;
+            inset: -24px -45%;
+            pointer-events: none;
+            z-index: 20;
+            background:
+              radial-gradient(circle at 18% 28%, rgba(255, 197, 116, 0.34) 0 1px, transparent 2px),
+              radial-gradient(circle at 44% 62%, rgba(37, 99, 235, 0.18) 0 1px, transparent 2px),
+              linear-gradient(105deg, transparent 0%, rgba(255, 255, 255, 0.08) 34%, rgba(255, 210, 140, 0.36) 48%, rgba(37, 99, 235, 0.14) 61%, transparent 100%);
+            background-size: 22px 22px, 28px 28px, 100% 100%;
+            filter: blur(0.25px);
+            animation: businessSandSweep 980ms cubic-bezier(.16,.84,.22,1) both;
+          }
+
+          @media (prefers-reduced-motion: reduce) {
+            .business-slide-window,
+            .business-slide-window::after {
+              animation: none;
+            }
+          }
+        `}
+      </style>
       <header className="min-h-16 bg-[#020918] shadow-[0_24px_60px_-48px_rgba(15,23,42,0.85)]">
         <div className="mx-auto flex min-h-16 max-w-[1440px] items-center px-4 py-3 sm:px-12">
           <BrandLogo />
         </div>
       </header>
 
-      <form onSubmit={submitSignup} className="mx-auto max-w-[1160px] px-3 pb-8 pt-5 sm:px-6 lg:px-8">
-        <section className="text-center">
-          <h1 className="text-[clamp(1.85rem,8vw,2.75rem)] font-black leading-tight tracking-[-0.04em] text-slate-950">
+      <form onSubmit={submitSignup} className="mx-auto flex min-h-[calc(100vh-64px)] w-full max-w-[1680px] flex-col px-3 pb-6 pt-3 sm:px-6 lg:px-8">
+        <section className="shrink-0 text-center">
+          <h1 className="text-[clamp(1.85rem,4.6vw,3.1rem)] font-black leading-tight tracking-[-0.04em] text-slate-950">
             Create your AI phone assistant
           </h1>
-          <p className="mt-1 text-base font-medium text-slate-600 sm:text-lg">Set up your business assistant in minutes.</p>
+          <p className="mt-1 text-lg font-medium text-slate-600">Set up your business assistant in minutes.</p>
 
-          <div className="mt-4 flex flex-wrap justify-center gap-x-10 gap-y-2">
+          <div className="mt-3 flex flex-wrap justify-center gap-x-10 gap-y-2">
             <Benefit icon="shield">Free for 14 days</Benefit>
             <Benefit icon="card">No credit card required</Benefit>
             <Benefit icon="refresh">Cancel anytime</Benefit>
@@ -1587,36 +1949,94 @@ export default function Signup() {
         </section>
 
         {currentStep === 1 ? (
-          <section className="mt-5 grid gap-6">
-            <div className="rounded-2xl border border-slate-200 bg-white/96 p-4 shadow-[0_34px_90px_-70px_rgba(15,23,42,0.8)] sm:p-6">
-              <section>
-                <h2 className="text-xl font-black tracking-[-0.02em] text-slate-950">1. Choose your trade</h2>
-                <div className="mt-3 grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3 xl:grid-cols-6">
+          <section className="mt-3 flex flex-1 flex-col">
+            <div className="flex flex-1 flex-col rounded-3xl border border-slate-200 bg-white/96 shadow-[0_34px_90px_-70px_rgba(15,23,42,0.8)]">
+              <div className="border-b border-slate-100 bg-slate-50/70 px-4 py-4 sm:px-8">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">Business setup</p>
+                  <p className="text-xs font-black text-slate-400">{businessSlide} of 4</p>
+                </div>
+                <div className="mt-4 grid grid-cols-4 gap-3">
+                  {businessSlideTabs.map((slide) => {
+                    const isActive = slide.number === businessSlide;
+                    const isAvailable = slide.number <= maxBusinessSlide;
+                    return (
+                      <button
+                        key={slide.number}
+                        type="button"
+                        disabled={!isAvailable}
+                        onClick={() => {
+                          if (!isAvailable) return;
+                          setBusinessSlide(slide.number);
+                          setError("");
+                        }}
+                        className={
+                          "min-h-[58px] rounded-2xl border px-2 text-center text-[0.72rem] font-black uppercase tracking-[0.1em] transition sm:text-xs " +
+                          (isActive
+                            ? "border-blue-600 bg-blue-600 text-white shadow-[0_14px_28px_-20px_rgba(37,99,235,0.95)]"
+                            : isAvailable
+                              ? "border-blue-100 bg-white text-blue-600 hover:border-blue-300 hover:bg-blue-50"
+                              : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400")
+                        }
+                        aria-current={isActive ? "step" : undefined}
+                      >
+                        <span className="block text-[0.68rem] opacity-75">0{slide.number}</span>
+                        {slide.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div key={businessSlide} className="business-slide-window relative flex flex-1 p-5 sm:p-8 lg:p-10">
+              {businessSlide === 1 ? (
+                <section className="grid w-full gap-6 lg:grid-cols-[360px_minmax(0,1fr)] xl:grid-cols-[390px_minmax(0,1fr)] lg:items-stretch">
+                  <div className="flex flex-col justify-center rounded-3xl border border-blue-100 bg-blue-50/70 p-8">
+                    <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">Step 1</p>
+                    <h2 className="mt-2 text-[clamp(2rem,3vw,3.1rem)] font-black leading-tight tracking-[-0.04em] text-slate-950">Choose your trade</h2>
+                    <p className="mt-4 text-lg font-medium leading-8 text-slate-600">Pick the type of business your AI assistant will answer for.</p>
+                  </div>
+                <div className="grid grid-cols-2 content-center gap-4 sm:grid-cols-3 xl:gap-5">
                   {TRADE_OPTIONS.map((trade) => (
                     <TradeCard
                       key={trade.id}
                       trade={trade}
                       selected={trade.id === selectedTradeId}
-                      onClick={() => setSelectedTradeId(trade.id)}
+                      onClick={() => selectTradeAndAdvance(trade.id)}
                     />
                   ))}
                 </div>
               </section>
+              ) : null}
 
-              <section className="mt-4">
-                <h2 className="text-xl font-black tracking-[-0.02em] text-slate-950">2. Service area</h2>
-                <p className="mt-0.5 text-sm font-medium text-slate-500">Select the Southern Ontario areas you serve.</p>
-                <div className="mt-3 flex flex-wrap gap-2.5 sm:gap-3">
-                  {AREA_OPTIONS.map((area) => (
-                    <AreaChip key={area} area={area} selected={selectedAreas.includes(area)} onClick={() => toggleArea(area)} />
-                  ))}
+              {businessSlide === 2 ? (
+              <section className="grid min-h-0 w-full gap-6 lg:grid-cols-[360px_minmax(0,1fr)] xl:grid-cols-[390px_minmax(0,1fr)] lg:items-stretch">
+                <div className="flex flex-col justify-center rounded-3xl border border-blue-100 bg-blue-50/70 p-8">
+                  <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">Step 2</p>
+                  <h2 className="mt-2 text-[clamp(2rem,3vw,3.1rem)] font-black leading-tight tracking-[-0.04em] text-slate-950">Service area</h2>
+                  <p className="mt-4 text-lg font-medium leading-8 text-slate-600">Select the Southern Ontario areas you serve.</p>
+                </div>
+                <div className="min-h-0 overflow-hidden rounded-3xl">
+                  <div className="flex h-full max-h-[42vh] content-start items-start overflow-y-auto pr-2 pb-2 [scrollbar-width:thin] sm:max-h-[46vh] lg:max-h-full">
+                    <div className="flex flex-wrap content-start items-start gap-3 xl:gap-4">
+                      {AREA_OPTIONS.map((area) => (
+                        <AreaChip key={area} area={area} selected={selectedAreas.includes(area)} onClick={() => toggleArea(area)} />
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </section>
+              ) : null}
 
-              <section className="mt-4">
-                <h2 className="text-xl font-black tracking-[-0.02em] text-slate-950">3. Business details</h2>
-                <p className="mt-0.5 text-sm font-medium text-slate-500">Enter real, complete business details. These are required before you can continue.</p>
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              {businessSlide === 3 ? (
+              <section className="grid w-full gap-6 lg:grid-cols-[360px_minmax(0,1fr)] xl:grid-cols-[390px_minmax(0,1fr)] lg:items-stretch">
+                <div className="flex flex-col justify-center rounded-3xl border border-blue-100 bg-blue-50/70 p-8">
+                  <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">Step 3</p>
+                  <h2 className="mt-2 text-[clamp(2rem,3vw,3.1rem)] font-black leading-tight tracking-[-0.04em] text-slate-950">Business details</h2>
+                  <p className="mt-4 text-lg font-medium leading-8 text-slate-600">Enter real, complete business details. These are required before you can continue.</p>
+                  <p className="mt-4 text-sm font-semibold leading-6 text-slate-500">Street address, city, province, and postal code help us serve your callers better.</p>
+                </div>
+                <div className="grid content-start gap-4 sm:grid-cols-2 xl:grid-cols-4 xl:gap-5">
                   <LabeledInput
                     label="Business owner's name"
                     icon="user"
@@ -1655,18 +2075,90 @@ export default function Signup() {
                     error={getBusinessFieldError("email")}
                   />
                   <LabeledInput
-                    className="sm:col-span-2"
-                    label="Business address"
+                    className="sm:col-span-2 lg:col-span-2"
+                    label="Street address"
                     icon="pin"
-                    value={details.address}
-                    onChange={updateDetails("address")}
-                    onBlur={markDetailTouched("address")}
-                    placeholder="123 Main St, Toronto, ON, Canada"
-                    error={getBusinessFieldError("address")}
+                    value={details.streetAddress}
+                    onChange={updateDetails("streetAddress")}
+                    onBlur={markDetailTouched("streetAddress")}
+                    placeholder="123 Main St"
+                    error={getBusinessFieldError("streetAddress")}
+                  />
+                  <LabeledInput
+                    label="City"
+                    icon="pin"
+                    value={details.city}
+                    onChange={updateDetails("city")}
+                    onBlur={markDetailTouched("city")}
+                    placeholder="Toronto"
+                    error={getBusinessFieldError("city")}
+                  />
+                  <LabeledSelect
+                    label="Province"
+                    icon="pin"
+                    value={details.province}
+                    onChange={updateDetails("province")}
+                    onBlur={markDetailTouched("province")}
+                    options={CANADIAN_PROVINCES}
+                    error={getBusinessFieldError("province")}
+                  />
+                  <LabeledInput
+                    label="Postal code"
+                    icon="pin"
+                    value={details.postalCode}
+                    onChange={updateDetails("postalCode")}
+                    onBlur={markDetailTouched("postalCode")}
+                    placeholder="M5V 2T6"
+                    error={getBusinessFieldError("postalCode")}
                   />
                 </div>
-                <p className="mt-1.5 text-xs font-medium text-slate-500">City, province and postal code help us serve your callers better.</p>
               </section>
+              ) : null}
+
+              {businessSlide === 4 ? (
+                <section className="grid w-full gap-6 lg:grid-cols-[360px_minmax(0,1fr)] xl:grid-cols-[390px_minmax(0,1fr)] lg:items-stretch">
+                  <div className="flex flex-col justify-center rounded-3xl border border-blue-100 bg-blue-50/70 p-8">
+                    <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">Step 4</p>
+                    <h2 className="mt-2 text-[clamp(2rem,3vw,3.1rem)] font-black leading-tight tracking-[-0.04em] text-slate-950">Review</h2>
+                    <p className="mt-4 text-lg font-medium leading-8 text-slate-600">Check the details before continuing. Use Back or the top columns to change anything.</p>
+                  </div>
+                  <div className="content-center">
+                    <ReviewPanel
+                      trade={selectedTrade}
+                      areas={selectedAreas}
+                      specializations={selectedSpecializationLabels}
+                      voice={selectedAgent}
+                      details={details}
+                      onUpdateDetails={updateDetails}
+                      onEditBusinessSlide={editBusinessSlideFromReview}
+                      onEditVoice={editVoiceFromReview}
+                      getFieldError={getBusinessFieldError}
+                      onFieldBlur={markDetailTouched}
+                    />
+                  </div>
+                </section>
+              ) : null}
+              </div>
+
+              {businessSlide > 1 ? (
+                <div className="border-t border-slate-100 bg-slate-50/80 px-5 py-4 sm:px-8">
+                  <div className="mx-auto grid max-w-[920px] gap-3 sm:grid-cols-[220px_minmax(0,1fr)] sm:items-center">
+                    <button
+                      type="button"
+                      onClick={() => setBusinessSlide((slide) => Math.max(1, slide - 1))}
+                      className="flex min-h-[54px] items-center justify-center rounded-xl border border-slate-200 bg-white px-5 text-base font-bold text-slate-600 transition hover:border-blue-300 hover:text-blue-600"
+                    >
+                      Back
+                    </button>
+
+                    <TrialButton
+                      disabled={businessSlideDisabled}
+                      busy={busy}
+                      label={businessSlideLabel}
+                    />
+                  </div>
+                </div>
+              ) : null}
             </div>
           </section>
         ) : null}
@@ -1683,21 +2175,17 @@ export default function Signup() {
               specializations={selectedSpecializationLabels}
               voice={selectedAgent}
               details={details}
+              onUpdateDetails={updateDetails}
+              onEditBusinessSlide={(slideNumber) => {
+                setCurrentStep(1);
+                editBusinessSlideFromReview(slideNumber);
+                window.scrollTo?.({ top: 0, behavior: "smooth" });
+              }}
+              onEditVoice={editVoiceFromReview}
+              getFieldError={getBusinessFieldError}
+              onFieldBlur={markDetailTouched}
             />
           </section>
-        ) : null}
-
-        {currentStep > 1 ? (
-          <button
-            type="button"
-            onClick={() => {
-              setCurrentStep((step) => Math.max(1, step - 1));
-              window.scrollTo?.({ top: 0, behavior: "smooth" });
-            }}
-            className="mx-auto mt-5 flex min-h-[44px] items-center justify-center rounded-xl border border-slate-200 bg-white px-5 text-base font-bold text-slate-600 transition hover:border-blue-300 hover:text-blue-600"
-          >
-            Back
-          </button>
         ) : null}
 
         {currentStep === 3 ? (
@@ -1711,29 +2199,54 @@ export default function Signup() {
           />
         ) : null}
 
-        <TrialButton
-          disabled={currentStep === 1 ? businessStepDisabled : currentStep === 2 ? voiceStepDisabled : securityStepDisabled}
-          busy={busy}
-          finalStep={currentStep === 3}
-          label={currentStep === 3 ? "Start free trial" : "Save & continue"}
-        />
+        <div className="shrink-0 pt-3">
+          {currentStep === 1 ? null : (
+            <div className="mx-auto grid max-w-[920px] gap-3 sm:grid-cols-[220px_minmax(0,1fr)] sm:items-center">
+              {currentStep > 1 || businessSlide > 1 ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (currentStep === 1 && businessSlide > 1) {
+                      setBusinessSlide((slide) => Math.max(1, slide - 1));
+                    } else {
+                      setCurrentStep((step) => Math.max(1, step - 1));
+                      if (currentStep === 2) setBusinessSlide(4);
+                    }
+                  }}
+                  className="flex min-h-[54px] items-center justify-center rounded-xl border border-slate-200 bg-white px-5 text-base font-bold text-slate-600 transition hover:border-blue-300 hover:text-blue-600"
+                >
+                  Back
+                </button>
+              ) : (
+                <span className="hidden sm:block" />
+              )}
 
-        <label className="sr-only" aria-hidden="true">
-          Company website
-          <input
-            name="companyWebsite"
-            type="text"
-            tabIndex="-1"
-            autoComplete="off"
-            value={botTrap}
-            onChange={(event) => setBotTrap(event.target.value)}
-            className="absolute -left-[10000px] top-auto h-px w-px opacity-0"
-          />
-        </label>
+              <TrialButton
+                disabled={currentStep === 1 ? businessSlideDisabled : currentStep === 2 ? voiceStepDisabled : securityStepDisabled}
+                busy={busy}
+                finalStep={currentStep === 3}
+                label={currentStep === 1 ? businessSlideLabel : currentStep === 3 ? "Start free trial" : "Save & continue"}
+              />
+            </div>
+          )}
 
-        <div className="mt-3 flex items-center justify-center gap-2 text-center text-sm font-medium text-slate-500 sm:text-base">
-          <Icon name="lock" className="h-4 w-4" />
-          Your data is secure and will never be shared.
+          <label className="sr-only" aria-hidden="true">
+            Company website
+            <input
+              name="companyWebsite"
+              type="text"
+              tabIndex="-1"
+              autoComplete="off"
+              value={botTrap}
+              onChange={(event) => setBotTrap(event.target.value)}
+              className="absolute -left-[10000px] top-auto h-px w-px opacity-0"
+            />
+          </label>
+
+          <div className="mt-3 flex items-center justify-center gap-2 text-center text-sm font-medium text-slate-500 sm:text-base">
+            <Icon name="lock" className="h-4 w-4" />
+            Your data is secure and will never be shared.
+          </div>
         </div>
 
         {error ? <p className="mt-4 text-center text-sm font-semibold text-rose-600">{error}</p> : null}

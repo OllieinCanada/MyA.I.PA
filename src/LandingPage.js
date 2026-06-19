@@ -119,38 +119,14 @@ const waveformBars = [
 const pricingCards = [
   {
     name: "Essential",
-    price: "$49",
+    price: "$79",
     suffix: "/month",
     eyebrow: "Current live plan",
     featured: true,
     accent: "from-[#2db4ff] via-[#2563eb] to-[#ff8b1f]",
     tint: "bg-[linear-gradient(145deg,#ffffff_0%,#f7fbff_58%,#fff6eb_100%)]",
-    minuteNote: "Includes 60 AI call minutes. Extra minutes billed clearly as usage.",
-    points: ["24/7 AI answering", "60 minutes included", "Text summaries for both sides"],
-  },
-  {
-    name: "Growth",
-    price: "$99",
-    suffix: "/month",
-    eyebrow: "Preview",
-    featured: false,
-    comingSoon: true,
-    accent: "from-[#38d8d0] via-[#2db4ff] to-[#2563eb]",
-    tint: "bg-[linear-gradient(145deg,#f7fcff_0%,#eaf7ff_58%,#eefcf9_100%)]",
-    minuteNote: "Planned: 200 AI call minutes for busier service teams.",
-    points: ["200 minutes included", "Urgency tagging", "Expanded FAQ controls"],
-  },
-  {
-    name: "Pro",
-    price: "$199",
-    suffix: "/month",
-    eyebrow: "Preview",
-    featured: false,
-    comingSoon: true,
-    accent: "from-[#ff8b1f] via-[#2db4ff] to-[#38d8d0]",
-    tint: "bg-[linear-gradient(145deg,#f8fcff_0%,#eaf6ff_56%,#fff7ed_100%)]",
-    minuteNote: "Planned: 500 AI call minutes for higher call volume.",
-    points: ["500 minutes included", "Advanced call routing", "Team notifications"],
+    minuteNote: "Includes 60 AI call minutes. Extra minutes are $0.25/min.",
+    points: ["24/7 AI answering", "60 AI call minutes included", "Extra minutes billed at $0.25/min", "Text summaries for both sides"],
   },
 ];
 
@@ -664,73 +640,73 @@ function AiAssistantAvatar({ compact = false }) {
 
 function HeroPhoneMockup() {
   return (
-    <div className="landing-phone relative mx-auto mt-0 h-[623px] w-full max-w-[375px] rounded-[38px] border-[5px] border-[#35373e] bg-[#050912] p-2 shadow-[0_30px_80px_-34px_rgba(0,0,0,1),0_0_0_1px_rgba(255,255,255,0.22)_inset] 2xl:h-[646px] 2xl:max-w-[385px]">
-      <div className="absolute left-1/2 top-3 z-10 h-5 w-16 -translate-x-1/2 rounded-full bg-black" />
-      <div className="flex h-full flex-col overflow-hidden rounded-[30px] bg-[radial-gradient(circle_at_50%_0%,rgba(8,90,158,0.34),transparent_36%),linear-gradient(180deg,#061b34_0%,#020814_100%)] px-5 pb-3 pt-4">
+    <div className="landing-phone relative mx-auto mt-0 h-[590px] w-full max-w-[460px] rounded-[46px] border-[4px] border-[#111827] bg-[#050912] p-2 shadow-[0_30px_80px_-34px_rgba(0,0,0,1),0_0_0_1px_rgba(255,255,255,0.22)_inset]">
+      <div className="absolute left-1/2 top-3 z-10 h-6 w-24 -translate-x-1/2 rounded-full bg-black" />
+      <div className="flex h-full flex-col overflow-hidden rounded-[37px] bg-[radial-gradient(circle_at_50%_0%,rgba(8,90,158,0.34),transparent_36%),linear-gradient(180deg,#061b34_0%,#020814_100%)] px-4 pb-3 pt-5">
         <div className="flex items-center justify-between text-white">
-          <span className="text-[0.96rem] font-black tracking-[-0.02em]">After-hours</span>
+          <span className="text-[1rem] font-black tracking-[-0.02em]">After-hours</span>
           <span className="flex items-center gap-1.5">
             <span className="h-2 w-4 rounded-sm border border-white/80" />
             <span className="h-2.5 w-5 rounded-sm border border-white/80 bg-white/20" />
           </span>
         </div>
-        <div className="mt-0.5 text-center">
-          <div className="inline-flex items-center gap-2 rounded-full border border-[#48ff7b]/60 bg-[#043d1c]/88 px-3 py-1 text-[0.74rem] font-black uppercase tracking-[0.14em] text-[#b9ffc9] shadow-[0_0_18px_-8px_rgba(72,255,123,0.9)]">
+        <div className="text-center">
+          <div className="inline-flex items-center gap-2 rounded-full border border-[#48ff7b]/60 bg-[#043d1c]/88 px-4 py-1 text-[0.72rem] font-black uppercase tracking-[0.13em] text-[#b9ffc9] shadow-[0_0_18px_-8px_rgba(72,255,123,0.9)]">
             <span className="h-2 w-2 rounded-full bg-[#39ff6a] shadow-[0_0_12px_rgba(57,255,106,0.95)]" />
             AI speaking now
           </div>
-          <p className="mt-1 text-[1.35rem] font-black tracking-[-0.03em] text-white">Live Call</p>
-          <p className="mt-1 text-[1.25rem] font-black text-[#ff7a00]">00:32</p>
+          <p className="mt-0.5 text-[1.24rem] font-black tracking-[-0.03em] text-white">Live Call</p>
+          <p className="mt-0.5 text-[1.12rem] font-black text-[#ff7a00]">00:32</p>
           <HeroWave small />
         </div>
 
-        <div className="mt-1.5 rounded-[20px] border border-white/14 bg-white/[0.08] px-3 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
-          <div className="flex gap-2.5">
-            <CustomerAvatar />
+        <div className="mt-1.5 rounded-[20px] border border-white/14 bg-white/[0.08] px-4 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+          <div className="flex gap-2">
+            <CustomerAvatar compact />
             <div>
-              <p className="text-[0.96rem] font-black leading-tight text-white">Customer</p>
-              <p className="mt-0.5 text-[0.85rem] font-medium leading-[1.28] text-white">Hi, I need someone to wire up my hot tub this week.</p>
+              <p className="text-[1.18rem] font-black leading-tight text-white">Customer</p>
+              <p className="mt-0.5 text-[1.02rem] font-medium leading-[1.28] text-white">Hi, I need someone to wire up my hot tub this week.</p>
             </div>
           </div>
         </div>
 
-        <div className="mt-1.5 rounded-[20px] border border-[#1d78ff]/45 bg-[linear-gradient(145deg,#063a83,#0050c9)] px-3 py-2 shadow-[0_18px_46px_-28px_rgba(0,80,201,0.95),inset_0_1px_0_rgba(255,255,255,0.12)]">
-          <div className="flex gap-2.5">
-            <AiAssistantAvatar />
+        <div className="mt-1.5 rounded-[20px] border border-[#1d78ff]/45 bg-[linear-gradient(145deg,#063a83,#0050c9)] px-4 py-2 shadow-[0_18px_46px_-28px_rgba(0,80,201,0.95),inset_0_1px_0_rgba(255,255,255,0.12)]">
+          <div className="flex gap-2">
+            <AiAssistantAvatar compact />
             <div>
-              <p className="text-[0.96rem] font-black leading-tight text-white">My AI PA</p>
-              <p className="mt-0.5 text-[0.85rem] font-medium leading-[1.28] text-white">
+              <p className="text-[1.18rem] font-black leading-tight text-white">My AI PA</p>
+              <p className="mt-0.5 text-[1.02rem] font-medium leading-[1.28] text-white">
                 Yes. I can collect the details so the team can follow up.
               </p>
             </div>
           </div>
         </div>
 
-        <div className="mt-1.5 rounded-[20px] border border-white/14 bg-white/[0.08] px-3 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
-          <div className="flex gap-2.5">
-            <CustomerAvatar />
+        <div className="mt-1.5 rounded-[20px] border border-white/14 bg-white/[0.08] px-4 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+          <div className="flex gap-2">
+            <CustomerAvatar compact />
             <div>
-              <p className="text-[0.96rem] font-black leading-tight text-white">Customer</p>
-              <p className="mt-0.5 text-[0.85rem] font-medium leading-[1.28] text-white">
+              <p className="text-[1.18rem] font-black leading-tight text-white">Customer</p>
+              <p className="mt-0.5 text-[1.02rem] font-medium leading-[1.28] text-white">
                 Brian, 905-123-4567, 63 York Street. Best time is 7:00 PM.
               </p>
             </div>
           </div>
         </div>
 
-        <div className="mt-1.5 rounded-[20px] border border-[#1d78ff]/45 bg-[linear-gradient(145deg,#063a83,#0050c9)] px-3 py-2 shadow-[0_18px_46px_-28px_rgba(0,80,201,0.95),inset_0_1px_0_rgba(255,255,255,0.12)]">
+        <div className="mt-1.5 rounded-[20px] border border-[#1d78ff]/45 bg-[linear-gradient(145deg,#063a83,#0050c9)] px-4 py-2 shadow-[0_18px_46px_-28px_rgba(0,80,201,0.95),inset_0_1px_0_rgba(255,255,255,0.12)]">
           <div className="flex gap-2">
             <AiAssistantAvatar compact />
             <div>
-              <p className="text-[0.96rem] font-black leading-tight text-white">My AI PA</p>
-              <p className="mt-0.5 text-[0.85rem] font-medium leading-[1.28] text-white">
-                Got It! I&apos;ll forward the details of this call to our service team, and we will get back regarding pricing and scheduling.
+              <p className="text-[1.18rem] font-black leading-tight text-white">My AI PA</p>
+              <p className="mt-0.5 text-[1.02rem] font-medium leading-[1.28] text-white">
+                Got it. I&apos;ll forward this to the service team for pricing and scheduling.
               </p>
             </div>
           </div>
         </div>
 
-        <div className="mt-auto flex items-center justify-between px-10 pt-1">
+        <div className="mt-auto flex items-center justify-between px-16 pt-1.5">
           <span className="grid h-8 w-8 place-items-center rounded-full bg-white/14 text-white">
             <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
               <path d="M12 3v10" />
@@ -738,7 +714,7 @@ function HeroPhoneMockup() {
               <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
             </svg>
           </span>
-          <span className="grid h-9 w-9 place-items-center rounded-full bg-[#ff392e] text-white">
+          <span className="grid h-10 w-10 place-items-center rounded-full bg-[#ff392e] text-white">
             <HeroIcon type="phone" className="h-5 w-5 rotate-[135deg]" />
           </span>
           <span className="grid h-8 w-8 place-items-center rounded-full bg-white/14 text-white">
@@ -763,43 +739,50 @@ function HeroSummaryStack() {
   ];
 
   return (
-    <div className="landing-summary mx-auto w-full max-w-[430px] space-y-1.5 md:grid md:max-w-[900px] md:grid-cols-2 md:gap-4 md:space-y-0 xl:block xl:max-w-none xl:space-y-1.5">
-      <div className="rounded-[34px] border-[5px] border-[#27313f] bg-[#07111f] p-2 shadow-[0_30px_88px_-42px_rgba(7,17,31,0.9)]">
-        <div className="relative overflow-hidden rounded-[26px] bg-[#f8fbff] px-4 pb-2 pt-8 text-[#081123]">
-          <span className="absolute left-1/2 top-2 h-4 w-20 -translate-x-1/2 rounded-full bg-[#111827]" />
-          <div className="flex items-center justify-between gap-3 border-b border-[#dbe6f3] pb-3">
-            <div className="min-w-0 flex-1">
-              <p className="text-[0.68rem] font-black uppercase tracking-[0.16em] text-[#2563eb]">Messages</p>
-              <h3 className="whitespace-nowrap text-[0.86rem] font-black leading-tight tracking-[-0.045em] sm:text-[1.02rem]">My AI PA - TIM&apos;S ELECTRICAL</h3>
-              <p className="mt-0.5 text-[0.78rem] font-black uppercase tracking-[0.12em] text-[#64748b]">Texted to owner</p>
-            </div>
-            <span className="shrink-0 rounded-full bg-[#00b84a] px-2.5 py-1 text-[0.68rem] font-black uppercase tracking-[0.12em] text-white shadow-[0_0_16px_-8px_rgba(0,184,74,0.95)] sm:px-3 sm:text-xs">Now</span>
+    <div className="landing-summary mx-auto w-full max-w-[460px] xl:max-w-[460px]">
+      <div className="relative h-[590px] rounded-[46px] border-[4px] border-[#111827] bg-[#07111f] p-2 shadow-[0_30px_84px_-42px_rgba(7,17,31,0.92),inset_0_0_0_1px_rgba(255,255,255,0.18)] before:absolute before:-left-[7px] before:top-[98px] before:h-11 before:w-[3px] before:rounded-l-full before:bg-[#1f2937] after:absolute after:-right-[7px] after:top-[158px] after:h-16 after:w-[3px] after:rounded-r-full after:bg-[#1f2937]">
+        <div className="relative flex h-full flex-col overflow-hidden rounded-[37px] bg-[#f8fbff] px-5 pb-6 pt-10 text-[#081123] ring-1 ring-white/70">
+          <div className="absolute left-0 right-0 top-0 z-10 flex h-9 items-center justify-between px-9 text-[0.68rem] font-black text-[#111827]">
+            <span>9:41</span>
+            <span className="flex items-center gap-1">
+              <span className="h-1.5 w-3 rounded-sm bg-[#111827]" />
+              <span className="h-1.5 w-2 rounded-sm bg-[#111827]" />
+              <span className="h-2 w-4 rounded-[3px] border border-[#111827] bg-[#111827]/10" />
+            </span>
           </div>
-          <div className="mt-4 rounded-[22px] bg-[#dbeafe] px-4 py-3 shadow-[0_8px_20px_-18px_rgba(15,23,42,0.5)]">
-            <p className="text-[0.92rem] font-black text-[#0b3b7a]">New service lead</p>
-            <div className="mt-2 space-y-1.5 text-[0.98rem] font-semibold leading-6 text-[#10233f]">
-              {rows.map(([, label, value]) => (
-                <p key={label}><span className="font-black">{label}:</span> {value}</p>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
+          <span className="absolute left-1/2 top-3 z-20 h-6 w-28 -translate-x-1/2 rounded-full bg-[#111827] shadow-[inset_0_1px_0_rgba(255,255,255,0.14)]" />
+          <span className="absolute bottom-2 left-1/2 h-1 w-32 -translate-x-1/2 rounded-full bg-[#111827]/82" />
 
-      <div className="rounded-[30px] border-[4px] border-[#27313f] bg-[#07111f] p-2 shadow-[0_24px_78px_-42px_rgba(7,17,31,0.85)]">
-        <div className="relative overflow-hidden rounded-[23px] bg-[#f8fbff] px-4 pb-2 pt-7 text-[#081123]">
-          <span className="absolute left-1/2 top-2 h-3 w-16 -translate-x-1/2 rounded-full bg-[#111827]" />
           <div className="flex items-center justify-between gap-3 border-b border-[#dbe6f3] pb-3">
             <div className="min-w-0 flex-1">
-              <p className="text-[0.68rem] font-black uppercase tracking-[0.16em] text-[#2563eb]">Messages</p>
-              <h3 className="whitespace-nowrap text-[0.84rem] font-black leading-tight tracking-[-0.04em] sm:text-[0.98rem]">My AI PA - TIM&apos;S ELECTRICAL</h3>
-              <p className="mt-0.5 text-[0.74rem] font-black uppercase tracking-[0.12em] text-[#64748b]">Texted to customer</p>
+              <p className="text-[0.78rem] font-black uppercase tracking-[0.15em] text-[#2563eb]">Messages</p>
+              <h3 className="whitespace-nowrap text-[0.98rem] font-black leading-tight tracking-[-0.045em]">My AI PA - TIM&apos;S ELECTRICAL</h3>
             </div>
-            <span className="shrink-0 rounded-full bg-[#00b84a] px-2.5 py-1 text-[0.68rem] font-black uppercase tracking-[0.12em] text-white shadow-[0_0_16px_-8px_rgba(0,184,74,0.95)] sm:px-3 sm:text-xs">Now</span>
+            <span className="shrink-0 rounded-full bg-[#00b84a] px-3 py-1.5 text-[0.78rem] font-black uppercase tracking-[0.12em] text-white shadow-[0_0_16px_-8px_rgba(0,184,74,0.95)]">Now</span>
           </div>
-          <div className="mt-4 max-w-[92%] rounded-[22px] bg-[#e5e7eb] px-4 py-3 text-[0.98rem] font-semibold leading-6 text-[#111827]">
-            Thanks for calling Tim&apos;s Electrical. We got your request and will follow up shortly.
-          </div>
+
+          <section className="mt-4">
+            <div className="rounded-[16px] border border-[#bfdbfe] bg-white/92 px-4 py-2.5 text-center shadow-[0_14px_34px_-30px_rgba(37,99,235,0.75)]">
+              <p className="whitespace-nowrap text-[0.9rem] font-black uppercase tracking-[0.085em] text-[#2563eb]">Owner cell phone summary</p>
+            </div>
+            <div className="mt-3 rounded-[22px] bg-[#dbeafe] px-5 py-4 shadow-[0_8px_20px_-18px_rgba(15,23,42,0.5)]">
+              <p className="text-[1.14rem] font-black text-[#0b3b7a]">New service lead</p>
+              <div className="mt-2 space-y-1.5 text-[1.08rem] font-semibold leading-[1.55rem] text-[#10233f]">
+                {rows.map(([, label, value]) => (
+                  <p key={label}><span className="font-black">{label}:</span> {value}</p>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          <section className="mt-4 border-t border-[#dbe6f3] pt-4">
+            <div className="rounded-[16px] border border-[#ddd6fe] bg-white/92 px-4 py-2.5 text-center shadow-[0_14px_34px_-30px_rgba(124,58,237,0.7)]">
+              <p className="whitespace-nowrap text-[0.9rem] font-black uppercase tracking-[0.085em] text-[#6d28d9]">Caller cell phone summary</p>
+            </div>
+            <div className="mt-3 max-w-[94%] rounded-[22px] bg-[#e5e7eb] px-5 py-4 text-[1.1rem] font-semibold leading-[1.6rem] text-[#111827]">
+              Thanks for calling Tim&apos;s Electrical. We got your request and will follow up shortly.
+            </div>
+          </section>
         </div>
       </div>
     </div>
@@ -1390,9 +1373,9 @@ function LandingPage() {
               z-index: 2;
             }
             .landing-phone {
-              height: 603px;
+              height: 590px;
               margin-top: 0;
-              max-width: 360px;
+              max-width: 460px;
             }
             .landing-summary {
               transform: none;
@@ -1422,8 +1405,8 @@ function LandingPage() {
             </div>
           </nav>
 
-          <div className="landing-hero-grid grid flex-1 gap-9 py-9 lg:grid-cols-[minmax(0,1fr)_375px] lg:items-center xl:grid-cols-[minmax(640px,1fr)_375px_340px] 2xl:grid-cols-[minmax(680px,1fr)_385px_360px] 2xl:gap-10 2xl:py-10">
-            <div className="relative z-10 min-w-0 max-w-[800px] xl:max-w-none lg:-translate-y-6 2xl:-translate-y-8">
+          <div className="landing-hero-grid grid flex-1 gap-7 py-9 lg:grid-cols-[minmax(0,1fr)_460px] lg:items-center xl:grid-cols-[minmax(360px,1fr)_460px_460px] 2xl:grid-cols-[minmax(520px,1fr)_460px_460px] 2xl:gap-8 2xl:py-10">
+            <div className="relative z-10 min-w-0 max-w-[800px] xl:max-w-none lg:-translate-y-10 2xl:-translate-y-12">
               <div className="mt-3 inline-flex rounded-full border border-[#b9d8ff] bg-white/72 px-4 py-2 text-lg font-semibold text-[#0b3b7a] shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_18px_42px_-34px_rgba(37,99,235,0.7)] 2xl:px-5 2xl:text-xl">
                 AI Phone Answering Assistant
               </div>
@@ -1474,10 +1457,10 @@ function LandingPage() {
                 </button>
               </div>
 
-              <p className="landing-hero-footnote mt-5 text-lg font-medium text-[#334155] 2xl:text-xl">PIPEDA Compliant&nbsp;&nbsp;&bull;&nbsp;&nbsp;14-day free trial&nbsp;&nbsp;&bull;&nbsp;&nbsp;No credit card / No obligation needed!</p>
+              <p className="landing-hero-footnote mt-5 text-lg font-medium text-[#334155] 2xl:text-xl">PIPEDA Compliant&nbsp;&nbsp;&bull;&nbsp;&nbsp;14-day free trial&nbsp;&nbsp;&bull;&nbsp;&nbsp;No credit card</p>
             </div>
 
-            <div className="relative z-0 mt-8 lg:mt-0 lg:-translate-y-2 2xl:translate-y-0">
+            <div className="relative z-0 mt-8 flex justify-center lg:mt-0 lg:self-start">
               <HeroPhoneMockup />
             </div>
 
@@ -1485,7 +1468,7 @@ function LandingPage() {
               <HeroSummaryStack />
             </div>
 
-            <div className="hidden xl:block xl:self-start xl:-translate-y-3">
+            <div className="hidden justify-center xl:flex xl:self-start xl:-translate-x-4 2xl:-translate-x-5">
               <HeroSummaryStack />
             </div>
           </div>
@@ -2111,16 +2094,16 @@ function LandingPage() {
           <div className="mx-auto max-w-4xl text-center">
             <h2 className="mt-3 text-[clamp(2.4rem,3.6vw,4rem)] font-black leading-[1.08] tracking-[-0.04em] text-[#07142a]">Clear pricing for businesses that just want calls handled properly.</h2>
             <p className="mx-auto mt-5 max-w-[900px] text-[1.32rem] font-medium leading-9 text-[#334155]">
-              Plans include monthly AI call minutes so business owners can understand what they are paying for. Extra usage is handled clearly.
+              One simple plan for getting calls answered. Includes 60 AI call minutes, with extra minutes billed clearly at $0.25/min.
             </p>
           </div>
 
-          <div className="mt-10 grid gap-5 lg:grid-cols-3">
+          <div className="mx-auto mt-10 grid max-w-[560px] gap-5">
             {pricingCards.map((plan) => (
               <div
                 key={plan.name}
                 className={
-                  "pricing-card rounded-[30px] border p-6 shadow-[0_24px_70px_-46px_rgba(15,23,42,0.24)] " +
+                  "pricing-card rounded-[30px] border p-7 shadow-[0_24px_70px_-46px_rgba(15,23,42,0.24)] " +
                   (plan.featured ? "border-[#a9c8ef] " : "border-[#d7e7fb] ") +
                   plan.tint
                 }
@@ -2145,11 +2128,11 @@ function LandingPage() {
                   </div>
                 </div>
 
-                <div className="mt-6 flex items-end gap-2">
+                <div className="mt-7 flex items-end gap-2">
                   <span className="text-[clamp(3rem,10vw,3.85rem)] font-black tracking-[-0.05em] text-[#07142a]">{plan.price}</span>
                   <span className="pb-2 text-lg font-bold uppercase tracking-[0.14em] text-[#475569]">{plan.suffix}</span>
                 </div>
-                <p className="mt-3 rounded-[16px] border border-[#d7e7fb] bg-white/64 px-4 py-3 text-[1.05rem] font-black leading-7 text-[#0b3b7a] shadow-[inset_0_1px_0_rgba(255,255,255,0.85),0_16px_42px_-36px_rgba(37,99,235,0.55)] backdrop-blur">{plan.minuteNote}</p>
+                <p className="mt-3 rounded-[16px] border border-[#d7e7fb] bg-white/64 px-4 py-3 text-[1.12rem] font-black leading-8 text-[#0b3b7a] shadow-[inset_0_1px_0_rgba(255,255,255,0.85),0_16px_42px_-36px_rgba(37,99,235,0.55)] backdrop-blur">{plan.minuteNote}</p>
 
                 <div className="mt-6 space-y-4">
                   {plan.points.map((point) => (
