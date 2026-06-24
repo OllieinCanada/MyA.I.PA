@@ -660,46 +660,46 @@ function HeroPhoneMockup() {
           <HeroWave small />
         </div>
 
-        <div className="mt-1.5 rounded-[20px] border border-white/14 bg-white/[0.08] px-4 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+        <div className="mt-1.5 rounded-[20px] border border-white/14 bg-white/[0.08] px-4 py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
           <div className="flex gap-2">
             <CustomerAvatar compact />
             <div>
-              <p className="text-[1.18rem] font-black leading-tight text-white">Customer</p>
-              <p className="mt-0.5 text-[1.02rem] font-medium leading-[1.28] text-white">Hi, I need someone to wire up my hot tub this week.</p>
+              <p className="text-[1.26rem] font-black leading-tight text-white">Customer</p>
+              <p className="mt-0.5 text-[1.12rem] font-medium leading-[1.27] text-white">Hi, I need someone to wire up my hot tub this week.</p>
             </div>
           </div>
         </div>
 
-        <div className="mt-1.5 rounded-[20px] border border-[#1d78ff]/45 bg-[linear-gradient(145deg,#063a83,#0050c9)] px-4 py-2 shadow-[0_18px_46px_-28px_rgba(0,80,201,0.95),inset_0_1px_0_rgba(255,255,255,0.12)]">
+        <div className="mt-1.5 rounded-[20px] border border-[#1d78ff]/45 bg-[linear-gradient(145deg,#063a83,#0050c9)] px-4 py-1.5 shadow-[0_18px_46px_-28px_rgba(0,80,201,0.95),inset_0_1px_0_rgba(255,255,255,0.12)]">
           <div className="flex gap-2">
             <AiAssistantAvatar compact />
             <div>
-              <p className="text-[1.18rem] font-black leading-tight text-white">My AI PA</p>
-              <p className="mt-0.5 text-[1.02rem] font-medium leading-[1.28] text-white">
+              <p className="text-[1.26rem] font-black leading-tight text-white">My AI PA</p>
+              <p className="mt-0.5 text-[1.12rem] font-medium leading-[1.27] text-white">
                 Yes. I can collect the details so the team can follow up.
               </p>
             </div>
           </div>
         </div>
 
-        <div className="mt-1.5 rounded-[20px] border border-white/14 bg-white/[0.08] px-4 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+        <div className="mt-1.5 rounded-[20px] border border-white/14 bg-white/[0.08] px-4 py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
           <div className="flex gap-2">
             <CustomerAvatar compact />
             <div>
-              <p className="text-[1.18rem] font-black leading-tight text-white">Customer</p>
-              <p className="mt-0.5 text-[1.02rem] font-medium leading-[1.28] text-white">
+              <p className="text-[1.26rem] font-black leading-tight text-white">Customer</p>
+              <p className="mt-0.5 text-[1.12rem] font-medium leading-[1.27] text-white">
                 Brian, 905-123-4567, 63 York Street. Best time is 7:00 PM.
               </p>
             </div>
           </div>
         </div>
 
-        <div className="mt-1.5 rounded-[20px] border border-[#1d78ff]/45 bg-[linear-gradient(145deg,#063a83,#0050c9)] px-4 py-2 shadow-[0_18px_46px_-28px_rgba(0,80,201,0.95),inset_0_1px_0_rgba(255,255,255,0.12)]">
+        <div className="mt-1.5 rounded-[20px] border border-[#1d78ff]/45 bg-[linear-gradient(145deg,#063a83,#0050c9)] px-4 py-1.5 shadow-[0_18px_46px_-28px_rgba(0,80,201,0.95),inset_0_1px_0_rgba(255,255,255,0.12)]">
           <div className="flex gap-2">
             <AiAssistantAvatar compact />
             <div>
-              <p className="text-[1.18rem] font-black leading-tight text-white">My AI PA</p>
-              <p className="mt-0.5 text-[1.02rem] font-medium leading-[1.28] text-white">
+              <p className="text-[1.26rem] font-black leading-tight text-white">My AI PA</p>
+              <p className="mt-0.5 text-[1.12rem] font-medium leading-[1.27] text-white">
                 Got it. I&apos;ll forward this to the service team for pricing and scheduling.
               </p>
             </div>
@@ -765,9 +765,9 @@ function HeroSummaryStack() {
             <div className="rounded-[16px] border border-[#bfdbfe] bg-white/92 px-4 py-2.5 text-center shadow-[0_14px_34px_-30px_rgba(37,99,235,0.75)]">
               <p className="whitespace-nowrap text-[0.9rem] font-black uppercase tracking-[0.085em] text-[#2563eb]">Owner cell phone summary</p>
             </div>
-            <div className="mt-3 rounded-[22px] bg-[#dbeafe] px-5 py-4 shadow-[0_8px_20px_-18px_rgba(15,23,42,0.5)]">
-              <p className="text-[1.14rem] font-black text-[#0b3b7a]">New service lead</p>
-              <div className="mt-2 space-y-1.5 text-[1.08rem] font-semibold leading-[1.55rem] text-[#10233f]">
+            <div className="mt-3 rounded-[22px] bg-[#dbeafe] px-5 py-3 shadow-[0_8px_20px_-18px_rgba(15,23,42,0.5)]">
+              <p className="text-[1.26rem] font-black text-[#0b3b7a]">New service lead</p>
+              <div className="mt-2 space-y-1 text-[1.16rem] font-semibold leading-[1.62rem] text-[#10233f]">
                 {rows.map(([, label, value]) => (
                   <p key={label}><span className="font-black">{label}:</span> {value}</p>
                 ))}
@@ -779,7 +779,7 @@ function HeroSummaryStack() {
             <div className="rounded-[16px] border border-[#ddd6fe] bg-white/92 px-4 py-2.5 text-center shadow-[0_14px_34px_-30px_rgba(124,58,237,0.7)]">
               <p className="whitespace-nowrap text-[0.9rem] font-black uppercase tracking-[0.085em] text-[#6d28d9]">Caller cell phone summary</p>
             </div>
-            <div className="mt-3 max-w-[94%] rounded-[22px] bg-[#e5e7eb] px-5 py-4 text-[1.1rem] font-semibold leading-[1.6rem] text-[#111827]">
+            <div className="mt-3 max-w-[94%] rounded-[22px] bg-[#e5e7eb] px-5 py-3 text-[1.16rem] font-semibold leading-[1.62rem] text-[#111827]">
               Thanks for calling Tim&apos;s Electrical. We got your request and will follow up shortly.
             </div>
           </section>
@@ -1324,13 +1324,13 @@ function LandingPage() {
           }
           @media (min-width: 1024px) and (max-height: 900px) {
             .landing-hero-shell {
-              padding-top: 1.25rem;
-              padding-bottom: 1.5rem;
+              padding-top: 1rem;
+              padding-bottom: 1rem;
             }
             .landing-hero-grid {
-              gap: 2rem;
-              padding-top: 2.2rem;
-              padding-bottom: 2.5rem;
+              gap: 1.5rem;
+              padding-top: 0.5rem;
+              padding-bottom: 1rem;
             }
             .landing-hero-title {
               font-size: clamp(3.1rem, 3.47vw, 3.94rem);
@@ -1373,12 +1373,12 @@ function LandingPage() {
               z-index: 2;
             }
             .landing-phone {
-              height: 590px;
+              height: min(620px, calc(100vh - 72px));
               margin-top: 0;
               max-width: 460px;
             }
-            .landing-summary {
-              transform: none;
+            .landing-summary > div {
+              height: min(620px, calc(100vh - 72px));
             }
           }
         `}</style>
@@ -1405,8 +1405,8 @@ function LandingPage() {
             </div>
           </nav>
 
-          <div className="landing-hero-grid grid flex-1 gap-7 py-9 lg:grid-cols-[minmax(0,1fr)_460px] lg:items-center xl:grid-cols-[minmax(360px,1fr)_460px_460px] 2xl:grid-cols-[minmax(520px,1fr)_460px_460px] 2xl:gap-8 2xl:py-10">
-            <div className="relative z-10 min-w-0 max-w-[800px] xl:max-w-none lg:-translate-y-10 2xl:-translate-y-12">
+          <div className="landing-hero-grid grid flex-1 gap-7 py-9 lg:grid-cols-[minmax(0,1fr)_460px] lg:items-center 2xl:grid-cols-[minmax(520px,1fr)_460px_460px] 2xl:gap-8 2xl:py-10">
+            <div className="relative z-10 min-w-0 max-w-[800px] xl:max-w-none lg:-translate-y-3 2xl:-translate-y-4">
               <div className="mt-3 inline-flex rounded-full border border-[#b9d8ff] bg-white/72 px-4 py-2 text-lg font-semibold text-[#0b3b7a] shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_18px_42px_-34px_rgba(37,99,235,0.7)] 2xl:px-5 2xl:text-xl">
                 AI Phone Answering Assistant
               </div>
@@ -1427,9 +1427,9 @@ function LandingPage() {
 
               <div className="landing-hero-points mt-6 space-y-3.5">
                 {[
-                  ["phone", "Speaks with callers"],
-                  ["people", "Eliminates voicemail hangups"],
-                  ["chat", "Works with your current number and texts you the details"],
+                  ["phone", "Talks to the customer naturally"],
+                  ["people", "Provides more information than a voicemail"],
+                  ["chat", "Easy to set up as your phone just forwards/transfer the call after 3 unanswered rings"],
                 ].map(([icon, label]) => (
                   <div key={label} className="landing-hero-point flex items-center gap-4 text-[1.28rem] font-medium text-[#16243a] 2xl:text-[1.36rem]">
                     <span className="landing-hero-point-icon grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[#0c4da0] text-white shadow-[0_10px_28px_-16px_rgba(59,130,246,1)]">
@@ -1464,11 +1464,11 @@ function LandingPage() {
               <HeroPhoneMockup />
             </div>
 
-            <div className="xl:hidden lg:col-span-2 lg:pt-1">
+            <div className="2xl:hidden lg:col-span-2 lg:pt-1">
               <HeroSummaryStack />
             </div>
 
-            <div className="hidden justify-center xl:flex xl:self-start xl:-translate-x-4 2xl:-translate-x-5">
+            <div className="hidden justify-center 2xl:flex 2xl:self-start 2xl:-translate-x-5">
               <HeroSummaryStack />
             </div>
           </div>
@@ -1504,11 +1504,11 @@ function LandingPage() {
             <div className="mt-6 space-y-3.5">
               <div className="flex items-start gap-3">
                 <span className="mt-2.5 h-2.5 w-2.5 rounded-full bg-[#a78bfa] shadow-[0_0_16px_rgba(167,139,250,0.85)]" />
-                <p className="text-[1.1rem] font-medium leading-8 text-[#e8e4ff] sm:text-[1.25rem]">Speaks with callers</p>
+                <p className="text-[1.1rem] font-medium leading-8 text-[#e8e4ff] sm:text-[1.25rem]">Talks to the customer naturally</p>
               </div>
               <div className="flex items-start gap-3">
                 <span className="mt-2.5 h-2.5 w-2.5 rounded-full bg-[#a78bfa] shadow-[0_0_16px_rgba(167,139,250,0.85)]" />
-                <p className="text-[1.1rem] font-medium leading-8 text-[#e8e4ff] sm:text-[1.25rem]">Eliminates voicemail hangups</p>
+                <p className="text-[1.1rem] font-medium leading-8 text-[#e8e4ff] sm:text-[1.25rem]">Provides more information than a voicemail</p>
               </div>
               <div className="flex items-start gap-3">
                 <span className="mt-2.5 h-2.5 w-2.5 rounded-full bg-[#a78bfa] shadow-[0_0_16px_rgba(167,139,250,0.85)]" />
@@ -1882,8 +1882,8 @@ function LandingPage() {
       </section>
 
       <section ref={demoRef} className="bg-[#eef4fb]">
-        <div className="mx-auto grid w-full max-w-[1220px] gap-6 px-4 py-6 sm:px-6 lg:grid-cols-[0.9fr_1fr] lg:px-8">
-          <div>
+        <div className="mx-auto grid w-full min-w-0 max-w-[1220px] gap-6 px-4 py-6 sm:px-6 lg:grid-cols-[0.9fr_1fr] lg:px-8">
+          <div className="min-w-0">
             <h2 className="max-w-[540px] text-[clamp(1.9rem,2.9vw,2.55rem)] font-black leading-[1.08] tracking-[-0.035em] text-[#07142a]">
               Hear a real example of one of our agent&apos;s taking a customer&apos;s inquiry
             </h2>
@@ -1933,7 +1933,7 @@ function LandingPage() {
                       <path d={audioPlaying ? "M7 5h3v14H7V5Zm7 0h3v14h-3V5Z" : "M8 5.8v12.4L18 12 8 5.8Z"} />
                     </svg>
                   </button>
-                  <div className="flex h-14 flex-1 items-center gap-1.5">
+                  <div className="flex h-14 min-w-0 flex-1 items-center gap-1">
                     {waveformBars.map((bar, index) => {
                       const played = index / Math.max(waveformBars.length - 1, 1) <= playbackProgress;
                       return (
@@ -2003,8 +2003,8 @@ function LandingPage() {
             />
           </div>
 
-          <div className="space-y-4">
-            <div className="overflow-hidden rounded-[18px] border border-[#d8bf8f] bg-white shadow-[0_18px_50px_-38px_rgba(15,23,42,0.35)]">
+          <div className="min-w-0 space-y-4">
+            <div className="w-full min-w-0 overflow-hidden rounded-[18px] border border-[#d8bf8f] bg-white shadow-[0_18px_50px_-38px_rgba(15,23,42,0.35)]">
               <div className="flex items-center gap-3 bg-[linear-gradient(90deg,#fff3d8,#ffffff)] px-4 py-3">
                 <span className="grid h-9 w-9 place-items-center rounded-full border border-[#d9b36d] bg-white text-[#9b661d] shadow-[0_10px_24px_-20px_rgba(120,72,20,0.8)]">
                   <svg viewBox="0 0 24 24" className="h-4.5 w-4.5" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
@@ -2014,7 +2014,7 @@ function LandingPage() {
                 </span>
                 <p className="text-[0.95rem] font-black uppercase tracking-[0.14em] text-[#8a5a18]">Owner gets this text summary</p>
               </div>
-              <div className="m-4 mx-auto max-w-[420px] rounded-[32px] border-[5px] border-[#263241] bg-[#07111f] p-2 shadow-[0_18px_46px_-32px_rgba(15,23,42,0.7)]">
+              <div className="mx-auto my-4 w-[calc(100%-1rem)] max-w-[420px] rounded-[32px] border-[5px] border-[#263241] bg-[#07111f] p-2 shadow-[0_18px_46px_-32px_rgba(15,23,42,0.7)]">
                 <div className="relative overflow-hidden rounded-[24px] bg-[#f7fbff] px-4 pb-5 pt-8 text-[#1f2937]">
                   <span className="absolute left-1/2 top-2 h-4 w-20 -translate-x-1/2 rounded-full bg-[#111827]" />
                   <div className="flex items-center justify-between border-b border-[#d9e5f3] pb-3">
@@ -2036,7 +2036,7 @@ function LandingPage() {
               </div>
             </div>
 
-            <div className="overflow-hidden rounded-[18px] border border-[#b9d8d4] bg-white shadow-[0_18px_50px_-38px_rgba(15,23,42,0.35)]">
+            <div className="w-full min-w-0 overflow-hidden rounded-[18px] border border-[#b9d8d4] bg-white shadow-[0_18px_50px_-38px_rgba(15,23,42,0.35)]">
               <div className="flex items-center gap-3 bg-[linear-gradient(90deg,#dcfaf4,#ffffff)] px-4 py-3">
                 <span className="grid h-9 w-9 place-items-center rounded-full border border-[#93cfc7] bg-white text-[#08776f] shadow-[0_10px_24px_-20px_rgba(8,119,111,0.7)]">
                   <svg viewBox="0 0 24 24" className="h-4.5 w-4.5" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
@@ -2046,7 +2046,7 @@ function LandingPage() {
                 </span>
                 <p className="text-[0.95rem] font-black uppercase tracking-[0.14em] text-[#08776f]">Caller gets this confirmation</p>
               </div>
-              <div className="m-4 mx-auto max-w-[420px] rounded-[32px] border-[5px] border-[#263241] bg-[#07111f] p-2 shadow-[0_18px_46px_-32px_rgba(15,23,42,0.7)]">
+              <div className="mx-auto my-4 w-[calc(100%-1rem)] max-w-[420px] rounded-[32px] border-[5px] border-[#263241] bg-[#07111f] p-2 shadow-[0_18px_46px_-32px_rgba(15,23,42,0.7)]">
                 <div className="relative overflow-hidden rounded-[24px] bg-[#f7fbff] px-4 pb-5 pt-8 text-[#12302d]">
                   <span className="absolute left-1/2 top-2 h-4 w-20 -translate-x-1/2 rounded-full bg-[#111827]" />
                   <div className="flex items-center justify-between border-b border-[#d9e5f3] pb-3">
@@ -2063,7 +2063,7 @@ function LandingPage() {
               </div>
             </div>
 
-            <div className="rounded-[18px] border border-[#bad6c7] bg-white p-4 shadow-[0_18px_50px_-38px_rgba(15,23,42,0.35)]">
+            <div className="w-full min-w-0 rounded-[18px] border border-[#bad6c7] bg-white p-4 shadow-[0_18px_50px_-38px_rgba(15,23,42,0.35)]">
               <div className="flex items-center gap-3">
                 <span className="grid h-8 w-8 place-items-center rounded-full border border-[#95c9aa] bg-[#eefaf3] text-[#1d7a47]">
                   <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
@@ -2110,7 +2110,7 @@ function LandingPage() {
               >
                 <div className={`absolute inset-x-6 top-0 h-1.5 rounded-b-full bg-gradient-to-r ${plan.accent}`} aria-hidden="true" />
                 <div className="pointer-events-none absolute right-5 top-5 h-24 w-24 rounded-full bg-white/34 blur-2xl" aria-hidden="true" />
-                <div className="pointer-events-none absolute -right-10 -top-10 h-36 w-36 rounded-full bg-[#2db4ff]/12 blur-3xl" aria-hidden="true" />
+                <div className="pointer-events-none absolute right-0 top-0 h-28 w-28 rounded-full bg-[#2db4ff]/12 blur-3xl" aria-hidden="true" />
                 {plan.featured ? (
                   <span className="absolute right-6 top-6 z-10 inline-flex h-10 w-[178px] items-center justify-center whitespace-nowrap rounded-full border border-[#7dff9e]/70 bg-[#00b84a] text-[0.82rem] font-black uppercase tracking-[0.12em] text-white shadow-[0_0_18px_-8px_rgba(57,255,106,0.95)]">
                     Recommended

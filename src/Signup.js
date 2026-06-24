@@ -1,371 +1,32 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 
-const DEFAULT_SIGNUP_WEBHOOK_URL = "https://hook.us2.make.com/bg30xcgcluakdcf3u2jtw1h9186gbq7m";
-const IS_LOCAL_BROWSER =
-  typeof window !== "undefined" &&
-  (window.location.protocol === "file:" || /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname));
-const RAW_API_BASE = process.env.REACT_APP_API_BASE_URL || (IS_LOCAL_BROWSER ? "" : DEFAULT_SIGNUP_WEBHOOK_URL);
-const MAKE_SIGNUP_WEBHOOK_URL = process.env.REACT_APP_MAKE_SIGNUP_WEBHOOK_URL || "";
-const MAKE_SIGNUP_WEBHOOK_API_KEY = process.env.REACT_APP_MAKE_SIGNUP_WEBHOOK_API_KEY || "";
-const GOOGLE_RECAPTCHA_TEST_SITE_KEY = "6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI";
-const RECAPTCHA_SITE_KEY = IS_LOCAL_BROWSER ? GOOGLE_RECAPTCHA_TEST_SITE_KEY : "";
-const RECAPTCHA_MODE = IS_LOCAL_BROWSER ? "checkbox" : process.env.REACT_APP_RECAPTCHA_MODE || "score";
-const USE_RECAPTCHA_ENTERPRISE = /^(1|true|yes|on)$/i.test(String(process.env.REACT_APP_RECAPTCHA_ENTERPRISE || ""));
-const TURNSTILE_SITE_KEY = process.env.REACT_APP_TURNSTILE_SITE_KEY || "";
-const CAPTCHA_PROVIDER = RECAPTCHA_SITE_KEY ? "recaptcha" : TURNSTILE_SITE_KEY ? "turnstile" : "";
-const SIGNUP_API_PATH = "/api/integrations/signup-complete";
-const IS_MAKE_WEBHOOK = /^https:\/\/hook\.[^/]+\.make\.com\//.test(RAW_API_BASE);
-
-const API_BASE =
-  RAW_API_BASE ||
-  (IS_LOCAL_BROWSER
-    ? "http://localhost:8787"
-    : "");
-const SIGNUP_SUBMIT_URL = MAKE_SIGNUP_WEBHOOK_URL
-  ? MAKE_SIGNUP_WEBHOOK_URL.replace(/\/+$/, "")
-  : IS_MAKE_WEBHOOK
-    ? RAW_API_BASE.replace(/\/+$/, "")
-    : API_BASE
-      ? `${API_BASE.replace(/\/+$/, "")}${SIGNUP_API_PATH}`
-      : "";
-
-const TRADE_OPTIONS = [
-  {
-    id: "electrician",
-    label: "Electrician",
-    businessType: "Electrical",
-    accent: "from-blue-600 to-violet-500",
-    icon: "bolt",
-    services: "Panel upgrades\nBreaker issues\nLighting installs\nEV charger installs\nEmergency electrical service",
-    faq: "Do you offer emergency electrical service?\nDo you handle panel upgrades?\nCan you install EV chargers?\nDo you provide estimates?",
-    greeting: "Hi, thanks for calling {business}. How can I help you today?",
-  },
-  {
-    id: "plumber",
-    label: "Plumber",
-    businessType: "Plumbing",
-    accent: "from-sky-500 to-blue-600",
-    icon: "drop",
-    services: "Drain cleaning\nLeak repair\nWater heaters\nSump pumps\nEmergency plumbing",
-    faq: "Do you offer emergency plumbing?\nDo you provide estimates?\nWhat areas do you serve?\nCan you help with water heaters?",
-    greeting: "Hi, thanks for calling {business}. How can I help with your plumbing today?",
-  },
-  {
-    id: "hvac",
-    label: "HVAC",
-    businessType: "HVAC",
-    accent: "from-cyan-500 to-indigo-500",
-    icon: "snow",
-    services: "Furnace repair\nAir conditioning repair\nMaintenance calls\nThermostats\nEmergency no-heat calls",
-    faq: "Do you offer emergency HVAC service?\nDo you service furnaces and AC units?\nDo you provide maintenance?\nWhat brands do you work on?",
-    greeting: "Hi, thanks for calling {business}. Are you calling about heating, cooling, or maintenance?",
-  },
-  {
-    id: "contractor",
-    label: "Contractor",
-    businessType: "Contractor",
-    accent: "from-slate-700 to-blue-600",
-    icon: "hammer",
-    services: "Renovation calls\nEstimate requests\nProject questions\nSite visits\nCustomer follow-up",
-    faq: "Do you provide estimates?\nWhat areas do you serve?\nCan you handle small jobs?\nWhen can someone call me back?",
-    greeting: "Hi, thanks for calling {business}. What kind of project can we help with?",
-  },
-  {
-    id: "roofer",
-    label: "Roofer",
-    businessType: "Roofing",
-    accent: "from-indigo-500 to-slate-700",
-    icon: "home",
-    services: "Roof repair\nLeak repair\nShingle replacement\nStorm damage\nRoof inspections",
-    faq: "Do you repair roof leaks?\nDo you provide inspections?\nCan you help after storm damage?\nDo you offer estimates?",
-    greeting: "Hi, thanks for calling {business}. Are you calling about a roof repair, leak, or estimate?",
-  },
-  {
-    id: "painter",
-    label: "Painter",
-    businessType: "Painting",
-    accent: "from-purple-500 to-blue-600",
-    icon: "roller",
-    services: "Interior painting\nExterior painting\nCabinet painting\nTouch-ups\nEstimate requests",
-    faq: "Do you provide painting estimates?\nDo you handle interior and exterior work?\nWhat areas do you serve?\nWhen can someone call me back?",
-    greeting: "Hi, thanks for calling {business}. Are you looking for interior, exterior, or cabinet painting?",
-  },
-];
-
-const AREA_OPTIONS = [
-  "Niagara Falls",
-  "Welland",
-  "St. Catharines",
-  "Thorold",
-  "Port Colborne",
-  "Fort Erie",
-  "Grimsby",
-  "Hamilton",
-  "Burlington",
-  "Oakville",
-  "Milton",
-  "Mississauga",
-  "Brampton",
-  "Toronto",
-  "Vaughan",
-  "Markham",
-  "Richmond Hill",
-  "Pickering",
-  "Ajax",
-  "Whitby",
-  "Oshawa",
-  "Kitchener",
-  "Waterloo",
-  "Cambridge",
-  "Guelph",
-  "Brantford",
-  "London",
-  "Barrie",
-];
-const SETUP_STEPS = [
-  { number: 1, label: "Your business" },
-  { number: 2, label: "Hear voice" },
-  { number: 3, label: "Review & launch" },
-];
-const ASSISTANT_SAMPLE_AUDIO_SRC = `${process.env.PUBLIC_URL || ""}/Assistant_Testing.wav`;
-const ASSISTANT_AGENT = {
-  value: "elliot",
-  label: "My AI PA Agent",
-  sampleSrc: ASSISTANT_SAMPLE_AUDIO_SRC,
-};
-const SPECIALIZATION_OPTIONS = [
-  { id: "residential", label: "Residential", icon: "home" },
-  { id: "commercial", label: "Commercial", icon: "building" },
-  { id: "industrial", label: "Industrial", icon: "factory" },
-  { id: "agricultural", label: "Agricultural", icon: "leaf" },
-  { id: "specialty", label: "Specialty", icon: "star" },
-];
-const OPENING_DIALOGUE_OPTIONS = [
-  {
-    id: "help-today",
-    text: "Hi, thanks for calling. How can I help you today?",
-  },
-  {
-    id: "res-commercial",
-    text: "Hello, and thanks for calling. We proudly serve both residential and commercial customers.",
-  },
-  {
-    id: "community",
-    text: "Good day, and thanks for calling. We've been helping the community for over 10 years.",
-  },
-  {
-    id: "welcome",
-    text: "Welcome, and thanks for calling. Please let me know what you need.",
-  },
-];
-const CANADIAN_PROVINCES = [
-  { value: "AB", label: "Alberta" },
-  { value: "BC", label: "British Columbia" },
-  { value: "MB", label: "Manitoba" },
-  { value: "NB", label: "New Brunswick" },
-  { value: "NL", label: "Newfoundland and Labrador" },
-  { value: "NS", label: "Nova Scotia" },
-  { value: "NT", label: "Northwest Territories" },
-  { value: "NU", label: "Nunavut" },
-  { value: "ON", label: "Ontario" },
-  { value: "PE", label: "Prince Edward Island" },
-  { value: "QC", label: "Quebec" },
-  { value: "SK", label: "Saskatchewan" },
-  { value: "YT", label: "Yukon" },
-];
-
-const SIGNUP_ATTEMPT_STORAGE_KEY = "myaipa_signup_attempts_v1";
-const SIGNUP_ATTEMPT_WINDOW_MS = 60 * 60 * 1000;
-const SIGNUP_ATTEMPT_LIMIT = 3;
-
-function getBrowserSignupAttempts() {
-  if (typeof window === "undefined") return [];
-  try {
-    const parsed = JSON.parse(window.localStorage.getItem(SIGNUP_ATTEMPT_STORAGE_KEY) || "[]");
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (_err) {
-    return [];
-  }
-}
-
-function rememberBrowserSignupAttempt() {
-  if (typeof window === "undefined") return;
-  const now = Date.now();
-  const attempts = getBrowserSignupAttempts().filter((timestamp) => now - Number(timestamp) < SIGNUP_ATTEMPT_WINDOW_MS);
-  attempts.push(now);
-  window.localStorage.setItem(SIGNUP_ATTEMPT_STORAGE_KEY, JSON.stringify(attempts));
-}
-
-function hasTooManyBrowserSignupAttempts() {
-  const now = Date.now();
-  return getBrowserSignupAttempts().filter((timestamp) => now - Number(timestamp) < SIGNUP_ATTEMPT_WINDOW_MS).length >= SIGNUP_ATTEMPT_LIMIT;
-}
-
-function isValidEmailAddress(value) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim());
-}
-
-function hasPlaceholderText(value) {
-  return /\b(e\.?g\.?|example|test|asdf|yourbusiness|main st|jamie smith|smith electrical|555-?1234)\b/i.test(String(value || ""));
-}
-
-function getPhoneDigits(value) {
-  const digits = String(value || "").replace(/\D/g, "");
-  return digits.length === 11 && digits.startsWith("1") ? digits.slice(1) : digits;
-}
-
-function formatBusinessAddress(details) {
-  return [details.streetAddress, details.city, details.province, details.postalCode]
-    .map((value) => String(value || "").trim())
-    .filter(Boolean)
-    .join(", ");
-}
-
-function validateBusinessDetails(details) {
-  const ownerName = details.ownerName.trim();
-  const businessName = details.businessName.trim();
-  const phone = details.phone.trim();
-  const email = details.email.trim();
-  const streetAddress = details.streetAddress.trim();
-  const city = details.city.trim();
-  const province = details.province.trim();
-  const postalCode = details.postalCode.trim();
-  const phoneDigits = getPhoneDigits(phone);
-  const postalCodePattern = /^[A-Za-z]\d[A-Za-z][ -]?\d[A-Za-z]\d$/;
-
-  const errors = {
-    ownerName:
-      ownerName.split(/\s+/).filter(Boolean).length < 2 || ownerName.length < 5 || hasPlaceholderText(ownerName)
-        ? "Enter the owner's first and last name."
-        : "",
-    businessName:
-      businessName.length < 4 || hasPlaceholderText(businessName)
-        ? "Enter the real business name."
-        : "",
-    phone:
-      phoneDigits.length !== 10 || /^(\d)\1{9}$/.test(phoneDigits) || hasPlaceholderText(phone)
-        ? "Enter a real 10-digit business phone number."
-        : "",
-    email:
-      !isValidEmailAddress(email) || hasPlaceholderText(email)
-        ? "Enter a real business email address."
-        : "",
-    streetAddress:
-      streetAddress.length < 6 || !/\d/.test(streetAddress) || !/[A-Za-z]/.test(streetAddress) || hasPlaceholderText(streetAddress)
-        ? "Enter the street address."
-        : "",
-    city:
-      city.length < 2 || !/^[A-Za-z][A-Za-z\s.'-]+$/.test(city) || hasPlaceholderText(city)
-        ? "Enter the city."
-        : "",
-    province:
-      !CANADIAN_PROVINCES.some((item) => item.value === province)
-        ? "Select a province."
-        : "",
-    postalCode:
-      !postalCodePattern.test(postalCode) || hasPlaceholderText(postalCode)
-        ? "Enter a valid postal code."
-        : "",
-  };
-
-  return {
-    errors,
-    isValid: Object.values(errors).every((message) => !message),
-  };
-}
-
-async function parseApiResponse(response, fallbackLabel) {
-  const rawText = await response.text();
-  let data = {};
-  try {
-    data = rawText ? JSON.parse(rawText) : {};
-  } catch (_err) {
-    data = rawText ? { message: rawText } : {};
-  }
-
-  if (!response.ok) {
-    throw new Error(data?.error || `${fallbackLabel} (${response.status})`);
-  }
-
-  return { ok: true, ...data };
-}
-
-function getSignupSuccess(data) {
-  if (data?.success === false || data?.ok === false) return false;
-  return data?.success === true || data?.ok === true;
-}
-
-function parseMaybeJson(value) {
-  if (typeof value !== "string") return value;
-  try {
-    return JSON.parse(value);
-  } catch (_err) {
-    return value;
-  }
-}
-
-function extractPhoneFromText(value) {
-  const match = String(value || "").match(/(?:\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}/);
-  return match?.[0]?.trim() || "";
-}
-
-function getTwilioPhoneNumber(data) {
-  const phoneKeys = new Set([
-    "twiliophonenumber",
-    "twilio_phone_number",
-    "phonenumber",
-    "assignedphonenumber",
-    "assigned_number",
-    "number",
-  ]);
-  const seen = new Set();
-
-  const visit = (value, key = "") => {
-    const parsed = parseMaybeJson(value);
-    if (parsed && typeof parsed === "object") {
-      if (seen.has(parsed)) return "";
-      seen.add(parsed);
-
-      if (Array.isArray(parsed)) {
-        for (const item of parsed) {
-          const found = visit(item, key);
-          if (found) return found;
-        }
-        return "";
-      }
-
-      for (const [entryKey, entryValue] of Object.entries(parsed)) {
-        const normalizedKey = entryKey.toLowerCase().replace(/[^a-z0-9_]/g, "");
-        if (phoneKeys.has(normalizedKey)) {
-          const directPhone = extractPhoneFromText(entryValue);
-          if (directPhone) return directPhone;
-        }
-
-        const found = visit(entryValue, entryKey);
-        if (found) return found;
-      }
-      return "";
-    }
-
-    const normalizedKey = String(key || "").toLowerCase().replace(/[^a-z0-9_]/g, "");
-    return phoneKeys.has(normalizedKey) ? extractPhoneFromText(parsed) : "";
-  };
-
-  return visit(data) || extractPhoneFromText(JSON.stringify(data || {}));
-}
-
-function formatPhoneNumber(value) {
-  const raw = String(value || "").trim();
-  const digits = raw.replace(/\D/g, "");
-  if (digits.length === 11 && digits.startsWith("1")) {
-    return `+1 (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
-  }
-  if (digits.length === 10) {
-    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
-  }
-  return raw;
-}
-
+import {
+  AREA_OPTIONS,
+  ASSISTANT_AGENT,
+  BUSINESS_SLIDE_TABS,
+  CANADIAN_PROVINCES,
+  CAPTCHA_PROVIDER,
+  DEFAULT_DETAILS,
+  DEFAULT_PRICING,
+  MAKE_SIGNUP_WEBHOOK_API_KEY,
+  OPENING_DIALOGUE_OPTIONS,
+  SETUP_STEPS,
+  SIGNUP_SUBMIT_URL,
+  SPECIALIZATION_OPTIONS,
+  TRADE_OPTIONS,
+} from "./features/signup/signupConfig";
+import {
+  buildPricingScript,
+  buildSignupPayload,
+  formatBusinessAddress,
+  formatPhoneNumber,
+  getSignupSuccess,
+  getTwilioPhoneNumber,
+  hasTooManyBrowserSignupAttempts,
+  parseApiResponse,
+  rememberBrowserSignupAttempt,
+  validateBusinessDetails,
+} from "./features/signup/signupUtils";
 function Icon({ name, className = "h-6 w-6" }) {
   if (name === "bolt") {
     return (
@@ -627,13 +288,13 @@ function Benefit({ icon, children }) {
 
 function Stepper({ currentStep }) {
   return (
-    <div className="mx-auto mt-5 flex w-full max-w-full snap-x items-center justify-start gap-2 overflow-x-auto px-1 pb-2 sm:max-w-[590px] sm:justify-center sm:gap-3 sm:overflow-visible sm:px-3 sm:pb-0">
+    <div className="mx-auto mt-3 flex w-full max-w-full snap-x items-center justify-start gap-2 overflow-x-auto px-1 pb-1 sm:max-w-[590px] sm:justify-center sm:gap-3 sm:overflow-visible sm:px-3 sm:pb-0">
       {SETUP_STEPS.map((step, index) => (
         <React.Fragment key={step.number}>
           <div className="flex shrink-0 snap-center items-center gap-2 sm:gap-3">
             <span
               className={
-                "grid h-9 w-9 place-items-center rounded-full text-sm font-bold shadow-sm " +
+                "grid h-8 w-8 place-items-center rounded-full text-sm font-bold shadow-sm " +
                 (step.number <= currentStep
                   ? "bg-gradient-to-br from-blue-600 to-violet-600 text-white shadow-blue-500/30"
                   : "bg-slate-100 text-slate-600")
@@ -785,6 +446,27 @@ function LabeledSelect({ label, icon, value, onChange, onBlur, options, classNam
         </select>
       </span>
       {error ? <span id={errorId} className="mt-1.5 block text-xs font-semibold text-rose-600">{error}</span> : null}
+    </label>
+  );
+}
+
+function LabeledTextarea({ label, icon, value, onChange, placeholder, className = "" }) {
+  const inputId = `${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-textarea`;
+
+  return (
+    <label className={className}>
+      <span className="mb-1.5 block text-sm font-semibold leading-none text-slate-700">{label}</span>
+      <span className="flex min-h-[96px] items-start gap-3 rounded-lg border border-slate-200 bg-white px-3 py-3 shadow-[0_1px_0_rgba(15,23,42,0.02)] transition focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-500/10">
+        <Icon name={icon} className="mt-1 h-4 w-4 shrink-0 text-slate-600" />
+        <textarea
+          id={inputId}
+          value={value}
+          onChange={onChange}
+          placeholder={placeholder}
+          rows={3}
+          className="min-w-0 flex-1 resize-none bg-transparent text-base font-medium leading-6 text-slate-950 outline-none placeholder:text-slate-400"
+        />
+      </span>
     </label>
   );
 }
@@ -997,11 +679,13 @@ function VoiceDemoStep({ agent }) {
   );
 }
 
-function ReviewPanel({ trade, areas, specializations, voice, details, onUpdateDetails, onEditBusinessSlide, onEditVoice, getFieldError, onFieldBlur }) {
+function ReviewPanel({ trade, areas, specializations, voice, details, pricing, onUpdateDetails, onEditBusinessSlide, onEditVoice, getFieldError, onFieldBlur }) {
   const businessAddress = formatBusinessAddress(details);
+  const pricingScript = pricing ? buildPricingScript(pricing) : "";
   const optionItems = [
     ["Trade", trade.label, () => onEditBusinessSlide?.(1)],
     ["Service area", areas.join(", "), () => onEditBusinessSlide?.(2)],
+    ["Pricing script", pricingScript, () => onEditBusinessSlide?.(4)],
     ["Specializations", specializations.join(", "), null],
     ["Assistant voice", voice.label, onEditVoice],
   ];
@@ -1157,198 +841,54 @@ function TrialButton({ disabled, busy, finalStep = false, label = "Start free tr
   );
 }
 
-function TurnstileCheck({ siteKey, onVerify }) {
-  const containerRef = useRef(null);
-  const widgetIdRef = useRef(null);
-
-  useEffect(() => {
-    if (!siteKey || typeof window === "undefined") return undefined;
-
-    let cancelled = false;
-    let pollTimer = null;
-
-    const renderWidget = () => {
-      if (cancelled || !containerRef.current || !window.turnstile || widgetIdRef.current != null) return;
-      widgetIdRef.current = window.turnstile.render(containerRef.current, {
-        sitekey: siteKey,
-        callback: (token) => onVerify(token || ""),
-        "expired-callback": () => onVerify(""),
-        "error-callback": () => onVerify(""),
-      });
-    };
-
-    if (!document.querySelector('script[src="https://challenges.cloudflare.com/turnstile/v0/api.js"]')) {
-      const script = document.createElement("script");
-      script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js";
-      script.async = true;
-      script.defer = true;
-      script.onload = renderWidget;
-      document.body.appendChild(script);
-    }
-
-    pollTimer = window.setInterval(renderWidget, 250);
-    renderWidget();
-
-    return () => {
-      cancelled = true;
-      if (pollTimer) window.clearInterval(pollTimer);
-      if (window.turnstile && widgetIdRef.current != null) {
-        window.turnstile.remove(widgetIdRef.current);
-      }
-      widgetIdRef.current = null;
-    };
-  }, [siteKey, onVerify]);
-
-  if (!siteKey) return null;
-
-  return (
-    <div className="mt-5 flex justify-center">
-      <div ref={containerRef} />
-    </div>
-  );
+function HumanVerificationCheck() {
+  return null;
 }
 
-function RecaptchaCheck({ siteKey, mode = "checkbox", enterprise = false, onVerify }) {
-  const containerRef = useRef(null);
-  const widgetIdRef = useRef(null);
-  const renderingRef = useRef(false);
-  const [scriptReady, setScriptReady] = useState(false);
-  const [verifying, setVerifying] = useState(false);
-  const [verified, setVerified] = useState(false);
-  const [verificationError, setVerificationError] = useState("");
-  const isScoreMode = mode === "score";
+function isMakeWebhookUrl(url) {
+  return /^https:\/\/hook\.[^/]+\.make\.com\//.test(String(url || ""));
+}
 
-  useEffect(() => {
-    if (!siteKey || typeof window === "undefined") return undefined;
-
-    let cancelled = false;
-    let pollTimer = null;
-    const callbackName = `onRecaptchaReady_${Math.random().toString(36).slice(2)}`;
-    const scriptBaseUrl = enterprise ? "https://www.google.com/recaptcha/enterprise.js" : "https://www.google.com/recaptcha/api.js";
-
-    const renderWidget = () => {
-      const recaptchaApi = enterprise ? window.grecaptcha?.enterprise : window.grecaptcha;
-      if (recaptchaApi && typeof recaptchaApi.ready === "function") {
-        setScriptReady(true);
-      }
-      if (isScoreMode) return;
-      if (
-        cancelled ||
-        !containerRef.current ||
-        !recaptchaApi ||
-        typeof recaptchaApi.render !== "function" ||
-        widgetIdRef.current != null ||
-        renderingRef.current
-      ) {
-        return;
-      }
-
-      renderingRef.current = true;
-      widgetIdRef.current = recaptchaApi.render(containerRef.current, {
-        sitekey: siteKey,
-        callback: (token) => onVerify(token || ""),
-        "expired-callback": () => onVerify(""),
-        "error-callback": () => onVerify(""),
-      });
-      renderingRef.current = false;
-    };
-
-    window[callbackName] = renderWidget;
-
-    if (!document.querySelector(`script[src^="${scriptBaseUrl}"]`)) {
-      const script = document.createElement("script");
-      script.src = isScoreMode
-        ? `${scriptBaseUrl}?render=${encodeURIComponent(siteKey)}`
-        : `${scriptBaseUrl}?onload=${callbackName}&render=explicit`;
-      script.async = true;
-      script.defer = true;
-      script.onload = renderWidget;
-      document.body.appendChild(script);
-    }
-
-    pollTimer = window.setInterval(renderWidget, 250);
-    renderWidget();
-
-    return () => {
-      cancelled = true;
-      if (pollTimer) window.clearInterval(pollTimer);
-      const recaptchaApi = enterprise ? window.grecaptcha?.enterprise : window.grecaptcha;
-      if (recaptchaApi && typeof recaptchaApi.reset === "function" && widgetIdRef.current != null) {
-        recaptchaApi.reset(widgetIdRef.current);
-      }
-      delete window[callbackName];
-      widgetIdRef.current = null;
-      renderingRef.current = false;
-    };
-  }, [siteKey, enterprise, isScoreMode, onVerify]);
-
-  if (!siteKey) return null;
-
-  const verifyScoreCaptcha = () => {
-    const recaptchaApi = enterprise ? window.grecaptcha?.enterprise : window.grecaptcha;
-    if (!recaptchaApi || typeof recaptchaApi.ready !== "function" || typeof recaptchaApi.execute !== "function") {
-      setVerificationError("Security check is still loading. Please try again in a moment.");
-      return;
-    }
-
-    setVerifying(true);
-    setVerificationError("");
-    recaptchaApi.ready(() => {
-      recaptchaApi
-        .execute(siteKey, { action: "signup" })
-        .then((token) => {
-          onVerify(token || "");
-          setVerified(Boolean(token));
-          if (!token) setVerificationError("Security check did not return a valid token. Please try again.");
-        })
-        .catch(() => {
-          onVerify("");
-          setVerified(false);
-          setVerificationError("Security check failed to complete. Please refresh and try again.");
-        })
-        .finally(() => setVerifying(false));
-    });
+async function postSignupPayload(url, formData) {
+  const jsonBody = JSON.stringify(formData);
+  const optimisticMakeResponse = {
+    ok: true,
+    status: 202,
+    text: async () => JSON.stringify({ ok: true, reviewRequired: true }),
   };
 
-  return (
-    <div className="mt-5 rounded-2xl border border-blue-100 bg-white/80 px-4 py-4 shadow-[0_18px_50px_-42px_rgba(37,99,235,0.9)]">
-      <div className="flex flex-col items-center gap-3">
-        <p className="text-center text-sm font-black uppercase tracking-[0.12em] text-blue-700">
-          Security check required
-        </p>
-        {isScoreMode ? (
-          <>
-            <button
-              type="button"
-              onClick={verifyScoreCaptcha}
-              disabled={verifying || verified || !scriptReady}
-              className={
-                "inline-flex min-h-[48px] min-w-[220px] items-center justify-center rounded-xl px-5 text-base font-black transition " +
-                (verified
-                  ? "bg-emerald-100 text-emerald-700"
-                  : "bg-[#07142a] text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600")
-              }
-            >
-              {verified ? "Security verified" : verifying ? "Verifying..." : scriptReady ? "Verify security check" : "Loading security check..."}
-            </button>
-            {verificationError ? <p className="max-w-md text-center text-sm font-semibold text-rose-600">{verificationError}</p> : null}
-          </>
-        ) : (
-          <div ref={containerRef} />
-        )}
-      </div>
-    </div>
-  );
-}
+  try {
+    return await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(MAKE_SIGNUP_WEBHOOK_API_KEY ? { "x-make-apikey": MAKE_SIGNUP_WEBHOOK_API_KEY } : {}),
+      },
+      body: jsonBody,
+    });
+  } catch (error) {
+    if (!isMakeWebhookUrl(url)) throw error;
 
-function HumanVerificationCheck({ provider, recaptchaSiteKey, recaptchaMode, useRecaptchaEnterprise, turnstileSiteKey, onVerify }) {
-  if (provider === "recaptcha") {
-    return <RecaptchaCheck siteKey={recaptchaSiteKey} mode={recaptchaMode} enterprise={useRecaptchaEnterprise} onVerify={onVerify} />;
+    try {
+      await fetch(url, {
+        method: "POST",
+        mode: "no-cors",
+        headers: {
+          "Content-Type": "text/plain;charset=UTF-8",
+        },
+        body: jsonBody,
+      });
+
+      return optimisticMakeResponse;
+    } catch {
+      if (typeof navigator !== "undefined" && typeof navigator.sendBeacon === "function") {
+        const sent = navigator.sendBeacon(url, new Blob([jsonBody], { type: "text/plain;charset=UTF-8" }));
+        if (sent) return optimisticMakeResponse;
+      }
+
+      throw error;
+    }
   }
-  if (provider === "turnstile") {
-    return <TurnstileCheck siteKey={turnstileSiteKey} onVerify={onVerify} />;
-  }
-  return null;
 }
 
 function SignupSuccessPage({ result, onStartAnother }) {
@@ -1548,16 +1088,8 @@ export default function Signup() {
   const [businessStepAttempted, setBusinessStepAttempted] = useState(false);
   const [touchedDetails, setTouchedDetails] = useState({});
   const [returnToReviewAfterEdit, setReturnToReviewAfterEdit] = useState(false);
-  const [details, setDetails] = useState({
-    ownerName: "",
-    businessName: "",
-    phone: "",
-    email: "",
-    streetAddress: "",
-    city: "",
-    province: "ON",
-    postalCode: "",
-  });
+  const [details, setDetails] = useState(() => ({ ...DEFAULT_DETAILS }));
+  const [pricing, setPricing] = useState(() => ({ ...DEFAULT_PRICING }));
 
   const selectedTrade = useMemo(
     () => TRADE_OPTIONS.find((trade) => trade.id === selectedTradeId) || TRADE_OPTIONS[0],
@@ -1584,21 +1116,24 @@ export default function Signup() {
       : businessSlide === 2
         ? "Next: Business details"
         : businessSlide === 3
-          ? "Review details"
-          : "Continue to voice";
-  const businessSlideTabs = [
-    { number: 1, label: "Trade" },
-    { number: 2, label: "Area" },
-    { number: 3, label: "Details" },
-    { number: 4, label: "Review" },
-  ];
-  const maxBusinessSlide = businessValidation.isValid && selectedAreas.length > 0 ? 4 : selectedAreas.length > 0 ? 3 : 2;
+          ? "Next: Pricing"
+          : businessSlide === 4
+            ? "Review details"
+            : "Continue to voice";
+  const maxBusinessSlide = businessValidation.isValid && selectedAreas.length > 0 ? 5 : selectedAreas.length > 0 ? 3 : 2;
   const specializationStepDisabled = selectedSpecializationIds.length === 0;
   const voiceStepDisabled = false;
   const securityStepDisabled = Boolean(CAPTCHA_PROVIDER && !captchaToken);
 
   const updateDetails = (field) => (event) => {
     setDetails((prev) => ({ ...prev, [field]: event.target.value }));
+    setStatus("");
+    setError("");
+  };
+
+  const updatePricing = (field) => (event) => {
+    const value = event.target.type === "checkbox" ? event.target.checked : event.target.value;
+    setPricing((prev) => ({ ...prev, [field]: value }));
     setStatus("");
     setError("");
   };
@@ -1626,7 +1161,7 @@ export default function Signup() {
     setError("");
     if (returnToReviewAfterEdit) {
       setReturnToReviewAfterEdit(false);
-      setBusinessSlide(4);
+      setBusinessSlide(5);
       return;
     }
     setBusinessSlide(2);
@@ -1670,16 +1205,8 @@ export default function Signup() {
     setTouchedDetails({});
     setReturnToReviewAfterEdit(false);
     signupStartedAtRef.current = Date.now();
-    setDetails({
-      ownerName: "",
-      businessName: "",
-      phone: "",
-      email: "",
-      streetAddress: "",
-      city: "",
-      province: "ON",
-      postalCode: "",
-    });
+    setDetails({ ...DEFAULT_DETAILS });
+    setPricing({ ...DEFAULT_PRICING });
     window.scrollTo?.({ top: 0, behavior: "smooth" });
   };
 
@@ -1699,7 +1226,7 @@ export default function Signup() {
         setError("");
         if (returnToReviewAfterEdit) {
           setReturnToReviewAfterEdit(false);
-          setBusinessSlide(4);
+          setBusinessSlide(5);
           return;
         }
         setBusinessSlide(3);
@@ -1716,10 +1243,18 @@ export default function Signup() {
         setError("");
         if (returnToReviewAfterEdit) {
           setReturnToReviewAfterEdit(false);
-          setBusinessSlide(4);
+          setBusinessSlide(5);
           return;
         }
         setBusinessSlide(4);
+        return;
+      }
+      if (businessSlide === 4) {
+        setError("");
+        if (returnToReviewAfterEdit) {
+          setReturnToReviewAfterEdit(false);
+        }
+        setBusinessSlide(5);
         return;
       }
       setBusinessStepAttempted(false);
@@ -1733,7 +1268,7 @@ export default function Signup() {
       if (returnToReviewAfterEdit) {
         setReturnToReviewAfterEdit(false);
         setCurrentStep(1);
-        setBusinessSlide(4);
+        setBusinessSlide(5);
         window.scrollTo?.({ top: 0, behavior: "smooth" });
         return;
       }
@@ -1755,7 +1290,7 @@ export default function Signup() {
 
     if (!businessValidation.isValid || selectedAreas.length === 0) {
       setCurrentStep(1);
-      setBusinessSlide(!selectedAreas.length ? 2 : 4);
+      setBusinessSlide(!selectedAreas.length ? 2 : 5);
       setBusinessStepAttempted(true);
       setTouchedDetails({ ownerName: true, businessName: true, phone: true, email: true, streetAddress: true, city: true, province: true, postalCode: true });
       setError(!selectedAreas.length ? "Select at least one service area before continuing." : "Please complete the business details properly before continuing.");
@@ -1767,76 +1302,27 @@ export default function Signup() {
     setError("");
     setStatus("");
 
-    const serviceArea = selectedAreas.join(", ");
-    const greeting = selectedDialogueText;
-    const businessAddress = formatBusinessAddress(details);
-    const formData = {
-      country: "ca",
-      selectedPlace: null,
-      businessProfile: {
-        businessName: details.businessName.trim(),
-        phone: details.phone.trim(),
-        address: businessAddress,
-        streetAddress: details.streetAddress.trim(),
-        city: details.city.trim(),
-        province: details.province.trim(),
-        postalCode: details.postalCode.trim().toUpperCase(),
-        website: "",
-        hours: "Monday-Friday 9:00 AM-5:00 PM",
-        services: selectedTrade.services,
-      },
-      setupDetails: {
-        ownerName: details.ownerName.trim(),
-        ownerEmail: details.email.trim(),
-        ownerPhone: details.phone.trim(),
-        businessAddress,
-        streetAddress: details.streetAddress.trim(),
-        city: details.city.trim(),
-        province: details.province.trim(),
-        postalCode: details.postalCode.trim().toUpperCase(),
-        businessType: selectedTrade.businessType,
-        serviceArea,
-        callForwardingNumber: details.phone.trim(),
-        bookingPreference: "Text owner first",
-        notificationPreference: "SMS",
-        aiTone: "Professional",
-        assistantVoice: selectedAgent.value,
-        assistantVoiceLabel: selectedAgent.label,
-        voiceSampleUrl: selectedAgent.sampleSrc,
-        openingDialogue: selectedDialogueText,
-        specializations: selectedSpecializationLabels,
-        specializationNotes: specializationNotes.trim(),
-        aiGoals: `Answer calls, capture lead details, text the owner, and help callers in ${serviceArea}. The business handles ${selectedSpecializationLabels.join(", ").toLowerCase()} work.${specializationNotes.trim() ? ` Notes: ${specializationNotes.trim()}` : ""}`,
-        faq: selectedTrade.faq,
-        greetingScript: greeting,
-        emergencyAfterHoursAvailable: true,
-        emergencyRules: "Escalate urgent safety or service requests to the owner.",
-      },
-      security: {
-        companyWebsite: botTrap,
-        clientElapsedMs: Date.now() - signupStartedAtRef.current,
-        captchaProvider: CAPTCHA_PROVIDER,
-        captchaToken,
-        recaptchaToken: CAPTCHA_PROVIDER === "recaptcha" ? captchaToken : "",
-        turnstileToken: CAPTCHA_PROVIDER === "turnstile" ? captchaToken : "",
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "",
-        pageUrl: typeof window !== "undefined" ? window.location.href : "",
-      },
-    };
+    const formData = buildSignupPayload({
+      details,
+      pricing,
+      selectedAreas,
+      selectedTrade,
+      selectedAgent,
+      selectedDialogueText,
+      selectedSpecializationLabels,
+      specializationNotes,
+      botTrap,
+      captchaProvider: CAPTCHA_PROVIDER,
+      captchaToken,
+      signupStartedAt: signupStartedAtRef.current,
+    });
 
     try {
       if (!SIGNUP_SUBMIT_URL) {
         throw new Error("Signup is not connected yet. Set REACT_APP_API_BASE_URL to your Make webhook URL and rebuild.");
       }
 
-      const response = await fetch(SIGNUP_SUBMIT_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(MAKE_SIGNUP_WEBHOOK_API_KEY ? { "x-make-apikey": MAKE_SIGNUP_WEBHOOK_API_KEY } : {}),
-        },
-        body: JSON.stringify(formData),
-      });
+      const response = await postSignupPayload(SIGNUP_SUBMIT_URL, formData);
 
       const result = await parseApiResponse(response, "Signup handoff failed");
       if (!getSignupSuccess(result)) {
@@ -1901,6 +1387,7 @@ export default function Signup() {
           .business-slide-window {
             animation: businessSlideIn 780ms cubic-bezier(.16,.84,.22,1) both;
             isolation: isolate;
+            overflow: hidden;
           }
 
           .business-slide-window::after {
@@ -1926,20 +1413,20 @@ export default function Signup() {
           }
         `}
       </style>
-      <header className="min-h-16 bg-[#020918] shadow-[0_24px_60px_-48px_rgba(15,23,42,0.85)]">
+      <header className="hidden bg-[#020918] shadow-[0_24px_60px_-48px_rgba(15,23,42,0.85)]">
         <div className="mx-auto flex min-h-16 max-w-[1440px] items-center px-4 py-3 sm:px-12">
           <BrandLogo />
         </div>
       </header>
 
-      <form onSubmit={submitSignup} className="mx-auto flex min-h-[calc(100vh-64px)] w-full max-w-[1680px] flex-col px-3 pb-6 pt-3 sm:px-6 lg:px-8">
+      <form onSubmit={submitSignup} className="mx-auto flex min-h-screen w-full max-w-[1680px] flex-col px-3 pb-5 pt-1 sm:px-6 lg:px-8">
         <section className="shrink-0 text-center">
-          <h1 className="text-[clamp(1.85rem,4.6vw,3.1rem)] font-black leading-tight tracking-[-0.04em] text-slate-950">
+          <h1 className="text-[clamp(1.65rem,3.8vw,2.55rem)] font-black leading-tight tracking-[-0.04em] text-slate-950">
             Create your AI phone assistant
           </h1>
-          <p className="mt-1 text-lg font-medium text-slate-600">Set up your business assistant in minutes.</p>
+          <p className="mt-0.5 text-base font-medium text-slate-600 sm:text-lg">Set up your business assistant in minutes.</p>
 
-          <div className="mt-3 flex flex-wrap justify-center gap-x-10 gap-y-2">
+          <div className="mt-2 flex flex-wrap justify-center gap-x-8 gap-y-1.5">
             <Benefit icon="shield">Free for 14 days</Benefit>
             <Benefit icon="card">No credit card required</Benefit>
             <Benefit icon="refresh">Cancel anytime</Benefit>
@@ -1949,15 +1436,15 @@ export default function Signup() {
         </section>
 
         {currentStep === 1 ? (
-          <section className="mt-3 flex flex-1 flex-col">
+          <section className="mt-2 flex flex-1 flex-col">
             <div className="flex flex-1 flex-col rounded-3xl border border-slate-200 bg-white/96 shadow-[0_34px_90px_-70px_rgba(15,23,42,0.8)]">
               <div className="border-b border-slate-100 bg-slate-50/70 px-4 py-4 sm:px-8">
                 <div className="flex items-center justify-between gap-3">
                   <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">Business setup</p>
-                  <p className="text-xs font-black text-slate-400">{businessSlide} of 4</p>
+                  <p className="text-xs font-black text-slate-400">{businessSlide} of 5</p>
                 </div>
-                <div className="mt-4 grid grid-cols-4 gap-3">
-                  {businessSlideTabs.map((slide) => {
+                <div className="mt-4 grid grid-cols-5 gap-3">
+                  {BUSINESS_SLIDE_TABS.map((slide) => {
                     const isActive = slide.number === businessSlide;
                     const isAvailable = slide.number <= maxBusinessSlide;
                     return (
@@ -2022,6 +1509,26 @@ export default function Signup() {
                       {AREA_OPTIONS.map((area) => (
                         <AreaChip key={area} area={area} selected={selectedAreas.includes(area)} onClick={() => toggleArea(area)} />
                       ))}
+                      <button
+                        type="button"
+                        onClick={() => setBusinessSlide(1)}
+                        className="min-h-[54px] min-w-[160px] rounded-2xl border border-slate-200 bg-white px-6 py-3 text-base font-bold text-slate-600 transition hover:border-blue-300 hover:text-blue-600 sm:text-lg"
+                      >
+                        Back
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={businessSlideDisabled || busy}
+                        className={
+                          "inline-flex min-h-[54px] min-w-[260px] items-center justify-center gap-3 rounded-2xl px-6 py-3 text-base font-black text-white transition sm:text-lg " +
+                          (businessSlideDisabled || busy
+                            ? "cursor-not-allowed bg-slate-300"
+                            : "bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 shadow-[0_16px_42px_-28px_rgba(79,70,229,0.95)] hover:-translate-y-0.5 hover:brightness-110")
+                        }
+                      >
+                        {busy ? "Saving..." : businessSlideLabel}
+                        <Icon name="arrow" className="h-5 w-5" />
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -2111,6 +1618,26 @@ export default function Signup() {
                     placeholder="M5V 2T6"
                     error={getBusinessFieldError("postalCode")}
                   />
+                  <button
+                    type="button"
+                    onClick={() => setBusinessSlide(2)}
+                    className="mt-auto flex min-h-[54px] items-center justify-center rounded-xl border border-slate-200 bg-white px-5 text-base font-bold text-slate-600 transition hover:border-blue-300 hover:text-blue-600"
+                  >
+                    Back
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={businessSlideDisabled || busy}
+                    className={
+                      "mt-auto inline-flex min-h-[54px] items-center justify-center gap-3 rounded-2xl px-6 text-base font-black text-white transition sm:text-lg xl:col-span-2 " +
+                      (businessSlideDisabled || busy
+                        ? "cursor-not-allowed bg-slate-300"
+                        : "bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 shadow-[0_16px_42px_-28px_rgba(79,70,229,0.95)] hover:-translate-y-0.5 hover:brightness-110")
+                    }
+                  >
+                    {busy ? "Saving..." : businessSlideLabel}
+                    <Icon name="arrow" className="h-5 w-5" />
+                  </button>
                 </div>
               </section>
               ) : null}
@@ -2119,6 +1646,46 @@ export default function Signup() {
                 <section className="grid w-full gap-6 lg:grid-cols-[360px_minmax(0,1fr)] xl:grid-cols-[390px_minmax(0,1fr)] lg:items-stretch">
                   <div className="flex flex-col justify-center rounded-3xl border border-blue-100 bg-blue-50/70 p-8">
                     <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">Step 4</p>
+                    <h2 className="mt-2 text-[clamp(2rem,3vw,3.1rem)] font-black leading-tight tracking-[-0.04em] text-slate-950">Pricing script</h2>
+                    <p className="mt-4 text-lg font-medium leading-8 text-slate-600">Set the simple prices your assistant should explain before booking.</p>
+                  </div>
+                  <div className="grid content-start gap-4 sm:grid-cols-2 xl:grid-cols-4 xl:gap-5">
+                    <label className="sm:col-span-2 xl:col-span-2">
+                      <span className="mb-1.5 block text-sm font-semibold leading-none text-slate-700">Installations</span>
+                      <span className="flex min-h-[54px] items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 text-lg font-semibold text-slate-950 shadow-[0_1px_0_rgba(15,23,42,0.02)]">
+                        <input
+                          type="checkbox"
+                          checked={pricing.installationFreeEstimate !== false}
+                          onChange={updatePricing("installationFreeEstimate")}
+                          className="h-5 w-5 rounded border-slate-300 text-blue-600 accent-blue-600"
+                        />
+                        Free estimates for installations
+                      </span>
+                    </label>
+                    <LabeledInput
+                      label="Repairs / maintenance visit"
+                      icon="card"
+                      value={pricing.repairVisitFee}
+                      onChange={updatePricing("repairVisitFee")}
+                      placeholder="100"
+                      type="number"
+                    />
+                    <LabeledInput
+                      label="Hourly rate after that"
+                      icon="card"
+                      value={pricing.repairHourlyRate}
+                      onChange={updatePricing("repairHourlyRate")}
+                      placeholder="100"
+                      type="number"
+                    />
+                  </div>
+                </section>
+              ) : null}
+
+              {businessSlide === 5 ? (
+                <section className="grid w-full gap-6 lg:grid-cols-[360px_minmax(0,1fr)] xl:grid-cols-[390px_minmax(0,1fr)] lg:items-stretch">
+                  <div className="flex flex-col justify-center rounded-3xl border border-blue-100 bg-blue-50/70 p-8">
+                    <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">Step 5</p>
                     <h2 className="mt-2 text-[clamp(2rem,3vw,3.1rem)] font-black leading-tight tracking-[-0.04em] text-slate-950">Review</h2>
                     <p className="mt-4 text-lg font-medium leading-8 text-slate-600">Check the details before continuing. Use Back or the top columns to change anything.</p>
                   </div>
@@ -2129,6 +1696,7 @@ export default function Signup() {
                       specializations={selectedSpecializationLabels}
                       voice={selectedAgent}
                       details={details}
+                      pricing={pricing}
                       onUpdateDetails={updateDetails}
                       onEditBusinessSlide={editBusinessSlideFromReview}
                       onEditVoice={editVoiceFromReview}
@@ -2140,7 +1708,7 @@ export default function Signup() {
               ) : null}
               </div>
 
-              {businessSlide > 1 ? (
+              {businessSlide > 1 && businessSlide !== 2 && businessSlide !== 3 ? (
                 <div className="border-t border-slate-100 bg-slate-50/80 px-5 py-4 sm:px-8">
                   <div className="mx-auto grid max-w-[920px] gap-3 sm:grid-cols-[220px_minmax(0,1fr)] sm:items-center">
                     <button
@@ -2173,8 +1741,9 @@ export default function Signup() {
               trade={selectedTrade}
               areas={selectedAreas}
               specializations={selectedSpecializationLabels}
-              voice={selectedAgent}
-              details={details}
+                      voice={selectedAgent}
+                      details={details}
+              pricing={pricing}
               onUpdateDetails={updateDetails}
               onEditBusinessSlide={(slideNumber) => {
                 setCurrentStep(1);
@@ -2189,14 +1758,7 @@ export default function Signup() {
         ) : null}
 
         {currentStep === 3 ? (
-          <HumanVerificationCheck
-            provider={CAPTCHA_PROVIDER}
-            recaptchaSiteKey={RECAPTCHA_SITE_KEY}
-            recaptchaMode={RECAPTCHA_MODE}
-            useRecaptchaEnterprise={USE_RECAPTCHA_ENTERPRISE}
-            turnstileSiteKey={TURNSTILE_SITE_KEY}
-            onVerify={setCaptchaToken}
-          />
+          <HumanVerificationCheck />
         ) : null}
 
         <div className="shrink-0 pt-3">
@@ -2210,7 +1772,7 @@ export default function Signup() {
                       setBusinessSlide((slide) => Math.max(1, slide - 1));
                     } else {
                       setCurrentStep((step) => Math.max(1, step - 1));
-                      if (currentStep === 2) setBusinessSlide(4);
+                      if (currentStep === 2) setBusinessSlide(5);
                     }
                   }}
                   className="flex min-h-[54px] items-center justify-center rounded-xl border border-slate-200 bg-white px-5 text-base font-bold text-slate-600 transition hover:border-blue-300 hover:text-blue-600"
@@ -2239,11 +1801,11 @@ export default function Signup() {
               autoComplete="off"
               value={botTrap}
               onChange={(event) => setBotTrap(event.target.value)}
-              className="absolute -left-[10000px] top-auto h-px w-px opacity-0"
+              className="pointer-events-none fixed left-0 top-0 h-px w-px opacity-0"
             />
           </label>
 
-          <div className="mt-3 flex items-center justify-center gap-2 text-center text-sm font-medium text-slate-500 sm:text-base">
+          <div className="mt-1 flex items-center justify-center gap-2 text-center text-sm font-medium text-slate-500 sm:text-base">
             <Icon name="lock" className="h-4 w-4" />
             Your data is secure and will never be shared.
           </div>
