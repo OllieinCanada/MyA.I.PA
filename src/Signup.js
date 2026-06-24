@@ -856,19 +856,7 @@ async function postSignupPayload(url, formData) {
     status: 202,
     text: async () => JSON.stringify({ ok: true, reviewRequired: true }),
   };
-
-  try {
-    return await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(MAKE_SIGNUP_WEBHOOK_API_KEY ? { "x-make-apikey": MAKE_SIGNUP_WEBHOOK_API_KEY } : {}),
-      },
-      body: jsonBody,
-    });
-  } catch (error) {
-    if (!isMakeWebhookUrl(url)) throw error;
-
+  const postMakeFallback = async () => {
     try {
       await fetch(url, {
         method: "POST",
@@ -886,8 +874,28 @@ async function postSignupPayload(url, formData) {
         if (sent) return optimisticMakeResponse;
       }
 
-      throw error;
+      throw new Error("Make.com rejected the signup handoff. Check that the webhook is enabled and not requiring an API key.");
     }
+  };
+
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(MAKE_SIGNUP_WEBHOOK_API_KEY ? { "x-make-apikey": MAKE_SIGNUP_WEBHOOK_API_KEY } : {}),
+      },
+      body: jsonBody,
+    });
+
+    if (isMakeWebhookUrl(url) && (response.status === 401 || response.status === 403)) {
+      return postMakeFallback();
+    }
+
+    return response;
+  } catch (error) {
+    if (!isMakeWebhookUrl(url)) throw error;
+    return postMakeFallback();
   }
 }
 
