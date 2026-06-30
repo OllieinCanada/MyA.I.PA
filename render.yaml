@@ -12,7 +12,7 @@ services:
     plan: starter
     region: ohio
     branch: main
-    buildCommand: npm ci && npm run backend:prepare
+    buildCommand: npm install --include=dev && npm run backend:prepare
     preDeployCommand: npm run db:push
     startCommand: npm run server:prod
     healthCheckPath: /api/health
