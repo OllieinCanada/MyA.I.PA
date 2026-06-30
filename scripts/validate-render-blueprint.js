@@ -45,7 +45,7 @@ if (!service) {
   expectEqual("service plan", service.plan, "starter");
   expectEqual("service region", service.region, "ohio");
   expectEqual("service branch", service.branch, "main");
-  expectEqual("buildCommand", service.buildCommand, "npm install --include=dev && npm run backend:prepare");
+  expectEqual("buildCommand", service.buildCommand, "npm install --include=dev --legacy-peer-deps && npm run backend:prepare");
   expectEqual("preDeployCommand", service.preDeployCommand, "npm run db:push");
   expectEqual("startCommand", service.startCommand, "npm run server:prod");
   expectEqual("healthCheckPath", service.healthCheckPath, "/api/health");
