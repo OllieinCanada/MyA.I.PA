@@ -47,16 +47,33 @@ enum LeadStatus {
   ARCHIVED
 }
 
+enum CallOutcome {
+  UNREVIEWED
+  BOOKED
+  QUOTE_NEEDED
+  EMERGENCY
+  SPAM
+  FOLLOW_UP
+  NOT_A_LEAD
+}
+
+enum TaskStatus {
+  OPEN
+  DONE
+  ARCHIVED
+}
+
 model Business {
-  id        Int        @id @default(autoincrement())
-  name      String
-  phone     String
-  timezone  String
-  createdAt DateTime   @default(now())
-  settings  Settings?
-  faqs      FAQ[]
-  calls     Call[]
-  leads     Lead[]
+  id           Int                   @id @default(autoincrement())
+  name         String
+  phone        String
+  timezone     String
+  createdAt    DateTime              @default(now())
+  settings     Settings?
+  faqs         FAQ[]
+  calls        Call[]
+  leads        Lead[]
+  vapiMappings VapiBusinessMapping[]
 }
 
 model Settings {
@@ -80,23 +97,43 @@ model Caller {
 }
 
 model Call {
-  id           Int       @id @default(autoincrement())
-  businessId   Int
-  callerId     Int
-  startedAt    DateTime
-  endedAt      DateTime?
-  durationSec  Int?
-  status       CallStatus
-  recordingUrl String?
-  transcript   String?
-  createdAt    DateTime  @default(now())
-  business     Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  caller       Caller    @relation(fields: [callerId], references: [id], onDelete: Cascade)
-  lead         Lead?
+  id               Int         @id @default(autoincrement())
+  businessId       Int
+  callerId         Int
+  startedAt        DateTime
+  endedAt          DateTime?
+  durationSec      Int?
+  status           CallStatus
+  recordingUrl     String?
+  transcript       String?
+  externalProvider String?
+  externalId       String?
+  outcome          CallOutcome @default(UNREVIEWED)
+  qualityScore     Int?
+  aiSummary        String?
+  followUpNeeded   Boolean     @default(false)
+  lastAlertAt      DateTime?
+  twilioCallSid    String?     @unique
+  twilioPrice      Float?
+  twilioPriceUnit  String?
+  vapiCost         Float?
+  vapiCostBreakdown Json?
+  totalInternalCost Float?
+  costSyncedAt     DateTime?
+  createdAt        DateTime    @default(now())
+  business         Business    @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  caller           Caller      @relation(fields: [callerId], references: [id], onDelete: Cascade)
+  lead             Lead?
+  notes            CallNote[]
+  tasks            CallTask[]
 
   @@index([businessId, startedAt])
   @@index([callerId, startedAt])
   @@index([status])
+  @@index([outcome])
+  @@index([twilioCallSid])
+  @@index([costSyncedAt])
+  @@unique([externalProvider, externalId])
 }
 
 model Lead {
@@ -109,6 +146,8 @@ model Lead {
   summary        String
   callbackNumber String
   name           String
+  qualityScore   Int?
+  outcomeTag     String?
   createdAt      DateTime    @default(now())
   status         LeadStatus  @default(NEW)
   business       Business    @relation(fields: [businessId], references: [id], onDelete: Cascade)
@@ -119,6 +158,44 @@ model Lead {
   @@index([intent])
   @@index([urgency])
   @@index([status])
+}
+
+model CallNote {
+  id        Int      @id @default(autoincrement())
+  callId    Int
+  body      String
+  createdAt DateTime @default(now())
+  call      Call     @relation(fields: [callId], references: [id], onDelete: Cascade)
+
+  @@index([callId, createdAt])
+}
+
+model CallTask {
+  id        Int        @id @default(autoincrement())
+  callId    Int
+  title     String
+  status    TaskStatus @default(OPEN)
+  dueAt     DateTime?
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  call      Call       @relation(fields: [callId], references: [id], onDelete: Cascade)
+
+  @@index([callId, status])
+  @@index([dueAt])
+}
+
+model VapiBusinessMapping {
+  id         Int      @id @default(autoincrement())
+  businessId Int
+  matchType  String
+  matchValue String   @unique
+  label      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId])
+  @@index([matchType])
 }
 
 model FAQ {
@@ -132,4 +209,11 @@ model FAQ {
 
   @@index([businessId])
   @@index([question])
+}
+
+model RuntimeStore {
+  key       String   @id
+  data      Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

@@ -44,6 +44,26 @@ function toEnum(value, allowed, fallback, field) {
   return normalized;
 }
 
+function scoreCallQuality(payload) {
+  const text = [
+    payload.summary,
+    payload.aiSummary,
+    payload.transcript,
+    payload.outcome,
+    payload.status,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  let score = 35;
+  if (payload.durationSec && Number(payload.durationSec) >= 60) score += 15;
+  if (/\b(book|appointment|schedule|quote|estimate|repair|install|service|emergency|urgent)\b/.test(text)) score += 25;
+  if (/\b(address|phone|email|name|tomorrow|today|callback|call back)\b/.test(text)) score += 15;
+  if (/\b(spam|wrong number|telemarketer|sales call|not interested)\b/.test(text)) score -= 45;
+  if (String(payload.status || "").toUpperCase() === "MISSED") score -= 15;
+  return Math.max(0, Math.min(100, Number(payload.qualityScore ?? score)));
+}
+
 async function ensureBusiness(businessId) {
   const id = Number(businessId || 1);
   if (!Number.isInteger(id) || id <= 0) {
@@ -80,8 +100,12 @@ async function logCall(payload) {
   });
 
   const status = toEnum(payload.status, ["STARTED", "COMPLETED", "MISSED", "ABANDONED", "FAILED"], "STARTED", "status");
+  const outcome = toEnum(payload.outcome, ["UNREVIEWED", "BOOKED", "QUOTE_NEEDED", "EMERGENCY", "SPAM", "FOLLOW_UP", "NOT_A_LEAD"], "UNREVIEWED", "outcome");
   const startedAt = payload.startedAt ? new Date(payload.startedAt) : new Date();
   const endedAt = payload.endedAt ? new Date(payload.endedAt) : null;
+  const externalProvider = optionalString(payload.externalProvider, 80);
+  const externalId = optionalString(payload.externalId, 180);
+  const qualityScore = scoreCallQuality(payload);
 
   if (Number.isNaN(startedAt.getTime()) || (endedAt && Number.isNaN(endedAt.getTime()))) {
     const err = new Error("Invalid startedAt or endedAt");
@@ -102,12 +126,58 @@ async function logCall(payload) {
           durationSec: payload.durationSec == null ? existing.durationSec : Number(payload.durationSec),
           transcript: payload.transcript == null ? existing.transcript : sanitizeTranscript(payload.transcript),
           recordingUrl: payload.recordingUrl == null ? existing.recordingUrl : sanitizeRecordingUrl(payload.recordingUrl),
+          externalProvider: externalProvider == null ? existing.externalProvider : externalProvider,
+          externalId: externalId == null ? existing.externalId : externalId,
+          outcome,
+          qualityScore,
+          aiSummary: payload.aiSummary == null ? existing.aiSummary : optionalString(payload.aiSummary, 2000),
+          followUpNeeded: Boolean(payload.followUpNeeded ?? existing.followUpNeeded),
+          twilioCallSid: payload.twilioCallSid == null ? existing.twilioCallSid : optionalString(payload.twilioCallSid, 120),
+          twilioPrice: payload.twilioPrice == null ? existing.twilioPrice : Number(payload.twilioPrice),
+          twilioPriceUnit: payload.twilioPriceUnit == null ? existing.twilioPriceUnit : optionalString(payload.twilioPriceUnit, 16),
+          vapiCost: payload.vapiCost == null ? existing.vapiCost : Number(payload.vapiCost),
+          vapiCostBreakdown: payload.vapiCostBreakdown == null ? existing.vapiCostBreakdown : payload.vapiCostBreakdown,
+          totalInternalCost: payload.totalInternalCost == null ? existing.totalInternalCost : Number(payload.totalInternalCost),
+          costSyncedAt: payload.costSyncedAt == null ? existing.costSyncedAt : new Date(payload.costSyncedAt),
           callerId: caller.id,
           businessId: business.id,
         },
-        include: { caller: true },
+        include: { caller: true, business: true },
       });
       return updated;
+    }
+  }
+
+  if (externalProvider && externalId) {
+    const existingExternal = await prisma.call.findUnique({
+      where: { externalProvider_externalId: { externalProvider, externalId } },
+    });
+    if (existingExternal) {
+      return prisma.call.update({
+        where: { id: existingExternal.id },
+        data: {
+          businessId: business.id,
+          callerId: caller.id,
+          startedAt,
+          endedAt,
+          durationSec: payload.durationSec == null ? existingExternal.durationSec : Number(payload.durationSec),
+          status,
+          transcript: payload.transcript == null ? existingExternal.transcript : sanitizeTranscript(payload.transcript),
+          recordingUrl: payload.recordingUrl == null ? existingExternal.recordingUrl : sanitizeRecordingUrl(payload.recordingUrl),
+          outcome,
+          qualityScore,
+          aiSummary: payload.aiSummary == null ? existingExternal.aiSummary : optionalString(payload.aiSummary, 2000),
+          followUpNeeded: Boolean(payload.followUpNeeded ?? existingExternal.followUpNeeded),
+          twilioCallSid: payload.twilioCallSid == null ? existingExternal.twilioCallSid : optionalString(payload.twilioCallSid, 120),
+          twilioPrice: payload.twilioPrice == null ? existingExternal.twilioPrice : Number(payload.twilioPrice),
+          twilioPriceUnit: payload.twilioPriceUnit == null ? existingExternal.twilioPriceUnit : optionalString(payload.twilioPriceUnit, 16),
+          vapiCost: payload.vapiCost == null ? existingExternal.vapiCost : Number(payload.vapiCost),
+          vapiCostBreakdown: payload.vapiCostBreakdown == null ? existingExternal.vapiCostBreakdown : payload.vapiCostBreakdown,
+          totalInternalCost: payload.totalInternalCost == null ? existingExternal.totalInternalCost : Number(payload.totalInternalCost),
+          costSyncedAt: payload.costSyncedAt == null ? existingExternal.costSyncedAt : new Date(payload.costSyncedAt),
+        },
+        include: { caller: true, business: true },
+      });
     }
   }
 
@@ -121,8 +191,21 @@ async function logCall(payload) {
       status,
       transcript: sanitizeTranscript(payload.transcript),
       recordingUrl: sanitizeRecordingUrl(payload.recordingUrl),
+      externalProvider,
+      externalId,
+      outcome,
+      qualityScore,
+      aiSummary: optionalString(payload.aiSummary, 2000),
+      followUpNeeded: Boolean(payload.followUpNeeded),
+      twilioCallSid: optionalString(payload.twilioCallSid, 120),
+      twilioPrice: payload.twilioPrice == null ? null : Number(payload.twilioPrice),
+      twilioPriceUnit: optionalString(payload.twilioPriceUnit, 16),
+      vapiCost: payload.vapiCost == null ? null : Number(payload.vapiCost),
+      vapiCostBreakdown: payload.vapiCostBreakdown || undefined,
+      totalInternalCost: payload.totalInternalCost == null ? null : Number(payload.totalInternalCost),
+      costSyncedAt: payload.costSyncedAt ? new Date(payload.costSyncedAt) : null,
     },
-    include: { caller: true },
+    include: { caller: true, business: true },
   });
 
   return created;
@@ -164,6 +247,8 @@ async function createLead(payload) {
       summary,
       callbackNumber,
       name,
+      qualityScore: payload.qualityScore == null ? null : Math.max(0, Math.min(100, Number(payload.qualityScore) || 0)),
+      outcomeTag: optionalString(payload.outcomeTag, 80),
       status,
     },
     include: {

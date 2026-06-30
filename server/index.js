@@ -3,6 +3,10 @@ require("dotenv").config();
 const crypto = require("crypto");
 const cors = require("cors");
 const express = require("express");
+const fs = require("fs");
+const nodemailer = require("nodemailer");
+const path = require("path");
+const Stripe = require("stripe");
 const { prisma } = require("./prisma");
 const {
   createLead,
@@ -15,10 +19,15 @@ const {
 
 const app = express();
 const PORT = Number(process.env.PORT || 8787);
+const dataDir = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.join(__dirname, "..", "data");
 const assistantRateLimit = new Map();
 const signupIpRateLimit = new Map();
 const signupIdentityRateLimit = new Map();
 const signupDuplicateSubmissions = new Map();
+const pendingSignupPath = path.join(dataDir, "pending-signup-verifications.json");
+const trialReminderPath = path.join(dataDir, "trial-reminders.json");
+const signupDashboardPath = path.join(dataDir, "signup-dashboard.json");
+const vapiCallSyncPath = path.join(dataDir, "vapi-call-sync.json");
 const GOOGLE_RECAPTCHA_TEST_SECRET_KEY = "6LeIxAcTAAAAAGG-vFI1TnRWxMZNFuojJ4WifJWe";
 const ASSISTANT_MAX_CHARS = 2000;
 const ASSISTANT_WINDOW_MS = 60 * 1000;
@@ -39,15 +48,106 @@ const EXPOSE_RECORDING_URLS_IN_ADMIN = /^(1|true|yes|on)$/i.test(String(process.
 const CALL_TRANSCRIPT_RETENTION_DAYS = Math.max(0, Number(process.env.CALL_TRANSCRIPT_RETENTION_DAYS || 0) || 0);
 const CALL_RECORDING_RETENTION_DAYS = Math.max(0, Number(process.env.CALL_RECORDING_RETENTION_DAYS || 0) || 0);
 const SENSITIVE_CALL_CLEANUP_INTERVAL_MS = 1000 * 60 * 60 * 6;
+const SIGNUP_VERIFICATION_TTL_MS = parsePositiveInt(process.env.SIGNUP_VERIFICATION_TTL_MS, 24 * 60 * 60 * 1000);
+const TRIAL_REMINDER_CHECK_INTERVAL_MS = parsePositiveInt(process.env.TRIAL_REMINDER_CHECK_INTERVAL_MS, 60 * 60 * 1000);
+const TRIAL_HALFWAY_REMINDER_DAYS = parsePositiveInt(process.env.TRIAL_HALFWAY_REMINDER_DAYS, 7);
+const STRIPE_SECRET_KEY = String(process.env.STRIPE_SECRET_KEY || "").trim();
+const STRIPE_PRICE_ID = String(process.env.STRIPE_PRICE_ID || "").trim();
+const STRIPE_WEBHOOK_SECRET = String(process.env.STRIPE_WEBHOOK_SECRET || "").trim();
+const STRIPE_TRIAL_DAYS = Math.max(0, Number(process.env.STRIPE_TRIAL_DAYS || 14) || 0);
+const stripe = STRIPE_SECRET_KEY ? new Stripe(STRIPE_SECRET_KEY) : null;
+const VAPI_API_KEY = String(process.env.VAPI_API_KEY || "").trim();
+const VAPI_API_BASE_URL = String(process.env.VAPI_API_BASE_URL || "https://api.vapi.ai").trim().replace(/\/+$/, "");
+const VAPI_CALL_LIMIT = Math.max(1, Math.min(1000, Number(process.env.VAPI_CALL_LIMIT || 100) || 100));
+const VAPI_DEFAULT_BUSINESS_ID = parsePositiveInt(process.env.VAPI_DEFAULT_BUSINESS_ID, 1);
+const VAPI_AUTO_SYNC_INTERVAL_MS = parsePositiveInt(process.env.VAPI_AUTO_SYNC_INTERVAL_MS, 15 * 60 * 1000);
+const VAPI_AUTO_SYNC_ENABLED = isEnabled(process.env.VAPI_AUTO_SYNC_ENABLED);
+const TWILIO_ACCOUNT_SID = String(process.env.TWILIO_ACCOUNT_SID || "").trim();
+const TWILIO_AUTH_TOKEN = String(process.env.TWILIO_AUTH_TOKEN || "").trim();
+const TWILIO_API_BASE_URL = String(process.env.TWILIO_API_BASE_URL || "https://api.twilio.com").trim().replace(/\/+$/, "");
+const MISSED_CALL_ALERT_ENABLED = isEnabled(process.env.MISSED_CALL_ALERT_ENABLED);
+const DAILY_DIGEST_ENABLED = isEnabled(process.env.DAILY_DIGEST_ENABLED);
+const DEFAULT_ALLOWED_ORIGINS = [
+  "https://www.myaipa.ca",
+  "https://myaipa.ca",
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+];
+const ALLOWED_ORIGINS = parseCsv(process.env.ALLOWED_ORIGINS || process.env.CORS_ORIGINS);
+
+app.set("trust proxy", 1);
 
 app.use(
   cors({
     origin(origin, callback) {
-      callback(null, origin || true);
+      if (!origin || isAllowedOrigin(origin)) return callback(null, true);
+      return callback(null, false);
     },
     credentials: true,
   })
 );
+
+app.post("/api/payments/stripe-webhook", express.raw({ type: "application/json" }), asyncRoute(async (req, res) => {
+  if (!stripe || !STRIPE_WEBHOOK_SECRET) {
+    return res.status(503).json({ error: "Stripe webhook is not configured." });
+  }
+
+  const signature = req.headers["stripe-signature"];
+  let event;
+
+  try {
+    event = stripe.webhooks.constructEvent(req.body, signature, STRIPE_WEBHOOK_SECRET);
+  } catch (error) {
+    console.error("[stripe:webhook] signature verification failed", { message: error?.message || String(error) });
+    return res.status(400).send(`Webhook Error: ${error.message}`);
+  }
+
+  const object = event.data?.object || {};
+  if (
+    event.type === "checkout.session.completed" ||
+    event.type === "customer.subscription.created" ||
+    event.type === "customer.subscription.updated" ||
+    event.type === "customer.subscription.deleted" ||
+    event.type === "invoice.payment_failed"
+  ) {
+    console.log("[stripe:webhook] received", {
+      type: event.type,
+      id: object.id,
+      customer: object.customer || object.customer_email || null,
+      status: object.status || object.payment_status || null,
+      metadata: object.metadata || {},
+    });
+  }
+
+  if (event.type === "checkout.session.completed") {
+    await scheduleTrialReminderFromCheckoutSession(object);
+    upsertSignupDashboardFromCheckoutSession(object, { status: "checkout_completed" });
+  }
+
+  if (event.type === "customer.subscription.created" || event.type === "customer.subscription.updated") {
+    scheduleTrialReminderFromSubscription(object);
+    upsertSignupDashboardFromSubscription(object);
+  }
+
+  if (event.type === "customer.subscription.deleted") {
+    markTrialReminderCancelled(object.id);
+    upsertSignupDashboardFromSubscription(object, { status: "subscription_cancelled" });
+  }
+
+  if (event.type === "invoice.payment_failed") {
+    upsertSignupDashboardRecord({
+      subscriptionId: typeof object.subscription === "string" ? object.subscription : object.subscription?.id || "",
+      customerId: typeof object.customer === "string" ? object.customer : object.customer?.id || "",
+      ownerEmail: String(object.customer_email || "").trim(),
+      paymentStatus: "payment_failed",
+      lastPaymentFailedAt: new Date().toISOString(),
+      status: "payment_failed",
+    });
+  }
+
+  res.json({ received: true });
+}));
+
 app.use(express.json({ limit: "15mb" }));
 
 function asyncRoute(handler) {
@@ -58,6 +158,28 @@ function parsePositiveInt(value, fallback) {
   if (value == null || value === "") return fallback;
   const n = Number(value);
   return Number.isInteger(n) && n > 0 ? n : fallback;
+}
+
+function withTimeout(promise, ms, message) {
+  let timer;
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(message)), ms);
+    }),
+  ]).finally(() => clearTimeout(timer));
+}
+
+function parseCsv(value) {
+  return String(value || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function isAllowedOrigin(origin) {
+  const allowed = ALLOWED_ORIGINS.length ? ALLOWED_ORIGINS : DEFAULT_ALLOWED_ORIGINS;
+  return allowed.includes(origin);
 }
 
 function parseCookies(req) {
@@ -162,6 +284,1417 @@ function getMakeSignupWebhookConfig() {
     url: String(process.env.MAKE_SIGNUP_WEBHOOK_URL || "").trim(),
     apiKey: String(process.env.MAKE_SIGNUP_WEBHOOK_API_KEY || "").trim(),
   };
+}
+
+function getPublicBaseUrl(req) {
+  const configured = String(process.env.PUBLIC_APP_URL || process.env.APP_URL || "").trim().replace(/\/+$/, "");
+  if (configured) return configured;
+
+  const proto = String(req.headers["x-forwarded-proto"] || req.protocol || "http").split(",")[0].trim();
+  const host = String(req.headers["x-forwarded-host"] || req.headers.host || "").split(",")[0].trim();
+  return host ? `${proto}://${host}` : "http://localhost:3000";
+}
+
+function getStripeReturnUrls(req) {
+  const baseUrl = getPublicBaseUrl(req);
+  return {
+    successUrl: String(process.env.STRIPE_SUCCESS_URL || "").trim() || `${baseUrl}/#/signup?payment=success`,
+    cancelUrl: String(process.env.STRIPE_CANCEL_URL || "").trim() || `${baseUrl}/#/signup?payment=cancelled`,
+  };
+}
+
+function getSignupVerificationUrl(req, token) {
+  const configured = String(process.env.SIGNUP_VERIFICATION_BASE_URL || "").trim().replace(/\/+$/, "");
+  const baseUrl = configured || getPublicBaseUrl(req);
+  return `${baseUrl}/api/integrations/verify-signup-email?token=${encodeURIComponent(token)}`;
+}
+
+function getEmailTransportConfig() {
+  const host = String(process.env.SMTP_HOST || "").trim();
+  const port = Number(process.env.SMTP_PORT || 587);
+  const user = String(process.env.SMTP_USER || "").trim();
+  const pass = String(process.env.SMTP_PASS || "").trim();
+  const from = String(process.env.EMAIL_FROM || process.env.SMTP_FROM || "").trim();
+
+  if (!host || !from) return null;
+
+  return {
+    from,
+    transport: {
+      host,
+      port: Number.isFinite(port) && port > 0 ? port : 587,
+      secure: isEnabled(process.env.SMTP_SECURE),
+      auth: user || pass ? { user, pass } : undefined,
+    },
+  };
+}
+
+function ensurePendingSignupStore() {
+  fs.mkdirSync(path.dirname(pendingSignupPath), { recursive: true });
+  if (!fs.existsSync(pendingSignupPath)) {
+    fs.writeFileSync(pendingSignupPath, "{}\n");
+  }
+}
+
+function readPendingSignupStore() {
+  ensurePendingSignupStore();
+  try {
+    const data = JSON.parse(fs.readFileSync(pendingSignupPath, "utf8"));
+    return data && typeof data === "object" ? data : {};
+  } catch {
+    return {};
+  }
+}
+
+function writePendingSignupStore(store) {
+  ensurePendingSignupStore();
+  fs.writeFileSync(pendingSignupPath, `${JSON.stringify(store, null, 2)}\n`);
+}
+
+function hashSignupVerificationToken(token) {
+  return crypto.createHash("sha256").update(String(token || "")).digest("hex");
+}
+
+function prunePendingSignupStore(store, now = Date.now()) {
+  for (const [tokenHash, record] of Object.entries(store)) {
+    if (record?.usedAt || Number(record?.expiresAt || 0) <= now) {
+      delete store[tokenHash];
+    }
+  }
+  return store;
+}
+
+function createPendingSignupVerification({ payload, ownerEmail, businessName, reviewReasons, ipHash }) {
+  const token = crypto.randomBytes(32).toString("base64url");
+  const tokenHash = hashSignupVerificationToken(token);
+  const now = Date.now();
+  const store = prunePendingSignupStore(readPendingSignupStore(), now);
+
+  store[tokenHash] = {
+    tokenHash,
+    ownerEmail,
+    businessName,
+    reviewReasons: Array.isArray(reviewReasons) ? reviewReasons : [],
+    ipHash,
+    payload,
+    createdAt: now,
+    expiresAt: now + SIGNUP_VERIFICATION_TTL_MS,
+  };
+
+  writePendingSignupStore(store);
+  return token;
+}
+
+async function sendSignupVerificationEmail({ req, ownerEmail, ownerName, businessName, token }) {
+  const verificationUrl = getSignupVerificationUrl(req, token);
+  const emailConfig = getEmailTransportConfig();
+  const subject = `Verify your email for ${businessName || "My AI PA"}`;
+  const safeOwnerName = ownerName || "there";
+  const text = [
+    `Hi ${safeOwnerName},`,
+    "",
+    "Please verify your email before we create your My AI PA agent.",
+    "",
+    verificationUrl,
+    "",
+    "This link expires in 24 hours. If you did not request this, you can ignore this email.",
+  ].join("\n");
+  const html = `
+    <div style="font-family:Arial,sans-serif;line-height:1.55;color:#0f172a;max-width:640px">
+      <h1 style="font-size:28px;line-height:1.1;margin:0 0 16px">Verify your email</h1>
+      <p>Hi ${escapeHtml(safeOwnerName)},</p>
+      <p>Please verify your email before we create your My AI PA agent for <strong>${escapeHtml(businessName || "your business")}</strong>.</p>
+      <p>
+        <a href="${verificationUrl}" style="display:inline-block;background:#07142a;color:#fff;text-decoration:none;font-weight:700;padding:14px 18px;border-radius:10px">
+          Verify email and continue setup
+        </a>
+      </p>
+      <p style="font-size:14px;color:#475569">This link expires in 24 hours. If the button does not work, copy and paste this URL into your browser:</p>
+      <p style="font-size:14px;word-break:break-all;color:#2563eb">${verificationUrl}</p>
+    </div>
+  `;
+
+  if (!emailConfig) {
+    if (process.env.NODE_ENV !== "production" || isEnabled(process.env.EMAIL_VERIFICATION_DEV_MODE)) {
+      console.warn("[signup:verification] SMTP is not configured. Dev verification link:", verificationUrl);
+      return { sent: false, devVerificationUrl: verificationUrl };
+    }
+    const err = new Error("Email verification is enabled, but SMTP is not configured.");
+    err.statusCode = 500;
+    throw err;
+  }
+
+  const transporter = nodemailer.createTransport(emailConfig.transport);
+  await transporter.sendMail({
+    from: emailConfig.from,
+    to: ownerEmail,
+    subject,
+    text,
+    html,
+  });
+
+  return { sent: true };
+}
+
+function ensureTrialReminderStore() {
+  fs.mkdirSync(path.dirname(trialReminderPath), { recursive: true });
+  if (!fs.existsSync(trialReminderPath)) {
+    fs.writeFileSync(trialReminderPath, "{}\n");
+  }
+}
+
+function readTrialReminderStore() {
+  ensureTrialReminderStore();
+  try {
+    const data = JSON.parse(fs.readFileSync(trialReminderPath, "utf8"));
+    return data && typeof data === "object" ? data : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeTrialReminderStore(store) {
+  ensureTrialReminderStore();
+  fs.writeFileSync(trialReminderPath, `${JSON.stringify(store, null, 2)}\n`);
+}
+
+function ensureSignupDashboardStore() {
+  fs.mkdirSync(path.dirname(signupDashboardPath), { recursive: true });
+  if (!fs.existsSync(signupDashboardPath)) {
+    fs.writeFileSync(signupDashboardPath, "{}\n");
+  }
+}
+
+function readSignupDashboardStore() {
+  ensureSignupDashboardStore();
+  try {
+    const data = JSON.parse(fs.readFileSync(signupDashboardPath, "utf8"));
+    return data && typeof data === "object" ? data : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeSignupDashboardStore(store) {
+  ensureSignupDashboardStore();
+  fs.writeFileSync(signupDashboardPath, `${JSON.stringify(store, null, 2)}\n`);
+}
+
+function ensureVapiCallSyncStore() {
+  fs.mkdirSync(path.dirname(vapiCallSyncPath), { recursive: true });
+  if (!fs.existsSync(vapiCallSyncPath)) {
+    fs.writeFileSync(vapiCallSyncPath, "{}\n");
+  }
+}
+
+function readVapiCallSyncStore() {
+  ensureVapiCallSyncStore();
+  try {
+    const data = JSON.parse(fs.readFileSync(vapiCallSyncPath, "utf8"));
+    return data && typeof data === "object" ? data : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeVapiCallSyncStore(store) {
+  ensureVapiCallSyncStore();
+  fs.writeFileSync(vapiCallSyncPath, `${JSON.stringify(store, null, 2)}\n`);
+}
+
+function parseVapiBusinessMap() {
+  const raw = String(process.env.VAPI_BUSINESS_MAP || "").trim();
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    return Object.fromEntries(
+      Object.entries(parsed)
+        .map(([key, value]) => [String(key).trim().toLowerCase(), Number(value)])
+        .filter(([key, value]) => key && Number.isInteger(value) && value > 0)
+    );
+  } catch (error) {
+    console.warn("[vapi:sync] VAPI_BUSINESS_MAP must be valid JSON", { message: error?.message || String(error) });
+    return {};
+  }
+}
+
+function normalizePhoneForMatch(value) {
+  return String(value || "").replace(/[^\d+]/g, "").replace(/^00/, "+").toLowerCase();
+}
+
+function getVapiNestedString(value, paths) {
+  for (const pathKey of paths) {
+    const parts = pathKey.split(".");
+    let cursor = value;
+    for (const part of parts) {
+      cursor = cursor && typeof cursor === "object" ? cursor[part] : undefined;
+    }
+    if (cursor != null && String(cursor).trim()) return String(cursor).trim();
+  }
+  return "";
+}
+
+async function resolveBusinessIdForVapiCall(call) {
+  const businessMap = parseVapiBusinessMap();
+  const keys = [
+    call.assistantId,
+    call.assistant?.id,
+    call.phoneNumberId,
+    call.phoneNumber?.id,
+    call.metadata?.businessId,
+    call.metadata?.companyId,
+    normalizePhoneForMatch(call.phoneNumber?.number),
+    normalizePhoneForMatch(call.phoneNumber?.twilioPhoneNumber),
+    normalizePhoneForMatch(call.destination?.number),
+    normalizePhoneForMatch(call.to),
+  ]
+    .map((item) => String(item || "").trim().toLowerCase())
+    .filter(Boolean);
+
+  for (const key of keys) {
+    if (businessMap[key]) return businessMap[key];
+  }
+
+  if (keys.length) {
+    const mapping = await prisma.vapiBusinessMapping.findFirst({
+      where: { matchValue: { in: keys } },
+      select: { businessId: true },
+    });
+    if (mapping?.businessId) return mapping.businessId;
+  }
+
+  const calledNumber = normalizePhoneForMatch(
+    call.phoneNumber?.number ||
+      call.phoneNumber?.twilioPhoneNumber ||
+      call.destination?.number ||
+      call.to ||
+      ""
+  );
+  if (calledNumber) {
+    const businesses = await prisma.business.findMany({ select: { id: true, phone: true } });
+    const matched = businesses.find((business) => normalizePhoneForMatch(business.phone) === calledNumber);
+    if (matched) return matched.id;
+  }
+
+  return VAPI_DEFAULT_BUSINESS_ID;
+}
+
+function mapVapiStatus(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (normalized.includes("ended") || normalized.includes("hangup")) return "COMPLETED";
+  if (["ended", "completed", "complete", "success", "successful"].includes(normalized)) return "COMPLETED";
+  if (["failed", "error"].includes(normalized)) return "FAILED";
+  if (["missed", "no-answer", "no_answer"].includes(normalized)) return "MISSED";
+  if (["abandoned", "canceled", "cancelled"].includes(normalized)) return "ABANDONED";
+  return "STARTED";
+}
+
+function getVapiDurationSeconds(call) {
+  const direct = Number(call.durationSec || call.durationSeconds || call.duration || 0);
+  if (Number.isFinite(direct) && direct > 0) return Math.round(direct);
+  const startedAt = new Date(call.startedAt || call.createdAt || call.started_at || 0).getTime();
+  const endedAt = new Date(call.endedAt || call.ended_at || call.completedAt || call.endedReasonAt || 0).getTime();
+  if (startedAt && endedAt && endedAt > startedAt) return Math.round((endedAt - startedAt) / 1000);
+  return null;
+}
+
+function getVapiTranscript(call) {
+  return (
+    getVapiNestedString(call, [
+      "transcript",
+      "artifact.transcript",
+      "analysis.transcript",
+      "summary",
+      "analysis.summary",
+    ]) || null
+  );
+}
+
+function getVapiSummary(call) {
+  return (
+    getVapiNestedString(call, [
+      "summary",
+      "analysis.summary",
+      "artifact.summary",
+    ]) || null
+  );
+}
+
+function getVapiRecordingUrl(call) {
+  return (
+    getVapiNestedString(call, [
+      "recordingUrl",
+      "recording.url",
+      "artifact.recordingUrl",
+      "artifact.recording.url",
+      "stereoRecordingUrl",
+    ]) || null
+  );
+}
+
+function getVapiTwilioCallSid(call) {
+  return (
+    getVapiNestedString(call, [
+      "twilioCallSid",
+      "twilio.callSid",
+      "phoneCallProviderDetails.twilioCallSid",
+      "phoneCallProviderDetails.callSid",
+      "transport.callSid",
+      "metadata.twilioCallSid",
+    ]) || null
+  );
+}
+
+function numberOrNull(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function getVapiCostBreakdown(call) {
+  const candidates = [
+    call?.costBreakdown,
+    call?.costs,
+    call?.costsBreakdown,
+    call?.analysis?.costBreakdown,
+    call?.artifact?.costBreakdown,
+  ];
+  const found = candidates.find((item) => item && typeof item === "object");
+  return found || null;
+}
+
+function getVapiCost(call) {
+  const direct = numberOrNull(call?.cost || call?.totalCost || call?.costInUsd || call?.price);
+  if (direct != null) return Math.abs(direct);
+
+  const breakdown = getVapiCostBreakdown(call);
+  if (!breakdown) return null;
+
+  if (Array.isArray(breakdown)) {
+    const total = breakdown.reduce((sum, item) => sum + Math.abs(numberOrNull(item?.cost || item?.amount || item?.price) || 0), 0);
+    return total || null;
+  }
+
+  const total = Object.values(breakdown).reduce((sum, value) => {
+    if (typeof value === "number" || typeof value === "string") return sum + Math.abs(numberOrNull(value) || 0);
+    if (value && typeof value === "object") return sum + Math.abs(numberOrNull(value.cost || value.amount || value.price) || 0);
+    return sum;
+  }, 0);
+  return total || null;
+}
+
+async function fetchVapiCalls({ limit = VAPI_CALL_LIMIT, createdAtGt } = {}) {
+  if (!VAPI_API_KEY) {
+    const err = new Error("VAPI_API_KEY is not configured.");
+    err.statusCode = 503;
+    throw err;
+  }
+
+  const url = new URL(`${VAPI_API_BASE_URL}/call`);
+  url.searchParams.set("limit", String(Math.max(1, Math.min(1000, Number(limit) || VAPI_CALL_LIMIT))));
+  if (createdAtGt) url.searchParams.set("createdAtGt", String(createdAtGt));
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${VAPI_API_KEY}`,
+      Accept: "application/json",
+    },
+  });
+  const rawText = await response.text();
+  const data = parseJsonObject(rawText);
+
+  if (!response.ok) {
+    const err = new Error(data?.message || data?.error || `Vapi call fetch failed with HTTP ${response.status}.`);
+    err.statusCode = response.status;
+    throw err;
+  }
+
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.data)) return data.data;
+  if (Array.isArray(data?.calls)) return data.calls;
+  if (Array.isArray(data?.results)) return data.results;
+  return [];
+}
+
+async function syncVapiCalls(options = {}) {
+  const calls = await fetchVapiCalls(options);
+  const store = readVapiCallSyncStore();
+  const results = [];
+
+  for (const call of calls) {
+    const vapiCallId = String(call?.id || call?.callId || "").trim();
+    if (!vapiCallId) continue;
+
+    const existing = store[vapiCallId] || {};
+    const businessId = await resolveBusinessIdForVapiCall(call);
+    const callerPhone =
+      getVapiNestedString(call, ["customer.number", "customer.phoneNumber", "caller.number", "from", "fromNumber"]) ||
+      `unknown-vapi-${vapiCallId}`;
+    const callerName = getVapiNestedString(call, ["customer.name", "caller.name", "metadata.customerName"]);
+    const startedAt = call.startedAt || call.started_at || call.createdAt || call.created_at || new Date().toISOString();
+    const endedAt = call.endedAt || call.ended_at || call.completedAt || null;
+    const vapiCost = getVapiCost(call);
+    const twilioCallSid = getVapiTwilioCallSid(call);
+    const localCall = await logCall({
+      callId: existing.localCallId,
+      businessId,
+      callerPhone,
+      callerName,
+      startedAt,
+      endedAt,
+      durationSec: getVapiDurationSeconds(call),
+      status: mapVapiStatus(call.status || call.endedReason),
+      transcript: getVapiTranscript(call),
+      recordingUrl: getVapiRecordingUrl(call),
+      externalProvider: "vapi",
+      externalId: vapiCallId,
+      aiSummary: getVapiSummary(call),
+      twilioCallSid,
+      vapiCost,
+      vapiCostBreakdown: getVapiCostBreakdown(call),
+      totalInternalCost: vapiCost,
+      costSyncedAt: vapiCost != null || twilioCallSid ? new Date().toISOString() : null,
+      followUpNeeded: /follow|quote|estimate|book|schedule|urgent|emergency/i.test(
+        [getVapiSummary(call), getVapiTranscript(call), call.endedReason].filter(Boolean).join(" ")
+      ),
+    });
+
+    store[vapiCallId] = {
+      ...existing,
+      vapiCallId,
+      localCallId: localCall.id,
+      businessId,
+      assistantId: call.assistantId || call.assistant?.id || "",
+      phoneNumberId: call.phoneNumberId || call.phoneNumber?.id || "",
+      twilioCallSid: twilioCallSid || existing.twilioCallSid || "",
+      syncedAt: new Date().toISOString(),
+    };
+    results.push({ vapiCallId, localCallId: localCall.id, businessId });
+  }
+
+  writeVapiCallSyncStore(store);
+  return { fetched: calls.length, synced: results.length, results };
+}
+
+async function fetchTwilioCalls({ days = 30, limit = 1000 } = {}) {
+  if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN) {
+    const err = new Error("Twilio credentials are not configured.");
+    err.statusCode = 503;
+    throw err;
+  }
+
+  const { start } = getDateRange(days);
+  const url = new URL(`${TWILIO_API_BASE_URL}/2010-04-01/Accounts/${encodeURIComponent(TWILIO_ACCOUNT_SID)}/Calls.json`);
+  url.searchParams.set("PageSize", String(Math.max(1, Math.min(1000, Number(limit) || 1000))));
+  url.searchParams.set("StartTimeAfter", start.toISOString().slice(0, 10));
+
+  const auth = Buffer.from(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`).toString("base64");
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Basic ${auth}`,
+      Accept: "application/json",
+    },
+  });
+  const rawText = await response.text();
+  const data = parseJsonObject(rawText);
+
+  if (!response.ok) {
+    const err = new Error(data?.message || data?.error || `Twilio call fetch failed with HTTP ${response.status}.`);
+    err.statusCode = response.status;
+    throw err;
+  }
+
+  return Array.isArray(data?.calls) ? data.calls : [];
+}
+
+function normalizeTwilioCall(call) {
+  const startedAt = call?.start_time || call?.date_created || call?.date_updated || null;
+  const endedAt = call?.end_time || null;
+  const rawPrice = numberOrNull(call?.price);
+  return {
+    sid: String(call?.sid || "").trim(),
+    from: normalizePhoneForMatch(call?.from || ""),
+    to: normalizePhoneForMatch(call?.to || ""),
+    phoneNumberSid: String(call?.phone_number_sid || "").trim(),
+    direction: String(call?.direction || "").trim(),
+    status: String(call?.status || "").trim(),
+    startedAt,
+    startedAtMs: startedAt ? new Date(startedAt).getTime() : 0,
+    endedAt,
+    durationSec: numberOrNull(call?.duration),
+    price: rawPrice == null ? null : Math.abs(rawPrice),
+    priceUnit: String(call?.price_unit || "").trim() || null,
+  };
+}
+
+function scoreTwilioCallMatch(localCall, twilioCall, businessNumbers) {
+  if (!localCall || !twilioCall?.sid) return -1;
+  if (localCall.twilioCallSid && localCall.twilioCallSid === twilioCall.sid) return 10000;
+
+  const startedAtMs = new Date(localCall.startedAt).getTime();
+  if (!startedAtMs || !twilioCall.startedAtMs) return -1;
+
+  const callerPhone = normalizePhoneForMatch(localCall.caller?.phone || "");
+  const localDuration = Number(localCall.durationSec || 0);
+  const timeDiffSec = Math.abs(startedAtMs - twilioCall.startedAtMs) / 1000;
+  const durationDiff = localDuration && twilioCall.durationSec != null ? Math.abs(localDuration - twilioCall.durationSec) : 0;
+
+  if (timeDiffSec > 15 * 60) return -1;
+  if (localDuration && twilioCall.durationSec != null && durationDiff > 45) return -1;
+
+  let score = 0;
+  if (callerPhone && (callerPhone === twilioCall.from || callerPhone === twilioCall.to)) score += 60;
+  if (businessNumbers.some((number) => number && (number === twilioCall.to || number === twilioCall.from))) score += 40;
+  score += Math.max(0, 40 - timeDiffSec / 15);
+  if (localDuration && twilioCall.durationSec != null) score += Math.max(0, 20 - durationDiff);
+  return score;
+}
+
+async function syncTwilioCallCosts({ days = 30, limit = 1000 } = {}) {
+  const twilioCalls = (await fetchTwilioCalls({ days, limit })).map(normalizeTwilioCall).filter((call) => call.sid);
+  const { start } = getDateRange(days);
+  const localCalls = await prisma.call.findMany({
+    where: { startedAt: { gte: start } },
+    include: { caller: true, business: { include: { vapiMappings: true } } },
+    orderBy: { startedAt: "desc" },
+    take: Math.max(1, Math.min(3000, Number(limit) * 3 || 3000)),
+  });
+
+  const usedTwilioSids = new Set();
+  const updates = [];
+
+  for (const localCall of localCalls) {
+    const businessNumbers = [
+      localCall.business?.phone,
+      ...(localCall.business?.vapiMappings || []).map((mapping) => mapping.matchValue),
+    ].map(normalizePhoneForMatch).filter(Boolean);
+
+    let best = null;
+    let bestScore = -1;
+
+    for (const twilioCall of twilioCalls) {
+      if (usedTwilioSids.has(twilioCall.sid) && localCall.twilioCallSid !== twilioCall.sid) continue;
+      const score = scoreTwilioCallMatch(localCall, twilioCall, businessNumbers);
+      if (score > bestScore) {
+        best = twilioCall;
+        bestScore = score;
+      }
+    }
+
+    if (!best || bestScore < 70) continue;
+    usedTwilioSids.add(best.sid);
+
+    const vapiCost = numberOrNull(localCall.vapiCost) || 0;
+    const twilioPrice = best.price;
+    const totalInternalCost = (twilioPrice || 0) + vapiCost;
+    const updated = await prisma.call.update({
+      where: { id: localCall.id },
+      data: {
+        twilioCallSid: best.sid,
+        twilioPrice,
+        twilioPriceUnit: best.priceUnit,
+        totalInternalCost: totalInternalCost || null,
+        costSyncedAt: new Date(),
+      },
+      include: { caller: true, business: true },
+    });
+    updates.push({ call: sanitizeAdminCall(updated), twilio: best, score: Math.round(bestScore) });
+  }
+
+  return { fetched: twilioCalls.length, updated: updates.length, updates };
+}
+
+async function syncCallCosts({ days = 30, limit = 1000, includeVapi = false } = {}) {
+  const result = { vapi: null, twilio: null };
+  if (includeVapi) {
+    result.vapi = await syncVapiCalls({ limit: Math.min(Number(limit) || VAPI_CALL_LIMIT, VAPI_CALL_LIMIT) });
+  }
+  result.twilio = await syncTwilioCallCosts({ days, limit });
+  return result;
+}
+
+function getDateRange(days = 30) {
+  const end = new Date();
+  const start = new Date(end.getTime() - Math.max(1, Number(days) || 30) * 24 * 60 * 60 * 1000);
+  return { start, end };
+}
+
+async function getCompanyCallAnalytics({ days = 30 } = {}) {
+  const { start, end } = getDateRange(days);
+  const calls = await prisma.call.findMany({
+    where: { startedAt: { gte: start, lte: end } },
+    include: { business: true },
+    orderBy: { startedAt: "desc" },
+    take: 2000,
+  });
+  const byBusiness = new Map();
+
+  for (const call of calls) {
+    const key = call.businessId;
+    const row = byBusiness.get(key) || {
+      businessId: key,
+      businessName: call.business?.name || `Business ${key}`,
+      totalCalls: 0,
+      missedCalls: 0,
+      answeredCalls: 0,
+      failedCalls: 0,
+      bookedCalls: 0,
+      followUps: 0,
+      averageDurationSec: 0,
+      totalDurationSec: 0,
+      busiestHour: null,
+      hours: {},
+    };
+    row.totalCalls += 1;
+    if (call.status === "MISSED" || call.status === "ABANDONED") row.missedCalls += 1;
+    if (call.status === "COMPLETED") row.answeredCalls += 1;
+    if (call.status === "FAILED") row.failedCalls += 1;
+    if (call.outcome === "BOOKED") row.bookedCalls += 1;
+    if (call.followUpNeeded || call.outcome === "FOLLOW_UP" || call.outcome === "QUOTE_NEEDED") row.followUps += 1;
+    row.totalDurationSec += Number(call.durationSec || 0);
+    const hour = new Date(call.startedAt).getHours();
+    row.hours[hour] = (row.hours[hour] || 0) + 1;
+    byBusiness.set(key, row);
+  }
+
+  return Array.from(byBusiness.values()).map((row) => {
+    const busiest = Object.entries(row.hours).sort((a, b) => b[1] - a[1])[0];
+    return {
+      ...row,
+      averageDurationSec: row.totalCalls ? Math.round(row.totalDurationSec / row.totalCalls) : 0,
+      missedRate: row.totalCalls ? Math.round((row.missedCalls / row.totalCalls) * 100) : 0,
+      busiestHour: busiest ? `${String(busiest[0]).padStart(2, "0")}:00` : "—",
+    };
+  });
+}
+
+async function getCostAudit({ days = 30 } = {}) {
+  const { start, end } = getDateRange(days);
+  let databaseWarning = "";
+  let calls = [];
+  try {
+    calls = await withTimeout(
+      prisma.call.findMany({
+        where: { startedAt: { gte: start, lte: end } },
+        include: {
+          caller: true,
+          business: { include: { vapiMappings: true } },
+        },
+        orderBy: { startedAt: "desc" },
+        take: 2000,
+      }),
+      8000,
+      "Database did not respond while loading cost audit."
+    );
+  } catch (error) {
+    const rawMessage = error?.message || "";
+    databaseWarning = /localhost:5432|database server|findMany|prisma/i.test(rawMessage)
+      ? "Database is unavailable. Start Postgres locally or point DATABASE_URL at the live database."
+      : rawMessage || "Database is unavailable.";
+    console.warn("[admin:cost-audit] database unavailable", { message: databaseWarning });
+    calls = [];
+  }
+
+  const groups = new Map();
+  for (const call of calls) {
+    const phoneMappings = (call.business?.vapiMappings || []).filter((mapping) => String(mapping.matchType || "").toLowerCase().includes("phone"));
+    const phoneNumber = phoneMappings[0]?.matchValue || call.business?.phone || `Business ${call.businessId}`;
+    const key = `${call.businessId}:${phoneNumber}`;
+    const row = groups.get(key) || {
+      businessId: call.businessId,
+      businessName: call.business?.name || `Business ${call.businessId}`,
+      phoneNumber,
+      totalCalls: 0,
+      pricedCalls: 0,
+      twilioCost: 0,
+      vapiCost: 0,
+      totalInternalCost: 0,
+      totalDurationSec: 0,
+      currency: call.twilioPriceUnit || "USD",
+      lastCallAt: null,
+    };
+
+    const twilioCost = Number(call.twilioPrice || 0);
+    const vapiCost = Number(call.vapiCost || 0);
+    const totalInternalCost = Number(call.totalInternalCost || twilioCost + vapiCost || 0);
+
+    row.totalCalls += 1;
+    if (call.costSyncedAt || twilioCost || vapiCost || totalInternalCost) row.pricedCalls += 1;
+    row.twilioCost += twilioCost;
+    row.vapiCost += vapiCost;
+    row.totalInternalCost += totalInternalCost;
+    row.totalDurationSec += Number(call.durationSec || 0);
+    row.currency = call.twilioPriceUnit || row.currency;
+    row.lastCallAt = row.lastCallAt && new Date(row.lastCallAt) > new Date(call.startedAt) ? row.lastCallAt : call.startedAt;
+    groups.set(key, row);
+  }
+
+  const summary = Array.from(groups.values()).map((row) => ({
+    ...row,
+    twilioCost: Number(row.twilioCost.toFixed(4)),
+    vapiCost: Number(row.vapiCost.toFixed(4)),
+    totalInternalCost: Number(row.totalInternalCost.toFixed(4)),
+    averageCost: row.totalCalls ? Number((row.totalInternalCost / row.totalCalls).toFixed(4)) : 0,
+    averageDurationSec: row.totalCalls ? Math.round(row.totalDurationSec / row.totalCalls) : 0,
+  }));
+
+  return {
+    days: Number(days) || 30,
+    totals: {
+      totalCalls: calls.length,
+      pricedCalls: calls.filter((call) => call.costSyncedAt || call.twilioPrice || call.vapiCost || call.totalInternalCost).length,
+      twilioCost: Number(calls.reduce((sum, call) => sum + Number(call.twilioPrice || 0), 0).toFixed(4)),
+      vapiCost: Number(calls.reduce((sum, call) => sum + Number(call.vapiCost || 0), 0).toFixed(4)),
+      totalInternalCost: Number(calls.reduce((sum, call) => sum + Number(call.totalInternalCost || Number(call.twilioPrice || 0) + Number(call.vapiCost || 0)), 0).toFixed(4)),
+    },
+    summary: summary.sort((a, b) => b.totalInternalCost - a.totalInternalCost),
+    calls: calls.slice(0, 300).map(sanitizeAdminCall),
+    env: {
+      databaseAvailable: !databaseWarning,
+      twilioConfigured: Boolean(TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN),
+      vapiConfigured: Boolean(VAPI_API_KEY),
+    },
+    warnings: [
+      databaseWarning,
+      !TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN ? "Twilio credentials are not configured, so Twilio per-call prices cannot sync." : "",
+      !VAPI_API_KEY ? "VAPI_API_KEY is not configured, so Vapi call costs cannot refresh." : "",
+    ].filter(Boolean),
+  };
+}
+
+async function searchCallTranscripts({ q = "", businessId, limit = 100 } = {}) {
+  const query = String(q || "").trim();
+  const where = {};
+  if (businessId) where.businessId = parsePositiveInt(businessId, 1);
+  if (query) {
+    where.OR = [
+      { transcript: { contains: query, mode: "insensitive" } },
+      { aiSummary: { contains: query, mode: "insensitive" } },
+      { caller: { is: { phone: { contains: query, mode: "insensitive" } } } },
+      { caller: { is: { name: { contains: query, mode: "insensitive" } } } },
+      { business: { is: { name: { contains: query, mode: "insensitive" } } } },
+    ];
+  }
+  return prisma.call.findMany({
+    where,
+    include: { caller: true, business: true, notes: { orderBy: { createdAt: "desc" } }, tasks: { orderBy: { createdAt: "desc" } } },
+    orderBy: { startedAt: "desc" },
+    take: Math.max(1, Math.min(300, Number(limit) || 100)),
+  });
+}
+
+function getBillingReadinessForSignup(signup) {
+  return [
+    { key: "signup", label: "Signup submitted", done: Boolean(signup.signedUpAt || signup.createdAt) },
+    { key: "email", label: "Email verified", done: Boolean(signup.emailVerified || !signup.emailVerificationRequired) },
+    { key: "setup", label: "Agent setup started", done: ["setup_started", "checkout_started", "checkout_completed", "subscription_trialing", "subscription_active"].includes(String(signup.status || "")) },
+    { key: "checkout", label: "Stripe checkout started", done: Boolean(signup.checkoutSessionId || signup.subscriptionId) },
+    { key: "subscription", label: "Subscription/trial active", done: Boolean(signup.subscriptionId || signup.subscriptionStatus === "trialing" || signup.subscriptionStatus === "active") },
+  ];
+}
+
+async function getTrialHealthDashboard() {
+  const signups = listSignupDashboardRecords();
+  const callsByEmail = new Map();
+  const recentCalls = await prisma.call.findMany({
+    include: { business: true },
+    orderBy: { startedAt: "desc" },
+    take: 1000,
+  });
+  for (const call of recentCalls) {
+    const key = normalizeForKey(call.business?.name || "");
+    if (key) callsByEmail.set(key, (callsByEmail.get(key) || 0) + 1);
+  }
+
+  return signups.map((signup) => {
+    const checklist = getBillingReadinessForSignup(signup);
+    const businessKey = normalizeForKey(signup.businessName || "");
+    return {
+      ...signup,
+      callCount: callsByEmail.get(businessKey) || 0,
+      readinessChecklist: checklist,
+      readinessPercent: Math.round((checklist.filter((item) => item.done).length / checklist.length) * 100),
+      needsAttention: checklist.some((item) => !item.done) || (signup.expiry?.color === "red"),
+    };
+  });
+}
+
+async function getAdminOpsOverview() {
+  const signups = listSignupDashboardRecords();
+  const signupByBusiness = new Map(
+    signups
+      .map((signup) => [normalizeForKey(signup.businessName || ""), signup])
+      .filter(([key]) => Boolean(key))
+  );
+  const syncStore = readVapiCallSyncStore();
+  const syncRows = Object.values(syncStore).filter(Boolean);
+  const latestSyncByBusiness = new Map();
+
+  for (const row of syncRows) {
+    const businessId = Number(row.businessId || 0);
+    if (!businessId) continue;
+    const current = latestSyncByBusiness.get(businessId) || { count: 0, lastSyncedAt: null };
+    const syncedAt = row.syncedAt || null;
+    latestSyncByBusiness.set(businessId, {
+      count: current.count + 1,
+      lastSyncedAt:
+        syncedAt && (!current.lastSyncedAt || new Date(syncedAt).getTime() > new Date(current.lastSyncedAt).getTime())
+          ? syncedAt
+          : current.lastSyncedAt,
+    });
+  }
+
+  let databaseWarning = "";
+  let businesses = [];
+  try {
+    businesses = await withTimeout(
+      prisma.business.findMany({
+        include: {
+          settings: true,
+          vapiMappings: { orderBy: { updatedAt: "desc" } },
+          calls: {
+            include: { caller: true },
+            orderBy: { startedAt: "desc" },
+            take: 25,
+          },
+        },
+        orderBy: { name: "asc" },
+        take: 300,
+      }),
+      8000,
+      "Database did not respond while loading businesses."
+    );
+  } catch (error) {
+    const rawMessage = error?.message || "";
+    databaseWarning = /localhost:5432|database server|findMany|prisma/i.test(rawMessage)
+      ? "Database is unavailable. Start Postgres locally or point DATABASE_URL at the live database."
+      : rawMessage || "Database is unavailable.";
+    console.warn("[admin:ops-overview] database unavailable", { message: databaseWarning });
+    businesses = [];
+  }
+
+  const ownerRows = businesses.map((business) => {
+    const signup = signupByBusiness.get(normalizeForKey(business.name || "")) || null;
+    const calls = business.calls || [];
+    const recentCalls = calls.slice(0, 5).map(sanitizeAdminCall);
+    const vapiMappings = business.vapiMappings || [];
+    const phoneMappings = vapiMappings.filter((mapping) => String(mapping.matchType || "").toLowerCase().includes("phone"));
+    const syncInfo = latestSyncByBusiness.get(business.id) || { count: 0, lastSyncedAt: null };
+    const missedCalls = calls.filter((call) => ["MISSED", "ABANDONED", "FAILED"].includes(call.status)).length;
+    const followUps = calls.filter((call) => call.followUpNeeded || ["FOLLOW_UP", "QUOTE_NEEDED", "EMERGENCY"].includes(call.outcome)).length;
+
+    return {
+      businessId: business.id,
+      businessName: business.name,
+      businessPhone: signup?.businessPhone || business.phone || "",
+      ownerName: signup?.ownerName || "",
+      ownerEmail: signup?.ownerEmail || "",
+      ownerPhone: business.settings?.ownerPhone || signup?.ownerPhone || "",
+      aiNumbers: phoneMappings.map((mapping) => mapping.matchValue),
+      settings: business.settings,
+      vapiMappings,
+      recentCalls,
+      stats: {
+        recentCallWindow: calls.length,
+        missedCalls,
+        followUps,
+        completedCalls: calls.filter((call) => call.status === "COMPLETED").length,
+        lastCallAt: calls[0]?.startedAt || null,
+        syncedCallCount: syncInfo.count,
+        lastSyncedAt: syncInfo.lastSyncedAt,
+      },
+      signup,
+      needsSetup: !business.settings?.ownerPhone || !vapiMappings.length || !syncInfo.count,
+    };
+  });
+
+  const envStatus = {
+    databaseAvailable: !databaseWarning,
+    vapiApiKeyConfigured: Boolean(VAPI_API_KEY),
+    vapiAutoSyncEnabled: Boolean(VAPI_AUTO_SYNC_ENABLED),
+    vapiAutoSyncIntervalMs: VAPI_AUTO_SYNC_INTERVAL_MS,
+    vapiDefaultBusinessId: VAPI_DEFAULT_BUSINESS_ID,
+    vapiBusinessMapEntries: Object.keys(parseVapiBusinessMap()).length,
+    twilioConfigured: Boolean(TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN),
+    exposeCallTranscriptsInAdmin: EXPOSE_CALL_TRANSCRIPTS_IN_ADMIN,
+    exposeRecordingUrlsInAdmin: EXPOSE_RECORDING_URLS_IN_ADMIN,
+    missedCallAlertsEnabled: MISSED_CALL_ALERT_ENABLED,
+    dailyDigestEnabled: DAILY_DIGEST_ENABLED,
+    adminPasswordLooksDefault: !process.env.ADMIN_PASSWORD || process.env.ADMIN_PASSWORD === "change-me",
+  };
+
+  const warnings = [];
+  if (databaseWarning) warnings.push(databaseWarning);
+  if (!envStatus.vapiApiKeyConfigured) warnings.push("VAPI_API_KEY is not configured, so live Vapi call sync cannot run.");
+  if (!envStatus.twilioConfigured) warnings.push("Twilio credentials are not configured, so per-call Twilio cost sync cannot run.");
+  if (!envStatus.vapiAutoSyncEnabled) warnings.push("VAPI_AUTO_SYNC_ENABLED is off; calls only sync when an admin presses Sync Vapi Calls.");
+  if (!ownerRows.length) warnings.push("No businesses exist in the database yet.");
+  if (ownerRows.length && !ownerRows.some((row) => row.vapiMappings.length)) warnings.push("No Vapi mappings exist yet, so calls may fall back to the default business.");
+  if (envStatus.adminPasswordLooksDefault) warnings.push("ADMIN_PASSWORD is missing or still set to the default placeholder.");
+
+  return {
+    owners: ownerRows,
+    sync: {
+      env: envStatus,
+      warnings,
+      syncStoreCount: syncRows.length,
+      mappedBusinessCount: ownerRows.filter((row) => row.vapiMappings.length).length,
+      businessesWithSyncedCalls: ownerRows.filter((row) => row.stats.syncedCallCount > 0).length,
+      lastSyncedAt: syncRows
+        .map((row) => row.syncedAt)
+        .filter(Boolean)
+        .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0] || null,
+    },
+  };
+}
+
+async function markMissedCallAlerts() {
+  if (!MISSED_CALL_ALERT_ENABLED) return { sent: 0, skipped: true };
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const calls = await prisma.call.findMany({
+    where: {
+      status: { in: ["MISSED", "FAILED", "ABANDONED"] },
+      startedAt: { gte: cutoff },
+      lastAlertAt: null,
+    },
+    include: { business: { include: { settings: true } }, caller: true },
+    take: 100,
+  });
+  let sent = 0;
+  for (const call of calls) {
+    console.warn("[missed-call-alert]", {
+      business: call.business?.name,
+      caller: call.caller?.phone,
+      startedAt: call.startedAt,
+      status: call.status,
+      ownerPhone: call.business?.settings?.ownerPhone || null,
+    });
+    await prisma.call.update({ where: { id: call.id }, data: { lastAlertAt: new Date(), followUpNeeded: true } });
+    sent += 1;
+  }
+  return { sent };
+}
+
+async function buildDailyDigest({ days = 1 } = {}) {
+  const { start, end } = getDateRange(days);
+  const analytics = await getCompanyCallAnalytics({ days });
+  const followUps = await prisma.call.findMany({
+    where: {
+      startedAt: { gte: start, lte: end },
+      OR: [{ followUpNeeded: true }, { outcome: { in: ["FOLLOW_UP", "QUOTE_NEEDED", "EMERGENCY"] } }],
+    },
+    include: { business: true, caller: true },
+    orderBy: { startedAt: "desc" },
+    take: 100,
+  });
+  return {
+    from: start.toISOString(),
+    to: end.toISOString(),
+    analytics,
+    followUps: followUps.map(sanitizeAdminCall),
+  };
+}
+
+async function sendDailyDigest() {
+  if (!DAILY_DIGEST_ENABLED) return { sent: false, skipped: true };
+  const digest = await buildDailyDigest({ days: 1 });
+  console.log("[daily-owner-digest]", JSON.stringify(digest, null, 2));
+  return { sent: true, digest };
+}
+
+function getSignupDashboardKey(record = {}) {
+  const subscriptionId = String(record.subscriptionId || "").trim();
+  if (subscriptionId) return `sub:${subscriptionId}`;
+  const ownerEmail = String(record.ownerEmail || "").trim().toLowerCase();
+  if (ownerEmail) return `email:${ownerEmail}`;
+  const checkoutSessionId = String(record.checkoutSessionId || "").trim();
+  if (checkoutSessionId) return `checkout:${checkoutSessionId}`;
+  return `signup:${crypto.randomUUID()}`;
+}
+
+function getSignupAliases(record = {}) {
+  return [
+    record.subscriptionId ? `sub:${String(record.subscriptionId).trim()}` : "",
+    record.ownerEmail ? `email:${String(record.ownerEmail).trim().toLowerCase()}` : "",
+    record.checkoutSessionId ? `checkout:${String(record.checkoutSessionId).trim()}` : "",
+  ].filter(Boolean);
+}
+
+function upsertSignupDashboardRecord(record) {
+  if (!record || typeof record !== "object") return null;
+  const store = readSignupDashboardStore();
+  const aliases = getSignupAliases(record);
+  const existingKey = aliases.find((alias) => store[alias]) || getSignupDashboardKey(record);
+  const existing = store[existingKey] || {};
+  const signedUpAt = existing.signedUpAt || record.signedUpAt || record.createdAt || new Date().toISOString();
+  const merged = compactObject({
+    ...existing,
+    ...record,
+    signedUpAt,
+    createdAt: existing.createdAt || record.createdAt || signedUpAt,
+    updatedAt: new Date().toISOString(),
+  });
+
+  store[existingKey] = merged;
+  for (const alias of aliases) {
+    if (alias !== existingKey) delete store[alias];
+  }
+  writeSignupDashboardStore(store);
+  return merged;
+}
+
+function upsertSignupDashboardFromPayload(payload, extra = {}) {
+  const business = payload?.business || {};
+  const owner = payload?.owner || {};
+  return upsertSignupDashboardRecord({
+    ownerName: String(owner.name || extra.ownerName || "").trim(),
+    ownerEmail: String(owner.email || extra.ownerEmail || "").trim(),
+    ownerPhone: String(owner.phone || extra.ownerPhone || "").trim(),
+    businessName: String(business.name || extra.businessName || "").trim(),
+    businessPhone: String(business.phone || "").trim(),
+    businessAddress: String(business.address || "").trim(),
+    businessWebsite: String(business.website || "").trim(),
+    country: payload?.source?.country || "",
+    signedUpAt: payload?.submittedAt || extra.signedUpAt || new Date().toISOString(),
+    emailVerified: Boolean(payload?.verification?.emailVerified),
+    smsVerified: Boolean(payload?.verification?.smsVerified),
+    status: extra.status || "signup_received",
+    reviewRequired: Boolean(extra.reviewRequired || payload?.security?.reviewRequired),
+    reviewReasons: extra.reviewReasons || payload?.security?.reviewReasons || [],
+    ...extra,
+  });
+}
+
+function getUnixMs(value) {
+  const n = Number(value || 0);
+  return n ? n * 1000 : null;
+}
+
+function getSubscriptionPeriodEndMs(subscription) {
+  return getUnixMs(subscription?.trial_end) || getUnixMs(subscription?.current_period_end) || null;
+}
+
+function upsertSignupDashboardFromCheckoutSession(session, extra = {}) {
+  const metadata = session?.metadata || {};
+  const details = session?.customer_details || {};
+  return upsertSignupDashboardRecord({
+    checkoutSessionId: session?.id || "",
+    subscriptionId: typeof session?.subscription === "string" ? session.subscription : session?.subscription?.id || "",
+    customerId: typeof session?.customer === "string" ? session.customer : session?.customer?.id || "",
+    ownerEmail: String(details.email || session?.customer_email || metadata.ownerEmail || extra.ownerEmail || "").trim(),
+    ownerName: String(details.name || metadata.ownerName || extra.ownerName || "").trim(),
+    ownerPhone: String(metadata.ownerPhone || extra.ownerPhone || "").trim(),
+    businessName: String(metadata.businessName || extra.businessName || "").trim(),
+    checkoutStatus: session?.status || "",
+    paymentStatus: session?.payment_status || "",
+    checkoutCreatedAt: session?.created ? new Date(Number(session.created) * 1000).toISOString() : new Date().toISOString(),
+    status: extra.status || (session?.payment_status === "paid" ? "subscription_started" : "checkout_started"),
+    ...extra,
+  });
+}
+
+function upsertSignupDashboardFromSubscription(subscription, extra = {}) {
+  const metadata = subscription?.metadata || {};
+  const periodStartMs = getUnixMs(subscription?.trial_start) || getUnixMs(subscription?.current_period_start);
+  const periodEndMs = getSubscriptionPeriodEndMs(subscription);
+  return upsertSignupDashboardRecord({
+    subscriptionId: subscription?.id || "",
+    customerId: typeof subscription?.customer === "string" ? subscription.customer : subscription?.customer?.id || "",
+    ownerEmail: String(extra.ownerEmail || metadata.ownerEmail || metadata.email || subscription?.customer_email || "").trim(),
+    ownerName: String(extra.ownerName || metadata.ownerName || "").trim(),
+    ownerPhone: String(extra.ownerPhone || metadata.ownerPhone || "").trim(),
+    businessName: String(extra.businessName || metadata.businessName || "").trim(),
+    subscriptionStatus: subscription?.status || "",
+    trialStartAt: getUnixMs(subscription?.trial_start),
+    trialEndAt: getUnixMs(subscription?.trial_end),
+    currentPeriodStartAt: getUnixMs(subscription?.current_period_start),
+    currentPeriodEndAt: getUnixMs(subscription?.current_period_end),
+    periodStartAt: periodStartMs,
+    periodEndAt: periodEndMs,
+    cancelAt: getUnixMs(subscription?.cancel_at),
+    canceledAt: getUnixMs(subscription?.canceled_at),
+    status: extra.status || (subscription?.status ? `subscription_${subscription.status}` : "subscription_updated"),
+    ...extra,
+  });
+}
+
+function getSignupExpiryStatus(record) {
+  const now = Date.now();
+  const start = Number(record.trialStartAt || record.currentPeriodStartAt || record.periodStartAt || 0);
+  const end = Number(record.trialEndAt || record.currentPeriodEndAt || record.periodEndAt || 0);
+
+  if (!end) {
+    return { color: "unknown", label: "No end date", daysRemaining: null, percentUsed: null };
+  }
+
+  const daysRemaining = Math.ceil((end - now) / (24 * 60 * 60 * 1000));
+  if (end <= now) {
+    return { color: "red", label: "Expired", daysRemaining, percentUsed: 100 };
+  }
+
+  const effectiveStart = start && start < end ? start : Number(new Date(record.signedUpAt || record.createdAt || now).getTime());
+  const duration = Math.max(1, end - effectiveStart);
+  const percentUsed = Math.max(0, Math.min(100, Math.round(((now - effectiveStart) / duration) * 100)));
+  const closeWindowMs = Math.max(2 * 24 * 60 * 60 * 1000, duration * 0.2);
+
+  if (end - now <= closeWindowMs || percentUsed >= 80) {
+    return { color: "red", label: "Close to end", daysRemaining, percentUsed };
+  }
+  if (percentUsed >= 50) {
+    return { color: "yellow", label: "Past halfway", daysRemaining, percentUsed };
+  }
+  return { color: "green", label: "Before halfway", daysRemaining, percentUsed };
+}
+
+function listSignupDashboardRecords() {
+  const reminderStore = readTrialReminderStore();
+
+  for (const reminder of Object.values(reminderStore)) {
+    if (!reminder?.subscriptionId) continue;
+    upsertSignupDashboardRecord({
+      subscriptionId: reminder.subscriptionId,
+      customerId: reminder.customerId || "",
+      ownerEmail: reminder.ownerEmail || "",
+      ownerName: reminder.ownerName || "",
+      businessName: reminder.businessName || "",
+      trialStartAt: reminder.trialStartAt || null,
+      trialEndAt: reminder.trialEndAt || null,
+      periodStartAt: reminder.trialStartAt || null,
+      periodEndAt: reminder.trialEndAt || null,
+      trialReminderStatus: reminder.status || "",
+      trialReminderDueAt: reminder.dueAt || null,
+      trialReminderSentAt: reminder.sentAt || null,
+      status: reminder.status === "cancelled" ? "subscription_cancelled" : "trial_reminder_scheduled",
+    });
+  }
+
+  const freshStore = readSignupDashboardStore();
+  return Object.values(freshStore)
+    .filter(Boolean)
+    .map((record) => ({
+      ...record,
+      expiry: getSignupExpiryStatus(record),
+    }))
+    .sort((a, b) => Number(new Date(b.signedUpAt || b.createdAt || 0)) - Number(new Date(a.signedUpAt || a.createdAt || 0)));
+}
+
+function getTrialReminderDueAt(subscription) {
+  const trialStartMs = Number(subscription?.trial_start || 0) * 1000;
+  const trialEndMs = Number(subscription?.trial_end || 0) * 1000;
+  if (!trialEndMs) return 0;
+
+  const dueAt = trialStartMs
+    ? trialStartMs + TRIAL_HALFWAY_REMINDER_DAYS * 24 * 60 * 60 * 1000
+    : Date.now() + TRIAL_HALFWAY_REMINDER_DAYS * 24 * 60 * 60 * 1000;
+
+  return Math.min(dueAt, trialEndMs);
+}
+
+function upsertTrialReminder(record) {
+  if (!record?.subscriptionId || !record?.ownerEmail || !record?.dueAt) return;
+  const store = readTrialReminderStore();
+  const existing = store[record.subscriptionId] || {};
+
+  store[record.subscriptionId] = {
+    ...existing,
+    ...record,
+    status: existing.sentAt ? "sent" : record.status || "scheduled",
+    updatedAt: new Date().toISOString(),
+  };
+
+  writeTrialReminderStore(store);
+}
+
+async function scheduleTrialReminderFromCheckoutSession(session) {
+  const subscriptionId = typeof session?.subscription === "string"
+    ? session.subscription
+    : session?.subscription?.id;
+  if (!subscriptionId || !stripe) return;
+
+  let subscription = null;
+  try {
+    subscription = await stripe.subscriptions.retrieve(subscriptionId);
+  } catch (error) {
+    console.error("[stripe:trial-reminder] could not retrieve subscription", {
+      subscriptionId,
+      message: error?.message || String(error),
+    });
+    return;
+  }
+
+  scheduleTrialReminderFromSubscription(subscription, {
+    ownerEmail: String(session?.customer_details?.email || session?.customer_email || "").trim(),
+    businessName: String(session?.metadata?.businessName || "").trim(),
+    ownerName: String(session?.metadata?.ownerName || "").trim(),
+  });
+}
+
+function scheduleTrialReminderFromSubscription(subscription, fallback = {}) {
+  if (!subscription?.id || !subscription?.trial_end) return;
+  if (subscription.status && !["trialing", "active"].includes(String(subscription.status))) return;
+
+  const dueAt = getTrialReminderDueAt(subscription);
+  const trialEndAt = Number(subscription.trial_end || 0) * 1000;
+  const metadata = subscription.metadata || {};
+  const ownerEmail = String(
+    fallback.ownerEmail ||
+      metadata.ownerEmail ||
+      metadata.email ||
+      subscription.customer_email ||
+      ""
+  ).trim();
+
+  if (!ownerEmail || !isValidEmailAddress(ownerEmail)) {
+    console.warn("[stripe:trial-reminder] subscription has no owner email", {
+      subscriptionId: subscription.id,
+      customer: subscription.customer || null,
+    });
+    return;
+  }
+
+  upsertTrialReminder({
+    subscriptionId: subscription.id,
+    customerId: typeof subscription.customer === "string" ? subscription.customer : subscription.customer?.id || "",
+    ownerEmail,
+    ownerName: String(fallback.ownerName || metadata.ownerName || "").trim(),
+    businessName: String(fallback.businessName || metadata.businessName || "").trim(),
+    dueAt,
+    trialEndAt,
+    trialStartAt: Number(subscription.trial_start || 0) * 1000 || null,
+    status: "scheduled",
+    createdAt: new Date().toISOString(),
+  });
+}
+
+function markTrialReminderCancelled(subscriptionId) {
+  if (!subscriptionId) return;
+  const store = readTrialReminderStore();
+  if (!store[subscriptionId]) return;
+  store[subscriptionId] = {
+    ...store[subscriptionId],
+    status: "cancelled",
+    cancelledAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  writeTrialReminderStore(store);
+}
+
+async function sendTrialHalfwayReminder(record) {
+  const emailConfig = getEmailTransportConfig();
+  const businessName = record.businessName || "your My AI PA account";
+  const ownerName = record.ownerName || "there";
+  const trialEndDate = record.trialEndAt
+    ? new Date(record.trialEndAt).toLocaleDateString("en-CA", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      })
+    : "soon";
+  const subject = `Your My AI PA free trial is halfway done`;
+  const text = [
+    `Hi ${ownerName},`,
+    "",
+    `Your 14-day My AI PA free trial for ${businessName} is halfway done.`,
+    `Your trial is scheduled to end on ${trialEndDate}.`,
+    "",
+    "This is a good time to test your assistant, place a sample call, and make sure your missed-call forwarding is ready.",
+    "",
+    "Thanks,",
+    "My AI PA",
+  ].join("\n");
+  const html = `
+    <div style="font-family:Arial,sans-serif;line-height:1.55;color:#0f172a;max-width:640px">
+      <p style="font-size:13px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#2563eb">Trial reminder</p>
+      <h1 style="font-size:30px;line-height:1.1;margin:0 0 16px">Your free trial is halfway done</h1>
+      <p>Hi ${escapeHtml(ownerName)},</p>
+      <p>Your 14-day My AI PA free trial for <strong>${escapeHtml(businessName)}</strong> is halfway done.</p>
+      <p>Your trial is scheduled to end on <strong>${escapeHtml(trialEndDate)}</strong>.</p>
+      <p>This is a good time to test your assistant, place a sample call, and make sure your missed-call forwarding is ready.</p>
+      <p style="font-size:14px;color:#475569">Card details and billing are handled securely by Stripe.</p>
+    </div>
+  `;
+
+  if (!emailConfig) {
+    if (process.env.NODE_ENV !== "production" || isEnabled(process.env.EMAIL_VERIFICATION_DEV_MODE)) {
+      console.warn("[stripe:trial-reminder] SMTP is not configured. Dev reminder email:", {
+        to: record.ownerEmail,
+        subject,
+        text,
+      });
+      return { sent: false, devOnly: true };
+    }
+    const err = new Error("SMTP is not configured for trial reminders.");
+    err.statusCode = 500;
+    throw err;
+  }
+
+  const transporter = nodemailer.createTransport(emailConfig.transport);
+  await transporter.sendMail({
+    from: emailConfig.from,
+    to: record.ownerEmail,
+    subject,
+    text,
+    html,
+  });
+
+  return { sent: true };
+}
+
+async function processTrialReminders() {
+  if (isEnabled(process.env.TRIAL_REMINDER_DISABLE)) return;
+
+  const now = Date.now();
+  const store = readTrialReminderStore();
+  let changed = false;
+
+  for (const [subscriptionId, record] of Object.entries(store)) {
+    if (!record || record.status === "sent" || record.status === "cancelled") continue;
+    if (Number(record.dueAt || 0) > now) continue;
+    if (record.trialEndAt && Number(record.trialEndAt) <= now) {
+      store[subscriptionId] = {
+        ...record,
+        status: "expired",
+        updatedAt: new Date().toISOString(),
+      };
+      changed = true;
+      continue;
+    }
+
+    try {
+      await sendTrialHalfwayReminder(record);
+      store[subscriptionId] = {
+        ...record,
+        status: "sent",
+        sentAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      changed = true;
+    } catch (error) {
+      store[subscriptionId] = {
+        ...record,
+        status: "error",
+        lastError: error?.message || String(error),
+        lastAttemptAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      changed = true;
+      console.error("[stripe:trial-reminder] reminder send failed", {
+        subscriptionId,
+        message: error?.message || String(error),
+      });
+    }
+  }
+
+  if (changed) writeTrialReminderStore(store);
+}
+
+function escapeHtml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 
 function isValidEmailAddress(value) {
@@ -340,10 +1873,6 @@ async function getSignupSecurityDecision(req, body, fields) {
 
   if (isEnabled(process.env.SIGNUP_REQUIRE_MANUAL_APPROVAL)) {
     reviewReasons.push("manual_approval_enabled");
-  }
-
-  if (isEnabled(process.env.SIGNUP_REQUIRE_VERIFICATION)) {
-    reviewReasons.push("verification_required");
   }
 
   return {
@@ -1352,11 +2881,58 @@ app.post(
       },
     });
 
+    upsertSignupDashboardFromPayload(payload, {
+      status: "signup_received",
+      reviewRequired: securityDecision.reviewRequired,
+      reviewReasons: securityDecision.reviewReasons,
+    });
+
+    if (isEnabled(process.env.SIGNUP_REQUIRE_VERIFICATION)) {
+      const token = createPendingSignupVerification({
+        payload,
+        ownerEmail,
+        businessName,
+        reviewReasons: securityDecision.reviewReasons,
+        ipHash: hashKey(securityDecision.ip),
+      });
+      const emailResult = await sendSignupVerificationEmail({
+        req,
+        ownerEmail,
+        ownerName,
+        businessName,
+        token,
+      });
+
+      upsertSignupDashboardFromPayload(payload, {
+        status: "pending_email_verification",
+        emailVerificationRequired: true,
+        emailVerificationSentAt: new Date().toISOString(),
+        reviewRequired: securityDecision.reviewRequired,
+        reviewReasons: securityDecision.reviewReasons,
+      });
+
+      return res.status(202).json({
+        success: true,
+        ok: true,
+        verificationRequired: true,
+        emailVerificationRequired: true,
+        emailSent: Boolean(emailResult.sent),
+        devVerificationUrl: emailResult.devVerificationUrl,
+        businessName,
+        message: "Signup received. Verify your email before setup continues.",
+      });
+    }
+
     if (securityDecision.reviewRequired) {
       console.warn("[signup:security] held signup for review", {
         reviewReasons: securityDecision.reviewReasons,
         ipHash: hashKey(securityDecision.ip),
         emailHash: hashKey(ownerEmail),
+      });
+      upsertSignupDashboardFromPayload(payload, {
+        status: "review_required",
+        reviewRequired: true,
+        reviewReasons: securityDecision.reviewReasons,
       });
       return res.status(202).json({
         success: true,
@@ -1370,8 +2946,19 @@ app.post(
     const makeResult = await sendMakeSignupCompleted(payload);
     const makeData = makeResult.data || {};
     if (!getMakeSignupSuccess(makeData)) {
+      upsertSignupDashboardFromPayload(payload, {
+        status: "setup_error",
+        makeStatus: makeResult.status,
+        makeError: makeData?.error || "Make webhook did not complete the signup.",
+      });
       return res.status(502).json({ error: makeData?.error || "Make webhook did not complete the signup." });
     }
+
+    upsertSignupDashboardFromPayload(payload, {
+      status: "setup_started",
+      makeStatus: makeResult.status,
+      twilioPhoneNumber: getMakeTwilioPhoneNumber(makeData) || getMakeTwilioPhoneNumberFromText(makeResult.body),
+    });
 
     res.json({
       success: true,
@@ -1379,6 +2966,207 @@ app.post(
       businessName,
       twilioPhoneNumber: getMakeTwilioPhoneNumber(makeData) || getMakeTwilioPhoneNumberFromText(makeResult.body),
       makeStatus: makeResult.status,
+    });
+  })
+);
+
+app.get(
+  "/api/integrations/verify-signup-email",
+  asyncRoute(async (req, res) => {
+    const token = String(req.query.token || "").trim();
+    const tokenHash = hashSignupVerificationToken(token);
+    const store = prunePendingSignupStore(readPendingSignupStore());
+    const record = store[tokenHash];
+
+    function renderVerificationPage({ title, body, ok }) {
+      res.status(ok ? 200 : 400).send(`<!doctype html>
+        <html lang="en">
+          <head>
+            <meta charset="utf-8" />
+            <meta name="viewport" content="width=device-width,initial-scale=1" />
+            <title>${escapeHtml(title)} | My AI PA</title>
+            <style>
+              body{margin:0;font-family:Arial,sans-serif;background:linear-gradient(135deg,#eef6ff,#fff);color:#07142a;display:grid;min-height:100vh;place-items:center;padding:24px}
+              main{max-width:680px;border:1px solid #d7e7fb;background:rgba(255,255,255,.94);border-radius:28px;padding:34px;box-shadow:0 34px 100px -70px rgba(15,23,42,.86)}
+              .badge{display:inline-flex;border-radius:999px;background:${ok ? "#dcfce7" : "#fee2e2"};color:${ok ? "#166534" : "#991b1b"};padding:8px 12px;font-size:12px;font-weight:900;letter-spacing:.14em;text-transform:uppercase}
+              h1{font-size:clamp(32px,7vw,54px);line-height:1.02;margin:18px 0 12px;letter-spacing:-.05em}
+              p{font-size:18px;line-height:1.6;color:#334155}
+              a{display:inline-flex;margin-top:12px;border-radius:14px;background:#07142a;color:white;text-decoration:none;font-weight:900;padding:14px 18px}
+            </style>
+          </head>
+          <body>
+            <main>
+              <span class="badge">${ok ? "Verified" : "Needs attention"}</span>
+              <h1>${escapeHtml(title)}</h1>
+              <p>${escapeHtml(body)}</p>
+              <a href="/#/signup">Return to My AI PA</a>
+            </main>
+          </body>
+        </html>`);
+    }
+
+    if (!token || !record) {
+      writePendingSignupStore(store);
+      return renderVerificationPage({
+        ok: false,
+        title: "Verification link is invalid or expired",
+        body: "Please submit the signup form again to receive a fresh verification email.",
+      });
+    }
+
+    if (Number(record.expiresAt || 0) <= Date.now()) {
+      delete store[tokenHash];
+      writePendingSignupStore(store);
+      return renderVerificationPage({
+        ok: false,
+        title: "Verification link expired",
+        body: "Please submit the signup form again to receive a fresh verification email.",
+      });
+    }
+
+    const payload = compactObject({
+      ...(record.payload || {}),
+      verifiedAt: new Date().toISOString(),
+      verification: {
+        ...((record.payload || {}).verification || {}),
+        emailVerified: true,
+        smsVerified: Boolean((record.payload || {}).verification?.smsVerified),
+      },
+      security: {
+        ...((record.payload || {}).security || {}),
+        emailVerificationCompleted: true,
+      },
+    });
+
+    if (Array.isArray(record.reviewReasons) && record.reviewReasons.length) {
+      delete store[tokenHash];
+      writePendingSignupStore(store);
+      upsertSignupDashboardFromPayload(payload, {
+        status: "review_required",
+        emailVerified: true,
+        emailVerifiedAt: new Date().toISOString(),
+        reviewRequired: true,
+        reviewReasons: record.reviewReasons,
+      });
+      console.warn("[signup:security] email verified but signup held for review", {
+        reviewReasons: record.reviewReasons,
+        emailHash: hashKey(record.ownerEmail),
+      });
+      return renderVerificationPage({
+        ok: true,
+        title: "Email verified",
+        body: "Your email is verified. Your signup needs a quick manual review before the agent setup continues.",
+      });
+    }
+
+    const makeResult = await sendMakeSignupCompleted(payload);
+    const makeData = makeResult.data || {};
+    if (!getMakeSignupSuccess(makeData)) {
+      upsertSignupDashboardFromPayload(payload, {
+        status: "setup_error",
+        emailVerified: true,
+        emailVerifiedAt: new Date().toISOString(),
+        makeStatus: makeResult.status,
+        makeError: makeData?.error || "Make webhook did not complete after email verification.",
+      });
+      console.error("[signup:verification] Make webhook did not complete after email verification", {
+        status: makeResult.status,
+        error: makeData?.error || null,
+        emailHash: hashKey(record.ownerEmail),
+      });
+      return renderVerificationPage({
+        ok: false,
+        title: "Email verified, setup needs attention",
+        body: "Your email was verified, but the automated setup handoff did not finish. Please contact My AI PA support.",
+      });
+    }
+
+    delete store[tokenHash];
+    writePendingSignupStore(store);
+    upsertSignupDashboardFromPayload(payload, {
+      status: "setup_started",
+      emailVerified: true,
+      emailVerifiedAt: new Date().toISOString(),
+      makeStatus: makeResult.status,
+      twilioPhoneNumber: getMakeTwilioPhoneNumber(makeData) || getMakeTwilioPhoneNumberFromText(makeResult.body),
+    });
+    return renderVerificationPage({
+      ok: true,
+      title: "Email verified",
+      body: "Your email is verified and your My AI PA setup is now continuing.",
+    });
+  })
+);
+
+app.post(
+  "/api/payments/create-checkout-session",
+  asyncRoute(async (req, res) => {
+    if (!stripe || !STRIPE_PRICE_ID) {
+      return res.status(503).json({
+        error: "Stripe checkout is not configured yet. Set STRIPE_SECRET_KEY and STRIPE_PRICE_ID on the server.",
+      });
+    }
+
+    const body = req.body || {};
+    const ownerEmail = String(body.ownerEmail || body.email || "").trim();
+    const businessName = String(body.businessName || "").trim();
+    const ownerName = String(body.ownerName || "").trim();
+    const ownerPhone = String(body.ownerPhone || "").trim();
+
+    if (!ownerEmail || !isValidEmailAddress(ownerEmail)) {
+      return res.status(400).json({ error: "A valid owner email is required to start checkout." });
+    }
+
+    const { successUrl, cancelUrl } = getStripeReturnUrls(req);
+    const subscriptionData = {
+      metadata: compactObject({
+        businessName,
+        ownerName,
+        ownerEmail,
+        ownerPhone,
+        source: "my-ai-pa-signup",
+      }),
+    };
+
+    if (STRIPE_TRIAL_DAYS > 0) {
+      subscriptionData.trial_period_days = STRIPE_TRIAL_DAYS;
+    }
+
+    const session = await stripe.checkout.sessions.create({
+      mode: "subscription",
+      customer_email: ownerEmail,
+      line_items: [
+        {
+          price: STRIPE_PRICE_ID,
+          quantity: 1,
+        },
+      ],
+      allow_promotion_codes: isEnabled(process.env.STRIPE_ALLOW_PROMOTION_CODES),
+      success_url: successUrl,
+      cancel_url: cancelUrl,
+      client_reference_id: ownerEmail,
+      metadata: compactObject({
+        businessName,
+        ownerName,
+        ownerEmail,
+        ownerPhone,
+        source: "my-ai-pa-signup",
+      }),
+      subscription_data: subscriptionData,
+    });
+
+    upsertSignupDashboardFromCheckoutSession(session, {
+      status: "checkout_started",
+      businessName,
+      ownerName,
+      ownerEmail,
+      ownerPhone,
+    });
+
+    res.json({
+      ok: true,
+      checkoutUrl: session.url,
+      sessionId: session.id,
     });
   })
 );
@@ -1438,13 +3226,231 @@ app.get(
       const minDuration = Math.max(0, Number(req.query.minDuration) || 0);
       where.durationSec = { gte: minDuration };
     }
+    if (req.query.outcome) where.outcome = String(req.query.outcome).toUpperCase();
+    if (req.query.businessId) where.businessId = parsePositiveInt(req.query.businessId, 1);
     const calls = await prisma.call.findMany({
       where,
-      include: { caller: true, business: true },
+      include: { caller: true, business: true, notes: { orderBy: { createdAt: "desc" } }, tasks: { orderBy: { createdAt: "desc" } } },
       orderBy: { startedAt: "desc" },
       take: 200,
     });
     res.json({ ok: true, calls: calls.map(sanitizeAdminCall) });
+  })
+);
+
+app.get(
+  "/api/admin/calls/analytics",
+  requireAdmin,
+  asyncRoute(async (req, res) => {
+    res.json({ ok: true, analytics: await getCompanyCallAnalytics({ days: req.query.days || 30 }) });
+  })
+);
+
+app.get(
+  "/api/admin/calls/search",
+  requireAdmin,
+  asyncRoute(async (req, res) => {
+    const calls = await searchCallTranscripts({
+      q: req.query.q || "",
+      businessId: req.query.businessId || "",
+      limit: req.query.limit || 100,
+    });
+    res.json({ ok: true, calls: calls.map(sanitizeAdminCall) });
+  })
+);
+
+app.put(
+  "/api/admin/calls/:id",
+  requireAdmin,
+  asyncRoute(async (req, res) => {
+    const id = parsePositiveInt(req.params.id);
+    const body = req.body || {};
+    const allowedOutcomes = ["UNREVIEWED", "BOOKED", "QUOTE_NEEDED", "EMERGENCY", "SPAM", "FOLLOW_UP", "NOT_A_LEAD"];
+    const data = {};
+    if (body.outcome != null) {
+      const outcome = String(body.outcome || "").toUpperCase();
+      if (!allowedOutcomes.includes(outcome)) return res.status(400).json({ error: "Invalid outcome." });
+      data.outcome = outcome;
+    }
+    if (body.qualityScore != null) data.qualityScore = Math.max(0, Math.min(100, Number(body.qualityScore) || 0));
+    if (body.followUpNeeded != null) data.followUpNeeded = Boolean(body.followUpNeeded);
+    if (body.aiSummary != null) data.aiSummary = String(body.aiSummary || "").trim().slice(0, 2000) || null;
+    const call = await prisma.call.update({
+      where: { id },
+      data,
+      include: { caller: true, business: true, notes: { orderBy: { createdAt: "desc" } }, tasks: { orderBy: { createdAt: "desc" } } },
+    });
+    res.json({ ok: true, call: sanitizeAdminCall(call) });
+  })
+);
+
+app.post(
+  "/api/admin/calls/:id/notes",
+  requireAdmin,
+  asyncRoute(async (req, res) => {
+    const callId = parsePositiveInt(req.params.id);
+    const body = String((req.body || {}).body || "").trim();
+    if (!body) return res.status(400).json({ error: "Note body is required." });
+    const note = await prisma.callNote.create({ data: { callId, body: body.slice(0, 2000) } });
+    res.status(201).json({ ok: true, note });
+  })
+);
+
+app.post(
+  "/api/admin/calls/:id/tasks",
+  requireAdmin,
+  asyncRoute(async (req, res) => {
+    const callId = parsePositiveInt(req.params.id);
+    const body = req.body || {};
+    const title = String(body.title || "").trim();
+    if (!title) return res.status(400).json({ error: "Task title is required." });
+    const dueAt = body.dueAt ? new Date(body.dueAt) : null;
+    const task = await prisma.callTask.create({
+      data: {
+        callId,
+        title: title.slice(0, 240),
+        dueAt: dueAt && !Number.isNaN(dueAt.getTime()) ? dueAt : null,
+      },
+    });
+    res.status(201).json({ ok: true, task });
+  })
+);
+
+app.put(
+  "/api/admin/call-tasks/:id",
+  requireAdmin,
+  asyncRoute(async (req, res) => {
+    const id = parsePositiveInt(req.params.id);
+    const body = req.body || {};
+    const allowed = ["OPEN", "DONE", "ARCHIVED"];
+    const data = {};
+    if (body.title != null) data.title = String(body.title || "").trim().slice(0, 240);
+    if (body.status != null) {
+      const status = String(body.status || "").toUpperCase();
+      if (!allowed.includes(status)) return res.status(400).json({ error: "Invalid task status." });
+      data.status = status;
+    }
+    const task = await prisma.callTask.update({ where: { id }, data });
+    res.json({ ok: true, task });
+  })
+);
+
+app.get(
+  "/api/admin/trial-health",
+  requireAdmin,
+  asyncRoute(async (_req, res) => {
+    res.json({ ok: true, accounts: await getTrialHealthDashboard() });
+  })
+);
+
+app.get(
+  "/api/admin/ops-overview",
+  requireAdmin,
+  asyncRoute(async (_req, res) => {
+    res.json({ ok: true, ...(await getAdminOpsOverview()) });
+  })
+);
+
+app.get(
+  "/api/admin/daily-digest",
+  requireAdmin,
+  asyncRoute(async (req, res) => {
+    res.json({ ok: true, digest: await buildDailyDigest({ days: req.query.days || 1 }) });
+  })
+);
+
+app.post(
+  "/api/admin/daily-digest/send",
+  requireAdmin,
+  asyncRoute(async (_req, res) => {
+    res.json({ ok: true, ...(await sendDailyDigest()) });
+  })
+);
+
+app.post(
+  "/api/admin/vapi/sync-calls",
+  requireAdmin,
+  asyncRoute(async (req, res) => {
+    const body = req.body || {};
+    const result = await syncVapiCalls({
+      limit: body.limit || req.query.limit || VAPI_CALL_LIMIT,
+      createdAtGt: body.createdAtGt || req.query.createdAtGt || "",
+    });
+    res.json({ ok: true, ...result });
+  })
+);
+
+app.get(
+  "/api/admin/cost-audit",
+  requireAdmin,
+  asyncRoute(async (req, res) => {
+    res.json({ ok: true, audit: await getCostAudit({ days: req.query.days || 30 }) });
+  })
+);
+
+app.post(
+  "/api/admin/cost-sync",
+  requireAdmin,
+  asyncRoute(async (req, res) => {
+    const body = req.body || {};
+    const result = await syncCallCosts({
+      days: body.days || req.query.days || 30,
+      limit: body.limit || req.query.limit || 1000,
+      includeVapi: Boolean(body.includeVapi || isEnabled(req.query.includeVapi)),
+    });
+    res.json({ ok: true, ...result, audit: await getCostAudit({ days: body.days || req.query.days || 30 }) });
+  })
+);
+
+app.get(
+  "/api/admin/vapi/mappings",
+  requireAdmin,
+  asyncRoute(async (_req, res) => {
+    const mappings = await prisma.vapiBusinessMapping.findMany({
+      include: { business: true },
+      orderBy: { updatedAt: "desc" },
+      take: 300,
+    });
+    const businesses = await prisma.business.findMany({ orderBy: { name: "asc" }, take: 300 });
+    res.json({ ok: true, mappings, businesses });
+  })
+);
+
+app.post(
+  "/api/admin/vapi/mappings",
+  requireAdmin,
+  asyncRoute(async (req, res) => {
+    const body = req.body || {};
+    const businessId = parsePositiveInt(body.businessId, 1);
+    const matchType = String(body.matchType || "assistantId").trim().slice(0, 80);
+    const rawValue = String(body.matchValue || "").trim();
+    if (!rawValue) return res.status(400).json({ error: "matchValue is required." });
+    const matchValue = matchType.toLowerCase().includes("phone") ? normalizePhoneForMatch(rawValue) : rawValue.toLowerCase();
+    const mapping = await prisma.vapiBusinessMapping.upsert({
+      where: { matchValue },
+      update: { businessId, matchType, label: String(body.label || "").trim().slice(0, 120) || null },
+      create: { businessId, matchType, matchValue, label: String(body.label || "").trim().slice(0, 120) || null },
+      include: { business: true },
+    });
+    res.status(201).json({ ok: true, mapping });
+  })
+);
+
+app.delete(
+  "/api/admin/vapi/mappings/:id",
+  requireAdmin,
+  asyncRoute(async (req, res) => {
+    const id = parsePositiveInt(req.params.id);
+    await prisma.vapiBusinessMapping.delete({ where: { id } });
+    res.json({ ok: true });
+  })
+);
+
+app.get(
+  "/api/admin/signups",
+  requireAdmin,
+  asyncRoute(async (_req, res) => {
+    res.json({ ok: true, signups: listSignupDashboardRecords() });
   })
 );
 
@@ -1581,11 +3587,44 @@ cleanupSensitiveCallData().catch((err) => {
   console.error("[call-data-cleanup] initial run failed", err);
 });
 
+processTrialReminders().catch((err) => {
+  console.error("[stripe:trial-reminder] initial run failed", err);
+});
+
 setInterval(() => {
   cleanupSensitiveCallData().catch((err) => {
     console.error("[call-data-cleanup] scheduled run failed", err);
   });
 }, SENSITIVE_CALL_CLEANUP_INTERVAL_MS);
+
+setInterval(() => {
+  processTrialReminders().catch((err) => {
+    console.error("[stripe:trial-reminder] scheduled run failed", err);
+  });
+}, TRIAL_REMINDER_CHECK_INTERVAL_MS);
+
+if (VAPI_AUTO_SYNC_ENABLED) {
+  syncVapiCalls().catch((err) => {
+    console.error("[vapi:sync] initial auto-sync failed", err);
+  });
+  setInterval(() => {
+    syncVapiCalls().catch((err) => {
+      console.error("[vapi:sync] scheduled auto-sync failed", err);
+    });
+  }, VAPI_AUTO_SYNC_INTERVAL_MS);
+}
+
+setInterval(() => {
+  markMissedCallAlerts().catch((err) => {
+    console.error("[missed-call-alert] scheduled run failed", err);
+  });
+}, 5 * 60 * 1000);
+
+setInterval(() => {
+  sendDailyDigest().catch((err) => {
+    console.error("[daily-owner-digest] scheduled run failed", err);
+  });
+}, 24 * 60 * 60 * 1000);
 
 app.listen(PORT, () => {
   console.log(`My AI PA API listening on http://localhost:${PORT}`);

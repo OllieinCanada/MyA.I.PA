@@ -1,0 +1,620 @@
+.myai-admin {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 12% 8%, rgba(42, 157, 244, 0.16), transparent 34rem),
+    radial-gradient(circle at 90% 14%, rgba(232, 112, 0, 0.12), transparent 32rem),
+    linear-gradient(180deg, #f7fbff 0%, #eef6fd 48%, #f8fbff 100%) !important;
+  color: #122238 !important;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.myai-admin *,
+.myai-admin *::before,
+.myai-admin *::after {
+  box-sizing: border-box;
+}
+
+.myai-admin .relative {
+  position: relative;
+}
+
+.myai-admin .absolute {
+  position: absolute;
+}
+
+.myai-admin .inset-0 {
+  inset: 0;
+}
+
+.myai-admin .pointer-events-none {
+  pointer-events: none;
+}
+
+.myai-admin .overflow-x-hidden {
+  overflow-x: hidden;
+}
+
+.myai-admin .z-10 {
+  z-index: 10;
+}
+
+.myai-admin .mx-auto {
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.myai-admin .max-w-7xl {
+  max-width: 80rem;
+}
+
+.myai-admin .px-4 {
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+
+.myai-admin .py-6 {
+  padding-top: 1.5rem;
+  padding-bottom: 1.5rem;
+}
+
+.myai-admin .p-3 {
+  padding: 0.75rem;
+}
+
+.myai-admin .p-4 {
+  padding: 1rem;
+}
+
+.myai-admin .p-5 {
+  padding: 1.25rem;
+}
+
+.myai-admin .px-3 {
+  padding-left: 0.75rem;
+  padding-right: 0.75rem;
+}
+
+.myai-admin .px-4 {
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+
+.myai-admin .px-5 {
+  padding-left: 1.25rem;
+  padding-right: 1.25rem;
+}
+
+.myai-admin .px-6 {
+  padding-left: 1.5rem;
+  padding-right: 1.5rem;
+}
+
+.myai-admin .py-1 {
+  padding-top: 0.25rem;
+  padding-bottom: 0.25rem;
+}
+
+.myai-admin .py-2 {
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+}
+
+.myai-admin .py-3 {
+  padding-top: 0.75rem;
+  padding-bottom: 0.75rem;
+}
+
+.myai-admin .py-4 {
+  padding-top: 1rem;
+  padding-bottom: 1rem;
+}
+
+.myai-admin .mt-1 {
+  margin-top: 0.25rem;
+}
+
+.myai-admin .mt-2 {
+  margin-top: 0.5rem;
+}
+
+.myai-admin .mt-3 {
+  margin-top: 0.75rem;
+}
+
+.myai-admin .mt-4 {
+  margin-top: 1rem;
+}
+
+.myai-admin .mt-5 {
+  margin-top: 1.25rem;
+}
+
+.myai-admin .mt-6 {
+  margin-top: 1.5rem;
+}
+
+.myai-admin .mt-8 {
+  margin-top: 2rem;
+}
+
+.myai-admin .mb-1 {
+  margin-bottom: 0.25rem;
+}
+
+.myai-admin .mb-3 {
+  margin-bottom: 0.75rem;
+}
+
+.myai-admin .mb-4 {
+  margin-bottom: 1rem;
+}
+
+.myai-admin .ml-auto {
+  margin-left: auto;
+}
+
+.myai-admin .block {
+  display: block;
+}
+
+.myai-admin .inline-flex {
+  display: inline-flex;
+}
+
+.myai-admin .flex {
+  display: flex;
+}
+
+.myai-admin .grid {
+  display: grid;
+}
+
+.myai-admin .hidden {
+  display: none;
+}
+
+.myai-admin .flex-wrap {
+  flex-wrap: wrap;
+}
+
+.myai-admin .items-center {
+  align-items: center;
+}
+
+.myai-admin .items-end {
+  align-items: flex-end;
+}
+
+.myai-admin .items-start {
+  align-items: flex-start;
+}
+
+.myai-admin .justify-between {
+  justify-content: space-between;
+}
+
+.myai-admin .gap-2 {
+  gap: 0.5rem;
+}
+
+.myai-admin .gap-3 {
+  gap: 0.75rem;
+}
+
+.myai-admin .gap-4 {
+  gap: 1rem;
+}
+
+.myai-admin .gap-5 {
+  gap: 1.25rem;
+}
+
+.myai-admin .gap-8 {
+  gap: 2rem;
+}
+
+.myai-admin .space-y-2 > * + * {
+  margin-top: 0.5rem;
+}
+
+.myai-admin .space-y-3 > * + * {
+  margin-top: 0.75rem;
+}
+
+.myai-admin .space-y-4 > * + * {
+  margin-top: 1rem;
+}
+
+.myai-admin .w-full {
+  width: 100%;
+}
+
+.myai-admin .min-w-full {
+  min-width: 100%;
+}
+
+.myai-admin .overflow-x-auto {
+  overflow-x: auto;
+}
+
+.myai-admin .text-left {
+  text-align: left;
+}
+
+.myai-admin .align-top {
+  vertical-align: top;
+}
+
+.myai-admin .font-semibold {
+  font-weight: 650;
+}
+
+.myai-admin .font-bold {
+  font-weight: 750;
+}
+
+.myai-admin .font-extrabold,
+.myai-admin .font-black {
+  font-weight: 900;
+}
+
+.myai-admin .uppercase {
+  text-transform: uppercase;
+}
+
+.myai-admin .text-xs {
+  font-size: 0.75rem;
+}
+
+.myai-admin .text-sm {
+  font-size: 0.875rem;
+}
+
+.myai-admin .text-lg {
+  font-size: 1.125rem;
+}
+
+.myai-admin .text-xl {
+  font-size: 1.25rem;
+}
+
+.myai-admin .text-2xl {
+  font-size: 1.85rem;
+}
+
+.myai-admin .leading-snug {
+  line-height: 1.35;
+}
+
+.myai-admin .leading-\[0\.95\] {
+  line-height: 0.95;
+}
+
+.myai-admin .tracking-\[0\.12em\] {
+  letter-spacing: 0.12em;
+}
+
+.myai-admin .tracking-\[0\.14em\] {
+  letter-spacing: 0.14em;
+}
+
+.myai-admin .tracking-\[0\.16em\] {
+  letter-spacing: 0.16em;
+}
+
+.myai-admin .tracking-\[0\.18em\] {
+  letter-spacing: 0.18em;
+}
+
+.myai-admin .tracking-\[0\.2em\] {
+  letter-spacing: 0.2em;
+}
+
+.myai-admin .tracking-\[0\.28em\] {
+  letter-spacing: 0.28em;
+}
+
+.myai-admin .tracking-\[0\.3em\] {
+  letter-spacing: 0.3em;
+}
+
+.myai-admin .rounded-xl {
+  border-radius: 0.75rem;
+}
+
+.myai-admin .rounded-2xl {
+  border-radius: 1rem;
+}
+
+.myai-admin .rounded-\[24px\] {
+  border-radius: 1.5rem;
+}
+
+.myai-admin .rounded-full {
+  border-radius: 999px;
+}
+
+.myai-admin .resize-none {
+  resize: none;
+}
+
+.myai-admin .outline-none {
+  outline: none;
+}
+
+.myai-admin .disabled\:opacity-60:disabled {
+  opacity: 0.6;
+}
+
+.myai-admin .sm\:col-span-2 {
+  grid-column: span 2 / span 2;
+}
+
+.myai-admin [class*="sm:grid-cols-2"] {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.myai-admin [class*="sm:grid-cols-3"] {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.myai-admin [class*="lg:grid-cols-4"] {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.myai-admin [class*="lg:grid-cols-5"] {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.myai-admin [class*="lg:grid-cols"] {
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+}
+
+.myai-admin h1 {
+  margin: 0;
+  font-size: clamp(2.25rem, 5vw, 4rem);
+  line-height: 0.98;
+}
+
+.myai-admin p {
+  margin-bottom: 0;
+}
+
+.myai-admin h1,
+.myai-admin h2,
+.myai-admin h3 {
+  color: #0d2238 !important;
+  font-family: inherit !important;
+  letter-spacing: 0 !important;
+}
+
+.myai-admin [class*="text-white"] {
+  color: #263c55 !important;
+}
+
+.myai-admin [class*="text-white/"],
+.myai-admin [class*="text-white\\/"] {
+  color: #60748a !important;
+}
+
+.myai-admin code {
+  color: #0b66b2 !important;
+  font-weight: 800;
+}
+
+.myai-admin .admin-panel {
+  border: 1px solid rgba(20, 94, 152, 0.12) !important;
+  background: rgba(255, 255, 255, 0.9) !important;
+  box-shadow: 0 22px 70px rgba(18, 43, 76, 0.12) !important;
+  color: #17263d !important;
+  backdrop-filter: blur(18px);
+}
+
+.myai-admin .admin-panel:first-child {
+  min-height: 8rem;
+}
+
+.myai-admin .admin-panel > .text-xs:first-child,
+.myai-admin .admin-panel thead,
+.myai-admin .admin-panel [class*="uppercase"] {
+  color: #53708b !important;
+}
+
+.myai-admin .admin-panel .text-white,
+.myai-admin .admin-panel [class*="text-white"] {
+  color: #17263d !important;
+}
+
+.myai-admin .admin-panel [class*="text-white/"],
+.myai-admin .admin-panel [class*="text-white\\/"] {
+  color: #60748a !important;
+}
+
+.myai-admin .admin-panel [class*="text-emerald"],
+.myai-admin .admin-panel [class*="text-green"] {
+  color: #047857 !important;
+}
+
+.myai-admin .admin-panel [class*="text-amber"],
+.myai-admin .admin-panel [class*="text-yellow"] {
+  color: #b45309 !important;
+}
+
+.myai-admin .admin-panel [class*="text-rose"],
+.myai-admin .admin-panel [class*="text-red"] {
+  color: #be123c !important;
+}
+
+.myai-admin .admin-panel [class*="bg-black"],
+.myai-admin .admin-panel [class*="bg-white/5"],
+.myai-admin .admin-panel [class*="bg-white\\/5"] {
+  background: #ffffff !important;
+}
+
+.myai-admin .admin-panel [class*="border-white"],
+.myai-admin .admin-panel [class*="border-white\\/"] {
+  border-color: rgba(20, 94, 152, 0.14) !important;
+}
+
+.myai-admin button {
+  appearance: none;
+  cursor: pointer;
+  background: #ffffff;
+  border-color: rgba(20, 94, 152, 0.18) !important;
+  color: #16466f !important;
+  transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease;
+}
+
+.myai-admin button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 28px rgba(15, 87, 148, 0.13);
+}
+
+.myai-admin button[class*="from-emerald"],
+.myai-admin button[class*="to-amber"],
+.myai-admin .admin-panel button[class*="from-emerald"],
+.myai-admin .admin-panel button[class*="to-amber"] {
+  background: linear-gradient(135deg, #0b75c9 0%, #0f93e8 48%, #e87500 100%) !important;
+  border-color: transparent !important;
+  color: #ffffff !important;
+  box-shadow: 0 13px 32px rgba(14, 116, 195, 0.22);
+}
+
+.myai-admin button[class*="from-emerald"] *,
+.myai-admin button[class*="to-amber"] * {
+  color: #ffffff !important;
+}
+
+.myai-admin .admin-input {
+  display: block;
+  border: 1px solid rgba(20, 94, 152, 0.18) !important;
+  background: #ffffff !important;
+  color: #16263c !important;
+  box-shadow: 0 1px 0 rgba(18, 43, 76, 0.04);
+}
+
+.myai-admin .admin-input::placeholder {
+  color: #8da0b3 !important;
+}
+
+.myai-admin .admin-input:focus {
+  border-color: #0f93e8 !important;
+  box-shadow: 0 0 0 4px rgba(15, 147, 232, 0.12);
+}
+
+.myai-admin table {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: 100%;
+}
+
+.myai-admin thead {
+  background: #f1f7fc !important;
+}
+
+.myai-admin th {
+  color: #58718a !important;
+  font-weight: 900 !important;
+  white-space: nowrap;
+}
+
+.myai-admin td {
+  color: #1d2d44 !important;
+  border-color: rgba(20, 94, 152, 0.1) !important;
+}
+
+.myai-admin tr:hover td {
+  background: #f8fbff;
+}
+
+.myai-admin .admin-panel span[class*="bg-emerald"],
+.myai-admin .admin-panel div[class*="bg-emerald"] {
+  background: #e8f8ef !important;
+  border-color: #a7e6c0 !important;
+  color: #047857 !important;
+}
+
+.myai-admin .admin-panel span[class*="bg-amber"],
+.myai-admin .admin-panel div[class*="bg-amber"] {
+  background: #fff5d6 !important;
+  border-color: #f9d77a !important;
+  color: #b45309 !important;
+}
+
+.myai-admin .admin-panel span[class*="bg-rose"],
+.myai-admin .admin-panel div[class*="bg-rose"] {
+  background: #ffe8ed !important;
+  border-color: #f9b4c3 !important;
+  color: #be123c !important;
+}
+
+.myai-admin .admin-panel .rounded-full {
+  border-radius: 999px;
+}
+
+.myai-admin .admin-panel table .rounded-full,
+.myai-admin .admin-panel table button {
+  white-space: nowrap;
+}
+
+.myai-admin .admin-calls-table {
+  table-layout: fixed;
+}
+
+.myai-admin .admin-calls-table th,
+.myai-admin .admin-calls-table td {
+  overflow-wrap: anywhere;
+  padding-left: 0.65rem !important;
+  padding-right: 0.65rem !important;
+}
+
+.myai-admin .admin-calls-table thead {
+  font-size: 0.68rem !important;
+  letter-spacing: 0.08em !important;
+}
+
+.myai-admin .admin-calls-table th:nth-child(1) { width: 14%; }
+.myai-admin .admin-calls-table th:nth-child(2) { width: 13%; }
+.myai-admin .admin-calls-table th:nth-child(3) { width: 10%; }
+.myai-admin .admin-calls-table th:nth-child(4) { width: 13%; }
+.myai-admin .admin-calls-table th:nth-child(5) { width: 8%; }
+.myai-admin .admin-calls-table th:nth-child(6) { width: 10%; }
+.myai-admin .admin-calls-table th:nth-child(7) { width: 12%; }
+.myai-admin .admin-calls-table th:nth-child(8) { width: 20%; }
+
+.myai-admin .admin-panel .overflow-x-auto {
+  border-radius: 18px !important;
+  background: #ffffff !important;
+}
+
+.myai-admin .admin-shell-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.myai-admin .admin-overview-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+@media (min-width: 1024px) {
+  .myai-admin .admin-shell-grid {
+    grid-template-columns: 18rem minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .myai-admin .admin-overview-grid {
+    grid-template-columns: minmax(0, 1.15fr) minmax(18rem, 0.85fr);
+  }
+}
+
+@media (max-width: 760px) {
+  .myai-admin .admin-panel {
+    border-radius: 18px !important;
+    padding: 1rem !important;
+  }
+
+  .myai-admin table {
+    min-width: 760px;
+  }
+}

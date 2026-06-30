@@ -1,0 +1,91 @@
+databases:
+  - name: myaipa-postgres
+    databaseName: myaipa
+    user: myaipa
+    plan: basic-256mb
+    region: ohio
+
+services:
+  - type: web
+    name: myaipa-api
+    runtime: node
+    plan: starter
+    region: ohio
+    branch: main
+    buildCommand: npm ci && npm run backend:prepare
+    preDeployCommand: npm run db:push
+    startCommand: npm run server:prod
+    healthCheckPath: /api/health
+    disk:
+      name: myaipa-data
+      mountPath: /data
+      sizeGB: 1
+    domains:
+      - api.myaipa.ca
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATA_DIR
+        value: /data
+      - key: PUBLIC_APP_URL
+        value: https://api.myaipa.ca
+      - key: ALLOWED_ORIGINS
+        value: https://www.myaipa.ca,https://myaipa.ca
+      - key: DATABASE_URL
+        fromDatabase:
+          name: myaipa-postgres
+          property: connectionString
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: ADMIN_SESSION_SECRET
+        generateValue: true
+      - key: MAKE_SIGNUP_WEBHOOK_URL
+        sync: false
+      - key: MAKE_SIGNUP_WEBHOOK_API_KEY
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_PRICE_ID
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_FROM_NUMBER
+        sync: false
+      - key: OWNER_SMS_FROM
+        sync: false
+      - key: TURNSTILE_SECRET_KEY
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: 587
+      - key: SMTP_SECURE
+        value: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+      - key: VAPI_API_KEY
+        sync: false
+      - key: VAPI_API_BASE_URL
+        value: https://api.vapi.ai
+      - key: VAPI_CALL_LIMIT
+        value: 100
+      - key: VAPI_DEFAULT_BUSINESS_ID
+        value: 1
+      - key: VAPI_BUSINESS_MAP
+        sync: false
+      - key: VAPI_AUTO_SYNC_ENABLED
+        value: false
+      - key: TWILIO_API_BASE_URL
+        value: https://api.twilio.com
+      - key: MISSED_CALL_ALERT_ENABLED
+        value: false
+      - key: DAILY_DIGEST_ENABLED
+        value: false
