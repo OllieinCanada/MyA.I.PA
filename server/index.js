@@ -247,28 +247,30 @@ function hasValidAdminSession(req) {
 }
 
 function setAdminSessionCookie(res, token) {
+  const isProduction = process.env.NODE_ENV === "production";
   const cookie = [
     `${ADMIN_SESSION_COOKIE}=${encodeURIComponent(token)}`,
     "Path=/",
     "HttpOnly",
-    "SameSite=Lax",
+    isProduction ? "SameSite=None" : "SameSite=Lax",
     `Max-Age=${Math.floor(ADMIN_SESSION_TTL_MS / 1000)}`,
   ];
-  if (process.env.NODE_ENV === "production") {
+  if (isProduction) {
     cookie.push("Secure");
   }
   res.setHeader("Set-Cookie", cookie.join("; "));
 }
 
 function clearAdminSessionCookie(res) {
+  const isProduction = process.env.NODE_ENV === "production";
   const cookie = [
     `${ADMIN_SESSION_COOKIE}=`,
     "Path=/",
     "HttpOnly",
-    "SameSite=Lax",
+    isProduction ? "SameSite=None" : "SameSite=Lax",
     "Max-Age=0",
   ];
-  if (process.env.NODE_ENV === "production") {
+  if (isProduction) {
     cookie.push("Secure");
   }
   res.setHeader("Set-Cookie", cookie.join("; "));
@@ -1119,6 +1121,285 @@ async function getTrialHealthDashboard() {
   });
 }
 
+const CUSTOMER_SETUP_STEPS = [
+  { key: "signup", label: "Signup received", nextAction: "Confirm the signup record exists with owner and business details." },
+  { key: "email", label: "Email verified", nextAction: "Ask the owner to open the verification email, or manually review the signup if email verification is disabled." },
+  { key: "stripe", label: "Stripe trial active", nextAction: "Send the customer through checkout or check the Stripe webhook configuration." },
+  { key: "make", label: "Make handoff completed", nextAction: "Check the Make scenario run history, then rerun the setup handoff if needed." },
+  { key: "vapi", label: "Vapi assistant mapped", nextAction: "Create or confirm the Vapi assistant/phone mapping for this business." },
+  { key: "twilio", label: "Twilio number connected", nextAction: "Add the Twilio/Vapi phone number and confirm it maps to the right business." },
+  { key: "first_call", label: "First call received", nextAction: "Place a test call after the number is connected." },
+  { key: "dashboard", label: "Customer dashboard ready", nextAction: "Make sure the customer has signup email plus owner or business phone for dashboard access." },
+];
+
+function getCustomerSetupId(signup = {}, business = {}) {
+  const source = [
+    signup.subscriptionId,
+    signup.checkoutSessionId,
+    signup.ownerEmail,
+    business.id ? `business:${business.id}` : "",
+    signup.businessName,
+    signup.businessPhone,
+  ].filter(Boolean)[0] || `${signup.businessName || "unknown"}:${signup.ownerPhone || signup.businessPhone || ""}`;
+  return hashKey(source);
+}
+
+function getCustomerSetupRuntimeKey(customerId) {
+  return `customer-setup:${String(customerId || "").trim()}`;
+}
+
+async function readCustomerSetupOverrides(customerId) {
+  if (!customerId) return {};
+  try {
+    const row = await prisma.runtimeStore.findUnique({ where: { key: getCustomerSetupRuntimeKey(customerId) } });
+    return row?.data && typeof row.data === "object" ? row.data : {};
+  } catch (error) {
+    console.warn("[customer-setup] override read failed", { message: error?.message || String(error) });
+    return {};
+  }
+}
+
+async function writeCustomerSetupOverrides(customerId, data) {
+  const key = getCustomerSetupRuntimeKey(customerId);
+  return prisma.runtimeStore.upsert({
+    where: { key },
+    update: { data },
+    create: { key, data },
+  });
+}
+
+function setupStep(status, reason = "") {
+  return { status, done: status === "done", reason };
+}
+
+function deriveCustomerSetupStep(stepKey, { signup, business, calls, envStatus }) {
+  const status = String(signup.status || "").toLowerCase();
+  const subscriptionStatus = String(signup.subscriptionStatus || signup.paymentStatus || signup.checkoutStatus || "").toLowerCase();
+  const makeStatus = Number(signup.makeStatus || 0);
+  const vapiMappings = business?.vapiMappings || [];
+  const phoneMappings = vapiMappings.filter((mapping) => String(mapping.matchType || "").toLowerCase().includes("phone"));
+
+  if (stepKey === "signup") {
+    return signup.signedUpAt || signup.createdAt ? setupStep("done", "Signup record exists.") : setupStep("waiting", "No signup timestamp found.");
+  }
+
+  if (stepKey === "email") {
+    if (signup.emailVerified || !signup.emailVerificationRequired) return setupStep("done", "Email verification is complete or not required.");
+    return setupStep("waiting", "Owner email verification is still pending.");
+  }
+
+  if (stepKey === "stripe") {
+    if (signup.subscriptionId || ["trialing", "active", "paid"].includes(subscriptionStatus)) return setupStep("done", "Stripe subscription or trial is active.");
+    if (["canceled", "cancelled", "expired", "unpaid", "failed"].includes(subscriptionStatus)) return setupStep("failed", `Stripe status is ${subscriptionStatus}.`);
+    if (!envStatus.stripeConfigured) return setupStep("manual", "Stripe is not configured on the backend.");
+    return setupStep("waiting", "Stripe checkout or trial has not been confirmed yet.");
+  }
+
+  if (stepKey === "make") {
+    if (signup.reviewRequired) return setupStep("manual", "Signup is held for manual review.");
+    if (status === "setup_error" || signup.makeError) return setupStep("failed", signup.makeError || "Make handoff failed.");
+    if (status.includes("setup_started") || status.includes("checkout") || status.includes("subscription") || (makeStatus >= 200 && makeStatus < 300)) {
+      return setupStep("done", "Make handoff has started or completed.");
+    }
+    return setupStep("waiting", "Make handoff has not completed yet.");
+  }
+
+  if (stepKey === "vapi") {
+    if (vapiMappings.length) return setupStep("done", "Vapi mapping exists for this business.");
+    if (!envStatus.vapiApiKeyConfigured) return setupStep("manual", "Vapi API key is not configured.");
+    return setupStep("waiting", "No Vapi mapping found for this business.");
+  }
+
+  if (stepKey === "twilio") {
+    if (signup.twilioPhoneNumber || phoneMappings.length) return setupStep("done", "AI phone number is mapped.");
+    return setupStep("waiting", "No AI/Twilio phone number is recorded yet.");
+  }
+
+  if (stepKey === "first_call") {
+    if (calls.length) return setupStep("done", "At least one call is synced.");
+    return setupStep("waiting", "No calls are synced for this business yet.");
+  }
+
+  if (stepKey === "dashboard") {
+    if (signup.ownerEmail && (signup.ownerPhone || signup.businessPhone || business?.phone)) return setupStep("done", "Customer can open the dashboard with email and phone.");
+    return setupStep("manual", "Dashboard lookup needs owner email plus owner or business phone.");
+  }
+
+  return setupStep("waiting", "Step has not been evaluated.");
+}
+
+function applyCustomerSetupOverride(derived, override) {
+  if (!override?.status) return derived;
+  const status = String(override.status || "").toLowerCase();
+  if (!["done", "waiting", "failed", "manual"].includes(status)) return derived;
+  return {
+    status,
+    done: status === "done",
+    reason: override.note || derived.reason || "Manually updated by admin.",
+    manualOverride: {
+      status,
+      note: override.note || "",
+      updatedAt: override.updatedAt || null,
+    },
+  };
+}
+
+function getSetupRollup(steps) {
+  const counts = steps.reduce(
+    (acc, step) => {
+      acc[step.status] = (acc[step.status] || 0) + 1;
+      if (step.done) acc.done += 1;
+      return acc;
+    },
+    { done: 0, waiting: 0, failed: 0, manual: 0 }
+  );
+  const readinessPercent = steps.length ? Math.round((counts.done / steps.length) * 100) : 0;
+  const blocker = steps.find((step) => !step.done) || null;
+  return {
+    counts,
+    readinessPercent,
+    overallStatus: steps.every((step) => step.done) ? "ready" : steps.some((step) => step.status === "failed") ? "blocked" : steps.some((step) => step.status === "manual") ? "manual" : "waiting",
+    nextAction: blocker?.nextAction || "Customer setup is ready.",
+    blockerKey: blocker?.key || null,
+    blockerLabel: blocker?.label || null,
+  };
+}
+
+async function getCustomerSetupCommandCenter() {
+  const signups = listSignupDashboardRecords();
+  const envStatus = {
+    databaseAvailable: true,
+    stripeConfigured: Boolean(stripe && STRIPE_PRICE_ID),
+    vapiApiKeyConfigured: Boolean(VAPI_API_KEY),
+    twilioConfigured: Boolean(TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN),
+  };
+
+  let businesses = [];
+  let databaseWarning = "";
+  try {
+    businesses = await prisma.business.findMany({
+      include: {
+        settings: true,
+        vapiMappings: { orderBy: { updatedAt: "desc" } },
+        calls: {
+          include: { caller: true },
+          orderBy: { startedAt: "desc" },
+          take: 10,
+        },
+      },
+      orderBy: { name: "asc" },
+      take: 300,
+    });
+  } catch (error) {
+    envStatus.databaseAvailable = false;
+    databaseWarning = error?.message || "Database is unavailable.";
+    businesses = [];
+  }
+
+  const businessesByName = new Map(businesses.map((business) => [normalizeForKey(business.name || ""), business]).filter(([key]) => Boolean(key)));
+  const businessesByPhone = new Map(businesses.map((business) => [normalizePhoneForMatch(business.phone || ""), business]).filter(([key]) => Boolean(key)));
+
+  const customers = [];
+  const usedBusinessIds = new Set();
+
+  for (const signup of signups) {
+    const business =
+      businessesByName.get(normalizeForKey(signup.businessName || "")) ||
+      businessesByPhone.get(normalizePhoneForMatch(signup.businessPhone || "")) ||
+      null;
+    if (business?.id) usedBusinessIds.add(business.id);
+    const customerId = getCustomerSetupId(signup, business || {});
+    const overrides = await readCustomerSetupOverrides(customerId);
+    const calls = business?.calls || [];
+    const steps = CUSTOMER_SETUP_STEPS.map((definition) => {
+      const derived = deriveCustomerSetupStep(definition.key, { signup, business, calls, envStatus });
+      return {
+        ...definition,
+        ...applyCustomerSetupOverride(derived, overrides.steps?.[definition.key]),
+      };
+    });
+    const rollup = getSetupRollup(steps);
+
+    customers.push({
+      id: customerId,
+      businessId: business?.id || null,
+      businessName: signup.businessName || business?.name || "Unnamed business",
+      ownerName: signup.ownerName || "",
+      ownerEmail: signup.ownerEmail || "",
+      ownerPhone: signup.ownerPhone || business?.settings?.ownerPhone || "",
+      businessPhone: signup.businessPhone || business?.phone || "",
+      signedUpAt: signup.signedUpAt || signup.createdAt || null,
+      status: signup.status || "signup_received",
+      subscriptionStatus: signup.subscriptionStatus || signup.paymentStatus || signup.checkoutStatus || "",
+      twilioPhoneNumber: signup.twilioPhoneNumber || "",
+      aiNumbers: (business?.vapiMappings || [])
+        .filter((mapping) => String(mapping.matchType || "").toLowerCase().includes("phone"))
+        .map((mapping) => mapping.matchValue),
+      callCount: calls.length,
+      lastCallAt: calls[0]?.startedAt || null,
+      steps,
+      ...rollup,
+    });
+  }
+
+  for (const business of businesses) {
+    if (usedBusinessIds.has(business.id)) continue;
+    const signup = { businessName: business.name, businessPhone: business.phone };
+    const customerId = getCustomerSetupId(signup, business);
+    const overrides = await readCustomerSetupOverrides(customerId);
+    const calls = business.calls || [];
+    const steps = CUSTOMER_SETUP_STEPS.map((definition) => {
+      const derived = deriveCustomerSetupStep(definition.key, { signup, business, calls, envStatus });
+      return {
+        ...definition,
+        ...applyCustomerSetupOverride(derived, overrides.steps?.[definition.key]),
+      };
+    });
+    const rollup = getSetupRollup(steps);
+    customers.push({
+      id: customerId,
+      businessId: business.id,
+      businessName: business.name,
+      ownerName: "",
+      ownerEmail: "",
+      ownerPhone: business.settings?.ownerPhone || "",
+      businessPhone: business.phone || "",
+      signedUpAt: business.createdAt || null,
+      status: "business_exists",
+      subscriptionStatus: "",
+      twilioPhoneNumber: "",
+      aiNumbers: (business.vapiMappings || [])
+        .filter((mapping) => String(mapping.matchType || "").toLowerCase().includes("phone"))
+        .map((mapping) => mapping.matchValue),
+      callCount: calls.length,
+      lastCallAt: calls[0]?.startedAt || null,
+      steps,
+      ...rollup,
+    });
+  }
+
+  const summary = customers.reduce(
+    (acc, customer) => {
+      acc.total += 1;
+      acc[customer.overallStatus] = (acc[customer.overallStatus] || 0) + 1;
+      return acc;
+    },
+    { total: 0, ready: 0, blocked: 0, manual: 0, waiting: 0 }
+  );
+
+  return {
+    customers: customers.sort((a, b) => Number(new Date(b.signedUpAt || 0)) - Number(new Date(a.signedUpAt || 0))),
+    summary,
+    warnings: [
+      databaseWarning ? "Database is unavailable, so setup rows may be incomplete." : "",
+      !envStatus.stripeConfigured ? "Stripe is not configured." : "",
+      !envStatus.vapiApiKeyConfigured ? "Vapi API key is not configured." : "",
+      !envStatus.twilioConfigured ? "Twilio credentials are not configured." : "",
+    ].filter(Boolean),
+    env: envStatus,
+  };
+}
+
 async function getAdminOpsOverview() {
   const signups = listSignupDashboardRecords();
   const signupByBusiness = new Map(
@@ -1216,6 +1497,7 @@ async function getAdminOpsOverview() {
     vapiDefaultBusinessId: VAPI_DEFAULT_BUSINESS_ID,
     vapiBusinessMapEntries: Object.keys(parseVapiBusinessMap()).length,
     twilioConfigured: Boolean(TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN),
+    stripeConfigured: Boolean(stripe && STRIPE_PRICE_ID),
     exposeCallTranscriptsInAdmin: EXPOSE_CALL_TRANSCRIPTS_IN_ADMIN,
     exposeRecordingUrlsInAdmin: EXPOSE_RECORDING_URLS_IN_ADMIN,
     missedCallAlertsEnabled: MISSED_CALL_ALERT_ENABLED,
@@ -1227,6 +1509,7 @@ async function getAdminOpsOverview() {
   if (databaseWarning) warnings.push(databaseWarning);
   if (!envStatus.vapiApiKeyConfigured) warnings.push("VAPI_API_KEY is not configured, so live Vapi call sync cannot run.");
   if (!envStatus.twilioConfigured) warnings.push("Twilio credentials are not configured, so per-call Twilio cost sync cannot run.");
+  if (!envStatus.stripeConfigured) warnings.push("Stripe checkout is not configured, so customers cannot start paid checkout yet.");
   if (!envStatus.vapiAutoSyncEnabled) warnings.push("VAPI_AUTO_SYNC_ENABLED is off; calls only sync when an admin presses Sync Vapi Calls.");
   if (!ownerRows.length) warnings.push("No businesses exist in the database yet.");
   if (ownerRows.length && !ownerRows.some((row) => row.vapiMappings.length)) warnings.push("No Vapi mappings exist yet, so calls may fall back to the default business.");
@@ -1476,6 +1759,123 @@ function listSignupDashboardRecords() {
       expiry: getSignupExpiryStatus(record),
     }))
     .sort((a, b) => Number(new Date(b.signedUpAt || b.createdAt || 0)) - Number(new Date(a.signedUpAt || a.createdAt || 0)));
+}
+
+function sanitizeCustomerCall(call) {
+  return {
+    id: call.id,
+    startedAt: call.startedAt,
+    durationSec: call.durationSec,
+    status: call.status,
+    outcome: call.outcome,
+    aiSummary: call.aiSummary || (call.transcript ? "Call summary is being prepared." : ""),
+    followUpNeeded: Boolean(call.followUpNeeded || ["FOLLOW_UP", "QUOTE_NEEDED", "EMERGENCY"].includes(call.outcome)),
+    caller: {
+      phone: call.caller?.phone || "",
+      name: call.caller?.name || "",
+    },
+  };
+}
+
+async function getCustomerDashboard({ email, phone }) {
+  const ownerEmail = String(email || "").trim().toLowerCase();
+  const phoneMatch = normalizePhoneForMatch(phone);
+  if (!ownerEmail || !isValidEmailAddress(ownerEmail) || !phoneMatch) return null;
+
+  const signup = listSignupDashboardRecords().find((record) => {
+    const recordEmail = String(record.ownerEmail || "").trim().toLowerCase();
+    if (recordEmail !== ownerEmail) return false;
+    const phones = [record.ownerPhone, record.businessPhone].map(normalizePhoneForMatch).filter(Boolean);
+    return phones.includes(phoneMatch);
+  });
+
+  if (!signup) return null;
+
+  const businessName = String(signup.businessName || "").trim();
+  const businessPhone = normalizePhoneForMatch(signup.businessPhone || "");
+  const businessLookup = [
+    businessName ? { name: { equals: businessName, mode: "insensitive" } } : undefined,
+    businessPhone ? { phone: businessPhone } : undefined,
+  ].filter(Boolean);
+  const business = businessLookup.length
+    ? await prisma.business.findFirst({
+        where: { OR: businessLookup },
+        include: {
+          settings: true,
+          vapiMappings: true,
+          faqs: { orderBy: { updatedAt: "desc" }, take: 6 },
+          calls: {
+            include: { caller: true },
+            orderBy: { startedAt: "desc" },
+            take: 50,
+          },
+        },
+      })
+    : null;
+
+  const calls = business?.calls || [];
+  const completedCalls = calls.filter((call) => call.status === "COMPLETED").length;
+  const missedCalls = calls.filter((call) => ["MISSED", "ABANDONED", "FAILED"].includes(call.status)).length;
+  const followUps = calls.filter((call) => call.followUpNeeded || ["FOLLOW_UP", "QUOTE_NEEDED", "EMERGENCY"].includes(call.outcome)).length;
+  const bookedCalls = calls.filter((call) => call.outcome === "BOOKED").length;
+  const billingChecklist = getBillingReadinessForSignup(signup);
+  const setupChecklist = [
+    ...billingChecklist,
+    { key: "owner-phone", label: "Owner phone added", done: Boolean(business?.settings?.ownerPhone || signup.ownerPhone) },
+    { key: "ai-number", label: "AI number mapped", done: Boolean(signup.twilioPhoneNumber || business?.vapiMappings?.length) },
+    { key: "faq", label: "Starter FAQs added", done: Boolean(business?.faqs?.length) },
+  ];
+
+  return {
+    signup: {
+      businessName: signup.businessName || business?.name || "Your business",
+      ownerName: signup.ownerName || "",
+      ownerEmail: signup.ownerEmail || "",
+      ownerPhone: signup.ownerPhone || business?.settings?.ownerPhone || "",
+      businessPhone: signup.businessPhone || business?.phone || "",
+      businessAddress: signup.businessAddress || "",
+      status: signup.status || "signup_received",
+      signedUpAt: signup.signedUpAt || signup.createdAt || "",
+      trialEndAt: signup.trialEndAt || signup.currentPeriodEndAt || signup.periodEndAt || null,
+      subscriptionStatus: signup.subscriptionStatus || signup.checkoutStatus || signup.paymentStatus || "",
+      twilioPhoneNumber: signup.twilioPhoneNumber || "",
+      reviewRequired: Boolean(signup.reviewRequired),
+      emailVerificationRequired: Boolean(signup.emailVerificationRequired),
+      emailVerified: Boolean(signup.emailVerified),
+    },
+    assistant: {
+      aiNumber: signup.twilioPhoneNumber || business?.vapiMappings?.find((mapping) => /phone/i.test(mapping.matchType))?.matchValue || "",
+      answerAfterRings: business?.settings?.answerAfterRings ?? 3,
+      afterHoursMode: business?.settings?.afterHoursMode || "AI_ALWAYS_ON",
+      bookingLink: business?.settings?.bookingLink || "",
+      mappedNumbers: (business?.vapiMappings || []).map((mapping) => ({
+        type: mapping.matchType,
+        value: mapping.matchValue,
+        label: mapping.label || "",
+      })),
+    },
+    stats: {
+      totalCalls: calls.length,
+      completedCalls,
+      missedCalls,
+      followUps,
+      bookedCalls,
+      averageDurationSec: calls.length ? Math.round(calls.reduce((sum, call) => sum + Number(call.durationSec || 0), 0) / calls.length) : 0,
+      lastCallAt: calls[0]?.startedAt || null,
+    },
+    setup: {
+      checklist: setupChecklist,
+      readinessPercent: Math.round((setupChecklist.filter((item) => item.done).length / setupChecklist.length) * 100),
+    },
+    recentCalls: calls.slice(0, 8).map(sanitizeCustomerCall),
+    faqs: (business?.faqs || []).map((faq) => ({
+      id: faq.id,
+      question: faq.question,
+      answer: faq.answer,
+      tags: faq.tags,
+      updatedAt: faq.updatedAt,
+    })),
+  };
 }
 
 function getTrialReminderDueAt(subscription) {
@@ -3172,6 +3572,26 @@ app.post(
 );
 
 app.post(
+  "/api/customer/dashboard",
+  asyncRoute(async (req, res) => {
+    const body = req.body || {};
+    const email = String(body.email || body.ownerEmail || "").trim();
+    const phone = String(body.phone || body.ownerPhone || body.businessPhone || "").trim();
+
+    if (!email || !isValidEmailAddress(email) || !phone) {
+      return res.status(400).json({ error: "Enter the signup email and phone number for this business." });
+    }
+
+    const dashboard = await getCustomerDashboard({ email, phone });
+    if (!dashboard) {
+      return res.status(404).json({ error: "No customer dashboard was found for that email and phone number." });
+    }
+
+    res.json({ ok: true, dashboard });
+  })
+);
+
+app.post(
   "/api/admin/login",
   asyncRoute(async (req, res) => {
     if (!hasValidAdminPassword(req)) {
@@ -3352,6 +3772,52 @@ app.get(
 );
 
 app.get(
+  "/api/admin/customer-setup",
+  requireAdmin,
+  asyncRoute(async (_req, res) => {
+    res.json({ ok: true, ...(await getCustomerSetupCommandCenter()) });
+  })
+);
+
+app.post(
+  "/api/admin/customer-setup/:customerId/steps/:stepKey",
+  requireAdmin,
+  asyncRoute(async (req, res) => {
+    const customerId = String(req.params.customerId || "").trim();
+    const stepKey = String(req.params.stepKey || "").trim();
+    const allowedStep = CUSTOMER_SETUP_STEPS.some((step) => step.key === stepKey);
+    if (!/^[a-f0-9]{32}$/i.test(customerId) || !allowedStep) {
+      return res.status(400).json({ error: "Invalid customer setup step." });
+    }
+
+    const body = req.body || {};
+    const status = String(body.status || "").trim().toLowerCase();
+    const allowedStatus = ["done", "waiting", "failed", "manual", "clear"];
+    if (!allowedStatus.includes(status)) return res.status(400).json({ error: "Invalid setup step status." });
+
+    const current = await readCustomerSetupOverrides(customerId);
+    const steps = { ...(current.steps || {}) };
+    if (status === "clear") {
+      delete steps[stepKey];
+    } else {
+      steps[stepKey] = {
+        status,
+        note: String(body.note || "").trim().slice(0, 500),
+        updatedAt: new Date().toISOString(),
+      };
+    }
+
+    await writeCustomerSetupOverrides(customerId, {
+      ...current,
+      steps,
+      updatedAt: new Date().toISOString(),
+    });
+
+    res.json({ ok: true, ...(await getCustomerSetupCommandCenter()) });
+  })
+);
+
+app.get(
   "/api/admin/daily-digest",
   requireAdmin,
   asyncRoute(async (req, res) => {
@@ -3413,6 +3879,72 @@ app.get(
     });
     const businesses = await prisma.business.findMany({ orderBy: { name: "asc" }, take: 300 });
     res.json({ ok: true, mappings, businesses });
+  })
+);
+
+app.post(
+  "/api/admin/businesses",
+  requireAdmin,
+  asyncRoute(async (req, res) => {
+    const body = req.body || {};
+    const requestedId = parsePositiveInt(body.id, 0);
+    const name = String(body.name || "").trim().slice(0, 160);
+    const phone = String(body.phone || "").trim().slice(0, 80);
+    const ownerPhone = String(body.ownerPhone || phone).trim().slice(0, 80);
+    const timezone = String(body.timezone || "America/Toronto").trim().slice(0, 80);
+    const bookingLink = String(body.bookingLink || "").trim().slice(0, 300) || null;
+
+    if (!name) return res.status(400).json({ error: "Business name is required." });
+    if (!phone) return res.status(400).json({ error: "Business phone is required." });
+
+    const businessData = { name, phone, timezone };
+    const business = requestedId
+      ? await prisma.business.upsert({
+          where: { id: requestedId },
+          update: businessData,
+          create: { id: requestedId, ...businessData },
+        })
+      : await prisma.business.create({ data: businessData });
+
+    const settings = await prisma.settings.upsert({
+      where: { businessId: business.id },
+      update: {
+        ownerPhone,
+        bookingLink,
+      },
+      create: {
+        businessId: business.id,
+        answerAfterRings: 3,
+        afterHoursMode: "AI_ALWAYS_ON",
+        ownerPhone,
+        bookingLink,
+      },
+    });
+
+    let mapping = null;
+    const rawMatchValue = String(body.vapiMatchValue || "").trim();
+    if (rawMatchValue) {
+      const matchType = String(body.vapiMatchType || "phoneNumber").trim().slice(0, 80);
+      const matchValue = matchType.toLowerCase().includes("phone")
+        ? normalizePhoneForMatch(rawMatchValue)
+        : rawMatchValue.toLowerCase();
+      mapping = await prisma.vapiBusinessMapping.upsert({
+        where: { matchValue },
+        update: {
+          businessId: business.id,
+          matchType,
+          label: String(body.vapiLabel || name).trim().slice(0, 120) || null,
+        },
+        create: {
+          businessId: business.id,
+          matchType,
+          matchValue,
+          label: String(body.vapiLabel || name).trim().slice(0, 120) || null,
+        },
+      });
+    }
+
+    res.status(201).json({ ok: true, business, settings, mapping });
   })
 );
 

@@ -593,6 +593,16 @@ export default function AdminDashboard() {
   const [costDays, setCostDays] = useState("30");
   const [faqDraft, setFaqDraft] = useState({ question: "", answer: "", tags: "" });
   const [mappingDraft, setMappingDraft] = useState({ businessId: "1", matchType: "assistantId", matchValue: "", label: "" });
+  const [businessDraft, setBusinessDraft] = useState({
+    id: "1",
+    name: "My AI PA",
+    phone: "+12495033301",
+    ownerPhone: "+12495033301",
+    timezone: "America/Toronto",
+    vapiMatchType: "phoneNumber",
+    vapiMatchValue: "+12495033301",
+    vapiLabel: "Main AI number",
+  });
 
   const stats = useMemo(
     () => ({
@@ -764,6 +774,18 @@ export default function AdminDashboard() {
       setVapiSyncStatus(`Cost sync complete. Twilio updated ${data.twilio?.updated || 0} of ${data.twilio?.fetched || 0} fetched calls.`);
     } catch (err) {
       setVapiSyncStatus("");
+      setError(cleanErrorMessage(err.message));
+    }
+  };
+
+  const createBusiness = async (e) => {
+    e.preventDefault();
+    setError("");
+    try {
+      const data = await api("/api/admin/businesses", { method: "POST", body: businessDraft });
+      setVapiSyncStatus(`Created ${data.business?.name || "business"} as Business #${data.business?.id || businessDraft.id}.`);
+      await Promise.allSettled([loadOpsOverview(), loadVapiMappings(), loadSettings()]);
+    } catch (err) {
       setError(cleanErrorMessage(err.message));
     }
   };
@@ -1354,6 +1376,49 @@ export default function AdminDashboard() {
                 <div className="mt-1 text-sm font-extrabold text-white">{dt(opsOverview.sync?.lastSyncedAt)}</div>
               </div>
             </div>
+
+            <form onSubmit={createBusiness} className="rounded-2xl border border-white/10 bg-black/20 p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="text-sm font-bold uppercase tracking-[0.2em] text-white/60">Create Business</div>
+                  <p className="mt-1 text-sm font-semibold text-white/55">Create the owner record directly, map the known AI phone number, then sync past Vapi calls.</p>
+                </div>
+                <button type="submit" className="rounded-full bg-gradient-to-r from-emerald-700 to-amber-500 px-5 py-3 text-sm font-black uppercase tracking-[0.12em] text-white">
+                  Save Business
+                </button>
+              </div>
+
+              <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <Labeled label="Business ID">
+                  <Input value={businessDraft.id} onChange={(e) => setBusinessDraft((s) => ({ ...s, id: e.target.value }))} />
+                </Labeled>
+                <Labeled label="Business Name">
+                  <Input value={businessDraft.name} onChange={(e) => setBusinessDraft((s) => ({ ...s, name: e.target.value }))} />
+                </Labeled>
+                <Labeled label="Business Phone">
+                  <Input value={businessDraft.phone} onChange={(e) => setBusinessDraft((s) => ({ ...s, phone: e.target.value }))} />
+                </Labeled>
+                <Labeled label="Owner Alert Phone">
+                  <Input value={businessDraft.ownerPhone} onChange={(e) => setBusinessDraft((s) => ({ ...s, ownerPhone: e.target.value }))} />
+                </Labeled>
+                <Labeled label="Timezone">
+                  <Input value={businessDraft.timezone} onChange={(e) => setBusinessDraft((s) => ({ ...s, timezone: e.target.value }))} />
+                </Labeled>
+                <Labeled label="Vapi Match Type">
+                  <Select value={businessDraft.vapiMatchType} onChange={(e) => setBusinessDraft((s) => ({ ...s, vapiMatchType: e.target.value }))}>
+                    <option value="phoneNumber">Phone number</option>
+                    <option value="assistantId">Assistant ID</option>
+                    <option value="phoneNumberId">Phone number ID</option>
+                  </Select>
+                </Labeled>
+                <Labeled label="Vapi Match Value">
+                  <Input value={businessDraft.vapiMatchValue} onChange={(e) => setBusinessDraft((s) => ({ ...s, vapiMatchValue: e.target.value }))} />
+                </Labeled>
+                <Labeled label="Mapping Label">
+                  <Input value={businessDraft.vapiLabel} onChange={(e) => setBusinessDraft((s) => ({ ...s, vapiLabel: e.target.value }))} />
+                </Labeled>
+              </div>
+            </form>
 
             {opsOverview.sync?.warnings?.length ? (
               <div className="grid gap-2">

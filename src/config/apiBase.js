@@ -11,7 +11,7 @@ export function isLocalBrowser() {
 }
 
 export function getDefaultApiBaseUrl() {
-  return isLocalBrowser() ? LOCAL_API_BASE_URL : PRODUCTION_API_BASE_URL;
+  return PRODUCTION_API_BASE_URL;
 }
 
 export function isMakeWebhookUrl(url) {
