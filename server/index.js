@@ -1148,7 +1148,7 @@ async function getCostAudit({ days = 30 } = {}) {
 
     const twilioCost = Number(call.twilioPrice || 0);
     const vapiCost = Number(call.vapiCost || 0);
-    const totalInternalCost = Number(call.totalInternalCost || twilioCost + vapiCost || 0);
+    const totalInternalCost = Number((twilioCost + vapiCost).toFixed(4));
 
     row.totalCalls += 1;
     if (call.costSyncedAt || twilioCost || vapiCost || totalInternalCost) row.pricedCalls += 1;
@@ -1172,7 +1172,7 @@ async function getCostAudit({ days = 30 } = {}) {
 
   const twilioCallCost = Number(calls.reduce((sum, call) => sum + Number(call.twilioPrice || 0), 0).toFixed(4));
   const vapiCost = Number(calls.reduce((sum, call) => sum + Number(call.vapiCost || 0), 0).toFixed(4));
-  const callUsageCost = Number(calls.reduce((sum, call) => sum + Number(call.totalInternalCost || Number(call.twilioPrice || 0) + Number(call.vapiCost || 0)), 0).toFixed(4));
+  const callUsageCost = Number((twilioCallCost + vapiCost).toFixed(4));
   const twilioUsageCost = twilioAccountUsage?.available ? Number(twilioAccountUsage.totalCost || 0) : null;
   const effectiveTwilioCost = twilioUsageCost ?? twilioCallCost;
   const fixedCost = Number(fixedCosts.totalCost || 0);
@@ -1193,7 +1193,10 @@ async function getCostAudit({ days = 30 } = {}) {
       estimatedProviderCost,
     },
     summary: summary.sort((a, b) => b.totalInternalCost - a.totalInternalCost),
-    calls: calls.slice(0, 300).map(sanitizeAdminCall),
+    calls: calls.slice(0, 300).map((call) => sanitizeAdminCall({
+      ...call,
+      totalInternalCost: Number((Number(call.twilioPrice || 0) + Number(call.vapiCost || 0)).toFixed(4)),
+    })),
     twilioAccountUsage,
     fixedCosts,
     env: {
