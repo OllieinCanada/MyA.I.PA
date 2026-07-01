@@ -1054,6 +1054,7 @@ function addNumberEvidence(map, phoneNumber, evidence) {
 
 async function getTwilioNumberInventory({ days = 90 } = {}) {
   const windowDays = Math.max(1, Math.min(365, Number(days) || 90));
+  const { start } = getDateRange(windowDays);
   const [numbers, twilioCalls, businesses, localCalls] = await Promise.all([
     fetchTwilioIncomingPhoneNumbers(),
     fetchTwilioCalls({ days: windowDays, limit: 1000 }).catch((error) => {
@@ -1087,7 +1088,10 @@ async function getTwilioNumberInventory({ days = 90 } = {}) {
   const inventory = numbers.map(normalizeTwilioInventoryNumber).filter((record) => record.phoneNumber);
   const inventoryNumbers = new Set(inventory.map((record) => record.phoneNumber));
   const twilioCallStats = new Map();
-  for (const call of twilioCalls.map(normalizeTwilioCall)) {
+  const recentTwilioCalls = twilioCalls
+    .map(normalizeTwilioCall)
+    .filter((call) => call.startedAtMs && call.startedAtMs >= start.getTime());
+  for (const call of recentTwilioCalls) {
     for (const phoneNumber of [call.to, call.from]) {
       if (!inventoryNumbers.has(phoneNumber)) continue;
       const stats = twilioCallStats.get(phoneNumber) || { count: 0, inbound: 0, outbound: 0, lastCallAt: null };
@@ -1116,7 +1120,7 @@ async function getTwilioNumberInventory({ days = 90 } = {}) {
     const hasWebhookConfig = Boolean(record.voiceUrl || record.smsUrl || record.voiceApplicationSid || record.smsApplicationSid || record.trunkSid);
     const status = evidence.length
       ? "keep"
-      : twilioStats.count || hasWebhookConfig
+      : twilioStats.count
         ? "review"
         : "likelyUnused";
     const reasons = evidence.length
@@ -1124,7 +1128,7 @@ async function getTwilioNumberInventory({ days = 90 } = {}) {
       : [
           twilioStats.count ? `${twilioStats.count} Twilio calls in ${windowDays} days` : "",
           hasWebhookConfig ? "Has Twilio webhook/application configuration" : "",
-          !twilioStats.count && !hasWebhookConfig ? `No app mapping and no Twilio calls in ${windowDays} days` : "",
+          !twilioStats.count ? `No app mapping and no Twilio calls in ${windowDays} days` : "",
         ].filter(Boolean);
 
     return {
@@ -1160,7 +1164,8 @@ async function getTwilioNumberInventory({ days = 90 } = {}) {
       review: rows.filter((row) => row.status === "review").length,
       likelyUnused: rows.filter((row) => row.status === "likelyUnused").length,
       appMappedNumbers: appEvidence.size,
-      twilioCallsAnalyzed: twilioCalls.length,
+      twilioCallsFetched: twilioCalls.length,
+      twilioCallsAnalyzed: recentTwilioCalls.length,
     },
     numbers: rows.sort((a, b) => {
       const rank = { keep: 0, review: 1, likelyUnused: 2 };
