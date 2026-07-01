@@ -1,20 +1,24 @@
-export const DEFAULT_SIGNUP_WEBHOOK_URL = "https://hook.us2.make.com/bg30xcgcluakdcf3u2jtw1h9186gbq7m";
-export const RAW_API_BASE = process.env.REACT_APP_API_BASE_URL || DEFAULT_SIGNUP_WEBHOOK_URL;
+import { getDefaultApiBaseUrl, isMakeWebhookUrl, normalizeApiBase } from "../../config/apiBase";
+
+export const DEFAULT_SIGNUP_WEBHOOK_URL = "";
+export const RAW_API_BASE = process.env.REACT_APP_API_BASE_URL || getDefaultApiBaseUrl();
+export const RAW_CHECKOUT_API_BASE = process.env.REACT_APP_CHECKOUT_API_BASE_URL || "";
 export const MAKE_SIGNUP_WEBHOOK_URL = process.env.REACT_APP_MAKE_SIGNUP_WEBHOOK_URL || "";
 export const MAKE_SIGNUP_WEBHOOK_API_KEY = process.env.REACT_APP_MAKE_SIGNUP_WEBHOOK_API_KEY || "";
 export const SIGNUP_API_PATH = "/api/integrations/signup-complete";
-export const IS_MAKE_WEBHOOK = /^https:\/\/hook\.[^/]+\.make\.com\//.test(RAW_API_BASE);
+export const CHECKOUT_API_PATH = "/api/payments/create-checkout-session";
+export const IS_MAKE_WEBHOOK = isMakeWebhookUrl(RAW_API_BASE);
 
-export const API_BASE =
-  RAW_API_BASE || "";
+export const API_BASE = normalizeApiBase(RAW_API_BASE);
 
 export const SIGNUP_SUBMIT_URL = MAKE_SIGNUP_WEBHOOK_URL
-  ? MAKE_SIGNUP_WEBHOOK_URL.replace(/\/+$/, "")
+  ? normalizeApiBase(MAKE_SIGNUP_WEBHOOK_URL)
   : IS_MAKE_WEBHOOK
-    ? RAW_API_BASE.replace(/\/+$/, "")
-    : API_BASE
-      ? `${API_BASE.replace(/\/+$/, "")}${SIGNUP_API_PATH}`
-      : "";
+    ? normalizeApiBase(RAW_API_BASE)
+    : `${API_BASE}${SIGNUP_API_PATH}`;
+
+export const CHECKOUT_API_BASE = normalizeApiBase(RAW_CHECKOUT_API_BASE || (IS_MAKE_WEBHOOK ? getDefaultApiBaseUrl() : API_BASE));
+export const CHECKOUT_SESSION_URL = `${CHECKOUT_API_BASE}${CHECKOUT_API_PATH}`;
 
 export const CAPTCHA_PROVIDER = "";
 export const RECAPTCHA_SITE_KEY = "";

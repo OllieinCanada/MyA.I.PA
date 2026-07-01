@@ -1,6 +1,8 @@
 import React from "react";
 import ReactDOM from "react-dom";
 import App from "./App";
+import AdminDashboard from "./AdminDashboard";
+import CustomerDashboard from "./CustomerDashboard";
 import Signup from "./Signup";
 import Privacy from "./Privacy";
 import Terms from "./Terms";
@@ -27,7 +29,9 @@ function RouterRoot() {
   }, []);
 
   let page = <App />;
-  if (route === "signup") page = <Signup />;
+  if (route === "admin") page = <AdminDashboard />;
+  else if (route === "dashboard") page = <CustomerDashboard />;
+  else if (route === "signup") page = <Signup />;
   else if (route === "privacy") page = <Privacy />;
   else if (route === "terms") page = <Terms />;
 

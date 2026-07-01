@@ -61,36 +61,36 @@ const problemMoments = [
 
 const benefitCards = [
   {
-    code: "EL",
-    eyebrow: "Electrical",
+    code: "PHONE",
+    eyebrow: "Catch every call",
     accent: "from-blue-600 to-blue-500",
     glow: "shadow-[0_18px_40px_-30px_rgba(56,189,248,0.42)]",
-    title: "Catch repair and estimate calls while you are on-site.",
-    body: "Panel upgrades, hot tub wiring, breaker issues, and quote requests still get answered while your hands are full, with job details texted to you for follow-up.",
+    title: "Never miss another opportunity.",
+    body: "Each inquiry is answered while you are on-site or on the ladder.",
   },
   {
-    code: "PL",
-    eyebrow: "Plumbing",
+    code: "CLIPBOARD",
+    eyebrow: "Stay organized",
     accent: "from-blue-400 to-blue-500",
     glow: "shadow-[0_18px_40px_-30px_rgba(96,165,250,0.42)]",
-    title: "Keep urgent plumbing calls from going to voicemail.",
-    body: "Burst pipes, drain calls, fixture installs, and emergency-service requests stay moving after hours or while you are on another job.",
+    title: "All details get collected.",
+    body: "Job notes, caller info, and timing arrive by text after the call.",
   },
   {
-    code: "HV",
-    eyebrow: "HVAC",
+    code: "TOOLS",
+    eyebrow: "Work-life balance",
     accent: "from-emerald-500 to-emerald-400",
     glow: "shadow-[0_18px_40px_-30px_rgba(52,211,153,0.42)]",
-    title: "Handle HVAC repair calls after hours and in peak season.",
-    body: "Furnace, AC, and maintenance callers get a real response, leave the right job details, and stay with you instead of calling the next company.",
+    title: "Handle calls after hours.",
+    body: "Let the agent answer without breaking focus or family time.",
   },
   {
-    code: "GC",
-    eyebrow: "General Contractors",
+    code: "CHART",
+    eyebrow: "Grow your business",
     accent: "from-orange-500 to-orange-400",
     glow: "shadow-[0_18px_40px_-30px_rgba(250,204,21,0.34)]",
-    title: "Keep larger project and estimate calls organized.",
-    body: "Renovations, additions, repairs, and site-visit requests get answered while you are managing crews, with project details sent cleanly to your phone.",
+    title: "More calls answered means more booked jobs.",
+    body: "Better reviews, cleaner follow-up, and higher revenue.",
   },
 ];
 
@@ -392,6 +392,26 @@ function ProofFeatureCard({ eyebrow, title, icon }) {
 
 function BenefitSymbol({ code }) {
   switch (code) {
+    case "PHONE":
+      return <HeroIcon type="phone" className="h-7 w-7" />;
+    case "CLIPBOARD":
+      return <HeroIcon type="clipboard" className="h-7 w-7" />;
+    case "TOOLS":
+      return (
+        <svg viewBox="0 0 24 24" className="h-7 w-7" fill="none" stroke="currentColor" strokeWidth="2.1" aria-hidden="true">
+          <path d="m14.7 5.2 4.1 4.1M16.2 3.7l4.1 4.1-8.8 8.8-4.1-4.1 8.8-8.8Z" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M6.5 13.5 3.8 16.2a2.4 2.4 0 0 0 3.4 3.4l2.7-2.7" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M5 5.2 8.8 9" strokeLinecap="round" />
+        </svg>
+      );
+    case "CHART":
+      return (
+        <svg viewBox="0 0 24 24" className="h-7 w-7" fill="none" stroke="currentColor" strokeWidth="2.1" aria-hidden="true">
+          <path d="M4 19.5h16" strokeLinecap="round" />
+          <path d="M6.5 16v-4M12 16V7M17.5 16V4.5" strokeLinecap="round" />
+          <path d="m6.5 9.5 4.2-3.2 3.1 2.1 4.2-5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
     case "EL":
       return (
         <svg viewBox="0 0 24 24" className="h-8 w-8" fill="none" aria-hidden="true">
@@ -566,6 +586,38 @@ function HeroIcon({ type, className = "h-6 w-6" }) {
       </svg>
     );
   }
+  if (type === "clipboard") {
+    return (
+      <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
+        <rect x="5" y="5" width="14" height="16" rx="2" />
+        <path d="M9 5V3h6v2M9 12l2 2 4-5" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+  if (type === "dollar") {
+    return (
+      <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 6v12M15.2 8.4c-.8-.8-2.1-1.2-3.4-1.1-1.7.1-2.9 1-2.9 2.3 0 3.5 6.4 1.7 6.4 5.3 0 1.4-1.3 2.4-3.1 2.5-1.4.1-2.8-.3-3.8-1.2" strokeLinecap="round" />
+      </svg>
+    );
+  }
+  if (type === "shield") {
+    return (
+      <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
+        <path d="M12 3 20 6v6.1c0 4.3-3.1 7.5-8 9-4.9-1.5-8-4.7-8-9V6l8-3Z" strokeLinejoin="round" />
+        <path d="m8.5 12 2.2 2.2 4.9-5" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+  if (type === "lock") {
+    return (
+      <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
+        <rect x="5" y="10" width="14" height="10" rx="2" />
+        <path d="M8 10V7a4 4 0 0 1 8 0v3" strokeLinecap="round" />
+      </svg>
+    );
+  }
   if (type === "bolt") {
     return (
       <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2.1" aria-hidden="true">
@@ -611,12 +663,10 @@ function HeroWave({ small = false }) {
 
 function CustomerAvatar({ compact = false }) {
   return (
-    <span className={(compact ? "h-8 w-8" : "h-9 w-9") + " grid shrink-0 place-items-center rounded-full bg-[linear-gradient(145deg,#ffe8c7,#ffffff)] text-[#12324f] shadow-[inset_0_1px_0_rgba(255,255,255,0.96),0_8px_18px_-16px_rgba(255,184,90,0.95)]"}>
-      <svg viewBox="0 0 28 28" className={compact ? "h-8 w-8" : "h-[34px] w-[34px]"} fill="none" aria-hidden="true">
-        <path d="M5.6 23.5c1.25-5 4.1-7.45 8.4-7.45s7.15 2.45 8.4 7.45" fill="#12324f" />
-        <circle cx="14" cy="10.35" r="5.15" fill="#12324f" />
-        <path d="M6.6 9.15c2.35-5.1 10.35-6.5 14.75-.75-3.9-.95-6.75-.55-8.75.85-1.8 1.25-3.5 1.3-6 .0Z" fill="#ff9a22" />
-        <circle cx="16.7" cy="8.6" r="1.4" fill="#ffffff" opacity="0.9" />
+    <span className={(compact ? "h-8 w-8" : "h-9 w-9") + " grid shrink-0 place-items-center rounded-full border border-white/55 bg-[linear-gradient(145deg,#eef6ff,#ffffff)] text-[#12324f] shadow-[inset_0_1px_0_rgba(255,255,255,0.96),0_8px_18px_-16px_rgba(105,140,180,0.9)]"}>
+      <svg viewBox="0 0 28 28" className={compact ? "h-7 w-7" : "h-8 w-8"} fill="none" aria-hidden="true">
+        <circle cx="14" cy="10.6" r="4.4" fill="currentColor" />
+        <path d="M6.2 23.4c.95-4.95 3.6-7.55 7.8-7.55s6.85 2.6 7.8 7.55" fill="currentColor" />
       </svg>
     </span>
   );
@@ -624,15 +674,17 @@ function CustomerAvatar({ compact = false }) {
 
 function AiAssistantAvatar({ compact = false }) {
   return (
-    <span className={(compact ? "h-8 w-8" : "h-9 w-9") + " grid shrink-0 place-items-center rounded-full bg-[linear-gradient(145deg,#dff8ff,#ffffff)] text-[#063a83] shadow-[inset_0_1px_0_rgba(255,255,255,0.96),0_0_18px_-10px_rgba(72,255,123,0.95)]"}>
-      <svg viewBox="0 0 28 28" className={compact ? "h-8 w-8" : "h-[34px] w-[34px]"} fill="none" aria-hidden="true">
-        <rect x="6" y="8.2" width="16" height="13" rx="4.7" fill="#063a83" />
-        <path d="M9.1 8.2V5.5a4.9 4.9 0 0 1 9.8 0v2.7" stroke="#063a83" strokeWidth="2.4" strokeLinecap="round" />
-        <circle cx="11.4" cy="14.5" r="1.45" fill="#dff8ff" />
-        <circle cx="16.6" cy="14.5" r="1.45" fill="#dff8ff" />
-        <path d="M11.7 17.6c1.45 1.1 3.15 1.1 4.6 0" stroke="#dff8ff" strokeWidth="1.9" strokeLinecap="round" />
-        <path d="M22.3 11.6h2.1M22.3 17.1h2.1M3.6 11.6h2.1M3.6 17.1h2.1" stroke="#39ff6a" strokeWidth="2.2" strokeLinecap="round" />
-        <circle cx="22.5" cy="6.2" r="2.55" fill="#39ff6a" />
+    <span className={(compact ? "h-12 w-12" : "h-12 w-12") + " grid shrink-0 place-items-center rounded-full border-2 border-white bg-white text-[#063a83] shadow-[inset_0_1px_0_rgba(255,255,255,1),0_0_22px_-8px_rgba(57,255,106,0.92)]"}>
+      <svg viewBox="0 0 48 48" className="h-11 w-11" fill="none" aria-hidden="true">
+        <circle cx="24" cy="24" r="20" fill="#e9f8ff" />
+        <path d="M11.5 24v-3.1C11.5 14 17 8.8 24 8.8S36.5 14 36.5 20.9V24" stroke="#063a83" strokeWidth="4.2" strokeLinecap="round" />
+        <rect x="8.8" y="20" width="7" height="12" rx="3.5" fill="#063a83" />
+        <rect x="32.2" y="20" width="7" height="12" rx="3.5" fill="#063a83" />
+        <rect x="18" y="18" width="3.2" height="14" rx="1.6" fill="#ff7a00" />
+        <rect x="23" y="14" width="3.2" height="22" rx="1.6" fill="#ff7a00" />
+        <rect x="28" y="18" width="3.2" height="14" rx="1.6" fill="#ff7a00" />
+        <path d="M35.8 30.8c-1.2 4.4-5.3 6.8-10.9 6.8" stroke="#063a83" strokeWidth="3.4" strokeLinecap="round" />
+        <path d="M24.2 37.6h-4.5" stroke="#39ff6a" strokeWidth="4" strokeLinecap="round" />
       </svg>
     </span>
   );
@@ -640,88 +692,97 @@ function AiAssistantAvatar({ compact = false }) {
 
 function HeroPhoneMockup() {
   return (
-    <div className="landing-phone relative mx-auto mt-0 h-[590px] w-full max-w-[460px] rounded-[46px] border-[4px] border-[#111827] bg-[#050912] p-2 shadow-[0_30px_80px_-34px_rgba(0,0,0,1),0_0_0_1px_rgba(255,255,255,0.22)_inset]">
-      <div className="absolute left-1/2 top-3 z-10 h-6 w-24 -translate-x-1/2 rounded-full bg-black" />
-      <div className="flex h-full flex-col overflow-hidden rounded-[37px] bg-[radial-gradient(circle_at_50%_0%,rgba(8,90,158,0.34),transparent_36%),linear-gradient(180deg,#061b34_0%,#020814_100%)] px-4 pb-3 pt-5">
+    <div className="landing-phone relative mx-auto mt-0 h-[640px] w-full max-w-[360px] rounded-[48px] border-[4px] border-[#111827] bg-[#050912] p-2 shadow-[0_30px_80px_-34px_rgba(0,0,0,1),0_0_0_1px_rgba(255,255,255,0.22)_inset]">
+      <span className="absolute -left-[7px] top-[98px] h-11 w-[3px] rounded-l-full bg-[#1f2937]" />
+      <span className="absolute -right-[7px] top-[158px] h-16 w-[3px] rounded-r-full bg-[#1f2937]" />
+      <div className="absolute left-1/2 top-3 z-10 h-5 w-[76px] -translate-x-1/2 rounded-full bg-black" />
+      <div className="flex h-full flex-col overflow-hidden rounded-[39px] bg-[radial-gradient(circle_at_50%_0%,rgba(8,90,158,0.34),transparent_36%),linear-gradient(180deg,#061b34_0%,#020814_100%)] px-4 pb-6 pt-4">
         <div className="flex items-center justify-between text-white">
-          <span className="text-[1rem] font-black tracking-[-0.02em]">After-hours</span>
+          <span className="text-[0.95rem] font-black tracking-[-0.02em]">After-hours</span>
           <span className="flex items-center gap-1.5">
             <span className="h-2 w-4 rounded-sm border border-white/80" />
             <span className="h-2.5 w-5 rounded-sm border border-white/80 bg-white/20" />
           </span>
         </div>
         <div className="text-center">
-          <div className="inline-flex items-center gap-2 rounded-full border border-[#48ff7b]/60 bg-[#043d1c]/88 px-4 py-1 text-[0.72rem] font-black uppercase tracking-[0.13em] text-[#b9ffc9] shadow-[0_0_18px_-8px_rgba(72,255,123,0.9)]">
-            <span className="h-2 w-2 rounded-full bg-[#39ff6a] shadow-[0_0_12px_rgba(57,255,106,0.95)]" />
+          <div className="inline-flex items-center gap-2 rounded-full border border-[#48ff7b]/70 bg-[#043d1c]/88 px-4 py-1.5 text-[0.74rem] font-black uppercase tracking-[0.1em] text-[#b9ffc9] shadow-[0_0_18px_-8px_rgba(72,255,123,0.9)]">
+            <span className="h-2.5 w-2.5 rounded-full bg-[#39ff6a] shadow-[0_0_12px_rgba(57,255,106,0.95)]" />
             AI speaking now
           </div>
-          <p className="mt-0.5 text-[1.24rem] font-black tracking-[-0.03em] text-white">Live Call</p>
-          <p className="mt-0.5 text-[1.12rem] font-black text-[#ff7a00]">00:32</p>
+          <p className="mt-1 text-[1.2rem] font-black tracking-[-0.03em] text-white">Live Call</p>
+          <p className="mt-0.5 text-[1.08rem] font-black text-[#ff7a00]">00:32</p>
           <HeroWave small />
         </div>
 
-        <div className="mt-1.5 rounded-[20px] border border-white/14 bg-white/[0.08] px-4 py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+        <div className="mt-2 rounded-[22px] border border-white/85 bg-[linear-gradient(145deg,#ffffff,#edf6ff)] px-3 py-3 text-[#07142a] shadow-[0_14px_30px_-24px_rgba(15,23,42,0.58)]">
           <div className="flex gap-2">
             <CustomerAvatar compact />
             <div>
-              <p className="text-[1.26rem] font-black leading-tight text-white">Customer</p>
-              <p className="mt-0.5 text-[1.12rem] font-medium leading-[1.27] text-white">Hi, I need someone to wire up my hot tub this week.</p>
+              <p className="text-[1.14rem] font-black leading-tight">Customer</p>
+              <p className="mt-0.5 text-[1.05rem] font-semibold leading-[1.2]">Need hot tub wiring this week.</p>
             </div>
           </div>
         </div>
 
-        <div className="mt-1.5 rounded-[20px] border border-[#1d78ff]/45 bg-[linear-gradient(145deg,#063a83,#0050c9)] px-4 py-1.5 shadow-[0_18px_46px_-28px_rgba(0,80,201,0.95),inset_0_1px_0_rgba(255,255,255,0.12)]">
+        <div className="mt-2 rounded-[22px] border border-[#bfdbfe] bg-[linear-gradient(145deg,#ffffff,#dbeafe)] px-3 py-3 text-[#07142a] shadow-[0_18px_38px_-28px_rgba(37,99,235,0.72),inset_0_1px_0_rgba(255,255,255,0.9)]">
           <div className="flex gap-2">
             <AiAssistantAvatar compact />
             <div>
-              <p className="text-[1.26rem] font-black leading-tight text-white">My AI PA</p>
-              <p className="mt-0.5 text-[1.12rem] font-medium leading-[1.27] text-white">
-                Yes. I can collect the details so the team can follow up.
+              <p className="text-[1.14rem] font-black leading-tight text-[#2563eb]">My AI PA</p>
+              <p className="mt-0.5 text-[1.05rem] font-semibold leading-[1.2]">
+                I&apos;ll collect the details and send a summary.
               </p>
             </div>
           </div>
         </div>
 
-        <div className="mt-1.5 rounded-[20px] border border-white/14 bg-white/[0.08] px-4 py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+        <div className="mt-2 rounded-[22px] border border-white/85 bg-[linear-gradient(145deg,#ffffff,#edf6ff)] px-3 py-3 text-[#07142a] shadow-[0_14px_30px_-24px_rgba(15,23,42,0.58)]">
           <div className="flex gap-2">
             <CustomerAvatar compact />
             <div>
-              <p className="text-[1.26rem] font-black leading-tight text-white">Customer</p>
-              <p className="mt-0.5 text-[1.12rem] font-medium leading-[1.27] text-white">
-                Brian, 905-123-4567, 63 York Street. Best time is 7:00 PM.
+              <p className="text-[1.14rem] font-black leading-tight">Customer</p>
+              <p className="mt-0.5 text-[1.05rem] font-semibold leading-[1.2]">
+                Brian. 905-123-4567. 63 York Street. 7:00 PM.
               </p>
             </div>
           </div>
         </div>
 
-        <div className="mt-1.5 rounded-[20px] border border-[#1d78ff]/45 bg-[linear-gradient(145deg,#063a83,#0050c9)] px-4 py-1.5 shadow-[0_18px_46px_-28px_rgba(0,80,201,0.95),inset_0_1px_0_rgba(255,255,255,0.12)]">
+        <div className="mt-2 rounded-[22px] border border-[#bfdbfe] bg-[linear-gradient(145deg,#ffffff,#dbeafe)] px-3 py-3 text-[#07142a] shadow-[0_18px_38px_-28px_rgba(37,99,235,0.72),inset_0_1px_0_rgba(255,255,255,0.9)]">
           <div className="flex gap-2">
             <AiAssistantAvatar compact />
             <div>
-              <p className="text-[1.26rem] font-black leading-tight text-white">My AI PA</p>
-              <p className="mt-0.5 text-[1.12rem] font-medium leading-[1.27] text-white">
-                Got it. I&apos;ll forward this to the service team for pricing and scheduling.
+              <p className="text-[1.14rem] font-black leading-tight text-[#2563eb]">My AI PA</p>
+              <p className="mt-0.5 text-[1.05rem] font-semibold leading-[1.2]">
+                Done. Sent for pricing and scheduling.
               </p>
             </div>
           </div>
         </div>
 
-        <div className="mt-auto flex items-center justify-between px-16 pt-1.5">
-          <span className="grid h-8 w-8 place-items-center rounded-full bg-white/14 text-white">
-            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
-              <path d="M12 3v10" />
-              <rect x="8" y="3" width="8" height="13" rx="4" />
-              <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
-            </svg>
+        <div className="mt-auto grid grid-cols-3 items-end gap-3 px-5 pt-1 text-center text-[0.72rem] font-bold text-white/88">
+          <span className="grid gap-1 justify-items-center">
+            <span className="grid h-11 w-11 place-items-center rounded-full border border-white/18 bg-white/14 text-white">
+              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
+                <path d="M4 9v6h4l5 4V5L8 9H4Z" />
+                <path d="M16.5 9.5a4 4 0 0 1 0 5" />
+              </svg>
+            </span>
           </span>
-          <span className="grid h-10 w-10 place-items-center rounded-full bg-[#ff392e] text-white">
-            <HeroIcon type="phone" className="h-5 w-5 rotate-[135deg]" />
+          <span className="grid gap-1 justify-items-center">
+            <span className="grid h-12 w-12 place-items-center rounded-full bg-[#ff392e] text-white shadow-[0_14px_26px_-18px_rgba(255,57,46,0.95)]">
+              <HeroIcon type="phone" className="h-5 w-5 rotate-[135deg]" />
+            </span>
           </span>
-          <span className="grid h-8 w-8 place-items-center rounded-full bg-white/14 text-white">
-            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
-              <path d="M4 9v6h4l5 4V5L8 9H4Z" />
-              <path d="M16.5 9.5a4 4 0 0 1 0 5M19 7a8 8 0 0 1 0 10" />
-            </svg>
+          <span className="grid gap-1 justify-items-center">
+            <span className="grid h-11 w-11 place-items-center rounded-full border border-white/18 bg-white/14 text-white">
+              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
+                <path d="M12 3v10" />
+                <rect x="8" y="3" width="8" height="13" rx="4" />
+                <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
+                <path d="M4 20 20 4" />
+              </svg>
+            </span>
           </span>
         </div>
       </div>
@@ -739,10 +800,10 @@ function HeroSummaryStack() {
   ];
 
   return (
-    <div className="landing-summary mx-auto w-full max-w-[460px] xl:max-w-[460px]">
-      <div className="relative h-[590px] rounded-[46px] border-[4px] border-[#111827] bg-[#07111f] p-2 shadow-[0_30px_84px_-42px_rgba(7,17,31,0.92),inset_0_0_0_1px_rgba(255,255,255,0.18)] before:absolute before:-left-[7px] before:top-[98px] before:h-11 before:w-[3px] before:rounded-l-full before:bg-[#1f2937] after:absolute after:-right-[7px] after:top-[158px] after:h-16 after:w-[3px] after:rounded-r-full after:bg-[#1f2937]">
-        <div className="relative flex h-full flex-col overflow-hidden rounded-[37px] bg-[#f8fbff] px-5 pb-6 pt-10 text-[#081123] ring-1 ring-white/70">
-          <div className="absolute left-0 right-0 top-0 z-10 flex h-9 items-center justify-between px-9 text-[0.68rem] font-black text-[#111827]">
+    <div className="landing-summary mx-auto w-full max-w-[360px] xl:max-w-[360px]">
+      <div className="relative h-[640px] rounded-[48px] border-[4px] border-[#111827] bg-[#07111f] p-2 shadow-[0_30px_84px_-42px_rgba(7,17,31,0.92),inset_0_0_0_1px_rgba(255,255,255,0.18)] before:absolute before:-left-[7px] before:top-[98px] before:h-11 before:w-[3px] before:rounded-l-full before:bg-[#1f2937] after:absolute after:-right-[7px] after:top-[158px] after:h-16 after:w-[3px] after:rounded-r-full after:bg-[#1f2937]">
+        <div className="relative flex h-full flex-col overflow-hidden rounded-[39px] bg-[#f8fbff] px-5 pb-6 pt-8 text-[#081123] ring-1 ring-white/70">
+          <div className="absolute left-0 right-0 top-0 z-10 flex h-9 items-center justify-between px-8 text-[0.72rem] font-black text-[#111827]">
             <span>9:41</span>
             <span className="flex items-center gap-1">
               <span className="h-1.5 w-3 rounded-sm bg-[#111827]" />
@@ -750,37 +811,179 @@ function HeroSummaryStack() {
               <span className="h-2 w-4 rounded-[3px] border border-[#111827] bg-[#111827]/10" />
             </span>
           </div>
-          <span className="absolute left-1/2 top-3 z-20 h-6 w-28 -translate-x-1/2 rounded-full bg-[#111827] shadow-[inset_0_1px_0_rgba(255,255,255,0.14)]" />
-          <span className="absolute bottom-2 left-1/2 h-1 w-32 -translate-x-1/2 rounded-full bg-[#111827]/82" />
+          <span className="absolute left-1/2 top-3 z-20 h-6 w-[92px] -translate-x-1/2 rounded-full bg-[#111827] shadow-[inset_0_1px_0_rgba(255,255,255,0.14)]" />
+          <span className="absolute bottom-2 left-1/2 h-1 w-28 -translate-x-1/2 rounded-full bg-[#111827]/82" />
 
-          <div className="flex items-center justify-between gap-3 border-b border-[#dbe6f3] pb-3">
+          <div className="flex items-center justify-between gap-2 border-b border-[#dbe6f3] pb-3">
             <div className="min-w-0 flex-1">
-              <p className="text-[0.78rem] font-black uppercase tracking-[0.15em] text-[#2563eb]">Messages</p>
-              <h3 className="whitespace-nowrap text-[0.98rem] font-black leading-tight tracking-[-0.045em]">My AI PA - TIM&apos;S ELECTRICAL</h3>
+              <p className="text-[0.78rem] font-black uppercase tracking-[0.13em] text-[#2563eb]">Messages</p>
+              <h3 className="whitespace-nowrap text-[0.9rem] font-black leading-tight tracking-[-0.035em]">My AI PA - TIM&apos;S ELECTRICAL</h3>
             </div>
-            <span className="shrink-0 rounded-full bg-[#00b84a] px-3 py-1.5 text-[0.78rem] font-black uppercase tracking-[0.12em] text-white shadow-[0_0_16px_-8px_rgba(0,184,74,0.95)]">Now</span>
+            <span className="shrink-0 rounded-full bg-[#00b84a] px-2.5 py-1.5 text-[0.68rem] font-black uppercase tracking-[0.12em] text-white shadow-[0_0_16px_-8px_rgba(0,184,74,0.95)]">Now</span>
           </div>
 
-          <section className="mt-4">
-            <div className="rounded-[16px] border border-[#bfdbfe] bg-white/92 px-4 py-2.5 text-center shadow-[0_14px_34px_-30px_rgba(37,99,235,0.75)]">
-              <p className="whitespace-nowrap text-[0.9rem] font-black uppercase tracking-[0.085em] text-[#2563eb]">Owner cell phone summary</p>
+          <section className="mt-3">
+            <div className="rounded-[15px] border border-[#bfdbfe] bg-white/92 px-3 py-2 text-center shadow-[0_14px_34px_-30px_rgba(37,99,235,0.75)]">
+              <p className="whitespace-nowrap text-[0.82rem] font-black uppercase tracking-[0.06em] text-[#2563eb]">Owner cell phone summary</p>
             </div>
-            <div className="mt-3 rounded-[22px] bg-[#dbeafe] px-5 py-3 shadow-[0_8px_20px_-18px_rgba(15,23,42,0.5)]">
-              <p className="text-[1.26rem] font-black text-[#0b3b7a]">New service lead</p>
-              <div className="mt-2 space-y-1 text-[1.16rem] font-semibold leading-[1.62rem] text-[#10233f]">
-                {rows.map(([, label, value]) => (
-                  <p key={label}><span className="font-black">{label}:</span> {value}</p>
+            <div className="mt-3 rounded-[20px] bg-[#dbeafe] px-4 py-3 shadow-[0_8px_20px_-18px_rgba(15,23,42,0.5)]">
+              <p className="text-[1.16rem] font-black text-[#0b3b7a]">New service lead</p>
+              <div className="mt-3 space-y-1.5 text-[0.98rem] font-semibold leading-[1.18rem] text-[#10233f]">
+                {rows.map(([icon, label, value]) => (
+                  <div key={label} className="flex items-start gap-3">
+                    <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[#0b3b7a] text-white shadow-[0_10px_18px_-14px_rgba(11,59,122,0.95)]">
+                      <HeroIcon type={icon} className="h-4 w-4" />
+                    </span>
+                    <p>
+                      <span className="font-black">{label}:</span> {value}
+                    </p>
+                  </div>
                 ))}
               </div>
             </div>
           </section>
 
-          <section className="mt-4 border-t border-[#dbe6f3] pt-4">
-            <div className="rounded-[16px] border border-[#ddd6fe] bg-white/92 px-4 py-2.5 text-center shadow-[0_14px_34px_-30px_rgba(124,58,237,0.7)]">
-              <p className="whitespace-nowrap text-[0.9rem] font-black uppercase tracking-[0.085em] text-[#6d28d9]">Caller cell phone summary</p>
+          <section className="mt-3 border-t border-[#dbe6f3] pt-3">
+            <div className="rounded-[15px] border border-[#ddd6fe] bg-white/92 px-3 py-2 text-center shadow-[0_14px_34px_-30px_rgba(124,58,237,0.7)]">
+              <p className="whitespace-nowrap text-[0.82rem] font-black uppercase tracking-[0.06em] text-[#6d28d9]">Caller cell phone summary</p>
             </div>
-            <div className="mt-3 max-w-[94%] rounded-[22px] bg-[#e5e7eb] px-5 py-3 text-[1.16rem] font-semibold leading-[1.62rem] text-[#111827]">
+            <div className="mt-3 max-w-[94%] rounded-[20px] bg-[#e5e7eb] px-4 py-2.5 text-[1rem] font-semibold leading-[1.32rem] text-[#111827]">
               Thanks for calling Tim&apos;s Electrical. We got your request and will follow up shortly.
+            </div>
+          </section>
+
+          <span className="mt-auto mb-3 inline-flex items-center justify-center rounded-[18px] bg-[linear-gradient(135deg,#2563eb,#1d7df2)] px-4 py-2.5 text-[0.82rem] font-black uppercase tracking-[0.1em] text-white shadow-[0_20px_34px_-24px_rgba(37,99,235,0.95)]">
+            View full conversation
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function HeroCallDashboard() {
+  const checklist = ["Name collected", "Phone collected", "Address collected", "Issue collected"];
+
+  return (
+    <div className="landing-call-dashboard relative mx-auto w-full max-w-[780px]">
+      <div className="relative h-[630px] overflow-hidden rounded-[32px] border border-[#142033] bg-[#050913] text-white shadow-[0_28px_78px_-42px_rgba(0,0,0,0.9),inset_0_1px_0_rgba(255,255,255,0.06)]">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_12%_34%,rgba(36,99,235,0.24),transparent_28%),radial-gradient(circle_at_74%_82%,rgba(37,99,235,0.28),transparent_30%),linear-gradient(90deg,rgba(255,255,255,0.04)_1px,transparent_1px)] bg-[size:auto,auto,1px_100%]" />
+
+        <div className="relative grid h-full grid-cols-[0.74fr_1.26fr]">
+          <section className="landing-call-panel relative flex flex-col border-r border-[#1b2638] px-7 py-6">
+            <div className="landing-call-status flex items-center justify-between text-[1.04rem] font-black">
+              <span className="inline-flex items-center gap-3">
+                <span className="h-3.5 w-3.5 rounded-full bg-[#00d66f] shadow-[0_0_22px_rgba(0,214,111,0.95)]" />
+                Live Call
+              </span>
+              <span>02:37</span>
+            </div>
+
+            <div className="landing-caller-card mt-8">
+              <div className="landing-caller-avatar grid h-24 w-24 place-items-center rounded-full bg-[radial-gradient(circle_at_30%_24%,#7545d8,#3b1b76_72%)] text-[2.15rem] font-black shadow-[0_20px_50px_-30px_rgba(126,87,255,1)]">
+                JS
+              </div>
+              <h3 className="landing-caller-name mt-5 text-[2rem] font-black leading-none tracking-[-0.045em]">John Smith</h3>
+              <p className="landing-caller-phone mt-3 text-[1.42rem] font-bold tracking-[-0.035em] text-white/82">905-555-1234</p>
+              <span className="landing-caller-tag mt-4 inline-flex rounded-full bg-white/10 px-5 py-2 text-[1rem] font-black text-white/92 shadow-[inset_0_1px_0_rgba(255,255,255,0.07)]">
+                HVAC Repair
+              </span>
+            </div>
+
+            <div className="landing-call-controls mt-auto">
+              <HeroWave />
+              <div className="mt-7 flex items-center justify-between">
+                <span className="landing-call-button grid h-14 w-14 place-items-center rounded-full bg-white/8 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+                  <svg viewBox="0 0 24 24" className="h-7 w-7" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+                    <path d="M12 3v10" />
+                    <rect x="8" y="3" width="8" height="13" rx="4" />
+                    <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
+                    <path d="M4 20 20 4" />
+                  </svg>
+                </span>
+                <span className="landing-hangup-button grid h-[4.5rem] w-[4.5rem] place-items-center rounded-full bg-[#ff3b45] text-white shadow-[0_24px_52px_-25px_rgba(255,59,69,1)]">
+                  <HeroIcon type="phone" className="h-8 w-8 rotate-[135deg]" />
+                </span>
+                <span className="landing-call-button grid h-14 w-14 place-items-center rounded-full bg-white/8 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+                  <svg viewBox="0 0 24 24" className="h-7 w-7" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+                    <path d="M4 9v6h4l5 4V5L8 9H4Z" />
+                    <path d="M16.5 9.5a4 4 0 0 1 0 5M19 7a8 8 0 0 1 0 10" />
+                  </svg>
+                </span>
+              </div>
+            </div>
+          </section>
+
+          <section className="landing-conversation-column relative flex flex-col px-7 py-6">
+            <div className="landing-conversation-header flex items-center justify-between">
+              <h3 className="text-[1.5rem] font-black tracking-[-0.025em]">Conversation</h3>
+              <span className="rounded-full bg-[#063a83]/80 px-3 py-1 text-[0.72rem] font-black uppercase tracking-[0.12em] text-[#9edaff]">Summary ready</span>
+            </div>
+
+            <div className="landing-conversation-panel mt-3 rounded-[24px] border border-white/8 bg-black/18 px-4 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+              <p className="text-sm font-black uppercase tracking-[0.06em] text-white/38">AI Assistant</p>
+              <div className="mt-2 max-w-[74%] rounded-[18px] bg-white/10 px-4 py-2 text-[0.92rem] font-bold leading-[1.22] text-white/92">
+                Thanks for calling Smith Heating &amp; Cooling. How can I help?
+              </div>
+              <p className="mt-0.5 text-right text-[0.68rem] font-bold text-white/35">10:32 AM</p>
+
+              <div className="ml-auto mt-2.5 max-w-[74%] rounded-[18px] bg-[#0b376d] px-4 py-2 text-[0.92rem] font-bold leading-[1.22] text-white/96 shadow-[0_18px_42px_-30px_rgba(37,99,235,0.95)]">
+                <p className="mb-0.5 text-[0.68rem] font-black text-white/45">Caller</p>
+                Hi, my furnace stopped working.
+              </div>
+              <p className="mt-0.5 text-right text-[0.68rem] font-bold text-white/35">10:32 AM</p>
+
+              <p className="mt-2.5 text-sm font-black uppercase tracking-[0.06em] text-white/38">AI Assistant</p>
+              <div className="mt-2 max-w-[74%] rounded-[18px] bg-white/10 px-4 py-2 text-[0.92rem] font-bold leading-[1.22] text-white/92">
+                Sorry to hear that. Can I get your name and address?
+              </div>
+              <p className="mt-0.5 text-right text-[0.68rem] font-bold text-white/35">10:32 AM</p>
+            </div>
+
+            <div className="landing-dashboard-bottom mt-3 grid grid-cols-[1fr_238px] gap-5">
+              <div className="landing-checklist-card rounded-[22px] border border-white/8 bg-white/[0.04] p-3">
+                <p className="text-[0.78rem] font-black uppercase tracking-[0.12em] text-white/45">Details captured</p>
+                <div className="mt-2 grid gap-1 text-[0.86rem] font-black">
+                  {checklist.map((item) => (
+                    <div key={item} className="grid grid-cols-[auto_1fr_auto] items-center gap-3 text-white/88">
+                      <span className="grid h-6 w-6 place-items-center rounded-full bg-[#114416] text-[#66ff75] shadow-[0_0_22px_-10px_rgba(102,255,117,0.95)]">
+                        <HeroIcon type="check" className="h-4 w-4" />
+                      </span>
+                      <span>{item}</span>
+                      <HeroIcon type="check" className="h-5 w-5 text-white/60" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="landing-lead-stack grid gap-2">
+                <div className="landing-lead-note flex items-center justify-center gap-2 text-center text-[0.9rem] font-black italic leading-[1.05] text-[#6f8dff] drop-shadow-[0_0_14px_rgba(52,92,255,0.48)]">
+                  <svg viewBox="0 0 42 28" className="h-6 w-9 shrink-0" fill="none" stroke="currentColor" strokeWidth="4" aria-hidden="true">
+                    <path d="M3 6c12 2 22 8 29 17" strokeLinecap="round" />
+                    <path d="m25 22 9 2 1-9" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  <span>Instantly sent to you</span>
+                </div>
+
+                <div className="landing-lead-card rounded-[22px] border border-[#b9d8ff] bg-white px-4 py-3 text-[#111827] shadow-[0_0_0_6px_rgba(37,99,235,0.2),0_28px_70px_-28px_rgba(37,99,235,1)]">
+                  <div className="flex items-center justify-between">
+                    <span className="inline-flex items-center gap-2.5 text-[0.98rem] font-black">
+                      <span className="grid h-8 w-8 place-items-center rounded-xl bg-[#66e83f] text-white">
+                        <HeroIcon type="chat" className="h-4 w-4" />
+                      </span>
+                      New Lead
+                    </span>
+                    <span className="text-[0.82rem] font-black text-gray-400">now</span>
+                  </div>
+                  <div className="mt-2 space-y-1 text-[0.84rem] font-semibold leading-[1.12] tracking-[-0.02em]">
+                    <p>John Smith</p>
+                    <p>905-555-1234</p>
+                    <p>123 Main St, Hamilton</p>
+                    <p>No heat upstairs. Furnace not working.</p>
+                    <p>Requested: Tomorrow morning.</p>
+                  </div>
+                </div>
+              </div>
             </div>
           </section>
         </div>
@@ -811,7 +1014,7 @@ function HeroTradeStrip() {
   );
 }
 
-function VoicemailLossesArtboard() {
+function LegacyVoicemailLossesArtboard() {
   const voicemailProblems = [
     ["Customers want help", "right away"],
     ["If nobody answers,", "they may call someone else"],
@@ -1112,6 +1315,343 @@ function VoicemailLossesArtboard() {
   );
 }
 
+function VoicemailLossesArtboard({ onStart, onPlayDemo }) {
+  return (
+    <section id="voicemail-vs-ai" className="scroll-mt-6 bg-[linear-gradient(135deg,#ffffff_0%,#f5fbff_58%,#eaf5ff_100%)]">
+      <style>{`
+        #voicemail-vs-ai .voicemail-ring-core {
+          animation: voicemailRingCore 6s ease-in-out infinite;
+        }
+        #voicemail-vs-ai .voicemail-ring-pulse-one {
+          animation: voicemailRingPulse 6s ease-out infinite;
+        }
+        #voicemail-vs-ai .voicemail-ring-pulse-two {
+          animation: voicemailRingPulse 6s ease-out infinite;
+          animation-delay: 0.45s;
+        }
+        #voicemail-vs-ai .voicemail-ring-badge {
+          opacity: 0.72;
+          transform: translateY(0) scale(1);
+          animation: voicemailRingBadge 6s ease-in-out infinite;
+        }
+        #voicemail-vs-ai .voicemail-ring-badge-2 {
+          animation-delay: 0.42s;
+        }
+        #voicemail-vs-ai .voicemail-ring-badge-3 {
+          animation-delay: 0.84s;
+        }
+        #voicemail-vs-ai .voicemail-opportunity-line {
+          position: relative;
+          overflow: hidden;
+        }
+        #voicemail-vs-ai .voicemail-opportunity-line::after {
+          content: "";
+          position: absolute;
+          inset: 0;
+          border-radius: inherit;
+          background: #16a34a;
+          transform: translateX(-100%);
+          animation: voicemailLineFill 6s ease-in-out infinite;
+        }
+        #voicemail-vs-ai .voicemail-no-answer {
+          animation: voicemailNoAnswerPop 6s ease-in-out infinite;
+        }
+        #voicemail-vs-ai .voicemail-competitor-arrow span {
+          transform-origin: left center;
+          animation: voicemailArrowDraw 6s ease-in-out infinite;
+        }
+        #voicemail-vs-ai .voicemail-competitor-card {
+          animation: voicemailCompetitorPulse 6s ease-in-out infinite;
+        }
+        @keyframes voicemailRingCore {
+          0%, 54%, 100% { transform: scale(1); }
+          8%, 22%, 36% { transform: scale(1.08); }
+          14%, 28%, 42% { transform: scale(1); }
+        }
+        @keyframes voicemailRingPulse {
+          0%, 3% { opacity: 0; transform: scale(0.72); }
+          8% { opacity: 0.58; transform: scale(1); }
+          24% { opacity: 0; transform: scale(1.3); }
+          25%, 100% { opacity: 0; transform: scale(0.72); }
+        }
+        @keyframes voicemailRingBadge {
+          0%, 6%, 100% { opacity: 0.72; transform: translateY(0) scale(1); }
+          10%, 18% { opacity: 1; transform: translateY(-1px) scale(1.02); }
+          24%, 100% { opacity: 0.82; transform: translateY(0) scale(1); }
+        }
+        @keyframes voicemailLineFill {
+          0%, 8% { transform: translateX(-100%); }
+          42% { transform: translateX(0); }
+          52%, 100% { transform: translateX(0); }
+        }
+        @keyframes voicemailNoAnswerPop {
+          0%, 45%, 100% { transform: translateY(0) scale(1); box-shadow: none; }
+          53%, 63% { transform: translateY(-1px) scale(1.012); box-shadow: 0 18px 34px -24px rgba(204, 15, 31, 0.65); }
+        }
+        @keyframes voicemailArrowDraw {
+          0%, 54% { transform: scaleX(0); opacity: 0.25; }
+          64%, 100% { transform: scaleX(1); opacity: 1; }
+        }
+        @keyframes voicemailCompetitorPulse {
+          0%, 60%, 100% { transform: scale(1); box-shadow: 0 16px 32px -28px rgba(220,38,38,0.75); }
+          70%, 80% { transform: scale(1.01); box-shadow: 0 20px 38px -24px rgba(220,38,38,0.82), 0 0 0 2px rgba(239,35,46,0.1); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          #voicemail-vs-ai .voicemail-ring-core,
+          #voicemail-vs-ai .voicemail-ring-pulse-one,
+          #voicemail-vs-ai .voicemail-ring-pulse-two,
+          #voicemail-vs-ai .voicemail-ring-badge,
+          #voicemail-vs-ai .voicemail-opportunity-line::after,
+          #voicemail-vs-ai .voicemail-no-answer,
+          #voicemail-vs-ai .voicemail-competitor-arrow span,
+          #voicemail-vs-ai .voicemail-competitor-card {
+            animation: none;
+          }
+        }
+      `}</style>
+      <div className="mx-auto w-full max-w-[1720px] px-5 py-7 sm:px-8 lg:px-10 lg:py-9">
+        <div className="mx-auto flex items-center justify-center gap-4">
+          <HeroLogoMark />
+        </div>
+
+        <div className="mt-4 text-center">
+          <p className="inline-flex rounded-full border border-[#d7e7fb] bg-[#eef6ff] px-6 py-2 text-[0.86rem] font-black uppercase tracking-[0.22em] text-[#1d65bd] shadow-[0_18px_44px_-36px_rgba(37,99,235,0.72)]">
+            AI phone answering assistant for trades businesses
+          </p>
+          <h2 className="mx-auto mt-4 max-w-[1420px] text-[clamp(3rem,5.25vw,5rem)] font-black leading-[0.95] tracking-[-0.058em] text-[#07142a]">
+            Voicemail loses jobs. <span className="text-[#1d7df2]">My AI PA</span>
+            <span className="block">catches them.</span>
+          </h2>
+          <p className="mx-auto mt-4 max-w-[960px] text-[clamp(1.18rem,1.65vw,1.55rem)] font-medium leading-8 text-[#405476]">
+            When you cannot get to the phone, the telephone assistant answers, collects the job details, and texts both sides for easy follow-up.
+          </p>
+        </div>
+
+        <div className="relative mt-6 grid gap-7 lg:grid-cols-3">
+          <article className="relative min-h-[410px] overflow-hidden rounded-lg border border-[#ff5b5b] bg-white p-5 shadow-[0_30px_80px_-58px_rgba(239,68,68,0.7)]">
+            <div className="absolute right-4 top-4 rounded-full bg-[#fff1f2] px-3 py-1 text-xs font-black uppercase tracking-[0.12em] text-[#cc0f1f]">
+              Major issue
+            </div>
+            <div className="flex items-center gap-4 pr-28">
+              <span className="grid h-14 w-14 shrink-0 place-items-center rounded-full bg-[linear-gradient(180deg,#ff4545,#e11d48)] text-3xl font-black text-white shadow-[0_18px_34px_-24px_rgba(225,29,72,1)]">1</span>
+              <p className="text-[clamp(1.42rem,1.75vw,1.8rem)] font-black leading-tight tracking-[-0.04em] text-[#ef232e]">Phone rings unanswered</p>
+            </div>
+            <h3 className="mt-3 text-[clamp(1.16rem,1.35vw,1.42rem)] font-black leading-tight text-[#07142a]">
+              Three rings. No answer. The customer moves on.
+            </h3>
+
+            <div className="mt-4 grid gap-3">
+              <div className="relative overflow-hidden rounded-lg border border-[#bbf7d0] bg-white px-4 py-4 shadow-[0_14px_28px_-24px_rgba(22,163,74,0.8)]">
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_48%,rgba(34,197,94,0.14),transparent_46%)]" />
+                <div className="relative grid items-center gap-3 sm:grid-cols-[1fr_124px]">
+                  <div>
+                    <p className="text-sm font-black uppercase tracking-[0.12em] text-[#15803d]">Incoming opportunity</p>
+                    <p className="mt-1 text-[1.02rem] font-black leading-tight text-[#07142a]">Three chances to answer.</p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {["Ring 1", "Ring 2", "Ring 3"].map((ring, index) => (
+                        <span key={ring} className={`voicemail-ring-badge voicemail-ring-badge-${index + 1} rounded-full bg-[#dcfce7] px-3 py-1 text-xs font-black text-[#15803d]`}>
+                          {ring}
+                        </span>
+                      ))}
+                    </div>
+                    <div className="voicemail-opportunity-line mt-3 h-1 max-w-[240px] rounded-full bg-[#22c55e]/18" />
+                  </div>
+                  <div className="relative mx-auto grid h-[108px] w-[108px] place-items-center">
+                    <span className="absolute h-24 w-24 rounded-full border-2 border-[#22c55e]/18" />
+                    <span className="voicemail-ring-pulse-one absolute h-20 w-20 rounded-full border-2 border-[#22c55e]/32" />
+                    <span className="voicemail-ring-pulse-two absolute h-28 w-28 rounded-full border border-[#22c55e]/22" />
+                    <span className="voicemail-ring-core relative grid h-16 w-16 place-items-center rounded-full bg-[linear-gradient(180deg,#22c55e,#15803d)] text-white shadow-[0_18px_30px_-18px_rgba(21,128,61,0.95)]">
+                      <HeroIcon type="phone" className="h-8 w-8" />
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid items-center gap-3 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
+                <div className="voicemail-no-answer flex items-center gap-3 rounded-lg bg-[#ffe4e6] px-4 py-3 text-[#7f1d1d]">
+                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#cc0f1f] text-white">
+                    <HeroIcon type="phone" className="h-5 w-5 rotate-[135deg]" />
+                  </span>
+                  <div>
+                    <p className="text-base font-black leading-tight">No answer</p>
+                    <p className="text-sm font-bold leading-5">The caller does not wait.</p>
+                  </div>
+                </div>
+                <div className="voicemail-competitor-arrow hidden items-center text-[#ef232e] sm:flex">
+                  <span className="h-0.5 w-8 bg-[#ef232e]" />
+                  <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.7" aria-hidden="true">
+                    <path d="M5 12h14M13 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </div>
+                <div className="voicemail-competitor-card rounded-lg border border-[#fecaca] bg-white px-4 py-3 shadow-[0_16px_32px_-28px_rgba(220,38,38,0.75)]">
+                  <p className="text-sm font-black uppercase tracking-[0.1em] text-[#cc0f1f]">Customer called competitor</p>
+                  <p className="mt-1 text-sm font-bold leading-5 text-[#07142a]">The opportunity left.</p>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <article className="relative min-h-[410px] rounded-lg border border-[#60a5fa] bg-white p-5 shadow-[0_30px_80px_-58px_rgba(37,99,235,0.7)]">
+            <div className="flex items-center gap-4">
+              <span className="grid h-14 w-14 place-items-center rounded-full bg-[linear-gradient(180deg,#3185ff,#1d4ed8)] text-3xl font-black text-white shadow-[0_18px_34px_-24px_rgba(29,78,216,1)]">2</span>
+              <p className="text-[clamp(1.55rem,2vw,2rem)] font-black leading-tight tracking-[-0.04em] text-[#1d7df2]">Assistant answers live</p>
+            </div>
+            <h3 className="mt-3 max-w-[360px] text-[clamp(1.22rem,1.45vw,1.52rem)] font-black leading-tight text-[#07142a]">Asks why they called and answers FAQ questions</h3>
+
+            <div className="mt-4 grid gap-4 xl:grid-cols-[1fr_150px]">
+              <div className="min-w-0">
+                <p className="mb-3 inline-flex rounded-full bg-[#e8f2ff] px-4 py-1 text-xs font-black uppercase tracking-[0.12em] text-[#1d7df2]">
+                  AI speaking now
+                </p>
+                <div className="space-y-3">
+                  {[
+                    ["My AI PA", "Hi! Thanks for calling. What can I help you with today?"],
+                    ["Caller", "I need a hot tub electrical setup at my home."],
+                    ["My AI PA", "Sure, I can help. I can also answer common questions before I collect the details."],
+                  ].map(([speaker, text], index) => (
+                    <div key={speaker + index} className="rounded-lg border border-[#d7e7fb] bg-[linear-gradient(180deg,#ffffff,#eef6ff)] px-3 py-2 shadow-[0_14px_32px_-30px_rgba(37,99,235,0.8)]">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-sm font-black text-[#07142a]">{speaker}</p>
+                        <p className="text-xs font-bold text-[#64748b]">10:15 AM</p>
+                      </div>
+                      <p className="mt-1 text-sm font-semibold leading-5 text-[#334155]">{text}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid content-center gap-4">
+                {[
+                  ["Name", "Brian Smith"],
+                  ["Phone", "905-123-4567"],
+                  ["Reason", "Hot tub electrical setup"],
+                  ["Address", "63 York Street, Bestville, ON"],
+                ].map(([label, value]) => (
+                  <div key={label} className="flex gap-3">
+                    <span className="mt-1 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[#1d7df2] text-white">
+                      <HeroIcon type="check" className="h-4 w-4" />
+                    </span>
+                    <div>
+                      <p className="text-sm font-black text-[#07142a]">{label}</p>
+                      <p className="text-sm font-semibold leading-5 text-[#405476]">{value}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </article>
+
+          <article className="relative min-h-[410px] rounded-lg border border-[#52b86f] bg-white p-5 shadow-[0_30px_80px_-58px_rgba(22,163,74,0.68)]">
+            <div className="grid gap-4">
+              <div>
+                <div className="flex items-center gap-4">
+                  <span className="grid h-14 w-14 place-items-center rounded-full bg-[linear-gradient(180deg,#22c55e,#15803d)] text-3xl font-black text-white shadow-[0_18px_34px_-24px_rgba(21,128,61,1)]">3</span>
+                  <p className="text-[clamp(1.4rem,1.75vw,1.8rem)] font-black leading-tight tracking-[-0.04em] text-[#13833c]">Text summaries sent</p>
+                </div>
+                <h3 className="mt-3 text-[clamp(1.18rem,1.38vw,1.48rem)] font-black leading-tight text-[#07142a]">Owner and caller both get clean follow-up texts</h3>
+              </div>
+
+              <div className="grid items-center gap-4 lg:grid-cols-[minmax(0,1fr)_132px] xl:grid-cols-[minmax(0,1fr)_148px] min-[1500px]:grid-cols-[1fr_190px]">
+                <div className="grid gap-3">
+                  {[
+                    ["chat", "Text sent to owner"],
+                    ["phone", "Text sent to caller"],
+                    ["clipboard", "Job details collected"],
+                    ["check", "Customer feels heard"],
+                  ].map(([icon, text]) => (
+                    <div key={text} className="flex items-center gap-3 rounded-lg bg-[#f0fdf4] px-3 py-2">
+                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[#dcfce7] text-[#13833c]">
+                        <HeroIcon type={icon} className="h-5 w-5" />
+                      </span>
+                      <p className="text-sm font-black leading-5 text-[#07142a] min-[1500px]:text-base">{text}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mx-auto h-[270px] w-full max-w-[190px] rounded-[24px] border-[4px] border-[#07142a] bg-white p-2 shadow-[0_22px_48px_-34px_rgba(15,23,42,0.95)] xl:h-[286px] min-[1500px]:h-[300px] min-[1500px]:w-[170px] min-[1500px]:rounded-[28px] min-[1500px]:border-[5px]">
+                  <div className="mx-auto h-2 w-14 rounded-full bg-[#07142a] min-[1500px]:w-16" />
+                  <div className="px-1 pt-3 text-center min-[1500px]:px-2 min-[1500px]:pt-4">
+                    <p className="text-[0.66rem] font-black text-[#07142a] min-[1500px]:text-[0.76rem]">My AI PA</p>
+                    <p className="mt-2 text-[0.58rem] font-semibold text-[#94a3b8] min-[1500px]:text-[0.68rem]">Today 10:16 AM</p>
+                  </div>
+                  <div className="mt-3 space-y-2">
+                    <div className="rounded-lg bg-[#ecfdf5] p-2.5">
+                      <p className="text-[0.62rem] font-black uppercase tracking-[0.08em] text-[#16a34a]">Owner alert</p>
+                      <div className="mt-1 space-y-0.5 text-[0.53rem] font-bold leading-3 text-[#07142a] xl:text-[0.58rem] min-[1500px]:text-[0.68rem] min-[1500px]:leading-4">
+                        <p>Brian Smith</p>
+                        <p>905-123-4567</p>
+                        <p>Hot tub wiring</p>
+                        <p>63 York Street</p>
+                      </div>
+                    </div>
+                    <div className="rounded-lg bg-[#e8f2ff] p-2.5">
+                      <p className="text-[0.62rem] font-black uppercase tracking-[0.08em] text-[#1d7df2]">Caller text</p>
+                      <p className="mt-1 text-[0.53rem] font-bold leading-3 text-[#07142a] xl:text-[0.58rem] min-[1500px]:text-[0.68rem] min-[1500px]:leading-4">
+                        Thanks Brian. Tim&apos;s Electrical received your details and will follow up.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <div className="pointer-events-none absolute left-[31.7%] top-[46%] hidden h-14 w-14 -translate-x-1/2 place-items-center rounded-full border-2 border-[#1d7df2] bg-white text-[#1d7df2] shadow-[0_16px_38px_-24px_rgba(37,99,235,0.85)] lg:grid">
+            <svg viewBox="0 0 24 24" className="h-8 w-8" fill="none" stroke="currentColor" strokeWidth="2.8" aria-hidden="true">
+              <path d="M4 12h15M13 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </div>
+          <div className="pointer-events-none absolute left-[65%] top-[46%] hidden h-14 w-14 -translate-x-1/2 place-items-center rounded-full border-2 border-[#1d7df2] bg-white text-[#1d7df2] shadow-[0_16px_38px_-24px_rgba(37,99,235,0.85)] lg:grid">
+            <svg viewBox="0 0 24 24" className="h-8 w-8" fill="none" stroke="currentColor" strokeWidth="2.8" aria-hidden="true">
+              <path d="M4 12h15M13 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </div>
+        </div>
+
+        <div className="mx-auto mt-6 grid max-w-[760px] gap-5 sm:grid-cols-2">
+          <button
+            type="button"
+            onClick={onPlayDemo}
+            className="inline-flex min-h-[72px] items-center justify-center gap-4 rounded-lg border-2 border-[#1d7df2] bg-white px-8 py-4 text-[clamp(1rem,1.45vw,1.45rem)] font-black leading-tight tracking-[-0.02em] text-[#0b3b7a] shadow-[0_18px_46px_-34px_rgba(37,99,235,0.72)] transition hover:-translate-y-0.5 hover:bg-[#eef6ff]"
+          >
+            <svg viewBox="0 0 24 24" className="h-7 w-7 text-[#1d7df2]" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+              <path d="M4 9v6h4l5 4V5L8 9H4Z" />
+              <path d="M16.5 9.5a4 4 0 0 1 0 5M19 7a8 8 0 0 1 0 10" />
+            </svg>
+            Hear Agent&apos;s Voice
+          </button>
+          <button
+            type="button"
+            onClick={onStart}
+            className="inline-flex min-h-[72px] items-center justify-center gap-5 rounded-lg bg-[linear-gradient(180deg,#ff9a17,#ff6a00)] px-8 py-4 text-[clamp(1rem,1.45vw,1.45rem)] font-black leading-tight tracking-[-0.02em] text-white shadow-[0_22px_54px_-34px_rgba(255,106,0,0.95)] transition hover:-translate-y-0.5"
+          >
+            Start Free Trial
+            <svg viewBox="0 0 24 24" className="h-7 w-7" fill="none" stroke="currentColor" strokeWidth="2.7" aria-hidden="true">
+              <path d="M5 12h14M13 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="mx-auto mt-5 flex max-w-[660px] flex-wrap items-center justify-center gap-x-8 gap-y-3 text-[0.98rem] font-semibold text-[#173763]">
+          {[
+            ["check", "14-day free trial"],
+            ["shield", "No credit card"],
+            ["lock", "Cancel anytime"],
+          ].map(([icon, text], index) => (
+            <div key={text} className="flex items-center gap-3">
+              {index ? <span className="hidden h-7 w-px bg-[#9db7d8] sm:block" /> : null}
+              <span className="grid h-6 w-6 place-items-center rounded-full border border-[#1d7df2] text-[#1d7df2]">
+                <HeroIcon type={icon} className="h-4 w-4" />
+              </span>
+              <span>{text}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function LandingPage() {
   const demoRef = useRef(null);
   const pricingRef = useRef(null);
@@ -1322,6 +1862,91 @@ function LandingPage() {
               background-size 0.16s cubic-bezier(0.35, 0, 0.2, 1) 0.22s,
               background-size 0.16s cubic-bezier(0.35, 0, 0.2, 1) 0.33s;
           }
+          @media (max-width: 767px) {
+            .landing-call-dashboard {
+              max-width: min(100%, 360px);
+            }
+            .landing-call-dashboard > div {
+              height: auto;
+              min-height: 0;
+              border-radius: 26px;
+            }
+            .landing-call-dashboard > div > div {
+              grid-template-columns: minmax(0, 1fr);
+            }
+            .landing-call-panel {
+              min-height: 390px;
+              border-right: 0;
+              border-bottom: 1px solid #1b2638;
+              padding: 1.25rem;
+            }
+            .landing-call-status {
+              font-size: 0.9rem;
+            }
+            .landing-caller-card {
+              margin-top: 1.45rem;
+            }
+            .landing-caller-avatar {
+              height: 4.75rem;
+              width: 4.75rem;
+              font-size: 1.7rem;
+            }
+            .landing-caller-name {
+              margin-top: 1rem;
+              font-size: 1.55rem;
+            }
+            .landing-caller-phone {
+              margin-top: 0.6rem;
+              font-size: 1.1rem;
+            }
+            .landing-caller-tag {
+              margin-top: 0.85rem;
+              padding: 0.45rem 0.95rem;
+              font-size: 0.82rem;
+            }
+            .landing-call-controls svg[viewBox="0 0 120 42"] {
+              height: 3.5rem;
+            }
+            .landing-call-button {
+              height: 3rem;
+              width: 3rem;
+            }
+            .landing-hangup-button {
+              height: 3.8rem;
+              width: 3.8rem;
+            }
+            .landing-conversation-column {
+              padding: 1.25rem;
+            }
+            .landing-conversation-header h3 {
+              font-size: 1.25rem;
+            }
+            .landing-conversation-header span {
+              font-size: 0.62rem;
+              padding: 0.32rem 0.65rem;
+            }
+            .landing-conversation-panel {
+              border-radius: 20px;
+              padding: 0.9rem;
+            }
+            .landing-conversation-panel div {
+              max-width: 88%;
+              font-size: 0.75rem;
+              line-height: 1.18;
+            }
+            .landing-dashboard-bottom {
+              grid-template-columns: minmax(0, 1fr);
+              gap: 0.8rem;
+            }
+            .landing-lead-note {
+              justify-content: flex-start;
+              font-size: 0.82rem;
+            }
+            .landing-lead-card {
+              border-radius: 18px;
+              padding: 0.9rem;
+            }
+          }
           @media (min-width: 1024px) and (max-height: 900px) {
             .landing-hero-shell {
               padding-top: 1rem;
@@ -1373,12 +1998,164 @@ function LandingPage() {
               z-index: 2;
             }
             .landing-phone {
-              height: min(620px, calc(100vh - 72px));
+              height: clamp(560px, calc(100vh - 76px), 640px);
               margin-top: 0;
-              max-width: 460px;
+              max-width: 360px;
             }
             .landing-summary > div {
-              height: min(620px, calc(100vh - 72px));
+              height: clamp(560px, calc(100vh - 76px), 640px);
+            }
+            .landing-call-dashboard > div {
+              height: min(630px, calc(100vh - 78px));
+            }
+          }
+          @media (min-width: 1024px) and (max-height: 720px) {
+            .landing-hero-shell {
+              padding-top: 0.75rem;
+              padding-bottom: 0.75rem;
+            }
+            .landing-hero-grid {
+              padding-top: 0;
+              padding-bottom: 0;
+            }
+            .landing-phone {
+              height: 560px;
+            }
+            .landing-summary > div {
+              height: 560px;
+            }
+            .landing-call-dashboard > div {
+              height: min(540px, calc(100vh - 96px));
+              border-radius: 28px;
+            }
+            .landing-call-panel,
+            .landing-conversation-column {
+              padding: 1.15rem 1.25rem;
+            }
+            .landing-call-status {
+              font-size: 0.94rem;
+            }
+            .landing-caller-card {
+              margin-top: 1.35rem;
+            }
+            .landing-caller-avatar {
+              width: 4.85rem;
+              height: 4.85rem;
+              font-size: 1.75rem;
+            }
+            .landing-caller-name {
+              margin-top: 1rem;
+              font-size: 1.55rem;
+            }
+            .landing-caller-phone {
+              margin-top: 0.6rem;
+              font-size: 1.08rem;
+            }
+            .landing-caller-tag {
+              margin-top: 0.8rem;
+              padding: 0.42rem 0.9rem;
+              font-size: 0.8rem;
+            }
+            .landing-call-controls svg[viewBox="0 0 120 42"] {
+              height: 3.35rem;
+            }
+            .landing-call-controls > div {
+              margin-top: 1.1rem;
+            }
+            .landing-call-button {
+              width: 2.95rem;
+              height: 2.95rem;
+            }
+            .landing-call-button svg {
+              width: 1.45rem;
+              height: 1.45rem;
+            }
+            .landing-hangup-button {
+              width: 3.75rem;
+              height: 3.75rem;
+            }
+            .landing-hangup-button svg {
+              width: 1.55rem;
+              height: 1.55rem;
+            }
+            .landing-conversation-header h3 {
+              font-size: 1.28rem;
+            }
+            .landing-conversation-header span {
+              font-size: 0.62rem;
+              padding: 0.28rem 0.68rem;
+            }
+            .landing-conversation-panel {
+              margin-top: 0.55rem;
+              border-radius: 20px;
+              padding: 0.72rem 0.82rem;
+            }
+            .landing-conversation-panel p {
+              font-size: 0.68rem;
+            }
+            .landing-conversation-panel div {
+              border-radius: 14px;
+              padding: 0.5rem 0.78rem;
+              font-size: 0.76rem;
+              line-height: 1.15;
+            }
+            .landing-dashboard-bottom {
+              margin-top: 0.7rem;
+              grid-template-columns: minmax(0, 0.93fr) minmax(190px, 0.9fr);
+              gap: 0.8rem;
+            }
+            .landing-checklist-card {
+              border-radius: 18px;
+              padding: 0.75rem;
+            }
+            .landing-checklist-card p {
+              font-size: 0.62rem;
+            }
+            .landing-checklist-card > div {
+              gap: 0.34rem;
+              font-size: 0.74rem;
+            }
+            .landing-checklist-card > div > div {
+              grid-template-columns: auto 1fr;
+              gap: 0.48rem;
+            }
+            .landing-checklist-card > div > div > span:nth-child(2) {
+              white-space: nowrap;
+            }
+            .landing-checklist-card > div > div > svg {
+              display: none;
+            }
+            .landing-checklist-card span {
+              width: 1.25rem;
+              height: 1.25rem;
+            }
+            .landing-lead-stack {
+              gap: 0.45rem;
+            }
+            .landing-lead-note {
+              justify-content: flex-start;
+              font-size: 0.72rem;
+            }
+            .landing-lead-note svg {
+              width: 1.7rem;
+              height: 1.15rem;
+            }
+            .landing-lead-card {
+              border-radius: 18px;
+              padding: 0.72rem 0.82rem;
+              box-shadow: 0 0 0 4px rgba(37,99,235,0.18), 0 22px 52px -28px rgba(37,99,235,0.95);
+            }
+            .landing-lead-card span {
+              font-size: 0.78rem;
+            }
+            .landing-lead-card span span {
+              width: 1.45rem;
+              height: 1.45rem;
+            }
+            .landing-lead-card > div + div {
+              margin-top: 0.55rem;
+              font-size: 0.69rem;
+              line-height: 1.15;
             }
           }
         `}</style>
@@ -1405,7 +2182,7 @@ function LandingPage() {
             </div>
           </nav>
 
-          <div className="landing-hero-grid grid flex-1 gap-7 py-9 lg:grid-cols-[minmax(0,1fr)_460px] lg:items-center 2xl:grid-cols-[minmax(520px,1fr)_460px_460px] 2xl:gap-8 2xl:py-10">
+          <div className="landing-hero-grid grid flex-1 gap-8 py-9 lg:grid-cols-[minmax(0,1fr)_minmax(660px,800px)] lg:items-center 2xl:grid-cols-[minmax(500px,1fr)_800px] 2xl:gap-12 2xl:py-10">
             <div className="relative z-10 min-w-0 max-w-[800px] xl:max-w-none lg:-translate-y-3 2xl:-translate-y-4">
               <div className="mt-3 inline-flex rounded-full border border-[#b9d8ff] bg-white/72 px-4 py-2 text-lg font-semibold text-[#0b3b7a] shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_18px_42px_-34px_rgba(37,99,235,0.7)] 2xl:px-5 2xl:text-xl">
                 AI Phone Answering Assistant
@@ -1429,7 +2206,7 @@ function LandingPage() {
                 {[
                   ["phone", "Talks to the customer naturally"],
                   ["people", "Provides more information than a voicemail"],
-                  ["chat", "Easy to set up as your phone just forwards/transfer the call after 3 unanswered rings"],
+                  ["chat", "Easy setup: forward calls after 3 unanswered rings"],
                 ].map(([icon, label]) => (
                   <div key={label} className="landing-hero-point flex items-center gap-4 text-[1.28rem] font-medium text-[#16243a] 2xl:text-[1.36rem]">
                     <span className="landing-hero-point-icon grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[#0c4da0] text-white shadow-[0_10px_28px_-16px_rgba(59,130,246,1)]">
@@ -1461,15 +2238,7 @@ function LandingPage() {
             </div>
 
             <div className="relative z-0 mt-8 flex justify-center lg:mt-0 lg:self-start">
-              <HeroPhoneMockup />
-            </div>
-
-            <div className="2xl:hidden lg:col-span-2 lg:pt-1">
-              <HeroSummaryStack />
-            </div>
-
-            <div className="hidden justify-center 2xl:flex 2xl:self-start 2xl:-translate-x-5">
-              <HeroSummaryStack />
+              <HeroCallDashboard />
             </div>
           </div>
 
@@ -1710,7 +2479,7 @@ function LandingPage() {
         </div>
       </section>
 
-      <VoicemailLossesArtboard />
+      <VoicemailLossesArtboard onStart={goToSignup} onPlayDemo={playDemo} />
 
       <section className="hidden overflow-hidden bg-[radial-gradient(circle_at_94%_92%,rgba(0,88,184,0.42),transparent_34%),linear-gradient(135deg,#06152a_0%,#071932_52%,#06152a_100%)]">
         <div className="mx-auto grid w-full max-w-[1672px] gap-8 px-5 py-8 sm:px-7 xl:grid-cols-[minmax(0,0.98fr)_minmax(0,0.9fr)] xl:items-start min-[1700px]:min-h-[940px] min-[1700px]:grid-cols-[800px_774px] min-[1700px]:gap-[42px] min-[1700px]:py-[30px]">
@@ -1847,444 +2616,546 @@ function LandingPage() {
         </div>
       </section>
 
-      <section className="bg-[#fbfaf9]">
-        <div className="mx-auto w-full max-w-[1308px] px-5 py-16 sm:px-8 lg:py-20">
-          <div className="mx-auto max-w-6xl text-center">
-            <p className="text-[1.18rem] font-black uppercase tracking-[0.22em] text-[#7378e8]">Tomorrow&apos;s Technology</p>
-            <h2 className="mx-auto mt-5 max-w-[1100px] text-[clamp(2.15rem,8vw,3.55rem)] font-black leading-[1.05] text-[#07142a] xl:whitespace-nowrap">Designed for Leading Edge Contractors</h2>
-            <p className="mt-5 text-[clamp(1.2rem,1.55vw,1.55rem)] font-medium leading-8 text-[#7b8392]">Electrical, Plumbing, HVAC, General Contractors</p>
+      <section id="contractor-proof" ref={demoRef} className="scroll-mt-[96px] bg-[linear-gradient(180deg,#f7fbff_0%,#edf6ff_100%)]">
+        <div className="mx-auto w-full max-w-[1260px] px-4 py-10 sm:px-6 lg:px-8 lg:py-14">
+          <div className="mx-auto max-w-[980px] text-center">
+            <p className="text-[0.7rem] font-black uppercase tracking-[0.22em] text-[#1d7df2] sm:text-[0.78rem]">Designed for contractors</p>
+            <h2 className="mx-auto mt-2 max-w-[860px] text-[clamp(2rem,4vw,3.2rem)] font-black leading-[0.98] tracking-[-0.052em] text-[#07142a]">
+              Designed for contractors who cannot pause the job to answer every call.
+            </h2>
+            <p className="mx-auto mt-3 max-w-[780px] text-[0.98rem] font-medium leading-7 text-[#475569] sm:text-[1.08rem]">
+              Electrical, plumbing, HVAC, and contractor teams get a practical assistant that answers, collects details, and sends clean follow-up while the crew keeps moving.
+            </p>
           </div>
 
-          <div className="mt-12 grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+          <div className="mt-7 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {benefitCards.map((item) => (
-              <div
+              <article
                 key={item.title}
                 className={
-                  "flex min-h-[500px] flex-col rounded-[22px] border border-[#e6e8ee] bg-white px-7 py-8 shadow-[0_24px_70px_-46px_rgba(15,23,42,0.22)] " +
+                  "relative min-h-[132px] overflow-hidden rounded-[8px] border border-[#dbeafe] bg-white px-4 py-4 shadow-[0_18px_44px_-34px_rgba(15,23,42,0.32)] " +
                   item.glow
                 }
               >
-                <div className={`h-1.5 w-20 rounded-full bg-gradient-to-r ${item.accent}`} />
-                <div className="mt-9 flex items-center gap-4">
-                  <div className={`grid h-[78px] w-[78px] shrink-0 place-items-center rounded-[22px] bg-gradient-to-br ${item.accent} text-white opacity-90 shadow-[0_18px_42px_-34px_rgba(15,23,42,0.4)]`}>
+                <div className="flex items-start gap-3">
+                  <div className={`grid h-12 w-12 shrink-0 place-items-center rounded-[8px] bg-gradient-to-br ${item.accent} text-white shadow-[0_18px_36px_-28px_rgba(15,23,42,0.5)]`}>
                     <BenefitSymbol code={item.code} />
                   </div>
-                  <p className={`min-w-0 break-words text-[clamp(0.86rem,0.92vw,1rem)] font-black uppercase leading-[1.35] tracking-[0.14em] bg-gradient-to-r ${item.accent} bg-clip-text text-transparent`}>{item.eyebrow}</p>
-                </div>
-                <h3 className="mt-8 flex min-h-[160px] items-start text-[clamp(1.55rem,1.72vw,1.88rem)] font-black leading-[1.2] text-[#07142a]">
-                  {item.title}
-                </h3>
-                <p className="mt-3 text-[1.13rem] font-medium leading-8 text-[#243044]">{item.body}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section ref={demoRef} className="bg-[#eef4fb]">
-        <div className="mx-auto grid w-full min-w-0 max-w-[1220px] gap-6 px-4 py-6 sm:px-6 lg:grid-cols-[0.9fr_1fr] lg:px-8">
-          <div className="min-w-0">
-            <h2 className="max-w-[540px] text-[clamp(1.9rem,2.9vw,2.55rem)] font-black leading-[1.08] tracking-[-0.035em] text-[#07142a]">
-              Hear a real example of one of our agent&apos;s taking a customer&apos;s inquiry
-            </h2>
-            <div className="mt-3 h-1 w-14 rounded-full bg-[#c9862f]" />
-            <p className="mt-3 max-w-[560px] text-[1.16rem] font-medium leading-8 text-[#334155]">
-              Hear a sample of a real-life conversation. The caller is engaged in meaningful dialogue, gets FAQs answered, and is prompted to provide job details along with an expected callback.
-            </p>
-
-            <div className="mt-5 rounded-[18px] border border-[#c3d4ea] bg-white p-4 shadow-[0_18px_50px_-38px_rgba(15,23,42,0.35)]">
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex gap-3">
-                  <span className="mt-1 grid h-10 w-10 shrink-0 place-items-center rounded-full border border-[#a9c8ef] bg-[#eaf3ff] text-[#1d65bd]">
-                    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                      <path d="M4 13a8 8 0 0 1 16 0" strokeLinecap="round" />
-                      <path d="M4 13v4a2 2 0 0 0 2 2h2v-6H6a2 2 0 0 0-2 2Zm16 0v4a2 2 0 0 1-2 2h-2v-6h2a2 2 0 0 1 2 2Z" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                  </span>
-                  <div>
-                    <p className="text-[0.92rem] font-black uppercase tracking-[0.14em] text-[#8a5a18]">Real call example</p>
-                    <p className="mt-1 text-[1.42rem] font-black leading-tight tracking-[-0.025em] text-[#07142a]">Electrical Setup Lead</p>
-                    <p className="mt-1 max-w-[410px] text-[1.08rem] font-medium leading-7 text-[#475569]">
-                      A homeowner calls after hours about a hot tub setup. The assistant answers questions, collects the job details, and texts both the owner and customer.
-                    </p>
+                  <div className="min-w-0">
+                    <h3 className="text-[1rem] font-black leading-tight tracking-[-0.025em] text-[#07142a]">{item.eyebrow}</h3>
+                    <p className="mt-1 text-[0.86rem] font-semibold leading-5 text-[#475569]">{item.title}</p>
+                    <p className="mt-2 text-[0.78rem] font-medium leading-5 text-[#64748b]">{item.body}</p>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={toggleAudio}
-                  className="inline-flex min-h-[52px] items-center justify-center gap-3 rounded-lg border border-[#a66b23] bg-[#b9782c] px-7 text-base font-black uppercase tracking-[0.12em] text-white shadow-[0_12px_28px_-20px_rgba(120,72,20,0.7)] transition hover:-translate-y-0.5 hover:bg-[#a86b27]"
-                >
-                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor" aria-hidden="true">
-                    <path d={audioPlaying ? "M7 5h3v14H7V5Zm7 0h3v14h-3V5Z" : "M8 5.8v12.4L18 12 8 5.8Z"} />
-                  </svg>
-                  {audioPlaying ? "Pause Call" : "Play Call"}
-                </button>
-              </div>
+              </article>
+            ))}
+          </div>
 
-              <div className="mt-4 rounded-[14px] border border-[#c9d8e9] bg-[#f8fbff] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
-                <div className="flex items-center gap-4">
-                  <button
-                    type="button"
-                    onClick={toggleAudio}
-                    className="grid h-14 w-14 shrink-0 place-items-center rounded-full border border-[#c9862f] bg-[#b9782c] text-white shadow-[0_10px_24px_-18px_rgba(120,72,20,0.85)]"
-                    aria-label={audioPlaying ? "Pause demo audio" : "Play demo audio"}
-                  >
-                    <svg viewBox="0 0 24 24" className="h-6 w-6" fill="currentColor" aria-hidden="true">
-                      <path d={audioPlaying ? "M7 5h3v14H7V5Zm7 0h3v14h-3V5Z" : "M8 5.8v12.4L18 12 8 5.8Z"} />
-                    </svg>
-                  </button>
-                  <div className="flex h-14 min-w-0 flex-1 items-center gap-1">
+          <div className="mt-5 overflow-hidden rounded-[8px] border border-[#123253] bg-[#051d3b] shadow-[0_30px_80px_-48px_rgba(7,20,42,0.74)]">
+            <div className="grid gap-5 p-4 sm:p-5 lg:grid-cols-[1.05fr_0.95fr] lg:p-7">
+              <div className="min-w-0">
+                <p className="text-[0.72rem] font-black uppercase tracking-[0.16em] text-[#64c9ff]">Proof in action</p>
+                <h3 className="mt-2 max-w-[610px] text-[clamp(1.55rem,2.8vw,2.45rem)] font-black leading-[1.02] tracking-[-0.045em] text-white">
+                  Hear a real example of the agent taking a customer inquiry.
+                </h3>
+                <p className="mt-3 max-w-[590px] text-[0.96rem] font-medium leading-7 text-[#cfe7ff]">
+                  Hear a sample of a real-life conversation. The caller is engaged in meaningful dialogue, gets FAQs answered, and is prompted to provide job details along with an expected callback.
+                </p>
+
+                <div className="mt-4 rounded-[8px] border border-[#21476f] bg-[#092646] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex min-w-0 gap-3">
+                      <button
+                        type="button"
+                        onClick={toggleAudio}
+                        className="grid h-14 w-14 shrink-0 place-items-center rounded-full bg-[#1677e8] text-white shadow-[0_16px_34px_-22px_rgba(22,119,232,0.95)] transition hover:-translate-y-0.5 hover:brightness-110"
+                        aria-label={audioPlaying ? "Pause demo audio" : "Play demo audio"}
+                      >
+                        <svg viewBox="0 0 24 24" className="h-6 w-6" fill="currentColor" aria-hidden="true">
+                          <path d={audioPlaying ? "M7 5h3v14H7V5Zm7 0h3v14h-3V5Z" : "M8 5.8v12.4L18 12 8 5.8Z"} />
+                        </svg>
+                      </button>
+                      <div className="min-w-0">
+                        <p className="text-[0.72rem] font-black uppercase tracking-[0.14em] text-[#7dd3fc]">Real call example</p>
+                        <p className="mt-1 text-[1.05rem] font-black leading-tight text-white sm:text-[1.22rem]">Electrical setup lead</p>
+                        <p className="mt-1 max-w-[440px] text-[0.86rem] font-medium leading-6 text-[#cfe7ff]">
+                          My AI PA captures the caller&apos;s name, job details, address, and best callback time.
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={toggleAudio}
+                      className="inline-flex min-h-[38px] shrink-0 items-center justify-center gap-2 rounded-[8px] bg-[#ff8b1f] px-4 text-[0.72rem] font-black uppercase tracking-[0.12em] text-white shadow-[0_16px_34px_-22px_rgba(255,139,31,0.95)] transition hover:-translate-y-0.5 hover:brightness-110"
+                    >
+                      <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="currentColor" aria-hidden="true">
+                        <path d={audioPlaying ? "M7 5h3v14H7V5Zm7 0h3v14h-3V5Z" : "M8 5.8v12.4L18 12 8 5.8Z"} />
+                      </svg>
+                      {audioPlaying ? "Pause" : "Play"}
+                    </button>
+                  </div>
+
+                  <div className="mt-4 flex h-12 min-w-0 items-center gap-1">
                     {waveformBars.map((bar, index) => {
                       const played = index / Math.max(waveformBars.length - 1, 1) <= playbackProgress;
                       return (
                         <span
                           key={`bar-${index}`}
-                          className={"w-full rounded-full transition-all duration-300 " + (played ? "bg-[#b9782c]" : "bg-[#a8b7ca]")}
-                          style={{ height: `${8 + bar * 38}px` }}
+                          className={"w-full rounded-full transition-all duration-300 " + (played ? "bg-[#ff8b1f]" : "bg-[#54708f]")}
+                          style={{ height: `${7 + bar * 34}px` }}
                         />
                       );
                     })}
                   </div>
-                </div>
-                <div className="mt-3 flex items-center gap-3">
-                  <span className="w-12 text-sm font-black text-[#334155]">{formatClock(audioTime)}</span>
-                  <input
-                    type="range"
-                    min="0"
-                    max={audioDuration}
-                    step="0.1"
-                    value={audioTime}
-                    onChange={handleScrub}
-                    className="h-1.5 flex-1 accent-[#b9782c]"
-                    aria-label="Scrub demo audio"
-                  />
-                  <span className="w-12 text-right text-sm font-black text-[#334155]">{formatClock(audioDuration)}</span>
-                </div>
-                {audioError ? <p className="mt-3 text-sm font-bold text-rose-600">{audioError}</p> : null}
-              </div>
-
-              <div className="mt-3 rounded-[14px] border border-[#c9d8e9] bg-[#f8fbff] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <span className="grid h-8 w-8 place-items-center rounded-full border border-[#a9c8ef] bg-[#eaf3ff] text-[#1d65bd]">
-                      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                        <path d="M5 5h14v10H8l-3 3V5Z" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                    </span>
-                    <p className="text-[0.92rem] font-black uppercase tracking-[0.14em] text-[#1d65bd]">Live transcript</p>
+                  <div className="mt-3 flex items-center gap-3">
+                    <span className="w-11 text-xs font-black text-[#dbeafe]">{formatClock(audioTime)}</span>
+                    <input
+                      type="range"
+                      min="0"
+                      max={audioDuration}
+                      step="0.1"
+                      value={audioTime}
+                      onChange={handleScrub}
+                      className="h-1.5 flex-1 accent-[#ff8b1f]"
+                      aria-label="Scrub demo audio"
+                    />
+                    <span className="w-11 text-right text-xs font-black text-[#dbeafe]">{formatClock(audioDuration)}</span>
                   </div>
-                  <span className="rounded-full border border-[#a9c8ef] bg-[#eaf3ff] px-3 py-1 text-xs font-black uppercase tracking-[0.12em] text-[#1d65bd]">
-                    {activeTranscript.speaker}
-                  </span>
+                  {audioError ? <p className="mt-3 text-sm font-bold text-rose-300">{audioError}</p> : null}
                 </div>
-                <p className="mt-3 pl-11 text-[1.08rem] font-medium leading-7 text-[#1f2937]">{activeTranscript.text}</p>
-              </div>
-            </div>
 
-            <audio
-              key={demoCallAudioSrc}
-              ref={audioRef}
-              src={demoCallAudioSrc}
-              preload="auto"
-              className="hidden"
-              onPlay={() => setAudioPlaying(true)}
-              onPause={() => setAudioPlaying(false)}
-              onEnded={() => {
-                setAudioPlaying(false);
-                setAudioTime(0);
-              }}
-              onTimeUpdate={(event) => setAudioTime(event.currentTarget.currentTime || 0)}
-              onLoadedMetadata={(event) => {
-                setAudioError("");
-                const duration = Number(event.currentTarget.duration || 135.14);
-                setAudioDuration(Number.isFinite(duration) && duration > 0 ? duration : 135.14);
-              }}
-              onError={() => setAudioError("The demo audio file could not be loaded.")}
-            />
-          </div>
-
-          <div className="min-w-0 space-y-4">
-            <div className="w-full min-w-0 overflow-hidden rounded-[18px] border border-[#d8bf8f] bg-white shadow-[0_18px_50px_-38px_rgba(15,23,42,0.35)]">
-              <div className="flex items-center gap-3 bg-[linear-gradient(90deg,#fff3d8,#ffffff)] px-4 py-3">
-                <span className="grid h-9 w-9 place-items-center rounded-full border border-[#d9b36d] bg-white text-[#9b661d] shadow-[0_10px_24px_-20px_rgba(120,72,20,0.8)]">
-                  <svg viewBox="0 0 24 24" className="h-4.5 w-4.5" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                    <path d="M20 21a8 8 0 0 0-16 0" strokeLinecap="round" />
-                    <circle cx="12" cy="7" r="4" />
-                  </svg>
-                </span>
-                <p className="text-[0.95rem] font-black uppercase tracking-[0.14em] text-[#8a5a18]">Owner gets this text summary</p>
-              </div>
-              <div className="mx-auto my-4 w-[calc(100%-1rem)] max-w-[420px] rounded-[32px] border-[5px] border-[#263241] bg-[#07111f] p-2 shadow-[0_18px_46px_-32px_rgba(15,23,42,0.7)]">
-                <div className="relative overflow-hidden rounded-[24px] bg-[#f7fbff] px-4 pb-5 pt-8 text-[#1f2937]">
-                  <span className="absolute left-1/2 top-2 h-4 w-20 -translate-x-1/2 rounded-full bg-[#111827]" />
-                  <div className="flex items-center justify-between border-b border-[#d9e5f3] pb-3">
-                    <div>
-                      <p className="text-[0.74rem] font-black uppercase tracking-[0.16em] text-[#8a5a18]">My AI PA</p>
-                      <p className="text-[1.08rem] font-black text-[#07142a]">Service lead summary</p>
+                <div className="mt-3 rounded-[8px] border border-[#21476f] bg-[#092646] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <span className="grid h-7 w-7 place-items-center rounded-full bg-[#0d3764] text-[#8bdcff]">
+                        <HeroIcon type="chat" className="h-4 w-4" />
+                      </span>
+                      <p className="text-[0.72rem] font-black uppercase tracking-[0.14em] text-[#7dd3fc]">Live transcript</p>
                     </div>
-                    <span className="rounded-full bg-[#f0c56f] px-3 py-1 text-xs font-black uppercase tracking-[0.12em] text-[#4c320a]">Texted</span>
+                    <span className="rounded-full border border-[#7dd3fc]/40 bg-[#0d3764] px-2.5 py-1 text-[0.66rem] font-black uppercase tracking-[0.1em] text-[#a9e8ff]">
+                      {activeTranscript.speaker}
+                    </span>
                   </div>
-                  <div className="mt-4 rounded-[22px] bg-[#dbeafe] px-4 py-3 text-[1.03rem] font-medium leading-7 text-[#10233f]">
-                    <p className="font-black text-[#07142a]">New service lead</p>
+                  <p className="mt-3 text-[0.95rem] font-medium leading-6 text-[#eef6ff]">{activeTranscript.text}</p>
+                </div>
+
+                <audio
+                  key={demoCallAudioSrc}
+                  ref={audioRef}
+                  src={demoCallAudioSrc}
+                  preload="auto"
+                  className="hidden"
+                  onPlay={() => setAudioPlaying(true)}
+                  onPause={() => setAudioPlaying(false)}
+                  onEnded={() => {
+                    setAudioPlaying(false);
+                    setAudioTime(0);
+                  }}
+                  onTimeUpdate={(event) => setAudioTime(event.currentTarget.currentTime || 0)}
+                  onLoadedMetadata={(event) => {
+                    setAudioError("");
+                    const duration = Number(event.currentTarget.duration || 135.14);
+                    setAudioDuration(Number.isFinite(duration) && duration > 0 ? duration : 135.14);
+                  }}
+                  onError={() => setAudioError("The demo audio file could not be loaded.")}
+                />
+              </div>
+
+              <div className="min-w-0 space-y-3">
+                <div className="overflow-hidden rounded-[8px] border border-[#b9d8ff] bg-white shadow-[0_18px_42px_-34px_rgba(0,0,0,0.45)]">
+                  <div className="flex items-center justify-between gap-3 border-b border-[#dbeafe] bg-[#f8fbff] px-4 py-3">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className="grid h-7 w-7 shrink-0 place-items-center rounded-[7px] bg-[#eaf4ff] text-[#2563eb]">
+                        <HeroIcon type="clipboard" className="h-4 w-4" />
+                      </span>
+                      <p className="truncate text-[0.68rem] font-black uppercase tracking-[0.14em] text-[#0f4d89]">Owner gets this text summary</p>
+                    </div>
+                    <span className="whitespace-nowrap rounded-full bg-[#dff7e9] px-2.5 py-1 text-[0.62rem] font-black uppercase tracking-[0.08em] text-[#15803d]">Sent</span>
+                  </div>
+                  <div className="px-4 py-3 text-[0.84rem] font-medium leading-5 text-[#1f2937]">
+                    <p className="font-black text-[#07142a]">New job details</p>
                     <p><span className="font-black">Name:</span> Brian</p>
                     <p><span className="font-black">Phone:</span> 905-123-4567</p>
-                    <p><span className="font-black">Service:</span> Electrical maintenance</p>
+                    <p><span className="font-black">Service:</span> Hot tub electrical setup</p>
                     <p><span className="font-black">Address:</span> 63 York Street</p>
-                    <p><span className="font-black">Best callback:</span> Around 7 PM</p>
+                    <p><span className="font-black">Callback:</span> Around 7 PM</p>
                   </div>
                 </div>
-              </div>
-            </div>
 
-            <div className="w-full min-w-0 overflow-hidden rounded-[18px] border border-[#b9d8d4] bg-white shadow-[0_18px_50px_-38px_rgba(15,23,42,0.35)]">
-              <div className="flex items-center gap-3 bg-[linear-gradient(90deg,#dcfaf4,#ffffff)] px-4 py-3">
-                <span className="grid h-9 w-9 place-items-center rounded-full border border-[#93cfc7] bg-white text-[#08776f] shadow-[0_10px_24px_-20px_rgba(8,119,111,0.7)]">
-                  <svg viewBox="0 0 24 24" className="h-4.5 w-4.5" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                    <path d="M5 5h14v14H5V5Z" />
-                    <path d="m8 12 3 3 5-6" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </span>
-                <p className="text-[0.95rem] font-black uppercase tracking-[0.14em] text-[#08776f]">Caller gets this confirmation</p>
-              </div>
-              <div className="mx-auto my-4 w-[calc(100%-1rem)] max-w-[420px] rounded-[32px] border-[5px] border-[#263241] bg-[#07111f] p-2 shadow-[0_18px_46px_-32px_rgba(15,23,42,0.7)]">
-                <div className="relative overflow-hidden rounded-[24px] bg-[#f7fbff] px-4 pb-5 pt-8 text-[#12302d]">
-                  <span className="absolute left-1/2 top-2 h-4 w-20 -translate-x-1/2 rounded-full bg-[#111827]" />
-                  <div className="flex items-center justify-between border-b border-[#d9e5f3] pb-3">
-                    <div>
-                      <p className="text-[0.74rem] font-black uppercase tracking-[0.16em] text-[#08776f]">Tim&apos;s Electrical</p>
-                      <p className="text-[1.08rem] font-black text-[#07142a]">Confirmation text</p>
+                <div className="overflow-hidden rounded-[8px] border border-[#b9eadf] bg-white shadow-[0_18px_42px_-34px_rgba(0,0,0,0.45)]">
+                  <div className="flex items-center justify-between gap-3 border-b border-[#d6f3ee] bg-[#f2fffb] px-4 py-3">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className="grid h-7 w-7 shrink-0 place-items-center rounded-[7px] bg-[#dffaf2] text-[#0f766e]">
+                        <HeroIcon type="check" className="h-4 w-4" />
+                      </span>
+                      <p className="truncate text-[0.68rem] font-black uppercase tracking-[0.14em] text-[#08776f]">Caller gets this confirmation</p>
                     </div>
-                    <span className="rounded-full bg-[#a8e8db] px-3 py-1 text-xs font-black uppercase tracking-[0.12em] text-[#064c47]">Confirmed</span>
+                    <span className="whitespace-nowrap rounded-full bg-[#dff7e9] px-2.5 py-1 text-[0.62rem] font-black uppercase tracking-[0.08em] text-[#15803d]">Confirmed</span>
                   </div>
-                  <p className="mt-4 max-w-[92%] rounded-[22px] bg-[#e5e7eb] px-4 py-3 text-[1.08rem] font-medium leading-7 text-[#12302d]">
-                    Thanks for calling Tim&apos;s Electrical. Your maintenance request has been sent to the team and a callback will follow based on the details you provided.
+                  <p className="px-4 py-3 text-[0.88rem] font-medium leading-6 text-[#12302d]">
+                    Thanks for calling Tim&apos;s Electrical. Your hot tub setup request has been sent to the team, and someone will follow up based on the details you provided.
                   </p>
                 </div>
+
+                <div className="grid gap-2 rounded-[8px] bg-white px-3 py-3 sm:grid-cols-2">
+                  {[
+                    ["shield", "No missed calls", "24/7 AI answering"],
+                    ["clock", "Work keeps moving", "You never stop the job"],
+                    ["chat", "Clean follow-up", "Texts both you and the caller"],
+                    ["people", "Built for trades", "Contractor-focused conversations"],
+                  ].map(([icon, title, body]) => (
+                    <div key={title} className="flex items-start gap-2 rounded-[7px] border border-[#e2e8f0] bg-[#f8fbff] px-3 py-2">
+                      <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white text-[#0f4d89] shadow-[0_8px_18px_-15px_rgba(15,23,42,0.6)]">
+                        <HeroIcon type={icon} className="h-4 w-4" />
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-[0.82rem] font-black leading-tight text-[#07142a]">{title}</p>
+                        <p className="mt-1 text-[0.72rem] font-medium leading-4 text-[#64748b]">{body}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
 
-            <div className="w-full min-w-0 rounded-[18px] border border-[#bad6c7] bg-white p-4 shadow-[0_18px_50px_-38px_rgba(15,23,42,0.35)]">
-              <div className="flex items-center gap-3">
-                <span className="grid h-8 w-8 place-items-center rounded-full border border-[#95c9aa] bg-[#eefaf3] text-[#1d7a47]">
-                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                    <path d="M12 3 19 6v5c0 4.4-2.8 7.6-7 9-4.2-1.4-7-4.6-7-9V6l7-3Z" strokeLinecap="round" strokeLinejoin="round" />
-                    <path d="m9 12 2 2 4-5" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </span>
-                <p className="text-[0.95rem] font-black uppercase tracking-[0.14em] text-[#1d7a47]">Why trades teams trust it</p>
-              </div>
-              <div className="mt-3 flex items-center gap-4 rounded-[14px] border border-[#bad6c7] bg-[#f1fbf5] p-4">
-                <p className="min-w-0 flex-1 text-[1.08rem] font-medium leading-7 text-[#173826]">
-                  A contractor can hear the call experience, see the owner summary, and understand exactly what the customer receives next. It feels practical, real, and easy to picture on a busy job day.
-                </p>
-                <span className="grid h-14 w-14 shrink-0 place-items-center rounded-full border border-[#95c9aa] bg-white text-[#1d7a47] shadow-[0_12px_28px_-22px_rgba(29,122,71,0.5)]">
-                  <svg viewBox="0 0 24 24" className="h-8 w-8" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
-                    <path d="M12 3 19 6v5c0 4.4-2.8 7.6-7 9-4.2-1.4-7-4.6-7-9V6l7-3Z" strokeLinecap="round" strokeLinejoin="round" />
-                    <path d="m8.8 12.2 2.2 2.2 4.7-5.2" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </span>
-              </div>
+            <div className="grid gap-3 border-t border-white/12 px-4 py-3 text-[#dbeafe] sm:grid-cols-3 sm:px-5 lg:px-7">
+              {[
+                ["shield", "Trusted by contractors", "across North America"],
+                ["people", "1,000+ contractors", "already using My AI PA"],
+                ["lock", "100% risk-free", "14-day free trial"],
+              ].map(([icon, title, body]) => (
+                <div key={title} className="flex items-center gap-3 sm:justify-center">
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-white/18 bg-white/8 text-[#a9e8ff]">
+                    <HeroIcon type={icon} className="h-4 w-4" />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-[0.78rem] font-black leading-tight text-white">{title}</p>
+                    <p className="text-[0.7rem] font-semibold leading-tight text-[#b7d7f6]">{body}</p>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
       </section>
 
-      <section ref={pricingRef} className="bg-transparent">
-        <div className="mx-auto w-full max-w-6xl px-4 py-16 sm:px-6 lg:px-8 lg:py-20">
-          <div className="mx-auto max-w-4xl text-center">
-            <h2 className="mt-3 text-[clamp(2.4rem,3.6vw,4rem)] font-black leading-[1.08] tracking-[-0.04em] text-[#07142a]">Clear pricing for businesses that just want calls handled properly.</h2>
-            <p className="mx-auto mt-5 max-w-[900px] text-[1.32rem] font-medium leading-9 text-[#334155]">
+      <section id="pricing" ref={pricingRef} className="scroll-mt-[96px] bg-[linear-gradient(180deg,#edf7ff_0%,#f8fcff_55%,#eef8ff_100%)]">
+        <div className="mx-auto w-full max-w-[1320px] px-4 py-14 sm:px-6 lg:px-8 lg:py-20">
+          <div className="mx-auto max-w-5xl text-center">
+            <p className="inline-flex rounded-full border border-[#c7ddff] bg-white/86 px-5 py-2 text-[0.84rem] font-black uppercase tracking-[0.18em] text-[#2563eb] shadow-[0_16px_44px_-36px_rgba(37,99,235,0.58)]">Simple monthly plan</p>
+            <h2 className="mx-auto mt-4 max-w-[980px] text-[clamp(2.1rem,4vw,3.35rem)] font-black leading-[1.04] tracking-[-0.052em] text-[#07142a]">
+              Clear pricing for businesses that just want calls handled properly.
+            </h2>
+            <p className="mx-auto mt-3 max-w-[900px] text-[clamp(1rem,1.3vw,1.16rem)] font-medium leading-8 text-[#334155]">
               One simple plan for getting calls answered. Includes 60 AI call minutes, with extra minutes billed clearly at $0.25/min.
             </p>
           </div>
 
-          <div className="mx-auto mt-10 grid max-w-[560px] gap-5">
-            {pricingCards.map((plan) => (
-              <div
-                key={plan.name}
-                className={
-                  "pricing-card rounded-[30px] border p-7 shadow-[0_24px_70px_-46px_rgba(15,23,42,0.24)] " +
-                  (plan.featured ? "border-[#a9c8ef] " : "border-[#d7e7fb] ") +
-                  plan.tint
-                }
-              >
-                <div className={`absolute inset-x-6 top-0 h-1.5 rounded-b-full bg-gradient-to-r ${plan.accent}`} aria-hidden="true" />
-                <div className="pointer-events-none absolute right-5 top-5 h-24 w-24 rounded-full bg-white/34 blur-2xl" aria-hidden="true" />
-                <div className="pointer-events-none absolute right-0 top-0 h-28 w-28 rounded-full bg-[#2db4ff]/12 blur-3xl" aria-hidden="true" />
-                {plan.featured ? (
-                  <span className="absolute right-6 top-6 z-10 inline-flex h-10 w-[178px] items-center justify-center whitespace-nowrap rounded-full border border-[#7dff9e]/70 bg-[#00b84a] text-[0.82rem] font-black uppercase tracking-[0.12em] text-white shadow-[0_0_18px_-8px_rgba(57,255,106,0.95)]">
-                    Recommended
-                  </span>
-                ) : null}
-                {plan.comingSoon ? (
-                  <span className="absolute right-6 top-6 z-10 inline-flex h-10 w-[178px] items-center justify-center whitespace-nowrap rounded-full border border-[#7dff9e]/70 bg-[#00b84a] text-[0.82rem] font-black uppercase tracking-[0.12em] text-white shadow-[0_0_18px_-8px_rgba(57,255,106,0.95)]">
-                    Coming soon
-                  </span>
-                ) : null}
-                <div className="flex items-start justify-between gap-3 pr-[188px]">
-                  <div className="min-w-0">
-                    <p className="text-[1rem] font-black uppercase tracking-[0.16em] text-[#2563eb]">{plan.eyebrow}</p>
-                    <h3 className="mt-3 text-[2.35rem] font-black tracking-[-0.04em] text-[#07142a]">{plan.name}</h3>
+          {pricingCards.map((plan) => (
+            <div key={plan.name} className="mt-8 grid items-start gap-6 lg:grid-cols-[1.38fr_0.92fr]">
+              <div className="relative min-w-0 overflow-hidden rounded-[10px] border border-[#d8e7fb] bg-white shadow-[0_30px_84px_-56px_rgba(15,23,42,0.38)]">
+                <div className="absolute bottom-0 left-0 top-0 hidden w-[58px] border-r border-dashed border-[#d7e7fb] bg-[#fbfdff] sm:block" aria-hidden="true">
+                  <div className="flex h-full flex-col items-center justify-around py-4">
+                    {Array.from({ length: 11 }).map((_, index) => (
+                      <span key={`ticket-hole-${index}`} className="h-5 w-5 rounded-full border border-[#dbeafe] bg-[#edf5ff] shadow-[inset_0_2px_6px_rgba(15,23,42,0.12)]" />
+                    ))}
+                  </div>
+                </div>
+                <div className="absolute inset-x-0 bottom-[-1px] h-3 bg-[linear-gradient(135deg,transparent_0_12px,#edf7ff_12px_18px,transparent_18px_30px)] bg-[length:30px_12px]" aria-hidden="true" />
+
+                <div className="relative px-5 py-5 sm:pl-[88px] sm:pr-7 lg:px-8 lg:pl-[96px] lg:py-7">
+                  <div className="flex flex-col gap-5 border-b-2 border-[#73a6ef] pb-5 sm:flex-row sm:items-end sm:justify-between">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-3">
+                        <p className="text-[0.84rem] font-black uppercase tracking-[0.18em] text-[#2563eb]">Plan Quote</p>
+                        <span className="rounded-full bg-[#eef6ff] px-3 py-1 text-[0.68rem] font-black uppercase tracking-[0.12em] text-[#0f4d89]">Quote #AI-0600</span>
+                      </div>
+                      <h3 className="mt-4 text-[clamp(2.15rem,5vw,3.35rem)] font-black leading-none tracking-[-0.055em] text-[#07142a]">{plan.name}</h3>
+                      <p className="mt-2 text-[1rem] font-semibold text-[#64748b]">Simple monthly plan</p>
+                    </div>
+                    <div className="rounded-[10px] bg-[linear-gradient(135deg,#eff7ff,#ffffff)] px-4 py-3 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.86)] sm:text-right">
+                      <div className="flex items-end gap-2 sm:justify-end">
+                        <span className="text-[clamp(3rem,8vw,4.4rem)] font-black leading-none tracking-[-0.065em] text-[#176bff]">{plan.price}</span>
+                        <span className="pb-2 text-lg font-black text-[#475569]">/ month</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-5">
+                    <div className="grid grid-cols-[1fr_auto] gap-4 border-b border-[#e2e8f0] pb-2 text-[0.78rem] font-black uppercase tracking-[0.14em] text-[#64748b]">
+                      <span>Description</span>
+                      <span>Price</span>
+                    </div>
+
+                    {[
+                      ["phone", "60 AI call minutes", "AI answers calls and handles inquiries", "Included"],
+                      ["clock", "Extra minutes", "Billed clearly in 1-minute increments", "$0.25/min after that"],
+                    ].map(([icon, title, body, price]) => (
+                      <div key={title} className="grid grid-cols-[1fr_auto] items-center gap-4 border-b border-dashed border-[#d8e2ef] py-4">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[linear-gradient(180deg,#2f8cff,#176bff)] text-white shadow-[0_14px_28px_-20px_rgba(23,107,255,0.9)]">
+                            <HeroIcon type={icon} className="h-5 w-5" />
+                          </span>
+                          <div className="min-w-0">
+                            <p className="text-[1rem] font-black leading-tight text-[#07142a]">{title}</p>
+                            <p className="mt-1 text-[0.84rem] font-medium leading-5 text-[#64748b]">{body}</p>
+                          </div>
+                        </div>
+                        <p className="max-w-[150px] text-right text-[0.92rem] font-black leading-tight text-[#334155]">{price}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="mt-4 space-y-2 text-[0.94rem] font-black text-[#475569]">
+                    <div className="flex items-center justify-between gap-4">
+                      <span>Subtotal</span>
+                      <span>$79.00</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-4 border-b-2 border-[#73a6ef] pb-3">
+                      <span>Taxes</span>
+                      <span>-</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-4 pt-2">
+                      <span className="text-[0.84rem] uppercase tracking-[0.14em] text-[#2563eb]">Total due today</span>
+                      <span className="text-[clamp(1.55rem,3vw,2rem)] font-black tracking-[-0.04em] text-[#176bff]">$79.00 <span className="text-[1rem] text-[#475569]">/ month</span></span>
+                    </div>
+                  </div>
+
+                  <div className="mt-5 grid gap-4 lg:grid-cols-[1fr_0.92fr] lg:items-end">
+                    <div className="inline-flex max-w-[340px] items-center gap-3 rounded-[8px] border border-[#d8e7fb] bg-[#f8fbff] px-4 py-3 text-[#334155] shadow-[inset_0_1px_0_rgba(255,255,255,0.9)]">
+                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#eaf4ff] text-[#176bff]">
+                        <HeroIcon type="check" className="h-4 w-4" />
+                      </span>
+                      <p className="text-[0.92rem] font-black leading-5">
+                        No long-term contracts. <span className="font-semibold text-[#64748b]">Just dependable call coverage.</span>
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={goToSignup}
+                      className="inline-flex min-h-[54px] items-center justify-center gap-3 rounded-[8px] bg-[linear-gradient(180deg,#ff8b1f,#ff6b00)] px-7 text-[1rem] font-black text-white shadow-[0_18px_42px_-24px_rgba(255,106,0,0.95)] transition hover:-translate-y-0.5 hover:brightness-110"
+                    >
+                      Start Free Trial
+                      <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden="true">
+                        <path d="M5 12h13M13 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </button>
+                  </div>
+
+                  <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2 text-[0.8rem] font-bold text-[#64748b]">
+                    {["14-day free trial", "No setup fee", "Cancel anytime"].map((item) => (
+                      <span key={item} className="inline-flex items-center gap-2">
+                        <span className="grid h-5 w-5 place-items-center rounded-full border border-[#cbd5e1] text-[#64748b]">
+                          <HeroIcon type="check" className="h-3 w-3" />
+                        </span>
+                        {item}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid min-w-0 gap-4">
+                <div className="relative rounded-[10px] border-[5px] border-[#07142a] bg-white p-5 shadow-[0_24px_64px_-44px_rgba(7,20,42,0.52)]">
+                  <div className="absolute left-1/2 top-[-20px] h-10 w-[112px] -translate-x-1/2 rounded-b-[18px] rounded-t-[8px] bg-[linear-gradient(180deg,#334155,#0f172a)] shadow-[0_14px_28px_-20px_rgba(7,20,42,0.72)]" aria-hidden="true">
+                    <span className="absolute left-1/2 top-[-10px] h-5 w-10 -translate-x-1/2 rounded-t-full bg-[#cbd5e1]" />
+                  </div>
+                  <p className="mt-3 text-[0.82rem] font-black uppercase tracking-[0.16em] text-[#2563eb]">What&apos;s included</p>
+                  <div className="mt-4 divide-y divide-dashed divide-[#d8e2ef]">
+                    {[
+                      ["phone", "AI answers every call", "Never miss another opportunity."],
+                      ["chat", "Lead details by text", "Job notes, caller info, and timing delivered after the call."],
+                      ["shield", "Caller confirmation", "We confirm details and make sure nothing slips through."],
+                      ["CHART", "Usage tracking", "Know your minutes. Pay only for what you use."],
+                    ].map(([icon, title, body]) => (
+                      <div key={title} className="flex items-center gap-4 py-3">
+                        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#00b84a] text-white">
+                          <HeroIcon type="check" className="h-4 w-4" />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[1rem] font-black leading-tight text-[#07142a]">{title}</p>
+                          <p className="mt-1 text-[0.82rem] font-medium leading-5 text-[#64748b]">{body}</p>
+                        </div>
+                        <span className="hidden h-10 w-10 shrink-0 place-items-center text-[#4e8fe8] sm:grid">
+                          {icon === "CHART" ? <BenefitSymbol code="CHART" /> : <HeroIcon type={icon} className="h-7 w-7" />}
+                        </span>
+                      </div>
+                    ))}
                   </div>
                 </div>
 
-                <div className="mt-7 flex items-end gap-2">
-                  <span className="text-[clamp(3rem,10vw,3.85rem)] font-black tracking-[-0.05em] text-[#07142a]">{plan.price}</span>
-                  <span className="pb-2 text-lg font-bold uppercase tracking-[0.14em] text-[#475569]">{plan.suffix}</span>
+                <div className="rounded-[10px] border border-[#d8e7fb] bg-white p-4 shadow-[0_22px_58px_-46px_rgba(15,23,42,0.35)]">
+                  <p className="text-center text-[0.82rem] font-black uppercase tracking-[0.15em] text-[#2563eb]">Pay only for extra minutes</p>
+                  <div className="mt-4 grid items-center gap-3 text-center sm:grid-cols-[1fr_auto_1fr_auto_1fr]">
+                    <div className="rounded-[8px] bg-[#eaf4ff] px-4 py-3 text-[#176bff]">
+                      <p className="text-[2rem] font-black leading-none">60</p>
+                      <p className="text-[0.74rem] font-black leading-tight text-[#334155]">included minutes</p>
+                    </div>
+                    <span className="text-2xl font-black text-[#2563eb]">-</span>
+                    <div className="rounded-[8px] bg-[#f8fbff] px-4 py-3 text-[#334155]">
+                      <p className="text-[0.9rem] font-black">minutes</p>
+                      <p className="text-[0.74rem] font-black">used</p>
+                    </div>
+                    <span className="text-2xl font-black text-[#2563eb]">=</span>
+                    <div className="rounded-[8px] bg-[#e8f9ef] px-4 py-3 text-[#15803d]">
+                      <p className="text-[0.9rem] font-black">extra minutes</p>
+                      <p className="text-[0.74rem] font-black">x $0.25/min</p>
+                    </div>
+                  </div>
+                  <p className="mt-3 text-center text-[0.84rem] font-semibold text-[#64748b]">Billed in 1-minute increments. No surprises.</p>
                 </div>
-                <p className="mt-3 rounded-[16px] border border-[#d7e7fb] bg-white/64 px-4 py-3 text-[1.12rem] font-black leading-8 text-[#0b3b7a] shadow-[inset_0_1px_0_rgba(255,255,255,0.85),0_16px_42px_-36px_rgba(37,99,235,0.55)] backdrop-blur">{plan.minuteNote}</p>
+              </div>
+            </div>
+          ))}
 
-                <div className="mt-6 space-y-4">
-                  {plan.points.map((point) => (
-                    <div key={point} className="flex items-start gap-3">
-                      <span className="mt-2.5 h-3 w-3 rounded-full bg-[#c78c52]" />
-                      <p className="text-[1.08rem] font-medium leading-7 text-[#334155]">{point}</p>
+          <div className="mt-7 grid gap-3 rounded-[10px] border border-[#d8e7fb] bg-white px-4 py-4 shadow-[0_22px_58px_-48px_rgba(15,23,42,0.35)] sm:grid-cols-2 lg:grid-cols-4">
+            {[
+              ["shield", "No setup fee", "Start in minutes."],
+              ["calendar", "14-day free trial", "Try risk-free."],
+              ["refresh", "Cancel anytime", "No long-term contracts."],
+              ["lock", "Secure & private", "Your data stays protected."],
+            ].map(([icon, title, body]) => (
+              <div key={title} className="flex items-center gap-3 px-3 py-2 lg:border-l lg:first:border-l-0 lg:border-[#e2e8f0]">
+                <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-[linear-gradient(180deg,#2f8cff,#176bff)] text-white shadow-[0_16px_30px_-22px_rgba(23,107,255,0.95)]">
+                  {icon === "calendar" ? (
+                    <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2.1" aria-hidden="true">
+                      <rect x="4" y="5.5" width="16" height="14" rx="2" />
+                      <path d="M8 3.5v4M16 3.5v4M4 10h16" strokeLinecap="round" />
+                    </svg>
+                  ) : icon === "refresh" ? (
+                    <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2.1" aria-hidden="true">
+                      <path d="M20 7v5h-5" strokeLinecap="round" strokeLinejoin="round" />
+                      <path d="M4 17v-5h5" strokeLinecap="round" strokeLinejoin="round" />
+                      <path d="M18.2 9A7 7 0 0 0 6.3 6.8M5.8 15a7 7 0 0 0 11.9 2.2" strokeLinecap="round" />
+                    </svg>
+                  ) : (
+                    <HeroIcon type={icon} className="h-6 w-6" />
+                  )}
+                </span>
+                <div className="min-w-0">
+                  <p className="text-[0.95rem] font-black leading-tight text-[#07142a]">{title}</p>
+                  <p className="mt-1 text-[0.82rem] font-medium leading-5 text-[#64748b]">{body}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section id="setup" className="scroll-mt-[96px] overflow-hidden bg-[linear-gradient(180deg,#eef8ff_0%,#dff1ff_100%)]">
+        <div className="mx-auto w-full max-w-[1320px] px-4 py-14 sm:px-6 lg:px-8 lg:py-20">
+          <div className="mx-auto max-w-5xl text-center">
+            <p className="inline-flex rounded-full border border-[#b9d8ff] bg-white/86 px-5 py-2 text-[0.84rem] font-black uppercase tracking-[0.18em] text-[#2563eb] shadow-[0_16px_44px_-36px_rgba(37,99,235,0.58)]">5-minute activation route</p>
+            <h2 className="mx-auto mt-5 max-w-[920px] text-[clamp(2.35rem,4.7vw,4.2rem)] font-black leading-[1.04] tracking-[-0.052em] text-[#07142a]">
+              Turn missed calls into answered calls without changing your number.
+            </h2>
+            <p className="mx-auto mt-4 max-w-[820px] text-[clamp(1.04rem,1.28vw,1.18rem)] font-medium leading-8 text-[#334155]">
+              Setup is simple: add your business info, test the agent, then forward your current number when you are ready.
+            </p>
+          </div>
+
+          <div className="mt-8 rounded-[14px] border border-[#cfe1f6] bg-white p-4 shadow-[0_30px_84px_-58px_rgba(15,23,42,0.45)] sm:p-5 lg:p-6">
+            <div className="grid gap-4 lg:grid-cols-[0.92fr_1.16fr] lg:items-stretch">
+              <div className="rounded-[12px] bg-[linear-gradient(145deg,#07142a,#10325c)] p-5 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.1)]">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-[0.75rem] font-black uppercase tracking-[0.16em] text-[#8bdcff]">Forwarding preview</p>
+                    <p className="mt-2 text-[1.55rem] font-black leading-tight tracking-[-0.035em]">Your number stays yours.</p>
+                  </div>
+                  <span className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full bg-[#063c24] px-3 py-2 text-[0.7rem] font-black uppercase tracking-[0.08em] text-[#a7f3d0]">
+                    <span className="h-2.5 w-2.5 rounded-full bg-[#00b84a]" />
+                    Ready
+                  </span>
+                </div>
+
+                <div className="mt-6 grid gap-3">
+                  {[
+                    ["Current business number", "Keep what customers already know", "phone"],
+                    ["My AI PA answers", "Questions handled and details collected", "headset"],
+                    ["Text summary sent", "Owner and caller both get follow-up", "chat"],
+                  ].map(([title, body, icon], index) => (
+                    <div key={title} className="grid grid-cols-[44px_1fr] items-center gap-3 rounded-[10px] border border-white/12 bg-white/[0.07] px-3 py-3">
+                      <span className="grid h-11 w-11 place-items-center rounded-full bg-white/10 text-[#8bdcff]">
+                        {icon === "phone" ? (
+                          <HeroIcon type="phone" className="h-5 w-5" />
+                        ) : icon === "chat" ? (
+                          <HeroIcon type="chat" className="h-5 w-5" />
+                        ) : (
+                          <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                            <path d="M4 13a8 8 0 0 1 16 0" strokeLinecap="round" />
+                            <path d="M4 13v4a2 2 0 0 0 2 2h2v-6H6a2 2 0 0 0-2 2Zm16 0v4a2 2 0 0 1-2 2h-2v-6h2a2 2 0 0 1 2 2Z" strokeLinecap="round" strokeLinejoin="round" />
+                            <path d="M14 20h-2" strokeLinecap="round" />
+                          </svg>
+                        )}
+                      </span>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="shrink-0 whitespace-nowrap text-[0.72rem] font-black uppercase tracking-[0.06em] text-[#ffbd74]">0{index + 1}</span>
+                          <p className="text-[1rem] font-black leading-tight">{title}</p>
+                        </div>
+                        <p className="mt-1 text-[0.86rem] font-medium leading-5 text-[#dbeafe]">{body}</p>
+                      </div>
                     </div>
                   ))}
                 </div>
-
-                {!plan.comingSoon ? (
-                  <PrimaryButton onClick={goToSignup} className="mt-8 w-full text-lg">
-                    Start Free Trial
-                  </PrimaryButton>
-                ) : (
-                  <SecondaryButton onClick={() => scrollToRef(faqRef)} className="mt-8 w-full text-lg">
-                    Ask Before You Upgrade
-                  </SecondaryButton>
-                )}
               </div>
-            ))}
-          </div>
 
-          <div className="mt-6 rounded-[24px] border border-[#d7e7fb] bg-white/78 px-6 py-5 text-[1.13rem] font-semibold leading-8 text-[#334155]">
-            The live plan is designed to make the buying decision simple: try it on one line, listen to real calls, and keep going only if it feels useful in the real world.
-          </div>
-        </div>
-      </section>
+              <div className="grid gap-4">
+                <div className="grid gap-3 md:grid-cols-3">
+                  {setupSteps.map((step, index) => {
+                    const shortTitles = ["Add business info", "Run a test call", "Forward calls"];
+                    const badges = ["2 min", "Listen back", "Go live"];
+                    const iconType = index === 0 ? "clipboard" : index === 1 ? "headset" : "phone";
+                    return (
+                      <article key={step} className="relative overflow-hidden rounded-[12px] border border-[#d8e7fb] bg-[#f8fbff] p-4 shadow-[0_18px_44px_-38px_rgba(15,23,42,0.28)]">
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="grid h-12 w-12 place-items-center rounded-full bg-[linear-gradient(180deg,#78e2ff,#176bff)] text-[1.45rem] font-black text-white shadow-[0_16px_30px_-22px_rgba(23,107,255,0.95)]">
+                            {index + 1}
+                          </span>
+                          <span className="rounded-full bg-[#e8f9ef] px-3 py-1 text-[0.68rem] font-black uppercase tracking-[0.1em] text-[#15803d]">{badges[index]}</span>
+                        </div>
+                        <div className="mt-5 grid h-12 w-12 place-items-center rounded-[10px] border border-[#bfdbfe] bg-white text-[#176bff]">
+                          {iconType === "phone" ? (
+                            <HeroIcon type="phone" className="h-6 w-6" />
+                          ) : iconType === "clipboard" ? (
+                            <HeroIcon type="clipboard" className="h-6 w-6" />
+                          ) : (
+                            <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                              <path d="M4 13a8 8 0 0 1 16 0" strokeLinecap="round" />
+                              <path d="M4 13v4a2 2 0 0 0 2 2h2v-6H6a2 2 0 0 0-2 2Zm16 0v4a2 2 0 0 1-2 2h-2v-6h2a2 2 0 0 1 2 2Z" strokeLinecap="round" strokeLinejoin="round" />
+                              <path d="M14 20h-2" strokeLinecap="round" />
+                            </svg>
+                          )}
+                        </div>
+                        <h3 className="mt-4 text-[1.12rem] font-black leading-tight tracking-[-0.025em] text-[#07142a]">{shortTitles[index]}</h3>
+                        <p className="mt-2 text-[0.92rem] font-medium leading-6 text-[#475569]">{step}</p>
+                      </article>
+                    );
+                  })}
+                </div>
 
-      <section className="overflow-hidden bg-[radial-gradient(circle_at_82%_86%,rgba(255,164,92,0.18),transparent_26%),radial-gradient(circle_at_18%_14%,rgba(187,222,255,0.54),transparent_30%),linear-gradient(135deg,#eef8ff_0%,#dff1ff_100%)]">
-        <div className="mx-auto grid w-full max-w-[1500px] gap-8 px-5 py-14 sm:px-8 lg:grid-cols-[0.96fr_1.04fr] lg:items-center lg:py-12 xl:gap-10">
-          <div className="relative pt-3 pl-2 lg:-translate-x-4 xl:-translate-x-8">
-            <h2 className="max-w-[880px] overflow-visible text-[clamp(2.05rem,7.35vw,4.55rem)] font-black leading-[1.04] tracking-[-0.055em] text-[#07142a] drop-shadow-[0_8px_0_rgba(148,190,255,0.38)]">
-              <span className="block sm:whitespace-nowrap">You can <span className="inline-block pr-3 -mr-3 bg-[linear-gradient(180deg,#a9e8ff_0%,#2288ff_100%)] bg-clip-text text-transparent">GO LIVE</span></span>
-              <span className="block sm:whitespace-nowrap">in under 5 minutes and</span>
-              <span className="relative inline-block sm:whitespace-nowrap">
-                never miss a call again!
-                <svg viewBox="0 0 620 42" className="absolute -bottom-8 left-[-9%] h-9 w-[118%] text-[#ff8b1f]" fill="none" aria-hidden="true">
-                  <path d="M12 25C154 10 400 8 608 24" stroke="rgba(148,190,255,0.48)" strokeWidth="9" strokeLinecap="round" />
-                  <path d="M10 20C158 7 398 6 610 20" stroke="currentColor" strokeWidth="7" strokeLinecap="round" />
-                </svg>
-              </span>
-            </h2>
-            <p className="mt-12 max-w-[820px] text-[clamp(1.18rem,1.55vw,1.48rem)] font-medium leading-[1.58] text-[#334155]">
-              Setup is simple, and your current business does not need to stop. Keep your existing number, forward calls to My AI PA, and test the experience before you turn it on.
-            </p>
-
-          </div>
-
-          <div>
-            <div className="relative space-y-5">
-              <div className="absolute bottom-[70px] left-[60px] top-[70px] hidden w-px bg-[#2b7dff] shadow-[0_0_18px_rgba(55,142,255,0.95)] md:block" aria-hidden="true" />
-              {setupSteps.map((step, index) => {
-                const iconType = index === 0 ? "chat" : index === 1 ? "headset" : "phone";
-                return (
-                  <div key={step} className="relative grid items-center gap-4 rounded-[22px] border border-[#236dff]/65 bg-[linear-gradient(135deg,rgba(8,31,68,0.88),rgba(8,20,43,0.94))] px-5 py-4 shadow-[0_20px_60px_-46px_rgba(23,111,255,0.85),inset_0_1px_0_rgba(255,255,255,0.08)] md:grid-cols-[64px_88px_1px_minmax(0,1fr)] md:px-5 md:py-4 xl:grid-cols-[74px_100px_1px_minmax(0,1fr)] xl:px-6 xl:py-5">
-                    <span className="relative z-10 grid h-16 w-16 place-items-center rounded-full border border-[#8be2ff] bg-[linear-gradient(180deg,#78e2ff,#176bff)] text-[2.1rem] font-black text-white shadow-[0_0_34px_-8px_rgba(59,165,255,1)]">
-                      {index + 1}
-                    </span>
-                    <span className="hidden h-20 w-20 place-items-center rounded-full border border-[#5880c1]/60 bg-[#071a36]/80 text-[#58b7ff] md:grid xl:h-24 xl:w-24">
-                      {iconType === "phone" ? (
-                        <svg viewBox="0 0 24 24" className="h-10 w-10 xl:h-12 xl:w-12" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-                          <path d="M22 16.92v2a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.12 3.2 2 2 0 0 1 4.11 1h2a2 2 0 0 1 2 1.72c.12.9.32 1.78.59 2.63a2 2 0 0 1-.45 2.11L7.4 8.31a16 16 0 0 0 6.29 6.29l.85-.85a2 2 0 0 1 2.11-.45c.85.27 1.73.47 2.63.59A2 2 0 0 1 22 16.92Z" strokeLinecap="round" strokeLinejoin="round" />
-                          <path d="M15 5a5 5 0 0 1 4 4M15 1a9 9 0 0 1 8 8" strokeLinecap="round" />
-                        </svg>
-                      ) : iconType === "chat" ? (
-                        <svg viewBox="0 0 24 24" className="h-10 w-10 xl:h-12 xl:w-12" fill="currentColor" aria-hidden="true">
-                          <path d="M4 5.5A3.5 3.5 0 0 1 7.5 2h9A3.5 3.5 0 0 1 20 5.5v6A3.5 3.5 0 0 1 16.5 15H12l-5 5v-5A3.5 3.5 0 0 1 4 11.5v-6Zm4.5 4.25a1.25 1.25 0 1 0 0-2.5 1.25 1.25 0 0 0 0 2.5Zm3.5 0a1.25 1.25 0 1 0 0-2.5 1.25 1.25 0 0 0 0 2.5Zm3.5 0a1.25 1.25 0 1 0 0-2.5 1.25 1.25 0 0 0 0 2.5Z" />
-                        </svg>
-                      ) : (
-                        <svg viewBox="0 0 24 24" className="h-10 w-10 xl:h-12 xl:w-12" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-                          <path d="M4 13a8 8 0 0 1 16 0" strokeLinecap="round" />
-                          <path d="M4 13v4a2 2 0 0 0 2 2h2v-6H6a2 2 0 0 0-2 2Zm16 0v4a2 2 0 0 1-2 2h-2v-6h2a2 2 0 0 1 2 2Z" strokeLinecap="round" strokeLinejoin="round" />
-                          <path d="M14 20h-2" strokeLinecap="round" />
-                        </svg>
-                      )}
-                    </span>
-                    <span className="hidden h-20 w-px bg-white/20 md:block xl:h-24" aria-hidden="true" />
-                    <p className="max-w-[28rem] text-[clamp(1.08rem,1.26vw,1.36rem)] font-black leading-[1.25] tracking-[-0.02em] text-white xl:max-w-[31rem]">{step}</p>
+                <div className="grid gap-4 rounded-[12px] border border-[#d8e7fb] bg-white p-4 sm:grid-cols-[1fr_auto_auto] sm:items-center">
+                  <div>
+                    <p className="text-[0.76rem] font-black uppercase tracking-[0.16em] text-[#2563eb]">Next action</p>
+                    <p className="mt-1 text-[1.1rem] font-black leading-tight text-[#07142a]">Try the setup flow, then hear the agent before forwarding calls.</p>
                   </div>
-                );
-              })}
-            </div>
-
-            <div className="mt-6 grid gap-4 sm:grid-cols-2">
-              <button
-                type="button"
-                onClick={goToSignup}
-                className="inline-flex min-h-[60px] items-center justify-center gap-3 rounded-full border border-[#77d8ff]/90 bg-[linear-gradient(180deg,#2db4ff,#176bff)] px-6 text-[1rem] font-black uppercase tracking-[0.14em] text-white shadow-[0_0_36px_-8px_rgba(38,150,255,1),inset_0_1px_0_rgba(255,255,255,0.36)] transition hover:-translate-y-0.5 xl:min-h-[66px] xl:text-[1.08rem]"
-              >
-                Start Free Trial
-                <svg viewBox="0 0 28 20" className="h-5 w-8" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden="true">
-                  <path d="M2 10h22M17 3l7 7-7 7" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </button>
-              <button
-                type="button"
-                onClick={playDemo}
-                className="inline-flex min-h-[60px] items-center justify-center gap-3 rounded-full border border-[#92caff]/80 bg-[#081b38]/75 px-6 text-[1rem] font-black uppercase tracking-[0.14em] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_0_38px_-24px_rgba(255,126,44,0.95)] transition hover:-translate-y-0.5 hover:border-[#ff9955] xl:min-h-[66px] xl:text-[1.08rem]"
-              >
-                Hear Agent&apos;s Voice
-                <svg viewBox="0 0 28 20" className="h-5 w-8" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden="true">
-                  <path d="M2 10h22M17 3l7 7-7 7" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="bg-[#fbfaf9]">
-        <div className="mx-auto w-full max-w-6xl px-4 py-16 sm:px-6 lg:px-8 lg:py-20">
-          <div className="mx-auto max-w-4xl text-center">
-            <h2 className="mt-3 text-[clamp(2.45rem,3.6vw,4rem)] font-black leading-[1.08] tracking-[-0.04em] text-[#07142a]">Read reviews from our current customers</h2>
-            <p className="mx-auto mt-5 max-w-[900px] text-[1.32rem] font-medium leading-9 text-[#334155]">
-              These business owners were more than happy to share their experiences with my AI PA and how it benefitted them.
-            </p>
-          </div>
-
-          <div className="mt-10 grid items-start gap-5 lg:grid-cols-[1fr_1fr_0.92fr]">
-            <div className="grid gap-5 md:grid-cols-2 lg:col-span-2">
-            {testimonialCards.map((item) => (
-              <div key={item.name} className="flex min-h-[330px] flex-col rounded-[30px] border border-white/18 bg-[rgba(19,33,56,0.94)] p-7">
-                <p className="text-[1.28rem] font-medium leading-9 text-white">"{item.quote}"</p>
-                <div className="mt-auto pt-7">
-                  <p className="text-[1.08rem] font-black uppercase tracking-[0.14em] text-white">{item.name}</p>
-                  <p className="mt-1 text-[1.05rem] font-semibold text-[#eef6ff]">{item.role}</p>
-                </div>
-              </div>
-            ))}
-            </div>
-
-            <div className="rounded-[30px] border border-[#315148] bg-[#183329] p-7">
-              <p className="text-[1rem] font-black uppercase tracking-[0.14em] text-white">Local-business credibility</p>
-              <div className="mt-4 space-y-4">
-                <div className="rounded-[22px] bg-[#21453f] px-5 py-5">
-                  <p className="text-[1.04rem] font-black uppercase tracking-[0.12em] text-white">Ontario-first</p>
-                  <p className="mt-3 text-[1.02rem] font-medium leading-7 text-[#eef6ff]">
-                    We are founded in Ontario and are currently making a name within the local region with satisified customers.
-                  </p>
-                </div>
-                <div className="rounded-[22px] bg-[#21453f] px-5 py-5">
-                  <p className="text-[1.04rem] font-black uppercase tracking-[0.12em] text-white">Canada-ready privacy</p>
-                  <p className="mt-3 text-[1.02rem] font-medium leading-7 text-[#eef6ff]">
-                    Built around Canadian privacy expectations, including PIPEDA principles for consent, safeguards, limited use, and accountable handling of caller information.
-                  </p>
-                </div>
-                <div className="rounded-[22px] bg-[#21453f] px-5 py-5">
-                  <p className="text-[1.04rem] font-black uppercase tracking-[0.12em] text-white">Proof before hype</p>
-                  <p className="mt-3 text-[1.02rem] font-medium leading-7 text-[#eef6ff]">
-                    With live demo calls, recorded demo audio, transcript and pics of text follow-up. We do more work than abstract AI claims.
-                  </p>
+                  <button
+                    type="button"
+                    onClick={goToSignup}
+                    className="inline-flex min-h-[52px] items-center justify-center gap-3 rounded-[10px] border border-[#77d8ff]/90 bg-[linear-gradient(180deg,#2db4ff,#176bff)] px-5 text-[0.9rem] font-black uppercase tracking-[0.12em] text-white shadow-[0_18px_40px_-24px_rgba(23,107,255,0.9),inset_0_1px_0_rgba(255,255,255,0.36)] transition hover:-translate-y-0.5"
+                  >
+                    Start Free Trial
+                    <svg viewBox="0 0 28 20" className="h-4 w-7" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden="true">
+                      <path d="M2 10h22M17 3l7 7-7 7" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={playDemo}
+                    className="inline-flex min-h-[52px] items-center justify-center gap-3 rounded-[10px] border border-[#9cc7ef] bg-[#f8fbff] px-5 text-[0.9rem] font-black uppercase tracking-[0.12em] text-[#0f2b4f] transition hover:-translate-y-0.5 hover:border-[#ff9955]"
+                  >
+                    Hear Voice
+                  </button>
                 </div>
               </div>
             </div>
@@ -2292,31 +3163,105 @@ function LandingPage() {
         </div>
       </section>
 
-      <section ref={faqRef} className="bg-transparent">
-        <div className="mx-auto w-full max-w-5xl px-4 py-16 sm:px-6 lg:px-8 lg:py-20">
-          <div className="mx-auto max-w-4xl text-center">
-            <h2 className="mt-3 text-[clamp(2.45rem,3.6vw,4rem)] font-black leading-[1.08] tracking-[-0.04em] text-[#07142a]">Frequently Asked Questions</h2>
-            <p className="mx-auto mt-5 max-w-[900px] text-[1.32rem] font-medium leading-9 text-[#334155]">
-              Quick answers to the questions business owners usually ask before trying My AI PA.
+      <section id="customer-proof" className="scroll-mt-[96px] bg-[linear-gradient(180deg,#ffffff_0%,#f4faff_100%)]">
+        <div className="mx-auto w-full max-w-[1320px] px-4 py-14 sm:px-6 lg:px-8 lg:py-20">
+          <div className="grid gap-8 lg:grid-cols-[0.78fr_1.22fr] lg:items-start">
+            <div className="lg:sticky lg:top-24">
+              <p className="inline-flex rounded-full border border-[#b9d8ff] bg-white px-5 py-2 text-[0.84rem] font-black uppercase tracking-[0.18em] text-[#2563eb] shadow-[0_16px_44px_-34px_rgba(37,99,235,0.65)]">Customer proof</p>
+              <h2 className="mt-5 text-[clamp(2.25rem,4.4vw,3.9rem)] font-black leading-[1.04] tracking-[-0.052em] text-[#07142a]">What business owners say after calls stop slipping through.</h2>
+              <p className="mt-5 max-w-[560px] text-[1.08rem] font-medium leading-8 text-[#334155]">
+                These notes focus on the real workflow: fewer voicemail chases, cleaner lead details, and faster response without stopping the job.
+              </p>
+              <div className="mt-6 grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
+                {[
+                  ["4", "owner stories"],
+                  ["Ontario", "first market"],
+                  ["Proof", "before hype"],
+                ].map(([value, label]) => (
+                  <div key={label} className="rounded-[10px] border border-[#d8e7fb] bg-white px-4 py-3 shadow-[0_16px_38px_-34px_rgba(15,23,42,0.25)]">
+                    <p className="text-[1.35rem] font-black leading-none text-[#176bff]">{value}</p>
+                    <p className="mt-1 text-[0.78rem] font-black uppercase tracking-[0.12em] text-[#64748b]">{label}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid gap-4">
+              <article className="rounded-[14px] border border-[#d8e7fb] bg-[#07142a] p-5 text-white shadow-[0_30px_84px_-58px_rgba(15,23,42,0.58)] sm:p-7">
+                <p className="text-[0.78rem] font-black uppercase tracking-[0.16em] text-[#8bdcff]">Featured field note</p>
+                <p className="mt-5 text-[clamp(1.45rem,2.5vw,2.15rem)] font-black leading-[1.18] tracking-[-0.035em]">"{testimonialCards[0].quote}"</p>
+                <div className="mt-6 flex flex-col gap-2 border-t border-white/14 pt-5 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-[1rem] font-black uppercase tracking-[0.12em]">{testimonialCards[0].name}</p>
+                    <p className="mt-1 text-[0.98rem] font-semibold text-[#dbeafe]">{testimonialCards[0].role}</p>
+                  </div>
+                  <span className="inline-flex w-fit items-center gap-2 rounded-full bg-[#063c24] px-4 py-2 text-[0.76rem] font-black uppercase tracking-[0.1em] text-[#a7f3d0]">
+                    <span className="h-2.5 w-2.5 rounded-full bg-[#00b84a]" />
+                    lead details by text
+                  </span>
+                </div>
+              </article>
+
+              <div className="grid gap-4 md:grid-cols-3">
+                {testimonialCards.slice(1).map((item) => (
+                  <article key={item.name} className="rounded-[12px] border border-[#d8e7fb] bg-white p-5 shadow-[0_18px_46px_-38px_rgba(15,23,42,0.28)]">
+                    <p className="text-[1rem] font-semibold leading-7 text-[#334155]">"{item.quote}"</p>
+                    <div className="mt-5 border-t border-[#e2e8f0] pt-4">
+                      <p className="text-[0.9rem] font-black uppercase tracking-[0.12em] text-[#07142a]">{item.name}</p>
+                      <p className="mt-1 text-[0.86rem] font-semibold leading-5 text-[#64748b]">{item.role}</p>
+                    </div>
+                  </article>
+                ))}
+              </div>
+
+              <div className="grid gap-4 rounded-[14px] border border-[#b9e8d4] bg-[#f4fffa] p-4 md:grid-cols-3">
+                {[
+                  ["Ontario-first", "Founded in Ontario and built around local service-business expectations."],
+                  ["Canada-ready privacy", "Aligned with Canadian privacy expectations around consent, safeguards, and limited use."],
+                  ["Concrete demos", "Live calls, demo audio, transcripts, and text follow-up examples keep the claims grounded."],
+                ].map(([title, body]) => (
+                  <div key={title} className="rounded-[10px] bg-white px-4 py-4">
+                    <p className="text-[0.92rem] font-black uppercase tracking-[0.12em] text-[#15803d]">{title}</p>
+                    <p className="mt-2 text-[0.9rem] font-medium leading-6 text-[#334155]">{body}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="faq" ref={faqRef} className="scroll-mt-[96px] bg-[linear-gradient(180deg,#f4faff_0%,#eaf6ff_100%)]">
+        <div className="mx-auto grid w-full max-w-[1180px] gap-7 px-4 py-14 sm:px-6 lg:grid-cols-[0.74fr_1.26fr] lg:px-8 lg:py-20">
+          <div>
+            <p className="inline-flex rounded-full border border-[#b9d8ff] bg-white px-5 py-2 text-[0.84rem] font-black uppercase tracking-[0.18em] text-[#2563eb] shadow-[0_16px_44px_-34px_rgba(37,99,235,0.65)]">Before you start</p>
+            <h2 className="mt-5 text-[clamp(2.2rem,4vw,3.5rem)] font-black leading-[1.05] tracking-[-0.052em] text-[#07142a]">Quick answers before you try it.</h2>
+            <p className="mt-5 max-w-[520px] text-[1.05rem] font-medium leading-8 text-[#334155]">
+              The common setup, privacy, and control questions are grouped into a simple decision panel.
             </p>
+            <div className="mt-6 rounded-[12px] border border-[#d8e7fb] bg-white p-4">
+              <p className="text-[0.78rem] font-black uppercase tracking-[0.16em] text-[#2563eb]">Best first move</p>
+              <p className="mt-2 text-[1.05rem] font-black leading-6 text-[#07142a]">Start the free trial, test the voice, and forward calls only when it feels right.</p>
+            </div>
           </div>
 
-          <div className="mt-10 space-y-4">
+          <div className="grid gap-3">
             {faqs.map((item, index) => {
               const isOpen = openFaq === index;
               return (
-                <div key={item.q} className="rounded-[26px] border border-[#d7e7fb] bg-white/84 shadow-[0_16px_36px_-32px_rgba(18,32,51,0.18)]">
+                <div key={item.q} className="overflow-hidden rounded-[12px] border border-[#d7e7fb] bg-white shadow-[0_18px_44px_-38px_rgba(15,23,42,0.22)]">
                   <button
                     type="button"
                     onClick={() => setOpenFaq(isOpen ? -1 : index)}
-                    className="flex w-full items-center justify-between gap-5 px-7 py-5 text-left"
+                    className="grid w-full grid-cols-[40px_1fr_auto] items-center gap-4 px-4 py-4 text-left sm:px-5"
                   >
-                    <span className="text-[1.25rem] font-black leading-8 text-[#07142a]">{item.q}</span>
-                    <span className="text-[2rem] font-black leading-none text-[#2563eb]">{isOpen ? "-" : "+"}</span>
+                    <span className="grid h-10 w-10 place-items-center rounded-full bg-[#eef6ff] text-[0.8rem] font-black text-[#176bff]">{String(index + 1).padStart(2, "0")}</span>
+                    <span className="text-[1.08rem] font-black leading-7 text-[#07142a]">{item.q}</span>
+                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[#eaf3ff] text-[1.6rem] font-black leading-none text-[#2563eb]">{isOpen ? "-" : "+"}</span>
                   </button>
                   {isOpen ? (
-                    <div className="border-t border-[#d7e7fb] px-7 py-5">
-                      <p className="text-[1.18rem] font-medium leading-8 text-[#334155]">{item.a}</p>
+                    <div className="border-t border-[#d7e7fb] bg-[#f8fbff] px-5 py-4 sm:pl-[76px]">
+                      <p className="text-[1.04rem] font-medium leading-8 text-[#334155]">{item.a}</p>
                     </div>
                   ) : null}
                 </div>
@@ -2326,67 +3271,83 @@ function LandingPage() {
         </div>
       </section>
 
-      <section className="bg-transparent">
-        <div className="mx-auto w-full max-w-6xl px-4 pb-14 sm:px-6 lg:px-8">
-          <div className="rounded-[30px] border border-[#d7e7fb] bg-[linear-gradient(145deg,rgba(255,255,255,0.86),rgba(236,247,255,0.88))] px-6 py-8 shadow-[0_24px_70px_-50px_rgba(18,32,51,0.28)] sm:px-8">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-              <div>
-                <p className="text-[0.95rem] font-black uppercase tracking-[0.18em] text-[#2563eb]">Trust and transparency</p>
-                <h2 className="mt-3 max-w-3xl text-[clamp(2rem,3vw,3.1rem)] font-black leading-[1.08] tracking-[-0.04em] text-[#07142a]">Clear rules for calls, texts, and customer details.</h2>
-              </div>
-              <div className="flex flex-wrap gap-3">
-                <a href="#/privacy" className="rounded-full border border-[#9ecaff] bg-white px-5 py-3 text-sm font-black uppercase tracking-[0.14em] text-[#0b3b7a] transition hover:-translate-y-0.5 hover:border-[#2563eb]">
+      <section id="trust" className="scroll-mt-[96px] bg-[#eaf6ff]">
+        <div className="mx-auto w-full max-w-[1180px] px-4 pb-14 sm:px-6 lg:px-8">
+          <div className="grid overflow-hidden rounded-[16px] border border-[#d7e7fb] bg-white shadow-[0_28px_82px_-58px_rgba(18,32,51,0.34)] lg:grid-cols-[0.78fr_1.22fr]">
+            <div className="bg-[#07142a] p-6 text-white sm:p-8">
+              <p className="text-[0.84rem] font-black uppercase tracking-[0.18em] text-[#8bdcff]">Trust and transparency</p>
+              <h2 className="mt-4 text-[clamp(2rem,3vw,3.05rem)] font-black leading-[1.06] tracking-[-0.045em]">Clear rules for calls, texts, and customer details.</h2>
+              <div className="mt-6 flex flex-wrap gap-3">
+                <a href="#/privacy" className="rounded-[10px] border border-white/18 bg-white/10 px-4 py-3 text-sm font-black uppercase tracking-[0.12em] text-white transition hover:-translate-y-0.5">
                   Privacy Policy
                 </a>
-                <a href="#/terms" className="rounded-full border border-[#ffd1a6] bg-white px-5 py-3 text-sm font-black uppercase tracking-[0.14em] text-[#8a4b07] transition hover:-translate-y-0.5 hover:border-[#ff8b1f]">
+                <a href="#/terms" className="rounded-[10px] border border-white/18 bg-white/10 px-4 py-3 text-sm font-black uppercase tracking-[0.12em] text-white transition hover:-translate-y-0.5">
                   Terms
                 </a>
               </div>
             </div>
 
-            <div className="mt-7 grid gap-4 md:grid-cols-3">
-              {trustCards.map((item) => (
-                <article key={item.title} className="rounded-[22px] border border-white/70 bg-white/78 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.86),0_18px_50px_-42px_rgba(37,99,235,0.42)]">
-                  <div className="grid h-10 w-10 place-items-center rounded-full bg-[#00b84a] text-white shadow-[0_0_18px_-8px_rgba(57,255,106,0.95)]">
-                    <HeroIcon type="check" className="h-5 w-5" />
+            <div className="grid gap-0 divide-y divide-[#e2e8f0]">
+              {trustCards.map((item, index) => (
+                <article key={item.title} className="grid gap-4 px-5 py-5 sm:grid-cols-[56px_1fr] sm:px-6">
+                  <span className="grid h-12 w-12 place-items-center rounded-full bg-[#e8f9ef] text-[#15803d]">
+                    <HeroIcon type={index === 0 ? "chat" : index === 1 ? "lock" : "check"} className="h-6 w-6" />
+                  </span>
+                  <div>
+                    <h3 className="text-[1.18rem] font-black leading-tight tracking-[-0.02em] text-[#07142a]">{item.title}</h3>
+                    <p className="mt-2 text-[1rem] font-medium leading-7 text-[#334155]">{item.body}</p>
                   </div>
-                  <h3 className="mt-4 text-[1.18rem] font-black leading-tight tracking-[-0.02em] text-[#07142a]">{item.title}</h3>
-                  <p className="mt-3 text-[1.02rem] font-medium leading-7 text-[#334155]">{item.body}</p>
                 </article>
               ))}
+              <div className="bg-[#f8fbff] px-5 py-4 sm:px-6">
+                <p className="text-[0.92rem] font-semibold leading-7 text-[#475569]">
+                  External verification badges, Google ownership tokens, SMS sender registration, and payment-provider trust marks should only be added after those accounts issue real approvals or tokens.
+                </p>
+              </div>
             </div>
-
-            <p className="mt-6 text-[0.98rem] font-semibold leading-7 text-[#475569]">
-              External verification badges, Google ownership tokens, SMS sender registration, and payment-provider trust marks should only be added after those accounts issue real approvals or tokens.
-            </p>
           </div>
         </div>
       </section>
 
-      <section className="bg-transparent">
-        <div className="mx-auto w-full max-w-6xl px-4 pb-16 sm:px-6 lg:px-8 lg:pb-20">
-          <div className="rounded-[34px] border border-[#d7e7fb] bg-white/84 px-6 py-10 shadow-[0_28px_80px_-48px_rgba(18,32,51,0.28)] sm:px-8 sm:py-12 lg:px-10">
-            <div className="max-w-4xl text-left">
-              <h2 className="mt-3 text-[clamp(2.45rem,3.7vw,4.1rem)] font-black leading-[1.08] tracking-[-0.04em] text-[#07142a]">Stop letting missed calls decide where the next job goes.</h2>
-              <p className="mt-5 max-w-[900px] text-[1.32rem] font-medium leading-9 text-[#334155]">
-                Never miss a call again. Try My AI PA free, hear how it sounds, and see how quickly missed calls can turn into clean follow-up opportunities.
+      <section id="final-cta" className="scroll-mt-[96px] bg-[linear-gradient(180deg,#eaf6ff_0%,#ffffff_100%)]">
+        <div className="mx-auto w-full max-w-[1180px] px-4 pb-16 sm:px-6 lg:px-8 lg:pb-20">
+          <div className="grid overflow-hidden rounded-[18px] border border-[#18365d]/16 bg-[#07142a] shadow-[0_34px_100px_-60px_rgba(18,32,51,0.64)] lg:grid-cols-[1.1fr_0.9fr]">
+            <div className="p-6 text-white sm:p-8 lg:p-10">
+              <p className="inline-flex rounded-full border border-white/16 bg-white/10 px-5 py-2 text-[0.84rem] font-black uppercase tracking-[0.18em] text-[#a9e8ff]">Ready when you are</p>
+              <h2 className="mt-5 text-[clamp(2.25rem,4vw,3.85rem)] font-black leading-[1.06] tracking-[-0.05em]">Stop letting missed calls decide where the next job goes.</h2>
+              <p className="mt-5 max-w-[720px] text-[1.12rem] font-medium leading-8 text-[#dbeafe]">
+                Try My AI PA free, hear how it sounds, and see how quickly missed calls can turn into clean follow-up opportunities.
               </p>
+              <div className="mt-8 flex flex-col gap-4 sm:flex-row">
+                <PrimaryButton onClick={goToSignup} className="text-lg">Start Free Trial</PrimaryButton>
+                <SecondaryButton onClick={playDemo} dark className="text-lg">
+                  Hear Agent&apos;s Voice
+                </SecondaryButton>
+              </div>
             </div>
 
-            <div className="mt-9 flex flex-col gap-4 sm:flex-row">
-              <PrimaryButton onClick={goToSignup} className="text-lg">Start Free Trial</PrimaryButton>
-              <SecondaryButton onClick={playDemo} dark className="text-lg">
-                Hear Agent&apos;s Voice
-              </SecondaryButton>
+            <div className="grid content-between gap-4 border-t border-white/12 bg-white/[0.06] p-6 text-white lg:border-l lg:border-t-0 sm:p-8">
+              <div className="rounded-[12px] border border-white/12 bg-white/10 p-5">
+                <p className="text-[0.78rem] font-black uppercase tracking-[0.16em] text-[#a9e8ff]">What happens next</p>
+                <div className="mt-4 space-y-3">
+                  {["Build your greeting", "Test a call", "Forward when ready"].map((item, index) => (
+                    <div key={item} className="flex items-center gap-3">
+                      <span className="grid h-8 w-8 place-items-center rounded-full bg-[#176bff] text-sm font-black">{index + 1}</span>
+                      <p className="font-black">{item}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="rounded-[12px] border border-white/12 bg-white/10 p-5">
+                <p className="text-[0.78rem] font-black uppercase tracking-[0.16em] text-[#ffbd74]">Live demo line</p>
+                <a href="tel:+12495033301" className="mt-2 block text-[1.75rem] font-black tracking-[-0.03em] text-white">(249) 503-3301</a>
+              </div>
             </div>
           </div>
 
           <footer className="flex flex-col gap-4 px-1 pt-7 text-[1.05rem] font-semibold leading-7 text-[#334155] sm:flex-row sm:items-center sm:justify-between">
-            <p className="inline-flex items-center gap-2">
-              <span>My AI PA is positioned for Ontario first. Made and Loved in Canada</span>
-              <span className="text-[1.35rem] leading-none" aria-hidden="true">🍁</span>
-            </p>
-            <div className="flex items-center gap-4">
+            <p>My AI PA is positioned for Ontario first. Made and Loved in Canada.</p>
+            <div className="flex flex-wrap items-center gap-4">
               <a href="mailto:hello@myaipa.com" className="transition hover:text-[#2563eb]">
                 hello@myaipa.com
               </a>

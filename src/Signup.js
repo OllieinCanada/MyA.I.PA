@@ -6,6 +6,7 @@ import {
   BUSINESS_SLIDE_TABS,
   CANADIAN_PROVINCES,
   CAPTCHA_PROVIDER,
+  CHECKOUT_SESSION_URL,
   DEFAULT_DETAILS,
   DEFAULT_PRICING,
   MAKE_SIGNUP_WEBHOOK_API_KEY,
@@ -851,6 +852,12 @@ function isMakeWebhookUrl(url) {
 
 async function postSignupPayload(url, formData) {
   const jsonBody = JSON.stringify(formData);
+  const makeFormBody = new FormData();
+  Object.entries(formData).forEach(([key, value]) => {
+    makeFormBody.append(key, typeof value === "string" ? value : JSON.stringify(value));
+  });
+  makeFormBody.append("payload", jsonBody);
+
   const optimisticMakeResponse = {
     ok: true,
     status: 202,
@@ -861,16 +868,16 @@ async function postSignupPayload(url, formData) {
       await fetch(url, {
         method: "POST",
         mode: "no-cors",
-        headers: {
-          "Content-Type": "text/plain;charset=UTF-8",
-        },
-        body: jsonBody,
+        body: makeFormBody,
       });
 
       return optimisticMakeResponse;
     } catch {
       if (typeof navigator !== "undefined" && typeof navigator.sendBeacon === "function") {
-        const sent = navigator.sendBeacon(url, new Blob([jsonBody], { type: "text/plain;charset=UTF-8" }));
+        const sent = navigator.sendBeacon(
+          url,
+          new Blob([jsonBody], { type: "application/json" })
+        );
         if (sent) return optimisticMakeResponse;
       }
 
@@ -899,14 +906,50 @@ async function postSignupPayload(url, formData) {
   }
 }
 
+async function createCheckoutSession(result) {
+  const response = await fetch(CHECKOUT_SESSION_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      businessName: result?.businessName || "",
+      ownerName: result?.ownerName || "",
+      ownerEmail: result?.ownerEmail || "",
+      ownerPhone: result?.ownerPhone || "",
+    }),
+  });
+
+  const data = await parseApiResponse(response, "Checkout could not be started");
+  if (!response.ok || !data?.checkoutUrl) {
+    throw new Error(data?.error || "Checkout could not be started.");
+  }
+
+  return data.checkoutUrl;
+}
+
 function SignupSuccessPage({ result, onStartAnother }) {
   const businessName = result?.businessName || "your business";
   const assignedNumber = result?.twilioPhoneNumber || "";
   const reviewRequired = Boolean(result?.reviewRequired);
+  const verificationRequired = Boolean(result?.verificationRequired || result?.emailVerificationRequired);
   const numberMissing = !assignedNumber;
   const [progress, setProgress] = useState(12);
   const [showNumber, setShowNumber] = useState(false);
   const [copiedNumber, setCopiedNumber] = useState(false);
+  const [checkoutBusy, setCheckoutBusy] = useState(false);
+  const [checkoutError, setCheckoutError] = useState("");
+
+  useEffect(() => {
+    try {
+      if (result?.ownerEmail && result?.ownerPhone) {
+        window.localStorage?.setItem(
+          "myaipa_customer_dashboard_lookup_v1",
+          JSON.stringify({ email: result.ownerEmail, phone: result.ownerPhone })
+        );
+      }
+    } catch (_err) {
+      // Local storage is only a convenience for returning to the dashboard.
+    }
+  }, [result?.ownerEmail, result?.ownerPhone]);
 
   useEffect(() => {
     if (numberMissing) {
@@ -935,6 +978,46 @@ function SignupSuccessPage({ result, onStartAnother }) {
     window.setTimeout(() => setCopiedNumber(false), 1800);
   };
 
+  const startCheckout = async () => {
+    setCheckoutBusy(true);
+    setCheckoutError("");
+    try {
+      const checkoutUrl = await createCheckoutSession(result);
+      window.location.assign(checkoutUrl);
+    } catch (error) {
+      const message = error?.message || "Checkout could not be started.";
+      setCheckoutError(
+        /stripe checkout is not configured|stripe/i.test(message)
+          ? "Signup is saved. Secure checkout is not enabled yet, so payment setup needs to be finished before this customer can be charged."
+          : message
+      );
+      setCheckoutBusy(false);
+    }
+  };
+
+  const launchSteps = [
+    { label: "Signup received", detail: "Business details saved for setup.", done: true },
+    {
+      label: "Owner verification",
+      detail: verificationRequired ? "Waiting for the email verification link." : "No verification block right now.",
+      done: !verificationRequired,
+      active: verificationRequired,
+    },
+    {
+      label: "AI number",
+      detail: assignedNumber && !reviewRequired ? formatPhoneNumber(assignedNumber) : "Pending assignment or review.",
+      done: Boolean(assignedNumber && !reviewRequired && !verificationRequired),
+      active: !assignedNumber || reviewRequired,
+    },
+    {
+      label: "Secure checkout",
+      detail: "Starts the paid plan after the trial setup is ready.",
+      done: false,
+      active: !reviewRequired && !verificationRequired,
+    },
+    { label: "Test call", detail: "Call the AI number before forwarding live calls.", done: false },
+  ];
+
   return (
     <main className="min-h-screen bg-[linear-gradient(135deg,#eef6ff_0%,#ffffff_42%,#f3f7ff_100%)] text-slate-950">
       <header className="min-h-16 bg-[#020918] shadow-[0_24px_60px_-48px_rgba(15,23,42,0.85)]">
@@ -950,13 +1033,15 @@ function SignupSuccessPage({ result, onStartAnother }) {
               <Icon name="check" className="h-8 w-8" />
             </div>
             <p className="mt-5 text-sm font-black uppercase tracking-[0.18em] text-[#9edaff]">
-              Setup milestone unlocked
+              {verificationRequired ? "Email verification required" : "Setup milestone unlocked"}
             </p>
             <h1 className="mt-2 text-[clamp(2.1rem,8vw,4.6rem)] font-black leading-tight tracking-[-0.055em]">
               Thanks, {businessName}.
             </h1>
             <p className="mt-3 max-w-3xl text-base font-medium leading-7 text-blue-50 sm:text-xl sm:leading-8">
-              {reviewRequired
+              {verificationRequired
+                ? "We sent a verification email. Click the link before your AI phone assistant setup continues."
+                : reviewRequired
                 ? "Your signup was received, but it needs review before the workflow continues."
                 : assignedNumber
                   ? "Your AI phone assistant is ready for testing. Your forwarding number is below."
@@ -968,13 +1053,30 @@ function SignupSuccessPage({ result, onStartAnother }) {
             <div className="rounded-3xl border border-blue-200 bg-[linear-gradient(180deg,#f7fbff,#edf5ff)] p-5 shadow-[0_30px_80px_-60px_rgba(37,99,235,0.9)] sm:p-7">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <p className="text-sm font-black uppercase tracking-[0.2em] text-blue-600">Your new My AI PA number</p>
-                {assignedNumber && !reviewRequired ? (
+                {assignedNumber && !reviewRequired && !verificationRequired ? (
                   <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-black uppercase tracking-[0.12em] text-emerald-700">
                     Ready
                   </span>
                 ) : null}
               </div>
-              {reviewRequired ? (
+              {verificationRequired ? (
+                <div className="mt-5">
+                  <p className="text-[1.28rem] font-black leading-tight tracking-[-0.03em] text-[#07142a]">
+                    Check your email to continue.
+                  </p>
+                  <p className="mt-3 text-sm font-semibold leading-6 text-slate-500">
+                    We will not create your agent until the owner email is verified. The verification link expires after 24 hours.
+                  </p>
+                  {result?.devVerificationUrl ? (
+                    <a
+                      href={result.devVerificationUrl}
+                      className="mt-4 inline-flex max-w-full rounded-xl bg-[#07142a] px-5 py-3 text-sm font-black text-white"
+                    >
+                      Open dev verification link
+                    </a>
+                  ) : null}
+                </div>
+              ) : reviewRequired ? (
                 <div className="mt-5">
                   <p className="text-[1.28rem] font-black leading-tight tracking-[-0.03em] text-[#07142a]">
                     Signup received for review.
@@ -1045,32 +1147,83 @@ function SignupSuccessPage({ result, onStartAnother }) {
             </div>
 
             <div className="rounded-3xl border border-slate-200 bg-white p-5 sm:p-6">
-              <h2 className="text-xl font-black tracking-[-0.02em] text-slate-950">What happens next</h2>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-black uppercase tracking-[0.18em] text-blue-600">Launch checklist</p>
+                  <h2 className="mt-1 text-xl font-black tracking-[-0.02em] text-slate-950">What happens next</h2>
+                </div>
+                <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-black uppercase tracking-[0.12em] text-blue-700">
+                  {launchSteps.filter((step) => step.done).length}/{launchSteps.length}
+                </span>
+              </div>
               <div className="mt-5 space-y-3">
-                {[
-                  "Call your new number and hear the assistant answer.",
-                  "Forward missed calls from your current business number.",
-                  "Use the setup details to fine-tune the assistant.",
-                ].map((item) => (
-                  <div key={item} className="flex gap-3 rounded-2xl border border-slate-100 bg-slate-50/80 p-4 text-sm font-bold leading-6 text-slate-700">
-                    <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-emerald-100 text-emerald-700">
-                      <Icon name="check" className="h-4 w-4" />
+                {launchSteps.map((step, index) => (
+                  <div
+                    key={step.label}
+                    className={
+                      "grid grid-cols-[auto_1fr_auto] gap-3 rounded-2xl border p-4 text-sm leading-6 " +
+                      (step.done
+                        ? "border-emerald-100 bg-emerald-50/80 text-emerald-950"
+                        : step.active
+                          ? "border-blue-200 bg-blue-50/90 text-slate-800"
+                          : "border-slate-100 bg-slate-50/80 text-slate-600")
+                    }
+                  >
+                    <span className={"mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-black " + (step.done ? "bg-emerald-600 text-white" : step.active ? "bg-blue-600 text-white" : "bg-slate-200 text-slate-600")}>
+                      {step.done ? <Icon name="check" className="h-4 w-4" /> : index + 1}
                     </span>
-                    <span>{item}</span>
+                    <span>
+                      <span className="block font-black">{step.label}</span>
+                      <span className="mt-0.5 block font-semibold opacity-75">{step.detail}</span>
+                    </span>
+                    <span className={"self-start rounded-full px-2 py-1 text-[0.62rem] font-black uppercase tracking-[0.1em] " + (step.done ? "bg-emerald-100 text-emerald-700" : step.active ? "bg-blue-100 text-blue-700" : "bg-slate-200 text-slate-500")}>
+                      {step.done ? "Done" : step.active ? "Now" : "Next"}
+                    </span>
                   </div>
                 ))}
               </div>
+
+              {!reviewRequired && !verificationRequired ? (
+                <div className="mt-5 rounded-3xl border border-blue-100 bg-[linear-gradient(180deg,#f7fbff,#eef6ff)] p-4">
+                  <p className="text-sm font-black uppercase tracking-[0.16em] text-blue-600">Secure payment</p>
+                  <p className="mt-2 text-base font-semibold leading-7 text-slate-700">
+                    Continue to Stripe Checkout to start the My AI PA plan. Card details are handled by Stripe.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={startCheckout}
+                    disabled={checkoutBusy}
+                    className="mt-4 inline-flex min-h-[52px] w-full items-center justify-center rounded-xl bg-[#07142a] px-5 text-base font-black text-white transition hover:-translate-y-0.5 hover:bg-blue-800 disabled:cursor-wait disabled:opacity-70 disabled:hover:translate-y-0"
+                  >
+                    {checkoutBusy ? "Opening checkout..." : "Continue to secure checkout"}
+                  </button>
+                  {checkoutError ? (
+                    <p className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-bold leading-6 text-rose-700">
+                      {checkoutError}
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           </div>
 
           <div className="border-t border-slate-100 bg-slate-50/70 px-5 py-5 sm:px-8">
-            <button
-              type="button"
-              onClick={onStartAnother}
-              className="inline-flex min-h-[48px] w-full items-center justify-center rounded-xl border border-blue-200 bg-white px-5 text-base font-black text-blue-700 transition hover:border-blue-400 hover:bg-blue-50 sm:w-auto"
-            >
-              Start another signup
-            </button>
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <button
+                type="button"
+                onClick={() => (window.location.hash = "/dashboard")}
+                className="inline-flex min-h-[48px] w-full items-center justify-center rounded-xl bg-[#07142a] px-5 text-base font-black text-white transition hover:bg-blue-800 sm:w-auto"
+              >
+                Open customer dashboard
+              </button>
+              <button
+                type="button"
+                onClick={onStartAnother}
+                className="inline-flex min-h-[48px] w-full items-center justify-center rounded-xl border border-blue-200 bg-white px-5 text-base font-black text-blue-700 transition hover:border-blue-400 hover:bg-blue-50 sm:w-auto"
+              >
+                Start another signup
+              </button>
+            </div>
           </div>
         </div>
       </section>
@@ -1339,8 +1492,13 @@ export default function Signup() {
       rememberBrowserSignupAttempt();
       setSignupResult({
         businessName: details.businessName.trim(),
+        ownerName: details.ownerName.trim(),
+        ownerEmail: details.email.trim(),
+        ownerPhone: details.phone.trim(),
         twilioPhoneNumber: getTwilioPhoneNumber(result),
         reviewRequired: Boolean(result?.reviewRequired),
+        verificationRequired: Boolean(result?.verificationRequired || result?.emailVerificationRequired),
+        devVerificationUrl: result?.devVerificationUrl || "",
       });
       window.scrollTo?.({ top: 0, behavior: "smooth" });
     } catch (submitError) {

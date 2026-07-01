@@ -1,12 +1,9 @@
 import React from "react";
+import { getDefaultApiBaseUrl, normalizeApiBase } from "../config/apiBase";
 
 const MAX_VISIBLE_MESSAGES = 10;
 const MAX_INPUT_CHARS = 2000;
-const API_BASE =
-  process.env.REACT_APP_API_BASE_URL ||
-  (typeof window !== "undefined" && /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname)
-    ? "http://localhost:8787"
-    : "");
+const API_BASE = normalizeApiBase(process.env.REACT_APP_API_BASE_URL || getDefaultApiBaseUrl());
 
 function getStatusClasses(status) {
   if (status === "Listening") return "bg-emerald-500/20 text-emerald-200 border-emerald-400/40";

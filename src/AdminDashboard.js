@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import "./AdminDashboard.css";
+import { getDefaultApiBaseUrl, normalizeApiBase } from "./config/apiBase";
 
-const API_BASE = (process.env.REACT_APP_API_BASE_URL || "http://localhost:8787").replace(/\/+$/, "");
+const API_BASE = normalizeApiBase(process.env.REACT_APP_API_BASE_URL || getDefaultApiBaseUrl());
 const ADMIN_API_TIMEOUT_MS = 6500;
 
 async function api(path, { method = "GET", body } = {}) {
@@ -62,8 +63,28 @@ function statusClasses(ok) {
     : "border-amber-300/35 bg-amber-300/15 text-amber-100";
 }
 
+function setupStatusClasses(status) {
+  if (status === "done" || status === "ready") return "border-emerald-300/30 bg-emerald-300/15 text-emerald-100";
+  if (status === "failed" || status === "blocked") return "border-rose-300/35 bg-rose-300/15 text-rose-100";
+  if (status === "manual") return "border-blue-300/30 bg-blue-300/15 text-blue-100";
+  return "border-amber-300/35 bg-amber-300/15 text-amber-100";
+}
+
+function setupStatusLabel(status) {
+  if (status === "done") return "Done";
+  if (status === "failed") return "Failed";
+  if (status === "manual") return "Manual";
+  if (status === "ready") return "Ready";
+  if (status === "blocked") return "Blocked";
+  return "Waiting";
+}
+
 function yesNo(value) {
   return value ? "Ready" : "Needs setup";
+}
+
+function readinessColor(ok) {
+  return ok ? "bg-emerald-300 text-emerald-950" : "bg-amber-300 text-amber-950";
 }
 
 function intervalText(ms) {
@@ -77,6 +98,12 @@ function money(value, currency = "USD") {
   const n = Number(value || 0);
   if (!Number.isFinite(n) || n === 0) return "—";
   return `${currency || "USD"} $${n.toFixed(4)}`;
+}
+
+function moneyCompact(value) {
+  const n = Number(value || 0);
+  if (!Number.isFinite(n) || n === 0) return "$0.00";
+  return `$${n.toFixed(n < 10 ? 4 : 2)}`;
 }
 
 function csvCell(value) {
@@ -170,6 +197,373 @@ function Textarea(props) {
   );
 }
 
+function SetupReadinessCard({ items, score, onOpenSync }) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <div className="text-xs font-bold uppercase tracking-[0.18em] text-white/45">Launch Readiness</div>
+          <div className="mt-1 text-2xl font-extrabold text-white">{score}%</div>
+        </div>
+        <div className="h-14 w-14 rounded-full border border-white/10 bg-white/5 p-1">
+          <div className="grid h-full w-full place-items-center rounded-full bg-[conic-gradient(#34d399_var(--score),rgba(255,255,255,0.12)_0)] text-xs font-black text-white" style={{ "--score": `${score}%` }}>
+            {items.filter((item) => item.ok).length}/{items.length}
+          </div>
+        </div>
+      </div>
+      <div className="mt-4 grid gap-2">
+        {items.map((item) => (
+          <div key={item.label} className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2">
+            <span className="text-xs font-bold text-white/75">{item.label}</span>
+            <span className={"rounded-full px-2 py-1 text-[0.65rem] font-black uppercase tracking-[0.1em] " + readinessColor(item.ok)}>
+              {item.ok ? "Ready" : "Missing"}
+            </span>
+          </div>
+        ))}
+      </div>
+      <button type="button" onClick={onOpenSync} className="mt-3 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-left text-xs font-bold text-white/75 hover:bg-white/10">
+        Open setup checks
+      </button>
+    </div>
+  );
+}
+
+function AdminNav({ groups, activeTab, onSelect }) {
+  return (
+    <div className="grid gap-4">
+      {groups.map((group) => (
+        <div key={group.title}>
+          <div className="text-xs font-bold uppercase tracking-[0.22em] text-white/35">{group.title}</div>
+          <div className="mt-2 grid gap-2">
+            {group.items.map(([key, label, desc]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => onSelect(key)}
+                className={
+                  "rounded-2xl px-4 py-3 text-left text-sm font-bold transition " +
+                  (activeTab === key
+                    ? "bg-gradient-to-r from-emerald-700 to-amber-500 text-white shadow-[0_18px_48px_-36px_rgba(245,158,11,0.9)]"
+                    : "border border-white/10 bg-white/5 text-white/70 hover:bg-white/10")
+                }
+              >
+                <span className="block">{label}</span>
+                <span className="mt-1 block text-xs font-semibold opacity-65">{desc}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ConceptLogo() {
+  return (
+    <div className="admin-brand">
+      <span className="admin-brand-mark"><span /></span>
+      <span className="admin-brand-text">My <strong>AI PA</strong></span>
+    </div>
+  );
+}
+
+function ConceptSidebar({ groups, activeTab, onSelect, onLock }) {
+  return (
+    <aside className="admin-concept-sidebar">
+      <ConceptLogo />
+      <nav className="admin-concept-nav" aria-label="Admin sections">
+        {groups.map((group) => (
+          <div key={group.title} className="admin-concept-nav-group">
+            <div className="admin-concept-nav-title">{group.title}</div>
+            {group.items.map(([key, label, desc]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => onSelect(key)}
+                className={"admin-concept-nav-item " + (activeTab === key ? "is-active" : "")}
+                title={desc}
+              >
+                <span className="admin-concept-nav-icon">{label.slice(0, 1)}</span>
+                <span>{label}</span>
+              </button>
+            ))}
+          </div>
+        ))}
+      </nav>
+      <div className="admin-concept-help">
+        <div className="admin-concept-help-icon">?</div>
+        <div className="admin-concept-help-title">Need help?</div>
+        <p>Check setup status, integrations, and customer call records from one control center.</p>
+        <button type="button" onClick={() => onSelect("sync")}>Open setup checks</button>
+      </div>
+      <button type="button" className="admin-concept-user" onClick={onLock}>
+        <span>OC</span>
+        <span><strong>Ollie in Canada</strong><small>Admin</small></span>
+      </button>
+    </aside>
+  );
+}
+
+function ConceptTopBar({ loading, onRefresh, onSyncCosts, onSite }) {
+  return (
+    <header className="admin-concept-topbar">
+      <div>
+        <h1>Control Center</h1>
+        <p>Overview of your AI phone answering operation.</p>
+      </div>
+      <div className="admin-concept-top-actions">
+        <div className="admin-concept-search">Search owners, numbers, calls...</div>
+        <div className="admin-concept-range">Last 30 days</div>
+        <button type="button" className="admin-concept-status" onClick={onRefresh}>
+          <span className="admin-dot admin-dot-green" />
+          {loading ? "Syncing..." : "All systems check"}
+        </button>
+        <button type="button" className="admin-concept-primary" onClick={onSyncCosts}>Sync Costs</button>
+        <button type="button" className="admin-concept-ghost" onClick={onSite}>Site</button>
+      </div>
+    </header>
+  );
+}
+
+function ConceptReadiness({ items, score, onOpenSetup }) {
+  const remaining = items.filter((item) => !item.ok).length;
+  return (
+    <section className="admin-card admin-readiness-card">
+      <div className="admin-card-title">Launch Readiness</div>
+      <div className="admin-readiness-layout">
+        <div className="admin-readiness-ring" style={{ "--score": `${score}%` }}>
+          <strong>{score}%</strong>
+          <span>Ready</span>
+        </div>
+        <div>
+          <h2>{remaining ? "You are almost ready to launch." : "Ready for live operations."}</h2>
+          <p>Complete the remaining setup items before relying on automated billing and call-cost reporting.</p>
+          <div className="admin-readiness-list">
+            {items.map((item) => (
+              <div key={item.label} className="admin-readiness-item">
+                <span className={item.ok ? "admin-check is-ready" : "admin-check is-warning"}>{item.ok ? "OK" : "!"}</span>
+                <span>{item.label}</span>
+                {!item.ok ? <em>pending</em> : null}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+      <button type="button" className="admin-card-action" onClick={onOpenSetup}>Open Setup</button>
+    </section>
+  );
+}
+
+function IntegrationCard({ name, subtitle, ok, accent, onOpen }) {
+  return (
+    <section className="admin-card admin-integration-card">
+      <div className={"admin-integration-mark " + accent}>{name.slice(0, 1)}</div>
+      <div>
+        <h3>{name}</h3>
+        <p>{subtitle}</p>
+      </div>
+      <span className={ok ? "admin-pill is-ready" : "admin-pill is-warning"}>{ok ? "Connected" : "Not connected"}</span>
+      <p className="admin-integration-copy">
+        {ok ? `${name} is connected and ready.` : `Connect ${name} to unlock this part of the operation.`}
+      </p>
+      <button type="button" className="admin-inline-link" onClick={onOpen}>{ok ? "Manage" : "Open Setup"} <span>›</span></button>
+    </section>
+  );
+}
+
+function KpiCard({ title, value, sub, delta, children, onOpen }) {
+  return (
+    <section className="admin-card admin-kpi-card">
+      <div className="admin-kpi-head">
+        <div className="admin-card-title">{title}</div>
+        {onOpen ? <button type="button" onClick={onOpen}>View all</button> : null}
+      </div>
+      <div className="admin-kpi-value">{value}</div>
+      <div className="admin-kpi-sub">{sub}</div>
+      {delta ? <div className="admin-kpi-delta">{delta}</div> : null}
+      {children}
+    </section>
+  );
+}
+
+function MiniLineChart({ calls }) {
+  const values = calls.slice(0, 7).map((call) => Number(call.durationSec || 0) || 0);
+  const fallback = [18, 25, 19, 28, 21, 32, 26];
+  const series = values.length >= 2 ? values : fallback;
+  const max = Math.max(...series, 1);
+  const points = series.map((value, index) => `${(index / Math.max(series.length - 1, 1)) * 100},${48 - (value / max) * 38}`).join(" ");
+  return (
+    <svg className="admin-mini-chart" viewBox="0 0 100 52" role="img" aria-label="Calls trend">
+      <polyline points={points} fill="none" stroke="#106dff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+      <path d={`M0 52 L${points.replace(/ /g, " L")} L100 52 Z`} fill="rgba(16,109,255,0.08)" />
+    </svg>
+  );
+}
+
+function CostBars({ totals }) {
+  const vapi = Number(totals?.vapiCost || 0);
+  const twilio = Number(totals?.twilioCost || 0);
+  const total = Math.max(vapi + twilio, 1);
+  const vapiPct = Math.round((vapi / total) * 100);
+  const twilioPct = Math.round((twilio / total) * 100);
+  const otherPct = Math.max(0, 100 - vapiPct - twilioPct);
+  return (
+    <div className="admin-cost-bars">
+      <div><span className="admin-dot admin-dot-teal" />AI Voice (Vapi)<strong>{moneyCompact(vapi)}</strong></div>
+      <div><span className="admin-dot admin-dot-red" />Phone (Twilio)<strong>{moneyCompact(twilio)}</strong></div>
+      <div><span className="admin-dot admin-dot-slate" />Other<strong>{otherPct}%</strong></div>
+      <div className="admin-cost-stack">
+        <span style={{ width: `${vapiPct}%` }} />
+        <span style={{ width: `${twilioPct}%` }} />
+        <span style={{ width: `${otherPct}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function ConceptRecentCalls({ calls, onOpen }) {
+  const rows = calls.slice(0, 5);
+  return (
+    <section className="admin-card admin-recent-calls">
+      <div className="admin-section-head">
+        <h2>Recent Calls</h2>
+        <button type="button" onClick={onOpen}>View all calls</button>
+      </div>
+      <div className="admin-table-lite">
+        <div className="admin-table-lite-head"><span>Time</span><span>Business Owner</span><span>From</span><span>Outcome</span><span>Cost</span></div>
+        {rows.length ? rows.map((call) => (
+          <div key={call.id} className="admin-table-lite-row">
+            <span>{dt(call.startedAt)}</span>
+            <span>{call.business?.name || `Business ${call.businessId}`}</span>
+            <span>{call.caller?.phone || "—"}</span>
+            <span><em className={call.status === "MISSED" ? "is-missed" : "is-answered"}>{call.outcome || call.status || "Answered"}</em></span>
+            <span>{moneyCompact(call.totalInternalCost)}</span>
+          </div>
+        )) : <div className="admin-empty-row">No calls synced yet.</div>}
+      </div>
+    </section>
+  );
+}
+
+function ConceptTrialSignups({ signups, onOpen }) {
+  const rows = signups.slice(0, 5);
+  return (
+    <section className="admin-card admin-trial-card">
+      <div className="admin-section-head">
+        <h2>Trial Signups</h2>
+        <button type="button" onClick={onOpen}>View all</button>
+      </div>
+      <div className="admin-kpi-value">{signups.length}</div>
+      <div className="admin-kpi-sub">New trials</div>
+      <div className="admin-list-lite">
+        {rows.length ? rows.map((signup, index) => (
+          <div key={signup.subscriptionId || signup.ownerEmail || index}>
+            <span>{signup.businessName || "Unnamed business"}</span>
+            <em>{signup.subscriptionStatus || signup.checkoutStatus || signup.status || "New"}</em>
+          </div>
+        )) : <div className="admin-empty-row">No signups yet.</div>}
+      </div>
+    </section>
+  );
+}
+
+function ConceptSetupAlerts({ warnings, onOpenSetup, onOpenOwners }) {
+  const rows = warnings.length ? warnings.slice(0, 4) : ["No active setup warnings detected."];
+  return (
+    <section className="admin-card admin-alert-card">
+      <div className="admin-section-head">
+        <h2>Setup Alerts <span>{warnings.length}</span></h2>
+        <button type="button" onClick={onOpenSetup}>View all</button>
+      </div>
+      <div className="admin-alert-list">
+        {rows.map((warning, index) => {
+          const ok = !warnings.length;
+          return (
+            <div key={`${warning}-${index}`} className={ok ? "is-ok" : "is-alert"}>
+              <span>{ok ? "OK" : "!"}</span>
+              <p>{warning}</p>
+              <button type="button" onClick={/mapping|business/i.test(warning) ? onOpenOwners : onOpenSetup}>{ok ? "Manage" : "Open Setup"}</button>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function ConceptOverview({
+  setupItems,
+  setupScore,
+  stats,
+  opsOverview,
+  costAudit,
+  calls,
+  signups,
+  onOpenTab,
+  onSyncCosts,
+}) {
+  const aiNumbers = (opsOverview.owners || []).reduce((total, owner) => total + (owner.aiNumbers?.length || 0), 0);
+  const activeOwners = (opsOverview.owners || []).filter((owner) => !owner.needsSetup).length;
+  const warnings = [...(opsOverview.sync?.warnings || []), ...(costAudit?.warnings || [])];
+  const totalCalls = costAudit?.totals?.totalCalls || calls.length;
+  const totalSpend = costAudit?.totals?.totalInternalCost || stats.totalCost;
+  const avgCost = totalCalls ? totalSpend / totalCalls : 0;
+
+  return (
+    <div className="admin-concept-overview">
+      <div className="admin-overview-top-grid">
+        <ConceptReadiness items={setupItems} score={setupScore} onOpenSetup={() => onOpenTab("sync")} />
+        <IntegrationCard name="Vapi" subtitle="AI Voice Platform" ok={opsOverview.sync?.env?.vapiApiKeyConfigured} accent="vapi" onOpen={() => onOpenTab("sync")} />
+        <IntegrationCard name="Twilio" subtitle="Phone System" ok={opsOverview.sync?.env?.twilioConfigured} accent="twilio" onOpen={() => onOpenTab("sync")} />
+        <IntegrationCard name="Stripe" subtitle="Payments" ok={opsOverview.sync?.env?.stripeConfigured} accent="stripe" onOpen={() => onOpenTab("sync")} />
+        <section className="admin-card admin-sync-card">
+          <div className="admin-sync-icon">R</div>
+          <h3>Sync Costs</h3>
+          <p>Last synced<br />{dt(opsOverview.sync?.lastSyncedAt)}</p>
+          <button type="button" className="admin-card-action" onClick={onSyncCosts}>Sync Now</button>
+        </section>
+      </div>
+
+      <div className="admin-kpi-grid">
+        <KpiCard title="Business Owners" value={stats.owners} sub="Total Owners" delta={`${activeOwners} active`} onOpen={() => onOpenTab("businesses")}>
+          <div className="admin-kpi-list">
+            <div><span className="admin-dot admin-dot-green" />Active<strong>{activeOwners}</strong></div>
+            <div><span className="admin-dot admin-dot-blue" />In Trial<strong>{stats.signups}</strong></div>
+            <div><span className="admin-dot admin-dot-orange" />Setup Incomplete<strong>{Math.max(stats.owners - activeOwners, 0)}</strong></div>
+          </div>
+        </KpiCard>
+        <KpiCard title="Phone Numbers" value={aiNumbers} sub="AI numbers mapped" delta={`${stats.mappedOwners} businesses`} onOpen={() => onOpenTab("mappings")}>
+          <div className="admin-kpi-list">
+            <div><span className="admin-dot admin-dot-green" />Mapped<strong>{stats.mappedOwners}</strong></div>
+            <div><span className="admin-dot admin-dot-orange" />Need mapping<strong>{Math.max(stats.owners - stats.mappedOwners, 0)}</strong></div>
+          </div>
+        </KpiCard>
+        <KpiCard title="Calls This Week" value={totalCalls} sub="Total calls">
+          <MiniLineChart calls={calls} />
+        </KpiCard>
+        <KpiCard title="Call Cost This Week" value={moneyCompact(totalSpend)} sub="Total spend" delta={`${costAudit?.totals?.pricedCalls || 0} priced`}>
+          <CostBars totals={costAudit?.totals} />
+        </KpiCard>
+      </div>
+
+      <div className="admin-bottom-grid">
+        <ConceptRecentCalls calls={calls} onOpen={() => onOpenTab("calls")} />
+        <ConceptTrialSignups signups={signups} onOpen={() => onOpenTab("signups")} />
+        <ConceptSetupAlerts warnings={warnings} onOpenSetup={() => onOpenTab("sync")} onOpenOwners={() => onOpenTab("businesses")} />
+      </div>
+
+      <div className="admin-bottom-strip">
+        <div><span>Owners</span><strong>{stats.owners}</strong></div>
+        <div><span>Active Numbers</span><strong>{aiNumbers}</strong></div>
+        <div><span>Calls</span><strong>{totalCalls}</strong></div>
+        <div><span>Total Spend</span><strong>{moneyCompact(totalSpend)}</strong></div>
+        <div><span>Avg Cost / Call</span><strong>{moneyCompact(avgCost)}</strong></div>
+        <div><span>Setup Warnings</span><strong>{warnings.length}</strong></div>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminDashboard() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authChecked, setAuthChecked] = useState(false);
@@ -185,6 +579,7 @@ export default function AdminDashboard() {
   const [signups, setSignups] = useState([]);
   const [analytics, setAnalytics] = useState([]);
   const [trialHealth, setTrialHealth] = useState([]);
+  const [customerSetup, setCustomerSetup] = useState({ customers: [], summary: null, warnings: [] });
   const [vapiMappings, setVapiMappings] = useState([]);
   const [businesses, setBusinesses] = useState([]);
   const [opsOverview, setOpsOverview] = useState({ owners: [], sync: null });
@@ -207,11 +602,63 @@ export default function AdminDashboard() {
       owners: opsOverview.owners?.length || 0,
       mappedOwners: opsOverview.sync?.mappedBusinessCount || 0,
       totalCost: costAudit?.totals?.totalInternalCost || 0,
+      setupBlocked: customerSetup.summary?.blocked || 0,
       syncWarnings: opsOverview.sync?.warnings?.length || costAudit?.warnings?.length || 0,
       faqs: faqs.length,
       rings: settings?.answerAfterRings ?? "—",
     }),
-    [leads.length, calls.length, signups.length, opsOverview.owners?.length, opsOverview.sync, costAudit, faqs.length, settings]
+    [leads.length, calls.length, signups.length, opsOverview.owners?.length, opsOverview.sync, costAudit, customerSetup.summary, faqs.length, settings]
+  );
+
+  const setupItems = useMemo(
+    () => [
+      { label: "Database", ok: Boolean(opsOverview.sync?.env?.databaseAvailable) },
+      { label: "Admin password", ok: Boolean(opsOverview.sync && !opsOverview.sync?.env?.adminPasswordLooksDefault) },
+      { label: "Stripe checkout", ok: Boolean(opsOverview.sync?.env?.stripeConfigured) },
+      { label: "Vapi API", ok: Boolean(opsOverview.sync?.env?.vapiApiKeyConfigured) },
+      { label: "Twilio cost sync", ok: Boolean(opsOverview.sync?.env?.twilioConfigured) },
+      { label: "Owner mappings", ok: Boolean(opsOverview.sync?.mappedBusinessCount) },
+    ],
+    [opsOverview.sync]
+  );
+
+  const setupScore = useMemo(() => {
+    if (!setupItems.length) return 0;
+    return Math.round((setupItems.filter((item) => item.ok).length / setupItems.length) * 100);
+  }, [setupItems]);
+
+  const navGroups = useMemo(
+    () => [
+      {
+        title: "Command",
+        items: [
+          ["overview", "Overview", "Health, alerts, and next actions"],
+          ["setup", "Customer Setup", "Where every customer is stuck"],
+          ["businesses", "Businesses", "Owners, numbers, mappings"],
+          ["signups", "Signups", "Trial and checkout pipeline"],
+          ["health", "Trial Health", "Readiness by customer"],
+        ],
+      },
+      {
+        title: "Calls",
+        items: [
+          ["calls", "Calls", "Review calls and follow-ups"],
+          ["costs", "Costs", "Vapi + Twilio spend"],
+          ["ops", "Metrics", "Answered, missed, booked"],
+          ["digest", "Daily Digest", "Owner follow-up summary"],
+        ],
+      },
+      {
+        title: "Setup",
+        items: [
+          ["sync", "Sync Health", "API keys and sync status"],
+          ["mappings", "Vapi Mapping", "Connect numbers to owners"],
+          ["faqs", "FAQ Editor", "Assistant answer library"],
+          ["settings", "Settings", "Rings, hours, owner phone"],
+        ],
+      },
+    ],
+    []
   );
 
   const loadLeads = async () => {
@@ -259,6 +706,16 @@ export default function AdminDashboard() {
     setTrialHealth(data.accounts || []);
   };
 
+  const loadCustomerSetup = async () => {
+    const data = await api("/api/admin/customer-setup");
+    setCustomerSetup({
+      customers: data.customers || [],
+      summary: data.summary || null,
+      warnings: data.warnings || [],
+      env: data.env || null,
+    });
+  };
+
   const loadOpsOverview = async () => {
     const data = await api("/api/admin/ops-overview");
     setOpsOverview({ owners: data.owners || [], sync: data.sync || null });
@@ -291,6 +748,7 @@ export default function AdminDashboard() {
       setVapiSyncStatus(`Synced ${data.synced || 0} of ${data.fetched || 0} Vapi calls.`);
       if (activeTab === "calls") await loadCalls();
       if (activeTab === "overview" || activeTab === "businesses") await loadOpsOverview();
+      if (activeTab === "setup") await loadCustomerSetup();
     } catch (err) {
       setVapiSyncStatus("");
       setError(cleanErrorMessage(err.message));
@@ -376,6 +834,7 @@ export default function AdminDashboard() {
       if (activeTab === "overview") {
         await Promise.allSettled([loadOpsOverview(), loadCostAudit(), loadCalls(), loadSignups(), loadAnalytics()]);
       }
+      if (activeTab === "setup") await loadCustomerSetup();
       if (activeTab === "businesses") await loadOpsOverview();
       if (activeTab === "calls") await loadCalls();
       if (activeTab === "signups") await loadSignups();
@@ -445,6 +904,7 @@ export default function AdminDashboard() {
       setSignups([]);
       setAnalytics([]);
       setTrialHealth([]);
+      setCustomerSetup({ customers: [], summary: null, warnings: [] });
       setVapiMappings([]);
       setBusinesses([]);
       setOpsOverview({ owners: [], sync: null });
@@ -518,6 +978,35 @@ export default function AdminDashboard() {
     }
   };
 
+  const updateCustomerSetupStep = async (customer, step, status) => {
+    const note =
+      status === "clear"
+        ? ""
+        : window.prompt(
+            status === "done"
+              ? "Optional note for marking this step done"
+              : status === "manual"
+                ? "What manual action is needed?"
+                : "Why is this step blocked or waiting?",
+            step.reason || ""
+          );
+    if (status !== "clear" && note == null) return;
+    try {
+      const data = await api(`/api/admin/customer-setup/${customer.id}/steps/${step.key}`, {
+        method: "POST",
+        body: { status, note },
+      });
+      setCustomerSetup({
+        customers: data.customers || [],
+        summary: data.summary || null,
+        warnings: data.warnings || [],
+        env: data.env || null,
+      });
+    } catch (err) {
+      setError(cleanErrorMessage(err.message));
+    }
+  };
+
   const updateFaq = async (faq) => {
     try {
       await api(`/api/admin/faqs/${faq.id}`, { method: "PUT", body: faq });
@@ -581,6 +1070,19 @@ export default function AdminDashboard() {
               <button type="button" onClick={() => (window.location.hash = "/")} className="rounded-full border border-white/25 bg-white/5 px-5 py-3 text-sm font-black uppercase tracking-[0.14em] text-white/80">Back To Site</button>
               <button type="button" onClick={() => (window.location.hash = "/signup")} className="rounded-full border border-white/25 bg-white/5 px-5 py-3 text-sm font-black uppercase tracking-[0.14em] text-white/80">Open Setup Flow</button>
             </div>
+            <div className="mt-8 grid max-w-3xl gap-3 sm:grid-cols-2">
+              {[
+                ["Trial pipeline", "Track signups, checkout status, and trial expiry."],
+                ["Owner numbers", "Match every business owner to their AI phone numbers."],
+                ["Call costs", "See Vapi and Twilio spend by phone number."],
+                ["Setup checks", "Know exactly which integrations still need keys."],
+              ].map(([label, copy]) => (
+                <div key={label} className="rounded-2xl border border-white/35 bg-white/55 p-4 shadow-[0_20px_60px_-50px_rgba(15,23,42,0.65)]">
+                  <div className="text-xs font-black uppercase tracking-[0.18em] text-[#1d4ed8]">{label}</div>
+                  <p className="mt-2 text-sm font-bold leading-6 text-[#102033]/75">{copy}</p>
+                </div>
+              ))}
+            </div>
           </div>
           <Panel>
             <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
@@ -603,70 +1105,18 @@ export default function AdminDashboard() {
   }
 
   return (
-    <Shell>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <div className="text-xs font-bold uppercase tracking-[0.28em] text-white/70">My AI PA Admin</div>
-          <h1 className="mt-1 font-serif text-[clamp(2.25rem,10vw,3rem)] font-semibold text-white">Voice Ops Dashboard</h1>
-          <p className="mt-2 text-sm font-semibold text-white/65">Backend: <code>{API_BASE}</code></p>
-        </div>
-        <div className="flex flex-wrap gap-3">
-          <button type="button" onClick={() => (window.location.hash = "/")} className="rounded-full border border-white/20 bg-white/5 px-4 py-2 text-sm font-bold text-white/80">Site</button>
-          <button type="button" onClick={lock} className="rounded-full border border-white/20 bg-white/5 px-4 py-2 text-sm font-bold text-white/80">Lock</button>
-        </div>
-      </div>
-
-      <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
-        <Panel><div className="text-xs font-bold uppercase tracking-[0.2em] text-white/50">Owners</div><div className="mt-1 text-2xl font-extrabold">{stats.owners}</div><div className="mt-1 text-xs font-semibold text-white/45">{stats.mappedOwners} mapped</div></Panel>
-        <Panel><div className="text-xs font-bold uppercase tracking-[0.2em] text-white/50">Calls</div><div className="mt-1 text-2xl font-extrabold">{stats.calls}</div><div className="mt-1 text-xs font-semibold text-white/45">current view</div></Panel>
-        <Panel><div className="text-xs font-bold uppercase tracking-[0.2em] text-white/50">Cost</div><div className="mt-1 text-2xl font-extrabold">{money(stats.totalCost)}</div><div className="mt-1 text-xs font-semibold text-white/45">{costDays} day window</div></Panel>
-        <Panel><div className="text-xs font-bold uppercase tracking-[0.2em] text-white/50">Signups</div><div className="mt-1 text-2xl font-extrabold">{stats.signups}</div><div className="mt-1 text-xs font-semibold text-white/45">trial pipeline</div></Panel>
-        <Panel><div className="text-xs font-bold uppercase tracking-[0.2em] text-white/50">Warnings</div><div className="mt-1 text-2xl font-extrabold">{stats.syncWarnings}</div><div className="mt-1 text-xs font-semibold text-white/45">setup checks</div></Panel>
-        <Panel><div className="text-xs font-bold uppercase tracking-[0.2em] text-white/50">Rings</div><div className="mt-1 text-2xl font-extrabold">{stats.rings}</div><div className="mt-1 text-xs font-semibold text-white/45">answer delay</div></Panel>
-      </div>
-
-      <div className="admin-shell-grid mt-5">
-        <Panel>
-          <div className="text-xs font-bold uppercase tracking-[0.22em] text-white/45">Workspace</div>
-          <div className="mt-4 grid gap-2">
-            {[
-              ["overview", "Overview", "Health, alerts, and next actions"],
-              ["businesses", "Businesses", "Owners, numbers, and mappings"],
-              ["calls", "Calls", "Review calls and follow-ups"],
-              ["costs", "Costs", "Vapi + Twilio spend"],
-            ].map(([k, label, desc]) => (
-              <button key={k} type="button" onClick={() => setActiveTab(k)} className={"rounded-2xl px-4 py-3 text-left text-sm font-bold transition " + (activeTab === k ? "bg-gradient-to-r from-emerald-700 to-amber-500 text-white shadow-[0_18px_48px_-36px_rgba(245,158,11,0.9)]" : "border border-white/10 bg-white/5 text-white/70 hover:bg-white/10")}>
-                <span className="block">{label}</span>
-                <span className="mt-1 block text-xs font-semibold opacity-65">{desc}</span>
-              </button>
-            ))}
-          </div>
-          <div className="mt-5 rounded-2xl border border-white/10 bg-black/20 p-4">
-            <div className="text-xs font-bold uppercase tracking-[0.18em] text-white/45">Quick Actions</div>
-            <div className="mt-3 grid gap-2">
-              <button type="button" onClick={syncVapiCalls} className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-left text-xs font-bold text-white/75">Sync Vapi Calls</button>
-              <button type="button" onClick={syncCosts} className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-left text-xs font-bold text-white/75">Sync Costs</button>
-              <button type="button" onClick={refresh} className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-left text-xs font-bold text-white/75">Refresh View</button>
-            </div>
-          </div>
-        </Panel>
-
-        <Panel>
-        <div className="hidden flex-wrap gap-2">
-          {[
-            ["leads", "Leads"],
-            ["calls", "Calls"],
-            ["owners", "Owners & Numbers"],
-            ["sync", "Sync Health"],
-            ["costs", "Cost Audit"],
-            ["signups", "Signups"],
-            ["ops", "Ops Metrics"],
-            ["health", "Trial Health"],
-            ["mappings", "Vapi Mapping"],
-            ["digest", "Daily Digest"],
-            ["faqs", "FAQ Editor"],
-            ["settings", "Settings"],
-          ].map(([k, label]) => (
+    <main className="myai-admin admin-concept-root">
+      <div className="admin-concept-shell">
+        <ConceptSidebar groups={navGroups} activeTab={activeTab} onSelect={setActiveTab} onLock={lock} />
+        <section className="admin-concept-main">
+          <ConceptTopBar
+            loading={loading}
+            onRefresh={refresh}
+            onSyncCosts={syncCosts}
+            onSite={() => (window.location.hash = "/")}
+          />
+          <div className="admin-mobile-tabs">
+          {navGroups.flatMap((group) => group.items).map(([k, label]) => (
             <button key={k} type="button" onClick={() => setActiveTab(k)} className={"rounded-full px-4 py-2 text-sm font-bold " + (activeTab === k ? "bg-gradient-to-r from-emerald-700 to-amber-500 text-white" : "border border-white/15 bg-white/5 text-white/70")}>{label}</button>
           ))}
           <button type="button" onClick={refresh} className="ml-auto rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm font-bold text-white/80">Refresh</button>
@@ -676,91 +1126,17 @@ export default function AdminDashboard() {
         {loading ? <p className="mt-3 text-sm font-semibold text-white/65">Loading...</p> : null}
 
         {activeTab === "overview" ? (
-          <div className="mt-4 grid gap-4">
-            <div className="admin-overview-grid">
-              <div className="rounded-2xl border border-white/10 bg-black/20 p-5">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <div className="text-sm font-bold uppercase tracking-[0.2em] text-white/60">Operations Overview</div>
-                    <h2 className="mt-2 text-2xl font-extrabold text-white">What needs attention now</h2>
-                  </div>
-                  <button type="button" onClick={refresh} className="rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm font-bold text-white/80">Refresh</button>
-                </div>
-
-                <div className="mt-5 grid gap-3 md:grid-cols-2">
-                  {[
-                    ["Database", Boolean(opsOverview.sync?.env?.databaseAvailable), "Required for businesses, calls, and cost history."],
-                    ["Vapi", Boolean(opsOverview.sync?.env?.vapiApiKeyConfigured), "Required to pull AI call records and Vapi cost."],
-                    ["Twilio", Boolean(opsOverview.sync?.env?.twilioConfigured), "Required to pull carrier call prices."],
-                    ["Mappings", Boolean(opsOverview.sync?.mappedBusinessCount), "Connects phone numbers to the right business owner."],
-                  ].map(([label, ok, desc]) => (
-                    <div key={label} className={"rounded-2xl border p-4 " + statusClasses(ok)}>
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="text-xs font-black uppercase tracking-[0.16em] opacity-75">{label}</div>
-                        <div className="rounded-full bg-white/20 px-2 py-1 text-[0.68rem] font-black uppercase tracking-[0.12em]">{yesNo(ok)}</div>
-                      </div>
-                      <p className="mt-3 text-sm font-semibold leading-6 opacity-80">{desc}</p>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="mt-5 grid gap-2">
-                  {[...(opsOverview.sync?.warnings || []), ...(costAudit?.warnings || [])].slice(0, 5).map((warning) => (
-                    <div key={warning} className="rounded-xl border border-amber-300/25 bg-amber-300/10 px-4 py-3 text-sm font-semibold text-amber-100">{warning}</div>
-                  ))}
-                  {!opsOverview.sync?.warnings?.length && !costAudit?.warnings?.length ? (
-                    <div className="rounded-xl border border-emerald-300/20 bg-emerald-300/10 px-4 py-3 text-sm font-semibold text-emerald-100">No active setup warnings detected.</div>
-                  ) : null}
-                </div>
-              </div>
-
-              <div className="grid gap-4">
-                <div className="rounded-2xl border border-white/10 bg-black/20 p-5">
-                  <div className="text-sm font-bold uppercase tracking-[0.2em] text-white/60">Cost Snapshot</div>
-                  <div className="mt-4 grid grid-cols-2 gap-3">
-                    <div className="rounded-xl bg-white/5 p-4"><div className="text-xs font-bold uppercase text-white/45">Total</div><div className="mt-1 text-xl font-extrabold text-white">{money(costAudit?.totals?.totalInternalCost)}</div></div>
-                    <div className="rounded-xl bg-white/5 p-4"><div className="text-xs font-bold uppercase text-white/45">Priced</div><div className="mt-1 text-xl font-extrabold text-white">{costAudit?.totals?.pricedCalls || 0}</div></div>
-                    <div className="rounded-xl bg-white/5 p-4"><div className="text-xs font-bold uppercase text-white/45">Vapi</div><div className="mt-1 text-xl font-extrabold text-white">{money(costAudit?.totals?.vapiCost)}</div></div>
-                    <div className="rounded-xl bg-white/5 p-4"><div className="text-xs font-bold uppercase text-white/45">Twilio</div><div className="mt-1 text-xl font-extrabold text-white">{money(costAudit?.totals?.twilioCost)}</div></div>
-                  </div>
-                </div>
-                <div className="rounded-2xl border border-white/10 bg-black/20 p-5">
-                  <div className="text-sm font-bold uppercase tracking-[0.2em] text-white/60">Next Actions</div>
-                  <div className="mt-4 grid gap-2">
-                    <button type="button" onClick={() => setActiveTab("businesses")} className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-left text-sm font-bold text-white/75">Review owner numbers and mappings</button>
-                    <button type="button" onClick={() => setActiveTab("calls")} className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-left text-sm font-bold text-white/75">Review missed calls and follow-ups</button>
-                    <button type="button" onClick={() => setActiveTab("costs")} className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-left text-sm font-bold text-white/75">Audit Vapi + Twilio cost</button>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="grid gap-4 xl:grid-cols-2">
-              <div className="rounded-2xl border border-white/10 bg-black/20 p-5">
-                <div className="text-sm font-bold uppercase tracking-[0.2em] text-white/60">Businesses Needing Setup</div>
-                <div className="mt-4 space-y-2">
-                  {opsOverview.owners?.filter((owner) => owner.needsSetup).slice(0, 6).length ? opsOverview.owners.filter((owner) => owner.needsSetup).slice(0, 6).map((owner) => (
-                    <div key={owner.businessId} className="rounded-xl border border-white/10 bg-white/5 px-4 py-3">
-                      <div className="font-extrabold text-white">{owner.businessName}</div>
-                      <div className="mt-1 text-xs font-semibold text-white/45">{owner.ownerPhone || "No owner phone"} · {owner.aiNumbers?.length ? owner.aiNumbers.join(", ") : "No AI number mapping"}</div>
-                    </div>
-                  )) : <div className="text-sm font-semibold text-white/55">No business setup rows available yet.</div>}
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-white/10 bg-black/20 p-5">
-                <div className="text-sm font-bold uppercase tracking-[0.2em] text-white/60">Recent Follow-Up Calls</div>
-                <div className="mt-4 space-y-2">
-                  {calls.filter((call) => call.followUpNeeded).slice(0, 6).length ? calls.filter((call) => call.followUpNeeded).slice(0, 6).map((call) => (
-                    <div key={call.id} className="rounded-xl border border-white/10 bg-white/5 px-4 py-3">
-                      <div className="font-extrabold text-white">{call.business?.name || `Business ${call.businessId}`}</div>
-                      <div className="mt-1 text-xs font-semibold text-white/45">{dt(call.startedAt)} · {call.caller?.phone || "—"} · {call.outcome || call.status}</div>
-                    </div>
-                  )) : <div className="text-sm font-semibold text-white/55">No follow-up calls loaded in this view.</div>}
-                </div>
-              </div>
-            </div>
-          </div>
+          <ConceptOverview
+            setupItems={setupItems}
+            setupScore={setupScore}
+            stats={stats}
+            opsOverview={opsOverview}
+            costAudit={costAudit}
+            calls={calls}
+            signups={signups}
+            onOpenTab={setActiveTab}
+            onSyncCosts={syncCosts}
+          />
         ) : null}
 
         {activeTab === "leads" ? (
@@ -860,6 +1236,94 @@ export default function AdminDashboard() {
                 </tbody>
               </table>
             </div>
+          </div>
+        ) : null}
+
+        {activeTab === "setup" ? (
+          <div className="mt-4 grid gap-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="text-sm font-bold uppercase tracking-[0.2em] text-white/60">Customer Setup Command Center</div>
+                <p className="mt-1 text-sm font-semibold text-white/55">Every signup gets a live checklist, a blocker, and the next action to move it forward.</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button type="button" onClick={loadCustomerSetup} className="rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm font-bold text-white/80">Refresh</button>
+                <button type="button" onClick={() => (window.location.hash = "/signup")} className="rounded-full bg-gradient-to-r from-emerald-700 to-amber-500 px-5 py-2 text-sm font-black uppercase tracking-[0.12em] text-white">New Signup</button>
+              </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+              {[
+                ["Customers", customerSetup.summary?.total || 0, "All setup rows"],
+                ["Ready", customerSetup.summary?.ready || 0, "Fully complete"],
+                ["Blocked", customerSetup.summary?.blocked || 0, "Failed step"],
+                ["Manual", customerSetup.summary?.manual || 0, "Needs your action"],
+                ["Waiting", customerSetup.summary?.waiting || 0, "Pending customer/system"],
+              ].map(([label, value, copy]) => (
+                <div key={label} className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                  <div className="text-xs font-black uppercase tracking-[0.18em] text-white/50">{label}</div>
+                  <div className="mt-1 text-2xl font-extrabold text-white">{value}</div>
+                  <div className="mt-1 text-xs font-semibold text-white/45">{copy}</div>
+                </div>
+              ))}
+            </div>
+
+            {customerSetup.warnings?.length ? (
+              <div className="grid gap-2">
+                {customerSetup.warnings.map((warning) => (
+                  <div key={warning} className="rounded-xl border border-amber-300/25 bg-amber-300/10 px-4 py-3 text-sm font-semibold text-amber-100">{warning}</div>
+                ))}
+              </div>
+            ) : null}
+
+            {customerSetup.customers?.length ? customerSetup.customers.map((customer) => (
+              <div key={customer.id} className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="text-xl font-extrabold text-white">{customer.businessName || "Unnamed business"}</div>
+                    <div className="mt-1 text-sm font-semibold text-white/55">
+                      {customer.ownerName || "No owner name"} · {customer.ownerEmail || "No email"} · {customer.ownerPhone || customer.businessPhone || "No phone"}
+                    </div>
+                    <div className="mt-2 text-xs font-semibold text-white/40">
+                      Signup: {dt(customer.signedUpAt)} · Calls: {customer.callCount || 0} · Last call: {dt(customer.lastCallAt)}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <span className={"inline-flex rounded-full border px-3 py-1 text-xs font-black uppercase tracking-[0.12em] " + setupStatusClasses(customer.overallStatus)}>
+                      {setupStatusLabel(customer.overallStatus)}
+                    </span>
+                    <div className="mt-2 text-sm font-black text-white">{customer.readinessPercent || 0}% ready</div>
+                  </div>
+                </div>
+
+                <div className="mt-4 rounded-xl border border-white/10 bg-white/5 p-3">
+                  <div className="text-xs font-bold uppercase tracking-[0.16em] text-white/45">Next action</div>
+                  <div className="mt-2 text-sm font-semibold text-white/80">{customer.nextAction || "Customer setup is ready."}</div>
+                  {customer.blockerLabel ? <div className="mt-1 text-xs font-semibold text-amber-100">Current blocker: {customer.blockerLabel}</div> : null}
+                </div>
+
+                <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                  {(customer.steps || []).map((step) => (
+                    <div key={step.key} className={"rounded-xl border p-3 " + setupStatusClasses(step.status)}>
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div>
+                          <div className="text-sm font-black text-white">{step.label}</div>
+                          <div className="mt-1 text-xs font-semibold opacity-80">{step.reason || step.nextAction}</div>
+                          {step.manualOverride ? <div className="mt-1 text-[0.68rem] font-black uppercase tracking-[0.14em] opacity-70">Manual override · {dt(step.manualOverride.updatedAt)}</div> : null}
+                        </div>
+                        <span className="rounded-full border border-current/25 px-2 py-1 text-[0.68rem] font-black uppercase tracking-[0.12em]">{setupStatusLabel(step.status)}</span>
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button type="button" onClick={() => updateCustomerSetupStep(customer, step, "done")} className="rounded-full border border-emerald-200/25 bg-emerald-200/10 px-3 py-1 text-xs font-bold text-emerald-50">Mark done</button>
+                        <button type="button" onClick={() => updateCustomerSetupStep(customer, step, "manual")} className="rounded-full border border-blue-200/25 bg-blue-200/10 px-3 py-1 text-xs font-bold text-blue-50">Manual</button>
+                        <button type="button" onClick={() => updateCustomerSetupStep(customer, step, "failed")} className="rounded-full border border-rose-200/25 bg-rose-200/10 px-3 py-1 text-xs font-bold text-rose-50">Block</button>
+                        {step.manualOverride ? <button type="button" onClick={() => updateCustomerSetupStep(customer, step, "clear")} className="rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs font-bold text-white/70">Clear</button> : null}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )) : <div className="rounded-2xl border border-white/10 bg-black/20 p-4 text-white/55">No customer setup rows yet. Submit a signup or create a business first.</div>}
           </div>
         ) : null}
 
@@ -1333,9 +1797,9 @@ export default function AdminDashboard() {
             )}
           </div>
         ) : null}
-      </Panel>
+        </section>
       </div>
-    </Shell>
+    </main>
   );
 }
 

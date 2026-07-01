@@ -13,6 +13,7 @@ console.log("Staging only known app and GitHub Pages build files...");
 const stagePaths = [
   "package.json",
   "package-lock.json",
+  "scripts/deploy-pages.js",
   "src",
   "docs/index.html",
   "docs/asset-manifest.json",
@@ -23,7 +24,8 @@ const stagePaths = [
   "docs/logo512.png",
   "docs/static",
 ];
-run("git", ["add", ...stagePaths]);
+const existingStagePaths = stagePaths.filter((stagePath) => require("fs").existsSync(rootPath(stagePath)));
+run("git", ["add", ...existingStagePaths]);
 
 const diffCheck = run("git", ["diff", "--cached", "--quiet"], { allowFailure: true, capture: true });
 if (diffCheck.status === 0) {
