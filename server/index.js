@@ -819,6 +819,40 @@ function getTwilioAuthHeader() {
   return `Basic ${Buffer.from(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`).toString("base64")}`;
 }
 
+async function fetchTwilioIncomingPhoneNumbers() {
+  if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN) {
+    const err = new Error("Twilio credentials are not configured.");
+    err.statusCode = 503;
+    throw err;
+  }
+
+  const records = [];
+  let nextUrl = new URL(`${TWILIO_API_BASE_URL}/2010-04-01/Accounts/${encodeURIComponent(TWILIO_ACCOUNT_SID)}/IncomingPhoneNumbers.json`);
+  nextUrl.searchParams.set("PageSize", "1000");
+
+  for (let page = 0; nextUrl && page < 10; page += 1) {
+    const response = await fetch(nextUrl, {
+      headers: {
+        Authorization: getTwilioAuthHeader(),
+        Accept: "application/json",
+      },
+    });
+    const rawText = await response.text();
+    const data = parseJsonObject(rawText);
+
+    if (!response.ok) {
+      const err = new Error(data?.message || data?.error || `Twilio phone number fetch failed with HTTP ${response.status}.`);
+      err.statusCode = response.status;
+      throw err;
+    }
+
+    records.push(...(Array.isArray(data?.incoming_phone_numbers) ? data.incoming_phone_numbers : []));
+    nextUrl = data?.next_page_uri ? new URL(data.next_page_uri, TWILIO_API_BASE_URL) : null;
+  }
+
+  return records;
+}
+
 async function fetchTwilioUsageRecords({ days = 30 } = {}) {
   if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN) {
     const err = new Error("Twilio credentials are not configured.");
@@ -990,6 +1024,148 @@ function normalizeTwilioCall(call) {
     durationSec: numberOrNull(call?.duration),
     price: rawPrice == null ? null : Math.abs(rawPrice),
     priceUnit: String(call?.price_unit || "").trim() || null,
+  };
+}
+
+function normalizeTwilioInventoryNumber(record) {
+  return {
+    sid: String(record?.sid || "").trim(),
+    phoneNumber: normalizePhoneForMatch(record?.phone_number || ""),
+    rawPhoneNumber: String(record?.phone_number || "").trim(),
+    friendlyName: String(record?.friendly_name || "").trim(),
+    dateCreated: record?.date_created || null,
+    dateUpdated: record?.date_updated || null,
+    voiceUrl: String(record?.voice_url || "").trim(),
+    smsUrl: String(record?.sms_url || "").trim(),
+    voiceApplicationSid: String(record?.voice_application_sid || "").trim(),
+    smsApplicationSid: String(record?.sms_application_sid || "").trim(),
+    trunkSid: String(record?.trunk_sid || "").trim(),
+    capabilities: record?.capabilities || {},
+  };
+}
+
+function addNumberEvidence(map, phoneNumber, evidence) {
+  const normalized = normalizePhoneForMatch(phoneNumber || "");
+  if (!normalized) return;
+  const current = map.get(normalized) || [];
+  current.push(evidence);
+  map.set(normalized, current);
+}
+
+async function getTwilioNumberInventory({ days = 90 } = {}) {
+  const windowDays = Math.max(1, Math.min(365, Number(days) || 90));
+  const [numbers, twilioCalls, businesses, localCalls] = await Promise.all([
+    fetchTwilioIncomingPhoneNumbers(),
+    fetchTwilioCalls({ days: windowDays, limit: 1000 }).catch((error) => {
+      console.warn("[admin:twilio-numbers] call fetch unavailable", { message: error?.message || "unknown" });
+      return [];
+    }),
+    prisma.business.findMany({ include: { vapiMappings: true }, orderBy: { id: "asc" }, take: 1000 }),
+    prisma.call.findMany({
+      where: { startedAt: { gte: getDateRange(windowDays).start } },
+      include: { business: true },
+      orderBy: { startedAt: "desc" },
+      take: 3000,
+    }),
+  ]);
+
+  const appEvidence = new Map();
+  for (const business of businesses) {
+    addNumberEvidence(appEvidence, business.phone, `Business phone: ${business.name || `Business ${business.id}`}`);
+    for (const mapping of business.vapiMappings || []) {
+      if (/phone/i.test(mapping.matchType || "")) {
+        addNumberEvidence(appEvidence, mapping.matchValue, `Vapi mapping: ${mapping.label || business.name || `Business ${business.id}`}`);
+      }
+    }
+  }
+  for (const signup of listSignupDashboardRecords()) {
+    if (signup.twilioPhoneNumber) {
+      addNumberEvidence(appEvidence, signup.twilioPhoneNumber, `Signup record: ${signup.businessName || signup.ownerEmail || "customer"}`);
+    }
+  }
+
+  const inventory = numbers.map(normalizeTwilioInventoryNumber).filter((record) => record.phoneNumber);
+  const inventoryNumbers = new Set(inventory.map((record) => record.phoneNumber));
+  const twilioCallStats = new Map();
+  for (const call of twilioCalls.map(normalizeTwilioCall)) {
+    for (const phoneNumber of [call.to, call.from]) {
+      if (!inventoryNumbers.has(phoneNumber)) continue;
+      const stats = twilioCallStats.get(phoneNumber) || { count: 0, inbound: 0, outbound: 0, lastCallAt: null };
+      stats.count += 1;
+      if (/inbound/i.test(call.direction)) stats.inbound += 1;
+      if (/outbound/i.test(call.direction)) stats.outbound += 1;
+      stats.lastCallAt = stats.lastCallAt && new Date(stats.lastCallAt) > new Date(call.startedAt) ? stats.lastCallAt : call.startedAt;
+      twilioCallStats.set(phoneNumber, stats);
+    }
+  }
+
+  const localCallStats = new Map();
+  for (const call of localCalls) {
+    const phoneNumber = normalizePhoneForMatch(call.business?.phone || "");
+    if (!phoneNumber) continue;
+    const stats = localCallStats.get(phoneNumber) || { count: 0, lastCallAt: null };
+    stats.count += 1;
+    stats.lastCallAt = stats.lastCallAt && new Date(stats.lastCallAt) > new Date(call.startedAt) ? stats.lastCallAt : call.startedAt;
+    localCallStats.set(phoneNumber, stats);
+  }
+
+  const rows = inventory.map((record) => {
+    const evidence = appEvidence.get(record.phoneNumber) || [];
+    const twilioStats = twilioCallStats.get(record.phoneNumber) || { count: 0, inbound: 0, outbound: 0, lastCallAt: null };
+    const localStats = localCallStats.get(record.phoneNumber) || { count: 0, lastCallAt: null };
+    const hasWebhookConfig = Boolean(record.voiceUrl || record.smsUrl || record.voiceApplicationSid || record.smsApplicationSid || record.trunkSid);
+    const status = evidence.length
+      ? "keep"
+      : twilioStats.count || hasWebhookConfig
+        ? "review"
+        : "likelyUnused";
+    const reasons = evidence.length
+      ? evidence
+      : [
+          twilioStats.count ? `${twilioStats.count} Twilio calls in ${windowDays} days` : "",
+          hasWebhookConfig ? "Has Twilio webhook/application configuration" : "",
+          !twilioStats.count && !hasWebhookConfig ? `No app mapping and no Twilio calls in ${windowDays} days` : "",
+        ].filter(Boolean);
+
+    return {
+      status,
+      phoneNumber: record.rawPhoneNumber || record.phoneNumber,
+      normalizedPhoneNumber: record.phoneNumber,
+      sid: record.sid,
+      friendlyName: record.friendlyName,
+      dateCreated: record.dateCreated,
+      dateUpdated: record.dateUpdated,
+      twilioCalls: twilioStats.count,
+      twilioInboundCalls: twilioStats.inbound,
+      twilioOutboundCalls: twilioStats.outbound,
+      twilioLastCallAt: twilioStats.lastCallAt,
+      appCalls: localStats.count,
+      appLastCallAt: localStats.lastCallAt,
+      hasWebhookConfig,
+      voiceUrlConfigured: Boolean(record.voiceUrl),
+      smsUrlConfigured: Boolean(record.smsUrl),
+      voiceApplicationConfigured: Boolean(record.voiceApplicationSid),
+      smsApplicationConfigured: Boolean(record.smsApplicationSid),
+      trunkConfigured: Boolean(record.trunkSid),
+      capabilities: record.capabilities,
+      reasons,
+    };
+  });
+
+  return {
+    days: windowDays,
+    summary: {
+      totalNumbers: rows.length,
+      keep: rows.filter((row) => row.status === "keep").length,
+      review: rows.filter((row) => row.status === "review").length,
+      likelyUnused: rows.filter((row) => row.status === "likelyUnused").length,
+      appMappedNumbers: appEvidence.size,
+      twilioCallsAnalyzed: twilioCalls.length,
+    },
+    numbers: rows.sort((a, b) => {
+      const rank = { keep: 0, review: 1, likelyUnused: 2 };
+      return rank[a.status] - rank[b.status] || b.twilioCalls - a.twilioCalls || a.phoneNumber.localeCompare(b.phoneNumber);
+    }),
   };
 }
 
@@ -4051,6 +4227,14 @@ app.get(
   requireAdmin,
   asyncRoute(async (req, res) => {
     res.json({ ok: true, audit: await getCostAudit({ days: req.query.days || 30 }) });
+  })
+);
+
+app.get(
+  "/api/admin/twilio/numbers",
+  requireAdmin,
+  asyncRoute(async (req, res) => {
+    res.json({ ok: true, inventory: await getTwilioNumberInventory({ days: req.query.days || 90 }) });
   })
 );
 
