@@ -864,6 +864,46 @@ function normalizeTwilioUsageRecord(record) {
   };
 }
 
+function getTwilioUsageCategoryKey(record) {
+  return String(record?.category || "").trim().toLowerCase();
+}
+
+function getTwilioUsageComparableText(value) {
+  return String(value || "").replace(/[^a-z0-9]/gi, "").toLowerCase();
+}
+
+function isTwilioAccountTotalRecord(record) {
+  return (
+    getTwilioUsageComparableText(record?.category) === "totalprice" ||
+    getTwilioUsageComparableText(record?.description) === "totalprice"
+  );
+}
+
+function selectTwilioUsageTotalRecords(records) {
+  const billableRecords = records.filter((record) => record.price);
+  const totalRecord = billableRecords.find(isTwilioAccountTotalRecord);
+  if (totalRecord) {
+    return {
+      totalSource: "accountTotal",
+      includedRecords: [totalRecord],
+      totalRecord,
+    };
+  }
+
+  const categoryKeys = billableRecords.map(getTwilioUsageCategoryKey).filter(Boolean);
+  const leafRecords = billableRecords.filter((record) => {
+    const key = getTwilioUsageCategoryKey(record);
+    if (!key) return true;
+    return !categoryKeys.some((otherKey) => otherKey !== key && otherKey.startsWith(`${key}-`));
+  });
+
+  return {
+    totalSource: "leafCategories",
+    includedRecords: leafRecords.length ? leafRecords : billableRecords,
+    totalRecord: null,
+  };
+}
+
 function getFixedMonthlyCosts({ days = 30 } = {}) {
   const records = [];
   const addRecord = (label, monthlyCost) => {
@@ -912,14 +952,24 @@ function getFixedMonthlyCosts({ days = 30 } = {}) {
 async function getTwilioAccountUsage({ days = 30 } = {}) {
   const records = (await fetchTwilioUsageRecords({ days })).map(normalizeTwilioUsageRecord);
   const billableRecords = records.filter((record) => record.price);
-  const totalCost = Number(records.reduce((sum, record) => sum + Number(record.price || 0), 0).toFixed(4));
+  const selection = selectTwilioUsageTotalRecords(records);
+  const includedRecords = new Set(selection.includedRecords);
+  const totalCost = Number(selection.includedRecords.reduce((sum, record) => sum + Number(record.price || 0), 0).toFixed(4));
   const currency = records.find((record) => record.priceUnit)?.priceUnit || "USD";
   return {
     available: true,
     totalCost,
+    totalSource: selection.totalSource,
     currency,
     billableRecords: billableRecords.length,
-    records: billableRecords.sort((a, b) => b.price - a.price),
+    includedRecords: selection.includedRecords.length,
+    records: billableRecords
+      .map((record) => ({
+        ...record,
+        includedInTotal: includedRecords.has(record),
+        isAccountTotal: record === selection.totalRecord,
+      }))
+      .sort((a, b) => Number(b.includedInTotal) - Number(a.includedInTotal) || b.price - a.price),
   };
 }
 
