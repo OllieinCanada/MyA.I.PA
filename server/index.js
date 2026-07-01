@@ -65,6 +65,8 @@ const VAPI_AUTO_SYNC_ENABLED = isEnabled(process.env.VAPI_AUTO_SYNC_ENABLED);
 const TWILIO_ACCOUNT_SID = String(process.env.TWILIO_ACCOUNT_SID || "").trim();
 const TWILIO_AUTH_TOKEN = String(process.env.TWILIO_AUTH_TOKEN || "").trim();
 const TWILIO_API_BASE_URL = String(process.env.TWILIO_API_BASE_URL || "https://api.twilio.com").trim().replace(/\/+$/, "");
+const FIXED_MONTHLY_COSTS_JSON = String(process.env.FIXED_MONTHLY_COSTS_JSON || "").trim();
+const FIXED_MONTHLY_COST_USD = numberOrNull(process.env.FIXED_MONTHLY_COST_USD) || 0;
 const MISSED_CALL_ALERT_ENABLED = isEnabled(process.env.MISSED_CALL_ALERT_ENABLED);
 const DAILY_DIGEST_ENABLED = isEnabled(process.env.DAILY_DIGEST_ENABLED);
 const DEFAULT_ALLOWED_ORIGINS = [
@@ -809,6 +811,118 @@ async function fetchTwilioCalls({ days = 30, limit = 1000 } = {}) {
   return Array.isArray(data?.calls) ? data.calls : [];
 }
 
+function dateOnly(value) {
+  return new Date(value).toISOString().slice(0, 10);
+}
+
+function getTwilioAuthHeader() {
+  return `Basic ${Buffer.from(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`).toString("base64")}`;
+}
+
+async function fetchTwilioUsageRecords({ days = 30 } = {}) {
+  if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN) {
+    const err = new Error("Twilio credentials are not configured.");
+    err.statusCode = 503;
+    throw err;
+  }
+
+  const { start, end } = getDateRange(days);
+  const url = new URL(`${TWILIO_API_BASE_URL}/2010-04-01/Accounts/${encodeURIComponent(TWILIO_ACCOUNT_SID)}/Usage/Records.json`);
+  url.searchParams.set("StartDate", dateOnly(start));
+  url.searchParams.set("EndDate", dateOnly(end));
+  url.searchParams.set("PageSize", "1000");
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: getTwilioAuthHeader(),
+      Accept: "application/json",
+    },
+  });
+  const rawText = await response.text();
+  const data = parseJsonObject(rawText);
+
+  if (!response.ok) {
+    const err = new Error(data?.message || data?.error || `Twilio usage fetch failed with HTTP ${response.status}.`);
+    err.statusCode = response.status;
+    throw err;
+  }
+
+  return Array.isArray(data?.usage_records) ? data.usage_records : [];
+}
+
+function normalizeTwilioUsageRecord(record) {
+  const price = Math.abs(numberOrNull(record?.price) || 0);
+  return {
+    category: String(record?.category || "unknown").trim(),
+    description: String(record?.description || record?.category || "Twilio usage").trim(),
+    count: numberOrNull(record?.count),
+    countUnit: String(record?.count_unit || "").trim() || null,
+    usage: numberOrNull(record?.usage),
+    usageUnit: String(record?.usage_unit || "").trim() || null,
+    price,
+    priceUnit: String(record?.price_unit || "USD").trim() || "USD",
+  };
+}
+
+function getFixedMonthlyCosts({ days = 30 } = {}) {
+  const records = [];
+  const addRecord = (label, monthlyCost) => {
+    const cost = Math.abs(numberOrNull(monthlyCost) || 0);
+    if (!cost) return;
+    const proratedCost = Number((cost * (Math.max(1, Number(days) || 30) / 30.4375)).toFixed(4));
+    records.push({
+      label: String(label || "Fixed monthly cost").trim().slice(0, 120),
+      monthlyCost: Number(cost.toFixed(4)),
+      proratedCost,
+      currency: "USD",
+    });
+  };
+
+  if (FIXED_MONTHLY_COST_USD) addRecord("Manual fixed monthly costs", FIXED_MONTHLY_COST_USD);
+
+  if (FIXED_MONTHLY_COSTS_JSON) {
+    try {
+      const parsed = JSON.parse(FIXED_MONTHLY_COSTS_JSON);
+      if (Array.isArray(parsed)) {
+        parsed.forEach((item) => {
+          if (item && typeof item === "object") addRecord(item.label || item.name || item.provider, item.monthlyCost ?? item.cost ?? item.amount);
+        });
+      } else if (parsed && typeof parsed === "object") {
+        Object.entries(parsed).forEach(([label, cost]) => addRecord(label, cost));
+      }
+    } catch (error) {
+      return {
+        available: false,
+        totalCost: 0,
+        currency: "USD",
+        records,
+        warning: `FIXED_MONTHLY_COSTS_JSON is not valid JSON: ${error?.message || "parse failed"}`,
+      };
+    }
+  }
+
+  return {
+    available: true,
+    totalCost: Number(records.reduce((sum, record) => sum + Number(record.proratedCost || 0), 0).toFixed(4)),
+    currency: "USD",
+    records,
+  };
+}
+
+async function getTwilioAccountUsage({ days = 30 } = {}) {
+  const records = (await fetchTwilioUsageRecords({ days })).map(normalizeTwilioUsageRecord);
+  const billableRecords = records.filter((record) => record.price);
+  const totalCost = Number(records.reduce((sum, record) => sum + Number(record.price || 0), 0).toFixed(4));
+  const currency = records.find((record) => record.priceUnit)?.priceUnit || "USD";
+  return {
+    available: true,
+    totalCost,
+    currency,
+    billableRecords: billableRecords.length,
+    records: billableRecords.sort((a, b) => b.price - a.price),
+  };
+}
+
 function normalizeTwilioCall(call) {
   const startedAt = call?.start_time || call?.date_created || call?.date_updated || null;
   const endedAt = call?.end_time || null;
@@ -973,6 +1087,9 @@ async function getCompanyCallAnalytics({ days = 30 } = {}) {
 async function getCostAudit({ days = 30 } = {}) {
   const { start, end } = getDateRange(days);
   let databaseWarning = "";
+  let twilioUsageWarning = "";
+  let twilioAccountUsage = null;
+  const fixedCosts = getFixedMonthlyCosts({ days });
   let calls = [];
   try {
     calls = await withTimeout(
@@ -995,6 +1112,19 @@ async function getCostAudit({ days = 30 } = {}) {
       : rawMessage || "Database is unavailable.";
     console.warn("[admin:cost-audit] database unavailable", { message: databaseWarning });
     calls = [];
+  }
+
+  if (TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN) {
+    try {
+      twilioAccountUsage = await withTimeout(
+        getTwilioAccountUsage({ days }),
+        10000,
+        "Twilio account usage did not respond while loading cost audit."
+      );
+    } catch (error) {
+      twilioUsageWarning = error?.message || "Twilio account usage could not be loaded.";
+      console.warn("[admin:cost-audit] Twilio account usage unavailable", { message: twilioUsageWarning });
+    }
   }
 
   const groups = new Map();
@@ -1040,17 +1170,32 @@ async function getCostAudit({ days = 30 } = {}) {
     averageDurationSec: row.totalCalls ? Math.round(row.totalDurationSec / row.totalCalls) : 0,
   }));
 
+  const twilioCallCost = Number(calls.reduce((sum, call) => sum + Number(call.twilioPrice || 0), 0).toFixed(4));
+  const vapiCost = Number(calls.reduce((sum, call) => sum + Number(call.vapiCost || 0), 0).toFixed(4));
+  const callUsageCost = Number(calls.reduce((sum, call) => sum + Number(call.totalInternalCost || Number(call.twilioPrice || 0) + Number(call.vapiCost || 0)), 0).toFixed(4));
+  const twilioUsageCost = twilioAccountUsage?.available ? Number(twilioAccountUsage.totalCost || 0) : null;
+  const effectiveTwilioCost = twilioUsageCost ?? twilioCallCost;
+  const fixedCost = Number(fixedCosts.totalCost || 0);
+  const estimatedProviderCost = Number((vapiCost + effectiveTwilioCost + fixedCost).toFixed(4));
+
   return {
     days: Number(days) || 30,
     totals: {
       totalCalls: calls.length,
       pricedCalls: calls.filter((call) => call.costSyncedAt || call.twilioPrice || call.vapiCost || call.totalInternalCost).length,
-      twilioCost: Number(calls.reduce((sum, call) => sum + Number(call.twilioPrice || 0), 0).toFixed(4)),
-      vapiCost: Number(calls.reduce((sum, call) => sum + Number(call.vapiCost || 0), 0).toFixed(4)),
-      totalInternalCost: Number(calls.reduce((sum, call) => sum + Number(call.totalInternalCost || Number(call.twilioPrice || 0) + Number(call.vapiCost || 0)), 0).toFixed(4)),
+      twilioCallCost,
+      twilioUsageCost,
+      twilioCost: Number(effectiveTwilioCost.toFixed(4)),
+      vapiCost,
+      fixedCost,
+      callUsageCost,
+      totalInternalCost: estimatedProviderCost,
+      estimatedProviderCost,
     },
     summary: summary.sort((a, b) => b.totalInternalCost - a.totalInternalCost),
     calls: calls.slice(0, 300).map(sanitizeAdminCall),
+    twilioAccountUsage,
+    fixedCosts,
     env: {
       databaseAvailable: !databaseWarning,
       twilioConfigured: Boolean(TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN),
@@ -1059,6 +1204,8 @@ async function getCostAudit({ days = 30 } = {}) {
     warnings: [
       databaseWarning,
       !TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN ? "Twilio credentials are not configured, so Twilio per-call prices cannot sync." : "",
+      twilioUsageWarning,
+      fixedCosts.warning || "",
       !VAPI_API_KEY ? "VAPI_API_KEY is not configured, so Vapi call costs cannot refresh." : "",
     ].filter(Boolean),
   };

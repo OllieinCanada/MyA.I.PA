@@ -403,19 +403,20 @@ function MiniLineChart({ calls }) {
 function CostBars({ totals }) {
   const vapi = Number(totals?.vapiCost || 0);
   const twilio = Number(totals?.twilioCost || 0);
-  const total = Math.max(vapi + twilio, 1);
+  const fixed = Number(totals?.fixedCost || 0);
+  const total = Math.max(Number(totals?.estimatedProviderCost || totals?.totalInternalCost || vapi + twilio || 0), 1);
   const vapiPct = Math.round((vapi / total) * 100);
   const twilioPct = Math.round((twilio / total) * 100);
-  const otherPct = Math.max(0, 100 - vapiPct - twilioPct);
+  const fixedPct = Math.max(0, 100 - vapiPct - twilioPct);
   return (
     <div className="admin-cost-bars">
       <div><span className="admin-dot admin-dot-teal" />AI Voice (Vapi)<strong>{moneyCompact(vapi)}</strong></div>
-      <div><span className="admin-dot admin-dot-red" />Phone (Twilio)<strong>{moneyCompact(twilio)}</strong></div>
-      <div><span className="admin-dot admin-dot-slate" />Other<strong>{otherPct}%</strong></div>
+      <div><span className="admin-dot admin-dot-red" />Twilio Usage<strong>{moneyCompact(twilio)}</strong></div>
+      <div><span className="admin-dot admin-dot-slate" />Fixed / Other<strong>{moneyCompact(fixed)}</strong></div>
       <div className="admin-cost-stack">
         <span style={{ width: `${vapiPct}%` }} />
         <span style={{ width: `${twilioPct}%` }} />
-        <span style={{ width: `${otherPct}%` }} />
+        <span style={{ width: `${fixedPct}%` }} />
       </div>
     </div>
   );
@@ -506,7 +507,7 @@ function ConceptOverview({
   const activeOwners = (opsOverview.owners || []).filter((owner) => !owner.needsSetup).length;
   const warnings = [...(opsOverview.sync?.warnings || []), ...(costAudit?.warnings || [])];
   const totalCalls = costAudit?.totals?.totalCalls || calls.length;
-  const totalSpend = costAudit?.totals?.totalInternalCost || stats.totalCost;
+  const totalSpend = costAudit?.totals?.estimatedProviderCost || costAudit?.totals?.totalInternalCost || stats.totalCost;
   const avgCost = totalCalls ? totalSpend / totalCalls : 0;
 
   return (
@@ -541,7 +542,7 @@ function ConceptOverview({
         <KpiCard title="Calls This Week" value={totalCalls} sub="Total calls">
           <MiniLineChart calls={calls} />
         </KpiCard>
-        <KpiCard title="Call Cost This Week" value={moneyCompact(totalSpend)} sub="Total spend" delta={`${costAudit?.totals?.pricedCalls || 0} priced`}>
+        <KpiCard title="Estimated Cost This Week" value={moneyCompact(totalSpend)} sub="Provider spend" delta={`${costAudit?.totals?.pricedCalls || 0} calls priced`}>
           <CostBars totals={costAudit?.totals} />
         </KpiCard>
       </div>
@@ -556,7 +557,7 @@ function ConceptOverview({
         <div><span>Owners</span><strong>{stats.owners}</strong></div>
         <div><span>Active Numbers</span><strong>{aiNumbers}</strong></div>
         <div><span>Calls</span><strong>{totalCalls}</strong></div>
-        <div><span>Total Spend</span><strong>{moneyCompact(totalSpend)}</strong></div>
+        <div><span>Estimated Spend</span><strong>{moneyCompact(totalSpend)}</strong></div>
         <div><span>Avg Cost / Call</span><strong>{moneyCompact(avgCost)}</strong></div>
         <div><span>Setup Warnings</span><strong>{warnings.length}</strong></div>
       </div>
@@ -841,7 +842,7 @@ export default function AdminDashboard() {
         row.vapiCost ?? "",
         row.twilioCost ?? "",
         row.totalInternalCost ?? "",
-        row.averageInternalCost ?? "",
+        row.averageCost ?? "",
         row.lastCallAt || "",
       ])
     );
@@ -1560,7 +1561,7 @@ export default function AdminDashboard() {
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
                 <div className="text-sm font-bold uppercase tracking-[0.2em] text-white/60">Cost Audit</div>
-                <p className="mt-1 text-sm font-semibold text-white/55">Per-call internal cost from Vapi plus Twilio, grouped by business phone number.</p>
+              <p className="mt-1 text-sm font-semibold text-white/55">Provider cost estimate from Vapi calls plus Twilio account usage, with per-call detail below.</p>
               </div>
               <div className="flex flex-wrap items-end gap-3">
                 <Labeled label="Days">
@@ -1578,7 +1579,7 @@ export default function AdminDashboard() {
             </div>
             {vapiSyncStatus ? <p className="text-sm font-semibold text-emerald-100">{vapiSyncStatus}</p> : null}
 
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
               <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
                 <div className="text-xs font-black uppercase tracking-[0.18em] text-white/50">Calls</div>
                 <div className="mt-1 text-2xl font-extrabold text-white">{costAudit?.totals?.totalCalls || 0}</div>
@@ -1588,16 +1589,20 @@ export default function AdminDashboard() {
                 <div className="mt-1 text-2xl font-extrabold text-white">{costAudit?.totals?.pricedCalls || 0}</div>
               </div>
               <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                <div className="text-xs font-black uppercase tracking-[0.18em] text-white/50">Vapi</div>
+                <div className="text-xs font-black uppercase tracking-[0.18em] text-white/50">Vapi Calls</div>
                 <div className="mt-1 text-xl font-extrabold text-white">{money(costAudit?.totals?.vapiCost)}</div>
               </div>
               <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                <div className="text-xs font-black uppercase tracking-[0.18em] text-white/50">Twilio</div>
+                <div className="text-xs font-black uppercase tracking-[0.18em] text-white/50">Twilio Usage</div>
                 <div className="mt-1 text-xl font-extrabold text-white">{money(costAudit?.totals?.twilioCost)}</div>
               </div>
               <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                <div className="text-xs font-black uppercase tracking-[0.18em] text-white/50">Total Cost</div>
-                <div className="mt-1 text-xl font-extrabold text-white">{money(costAudit?.totals?.totalInternalCost)}</div>
+                <div className="text-xs font-black uppercase tracking-[0.18em] text-white/50">Fixed / Other</div>
+                <div className="mt-1 text-xl font-extrabold text-white">{money(costAudit?.totals?.fixedCost)}</div>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                <div className="text-xs font-black uppercase tracking-[0.18em] text-white/50">Estimate</div>
+                <div className="mt-1 text-xl font-extrabold text-white">{money(costAudit?.totals?.estimatedProviderCost || costAudit?.totals?.totalInternalCost)}</div>
               </div>
             </div>
 
@@ -1606,6 +1611,54 @@ export default function AdminDashboard() {
                 {costAudit.warnings.map((warning) => (
                   <div key={warning} className="rounded-xl border border-amber-300/25 bg-amber-300/10 px-4 py-3 text-sm font-semibold text-amber-100">{warning}</div>
                 ))}
+              </div>
+            ) : null}
+
+            {costAudit?.twilioAccountUsage?.records?.length ? (
+              <div className="overflow-x-auto rounded-2xl border border-white/10 bg-black/20">
+                <div className="border-b border-white/10 px-4 py-3">
+                  <div className="text-sm font-black uppercase tracking-[0.18em] text-white/60">Twilio Account Usage</div>
+                  <div className="mt-1 text-xs font-semibold text-white/45">Includes account-level Twilio usage for this date range, such as calls, SMS, phone numbers, and carrier fees when Twilio reports them.</div>
+                </div>
+                <table className="min-w-full text-left text-sm">
+                  <thead className="border-b border-white/10 text-xs font-bold uppercase tracking-[0.18em] text-white/55">
+                    <tr><th className="px-4 py-3">Category</th><th className="px-4 py-3">Description</th><th className="px-4 py-3">Usage</th><th className="px-4 py-3">Count</th><th className="px-4 py-3">Cost</th></tr>
+                  </thead>
+                  <tbody>
+                    {costAudit.twilioAccountUsage.records.map((record) => (
+                      <tr key={`${record.category}:${record.description}:${record.price}`} className="border-t border-white/5 align-top">
+                        <td className="px-4 py-3 font-semibold">{record.category}</td>
+                        <td className="px-4 py-3 text-white/70">{record.description}</td>
+                        <td className="px-4 py-3">{record.usage ?? "—"} {record.usageUnit || ""}</td>
+                        <td className="px-4 py-3">{record.count ?? "—"} {record.countUnit || ""}</td>
+                        <td className="px-4 py-3 font-extrabold text-white">{money(record.price, record.priceUnit)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : null}
+
+            {costAudit?.fixedCosts?.records?.length ? (
+              <div className="overflow-x-auto rounded-2xl border border-white/10 bg-black/20">
+                <div className="border-b border-white/10 px-4 py-3">
+                  <div className="text-sm font-black uppercase tracking-[0.18em] text-white/60">Fixed Monthly Costs</div>
+                  <div className="mt-1 text-xs font-semibold text-white/45">Manual provider costs prorated into the selected cost window.</div>
+                </div>
+                <table className="min-w-full text-left text-sm">
+                  <thead className="border-b border-white/10 text-xs font-bold uppercase tracking-[0.18em] text-white/55">
+                    <tr><th className="px-4 py-3">Item</th><th className="px-4 py-3">Monthly</th><th className="px-4 py-3">This Window</th></tr>
+                  </thead>
+                  <tbody>
+                    {costAudit.fixedCosts.records.map((record) => (
+                      <tr key={record.label} className="border-t border-white/5 align-top">
+                        <td className="px-4 py-3 font-semibold">{record.label}</td>
+                        <td className="px-4 py-3">{money(record.monthlyCost, record.currency)}</td>
+                        <td className="px-4 py-3 font-extrabold text-white">{money(record.proratedCost, record.currency)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             ) : null}
 

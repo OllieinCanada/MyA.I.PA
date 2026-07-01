@@ -85,6 +85,10 @@ services:
         value: false
       - key: TWILIO_API_BASE_URL
         value: https://api.twilio.com
+      - key: FIXED_MONTHLY_COST_USD
+        value: 0
+      - key: FIXED_MONTHLY_COSTS_JSON
+        sync: false
       - key: MISSED_CALL_ALERT_ENABLED
         value: false
       - key: DAILY_DIGEST_ENABLED
