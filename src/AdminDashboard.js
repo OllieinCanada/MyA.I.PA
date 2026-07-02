@@ -208,6 +208,20 @@ function paymentBadgeClass(key) {
   return "admin-money-badge admin-money-badge-warn";
 }
 
+function customerHealthTone(score, issues = []) {
+  if (score >= 85 && !issues.length) return "good";
+  if (score >= 70) return "watch";
+  if (score >= 50) return "warn";
+  return "bad";
+}
+
+function customerHealthLabel(score, issues = []) {
+  if (score >= 85 && !issues.length) return "Healthy";
+  if (score >= 70) return "Watch";
+  if (score >= 50) return "Needs Work";
+  return "Critical";
+}
+
 function callOutcomeBadgeClass(outcome) {
   const value = String(outcome || "UNREVIEWED").toUpperCase();
   if (value === "BOOKED") return "admin-call-badge admin-call-badge-good";
@@ -1482,6 +1496,104 @@ export default function AdminDashboard() {
     };
   }, [customerAccounts, costAudit?.days, costAudit?.totals, costDays]);
 
+  const customerHealthQueue = useMemo(() => {
+    const rowsByKey = new Map((customerFinancialRows.rows || []).map((row) => [row.key, row]));
+    const rows = customerAccounts.map((account) => {
+      const financial = rowsByKey.get(account.key) || {};
+      const payment = financial.payment || paymentStateForAccount(account);
+      const monthlyRevenue = Number(financial.monthlyRevenue || 0);
+      const projectedRevenue = Number(financial.projectedRevenue || 0);
+      const spendMonthly = Number(financial.spendMonthly || 0);
+      const profitMonthly = Number(financial.profitMonthly || (monthlyRevenue - spendMonthly));
+      const displayRevenue = monthlyRevenue || projectedRevenue;
+      const displayProfit = monthlyRevenue ? profitMonthly : projectedRevenue ? Number((projectedRevenue - spendMonthly).toFixed(2)) : profitMonthly;
+      const margin = financial.margin;
+      const issues = [];
+      let score = 100;
+      let action = "Open customer";
+      let actionTab = "customers";
+
+      const addIssue = (label, weight, nextAction, tab = "customers") => {
+        issues.push(label);
+        score -= weight;
+        if (issues.length === 1) {
+          action = nextAction;
+          actionTab = tab;
+        }
+      };
+
+      if (payment.key === "problem") addIssue("Payment problem", 30, "Fix billing", "costs");
+      else if (payment.key === "pending") addIssue("Checkout pending", 22, "Finish checkout", "costs");
+      else if (payment.key === "unknown") addIssue("Stripe unknown", 16, "Check billing", "costs");
+      else if (payment.key === "trialing") addIssue("Trial account", 8, "Watch trial", "costs");
+
+      if (!account.hasNumber) addIssue("No AI number", 24, "Map number", "mappings");
+      if (!account.setupReady) addIssue("Setup incomplete", 18, account.nextAction || "Finish setup", "setup");
+      if (!account.hasCalls) addIssue("No synced calls", 13, "Sync calls", "calls");
+      if (!(account.ownerPhone || settings?.ownerPhone)) addIssue("No owner text", 10, "Add owner text", "setup");
+      if (account.statusLabel === "Problem") addIssue(account.blockerLabel || "Blocked setup", 16, "Fix setup", "setup");
+
+      if (payment.key === "paying" && profitMonthly < 0) {
+        addIssue("Losing money", 28, "Review spend", "costs");
+      } else if (payment.key === "paying" && monthlyRevenue > 0 && spendMonthly > monthlyRevenue * 0.45) {
+        addIssue("High spend", 15, "Review spend", "costs");
+      }
+
+      if (account.recentLeads?.length && !account.ownerPhone && !settings?.ownerPhone) {
+        addIssue("Lead handoff risk", 8, "Add owner text", "setup");
+      }
+
+      score = Math.max(0, Math.min(100, Math.round(score)));
+      const tone = customerHealthTone(score, issues);
+      const label = customerHealthLabel(score, issues);
+      const why =
+        issues.length
+          ? issues.slice(0, 3).join(", ")
+          : payment.key === "paying"
+            ? "Paying, mapped, and active"
+            : "No urgent customer blockers";
+
+      return {
+        key: account.key,
+        account,
+        payment,
+        score,
+        tone,
+        label,
+        why,
+        issues,
+        action,
+        actionTab,
+        monthlyRevenue,
+        projectedRevenue,
+        displayRevenue,
+        spendMonthly,
+        profitMonthly,
+        displayProfit,
+        margin,
+        calls: Number(account.callCount || 0),
+      };
+    }).sort((a, b) => {
+      const toneRank = { bad: 0, warn: 1, watch: 2, good: 3 };
+      return (toneRank[a.tone] ?? 4) - (toneRank[b.tone] ?? 4) || a.score - b.score || b.spendMonthly - a.spendMonthly;
+    });
+
+    const counts = rows.reduce(
+      (acc, row) => {
+        acc[row.tone] = (acc[row.tone] || 0) + 1;
+        return acc;
+      },
+      { bad: 0, warn: 0, watch: 0, good: 0 }
+    );
+
+    return {
+      rows,
+      urgent: rows.filter((row) => row.tone === "bad" || row.tone === "warn").slice(0, 6),
+      counts,
+      averageScore: rows.length ? Math.round(rows.reduce((sum, row) => sum + row.score, 0) / rows.length) : 0,
+    };
+  }, [customerAccounts, customerFinancialRows.rows, settings?.ownerPhone]);
+
   const callInsights = useMemo(() => {
     const rows = calls || [];
     const total = rows.length;
@@ -2224,9 +2336,9 @@ export default function AdminDashboard() {
               {[
                 ["Customers", customerAccounts.length, "Accounts found"],
                 ["Ready", customerAccounts.filter((account) => account.statusLabel === "Ready").length, "Operational"],
-                ["Needs Setup", customerAccounts.filter((account) => account.statusLabel === "Needs Setup").length, "Missing a step"],
-                ["Calls", customerAccounts.reduce((total, account) => total + Number(account.callCount || 0), 0), "Linked to businesses"],
-                ["Provider Spend", moneyCompact(customerAccounts.reduce((total, account) => total + Number(account.cost?.totalInternalCost || 0), 0)), "Tracked customer cost"],
+                ["Health Score", customerHealthQueue.averageScore ? `${customerHealthQueue.averageScore}%` : "—", `${customerHealthQueue.counts.bad + customerHealthQueue.counts.warn} urgent`],
+                ["Profit / Mo", moneyDashboard(customerFinancialRows.totals.profitMonthly), `${percentDashboard(customerFinancialRows.totals.margin)} margin`],
+                ["Provider Spend", moneyDashboard(customerFinancialRows.totals.providerMonthlySpend), "Projected monthly"],
               ].map(([label, value, copy]) => (
                 <div key={label} className="admin-customer-kpi">
                   <span>{label}</span>
@@ -2235,6 +2347,55 @@ export default function AdminDashboard() {
                 </div>
               ))}
             </div>
+
+            <section className="admin-customer-card admin-health-queue">
+              <div className="admin-customer-card-head">
+                <div>
+                  <span>Customer Health Queue</span>
+                  <h3>Fix the accounts that can cost you money first</h3>
+                </div>
+                <p>{customerHealthQueue.rows.length} scored customer(s)</p>
+              </div>
+              <div className="admin-health-queue-list">
+                {customerHealthQueue.rows.length ? customerHealthQueue.rows.slice(0, 6).map((row, index) => (
+                  <div key={row.key} className={"admin-health-row is-" + row.tone}>
+                    <button
+                      type="button"
+                      className="admin-health-main"
+                      onClick={() => setSelectedCustomerKey(row.account.key)}
+                    >
+                      <span className="admin-health-rank">{index + 1}</span>
+                      <span className="admin-health-score">
+                        <strong>{row.score}</strong>
+                        <em>{row.label}</em>
+                      </span>
+                      <span className="admin-health-name">
+                        <strong>{row.account.businessName || row.account.ownerName || "Unknown customer"}</strong>
+                        <em>{row.why}</em>
+                      </span>
+                    </button>
+                    <div className="admin-health-money">
+                      <span><b>{moneyDashboard(row.displayRevenue)}</b> {row.monthlyRevenue ? "revenue" : "pipeline"}</span>
+                      <span><b>{moneyDashboard(row.spendMonthly)}</b> spend</span>
+                      <span className={row.displayProfit >= 0 ? "is-good" : "is-bad"}><b>{moneyDashboard(row.displayProfit)}</b> {row.monthlyRevenue ? "profit" : "projected"}</span>
+                    </div>
+                    <div className="admin-health-issues">
+                      {row.issues.length ? row.issues.slice(0, 3).map((issue) => <span key={issue}>{issue}</span>) : <span>Clear</span>}
+                    </div>
+                    <button
+                      type="button"
+                      className="admin-health-action"
+                      onClick={() => {
+                        setSelectedCustomerKey(row.account.key);
+                        setActiveTab(row.actionTab);
+                      }}
+                    >
+                      {row.action}
+                    </button>
+                  </div>
+                )) : <div className="admin-customer-empty">No customers to score yet.</div>}
+              </div>
+            </section>
 
             <div className="admin-customer-layout">
               <section className="admin-customer-card admin-customer-list-card">

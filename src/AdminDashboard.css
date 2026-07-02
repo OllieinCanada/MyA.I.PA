@@ -3146,6 +3146,187 @@
   font-size: 0.9rem;
 }
 
+.admin-health-queue {
+  padding-bottom: 0.85rem;
+}
+
+.admin-health-queue-list {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.admin-health-row {
+  display: grid;
+  grid-template-columns: minmax(18rem, 1.05fr) minmax(15rem, 0.85fr) minmax(14rem, 0.8fr) auto;
+  align-items: center;
+  gap: 0.75rem;
+  border: 1px solid #e8eef6;
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 0.75rem;
+}
+
+.admin-health-row.is-bad {
+  border-color: #ffd0d0;
+  background: #fff7f7;
+}
+
+.admin-health-row.is-warn {
+  border-color: #f1d79a;
+  background: #fffaf0;
+}
+
+.admin-health-row.is-watch {
+  border-color: #c9dcff;
+  background: #f3f7ff;
+}
+
+.admin-health-row.is-good {
+  border-color: #ccead8;
+  background: #f4fbf7;
+}
+
+.admin-health-main {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.75rem;
+  border: 0;
+  background: transparent;
+  color: #172033;
+  padding: 0;
+  text-align: left;
+}
+
+.admin-health-rank {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  background: #172033;
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 950;
+}
+
+.admin-health-score {
+  display: grid;
+  place-items: center;
+  width: 4.1rem;
+  min-height: 3.4rem;
+  border: 1px solid #dfe7f1;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.admin-health-score strong {
+  color: #07142a;
+  font-size: 1.25rem;
+  font-weight: 950;
+}
+
+.admin-health-score em {
+  color: #62758b;
+  font-size: 0.62rem;
+  font-style: normal;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.admin-health-name strong,
+.admin-health-name em {
+  display: block;
+}
+
+.admin-health-name strong {
+  color: #07142a;
+  font-size: 0.98rem;
+  font-weight: 950;
+}
+
+.admin-health-name em {
+  margin-top: 0.18rem;
+  color: #62758b;
+  font-size: 0.78rem;
+  font-style: normal;
+  font-weight: 750;
+}
+
+.admin-health-money {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.45rem;
+}
+
+.admin-health-money span {
+  border: 1px solid #e8eef6;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.72);
+  color: #62758b;
+  padding: 0.48rem;
+  font-size: 0.68rem;
+  font-weight: 850;
+}
+
+.admin-health-money b {
+  display: block;
+  color: #07142a;
+  font-size: 0.86rem;
+  font-weight: 950;
+}
+
+.admin-health-money .is-good b {
+  color: #16794b;
+}
+
+.admin-health-money .is-bad b {
+  color: #b42318;
+}
+
+.admin-health-issues {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.admin-health-issues span {
+  border-radius: 999px;
+  background: #edf2f8;
+  color: #42526a;
+  padding: 0.3rem 0.55rem;
+  font-size: 0.66rem;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.admin-health-row.is-bad .admin-health-issues span {
+  background: #ffe3e3;
+  color: #b42318;
+}
+
+.admin-health-row.is-warn .admin-health-issues span {
+  background: #fff0c7;
+  color: #8a5a12;
+}
+
+.admin-health-row.is-good .admin-health-issues span {
+  background: #eaf8f0;
+  color: #16794b;
+}
+
+.admin-health-action {
+  min-height: 2.55rem;
+  border: 1px solid #176bff;
+  border-radius: 999px;
+  background: #176bff;
+  color: #fff;
+  padding: 0.58rem 0.9rem;
+  font-size: 0.78rem;
+  font-weight: 950;
+  white-space: nowrap;
+}
+
 .admin-customer-hero {
   padding: 1.15rem;
 }
@@ -3386,7 +3567,8 @@
 @media (max-width: 1180px) {
   .admin-customer-header,
   .admin-customer-layout,
-  .admin-customer-two-col {
+  .admin-customer-two-col,
+  .admin-health-row {
     grid-template-columns: 1fr;
   }
 
@@ -3405,6 +3587,10 @@
   .admin-customer-metric-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .admin-health-action {
+    width: fit-content;
+  }
 }
 
 @media (max-width: 720px) {
@@ -3412,12 +3598,20 @@
   .admin-customer-metric-grid,
   .admin-customer-check-grid,
   .admin-customer-row-metrics,
-  .admin-customer-link-row {
+  .admin-customer-link-row,
+  .admin-health-main,
+  .admin-health-money {
     grid-template-columns: 1fr;
   }
 
   .admin-customer-card-head {
     display: block;
+  }
+
+  .admin-health-score {
+    width: 100%;
+    place-items: start;
+    padding: 0.65rem;
   }
 }
 
