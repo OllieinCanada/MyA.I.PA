@@ -28,5 +28,6 @@ ensureDir(docsDir);
 removeDir(path.join(docsDir, "static"));
 copyDir(buildDir, docsDir);
 fs.writeFileSync(path.join(docsDir, ".nojekyll"), "");
+fs.copyFileSync(path.join(docsDir, "index.html"), path.join(docsDir, "404.html"));
 
 console.log("Done. docs/ now contains the latest production build.");

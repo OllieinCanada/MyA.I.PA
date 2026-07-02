@@ -10,7 +10,14 @@ export function isLocalBrowser() {
   return /^(localhost|127\.0\.0\.1|\[?::1\]?)$/i.test(window.location.hostname);
 }
 
+export function getApiBaseUrl(configuredValue) {
+  const configured = normalizeApiBase(configuredValue || "");
+  if (configured) return configured;
+  return getDefaultApiBaseUrl();
+}
+
 export function getDefaultApiBaseUrl() {
+  if (isLocalBrowser()) return LOCAL_API_BASE_URL;
   return PRODUCTION_API_BASE_URL;
 }
 
