@@ -141,6 +141,105 @@ function moneyCompact(value) {
   return `$${n.toFixed(n < 10 ? 4 : 2)}`;
 }
 
+const DEFAULT_MONTHLY_REVENUE_USD = Number(process.env.REACT_APP_MONTHLY_PRICE_USD || process.env.REACT_APP_SUBSCRIPTION_PRICE_USD || 79) || 79;
+
+function moneyDashboard(value) {
+  const n = Number(value || 0);
+  if (!Number.isFinite(n)) return "$0.00";
+  const safe = Object.is(n, -0) ? 0 : n;
+  const formatted = Math.abs(safe).toFixed(Math.abs(safe) < 10 ? 2 : 0);
+  return safe < 0 ? `-$${formatted}` : `$${formatted}`;
+}
+
+function percentDashboard(value) {
+  if (value == null || value === "") return "—";
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "—";
+  return `${Math.round(n)}%`;
+}
+
+function maybeCentsToDollars(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return n > 1000 ? n / 100 : n;
+}
+
+function signupRevenueAmount(signup) {
+  if (!signup) return 0;
+  return (
+    maybeCentsToDollars(signup.monthlyRevenue) ||
+    maybeCentsToDollars(signup.subscriptionAmount) ||
+    maybeCentsToDollars(signup.amountMonthly) ||
+    maybeCentsToDollars(signup.priceAmount) ||
+    maybeCentsToDollars(signup.amountTotal) ||
+    maybeCentsToDollars(signup.amount)
+  );
+}
+
+function paymentStateForAccount(account) {
+  const raw = [
+    account?.subscriptionStatus,
+    account?.signup?.subscriptionStatus,
+    account?.signup?.paymentStatus,
+    account?.signup?.checkoutStatus,
+    account?.signup?.status,
+    account?.trial?.subscriptionStatus,
+  ].filter(Boolean).join(" ").toLowerCase();
+
+  if (/past_due|unpaid|failed|cancelled|canceled|expired|rejected|error/.test(raw)) {
+    return { key: "problem", label: "Problem" };
+  }
+  if (/\bactive\b|\bpaid\b|subscription_active/.test(raw)) {
+    return { key: "paying", label: "Paying" };
+  }
+  if (/trial|checkout_completed|setup_started|subscription_trialing/.test(raw) || account?.trial?.expiry) {
+    return { key: "trialing", label: "Trialing" };
+  }
+  if (/checkout|pending|open|incomplete|requires|not linked|signup/.test(raw)) {
+    return { key: "pending", label: "Pending" };
+  }
+  return { key: "unknown", label: "Unknown" };
+}
+
+function paymentBadgeClass(key) {
+  if (key === "paying") return "admin-money-badge admin-money-badge-good";
+  if (key === "trialing") return "admin-money-badge admin-money-badge-info";
+  if (key === "problem") return "admin-money-badge admin-money-badge-bad";
+  return "admin-money-badge admin-money-badge-warn";
+}
+
+function callOutcomeBadgeClass(outcome) {
+  const value = String(outcome || "UNREVIEWED").toUpperCase();
+  if (value === "BOOKED") return "admin-call-badge admin-call-badge-good";
+  if (value === "EMERGENCY" || value === "QUOTE_NEEDED" || value === "FOLLOW_UP") return "admin-call-badge admin-call-badge-warn";
+  if (value === "SPAM" || value === "NOT_A_LEAD") return "admin-call-badge admin-call-badge-muted";
+  return "admin-call-badge admin-call-badge-info";
+}
+
+function callStatusBadgeClass(status) {
+  const value = String(status || "").toUpperCase();
+  if (value === "COMPLETED") return "admin-call-badge admin-call-badge-good";
+  if (value === "MISSED" || value === "FAILED") return "admin-call-badge admin-call-badge-bad";
+  return "admin-call-badge admin-call-badge-info";
+}
+
+function callDurationText(seconds) {
+  const n = Number(seconds || 0);
+  if (!Number.isFinite(n) || n <= 0) return "—";
+  if (n < 60) return `${Math.round(n)}s`;
+  const mins = Math.floor(n / 60);
+  const secs = Math.round(n % 60);
+  return secs ? `${mins}m ${secs}s` : `${mins}m`;
+}
+
+function callScoreClass(score) {
+  const n = Number(score);
+  if (!Number.isFinite(n)) return "admin-call-score";
+  if (n >= 80) return "admin-call-score is-good";
+  if (n >= 55) return "admin-call-score is-warn";
+  return "admin-call-score is-bad";
+}
+
 function textKey(value) {
   return String(value || "").trim().toLowerCase();
 }
@@ -854,6 +953,7 @@ export default function AdminDashboard() {
 
   const [leads, setLeads] = useState([]);
   const [calls, setCalls] = useState([]);
+  const [selectedCall, setSelectedCall] = useState(null);
   const [signups, setSignups] = useState([]);
   const [analytics, setAnalytics] = useState([]);
   const [trialHealth, setTrialHealth] = useState([]);
@@ -915,6 +1015,80 @@ export default function AdminDashboard() {
     if (!setupItems.length) return 0;
     return Math.round((setupItems.filter((item) => item.ok).length / setupItems.length) * 100);
   }, [setupItems]);
+
+  const systemHealth = useMemo(() => {
+    const env = opsOverview.sync?.env || {};
+    const makeOk = signups.some((signup) => Number(signup.makeStatus || 0) >= 200 && Number(signup.makeStatus || 0) < 300);
+    const mappedBusinesses = Number(opsOverview.sync?.mappedBusinessCount || 0);
+    const syncedRecords = Number(opsOverview.sync?.syncStoreCount || 0);
+    const services = [
+      {
+        label: "Render API",
+        status: API_SOURCE_LABEL === "Live Render API" ? "Connected" : "Local",
+        ok: API_SOURCE_LABEL === "Live Render API",
+        detail: API_SOURCE_LABEL,
+        action: API_SOURCE_LABEL === "Live Render API" ? "Live admin API" : "Preview is using local API",
+      },
+      {
+        label: "Database",
+        status: env.databaseAvailable ? "Connected" : "Problem",
+        ok: Boolean(env.databaseAvailable),
+        detail: "Postgres",
+        action: env.databaseAvailable ? "Reads and writes available" : "Check DATABASE_URL / Render Postgres",
+      },
+      {
+        label: "Stripe",
+        status: env.stripeConfigured ? "Connected" : "Missing",
+        ok: Boolean(env.stripeConfigured),
+        detail: "Checkout + webhooks",
+        action: env.stripeConfigured ? "Trials and subscriptions can update" : "Add Stripe keys and webhook secret",
+      },
+      {
+        label: "Vapi",
+        status: env.vapiApiKeyConfigured ? "Connected" : "Missing",
+        ok: Boolean(env.vapiApiKeyConfigured),
+        detail: `${vapiInventory.totals?.phoneNumbers ?? vapiInventory.phoneNumbers?.length ?? 0} numbers`,
+        action: env.vapiApiKeyConfigured ? `${syncedRecords} synced records` : "Add VAPI_API_KEY",
+      },
+      {
+        label: "Twilio",
+        status: env.twilioConfigured ? "Connected" : "Missing",
+        ok: Boolean(env.twilioConfigured),
+        detail: "Cost sync",
+        action: env.twilioConfigured ? "Per-call costs can sync" : "Add Twilio SID/token",
+      },
+      {
+        label: "Make",
+        status: makeOk ? "Handoff OK" : "Waiting",
+        ok: makeOk || !signups.length,
+        detail: "Signup automation",
+        action: makeOk ? "Recent signup handoff accepted" : signups.length ? "Check latest Make scenario run" : "No signup handoff observed yet",
+      },
+      {
+        label: "Mappings",
+        status: mappedBusinesses ? "Mapped" : "Needs setup",
+        ok: Boolean(mappedBusinesses),
+        detail: `${mappedBusinesses} customers`,
+        action: mappedBusinesses ? "Calls can attach to owners" : "Map Vapi numbers to customers",
+      },
+      {
+        label: "Admin Password",
+        status: env.adminPasswordLooksDefault ? "Weak" : "Set",
+        ok: Boolean(opsOverview.sync && !env.adminPasswordLooksDefault),
+        detail: "Dashboard gate",
+        action: env.adminPasswordLooksDefault ? "Change ADMIN_PASSWORD" : "Protected",
+      },
+    ];
+    const warnings = [
+      ...(opsOverview.sync?.warnings || []),
+      ...(vapiInventory.warnings || []),
+      ...(costAudit?.warnings || []),
+    ].filter(Boolean);
+    const connected = services.filter((item) => item.ok).length;
+    const score = services.length ? Math.round((connected / services.length) * 100) : 0;
+    const actionItems = services.filter((item) => !item.ok).slice(0, 5);
+    return { services, warnings, connected, score, actionItems };
+  }, [costAudit?.warnings, opsOverview.sync, signups, vapiInventory.phoneNumbers, vapiInventory.totals, vapiInventory.warnings]);
 
   const customerAccounts = useMemo(() => {
     const accounts = [];
@@ -1134,6 +1308,199 @@ export default function AdminDashboard() {
     if (!(selectedCustomer.ownerPhone || settings?.ownerPhone)) return "Add the owner phone so text alerts can go to the right person.";
     return "Nothing urgent. This customer is ready. Watch new calls, leads, and costs.";
   }, [selectedCustomer, settings?.ownerPhone]);
+
+  const selectedCustomerOps = useMemo(() => {
+    if (!selectedCustomer) {
+      return {
+        calls: [],
+        vapiCalls: [],
+        twilioCalls: [],
+        connectionRows: [],
+        transcriptCount: 0,
+        recordingCount: 0,
+        totalVapiCost: 0,
+        totalTwilioCost: 0,
+        totalInternalCost: 0,
+      };
+    }
+
+    const seenCalls = new Set();
+    const callsForCustomer = [];
+    (selectedCustomer.recentCalls || []).forEach((call) => {
+      const key = call.id || call.externalId || call.twilioCallSid || `${call.startedAt || ""}:${call.caller?.phone || ""}`;
+      if (seenCalls.has(key)) return;
+      seenCalls.add(key);
+      callsForCustomer.push(call);
+    });
+
+    const hasVapiRecord = (call) => String(call.externalProvider || "").toLowerCase() === "vapi" || Boolean(call.externalId || call.vapiCallId);
+    const hasTwilioRecord = (call) => Boolean(call.twilioCallSid || call.twilioPrice != null || call.twilioCost != null || call.twilioPriceUnit);
+    const sum = (rows, getter) => rows.reduce((total, row) => total + Number(getter(row) || 0), 0);
+    const vapiCalls = callsForCustomer.filter(hasVapiRecord);
+    const twilioCalls = callsForCustomer.filter(hasTwilioRecord);
+    const totalVapiCost = Number(selectedCustomer.cost?.vapiCost ?? sum(callsForCustomer, (call) => call.vapiCost));
+    const totalTwilioCost = Number(selectedCustomer.cost?.twilioCost ?? sum(callsForCustomer, (call) => call.twilioPrice || call.twilioCost));
+    const totalInternalCost = Number(selectedCustomer.cost?.totalInternalCost ?? sum(callsForCustomer, (call) => call.totalInternalCost));
+    const transcriptCount = callsForCustomer.filter((call) => call.transcriptAvailable || call.transcript).length;
+    const recordingCount = callsForCustomer.filter((call) => call.recordingAvailable || call.recordingUrl).length;
+
+    const connectionRows = [];
+    (selectedCustomer.aiNumbers || []).forEach((number) => {
+      connectionRows.push({
+        key: `ai:${number}`,
+        type: "AI number",
+        value: number,
+        detail: number === selectedCustomer.twilioPhoneNumber ? "Assigned Twilio number" : "Mapped number",
+        state: "Linked",
+      });
+    });
+    (selectedCustomer.vapiMappings || []).forEach((mapping, index) => {
+      connectionRows.push({
+        key: `vapi:${mapping.id || index}`,
+        type: "Vapi mapping",
+        value: mapping.matchValue || mapping.label || mapping.id || "Mapping",
+        detail: [mapping.matchType, mapping.label].filter(Boolean).join(" · ") || "Assistant/customer mapping",
+        state: "Linked",
+      });
+    });
+
+    const twilioSidRows = [];
+    const seenTwilioSids = new Set();
+    callsForCustomer.forEach((call) => {
+      if (!call.twilioCallSid || seenTwilioSids.has(call.twilioCallSid)) return;
+      seenTwilioSids.add(call.twilioCallSid);
+      twilioSidRows.push({
+        key: `twilio:${call.twilioCallSid}`,
+        type: "Twilio call",
+        value: call.twilioCallSid,
+        detail: `${dt(call.startedAt)} · ${moneyCompact(call.twilioPrice || call.twilioCost)}`,
+        state: "Synced",
+      });
+    });
+
+    if (!connectionRows.length) {
+      connectionRows.push({
+        key: "empty",
+        type: "No number linked",
+        value: "Assign a Vapi/Twilio number",
+        detail: "Calls cannot be tracked to this customer until a number or mapping exists.",
+        state: "Missing",
+      });
+    }
+
+    return {
+      calls: callsForCustomer,
+      vapiCalls,
+      twilioCalls,
+      connectionRows: [...connectionRows, ...twilioSidRows.slice(0, 5)],
+      transcriptCount,
+      recordingCount,
+      totalVapiCost,
+      totalTwilioCost,
+      totalInternalCost,
+    };
+  }, [selectedCustomer]);
+
+  const customerFinancialRows = useMemo(() => {
+    const days = Math.max(Number(costAudit?.days || costDays || 30), 1);
+    const planRevenue = DEFAULT_MONTHLY_REVENUE_USD;
+    const rows = customerAccounts.map((account) => {
+      const payment = paymentStateForAccount(account);
+      const configuredRevenue = signupRevenueAmount(account.signup) || planRevenue;
+      const monthlyRevenue = payment.key === "paying" ? configuredRevenue : 0;
+      const spendWindow = Number(account.cost?.totalInternalCost || 0);
+      const spendMonthly = Number((spendWindow * (30 / days)).toFixed(2));
+      const profitMonthly = Number((monthlyRevenue - spendMonthly).toFixed(2));
+      const margin = monthlyRevenue > 0 ? (profitMonthly / monthlyRevenue) * 100 : null;
+      const callsWindow = Number(account.cost?.totalCalls || account.callCount || 0);
+      const projectedRevenue = payment.key === "trialing" ? configuredRevenue : 0;
+      const nextAction =
+        payment.key === "paying"
+          ? profitMonthly < 0
+            ? "Check call volume or pricing."
+            : "Healthy paying account."
+          : payment.key === "trialing"
+            ? "Watch trial conversion."
+            : payment.key === "problem"
+              ? "Fix Stripe/payment status."
+              : "Get Stripe checkout completed.";
+
+      return {
+        account,
+        key: account.key,
+        businessName: account.businessName || account.ownerName || account.ownerEmail || "Unknown customer",
+        owner: account.ownerName || account.ownerEmail || account.ownerPhone || "—",
+        phone: account.aiNumbers?.[0] || account.twilioPhoneNumber || account.businessPhone || "—",
+        payment,
+        monthlyRevenue,
+        projectedRevenue,
+        configuredRevenue,
+        spendWindow,
+        spendMonthly,
+        profitMonthly,
+        margin,
+        callsWindow,
+        nextAction,
+      };
+    }).sort((a, b) => {
+      const stateRank = { paying: 0, trialing: 1, pending: 2, problem: 3, unknown: 4 };
+      return (stateRank[a.payment.key] ?? 5) - (stateRank[b.payment.key] ?? 5) || b.spendMonthly - a.spendMonthly;
+    });
+
+    const providerWindowSpend = Number(costAudit?.totals?.estimatedProviderCost || costAudit?.totals?.totalInternalCost || 0);
+    const providerMonthlySpend = Number((providerWindowSpend * (30 / days)).toFixed(2));
+    const customerWindowSpend = rows.reduce((sum, row) => sum + row.spendWindow, 0);
+    const revenueMonthly = rows.reduce((sum, row) => sum + row.monthlyRevenue, 0);
+    const projectedTrialRevenue = rows.reduce((sum, row) => sum + row.projectedRevenue, 0);
+    const profitMonthly = Number((revenueMonthly - providerMonthlySpend).toFixed(2));
+    const margin = revenueMonthly > 0 ? (profitMonthly / revenueMonthly) * 100 : null;
+    const paying = rows.filter((row) => row.payment.key === "paying").length;
+    const trialing = rows.filter((row) => row.payment.key === "trialing").length;
+    const attention = rows.filter((row) =>
+      row.payment.key === "problem" ||
+      row.payment.key === "pending" ||
+      (row.payment.key === "paying" && row.profitMonthly < 0) ||
+      (row.payment.key === "unknown" && row.spendWindow > 0)
+    ).slice(0, 6);
+
+    return {
+      rows,
+      attention,
+      days,
+      totals: {
+        paying,
+        trialing,
+        revenueMonthly,
+        projectedTrialRevenue,
+        providerWindowSpend,
+        providerMonthlySpend,
+        customerWindowSpend,
+        unallocatedWindowSpend: Math.max(providerWindowSpend - customerWindowSpend, 0),
+        profitMonthly,
+        margin,
+      },
+    };
+  }, [customerAccounts, costAudit?.days, costAudit?.totals, costDays]);
+
+  const callInsights = useMemo(() => {
+    const rows = calls || [];
+    const total = rows.length;
+    const unreviewed = rows.filter((call) => !call.outcome || call.outcome === "UNREVIEWED").length;
+    const followUps = rows.filter((call) => call.followUpNeeded || call.outcome === "FOLLOW_UP").length;
+    const booked = rows.filter((call) => call.outcome === "BOOKED").length;
+    const scores = rows.map((call) => Number(call.qualityScore)).filter((score) => Number.isFinite(score));
+    const durations = rows.map((call) => Number(call.durationSec)).filter((duration) => Number.isFinite(duration) && duration > 0);
+    const avgScore = scores.length ? Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length) : null;
+    const avgDuration = durations.length ? Math.round(durations.reduce((sum, duration) => sum + duration, 0) / durations.length) : 0;
+    const queue = rows
+      .filter((call) => {
+        const outcome = call.outcome || "UNREVIEWED";
+        const score = Number(call.qualityScore);
+        return outcome === "UNREVIEWED" || outcome === "EMERGENCY" || outcome === "FOLLOW_UP" || call.followUpNeeded || (Number.isFinite(score) && score < 60);
+      })
+      .slice(0, 5);
+    return { total, unreviewed, followUps, booked, avgScore, avgDuration, queue };
+  }, [calls]);
 
   const fixFirstItems = useMemo(() => {
     const items = [];
@@ -1442,18 +1809,19 @@ export default function AdminDashboard() {
 
   const exportCostsCsv = () => {
     downloadCsv(
-      `myai-admin-costs-${costDays || 30}d.csv`,
-      ["Business", "Phone", "Calls", "Priced", "Vapi", "Twilio", "Total", "Average", "Last call"],
-      (costAudit?.summary || []).map((row) => [
+      `myai-admin-profitability-${costDays || 30}d.csv`,
+      ["Customer", "Owner", "Phone", "Payment", "Revenue per month", "Provider spend per month", "Profit per month", "Margin", "Calls", "Next action"],
+      (customerFinancialRows.rows || []).map((row) => [
         row.businessName,
-        row.phoneNumber,
-        row.totalCalls,
-        row.pricedCalls,
-        row.vapiCost ?? "",
-        row.twilioCost ?? "",
-        row.totalInternalCost ?? "",
-        row.averageCost ?? "",
-        row.lastCallAt || "",
+        row.owner,
+        row.phone,
+        row.payment.label,
+        row.monthlyRevenue,
+        row.spendMonthly,
+        row.profitMonthly,
+        row.margin == null ? "" : `${Math.round(row.margin)}%`,
+        row.callsWindow,
+        row.nextAction,
       ])
     );
   };
@@ -1506,6 +1874,7 @@ export default function AdminDashboard() {
       if (activeTab === "ops") await loadAnalytics();
       if (activeTab === "health") await loadTrialHealth();
       if (activeTab === "costs") await loadCostAudit();
+      if (activeTab === "sync") await Promise.allSettled([loadOpsOverview(), loadVapiInventory(), loadCostAudit()]);
       if (activeTab === "vapi") await loadVapiInventory();
       if (activeTab === "mappings") await loadVapiMappings();
       if (activeTab === "digest") await loadDigest();
@@ -1630,6 +1999,17 @@ export default function AdminDashboard() {
     try {
       await api(`/api/admin/calls/${call.id}/notes`, { method: "POST", body: { body } });
       await loadCalls();
+    } catch (err) {
+      setError(cleanErrorMessage(err.message));
+    }
+  };
+
+  const loadCallDetails = async (call) => {
+    if (!call?.id) return;
+    setError("");
+    try {
+      const data = await api(`/api/admin/calls/${call.id}`);
+      setSelectedCall(data.call || call);
     } catch (err) {
       setError(cleanErrorMessage(err.message));
     }
@@ -1822,252 +2202,210 @@ export default function AdminDashboard() {
         ) : null}
 
         {activeTab === "customers" ? (
-          <div className="mt-4 grid gap-4">
-            <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="admin-customer-page">
+            <div className="admin-customer-header">
               <div>
-                <div className="text-sm font-bold uppercase tracking-[0.2em] text-white/60">Customers</div>
-                <p className="mt-1 text-sm font-semibold text-white/55">Pick a customer. Check the color. Do the next action.</p>
+                <div className="admin-customer-eyebrow">Customer Command Center</div>
+                <h2>Business drill-down</h2>
+                <p>Select a business to see its Vapi records, Twilio usage, call logs, setup state, and spend together.</p>
               </div>
-              <div className="flex flex-wrap gap-2">
-                <button type="button" onClick={refresh} className="rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm font-bold text-white/80">Refresh</button>
-                <button type="button" onClick={syncVapiCalls} className="rounded-full border border-emerald-300/25 bg-emerald-300/10 px-4 py-2 text-sm font-bold text-emerald-100">Sync Calls</button>
-                <button type="button" onClick={syncCosts} className="rounded-full bg-gradient-to-r from-emerald-700 to-amber-500 px-5 py-2 text-sm font-black uppercase tracking-[0.12em] text-white">Sync Costs</button>
+              <div className="admin-customer-actions">
+                <button type="button" onClick={refresh}>Refresh</button>
+                <button type="button" onClick={syncVapiCalls}>Sync Calls</button>
+                <button type="button" onClick={syncCosts} className="admin-customer-primary">Sync Costs</button>
               </div>
             </div>
 
-            {vapiSyncStatus ? <p className="text-sm font-semibold text-emerald-100">{vapiSyncStatus}</p> : null}
+            {vapiSyncStatus ? <div className="admin-customer-status">{vapiSyncStatus}</div> : null}
 
             <FixFirstPanel items={fixFirstItems} onOpen={setActiveTab} onSyncCalls={syncVapiCalls} />
 
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+            <div className="admin-customer-kpis">
               {[
-                ["All Customers", customerAccounts.length, "Every account found"],
-                ["Ready", customerAccounts.filter((account) => account.statusLabel === "Ready").length, "No action needed"],
-                ["Needs Setup", customerAccounts.filter((account) => account.statusLabel === "Needs Setup").length, "Do the next action"],
-                ["Problems", customerAccounts.filter((account) => account.statusLabel === "Problem").length, "Blocked or broken"],
-                ["Calls", customerAccounts.reduce((total, account) => total + Number(account.callCount || 0), 0), "Matched to accounts"],
+                ["Customers", customerAccounts.length, "Accounts found"],
+                ["Ready", customerAccounts.filter((account) => account.statusLabel === "Ready").length, "Operational"],
+                ["Needs Setup", customerAccounts.filter((account) => account.statusLabel === "Needs Setup").length, "Missing a step"],
+                ["Calls", customerAccounts.reduce((total, account) => total + Number(account.callCount || 0), 0), "Linked to businesses"],
+                ["Provider Spend", moneyCompact(customerAccounts.reduce((total, account) => total + Number(account.cost?.totalInternalCost || 0), 0)), "Tracked customer cost"],
               ].map(([label, value, copy]) => (
-                <div key={label} className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                  <div className="text-xs font-black uppercase tracking-[0.18em] text-white/50">{label}</div>
-                  <div className="mt-1 text-2xl font-extrabold text-white">{value}</div>
-                  <div className="mt-1 text-xs font-semibold text-white/45">{copy}</div>
+                <div key={label} className="admin-customer-kpi">
+                  <span>{label}</span>
+                  <strong>{value}</strong>
+                  <em>{copy}</em>
                 </div>
               ))}
             </div>
 
-            <div className="grid gap-4 xl:grid-cols-[0.85fr_1.15fr]">
-              <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="text-sm font-bold uppercase tracking-[0.2em] text-white/60">Accounts</div>
-                  <div className="text-xs font-semibold text-white/45">{customerAccounts.length} total</div>
+            <div className="admin-customer-layout">
+              <section className="admin-customer-card admin-customer-list-card">
+                <div className="admin-customer-card-head">
+                  <div>
+                    <span>Businesses</span>
+                    <h3>Click a business name</h3>
+                  </div>
+                  <p>{customerAccounts.length} total</p>
                 </div>
-                <div className="mt-4 grid gap-2">
+                <div className="admin-customer-list-v2">
                   {customerAccounts.length ? customerAccounts.map((account) => (
                     <button
                       key={account.key}
                       type="button"
                       onClick={() => setSelectedCustomerKey(account.key)}
-                      className={
-                        "rounded-2xl border p-3 text-left transition " +
-                        (selectedCustomer?.key === account.key ? "border-emerald-300/35 bg-emerald-300/10" : "border-white/10 bg-white/5 hover:bg-white/10")
-                      }
+                      className={"admin-customer-row-v2 " + (selectedCustomer?.key === account.key ? "is-selected" : "")}
                     >
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <div className="text-base font-extrabold text-white">{account.businessName || "Unnamed business"}</div>
-                          <div className="mt-1 text-xs font-semibold text-white/50">{displayValue(account.ownerName, "No owner")} · {displayValue(account.ownerPhone || account.ownerEmail, "No contact")}</div>
-                        </div>
-                        <span className={"rounded-full border px-2 py-1 text-[0.68rem] font-black uppercase tracking-[0.1em] " + simpleStatusClasses(account.statusLabel)}>
-                          {account.statusLabel}
-                        </span>
+                      <div>
+                        <strong>{account.businessName || "Unnamed business"}</strong>
+                        <small>{displayValue(account.ownerName, "No owner")} · {displayValue(account.ownerPhone || account.ownerEmail, "No contact")}</small>
                       </div>
-                      <div className="mt-3 grid grid-cols-4 gap-2 text-center">
-                        <div className="rounded-lg bg-black/20 px-2 py-2"><div className="text-sm font-black text-white">{account.aiNumbers.length || account.vapiMappings.length}</div><div className="text-[0.62rem] font-bold uppercase text-white/40">Nums</div></div>
-                        <div className="rounded-lg bg-black/20 px-2 py-2"><div className="text-sm font-black text-white">{account.callCount}</div><div className="text-[0.62rem] font-bold uppercase text-white/40">Calls</div></div>
-                        <div className="rounded-lg bg-black/20 px-2 py-2"><div className="text-sm font-black text-white">{account.leadCount}</div><div className="text-[0.62rem] font-bold uppercase text-white/40">Leads</div></div>
-                        <div className="rounded-lg bg-black/20 px-2 py-2"><div className="text-sm font-black text-white">{moneyCompact(account.cost?.totalInternalCost)}</div><div className="text-[0.62rem] font-bold uppercase text-white/40">Cost</div></div>
+                      <span className={"admin-customer-status-pill is-" + String(account.statusLabel || "unknown").toLowerCase().replace(/\s+/g, "-")}>{account.statusLabel}</span>
+                      <div className="admin-customer-row-metrics">
+                        <span><b>{account.aiNumbers.length || account.vapiMappings.length}</b> nums</span>
+                        <span><b>{account.callCount}</b> calls</span>
+                        <span><b>{moneyCompact(account.cost?.totalInternalCost)}</b> cost</span>
                       </div>
                     </button>
-                  )) : <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-sm font-semibold text-white/55">No customer records found yet.</div>}
+                  )) : <div className="admin-customer-empty">No customer records found yet.</div>}
                 </div>
-              </div>
+              </section>
 
               {selectedCustomer ? (
-                <div className="grid gap-4">
-                  <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
+                <section className="admin-customer-detail">
+                  <div className="admin-customer-card admin-customer-hero">
+                    <div className="admin-customer-hero-main">
                       <div>
-                        <div className="text-2xl font-extrabold text-white">{selectedCustomer.businessName || "Unnamed business"}</div>
-                        <div className="mt-1 text-sm font-semibold text-white/55">
-                          Business #{displayValue(selectedCustomer.businessId)} · {displayValue(selectedCustomer.businessPhone, "No business phone")}
-                        </div>
+                        <div className="admin-customer-eyebrow">Selected Business</div>
+                        <h2>{selectedCustomer.businessName || "Unnamed business"}</h2>
+                        <p>
+                          Business #{displayValue(selectedCustomer.businessId)} · {displayValue(selectedCustomer.businessPhone, "No business phone")} · Owner {displayValue(selectedCustomer.ownerName, "not recorded")}
+                        </p>
                       </div>
-                      <span className={"rounded-full border px-3 py-1 text-xs font-black uppercase tracking-[0.12em] " + simpleStatusClasses(selectedCustomer.statusLabel)}>
-                        {selectedCustomer.statusLabel}
-                      </span>
+                      <span className={"admin-customer-status-pill is-" + String(selectedCustomer.statusLabel || "unknown").toLowerCase().replace(/\s+/g, "-")}>{selectedCustomer.statusLabel}</span>
                     </div>
-
-                    <div className={"mt-4 rounded-2xl border p-4 " + simpleStatusClasses(selectedCustomer.statusLabel)}>
-                      <div className="text-xs font-black uppercase tracking-[0.18em] opacity-75">What do I do next?</div>
-                      <div className="mt-2 text-xl font-extrabold text-white">{selectedCustomerNextAction}</div>
-                      <div className="mt-2 text-xs font-semibold opacity-75">Green means ready. Yellow means setup is missing. Red means something is blocked.</div>
-                    </div>
-
-                    <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                      <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-                        <div className="text-xs font-bold uppercase tracking-[0.16em] text-white/45">Owner</div>
-                        <div className="mt-2 font-extrabold text-white">{displayValue(selectedCustomer.ownerName, "Not recorded")}</div>
-                        <div className="mt-1 text-sm font-semibold text-white/60">{displayValue(selectedCustomer.ownerPhone, "No owner phone")}</div>
-                        <div className="mt-1 text-xs font-semibold text-white/40">{displayValue(selectedCustomer.ownerEmail, "No owner email")}</div>
-                      </div>
-                      <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-                        <div className="text-xs font-bold uppercase tracking-[0.16em] text-white/45">Subscription</div>
-                        <div className="mt-2 font-extrabold text-white">{selectedCustomer.subscriptionStatus}</div>
-                        <div className="mt-1 text-sm font-semibold text-white/60">{selectedCustomer.trial?.expiry?.label || selectedCustomer.signup?.expiry?.label || "No trial date"}</div>
-                        <div className="mt-1 text-xs font-semibold text-white/40">Signup {dt(selectedCustomer.lastSignupAt)}</div>
-                      </div>
-                      <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-                        <div className="text-xs font-bold uppercase tracking-[0.16em] text-white/45">Calls</div>
-                        <div className="mt-2 text-2xl font-extrabold text-white">{selectedCustomer.callCount}</div>
-                        <div className="mt-1 text-sm font-semibold text-white/60">Last call {dt(selectedCustomer.lastCallAt)}</div>
-                        <div className="mt-1 text-xs font-semibold text-white/40">{selectedCustomer.stats?.missedCalls || 0} missed · {selectedCustomer.stats?.followUps || 0} follow-ups</div>
-                      </div>
-                      <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-                        <div className="text-xs font-bold uppercase tracking-[0.16em] text-white/45">Cost</div>
-                        <div className="mt-2 text-2xl font-extrabold text-white">{moneyCompact(selectedCustomer.cost?.totalInternalCost)}</div>
-                        <div className="mt-1 text-sm font-semibold text-white/60">Vapi {moneyCompact(selectedCustomer.cost?.vapiCost)} · Twilio {moneyCompact(selectedCustomer.cost?.twilioCost)}</div>
-                        <div className="mt-1 text-xs font-semibold text-white/40">Avg {moneyCompact(selectedCustomer.cost?.averageCost)} per call</div>
-                      </div>
+                    <div className="admin-customer-next-action">
+                      <span>Next action</span>
+                      <strong>{selectedCustomerNextAction}</strong>
                     </div>
                   </div>
 
-                  <div className="grid gap-4 lg:grid-cols-[1fr_0.9fr]">
-                    <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                      <div className="text-sm font-bold uppercase tracking-[0.2em] text-white/60">Is it working?</div>
-                      <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                        {[
-                          ["Signup", Boolean(selectedCustomer.signup || selectedCustomer.trial), selectedCustomer.lastSignupAt ? dt(selectedCustomer.lastSignupAt) : "No signup linked"],
-                          [
-                            "AI Number",
-                            selectedCustomer.hasNumber,
-                            selectedCustomer.aiNumbers.length
-                              ? selectedCustomer.aiNumbers.join(", ")
-                              : selectedCustomer.vapiMappings.length
-                                ? `${selectedCustomer.vapiMappings.length} mapping(s)`
-                                : "No number",
-                          ],
-                          ["Setup", selectedCustomer.setupReady, `${selectedCustomer.readinessPercent || 0}% ready`],
-                          ["Calls", selectedCustomer.hasCalls, `${selectedCustomer.callCount} call(s) synced`],
-                          ["Leads", selectedCustomer.leadCount > 0, `${selectedCustomer.leadCount} lead(s) captured`],
-                          ["Text Handoff", Boolean(selectedCustomer.ownerPhone || settings?.ownerPhone), selectedCustomer.ownerPhone || settings?.ownerPhone || "Owner text not configured"],
-                        ].map(([label, ok, detail]) => (
-                          <div key={label} className={"rounded-xl border p-3 " + statusClasses(ok)}>
-                            <div className="text-xs font-black uppercase tracking-[0.14em] opacity-70">{ok ? "Ready" : "Missing"}</div>
-                            <div className="mt-1 text-sm font-extrabold text-white">{label}</div>
-                            <div className="mt-1 text-xs font-semibold opacity-80">{detail}</div>
+                  <div className="admin-customer-metric-grid">
+                    <div className="admin-customer-metric"><span>AI Numbers</span><strong>{selectedCustomer.aiNumbers.length || selectedCustomer.vapiMappings.length}</strong><em>{selectedCustomer.aiNumbers[0] || selectedCustomer.vapiMappings[0]?.matchValue || "No number linked"}</em></div>
+                    <div className="admin-customer-metric"><span>Vapi Calls</span><strong>{selectedCustomerOps.vapiCalls.length}</strong><em>{selectedCustomerOps.transcriptCount} transcript(s), {selectedCustomerOps.recordingCount} recording(s)</em></div>
+                    <div className="admin-customer-metric"><span>Twilio Calls</span><strong>{selectedCustomerOps.twilioCalls.length}</strong><em>{moneyCompact(selectedCustomerOps.totalTwilioCost)} Twilio cost</em></div>
+                    <div className="admin-customer-metric"><span>Total Spend</span><strong>{moneyCompact(selectedCustomerOps.totalInternalCost)}</strong><em>Vapi {moneyCompact(selectedCustomerOps.totalVapiCost)} · avg {moneyCompact(selectedCustomer.cost?.averageCost)}</em></div>
+                  </div>
+
+                  <div className="admin-customer-two-col">
+                    <div className="admin-customer-card">
+                      <div className="admin-customer-card-head">
+                        <div>
+                          <span>Vapi + Twilio Links</span>
+                          <h3>Numbers, mappings, and synced provider IDs</h3>
+                        </div>
+                      </div>
+                      <div className="admin-customer-link-list">
+                        {selectedCustomerOps.connectionRows.map((row) => (
+                          <div key={row.key} className={"admin-customer-link-row " + (row.state === "Missing" ? "is-missing" : "")}>
+                            <div>
+                              <strong>{row.type}</strong>
+                              <small>{row.detail}</small>
+                            </div>
+                            <code>{row.value}</code>
+                            <span>{row.state}</span>
                           </div>
                         ))}
                       </div>
-                      <div className="mt-4 flex flex-wrap gap-2">
-                        <button type="button" onClick={() => setActiveTab("setup")} className="rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm font-bold text-white/80">Setup To-Do</button>
-                        <button type="button" onClick={() => setActiveTab("calls")} className="rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm font-bold text-white/80">Calls</button>
-                        <button type="button" onClick={() => setActiveTab("costs")} className="rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm font-bold text-white/80">Costs</button>
-                        <button type="button" onClick={() => setActiveTab("mappings")} className="rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm font-bold text-white/80">Phone Setup</button>
-                      </div>
                     </div>
 
-                    <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                      <div className="text-sm font-bold uppercase tracking-[0.2em] text-white/60">Timeline</div>
-                      <div className="mt-4 grid gap-2">
-                        {selectedCustomer.timeline.length ? selectedCustomer.timeline.map((event) => (
-                          <div key={event.label} className="rounded-xl border border-white/10 bg-white/5 px-3 py-2">
-                            <div className="text-xs font-black uppercase tracking-[0.14em] text-white/45">{event.label}</div>
-                            <div className="mt-1 text-sm font-semibold text-white/80">{event.value}</div>
-                          </div>
-                        )) : <div className="rounded-xl border border-white/10 bg-white/5 p-3 text-sm font-semibold text-white/55">No timeline events yet.</div>}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="grid gap-4 lg:grid-cols-2">
-                    <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                      <div className="text-sm font-bold uppercase tracking-[0.2em] text-white/60">Phone Numbers</div>
-                      <div className="mt-4 space-y-2">
-                        <div className="rounded-xl border border-white/10 bg-white/5 p-3 text-sm font-semibold text-white/70">
-                          AI numbers: <span className="text-white">{selectedCustomer.aiNumbers.length ? selectedCustomer.aiNumbers.join(", ") : "None mapped"}</span>
+                    <div className="admin-customer-card">
+                      <div className="admin-customer-card-head">
+                        <div>
+                          <span>Setup + Billing</span>
+                          <h3>Customer state</h3>
                         </div>
-                        {selectedCustomer.vapiMappings.length ? selectedCustomer.vapiMappings.map((mapping) => (
-                          <div key={mapping.id} className="rounded-xl border border-white/10 bg-white/5 p-3 text-sm">
-                            <span className="font-bold text-white">{mapping.matchType}</span>
-                            <span className="text-white/60"> · {mapping.matchValue}</span>
-                            {mapping.label ? <span className="text-white/45"> · {mapping.label}</span> : null}
-                          </div>
-                        )) : selectedCustomer.aiNumbers.length ? (
-                          <div className="rounded-xl border border-sky-300/25 bg-sky-300/10 p-3 text-sm font-semibold text-sky-100">Twilio number assigned. Vapi mapping is still pending.</div>
-                        ) : <div className="rounded-xl border border-amber-300/25 bg-amber-300/10 p-3 text-sm font-semibold text-amber-100">No phone number setup linked to this customer.</div>}
                       </div>
-                    </div>
-
-                    <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                      <div className="text-sm font-bold uppercase tracking-[0.2em] text-white/60">Setup Checklist</div>
-                      <div className="mt-4 grid gap-2">
-                        {selectedCustomer.setupSteps.length ? selectedCustomer.setupSteps.map((step) => (
-                          <div key={step.key} className={"rounded-xl border px-3 py-2 " + setupStatusClasses(step.status)}>
-                            <div className="flex items-start justify-between gap-2">
-                              <div>
-                                <div className="text-sm font-extrabold text-white">{step.label}</div>
-                                <div className="mt-1 text-xs font-semibold opacity-80">{step.reason || step.nextAction || "No note"}</div>
-                              </div>
-                              <span className="rounded-full border border-current/25 px-2 py-1 text-[0.66rem] font-black uppercase tracking-[0.1em]">{setupStatusLabel(step.status)}</span>
-                            </div>
+                      <div className="admin-customer-check-grid">
+                        {[
+                          ["Signup", Boolean(selectedCustomer.signup || selectedCustomer.trial), selectedCustomer.lastSignupAt ? dt(selectedCustomer.lastSignupAt) : "No signup linked"],
+                          ["Stripe", paymentStateForAccount(selectedCustomer).key !== "unknown", selectedCustomer.subscriptionStatus],
+                          ["Setup", selectedCustomer.setupReady, `${selectedCustomer.readinessPercent || 0}% ready`],
+                          ["Owner Text", Boolean(selectedCustomer.ownerPhone || settings?.ownerPhone), selectedCustomer.ownerPhone || settings?.ownerPhone || "No owner text number"],
+                        ].map(([label, ok, detail]) => (
+                          <div key={label} className={"admin-customer-check " + (ok ? "is-ready" : "is-warning")}>
+                            <span>{ok ? "Ready" : "Check"}</span>
+                            <strong>{label}</strong>
+                            <em>{detail}</em>
                           </div>
-                        )) : <div className="rounded-xl border border-white/10 bg-white/5 p-3 text-sm font-semibold text-white/55">No setup checklist linked yet.</div>}
+                        ))}
+                      </div>
+                      <div className="admin-customer-shortcuts">
+                        <button type="button" onClick={() => setActiveTab("setup")}>Setup</button>
+                        <button type="button" onClick={() => setActiveTab("calls")}>Calls</button>
+                        <button type="button" onClick={() => setActiveTab("costs")}>Billing</button>
+                        <button type="button" onClick={() => setActiveTab("mappings")}>Vapi Mapping</button>
                       </div>
                     </div>
                   </div>
 
-                  <div className="grid gap-4 lg:grid-cols-2">
-                    <div className="overflow-x-auto rounded-2xl border border-white/10 bg-black/20">
-                      <div className="border-b border-white/10 px-4 py-3 text-sm font-bold uppercase tracking-[0.2em] text-white/60">Recent Calls</div>
-                      <table className="min-w-full text-left text-sm">
-                        <thead className="border-b border-white/10 text-xs font-bold uppercase tracking-[0.16em] text-white/50">
-                          <tr><th className="px-3 py-2">Started</th><th className="px-3 py-2">Caller</th><th className="px-3 py-2">Outcome</th><th className="px-3 py-2">Cost</th></tr>
-                        </thead>
-                        <tbody>
-                          {selectedCustomer.recentCalls.length ? selectedCustomer.recentCalls.slice(0, 6).map((call) => (
-                            <tr key={call.id} className="border-t border-white/5 align-top">
-                              <td className="px-3 py-2 text-white/70">{dt(call.startedAt)}</td>
-                              <td className="px-3 py-2">{call.caller?.phone || "—"}</td>
-                              <td className="px-3 py-2">{call.outcome || call.status || "UNREVIEWED"}</td>
-                              <td className="px-3 py-2">{moneyCompact(call.totalInternalCost)}</td>
-                            </tr>
-                          )) : <tr><td colSpan="4" className="px-3 py-3 text-white/55">No synced calls for this customer yet.</td></tr>}
-                        </tbody>
-                      </table>
+                  <div className="admin-customer-card">
+                    <div className="admin-customer-card-head">
+                      <div>
+                        <span>Call Logs</span>
+                        <h3>Vapi and Twilio activity for this business</h3>
+                      </div>
+                      <p>{selectedCustomerOps.calls.length} linked call(s)</p>
                     </div>
-
-                    <div className="overflow-x-auto rounded-2xl border border-white/10 bg-black/20">
-                      <div className="border-b border-white/10 px-4 py-3 text-sm font-bold uppercase tracking-[0.2em] text-white/60">Recent Leads</div>
-                      <table className="min-w-full text-left text-sm">
-                        <thead className="border-b border-white/10 text-xs font-bold uppercase tracking-[0.16em] text-white/50">
-                          <tr><th className="px-3 py-2">Created</th><th className="px-3 py-2">Name</th><th className="px-3 py-2">Intent</th><th className="px-3 py-2">Callback</th></tr>
+                    <div className="admin-customer-table-wrap">
+                      <table className="admin-customer-table">
+                        <thead>
+                          <tr>
+                            <th>Started</th>
+                            <th>Caller</th>
+                            <th>Vapi</th>
+                            <th>Twilio</th>
+                            <th>Artifacts</th>
+                            <th>Spend</th>
+                          </tr>
                         </thead>
                         <tbody>
-                          {selectedCustomer.recentLeads.length ? selectedCustomer.recentLeads.slice(0, 6).map((lead) => (
-                            <tr key={lead.id} className="border-t border-white/5 align-top">
-                              <td className="px-3 py-2 text-white/70">{dt(lead.createdAt)}</td>
-                              <td className="px-3 py-2">{lead.name || "—"}</td>
-                              <td className="px-3 py-2">{lead.intent || "—"}</td>
-                              <td className="px-3 py-2">{lead.callbackNumber || "—"}</td>
+                          {selectedCustomerOps.calls.length ? selectedCustomerOps.calls.slice(0, 10).map((call) => (
+                            <tr key={call.id || call.externalId || call.startedAt}>
+                              <td><strong>{dt(call.startedAt)}</strong><small>{callDurationText(call.durationSec)}</small></td>
+                              <td>{call.caller?.phone || "Unknown"}</td>
+                              <td><strong>{call.externalId || call.vapiCallId || "—"}</strong><small>{call.outcome || call.status || "UNREVIEWED"}</small></td>
+                              <td><strong>{call.twilioCallSid || "—"}</strong><small>{moneyCompact(call.twilioPrice || call.twilioCost)}</small></td>
+                              <td>
+                                <span className={call.transcriptAvailable || call.transcript ? "admin-customer-mini-good" : "admin-customer-mini-muted"}>Transcript</span>
+                                <span className={call.recordingAvailable || call.recordingUrl ? "admin-customer-mini-good" : "admin-customer-mini-muted"}>Recording</span>
+                              </td>
+                              <td>{moneyCompact(call.totalInternalCost)}</td>
                             </tr>
-                          )) : <tr><td colSpan="4" className="px-3 py-3 text-white/55">No captured leads linked yet.</td></tr>}
+                          )) : <tr><td colSpan="6">No Vapi/Twilio calls have been linked to this customer yet.</td></tr>}
                         </tbody>
                       </table>
                     </div>
                   </div>
-                </div>
+
+                  <div className="admin-customer-two-col">
+                    <div className="admin-customer-card">
+                      <div className="admin-customer-card-head"><div><span>Timeline</span><h3>What happened recently</h3></div></div>
+                      <div className="admin-customer-timeline">
+                        {selectedCustomer.timeline.length ? selectedCustomer.timeline.map((event) => (
+                          <div key={event.label}><strong>{event.label}</strong><span>{event.value}</span></div>
+                        )) : <p>No timeline events yet.</p>}
+                      </div>
+                    </div>
+                    <div className="admin-customer-card">
+                      <div className="admin-customer-card-head"><div><span>Leads</span><h3>Captured from this business</h3></div></div>
+                      <div className="admin-customer-lead-list">
+                        {selectedCustomer.recentLeads.length ? selectedCustomer.recentLeads.slice(0, 5).map((lead) => (
+                          <div key={lead.id}><strong>{lead.name || "Unnamed lead"}</strong><span>{lead.intent || "No intent"} · {lead.callbackNumber || "No callback"}</span></div>
+                        )) : <p>No captured leads linked yet.</p>}
+                      </div>
+                    </div>
+                  </div>
+                </section>
               ) : (
-                <div className="rounded-2xl border border-white/10 bg-black/20 p-4 text-white/55">No customer selected.</div>
+                <section className="admin-customer-card admin-customer-empty">No customer selected.</section>
               )}
             </div>
           </div>
@@ -2110,8 +2448,21 @@ export default function AdminDashboard() {
         ) : null}
 
         {activeTab === "calls" ? (
-          <div className="mt-4">
-            <div className="mb-4 grid gap-3 lg:grid-cols-[1fr_1fr_1fr_1.2fr_auto]">
+          <div className="admin-call-page">
+            <div className="admin-call-header">
+              <div>
+                <div className="admin-call-eyebrow">Call Command Center</div>
+                <h2>Review calls and follow-ups</h2>
+                <p>Use this queue to spot unreviewed calls, mark outcomes, and create the next task before leads go cold.</p>
+              </div>
+              <div className="admin-call-actions">
+                <button type="button" onClick={exportCallsCsv}>Export CSV</button>
+                <button type="button" onClick={syncVapiCalls} className="admin-call-primary">Sync Vapi Calls</button>
+              </div>
+            </div>
+            {vapiSyncStatus ? <p className="admin-call-status">{vapiSyncStatus}</p> : null}
+
+            <div className="admin-call-filter-card">
               <Labeled label="Status">
                 <Select value={callFilters.status} onChange={(e) => setCallFilters((s) => ({ ...s, status: e.target.value }))}>
                   <option value="">All</option><option value="STARTED">STARTED</option><option value="COMPLETED">COMPLETED</option><option value="MISSED">MISSED</option><option value="FAILED">FAILED</option>
@@ -2122,53 +2473,119 @@ export default function AdminDashboard() {
                   <option value="">All</option><option value="UNREVIEWED">UNREVIEWED</option><option value="BOOKED">BOOKED</option><option value="QUOTE_NEEDED">QUOTE_NEEDED</option><option value="EMERGENCY">EMERGENCY</option><option value="SPAM">SPAM</option><option value="FOLLOW_UP">FOLLOW_UP</option><option value="NOT_A_LEAD">NOT_A_LEAD</option>
                 </Select>
               </Labeled>
-              <Labeled label="Min Duration (sec)">
+              <Labeled label="Min Duration">
                 <Input type="number" min="0" value={callFilters.minDuration} onChange={(e) => setCallFilters((s) => ({ ...s, minDuration: e.target.value }))} />
               </Labeled>
               <Labeled label="Search transcripts">
                 <Input value={callFilters.search} onChange={(e) => setCallFilters((s) => ({ ...s, search: e.target.value }))} onKeyDown={(e) => { if (e.key === "Enter") loadCalls(); }} placeholder="name, phone, service..." />
               </Labeled>
-              <div className="flex items-end gap-2">
-                <button type="button" onClick={exportCallsCsv} className="w-full rounded-full border border-white/15 bg-white/5 px-4 py-3 text-sm font-bold text-white/80">
-                  Export CSV
-                </button>
-                <button type="button" onClick={syncVapiCalls} className="w-full rounded-full bg-gradient-to-r from-emerald-700 to-amber-500 px-5 py-3 text-sm font-black uppercase tracking-[0.12em] text-white">
-                  Sync Vapi Calls
-                </button>
-              </div>
+              <button type="button" onClick={loadCalls}>Apply</button>
             </div>
-            {vapiSyncStatus ? <p className="mb-3 text-sm font-semibold text-emerald-100">{vapiSyncStatus}</p> : null}
-            <div className="overflow-x-auto rounded-2xl border border-white/10 bg-black/20">
-              <table className="admin-calls-table min-w-full text-left text-sm">
-                <thead className="border-b border-white/10 text-xs font-bold uppercase tracking-[0.18em] text-white/55">
-                  <tr><th className="px-4 py-3">Started</th><th className="px-4 py-3">Company</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Outcome</th><th className="px-4 py-3">Score</th><th className="px-4 py-3">Duration</th><th className="px-4 py-3">Caller</th><th className="px-4 py-3">Workflow</th></tr>
-                </thead>
-                <tbody>
-                  {calls.length ? calls.map((call) => (
-                    <tr key={call.id} className="border-t border-white/5 align-top">
-                      <td className="px-4 py-3">{dt(call.startedAt)}</td>
-                      <td className="px-4 py-3 font-semibold">{call.business?.name || `Business ${call.businessId}`}</td>
-                      <td className="px-4 py-3">{call.status}</td>
-                      <td className="px-4 py-3">
-                        <Select value={call.outcome || "UNREVIEWED"} onChange={(e) => updateCall(call, { outcome: e.target.value })}>
-                          <option value="UNREVIEWED">UNREVIEWED</option><option value="BOOKED">BOOKED</option><option value="QUOTE_NEEDED">QUOTE</option><option value="EMERGENCY">EMERGENCY</option><option value="SPAM">SPAM</option><option value="FOLLOW_UP">FOLLOW_UP</option><option value="NOT_A_LEAD">NOT_A_LEAD</option>
-                        </Select>
-                      </td>
-                      <td className="px-4 py-3 font-black">{call.qualityScore ?? "—"}</td>
-                      <td className="px-4 py-3">{call.durationSec ?? "—"}</td>
-                      <td className="px-4 py-3">{call.caller?.phone || "—"}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex flex-wrap gap-2">
-                          <button type="button" onClick={() => addCallTask(call)} className="rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs font-bold text-white/80">Task</button>
-                          <button type="button" onClick={() => addCallNote(call)} className="rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs font-bold text-white/80">Note</button>
-                          <button type="button" onClick={() => updateCall(call, { followUpNeeded: !call.followUpNeeded })} className={"rounded-full border px-3 py-1 text-xs font-bold " + (call.followUpNeeded ? "border-amber-300/30 bg-amber-300/15 text-amber-100" : "border-white/15 bg-white/5 text-white/70")}>Follow Up</button>
-                        </div>
-                        {call.tasks?.length ? <div className="mt-2 text-xs font-semibold text-white/45">{call.tasks.filter((task) => task.status === "OPEN").length} open tasks</div> : null}
-                      </td>
-                    </tr>
-                  )) : <tr><td colSpan="8" className="px-4 py-4 text-white/55">No calls found.</td></tr>}
-                </tbody>
-              </table>
+
+            <div className="admin-call-kpis">
+              <div className="admin-call-kpi"><span>Total Calls</span><strong>{callInsights.total}</strong><em>Current filtered view</em></div>
+              <div className="admin-call-kpi is-warn"><span>Needs Review</span><strong>{callInsights.unreviewed}</strong><em>Unreviewed outcomes</em></div>
+              <div className="admin-call-kpi is-blue"><span>Follow Ups</span><strong>{callInsights.followUps}</strong><em>Marked for workflow</em></div>
+              <div className="admin-call-kpi is-good"><span>Booked</span><strong>{callInsights.booked}</strong><em>Converted calls</em></div>
+              <div className="admin-call-kpi"><span>Avg Score</span><strong>{callInsights.avgScore ?? "—"}</strong><em>{callDurationText(callInsights.avgDuration)} avg duration</em></div>
+            </div>
+
+            <div className="admin-call-grid">
+              <section className="admin-call-card admin-call-main-card">
+                <div className="admin-call-card-head">
+                  <div>
+                    <span>Call Log</span>
+                    <h3>Latest conversations</h3>
+                  </div>
+                  <p>{calls.length} calls</p>
+                </div>
+                <div className="admin-call-table-wrap">
+                  <table className="admin-call-table">
+                    <thead>
+                      <tr><th>Call</th><th>Customer</th><th>Outcome</th><th>Quality</th><th>Workflow</th></tr>
+                    </thead>
+                    <tbody>
+                      {calls.length ? calls.map((call) => (
+                        <tr key={call.id}>
+                          <td>
+                            <strong>{dt(call.startedAt)}</strong>
+                            <small>{callDurationText(call.durationSec)} · {call.caller?.phone || "Unknown caller"}</small>
+                            <span className={callStatusBadgeClass(call.status)}>{call.status || "Unknown"}</span>
+                          </td>
+                          <td>
+                            <strong>{call.business?.name || `Business ${call.businessId}`}</strong>
+                            <small>{call.aiSummary || call.transcript ? String(call.aiSummary || call.transcript).slice(0, 90) : call.transcriptProtected ? "Transcript stored privately" : "No summary yet"}</small>
+                          </td>
+                          <td>
+                            <Select value={call.outcome || "UNREVIEWED"} onChange={(e) => updateCall(call, { outcome: e.target.value })}>
+                              <option value="UNREVIEWED">UNREVIEWED</option><option value="BOOKED">BOOKED</option><option value="QUOTE_NEEDED">QUOTE</option><option value="EMERGENCY">EMERGENCY</option><option value="SPAM">SPAM</option><option value="FOLLOW_UP">FOLLOW_UP</option><option value="NOT_A_LEAD">NOT_A_LEAD</option>
+                            </Select>
+                          </td>
+                          <td><span className={callScoreClass(call.qualityScore)}>{call.qualityScore ?? "—"}</span></td>
+                          <td>
+                            <div className="admin-call-workflow">
+                              <button type="button" onClick={() => loadCallDetails(call)}>Details</button>
+                              <button type="button" onClick={() => addCallTask(call)}>Task</button>
+                              <button type="button" onClick={() => addCallNote(call)}>Note</button>
+                              <button type="button" onClick={() => updateCall(call, { followUpNeeded: !call.followUpNeeded })} className={call.followUpNeeded ? "is-active" : ""}>Follow Up</button>
+                            </div>
+                            {call.tasks?.length ? <small>{call.tasks.filter((task) => task.status === "OPEN").length} open tasks</small> : null}
+                          </td>
+                        </tr>
+                      )) : <tr><td colSpan="5">No calls found for these filters.</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+
+              <aside className="admin-call-card">
+                <div className="admin-call-detail-panel">
+                  <div className="admin-call-card-head">
+                    <div>
+                      <span>Vapi Details</span>
+                      <h3>Transcript and artifacts</h3>
+                    </div>
+                  </div>
+                  {selectedCall ? (
+                    <div className="admin-call-detail-body">
+                      <strong>{selectedCall.business?.name || `Business ${selectedCall.businessId}`}</strong>
+                      <span>{dt(selectedCall.startedAt)} · {callDurationText(selectedCall.durationSec)}</span>
+                      <p>{selectedCall.aiSummary || "No summary stored yet. Press Sync Vapi Calls after the Vapi call has ended."}</p>
+                      <div className="admin-call-detail-meta">
+                        <div><span>Vapi ID</span><strong>{selectedCall.externalProvider === "vapi" ? selectedCall.externalId || "—" : "Not linked"}</strong></div>
+                        <div><span>Transcript</span><strong>{selectedCall.transcriptAvailable ? selectedCall.transcript ? "Visible" : "Stored privately" : "Missing"}</strong></div>
+                        <div><span>Recording</span><strong>{selectedCall.recordingAvailable ? selectedCall.recordingUrl ? "Visible" : "Stored privately" : "Missing"}</strong></div>
+                      </div>
+                      {selectedCall.recordingUrl ? <a className="admin-call-recording-link" href={selectedCall.recordingUrl} target="_blank" rel="noreferrer">Open recording</a> : null}
+                      {selectedCall.transcript ? (
+                        <pre className="admin-call-transcript">{selectedCall.transcript}</pre>
+                      ) : selectedCall.transcriptProtected ? (
+                        <div className="admin-call-protected">Transcript is stored, but `EXPOSE_CALL_TRANSCRIPTS_IN_ADMIN` is off.</div>
+                      ) : (
+                        <div className="admin-call-protected">No transcript stored for this call yet.</div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="admin-call-empty">Click Details on a call to load its Vapi transcript and recording.</div>
+                  )}
+                </div>
+
+                <div className="admin-call-card-head">
+                  <div>
+                    <span>Review Queue</span>
+                    <h3>Fix these first</h3>
+                  </div>
+                </div>
+                <div className="admin-call-review-list">
+                  {callInsights.queue.length ? callInsights.queue.map((call) => (
+                    <div key={call.id} className="admin-call-review-item">
+                      <strong>{call.business?.name || `Business ${call.businessId}`}</strong>
+                      <span>{call.caller?.phone || "Unknown caller"} · {callDurationText(call.durationSec)}</span>
+                      <em>{call.outcome || "UNREVIEWED"} · Score {call.qualityScore ?? "—"}</em>
+                    </div>
+                  )) : <div className="admin-call-empty">No urgent calls in this view.</div>}
+                </div>
+              </aside>
             </div>
           </div>
         ) : null}
@@ -2413,68 +2830,136 @@ export default function AdminDashboard() {
         ) : null}
 
         {activeTab === "sync" ? (
-          <div className="mt-4 grid gap-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="admin-system-page">
+            <div className="admin-system-header">
               <div>
-                <div className="text-sm font-bold uppercase tracking-[0.2em] text-white/60">Sync Health</div>
-                <p className="mt-1 text-sm font-semibold text-white/55">Checks whether admin can pull Vapi calls and attach them to the right business owner.</p>
+                <div className="admin-system-eyebrow">System Health</div>
+                <h2>Integrations and sync status</h2>
+                <p>Checks the services that make signup, checkout, call sync, owner mapping, and cost tracking work together.</p>
               </div>
-              <button type="button" onClick={syncVapiCalls} className="rounded-full bg-gradient-to-r from-emerald-700 to-amber-500 px-5 py-3 text-sm font-black uppercase tracking-[0.12em] text-white">
-                Sync Vapi Calls
-              </button>
-            </div>
-            {vapiSyncStatus ? <p className="text-sm font-semibold text-emerald-100">{vapiSyncStatus}</p> : null}
-
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              {[
-                ["Database", Boolean(opsOverview.sync?.env?.databaseAvailable)],
-                ["Vapi API Key", opsOverview.sync?.env?.vapiApiKeyConfigured],
-                ["Twilio", opsOverview.sync?.env?.twilioConfigured],
-                ["Auto Sync", opsOverview.sync?.env?.vapiAutoSyncEnabled],
-                ["Mappings", Boolean(opsOverview.sync?.mappedBusinessCount)],
-                ["Admin Password", !opsOverview.sync?.env?.adminPasswordLooksDefault],
-              ].map(([label, ok]) => (
-                <div key={label} className={"rounded-2xl border p-4 " + statusClasses(ok)}>
-                  <div className="text-xs font-black uppercase tracking-[0.16em] opacity-75">{label}</div>
-                  <div className="mt-2 text-lg font-extrabold">{yesNo(ok)}</div>
-                </div>
-              ))}
-            </div>
-
-            <div className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
-              <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                <div className="text-sm font-bold uppercase tracking-[0.2em] text-white/60">Configuration</div>
-                <div className="mt-4 space-y-3 text-sm font-semibold text-white/70">
-                  <div className="flex justify-between gap-4"><span>Auto-sync interval</span><span className="text-white">{intervalText(opsOverview.sync?.env?.vapiAutoSyncIntervalMs)}</span></div>
-                  <div className="flex justify-between gap-4"><span>Default business ID</span><span className="text-white">{opsOverview.sync?.env?.vapiDefaultBusinessId || "—"}</span></div>
-                  <div className="flex justify-between gap-4"><span>Env map entries</span><span className="text-white">{opsOverview.sync?.env?.vapiBusinessMapEntries ?? "—"}</span></div>
-                  <div className="flex justify-between gap-4"><span>DB mapped businesses</span><span className="text-white">{opsOverview.sync?.mappedBusinessCount ?? "—"}</span></div>
-                  <div className="flex justify-between gap-4"><span>Synced Vapi records</span><span className="text-white">{opsOverview.sync?.syncStoreCount ?? "—"}</span></div>
-                  <div className="flex justify-between gap-4"><span>Transcripts visible</span><span className="text-white">{opsOverview.sync?.env?.exposeCallTranscriptsInAdmin ? "Yes" : "No"}</span></div>
-                  <div className="flex justify-between gap-4"><span>Recording URLs visible</span><span className="text-white">{opsOverview.sync?.env?.exposeRecordingUrlsInAdmin ? "Yes" : "No"}</span></div>
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                <div className="text-sm font-bold uppercase tracking-[0.2em] text-white/60">Warnings</div>
-                <div className="mt-4 space-y-2">
-                  {opsOverview.sync?.warnings?.length ? opsOverview.sync.warnings.map((warning) => (
-                    <div key={warning} className="rounded-xl border border-amber-300/25 bg-amber-300/10 px-3 py-2 text-sm font-semibold text-amber-100">{warning}</div>
-                  )) : <div className="rounded-xl border border-emerald-300/20 bg-emerald-300/10 px-3 py-2 text-sm font-semibold text-emerald-100">No sync configuration warnings detected.</div>}
-                </div>
+              <div className="admin-system-actions">
+                <button type="button" onClick={() => Promise.allSettled([loadOpsOverview(), loadVapiInventory(), loadCostAudit()])}>Refresh</button>
+                <button type="button" onClick={syncVapiCalls} className="admin-system-primary">Sync Vapi Calls</button>
               </div>
             </div>
+            {vapiSyncStatus ? <p className="admin-system-status">{vapiSyncStatus}</p> : null}
+
+            <div className="admin-system-score-grid">
+              <section className={systemHealth.score >= 80 ? "admin-system-score is-good" : systemHealth.score >= 60 ? "admin-system-score is-warn" : "admin-system-score is-bad"}>
+                <span>Health Score</span>
+                <strong>{systemHealth.score}%</strong>
+                <em>{systemHealth.connected} of {systemHealth.services.length} checks passing</em>
+              </section>
+              <section className="admin-system-score">
+                <span>Warnings</span>
+                <strong>{systemHealth.warnings.length}</strong>
+                <em>{systemHealth.warnings.length ? "Needs review" : "No known warnings"}</em>
+              </section>
+              <section className="admin-system-score">
+                <span>Synced Calls</span>
+                <strong>{opsOverview.sync?.syncStoreCount ?? 0}</strong>
+                <em>Vapi records tracked</em>
+              </section>
+              <section className="admin-system-score">
+                <span>Mapped Customers</span>
+                <strong>{opsOverview.sync?.mappedBusinessCount ?? 0}</strong>
+                <em>Owners connected to AI numbers</em>
+              </section>
+            </div>
+
+            <section className="admin-system-card">
+              <div className="admin-system-card-head">
+                <div>
+                  <span>Services</span>
+                  <h3>What is connected right now</h3>
+                </div>
+                <p>{API_SOURCE_LABEL}</p>
+              </div>
+              <div className="admin-system-service-grid">
+                {systemHealth.services.map((item) => (
+                  <div key={item.label} className={item.ok ? "admin-system-service is-ok" : "admin-system-service is-warn"}>
+                    <div>
+                      <span className="admin-system-dot" />
+                      <strong>{item.label}</strong>
+                    </div>
+                    <em>{item.status}</em>
+                    <p>{item.detail}</p>
+                    <small>{item.action}</small>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <div className="admin-system-grid">
+              <section className="admin-system-card">
+                <div className="admin-system-card-head">
+                  <div>
+                    <span>Next Fix</span>
+                    <h3>Action queue</h3>
+                  </div>
+                </div>
+                <div className="admin-system-action-list">
+                  {systemHealth.actionItems.length ? systemHealth.actionItems.map((item) => (
+                    <div key={item.label} className="admin-system-action-item">
+                      <strong>{item.label}</strong>
+                      <span>{item.action}</span>
+                    </div>
+                  )) : <div className="admin-system-empty">No urgent system fixes detected.</div>}
+                </div>
+              </section>
+
+              <section className="admin-system-card">
+                <div className="admin-system-card-head">
+                  <div>
+                    <span>Warnings</span>
+                    <h3>Configuration messages</h3>
+                  </div>
+                </div>
+                <div className="admin-system-warning-list">
+                  {systemHealth.warnings.length ? systemHealth.warnings.map((warning) => (
+                    <div key={warning}>{warning}</div>
+                  )) : <div className="admin-system-empty">No sync configuration warnings detected.</div>}
+                </div>
+              </section>
+            </div>
+
+            <section className="admin-system-card">
+              <div className="admin-system-card-head">
+                <div>
+                  <span>Configuration</span>
+                  <h3>Sync settings and privacy switches</h3>
+                </div>
+              </div>
+              <div className="admin-system-config-grid">
+                {[
+                  ["Auto-sync interval", intervalText(opsOverview.sync?.env?.vapiAutoSyncIntervalMs)],
+                  ["Auto-sync enabled", opsOverview.sync?.env?.vapiAutoSyncEnabled ? "Yes" : "No"],
+                  ["Default business ID", opsOverview.sync?.env?.vapiDefaultBusinessId || "—"],
+                  ["Env map entries", opsOverview.sync?.env?.vapiBusinessMapEntries ?? "—"],
+                  ["DB mapped businesses", opsOverview.sync?.mappedBusinessCount ?? "—"],
+                  ["Synced Vapi records", opsOverview.sync?.syncStoreCount ?? "—"],
+                  ["Transcripts visible", opsOverview.sync?.env?.exposeCallTranscriptsInAdmin ? "Yes" : "No"],
+                  ["Recording URLs visible", opsOverview.sync?.env?.exposeRecordingUrlsInAdmin ? "Yes" : "No"],
+                ].map(([label, value]) => (
+                  <div key={label}>
+                    <span>{label}</span>
+                    <strong>{value}</strong>
+                  </div>
+                ))}
+              </div>
+            </section>
           </div>
         ) : null}
 
         {activeTab === "costs" ? (
-          <div className="mt-4 grid gap-4">
-            <div className="flex flex-wrap items-end justify-between gap-3">
+          <div className="admin-money-page">
+            <div className="admin-money-header">
               <div>
-                <div className="text-sm font-bold uppercase tracking-[0.2em] text-white/60">Cost Audit</div>
-              <p className="mt-1 text-sm font-semibold text-white/55">Separates this AI number's matched call usage from the whole Twilio account total.</p>
+                <div className="admin-money-eyebrow">Money Dashboard</div>
+                <h2>Paying customers, spend, and profit</h2>
+                <p>Revenue uses the live $79/month plan unless Stripe sends a specific amount. Provider spend is normalized from the selected cost window.</p>
               </div>
-              <div className="flex flex-wrap items-end gap-3">
+              <div className="admin-money-actions">
                 <Labeled label="Days">
                   <Select value={costDays} onChange={(e) => setCostDays(e.target.value)}>
                     <option value="7">7</option>
@@ -2483,142 +2968,222 @@ export default function AdminDashboard() {
                     <option value="90">90</option>
                   </Select>
                 </Labeled>
-                <button type="button" onClick={loadCostAudit} className="rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm font-bold text-white/80">Refresh</button>
-                <button type="button" onClick={exportCostsCsv} className="rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm font-bold text-white/80">Export CSV</button>
-                <button type="button" onClick={syncCosts} className="rounded-full bg-gradient-to-r from-emerald-700 to-amber-500 px-5 py-3 text-sm font-black uppercase tracking-[0.12em] text-white">Sync Costs</button>
+                <button type="button" onClick={loadCostAudit}>Refresh</button>
+                <button type="button" onClick={exportCostsCsv}>Export CSV</button>
+                <button type="button" onClick={syncCosts} className="admin-money-primary">Sync Costs</button>
               </div>
             </div>
-            {vapiSyncStatus ? <p className="text-sm font-semibold text-emerald-100">{vapiSyncStatus}</p> : null}
+            {vapiSyncStatus ? <p className="admin-money-status">{vapiSyncStatus}</p> : null}
 
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
-              <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                <div className="text-xs font-black uppercase tracking-[0.18em] text-white/50">Calls</div>
-                <div className="mt-1 text-2xl font-extrabold text-white">{costAudit?.totals?.totalCalls || 0}</div>
+            <div className="admin-money-kpis">
+              <div className="admin-money-kpi admin-money-kpi-blue">
+                <span>Paying Customers</span>
+                <strong>{customerFinancialRows.totals.paying}</strong>
+                <em>{customerFinancialRows.totals.trialing} trialing</em>
               </div>
-              <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                <div className="text-xs font-black uppercase tracking-[0.18em] text-white/50">Priced</div>
-                <div className="mt-1 text-2xl font-extrabold text-white">{costAudit?.totals?.pricedCalls || 0}</div>
+              <div className="admin-money-kpi admin-money-kpi-green">
+                <span>Monthly Revenue</span>
+                <strong>{moneyDashboard(customerFinancialRows.totals.revenueMonthly)}</strong>
+                <em>{moneyDashboard(customerFinancialRows.totals.projectedTrialRevenue)} trial pipeline</em>
               </div>
-              <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                <div className="text-xs font-black uppercase tracking-[0.18em] text-white/50">This AI Number</div>
-                <div className="mt-1 text-xl font-extrabold text-white">{money(costAudit?.totals?.callUsageCost)}</div>
+              <div className="admin-money-kpi admin-money-kpi-amber">
+                <span>Provider Spend / Mo</span>
+                <strong>{moneyDashboard(customerFinancialRows.totals.providerMonthlySpend)}</strong>
+                <em>{moneyDashboard(customerFinancialRows.totals.providerWindowSpend)} in {customerFinancialRows.days}d</em>
               </div>
-              <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                <div className="text-xs font-black uppercase tracking-[0.18em] text-white/50">Twilio Account</div>
-                <div className="mt-1 text-xl font-extrabold text-white">{money(costAudit?.totals?.twilioCost)}</div>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                <div className="text-xs font-black uppercase tracking-[0.18em] text-white/50">Fixed / Other</div>
-                <div className="mt-1 text-xl font-extrabold text-white">{money(costAudit?.totals?.fixedCost)}</div>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                <div className="text-xs font-black uppercase tracking-[0.18em] text-white/50">Provider Estimate</div>
-                <div className="mt-1 text-xl font-extrabold text-white">{money(costAudit?.totals?.estimatedProviderCost || costAudit?.totals?.totalInternalCost)}</div>
+              <div className={customerFinancialRows.totals.profitMonthly >= 0 ? "admin-money-kpi admin-money-kpi-green" : "admin-money-kpi admin-money-kpi-red"}>
+                <span>Projected Profit / Mo</span>
+                <strong>{moneyDashboard(customerFinancialRows.totals.profitMonthly)}</strong>
+                <em>{percentDashboard(customerFinancialRows.totals.margin)} margin</em>
               </div>
             </div>
-            <p className="text-xs font-semibold text-white/45">This AI Number = matched Vapi calls plus matched Twilio call minutes. Provider Estimate = Vapi calls plus the Twilio account total plus fixed monthly costs.</p>
 
             {costAudit?.warnings?.length ? (
-              <div className="grid gap-2">
+              <div className="admin-money-warning-list">
                 {costAudit.warnings.map((warning) => (
-                  <div key={warning} className="rounded-xl border border-amber-300/25 bg-amber-300/10 px-4 py-3 text-sm font-semibold text-amber-100">{warning}</div>
+                  <div key={warning}>{warning}</div>
                 ))}
               </div>
             ) : null}
 
-            {costAudit?.twilioAccountUsage?.records?.length ? (
-              <div className="overflow-x-auto rounded-2xl border border-white/10 bg-black/20">
-                <div className="border-b border-white/10 px-4 py-3">
-                  <div className="text-sm font-black uppercase tracking-[0.18em] text-white/60">Twilio Account Usage</div>
-                  <div className="mt-1 text-xs font-semibold text-white/45">Only the account total row is counted when Twilio reports it; the other rows stay visible as breakdown.</div>
+            <div className="admin-money-grid">
+              <section className="admin-money-card admin-money-main-card">
+                <div className="admin-money-card-head">
+                  <div>
+                    <span>Customer Profitability</span>
+                    <h3>Who is paying and what each account costs</h3>
+                  </div>
+                  <p>{customerFinancialRows.rows.length} customer rows</p>
                 </div>
-                <table className="min-w-full text-left text-sm">
-                  <thead className="border-b border-white/10 text-xs font-bold uppercase tracking-[0.18em] text-white/55">
-                    <tr><th className="px-4 py-3">Role</th><th className="px-4 py-3">Category</th><th className="px-4 py-3">Description</th><th className="px-4 py-3">Usage</th><th className="px-4 py-3">Count</th><th className="px-4 py-3">Cost</th></tr>
+                <div className="admin-money-table-wrap">
+                  <table className="admin-money-table">
+                    <thead>
+                      <tr>
+                        <th>Customer</th>
+                        <th>Payment</th>
+                        <th>Revenue / Mo</th>
+                        <th>Spend / Mo</th>
+                        <th>Profit / Mo</th>
+                        <th>Margin</th>
+                        <th>Calls</th>
+                        <th>Next Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {customerFinancialRows.rows.length ? customerFinancialRows.rows.map((row) => (
+                        <tr key={row.key}>
+                          <td>
+                            <strong>{row.businessName}</strong>
+                            <small>{row.owner} · {row.phone}</small>
+                          </td>
+                          <td><span className={paymentBadgeClass(row.payment.key)}>{row.payment.label}</span></td>
+                          <td>
+                            <strong>{moneyDashboard(row.monthlyRevenue)}</strong>
+                            {row.projectedRevenue ? <small>{moneyDashboard(row.projectedRevenue)} after trial</small> : null}
+                          </td>
+                          <td>
+                            <strong>{moneyDashboard(row.spendMonthly)}</strong>
+                            <small>{moneyDashboard(row.spendWindow)} in {customerFinancialRows.days}d</small>
+                          </td>
+                          <td className={row.profitMonthly >= 0 ? "admin-money-profit-good" : "admin-money-profit-bad"}>{moneyDashboard(row.profitMonthly)}</td>
+                          <td>{percentDashboard(row.margin)}</td>
+                          <td>{row.callsWindow}</td>
+                          <td>{row.nextAction}</td>
+                        </tr>
+                      )) : <tr><td colSpan="8">No customer or cost rows found yet.</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+
+              <aside className="admin-money-card">
+                <div className="admin-money-card-head">
+                  <div>
+                    <span>Needs Attention</span>
+                    <h3>Money blockers</h3>
+                  </div>
+                </div>
+                <div className="admin-money-attention-list">
+                  {customerFinancialRows.attention.length ? customerFinancialRows.attention.map((row) => (
+                    <div key={row.key} className="admin-money-attention-item">
+                      <strong>{row.businessName}</strong>
+                      <span>{row.nextAction}</span>
+                      <em>{row.payment.label} · {moneyDashboard(row.spendMonthly)} spend/mo</em>
+                    </div>
+                  )) : <div className="admin-money-empty">No urgent billing issues in this window.</div>}
+                </div>
+              </aside>
+            </div>
+
+            <section className="admin-money-card">
+              <div className="admin-money-card-head">
+                <div>
+                  <span>Business Spending</span>
+                  <h3>Provider cost breakdown</h3>
+                </div>
+                <p>{customerFinancialRows.days}-day window</p>
+              </div>
+              <div className="admin-money-breakdown">
+                <div><span>Matched Vapi + Twilio calls</span><strong>{moneyDashboard(costAudit?.totals?.callUsageCost)}</strong></div>
+                <div><span>Whole Twilio account</span><strong>{moneyDashboard(costAudit?.totals?.twilioCost)}</strong></div>
+                <div><span>Fixed / other</span><strong>{moneyDashboard(costAudit?.totals?.fixedCost)}</strong></div>
+                <div><span>Unallocated account spend</span><strong>{moneyDashboard(customerFinancialRows.totals.unallocatedWindowSpend)}</strong></div>
+              </div>
+            </section>
+
+            <details className="admin-money-details">
+              <summary>Technical provider audit</summary>
+
+              {costAudit?.twilioAccountUsage?.records?.length ? (
+                <div className="admin-money-table-wrap">
+                  <div className="admin-money-detail-title">Twilio Account Usage</div>
+                  <table className="admin-money-table">
+                    <thead>
+                      <tr><th>Role</th><th>Category</th><th>Description</th><th>Usage</th><th>Count</th><th>Cost</th></tr>
+                    </thead>
+                    <tbody>
+                      {costAudit.twilioAccountUsage.records.map((record) => (
+                        <tr key={`${record.category}:${record.description}:${record.price}`}>
+                          <td>{record.isAccountTotal ? "Account total" : record.includedInTotal ? "Counted" : "Breakdown"}</td>
+                          <td>{record.category}</td>
+                          <td>{record.description}</td>
+                          <td>{record.usage ?? "—"} {record.usageUnit || ""}</td>
+                          <td>{record.count ?? "—"} {record.countUnit || ""}</td>
+                          <td>{money(record.price, record.priceUnit)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : null}
+
+              {costAudit?.fixedCosts?.records?.length ? (
+                <div className="admin-money-table-wrap">
+                  <div className="admin-money-detail-title">Fixed Monthly Costs</div>
+                  <table className="admin-money-table">
+                    <thead>
+                      <tr><th>Item</th><th>Monthly</th><th>This Window</th></tr>
+                    </thead>
+                    <tbody>
+                      {costAudit.fixedCosts.records.map((record) => (
+                        <tr key={record.label}>
+                          <td>{record.label}</td>
+                          <td>{money(record.monthlyCost, record.currency)}</td>
+                          <td>{money(record.proratedCost, record.currency)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : null}
+
+              <div className="admin-money-table-wrap">
+                <div className="admin-money-detail-title">Matched Cost By AI Number</div>
+                <table className="admin-money-table">
+                  <thead>
+                    <tr><th>Business</th><th>Phone</th><th>Calls</th><th>Priced</th><th>Vapi</th><th>Twilio</th><th>Total</th><th>Avg</th><th>Last Call</th></tr>
                   </thead>
                   <tbody>
-                    {costAudit.twilioAccountUsage.records.map((record) => (
-                      <tr key={`${record.category}:${record.description}:${record.price}`} className="border-t border-white/5 align-top">
-                        <td className="px-4 py-3 font-bold text-white/75">{record.isAccountTotal ? "Account total" : record.includedInTotal ? "Counted" : "Breakdown"}</td>
-                        <td className="px-4 py-3 font-semibold">{record.category}</td>
-                        <td className="px-4 py-3 text-white/70">{record.description}</td>
-                        <td className="px-4 py-3">{record.usage ?? "—"} {record.usageUnit || ""}</td>
-                        <td className="px-4 py-3">{record.count ?? "—"} {record.countUnit || ""}</td>
-                        <td className="px-4 py-3 font-extrabold text-white">{money(record.price, record.priceUnit)}</td>
+                    {costAudit?.summary?.length ? costAudit.summary.map((row) => (
+                      <tr key={`${row.businessId}:${row.phoneNumber}`}>
+                        <td>{row.businessName}</td>
+                        <td>{row.phoneNumber}</td>
+                        <td>{row.totalCalls}</td>
+                        <td>{row.pricedCalls}</td>
+                        <td>{money(row.vapiCost, row.currency)}</td>
+                        <td>{money(row.twilioCost, row.currency)}</td>
+                        <td>{money(row.totalInternalCost, row.currency)}</td>
+                        <td>{money(row.averageCost, row.currency)}</td>
+                        <td>{dt(row.lastCallAt)}</td>
                       </tr>
-                    ))}
+                    )) : <tr><td colSpan="9">No cost data found for this window.</td></tr>}
                   </tbody>
                 </table>
               </div>
-            ) : null}
 
-            {costAudit?.fixedCosts?.records?.length ? (
-              <div className="overflow-x-auto rounded-2xl border border-white/10 bg-black/20">
-                <div className="border-b border-white/10 px-4 py-3">
-                  <div className="text-sm font-black uppercase tracking-[0.18em] text-white/60">Fixed Monthly Costs</div>
-                  <div className="mt-1 text-xs font-semibold text-white/45">Manual provider costs prorated into the selected cost window.</div>
-                </div>
-                <table className="min-w-full text-left text-sm">
-                  <thead className="border-b border-white/10 text-xs font-bold uppercase tracking-[0.18em] text-white/55">
-                    <tr><th className="px-4 py-3">Item</th><th className="px-4 py-3">Monthly</th><th className="px-4 py-3">This Window</th></tr>
+              <div className="admin-money-table-wrap">
+                <div className="admin-money-detail-title">Recent Costed Calls</div>
+                <table className="admin-money-table">
+                  <thead>
+                    <tr><th>Started</th><th>Business</th><th>Caller</th><th>Duration</th><th>Vapi</th><th>Twilio</th><th>Total</th><th>Twilio SID</th></tr>
                   </thead>
                   <tbody>
-                    {costAudit.fixedCosts.records.map((record) => (
-                      <tr key={record.label} className="border-t border-white/5 align-top">
-                        <td className="px-4 py-3 font-semibold">{record.label}</td>
-                        <td className="px-4 py-3">{money(record.monthlyCost, record.currency)}</td>
-                        <td className="px-4 py-3 font-extrabold text-white">{money(record.proratedCost, record.currency)}</td>
+                    {costAudit?.calls?.length ? costAudit.calls.map((call) => (
+                      <tr key={call.id}>
+                        <td>{dt(call.startedAt)}</td>
+                        <td>{call.business?.name || `Business ${call.businessId}`}</td>
+                        <td>{call.caller?.phone || "—"}</td>
+                        <td>{call.durationSec ?? "—"}s</td>
+                        <td>{money(call.vapiCost, call.twilioPriceUnit)}</td>
+                        <td>{money(call.twilioPrice, call.twilioPriceUnit)}</td>
+                        <td>{money(call.totalInternalCost, call.twilioPriceUnit)}</td>
+                        <td>{call.twilioCallSid || "—"}</td>
                       </tr>
-                    ))}
+                    )) : <tr><td colSpan="8">No recent calls in this window.</td></tr>}
                   </tbody>
                 </table>
               </div>
-            ) : null}
-
-            <div className="overflow-x-auto rounded-2xl border border-white/10 bg-black/20">
-              <table className="min-w-full text-left text-sm">
-                <thead className="border-b border-white/10 text-xs font-bold uppercase tracking-[0.18em] text-white/55">
-                  <tr><th className="px-4 py-3">Business</th><th className="px-4 py-3">Phone</th><th className="px-4 py-3">Calls</th><th className="px-4 py-3">Priced</th><th className="px-4 py-3">Vapi</th><th className="px-4 py-3">Twilio</th><th className="px-4 py-3">Total</th><th className="px-4 py-3">Avg</th><th className="px-4 py-3">Last Call</th></tr>
-                </thead>
-                <tbody>
-                  {costAudit?.summary?.length ? costAudit.summary.map((row) => (
-                    <tr key={`${row.businessId}:${row.phoneNumber}`} className="border-t border-white/5 align-top">
-                      <td className="px-4 py-3 font-semibold">{row.businessName}</td>
-                      <td className="px-4 py-3">{row.phoneNumber}</td>
-                      <td className="px-4 py-3">{row.totalCalls}</td>
-                      <td className="px-4 py-3">{row.pricedCalls}</td>
-                      <td className="px-4 py-3">{money(row.vapiCost, row.currency)}</td>
-                      <td className="px-4 py-3">{money(row.twilioCost, row.currency)}</td>
-                      <td className="px-4 py-3 font-extrabold text-white">{money(row.totalInternalCost, row.currency)}</td>
-                      <td className="px-4 py-3">{money(row.averageCost, row.currency)}</td>
-                      <td className="px-4 py-3 text-white/70">{dt(row.lastCallAt)}</td>
-                    </tr>
-                  )) : <tr><td colSpan="9" className="px-4 py-4 text-white/55">No cost data found for this window.</td></tr>}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="overflow-x-auto rounded-2xl border border-white/10 bg-black/20">
-              <table className="min-w-full text-left text-sm">
-                <thead className="border-b border-white/10 text-xs font-bold uppercase tracking-[0.18em] text-white/55">
-                  <tr><th className="px-4 py-3">Started</th><th className="px-4 py-3">Business</th><th className="px-4 py-3">Caller</th><th className="px-4 py-3">Duration</th><th className="px-4 py-3">Vapi</th><th className="px-4 py-3">Twilio</th><th className="px-4 py-3">Total</th><th className="px-4 py-3">Twilio SID</th></tr>
-                </thead>
-                <tbody>
-                  {costAudit?.calls?.length ? costAudit.calls.map((call) => (
-                    <tr key={call.id} className="border-t border-white/5 align-top">
-                      <td className="px-4 py-3 text-white/70">{dt(call.startedAt)}</td>
-                      <td className="px-4 py-3 font-semibold">{call.business?.name || `Business ${call.businessId}`}</td>
-                      <td className="px-4 py-3">{call.caller?.phone || "—"}</td>
-                      <td className="px-4 py-3">{call.durationSec ?? "—"}s</td>
-                      <td className="px-4 py-3">{money(call.vapiCost, call.twilioPriceUnit)}</td>
-                      <td className="px-4 py-3">{money(call.twilioPrice, call.twilioPriceUnit)}</td>
-                      <td className="px-4 py-3 font-extrabold text-white">{money(call.totalInternalCost, call.twilioPriceUnit)}</td>
-                      <td className="px-4 py-3 text-xs text-white/55">{call.twilioCallSid || "—"}</td>
-                    </tr>
-                  )) : <tr><td colSpan="8" className="px-4 py-4 text-white/55">No recent calls in this window.</td></tr>}
-                </tbody>
-              </table>
-            </div>
+            </details>
           </div>
         ) : null}
 
