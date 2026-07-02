@@ -6,7 +6,6 @@ import {
   BUSINESS_SLIDE_TABS,
   CANADIAN_PROVINCES,
   CAPTCHA_PROVIDER,
-  CHECKOUT_SESSION_URL,
   DEFAULT_DETAILS,
   DEFAULT_PRICING,
   MAKE_SIGNUP_WEBHOOK_API_KEY,
@@ -362,7 +361,7 @@ function SpecializationCard({ item, selected, onClick }) {
       type="button"
       onClick={onClick}
       className={
-        "relative flex min-h-[104px] min-w-0 flex-col items-center justify-center gap-2 rounded-xl border bg-white px-2.5 py-3 text-center transition sm:min-h-[108px] sm:px-3 sm:py-4 " +
+        "relative flex min-h-[104px] min-w-0 flex-col items-center justify-center gap-2 rounded-2xl border bg-white px-2.5 py-3 text-center transition sm:min-h-[112px] sm:px-3 sm:py-4 " +
         (selected
           ? "border-blue-600 bg-blue-50/35 shadow-[0_18px_34px_-24px_rgba(37,99,235,0.9),0_0_0_1px_rgba(124,58,237,0.32)_inset]"
           : "border-slate-200 shadow-sm hover:border-blue-300 hover:bg-slate-50/80 hover:shadow-md")
@@ -373,10 +372,10 @@ function SpecializationCard({ item, selected, onClick }) {
           <Icon name="check" className="h-3.5 w-3.5" />
         </span>
       ) : null}
-      <span className={(selected ? "bg-blue-100 text-blue-600" : "bg-slate-100 text-slate-700") + " grid h-11 w-11 place-items-center rounded-xl"}>
-        <Icon name={item.icon} className="h-6 w-6" />
+      <span className={(selected ? "text-blue-600 drop-shadow-[0_0_12px_rgba(37,99,235,0.22)]" : "text-slate-800") + " grid h-11 w-11 place-items-center rounded-xl"}>
+        <Icon name={item.icon} className="h-7 w-7" />
       </span>
-      <span className="text-sm font-bold leading-tight text-slate-950">{item.label}</span>
+      <span className="text-sm font-bold leading-tight text-slate-950 sm:text-base">{item.label}</span>
     </button>
   );
 }
@@ -684,10 +683,10 @@ function ReviewPanel({ trade, areas, specializations, voice, details, pricing, o
   const businessAddress = formatBusinessAddress(details);
   const pricingScript = pricing ? buildPricingScript(pricing) : "";
   const optionItems = [
-    ["Trade", trade.label, () => onEditBusinessSlide?.(1)],
+    ["Trade", trade.label, () => onEditBusinessSlide?.(1, "trade")],
     ["Service area", areas.join(", "), () => onEditBusinessSlide?.(2)],
     ["Pricing script", pricingScript, () => onEditBusinessSlide?.(4)],
-    ["Specializations", specializations.join(", "), null],
+    ["Specializations", specializations.join(", "), () => onEditBusinessSlide?.(1, "specialization")],
     ["Assistant voice", voice.label, onEditVoice],
   ];
 
@@ -836,7 +835,7 @@ function TrialButton({ disabled, busy, finalStep = false, label = "Start free tr
           : "bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 shadow-[0_26px_65px_-34px_rgba(79,70,229,0.95)] hover:-translate-y-0.5 hover:brightness-110 disabled:cursor-wait disabled:hover:translate-y-0 disabled:hover:brightness-100")
       }
     >
-      {busy ? "Sending setup..." : label}
+      {busy ? "Starting trial..." : label}
       <Icon name="arrow" className="h-6 w-6" />
     </button>
   );
@@ -906,26 +905,6 @@ async function postSignupPayload(url, formData) {
   }
 }
 
-async function createCheckoutSession(result) {
-  const response = await fetch(CHECKOUT_SESSION_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      businessName: result?.businessName || "",
-      ownerName: result?.ownerName || "",
-      ownerEmail: result?.ownerEmail || "",
-      ownerPhone: result?.ownerPhone || "",
-    }),
-  });
-
-  const data = await parseApiResponse(response, "Checkout could not be started");
-  if (!response.ok || !data?.checkoutUrl) {
-    throw new Error(data?.error || "Checkout could not be started.");
-  }
-
-  return data.checkoutUrl;
-}
-
 function SignupSuccessPage({ result, onStartAnother }) {
   const businessName = result?.businessName || "your business";
   const assignedNumber = result?.twilioPhoneNumber || "";
@@ -935,8 +914,6 @@ function SignupSuccessPage({ result, onStartAnother }) {
   const [progress, setProgress] = useState(12);
   const [showNumber, setShowNumber] = useState(false);
   const [copiedNumber, setCopiedNumber] = useState(false);
-  const [checkoutBusy, setCheckoutBusy] = useState(false);
-  const [checkoutError, setCheckoutError] = useState("");
 
   useEffect(() => {
     try {
@@ -978,23 +955,6 @@ function SignupSuccessPage({ result, onStartAnother }) {
     window.setTimeout(() => setCopiedNumber(false), 1800);
   };
 
-  const startCheckout = async () => {
-    setCheckoutBusy(true);
-    setCheckoutError("");
-    try {
-      const checkoutUrl = await createCheckoutSession(result);
-      window.location.assign(checkoutUrl);
-    } catch (error) {
-      const message = error?.message || "Checkout could not be started.";
-      setCheckoutError(
-        /stripe checkout is not configured|stripe/i.test(message)
-          ? "Signup is saved. Secure checkout is not enabled yet, so payment setup needs to be finished before this customer can be charged."
-          : message
-      );
-      setCheckoutBusy(false);
-    }
-  };
-
   const launchSteps = [
     { label: "Signup received", detail: "Business details saved for setup.", done: true },
     {
@@ -1010,10 +970,10 @@ function SignupSuccessPage({ result, onStartAnother }) {
       active: !assignedNumber || reviewRequired,
     },
     {
-      label: "Secure checkout",
-      detail: "Starts the paid plan after the trial setup is ready.",
-      done: false,
-      active: !reviewRequired && !verificationRequired,
+      label: "Free trial active",
+      detail: "No credit card is needed to start the trial.",
+      done: !reviewRequired && !verificationRequired,
+      active: reviewRequired || verificationRequired,
     },
     { label: "Test call", detail: "Call the AI number before forwarding live calls.", done: false },
   ];
@@ -1185,23 +1145,10 @@ function SignupSuccessPage({ result, onStartAnother }) {
 
               {!reviewRequired && !verificationRequired ? (
                 <div className="mt-5 rounded-3xl border border-blue-100 bg-[linear-gradient(180deg,#f7fbff,#eef6ff)] p-4">
-                  <p className="text-sm font-black uppercase tracking-[0.16em] text-blue-600">Secure payment</p>
+                  <p className="text-sm font-black uppercase tracking-[0.16em] text-blue-600">Free trial</p>
                   <p className="mt-2 text-base font-semibold leading-7 text-slate-700">
-                    Continue to Stripe Checkout to start the My AI PA plan. Card details are handled by Stripe.
+                    Your 14-day trial has started without collecting a credit card. Billing can be set up after the trial is approved and ready.
                   </p>
-                  <button
-                    type="button"
-                    onClick={startCheckout}
-                    disabled={checkoutBusy}
-                    className="mt-4 inline-flex min-h-[52px] w-full items-center justify-center rounded-xl bg-[#07142a] px-5 text-base font-black text-white transition hover:-translate-y-0.5 hover:bg-blue-800 disabled:cursor-wait disabled:opacity-70 disabled:hover:translate-y-0"
-                  >
-                    {checkoutBusy ? "Opening checkout..." : "Continue to secure checkout"}
-                  </button>
-                  {checkoutError ? (
-                    <p className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-bold leading-6 text-rose-700">
-                      {checkoutError}
-                    </p>
-                  ) : null}
                 </div>
               ) : null}
             </div>
@@ -1235,6 +1182,7 @@ export default function Signup() {
   const signupStartedAtRef = useRef(Date.now());
   const [currentStep, setCurrentStep] = useState(1);
   const [businessSlide, setBusinessSlide] = useState(1);
+  const [tradeSetupPanel, setTradeSetupPanel] = useState("trade");
   const [selectedTradeId, setSelectedTradeId] = useState("electrician");
   const [selectedAreas, setSelectedAreas] = useState(["Niagara Falls"]);
   const [selectedSpecializationIds, setSelectedSpecializationIds] = useState(["residential", "commercial", "specialty"]);
@@ -1268,9 +1216,12 @@ export default function Signup() {
   const businessValidation = useMemo(() => validateBusinessDetails(details), [details]);
 
   const businessStepDisabled = !businessValidation.isValid || selectedAreas.length === 0;
+  const specializationStepDisabled = selectedSpecializationIds.length === 0;
   const businessSlideDisabled =
     currentStep === 1 &&
-    ((businessSlide === 2 && selectedAreas.length === 0) || (businessSlide === 3 && !businessValidation.isValid));
+    ((businessSlide === 1 && tradeSetupPanel === "specialization" && specializationStepDisabled) ||
+      (businessSlide === 2 && selectedAreas.length === 0) ||
+      (businessSlide === 3 && !businessValidation.isValid));
   const businessSlideLabel =
     businessSlide === 1
       ? "Next: Service area"
@@ -1282,7 +1233,6 @@ export default function Signup() {
             ? "Review details"
             : "Continue to voice";
   const maxBusinessSlide = businessValidation.isValid && selectedAreas.length > 0 ? 5 : selectedAreas.length > 0 ? 3 : 2;
-  const specializationStepDisabled = selectedSpecializationIds.length === 0;
   const voiceStepDisabled = false;
   const securityStepDisabled = Boolean(CAPTCHA_PROVIDER && !captchaToken);
 
@@ -1317,20 +1267,16 @@ export default function Signup() {
     });
   };
 
-  const selectTradeAndAdvance = (tradeId) => {
+  const selectTrade = (tradeId) => {
     setSelectedTradeId(tradeId);
     setError("");
-    if (returnToReviewAfterEdit) {
-      setReturnToReviewAfterEdit(false);
-      setBusinessSlide(5);
-      return;
-    }
-    setBusinessSlide(2);
+    setTradeSetupPanel("specialization");
   };
 
-  const editBusinessSlideFromReview = (slideNumber) => {
+  const editBusinessSlideFromReview = (slideNumber, panel = "") => {
     setReturnToReviewAfterEdit(true);
     setError("");
+    if (slideNumber === 1) setTradeSetupPanel(panel || "trade");
     setBusinessSlide(slideNumber);
   };
 
@@ -1351,6 +1297,7 @@ export default function Signup() {
   const resetSignup = () => {
     setCurrentStep(1);
     setBusinessSlide(1);
+    setTradeSetupPanel("trade");
     setSelectedTradeId("electrician");
     setSelectedAreas(["Niagara Falls"]);
     setSelectedSpecializationIds(["residential", "commercial", "specialty"]);
@@ -1376,6 +1323,19 @@ export default function Signup() {
     if (busy) return;
     if (currentStep === 1) {
       if (businessSlide === 1) {
+        if (tradeSetupPanel === "trade") {
+          setTradeSetupPanel("specialization");
+          return;
+        }
+        if (specializationStepDisabled) {
+          setError("Select at least one specialization before continuing.");
+          return;
+        }
+        if (returnToReviewAfterEdit) {
+          setReturnToReviewAfterEdit(false);
+          setBusinessSlide(5);
+          return;
+        }
         setBusinessSlide(2);
         return;
       }
@@ -1479,32 +1439,28 @@ export default function Signup() {
     });
 
     try {
-      if (!SIGNUP_SUBMIT_URL) {
-        throw new Error("Signup is not connected yet. Set REACT_APP_API_BASE_URL to your Make webhook URL and rebuild.");
-      }
-
-      const response = await postSignupPayload(SIGNUP_SUBMIT_URL, formData);
-
-      const result = await parseApiResponse(response, "Signup handoff failed");
-      if (!getSignupSuccess(result)) {
-        throw new Error(result?.error || "Signup handoff failed.");
-      }
       rememberBrowserSignupAttempt();
+      const response = await postSignupPayload(SIGNUP_SUBMIT_URL, formData);
+      const data = await parseApiResponse(response, "Signup could not be completed");
+      if (!getSignupSuccess(data)) {
+        throw new Error(data?.error || "Signup could not be completed right now. Please try again later.");
+      }
+
       setSignupResult({
-        businessName: details.businessName.trim(),
-        ownerName: details.ownerName.trim(),
-        ownerEmail: details.email.trim(),
-        ownerPhone: details.phone.trim(),
-        twilioPhoneNumber: getTwilioPhoneNumber(result),
-        reviewRequired: Boolean(result?.reviewRequired),
-        verificationRequired: Boolean(result?.verificationRequired || result?.emailVerificationRequired),
-        devVerificationUrl: result?.devVerificationUrl || "",
+        ...formData,
+        ...data,
+        businessName: data.businessName || formData.businessName || formData.businessProfile?.businessName || "",
+        ownerName: data.ownerName || formData.ownerName || formData.setupDetails?.ownerName || "",
+        ownerEmail: data.ownerEmail || formData.ownerEmail || formData.email || formData.setupDetails?.ownerEmail || "",
+        ownerPhone: data.ownerPhone || formData.ownerPhone || formData.phone || formData.setupDetails?.ownerPhone || "",
+        twilioPhoneNumber: getTwilioPhoneNumber(data) || data.twilioPhoneNumber || "",
+        trialDays: 14,
       });
+      setBusy(false);
       window.scrollTo?.({ top: 0, behavior: "smooth" });
     } catch (submitError) {
-      setError(submitError?.message || "Signup handoff failed.");
-    } finally {
       setBusy(false);
+      setError(submitError?.message || "Signup could not be completed right now. Please try again later.");
     }
   };
 
@@ -1548,6 +1504,23 @@ export default function Signup() {
               opacity: 0;
               transform: translateX(125%) skewX(-14deg);
             }
+          }
+
+          @keyframes tradeChoiceSwipe {
+            0% {
+              opacity: 0;
+              transform: translateX(42px);
+              filter: blur(4px);
+            }
+            100% {
+              opacity: 1;
+              transform: translateX(0);
+              filter: blur(0);
+            }
+          }
+
+          .trade-choice-panel {
+            animation: tradeChoiceSwipe 520ms cubic-bezier(.16,.84,.22,1) both;
           }
 
           .business-slide-window {
@@ -1609,7 +1582,7 @@ export default function Signup() {
                   <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">Business setup</p>
                   <p className="text-xs font-black text-slate-400">{businessSlide} of 5</p>
                 </div>
-                <div className="mt-4 grid grid-cols-5 gap-3">
+                <div className="mt-4 flex gap-3 overflow-x-auto pb-1 [scrollbar-width:thin] sm:grid sm:grid-cols-5 sm:overflow-visible sm:pb-0">
                   {BUSINESS_SLIDE_TABS.map((slide) => {
                     const isActive = slide.number === businessSlide;
                     const isAvailable = slide.number <= maxBusinessSlide;
@@ -1621,10 +1594,11 @@ export default function Signup() {
                         onClick={() => {
                           if (!isAvailable) return;
                           setBusinessSlide(slide.number);
+                          if (slide.number === 1) setTradeSetupPanel("trade");
                           setError("");
                         }}
                         className={
-                          "min-h-[58px] rounded-2xl border px-2 text-center text-[0.72rem] font-black uppercase tracking-[0.1em] transition sm:text-xs " +
+                          "min-h-[58px] min-w-[142px] rounded-2xl border px-3 text-center text-[0.72rem] font-black uppercase leading-tight tracking-[0.1em] transition sm:min-w-0 sm:text-xs " +
                           (isActive
                             ? "border-blue-600 bg-blue-600 text-white shadow-[0_14px_28px_-20px_rgba(37,99,235,0.95)]"
                             : isAvailable
@@ -1646,19 +1620,88 @@ export default function Signup() {
                 <section className="grid w-full gap-6 lg:grid-cols-[360px_minmax(0,1fr)] xl:grid-cols-[390px_minmax(0,1fr)] lg:items-stretch">
                   <div className="flex flex-col justify-center rounded-3xl border border-blue-100 bg-blue-50/70 p-8">
                     <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">Step 1</p>
-                    <h2 className="mt-2 text-[clamp(2rem,3vw,3.1rem)] font-black leading-tight tracking-[-0.04em] text-slate-950">Choose your trade</h2>
-                    <p className="mt-4 text-lg font-medium leading-8 text-slate-600">Pick the type of business your AI assistant will answer for.</p>
+                    <h2 className="mt-2 text-[clamp(2rem,3vw,3.1rem)] font-black leading-tight tracking-[-0.04em] text-slate-950">
+                      {tradeSetupPanel === "trade" ? "Choose your trade" : "Choose specializations"}
+                    </h2>
+                    <p className="mt-4 text-lg font-medium leading-8 text-slate-600">
+                      {tradeSetupPanel === "trade"
+                        ? "Pick the main business type. The next panel will ask which kinds of work you handle."
+                        : `Tell the assistant which types of ${selectedTrade.label.toLowerCase()} work to answer for.`}
+                    </p>
+                    <div className="mt-6 rounded-2xl border border-blue-100 bg-white/80 p-4 text-sm font-semibold leading-6 text-slate-600">
+                      <span className="font-black text-blue-600">Selected:</span> {selectedTrade.label} for {selectedSpecializationLabels.join(", ").toLowerCase()} work.
+                    </div>
                   </div>
-                <div className="grid grid-cols-2 content-center gap-4 sm:grid-cols-3 xl:gap-5">
-                  {TRADE_OPTIONS.map((trade) => (
-                    <TradeCard
-                      key={trade.id}
-                      trade={trade}
-                      selected={trade.id === selectedTradeId}
-                      onClick={() => selectTradeAndAdvance(trade.id)}
-                    />
-                  ))}
-                </div>
+                  <div className="relative grid content-center">
+                    {tradeSetupPanel === "trade" ? (
+                    <div key="trade-panel" className="trade-choice-panel">
+                      <div className="mb-4 flex items-end justify-between gap-3">
+                        <div>
+                          <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">Trade</p>
+                          <p className="mt-1 text-sm font-semibold text-slate-500">Tap a trade to continue to specialization.</p>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:gap-5">
+                        {TRADE_OPTIONS.map((trade) => (
+                          <TradeCard
+                            key={trade.id}
+                            trade={trade}
+                            selected={trade.id === selectedTradeId}
+                            onClick={() => selectTrade(trade.id)}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                    ) : (
+                    <div key="specialization-panel" className="trade-choice-panel grid gap-5">
+                      <div className="flex flex-wrap items-end justify-between gap-3">
+                        <div>
+                          <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">Specialization</p>
+                          <p className="mt-1 text-sm font-semibold text-slate-500">Choose at least one. You can select multiple.</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTradeSetupPanel("trade");
+                            setError("");
+                          }}
+                          className="inline-flex min-h-[42px] items-center justify-center rounded-xl border border-blue-100 bg-white px-4 text-sm font-black text-blue-600 transition hover:border-blue-300 hover:bg-blue-50"
+                        >
+                          Back to trades
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-5 xl:gap-5">
+                        {SPECIALIZATION_OPTIONS.map((item) => (
+                          <SpecializationCard
+                            key={item.id}
+                            item={item}
+                            selected={selectedSpecializationIds.includes(item.id)}
+                            onClick={() => toggleSpecialization(item.id)}
+                          />
+                        ))}
+                      </div>
+
+                      <div className="grid gap-3 sm:grid-cols-[1fr_220px] sm:items-center">
+                        <p className="text-sm font-semibold leading-6 text-slate-500">
+                          These choices are sent to Make.com and included in the assistant setup prompt.
+                        </p>
+                        <button
+                          type="submit"
+                          disabled={businessSlideDisabled || busy}
+                          className={
+                            "inline-flex min-h-[54px] items-center justify-center gap-3 rounded-2xl px-6 py-3 text-base font-black text-white transition sm:text-lg " +
+                            (businessSlideDisabled || busy
+                              ? "cursor-not-allowed bg-slate-300"
+                              : "bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 shadow-[0_16px_42px_-28px_rgba(79,70,229,0.95)] hover:-translate-y-0.5 hover:brightness-110")
+                          }
+                        >
+                          {busy ? "Saving..." : businessSlideLabel}
+                          <Icon name="arrow" className="h-5 w-5" />
+                        </button>
+                      </div>
+                    </div>
+                    )}
+                  </div>
               </section>
               ) : null}
 

@@ -25,6 +25,7 @@ const signupIpRateLimit = new Map();
 const signupIdentityRateLimit = new Map();
 const signupDuplicateSubmissions = new Map();
 const pendingSignupPath = path.join(dataDir, "pending-signup-verifications.json");
+const pendingStripeSignupPath = path.join(dataDir, "pending-stripe-signups.json");
 const trialReminderPath = path.join(dataDir, "trial-reminders.json");
 const signupDashboardPath = path.join(dataDir, "signup-dashboard.json");
 const vapiCallSyncPath = path.join(dataDir, "vapi-call-sync.json");
@@ -123,7 +124,46 @@ app.post("/api/payments/stripe-webhook", express.raw({ type: "application/json" 
 
   if (event.type === "checkout.session.completed") {
     await scheduleTrialReminderFromCheckoutSession(object);
-    upsertSignupDashboardFromCheckoutSession(object, { status: "checkout_completed" });
+    const pendingSignup = takePendingStripeSignup(object.id);
+    const checkoutRecord = upsertSignupDashboardFromCheckoutSession(object, {
+      status: "checkout_completed",
+      ...(pendingSignup?.summary || {}),
+    });
+    if (pendingSignup?.payload) {
+      const makePayload = buildStripeSignupMakePayload(pendingSignup.payload, object);
+      try {
+        const makeResult = await sendMakeSignupCompleted(makePayload);
+        const makeData = makeResult.data || {};
+        if (!getMakeSignupSuccess(makeData)) {
+          upsertSignupDashboardRecord({
+            ...checkoutRecord,
+            ...(pendingSignup.summary || {}),
+            status: "setup_error",
+            makeStatus: makeResult.status,
+            makeError: makeData?.error || "Make webhook did not complete after Stripe checkout.",
+          });
+        } else {
+          upsertSignupDashboardRecord({
+            ...checkoutRecord,
+            ...(pendingSignup.summary || {}),
+            status: "setup_started",
+            makeStatus: makeResult.status,
+            twilioPhoneNumber: getMakeTwilioPhoneNumber(makeData) || getMakeTwilioPhoneNumberFromText(makeResult.body),
+          });
+        }
+      } catch (error) {
+        console.error("[stripe:webhook] Make handoff after checkout failed", {
+          checkoutSessionId: object.id,
+          message: error?.message || String(error),
+        });
+        upsertSignupDashboardRecord({
+          ...checkoutRecord,
+          ...(pendingSignup.summary || {}),
+          status: "setup_error",
+          makeError: error?.message || "Make handoff failed after Stripe checkout.",
+        });
+      }
+    }
   }
 
   if (event.type === "customer.subscription.created" || event.type === "customer.subscription.updated") {
@@ -355,6 +395,63 @@ function writePendingSignupStore(store) {
   fs.writeFileSync(pendingSignupPath, `${JSON.stringify(store, null, 2)}\n`);
 }
 
+function ensurePendingStripeSignupStore() {
+  fs.mkdirSync(path.dirname(pendingStripeSignupPath), { recursive: true });
+  if (!fs.existsSync(pendingStripeSignupPath)) {
+    fs.writeFileSync(pendingStripeSignupPath, "{}\n");
+  }
+}
+
+function readPendingStripeSignupStore() {
+  ensurePendingStripeSignupStore();
+  try {
+    const data = JSON.parse(fs.readFileSync(pendingStripeSignupPath, "utf8"));
+    return data && typeof data === "object" ? data : {};
+  } catch {
+    return {};
+  }
+}
+
+function writePendingStripeSignupStore(store) {
+  ensurePendingStripeSignupStore();
+  fs.writeFileSync(pendingStripeSignupPath, `${JSON.stringify(store, null, 2)}\n`);
+}
+
+function prunePendingStripeSignupStore(store, now = Date.now()) {
+  const ttlMs = Math.max(SIGNUP_VERIFICATION_TTL_MS, 7 * 24 * 60 * 60 * 1000);
+  for (const [sessionId, record] of Object.entries(store)) {
+    if (record?.completedAt || Number(record?.createdAt || 0) + ttlMs <= now) {
+      delete store[sessionId];
+    }
+  }
+  return store;
+}
+
+function savePendingStripeSignup(session, record) {
+  const sessionId = String(session?.id || "").trim();
+  if (!sessionId) return;
+  const store = prunePendingStripeSignupStore(readPendingStripeSignupStore());
+  store[sessionId] = {
+    ...record,
+    sessionId,
+    checkoutUrl: session?.url || "",
+    createdAt: Date.now(),
+  };
+  writePendingStripeSignupStore(store);
+}
+
+function takePendingStripeSignup(sessionId) {
+  const key = String(sessionId || "").trim();
+  if (!key) return null;
+  const store = prunePendingStripeSignupStore(readPendingStripeSignupStore());
+  const record = store[key] || null;
+  if (record) {
+    delete store[key];
+    writePendingStripeSignupStore(store);
+  }
+  return record;
+}
+
 function hashSignupVerificationToken(token) {
   return crypto.createHash("sha256").update(String(token || "")).digest("hex");
 }
@@ -529,14 +626,37 @@ function normalizePhoneForMatch(value) {
 
 function getVapiNestedString(value, paths) {
   for (const pathKey of paths) {
-    const parts = pathKey.split(".");
-    let cursor = value;
-    for (const part of parts) {
-      cursor = cursor && typeof cursor === "object" ? cursor[part] : undefined;
-    }
+    const cursor = getVapiNestedValue(value, pathKey);
     if (cursor != null && String(cursor).trim()) return String(cursor).trim();
   }
   return "";
+}
+
+function getVapiNestedValue(value, pathKey) {
+  const parts = String(pathKey || "").split(".");
+  let cursor = value;
+  for (const part of parts) {
+    cursor = cursor && typeof cursor === "object" ? cursor[part] : undefined;
+  }
+  return cursor;
+}
+
+function formatVapiTranscriptValue(value) {
+  if (typeof value === "string") return value.trim();
+  if (!Array.isArray(value)) return "";
+  return value
+    .map((item) => {
+      if (typeof item === "string") return item.trim();
+      if (!item || typeof item !== "object") return "";
+      const role = item.role || item.speaker || item.name || item.type || "speaker";
+      const message = item.message || item.content || item.text || item.transcript || "";
+      if (!String(message || "").trim()) return "";
+      const time = Number(item.time ?? item.start ?? item.startTime);
+      const timePrefix = Number.isFinite(time) ? `[${Math.floor(time / 60)}:${String(Math.round(time % 60)).padStart(2, "0")}] ` : "";
+      return `${timePrefix}${String(role).trim()}: ${String(message).trim()}`;
+    })
+    .filter(Boolean)
+    .join("\n");
 }
 
 async function resolveBusinessIdForVapiCall(call) {
@@ -604,15 +724,17 @@ function getVapiDurationSeconds(call) {
 }
 
 function getVapiTranscript(call) {
-  return (
-    getVapiNestedString(call, [
-      "transcript",
-      "artifact.transcript",
-      "analysis.transcript",
-      "summary",
-      "analysis.summary",
-    ]) || null
-  );
+  const direct = getVapiNestedString(call, ["transcript", "analysis.transcript"]);
+  if (direct) return direct;
+  const artifactTranscript = formatVapiTranscriptValue(getVapiNestedValue(call, "artifact.transcript"));
+  if (artifactTranscript) return artifactTranscript;
+  const messages = formatVapiTranscriptValue(getVapiNestedValue(call, "artifact.messages"));
+  if (messages) return messages;
+  const openAiMessages = formatVapiTranscriptValue(getVapiNestedValue(call, "artifact.messagesOpenAIFormatted"));
+  if (openAiMessages) return openAiMessages;
+  const fallbackMessages = formatVapiTranscriptValue(call.messages || call.messagesOpenAIFormatted);
+  if (fallbackMessages) return fallbackMessages;
+  return getVapiNestedString(call, ["summary", "analysis.summary"]) || null;
 }
 
 function getVapiSummary(call) {
@@ -630,6 +752,7 @@ function getVapiRecordingUrl(call) {
     getVapiNestedString(call, [
       "recordingUrl",
       "recording.url",
+      "artifact.recording",
       "artifact.recordingUrl",
       "artifact.recording.url",
       "stereoRecordingUrl",
@@ -720,25 +843,233 @@ async function fetchVapiCalls({ limit = VAPI_CALL_LIMIT, createdAtGt } = {}) {
   return [];
 }
 
+async function fetchVapiCallDetail(callId) {
+  if (!VAPI_API_KEY) {
+    const err = new Error("VAPI_API_KEY is not configured.");
+    err.statusCode = 503;
+    throw err;
+  }
+  const id = String(callId || "").trim();
+  if (!id) {
+    const err = new Error("Vapi call id is required.");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const response = await fetch(`${VAPI_API_BASE_URL}/call/${encodeURIComponent(id)}`, {
+    headers: {
+      Authorization: `Bearer ${VAPI_API_KEY}`,
+      Accept: "application/json",
+    },
+  });
+  const rawText = await response.text();
+  const data = parseJsonObject(rawText);
+
+  if (!response.ok) {
+    const err = new Error(data?.message || data?.error || `Vapi call detail fetch failed with HTTP ${response.status}.`);
+    err.statusCode = response.status;
+    throw err;
+  }
+
+  return data && typeof data === "object" ? data : null;
+}
+
+async function fetchVapiCollection(resourcePath, collectionKeys = []) {
+  if (!VAPI_API_KEY) {
+    const err = new Error("VAPI_API_KEY is not configured.");
+    err.statusCode = 503;
+    throw err;
+  }
+
+  const url = new URL(`${VAPI_API_BASE_URL}/${String(resourcePath || "").replace(/^\/+/, "")}`);
+  url.searchParams.set("limit", "1000");
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${VAPI_API_KEY}`,
+      Accept: "application/json",
+    },
+  });
+  const rawText = await response.text();
+  const data = parseJsonObject(rawText);
+
+  if (!response.ok) {
+    const err = new Error(data?.message || data?.error || `Vapi ${resourcePath} fetch failed with HTTP ${response.status}.`);
+    err.statusCode = response.status;
+    throw err;
+  }
+
+  if (Array.isArray(data)) return data;
+  for (const key of ["data", "items", "results", ...collectionKeys]) {
+    if (Array.isArray(data?.[key])) return data[key];
+  }
+  return [];
+}
+
+function getVapiPhoneNumber(record) {
+  return (
+    getVapiNestedString(record, [
+      "number",
+      "phoneNumber",
+      "twilioPhoneNumber",
+      "providerResourceId",
+      "sipUri",
+      "sip.uri",
+    ]) || ""
+  );
+}
+
+function getVapiAssistantName(record) {
+  return getVapiNestedString(record, ["name", "assistant.name", "metadata.name"]) || "";
+}
+
+function getVapiAssistantId(record) {
+  return getVapiNestedString(record, ["assistantId", "assistant.id"]) || "";
+}
+
+function findVapiInventoryMapping(record, mappings, type) {
+  const rawCandidates = [
+    record?.id,
+    record?.phoneNumberId,
+    record?.assistantId,
+    getVapiAssistantId(record),
+    getVapiPhoneNumber(record),
+  ]
+    .map((item) => String(item || "").trim())
+    .filter(Boolean);
+  const normalizedCandidates = new Set([
+    ...rawCandidates.map((item) => item.toLowerCase()),
+    ...rawCandidates.map((item) => normalizePhoneForMatch(item)).filter(Boolean),
+  ]);
+  const typeNeedle = type === "assistant" ? "assistant" : "phone";
+
+  return mappings.find((mapping) => {
+    const value = String(mapping.matchValue || "").trim().toLowerCase();
+    if (!normalizedCandidates.has(value)) return false;
+    const matchType = String(mapping.matchType || "").toLowerCase();
+    return !matchType || matchType.includes(typeNeedle);
+  });
+}
+
+async function getVapiAccountInventory() {
+  const warnings = [];
+  const [phoneResult, assistantResult, mappings] = await Promise.all([
+    fetchVapiCollection("phone-number", ["phoneNumbers", "phone_numbers"]).catch((error) => {
+      warnings.push(`Could not load Vapi phone numbers: ${error.message}`);
+      return [];
+    }),
+    fetchVapiCollection("assistant", ["assistants", "agents"]).catch((error) => {
+      warnings.push(`Could not load Vapi agents: ${error.message}`);
+      return [];
+    }),
+    prisma.vapiBusinessMapping.findMany({ include: { business: true }, orderBy: { updatedAt: "desc" }, take: 500 }),
+  ]);
+
+  const assistantsById = new Map(
+    assistantResult
+      .map((assistant) => [String(assistant?.id || "").trim(), assistant])
+      .filter(([id]) => id)
+  );
+
+  const phoneNumbers = phoneResult.map((phone) => {
+    const assistantId = getVapiAssistantId(phone);
+    const assistant = assistantId ? assistantsById.get(assistantId) : null;
+    const mapping = findVapiInventoryMapping(phone, mappings, "phone");
+    return {
+      id: phone.id || phone.phoneNumberId || "",
+      name: phone.name || phone.label || "",
+      number: getVapiPhoneNumber(phone),
+      provider: phone.provider || phone.providerName || phone.type || "",
+      status: phone.status || phone.state || "",
+      assistantId,
+      assistantName: getVapiAssistantName(assistant || phone),
+      createdAt: phone.createdAt || phone.created_at || "",
+      updatedAt: phone.updatedAt || phone.updated_at || "",
+      mappedBusiness: mapping?.business ? { id: mapping.business.id, name: mapping.business.name } : null,
+      mapping: mapping ? { id: mapping.id, matchType: mapping.matchType, label: mapping.label } : null,
+    };
+  });
+
+  const assistants = assistantResult.map((assistant) => {
+    const mapping = findVapiInventoryMapping(assistant, mappings, "assistant");
+    const id = String(assistant?.id || "").trim();
+    return {
+      id,
+      name: getVapiAssistantName(assistant) || id || "Unnamed agent",
+      model: getVapiNestedString(assistant, ["model.model", "model.provider", "model.name"]) || "",
+      voice: getVapiNestedString(assistant, ["voice.voiceId", "voice.provider", "voice.name"]) || "",
+      firstMessage: getVapiNestedString(assistant, ["firstMessage"]) || "",
+      phoneNumbers: phoneNumbers.filter((phone) => phone.assistantId && phone.assistantId === id).map((phone) => phone.number || phone.id),
+      createdAt: assistant.createdAt || assistant.created_at || "",
+      updatedAt: assistant.updatedAt || assistant.updated_at || "",
+      mappedBusiness: mapping?.business ? { id: mapping.business.id, name: mapping.business.name } : null,
+      mapping: mapping ? { id: mapping.id, matchType: mapping.matchType, label: mapping.label } : null,
+    };
+  });
+
+  return {
+    phoneNumbers,
+    assistants,
+    warnings,
+    totals: {
+      phoneNumbers: phoneNumbers.length,
+      assistants: assistants.length,
+      mappedPhoneNumbers: phoneNumbers.filter((phone) => phone.mappedBusiness).length,
+      mappedAssistants: assistants.filter((assistant) => assistant.mappedBusiness).length,
+    },
+    fetchedAt: new Date().toISOString(),
+  };
+}
+
 async function syncVapiCalls(options = {}) {
   const calls = await fetchVapiCalls(options);
   const store = readVapiCallSyncStore();
   const results = [];
+  const detailErrors = [];
+  let detailsFetched = 0;
 
   for (const call of calls) {
     const vapiCallId = String(call?.id || call?.callId || "").trim();
     if (!vapiCallId) continue;
 
+    let fullCall = call;
+    try {
+      const detail = await fetchVapiCallDetail(vapiCallId);
+      if (detail) {
+        detailsFetched += 1;
+        fullCall = {
+          ...call,
+          ...detail,
+          artifact: {
+            ...(call.artifact || {}),
+            ...(detail.artifact || {}),
+          },
+          analysis: {
+            ...(call.analysis || {}),
+            ...(detail.analysis || {}),
+          },
+          metadata: {
+            ...(call.metadata || {}),
+            ...(detail.metadata || {}),
+          },
+        };
+      }
+    } catch (error) {
+      detailErrors.push({ vapiCallId, message: error?.message || "Could not fetch Vapi call detail." });
+    }
+
     const existing = store[vapiCallId] || {};
-    const businessId = await resolveBusinessIdForVapiCall(call);
+    const businessId = await resolveBusinessIdForVapiCall(fullCall);
     const callerPhone =
-      getVapiNestedString(call, ["customer.number", "customer.phoneNumber", "caller.number", "from", "fromNumber"]) ||
+      getVapiNestedString(fullCall, ["customer.number", "customer.phoneNumber", "caller.number", "from", "fromNumber"]) ||
       `unknown-vapi-${vapiCallId}`;
-    const callerName = getVapiNestedString(call, ["customer.name", "caller.name", "metadata.customerName"]);
-    const startedAt = call.startedAt || call.started_at || call.createdAt || call.created_at || new Date().toISOString();
-    const endedAt = call.endedAt || call.ended_at || call.completedAt || null;
-    const vapiCost = getVapiCost(call);
-    const twilioCallSid = getVapiTwilioCallSid(call);
+    const callerName = getVapiNestedString(fullCall, ["customer.name", "caller.name", "metadata.customerName"]);
+    const startedAt = fullCall.startedAt || fullCall.started_at || fullCall.createdAt || fullCall.created_at || new Date().toISOString();
+    const endedAt = fullCall.endedAt || fullCall.ended_at || fullCall.completedAt || null;
+    const vapiCost = getVapiCost(fullCall);
+    const twilioCallSid = getVapiTwilioCallSid(fullCall);
+    const transcript = getVapiTranscript(fullCall);
+    const summary = getVapiSummary(fullCall);
     const localCall = await logCall({
       callId: existing.localCallId,
       businessId,
@@ -746,20 +1077,20 @@ async function syncVapiCalls(options = {}) {
       callerName,
       startedAt,
       endedAt,
-      durationSec: getVapiDurationSeconds(call),
-      status: mapVapiStatus(call.status || call.endedReason),
-      transcript: getVapiTranscript(call),
-      recordingUrl: getVapiRecordingUrl(call),
+      durationSec: getVapiDurationSeconds(fullCall),
+      status: mapVapiStatus(fullCall.status || fullCall.endedReason),
+      transcript,
+      recordingUrl: getVapiRecordingUrl(fullCall),
       externalProvider: "vapi",
       externalId: vapiCallId,
-      aiSummary: getVapiSummary(call),
+      aiSummary: summary,
       twilioCallSid,
       vapiCost,
-      vapiCostBreakdown: getVapiCostBreakdown(call),
+      vapiCostBreakdown: getVapiCostBreakdown(fullCall),
       totalInternalCost: vapiCost,
       costSyncedAt: vapiCost != null || twilioCallSid ? new Date().toISOString() : null,
       followUpNeeded: /follow|quote|estimate|book|schedule|urgent|emergency/i.test(
-        [getVapiSummary(call), getVapiTranscript(call), call.endedReason].filter(Boolean).join(" ")
+        [summary, transcript, fullCall.endedReason].filter(Boolean).join(" ")
       ),
     });
 
@@ -768,16 +1099,18 @@ async function syncVapiCalls(options = {}) {
       vapiCallId,
       localCallId: localCall.id,
       businessId,
-      assistantId: call.assistantId || call.assistant?.id || "",
-      phoneNumberId: call.phoneNumberId || call.phoneNumber?.id || "",
+      assistantId: fullCall.assistantId || fullCall.assistant?.id || "",
+      phoneNumberId: fullCall.phoneNumberId || fullCall.phoneNumber?.id || "",
       twilioCallSid: twilioCallSid || existing.twilioCallSid || "",
+      transcriptAvailable: Boolean(transcript),
+      recordingAvailable: Boolean(getVapiRecordingUrl(fullCall)),
       syncedAt: new Date().toISOString(),
     };
-    results.push({ vapiCallId, localCallId: localCall.id, businessId });
+    results.push({ vapiCallId, localCallId: localCall.id, businessId, transcriptAvailable: Boolean(transcript), recordingAvailable: Boolean(getVapiRecordingUrl(fullCall)) });
   }
 
   writeVapiCallSyncStore(store);
-  return { fetched: calls.length, synced: results.length, results };
+  return { fetched: calls.length, detailsFetched, detailErrors, synced: results.length, results };
 }
 
 async function fetchTwilioCalls({ days = 30, limit = 1000 } = {}) {
@@ -1701,6 +2034,13 @@ async function getCustomerSetupCommandCenter() {
     });
     const rollup = getSetupRollup(steps);
 
+    const aiNumbers = uniqueStrings([
+      signup.twilioPhoneNumber,
+      ...(business?.vapiMappings || [])
+        .filter((mapping) => String(mapping.matchType || "").toLowerCase().includes("phone"))
+        .map((mapping) => mapping.matchValue),
+    ]);
+
     customers.push({
       id: customerId,
       businessId: business?.id || null,
@@ -1713,9 +2053,7 @@ async function getCustomerSetupCommandCenter() {
       status: signup.status || "signup_received",
       subscriptionStatus: signup.subscriptionStatus || signup.paymentStatus || signup.checkoutStatus || "",
       twilioPhoneNumber: signup.twilioPhoneNumber || "",
-      aiNumbers: (business?.vapiMappings || [])
-        .filter((mapping) => String(mapping.matchType || "").toLowerCase().includes("phone"))
-        .map((mapping) => mapping.matchValue),
+      aiNumbers,
       callCount: calls.length,
       lastCallAt: calls[0]?.startedAt || null,
       steps,
@@ -2695,6 +3033,122 @@ function compactObject(value) {
   return value == null ? undefined : value;
 }
 
+function getSignupBillingIdentity(payload, extra = {}) {
+  const business = payload?.business || {};
+  const owner = payload?.owner || {};
+  return {
+    businessName: String(extra.businessName || business.name || "").trim(),
+    ownerName: String(extra.ownerName || owner.name || "").trim(),
+    ownerEmail: String(extra.ownerEmail || owner.email || "").trim(),
+    ownerPhone: String(extra.ownerPhone || owner.phone || "").trim(),
+    businessPhone: String(extra.businessPhone || business.phone || "").trim(),
+    businessAddress: String(extra.businessAddress || business.address || "").trim(),
+  };
+}
+
+async function createNoCardStripeTrialForSignup(payload, extra = {}) {
+  if (!stripe || !STRIPE_PRICE_ID || STRIPE_TRIAL_DAYS <= 0) {
+    return { ok: false, skipped: true, reason: "stripe_not_configured" };
+  }
+
+  const identity = getSignupBillingIdentity(payload, extra);
+  if (!identity.ownerEmail || !isValidEmailAddress(identity.ownerEmail)) {
+    return { ok: false, skipped: true, reason: "invalid_owner_email" };
+  }
+
+  const metadata = compactObject({
+    businessName: identity.businessName,
+    ownerName: identity.ownerName,
+    ownerEmail: identity.ownerEmail,
+    ownerPhone: identity.ownerPhone,
+    businessPhone: identity.businessPhone,
+    source: "my-ai-pa-signup",
+    trialType: "no-card",
+  });
+
+  const existingCustomers = await stripe.customers.list({
+    email: identity.ownerEmail,
+    limit: 1,
+  });
+  const existingCustomer = existingCustomers.data?.[0] || null;
+  const customer = existingCustomer
+    ? await stripe.customers.update(existingCustomer.id, {
+        name: identity.ownerName || identity.businessName || undefined,
+        phone: identity.ownerPhone || identity.businessPhone || undefined,
+        metadata,
+      })
+    : await stripe.customers.create({
+        email: identity.ownerEmail,
+        name: identity.ownerName || identity.businessName || undefined,
+        phone: identity.ownerPhone || identity.businessPhone || undefined,
+        metadata,
+      });
+
+  const subscriptions = await stripe.subscriptions.list({
+    customer: customer.id,
+    status: "all",
+    limit: 20,
+  });
+  const existingSubscription = subscriptions.data.find((subscription) => {
+    const status = String(subscription.status || "");
+    if (["canceled", "incomplete_expired", "unpaid"].includes(status)) return false;
+    const subMetadata = subscription.metadata || {};
+    if (subMetadata.source !== "my-ai-pa-signup") return false;
+    if (!identity.businessName) return true;
+    return String(subMetadata.businessName || "").trim().toLowerCase() === identity.businessName.toLowerCase();
+  });
+
+  if (existingSubscription) {
+    return { ok: true, customer, subscription: existingSubscription, reused: true };
+  }
+
+  const subscription = await stripe.subscriptions.create({
+    customer: customer.id,
+    items: [{ price: STRIPE_PRICE_ID }],
+    trial_period_days: STRIPE_TRIAL_DAYS,
+    trial_settings: {
+      end_behavior: {
+        missing_payment_method: "pause",
+      },
+    },
+    metadata,
+  });
+
+  return { ok: true, customer, subscription, reused: false };
+}
+
+async function attachNoCardStripeTrialToSignup(payload, extra = {}) {
+  try {
+    const trialResult = await createNoCardStripeTrialForSignup(payload, extra);
+    if (!trialResult.subscription) return trialResult;
+
+    const identity = getSignupBillingIdentity(payload, extra);
+    upsertSignupDashboardFromSubscription(trialResult.subscription, {
+      ...identity,
+      makeStatus: extra.makeStatus,
+      twilioPhoneNumber: extra.twilioPhoneNumber,
+      stripeTrialType: "no-card",
+      stripeTrialReused: Boolean(trialResult.reused),
+    });
+
+    return trialResult;
+  } catch (error) {
+    const identity = getSignupBillingIdentity(payload, extra);
+    console.error("[stripe:no-card-trial] could not create trial subscription", {
+      emailHash: hashKey(identity.ownerEmail),
+      businessName: identity.businessName,
+      error: error?.message || String(error),
+    });
+    upsertSignupDashboardFromPayload(payload, {
+      ...identity,
+      makeStatus: extra.makeStatus,
+      twilioPhoneNumber: extra.twilioPhoneNumber,
+      stripeTrialError: error?.message || "Stripe trial subscription could not be created.",
+    });
+    return { ok: false, error: error?.message || "Stripe trial subscription could not be created." };
+  }
+}
+
 function parseJsonObject(rawText) {
   try {
     const data = rawText ? JSON.parse(rawText) : {};
@@ -2730,6 +3184,37 @@ function getMakeTwilioPhoneNumberFromText(rawText) {
 
   const phoneMatch = text.match(/(?:\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}/);
   return phoneMatch?.[0]?.trim() || "";
+}
+
+function buildStripeSignupMakePayload(signupPayload, checkoutSession) {
+  const body = signupPayload && typeof signupPayload === "object" ? signupPayload : {};
+  const countryCode = String(body.country || "").trim().toLowerCase();
+  return compactObject({
+    ...body,
+    event: "signup.completed",
+    submittedAt: new Date().toISOString(),
+    source: {
+      app: "my-ai-pa-signup",
+      countryCode,
+      country: countryCode === "ca" ? "Canada" : countryCode === "us" ? "United States" : undefined,
+      stripeCheckoutSessionId: checkoutSession?.id || "",
+    },
+    security: {
+      ...(body.security || {}),
+      checkoutCompleted: true,
+    },
+    verification: {
+      emailVerified: false,
+      smsVerified: false,
+    },
+    stripe: {
+      checkoutSessionId: checkoutSession?.id || "",
+      customerId: typeof checkoutSession?.customer === "string" ? checkoutSession.customer : checkoutSession?.customer?.id || "",
+      subscriptionId: typeof checkoutSession?.subscription === "string" ? checkoutSession.subscription : checkoutSession?.subscription?.id || "",
+      paymentStatus: checkoutSession?.payment_status || "",
+      status: checkoutSession?.status || "",
+    },
+  });
 }
 
 async function sendMakeSignupCompleted(payload) {
@@ -3577,6 +4062,12 @@ app.post(
     const ownerName = String(setupDetails.ownerName || "").trim();
     const ownerEmail = String(setupDetails.ownerEmail || "").trim();
     const ownerPhone = String(setupDetails.ownerPhone || "").trim();
+    const pricingDetails = body.pricing && typeof body.pricing === "object" ? body.pricing : setupDetails.pricing || {};
+    const installationFreeEstimate = pricingDetails.installationFreeEstimate !== false;
+    const repairVisitFee = String(pricingDetails.repairVisitFee || "").trim();
+    const repairHourlyRate = String(pricingDetails.repairHourlyRate || "").trim();
+    const freeEstimateAnswer = String(pricingDetails.freeEstimateAnswer || (installationFreeEstimate ? "yes we do" : "no we don't")).trim();
+    const pricingScript = String(body.pricingScript || setupDetails.pricingScript || "").trim();
     const countryCode = String(body.country || "").trim().toLowerCase();
     const googlePlaceId = String(body.selectedPlace?.place_id || body.selectedPlace?.placeId || "").trim();
 
@@ -3643,6 +4134,15 @@ app.post(
         email: ownerEmail,
         phone: ownerPhone,
       },
+      pricing: {
+        installationFreeEstimate,
+        freeEstimateAnswer,
+        repairVisitFee,
+        repairHourlyRate,
+        repairVisitFeeText: repairVisitFee ? `${repairVisitFee} dollars` : undefined,
+        repairHourlyRateText: repairHourlyRate ? `${repairHourlyRate} dollars per hour` : undefined,
+        pricingScript,
+      },
       aiAssistant: {
         goals: String(setupDetails.aiGoals || "").trim(),
         businessType: String(setupDetails.businessType || "").trim(),
@@ -3654,6 +4154,10 @@ app.post(
         assistantVoice: String(setupDetails.assistantVoice || setupDetails.voice || "").trim(),
         emergencyAfterHoursAvailable: Boolean(setupDetails.emergencyAfterHoursAvailable),
         emergencyRules: String(setupDetails.emergencyRules || "").trim(),
+        pricingScript,
+        freeEstimateAnswer,
+        repairVisitFee,
+        repairHourlyRate,
         faq: String(setupDetails.faq || "").trim(),
         greetingScript: String(setupDetails.greetingScript || "").trim(),
         intakeQuestions: String(setupDetails.intakeQuestions || "").trim(),
@@ -3746,18 +4250,30 @@ app.post(
       return res.status(502).json({ error: makeData?.error || "Make webhook did not complete the signup." });
     }
 
+    const twilioPhoneNumber = getMakeTwilioPhoneNumber(makeData) || getMakeTwilioPhoneNumberFromText(makeResult.body);
     upsertSignupDashboardFromPayload(payload, {
       status: "setup_started",
       makeStatus: makeResult.status,
-      twilioPhoneNumber: getMakeTwilioPhoneNumber(makeData) || getMakeTwilioPhoneNumberFromText(makeResult.body),
+      twilioPhoneNumber,
+    });
+    const stripeTrial = await attachNoCardStripeTrialToSignup(payload, {
+      makeStatus: makeResult.status,
+      twilioPhoneNumber,
     });
 
     res.json({
       success: true,
       ok: true,
       businessName,
-      twilioPhoneNumber: getMakeTwilioPhoneNumber(makeData) || getMakeTwilioPhoneNumberFromText(makeResult.body),
+      twilioPhoneNumber,
       makeStatus: makeResult.status,
+      stripeCustomerId: stripeTrial.customer?.id || "",
+      subscriptionId: stripeTrial.subscription?.id || "",
+      subscriptionStatus: stripeTrial.subscription?.status || "",
+      trialStartAt: getUnixMs(stripeTrial.subscription?.trial_start),
+      trialEndAt: getUnixMs(stripeTrial.subscription?.trial_end),
+      stripeTrialSkipped: Boolean(stripeTrial.skipped),
+      stripeTrialError: stripeTrial.error || "",
     });
   })
 );
@@ -3875,12 +4391,17 @@ app.get(
 
     delete store[tokenHash];
     writePendingSignupStore(store);
+    const twilioPhoneNumber = getMakeTwilioPhoneNumber(makeData) || getMakeTwilioPhoneNumberFromText(makeResult.body);
     upsertSignupDashboardFromPayload(payload, {
       status: "setup_started",
       emailVerified: true,
       emailVerifiedAt: new Date().toISOString(),
       makeStatus: makeResult.status,
-      twilioPhoneNumber: getMakeTwilioPhoneNumber(makeData) || getMakeTwilioPhoneNumberFromText(makeResult.body),
+      twilioPhoneNumber,
+    });
+    await attachNoCardStripeTrialToSignup(payload, {
+      makeStatus: makeResult.status,
+      twilioPhoneNumber,
     });
     return renderVerificationPage({
       ok: true,
@@ -3900,10 +4421,15 @@ app.post(
     }
 
     const body = req.body || {};
-    const ownerEmail = String(body.ownerEmail || body.email || "").trim();
-    const businessName = String(body.businessName || "").trim();
-    const ownerName = String(body.ownerName || "").trim();
-    const ownerPhone = String(body.ownerPhone || "").trim();
+    const signupPayload = body.signupPayload && typeof body.signupPayload === "object" ? body.signupPayload : body;
+    const setupDetails = signupPayload.setupDetails || {};
+    const businessProfile = signupPayload.businessProfile || {};
+    const ownerEmail = String(body.ownerEmail || signupPayload.ownerEmail || signupPayload.email || setupDetails.ownerEmail || "").trim();
+    const businessName = String(body.businessName || signupPayload.businessName || businessProfile.businessName || "").trim();
+    const ownerName = String(body.ownerName || signupPayload.ownerName || setupDetails.ownerName || "").trim();
+    const ownerPhone = String(body.ownerPhone || signupPayload.ownerPhone || signupPayload.phone || setupDetails.ownerPhone || "").trim();
+    const businessPhone = String(signupPayload.businessPhone || signupPayload.phone || businessProfile.phone || "").trim();
+    const businessAddress = String(signupPayload.businessAddress || businessProfile.address || "").trim();
 
     if (!ownerEmail || !isValidEmailAddress(ownerEmail)) {
       return res.status(400).json({ error: "A valid owner email is required to start checkout." });
@@ -3924,9 +4450,23 @@ app.post(
       subscriptionData.trial_period_days = STRIPE_TRIAL_DAYS;
     }
 
+    const customer = await stripe.customers.create({
+      email: ownerEmail,
+      name: ownerName || businessName || undefined,
+      phone: ownerPhone || businessPhone || undefined,
+      metadata: compactObject({
+        businessName,
+        ownerName,
+        ownerEmail,
+        ownerPhone,
+        source: "my-ai-pa-signup",
+      }),
+    });
+
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
-      customer_email: ownerEmail,
+      customer: customer.id,
+      payment_method_types: ["card"],
       line_items: [
         {
           price: STRIPE_PRICE_ID,
@@ -3950,9 +4490,22 @@ app.post(
     upsertSignupDashboardFromCheckoutSession(session, {
       status: "checkout_started",
       businessName,
+      businessPhone,
+      businessAddress,
       ownerName,
       ownerEmail,
       ownerPhone,
+    });
+    savePendingStripeSignup(session, {
+      payload: signupPayload,
+      summary: compactObject({
+        businessName,
+        businessPhone,
+        businessAddress,
+        ownerName,
+        ownerEmail,
+        ownerPhone,
+      }),
     });
 
     res.json({
@@ -4068,6 +4621,20 @@ app.get(
       limit: req.query.limit || 100,
     });
     res.json({ ok: true, calls: calls.map(sanitizeAdminCall) });
+  })
+);
+
+app.get(
+  "/api/admin/calls/:id",
+  requireAdmin,
+  asyncRoute(async (req, res) => {
+    const id = parsePositiveInt(req.params.id);
+    const call = await prisma.call.findUnique({
+      where: { id },
+      include: { caller: true, business: true, notes: { orderBy: { createdAt: "desc" } }, tasks: { orderBy: { createdAt: "desc" } } },
+    });
+    if (!call) return res.status(404).json({ error: "Call not found." });
+    res.json({ ok: true, call: sanitizeAdminCall(call) });
   })
 );
 
@@ -4235,6 +4802,14 @@ app.post(
       createdAtGt: body.createdAtGt || req.query.createdAtGt || "",
     });
     res.json({ ok: true, ...result });
+  })
+);
+
+app.get(
+  "/api/admin/vapi/inventory",
+  requireAdmin,
+  asyncRoute(async (_req, res) => {
+    res.json({ ok: true, inventory: await getVapiAccountInventory() });
   })
 );
 

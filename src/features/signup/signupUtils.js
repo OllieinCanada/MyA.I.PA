@@ -64,6 +64,28 @@ export function buildPricingScript(pricing) {
     .join("\n");
 }
 
+export function buildPricingPayload(pricing) {
+  const repairVisitFee = String(pricing.repairVisitFee ?? "").trim() || "100";
+  const repairHourlyRate = String(pricing.repairHourlyRate ?? "").trim() || "100";
+  const installationFreeEstimate = pricing.installationFreeEstimate !== false;
+  const freeEstimateAnswer = installationFreeEstimate ? "yes we do" : "no we don't";
+  const pricingScript = buildPricingScript({
+    installationFreeEstimate,
+    repairVisitFee,
+    repairHourlyRate,
+  });
+
+  return {
+    installationFreeEstimate,
+    freeEstimateAnswer,
+    repairVisitFee,
+    repairHourlyRate,
+    repairVisitFeeText: `${repairVisitFee} dollars`,
+    repairHourlyRateText: `${repairHourlyRate} dollars per hour`,
+    pricingScript,
+  };
+}
+
 export function validateBusinessDetails(details) {
   const ownerName = details.ownerName.trim();
   const businessName = details.businessName.trim();
@@ -226,7 +248,8 @@ export function buildSignupPayload({
 }) {
   const serviceArea = selectedAreas.join(", ");
   const businessAddress = formatBusinessAddress(details);
-  const pricingScript = buildPricingScript(pricing);
+  const pricingDetails = buildPricingPayload(pricing);
+  const pricingScript = pricingDetails.pricingScript;
 
   return {
     country: "ca",
@@ -243,6 +266,11 @@ export function buildSignupPayload({
     postalCode: details.postalCode.trim().toUpperCase(),
     businessType: selectedTrade.businessType,
     serviceArea,
+    pricing: pricingDetails,
+    installationFreeEstimate: pricingDetails.installationFreeEstimate,
+    freeEstimateAnswer: pricingDetails.freeEstimateAnswer,
+    repairVisitFee: pricingDetails.repairVisitFee,
+    repairHourlyRate: pricingDetails.repairHourlyRate,
     pricingScript,
     selectedPlace: null,
     businessProfile: {
@@ -278,7 +306,11 @@ export function buildSignupPayload({
       openingDialogue: selectedDialogueText,
       specializations: selectedSpecializationLabels,
       specializationNotes: specializationNotes.trim(),
-      pricing,
+      pricing: pricingDetails,
+      installationFreeEstimate: pricingDetails.installationFreeEstimate,
+      freeEstimateAnswer: pricingDetails.freeEstimateAnswer,
+      repairVisitFee: pricingDetails.repairVisitFee,
+      repairHourlyRate: pricingDetails.repairHourlyRate,
       pricingScript,
       aiGoals: `Answer calls, capture lead details, text the owner, and help callers in ${serviceArea}. The business handles ${selectedSpecializationLabels.join(", ").toLowerCase()} work. Use this pricing script when callers ask about estimates, repairs, maintenance, or installations: ${pricingScript}${specializationNotes.trim() ? ` Notes: ${specializationNotes.trim()}` : ""}`,
       faq: selectedTrade.faq,

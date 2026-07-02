@@ -1,7 +1,7 @@
-import { getDefaultApiBaseUrl, isMakeWebhookUrl, normalizeApiBase } from "../../config/apiBase";
+import { getApiBaseUrl, getDefaultApiBaseUrl, isMakeWebhookUrl, normalizeApiBase } from "../../config/apiBase";
 
 export const DEFAULT_SIGNUP_WEBHOOK_URL = "";
-export const RAW_API_BASE = process.env.REACT_APP_API_BASE_URL || getDefaultApiBaseUrl();
+export const RAW_API_BASE = getApiBaseUrl(process.env.REACT_APP_API_BASE_URL);
 export const RAW_CHECKOUT_API_BASE = process.env.REACT_APP_CHECKOUT_API_BASE_URL || "";
 export const MAKE_SIGNUP_WEBHOOK_URL = process.env.REACT_APP_MAKE_SIGNUP_WEBHOOK_URL || "";
 export const MAKE_SIGNUP_WEBHOOK_API_KEY = process.env.REACT_APP_MAKE_SIGNUP_WEBHOOK_API_KEY || "";
@@ -177,7 +177,7 @@ export const CANADIAN_PROVINCES = [
 ];
 
 export const BUSINESS_SLIDE_TABS = [
-  { number: 1, label: "Trade" },
+  { number: 1, label: "Trade / Specialization" },
   { number: 2, label: "Area" },
   { number: 3, label: "Details" },
   { number: 4, label: "Pricing" },

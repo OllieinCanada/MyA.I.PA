@@ -5,10 +5,16 @@ const env = loadProjectEnv();
 const shouldPost = process.argv.includes("--post");
 const outputPathIndex = process.argv.indexOf("--out");
 const outputPath = outputPathIndex >= 0 ? process.argv[outputPathIndex + 1] : "";
-const endpoint =
-  env.REACT_APP_MAKE_SIGNUP_WEBHOOK_URL ||
-  env.REACT_APP_API_BASE_URL ||
-  "https://hook.us2.make.com/bg30xcgcluakdcf3u2jtw1h9186gbq7m";
+const defaultApiBase = "https://myaipa-api.onrender.com";
+const signupApiPath = "/api/integrations/signup-complete";
+const configuredSignupEndpoint = env.MAKE_SIGNUP_WEBHOOK_URL || env.REACT_APP_MAKE_SIGNUP_WEBHOOK_URL || "";
+const configuredApiBase = env.REACT_APP_API_BASE_URL || env.API_BASE_URL || defaultApiBase;
+const endpoint = configuredSignupEndpoint || (
+  /^https:\/\/hook\.[^/]+\.make\.com\//.test(configuredApiBase)
+    ? configuredApiBase.replace(/\/+$/, "")
+    : `${configuredApiBase.replace(/\/+$/, "")}${signupApiPath}`
+);
+const makeApiKey = env.MAKE_SIGNUP_WEBHOOK_API_KEY || env.REACT_APP_MAKE_SIGNUP_WEBHOOK_API_KEY || "";
 
 const payload = {
   country: "ca",
@@ -25,6 +31,20 @@ const payload = {
   postalCode: "L3M 4E7",
   businessType: "Electrical",
   serviceArea: "Niagara Falls, Welland, Brampton",
+  pricing: {
+    installationFreeEstimate: true,
+    freeEstimateAnswer: "yes we do",
+    repairVisitFee: "100",
+    repairHourlyRate: "100",
+    repairVisitFeeText: "100 dollars",
+    repairHourlyRateText: "100 dollars per hour",
+    pricingScript:
+      "Installations: Ask, \"Would you like us to come down and give you a free estimate?\"\nRepairs or maintenance: 100 dollars to come out and 100 dollars per hour after that.\nAsk, \"Would you like to continue?\"",
+  },
+  installationFreeEstimate: true,
+  freeEstimateAnswer: "yes we do",
+  repairVisitFee: "100",
+  repairHourlyRate: "100",
   pricingScript:
     "Installations: Ask, \"Would you like us to come down and give you a free estimate?\"\nRepairs or maintenance: 100 dollars to come out and 100 dollars per hour after that.\nAsk, \"Would you like to continue?\"",
   selectedPlace: null,
@@ -62,9 +82,18 @@ const payload = {
     specializationNotes: "",
     pricing: {
       installationFreeEstimate: true,
+      freeEstimateAnswer: "yes we do",
       repairVisitFee: "100",
       repairHourlyRate: "100",
+      repairVisitFeeText: "100 dollars",
+      repairHourlyRateText: "100 dollars per hour",
+      pricingScript:
+        "Installations: Ask, \"Would you like us to come down and give you a free estimate?\"\nRepairs or maintenance: 100 dollars to come out and 100 dollars per hour after that.\nAsk, \"Would you like to continue?\"",
     },
+    installationFreeEstimate: true,
+    freeEstimateAnswer: "yes we do",
+    repairVisitFee: "100",
+    repairHourlyRate: "100",
     pricingScript:
       "Installations: Ask, \"Would you like us to come down and give you a free estimate?\"\nRepairs or maintenance: 100 dollars to come out and 100 dollars per hour after that.\nAsk, \"Would you like to continue?\"",
     faq: "Do you offer emergency electrical service?\nDo you handle panel upgrades?\nCan you install EV chargers?\nDo you provide estimates?",
@@ -99,7 +128,7 @@ if (shouldPost) {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      ...(env.REACT_APP_MAKE_SIGNUP_WEBHOOK_API_KEY ? { "x-make-apikey": env.REACT_APP_MAKE_SIGNUP_WEBHOOK_API_KEY } : {}),
+      ...(makeApiKey ? { "x-make-apikey": makeApiKey } : {}),
     },
     body: JSON.stringify(payload),
   })
