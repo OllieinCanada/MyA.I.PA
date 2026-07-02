@@ -3661,6 +3661,17 @@ app.post(
         doNotHandle: String(setupDetails.doNotHandle || "").trim(),
       },
     });
+    const makePayload = compactObject({
+      ...body,
+      event: payload.event,
+      submittedAt: payload.submittedAt,
+      source: payload.source,
+      security: {
+        ...(body.security || {}),
+        ...(payload.security || {}),
+      },
+      verification: payload.verification,
+    });
 
     upsertSignupDashboardFromPayload(payload, {
       status: "signup_received",
@@ -3724,7 +3735,7 @@ app.post(
       });
     }
 
-    const makeResult = await sendMakeSignupCompleted(payload);
+    const makeResult = await sendMakeSignupCompleted(makePayload);
     const makeData = makeResult.data || {};
     if (!getMakeSignupSuccess(makeData)) {
       upsertSignupDashboardFromPayload(payload, {
