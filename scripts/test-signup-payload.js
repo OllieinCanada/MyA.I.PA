@@ -31,6 +31,10 @@ const payload = {
   postalCode: "L3M 4E7",
   businessType: "Electrical",
   serviceArea: "Niagara Falls, Welland, Brampton",
+  specializations: ["Residential", "Commercial", "Industrial", "Agricultural", "Specialty"],
+  specializationList: "Residential, Commercial, Industrial, Agricultural, Specialty",
+  specialityList: "Residential, Commercial, Industrial, Agricultural, Specialty",
+  specialtyList: "Residential, Commercial, Industrial, Agricultural, Specialty",
   pricing: {
     installationFreeEstimate: true,
     freeEstimateAnswer: "yes we do",
@@ -78,7 +82,10 @@ const payload = {
     assistantVoice: "elliot",
     assistantVoiceLabel: "My AI PA Agent",
     openingDialogue: "Hi, thanks for calling. How can I help you today?",
-    specializations: ["Residential", "Commercial", "Specialty"],
+    specializations: ["Residential", "Commercial", "Industrial", "Agricultural", "Specialty"],
+    specializationList: "Residential, Commercial, Industrial, Agricultural, Specialty",
+    specialityList: "Residential, Commercial, Industrial, Agricultural, Specialty",
+    specialtyList: "Residential, Commercial, Industrial, Agricultural, Specialty",
     specializationNotes: "",
     pricing: {
       installationFreeEstimate: true,

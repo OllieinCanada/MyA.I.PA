@@ -4068,6 +4068,22 @@ app.post(
     const repairHourlyRate = String(pricingDetails.repairHourlyRate || "").trim();
     const freeEstimateAnswer = String(pricingDetails.freeEstimateAnswer || (installationFreeEstimate ? "yes we do" : "no we don't")).trim();
     const pricingScript = String(body.pricingScript || setupDetails.pricingScript || "").trim();
+    const rawSpecializations = Array.isArray(body.specializations)
+      ? body.specializations
+      : Array.isArray(setupDetails.specializations)
+        ? setupDetails.specializations
+        : String(body.specializationList || body.specialityList || body.specialtyList || setupDetails.specializationList || setupDetails.specialityList || setupDetails.specialtyList || setupDetails.specializations || "")
+            .split(",");
+    const specializations = rawSpecializations
+      .map((value) => String(value || "").trim())
+      .filter(Boolean);
+    const specializationList = String(
+      body.specializationList
+        || setupDetails.specializationList
+        || specializations.join(", ")
+    ).trim();
+    const specialityList = String(body.specialityList || setupDetails.specialityList || specializationList).trim();
+    const specialtyList = String(body.specialtyList || setupDetails.specialtyList || specializationList).trim();
     const countryCode = String(body.country || "").trim().toLowerCase();
     const googlePlaceId = String(body.selectedPlace?.place_id || body.selectedPlace?.placeId || "").trim();
 
@@ -4143,10 +4159,18 @@ app.post(
         repairHourlyRateText: repairHourlyRate ? `${repairHourlyRate} dollars per hour` : undefined,
         pricingScript,
       },
+      specializations,
+      specializationList,
+      specialityList,
+      specialtyList,
       aiAssistant: {
         goals: String(setupDetails.aiGoals || "").trim(),
         businessType: String(setupDetails.businessType || "").trim(),
         serviceArea: String(setupDetails.serviceArea || "").trim(),
+        specializations,
+        specializationList,
+        specialityList,
+        specialtyList,
         callForwardingNumber: String(setupDetails.callForwardingNumber || "").trim(),
         bookingPreference: String(setupDetails.bookingPreference || "").trim(),
         notificationPreference: String(setupDetails.notificationPreference || "").trim(),

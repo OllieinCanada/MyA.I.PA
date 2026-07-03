@@ -250,6 +250,7 @@ export function buildSignupPayload({
   const businessAddress = formatBusinessAddress(details);
   const pricingDetails = buildPricingPayload(pricing);
   const pricingScript = pricingDetails.pricingScript;
+  const specializationList = selectedSpecializationLabels.join(", ");
 
   return {
     country: "ca",
@@ -266,6 +267,10 @@ export function buildSignupPayload({
     postalCode: details.postalCode.trim().toUpperCase(),
     businessType: selectedTrade.businessType,
     serviceArea,
+    specializations: selectedSpecializationLabels,
+    specializationList,
+    specialityList: specializationList,
+    specialtyList: specializationList,
     pricing: pricingDetails,
     installationFreeEstimate: pricingDetails.installationFreeEstimate,
     freeEstimateAnswer: pricingDetails.freeEstimateAnswer,
@@ -305,6 +310,9 @@ export function buildSignupPayload({
       voiceSampleUrl: selectedAgent.sampleSrc,
       openingDialogue: selectedDialogueText,
       specializations: selectedSpecializationLabels,
+      specializationList,
+      specialityList: specializationList,
+      specialtyList: specializationList,
       specializationNotes: specializationNotes.trim(),
       pricing: pricingDetails,
       installationFreeEstimate: pricingDetails.installationFreeEstimate,
