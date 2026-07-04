@@ -1,0 +1,14 @@
+{
+  "site": "https://www.myaipa.ca",
+  "label": "2026-07-04-homepage-live-call-refresh",
+  "status": "latest",
+  "builtAt": "2026-07-04",
+  "bundle": "static/js/main.6bfb1f96.js",
+  "notes": [
+    "AI Telephone Answering Assistant hero badge",
+    "Lowered badge spacing below the My AI PA logo",
+    "Refreshed live-call conversation",
+    "Owner Text and Customer Text service request cards",
+    "Laptop-height hero layout fixes"
+  ]
+}
