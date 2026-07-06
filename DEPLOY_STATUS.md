@@ -1,6 +1,6 @@
 # Deploy Status
 
-Last updated: 2026-07-04
+Last updated: 2026-07-06
 
 ## Latest www.myaipa.ca Frontend Build
 
@@ -10,21 +10,22 @@ The current `docs/` GitHub Pages output is the latest build intended for:
 https://www.myaipa.ca
 ```
 
-Build label: `2026-07-04-homepage-live-call-refresh`
+Build label: `2026-07-06-homepage-tims-electrical-live-call-refresh`
 
 Current production bundle after `npm run build:pages`:
 
 ```text
-docs/static/js/main.6bfb1f96.js
+docs/static/js/main.133b6181.js
 ```
 
-This build includes the refreshed homepage hero for My AI PA:
+This is the latest `www.myaipa.ca` frontend build and includes the refreshed homepage hero for My AI PA:
 
 - `AI Telephone Answering Assistant` hero badge.
-- Lowered hero badge spacing so it does not crowd the My AI PA logo.
-- Updated live-call conversation around installation, maintenance, and repair.
-- Owner Text and Customer Text cards with clearer service request formatting.
-- Enlarged blue arrow/text note: `Instantly sends you and the customer a text message`.
+- Tim's Electrical AI live-call demo with a service-van avatar mark.
+- Updated live-call conversation for residential and commercial electrical work.
+- Larger `Summary ready` badge and clearer `An Example of A Real Conversation` heading.
+- Larger Details Captured, Owner Text, Customer Text, and trust-line copy.
+- `PIPEDA Compliant`, `14-day free trial`, and `No credit card required` shown as a readable two-line trust block.
 - Laptop-height layout fixes so the hero cards fit without clipping.
 
 ## Recurring Thread Request
