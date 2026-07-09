@@ -889,7 +889,7 @@ function HeroCallDashboard() {
   const checklist = ["Name collected", "Phone collected", "Service type", "Issue details", "Best time to call back"];
 
   return (
-    <div className="landing-call-dashboard relative mx-auto w-full max-w-[960px]">
+    <div className="landing-call-dashboard relative mx-auto w-full max-w-[690px]">
       <div className="relative overflow-hidden rounded-[32px] border border-[#142033] bg-[#050913] text-white shadow-[0_28px_78px_-42px_rgba(0,0,0,0.9),inset_0_1px_0_rgba(255,255,255,0.06)]">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_12%_34%,rgba(36,99,235,0.24),transparent_28%),radial-gradient(circle_at_74%_82%,rgba(37,99,235,0.28),transparent_30%),linear-gradient(90deg,rgba(255,255,255,0.04)_1px,transparent_1px)] bg-[size:auto,auto,1px_100%]" />
 
@@ -960,35 +960,36 @@ function HeroCallDashboard() {
 
             <div className="landing-conversation-panel mt-4 rounded-[26px] border border-white/8 bg-black/18 px-5 py-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
               <p className="text-[0.92rem] font-black uppercase tracking-[0.06em] text-white/38">AI Assistant</p>
-              <div className="mt-2.5 max-w-[78%] rounded-[20px] bg-white/10 px-5 py-3 text-[1.06rem] font-bold leading-[1.22] text-white/92">
-                Thanks for calling Tim&apos;s Electrical! We do residential and commercial work. Are you looking for a new installation, maintenance or repairs?
+              <div className="mt-2.5 max-w-[78%] rounded-[16px] bg-white/10 px-5 py-3 text-[1.12rem] font-bold leading-[1.26] text-white/92">
+                <span className="block">Thanks for calling Tim&apos;s Electrical.</span>
+                <span className="mt-2 block">How can I help you today?</span>
               </div>
               <p className="mt-1 text-right text-[0.74rem] font-bold text-white/35">10:32 AM</p>
 
               <p className="mt-3 text-right text-[0.92rem] font-black uppercase tracking-[0.06em] text-[#78b7ff]">Caller</p>
-              <div className="ml-auto mt-2.5 max-w-[78%] rounded-[20px] bg-[#0b376d] px-5 py-3 text-[1.06rem] font-bold leading-[1.22] text-white/96 shadow-[0_18px_42px_-30px_rgba(37,99,235,0.95)]">
+              <div className="ml-auto mt-2.5 max-w-[78%] rounded-[20px] bg-[#0b376d] px-5 py-3 text-[1.1rem] font-bold leading-[1.2] text-white/96 shadow-[0_18px_42px_-30px_rgba(37,99,235,0.95)]">
                 Yes, I want a Hot Tub installed
               </div>
               <p className="mt-1 text-right text-[0.74rem] font-bold text-white/35">10:32 AM</p>
 
               <p className="mt-3 text-[0.92rem] font-black uppercase tracking-[0.06em] text-white/38">AI Assistant</p>
-              <div className="mt-2.5 max-w-[78%] rounded-[20px] bg-white/10 px-5 py-3 text-[1.06rem] font-bold leading-[1.22] text-white/92">
-                Sure we can help with that. Let me get some information.
+              <div className="landing-conversation-long-bubble mt-2.5 max-w-[84%] rounded-[16px] bg-white/10 px-5 py-3 text-[1.02rem] font-bold leading-[1.18] text-white/92">
+                Sure, we can help with a hot tub installation! Let me get some details related to the job and send them off to a dedicated team member!
               </div>
               <p className="mt-1 text-right text-[0.74rem] font-bold text-white/35">10:32 AM</p>
             </div>
 
             <div className="landing-dashboard-bottom mt-3">
               <div className="landing-lead-stack grid gap-2">
-                <div className="landing-lead-note flex items-center justify-center gap-3 text-center text-[1.2rem] font-black italic leading-[1.04] text-[#c7ecff] drop-shadow-[0_0_12px_rgba(167,221,255,0.6)]">
+                <div className="landing-lead-note flex items-center justify-center gap-3 text-center text-[1.02rem] font-black italic leading-[1.04] text-[#39cfff] drop-shadow-[0_0_12px_rgba(56,189,248,0.42)]">
                   <svg viewBox="0 0 42 28" className="h-7 w-10 shrink-0" fill="none" stroke="currentColor" strokeWidth="4" aria-hidden="true">
                     <path d="M3 6c12 2 22 8 29 17" strokeLinecap="round" />
                     <path d="m25 22 9 2 1-9" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
-                  <span>Instantly sends you and the customer a text message</span>
+                  <span>Instantly sends you and the customer a text message.</span>
                 </div>
 
-                <div className="landing-lead-card rounded-[20px] border border-[#b9d8ff] bg-white px-4 py-3 text-[#111827] shadow-[0_0_0_6px_rgba(37,99,235,0.2),0_28px_70px_-28px_rgba(37,99,235,1)]">
+                <div className="landing-lead-card rounded-[14px] border border-[#92f28f] bg-white px-4 py-3 text-[#111827] shadow-[0_0_0_3px_rgba(34,197,94,0.32),0_28px_70px_-28px_rgba(34,197,94,0.95)]">
                   <div className="flex items-center justify-between">
                     <span className="landing-owner-text-title inline-flex items-center gap-3 font-black">
                       <span className="landing-message-icon grid place-items-center rounded-xl bg-[#66e83f] text-white">
@@ -998,18 +999,18 @@ function HeroCallDashboard() {
                     </span>
                     <span className="text-[0.82rem] font-black text-gray-400">now</span>
                   </div>
-                  <div className="landing-owner-text-body mt-2 space-y-0.5 font-black tracking-[-0.02em]">
-                    <p>Service request (installation):</p>
-                    <p>- Name: Tim&apos;s Electrical</p>
-                    <p>- Phone: 905-555-1234</p>
-                    <p>- Job Details: Hot Tub installation</p>
-                    <p>- Address: 123 Main St</p>
-                    <p>- City: Hamilton</p>
-                    <p>- Best Callback time: Tomorrow morning</p>
+                  <div className="landing-owner-text-body mt-2 font-bold tracking-[-0.01em]">
+                    <p>New service request received.</p>
+                    <p>&bull; Name: Tim&apos;s Electrical</p>
+                    <p>&bull; Phone: 905-555-1234</p>
+                    <p>&bull; Job: Hot Tub installation</p>
+                    <p>&bull; Address: 123 Main St</p>
+                    <p>&bull; City: Hamilton</p>
+                    <p>Best callback time: Tomorrow morning</p>
                   </div>
                 </div>
 
-                <div className="landing-customer-text-card rounded-[20px] border border-[#c7f5d6] bg-[#f4fff7] px-4 py-3 text-[#0f2b1a] shadow-[0_18px_44px_-32px_rgba(34,197,94,0.95)]">
+                <div className="landing-customer-text-card rounded-[14px] border border-[#92f28f] bg-white px-4 py-3 text-[#0f2b1a] shadow-[0_18px_44px_-32px_rgba(34,197,94,0.95)]">
                   <div className="flex items-center justify-between">
                     <span className="landing-customer-text-title inline-flex items-center gap-3 font-black">
                       <span className="landing-message-icon grid place-items-center rounded-xl bg-[#22c55e] text-white">
@@ -1020,7 +1021,7 @@ function HeroCallDashboard() {
                     <span className="text-[0.82rem] font-black text-[#7a9a86]">now</span>
                   </div>
                   <p className="landing-customer-text-body mt-3 font-black tracking-[-0.02em]">
-                    Thanks for calling TIM&apos;S ELECTRICAL. your request for a hot tub has been delivered to one of our specialists. We&apos;ll try to call around the time you said was most convenient which was tomorrow morning. Have a great day!
+                    Thanks for calling Tim&apos;s Electrical. We&apos;ll be in touch tomorrow morning. Have a great day!
                   </p>
                 </div>
               </div>
@@ -1903,7 +1904,10 @@ function LandingPage() {
               background-size 0.16s cubic-bezier(0.35, 0, 0.2, 1) 0.33s;
           }
           .landing-call-dashboard > div {
-            height: 700px;
+            height: 660px;
+          }
+          .landing-call-panel {
+            min-height: 0;
           }
           .landing-conversation-column {
             min-height: 0;
@@ -1987,14 +1991,18 @@ function LandingPage() {
               max-width: min(100%, 360px);
             }
             .landing-call-dashboard > div {
-              height: auto;
+              height: auto !important;
               min-height: 0;
               border-radius: 26px;
+              overflow: hidden;
             }
             .landing-call-dashboard > div > div {
+              display: block !important;
+              height: auto !important;
               grid-template-columns: minmax(0, 1fr);
             }
             .landing-call-panel {
+              height: auto !important;
               min-height: 390px;
               border-right: 0;
               border-bottom: 1px solid #1b2638;
@@ -2039,35 +2047,103 @@ function LandingPage() {
               width: 3.8rem;
             }
             .landing-conversation-column {
+              height: auto !important;
+              min-height: 0;
               padding: 1.25rem;
+              overflow: visible;
+            }
+            .landing-conversation-header {
+              align-items: flex-start;
+              gap: 0.65rem;
             }
             .landing-conversation-header h3 {
-              font-size: 1.2rem;
+              font-size: 1.08rem;
+              line-height: 1.08;
             }
             .landing-conversation-header span {
-              font-size: 0.74rem;
-              padding: 0.44rem 0.8rem;
+              flex-shrink: 0;
+              font-size: 0.58rem;
+              padding: 0.34rem 0.6rem;
             }
             .landing-conversation-panel {
+              flex: none;
+              margin-top: 0.8rem;
               border-radius: 20px;
-              padding: 0.9rem;
+              padding: 0.78rem;
+            }
+            .landing-conversation-panel > p {
+              font-size: 0.62rem;
+              line-height: 1;
             }
             .landing-conversation-panel div {
-              max-width: 88%;
-              font-size: 0.75rem;
-              line-height: 1.18;
+              max-width: 92%;
+              padding: 0.58rem 0.78rem;
+              font-size: 0.72rem;
+              line-height: 1.12;
             }
             .landing-dashboard-bottom {
-              grid-template-columns: minmax(0, 1fr);
-              gap: 0.8rem;
+              display: block;
+              flex: none;
+              height: auto !important;
+              margin-top: 0.95rem;
+              min-height: 0;
+              overflow: visible;
+            }
+            .landing-lead-stack {
+              display: flex;
+              height: auto !important;
+              flex-direction: column;
+              gap: 0.82rem;
+              min-height: 0;
+              overflow: visible;
             }
             .landing-lead-note {
               justify-content: flex-start;
-              font-size: 0.82rem;
+              align-items: center;
+              font-size: 0.78rem;
+              line-height: 1.08;
+              text-align: left;
             }
-            .landing-lead-card {
+            .landing-lead-note svg {
+              height: 1.35rem;
+              width: 1.9rem;
+            }
+            .landing-lead-card,
+            .landing-customer-text-card {
+              flex: none;
+              min-height: 0;
+              height: auto;
               border-radius: 18px;
-              padding: 0.9rem;
+              padding: 0.85rem;
+              justify-content: flex-start;
+            }
+            .landing-owner-text-title,
+            .landing-customer-text-title {
+              font-size: 1.04rem !important;
+              line-height: 1.05 !important;
+            }
+            .landing-owner-text-body {
+              display: block;
+              margin-top: 0.6rem !important;
+              font-size: 0.78rem !important;
+              line-height: 1.08 !important;
+            }
+            .landing-owner-text-body > p {
+              margin-top: 0.16rem !important;
+            }
+            .landing-customer-text-body {
+              margin-top: 0.55rem !important;
+              font-size: 0.74rem !important;
+              line-height: 1.1 !important;
+            }
+            .landing-customer-text-card {
+              container-type: normal;
+              contain: none;
+              padding-bottom: 0.95rem;
+            }
+            .landing-message-icon {
+              width: 1.9rem !important;
+              height: 1.9rem !important;
             }
           }
           @media (min-width: 1024px) and (max-height: 900px) {
@@ -2076,7 +2152,7 @@ function LandingPage() {
               padding-bottom: 1rem;
             }
             .landing-hero-grid {
-              gap: 1.5rem;
+              gap: 3rem;
               padding-top: 0.5rem;
               padding-bottom: 1rem;
             }
@@ -2188,10 +2264,11 @@ function LandingPage() {
               font-size: 1.34rem;
               line-height: 1.16;
             }
-            .landing-call-checklist-card {
-              margin-top: 1.15rem;
-              padding: 0.8rem;
-            }
+          .landing-call-checklist-card {
+            margin-top: 1.15rem;
+            padding: 0.8rem;
+            margin-bottom: 0.9rem;
+          }
             .landing-call-checklist-card p {
               font-size: 0.66rem;
             }
@@ -2210,8 +2287,8 @@ function LandingPage() {
             .landing-hero-grid {
               padding-top: 0;
               padding-bottom: 0;
-              grid-template-columns: minmax(390px, 0.52fr) minmax(760px, 1.48fr);
-              gap: 0.9rem;
+              grid-template-columns: minmax(360px, 0.64fr) minmax(650px, 1.36fr);
+              gap: 2.25rem;
             }
             .landing-hero-title {
               font-size: clamp(2.82rem, 3.18vw, 3.38rem);
@@ -2235,7 +2312,8 @@ function LandingPage() {
             }
             .landing-hero-visual {
               margin-top: 0.25rem;
-              margin-right: -0.35rem;
+              margin-right: 0;
+              transform: translateY(-0.55rem);
             }
             .landing-phone {
               height: 560px;
@@ -2664,11 +2742,198 @@ function LandingPage() {
               height: 1.32rem !important;
             }
           }
+          @media (min-width: 1024px) and (max-height: 820px) {
+            .landing-hero-visual {
+              transform: translateY(-4.25rem) !important;
+            }
+            .landing-call-dashboard > div {
+              height: 640px !important;
+            }
+            .landing-call-panel,
+            .landing-conversation-column {
+              height: 100% !important;
+              min-height: 0 !important;
+              overflow: hidden;
+              padding: 1.35rem 1.45rem !important;
+            }
+            .landing-call-status {
+              font-size: 0.92rem !important;
+            }
+            .landing-caller-card {
+              margin-top: 0.9rem !important;
+            }
+            .landing-caller-avatar {
+              width: 4.35rem !important;
+              height: 4.35rem !important;
+            }
+            .landing-caller-avatar svg {
+              width: 3rem !important;
+              height: 3rem !important;
+            }
+            .landing-caller-name {
+              margin-top: 0.7rem !important;
+              font-size: 1.42rem !important;
+              line-height: 1.04 !important;
+            }
+            .landing-caller-phone {
+              margin-top: 0.45rem !important;
+              font-size: 0.94rem !important;
+            }
+            .landing-caller-tag {
+              margin-top: 0.55rem !important;
+              max-width: 11.4rem !important;
+              padding: 0.48rem 0.8rem !important;
+              font-size: 0.76rem !important;
+              line-height: 1.1 !important;
+            }
+            .landing-call-checklist-card {
+              margin-top: 0.75rem !important;
+              margin-bottom: 0.65rem !important;
+              border-radius: 18px !important;
+              padding: 0.62rem !important;
+            }
+            .landing-call-checklist-title {
+              font-size: 0.72rem !important;
+              line-height: 1.04 !important;
+            }
+            .landing-call-checklist-list {
+              margin-top: 0.42rem !important;
+              gap: 0.28rem !important;
+              font-size: 0.82rem !important;
+              line-height: 1.05 !important;
+            }
+            .landing-call-checklist-row {
+              gap: 0.48rem !important;
+            }
+            .landing-call-checklist-icon {
+              width: 1.32rem !important;
+              height: 1.32rem !important;
+            }
+            .landing-call-checklist-check {
+              width: 0.84rem !important;
+              height: 0.84rem !important;
+            }
+            .landing-call-controls svg[viewBox="0 0 120 42"] {
+              height: 2.2rem !important;
+            }
+            .landing-call-controls > div {
+              margin-top: 0.45rem !important;
+            }
+            .landing-call-controls {
+              transform: translateY(0);
+            }
+            .landing-call-button {
+              width: 2.35rem !important;
+              height: 2.35rem !important;
+            }
+            .landing-call-button svg {
+              width: 1.25rem !important;
+              height: 1.25rem !important;
+            }
+            .landing-hangup-button {
+              width: 3.1rem !important;
+              height: 3.1rem !important;
+            }
+            .landing-hangup-button svg {
+              width: 1.5rem !important;
+              height: 1.5rem !important;
+            }
+            .landing-conversation-header {
+              gap: 0.8rem !important;
+            }
+            .landing-conversation-header h3 {
+              font-size: 1.18rem !important;
+              line-height: 1.14 !important;
+            }
+            .landing-conversation-header span {
+              flex-shrink: 0;
+              font-size: 0.7rem !important;
+              padding: 0.55rem 0.9rem !important;
+            }
+            .landing-conversation-panel {
+              flex: 0 0 15.25rem !important;
+              margin-top: 0.7rem !important;
+              border-radius: 18px !important;
+              padding: 0.65rem 0.75rem !important;
+            }
+            .landing-conversation-panel > p {
+              margin-top: 0.18rem !important;
+              font-size: 0.72rem !important;
+              line-height: 1 !important;
+            }
+            .landing-conversation-panel > div {
+              margin-top: 0.4rem !important;
+              border-radius: 12px !important;
+              padding: 0.52rem 0.75rem !important;
+              font-size: 0.9rem !important;
+              line-height: 1.12 !important;
+            }
+            .landing-conversation-panel .landing-conversation-long-bubble {
+              max-width: 90% !important;
+              font-size: 0.8rem !important;
+              line-height: 1.08 !important;
+            }
+            .landing-conversation-panel > div + p {
+              margin-top: 0.18rem !important;
+            }
+            .landing-dashboard-bottom {
+              flex: 1 1 0 !important;
+              min-height: 0 !important;
+              margin-top: 0.55rem !important;
+            }
+            .landing-lead-stack {
+              height: 100% !important;
+              gap: 0.52rem !important;
+              grid-template-rows: auto minmax(7.8rem, 1fr) minmax(4.9rem, 0.64fr) !important;
+              align-content: stretch !important;
+            }
+            .landing-lead-note {
+              justify-content: flex-start !important;
+              font-size: 0.78rem !important;
+              line-height: 1.05 !important;
+            }
+            .landing-lead-note svg {
+              width: 2.05rem !important;
+              height: 1.35rem !important;
+            }
+            .landing-lead-card,
+            .landing-customer-text-card {
+              min-height: 0 !important;
+              height: auto !important;
+              border-radius: 12px !important;
+              padding: 0.82rem 1rem !important;
+              justify-content: flex-start !important;
+            }
+            .landing-owner-text-title,
+            .landing-customer-text-title {
+              font-size: 1.22rem !important;
+              line-height: 1.05 !important;
+            }
+            .landing-owner-text-body,
+            .landing-customer-text-body {
+              font-size: 0.9rem !important;
+              line-height: 1.1 !important;
+            }
+            .landing-owner-text-body {
+              margin-top: 0.72rem !important;
+              column-gap: 1rem !important;
+              row-gap: 0.12rem !important;
+            }
+            .landing-customer-text-body {
+              margin-top: 0.58rem !important;
+              font-size: 1rem !important;
+              line-height: 1.15 !important;
+            }
+            .landing-message-icon {
+              width: 2.08rem !important;
+              height: 2.08rem !important;
+            }
+          }
         `}</style>
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_16%_18%,rgba(187,222,255,0.74),transparent_30%),radial-gradient(circle_at_78%_12%,rgba(213,235,255,0.70),transparent_32%),linear-gradient(180deg,#ffffff_0%,#f6fbff_28%,#e9f6ff_100%)]" />
         <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgba(37,99,235,0.06)_1px,transparent_1px),linear-gradient(rgba(37,99,235,0.045)_1px,transparent_1px)] bg-[size:76px_76px] opacity-[0.32]" />
 
-        <div className="landing-hero-shell relative z-10 mx-auto flex w-full max-w-[1660px] flex-col px-5 py-6 sm:px-8 lg:min-h-screen lg:px-10 lg:py-7 2xl:px-12 2xl:py-8">
+        <div className="landing-hero-shell relative z-10 mx-auto flex w-full max-w-[1360px] flex-col px-5 py-5 sm:px-8 lg:min-h-[calc(100vh-76px)] lg:px-10 lg:py-5 2xl:px-10 2xl:py-5">
           <nav className="grid shrink-0 gap-5 lg:grid-cols-[auto_1fr_auto] lg:items-center">
             <HeroLogoMark />
             <div className="hidden justify-self-center text-center lg:block">
@@ -2688,32 +2953,41 @@ function LandingPage() {
             </div>
           </nav>
 
-          <div className="landing-hero-grid grid flex-1 gap-6 py-9 lg:grid-cols-[minmax(360px,0.78fr)_minmax(560px,1.22fr)] lg:items-center xl:grid-cols-[minmax(470px,0.76fr)_minmax(760px,1.24fr)] 2xl:grid-cols-[minmax(540px,0.74fr)_minmax(940px,1.26fr)] 2xl:gap-10 2xl:py-10">
-            <div className="relative z-10 min-w-0 max-w-[800px] xl:max-w-none lg:-translate-y-3 2xl:-translate-y-4">
-              <div className="mt-6 inline-flex rounded-full border border-[#b9d8ff] bg-white/72 px-4 py-2 text-lg font-semibold text-[#0b3b7a] shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_18px_42px_-34px_rgba(37,99,235,0.7)] 2xl:px-5 2xl:text-xl">
+          <div className="landing-hero-grid grid flex-1 gap-10 py-5 lg:grid-cols-[minmax(380px,0.7fr)_minmax(620px,1.3fr)] lg:items-center xl:grid-cols-[minmax(430px,0.72fr)_minmax(680px,1.28fr)] xl:gap-16 2xl:gap-16 2xl:py-5">
+            <div className="relative z-10 min-w-0 max-w-[500px] xl:max-w-[520px] lg:-translate-y-1">
+              <div className="landing-hero-label text-[1.16rem] font-medium leading-tight tracking-[-0.02em] text-[#0b315f] 2xl:text-[1.22rem]">
                 AI Telephone Answering Assistant
               </div>
 
-              <h1 className="landing-hero-title mt-5 text-[clamp(2.65rem,12vw,4.07rem)] font-black leading-[1.03] tracking-[-0.055em] text-[#07142a] 2xl:text-[4.32rem]">
+              <h1 className="landing-hero-title mt-2 text-[clamp(2.8rem,11vw,3.8rem)] font-black leading-[1.02] tracking-[-0.055em] text-[#07142a] 2xl:text-[3.95rem]">
                 <span className="block 2xl:whitespace-nowrap drop-shadow-[0_3px_0_rgba(148,190,255,0.45)]">Answers the phone</span>
-                <span className="block pb-2 bg-[linear-gradient(180deg,#ff9a22,#ff6b00)] bg-clip-text text-transparent drop-shadow-[0_4px_0_rgba(255,107,0,0.16)]">
+                <span className="landing-reflection-text block pb-2 bg-[linear-gradient(180deg,#ff8a13,#ff250f)] bg-clip-text text-transparent drop-shadow-[0_4px_0_rgba(255,107,0,0.16)]">
                   when you can&apos;t.
                 </span>
               </h1>
 
-              <p className="landing-hero-kicker mt-3 text-[clamp(2.05rem,7vw,3.35rem)] font-black leading-[0.98] tracking-[-0.055em] text-[#e93621] drop-shadow-[0_4px_0_rgba(255,169,92,0.34)] 2xl:text-[3.55rem]">Never Miss A Call Again!</p>
-              <p className="landing-hero-copy mt-3 max-w-[700px] text-[1.2rem] font-medium leading-8 text-[#243044] sm:text-[1.28rem] 2xl:text-[1.34rem] 2xl:leading-9">
-                <span className="marker-highlight">24/7 AI call answering</span> for busy trade businesses. Asks if they need <span className="marker-highlight marker-highlight--second">service, repair, or a new installation.</span>
+              <p className="landing-hero-kicker mt-2 text-[clamp(2rem,7vw,2.6rem)] font-black leading-[1] tracking-[-0.055em] text-[#e11408] drop-shadow-[0_4px_0_rgba(255,169,92,0.34)] 2xl:text-[2.72rem]">Never Miss A Call Again!</p>
+
+              <div className="landing-revenue-line mt-4 flex items-center gap-3 text-[1.34rem] font-black uppercase leading-none text-[#17951f] 2xl:text-[1.42rem]">
+                <span className="grid h-8 w-10 place-items-center rounded-md border-2 border-[#23a425] bg-[#dfffe1] text-[#17951f]">
+                  <HeroIcon type="dollar" className="h-6 w-6" />
+                </span>
+                <span>MISSED CALLS = LOST REVENUE</span>
+              </div>
+
+              <p className="landing-hero-copy mt-4 max-w-[540px] text-[1.06rem] font-medium leading-7 text-[#111827] sm:text-[1.12rem] 2xl:text-[1.16rem] 2xl:leading-8">
+                <span className="font-black">24/7 AI call answering</span> for <span className="marker-highlight">busy trade businesses</span>.
               </p>
 
-              <div className="landing-hero-points mt-6 space-y-3.5">
+              <div className="landing-hero-points mt-5 space-y-3">
                 {[
-                  ["phone", "Talks to customer naturally"],
-                  ["people", "Eliminates voice machine hangups"],
-                  ["chat", "Answers business questions for customers"],
+                  ["phone", "Welcomes customers with a professional greeting"],
+                  ["chat", "Answers common customer questions"],
+                  ["clipboard", "Collects job details automatically"],
+                  ["people", "Sends a text for easy follow-up"],
                 ].map(([icon, label]) => (
-                  <div key={label} className="landing-hero-point flex items-center gap-4 text-[1.28rem] font-medium text-[#16243a] 2xl:text-[1.36rem]">
-                    <span className="landing-hero-point-icon grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[#0c4da0] text-white shadow-[0_10px_28px_-16px_rgba(59,130,246,1)]">
+                  <div key={label} className="landing-hero-point flex items-center gap-4 text-[1rem] font-semibold text-[#111827] 2xl:text-[1.06rem]">
+                    <span className="landing-hero-point-icon grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#0c4da0] text-white shadow-[0_10px_28px_-16px_rgba(59,130,246,1)]">
                       <HeroIcon type={icon} className="h-5 w-5" />
                     </span>
                     <span>{label}</span>
@@ -2721,30 +2995,29 @@ function LandingPage() {
                 ))}
               </div>
 
-              <div className="landing-hero-ctas mt-7 flex flex-col gap-4 sm:flex-row">
+              <div className="landing-hero-ctas mt-5 flex flex-col gap-4 sm:flex-row">
                 <button
                   type="button"
                   onClick={goToSignup}
-                  className="landing-hero-cta inline-flex min-h-[62px] items-center justify-center rounded-xl bg-[linear-gradient(180deg,#ff8a13,#ff6900)] px-10 text-[1.2rem] font-black text-white shadow-[0_22px_46px_-26px_rgba(255,106,0,1)] transition hover:-translate-y-0.5 hover:brightness-110 2xl:min-h-[66px] 2xl:text-[1.28rem]"
+                  className="landing-hero-cta inline-flex min-h-[46px] items-center justify-center rounded-lg bg-[linear-gradient(180deg,#ff8a13,#ff3f16)] px-9 text-[1.02rem] font-black text-white shadow-[0_18px_38px_-25px_rgba(255,106,0,1)] transition hover:-translate-y-0.5 hover:brightness-110 2xl:min-h-[48px] 2xl:text-[1.08rem]"
                 >
                   Start Free Trial
                 </button>
                 <button
                   type="button"
                   onClick={playDemo}
-                  className="landing-hero-cta inline-flex min-h-[62px] items-center justify-center rounded-xl border-2 border-[#1d5ea8]/70 bg-white/50 px-10 text-[1.2rem] font-black text-[#0b3b7a] transition hover:bg-white 2xl:min-h-[66px] 2xl:text-[1.28rem]"
+                  className="landing-hero-cta inline-flex min-h-[46px] items-center justify-center rounded-lg border-2 border-[#1d5ea8]/80 bg-white/50 px-9 text-[1.02rem] font-black text-[#0b3b7a] transition hover:bg-white 2xl:min-h-[48px] 2xl:text-[1.08rem]"
                 >
-                  Hear Agent&apos;s Voice
+                  Hear Agent Voice
                 </button>
               </div>
 
-              <p className="landing-hero-footnote mt-5 text-[1.2rem] font-bold leading-[1.18] tracking-[-0.02em] text-[#26364d] 2xl:text-[1.32rem]">
-                <span className="block whitespace-nowrap">PIPEDA&nbsp;Compliant&nbsp;&bull;&nbsp;14-day&nbsp;free&nbsp;trial</span>
-                <span className="mt-0.5 block whitespace-nowrap">No&nbsp;credit&nbsp;card&nbsp;required</span>
+              <p className="landing-hero-footnote mt-4 whitespace-nowrap text-[0.82rem] font-black uppercase leading-none tracking-[-0.01em] text-[#111827] 2xl:text-[0.9rem]">
+                PIPEDA Compliant &bull; 14-day free trial &bull; No credit card required
               </p>
             </div>
 
-            <div className="landing-hero-visual relative z-0 mt-8 flex justify-end lg:mt-10 lg:self-start xl:mt-12 2xl:mt-14">
+            <div className="landing-hero-visual relative z-0 mt-8 flex justify-end lg:mt-2 lg:self-center">
               <HeroCallDashboard />
             </div>
           </div>
