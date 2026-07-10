@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { getDefaultApiBaseUrl, normalizeApiBase } from "./config/apiBase";
+import { getApiBaseUrl, normalizeApiBase } from "./config/apiBase";
 import "./CustomerDashboard.css";
 
-const API_BASE = normalizeApiBase(process.env.REACT_APP_API_BASE_URL || getDefaultApiBaseUrl());
+const API_BASE = normalizeApiBase(getApiBaseUrl(process.env.REACT_APP_API_BASE_URL));
 const STORAGE_KEY = "myaipa_customer_dashboard_lookup_v1";
 
 function fmtDate(value) {

@@ -6,6 +6,7 @@ import CustomerDashboard from "./CustomerDashboard";
 import Signup from "./Signup";
 import Privacy from "./Privacy";
 import Terms from "./Terms";
+import PhoneGame from "./PhoneGame";
 import "./style.css";
 
 const getRoute = () => {
@@ -34,8 +35,16 @@ function RouterRoot() {
   else if (route === "signup") page = <Signup />;
   else if (route === "privacy") page = <Privacy />;
   else if (route === "terms") page = <Terms />;
+  else if (route === "game") page = <PhoneGame />;
 
   return page;
 }
 
 ReactDOM.render(<RouterRoot />, document.getElementById("root"));
+
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    const publicUrl = process.env.PUBLIC_URL || "";
+    navigator.serviceWorker.register(`${publicUrl}/sw.js`).catch(() => {});
+  });
+}

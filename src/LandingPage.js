@@ -886,8 +886,6 @@ function HeroSummaryStack() {
 }
 
 function HeroCallDashboard() {
-  const checklist = ["Name collected", "Phone collected", "Service type", "Issue details", "Best time to call back"];
-
   return (
     <div className="landing-call-dashboard relative mx-auto w-full max-w-[690px]">
       <div className="relative overflow-hidden rounded-[32px] border border-[#142033] bg-[#050913] text-white shadow-[0_28px_78px_-42px_rgba(0,0,0,0.9),inset_0_1px_0_rgba(255,255,255,0.06)]">
@@ -914,17 +912,25 @@ function HeroCallDashboard() {
               </span>
             </div>
 
-            <div className="landing-call-checklist-card mt-6 rounded-[22px] border border-white/10 bg-white/[0.045] p-3.5">
-              <p className="landing-call-checklist-title text-[0.78rem] font-black uppercase tracking-[0.12em] text-white/45">Details captured</p>
-              <div className="landing-call-checklist-list mt-2.5 grid gap-1.5 text-[0.86rem] font-black">
-                {checklist.map((item) => (
-                  <div key={item} className="landing-call-checklist-row grid grid-cols-[auto_1fr] items-center gap-2.5 text-white/88">
-                    <span className="landing-call-checklist-icon grid h-6 w-6 place-items-center rounded-full bg-[#114416] text-[#66ff75] shadow-[0_0_22px_-10px_rgba(102,255,117,0.95)]">
-                      <HeroIcon type="check" className="landing-call-checklist-check h-4 w-4" />
-                    </span>
-                    <span>{item}</span>
-                  </div>
-                ))}
+            <div className="landing-call-owner-card mt-6 rounded-[18px] border border-[#92f28f] bg-white px-3.5 py-3 text-[#111827] shadow-[0_0_0_2px_rgba(34,197,94,0.24),0_18px_44px_-28px_rgba(34,197,94,0.9)]">
+              <div className="flex items-center justify-between gap-2">
+                <span className="landing-call-owner-title inline-flex items-center gap-2 font-black">
+                  <span className="landing-call-owner-icon grid place-items-center rounded-lg bg-[#66e83f] text-white">
+                    <HeroIcon type="chat" className="h-4 w-4" />
+                  </span>
+                  Owner Text
+                </span>
+                <span className="landing-call-owner-now text-[0.68rem] font-black text-gray-400">now</span>
+              </div>
+              <div className="landing-call-owner-body mt-2 font-bold tracking-[-0.01em]">
+                <p>New service request received.</p>
+                <p>&bull; Name: Brian</p>
+                <p>&bull; Phone: 905-555-1234</p>
+                <p>&bull; Job: Hot Tub installation</p>
+                <p>&bull; Address: 123 Main St</p>
+                <p>&bull; City: Hamilton</p>
+                <p>&bull; Date of Job: July 15</p>
+                <p>Best callback time: Tomorrow morning</p>
               </div>
             </div>
 
@@ -961,8 +967,8 @@ function HeroCallDashboard() {
             <div className="landing-conversation-panel mt-4 rounded-[26px] border border-white/8 bg-black/18 px-5 py-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
               <p className="text-[0.92rem] font-black uppercase tracking-[0.06em] text-white/38">AI Assistant</p>
               <div className="mt-2.5 max-w-[78%] rounded-[16px] bg-white/10 px-5 py-3 text-[1.12rem] font-bold leading-[1.26] text-white/92">
-                <span className="block">Thanks for calling Tim&apos;s Electrical.</span>
-                <span className="mt-2 block">How can I help you today?</span>
+                <span className="block">Hi thanks for calling Tim&apos;s Electrical! How can we help you today?</span>
+                <span className="mt-2 block">Are you looking for a new installation, maintenance or repairs?</span>
               </div>
               <p className="mt-1 text-right text-[0.74rem] font-bold text-white/35">10:32 AM</p>
 
@@ -974,7 +980,13 @@ function HeroCallDashboard() {
 
               <p className="mt-3 text-[0.92rem] font-black uppercase tracking-[0.06em] text-white/38">AI Assistant</p>
               <div className="landing-conversation-long-bubble mt-2.5 max-w-[84%] rounded-[16px] bg-white/10 px-5 py-3 text-[1.02rem] font-bold leading-[1.18] text-white/92">
-                Sure, we can help with a hot tub installation! Let me get some details related to the job and send them off to a dedicated team member!
+                Sure we can help install a hot tub, I just need a few more details. Let&apos;s start with your name, phone number and address.
+              </div>
+              <p className="mt-1 text-right text-[0.74rem] font-bold text-white/35">10:32 AM</p>
+
+              <p className="mt-3 text-right text-[0.92rem] font-black uppercase tracking-[0.06em] text-[#78b7ff]">Caller</p>
+              <div className="landing-conversation-caller-detail ml-auto mt-2.5 max-w-[78%] rounded-[20px] bg-[#0b376d] px-5 py-3 text-[1rem] font-bold leading-[1.18] text-white/96 shadow-[0_18px_42px_-30px_rgba(37,99,235,0.95)]">
+                My name is Brian, phone number is 905-555-1234 and my address is 23 Robb street.
               </div>
               <p className="mt-1 text-right text-[0.74rem] font-bold text-white/35">10:32 AM</p>
             </div>
@@ -989,27 +1001,6 @@ function HeroCallDashboard() {
                   <span>Instantly sends you and the customer a text message.</span>
                 </div>
 
-                <div className="landing-lead-card rounded-[14px] border border-[#92f28f] bg-white px-4 py-3 text-[#111827] shadow-[0_0_0_3px_rgba(34,197,94,0.32),0_28px_70px_-28px_rgba(34,197,94,0.95)]">
-                  <div className="flex items-center justify-between">
-                    <span className="landing-owner-text-title inline-flex items-center gap-3 font-black">
-                      <span className="landing-message-icon grid place-items-center rounded-xl bg-[#66e83f] text-white">
-                        <HeroIcon type="chat" className="h-5 w-5" />
-                      </span>
-                      Owner Text
-                    </span>
-                    <span className="text-[0.82rem] font-black text-gray-400">now</span>
-                  </div>
-                  <div className="landing-owner-text-body mt-2 font-bold tracking-[-0.01em]">
-                    <p>New service request received.</p>
-                    <p>&bull; Name: Tim&apos;s Electrical</p>
-                    <p>&bull; Phone: 905-555-1234</p>
-                    <p>&bull; Job: Hot Tub installation</p>
-                    <p>&bull; Address: 123 Main St</p>
-                    <p>&bull; City: Hamilton</p>
-                    <p>Best callback time: Tomorrow morning</p>
-                  </div>
-                </div>
-
                 <div className="landing-customer-text-card rounded-[14px] border border-[#92f28f] bg-white px-4 py-3 text-[#0f2b1a] shadow-[0_18px_44px_-32px_rgba(34,197,94,0.95)]">
                   <div className="flex items-center justify-between">
                     <span className="landing-customer-text-title inline-flex items-center gap-3 font-black">
@@ -1021,7 +1012,7 @@ function HeroCallDashboard() {
                     <span className="text-[0.82rem] font-black text-[#7a9a86]">now</span>
                   </div>
                   <p className="landing-customer-text-body mt-3 font-black tracking-[-0.02em]">
-                    Thanks for calling Tim&apos;s Electrical. We&apos;ll be in touch tomorrow morning. Have a great day!
+                    Thanks for calling TIM&apos;S ELECTRICAL. Your new installation: A Hot Tub will be serviced at 23 Robb ST. We will try to call you back at best call back time you provided at 7:00 pm. Your message has been delivered. We will get back to you shortly to provide a free quote. please visit the site www.timselectrical.ca to learn more
                   </p>
                 </div>
               </div>
@@ -1913,7 +1904,7 @@ function LandingPage() {
             min-height: 0;
           }
           .landing-conversation-panel {
-            flex: 0 0 18rem;
+            flex: 0 0 15.9rem;
             min-height: 0;
           }
           .landing-dashboard-bottom {
@@ -1924,7 +1915,7 @@ function LandingPage() {
           .landing-lead-stack {
             width: 100%;
             height: 100%;
-            grid-template-rows: auto minmax(10.9rem, 1.55fr) minmax(4.7rem, 0.45fr);
+            grid-template-rows: auto minmax(8.15rem, 0.74fr) minmax(9.75rem, 1.26fr);
             align-content: stretch;
           }
           .landing-lead-card,
@@ -1932,7 +1923,7 @@ function LandingPage() {
             display: flex;
             min-height: 0;
             flex-direction: column;
-            justify-content: center;
+            justify-content: flex-start;
           }
           .landing-owner-text-title,
           .landing-customer-text-title {
@@ -1958,10 +1949,13 @@ function LandingPage() {
             grid-column: 1 / -1;
           }
           .landing-customer-text-body {
+            margin-top: 0.55rem !important;
+            font-size: 0.56rem !important;
+            line-height: 1.08 !important;
             text-wrap: pretty;
           }
           .landing-customer-text-card {
-            container-type: size;
+            container-type: normal;
           }
           .landing-message-icon {
             width: 2.25rem !important;
@@ -1987,6 +1981,24 @@ function LandingPage() {
             height: 1.2rem !important;
           }
           @media (max-width: 767px) {
+            .landing-hero-shell {
+              padding-left: 1rem !important;
+              padding-right: 1rem !important;
+            }
+            .landing-hero-grid {
+              gap: 1.35rem !important;
+            }
+            .landing-hero-grid > div:first-child {
+              max-width: none !important;
+              width: 100% !important;
+            }
+            .landing-hero-footnote {
+              display: block;
+              width: 100%;
+              font-size: clamp(0.72rem, 2.55vw, 0.88rem) !important;
+              letter-spacing: -0.055em !important;
+              white-space: nowrap;
+            }
             .landing-call-dashboard {
               max-width: min(100%, 360px);
             }
@@ -2610,7 +2622,7 @@ function LandingPage() {
               height: clamp(510px, calc(100vh - 86px), 590px);
             }
             .landing-conversation-panel {
-              flex: 0 0 14.15rem;
+              flex: 0 0 12.95rem;
             }
             .landing-dashboard-bottom {
               flex: 1 1 0;
@@ -2618,7 +2630,7 @@ function LandingPage() {
             }
             .landing-lead-stack {
               height: 100%;
-              grid-template-rows: auto minmax(6.4rem, 1.12fr) minmax(5.25rem, 0.88fr);
+              grid-template-rows: auto minmax(5.2rem, 0.72fr) minmax(7.45rem, 1.28fr);
               align-content: stretch;
             }
             .landing-lead-card,
@@ -2646,7 +2658,7 @@ function LandingPage() {
             }
             .landing-customer-text-body {
               margin-top: 0.18rem !important;
-              font-size: clamp(0.58rem, 14cqh, 0.72rem) !important;
+              font-size: clamp(0.42rem, 8cqh, 0.5rem) !important;
               line-height: 1.05 !important;
             }
             .landing-message-icon {
@@ -2851,7 +2863,7 @@ function LandingPage() {
               padding: 0.55rem 0.9rem !important;
             }
             .landing-conversation-panel {
-              flex: 0 0 15.25rem !important;
+              flex: 0 0 13.7rem !important;
               margin-top: 0.7rem !important;
               border-radius: 18px !important;
               padding: 0.65rem 0.75rem !important;
@@ -2884,7 +2896,7 @@ function LandingPage() {
             .landing-lead-stack {
               height: 100% !important;
               gap: 0.52rem !important;
-              grid-template-rows: auto minmax(7.8rem, 1fr) minmax(4.9rem, 0.64fr) !important;
+              grid-template-rows: auto minmax(6.2rem, 0.74fr) minmax(8rem, 1.26fr) !important;
               align-content: stretch !important;
             }
             .landing-lead-note {
@@ -2920,13 +2932,232 @@ function LandingPage() {
               row-gap: 0.12rem !important;
             }
             .landing-customer-text-body {
-              margin-top: 0.58rem !important;
-              font-size: 1rem !important;
-              line-height: 1.15 !important;
+              margin-top: 0.38rem !important;
+              font-size: 0.52rem !important;
+              line-height: 1.08 !important;
             }
             .landing-message-icon {
               width: 2.08rem !important;
               height: 2.08rem !important;
+            }
+          }
+          @media (min-width: 768px) {
+            .landing-call-dashboard > div {
+              height: auto !important;
+              min-height: 660px;
+            }
+            .landing-conversation-column {
+              min-height: 660px;
+            }
+            .landing-dashboard-bottom {
+              display: block !important;
+              flex: 0 0 auto !important;
+              min-height: 0 !important;
+            }
+            .landing-lead-stack {
+              height: auto !important;
+              grid-template-rows: auto auto auto !important;
+              align-content: start !important;
+            }
+            .landing-lead-card,
+            .landing-customer-text-card {
+              min-height: 0 !important;
+              height: auto !important;
+              justify-content: flex-start !important;
+            }
+            .landing-customer-text-card {
+              container-type: normal !important;
+              padding-bottom: 0.9rem !important;
+            }
+            .landing-customer-text-body {
+              margin-top: 0.48rem !important;
+              font-size: 0.58rem !important;
+              line-height: 1.08 !important;
+            }
+          }
+          @media (min-width: 1024px) and (max-width: 1200px) {
+            .landing-owner-text-title,
+            .landing-customer-text-title {
+              font-size: 1.12rem !important;
+            }
+            .landing-owner-text-body {
+              font-size: 0.72rem !important;
+              line-height: 1.08 !important;
+            }
+            .landing-customer-text-body {
+              font-size: 0.52rem !important;
+              line-height: 1.06 !important;
+            }
+          }
+          @media (min-width: 768px) {
+            .landing-call-dashboard > div {
+              min-height: 780px !important;
+            }
+            .landing-call-dashboard > div > div {
+              min-height: 780px !important;
+            }
+            .landing-conversation-column {
+              min-height: 780px !important;
+            }
+            .landing-dashboard-bottom {
+              margin-top: 1rem !important;
+            }
+            .landing-lead-stack {
+              gap: 0.72rem !important;
+              grid-template-rows: auto auto auto !important;
+            }
+            .landing-lead-card,
+            .landing-customer-text-card {
+              padding: 1rem 1.25rem !important;
+            }
+            .landing-customer-text-card {
+              min-height: 10.75rem !important;
+              padding-bottom: 1.15rem !important;
+            }
+            .landing-customer-text-body {
+              margin-top: 0.72rem !important;
+              font-size: 0.78rem !important;
+              line-height: 1.18 !important;
+              letter-spacing: -0.015em !important;
+            }
+          }
+          @media (min-width: 1024px) and (max-width: 1250px) {
+            .landing-customer-text-card {
+              min-height: 10.3rem !important;
+            }
+            .landing-customer-text-body {
+              font-size: 0.72rem !important;
+              line-height: 1.16 !important;
+            }
+          }
+          @media (max-width: 767px) {
+            .landing-customer-text-card {
+              min-height: 14rem !important;
+              padding: 1rem !important;
+            }
+            .landing-customer-text-title {
+              font-size: 1.22rem !important;
+            }
+            .landing-customer-text-body {
+              margin-top: 0.72rem !important;
+              font-size: 0.84rem !important;
+              line-height: 1.14 !important;
+              letter-spacing: -0.015em !important;
+            }
+          }
+          @media (min-width: 768px) and (max-width: 1023px) {
+            .landing-call-dashboard > div {
+              min-height: 1120px !important;
+            }
+            .landing-call-dashboard > div > div {
+              min-height: 1120px !important;
+            }
+            .landing-conversation-column {
+              min-height: 1120px !important;
+            }
+            .landing-conversation-panel {
+              flex: 0 0 30rem !important;
+              padding: 1rem !important;
+            }
+            .landing-conversation-panel > div {
+              font-size: 0.88rem !important;
+              line-height: 1.14 !important;
+            }
+            .landing-conversation-panel .landing-conversation-long-bubble {
+              max-width: 90% !important;
+              font-size: 0.78rem !important;
+              line-height: 1.08 !important;
+            }
+            .landing-dashboard-bottom {
+              margin-top: 1.35rem !important;
+            }
+            .landing-customer-text-card {
+              min-height: 14.35rem !important;
+              padding: 1rem 1.25rem 1.15rem !important;
+            }
+            .landing-customer-text-body {
+              margin-top: 0.78rem !important;
+              font-size: 0.9rem !important;
+              line-height: 1.1 !important;
+              letter-spacing: -0.015em !important;
+            }
+          }
+          @media (min-width: 1024px) {
+            .landing-hero-grid {
+              align-items: start !important;
+            }
+            .landing-hero-visual {
+              margin-top: 0.5rem !important;
+              transform: translateY(0) !important;
+            }
+            .landing-call-dashboard > div {
+              height: auto !important;
+              min-height: 980px !important;
+            }
+            .landing-call-dashboard > div > div {
+              min-height: 980px !important;
+            }
+            .landing-call-panel,
+            .landing-conversation-column {
+              height: auto !important;
+              min-height: 980px !important;
+              overflow: visible !important;
+            }
+            .landing-conversation-panel {
+              display: block !important;
+              flex: 0 0 30rem !important;
+              margin-top: 1rem !important;
+              padding: 1rem 1.05rem 2.25rem !important;
+            }
+            .landing-conversation-panel > p {
+              margin-top: 0.42rem !important;
+              font-size: 0.82rem !important;
+              line-height: 1.05 !important;
+            }
+            .landing-conversation-panel > p:first-child {
+              margin-top: 0 !important;
+            }
+            .landing-conversation-panel > div {
+              margin-top: 0.5rem !important;
+              padding: 0.65rem 0.92rem !important;
+              font-size: 0.94rem !important;
+              line-height: 1.15 !important;
+            }
+            .landing-conversation-panel .landing-conversation-long-bubble {
+              max-width: 92% !important;
+              font-size: 0.84rem !important;
+              line-height: 1.12 !important;
+            }
+            .landing-conversation-panel .landing-conversation-caller-detail {
+              max-width: 90% !important;
+              font-size: 0.84rem !important;
+              line-height: 1.12 !important;
+            }
+            .landing-conversation-panel > div + p {
+              margin-top: 0.28rem !important;
+            }
+            .landing-dashboard-bottom {
+              margin-top: 1.35rem !important;
+            }
+            .landing-call-owner-card {
+              margin-top: 1rem !important;
+              padding: 1rem 1.05rem !important;
+            }
+            .landing-call-owner-title {
+              font-size: 1.16rem !important;
+              line-height: 1.05 !important;
+            }
+            .landing-call-owner-icon {
+              width: 2.2rem !important;
+              height: 2.2rem !important;
+            }
+            .landing-call-owner-body {
+              margin-top: 0.8rem !important;
+              font-size: 0.82rem !important;
+              line-height: 1.16 !important;
+            }
+            .landing-call-owner-body > p + p {
+              margin-top: 0.18rem !important;
             }
           }
         `}</style>
@@ -2976,7 +3207,7 @@ function LandingPage() {
               </div>
 
               <p className="landing-hero-copy mt-4 max-w-[540px] text-[1.06rem] font-medium leading-7 text-[#111827] sm:text-[1.12rem] 2xl:text-[1.16rem] 2xl:leading-8">
-                <span className="font-black">24/7 AI call answering</span> for <span className="marker-highlight">busy trade businesses</span>.
+                <span className="font-black">24/7 AI call answering</span> for <span className="marker-highlight whitespace-nowrap">busy trade businesses.</span>
               </p>
 
               <div className="landing-hero-points mt-5 space-y-3">

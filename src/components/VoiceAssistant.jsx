@@ -1,9 +1,9 @@
 import React from "react";
-import { getDefaultApiBaseUrl, normalizeApiBase } from "../config/apiBase";
+import { getApiBaseUrl, normalizeApiBase } from "../config/apiBase";
 
 const MAX_VISIBLE_MESSAGES = 10;
 const MAX_INPUT_CHARS = 2000;
-const API_BASE = normalizeApiBase(process.env.REACT_APP_API_BASE_URL || getDefaultApiBaseUrl());
+const API_BASE = normalizeApiBase(getApiBaseUrl(process.env.REACT_APP_API_BASE_URL));
 
 function getStatusClasses(status) {
   if (status === "Listening") return "bg-emerald-500/20 text-emerald-200 border-emerald-400/40";

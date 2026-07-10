@@ -1,0 +1,27 @@
+{
+  "name": "Star Runner",
+  "short_name": "Star Runner",
+  "description": "A fast mobile arcade game you can launch from your phone home screen.",
+  "start_url": "/#game",
+  "scope": "/",
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone"],
+  "orientation": "portrait",
+  "background_color": "#12172c",
+  "theme_color": "#12172c",
+  "icons": [
+    {
+      "src": "/star-runner-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/MyAIPA_logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ],
+  "categories": ["games", "entertainment"]
+}
