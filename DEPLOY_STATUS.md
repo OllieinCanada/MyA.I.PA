@@ -5,28 +5,37 @@ Last updated: 2026-07-12
 ## Morning Executive Summary
 
 - Biggest win: The local Pages build now defaults to `https://api.myaipa.ca`, Stripe Checkout return URLs are pinned back to `www.myaipa.ca`, signup anti-abuse/reminder env defaults are explicit in Render, admin/customer API responses now get no-store privacy headers, query-string admin password login is blocked, customer dashboard lookup now uses session-only storage plus backend rate limits with legacy `localStorage` cleanup, admin now has a read-only live Stripe Trials view, stale Star Runner PWA/game shipping paths were removed from the production bundle, dashboard/admin routes are included in repeatable visual diagnostics, the Vapi eval suite covers emergency handling, AI disclosure, and installation routing, trust copy is safer for launch, and visual/accessibility checks pass.
-- Biggest blocker: The remaining launch work is external: Render blueprint creation, secret entry, DNS for `api.myaipa.ca`, and production deploy/push approval. The live site still serves old bundle `main.62f74467.js`, and `api.myaipa.ca` currently returns DNS `ENOTFOUND`.
+- Biggest blocker: The frontend deploy is now live, but the backend is still external work: Render blueprint creation, Render secret entry, and DNS for `api.myaipa.ca`. Until that is done, live admin/signup API calls cannot reach the backend and `api.myaipa.ca` returns DNS `ENOTFOUND`.
 - Files changed this run: `.env.example`, `server/index.js`, `src/config/apiBase.js`, `src/AdminDashboard.css`, `src/AdminDashboard.js`, `src/CustomerDashboard.js`, `src/Signup.js`, `src/index.js`, `public/index.html`, `public/manifest.json`, `public/sw.js`, `render.yaml`, `config/backend.env.example`, `config/vapi-agent-evals.json`, `BACKEND_DEPLOY.md`, `scripts/build-pages.js`, `scripts/browser-drive.js`, `scripts/diagnose-live-site.js`, `scripts/diagnose-signup.js`, `scripts/test-signup-payload.js`, `scripts/diagnose-visual.js`, `scripts/telegram-send-admin-customers-mock.js`, `scripts/validate-render-blueprint.js`, `package.json`, `src/LandingPage.js`, and generated `docs/` assets.
-- Checks passed: `npm run render:validate`, `npm run backend:check`, `npx prisma validate`, `node scripts/check-backend-deploy.js`, `npm run diagnose:signup`, `npm run evals:vapi:dry-run`, `npm run build:pages`, `npm run diagnose:visual -- --url=http://127.0.0.1:3101` including `/#/dashboard` and `/#/admin`, `npm run diagnose:visual -- --url=http://127.0.0.1:3102`, `npm run find:todos -- --url=http://127.0.0.1:3101` including `/#/dashboard` and `/#/admin`, `npm run diagnose:site`, `npm run diagnose:live-site`, `node --check server\index.js`, `node --check scripts\browser-drive.js`, `node --check scripts\diagnose-live-site.js`, `node --check scripts\setup-vapi-evals.js`, `node --check scripts\telegram-send-admin-customers-mock.js`, `node --check scripts\validate-render-blueprint.js`, local backend header/auth probe on port 8799, local read-only Stripe Trials endpoint probe on port 8797, customer dashboard session-storage Playwright smoke test, customer dashboard rate-limit local backend probe, Vapi eval JSON parse/count check, server env-template coverage audit, local admin mock desktop/mobile Playwright captures, local admin Stripe Trials mock capture, checkout-return route smoke tests for `/#/signup?payment=success` and `/#/signup?payment=cancelled`, and a lightweight Playwright accessibility/SEO probe.
+- Checks passed: `npm run render:validate`, `npm run backend:check`, `npx prisma validate`, `node scripts/check-backend-deploy.js`, `npm run diagnose:signup`, `npm run evals:vapi:dry-run`, `npm run build:pages`, `npm run diagnose:visual -- --url=http://127.0.0.1:3101` including `/#/dashboard` and `/#/admin`, `npm run diagnose:visual -- --url=http://127.0.0.1:3102`, `npm run find:todos -- --url=http://127.0.0.1:3101` including `/#/dashboard` and `/#/admin`, `npm run diagnose:site`, `npm run diagnose:live-site`, GitHub Pages deployment for commit `80f3e44`, live `www.myaipa.ca` JS/CSS match to local `docs/`, `node --check server\index.js`, `node --check scripts\browser-drive.js`, `node --check scripts\diagnose-live-site.js`, `node --check scripts\setup-vapi-evals.js`, `node --check scripts\telegram-send-admin-customers-mock.js`, `node --check scripts\validate-render-blueprint.js`, local backend header/auth probe on port 8799, local read-only Stripe Trials endpoint probe on port 8797, customer dashboard session-storage Playwright smoke test, customer dashboard rate-limit local backend probe, Vapi eval JSON parse/count check, server env-template coverage audit, local admin mock desktop/mobile Playwright captures, local admin Stripe Trials mock capture, checkout-return route smoke tests for `/#/signup?payment=success` and `/#/signup?payment=cancelled`, and a lightweight Playwright accessibility/SEO probe.
 - Checks blocked: `npm run diagnose:vapi-agents` could not run because `VAPI_API_KEY` and `MAKE_API_TOKEN` are not set in the local environment.
 - Review item: A broad local secret-pattern scan matched likely false positives in lockfile/old backup files (`package-lock.json`, `src/Hello.js`, backup copies); review before deployment, but no secrets were printed or edited. A stale old-API generated bundle also remains under `output/build-check/`; it is not the deployable `docs/` bundle.
-- Next 3 human actions: create the Render Blueprint from `render.yaml`; fill Render secrets, including SMTP or set `TRIAL_REMINDER_DISABLE=true`; add DNS for `api.myaipa.ca`, verify `/api/health`, then approve the GitHub Pages deploy. After credentials are available, sync/run the safe Vapi evals explicitly.
+- Next 3 human actions: create the Render Blueprint from `render.yaml`; fill Render secrets, including SMTP or set `TRIAL_REMINDER_DISABLE=true`; add DNS for `api.myaipa.ca`, verify `/api/health`, then open live `/#/admin` -> `Trials` to confirm real Stripe trials. After credentials are available, sync/run the safe Vapi evals explicitly.
 
 ## Latest www.myaipa.ca Frontend Build
 
-The current `docs/` GitHub Pages output is the latest build intended for:
+The current `docs/` GitHub Pages output is the latest build deployed to:
 
 ```text
 https://www.myaipa.ca
 ```
 
-Build label: `2026-07-12-api-base-trust-copy-a11y-admin-mobile-stripe-return-customer-privacy`
+Build label: `2026-07-12-api-base-trust-copy-a11y-admin-mobile-stripe-return-customer-privacy-admin-trials`
 
 Current production bundles after `npm run build:pages`:
 
 ```text
 docs/static/js/main.7186918e.js
 docs/static/css/main.9f678dae.css
+```
+
+Pushed commit: `80f3e44 Prepare MyAIPA backend and admin trials deploy`
+
+Live verification after GitHub Pages deployment:
+
+```text
+www.myaipa.ca JS/CSS match local docs: yes
+api.myaipa.ca/api/health: DNS ENOTFOUND
 ```
 
 This is the latest `www.myaipa.ca` frontend build and includes the refreshed homepage hero for My AI PA:
