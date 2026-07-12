@@ -1,16 +1,18 @@
 import React from "react";
-import ReactDOM from "react-dom";
+import { createRoot } from "react-dom/client";
 import App from "./App";
 import AdminDashboard from "./AdminDashboard";
 import CustomerDashboard from "./CustomerDashboard";
 import Signup from "./Signup";
 import Privacy from "./Privacy";
 import Terms from "./Terms";
-import PhoneGame from "./PhoneGame";
 import "./style.css";
 
 const getRoute = () => {
-  const hashRoute = window.location.hash.replace(/^#\/?/, "").toLowerCase();
+  const hashRoute = window.location.hash
+    .replace(/^#\/?/, "")
+    .split(/[?#]/)[0]
+    .toLowerCase();
   if (hashRoute) return hashRoute;
   const pathRoute = window.location.pathname.replace(/^\/+|\/+$/g, "").toLowerCase();
   return pathRoute || "home";
@@ -35,12 +37,11 @@ function RouterRoot() {
   else if (route === "signup") page = <Signup />;
   else if (route === "privacy") page = <Privacy />;
   else if (route === "terms") page = <Terms />;
-  else if (route === "game") page = <PhoneGame />;
 
   return page;
 }
 
-ReactDOM.render(<RouterRoot />, document.getElementById("root"));
+createRoot(document.getElementById("root")).render(<RouterRoot />);
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {

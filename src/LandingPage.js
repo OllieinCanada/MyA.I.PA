@@ -139,23 +139,23 @@ const setupSteps = [
 const testimonialCards = [
   {
     quote: "I am usually on a job and not in a position to answer every call. Now people get a proper response and I get the details by text instead of chasing voicemails later.",
-    name: "Mark S.",
-    role: "Carpentry contractor",
+    name: "Carpentry example",
+    role: "Common contractor workflow",
   },
   {
     quote: "Evening rental inquiries used to sit until morning. Now callers get an immediate response and our team wakes up to clean lead details instead of a pile of missed calls.",
-    name: "David A.",
-    role: "Property manager, St. Catharines",
+    name: "Property management example",
+    role: "After-hours inquiry workflow",
   },
   {
     quote: "Roof repair calls used to interrupt me while I was on ladders or meeting homeowners. Now the caller gets helped and I get the job details by text.",
-    name: "Lisa S.",
-    role: "Roofing contractor",
+    name: "Roofing example",
+    role: "On-site service workflow",
   },
   {
     quote: "Service calls come in while we are driving between plumbing jobs. My AI PA keeps the lead warm, answers basics, and sends us the follow-up details.",
-    name: "Anthony R.",
-    role: "Plumbing contractor",
+    name: "Plumbing example",
+    role: "In-transit service workflow",
   },
 ];
 
@@ -3160,6 +3160,181 @@ function LandingPage() {
               margin-top: 0.18rem !important;
             }
           }
+          @media (min-width: 1024px) and (max-height: 900px) {
+            .landing-call-dashboard > div {
+              height: min(760px, calc(100vh - 118px)) !important;
+              min-height: 540px !important;
+              max-height: 760px !important;
+            }
+            .landing-call-dashboard > div > div,
+            .landing-call-panel,
+            .landing-conversation-column {
+              height: 100% !important;
+              min-height: 0 !important;
+            }
+            .landing-call-panel {
+              padding: 0.95rem !important;
+              overflow: hidden !important;
+            }
+            .landing-call-status {
+              font-size: 0.78rem !important;
+            }
+            .landing-caller-card {
+              margin-top: 0.8rem !important;
+            }
+            .landing-caller-avatar {
+              height: 4.25rem !important;
+              width: 4.25rem !important;
+            }
+            .landing-caller-name {
+              margin-top: 0.75rem !important;
+              font-size: 1.18rem !important;
+              line-height: 1.02 !important;
+            }
+            .landing-caller-phone {
+              margin-top: 0.45rem !important;
+              font-size: 0.86rem !important;
+            }
+            .landing-caller-tag {
+              margin-top: 0.65rem !important;
+              padding: 0.38rem 0.62rem !important;
+              font-size: 0.68rem !important;
+              line-height: 1.05 !important;
+            }
+            .landing-call-owner-card {
+              margin-top: 0.7rem !important;
+              padding: 0.58rem 0.68rem !important;
+              border-radius: 13px !important;
+            }
+            .landing-call-owner-title {
+              font-size: 0.76rem !important;
+            }
+            .landing-call-owner-icon {
+              height: 1.55rem !important;
+              width: 1.55rem !important;
+            }
+            .landing-call-owner-body {
+              margin-top: 0.38rem !important;
+              font-size: 0.56rem !important;
+              line-height: 1.06 !important;
+            }
+            .landing-call-owner-body > p + p {
+              margin-top: 0.08rem !important;
+            }
+            .landing-call-controls {
+              margin-top: 0.6rem !important;
+            }
+            .landing-call-controls svg[viewBox="0 0 120 42"] {
+              height: 2.1rem !important;
+            }
+            .landing-call-controls > div {
+              margin-top: 0.45rem !important;
+            }
+            .landing-call-button {
+              height: 2.35rem !important;
+              width: 2.35rem !important;
+            }
+            .landing-call-button svg {
+              height: 1.15rem !important;
+              width: 1.15rem !important;
+            }
+            .landing-hangup-button {
+              height: 3rem !important;
+              width: 3rem !important;
+            }
+            .landing-hangup-button svg {
+              height: 1.3rem !important;
+              width: 1.3rem !important;
+            }
+            .landing-conversation-column {
+              padding: 0.9rem !important;
+              overflow: hidden !important;
+            }
+            .landing-conversation-header h3 {
+              font-size: 0.9rem !important;
+              line-height: 1.05 !important;
+            }
+            .landing-conversation-header span {
+              padding: 0.32rem 0.58rem !important;
+              font-size: 0.5rem !important;
+            }
+            .landing-conversation-panel {
+              display: flex !important;
+              flex: 1 1 auto !important;
+              flex-direction: column !important;
+              justify-content: space-between !important;
+              margin-top: 0.38rem !important;
+              padding: 0.42rem 0.54rem !important;
+              overflow: hidden !important;
+            }
+            .landing-conversation-panel > p {
+              margin-top: 0.12rem !important;
+              font-size: 0.52rem !important;
+              line-height: 1 !important;
+            }
+            .landing-conversation-panel > div {
+              margin-top: 0.14rem !important;
+              padding: 0.34rem 0.5rem !important;
+              font-size: 0.62rem !important;
+              line-height: 1.08 !important;
+            }
+            .landing-conversation-panel .landing-conversation-long-bubble,
+            .landing-conversation-panel .landing-conversation-caller-detail {
+              font-size: 0.58rem !important;
+              line-height: 1.06 !important;
+            }
+            .landing-conversation-panel > div + p {
+              margin-top: 0.1rem !important;
+            }
+            .landing-dashboard-bottom {
+              margin-top: 0.42rem !important;
+              flex: 0 0 auto !important;
+            }
+            .landing-lead-stack {
+              gap: 0.34rem !important;
+            }
+            .landing-lead-note {
+              justify-content: flex-start !important;
+              font-size: 0.66rem !important;
+              line-height: 1.05 !important;
+            }
+            .landing-lead-note svg {
+              height: 1.05rem !important;
+              width: 1.55rem !important;
+            }
+            .landing-customer-text-card {
+              min-height: 0 !important;
+              padding: 0.55rem 0.65rem !important;
+              border-radius: 12px !important;
+            }
+            .landing-customer-text-title {
+              font-size: 0.82rem !important;
+            }
+            .landing-message-icon {
+              height: 1.5rem !important;
+              width: 1.5rem !important;
+            }
+            .landing-customer-text-body {
+              margin-top: 0.32rem !important;
+              font-size: 0.46rem !important;
+              line-height: 1.06 !important;
+            }
+          }
+          @media (min-width: 1024px) and (max-height: 700px) {
+            .landing-call-dashboard > div {
+              height: calc(100vh - 100px) !important;
+              min-height: 520px !important;
+            }
+            .landing-call-controls {
+              display: none !important;
+            }
+            .landing-call-owner-body {
+              font-size: 0.52rem !important;
+            }
+            .landing-customer-text-body {
+              font-size: 0.42rem !important;
+            }
+          }
         `}</style>
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_16%_18%,rgba(187,222,255,0.74),transparent_30%),radial-gradient(circle_at_78%_12%,rgba(213,235,255,0.70),transparent_32%),linear-gradient(180deg,#ffffff_0%,#f6fbff_28%,#e9f6ff_100%)]" />
         <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgba(37,99,235,0.06)_1px,transparent_1px),linear-gradient(rgba(37,99,235,0.045)_1px,transparent_1px)] bg-[size:76px_76px] opacity-[0.32]" />
@@ -3244,7 +3419,7 @@ function LandingPage() {
               </div>
 
               <p className="landing-hero-footnote mt-4 whitespace-nowrap text-[0.82rem] font-black uppercase leading-none tracking-[-0.01em] text-[#111827] 2xl:text-[0.9rem]">
-                PIPEDA Compliant &bull; 14-day free trial &bull; No credit card required
+                PIPEDA-aware setup &bull; 14-day free trial &bull; No credit card required
               </p>
             </div>
 
@@ -3271,12 +3446,12 @@ function LandingPage() {
               </p>
             </div>
 
-            <h1 className="mt-8 max-w-3xl text-[3rem] font-black uppercase leading-[0.9] tracking-[-0.06em] text-white sm:text-[4.25rem] sm:leading-[0.88] lg:text-[5rem]">
+            <h2 className="mt-8 max-w-3xl text-[3rem] font-black uppercase leading-[0.9] tracking-[-0.06em] text-white sm:text-[4.25rem] sm:leading-[0.88] lg:text-[5rem]">
               <span className="block sm:whitespace-nowrap">Answers the phone</span>
               <span className="block bg-[linear-gradient(135deg,#8b5cff_0%,#6e7dff_46%,#39b9ff_100%)] bg-clip-text text-transparent">
                 when you can&apos;t
               </span>
-            </h1>
+            </h2>
 
             <p className="mt-2 text-[2rem] font-black leading-tight tracking-[-0.04em] text-[#ff5757] sm:text-[2.35rem]">
               Never Miss A Call Again!
@@ -4178,16 +4353,16 @@ function LandingPage() {
         <div className="mx-auto w-full max-w-[1320px] px-4 py-14 sm:px-6 lg:px-8 lg:py-20">
           <div className="grid gap-8 lg:grid-cols-[0.78fr_1.22fr] lg:items-start">
             <div className="lg:sticky lg:top-24">
-              <p className="inline-flex rounded-full border border-[#b9d8ff] bg-white px-5 py-2 text-[0.84rem] font-black uppercase tracking-[0.18em] text-[#2563eb] shadow-[0_16px_44px_-34px_rgba(37,99,235,0.65)]">Customer proof</p>
-              <h2 className="mt-5 text-[clamp(2.25rem,4.4vw,3.9rem)] font-black leading-[1.04] tracking-[-0.052em] text-[#07142a]">What business owners say after calls stop slipping through.</h2>
+              <p className="inline-flex rounded-full border border-[#b9d8ff] bg-white px-5 py-2 text-[0.84rem] font-black uppercase tracking-[0.18em] text-[#2563eb] shadow-[0_16px_44px_-34px_rgba(37,99,235,0.65)]">Field examples</p>
+              <h2 className="mt-5 text-[clamp(2.25rem,4.4vw,3.9rem)] font-black leading-[1.04] tracking-[-0.052em] text-[#07142a]">What the workflow feels like when calls stop slipping through.</h2>
               <p className="mt-5 max-w-[560px] text-[1.08rem] font-medium leading-8 text-[#334155]">
-                These notes focus on the real workflow: fewer voicemail chases, cleaner lead details, and faster response without stopping the job.
+                These examples focus on the real workflow: fewer voicemail chases, cleaner lead details, and faster response without stopping the job.
               </p>
               <div className="mt-6 grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
                 {[
-                  ["4", "owner stories"],
-                  ["Ontario", "first market"],
-                  ["Proof", "before hype"],
+                  ["4", "missed-call moments"],
+                  ["Ontario", "built first"],
+                  ["Demo", "before hype"],
                 ].map(([value, label]) => (
                   <div key={label} className="rounded-[10px] border border-[#d8e7fb] bg-white px-4 py-3 shadow-[0_16px_38px_-34px_rgba(15,23,42,0.25)]">
                     <p className="text-[1.35rem] font-black leading-none text-[#176bff]">{value}</p>
@@ -4199,7 +4374,7 @@ function LandingPage() {
 
             <div className="grid gap-4">
               <article className="rounded-[14px] border border-[#d8e7fb] bg-[#07142a] p-5 text-white shadow-[0_30px_84px_-58px_rgba(15,23,42,0.58)] sm:p-7">
-                <p className="text-[0.78rem] font-black uppercase tracking-[0.16em] text-[#8bdcff]">Featured field note</p>
+                <p className="text-[0.78rem] font-black uppercase tracking-[0.16em] text-[#8bdcff]">Featured field example</p>
                 <p className="mt-5 text-[clamp(1.45rem,2.5vw,2.15rem)] font-black leading-[1.18] tracking-[-0.035em]">"{testimonialCards[0].quote}"</p>
                 <div className="mt-6 flex flex-col gap-2 border-t border-white/14 pt-5 sm:flex-row sm:items-center sm:justify-between">
                   <div>
@@ -4227,9 +4402,9 @@ function LandingPage() {
 
               <div className="grid gap-4 rounded-[14px] border border-[#b9e8d4] bg-[#f4fffa] p-4 md:grid-cols-3">
                 {[
-                  ["Ontario-first", "Founded in Ontario and built around local service-business expectations."],
-                  ["Canada-ready privacy", "Aligned with Canadian privacy expectations around consent, safeguards, and limited use."],
-                  ["Concrete demos", "Live calls, demo audio, transcripts, and text follow-up examples keep the claims grounded."],
+                  ["Ontario-built", "Made for local service-business expectations before broad expansion."],
+                  ["Privacy-aware workflow", "Privacy and terms pages explain consent, safeguards, limited use, transcripts, and text messages."],
+                  ["Concrete demos", "Demo audio, transcripts, and text follow-up examples keep the claims grounded."],
                 ].map(([title, body]) => (
                   <div key={title} className="rounded-[10px] bg-white px-4 py-4">
                     <p className="text-[0.92rem] font-black uppercase tracking-[0.12em] text-[#15803d]">{title}</p>
@@ -4312,7 +4487,7 @@ function LandingPage() {
               ))}
               <div className="bg-[#f8fbff] px-5 py-4 sm:px-6">
                 <p className="text-[0.92rem] font-semibold leading-7 text-[#475569]">
-                  External verification badges, Google ownership tokens, SMS sender registration, and payment-provider trust marks should only be added after those accounts issue real approvals or tokens.
+                  Public privacy and terms pages, a no-credit-card trial, demo audio, transcripts, and text follow-up examples give customers proof they can inspect before launch.
                 </p>
               </div>
             </div>

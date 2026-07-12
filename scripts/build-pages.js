@@ -5,7 +5,7 @@ const { copyDir, ensureDir, npmCommand, removeDir, rootPath, run } = require("./
 const buildDirName = "build-pages-output";
 const buildDir = rootPath(buildDirName);
 const docsDir = rootPath("docs");
-const productionApiBase = process.env.REACT_APP_API_BASE_URL || "https://myaipa-api.onrender.com";
+const productionApiBase = process.env.REACT_APP_API_BASE_URL || "https://api.myaipa.ca";
 
 console.log("Building production React app...");
 removeDir(buildDir);

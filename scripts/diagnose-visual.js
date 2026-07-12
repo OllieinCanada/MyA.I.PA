@@ -9,16 +9,21 @@ const baseUrl = (baseUrlArg ? baseUrlArg.split("=").slice(1).join("=") : process
 const routes = [
   { name: "home", path: "/" },
   { name: "signup", path: "/#/signup" },
+  { name: "dashboard", path: "/#/dashboard" },
+  { name: "admin", path: "/#/admin", waitMs: 7200 },
 ];
 const viewports = [
   { name: "desktop", width: 1440, height: 900 },
+  { name: "firefox-window", width: 1536, height: 650 },
   { name: "laptop", width: 1365, height: 768 },
   { name: "mobile", width: 390, height: 844 },
 ];
 
 const requiredText = {
-  home: ["Answers the phone", "Start Free Trial", "Hear Agent"],
+  home: ["Answers the phone", "Start Free Trial", "Hear Agent", "Owner Text", "Instantly sends"],
   signup: ["Business setup", "Choose your trade"],
+  dashboard: ["Customer dashboard", "Signup email", "Open Dashboard"],
+  admin: ["Admin Dashboard", "Admin Password", "Unlock Admin"],
 };
 
 async function checkServerReachable(url) {
@@ -80,7 +85,7 @@ async function collectPageDiagnostics(page, pageName) {
     const heroNav = document.querySelector(".landing-hero-shell nav");
     const heroNavBottom = heroNav ? heroNav.getBoundingClientRect().bottom : 0;
     const heroSafeTop = Math.round(heroNavBottom + 8);
-    const heroPhoneElements = Array.from(document.querySelectorAll(".landing-phone, .landing-summary"))
+    const heroPhoneElements = Array.from(document.querySelectorAll(".landing-phone, .landing-summary, .landing-call-dashboard"))
       .filter((element) => {
         const rect = element.getBoundingClientRect();
         const style = window.getComputedStyle(element);
@@ -111,7 +116,56 @@ async function collectPageDiagnostics(page, pageName) {
           overlapsBy: Math.max(0, Math.round(heroSafeTop - rect.top)),
         };
       })
-      .filter((item) => item.overlapsBy > 0);
+      .filter((item) => item.overlapsBy > 12);
+
+    function rectFor(selector) {
+      const element = document.querySelector(selector);
+      if (!element) return null;
+      const rect = element.getBoundingClientRect();
+      return {
+        selector,
+        top: Math.round(rect.top),
+        right: Math.round(rect.right),
+        bottom: Math.round(rect.bottom),
+        left: Math.round(rect.left),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+      };
+    }
+
+    function overlapAmount(a, b) {
+      if (!a || !b) return 0;
+      const xOverlap = Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left));
+      const yOverlap = Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
+      return Math.round(xOverlap * yOverlap);
+    }
+
+    const dashboardRect = rectFor(".landing-call-dashboard");
+    const conversationRect = rectFor(".landing-conversation-panel");
+    const leadNoteRect = rectFor(".landing-lead-note");
+    const leadCardRect = rectFor(".landing-lead-card");
+    const dashboardIssues = [];
+
+    if (dashboardRect && viewportWidth >= 1024) {
+      if (dashboardRect.right > viewportWidth + 2) {
+        dashboardIssues.push(`Dashboard extends ${Math.round(dashboardRect.right - viewportWidth)}px past viewport right edge`);
+      }
+      if (dashboardRect.bottom > viewportHeight + 12) {
+        dashboardIssues.push(`Dashboard extends ${Math.round(dashboardRect.bottom - viewportHeight)}px below visible viewport`);
+      }
+    }
+    if (viewportWidth >= 1024 && dashboardRect && leadCardRect && leadCardRect.bottom > dashboardRect.bottom + 6) {
+      dashboardIssues.push(`Lead card is clipped by dashboard bottom (${Math.round(leadCardRect.bottom - dashboardRect.bottom)}px)`);
+    }
+    if (viewportWidth >= 1024 && conversationRect && leadCardRect && overlapAmount(conversationRect, leadCardRect) > 0) {
+      dashboardIssues.push("Lead card overlaps conversation panel");
+    }
+    if (viewportWidth >= 1024 && conversationRect && leadNoteRect && overlapAmount(conversationRect, leadNoteRect) > 0) {
+      dashboardIssues.push("Lead note overlaps conversation panel");
+    }
+    if (viewportWidth >= 1024 && leadNoteRect && leadCardRect && overlapAmount(leadNoteRect, leadCardRect) > 0) {
+      dashboardIssues.push("Lead note overlaps lead card");
+    }
 
     const missingText = expectedText.filter((item) => !text.includes(String(item).toLowerCase()));
 
@@ -126,6 +180,13 @@ async function collectPageDiagnostics(page, pageName) {
       offscreenElements,
       foldCutoffElements,
       topOverlapElements,
+      dashboard: {
+        dashboardRect,
+        conversationRect,
+        leadNoteRect,
+        leadCardRect,
+        issues: dashboardIssues,
+      },
     };
   }, requiredText[pageName] || []);
 }
@@ -169,7 +230,7 @@ async function main() {
       console.log(`Checking ${url} at ${viewport.width}x${viewport.height}...`);
       try {
         await page.goto(url, { waitUntil: "domcontentloaded", timeout: 12000 });
-        await page.waitForTimeout(1200);
+        await page.waitForTimeout(route.waitMs || 1200);
         await page.screenshot({ path: screenshotPath, fullPage: true });
         const diagnostics = await collectPageDiagnostics(page, route.name);
         const warnings = [];
@@ -184,10 +245,13 @@ async function main() {
           warnings.push(`${diagnostics.offscreenElements.length} visible elements extend past the viewport`);
         }
         if (route.name === "home" && diagnostics.foldCutoffElements.length) {
-          warnings.push(`${diagnostics.foldCutoffElements.length} hero phone mockups extend below the visible fold`);
+          warnings.push(`${diagnostics.foldCutoffElements.length} hero visual elements extend below the visible fold`);
         }
         if (route.name === "home" && diagnostics.topOverlapElements.length) {
-          warnings.push(`${diagnostics.topOverlapElements.length} hero phone mockups overlap the header area`);
+          warnings.push(`${diagnostics.topOverlapElements.length} hero visual elements overlap the header area`);
+        }
+        if (route.name === "home" && diagnostics.dashboard.issues.length) {
+          warnings.push(...diagnostics.dashboard.issues);
         }
 
         report.checks.push({

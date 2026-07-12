@@ -142,6 +142,23 @@ function moneyCompact(value) {
 }
 
 const DEFAULT_MONTHLY_REVENUE_USD = Number(process.env.REACT_APP_MONTHLY_PRICE_USD || process.env.REACT_APP_SUBSCRIPTION_PRICE_USD || 79) || 79;
+const EMPTY_STRIPE_TRIALS = {
+  configured: false,
+  fetchedAt: "",
+  mode: "",
+  account: null,
+  totals: {
+    subscriptionsAllStatuses: 0,
+    statusCounts: {},
+    activeTrialCount: 0,
+    trialRelatedCount: 0,
+    endingSoonWithin3DaysCount: 0,
+    recentlyEndedTrialCountLast30Days: 0,
+  },
+  activeTrials: [],
+  recentlyEndedTrialsLast30Days: [],
+  warnings: [],
+};
 
 function moneyDashboard(value) {
   const n = Number(value || 0);
@@ -149,6 +166,14 @@ function moneyDashboard(value) {
   const safe = Object.is(n, -0) ? 0 : n;
   const formatted = Math.abs(safe).toFixed(Math.abs(safe) < 10 ? 2 : 0);
   return safe < 0 ? `-$${formatted}` : `$${formatted}`;
+}
+
+function moneyFromCents(value, currency = "CAD", interval = "") {
+  const cents = Number(value);
+  if (!Number.isFinite(cents) || cents <= 0) return "—";
+  const amount = cents / 100;
+  const label = `${amount.toLocaleString(undefined, { style: "currency", currency: currency || "CAD" })}`;
+  return interval ? `${label}/${interval}` : label;
 }
 
 function percentDashboard(value) {
@@ -205,6 +230,15 @@ function paymentBadgeClass(key) {
   if (key === "paying") return "admin-money-badge admin-money-badge-good";
   if (key === "trialing") return "admin-money-badge admin-money-badge-info";
   if (key === "problem") return "admin-money-badge admin-money-badge-bad";
+  return "admin-money-badge admin-money-badge-warn";
+}
+
+function stripeStatusBadgeClass(status, expiryColor) {
+  const value = String(status || "").toLowerCase();
+  if (value === "active") return "admin-money-badge admin-money-badge-good";
+  if (value === "trialing" && expiryColor === "red") return "admin-money-badge admin-money-badge-bad";
+  if (value === "trialing") return "admin-money-badge admin-money-badge-info";
+  if (/past_due|unpaid|incomplete|canceled|cancelled/.test(value)) return "admin-money-badge admin-money-badge-bad";
   return "admin-money-badge admin-money-badge-warn";
 }
 
@@ -836,7 +870,7 @@ function SystemHealthPanel({ setupItems, signups, apiSourceLabel, onOpen }) {
       </div>
       <div className="admin-v2-health-list">
         {items.map((item) => (
-          <button key={item.label} type="button" onClick={() => onOpen(item.label === "Vapi" ? "vapi" : item.label === "Twilio" ? "costs" : "sync")}>
+          <button key={item.label} type="button" onClick={() => onOpen(item.label === "Vapi" ? "vapi" : item.label === "Twilio" ? "costs" : item.label === "Stripe checkout" ? "trials" : "sync")}>
             <span className={"admin-v2-health-dot " + (item.ok ? "is-ok" : "is-warn")} />
             <strong>{item.label}</strong>
             <em>{item.detail}</em>
@@ -971,6 +1005,7 @@ export default function AdminDashboard() {
   const [signups, setSignups] = useState([]);
   const [analytics, setAnalytics] = useState([]);
   const [trialHealth, setTrialHealth] = useState([]);
+  const [stripeTrials, setStripeTrials] = useState(EMPTY_STRIPE_TRIALS);
   const [customerSetup, setCustomerSetup] = useState({ customers: [], summary: null, warnings: [] });
   const [vapiMappings, setVapiMappings] = useState([]);
   const [vapiInventory, setVapiInventory] = useState({ phoneNumbers: [], assistants: [], warnings: [], totals: null, fetchedAt: "" });
@@ -1009,8 +1044,9 @@ export default function AdminDashboard() {
       syncWarnings: opsOverview.sync?.warnings?.length || costAudit?.warnings?.length || 0,
       faqs: faqs.length,
       rings: settings?.answerAfterRings ?? "—",
+      stripeTrials: stripeTrials.totals?.activeTrialCount || 0,
     }),
-    [leads.length, calls.length, signups.length, opsOverview.owners?.length, opsOverview.sync, costAudit, customerSetup.summary, faqs.length, settings]
+    [leads.length, calls.length, signups.length, opsOverview.owners?.length, opsOverview.sync, costAudit, customerSetup.summary, faqs.length, settings, stripeTrials.totals?.activeTrialCount]
   );
 
   const setupItems = useMemo(
@@ -1525,7 +1561,7 @@ export default function AdminDashboard() {
       if (payment.key === "problem") addIssue("Payment problem", 30, "Fix billing", "costs");
       else if (payment.key === "pending") addIssue("Checkout pending", 22, "Finish checkout", "costs");
       else if (payment.key === "unknown") addIssue("Stripe unknown", 16, "Check billing", "costs");
-      else if (payment.key === "trialing") addIssue("Trial account", 8, "Watch trial", "costs");
+      else if (payment.key === "trialing") addIssue("Trial account", 8, "Watch trial", "trials");
 
       if (!account.hasNumber) addIssue("No AI number", 24, "Map number", "mappings");
       if (!account.setupReady) addIssue("Setup incomplete", 18, account.nextAction || "Finish setup", "setup");
@@ -1747,6 +1783,7 @@ export default function AdminDashboard() {
           ["customers", "Customers", "Who is working and what to do next"],
           ["setup", "Setup", "Fix customers that are not ready"],
           ["calls", "Calls", "Read calls and follow-ups"],
+          ["trials", "Trials", "Live Stripe trial status"],
           ["costs", "Billing", "Vapi and Twilio spend"],
           ["sync", "System", "Keys and sync status"],
         ],
@@ -1798,6 +1835,18 @@ export default function AdminDashboard() {
   const loadTrialHealth = async () => {
     const data = await api("/api/admin/trial-health");
     setTrialHealth(data.accounts || []);
+  };
+
+  const loadStripeTrials = async () => {
+    const data = await api("/api/admin/stripe-trials");
+    setStripeTrials({
+      ...EMPTY_STRIPE_TRIALS,
+      ...data,
+      totals: { ...EMPTY_STRIPE_TRIALS.totals, ...(data.totals || {}) },
+      activeTrials: data.activeTrials || [],
+      recentlyEndedTrialsLast30Days: data.recentlyEndedTrialsLast30Days || [],
+      warnings: data.warnings || [],
+    });
   };
 
   const loadCustomerSetup = async () => {
@@ -1948,6 +1997,7 @@ export default function AdminDashboard() {
         loadOpsOverview(),
         loadCustomerSetup(),
         loadTrialHealth(),
+        loadStripeTrials(),
         loadSignups(),
         loadCalls(),
         loadLeads(),
@@ -1974,7 +2024,7 @@ export default function AdminDashboard() {
     try {
       if (activeTab === "leads") await loadLeads();
       if (activeTab === "overview") {
-        await Promise.allSettled([loadOpsOverview(), loadCustomerSetup(), loadTrialHealth(), loadCostAudit(), loadCalls(), loadLeads(), loadSignups(), loadAnalytics(), loadVapiMappings(), loadVapiInventory(), loadSettings()]);
+        await Promise.allSettled([loadOpsOverview(), loadCustomerSetup(), loadTrialHealth(), loadStripeTrials(), loadCostAudit(), loadCalls(), loadLeads(), loadSignups(), loadAnalytics(), loadVapiMappings(), loadVapiInventory(), loadSettings()]);
       }
       if (activeTab === "customers") {
         await Promise.allSettled([loadOpsOverview(), loadCustomerSetup(), loadTrialHealth(), loadSignups(), loadCalls(), loadLeads(), loadCostAudit(), loadVapiMappings(), loadVapiInventory()]);
@@ -1985,8 +2035,9 @@ export default function AdminDashboard() {
       if (activeTab === "signups") await loadSignups();
       if (activeTab === "ops") await loadAnalytics();
       if (activeTab === "health") await loadTrialHealth();
-      if (activeTab === "costs") await loadCostAudit();
-      if (activeTab === "sync") await Promise.allSettled([loadOpsOverview(), loadVapiInventory(), loadCostAudit()]);
+      if (activeTab === "trials") await loadStripeTrials();
+      if (activeTab === "costs") await Promise.allSettled([loadCostAudit(), loadStripeTrials()]);
+      if (activeTab === "sync") await Promise.allSettled([loadOpsOverview(), loadVapiInventory(), loadCostAudit(), loadStripeTrials()]);
       if (activeTab === "vapi") await loadVapiInventory();
       if (activeTab === "mappings") await loadVapiMappings();
       if (activeTab === "digest") await loadDigest();
@@ -2060,6 +2111,7 @@ export default function AdminDashboard() {
       setSignups([]);
       setAnalytics([]);
       setTrialHealth([]);
+      setStripeTrials(EMPTY_STRIPE_TRIALS);
       setCustomerSetup({ customers: [], summary: null, warnings: [] });
       setVapiMappings([]);
       setVapiInventory({ phoneNumbers: [], assistants: [], warnings: [], totals: null, fetchedAt: "" });
@@ -3107,6 +3159,162 @@ export default function AdminDashboard() {
                     <strong>{value}</strong>
                   </div>
                 ))}
+              </div>
+            </section>
+          </div>
+        ) : null}
+
+        {activeTab === "trials" ? (
+          <div className="admin-stripe-page">
+            <div className="admin-money-header">
+              <div>
+                <div className="admin-money-eyebrow">Stripe Trials</div>
+                <h2>Live subscriptions in Stripe</h2>
+                <p>Read-only billing view from Stripe. Use it to catch trials before they end and spot live-mode test customers.</p>
+              </div>
+              <div className="admin-money-actions">
+                <button type="button" onClick={loadStripeTrials}>Refresh Stripe</button>
+                <a href="https://dashboard.stripe.com/subscriptions?status=trialing" target="_blank" rel="noreferrer">Open Stripe</a>
+              </div>
+            </div>
+
+            {stripeTrials.warnings?.length ? (
+              <div className="admin-money-warning-list">
+                {stripeTrials.warnings.map((warning) => (
+                  <div key={warning}>{warning}</div>
+                ))}
+              </div>
+            ) : null}
+
+            {!stripeTrials.configured ? (
+              <section className="admin-money-card">
+                <div className="admin-money-card-head">
+                  <div>
+                    <span>Not Connected</span>
+                    <h3>Stripe key missing on the backend</h3>
+                  </div>
+                </div>
+                <p className="admin-stripe-note">Add STRIPE_SECRET_KEY to the backend environment, then refresh this page.</p>
+              </section>
+            ) : null}
+
+            <div className="admin-money-kpis">
+              <div className="admin-money-kpi admin-money-kpi-blue">
+                <span>Active Trials</span>
+                <strong>{stripeTrials.totals?.activeTrialCount || 0}</strong>
+                <em>{stripeTrials.mode === "live" ? "Live mode" : stripeTrials.mode === "test" ? "Test mode" : "Stripe mode unknown"}</em>
+              </div>
+              <div className={(stripeTrials.totals?.endingSoonWithin3DaysCount || 0) ? "admin-money-kpi admin-money-kpi-red" : "admin-money-kpi admin-money-kpi-green"}>
+                <span>Ending Soon</span>
+                <strong>{stripeTrials.totals?.endingSoonWithin3DaysCount || 0}</strong>
+                <em>Within 3 days</em>
+              </div>
+              <div className="admin-money-kpi admin-money-kpi-amber">
+                <span>All Subscriptions</span>
+                <strong>{stripeTrials.totals?.subscriptionsAllStatuses || 0}</strong>
+                <em>{Object.entries(stripeTrials.totals?.statusCounts || {}).map(([status, count]) => `${count} ${status}`).join(", ") || "No subscriptions loaded"}</em>
+              </div>
+              <div className={stripeTrials.account?.payoutsEnabled ? "admin-money-kpi admin-money-kpi-green" : "admin-money-kpi admin-money-kpi-red"}>
+                <span>Stripe Account</span>
+                <strong>{stripeTrials.account?.chargesEnabled ? "Charges on" : "Check"}</strong>
+                <em>{stripeTrials.account?.payoutsEnabled ? "Payouts enabled" : "Payouts not enabled"}</em>
+              </div>
+            </div>
+
+            <section className="admin-money-card admin-stripe-card">
+              <div className="admin-money-card-head">
+                <div>
+                  <span>Active Trial Queue</span>
+                  <h3>Who needs owner follow-up before billing starts</h3>
+                </div>
+                <p>{stripeTrials.fetchedAt ? `Last checked ${dt(stripeTrials.fetchedAt)}` : "Not loaded yet"}</p>
+              </div>
+              <div className="admin-money-table-wrap">
+                <table className="admin-money-table admin-stripe-table">
+                  <thead>
+                    <tr>
+                      <th>Customer</th>
+                      <th>Status</th>
+                      <th>Trial Ends</th>
+                      <th>Time Left</th>
+                      <th>Price</th>
+                      <th>Subscription</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {stripeTrials.activeTrials?.length ? stripeTrials.activeTrials.map((trial) => {
+                      const expiry = trial.expiry || {};
+                      return (
+                        <tr key={trial.subscriptionId} className="align-top">
+                          <td>
+                            <strong>{trial.businessName || trial.customerName || "Unnamed customer"}</strong>
+                            <small>{trial.customerEmail || trial.customerName || trial.customerId || "No customer details"}</small>
+                          </td>
+                          <td><span className={stripeStatusBadgeClass(trial.status, expiry.color)}>{trial.status || "unknown"}</span></td>
+                          <td>
+                            <strong>{dt(trial.trialEndAt)}</strong>
+                            {trial.cancelAtPeriodEnd ? <small>Cancel at period end</small> : null}
+                          </td>
+                          <td>
+                            <span className={"admin-stripe-expiry " + expiryClasses(expiry.color)}>{daysText(expiry.daysRemaining)}</span>
+                            {expiry.percentUsed != null ? <small>{expiry.percentUsed}% used</small> : null}
+                          </td>
+                          <td>
+                            <strong>{moneyFromCents(trial.priceAmount, trial.priceCurrency || "CAD", trial.priceInterval)}</strong>
+                            <small>{trial.priceId || "No price ID"}</small>
+                          </td>
+                          <td>
+                            <strong>{trial.subscriptionId}</strong>
+                            <small>Created {dt(trial.createdAt)}</small>
+                          </td>
+                          <td>
+                            {trial.dashboardUrl ? <a href={trial.dashboardUrl} target="_blank" rel="noreferrer" className="admin-stripe-link">Open</a> : "—"}
+                          </td>
+                        </tr>
+                      );
+                    }) : <tr><td colSpan="7">No active Stripe trials found.</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <section className="admin-money-card admin-stripe-card">
+              <div className="admin-money-card-head">
+                <div>
+                  <span>Recently Ended</span>
+                  <h3>Trials that ended in the last 30 days</h3>
+                </div>
+                <p>{stripeTrials.totals?.recentlyEndedTrialCountLast30Days || 0} ended</p>
+              </div>
+              <div className="admin-money-table-wrap">
+                <table className="admin-money-table admin-stripe-table">
+                  <thead>
+                    <tr>
+                      <th>Customer</th>
+                      <th>Status</th>
+                      <th>Trial Ended</th>
+                      <th>Price</th>
+                      <th>Subscription</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {stripeTrials.recentlyEndedTrialsLast30Days?.length ? stripeTrials.recentlyEndedTrialsLast30Days.map((trial) => (
+                      <tr key={trial.subscriptionId}>
+                        <td>
+                          <strong>{trial.businessName || trial.customerName || "Unnamed customer"}</strong>
+                          <small>{trial.customerEmail || trial.customerId || "No customer details"}</small>
+                        </td>
+                        <td><span className={stripeStatusBadgeClass(trial.status, trial.expiry?.color)}>{trial.status || "unknown"}</span></td>
+                        <td>{dt(trial.trialEndAt)}</td>
+                        <td>{moneyFromCents(trial.priceAmount, trial.priceCurrency || "CAD", trial.priceInterval)}</td>
+                        <td>{trial.subscriptionId}</td>
+                        <td>{trial.dashboardUrl ? <a href={trial.dashboardUrl} target="_blank" rel="noreferrer" className="admin-stripe-link">Open</a> : "—"}</td>
+                      </tr>
+                    )) : <tr><td colSpan="6">No recently ended trials found.</td></tr>}
+                  </tbody>
+                </table>
               </div>
             </section>
           </div>

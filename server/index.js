@@ -1,4 +1,6 @@
-require("dotenv").config();
+const dotenv = require("dotenv");
+dotenv.config();
+dotenv.config({ path: ".env.local", override: false });
 
 const crypto = require("crypto");
 const cors = require("cors");
@@ -17,6 +19,8 @@ const {
   escalateToHuman,
 } = require("./agentTools");
 
+loadPowerShellEnvAssignments(path.join(__dirname, "..", ".env.local"));
+
 const app = express();
 const PORT = Number(process.env.PORT || 8787);
 const dataDir = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.join(__dirname, "..", "data");
@@ -24,6 +28,8 @@ const assistantRateLimit = new Map();
 const signupIpRateLimit = new Map();
 const signupIdentityRateLimit = new Map();
 const signupDuplicateSubmissions = new Map();
+const customerDashboardIpRateLimit = new Map();
+const customerDashboardLookupRateLimit = new Map();
 const pendingSignupPath = path.join(dataDir, "pending-signup-verifications.json");
 const pendingStripeSignupPath = path.join(dataDir, "pending-stripe-signups.json");
 const trialReminderPath = path.join(dataDir, "trial-reminders.json");
@@ -39,6 +45,10 @@ const SIGNUP_IDENTITY_WINDOW_MS = parsePositiveInt(process.env.SIGNUP_IDENTITY_W
 const SIGNUP_IDENTITY_MAX_REQUESTS = parsePositiveInt(process.env.SIGNUP_IDENTITY_MAX_REQUESTS, 2);
 const SIGNUP_DUPLICATE_WINDOW_MS = parsePositiveInt(process.env.SIGNUP_DUPLICATE_WINDOW_MS, 10 * 60 * 1000);
 const SIGNUP_MIN_ELAPSED_MS = parsePositiveInt(process.env.SIGNUP_MIN_ELAPSED_MS, 2500);
+const CUSTOMER_DASHBOARD_IP_WINDOW_MS = parsePositiveInt(process.env.CUSTOMER_DASHBOARD_IP_WINDOW_MS, 15 * 60 * 1000);
+const CUSTOMER_DASHBOARD_IP_MAX_REQUESTS = parsePositiveInt(process.env.CUSTOMER_DASHBOARD_IP_MAX_REQUESTS, 30);
+const CUSTOMER_DASHBOARD_LOOKUP_WINDOW_MS = parsePositiveInt(process.env.CUSTOMER_DASHBOARD_LOOKUP_WINDOW_MS, 60 * 60 * 1000);
+const CUSTOMER_DASHBOARD_LOOKUP_MAX_REQUESTS = parsePositiveInt(process.env.CUSTOMER_DASHBOARD_LOOKUP_MAX_REQUESTS, 8);
 const WEBSITE_FETCH_TIMEOUT_MS = 8000;
 const WEBSITE_MAX_HTML_CHARS = 250000;
 const WEBSITE_MAX_EXTRA_PAGES = 3;
@@ -56,6 +66,7 @@ const STRIPE_SECRET_KEY = String(process.env.STRIPE_SECRET_KEY || "").trim();
 const STRIPE_PRICE_ID = String(process.env.STRIPE_PRICE_ID || "").trim();
 const STRIPE_WEBHOOK_SECRET = String(process.env.STRIPE_WEBHOOK_SECRET || "").trim();
 const STRIPE_TRIAL_DAYS = Math.max(0, Number(process.env.STRIPE_TRIAL_DAYS || 14) || 0);
+const STRIPE_ADMIN_SUBSCRIPTION_LIMIT = Math.max(1, Math.min(500, Number(process.env.STRIPE_ADMIN_SUBSCRIPTION_LIMIT || 100) || 100));
 const stripe = STRIPE_SECRET_KEY ? new Stripe(STRIPE_SECRET_KEY) : null;
 const VAPI_API_KEY = String(process.env.VAPI_API_KEY || "").trim();
 const VAPI_API_BASE_URL = String(process.env.VAPI_API_BASE_URL || "https://api.vapi.ai").trim().replace(/\/+$/, "");
@@ -66,6 +77,7 @@ const VAPI_AUTO_SYNC_ENABLED = isEnabled(process.env.VAPI_AUTO_SYNC_ENABLED);
 const TWILIO_ACCOUNT_SID = String(process.env.TWILIO_ACCOUNT_SID || "").trim();
 const TWILIO_AUTH_TOKEN = String(process.env.TWILIO_AUTH_TOKEN || "").trim();
 const TWILIO_API_BASE_URL = String(process.env.TWILIO_API_BASE_URL || "https://api.twilio.com").trim().replace(/\/+$/, "");
+const INTEGRATION_API_KEY = String(process.env.INTEGRATION_API_KEY || process.env.MAKE_SIGNUP_WEBHOOK_API_KEY || "").trim();
 const FIXED_MONTHLY_COSTS_JSON = String(process.env.FIXED_MONTHLY_COSTS_JSON || "").trim();
 const FIXED_MONTHLY_COST_USD = numberOrNull(process.env.FIXED_MONTHLY_COST_USD) || 0;
 const MISSED_CALL_ALERT_ENABLED = isEnabled(process.env.MISSED_CALL_ALERT_ENABLED);
@@ -89,6 +101,9 @@ app.use(
     credentials: true,
   })
 );
+
+app.use(applySecurityHeaders);
+app.use(noStoreSensitiveApiResponses);
 
 app.post("/api/payments/stripe-webhook", express.raw({ type: "application/json" }), asyncRoute(async (req, res) => {
   if (!stripe || !STRIPE_WEBHOOK_SECRET) {
@@ -219,6 +234,18 @@ function parseCsv(value) {
     .filter(Boolean);
 }
 
+function loadPowerShellEnvAssignments(filePath) {
+  if (!filePath || !fs.existsSync(filePath)) return;
+  const text = fs.readFileSync(filePath, "utf8");
+  for (const line of text.split(/\r?\n/)) {
+    const match = line.match(/^\s*\$env:([A-Z][A-Z0-9_]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|(.+?))\s*$/);
+    if (!match) continue;
+    const key = match[1];
+    if (process.env[key]) continue;
+    process.env[key] = String(match[2] ?? match[3] ?? match[4] ?? "").trim();
+  }
+}
+
 function isAllowedOrigin(origin) {
   const allowed = ALLOWED_ORIGINS.length ? ALLOWED_ORIGINS : DEFAULT_ALLOWED_ORIGINS;
   return allowed.includes(origin);
@@ -235,6 +262,26 @@ function parseCookies(req) {
     if (key) acc[key] = decodeURIComponent(value);
     return acc;
   }, {});
+}
+
+function applySecurityHeaders(req, res, next) {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()");
+  if (String(req.path || "").startsWith("/api/")) {
+    res.setHeader("X-Robots-Tag", "noindex, nofollow");
+  }
+  next();
+}
+
+function noStoreSensitiveApiResponses(req, res, next) {
+  if (/^\/api\/(admin|customer)\b/.test(String(req.path || ""))) {
+    res.setHeader("Cache-Control", "no-store, max-age=0");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+  }
+  next();
 }
 
 function getAdminPassword() {
@@ -319,7 +366,7 @@ function clearAdminSessionCookie(res) {
 }
 
 function hasValidAdminPassword(req) {
-  const supplied = req.headers["x-admin-password"] || req.body?.password || req.query.password;
+  const supplied = req.headers["x-admin-password"] || req.body?.password;
   return supplied === getAdminPassword();
 }
 
@@ -328,6 +375,25 @@ function getMakeSignupWebhookConfig() {
     url: String(process.env.MAKE_SIGNUP_WEBHOOK_URL || "").trim(),
     apiKey: String(process.env.MAKE_SIGNUP_WEBHOOK_API_KEY || "").trim(),
   };
+}
+
+function safeEqualString(a, b) {
+  const left = Buffer.from(String(a || ""));
+  const right = Buffer.from(String(b || ""));
+  return left.length === right.length && left.length > 0 && crypto.timingSafeEqual(left, right);
+}
+
+function hasValidIntegrationKey(req) {
+  if (!INTEGRATION_API_KEY) return false;
+  const authHeader = String(req.headers.authorization || "").trim();
+  const bearerMatch = authHeader.match(/^Bearer\s+(.+)$/i);
+  const supplied =
+    String(req.headers["x-myaipa-integration-key"] || "").trim() ||
+    String(req.headers["x-api-key"] || "").trim() ||
+    String(req.headers["x-make-apikey"] || "").trim() ||
+    String(bearerMatch?.[1] || "").trim() ||
+    String(req.body?.integrationKey || "").trim();
+  return safeEqualString(supplied, INTEGRATION_API_KEY);
 }
 
 function getPublicBaseUrl(req) {
@@ -904,6 +970,88 @@ async function fetchVapiCollection(resourcePath, collectionKeys = []) {
     if (Array.isArray(data?.[key])) return data[key];
   }
   return [];
+}
+
+function normalizeVapiImportPhone(value) {
+  const normalized = normalizePhoneForMatch(value);
+  return /^\+\d{10,15}$/.test(normalized) ? normalized : "";
+}
+
+function sanitizeVapiImportName(value, fallback) {
+  return String(value || fallback || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .slice(0, 120);
+}
+
+function summarizeVapiPhoneNumberImport(data, fallbackPhoneNumber) {
+  return {
+    id: String(data?.id || "").trim(),
+    number: String(data?.number || data?.twilioPhoneNumber || fallbackPhoneNumber || "").trim(),
+    name: String(data?.name || "").trim(),
+    provider: String(data?.provider || "twilio").trim(),
+    status: String(data?.status || "").trim(),
+    assistantId: String(data?.assistantId || data?.assistant?.id || "").trim(),
+    createdAt: data?.createdAt || null,
+    updatedAt: data?.updatedAt || null,
+  };
+}
+
+async function importTwilioPhoneNumberToVapi({ twilioPhoneNumber, assistantId, name }) {
+  if (!VAPI_API_KEY) {
+    const err = new Error("VAPI_API_KEY is not configured.");
+    err.statusCode = 503;
+    throw err;
+  }
+
+  if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN) {
+    const err = new Error("Twilio credentials are not configured.");
+    err.statusCode = 503;
+    throw err;
+  }
+
+  const phoneNumber = normalizeVapiImportPhone(twilioPhoneNumber);
+  const vapiAssistantId = String(assistantId || "").trim();
+
+  if (!phoneNumber) {
+    const err = new Error("twilioPhoneNumber must be a valid E.164 phone number.");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  if (!vapiAssistantId) {
+    const err = new Error("assistantId is required.");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const payload = {
+    twilioPhoneNumber: phoneNumber,
+    twilioAccountSid: TWILIO_ACCOUNT_SID,
+    twilioAuthToken: TWILIO_AUTH_TOKEN,
+    name: sanitizeVapiImportName(name, `${phoneNumber} Number`),
+    assistantId: vapiAssistantId,
+  };
+
+  const response = await fetch(`${VAPI_API_BASE_URL}/phone-number/import/twilio`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${VAPI_API_KEY}`,
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+  const rawText = await response.text();
+  const data = parseJsonObject(rawText);
+
+  if (!response.ok) {
+    const err = new Error(data?.message || data?.error || `Vapi Twilio import failed with HTTP ${response.status}.`);
+    err.statusCode = response.status;
+    throw err;
+  }
+
+  return summarizeVapiPhoneNumberImport(data, phoneNumber);
 }
 
 function getVapiPhoneNumber(record) {
@@ -2448,6 +2596,173 @@ function getSignupExpiryStatus(record) {
   return { color: "green", label: "Before halfway", daysRemaining, percentUsed };
 }
 
+function stripeUnixIso(value) {
+  const ms = getUnixMs(value);
+  return ms ? new Date(ms).toISOString() : null;
+}
+
+function getStripeCustomerId(subscription) {
+  return typeof subscription?.customer === "string" ? subscription.customer : subscription?.customer?.id || "";
+}
+
+function getStripeCustomer(subscription) {
+  return subscription?.customer && typeof subscription.customer === "object" ? subscription.customer : {};
+}
+
+function getStripePrice(subscription) {
+  return subscription?.items?.data?.[0]?.price || {};
+}
+
+function getStripePriceAmount(price) {
+  const decimal = Number(price?.unit_amount_decimal);
+  if (Number.isFinite(decimal) && decimal > 0) return decimal;
+  const amount = Number(price?.unit_amount);
+  return Number.isFinite(amount) && amount > 0 ? amount : null;
+}
+
+function summarizeStripeSubscriptionForAdmin(subscription) {
+  const metadata = subscription?.metadata || {};
+  const customer = getStripeCustomer(subscription);
+  const customerMetadata = customer?.metadata || {};
+  const price = getStripePrice(subscription);
+  const amountCents = getStripePriceAmount(price);
+  const trialStartAt = getUnixMs(subscription?.trial_start);
+  const trialEndAt = getUnixMs(subscription?.trial_end);
+  const currentPeriodStartAt = getUnixMs(subscription?.current_period_start);
+  const currentPeriodEndAt = getUnixMs(subscription?.current_period_end);
+  const dashboardMode = STRIPE_SECRET_KEY.startsWith("sk_test_") ? "test/" : "";
+
+  return {
+    subscriptionId: subscription?.id || "",
+    customerId: getStripeCustomerId(subscription),
+    customerEmail: String(customer?.email || metadata.ownerEmail || metadata.email || "").trim(),
+    customerName: String(customer?.name || metadata.ownerName || "").trim(),
+    businessName: String(metadata.businessName || metadata.company || customerMetadata.businessName || customer?.description || "").trim(),
+    status: subscription?.status || "",
+    trialStartAt: stripeUnixIso(subscription?.trial_start),
+    trialEndAt: stripeUnixIso(subscription?.trial_end),
+    currentPeriodEndAt: stripeUnixIso(subscription?.current_period_end),
+    cancelAt: stripeUnixIso(subscription?.cancel_at),
+    canceledAt: stripeUnixIso(subscription?.canceled_at),
+    cancelAtPeriodEnd: Boolean(subscription?.cancel_at_period_end),
+    createdAt: stripeUnixIso(subscription?.created),
+    priceId: price?.id || "",
+    priceAmount: amountCents,
+    priceCurrency: String(price?.currency || "").toUpperCase(),
+    priceInterval: price?.recurring?.interval || "",
+    dashboardUrl: subscription?.id ? `https://dashboard.stripe.com/${dashboardMode}subscriptions/${subscription.id}` : "",
+    expiry: getSignupExpiryStatus({
+      trialStartAt,
+      trialEndAt,
+      currentPeriodStartAt,
+      currentPeriodEndAt,
+      createdAt: stripeUnixIso(subscription?.created),
+      subscriptionStatus: subscription?.status || "",
+    }),
+  };
+}
+
+async function getStripeTrialsDashboard() {
+  if (!stripe) {
+    return {
+      configured: false,
+      fetchedAt: new Date().toISOString(),
+      account: null,
+      totals: {
+        subscriptionsAllStatuses: 0,
+        statusCounts: {},
+        activeTrialCount: 0,
+        trialRelatedCount: 0,
+        endingSoonWithin3DaysCount: 0,
+        recentlyEndedTrialCountLast30Days: 0,
+      },
+      activeTrials: [],
+      recentlyEndedTrialsLast30Days: [],
+      warnings: ["STRIPE_SECRET_KEY is not configured on the backend."],
+    };
+  }
+
+  const warnings = [];
+  let account = null;
+  try {
+    const stripeAccount = await stripe.accounts.retrieve();
+    account = {
+      id: stripeAccount.id,
+      country: stripeAccount.country || "",
+      chargesEnabled: Boolean(stripeAccount.charges_enabled),
+      payoutsEnabled: Boolean(stripeAccount.payouts_enabled),
+    };
+    if (!stripeAccount.payouts_enabled) warnings.push("Stripe payouts are not enabled yet.");
+  } catch (error) {
+    warnings.push(`Stripe account read failed: ${error?.message || "Unknown Stripe error"}`);
+  }
+
+  const subscriptions = [];
+  try {
+    for await (const subscription of stripe.subscriptions.list({
+      status: "all",
+      limit: 100,
+      expand: ["data.customer", "data.items.data.price"],
+    })) {
+      subscriptions.push(subscription);
+      if (subscriptions.length >= STRIPE_ADMIN_SUBSCRIPTION_LIMIT) break;
+    }
+  } catch (error) {
+    return {
+      configured: true,
+      fetchedAt: new Date().toISOString(),
+      account,
+      totals: {
+        subscriptionsAllStatuses: 0,
+        statusCounts: {},
+        activeTrialCount: 0,
+        trialRelatedCount: 0,
+        endingSoonWithin3DaysCount: 0,
+        recentlyEndedTrialCountLast30Days: 0,
+      },
+      activeTrials: [],
+      recentlyEndedTrialsLast30Days: [],
+      warnings: [`Stripe subscription read failed: ${error?.message || "Unknown Stripe error"}`],
+    };
+  }
+
+  const nowSec = Math.floor(Date.now() / 1000);
+  const activeTrials = subscriptions.filter((subscription) => subscription.status === "trialing" && (!subscription.trial_end || subscription.trial_end > nowSec));
+  const trialRelated = subscriptions.filter((subscription) => subscription.trial_start || subscription.trial_end || subscription.status === "trialing");
+  const recentlyEndedTrials = trialRelated.filter((subscription) => subscription.trial_end && subscription.trial_end <= nowSec && subscription.trial_end >= nowSec - 30 * 24 * 60 * 60);
+  const endingSoon = activeTrials.filter((subscription) => subscription.trial_end && subscription.trial_end <= nowSec + 3 * 24 * 60 * 60);
+  const statusCounts = subscriptions.reduce((acc, subscription) => {
+    const status = subscription.status || "unknown";
+    acc[status] = (acc[status] || 0) + 1;
+    return acc;
+  }, {});
+
+  return {
+    configured: true,
+    fetchedAt: new Date().toISOString(),
+    mode: STRIPE_SECRET_KEY.startsWith("sk_live_") ? "live" : STRIPE_SECRET_KEY.startsWith("sk_test_") ? "test" : "unknown",
+    account,
+    totals: {
+      subscriptionsAllStatuses: subscriptions.length,
+      statusCounts,
+      activeTrialCount: activeTrials.length,
+      trialRelatedCount: trialRelated.length,
+      endingSoonWithin3DaysCount: endingSoon.length,
+      recentlyEndedTrialCountLast30Days: recentlyEndedTrials.length,
+      resultLimit: STRIPE_ADMIN_SUBSCRIPTION_LIMIT,
+      resultLimitReached: subscriptions.length >= STRIPE_ADMIN_SUBSCRIPTION_LIMIT,
+    },
+    activeTrials: activeTrials
+      .sort((a, b) => (a.trial_end || Number.MAX_SAFE_INTEGER) - (b.trial_end || Number.MAX_SAFE_INTEGER))
+      .map(summarizeStripeSubscriptionForAdmin),
+    recentlyEndedTrialsLast30Days: recentlyEndedTrials
+      .sort((a, b) => (b.trial_end || 0) - (a.trial_end || 0))
+      .slice(0, 20)
+      .map(summarizeStripeSubscriptionForAdmin),
+    warnings,
+  };
+}
+
 function listSignupDashboardRecords() {
   const reminderStore = readTrialReminderStore();
 
@@ -2864,6 +3179,39 @@ function checkWindowLimit(store, key, maxRequests, windowMs) {
   };
 }
 
+function setRetryAfterHeader(res, retryAfterMs) {
+  if (!retryAfterMs) return;
+  res.setHeader("Retry-After", String(Math.max(1, Math.ceil(retryAfterMs / 1000))));
+}
+
+function getCustomerDashboardRateLimitDecision(req, { email, phone }) {
+  const ip = getClientIp(req);
+  const limits = [];
+  const ipLimit = checkWindowLimit(
+    customerDashboardIpRateLimit,
+    hashKey(ip),
+    CUSTOMER_DASHBOARD_IP_MAX_REQUESTS,
+    CUSTOMER_DASHBOARD_IP_WINDOW_MS
+  );
+  if (!ipLimit.allowed) limits.push(ipLimit);
+
+  const lookupKeySource = [email, normalizePhoneForMatch(phone)].map(normalizeForKey).join("|");
+  if (lookupKeySource.trim() !== "|") {
+    const lookupLimit = checkWindowLimit(
+      customerDashboardLookupRateLimit,
+      hashKey(lookupKeySource),
+      CUSTOMER_DASHBOARD_LOOKUP_MAX_REQUESTS,
+      CUSTOMER_DASHBOARD_LOOKUP_WINDOW_MS
+    );
+    if (!lookupLimit.allowed) limits.push(lookupLimit);
+  }
+
+  return {
+    blocked: limits.length > 0,
+    retryAfterMs: Math.max(...limits.map((limit) => limit.retryAfterMs || 0), 0),
+  };
+}
+
 function rememberDuplicateSignup(key) {
   const now = Date.now();
   const previous = signupDuplicateSubmissions.get(key);
@@ -3274,6 +3622,16 @@ function requireAdmin(req, res, next) {
   } catch (err) {
     return res.status(err.statusCode || 500).json({ error: err.message || "Admin authentication failed." });
   }
+}
+
+function requireIntegrationKey(req, res, next) {
+  if (!INTEGRATION_API_KEY) {
+    return res.status(503).json({ error: "INTEGRATION_API_KEY is not configured." });
+  }
+  if (!hasValidIntegrationKey(req)) {
+    return res.status(401).json({ error: "Invalid integration key." });
+  }
+  return next();
 }
 
 function getClientIp(req) {
@@ -4051,6 +4409,27 @@ app.post(
 );
 
 app.post(
+  "/api/integrations/vapi/import-twilio-number",
+  requireIntegrationKey,
+  asyncRoute(async (req, res) => {
+    const body = req.body || {};
+    const result = await importTwilioPhoneNumberToVapi({
+      twilioPhoneNumber: body.twilioPhoneNumber || body.phoneNumber || body.number,
+      assistantId: body.assistantId,
+      name: body.name,
+    });
+
+    res.status(201).json({
+      success: true,
+      ok: true,
+      twilioPhoneNumber: result.number,
+      phoneNumberId: result.id,
+      result,
+    });
+  })
+);
+
+app.post(
   "/api/integrations/signup-complete",
   asyncRoute(async (req, res) => {
     const body = req.body || {};
@@ -4546,6 +4925,12 @@ app.post(
     const body = req.body || {};
     const email = String(body.email || body.ownerEmail || "").trim();
     const phone = String(body.phone || body.ownerPhone || body.businessPhone || "").trim();
+    const rateLimit = getCustomerDashboardRateLimitDecision(req, { email, phone });
+
+    if (rateLimit.blocked) {
+      setRetryAfterHeader(res, rateLimit.retryAfterMs);
+      return res.status(429).json({ error: "Too many dashboard lookup attempts. Wait a few minutes and try again." });
+    }
 
     if (!email || !isValidEmailAddress(email) || !phone) {
       return res.status(400).json({ error: "Enter the signup email and phone number for this business." });
@@ -4743,6 +5128,14 @@ app.get(
   requireAdmin,
   asyncRoute(async (_req, res) => {
     res.json({ ok: true, accounts: await getTrialHealthDashboard() });
+  })
+);
+
+app.get(
+  "/api/admin/stripe-trials",
+  requireAdmin,
+  asyncRoute(async (_req, res) => {
+    res.json({ ok: true, ...(await getStripeTrialsDashboard()) });
   })
 );
 

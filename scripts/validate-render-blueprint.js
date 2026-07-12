@@ -22,6 +22,12 @@ function expectEqual(label, actual, expected) {
   }
 }
 
+function expectEnvValue(service, key, expected) {
+  if (!hasEnv(service, key, (item) => item.value === expected)) {
+    fail(`${key} should be ${JSON.stringify(expected)}`);
+  }
+}
+
 if (!blueprint || typeof blueprint !== "object") {
   fail("render.yaml must parse to an object");
 }
@@ -67,6 +73,33 @@ if (!service) {
   if (!hasEnv(service, "ALLOWED_ORIGINS", (item) => String(item.value || "").includes("https://www.myaipa.ca"))) {
     fail("ALLOWED_ORIGINS should include https://www.myaipa.ca");
   }
+  if (!hasEnv(service, "STRIPE_SUCCESS_URL", (item) => item.value === "https://www.myaipa.ca/#/signup?payment=success")) {
+    fail("STRIPE_SUCCESS_URL should return successful checkout users to www.myaipa.ca");
+  }
+  if (!hasEnv(service, "STRIPE_CANCEL_URL", (item) => item.value === "https://www.myaipa.ca/#/signup?payment=cancelled")) {
+    fail("STRIPE_CANCEL_URL should return cancelled checkout users to www.myaipa.ca");
+  }
+  expectEnvValue(service, "STRIPE_TRIAL_DAYS", 14);
+  expectEnvValue(service, "STRIPE_ALLOW_PROMOTION_CODES", false);
+  expectEnvValue(service, "TRIAL_HALFWAY_REMINDER_DAYS", 7);
+  expectEnvValue(service, "TRIAL_REMINDER_CHECK_INTERVAL_MS", 3600000);
+  expectEnvValue(service, "TRIAL_REMINDER_DISABLE", false);
+  expectEnvValue(service, "SIGNUP_REQUIRE_MANUAL_APPROVAL", false);
+  expectEnvValue(service, "SIGNUP_REQUIRE_VERIFICATION", false);
+  expectEnvValue(service, "SIGNUP_IP_WINDOW_MS", 900000);
+  expectEnvValue(service, "SIGNUP_IP_MAX_REQUESTS", 5);
+  expectEnvValue(service, "SIGNUP_IDENTITY_WINDOW_MS", 3600000);
+  expectEnvValue(service, "SIGNUP_IDENTITY_MAX_REQUESTS", 2);
+  expectEnvValue(service, "SIGNUP_DUPLICATE_WINDOW_MS", 600000);
+  expectEnvValue(service, "SIGNUP_MIN_ELAPSED_MS", 2500);
+  expectEnvValue(service, "SIGNUP_REVIEW_DUPLICATES", true);
+  expectEnvValue(service, "CUSTOMER_DASHBOARD_IP_WINDOW_MS", 900000);
+  expectEnvValue(service, "CUSTOMER_DASHBOARD_IP_MAX_REQUESTS", 30);
+  expectEnvValue(service, "CUSTOMER_DASHBOARD_LOOKUP_WINDOW_MS", 3600000);
+  expectEnvValue(service, "CUSTOMER_DASHBOARD_LOOKUP_MAX_REQUESTS", 8);
+  expectEnvValue(service, "SIGNUP_VERIFICATION_TTL_MS", 86400000);
+  expectEnvValue(service, "SIGNUP_VERIFICATION_BASE_URL", "https://api.myaipa.ca");
+  expectEnvValue(service, "EMAIL_VERIFICATION_DEV_MODE", false);
   if (!hasEnv(service, "DATABASE_URL", (item) => item.fromDatabase && item.fromDatabase.name === "myaipa-postgres")) {
     fail("DATABASE_URL should come from myaipa-postgres");
   }

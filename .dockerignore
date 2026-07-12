@@ -1,0 +1,10 @@
+node_modules
+build
+build-codex-preview
+build-pages-output
+diagnostics
+.git
+.env
+.env.local
+.env.*
+npm-debug.log*

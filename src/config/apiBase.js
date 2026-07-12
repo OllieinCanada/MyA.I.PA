@@ -1,4 +1,4 @@
-export const PRODUCTION_API_BASE_URL = "https://myaipa-api.onrender.com";
+export const PRODUCTION_API_BASE_URL = "https://api.myaipa.ca";
 export const LOCAL_API_BASE_URL = "http://localhost:8787";
 
 export function normalizeApiBase(value) {

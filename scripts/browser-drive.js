@@ -145,7 +145,7 @@ function mockAdminResponse(url) {
     },
   ];
 
-  if (pathname.endsWith("/session") || pathname.endsWith("/login")) return {};
+  if (pathname.endsWith("/session") || pathname.endsWith("/login")) return { ok: true };
   if (pathname.endsWith("/ops-overview")) {
     return {
       owners: [
@@ -185,14 +185,54 @@ function mockAdminResponse(url) {
     };
   }
   if (pathname.endsWith("/trial-health")) return { accounts: [trial] };
+  if (pathname.endsWith("/stripe-trials")) {
+    const trialEnd = new Date(Date.now() + 9 * 86400000).toISOString();
+    return {
+      configured: true,
+      fetchedAt: now,
+      mode: "live",
+      account: { id: "acct_mock", country: "CA", chargesEnabled: true, payoutsEnabled: false },
+      totals: {
+        subscriptionsAllStatuses: 2,
+        statusCounts: { trialing: 1, active: 1 },
+        activeTrialCount: 1,
+        trialRelatedCount: 1,
+        endingSoonWithin3DaysCount: 0,
+        recentlyEndedTrialCountLast30Days: 0,
+      },
+      activeTrials: [
+        {
+          subscriptionId: "sub_mock_trial_001",
+          customerId: "cus_mock_001",
+          customerEmail: trial.ownerEmail,
+          customerName: trial.ownerName,
+          businessName: trial.businessName,
+          status: "trialing",
+          trialStartAt: now,
+          trialEndAt: trialEnd,
+          currentPeriodEndAt: trialEnd,
+          cancelAtPeriodEnd: false,
+          createdAt: now,
+          priceId: "price_mock_79cad",
+          priceAmount: 7900,
+          priceCurrency: "CAD",
+          priceInterval: "month",
+          dashboardUrl: "https://dashboard.stripe.com/subscriptions/sub_mock_trial_001",
+          expiry: { label: "Before halfway", color: "green", daysRemaining: 9, percentUsed: 35 },
+        },
+      ],
+      recentlyEndedTrialsLast30Days: [],
+      warnings: ["Stripe payouts are not enabled yet."],
+    };
+  }
   if (pathname.endsWith("/signups")) return { signups: [customer, trial] };
   if (/\/api\/admin\/calls\/[^/]+$/.test(pathname)) {
     const id = pathname.split("/").pop();
     return { call: mockCalls.find((call) => String(call.id) === String(id)) || mockCalls[0] };
   }
   if (pathname.endsWith("/calls")) return { calls: mockCalls };
-  if (pathname.endsWith("/leads")) return [];
-  if (pathname.endsWith("/analytics")) return [];
+  if (pathname.endsWith("/leads")) return { leads: [] };
+  if (pathname.endsWith("/analytics")) return { analytics: [] };
   if (pathname.endsWith("/vapi/inventory")) {
     return { inventory: {
       phoneNumbers: [
@@ -287,18 +327,39 @@ async function main() {
       }
     }
   }
-  const page = await browser.newPage({ viewport });
+  const context = await browser.newContext({ viewport, serviceWorkers: "block" });
+  const page = await context.newPage();
 
   page.on("console", (message) => {
     if (message.type() === "error") console.log(`browser console error: ${message.text()}`);
   });
 
+  page.on("requestfailed", (request) => {
+    if (!request.url().includes("/api/admin/")) return;
+    const { pathname } = new URL(request.url());
+    console.log(`admin request failed: ${request.method()} ${pathname} ${request.failure()?.errorText || ""}`);
+  });
+
   if (mockAdmin) {
     await page.route("**/api/admin/**", async (route) => {
-      const body = mockAdminResponse(route.request().url());
+      const request = route.request();
+      const origin = request.headers().origin || "http://127.0.0.1:3101";
+      const headers = {
+        "Access-Control-Allow-Origin": origin,
+        "Access-Control-Allow-Credentials": "true",
+        "Access-Control-Allow-Headers": "Content-Type, X-Admin-Password",
+        "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+        Vary: "Origin",
+      };
+      if (request.method() === "OPTIONS") {
+        await route.fulfill({ status: 204, headers });
+        return;
+      }
+      const body = mockAdminResponse(request.url());
       await route.fulfill({
         status: 200,
         contentType: "application/json",
+        headers,
         body: JSON.stringify(body),
       });
     });

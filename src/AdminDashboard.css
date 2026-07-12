@@ -137,12 +137,14 @@
 .admin-v2-overview {
   display: grid;
   gap: 1rem;
+  min-width: 0;
 }
 
 .admin-v2-kpis {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0.85rem;
+  min-width: 0;
 }
 
 .myai-admin .admin-v2-kpi {
@@ -187,9 +189,12 @@
   grid-template-columns: minmax(0, 1.7fr) minmax(18rem, 0.75fr);
   gap: 1rem;
   align-items: start;
+  min-width: 0;
 }
 
 .admin-v2-card {
+  min-width: 0;
+  overflow: hidden;
   border: 1px solid #e1e7ef;
   border-radius: 0.5rem;
   background: #fff;
@@ -342,7 +347,9 @@
 }
 
 .admin-v2-table {
+  max-width: 100%;
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .admin-v2-table-head,
@@ -2579,7 +2586,11 @@
   gap: 0.55rem;
 }
 
-.admin-money-actions button {
+.admin-money-actions button,
+.admin-money-actions a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-height: 2.7rem;
   border: 1px solid #d9e3ef;
   border-radius: 999px;
@@ -2588,6 +2599,7 @@
   padding: 0.65rem 0.95rem;
   font-size: 0.82rem;
   font-weight: 900;
+  text-decoration: none;
 }
 
 .admin-money-actions .admin-money-primary {
@@ -2870,6 +2882,66 @@
   padding: 0.8rem 0.9rem 0;
 }
 
+.admin-stripe-page {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1rem;
+  color: #172033;
+}
+
+.admin-stripe-card .admin-money-card-head p {
+  max-width: 18rem;
+  text-align: right;
+}
+
+.admin-stripe-note {
+  margin: 0;
+  color: #62758b;
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+.admin-stripe-table {
+  min-width: 980px;
+}
+
+.admin-stripe-table td {
+  word-break: normal;
+}
+
+.admin-stripe-table td:nth-child(6) strong,
+.admin-stripe-table td:nth-child(6) small {
+  max-width: 15rem;
+  overflow-wrap: anywhere;
+}
+
+.admin-stripe-expiry {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.75rem;
+  border-radius: 999px;
+  padding: 0.25rem 0.62rem;
+  font-size: 0.68rem;
+  font-weight: 950;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.admin-stripe-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2rem;
+  border-radius: 999px;
+  background: #176bff;
+  color: #fff;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.76rem;
+  font-weight: 950;
+  text-decoration: none;
+}
+
 @media (max-width: 1180px) {
   .admin-money-header,
   .admin-money-grid {
@@ -2894,6 +2966,11 @@
 
   .admin-money-card-head {
     display: block;
+  }
+
+  .admin-stripe-card .admin-money-card-head p {
+    max-width: none;
+    text-align: left;
   }
 }
 

@@ -277,6 +277,14 @@ function BrandLogo() {
   );
 }
 
+function getPaymentReturnStatus() {
+  if (typeof window === "undefined") return "";
+  const hash = window.location.hash || "";
+  const hashQuery = hash.includes("?") ? hash.slice(hash.indexOf("?") + 1) : "";
+  const params = new URLSearchParams(hashQuery || window.location.search);
+  return String(params.get("payment") || "").toLowerCase();
+}
+
 function Benefit({ icon, children }) {
   return (
     <div className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600">
@@ -918,13 +926,14 @@ function SignupSuccessPage({ result, onStartAnother }) {
   useEffect(() => {
     try {
       if (result?.ownerEmail && result?.ownerPhone) {
-        window.localStorage?.setItem(
+        window.sessionStorage?.setItem(
           "myaipa_customer_dashboard_lookup_v1",
           JSON.stringify({ email: result.ownerEmail, phone: result.ownerPhone })
         );
+        window.localStorage?.removeItem("myaipa_customer_dashboard_lookup_v1");
       }
     } catch (_err) {
-      // Local storage is only a convenience for returning to the dashboard.
+      // Session storage is only a convenience for returning to the dashboard.
     }
   }, [result?.ownerEmail, result?.ownerPhone]);
 
@@ -1199,6 +1208,24 @@ export default function Signup() {
   const [returnToReviewAfterEdit, setReturnToReviewAfterEdit] = useState(false);
   const [details, setDetails] = useState(() => ({ ...DEFAULT_DETAILS }));
   const [pricing, setPricing] = useState(() => ({ ...DEFAULT_PRICING }));
+  const paymentReturnStatus = useMemo(() => getPaymentReturnStatus(), []);
+  const paymentReturnNotice = useMemo(() => {
+    if (paymentReturnStatus === "success") {
+      return {
+        title: "Checkout complete",
+        body: "Stripe sent you back successfully. The admin setup queue will update from the payment webhook.",
+        className: "border-emerald-200 bg-emerald-50 text-emerald-950",
+      };
+    }
+    if (paymentReturnStatus === "cancelled" || paymentReturnStatus === "canceled") {
+      return {
+        title: "Checkout cancelled",
+        body: "No checkout was completed. You can restart setup here when you are ready.",
+        className: "border-amber-200 bg-amber-50 text-amber-950",
+      };
+    }
+    return null;
+  }, [paymentReturnStatus]);
 
   const selectedTrade = useMemo(
     () => TRADE_OPTIONS.find((trade) => trade.id === selectedTradeId) || TRADE_OPTIONS[0],
@@ -1570,6 +1597,17 @@ export default function Signup() {
             <Benefit icon="card">No credit card required</Benefit>
             <Benefit icon="refresh">Cancel anytime</Benefit>
           </div>
+
+          {paymentReturnNotice ? (
+            <div
+              className={`mx-auto mt-3 max-w-3xl rounded-2xl border px-4 py-3 text-left shadow-[0_18px_44px_-36px_rgba(15,23,42,0.75)] ${paymentReturnNotice.className}`}
+              role="status"
+              aria-live="polite"
+            >
+              <p className="text-sm font-black uppercase tracking-[0.12em]">{paymentReturnNotice.title}</p>
+              <p className="mt-1 text-sm font-semibold leading-6 opacity-80">{paymentReturnNotice.body}</p>
+            </div>
+          ) : null}
 
           <Stepper currentStep={currentStep} />
         </section>

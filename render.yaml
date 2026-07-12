@@ -43,12 +43,28 @@ services:
         sync: false
       - key: MAKE_SIGNUP_WEBHOOK_API_KEY
         sync: false
+      - key: INTEGRATION_API_KEY
+        sync: false
       - key: STRIPE_SECRET_KEY
         sync: false
       - key: STRIPE_PRICE_ID
         sync: false
       - key: STRIPE_WEBHOOK_SECRET
         sync: false
+      - key: STRIPE_TRIAL_DAYS
+        value: 14
+      - key: STRIPE_SUCCESS_URL
+        value: https://www.myaipa.ca/#/signup?payment=success
+      - key: STRIPE_CANCEL_URL
+        value: https://www.myaipa.ca/#/signup?payment=cancelled
+      - key: STRIPE_ALLOW_PROMOTION_CODES
+        value: false
+      - key: TRIAL_HALFWAY_REMINDER_DAYS
+        value: 7
+      - key: TRIAL_REMINDER_CHECK_INTERVAL_MS
+        value: 3600000
+      - key: TRIAL_REMINDER_DISABLE
+        value: false
       - key: TWILIO_ACCOUNT_SID
         sync: false
       - key: TWILIO_AUTH_TOKEN
@@ -59,6 +75,38 @@ services:
         sync: false
       - key: TURNSTILE_SECRET_KEY
         sync: false
+      - key: SIGNUP_REQUIRE_MANUAL_APPROVAL
+        value: false
+      - key: SIGNUP_REQUIRE_VERIFICATION
+        value: false
+      - key: SIGNUP_IP_WINDOW_MS
+        value: 900000
+      - key: SIGNUP_IP_MAX_REQUESTS
+        value: 5
+      - key: SIGNUP_IDENTITY_WINDOW_MS
+        value: 3600000
+      - key: SIGNUP_IDENTITY_MAX_REQUESTS
+        value: 2
+      - key: SIGNUP_DUPLICATE_WINDOW_MS
+        value: 600000
+      - key: SIGNUP_MIN_ELAPSED_MS
+        value: 2500
+      - key: SIGNUP_REVIEW_DUPLICATES
+        value: true
+      - key: CUSTOMER_DASHBOARD_IP_WINDOW_MS
+        value: 900000
+      - key: CUSTOMER_DASHBOARD_IP_MAX_REQUESTS
+        value: 30
+      - key: CUSTOMER_DASHBOARD_LOOKUP_WINDOW_MS
+        value: 3600000
+      - key: CUSTOMER_DASHBOARD_LOOKUP_MAX_REQUESTS
+        value: 8
+      - key: SIGNUP_VERIFICATION_TTL_MS
+        value: 86400000
+      - key: SIGNUP_VERIFICATION_BASE_URL
+        value: https://api.myaipa.ca
+      - key: EMAIL_VERIFICATION_DEV_MODE
+        value: false
       - key: SMTP_HOST
         sync: false
       - key: SMTP_PORT
@@ -83,6 +131,18 @@ services:
         sync: false
       - key: VAPI_AUTO_SYNC_ENABLED
         value: false
+      - key: STORE_CALL_TRANSCRIPTS
+        value: true
+      - key: STORE_CALL_RECORDING_URLS
+        value: true
+      - key: EXPOSE_CALL_TRANSCRIPTS_IN_ADMIN
+        value: true
+      - key: EXPOSE_RECORDING_URLS_IN_ADMIN
+        value: true
+      - key: CALL_TRANSCRIPT_RETENTION_DAYS
+        value: 30
+      - key: CALL_RECORDING_RETENTION_DAYS
+        value: 30
       - key: TWILIO_API_BASE_URL
         value: https://api.twilio.com
       - key: FIXED_MONTHLY_COST_USD

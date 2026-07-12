@@ -5,7 +5,14 @@ const env = loadProjectEnv();
 const shouldPost = process.argv.includes("--post");
 const outputPathIndex = process.argv.indexOf("--out");
 const outputPath = outputPathIndex >= 0 ? process.argv[outputPathIndex + 1] : "";
-const defaultApiBase = "https://myaipa-api.onrender.com";
+const argValue = (name, fallback = "") => {
+  const prefix = `--${name}=`;
+  const found = process.argv.find((arg) => arg.startsWith(prefix));
+  return found ? found.slice(prefix.length) : fallback;
+};
+const sampleBusinessName = argValue("business-name", "Sample Electrical Services");
+const sampleBusinessPhone = argValue("business-phone", "2495033301");
+const defaultApiBase = "https://api.myaipa.ca";
 const signupApiPath = "/api/integrations/signup-complete";
 const configuredSignupEndpoint = env.MAKE_SIGNUP_WEBHOOK_URL || env.REACT_APP_MAKE_SIGNUP_WEBHOOK_URL || "";
 const configuredApiBase = env.REACT_APP_API_BASE_URL || env.API_BASE_URL || defaultApiBase;
@@ -18,12 +25,12 @@ const makeApiKey = env.MAKE_SIGNUP_WEBHOOK_API_KEY || env.REACT_APP_MAKE_SIGNUP_
 
 const payload = {
   country: "ca",
-  businessName: "Sample Electrical Services",
+  businessName: sampleBusinessName,
   ownerName: "Oliver Slapinski",
   ownerEmail: "owner@example.com",
   email: "owner@example.com",
-  businessPhone: "2495033301",
-  phone: "2495033301",
+  businessPhone: sampleBusinessPhone,
+  phone: sampleBusinessPhone,
   businessAddress: "277 Mud St E, Toronto, ON, L3M 4E7",
   streetAddress: "277 Mud St E",
   city: "Toronto",
@@ -53,8 +60,8 @@ const payload = {
     "Installations: Ask, \"Would you like us to come down and give you a free estimate?\"\nRepairs or maintenance: 100 dollars to come out and 100 dollars per hour after that.\nAsk, \"Would you like to continue?\"",
   selectedPlace: null,
   businessProfile: {
-    businessName: "Sample Electrical Services",
-    phone: "2495033301",
+    businessName: sampleBusinessName,
+    phone: sampleBusinessPhone,
     address: "277 Mud St E, Toronto, ON, L3M 4E7",
     streetAddress: "277 Mud St E",
     city: "Toronto",
@@ -67,7 +74,7 @@ const payload = {
   setupDetails: {
     ownerName: "Oliver Slapinski",
     ownerEmail: "owner@example.com",
-    ownerPhone: "2495033301",
+    ownerPhone: sampleBusinessPhone,
     businessAddress: "277 Mud St E, Toronto, ON, L3M 4E7",
     streetAddress: "277 Mud St E",
     city: "Toronto",
@@ -75,7 +82,7 @@ const payload = {
     postalCode: "L3M 4E7",
     businessType: "Electrical",
     serviceArea: "Niagara Falls, Welland, Brampton",
-    callForwardingNumber: "2495033301",
+    callForwardingNumber: sampleBusinessPhone,
     bookingPreference: "Text owner first",
     notificationPreference: "SMS",
     aiTone: "Professional",

@@ -121,6 +121,7 @@ module.exports = {
   nodeCommand,
   npmCommand,
   redact,
+  readJson,
   removeDir,
   rootDir,
   rootPath,

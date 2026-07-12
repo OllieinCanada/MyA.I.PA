@@ -5,6 +5,39 @@ import "./CustomerDashboard.css";
 const API_BASE = normalizeApiBase(getApiBaseUrl(process.env.REACT_APP_API_BASE_URL));
 const STORAGE_KEY = "myaipa_customer_dashboard_lookup_v1";
 
+function readStoredLookup() {
+  if (typeof window === "undefined") return {};
+  try {
+    const sessionValue = window.sessionStorage?.getItem(STORAGE_KEY) || "";
+    const legacyValue = window.localStorage?.getItem(STORAGE_KEY) || "";
+    if (legacyValue) window.localStorage?.removeItem(STORAGE_KEY);
+    const parsed = JSON.parse(sessionValue || legacyValue || "{}");
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function rememberLookup(credentials) {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage?.setItem(STORAGE_KEY, JSON.stringify(credentials));
+    window.localStorage?.removeItem(STORAGE_KEY);
+  } catch {
+    // Session storage is only a convenience for returning to the dashboard in this browser tab.
+  }
+}
+
+function forgetLookup() {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage?.removeItem(STORAGE_KEY);
+    window.localStorage?.removeItem(STORAGE_KEY);
+  } catch {
+    // Best-effort cleanup only.
+  }
+}
+
 function fmtDate(value) {
   if (!value) return "Not available";
   const date = new Date(value);
@@ -237,13 +270,7 @@ function CustomerDashboardView({ dashboard, onSignOut }) {
 }
 
 export default function CustomerDashboard() {
-  const [credentials, setCredentials] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
-    } catch {
-      return {};
-    }
-  });
+  const [credentials, setCredentials] = useState(readStoredLookup);
   const [dashboard, setDashboard] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -259,7 +286,7 @@ export default function CustomerDashboard() {
     setError("");
     try {
       const data = await loadDashboard(normalizedCredentials);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(normalizedCredentials));
+      rememberLookup(normalizedCredentials);
       setDashboard(data);
     } catch (err) {
       setDashboard(null);
@@ -283,7 +310,7 @@ export default function CustomerDashboard() {
     <CustomerDashboardView
       dashboard={dashboard}
       onSignOut={() => {
-        localStorage.removeItem(STORAGE_KEY);
+        forgetLookup();
         setDashboard(null);
         setCredentials({ email: "", phone: "" });
       }}

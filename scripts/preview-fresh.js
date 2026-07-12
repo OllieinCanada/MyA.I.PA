@@ -1,11 +1,22 @@
 const fs = require("fs");
 const net = require("net");
+const os = require("os");
 const { npmCommand, rootPath, spawnDetached } = require("./_helpers");
 
 const portArg = process.argv.find((arg) => arg.startsWith("--port="));
 const startPort = Number(portArg ? portArg.split("=")[1] : process.env.PORT || "3000");
 const maxAttemptsArg = process.argv.find((arg) => arg.startsWith("--max-attempts="));
 const maxAttempts = Number(maxAttemptsArg ? maxAttemptsArg.split("=")[1] : "10");
+const hostArg = process.argv.find((arg) => arg.startsWith("--host="));
+const host = hostArg ? hostArg.split("=").slice(1).join("=") : process.env.HOST || "127.0.0.1";
+const lanMode = process.argv.includes("--lan") || host === "0.0.0.0";
+
+function getLanAddresses() {
+  return Object.values(os.networkInterfaces())
+    .flat()
+    .filter((entry) => entry && entry.family === "IPv4" && !entry.internal)
+    .map((entry) => entry.address);
+}
 
 function isPortFree(port) {
   return new Promise((resolve) => {
@@ -14,7 +25,7 @@ function isPortFree(port) {
     server.once("listening", () => {
       server.close(() => resolve(true));
     });
-    server.listen(port, "127.0.0.1");
+    server.listen(port, host);
   });
 }
 
@@ -58,6 +69,7 @@ async function main() {
   spawnDetached(npmCommand(), ["start"], {
     env: {
       BROWSER: "none",
+      HOST: host,
       PORT: String(port),
     },
     stdio: ["ignore", out, err],
@@ -65,6 +77,15 @@ async function main() {
 
   const url = await waitForServer(port);
   console.log(`Preview ready: ${url}`);
+  if (lanMode) {
+    const lanAddresses = getLanAddresses();
+    if (lanAddresses.length) {
+      console.log("Same-network URLs:");
+      for (const address of lanAddresses) console.log(`- http://${address}:${port}`);
+    } else {
+      console.log("No non-internal IPv4 network address was detected.");
+    }
+  }
   console.log(`Logs: ${outPath} and ${errPath}`);
 }
 
