@@ -119,6 +119,14 @@ services:
         sync: false
       - key: EMAIL_FROM
         sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_ASSISTANT_MODEL
+        value: gpt-4o-mini
+      - key: OPENAI_TRANSCRIBE_MODEL
+        value: whisper-1
+      - key: OPENAI_TRANSCRIBE_LANGUAGE
+        value: en
       - key: VAPI_API_KEY
         sync: false
       - key: VAPI_API_BASE_URL

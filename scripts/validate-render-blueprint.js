@@ -100,6 +100,9 @@ if (!service) {
   expectEnvValue(service, "SIGNUP_VERIFICATION_TTL_MS", 86400000);
   expectEnvValue(service, "SIGNUP_VERIFICATION_BASE_URL", "https://api.myaipa.ca");
   expectEnvValue(service, "EMAIL_VERIFICATION_DEV_MODE", false);
+  expectEnvValue(service, "OPENAI_ASSISTANT_MODEL", "gpt-4o-mini");
+  expectEnvValue(service, "OPENAI_TRANSCRIBE_MODEL", "whisper-1");
+  expectEnvValue(service, "OPENAI_TRANSCRIBE_LANGUAGE", "en");
   if (!hasEnv(service, "DATABASE_URL", (item) => item.fromDatabase && item.fromDatabase.name === "myaipa-postgres")) {
     fail("DATABASE_URL should come from myaipa-postgres");
   }
@@ -112,6 +115,7 @@ if (!service) {
   for (const key of [
     "MAKE_SIGNUP_WEBHOOK_URL",
     "MAKE_SIGNUP_WEBHOOK_API_KEY",
+    "OPENAI_API_KEY",
     "VAPI_API_KEY",
     "STRIPE_SECRET_KEY",
     "STRIPE_PRICE_ID",
