@@ -64,7 +64,7 @@ services:
       - key: TRIAL_REMINDER_CHECK_INTERVAL_MS
         value: 3600000
       - key: TRIAL_REMINDER_DISABLE
-        value: false
+        value: true
       - key: TWILIO_ACCOUNT_SID
         sync: false
       - key: TWILIO_AUTH_TOKEN

@@ -83,7 +83,7 @@ if (!service) {
   expectEnvValue(service, "STRIPE_ALLOW_PROMOTION_CODES", false);
   expectEnvValue(service, "TRIAL_HALFWAY_REMINDER_DAYS", 7);
   expectEnvValue(service, "TRIAL_REMINDER_CHECK_INTERVAL_MS", 3600000);
-  expectEnvValue(service, "TRIAL_REMINDER_DISABLE", false);
+  expectEnvValue(service, "TRIAL_REMINDER_DISABLE", true);
   expectEnvValue(service, "SIGNUP_REQUIRE_MANUAL_APPROVAL", false);
   expectEnvValue(service, "SIGNUP_REQUIRE_VERIFICATION", false);
   expectEnvValue(service, "SIGNUP_IP_WINDOW_MS", 900000);
