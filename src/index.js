@@ -46,6 +46,9 @@ createRoot(document.getElementById("root")).render(<RouterRoot />);
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     const publicUrl = process.env.PUBLIC_URL || "";
-    navigator.serviceWorker.register(`${publicUrl}/sw.js`).catch(() => {});
+    navigator.serviceWorker
+      .register(`${publicUrl}/sw.js`, { updateViaCache: "none" })
+      .then((registration) => registration.update())
+      .catch(() => {});
   });
 }
