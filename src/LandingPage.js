@@ -951,7 +951,7 @@ function HeroCallDashboard() {
                   <span className="landing-call-owner-icon grid place-items-center rounded-lg bg-[#66e83f] text-white">
                     <HeroIcon type="chat" className="h-4 w-4" />
                   </span>
-                  Owner Text
+                  Owner Phone (Cellphone)
                 </span>
                 <span className="landing-call-owner-now text-[0.68rem] font-black text-gray-400">now</span>
               </div>
@@ -960,7 +960,7 @@ function HeroCallDashboard() {
                 <p>&bull; Name: Brian</p>
                 <p>&bull; Phone: 905-555-1234</p>
                 <p>&bull; Job: Hot tub installation</p>
-                <p>&bull; Date Of Job: July 21</p>
+                <p>&bull; Preferred starting date: July 21</p>
                 <p>&bull; Address: 23 Robb St</p>
                 <p>&bull; Callback: Tomorrow morning</p>
               </div>
@@ -1005,14 +1005,22 @@ function HeroCallDashboard() {
               <p className="landing-conversation-time mt-1 text-right text-[0.74rem] font-bold text-white/35">10:32 AM</p>
 
               <p className="mt-3 text-right text-[0.92rem] font-black uppercase tracking-[0.06em] text-[#78b7ff]">Caller</p>
-              <div className="ml-auto mt-2.5 max-w-[78%] rounded-[20px] bg-[#0b376d] px-5 py-3 text-[1.1rem] font-bold leading-[1.2] text-white/96 shadow-[0_18px_42px_-30px_rgba(37,99,235,0.95)]">
-                Yes. I want a hot tub installed.
+              <div className="landing-service-message relative ml-auto mt-2.5 max-w-[78%] rounded-[20px] bg-[#0b376d] px-5 py-3 text-[1.1rem] font-bold leading-[1.2] text-white/96 shadow-[0_18px_42px_-30px_rgba(37,99,235,0.95)]">
+                <span className="landing-service-badge absolute right-[calc(100%+0.55rem)] top-1/2 -translate-y-1/2 whitespace-nowrap rounded-full border border-[#ffb34d]/70 bg-[#3a2505] px-2.5 py-1 text-[0.68rem] font-black uppercase tracking-[0.08em] text-[#ffc767] shadow-[0_8px_22px_-14px_rgba(255,179,77,0.95)]">
+                  (Service)
+                </span>
+                Yes I&apos;m installing a hot tub.
               </div>
               <p className="landing-conversation-time mt-1 text-right text-[0.74rem] font-bold text-white/35">10:32 AM</p>
 
               <p className="mt-3 text-[0.92rem] font-black uppercase tracking-[0.06em] text-white/38">AI Assistant</p>
               <div className="landing-conversation-long-bubble mt-2.5 max-w-[84%] rounded-[16px] bg-white/10 px-5 py-3 text-[1.02rem] font-bold leading-[1.18] text-white/92">
-                Sure, we can help install a hot tub. I just need your name, phone number and address. Also I need to know when you want to start this job and what&apos;s the best time to call you back?
+                <span className="block">Sure, we can help you with that. I just need a few details:</span>
+                <ul className="mt-1.5 list-disc space-y-0.5 pl-5">
+                  <li>Name, phone number and address</li>
+                  <li>Preferred starting date for this job</li>
+                  <li>What&apos;s the best time to call you back at?</li>
+                </ul>
               </div>
               <p className="landing-conversation-time mt-1 text-right text-[0.74rem] font-bold text-white/35">10:32 AM</p>
 
@@ -1039,7 +1047,7 @@ function HeroCallDashboard() {
                       <span className="landing-message-icon grid place-items-center rounded-xl bg-[#22c55e] text-white">
                         <HeroIcon type="phone" className="h-5 w-5" />
                       </span>
-                      Customer Text
+                      Customer Text (Cellphone)
                     </span>
                     <span className="landing-customer-text-now text-[0.82rem] font-black text-[#7a9a86]">now</span>
                   </div>
@@ -3983,7 +3991,7 @@ function LandingPage() {
                 {[
                   ["phone", "Welcomes customers with a professional greeting"],
                   ["faq", "Answers FAQs"],
-                  ["clipboard", "Collects job details automatically"],
+                  ["clipboard", "Collects job details"],
                   ["sms", "Sends a text for easy follow-up"],
                 ].map(([icon, label]) => (
                   <div key={label} className="landing-hero-point flex items-center gap-4 text-[1rem] font-semibold text-[#111827] 2xl:text-[1.06rem]">
