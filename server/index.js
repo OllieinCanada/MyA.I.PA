@@ -10,14 +10,22 @@ const nodemailer = require("nodemailer");
 const path = require("path");
 const Stripe = require("stripe");
 const { prisma } = require("./prisma");
+const { fetchPublicWebsite } = require("./safeWebsiteFetch");
 const {
   createLead,
   logCall,
   searchFaq,
-  sendOwnerSms,
   createBooking,
   escalateToHuman,
 } = require("./agentTools");
+const {
+  acknowledgeLeadByToken,
+  applyProviderEvent,
+  createAndDispatchLeadHandoff,
+  getLeadHandoffDashboard,
+  parseAcknowledgementToken,
+  processDueLeadHandoffs,
+} = require("./leadHandoffs");
 
 loadPowerShellEnvAssignments(path.join(__dirname, "..", ".env.local"));
 
@@ -25,6 +33,7 @@ const app = express();
 const PORT = Number(process.env.PORT || 8787);
 const dataDir = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.join(__dirname, "..", "data");
 const assistantRateLimit = new Map();
+const publicRouteRateLimit = new Map();
 const signupIpRateLimit = new Map();
 const signupIdentityRateLimit = new Map();
 const signupDuplicateSubmissions = new Map();
@@ -39,6 +48,11 @@ const GOOGLE_RECAPTCHA_TEST_SECRET_KEY = "6LeIxAcTAAAAAGG-vFI1TnRWxMZNFuojJ4WifJ
 const ASSISTANT_MAX_CHARS = 2000;
 const ASSISTANT_WINDOW_MS = 60 * 1000;
 const ASSISTANT_MAX_REQUESTS_PER_WINDOW = 12;
+const PUBLIC_ROUTE_WINDOW_MS = parsePositiveInt(process.env.PUBLIC_ROUTE_WINDOW_MS, 15 * 60 * 1000);
+const BUSINESS_ENRICH_IP_MAX_REQUESTS = parsePositiveInt(process.env.BUSINESS_ENRICH_IP_MAX_REQUESTS, 10);
+const STRIPE_CHECKOUT_IP_MAX_REQUESTS = parsePositiveInt(process.env.STRIPE_CHECKOUT_IP_MAX_REQUESTS, 5);
+const ADMIN_LOGIN_IP_MAX_REQUESTS = parsePositiveInt(process.env.ADMIN_LOGIN_IP_MAX_REQUESTS, 10);
+const JSON_BODY_LIMIT = String(process.env.JSON_BODY_LIMIT || "1mb").trim() || "1mb";
 const SIGNUP_IP_WINDOW_MS = parsePositiveInt(process.env.SIGNUP_IP_WINDOW_MS, 15 * 60 * 1000);
 const SIGNUP_IP_MAX_REQUESTS = parsePositiveInt(process.env.SIGNUP_IP_MAX_REQUESTS, 5);
 const SIGNUP_IDENTITY_WINDOW_MS = parsePositiveInt(process.env.SIGNUP_IDENTITY_WINDOW_MS, 60 * 60 * 1000);
@@ -74,6 +88,7 @@ const VAPI_CALL_LIMIT = Math.max(1, Math.min(1000, Number(process.env.VAPI_CALL_
 const VAPI_DEFAULT_BUSINESS_ID = parsePositiveInt(process.env.VAPI_DEFAULT_BUSINESS_ID, 1);
 const VAPI_AUTO_SYNC_INTERVAL_MS = parsePositiveInt(process.env.VAPI_AUTO_SYNC_INTERVAL_MS, 15 * 60 * 1000);
 const VAPI_AUTO_SYNC_ENABLED = isEnabled(process.env.VAPI_AUTO_SYNC_ENABLED);
+const LEAD_HANDOFF_CHECK_INTERVAL_MS = parsePositiveInt(process.env.LEAD_HANDOFF_CHECK_INTERVAL_MS, 60 * 1000);
 const TWILIO_ACCOUNT_SID = String(process.env.TWILIO_ACCOUNT_SID || "").trim();
 const TWILIO_AUTH_TOKEN = String(process.env.TWILIO_AUTH_TOKEN || "").trim();
 const TWILIO_API_BASE_URL = String(process.env.TWILIO_API_BASE_URL || "https://api.twilio.com").trim().replace(/\/+$/, "");
@@ -205,7 +220,7 @@ app.post("/api/payments/stripe-webhook", express.raw({ type: "application/json" 
   res.json({ received: true });
 }));
 
-app.use(express.json({ limit: "15mb" }));
+app.use(express.json({ limit: JSON_BODY_LIMIT }));
 
 function asyncRoute(handler) {
   return (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
@@ -276,12 +291,30 @@ function applySecurityHeaders(req, res, next) {
 }
 
 function noStoreSensitiveApiResponses(req, res, next) {
-  if (/^\/api\/(admin|customer)\b/.test(String(req.path || ""))) {
+  if (/^\/api\/(admin|customer|leads\/acknowledge)\b/.test(String(req.path || ""))) {
     res.setHeader("Cache-Control", "no-store, max-age=0");
     res.setHeader("Pragma", "no-cache");
     res.setHeader("Expires", "0");
   }
   next();
+}
+
+function acknowledgementPage({ token, state = "confirm" }) {
+  const safeToken = String(token || "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const states = {
+    confirm: { eyebrow: "New lead", title: "Confirm you received this lead", body: "This records that a person has seen the lead. It will stop the backup-contact escalation.", action: true },
+    success: { eyebrow: "Lead acknowledged", title: "You’re all set", body: "My AI PA recorded your acknowledgement. You can close this page.", action: false },
+    already: { eyebrow: "Already acknowledged", title: "This lead is already confirmed", body: "No further action is required.", action: false },
+    invalid: { eyebrow: "Link unavailable", title: "This acknowledgement link is invalid", body: "Open the original owner text again or contact your administrator.", action: false },
+    expired: { eyebrow: "Link expired", title: "This acknowledgement link has expired", body: "Contact your administrator so the lead can be reviewed manually.", action: false },
+  };
+  const copy = states[state] || states.invalid;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${copy.title}</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#07142d;color:#fff;font:18px/1.5 system-ui,-apple-system,Segoe UI,sans-serif}.card{width:min(560px,calc(100% - 40px));box-sizing:border-box;padding:38px;border:1px solid #29436e;border-radius:24px;background:#0d1e3d;box-shadow:0 24px 80px #0007}.eyebrow{color:#70d7ff;font-size:14px;font-weight:800;letter-spacing:.14em;text-transform:uppercase}h1{font-size:clamp(30px,7vw,46px);line-height:1.05;margin:12px 0 18px}p{color:#d9e7ff;margin:0 0 28px}button{width:100%;border:0;border-radius:14px;padding:17px 20px;background:#16a765;color:white;font:800 18px system-ui;cursor:pointer}small{display:block;margin-top:18px;color:#9eb2d2}</style></head><body><main class="card"><div class="eyebrow">${copy.eyebrow}</div><h1>${copy.title}</h1><p>${copy.body}</p>${copy.action ? `<form method="post" action="/api/leads/acknowledge"><input type="hidden" name="token" value="${safeToken}"><button type="submit">Acknowledge lead</button></form><small>Opening this page does not confirm the lead. Only the button does.</small>` : ""}</main></body></html>`;
+}
+
+function sendAcknowledgementPage(res, { token = "", state, statusCode = 200 }) {
+  res.setHeader("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'");
+  return res.status(statusCode).type("html").send(acknowledgementPage({ token, state }));
 }
 
 function getAdminPassword() {
@@ -341,7 +374,7 @@ function setAdminSessionCookie(res, token) {
     `${ADMIN_SESSION_COOKIE}=${encodeURIComponent(token)}`,
     "Path=/",
     "HttpOnly",
-    isProduction ? "SameSite=None" : "SameSite=Lax",
+    "SameSite=Lax",
     `Max-Age=${Math.floor(ADMIN_SESSION_TTL_MS / 1000)}`,
   ];
   if (isProduction) {
@@ -356,7 +389,7 @@ function clearAdminSessionCookie(res) {
     `${ADMIN_SESSION_COOKIE}=`,
     "Path=/",
     "HttpOnly",
-    isProduction ? "SameSite=None" : "SameSite=Lax",
+    "SameSite=Lax",
     "Max-Age=0",
   ];
   if (isProduction) {
@@ -367,7 +400,7 @@ function clearAdminSessionCookie(res) {
 
 function hasValidAdminPassword(req) {
   const supplied = req.headers["x-admin-password"] || req.body?.password;
-  return supplied === getAdminPassword();
+  return safeEqualString(supplied, getAdminPassword());
 }
 
 function getMakeSignupWebhookConfig() {
@@ -389,6 +422,7 @@ function hasValidIntegrationKey(req) {
   const bearerMatch = authHeader.match(/^Bearer\s+(.+)$/i);
   const supplied =
     String(req.headers["x-myaipa-integration-key"] || "").trim() ||
+    String(req.headers["x-vapi-secret"] || "").trim() ||
     String(req.headers["x-api-key"] || "").trim() ||
     String(req.headers["x-make-apikey"] || "").trim() ||
     String(bearerMatch?.[1] || "").trim() ||
@@ -3732,6 +3766,33 @@ function enforceAssistantRateLimit(req, res, next) {
   next();
 }
 
+function enforcePublicRouteRateLimit(routeKey, maxRequests) {
+  return (req, res, next) => {
+    const now = Date.now();
+    const key = `${routeKey}:${getClientIp(req)}`;
+    const recent = (publicRouteRateLimit.get(key) || []).filter((timestamp) => now - timestamp < PUBLIC_ROUTE_WINDOW_MS);
+
+    if (recent.length >= maxRequests) {
+      const oldest = recent[0] || now;
+      setRetryAfterHeader(res, Math.max(1000, PUBLIC_ROUTE_WINDOW_MS - (now - oldest)));
+      return res.status(429).json({ error: "Too many requests. Wait a few minutes and try again." });
+    }
+
+    recent.push(now);
+    publicRouteRateLimit.set(key, recent);
+
+    if (publicRouteRateLimit.size > 1000) {
+      for (const [storedKey, timestamps] of publicRouteRateLimit.entries()) {
+        const kept = timestamps.filter((timestamp) => now - timestamp < PUBLIC_ROUTE_WINDOW_MS);
+        if (kept.length) publicRouteRateLimit.set(storedKey, kept);
+        else publicRouteRateLimit.delete(storedKey);
+      }
+    }
+
+    return next();
+  };
+}
+
 function normalizeWebsiteUrl(value) {
   const raw = String(value || "").trim();
   if (!raw) return "";
@@ -3955,8 +4016,7 @@ async function fetchWebsiteHtml(url) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), WEBSITE_FETCH_TIMEOUT_MS);
   try {
-    const response = await fetch(url, {
-      redirect: "follow",
+    const response = await fetchPublicWebsite(url, {
       signal: controller.signal,
       headers: {
         Accept: "text/html,application/xhtml+xml",
@@ -4214,6 +4274,7 @@ app.get("/api/health", (_req, res) => {
 
 app.post(
   "/api/business/enrich",
+  enforcePublicRouteRateLimit("business-enrich", BUSINESS_ENRICH_IP_MAX_REQUESTS),
   asyncRoute(async (req, res) => {
     const body = req.body || {};
     const website = normalizeWebsiteUrl(body.website);
@@ -4319,14 +4380,48 @@ app.post(
 
 app.post(
   "/api/leads/create",
+  requireIntegrationKey,
   asyncRoute(async (req, res) => {
     const lead = await createLead(req.body || {});
     res.status(201).json({ ok: true, leadId: lead.id, lead });
   })
 );
 
+app.get(
+  "/api/leads/acknowledge",
+  enforcePublicRouteRateLimit("lead-ack-view", 60),
+  asyncRoute(async (req, res) => {
+    const token = String(req.query.token || "").trim();
+    const result = await acknowledgeLeadByTokenPreview(token);
+    sendAcknowledgementPage(res, { token, state: result.state, statusCode: result.statusCode });
+  })
+);
+
+app.post(
+  "/api/leads/acknowledge",
+  express.urlencoded({ extended: false, limit: "8kb" }),
+  enforcePublicRouteRateLimit("lead-ack-submit", 20),
+  asyncRoute(async (req, res) => {
+    const token = String((req.body || {}).token || "").trim();
+    const result = await acknowledgeLeadByToken({ token, ip: getClientIp(req) });
+    const state = result.ok ? (result.alreadyAcknowledged ? "already" : "success") : (result.code === "EXPIRED" ? "expired" : "invalid");
+    sendAcknowledgementPage(res, { state, statusCode: result.ok ? 200 : result.statusCode || 400 });
+  })
+);
+
+async function acknowledgeLeadByTokenPreview(token) {
+  const key = parseAcknowledgementToken(token);
+  if (!key) return { state: "invalid", statusCode: 400 };
+  const handoff = await prisma.leadHandoff.findUnique({ where: { acknowledgementKey: key } });
+  if (!handoff) return { state: "invalid", statusCode: 404 };
+  if (handoff.acknowledgedAt) return { state: "already", statusCode: 200 };
+  if (handoff.acknowledgementExpiresAt.getTime() < Date.now()) return { state: "expired", statusCode: 410 };
+  return { state: "confirm", statusCode: 200 };
+}
+
 app.post(
   "/api/calls/log",
+  requireIntegrationKey,
   asyncRoute(async (req, res) => {
     const call = await logCall(req.body || {});
     res.status(201).json({ ok: true, callId: call.id, call });
@@ -4335,6 +4430,7 @@ app.post(
 
 app.get(
   "/api/faqs/search",
+  requireIntegrationKey,
   asyncRoute(async (req, res) => {
     const q = String(req.query.q || "");
     if (!q.trim()) {
@@ -4351,21 +4447,69 @@ app.get(
 
 app.post(
   "/api/notify/owner-sms",
-  asyncRoute(async (req, res) => {
-    const payload = req.body || {};
-    const result = await sendOwnerSms({
-      businessId: payload.businessId || 1,
-      to: payload.to,
-      message: payload.message,
+  requireIntegrationKey,
+  asyncRoute(async (_req, res) => {
+    res.status(410).json({
+      error: "Direct Twilio owner SMS is disabled. Send a lead.capture event so Vapi can deliver and track the acknowledgement.",
+      replacement: "/api/webhooks/voice",
     });
-    res.status(201).json({ ok: true, result });
+  })
+);
+
+app.post(
+  "/api/integrations/vapi/lead-handoffs/events",
+  requireIntegrationKey,
+  asyncRoute(async (req, res) => {
+    const result = await applyProviderEvent(req.body || {});
+    res.status(result.duplicate ? 200 : 201).json({ ok: true, ...result });
   })
 );
 
 app.post(
   "/api/webhooks/voice",
+  requireIntegrationKey,
   asyncRoute(async (req, res) => {
     const payload = req.body || {};
+    const vapiMessage = payload.message && typeof payload.message === "object" ? payload.message : null;
+    if (String(vapiMessage?.type || "").toLowerCase() === "tool-calls") {
+      const calls = Array.isArray(vapiMessage.toolCallList) ? vapiMessage.toolCallList : [];
+      const results = [];
+      for (const toolCall of calls) {
+        const toolName = String(toolCall.name || "").toLowerCase();
+        const parameters = toolCall.parameters && typeof toolCall.parameters === "object" ? toolCall.parameters : {};
+        if (["send_owner_sms_dynamic", "record_lead_and_notify_owner", "create_lead_handoff"].includes(toolName)) {
+          const sourceEventId = toolCall.id ? `vapi-tool:${String(toolCall.id).trim()}` : null;
+          const existingHandoff = sourceEventId ? await prisma.leadHandoff.findUnique({ where: { sourceEventId } }) : null;
+          if (existingHandoff) {
+            results.push({ name: toolCall.name, toolCallId: toolCall.id, result: JSON.stringify({ ok: true, duplicate: true, handoffId: existingHandoff.id, status: existingHandoff.status }) });
+            continue;
+          }
+          const address = [parameters.streetAddress, parameters.city].map((value) => String(value || "").trim()).filter(Boolean).join(", ");
+          const summary = [parameters.jobDetails, address && `Address: ${address}`, parameters.bestCallbackTime && `Best callback time: ${parameters.bestCallbackTime}`]
+            .filter(Boolean)
+            .join(". ") || "New service request";
+          const lead = await createLead({
+            businessId: parameters.businessId || 1,
+            name: parameters.name || "Unknown caller",
+            callerPhone: parameters.rawPhoneNumber || parameters.callbackNumber,
+            callbackNumber: parameters.rawPhoneNumber || parameters.callbackNumber,
+            summary,
+            intent: parameters.intent || "QUOTE",
+            urgency: parameters.urgency || "MEDIUM",
+          });
+          const handoff = await createAndDispatchLeadHandoff({
+            lead,
+            businessId: parameters.businessId || 1,
+            sourceEventId,
+            message: parameters.message || "",
+          });
+          results.push({ name: toolCall.name, toolCallId: toolCall.id, result: JSON.stringify({ ok: true, leadId: lead.id, handoffId: handoff.handoffId, status: handoff.status }) });
+        } else {
+          results.push({ name: toolCall.name, toolCallId: toolCall.id, result: JSON.stringify({ ok: false, error: `Unsupported tool '${toolCall.name}'.` }) });
+        }
+      }
+      return res.json({ results });
+    }
     const eventType = String(payload.eventType || payload.type || "unknown").toLowerCase();
     const toolResults = [];
 
@@ -4374,7 +4518,17 @@ app.post(
     } else if (eventType === "call.completed") {
       toolResults.push({ tool: "logCall", result: await logCall({ status: payload.status || "COMPLETED", ...payload }) });
       if (payload.lead) {
-        toolResults.push({ tool: "createLead", result: await createLead({ businessId: payload.businessId || 1, ...payload.lead }) });
+        const sourceEventId = payload.eventId || payload.id || null;
+        const existingHandoff = sourceEventId ? await prisma.leadHandoff.findUnique({ where: { sourceEventId: String(sourceEventId).slice(0, 180) } }) : null;
+        if (existingHandoff) return res.json({ ok: true, eventType, duplicate: true, handoffId: existingHandoff.id, toolResults });
+        const lead = await createLead({ businessId: payload.businessId || 1, ...payload.lead });
+        toolResults.push({ tool: "createLead", result: lead });
+        if (payload.notifyOwner !== false) {
+          toolResults.push({
+            tool: "sendOwnerViaVapi",
+            result: await createAndDispatchLeadHandoff({ lead, businessId: payload.businessId || 1, callId: lead.callId || null, sourceEventId, message: payload.smsMessage || "" }),
+          });
+        }
       }
     } else if (eventType === "faq.lookup") {
       toolResults.push({
@@ -4382,14 +4536,20 @@ app.post(
         result: await searchFaq({ q: payload.q || payload.query || "", businessId: payload.businessId || 1, limit: payload.limit || 5 }),
       });
     } else if (eventType === "lead.capture") {
+      const sourceEventId = payload.eventId || payload.id || null;
+      const existingHandoff = sourceEventId ? await prisma.leadHandoff.findUnique({ where: { sourceEventId: String(sourceEventId).slice(0, 180) } }) : null;
+      if (existingHandoff) return res.json({ ok: true, eventType, duplicate: true, handoffId: existingHandoff.id, toolResults });
       const lead = await createLead({ businessId: payload.businessId || 1, ...payload });
       toolResults.push({ tool: "createLead", result: lead });
       if (payload.notifyOwner !== false) {
         toolResults.push({
-          tool: "sendOwnerSms",
-          result: await sendOwnerSms({
+          tool: "sendOwnerViaVapi",
+          result: await createAndDispatchLeadHandoff({
+            lead,
             businessId: payload.businessId || 1,
-            message: payload.smsMessage || `New ${lead.intent} lead from ${lead.name} (${lead.callbackNumber}).`,
+            callId: lead.callId || null,
+            sourceEventId,
+            message: payload.smsMessage || "",
           }),
         });
       }
@@ -4816,6 +4976,7 @@ app.get(
 
 app.post(
   "/api/payments/create-checkout-session",
+  enforcePublicRouteRateLimit("stripe-checkout", STRIPE_CHECKOUT_IP_MAX_REQUESTS),
   asyncRoute(async (req, res) => {
     if (!stripe || !STRIPE_PRICE_ID) {
       return res.status(503).json({
@@ -4947,6 +5108,7 @@ app.post(
 
 app.post(
   "/api/admin/login",
+  enforcePublicRouteRateLimit("admin-login", ADMIN_LOGIN_IP_MAX_REQUESTS),
   asyncRoute(async (req, res) => {
     if (!hasValidAdminPassword(req)) {
       return res.status(401).json({ error: "Invalid admin password." });
@@ -4987,6 +5149,14 @@ app.get(
       take: 200,
     });
     res.json({ ok: true, leads: leads.map(sanitizeAdminLead) });
+  })
+);
+
+app.get(
+  "/api/admin/lead-handoffs",
+  requireAdmin,
+  asyncRoute(async (_req, res) => {
+    res.json({ ok: true, ...(await getLeadHandoffDashboard()) });
   })
 );
 
@@ -5457,6 +5627,7 @@ app.get(
           answerAfterRings: 3,
           afterHoursMode: "AI_ALWAYS_ON",
           ownerPhone: business.phone,
+          backupPhone: null,
           bookingLink: null,
         },
       });
@@ -5483,6 +5654,7 @@ app.put(
         answerAfterRings,
         afterHoursMode,
         ownerPhone: String(body.ownerPhone || "").trim(),
+        backupPhone: body.backupPhone ? String(body.backupPhone).trim() : null,
         bookingLink: body.bookingLink ? String(body.bookingLink).trim() : null,
       },
       create: {
@@ -5490,6 +5662,7 @@ app.put(
         answerAfterRings,
         afterHoursMode,
         ownerPhone: String(body.ownerPhone || "").trim(),
+        backupPhone: body.backupPhone ? String(body.backupPhone).trim() : null,
         bookingLink: body.bookingLink ? String(body.bookingLink).trim() : null,
       },
     });
@@ -5507,49 +5680,70 @@ app.use((err, _req, res, _next) => {
   res.status(status).json({ error: message });
 });
 
-cleanupSensitiveCallData().catch((err) => {
-  console.error("[call-data-cleanup] initial run failed", err);
-});
-
-processTrialReminders().catch((err) => {
-  console.error("[stripe:trial-reminder] initial run failed", err);
-});
-
-setInterval(() => {
+function startBackgroundJobs() {
   cleanupSensitiveCallData().catch((err) => {
-    console.error("[call-data-cleanup] scheduled run failed", err);
+    console.error("[call-data-cleanup] initial run failed", err);
   });
-}, SENSITIVE_CALL_CLEANUP_INTERVAL_MS);
 
-setInterval(() => {
   processTrialReminders().catch((err) => {
-    console.error("[stripe:trial-reminder] scheduled run failed", err);
+    console.error("[stripe:trial-reminder] initial run failed", err);
   });
-}, TRIAL_REMINDER_CHECK_INTERVAL_MS);
 
-if (VAPI_AUTO_SYNC_ENABLED) {
-  syncVapiCalls().catch((err) => {
-    console.error("[vapi:sync] initial auto-sync failed", err);
+  processDueLeadHandoffs().catch((err) => {
+    console.error("[lead-handoff] initial run failed", err);
   });
+
   setInterval(() => {
-    syncVapiCalls().catch((err) => {
-      console.error("[vapi:sync] scheduled auto-sync failed", err);
+    cleanupSensitiveCallData().catch((err) => {
+      console.error("[call-data-cleanup] scheduled run failed", err);
     });
-  }, VAPI_AUTO_SYNC_INTERVAL_MS);
+  }, SENSITIVE_CALL_CLEANUP_INTERVAL_MS);
+
+  setInterval(() => {
+    processTrialReminders().catch((err) => {
+      console.error("[stripe:trial-reminder] scheduled run failed", err);
+    });
+  }, TRIAL_REMINDER_CHECK_INTERVAL_MS);
+
+  setInterval(() => {
+    processDueLeadHandoffs().catch((err) => {
+      console.error("[lead-handoff] scheduled run failed", err);
+    });
+  }, LEAD_HANDOFF_CHECK_INTERVAL_MS);
+
+  if (VAPI_AUTO_SYNC_ENABLED) {
+    syncVapiCalls().catch((err) => {
+      console.error("[vapi:sync] initial auto-sync failed", err);
+    });
+    setInterval(() => {
+      syncVapiCalls().catch((err) => {
+        console.error("[vapi:sync] scheduled auto-sync failed", err);
+      });
+    }, VAPI_AUTO_SYNC_INTERVAL_MS);
+  }
+
+  setInterval(() => {
+    markMissedCallAlerts().catch((err) => {
+      console.error("[missed-call-alert] scheduled run failed", err);
+    });
+  }, 5 * 60 * 1000);
+
+  setInterval(() => {
+    sendDailyDigest().catch((err) => {
+      console.error("[daily-owner-digest] scheduled run failed", err);
+    });
+  }, 24 * 60 * 60 * 1000);
 }
 
-setInterval(() => {
-  markMissedCallAlerts().catch((err) => {
-    console.error("[missed-call-alert] scheduled run failed", err);
+function startServer(port = PORT) {
+  startBackgroundJobs();
+  return app.listen(port, () => {
+    console.log(`My AI PA API listening on http://localhost:${port}`);
   });
-}, 5 * 60 * 1000);
+}
 
-setInterval(() => {
-  sendDailyDigest().catch((err) => {
-    console.error("[daily-owner-digest] scheduled run failed", err);
-  });
-}, 24 * 60 * 60 * 1000);
+if (require.main === module) {
+  startServer();
+}
 
-app.listen(PORT, () => {
-  console.log(`My AI PA API listening on http://localhost:${PORT}`);
-});
+module.exports = { app, startServer };

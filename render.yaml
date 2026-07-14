@@ -91,6 +91,16 @@ services:
         value: 600000
       - key: SIGNUP_MIN_ELAPSED_MS
         value: 2500
+      - key: PUBLIC_ROUTE_WINDOW_MS
+        value: 900000
+      - key: BUSINESS_ENRICH_IP_MAX_REQUESTS
+        value: 10
+      - key: STRIPE_CHECKOUT_IP_MAX_REQUESTS
+        value: 5
+      - key: ADMIN_LOGIN_IP_MAX_REQUESTS
+        value: 10
+      - key: JSON_BODY_LIMIT
+        value: 1mb
       - key: SIGNUP_REVIEW_DUPLICATES
         value: true
       - key: CUSTOMER_DASHBOARD_IP_WINDOW_MS
@@ -139,6 +149,24 @@ services:
         sync: false
       - key: VAPI_AUTO_SYNC_ENABLED
         value: false
+      - key: VAPI_SMS_ASSISTANT_ID
+        sync: false
+      - key: VAPI_SMS_PHONE_NUMBER_ID
+        sync: false
+      - key: LEAD_ACK_BASE_URL
+        value: https://api.myaipa.ca
+      - key: LEAD_ACK_SECRET
+        generateValue: true
+      - key: LEAD_ACK_TIMEOUT_MINUTES
+        value: 10
+      - key: LEAD_ACK_TOKEN_TTL_HOURS
+        value: 72
+      - key: LEAD_NOTIFICATION_MAX_RETRIES
+        value: 2
+      - key: LEAD_NOTIFICATION_RETRY_MINUTES
+        value: 2
+      - key: LEAD_HANDOFF_CHECK_INTERVAL_MS
+        value: 60000
       - key: STORE_CALL_TRANSCRIPTS
         value: true
       - key: STORE_CALL_RECORDING_URLS

@@ -37,6 +37,7 @@ ALLOWED_ORIGINS=https://www.myaipa.ca,https://myaipa.ca
 DATABASE_URL=postgresql://...
 ADMIN_PASSWORD=<strong password>
 ADMIN_SESSION_SECRET=<long random secret>
+INTEGRATION_API_KEY=<long random secret shared only with approved integrations>
 STRIPE_SUCCESS_URL=https://www.myaipa.ca/#/signup?payment=success
 STRIPE_CANCEL_URL=https://www.myaipa.ca/#/signup?payment=cancelled
 SIGNUP_REVIEW_DUPLICATES=true
@@ -47,6 +48,46 @@ SIGNUP_REVIEW_DUPLICATES=true
 Trial reminder emails are enabled by default. Configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, and `EMAIL_FROM` in Render before relying on reminders, or set `TRIAL_REMINDER_DISABLE=true` until outbound email is ready.
 
 `SIGNUP_REVIEW_DUPLICATES=true` is recommended for launch so repeat submissions are held for admin review instead of starting duplicate Make/Vapi setup handoffs.
+
+## Integration and Vapi Authentication
+
+The following backend routes reject unauthenticated requests:
+
+- `POST /api/leads/create`
+- `POST /api/calls/log`
+- `GET /api/faqs/search`
+- `POST /api/notify/owner-sms`
+- `POST /api/webhooks/voice`
+- `POST /api/integrations/vapi/lead-handoffs/events`
+
+Approved server-to-server callers can authenticate with `Authorization: Bearer <INTEGRATION_API_KEY>`, `X-MyAIPA-Key`, or `X-Vapi-Secret`. Never put this key in frontend code or a public build.
+
+Before enabling a Vapi assistant in production, create a Vapi custom credential containing the same secret and attach that credential to every assistant, phone-number, or tool server URL that calls these routes. A deployment is not ready until an authenticated Vapi test event succeeds and the same event without a credential returns `401` without changing data or sending a message.
+
+`X-Vapi-Secret` verifies knowledge of the configured shared secret. Provider event identifiers should also be stored and checked for duplicate/replayed events before relying on the webhook for billing or message delivery.
+
+## Vapi Owner Lead Handoff
+
+Owner lead texts use Vapi's Chat API with direct Twilio SMS transport. The backend records each request and attempt, creates a signed acknowledgement link, retries Vapi request failures, flags unacknowledged leads, and escalates to the approved backup phone saved in Settings.
+
+Configure these production variables before enabling the workflow:
+
+```text
+VAPI_API_KEY=
+VAPI_SMS_ASSISTANT_ID=
+VAPI_SMS_PHONE_NUMBER_ID=
+LEAD_ACK_BASE_URL=https://api.myaipa.ca
+LEAD_ACK_SECRET=<generated secret>
+LEAD_ACK_TIMEOUT_MINUTES=10
+LEAD_ACK_TOKEN_TTL_HOURS=72
+LEAD_NOTIFICATION_MAX_RETRIES=2
+LEAD_NOTIFICATION_RETRY_MINUTES=2
+LEAD_HANDOFF_CHECK_INTERVAL_MS=60000
+```
+
+The legacy `POST /api/notify/owner-sms` route now returns `410` and never calls Twilio. Vapi should call `POST /api/webhooks/voice` with `lead.capture`, or use a server tool named `send_owner_sms_dynamic`, `record_lead_and_notify_owner`, or `create_lead_handoff`. Include a stable `eventId` or Vapi tool-call ID so retries are deduplicated.
+
+The acknowledgement URL uses a confirmation page: opening the link does not mutate data. The owner must press the button, which prevents SMS link scanners from acknowledging a lead accidentally. Do not enable backup escalation until the business has approved the backup phone stored in Admin Settings.
 
 The `CUSTOMER_DASHBOARD_*` rate-limit defaults protect the email+phone customer dashboard lookup from rapid guessing while still allowing normal owner refreshes.
 

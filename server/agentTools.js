@@ -1,4 +1,5 @@
 const { prisma } = require("./prisma");
+const { sendSmsViaTwilio } = require("./twilioSms");
 
 const STORE_CALL_TRANSCRIPTS = /^(1|true|yes|on)$/i.test(String(process.env.STORE_CALL_TRANSCRIPTS || ""));
 const STORE_CALL_RECORDING_URLS = /^(1|true|yes|on)$/i.test(String(process.env.STORE_CALL_RECORDING_URLS || ""));
@@ -286,15 +287,13 @@ async function sendOwnerSms(payload) {
   const settings = await prisma.settings.findUnique({ where: { businessId: business.id } });
   const to = payload.to || settings?.ownerPhone || null;
   const message = assertString(payload.message, "message");
-  const result = {
-    mocked: true,
-    provider: "console",
-    to,
-    from: process.env.OWNER_SMS_FROM || process.env.TWILIO_FROM_NUMBER || null,
-    message,
-    createdAt: new Date().toISOString(),
-  };
-  console.log("[mock-owner-sms]", result);
+  const result = await sendSmsViaTwilio({ to, message });
+  if (result.mocked) {
+    console.warn("[mock-owner-sms] Twilio is not configured; no SMS was sent.", {
+      businessId: business.id,
+      to: result.to,
+    });
+  }
   return result;
 }
 

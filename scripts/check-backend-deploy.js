@@ -52,6 +52,10 @@ for (const file of [
   "config/backend.env.example",
   "scripts/migrate-json-stores-to-db.js",
   "scripts/validate-render-blueprint.js",
+  "server/safeWebsiteFetch.js",
+  "server/twilioSms.js",
+  "server/vapiSms.js",
+  "server/leadHandoffs.js",
 ]) {
   readText(file);
 }
@@ -59,6 +63,9 @@ for (const file of [
 expectIncludes("server/index.js", 'app.get("/api/health"');
 expectIncludes("server/index.js", "ALLOWED_ORIGINS");
 expectIncludes("server/index.js", "DATA_DIR");
+expectIncludes("server/index.js", 'req.headers["x-vapi-secret"]');
+expectIncludes("server/index.js", "requireIntegrationKey");
+expectIncludes("server/index.js", "JSON_BODY_LIMIT");
 expectIncludes("prisma/schema.prisma", "model RuntimeStore");
 expectIncludes("Procfile", "npm run server:prod");
 expectIncludes("Dockerfile", 'CMD ["npm", "run", "server:prod"]');
@@ -68,6 +75,12 @@ expectIncludes("render.yaml", "api.myaipa.ca");
 expectIncludes("config/backend.env.example", "ALLOWED_ORIGINS=");
 expectIncludes("config/backend.env.example", "DATABASE_URL=");
 expectIncludes("config/backend.env.example", "ADMIN_PASSWORD=");
+expectIncludes("config/backend.env.example", "INTEGRATION_API_KEY=");
+expectIncludes("config/backend.env.example", "JSON_BODY_LIMIT=");
+expectIncludes("config/backend.env.example", "VAPI_SMS_ASSISTANT_ID=");
+expectIncludes("config/backend.env.example", "VAPI_SMS_PHONE_NUMBER_ID=");
+expectIncludes("config/backend.env.example", "LEAD_ACK_BASE_URL=");
+expectIncludes("prisma/schema.prisma", "model LeadHandoff");
 
 if (fs.existsSync(rootPath("scripts/validate-render-blueprint.js"))) {
   runNodeScript("scripts/validate-render-blueprint.js");
