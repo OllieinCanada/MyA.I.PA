@@ -199,6 +199,7 @@ model LeadHandoff {
   status                   LeadHandoffStatus         @default(PENDING)
   ownerPhone               String
   backupPhone              String?
+  acknowledgementRequired Boolean                   @default(true)
   acknowledgementKey       String                    @unique
   acknowledgementExpiresAt DateTime
   acknowledgedAt           DateTime?

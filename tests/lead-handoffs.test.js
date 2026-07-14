@@ -4,6 +4,7 @@ const {
   buildAcknowledgementUrl,
   buildOwnerLeadMessage,
   makeAcknowledgementToken,
+  normalizeExternalSmsResult,
   parseAcknowledgementToken,
 } = require("../server/leadHandoffs");
 
@@ -17,6 +18,45 @@ test("acknowledgement tokens are signed and tamper evident", () => {
   assert.equal(parseAcknowledgementToken(token, env), "public-key");
   assert.equal(parseAcknowledgementToken(`${token}x`, env), null);
   assert.equal(parseAcknowledgementToken("public-key.invalid", env), null);
+});
+
+test("external Vapi tool results keep Vapi as sender without requiring acknowledgement", () => {
+  assert.deepEqual(
+    normalizeExternalSmsResult({
+      owner: { sent: true, sid: "SM123", to: "+19055550123", attemptCount: 2 },
+    }),
+    {
+      status: "SENT",
+      owner: {
+        sent: true,
+        phone: "+19055550123",
+        from: "",
+        messageId: "SM123",
+        attemptCount: 2,
+        errorCode: "",
+        errorMessage: "",
+      },
+      backup: {
+        sent: false,
+        phone: "",
+        from: "",
+        messageId: "",
+        attemptCount: 1,
+        errorCode: "",
+        errorMessage: "",
+      },
+    }
+  );
+});
+
+test("external Vapi tool results record backup escalation only after owner failure", () => {
+  const result = normalizeExternalSmsResult({
+    owner: { sent: false, errorCode: "provider_error", attemptCount: 3 },
+    backup: { sent: true, sid: "SMBACKUP", to: "+19055550999" },
+  });
+  assert.equal(result.status, "ESCALATED");
+  assert.equal(result.owner.attemptCount, 3);
+  assert.equal(result.backup.sent, true);
 });
 
 test("acknowledgement URL points to the public API and carries no lead details", () => {

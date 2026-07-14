@@ -242,6 +242,136 @@ async function createAndDispatchLeadHandoff({ lead, businessId, callId = null, s
   return dispatchLeadHandoff(handoff.id, "OWNER", { message, env, sendSms, fetchImpl });
 }
 
+function normalizeExternalSmsResult(payload = {}) {
+  const owner = payload.owner && typeof payload.owner === "object" ? payload.owner : {};
+  const backup = payload.backup && typeof payload.backup === "object" ? payload.backup : {};
+  const ownerSent = owner.sent === true || cleanLine(owner.status).toUpperCase() === "SENT";
+  const backupSent = backup.sent === true || cleanLine(backup.status).toUpperCase() === "SENT";
+  return {
+    status: ownerSent ? "SENT" : (backupSent ? "ESCALATED" : "FAILED"),
+    owner: {
+      sent: ownerSent,
+      phone: cleanLine(owner.to || payload.ownerPhone),
+      from: cleanLine(owner.from),
+      messageId: cleanLine(owner.messageId || owner.sid),
+      attemptCount: Math.max(1, positiveInt(owner.attemptCount, 1)),
+      errorCode: cleanLine(owner.errorCode || owner.code).slice(0, 100),
+      errorMessage: cleanLine(owner.errorMessage || owner.error).slice(0, 500),
+    },
+    backup: {
+      sent: backupSent,
+      phone: cleanLine(backup.to || payload.backupPhone),
+      from: cleanLine(backup.from),
+      messageId: cleanLine(backup.messageId || backup.sid),
+      attemptCount: Math.max(1, positiveInt(backup.attemptCount, 1)),
+      errorCode: cleanLine(backup.errorCode || backup.code).slice(0, 100),
+      errorMessage: cleanLine(backup.errorMessage || backup.error).slice(0, 500),
+    },
+  };
+}
+
+async function recordExternalOwnerSmsResult({ lead, businessId, callId = null, sourceEventId, payload = {} }) {
+  if (!lead?.id) {
+    const error = new Error("A saved lead is required before recording an owner SMS result.");
+    error.statusCode = 400;
+    throw error;
+  }
+  const normalizedSourceEventId = cleanLine(sourceEventId).slice(0, 180);
+  if (!normalizedSourceEventId) {
+    const error = new Error("eventId is required for idempotent SMS result recording.");
+    error.statusCode = 400;
+    throw error;
+  }
+  const existing = await prisma.leadHandoff.findUnique({ where: { sourceEventId: normalizedSourceEventId } });
+  if (existing) return { handoffId: existing.id, status: existing.status, duplicate: true };
+
+  const resolvedBusinessId = Number(businessId || lead.businessId);
+  const settings = await prisma.settings.findUnique({ where: { businessId: resolvedBusinessId } });
+  const result = normalizeExternalSmsResult(payload);
+  const now = new Date();
+  const acknowledgementKey = crypto.randomBytes(24).toString("base64url");
+  const ownerPhone = result.owner.phone || cleanLine(settings?.ownerPhone);
+  const backupPhone = result.backup.phone || cleanLine(settings?.backupPhone) || null;
+  const ownerErrorCode = result.owner.errorCode || (result.owner.sent ? null : "OWNER_SMS_FAILED");
+  const ownerErrorMessage = result.owner.errorMessage || null;
+
+  const handoff = await prisma.leadHandoff.create({
+    data: {
+      sourceEventId: normalizedSourceEventId,
+      leadId: lead.id,
+      businessId: resolvedBusinessId,
+      callId: callId || lead.callId || null,
+      provider: "VAPI_TOOL",
+      status: result.status,
+      ownerPhone,
+      backupPhone,
+      acknowledgementRequired: false,
+      acknowledgementKey,
+      acknowledgementExpiresAt: new Date(now.getTime() + ACK_TOKEN_TTL_HOURS * 60 * 60 * 1000),
+      ownerAcceptedAt: result.owner.sent ? now : null,
+      failedAt: result.owner.sent ? null : now,
+      escalatedAt: result.status === "ESCALATED" ? now : null,
+      retryCount: Math.max(0, result.owner.attemptCount - 1),
+      maxRetries: MAX_RETRIES,
+      nextActionAt: null,
+      lastErrorCode: result.status === "FAILED" ? ownerErrorCode : null,
+      lastErrorMessage: result.status === "FAILED" ? ownerErrorMessage : null,
+    },
+  });
+
+  const ownerAttempt = await prisma.leadNotificationAttempt.create({
+    data: {
+      handoffId: handoff.id,
+      recipientRole: "OWNER",
+      recipientPhone: ownerPhone,
+      attemptNumber: 1,
+      status: result.owner.sent ? "ACCEPTED" : "FAILED",
+      providerMessageId: result.owner.messageId || null,
+      acceptedAt: result.owner.sent ? now : null,
+      failedAt: result.owner.sent ? null : now,
+      errorCode: result.owner.sent ? null : ownerErrorCode,
+      errorMessage: result.owner.sent ? null : ownerErrorMessage,
+    },
+  });
+  await recordEvent({
+    handoffId: handoff.id,
+    attemptId: ownerAttempt.id,
+    providerEventId: `${normalizedSourceEventId}:owner`,
+    status: result.owner.sent ? "OWNER_SMS_ACCEPTED" : "OWNER_SMS_FAILED",
+    source: "VAPI_CODE_TOOL",
+    details: { messageId: result.owner.messageId || null, attemptCount: result.owner.attemptCount, errorCode: ownerErrorCode || null },
+    occurredAt: now,
+  });
+
+  if (result.backup.sent || result.backup.errorCode || result.backup.errorMessage) {
+    const backupAttempt = await prisma.leadNotificationAttempt.create({
+      data: {
+        handoffId: handoff.id,
+        recipientRole: "BACKUP",
+        recipientPhone: backupPhone || "not-configured",
+        attemptNumber: 1,
+        status: result.backup.sent ? "ACCEPTED" : "FAILED",
+        providerMessageId: result.backup.messageId || null,
+        acceptedAt: result.backup.sent ? now : null,
+        failedAt: result.backup.sent ? null : now,
+        errorCode: result.backup.sent ? null : (result.backup.errorCode || "BACKUP_SMS_FAILED"),
+        errorMessage: result.backup.sent ? null : (result.backup.errorMessage || null),
+      },
+    });
+    await recordEvent({
+      handoffId: handoff.id,
+      attemptId: backupAttempt.id,
+      providerEventId: `${normalizedSourceEventId}:backup`,
+      status: result.backup.sent ? "BACKUP_SMS_ACCEPTED" : "BACKUP_SMS_FAILED",
+      source: "VAPI_CODE_TOOL",
+      details: { messageId: result.backup.messageId || null, attemptCount: result.backup.attemptCount, errorCode: result.backup.errorCode || null },
+      occurredAt: now,
+    });
+  }
+
+  return { handoffId: handoff.id, status: handoff.status, duplicate: false };
+}
+
 async function acknowledgeLeadByToken({ token, ip = "unknown", env = process.env }) {
   const key = parseAcknowledgementToken(token, env);
   if (!key) return { ok: false, code: "INVALID", statusCode: 400 };
@@ -263,7 +393,14 @@ async function acknowledgeLeadByToken({ token, ip = "unknown", env = process.env
 async function processDueLeadHandoffs() {
   const now = new Date();
   const due = await prisma.leadHandoff.findMany({
-    where: { acknowledgedAt: null, nextActionAt: { lte: now }, status: { in: ["RETRY_DUE", "SENT", "DELIVERED", "ESCALATION_DUE"] } },
+    where: {
+      acknowledgedAt: null,
+      nextActionAt: { lte: now },
+      OR: [
+        { status: { in: ["RETRY_DUE", "ESCALATION_DUE"] } },
+        { acknowledgementRequired: true, status: { in: ["SENT", "DELIVERED"] } },
+      ],
+    },
     orderBy: { nextActionAt: "asc" },
     take: 50,
   });
@@ -338,7 +475,7 @@ async function getLeadHandoffDashboard() {
   const [total, ownerNotified, awaitingAcknowledgement, delivered, acknowledged, retryDue, escalationDue, escalated, failed, recent] = await Promise.all([
     prisma.leadHandoff.count(),
     prisma.leadHandoff.count({ where: { ownerAcceptedAt: { not: null } } }),
-    prisma.leadHandoff.count({ where: { acknowledgedAt: null, status: { in: ["SENT", "DELIVERED"] } } }),
+    prisma.leadHandoff.count({ where: { acknowledgementRequired: true, acknowledgedAt: null, status: { in: ["SENT", "DELIVERED"] } } }),
     prisma.leadHandoff.count({ where: { deliveredAt: { not: null } } }),
     prisma.leadHandoff.count({ where: { status: "ACKNOWLEDGED" } }),
     prisma.leadHandoff.count({ where: { status: "RETRY_DUE" } }),
@@ -371,6 +508,7 @@ async function getLeadHandoffDashboard() {
       ownerAcceptedAt: handoff.ownerAcceptedAt,
       deliveredAt: handoff.deliveredAt,
       acknowledgedAt: handoff.acknowledgedAt,
+      acknowledgementRequired: handoff.acknowledgementRequired,
       escalatedAt: handoff.escalatedAt,
       retryCount: handoff.retryCount,
       nextActionAt: handoff.nextActionAt,
@@ -393,4 +531,6 @@ module.exports = {
   makeAcknowledgementToken,
   parseAcknowledgementToken,
   processDueLeadHandoffs,
+  normalizeExternalSmsResult,
+  recordExternalOwnerSmsResult,
 };

@@ -25,6 +25,7 @@ const {
   getLeadHandoffDashboard,
   parseAcknowledgementToken,
   processDueLeadHandoffs,
+  recordExternalOwnerSmsResult,
 } = require("./leadHandoffs");
 
 loadPowerShellEnvAssignments(path.join(__dirname, "..", ".env.local"));
@@ -4450,9 +4451,41 @@ app.post(
   requireIntegrationKey,
   asyncRoute(async (_req, res) => {
     res.status(410).json({
-      error: "Direct Twilio owner SMS is disabled. Send a lead.capture event so Vapi can deliver and track the acknowledgement.",
-      replacement: "/api/webhooks/voice",
+      error: "Direct backend owner SMS is disabled. The existing Vapi tool remains the sender; report its result to the integration endpoint.",
+      replacement: "/api/integrations/vapi/owner-sms-results",
     });
+  })
+);
+
+app.post(
+  "/api/integrations/vapi/owner-sms-results",
+  requireIntegrationKey,
+  asyncRoute(async (req, res) => {
+    const payload = req.body || {};
+    const sourceEventId = String(payload.eventId || payload.idempotencyKey || "").trim().slice(0, 180);
+    if (!sourceEventId) return res.status(400).json({ error: "eventId or idempotencyKey is required" });
+    const existing = await prisma.leadHandoff.findUnique({ where: { sourceEventId } });
+    if (existing) return res.json({ ok: true, duplicate: true, handoffId: existing.id, status: existing.status });
+
+    const leadPayload = payload.lead && typeof payload.lead === "object" ? payload.lead : payload;
+    const callbackNumber = leadPayload.callbackNumber || leadPayload.rawPhoneNumber || leadPayload.phone;
+    const lead = await createLead({
+      businessId: payload.businessId || leadPayload.businessId || 1,
+      name: leadPayload.name || leadPayload.callerName || "Unknown caller",
+      callerPhone: callbackNumber,
+      callbackNumber,
+      summary: leadPayload.summary || leadPayload.jobDetails || leadPayload.message || "New service request",
+      intent: leadPayload.intent || "QUOTE",
+      urgency: leadPayload.urgency || "MEDIUM",
+    });
+    const result = await recordExternalOwnerSmsResult({
+      lead,
+      businessId: payload.businessId || lead.businessId || 1,
+      callId: payload.callId || lead.callId || null,
+      sourceEventId,
+      payload,
+    });
+    res.status(201).json({ ok: true, leadId: lead.id, ...result });
   })
 );
 

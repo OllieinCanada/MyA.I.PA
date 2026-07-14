@@ -58,6 +58,7 @@ test("internal tool and webhook routes reject missing integration credentials", 
     ["/api/calls/log", { method: "POST", body: {} }],
     ["/api/faqs/search?q=hours", { method: "GET" }],
     ["/api/notify/owner-sms", { method: "POST", body: {} }],
+    ["/api/integrations/vapi/owner-sms-results", { method: "POST", body: {} }],
     ["/api/integrations/vapi/lead-handoffs/events", { method: "POST", body: {} }],
     ["/api/webhooks/voice", { method: "POST", body: { eventType: "unknown" } }],
   ];
@@ -78,7 +79,8 @@ test("legacy direct-Twilio owner alerts are disabled even with valid integration
   });
   assert.equal(response.status, 410);
   const payload = await response.json();
-  assert.match(payload.error, /Direct Twilio owner SMS is disabled/i);
+  assert.match(payload.error, /Direct backend owner SMS is disabled/i);
+  assert.equal(payload.replacement, "/api/integrations/vapi/owner-sms-results");
 });
 
 test("acknowledgement previews do not mutate and reject invalid signed tokens", async () => {
