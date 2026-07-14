@@ -807,11 +807,11 @@ async function resolveBusinessIdForVapiCall(call) {
 
 function mapVapiStatus(value) {
   const normalized = String(value || "").trim().toLowerCase();
+  if (normalized.includes("failed") || normalized.includes("error")) return "FAILED";
+  if (normalized.includes("missed") || normalized.includes("no-answer") || normalized.includes("no_answer")) return "MISSED";
+  if (["abandoned", "canceled", "cancelled"].includes(normalized)) return "ABANDONED";
   if (normalized.includes("ended") || normalized.includes("hangup")) return "COMPLETED";
   if (["ended", "completed", "complete", "success", "successful"].includes(normalized)) return "COMPLETED";
-  if (["failed", "error"].includes(normalized)) return "FAILED";
-  if (["missed", "no-answer", "no_answer"].includes(normalized)) return "MISSED";
-  if (["abandoned", "canceled", "cancelled"].includes(normalized)) return "ABANDONED";
   return "STARTED";
 }
 
@@ -853,9 +853,11 @@ function getVapiRecordingUrl(call) {
     getVapiNestedString(call, [
       "recordingUrl",
       "recording.url",
-      "artifact.recording",
       "artifact.recordingUrl",
       "artifact.recording.url",
+      "artifact.recording.mono.url",
+      "artifact.recording.stereo.url",
+      "artifact.recording",
       "stereoRecordingUrl",
     ]) || null
   );
@@ -1204,6 +1206,118 @@ async function getVapiAccountInventory() {
   };
 }
 
+function mergeVapiEndOfCallReport(message) {
+  const call = message?.call && typeof message.call === "object" ? message.call : {};
+  return {
+    ...call,
+    ...message,
+    id: call.id || message?.callId || message?.id || "",
+    artifact: {
+      ...(call.artifact || {}),
+      ...(message?.artifact || {}),
+    },
+    analysis: {
+      ...(call.analysis || {}),
+      ...(message?.analysis || {}),
+    },
+    metadata: {
+      ...(call.metadata || {}),
+      ...(message?.metadata || {}),
+    },
+  };
+}
+
+async function upsertVapiCall(fullCall, store) {
+  const vapiCallId = String(fullCall?.id || fullCall?.callId || "").trim();
+  if (!vapiCallId) {
+    const err = new Error("Vapi call id is required.");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const existingStore = store[vapiCallId] || {};
+  const existingCall = await prisma.call.findUnique({
+    where: { externalProvider_externalId: { externalProvider: "vapi", externalId: vapiCallId } },
+    include: { caller: true },
+  });
+  const businessId = await resolveBusinessIdForVapiCall(fullCall);
+  const callerPhone =
+    getVapiNestedString(fullCall, ["customer.number", "customer.phoneNumber", "caller.number", "from", "fromNumber"]) ||
+    existingCall?.caller?.phone ||
+    `unknown-vapi-${vapiCallId}`;
+  const callerName =
+    getVapiNestedString(fullCall, ["customer.name", "caller.name", "metadata.customerName"]) ||
+    existingCall?.caller?.name ||
+    "";
+  const startedAt =
+    fullCall.startedAt ||
+    fullCall.started_at ||
+    fullCall.createdAt ||
+    fullCall.created_at ||
+    existingCall?.startedAt ||
+    new Date().toISOString();
+  const endedAt = fullCall.endedAt || fullCall.ended_at || fullCall.completedAt || existingCall?.endedAt || null;
+  const vapiCost = getVapiCost(fullCall);
+  const twilioCallSid = getVapiTwilioCallSid(fullCall) || existingCall?.twilioCallSid || null;
+  const transcript = getVapiTranscript(fullCall);
+  const summary = getVapiSummary(fullCall);
+  const recordingUrl = getVapiRecordingUrl(fullCall);
+  const localCall = await logCall({
+    callId: existingStore.localCallId || existingCall?.id,
+    businessId,
+    callerPhone,
+    callerName,
+    startedAt,
+    endedAt,
+    durationSec: getVapiDurationSeconds(fullCall),
+    status: mapVapiStatus(fullCall.status || fullCall.endedReason || "ended"),
+    transcript: transcript || undefined,
+    recordingUrl: recordingUrl || undefined,
+    externalProvider: "vapi",
+    externalId: vapiCallId,
+    aiSummary: summary || undefined,
+    twilioCallSid,
+    vapiCost,
+    vapiCostBreakdown: getVapiCostBreakdown(fullCall),
+    totalInternalCost: vapiCost,
+    costSyncedAt: vapiCost != null || twilioCallSid ? new Date().toISOString() : null,
+    followUpNeeded: /follow|quote|estimate|book|schedule|urgent|emergency/i.test(
+      [summary, transcript, fullCall.endedReason].filter(Boolean).join(" ")
+    ),
+  });
+
+  store[vapiCallId] = {
+    ...existingStore,
+    vapiCallId,
+    localCallId: localCall.id,
+    businessId,
+    assistantId: fullCall.assistantId || fullCall.assistant?.id || existingStore.assistantId || "",
+    phoneNumberId: fullCall.phoneNumberId || fullCall.phoneNumber?.id || existingStore.phoneNumberId || "",
+    twilioCallSid: twilioCallSid || existingStore.twilioCallSid || "",
+    transcriptAvailable: Boolean(transcript || existingStore.transcriptAvailable),
+    recordingAvailable: Boolean(recordingUrl || existingStore.recordingAvailable),
+    syncedAt: new Date().toISOString(),
+  };
+
+  return {
+    duplicate: Boolean(existingCall),
+    vapiCallId,
+    localCallId: localCall.id,
+    businessId,
+    durationSec: localCall.durationSec,
+    transcriptAvailable: Boolean(transcript),
+    recordingAvailable: Boolean(recordingUrl),
+  };
+}
+
+async function ingestVapiEndOfCallReport(message) {
+  const fullCall = mergeVapiEndOfCallReport(message);
+  const store = readVapiCallSyncStore();
+  const result = await upsertVapiCall(fullCall, store);
+  writeVapiCallSyncStore(store);
+  return result;
+}
+
 async function syncVapiCalls(options = {}) {
   const calls = await fetchVapiCalls(options);
   const store = readVapiCallSyncStore();
@@ -1223,73 +1337,16 @@ async function syncVapiCalls(options = {}) {
         fullCall = {
           ...call,
           ...detail,
-          artifact: {
-            ...(call.artifact || {}),
-            ...(detail.artifact || {}),
-          },
-          analysis: {
-            ...(call.analysis || {}),
-            ...(detail.analysis || {}),
-          },
-          metadata: {
-            ...(call.metadata || {}),
-            ...(detail.metadata || {}),
-          },
+          artifact: { ...(call.artifact || {}), ...(detail.artifact || {}) },
+          analysis: { ...(call.analysis || {}), ...(detail.analysis || {}) },
+          metadata: { ...(call.metadata || {}), ...(detail.metadata || {}) },
         };
       }
     } catch (error) {
       detailErrors.push({ vapiCallId, message: error?.message || "Could not fetch Vapi call detail." });
     }
 
-    const existing = store[vapiCallId] || {};
-    const businessId = await resolveBusinessIdForVapiCall(fullCall);
-    const callerPhone =
-      getVapiNestedString(fullCall, ["customer.number", "customer.phoneNumber", "caller.number", "from", "fromNumber"]) ||
-      `unknown-vapi-${vapiCallId}`;
-    const callerName = getVapiNestedString(fullCall, ["customer.name", "caller.name", "metadata.customerName"]);
-    const startedAt = fullCall.startedAt || fullCall.started_at || fullCall.createdAt || fullCall.created_at || new Date().toISOString();
-    const endedAt = fullCall.endedAt || fullCall.ended_at || fullCall.completedAt || null;
-    const vapiCost = getVapiCost(fullCall);
-    const twilioCallSid = getVapiTwilioCallSid(fullCall);
-    const transcript = getVapiTranscript(fullCall);
-    const summary = getVapiSummary(fullCall);
-    const localCall = await logCall({
-      callId: existing.localCallId,
-      businessId,
-      callerPhone,
-      callerName,
-      startedAt,
-      endedAt,
-      durationSec: getVapiDurationSeconds(fullCall),
-      status: mapVapiStatus(fullCall.status || fullCall.endedReason),
-      transcript,
-      recordingUrl: getVapiRecordingUrl(fullCall),
-      externalProvider: "vapi",
-      externalId: vapiCallId,
-      aiSummary: summary,
-      twilioCallSid,
-      vapiCost,
-      vapiCostBreakdown: getVapiCostBreakdown(fullCall),
-      totalInternalCost: vapiCost,
-      costSyncedAt: vapiCost != null || twilioCallSid ? new Date().toISOString() : null,
-      followUpNeeded: /follow|quote|estimate|book|schedule|urgent|emergency/i.test(
-        [summary, transcript, fullCall.endedReason].filter(Boolean).join(" ")
-      ),
-    });
-
-    store[vapiCallId] = {
-      ...existing,
-      vapiCallId,
-      localCallId: localCall.id,
-      businessId,
-      assistantId: fullCall.assistantId || fullCall.assistant?.id || "",
-      phoneNumberId: fullCall.phoneNumberId || fullCall.phoneNumber?.id || "",
-      twilioCallSid: twilioCallSid || existing.twilioCallSid || "",
-      transcriptAvailable: Boolean(transcript),
-      recordingAvailable: Boolean(getVapiRecordingUrl(fullCall)),
-      syncedAt: new Date().toISOString(),
-    };
-    results.push({ vapiCallId, localCallId: localCall.id, businessId, transcriptAvailable: Boolean(transcript), recordingAvailable: Boolean(getVapiRecordingUrl(fullCall)) });
+    results.push(await upsertVapiCall(fullCall, store));
   }
 
   writeVapiCallSyncStore(store);
@@ -4504,7 +4561,16 @@ app.post(
   asyncRoute(async (req, res) => {
     const payload = req.body || {};
     const vapiMessage = payload.message && typeof payload.message === "object" ? payload.message : null;
-    if (String(vapiMessage?.type || "").toLowerCase() === "tool-calls") {
+    const vapiMessageType = String(vapiMessage?.type || "").toLowerCase();
+    if (vapiMessageType === "end-of-call-report") {
+      const result = await ingestVapiEndOfCallReport(vapiMessage);
+      return res.status(result.duplicate ? 200 : 201).json({
+        ok: true,
+        eventType: vapiMessageType,
+        ...result,
+      });
+    }
+    if (vapiMessageType === "tool-calls") {
       const calls = Array.isArray(vapiMessage.toolCallList) ? vapiMessage.toolCallList : [];
       const results = [];
       for (const toolCall of calls) {
@@ -5779,4 +5845,14 @@ if (require.main === module) {
   startServer();
 }
 
-module.exports = { app, startServer };
+module.exports = {
+  app,
+  startServer,
+  __test: {
+    getVapiCost,
+    getVapiDurationSeconds,
+    getVapiRecordingUrl,
+    mapVapiStatus,
+    mergeVapiEndOfCallReport,
+  },
+};

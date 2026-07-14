@@ -10,7 +10,7 @@ process.env.VAPI_AUTO_SYNC_ENABLED = "false";
 process.env.MISSED_CALL_ALERT_ENABLED = "false";
 process.env.DAILY_DIGEST_ENABLED = "false";
 
-const { app } = require("../server/index");
+const { app, __test } = require("../server/index");
 const { prisma } = require("../server/prisma");
 
 let server;
@@ -118,6 +118,40 @@ test("standard bearer integration authentication is accepted", async () => {
     body: { eventType: "test.noop" },
   });
   assert.equal(response.status, 200);
+});
+
+test("Vapi end-of-call reports normalize duration, status, cost, and artifacts", () => {
+  const report = __test.mergeVapiEndOfCallReport({
+    type: "end-of-call-report",
+    endedReason: "customer-ended-call",
+    cost: 0.1234,
+    call: {
+      id: "test-vapi-call",
+      customer: { number: "+12495550123" },
+      startedAt: "2026-07-14T12:00:00.000Z",
+      endedAt: "2026-07-14T12:02:05.000Z",
+    },
+    artifact: {
+      transcript: "AI: Hello\nUser: I need service.",
+      recording: { url: "https://example.com/test-recording.wav" },
+    },
+  });
+
+  assert.equal(report.id, "test-vapi-call");
+  assert.equal(__test.getVapiDurationSeconds(report), 125);
+  assert.equal(__test.mapVapiStatus(report.endedReason), "COMPLETED");
+  assert.equal(__test.getVapiCost(report), 0.1234);
+  assert.equal(__test.getVapiRecordingUrl(report), "https://example.com/test-recording.wav");
+});
+
+test("authenticated Vapi end-of-call reports require a call id before database work", async () => {
+  const response = await request("/api/webhooks/voice", {
+    method: "POST",
+    headers: { "x-vapi-secret": process.env.INTEGRATION_API_KEY },
+    body: { message: { type: "end-of-call-report", endedReason: "hangup" } },
+  });
+  assert.equal(response.status, 400);
+  assert.match((await response.json()).error, /call id is required/i);
 });
 
 test("CORS only reflects configured origins", async () => {
