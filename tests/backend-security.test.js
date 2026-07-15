@@ -3,6 +3,7 @@ const { after, before, test } = require("node:test");
 
 process.env.NODE_ENV = "test";
 process.env.INTEGRATION_API_KEY = "test-integration-key-42";
+process.env.MAKE_SIGNUP_WEBHOOK_API_KEY = "test-make-signup-key-42";
 process.env.ADMIN_PASSWORD = "test-admin-password-42";
 process.env.ADMIN_SESSION_SECRET = "test-admin-session-secret-42";
 process.env.TRIAL_REMINDER_DISABLE = "true";
@@ -129,6 +130,16 @@ test("Twilio provisioning only accepts valid area codes and Make webhook URLs", 
   );
   assert.throws(() => __test.normalizeTwilioProvisioningAreaCode("24"), /three digits/i);
   assert.throws(() => __test.normalizeTwilioProvisioningVoiceUrl("https://example.com/webhook"), /Make webhook/i);
+});
+
+test("Make signup authentication is accepted by provisioning routes", async () => {
+  const response = await request("/api/integrations/vapi/import-twilio-number", {
+    method: "POST",
+    headers: { "x-make-apikey": process.env.MAKE_SIGNUP_WEBHOOK_API_KEY },
+    body: {},
+  });
+  assert.equal(response.status, 400);
+  assert.match((await response.json()).error, /E\.164 phone number/i);
 });
 
 test("Vapi end-of-call reports normalize duration, status, cost, and artifacts", () => {

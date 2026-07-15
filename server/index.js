@@ -3836,6 +3836,18 @@ function requireIntegrationKey(req, res, next) {
   return next();
 }
 
+function requireProvisioningKey(req, res, next) {
+  const makeSignupKey = getMakeSignupWebhookConfig().apiKey;
+  const suppliedMakeKey = String(req.headers["x-make-apikey"] || "").trim();
+  if (hasValidIntegrationKey(req) || safeEqualString(suppliedMakeKey, makeSignupKey)) {
+    return next();
+  }
+  if (!INTEGRATION_API_KEY && !makeSignupKey) {
+    return res.status(503).json({ error: "Provisioning authentication is not configured." });
+  }
+  return res.status(401).json({ error: "Invalid provisioning key." });
+}
+
 function getClientIp(req) {
   const forwarded = req.headers["x-forwarded-for"];
   if (typeof forwarded === "string" && forwarded.trim()) {
@@ -4779,7 +4791,7 @@ app.post(
 
 app.post(
   "/api/integrations/twilio/purchase-number",
-  requireIntegrationKey,
+  requireProvisioningKey,
   asyncRoute(async (req, res) => {
     const input = { ...(req.query || {}), ...(req.body || {}) };
     const result = await purchaseTwilioPhoneNumber({
@@ -4794,7 +4806,7 @@ app.post(
 
 app.post(
   "/api/integrations/vapi/import-twilio-number",
-  requireIntegrationKey,
+  requireProvisioningKey,
   asyncRoute(async (req, res) => {
     const body = { ...(req.query || {}), ...(req.body || {}) };
     const result = await importTwilioPhoneNumberToVapi({
