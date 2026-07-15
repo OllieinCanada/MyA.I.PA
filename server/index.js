@@ -4844,6 +4844,54 @@ app.post(
   requireProvisioningKey,
   asyncRoute(async (req, res) => {
     const limit = Math.max(1, Math.min(VAPI_CALL_LIMIT, Number(req.body?.limit || 100) || 100));
+    const ownerEmail = String(req.headers["x-signup-owner-email"] || req.body?.ownerEmail || "").trim().toLowerCase();
+    let linkedBusinessId = null;
+
+    if (ownerEmail && isValidEmailAddress(ownerEmail)) {
+      const signup = listSignupDashboardRecords().find((record) => String(record.ownerEmail || "").trim().toLowerCase() === ownerEmail);
+      if (signup?.twilioPhoneNumber) {
+        const normalizedBusinessPhone = normalizePhoneForMatch(signup.businessPhone || signup.ownerPhone || signup.twilioPhoneNumber);
+        const businessName = String(signup.businessName || signup.ownerName || "My AI PA Customer").trim();
+        const lookup = [
+          businessName ? { name: { equals: businessName, mode: "insensitive" } } : undefined,
+          normalizedBusinessPhone ? { phone: normalizedBusinessPhone } : undefined,
+        ].filter(Boolean);
+        let business = lookup.length ? await prisma.business.findFirst({ where: { OR: lookup } }) : null;
+        if (!business) {
+          business = await prisma.business.create({
+            data: { name: businessName, phone: normalizedBusinessPhone, timezone: "America/Toronto" },
+          });
+        }
+        linkedBusinessId = business.id;
+        await prisma.settings.upsert({
+          where: { businessId: business.id },
+          update: { ownerPhone: String(signup.ownerPhone || signup.businessPhone || "").trim() },
+          create: {
+            businessId: business.id,
+            answerAfterRings: 3,
+            afterHoursMode: "AI_ALWAYS_ON",
+            ownerPhone: String(signup.ownerPhone || signup.businessPhone || "").trim(),
+          },
+        });
+
+        const aiNumber = normalizePhoneForMatch(signup.twilioPhoneNumber);
+        const vapiNumbers = await fetchVapiCollection("phone-number", ["phoneNumbers", "phone_numbers"]);
+        const vapiNumber = vapiNumbers.find((record) => normalizePhoneForMatch(getVapiPhoneNumber(record)) === aiNumber);
+        const mappingValues = [
+          { matchType: "phoneNumber", matchValue: aiNumber },
+          { matchType: "phoneNumberId", matchValue: String(vapiNumber?.id || "").trim().toLowerCase() },
+          { matchType: "assistantId", matchValue: getVapiAssistantId(vapiNumber).toLowerCase() },
+        ].filter((mapping) => mapping.matchValue);
+        for (const mapping of mappingValues) {
+          await prisma.vapiBusinessMapping.upsert({
+            where: { matchValue: mapping.matchValue },
+            update: { businessId: business.id, matchType: mapping.matchType, label: businessName.slice(0, 120) },
+            create: { businessId: business.id, ...mapping, label: businessName.slice(0, 120) },
+          });
+        }
+      }
+    }
+
     const result = await syncVapiCalls({ limit });
     res.json({
       success: true,
@@ -4852,6 +4900,7 @@ app.post(
       detailsFetched: result.detailsFetched,
       synced: result.synced,
       detailErrorCount: result.detailErrors.length,
+      linkedBusinessId,
     });
   })
 );
