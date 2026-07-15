@@ -4,6 +4,7 @@ const { after, before, test } = require("node:test");
 process.env.NODE_ENV = "test";
 process.env.INTEGRATION_API_KEY = "test-integration-key-42";
 process.env.MAKE_SIGNUP_WEBHOOK_API_KEY = "test-make-signup-key-42";
+process.env.MAKE_SIGNUP_WEBHOOK_URL = "https://hook.us2.make.com/test-private-webhook-token-42";
 process.env.ADMIN_PASSWORD = "test-admin-password-42";
 process.env.ADMIN_SESSION_SECRET = "test-admin-session-secret-42";
 process.env.TRIAL_REMINDER_DISABLE = "true";
@@ -136,6 +137,16 @@ test("Make signup authentication is accepted by provisioning routes", async () =
   const response = await request("/api/integrations/vapi/import-twilio-number", {
     method: "POST",
     headers: { "x-make-apikey": process.env.MAKE_SIGNUP_WEBHOOK_API_KEY },
+    body: {},
+  });
+  assert.notEqual(response.status, 401);
+  assert.match((await response.json()).error, /VAPI_API_KEY is not configured/i);
+});
+
+test("Make webhook token authentication is accepted by provisioning routes", async () => {
+  const response = await request("/api/integrations/vapi/import-twilio-number", {
+    method: "POST",
+    headers: { "x-make-webhook-token": "test-private-webhook-token-42" },
     body: {},
   });
   assert.notEqual(response.status, 401);

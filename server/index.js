@@ -411,6 +411,15 @@ function getMakeSignupWebhookConfig() {
   };
 }
 
+function getMakeSignupWebhookToken() {
+  try {
+    const url = new URL(getMakeSignupWebhookConfig().url);
+    return url.pathname.split("/").filter(Boolean).pop() || "";
+  } catch (_err) {
+    return "";
+  }
+}
+
 function safeEqualString(a, b) {
   const left = Buffer.from(String(a || ""));
   const right = Buffer.from(String(b || ""));
@@ -3839,10 +3848,16 @@ function requireIntegrationKey(req, res, next) {
 function requireProvisioningKey(req, res, next) {
   const makeSignupKey = getMakeSignupWebhookConfig().apiKey;
   const suppliedMakeKey = String(req.headers["x-make-apikey"] || "").trim();
-  if (hasValidIntegrationKey(req) || safeEqualString(suppliedMakeKey, makeSignupKey)) {
+  const makeWebhookToken = getMakeSignupWebhookToken();
+  const suppliedWebhookToken = String(req.headers["x-make-webhook-token"] || "").trim();
+  if (
+    hasValidIntegrationKey(req)
+    || safeEqualString(suppliedMakeKey, makeSignupKey)
+    || safeEqualString(suppliedWebhookToken, makeWebhookToken)
+  ) {
     return next();
   }
-  if (!INTEGRATION_API_KEY && !makeSignupKey) {
+  if (!INTEGRATION_API_KEY && !makeSignupKey && !makeWebhookToken) {
     return res.status(503).json({ error: "Provisioning authentication is not configured." });
   }
   return res.status(401).json({ error: "Invalid provisioning key." });
