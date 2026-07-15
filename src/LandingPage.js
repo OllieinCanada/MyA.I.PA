@@ -1015,7 +1015,8 @@ function HeroCallDashboard() {
 
               <p className="mt-3 text-[0.92rem] font-black uppercase tracking-[0.06em] text-white/38">AI Assistant</p>
               <div className="landing-conversation-long-bubble mt-2.5 max-w-[84%] rounded-[16px] bg-white/10 px-5 py-3 text-[1.02rem] font-bold leading-[1.18] text-white/92">
-                <ul className="grid gap-y-0.5">
+                <span className="block">Sure, we can help you with that. I just need a few details:</span>
+                <ul className="mt-1.5 grid gap-y-0.5">
                   <li className="flex gap-1"><span aria-hidden="true">-</span><span>Can I get your name?</span></li>
                   <li className="flex gap-1"><span aria-hidden="true">-</span><span>What&apos;s the address? In What city?</span></li>
                   <li className="flex gap-1"><span aria-hidden="true">-</span><span>When do you need the work done?</span></li>
@@ -1500,12 +1501,12 @@ function VoicemailLossesArtboard({ onStart, onPlayDemo }) {
           </p>
         </div>
 
-        <div id="voicemail-comparison-cards" className="relative mt-6 grid gap-7 lg:grid-cols-3">
-          <article className="relative min-h-[410px] overflow-hidden rounded-lg border border-[#ff5b5b] bg-white p-5 shadow-[0_30px_80px_-58px_rgba(239,68,68,0.7)]">
-            <div className="absolute right-4 top-4 rounded-full bg-[#fff1f2] px-3 py-1 text-xs font-black uppercase tracking-[0.12em] text-[#cc0f1f]">
+        <div id="voicemail-comparison-cards" className="relative mt-6 grid gap-9 pt-5 lg:grid-cols-3 lg:gap-7">
+          <article className="relative flex min-h-[410px] flex-col rounded-lg border border-[#ff5b5b] bg-white p-5 shadow-[0_30px_80px_-58px_rgba(239,68,68,0.7)]">
+            <div className="absolute left-1/2 top-0 z-10 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-full border-2 border-[#ff5b5b] bg-white px-5 py-2 text-sm font-black uppercase tracking-[0.12em] text-[#cc0f1f] shadow-[0_12px_28px_-18px_rgba(204,15,31,0.8)]">
               Old way
             </div>
-            <div className="flex items-center gap-4 pr-28">
+            <div className="flex items-center gap-4">
               <span className="grid h-14 w-14 shrink-0 place-items-center rounded-full bg-[linear-gradient(180deg,#ff4545,#e11d48)] text-3xl font-black text-white shadow-[0_18px_34px_-24px_rgba(225,29,72,1)]">1</span>
               <p className="text-[clamp(1.42rem,1.75vw,1.8rem)] font-black leading-tight tracking-[-0.04em] text-[#ef232e]">Phone rings unanswered</p>
             </div>
@@ -1514,6 +1515,39 @@ function VoicemailLossesArtboard({ onStart, onPlayDemo }) {
             </h3>
 
             <div className="mt-4 grid gap-3">
+              <div className="rounded-lg border border-[#cbd5e1] border-l-4 border-l-[#cc0f1f] bg-[linear-gradient(135deg,#ffffff,#f8fafc)] px-5 py-4 shadow-[0_16px_34px_-28px_rgba(15,23,42,0.7)]">
+                <div className="space-y-1 text-[clamp(0.96rem,1.18vw,1.12rem)] font-black uppercase leading-[1.18] tracking-[-0.015em] text-[#07142a]">
+                  <p className="text-[#cc0f1f]">Answering machine:</p>
+                  <p>Cold / Impersonal</p>
+                  <p>Customer wants actions</p>
+                  <p>Hangs up. Customer moves on</p>
+                </div>
+              </div>
+
+              <div className="grid items-center gap-3 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
+                <div className="voicemail-no-answer flex items-center gap-3 rounded-lg bg-[#ffe4e6] px-4 py-3 text-[#7f1d1d]">
+                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#cc0f1f] text-white">
+                    <HeroIcon type="phone" className="h-5 w-5 rotate-[135deg]" />
+                  </span>
+                  <div>
+                    <p className="text-base font-black leading-tight">No answer</p>
+                    <p className="text-sm font-bold leading-5">The caller does not wait.</p>
+                  </div>
+                </div>
+                <div className="voicemail-competitor-arrow hidden items-center text-[#ef232e] sm:flex">
+                  <span className="h-0.5 w-8 bg-[#ef232e]" />
+                  <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.7" aria-hidden="true">
+                    <path d="M5 12h14M13 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </div>
+                <div className="voicemail-competitor-card rounded-lg border border-[#fecaca] bg-white px-4 py-3 shadow-[0_16px_32px_-28px_rgba(220,38,38,0.75)]">
+                  <p className="text-sm font-black uppercase tracking-[0.1em] text-[#cc0f1f]">Customer calls competitor</p>
+                  <p className="mt-1 text-sm font-bold leading-5 text-[#07142a]">The opportunity left.</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-auto pt-4">
               <div className="relative overflow-hidden rounded-lg border border-[#bbf7d0] bg-white px-4 py-4 shadow-[0_14px_28px_-24px_rgba(22,163,74,0.8)]">
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_48%,rgba(34,197,94,0.14),transparent_46%)]" />
                 <div className="relative grid items-center gap-3 sm:grid-cols-[1fr_124px]">
@@ -1539,36 +1573,14 @@ function VoicemailLossesArtboard({ onStart, onPlayDemo }) {
                   </div>
                 </div>
               </div>
-
-              <div className="grid items-center gap-3 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
-                <div className="voicemail-no-answer flex items-center gap-3 rounded-lg bg-[#ffe4e6] px-4 py-3 text-[#7f1d1d]">
-                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#cc0f1f] text-white">
-                    <HeroIcon type="phone" className="h-5 w-5 rotate-[135deg]" />
-                  </span>
-                  <div>
-                    <p className="text-base font-black leading-tight">No answer</p>
-                    <p className="text-sm font-bold leading-5">The caller does not wait.</p>
-                  </div>
-                </div>
-                <div className="voicemail-competitor-arrow hidden items-center text-[#ef232e] sm:flex">
-                  <span className="h-0.5 w-8 bg-[#ef232e]" />
-                  <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.7" aria-hidden="true">
-                    <path d="M5 12h14M13 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </div>
-                <div className="voicemail-competitor-card rounded-lg border border-[#fecaca] bg-white px-4 py-3 shadow-[0_16px_32px_-28px_rgba(220,38,38,0.75)]">
-                  <p className="text-sm font-black uppercase tracking-[0.1em] text-[#cc0f1f]">Customer called competitor</p>
-                  <p className="mt-1 text-sm font-bold leading-5 text-[#07142a]">The opportunity left.</p>
-                </div>
-              </div>
             </div>
           </article>
 
           <article className="relative min-h-[410px] rounded-lg border border-[#60a5fa] bg-white p-5 shadow-[0_30px_80px_-58px_rgba(37,99,235,0.7)]">
-            <div className="absolute right-4 top-4 rounded-full bg-[#e8f2ff] px-3 py-1 text-xs font-black uppercase tracking-[0.12em] text-[#1d65bd]">
+            <div className="absolute left-1/2 top-0 z-10 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-full border-2 border-[#60a5fa] bg-white px-5 py-2 text-sm font-black uppercase tracking-[0.12em] text-[#1d65bd] shadow-[0_12px_28px_-18px_rgba(29,101,189,0.8)]">
               New way
             </div>
-            <div className="flex items-center gap-4 pr-24">
+            <div className="flex items-center gap-4">
               <span className="grid h-14 w-14 place-items-center rounded-full bg-[linear-gradient(180deg,#3185ff,#1d4ed8)] text-3xl font-black text-white shadow-[0_18px_34px_-24px_rgba(29,78,216,1)]">2</span>
               <p className="text-[clamp(1.55rem,2vw,2rem)] font-black leading-tight tracking-[-0.04em] text-[#1d7df2]">Assistant answers live</p>
             </div>
@@ -1643,7 +1655,10 @@ function VoicemailLossesArtboard({ onStart, onPlayDemo }) {
                       <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[#dcfce7] text-[#13833c]">
                         <HeroIcon type={icon} className="h-5 w-5" />
                       </span>
-                      <p className="text-sm font-black leading-5 text-[#07142a] min-[1500px]:text-base">{text}</p>
+                      <p className="min-w-0 flex-1 text-sm font-black leading-5 text-[#07142a] min-[1500px]:text-base">{text}</p>
+                      <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[#16a34a] text-white shadow-[0_8px_18px_-10px_rgba(22,163,74,0.9)]" aria-label="Completed">
+                        <HeroIcon type="check" className="h-4 w-4" />
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -4163,6 +4178,15 @@ function LandingPage() {
             }
           }
           @media (min-width: 1024px) and (max-height: 820px) {
+            .landing-conversation-panel .landing-conversation-long-bubble {
+              margin-top: 0.35rem !important;
+              padding-top: 0.42rem !important;
+              padding-bottom: 0.42rem !important;
+            }
+            .landing-conversation-panel .landing-conversation-long-bubble ul {
+              margin-top: 0.2rem !important;
+              row-gap: 0 !important;
+            }
             .landing-conversation-panel .landing-conversation-caller-detail {
               max-width: 94% !important;
               margin-top: 0.35rem !important;
