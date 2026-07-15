@@ -1020,7 +1020,10 @@ async function fetchVapiCollection(resourcePath, collectionKeys = []) {
 
 function normalizeVapiImportPhone(value) {
   const normalized = normalizePhoneForMatch(value);
-  return /^\+\d{10,15}$/.test(normalized) ? normalized : "";
+  if (/^\+\d{10,15}$/.test(normalized)) return normalized;
+  if (/^1\d{10}$/.test(normalized)) return `+${normalized}`;
+  if (/^\d{10}$/.test(normalized)) return `+1${normalized}`;
+  return "";
 }
 
 function sanitizeVapiImportName(value, fallback) {
@@ -4833,6 +4836,67 @@ app.post(
     }
 
     res.json({ ok: true, eventType, toolResults });
+  })
+);
+
+app.post(
+  "/api/integrations/provisioning/complete-existing",
+  requireProvisioningKey,
+  asyncRoute(async (req, res) => {
+    const body = { ...(req.query || {}), ...(req.body || {}) };
+    const voiceUrl = normalizeTwilioProvisioningVoiceUrl(body.voiceUrl);
+    const ownerEmail = String(req.headers["x-signup-owner-email"] || body.ownerEmail || "").trim();
+    const assistantName = sanitizeVapiImportName(body.assistantName, "My AI PA Agent");
+
+    const twilioNumbers = await fetchTwilioIncomingPhoneNumbers();
+    const twilioNumber = twilioNumbers.find((record) => String(record?.voice_url || "").trim() === voiceUrl);
+    const phoneNumber = normalizeVapiImportPhone(twilioNumber?.phone_number);
+    if (!phoneNumber) {
+      const err = new Error("No existing Twilio number is assigned to this Make voice webhook.");
+      err.statusCode = 404;
+      throw err;
+    }
+
+    const existingVapiNumbers = await fetchVapiCollection("phone-number", ["phoneNumbers", "phone_numbers"]);
+    const existingVapiNumber = existingVapiNumbers.find((record) => normalizeVapiImportPhone(getVapiPhoneNumber(record)) === phoneNumber);
+    let result;
+    let reused = false;
+    if (existingVapiNumber) {
+      result = summarizeVapiPhoneNumberImport(existingVapiNumber, phoneNumber);
+      reused = true;
+    } else {
+      const assistants = await fetchVapiCollection("assistant", ["assistants", "agents"]);
+      const assistant = assistants
+        .filter((record) => getVapiAssistantName(record) === assistantName)
+        .sort((left, right) => Date.parse(right?.createdAt || right?.created_at || 0) - Date.parse(left?.createdAt || left?.created_at || 0))[0];
+      const assistantId = String(assistant?.id || "").trim();
+      if (!assistantId) {
+        const err = new Error(`No existing Vapi assistant named ${assistantName} was found.`);
+        err.statusCode = 404;
+        throw err;
+      }
+      result = await importTwilioPhoneNumberToVapi({ twilioPhoneNumber: phoneNumber, assistantId, name: `${assistantName} Number` });
+    }
+
+    if (ownerEmail && isValidEmailAddress(ownerEmail)) {
+      upsertSignupDashboardRecord({
+        ownerEmail,
+        twilioPhoneNumber: result.number || phoneNumber,
+        vapiPhoneNumberId: result.id,
+        vapiAssistantId: result.assistantId,
+        makeStatus: 200,
+        status: "setup_started",
+      });
+    }
+
+    res.status(reused ? 200 : 201).json({
+      success: true,
+      ok: true,
+      reused,
+      twilioPhoneNumber: result.number || phoneNumber,
+      phoneNumberId: result.id,
+      assistantId: result.assistantId,
+    });
   })
 );
 
