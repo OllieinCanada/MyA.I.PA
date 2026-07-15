@@ -5,6 +5,8 @@ process.env.NODE_ENV = "test";
 process.env.INTEGRATION_API_KEY = "test-integration-key-42";
 process.env.MAKE_SIGNUP_WEBHOOK_API_KEY = "test-make-signup-key-42";
 process.env.MAKE_SIGNUP_WEBHOOK_URL = "https://hook.us2.make.com/test-private-webhook-token-42";
+process.env.TWILIO_ACCOUNT_SID = "ACtestaccountsid";
+process.env.TWILIO_AUTH_TOKEN = "test-twilio-auth-token";
 process.env.ADMIN_PASSWORD = "test-admin-password-42";
 process.env.ADMIN_SESSION_SECRET = "test-admin-session-secret-42";
 process.env.TRIAL_REMINDER_DISABLE = "true";
@@ -151,6 +153,32 @@ test("Make webhook token authentication is accepted by provisioning routes", asy
   });
   assert.notEqual(response.status, 401);
   assert.match((await response.json()).error, /VAPI_API_KEY is not configured/i);
+});
+
+test("Twilio provisioning reuses a number already assigned to the Make voice webhook", async () => {
+  const calls = [];
+  const result = await __test.purchaseTwilioPhoneNumber(
+    { areaCode: "249", voiceUrl: "https://hook.us2.make.com/existing-voice-hook" },
+    {
+      fetchImpl: async (url, options = {}) => {
+        calls.push({ url: String(url), method: options.method || "GET" });
+        return new Response(JSON.stringify({
+          incoming_phone_numbers: [{
+            sid: "PNexisting",
+            phone_number: "+12495550123",
+            voice_url: "https://hook.us2.make.com/existing-voice-hook",
+            voice_method: "POST",
+            capabilities: { voice: true, sms: true },
+          }],
+        }), { status: 200, headers: { "content-type": "application/json" } });
+      },
+    }
+  );
+
+  assert.equal(result.phone_number, "+12495550123");
+  assert.equal(result.reused, true);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].method, "GET");
 });
 
 test("Vapi end-of-call reports normalize duration, status, cost, and artifacts", () => {

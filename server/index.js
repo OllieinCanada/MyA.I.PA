@@ -1481,6 +1481,38 @@ async function purchaseTwilioPhoneNumber({ areaCode = "249", voiceUrl, voiceMeth
     throw err;
   }
 
+  const ownedNumbersUrl = new URL(
+    `${TWILIO_API_BASE_URL}/2010-04-01/Accounts/${encodeURIComponent(TWILIO_ACCOUNT_SID)}/IncomingPhoneNumbers.json`
+  );
+  ownedNumbersUrl.searchParams.set("PageSize", "1000");
+  const ownedNumbersResponse = await fetchImpl(ownedNumbersUrl, {
+    headers: { Authorization: getTwilioAuthHeader(), Accept: "application/json" },
+  });
+  const ownedNumbersData = parseJsonObject(await ownedNumbersResponse.text());
+  if (!ownedNumbersResponse.ok) {
+    const err = new Error(ownedNumbersData?.message || ownedNumbersData?.error || `Twilio phone number lookup failed with HTTP ${ownedNumbersResponse.status}.`);
+    err.statusCode = ownedNumbersResponse.status;
+    throw err;
+  }
+
+  const existingNumber = (ownedNumbersData?.incoming_phone_numbers || []).find((record) => {
+    const recordVoiceUrl = String(record?.voice_url || "").trim();
+    return recordVoiceUrl && recordVoiceUrl === normalizedVoiceUrl;
+  });
+  if (existingNumber) {
+    const phoneNumber = normalizeVapiImportPhone(existingNumber.phone_number);
+    return {
+      sid: String(existingNumber.sid || "").trim(),
+      phone_number: phoneNumber,
+      phoneNumber,
+      friendly_name: String(existingNumber.friendly_name || phoneNumber).trim(),
+      voice_url: String(existingNumber.voice_url || normalizedVoiceUrl).trim(),
+      voice_method: String(existingNumber.voice_method || normalizedVoiceMethod).trim(),
+      capabilities: existingNumber.capabilities || { voice: true, sms: true },
+      reused: true,
+    };
+  }
+
   const availableUrl = new URL(
     `${TWILIO_API_BASE_URL}/2010-04-01/Accounts/${encodeURIComponent(TWILIO_ACCOUNT_SID)}/AvailablePhoneNumbers/CA/Local.json`
   );
