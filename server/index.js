@@ -4840,6 +4840,23 @@ app.post(
 );
 
 app.post(
+  "/api/integrations/vapi/sync-now",
+  requireProvisioningKey,
+  asyncRoute(async (req, res) => {
+    const limit = Math.max(1, Math.min(VAPI_CALL_LIMIT, Number(req.body?.limit || 100) || 100));
+    const result = await syncVapiCalls({ limit });
+    res.json({
+      success: true,
+      ok: true,
+      fetched: result.fetched,
+      detailsFetched: result.detailsFetched,
+      synced: result.synced,
+      detailErrorCount: result.detailErrors.length,
+    });
+  })
+);
+
+app.post(
   "/api/integrations/provisioning/complete-existing",
   requireProvisioningKey,
   asyncRoute(async (req, res) => {
