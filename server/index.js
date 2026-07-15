@@ -3684,6 +3684,7 @@ async function sendMakeSignupCompleted(payload) {
     console.error("[make:signup] webhook request failed", { message: error?.message || String(error) });
     const err = new Error("Make webhook could not be reached.");
     err.statusCode = 502;
+    err.code = "MAKE_SIGNUP_UNREACHABLE";
     throw err;
   }
 
@@ -3695,6 +3696,8 @@ async function sendMakeSignupCompleted(payload) {
     });
     const err = new Error("Make webhook rejected the signup handoff.");
     err.statusCode = 502;
+    err.code = "MAKE_SIGNUP_REJECTED";
+    err.upstreamStatus = response.status;
     throw err;
   }
 
@@ -4901,7 +4904,17 @@ app.post(
       });
     }
 
-    const makeResult = await sendMakeSignupCompleted(makePayload);
+    let makeResult;
+    try {
+      makeResult = await sendMakeSignupCompleted(makePayload);
+    } catch (error) {
+      upsertSignupDashboardFromPayload(payload, {
+        status: "setup_error",
+        makeStatus: Number(error?.upstreamStatus) || 0,
+        makeError: error?.code || "MAKE_SIGNUP_FAILED",
+      });
+      throw error;
+    }
     const makeData = makeResult.data || {};
     if (!getMakeSignupSuccess(makeData)) {
       upsertSignupDashboardFromPayload(payload, {
@@ -5776,7 +5789,14 @@ app.use((err, _req, res, _next) => {
   if (status >= 500) {
     console.error(err);
   }
-  res.status(status).json({ error: message });
+  const body = { error: message };
+  if (String(err.code || "").startsWith("MAKE_SIGNUP_")) {
+    body.code = err.code;
+  }
+  if (Number.isInteger(err.upstreamStatus) && err.upstreamStatus >= 400 && err.upstreamStatus <= 599) {
+    body.upstreamStatus = err.upstreamStatus;
+  }
+  res.status(status).json(body);
 });
 
 function startBackgroundJobs() {
