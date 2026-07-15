@@ -4815,6 +4815,18 @@ app.post(
       name: body.name,
     });
 
+    const ownerEmail = String(req.headers["x-signup-owner-email"] || body.ownerEmail || "").trim();
+    if (ownerEmail && isValidEmailAddress(ownerEmail)) {
+      upsertSignupDashboardRecord({
+        ownerEmail,
+        twilioPhoneNumber: result.number,
+        vapiPhoneNumberId: result.id,
+        vapiAssistantId: result.assistantId || String(body.assistantId || "").trim(),
+        makeStatus: 200,
+        status: "setup_started",
+      });
+    }
+
     res.status(201).json({
       success: true,
       ok: true,
