@@ -271,6 +271,73 @@ function callStatusBadgeClass(status) {
   return "admin-call-badge admin-call-badge-info";
 }
 
+function friendlyCallStatus(status) {
+  const labels = {
+    STARTED: "In progress",
+    COMPLETED: "Completed",
+    MISSED: "Missed",
+    FAILED: "Failed",
+  };
+  const value = String(status || "").toUpperCase();
+  return labels[value] || "Unknown";
+}
+
+function friendlyCallOutcome(outcome) {
+  const labels = {
+    UNREVIEWED: "Waiting for review",
+    BOOKED: "Job booked",
+    QUOTE_NEEDED: "Quote needed",
+    EMERGENCY: "Emergency",
+    SPAM: "Spam",
+    FOLLOW_UP: "Follow-up due",
+    NOT_A_LEAD: "Not a lead",
+  };
+  const value = String(outcome || "UNREVIEWED").toUpperCase();
+  return labels[value] || "Waiting for review";
+}
+
+function friendlyConnectionWarning(warning) {
+  const text = String(warning || "");
+  if (/DATABASE_URL|database|postgres/i.test(text)) {
+    return {
+      title: "Business records are not connected",
+      detail: "Connect the database so customer, call, and billing records can be saved reliably.",
+      actionLabel: "Connections",
+      actionTab: "sync",
+    };
+  }
+  if (/twilio/i.test(text)) {
+    return {
+      title: "Twilio is not connected",
+      detail: "Phone-number, text-message, and call-cost information cannot update yet.",
+      actionLabel: "Connections",
+      actionTab: "sync",
+    };
+  }
+  if (/vapi|VAPI_API_KEY/i.test(text)) {
+    return {
+      title: "Vapi is not connected",
+      detail: "AI call activity, recordings, transcripts, and call costs cannot update yet.",
+      actionLabel: "Connections",
+      actionTab: "sync",
+    };
+  }
+  if (/stripe/i.test(text)) {
+    return {
+      title: "Stripe needs attention",
+      detail: "Payment and trial information cannot update until the billing connection is ready.",
+      actionLabel: "Billing",
+      actionTab: "costs",
+    };
+  }
+  return {
+    title: "A service connection needs attention",
+    detail: text || "Open Connections to see what still needs to be completed.",
+    actionLabel: "Connections",
+    actionTab: "sync",
+  };
+}
+
 function callDurationText(seconds) {
   const n = Number(seconds || 0);
   if (!Number.isFinite(n) || n <= 0) return "—";
@@ -505,8 +572,8 @@ function ConceptSidebar({ groups, activeTab, onSelect, onLock }) {
       <div className="admin-concept-help">
         <div className="admin-concept-help-icon">?</div>
         <div className="admin-concept-help-title">Need help?</div>
-        <p>Check setup status, integrations, and customer call records from one control center.</p>
-        <button type="button" onClick={() => onSelect("sync")}>Open setup checks</button>
+        <p>See what needs attention and keep every business, call, and follow-up moving.</p>
+        <button type="button" onClick={() => onSelect("sync")}>Check connections</button>
       </div>
       <button type="button" className="admin-concept-user" onClick={onLock}>
         <span>OC</span>
@@ -520,23 +587,22 @@ function ConceptTopBar({ loading, apiBase, apiSourceLabel, onRefresh, onRefreshA
   return (
     <header className="admin-concept-topbar">
       <div>
-        <h1>Control Center</h1>
-        <p>Customer status, call activity, billing, and system health in one place.</p>
+        <h1>Lead &amp; Business Overview</h1>
+        <p>See what needs attention, follow every lead, and keep each business ready.</p>
         <div className="admin-api-source" title={apiBase}>
           <span className={apiSourceLabel === "Live Render API" ? "is-live" : "is-local"} />
           {apiSourceLabel}: {apiBase}
         </div>
       </div>
       <div className="admin-concept-top-actions">
-        <div className="admin-concept-search">Search customers, numbers, calls...</div>
+        <div className="admin-concept-search">All businesses and calls</div>
         <div className="admin-concept-range">Last 30 days</div>
         <button type="button" className="admin-concept-status" onClick={onRefresh}>
-          <span className="admin-dot admin-dot-green" />
-          {loading ? "Syncing..." : "System OK"}
+          {loading ? "Checking..." : "Check Status"}
         </button>
-        <button type="button" className="admin-concept-ghost" onClick={onRefreshAll}>Refresh All</button>
-        <button type="button" className="admin-concept-primary" onClick={onSyncCalls}>Sync Calls</button>
-        <button type="button" className="admin-concept-ghost" onClick={onSite}>Site</button>
+        <button type="button" className="admin-concept-ghost" onClick={onRefreshAll}>Refresh Dashboard</button>
+        <button type="button" className="admin-concept-primary" onClick={onSyncCalls}>Check Calls</button>
+        <button type="button" className="admin-concept-ghost" onClick={onSite}>View Website</button>
       </div>
     </header>
   );
@@ -827,7 +893,7 @@ function customerStatusLabel(account) {
   if (/fail|past_due|unpaid|incomplete|requires|cancel/.test(subscription)) return "Payment Pending";
   if (/checkout|pending|open|not linked/.test(subscription)) return "Payment Pending";
   if (account.statusLabel === "Problem") return "Problem";
-  if (account.hasNumber && !account.vapiMappings.length) return "Mapping Pending";
+  if (account.hasNumber && !account.vapiMappings.length) return "Phone Not Connected";
   if (!account.hasNumber || !account.setupReady) return "Setup Needed";
   return "Live";
 }
@@ -835,36 +901,36 @@ function customerStatusLabel(account) {
 function customerNextAction(account) {
   const status = customerStatusLabel(account);
   if (status === "Payment Pending") return { label: "Resend Checkout", tab: "signups" };
-  if (status === "Mapping Pending" || !account.hasNumber) return { label: "Connect in Vapi", tab: "mappings" };
-  if (!account.hasCalls) return { label: "Run Test", tab: "calls" };
-  if (!account.setupReady) return { label: "Finish Setup", tab: "setup" };
-  return { label: "View Customer", tab: "customers" };
+  if (status === "Phone Not Connected" || !account.hasNumber) return { label: "Connect AI Number", tab: "mappings" };
+  if (!account.hasCalls) return { label: "Make Test Call", tab: "calls" };
+  if (!account.setupReady) return { label: "Finish Business Setup", tab: "setup" };
+  return { label: "View Business", tab: "customers" };
 }
 
 function dashboardBadgeClass(status) {
   if (status === "Live" || status === "Ready") return "is-live";
   if (status === "Problem") return "is-problem";
-  if (status === "Payment Pending" || status === "Mapping Pending") return "is-warning";
+  if (status === "Payment Pending" || status === "Phone Not Connected") return "is-warning";
   return "is-muted";
 }
 
 function SystemHealthPanel({ setupItems, signups, apiSourceLabel, onOpen }) {
   const makeOk = signups.some((signup) => Number(signup.makeStatus || 0) >= 200 && Number(signup.makeStatus || 0) < 300);
   const items = [
-    { label: "Stripe", ok: setupItems.find((item) => item.label === "Stripe checkout")?.ok, detail: "Checkout" },
-    { label: "Vapi", ok: setupItems.find((item) => item.label === "Vapi API")?.ok, detail: "Agents" },
-    { label: "Twilio", ok: setupItems.find((item) => item.label === "Twilio cost sync")?.ok, detail: "Numbers" },
-    { label: "Make", ok: makeOk, detail: makeOk ? "Handoff OK" : "Awaiting run" },
-    { label: "Render", ok: apiSourceLabel === "Live Render API", detail: apiSourceLabel === "Live Render API" ? "Live API" : "Local API" },
-    { label: "Database", ok: setupItems.find((item) => item.label === "Database")?.ok, detail: "Postgres" },
+    { label: "Stripe", ok: setupItems.find((item) => item.label === "Stripe checkout")?.ok, detail: "Payments" },
+    { label: "Vapi", ok: setupItems.find((item) => item.label === "Vapi API")?.ok, detail: "AI calls" },
+    { label: "Twilio", ok: setupItems.find((item) => item.label === "Twilio cost sync")?.ok, detail: "Numbers & texts" },
+    { label: "Make", ok: makeOk, detail: makeOk ? "Signup automation ready" : "Signup automation not tested" },
+    { label: "Render", ok: apiSourceLabel === "Live Render API", detail: apiSourceLabel === "Live Render API" ? "Backend online" : "Using local backend" },
+    { label: "Database", ok: setupItems.find((item) => item.label === "Database")?.ok, detail: "Customer records" },
   ];
 
   return (
     <section className="admin-v2-card admin-v2-health">
       <div className="admin-v2-card-head">
         <div>
-          <span>System Health</span>
-          <h2>Integrations</h2>
+          <span>Connections</span>
+          <h2>Connected services</h2>
         </div>
         <button type="button" onClick={() => onOpen("sync")}>Details</button>
       </div>
@@ -881,6 +947,44 @@ function SystemHealthPanel({ setupItems, signups, apiSourceLabel, onOpen }) {
   );
 }
 
+function LeadJourney({ totalCalls, unreviewed, followUps, booked, handoffSummary, onOpen }) {
+  const ownerNotified = handoffSummary?.ownerNotified || 0;
+  const textIssues = (handoffSummary?.retryDue || 0) + (handoffSummary?.failed || 0);
+  const stages = [
+    { label: "Calls captured", value: totalCalls, detail: "Saved for review", tone: "is-blue" },
+    { label: "Owner text sent", value: ownerNotified, detail: "Twilio accepted the text", tone: ownerNotified ? "is-blue" : "is-gap" },
+    { label: "Text issues", value: textIssues, detail: textIssues ? "Retry or manual follow-up" : "No sending problems", tone: textIssues ? "is-warn" : "is-good" },
+    { label: "Follow-up due", value: followUps, detail: "Needs the next action", tone: "is-warn" },
+    { label: "Jobs booked", value: booked, detail: "Marked as won", tone: "is-good" },
+  ];
+
+  return (
+    <section className="admin-v2-card admin-lead-journey">
+      <div className="admin-v2-card-head">
+        <div>
+          <span>Lead follow-up</span>
+          <h2>Every lead should have a clear next step</h2>
+        </div>
+        <button type="button" onClick={onOpen}>Review leads &amp; calls</button>
+      </div>
+      <div className="admin-lead-journey-stages">
+        {stages.map((stage, index) => (
+          <div key={stage.label} className={`admin-lead-stage ${stage.tone}`}>
+            <div className="admin-lead-stage-number">{index + 1}</div>
+            <span>{stage.label}</span>
+            <strong>{stage.value}</strong>
+            <small>{stage.detail}</small>
+          </div>
+        ))}
+      </div>
+      <div className="admin-lead-journey-note">
+        <strong>{textIssues ? `${textIssues} owner text${textIssues === 1 ? " needs" : "s need"} attention.` : unreviewed ? `${unreviewed} call${unreviewed === 1 ? " is" : "s are"} waiting for review.` : "No calls are waiting for review."}</strong>
+        <span>Vapi remains the sender. My AI PA records whether Twilio accepted the owner text and flags failures after the retry attempts are used.</span>
+      </div>
+    </section>
+  );
+}
+
 function ConceptOverview({
   stats,
   costAudit,
@@ -891,6 +995,7 @@ function ConceptOverview({
   setupItems,
   signups,
   apiSourceLabel,
+  leadHandoffs,
   onOpenTab,
   onSyncCalls,
 }) {
@@ -900,38 +1005,50 @@ function ConceptOverview({
   const monthlyCost = costAudit?.totals?.estimatedProviderCost || costAudit?.totals?.totalInternalCost || stats.totalCost || 0;
   const customerRows = customerAccounts.slice(0, 6);
   const fixRows = fixFirstItems.slice(0, 3);
+  const unreviewed = calls.filter((call) => !call.outcome || call.outcome === "UNREVIEWED").length;
+  const followUps = calls.filter((call) => call.followUpNeeded || call.outcome === "FOLLOW_UP" || call.outcome === "QUOTE_NEEDED").length;
+  const booked = calls.filter((call) => call.outcome === "BOOKED").length;
 
   return (
     <div className="admin-v2-overview">
       <div className="admin-v2-kpis">
         <button type="button" onClick={() => onOpenTab("customers")} className="admin-v2-kpi">
-          <span>Live Customers</span>
+          <span>Live Businesses</span>
           <strong>{liveCustomers}</strong>
-          <em>{customerAccounts.length || stats.owners} total customers</em>
+          <em>{customerAccounts.length || stats.owners} total businesses</em>
         </button>
         <button type="button" onClick={() => onOpenTab("setup")} className="admin-v2-kpi is-warning">
-          <span>Needs Action</span>
+          <span>Business Setup Needed</span>
           <strong>{needsAction}</strong>
-          <em>Setup, payment, or mapping</em>
+          <em>Setup, payment, or phone connection</em>
         </button>
         <button type="button" onClick={() => onOpenTab("calls")} className="admin-v2-kpi">
-          <span>Calls Today</span>
+          <span>Calls Captured</span>
           <strong>{totalCalls}</strong>
-          <em>{calls.length} recent calls synced</em>
+          <em>{calls.length} ready for lead review</em>
         </button>
         <button type="button" onClick={() => onOpenTab("costs")} className="admin-v2-kpi">
-          <span>Monthly Cost</span>
+          <span>Provider Cost</span>
           <strong>{moneyCompact(monthlyCost)}</strong>
           <em>{costAudit?.totals?.pricedCalls || 0} priced calls</em>
         </button>
       </div>
 
+      <LeadJourney
+        totalCalls={totalCalls}
+        unreviewed={unreviewed}
+        followUps={followUps}
+        booked={booked}
+        handoffSummary={leadHandoffs?.summary}
+        onOpen={() => onOpenTab("calls")}
+      />
+
       <div className="admin-v2-main-grid">
         <section className="admin-v2-card admin-v2-fix">
           <div className="admin-v2-card-head">
             <div>
-              <span>Priority Queue</span>
-              <h2>Fix First</h2>
+              <span>What needs attention</span>
+              <h2>Do these next</h2>
             </div>
             <button type="button" onClick={() => onOpenTab("setup")}>View all</button>
           </div>
@@ -948,7 +1065,7 @@ function ConceptOverview({
                 </button>
               </div>
             )) : (
-              <div className="admin-v2-empty">No urgent tasks. New signup, call, or cost issues will appear here.</div>
+              <div className="admin-v2-empty"><strong>You’re caught up.</strong><span>New setup, call, or billing issues will appear here with the next action.</span></div>
             )}
           </div>
         </section>
@@ -959,21 +1076,21 @@ function ConceptOverview({
       <section className="admin-v2-card admin-v2-customers">
         <div className="admin-v2-card-head">
           <div>
-            <span>Customer Operations</span>
-            <h2>Customers</h2>
+            <span>Business accounts</span>
+            <h2>Businesses</h2>
           </div>
-          <button type="button" onClick={() => onOpenTab("customers")}>Open customers</button>
+          <button type="button" onClick={() => onOpenTab("customers")}>Manage businesses</button>
         </div>
         <div className="admin-v2-table">
           <div className="admin-v2-table-head">
-            <span>Customer</span><span>Trial</span><span>Phone Number</span><span>AI Status</span><span>Calls</span><span>Next Action</span>
+            <span>Business</span><span>Trial</span><span>AI Phone Number</span><span>Phone Assistant</span><span>Calls</span><span>Next Action</span>
           </div>
           {customerRows.length ? customerRows.map((account) => {
             const status = customerStatusLabel(account);
             const action = customerNextAction(account);
             return (
               <div key={account.key} className="admin-v2-table-row">
-                <span><strong>{account.businessName || account.ownerName || "Unnamed customer"}</strong><small>{account.ownerEmail || account.ownerPhone || "No owner contact"}</small></span>
+                <span><strong>{account.businessName || account.ownerName || "Unnamed business"}</strong><small>{account.ownerEmail || account.ownerPhone || "No owner contact"}</small></span>
                 <span><em className={"admin-v2-badge " + dashboardBadgeClass(status)}>{status === "Live" ? "Live" : account.subscriptionStatus || status}</em></span>
                 <span>{account.aiNumbers[0] || account.twilioPhoneNumber || "Not assigned"}</span>
                 <span><em className={"admin-v2-badge " + dashboardBadgeClass(status)}>{status}</em></span>
@@ -981,7 +1098,12 @@ function ConceptOverview({
                 <span><button type="button" onClick={() => onOpenTab(action.tab)}>{action.label}</button></span>
               </div>
             );
-          }) : <div className="admin-v2-empty">No customers found yet.</div>}
+          }) : (
+            <div className="admin-v2-empty admin-v2-empty-action">
+              <div><strong>No businesses yet.</strong><span>Open Business Setup to add the first business, connect its AI number, and make a test call.</span></div>
+              <button type="button" onClick={() => onOpenTab("setup")}>Open Business Setup</button>
+            </div>
+          )}
         </div>
       </section>
       </div>
@@ -1015,6 +1137,7 @@ export default function AdminDashboard() {
   const [digest, setDigest] = useState(null);
   const [faqs, setFaqs] = useState([]);
   const [settings, setSettings] = useState(null);
+  const [leadHandoffs, setLeadHandoffs] = useState({ summary: {}, handoffs: [] });
 
   const [leadFilters, setLeadFilters] = useState({ status: "", intent: "", urgency: "" });
   const [callFilters, setCallFilters] = useState({ status: "", minDuration: "", outcome: "", search: "" });
@@ -1760,19 +1883,28 @@ export default function AdminDashboard() {
       }
     });
 
-    (costAudit?.warnings || []).forEach((warning) => {
+    const handoffProblems = (leadHandoffs.summary?.retryDue || 0) + (leadHandoffs.summary?.escalationDue || 0) + (leadHandoffs.summary?.failed || 0);
+    if (handoffProblems) {
       addItem({
         status: "Problem",
-        title: "Cost data needs attention",
-        detail: warning,
-        actionLabel: "Costs",
-        actionTab: "costs",
+        title: `${handoffProblems} lead alert${handoffProblems === 1 ? " needs" : "s need"} attention`,
+        detail: "A Vapi text failed, is due for retry, or needs a configured backup contact.",
+        actionLabel: "Review Leads",
+        actionTab: "calls",
+      });
+    }
+
+    (costAudit?.warnings || []).forEach((warning) => {
+      const friendly = friendlyConnectionWarning(warning);
+      addItem({
+        status: "Problem",
+        ...friendly,
       });
     });
 
     const priority = { Problem: 0, "Needs Setup": 1, Ready: 2 };
     return items.sort((a, b) => (priority[a.status] ?? 9) - (priority[b.status] ?? 9)).slice(0, 8);
-  }, [costAudit?.warnings, customerAccounts, settings?.ownerPhone, vapiInventory.assistants, vapiInventory.phoneNumbers, vapiInventory.warnings]);
+  }, [costAudit?.warnings, customerAccounts, leadHandoffs.summary?.escalationDue, leadHandoffs.summary?.failed, leadHandoffs.summary?.retryDue, settings?.ownerPhone, vapiInventory.assistants, vapiInventory.phoneNumbers, vapiInventory.warnings]);
 
   const navGroups = useMemo(
     () => [
@@ -1780,12 +1912,12 @@ export default function AdminDashboard() {
         title: "Command",
         items: [
           ["overview", "Overview", "Control center"],
-          ["customers", "Customers", "Who is working and what to do next"],
-          ["setup", "Setup", "Fix customers that are not ready"],
-          ["calls", "Calls", "Read calls and follow-ups"],
+          ["customers", "Businesses", "See every business and its next action"],
+          ["setup", "Business Setup", "Finish businesses that are not ready"],
+          ["calls", "Leads & Calls", "Review calls and move leads forward"],
           ["trials", "Trials", "Live Stripe trial status"],
           ["costs", "Billing", "Vapi and Twilio spend"],
-          ["sync", "System", "Keys and sync status"],
+          ["sync", "Connections", "Service connection and refresh status"],
         ],
       },
     ],
@@ -1825,6 +1957,11 @@ export default function AdminDashboard() {
   const loadSettings = async () => {
     const data = await api("/api/admin/settings");
     setSettings(data.settings || null);
+  };
+
+  const loadLeadHandoffs = async () => {
+    const data = await api("/api/admin/lead-handoffs");
+    setLeadHandoffs({ summary: data.summary || {}, handoffs: data.handoffs || [] });
   };
 
   const loadAnalytics = async () => {
@@ -2007,6 +2144,7 @@ export default function AdminDashboard() {
         loadAnalytics(),
         loadDigest(),
         loadSettings(),
+        loadLeadHandoffs(),
       ]);
       setVapiSyncStatus("Dashboard refreshed.");
     } catch (e) {
@@ -2024,14 +2162,14 @@ export default function AdminDashboard() {
     try {
       if (activeTab === "leads") await loadLeads();
       if (activeTab === "overview") {
-        await Promise.allSettled([loadOpsOverview(), loadCustomerSetup(), loadTrialHealth(), loadStripeTrials(), loadCostAudit(), loadCalls(), loadLeads(), loadSignups(), loadAnalytics(), loadVapiMappings(), loadVapiInventory(), loadSettings()]);
+        await Promise.allSettled([loadOpsOverview(), loadCustomerSetup(), loadTrialHealth(), loadStripeTrials(), loadCostAudit(), loadCalls(), loadLeads(), loadSignups(), loadAnalytics(), loadVapiMappings(), loadVapiInventory(), loadSettings(), loadLeadHandoffs()]);
       }
       if (activeTab === "customers") {
         await Promise.allSettled([loadOpsOverview(), loadCustomerSetup(), loadTrialHealth(), loadSignups(), loadCalls(), loadLeads(), loadCostAudit(), loadVapiMappings(), loadVapiInventory()]);
       }
       if (activeTab === "setup") await loadCustomerSetup();
       if (activeTab === "businesses") await loadOpsOverview();
-      if (activeTab === "calls") await loadCalls();
+      if (activeTab === "calls") await Promise.allSettled([loadCalls(), loadLeadHandoffs()]);
       if (activeTab === "signups") await loadSignups();
       if (activeTab === "ops") await loadAnalytics();
       if (activeTab === "health") await loadTrialHealth();
@@ -2257,6 +2395,7 @@ export default function AdminDashboard() {
           answerAfterRings: Number(settings.answerAfterRings || 3),
           afterHoursMode: settings.afterHoursMode || "AI_ALWAYS_ON",
           ownerPhone: settings.ownerPhone || "",
+          backupPhone: settings.backupPhone || "",
           bookingLink: settings.bookingLink || "",
         },
       });
@@ -2360,6 +2499,7 @@ export default function AdminDashboard() {
             setupItems={setupItems}
             signups={signups}
             apiSourceLabel={API_SOURCE_LABEL}
+            leadHandoffs={leadHandoffs}
             onOpenTab={setActiveTab}
             onSyncCalls={syncVapiCalls}
           />
@@ -2664,58 +2804,58 @@ export default function AdminDashboard() {
           <div className="admin-call-page">
             <div className="admin-call-header">
               <div>
-                <div className="admin-call-eyebrow">Call Command Center</div>
-                <h2>Review calls and follow-ups</h2>
-                <p>Use this queue to spot unreviewed calls, mark outcomes, and create the next task before leads go cold.</p>
+                <div className="admin-call-eyebrow">Lead follow-up</div>
+                <h2>Make sure every call gets a next step</h2>
+                <p>Review new calls, record the result, and assign follow-up before an opportunity goes cold.</p>
               </div>
               <div className="admin-call-actions">
                 <button type="button" onClick={exportCallsCsv}>Export CSV</button>
-                <button type="button" onClick={syncVapiCalls} className="admin-call-primary">Sync Vapi Calls</button>
+                <button type="button" onClick={syncVapiCalls} className="admin-call-primary">Check for New Calls</button>
               </div>
             </div>
             {vapiSyncStatus ? <p className="admin-call-status">{vapiSyncStatus}</p> : null}
 
             <div className="admin-call-filter-card">
-              <Labeled label="Status">
+              <Labeled label="Call status">
                 <Select value={callFilters.status} onChange={(e) => setCallFilters((s) => ({ ...s, status: e.target.value }))}>
-                  <option value="">All</option><option value="STARTED">STARTED</option><option value="COMPLETED">COMPLETED</option><option value="MISSED">MISSED</option><option value="FAILED">FAILED</option>
+                  <option value="">All call statuses</option><option value="STARTED">In progress</option><option value="COMPLETED">Completed</option><option value="MISSED">Missed</option><option value="FAILED">Failed</option>
                 </Select>
               </Labeled>
-              <Labeled label="Outcome">
+              <Labeled label="Lead result">
                 <Select value={callFilters.outcome} onChange={(e) => setCallFilters((s) => ({ ...s, outcome: e.target.value }))}>
-                  <option value="">All</option><option value="UNREVIEWED">UNREVIEWED</option><option value="BOOKED">BOOKED</option><option value="QUOTE_NEEDED">QUOTE_NEEDED</option><option value="EMERGENCY">EMERGENCY</option><option value="SPAM">SPAM</option><option value="FOLLOW_UP">FOLLOW_UP</option><option value="NOT_A_LEAD">NOT_A_LEAD</option>
+                  <option value="">All lead results</option><option value="UNREVIEWED">Waiting for review</option><option value="BOOKED">Job booked</option><option value="QUOTE_NEEDED">Quote needed</option><option value="EMERGENCY">Emergency</option><option value="SPAM">Spam</option><option value="FOLLOW_UP">Follow-up due</option><option value="NOT_A_LEAD">Not a lead</option>
                 </Select>
               </Labeled>
-              <Labeled label="Min Duration">
+              <Labeled label="Minimum call length">
                 <Input type="number" min="0" value={callFilters.minDuration} onChange={(e) => setCallFilters((s) => ({ ...s, minDuration: e.target.value }))} />
               </Labeled>
-              <Labeled label="Search transcripts">
-                <Input value={callFilters.search} onChange={(e) => setCallFilters((s) => ({ ...s, search: e.target.value }))} onKeyDown={(e) => { if (e.key === "Enter") loadCalls(); }} placeholder="name, phone, service..." />
+              <Labeled label="Search calls">
+                <Input value={callFilters.search} onChange={(e) => setCallFilters((s) => ({ ...s, search: e.target.value }))} onKeyDown={(e) => { if (e.key === "Enter") loadCalls(); }} placeholder="caller, phone, service..." />
               </Labeled>
-              <button type="button" onClick={loadCalls}>Apply</button>
+              <button type="button" onClick={loadCalls}>Apply Filters</button>
             </div>
 
             <div className="admin-call-kpis">
-              <div className="admin-call-kpi"><span>Total Calls</span><strong>{callInsights.total}</strong><em>Current filtered view</em></div>
-              <div className="admin-call-kpi is-warn"><span>Needs Review</span><strong>{callInsights.unreviewed}</strong><em>Unreviewed outcomes</em></div>
-              <div className="admin-call-kpi is-blue"><span>Follow Ups</span><strong>{callInsights.followUps}</strong><em>Marked for workflow</em></div>
-              <div className="admin-call-kpi is-good"><span>Booked</span><strong>{callInsights.booked}</strong><em>Converted calls</em></div>
-              <div className="admin-call-kpi"><span>Avg Score</span><strong>{callInsights.avgScore ?? "—"}</strong><em>{callDurationText(callInsights.avgDuration)} avg duration</em></div>
+              <div className="admin-call-kpi"><span>Calls Captured</span><strong>{callInsights.total}</strong><em>Shown with these filters</em></div>
+              <div className="admin-call-kpi is-warn"><span>Waiting for Review</span><strong>{callInsights.unreviewed}</strong><em>Result not recorded yet</em></div>
+              <div className="admin-call-kpi is-blue"><span>Owner Text Sent</span><strong>{leadHandoffs.summary?.ownerNotified || 0}</strong><em>Twilio accepted the text</em></div>
+              <div className="admin-call-kpi is-warn"><span>SMS Retries Due</span><strong>{leadHandoffs.summary?.retryDue || 0}</strong><em>Automatic retry needed</em></div>
+              <div className="admin-call-kpi is-warn"><span>Failed Texts</span><strong>{leadHandoffs.summary?.failed || 0}</strong><em>Manual follow-up required</em></div>
             </div>
 
             <div className="admin-call-grid">
               <section className="admin-call-card admin-call-main-card">
                 <div className="admin-call-card-head">
                   <div>
-                    <span>Call Log</span>
-                    <h3>Latest conversations</h3>
+                    <span>Lead activity</span>
+                    <h3>Latest leads and calls</h3>
                   </div>
                   <p>{calls.length} calls</p>
                 </div>
                 <div className="admin-call-table-wrap">
                   <table className="admin-call-table">
                     <thead>
-                      <tr><th>Call</th><th>Customer</th><th>Outcome</th><th>Quality</th><th>Workflow</th></tr>
+                      <tr><th>Call</th><th>Business</th><th>Lead result</th><th>Answer quality</th><th>Next step</th></tr>
                     </thead>
                     <tbody>
                       {calls.length ? calls.map((call) => (
@@ -2723,7 +2863,7 @@ export default function AdminDashboard() {
                           <td>
                             <strong>{dt(call.startedAt)}</strong>
                             <small>{callDurationText(call.durationSec)} · {call.caller?.phone || "Unknown caller"}</small>
-                            <span className={callStatusBadgeClass(call.status)}>{call.status || "Unknown"}</span>
+                            <span className={callStatusBadgeClass(call.status)}>{friendlyCallStatus(call.status)}</span>
                           </td>
                           <td>
                             <strong>{call.business?.name || `Business ${call.businessId}`}</strong>
@@ -2731,21 +2871,21 @@ export default function AdminDashboard() {
                           </td>
                           <td>
                             <Select value={call.outcome || "UNREVIEWED"} onChange={(e) => updateCall(call, { outcome: e.target.value })}>
-                              <option value="UNREVIEWED">UNREVIEWED</option><option value="BOOKED">BOOKED</option><option value="QUOTE_NEEDED">QUOTE</option><option value="EMERGENCY">EMERGENCY</option><option value="SPAM">SPAM</option><option value="FOLLOW_UP">FOLLOW_UP</option><option value="NOT_A_LEAD">NOT_A_LEAD</option>
+                              <option value="UNREVIEWED">Waiting for review</option><option value="BOOKED">Job booked</option><option value="QUOTE_NEEDED">Quote needed</option><option value="EMERGENCY">Emergency</option><option value="SPAM">Spam</option><option value="FOLLOW_UP">Follow-up due</option><option value="NOT_A_LEAD">Not a lead</option>
                             </Select>
                           </td>
                           <td><span className={callScoreClass(call.qualityScore)}>{call.qualityScore ?? "—"}</span></td>
                           <td>
                             <div className="admin-call-workflow">
-                              <button type="button" onClick={() => loadCallDetails(call)}>Details</button>
-                              <button type="button" onClick={() => addCallTask(call)}>Task</button>
-                              <button type="button" onClick={() => addCallNote(call)}>Note</button>
-                              <button type="button" onClick={() => updateCall(call, { followUpNeeded: !call.followUpNeeded })} className={call.followUpNeeded ? "is-active" : ""}>Follow Up</button>
+                              <button type="button" onClick={() => loadCallDetails(call)}>Review Call</button>
+                              <button type="button" onClick={() => addCallTask(call)}>Add Task</button>
+                              <button type="button" onClick={() => addCallNote(call)}>Add Note</button>
+                              <button type="button" onClick={() => updateCall(call, { followUpNeeded: !call.followUpNeeded })} className={call.followUpNeeded ? "is-active" : ""}>Follow-up Due</button>
                             </div>
                             {call.tasks?.length ? <small>{call.tasks.filter((task) => task.status === "OPEN").length} open tasks</small> : null}
                           </td>
                         </tr>
-                      )) : <tr><td colSpan="5">No calls found for these filters.</td></tr>}
+                      )) : <tr><td colSpan="5">No calls are shown. After a test call, choose “Check for New Calls,” or change the filters.</td></tr>}
                     </tbody>
                   </table>
                 </div>
@@ -2755,17 +2895,17 @@ export default function AdminDashboard() {
                 <div className="admin-call-detail-panel">
                   <div className="admin-call-card-head">
                     <div>
-                      <span>Vapi Details</span>
-                      <h3>Transcript and artifacts</h3>
+                      <span>Call information</span>
+                      <h3>Recording &amp; transcript</h3>
                     </div>
                   </div>
                   {selectedCall ? (
                     <div className="admin-call-detail-body">
                       <strong>{selectedCall.business?.name || `Business ${selectedCall.businessId}`}</strong>
                       <span>{dt(selectedCall.startedAt)} · {callDurationText(selectedCall.durationSec)}</span>
-                      <p>{selectedCall.aiSummary || "No summary stored yet. Press Sync Vapi Calls after the Vapi call has ended."}</p>
+                      <p>{selectedCall.aiSummary || "No call summary yet. Choose Check for New Calls after the call has ended."}</p>
                       <div className="admin-call-detail-meta">
-                        <div><span>Vapi ID</span><strong>{selectedCall.externalProvider === "vapi" ? selectedCall.externalId || "—" : "Not linked"}</strong></div>
+                        <div><span>Provider call ID</span><strong>{selectedCall.externalProvider === "vapi" ? selectedCall.externalId || "—" : "Not linked"}</strong></div>
                         <div><span>Transcript</span><strong>{selectedCall.transcriptAvailable ? selectedCall.transcript ? "Visible" : "Stored privately" : "Missing"}</strong></div>
                         <div><span>Recording</span><strong>{selectedCall.recordingAvailable ? selectedCall.recordingUrl ? "Visible" : "Stored privately" : "Missing"}</strong></div>
                       </div>
@@ -2773,20 +2913,20 @@ export default function AdminDashboard() {
                       {selectedCall.transcript ? (
                         <pre className="admin-call-transcript">{selectedCall.transcript}</pre>
                       ) : selectedCall.transcriptProtected ? (
-                        <div className="admin-call-protected">Transcript is stored, but `EXPOSE_CALL_TRANSCRIPTS_IN_ADMIN` is off.</div>
+                        <div className="admin-call-protected">This transcript is stored securely but hidden by the dashboard privacy settings.</div>
                       ) : (
                         <div className="admin-call-protected">No transcript stored for this call yet.</div>
                       )}
                     </div>
                   ) : (
-                    <div className="admin-call-empty">Click Details on a call to load its Vapi transcript and recording.</div>
+                    <div className="admin-call-empty">Choose Review Call beside a conversation to see its recording, transcript, and summary.</div>
                   )}
                 </div>
 
                 <div className="admin-call-card-head">
                   <div>
-                    <span>Review Queue</span>
-                    <h3>Fix these first</h3>
+                    <span>Needs attention</span>
+                    <h3>Follow up first</h3>
                   </div>
                 </div>
                 <div className="admin-call-review-list">
@@ -2794,9 +2934,9 @@ export default function AdminDashboard() {
                     <div key={call.id} className="admin-call-review-item">
                       <strong>{call.business?.name || `Business ${call.businessId}`}</strong>
                       <span>{call.caller?.phone || "Unknown caller"} · {callDurationText(call.durationSec)}</span>
-                      <em>{call.outcome || "UNREVIEWED"} · Score {call.qualityScore ?? "—"}</em>
+                      <em>{friendlyCallOutcome(call.outcome)} · Answer quality {call.qualityScore ?? "—"}</em>
                     </div>
-                  )) : <div className="admin-call-empty">No urgent calls in this view.</div>}
+                  )) : <div className="admin-call-empty">You’re caught up. No calls in this view need immediate attention.</div>}
                 </div>
               </aside>
             </div>
@@ -2807,8 +2947,8 @@ export default function AdminDashboard() {
           <div className="mt-4 grid gap-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <div className="text-sm font-bold uppercase tracking-[0.2em] text-white/60">Customer Setup Command Center</div>
-                <p className="mt-1 text-sm font-semibold text-white/55">Every signup gets a live checklist, a blocker, and the next action to move it forward.</p>
+                <div className="text-sm font-bold uppercase tracking-[0.2em] text-white/60">Business Setup</div>
+                <p className="mt-1 text-sm font-semibold text-white/55">Every business gets a checklist, a clear blocker, and the next action needed to become ready.</p>
               </div>
               <div className="flex flex-wrap gap-2">
                 <button type="button" onClick={loadCustomerSetup} className="rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm font-bold text-white/80">Refresh</button>
@@ -3892,6 +4032,7 @@ export default function AdminDashboard() {
                   </Select>
                 </Labeled>
                 <Labeled label="Owner Phone"><Input value={settings.ownerPhone || ""} onChange={(e) => setSettings((s) => ({ ...s, ownerPhone: e.target.value }))} /></Labeled>
+                <Labeled label="Backup Escalation Phone"><Input value={settings.backupPhone || ""} onChange={(e) => setSettings((s) => ({ ...s, backupPhone: e.target.value }))} placeholder="Approved backup contact" /></Labeled>
                 <Labeled label="Booking Link"><Input value={settings.bookingLink || ""} onChange={(e) => setSettings((s) => ({ ...s, bookingLink: e.target.value }))} placeholder="https://..." /></Labeled>
                 <div className="sm:col-span-2"><button type="submit" className="rounded-full bg-gradient-to-r from-emerald-700 to-amber-500 px-6 py-3 text-sm font-black uppercase tracking-[0.14em] text-white">Save Settings</button></div>
               </form>

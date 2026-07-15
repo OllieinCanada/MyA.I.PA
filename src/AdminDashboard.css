@@ -4492,3 +4492,187 @@
     display: block;
   }
 }
+
+/* Newcomer-first lead journey and plain-language dashboard refinements */
+.admin-lead-journey-stages {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.75rem;
+  padding: 1rem;
+}
+
+.admin-lead-stage {
+  position: relative;
+  display: grid;
+  align-content: start;
+  min-width: 0;
+  min-height: 8.4rem;
+  border: 1px solid #dfe7f1;
+  border-top: 4px solid #176bff;
+  border-radius: 0.55rem;
+  background: #f8fbff;
+  padding: 0.85rem;
+}
+
+.admin-lead-stage.is-warn {
+  border-top-color: #d58119;
+  background: #fffaf0;
+}
+
+.admin-lead-stage.is-good {
+  border-top-color: #1f9d61;
+  background: #f2fbf6;
+}
+
+.admin-lead-stage.is-gap {
+  border-top-color: #f59e0b;
+  background: #fff8e8;
+}
+
+.admin-lead-stage-number {
+  display: grid;
+  place-items: center;
+  width: 1.55rem;
+  height: 1.55rem;
+  margin-bottom: 0.65rem;
+  border-radius: 999px;
+  background: #e7f0ff;
+  color: #176bff;
+  font-size: 0.72rem;
+  font-weight: 950;
+}
+
+.admin-lead-stage.is-gap .admin-lead-stage-number {
+  background: #ffedc2;
+  color: #9a5b00;
+}
+
+.admin-lead-stage span,
+.admin-lead-stage strong,
+.admin-lead-stage small {
+  display: block;
+}
+
+.admin-lead-stage span {
+  color: #526276;
+  font-size: 0.74rem;
+  font-weight: 900;
+}
+
+.admin-lead-stage strong {
+  margin-top: 0.3rem;
+  color: #172033;
+  font-size: 1.55rem;
+  line-height: 1.1;
+  font-weight: 950;
+}
+
+.admin-lead-stage.is-gap strong {
+  color: #9a5b00;
+  font-size: 1rem;
+}
+
+.admin-lead-stage small {
+  margin-top: 0.35rem;
+  color: #7d8a9b;
+  font-size: 0.7rem;
+  line-height: 1.35;
+  font-weight: 750;
+}
+
+.admin-lead-journey-note {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 1rem;
+  border-top: 1px solid #edf1f6;
+  background: #f8fafc;
+  padding: 0.8rem 1rem;
+}
+
+.admin-lead-journey-note strong,
+.admin-lead-journey-note span {
+  color: #526276;
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
+.admin-lead-journey-note strong {
+  flex: 0 0 auto;
+  color: #172033;
+  font-weight: 950;
+}
+
+.admin-v2-empty strong,
+.admin-v2-empty span {
+  display: block;
+}
+
+.admin-v2-empty strong {
+  margin-bottom: 0.2rem;
+  color: #172033;
+  font-weight: 950;
+}
+
+.admin-v2-empty-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.myai-admin .admin-v2-empty-action button {
+  flex: 0 0 auto;
+  border: 1px solid #0f6fff !important;
+  border-radius: 0.45rem;
+  background: #0f6fff !important;
+  color: #fff !important;
+  padding: 0.62rem 0.8rem;
+  font-size: 0.78rem;
+  font-weight: 900;
+  box-shadow: none !important;
+}
+
+.admin-concept-top-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.admin-concept-search {
+  flex: 1 1 14rem;
+}
+
+.admin-concept-range,
+.myai-admin .admin-concept-status,
+.myai-admin .admin-concept-primary,
+.myai-admin .admin-concept-ghost {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 1450px) {
+  .admin-concept-topbar {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-concept-top-actions {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 1000px) {
+  .admin-lead-journey-stages {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-lead-journey-note,
+  .admin-v2-empty-action {
+    display: grid;
+  }
+}
+
+@media (max-width: 600px) {
+  .admin-lead-journey-stages {
+    grid-template-columns: 1fr;
+  }
+}
