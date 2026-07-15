@@ -1426,6 +1426,113 @@ async function fetchTwilioIncomingPhoneNumbers() {
   return records;
 }
 
+function normalizeTwilioProvisioningAreaCode(value) {
+  const areaCode = String(value || "249").replace(/\D/g, "");
+  if (!/^\d{3}$/.test(areaCode)) {
+    const err = new Error("areaCode must contain exactly three digits.");
+    err.statusCode = 400;
+    throw err;
+  }
+  return areaCode;
+}
+
+function normalizeTwilioProvisioningVoiceUrl(value) {
+  let url;
+  try {
+    url = new URL(String(value || "").trim());
+  } catch (_err) {
+    const err = new Error("voiceUrl must be a valid Make webhook URL.");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const hostname = url.hostname.toLowerCase();
+  const isMakeWebhook = hostname === "hook.make.com" || /^hook\.[a-z0-9-]+\.make\.com$/.test(hostname);
+  if (url.protocol !== "https:" || !isMakeWebhook || url.username || url.password) {
+    const err = new Error("voiceUrl must be an HTTPS Make webhook URL.");
+    err.statusCode = 400;
+    throw err;
+  }
+  return url.toString();
+}
+
+async function purchaseTwilioPhoneNumber({ areaCode = "249", voiceUrl, voiceMethod = "POST" } = {}, { fetchImpl = fetch } = {}) {
+  if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN) {
+    const err = new Error("Twilio credentials are not configured.");
+    err.statusCode = 503;
+    throw err;
+  }
+
+  const normalizedAreaCode = normalizeTwilioProvisioningAreaCode(areaCode);
+  const normalizedVoiceUrl = normalizeTwilioProvisioningVoiceUrl(voiceUrl);
+  const normalizedVoiceMethod = String(voiceMethod || "POST").trim().toUpperCase();
+  if (!new Set(["GET", "POST"]).has(normalizedVoiceMethod)) {
+    const err = new Error("voiceMethod must be GET or POST.");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const availableUrl = new URL(
+    `${TWILIO_API_BASE_URL}/2010-04-01/Accounts/${encodeURIComponent(TWILIO_ACCOUNT_SID)}/AvailablePhoneNumbers/CA/Local.json`
+  );
+  availableUrl.searchParams.set("AreaCode", normalizedAreaCode);
+  availableUrl.searchParams.set("SmsEnabled", "true");
+  availableUrl.searchParams.set("VoiceEnabled", "true");
+  availableUrl.searchParams.set("PageSize", "1");
+
+  const availableResponse = await fetchImpl(availableUrl, {
+    headers: { Authorization: getTwilioAuthHeader(), Accept: "application/json" },
+  });
+  const availableData = parseJsonObject(await availableResponse.text());
+  if (!availableResponse.ok) {
+    const err = new Error(availableData?.message || availableData?.error || `Twilio number search failed with HTTP ${availableResponse.status}.`);
+    err.statusCode = availableResponse.status;
+    throw err;
+  }
+
+  const availableNumber = normalizeVapiImportPhone(availableData?.available_phone_numbers?.[0]?.phone_number);
+  if (!availableNumber) {
+    const err = new Error(`No SMS and voice-capable Canadian number is currently available in area code ${normalizedAreaCode}.`);
+    err.statusCode = 409;
+    throw err;
+  }
+
+  const purchaseUrl = new URL(
+    `${TWILIO_API_BASE_URL}/2010-04-01/Accounts/${encodeURIComponent(TWILIO_ACCOUNT_SID)}/IncomingPhoneNumbers.json`
+  );
+  const form = new URLSearchParams({
+    PhoneNumber: availableNumber,
+    VoiceUrl: normalizedVoiceUrl,
+    VoiceMethod: normalizedVoiceMethod,
+  });
+  const purchaseResponse = await fetchImpl(purchaseUrl, {
+    method: "POST",
+    headers: {
+      Authorization: getTwilioAuthHeader(),
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: form.toString(),
+  });
+  const purchaseData = parseJsonObject(await purchaseResponse.text());
+  if (!purchaseResponse.ok) {
+    const err = new Error(purchaseData?.message || purchaseData?.error || `Twilio number purchase failed with HTTP ${purchaseResponse.status}.`);
+    err.statusCode = purchaseResponse.status;
+    throw err;
+  }
+
+  const phoneNumber = normalizeVapiImportPhone(purchaseData?.phone_number || availableNumber);
+  return {
+    sid: String(purchaseData?.sid || "").trim(),
+    phone_number: phoneNumber,
+    phoneNumber,
+    friendly_name: String(purchaseData?.friendly_name || phoneNumber).trim(),
+    voice_url: String(purchaseData?.voice_url || normalizedVoiceUrl).trim(),
+    voice_method: String(purchaseData?.voice_method || normalizedVoiceMethod).trim(),
+    capabilities: purchaseData?.capabilities || { voice: true, sms: true },
+  };
+}
+
 async function fetchTwilioUsageRecords({ days = 30 } = {}) {
   if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN) {
     const err = new Error("Twilio credentials are not configured.");
@@ -4671,10 +4778,25 @@ app.post(
 );
 
 app.post(
+  "/api/integrations/twilio/purchase-number",
+  requireIntegrationKey,
+  asyncRoute(async (req, res) => {
+    const input = { ...(req.query || {}), ...(req.body || {}) };
+    const result = await purchaseTwilioPhoneNumber({
+      areaCode: input.areaCode,
+      voiceUrl: input.voiceUrl,
+      voiceMethod: input.voiceMethod,
+    });
+
+    res.status(201).json({ success: true, ok: true, ...result });
+  })
+);
+
+app.post(
   "/api/integrations/vapi/import-twilio-number",
   requireIntegrationKey,
   asyncRoute(async (req, res) => {
-    const body = req.body || {};
+    const body = { ...(req.query || {}), ...(req.body || {}) };
     const result = await importTwilioPhoneNumberToVapi({
       twilioPhoneNumber: body.twilioPhoneNumber || body.phoneNumber || body.number,
       assistantId: body.assistantId,
@@ -5874,5 +5996,8 @@ module.exports = {
     getVapiRecordingUrl,
     mapVapiStatus,
     mergeVapiEndOfCallReport,
+    normalizeTwilioProvisioningAreaCode,
+    normalizeTwilioProvisioningVoiceUrl,
+    purchaseTwilioPhoneNumber,
   },
 };

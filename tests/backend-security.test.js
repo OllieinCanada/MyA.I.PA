@@ -60,6 +60,7 @@ test("internal tool and webhook routes reject missing integration credentials", 
     ["/api/notify/owner-sms", { method: "POST", body: {} }],
     ["/api/integrations/vapi/owner-sms-results", { method: "POST", body: {} }],
     ["/api/integrations/vapi/lead-handoffs/events", { method: "POST", body: {} }],
+    ["/api/integrations/twilio/purchase-number", { method: "POST", body: {} }],
     ["/api/webhooks/voice", { method: "POST", body: { eventType: "unknown" } }],
   ];
 
@@ -118,6 +119,16 @@ test("standard bearer integration authentication is accepted", async () => {
     body: { eventType: "test.noop" },
   });
   assert.equal(response.status, 200);
+});
+
+test("Twilio provisioning only accepts valid area codes and Make webhook URLs", () => {
+  assert.equal(__test.normalizeTwilioProvisioningAreaCode("(249)"), "249");
+  assert.equal(
+    __test.normalizeTwilioProvisioningVoiceUrl("https://hook.us2.make.com/example"),
+    "https://hook.us2.make.com/example"
+  );
+  assert.throws(() => __test.normalizeTwilioProvisioningAreaCode("24"), /three digits/i);
+  assert.throws(() => __test.normalizeTwilioProvisioningVoiceUrl("https://example.com/webhook"), /Make webhook/i);
 });
 
 test("Vapi end-of-call reports normalize duration, status, cost, and artifacts", () => {
