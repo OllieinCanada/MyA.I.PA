@@ -1004,31 +1004,30 @@ function HeroCallDashboard() {
               </div>
               <p className="landing-conversation-time mt-1 text-right text-[0.74rem] font-bold text-white/35">10:32 AM</p>
 
-              <p className="mt-3 text-right text-[0.92rem] font-black uppercase tracking-[0.06em] text-[#78b7ff]">Caller</p>
-              <div className="landing-service-message relative ml-auto mt-2.5 max-w-[78%] rounded-[20px] bg-[#0b376d] px-5 py-3 text-[1.1rem] font-bold leading-[1.2] text-white/96 shadow-[0_18px_42px_-30px_rgba(37,99,235,0.95)]">
-                <span className="landing-service-badge absolute right-[calc(100%+0.55rem)] top-1/2 -translate-y-1/2 whitespace-nowrap rounded-full border border-[#78b7ff]/75 bg-[#0b376d] px-2.5 py-1 text-[0.68rem] font-black uppercase tracking-[0.08em] text-[#b9dcff] shadow-[0_8px_22px_-14px_rgba(120,183,255,0.95)]">
-                  (Service)
+              <p className="mt-3 text-[0.92rem] font-black uppercase tracking-[0.06em] text-[#78b7ff]">Caller</p>
+              <div className="landing-service-message ml-auto mt-2.5 flex max-w-[92%] items-center gap-2.5 rounded-[20px] bg-[#0b376d] px-3.5 py-2.5 text-[1.1rem] font-bold leading-[1.2] text-white/96 shadow-[0_18px_42px_-30px_rgba(37,99,235,0.95)]">
+                <span className="landing-service-badge shrink-0 whitespace-nowrap rounded-full border border-[#78b7ff]/75 bg-[#082c5a] px-2.5 py-1 text-[0.68rem] font-black uppercase tracking-[0.06em] text-[#b9dcff] shadow-[0_8px_22px_-14px_rgba(120,183,255,0.95)]">
+                  (New Installation)
                 </span>
-                Yes I&apos;m installing a hot tub.
+                <span className="min-w-0">I need someone to wire up my hot tub.</span>
               </div>
               <p className="landing-conversation-time mt-1 text-right text-[0.74rem] font-bold text-white/35">10:32 AM</p>
 
               <p className="mt-3 text-[0.92rem] font-black uppercase tracking-[0.06em] text-white/38">AI Assistant</p>
               <div className="landing-conversation-long-bubble mt-2.5 max-w-[84%] rounded-[16px] bg-white/10 px-5 py-3 text-[1.02rem] font-bold leading-[1.18] text-white/92">
-                <span className="block">Sure, we can help you with that. I just need a few details:</span>
-                <ul className="mt-1.5 grid grid-cols-2 gap-x-5 gap-y-0.5 pl-5 [list-style-position:outside] [list-style-type:disc]">
-                  <li>Your full name</li>
-                  <li>Service address and city</li>
-                  <li>When you need the work done</li>
-                  <li>Best phone number</li>
-                  <li>Best callback time</li>
+                <ul className="grid gap-y-0.5">
+                  <li className="flex gap-1"><span aria-hidden="true">-</span><span>Can I get your name?</span></li>
+                  <li className="flex gap-1"><span aria-hidden="true">-</span><span>What&apos;s the address? In What city?</span></li>
+                  <li className="flex gap-1"><span aria-hidden="true">-</span><span>When do you need the work done?</span></li>
+                  <li className="flex gap-1"><span aria-hidden="true">-</span><span>What is the best number to reach you?</span></li>
+                  <li className="flex gap-1"><span aria-hidden="true">-</span><span>What is your best call back time?</span></li>
                 </ul>
               </div>
               <p className="landing-conversation-time mt-1 text-right text-[0.74rem] font-bold text-white/35">10:32 AM</p>
 
-              <p className="mt-3 text-right text-[0.92rem] font-black uppercase tracking-[0.06em] text-[#78b7ff]">Caller</p>
+              <p className="mt-3 text-[0.92rem] font-black uppercase tracking-[0.06em] text-[#78b7ff]">Caller</p>
               <div className="landing-conversation-caller-detail ml-auto mt-2.5 max-w-[78%] rounded-[20px] bg-[#0b376d] px-5 py-3 text-[1rem] font-bold leading-[1.18] text-white/96 shadow-[0_18px_42px_-30px_rgba(37,99,235,0.95)]">
-                Brian Smith, 905-555-1234. The job is at 23 Robb St, Hamilton. Start right away. Call me in the afternoon or after 5 PM.
+                My name is Brian Smith, my address is 23 Robb Street in the city of Hamilton. I&apos;d like to start right away. Call me back on this number as the best time to call me back is afternoons or after 5 pm.
               </div>
               <p className="landing-conversation-time mt-1 text-right text-[0.74rem] font-bold text-white/35">10:33 AM</p>
             </div>
@@ -4161,6 +4160,22 @@ function LandingPage() {
               height: 700px !important;
               min-height: 700px !important;
               max-height: 700px !important;
+            }
+          }
+          @media (min-width: 1024px) and (max-height: 820px) {
+            .landing-conversation-panel .landing-conversation-caller-detail {
+              max-width: 94% !important;
+              margin-top: 0.35rem !important;
+              margin-bottom: 1.15rem !important;
+              padding: 0.38rem 0.58rem !important;
+              font-size: 0.7rem !important;
+              line-height: 1.06 !important;
+            }
+          }
+          @media (min-width: 1024px) and (max-width: 1279px) and (max-height: 820px) and (orientation: landscape) {
+            .landing-conversation-panel .landing-conversation-caller-detail {
+              font-size: 0.64rem !important;
+              line-height: 1.05 !important;
             }
           }
         `}</style>
