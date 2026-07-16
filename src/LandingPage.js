@@ -1584,7 +1584,8 @@ function VoicemailLossesArtboard({ onStart, onPlayDemo }) {
               <span className="grid h-14 w-14 place-items-center rounded-full bg-[linear-gradient(180deg,#3185ff,#1d4ed8)] text-3xl font-black text-white shadow-[0_18px_34px_-24px_rgba(29,78,216,1)]">2</span>
               <p className="text-[clamp(1.55rem,2vw,2rem)] font-black leading-tight tracking-[-0.04em] text-[#1d7df2]">Assistant answers live</p>
             </div>
-            <h3 className="mt-3 max-w-[360px] text-[clamp(1.22rem,1.45vw,1.52rem)] font-black leading-tight text-[#07142a]">Asks why they called and answers FAQ questions</h3>
+            <h3 className="mt-3 max-w-[360px] text-[clamp(1.22rem,1.45vw,1.52rem)] font-black leading-tight text-[#07142a]">Instantly connects with customer</h3>
+            <p className="mt-2 max-w-[360px] text-[clamp(1rem,1.12vw,1.16rem)] font-bold leading-snug text-[#405476]">Asks why they called and answers FAQ questions.</p>
 
             <div className="mt-4 grid gap-4 xl:grid-cols-[1fr_150px]">
               <div className="min-w-0">
@@ -1595,7 +1596,7 @@ function VoicemailLossesArtboard({ onStart, onPlayDemo }) {
                   {[
                     ["My AI PA", "Hi! Thanks for calling. What can I help you with today?"],
                     ["Caller", "I need a hot tub electrical setup at my home."],
-                    ["My AI PA", "Sure, we can help. We can also answer common questions before collecting the details."],
+                    ["My AI PA", "Sure, we can help. I can also answer common questions before I collect the details."],
                   ].map(([speaker, text], index) => (
                     <div key={speaker + index} className="rounded-lg border border-[#d7e7fb] bg-[linear-gradient(180deg,#ffffff,#eef6ff)] px-3 py-2 shadow-[0_14px_32px_-30px_rgba(37,99,235,0.8)]">
                       <div className="flex items-center justify-between gap-3">
@@ -1636,10 +1637,10 @@ function VoicemailLossesArtboard({ onStart, onPlayDemo }) {
               <div>
                 <div className="flex items-center gap-4">
                   <span className="grid h-14 w-14 place-items-center rounded-full bg-[linear-gradient(180deg,#22c55e,#15803d)] text-3xl font-black text-white shadow-[0_18px_34px_-24px_rgba(21,128,61,1)]">3</span>
-                  <p className="text-[clamp(1.4rem,1.75vw,1.8rem)] font-black leading-tight tracking-[-0.04em] text-[#13833c]">Clear text summaries sent</p>
+                  <p className="text-[clamp(1.4rem,1.75vw,1.8rem)] font-black leading-tight tracking-[-0.04em] text-[#13833c]">Job description texted to your phone</p>
                 </div>
                 <h3 className="mt-3 text-[clamp(1.08rem,1.25vw,1.34rem)] font-black leading-tight text-[#07142a]">
-                  Owner and caller both get clear follow-up texts providing a clear background for future conversation.
+                  Owner and caller both get clear follow-up texts for an easy callback.
                 </h3>
               </div>
 
@@ -1656,22 +1657,22 @@ function VoicemailLossesArtboard({ onStart, onPlayDemo }) {
                         <HeroIcon type={icon} className="h-5 w-5" />
                       </span>
                       <p className="min-w-0 flex-1 text-sm font-black leading-5 text-[#07142a] min-[1500px]:text-base">{text}</p>
-                      <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[#16a34a] text-white shadow-[0_8px_18px_-10px_rgba(22,163,74,0.9)]" aria-label="Completed">
-                        <HeroIcon type="check" className="h-4 w-4" />
+                      <span className="grid h-6 w-6 shrink-0 place-items-center text-[#16a34a]" aria-label="Completed">
+                        <HeroIcon type="check" className="h-6 w-6" />
                       </span>
                     </div>
                   ))}
                 </div>
 
-                <div className="mx-auto h-[270px] w-full max-w-[190px] rounded-[24px] border-[4px] border-[#07142a] bg-white p-2 shadow-[0_22px_48px_-34px_rgba(15,23,42,0.95)] xl:h-[286px] min-[1500px]:h-[300px] min-[1500px]:w-[170px] min-[1500px]:rounded-[28px] min-[1500px]:border-[5px]">
+                <div className="mx-auto h-[300px] w-full max-w-[190px] overflow-hidden rounded-[24px] border-[4px] border-[#07142a] bg-white p-2 shadow-[0_22px_48px_-34px_rgba(15,23,42,0.95)] xl:h-[316px] min-[1500px]:h-[330px] min-[1500px]:w-[170px] min-[1500px]:rounded-[28px] min-[1500px]:border-[5px]">
                   <div className="mx-auto h-2 w-14 rounded-full bg-[#07142a] min-[1500px]:w-16" />
                   <div className="px-1 pt-3 text-center min-[1500px]:px-2 min-[1500px]:pt-4">
                     <p className="text-[0.66rem] font-black text-[#07142a] min-[1500px]:text-[0.76rem]">My AI PA</p>
                     <p className="mt-2 text-[0.58rem] font-semibold text-[#94a3b8] min-[1500px]:text-[0.68rem]">Today 10:16 AM</p>
                   </div>
-                  <div className="mt-3 space-y-2">
+                  <div className="mt-3 space-y-2 pb-2">
                     <div className="rounded-lg bg-[#ecfdf5] p-2.5">
-                      <p className="text-[0.62rem] font-black uppercase tracking-[0.08em] text-[#16a34a]">Owner alert</p>
+                      <p className="text-[0.62rem] font-black uppercase tracking-[0.08em] text-[#16a34a]">Job description to owner</p>
                       <div className="mt-1 space-y-0.5 text-[0.53rem] font-bold leading-3 text-[#07142a] xl:text-[0.58rem] min-[1500px]:text-[0.68rem] min-[1500px]:leading-4">
                         <p>Brian Smith</p>
                         <p>905-555-1234</p>
@@ -1689,7 +1690,7 @@ function VoicemailLossesArtboard({ onStart, onPlayDemo }) {
                 </div>
               </div>
               <p className="rounded-lg bg-[#ecfdf5] px-4 py-3 text-sm font-bold leading-5 text-[#27543a]">
-                The business owner can follow up fully informed once they are safely off the ladder or finished dinner with their family.
+                The business owner instantly receives the job details for an easy callback once they are safely down from the ladder or finished dinner with their family.
               </p>
             </div>
           </article>
