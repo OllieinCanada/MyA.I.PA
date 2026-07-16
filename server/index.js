@@ -835,6 +835,23 @@ function summarizeVapiToolEnvironmentVariables(tool) {
   return [];
 }
 
+function getVapiToolEnvironmentVariableValue(tool, variableName) {
+  const variables = tool?.environmentVariables;
+  if (Array.isArray(variables)) {
+    const variable = variables.find(
+      (item) => String(item?.name || item?.key || "").trim() === variableName
+    );
+    if (typeof variable === "string") return variable.trim();
+    return String(variable?.value || variable?.secret || "").trim();
+  }
+  if (variables && typeof variables === "object") {
+    const variable = variables[variableName];
+    if (typeof variable === "string") return variable.trim();
+    return String(variable?.value || variable?.secret || "").trim();
+  }
+  return "";
+}
+
 function summarizeVapiToolResults(call) {
   const callNames = new Map();
   const results = [];
@@ -4986,6 +5003,7 @@ app.post(
       : null;
 
     let matchingMessages = [];
+    let twilioMessageAudit = { ownerNumberLast4: "", aiNumberLast4: "", recentToOwnerCount: 0, recentFromAiCount: 0, recentToOwner: [] };
     if (TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN && latestCall) {
       const url = new URL(`${TWILIO_API_BASE_URL}/2010-04-01/Accounts/${encodeURIComponent(TWILIO_ACCOUNT_SID)}/Messages.json`);
       url.searchParams.set("PageSize", "100");
@@ -5001,13 +5019,16 @@ app.post(
       const aiNumber = normalizePhoneForMatch(signup.twilioPhoneNumber);
       const ownerNumber = normalizePhoneForMatch(signup.ownerPhone || signup.businessPhone);
       const startedAtMs = new Date(latestCall.startedAt || 0).getTime();
-      matchingMessages = (data.messages || [])
+      const recentMessages = (data.messages || []).filter((message) => {
+        const sentAtMs = new Date(message.date_sent || message.date_created || 0).getTime();
+        return sentAtMs >= startedAtMs - 5 * 60 * 1000;
+      });
+      matchingMessages = recentMessages
         .filter((message) => {
           const from = normalizePhoneForMatch(message.from);
           const to = normalizePhoneForMatch(message.to);
-          const sentAtMs = new Date(message.date_sent || message.date_created || 0).getTime();
           const matchesNumbers = [from, to].includes(aiNumber) && [from, to].includes(ownerNumber);
-          return matchesNumbers && sentAtMs >= startedAtMs - 5 * 60 * 1000;
+          return matchesNumbers;
         })
         .map((message) => ({
           sid: String(message.sid || "").trim(),
@@ -5017,6 +5038,20 @@ app.post(
           errorCode: message.error_code || null,
           bodyLength: String(message.body || "").length,
         }));
+      const recentToOwner = recentMessages.filter((message) => normalizePhoneForMatch(message.to) === ownerNumber);
+      twilioMessageAudit = {
+        ownerNumberLast4: ownerNumber.slice(-4),
+        aiNumberLast4: aiNumber.slice(-4),
+        recentToOwnerCount: recentToOwner.length,
+        recentFromAiCount: recentMessages.filter((message) => normalizePhoneForMatch(message.from) === aiNumber).length,
+        recentToOwner: recentToOwner.map((message) => ({
+          sidSet: Boolean(String(message.sid || "").trim()),
+          fromLast4: normalizePhoneForMatch(message.from).slice(-4),
+          status: String(message.status || "").trim(),
+          errorCode: message.error_code || null,
+          sentAt: message.date_sent || message.date_created || null,
+        })),
+      };
     }
 
     let toolAudit = { assistantIdSet: false, attachedToolCount: 0, tools: [] };
@@ -5038,15 +5073,31 @@ app.post(
         tools: toolIds.map((toolId) => {
           const tool = tools.find((record) => String(record?.id || "").trim() === toolId) || {};
           const code = String(tool.code || "");
+          const toolName = getVapiNestedString(tool, ["function.name", "name"]) || "unknown";
+          const isSmsTool = ["send_customer_sms_dynamic", "send_owner_sms_dynamic"].includes(toolName);
           return {
             id: toolId,
-            name: getVapiNestedString(tool, ["function.name", "name"]) || "unknown",
+            name: toolName,
             type: getVapiNestedString(tool, ["type", "function.type"]) || "unknown",
             serverUrlConfigured: Boolean(getVapiNestedString(tool, ["server.url", "function.server.url", "url"])),
             codeConfigured: Boolean(code.trim()),
             twilioEnvironmentReferences: ["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "DEFAULT_FROM_NUMBER", "DEFAULT_OWNER_TO_NUMBER"]
               .filter((name) => code.includes(`env.${name}`)),
             environmentVariables: summarizeVapiToolEnvironmentVariables(tool),
+            matchesBackendEnvironment: isSmsTool
+              ? {
+                  twilioAccountSid: getVapiToolEnvironmentVariableValue(tool, "TWILIO_ACCOUNT_SID") === TWILIO_ACCOUNT_SID,
+                  twilioAuthToken: getVapiToolEnvironmentVariableValue(tool, "TWILIO_AUTH_TOKEN") === TWILIO_AUTH_TOKEN,
+                  defaultFromNumber:
+                    normalizePhoneForMatch(getVapiToolEnvironmentVariableValue(tool, "DEFAULT_FROM_NUMBER")) ===
+                    normalizePhoneForMatch(signup.twilioPhoneNumber),
+                  defaultOwnerNumber:
+                    toolName === "send_owner_sms_dynamic"
+                      ? normalizePhoneForMatch(getVapiToolEnvironmentVariableValue(tool, "DEFAULT_OWNER_TO_NUMBER")) ===
+                        normalizePhoneForMatch(signup.ownerPhone || signup.businessPhone)
+                      : null,
+                }
+              : null,
             configurationKeys: Object.keys(tool).filter((key) => !["code", "function"].includes(key)).sort(),
           };
         }),
@@ -5086,6 +5137,7 @@ app.post(
       sms: {
         matchingCount: matchingMessages.length,
         messages: matchingMessages,
+        audit: twilioMessageAudit,
       },
       toolAudit,
       vapiCallAudit,
