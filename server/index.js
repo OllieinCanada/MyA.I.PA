@@ -1127,6 +1127,56 @@ async function fetchVapiCallDetail(callId) {
   return data && typeof data === "object" ? data : null;
 }
 
+async function patchVapiAssistant(assistantId, patch) {
+  if (!VAPI_API_KEY) {
+    const err = new Error("VAPI_API_KEY is not configured.");
+    err.statusCode = 503;
+    throw err;
+  }
+  const id = String(assistantId || "").trim();
+  if (!id) {
+    const err = new Error("Vapi assistant id is required.");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const response = await fetch(`${VAPI_API_BASE_URL}/assistant/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${VAPI_API_KEY}`,
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(patch || {}),
+  });
+  const rawText = await response.text();
+  const data = parseJsonObject(rawText);
+  if (!response.ok) {
+    const err = new Error(data?.message || data?.error || `Vapi assistant update failed with HTTP ${response.status}.`);
+    err.statusCode = response.status;
+    throw err;
+  }
+  return data && typeof data === "object" ? data : null;
+}
+
+function upsertVapiSmsRoutingPrompt(prompt, aiNumber, ownerNumber) {
+  const startMarker = "## MYAIPA SMS ROUTING (DO NOT GUESS)";
+  const endMarker = "## END MYAIPA SMS ROUTING";
+  const withoutExisting = String(prompt || "")
+    .replace(new RegExp(`${startMarker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[\\s\\S]*?${endMarker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "g"), "")
+    .trim();
+  const block = [
+    startMarker,
+    `- Assigned AI/Twilio sender number: ${aiNumber}`,
+    `- Owner notification number: ${ownerNumber}`,
+    "- For both SMS tools, pass the assigned sender number above as fromNumber.",
+    "- For send_owner_sms_dynamic, pass the owner notification number above as toNumber.",
+    "- Never substitute a placeholder, example number, caller number, or another customer's number.",
+    endMarker,
+  ].join("\n");
+  return `${withoutExisting}\n\n${block}`;
+}
+
 async function fetchVapiCollection(resourcePath, collectionKeys = []) {
   if (!VAPI_API_KEY) {
     const err = new Error("VAPI_API_KEY is not configured.");
@@ -5141,6 +5191,67 @@ app.post(
       },
       toolAudit,
       vapiCallAudit,
+    });
+  })
+);
+
+app.post(
+  "/api/integrations/vapi/repair-sms-routing",
+  requireProvisioningKey,
+  asyncRoute(async (req, res) => {
+    const ownerEmail = String(req.headers["x-signup-owner-email"] || req.body?.ownerEmail || "").trim().toLowerCase();
+    if (!ownerEmail || !isValidEmailAddress(ownerEmail)) {
+      return res.status(400).json({ error: "A valid ownerEmail is required." });
+    }
+    const signup = listSignupDashboardRecords().find(
+      (record) => String(record.ownerEmail || "").trim().toLowerCase() === ownerEmail
+    );
+    if (!signup) return res.status(404).json({ error: "Signup record not found." });
+
+    const aiNumber = normalizeVapiImportPhone(signup.twilioPhoneNumber);
+    const ownerNumber = normalizeVapiImportPhone(signup.ownerPhone || signup.businessPhone);
+    if (!aiNumber || !ownerNumber) {
+      return res.status(409).json({ error: "The assigned AI number and owner notification number are required." });
+    }
+
+    const [vapiNumbers, assistants] = await Promise.all([
+      fetchVapiCollection("phone-number", ["phoneNumbers", "phone_numbers"]),
+      fetchVapiCollection("assistant", ["assistants", "agents"]),
+    ]);
+    const vapiNumber = vapiNumbers.find(
+      (record) => normalizePhoneForMatch(getVapiPhoneNumber(record)) === normalizePhoneForMatch(aiNumber)
+    );
+    const assistantId = getVapiAssistantId(vapiNumber);
+    const assistant = assistants.find((record) => String(record?.id || "").trim() === assistantId);
+    if (!assistantId || !assistant) {
+      return res.status(404).json({ error: "The Vapi assistant assigned to this phone number was not found." });
+    }
+
+    const messages = Array.isArray(assistant?.model?.messages) ? assistant.model.messages : [];
+    let systemMessageUpdated = false;
+    const updatedMessages = messages.map((message) => {
+      if (!systemMessageUpdated && message?.role === "system") {
+        systemMessageUpdated = true;
+        return { ...message, content: upsertVapiSmsRoutingPrompt(message.content, aiNumber, ownerNumber) };
+      }
+      return message;
+    });
+    if (!systemMessageUpdated) {
+      return res.status(409).json({ error: "The Vapi assistant has no system prompt to update." });
+    }
+
+    const updated = await patchVapiAssistant(assistantId, {
+      model: { ...assistant.model, messages: updatedMessages },
+    });
+    const updatedPrompt = (updated?.model?.messages || []).find((message) => message?.role === "system")?.content || "";
+    res.json({
+      success: true,
+      ok: true,
+      assistantId,
+      aiNumberLast4: aiNumber.slice(-4),
+      ownerNumberLast4: ownerNumber.slice(-4),
+      senderRoutingConfigured: updatedPrompt.includes(`Assigned AI/Twilio sender number: ${aiNumber}`),
+      ownerRoutingConfigured: updatedPrompt.includes(`Owner notification number: ${ownerNumber}`),
     });
   })
 );

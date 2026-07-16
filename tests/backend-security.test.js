@@ -67,6 +67,7 @@ test("internal tool and webhook routes reject missing integration credentials", 
     ["/api/integrations/twilio/purchase-number", { method: "POST", body: {} }],
     ["/api/integrations/provisioning/complete-existing", { method: "POST", body: {} }],
     ["/api/integrations/vapi/sync-now", { method: "POST", body: {} }],
+    ["/api/integrations/vapi/repair-sms-routing", { method: "POST", body: {} }],
     ["/api/integrations/provisioning/audit-latest-call", { method: "POST", body: {} }],
     ["/api/webhooks/voice", { method: "POST", body: { eventType: "unknown" } }],
   ];
