@@ -4858,9 +4858,17 @@ app.post(
         ].filter(Boolean);
         let business = lookup.length ? await prisma.business.findFirst({ where: { OR: lookup } }) : null;
         if (!business) {
-          business = await prisma.business.create({
-            data: { name: businessName, phone: normalizedBusinessPhone, timezone: "America/Toronto" },
-          });
+          const businessData = { name: businessName, phone: normalizedBusinessPhone, timezone: "America/Toronto" };
+          try {
+            business = await prisma.business.create({ data: businessData });
+          } catch (error) {
+            if (error?.code !== "P2002") throw error;
+            const current = await prisma.business.aggregate({ _max: { id: true } });
+            business = await prisma.business.create({
+              data: { id: Number(current?._max?.id || 0) + 1, ...businessData },
+            });
+            await prisma.$queryRaw`SELECT setval(pg_get_serial_sequence('"Business"', 'id'), COALESCE(MAX(id), 1), true) FROM "Business"`;
+          }
         }
         linkedBusinessId = business.id;
         await prisma.settings.upsert({
