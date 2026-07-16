@@ -805,6 +805,94 @@ function summarizeVapiToolCalls(call) {
   return { count: names.length, toolNames };
 }
 
+function summarizeVapiToolEnvironmentVariables(tool) {
+  const variables = tool?.environmentVariables;
+  if (Array.isArray(variables)) {
+    return variables
+      .map((variable) => {
+        const name = String(variable?.name || variable?.key || "").trim();
+        const configured = Boolean(
+          typeof variable === "string"
+            ? variable.trim()
+            : variable?.value || variable?.secret || variable?.secretId || variable?.credentialId
+        );
+        return name ? { name, configured } : null;
+      })
+      .filter(Boolean);
+  }
+  if (variables && typeof variables === "object") {
+    return Object.entries(variables)
+      .map(([name, value]) => ({
+        name: String(name).trim(),
+        configured: Boolean(
+          typeof value === "string"
+            ? value.trim()
+            : value?.value || value?.secret || value?.secretId || value?.credentialId || value?.id
+        ),
+      }))
+      .filter((variable) => variable.name);
+  }
+  return [];
+}
+
+function summarizeVapiToolResults(call) {
+  const callNames = new Map();
+  const results = [];
+  const visited = new Set();
+
+  function safeResult(value) {
+    let parsed = value;
+    if (typeof value === "string") parsed = parseJsonObject(value);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+    return {
+      ok: typeof parsed.ok === "boolean" ? parsed.ok : null,
+      sent: typeof parsed.sent === "boolean" ? parsed.sent : null,
+      skipped: typeof parsed.skipped === "boolean" ? parsed.skipped : null,
+      status: String(parsed.status || "").trim().slice(0, 80),
+      error: String(parsed.error || parsed.message || "").trim().slice(0, 240),
+    };
+  }
+
+  function visit(value) {
+    if (!value || typeof value !== "object" || visited.has(value)) return;
+    visited.add(value);
+    if (Array.isArray(value)) {
+      for (const item of value) visit(item);
+      return;
+    }
+
+    for (const key of ["toolCallList", "toolCalls", "tool_calls"]) {
+      const calls = Array.isArray(value[key]) ? value[key] : [];
+      for (const toolCall of calls) {
+        const id = String(toolCall?.id || toolCall?.toolCallId || toolCall?.tool_call_id || "").trim();
+        const name = getVapiNestedString(toolCall, ["function.name", "name"]);
+        if (id && name) callNames.set(id, name);
+      }
+    }
+
+    const eventType = String(value.type || value.role || "").trim().toLowerCase();
+    const toolCallId = String(value.toolCallId || value.tool_call_id || "").trim();
+    if (toolCallId || /tool[-_ ]?(call[-_ ]?)?result/.test(eventType)) {
+      const rawResult = value.result ?? value.content ?? value.output ?? value.message;
+      const result = safeResult(rawResult);
+      if (result) {
+        results.push({
+          name: getVapiNestedString(value, ["name", "function.name"]) || callNames.get(toolCallId) || "unknown",
+          ...result,
+        });
+      }
+    }
+
+    for (const nested of Object.values(value)) visit(nested);
+  }
+
+  visit(call);
+  return results.filter(
+    (result, index, items) =>
+      index === items.findIndex((item) => JSON.stringify(item) === JSON.stringify(result))
+  );
+}
+
 async function resolveBusinessIdForVapiCall(call) {
   const businessMap = parseVapiBusinessMap();
   const keys = [
@@ -4932,7 +5020,7 @@ app.post(
     }
 
     let toolAudit = { assistantIdSet: false, attachedToolCount: 0, tools: [] };
-    let vapiCallAudit = { available: false, endedReason: "", toolCallCount: 0, toolNames: [] };
+    let vapiCallAudit = { available: false, endedReason: "", toolCallCount: 0, toolNames: [], toolResults: [] };
     if (signup.twilioPhoneNumber) {
       const [vapiNumbers, assistants, tools] = await Promise.all([
         fetchVapiCollection("phone-number", ["phoneNumbers", "phone_numbers"]),
@@ -4958,6 +5046,7 @@ app.post(
             codeConfigured: Boolean(code.trim()),
             twilioEnvironmentReferences: ["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "DEFAULT_FROM_NUMBER", "DEFAULT_OWNER_TO_NUMBER"]
               .filter((name) => code.includes(`env.${name}`)),
+            environmentVariables: summarizeVapiToolEnvironmentVariables(tool),
             configurationKeys: Object.keys(tool).filter((key) => !["code", "function"].includes(key)).sort(),
           };
         }),
@@ -4972,6 +5061,7 @@ app.post(
         endedReason: String(fullCall?.endedReason || "").trim(),
         toolCallCount: toolCalls.count,
         toolNames: toolCalls.toolNames,
+        toolResults: summarizeVapiToolResults(fullCall),
       };
     }
 
