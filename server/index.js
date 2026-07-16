@@ -4895,6 +4895,33 @@ app.post(
         }));
     }
 
+    let toolAudit = { assistantIdSet: false, attachedToolCount: 0, tools: [] };
+    if (signup.twilioPhoneNumber) {
+      const [vapiNumbers, assistants, tools] = await Promise.all([
+        fetchVapiCollection("phone-number", ["phoneNumbers", "phone_numbers"]),
+        fetchVapiCollection("assistant", ["assistants", "agents"]),
+        fetchVapiCollection("tool", ["tools"]),
+      ]);
+      const aiNumber = normalizePhoneForMatch(signup.twilioPhoneNumber);
+      const vapiNumber = vapiNumbers.find((record) => normalizePhoneForMatch(getVapiPhoneNumber(record)) === aiNumber);
+      const assistantId = getVapiAssistantId(vapiNumber);
+      const assistant = assistants.find((record) => String(record?.id || "").trim() === assistantId);
+      const toolIds = Array.isArray(assistant?.model?.toolIds) ? assistant.model.toolIds.map((id) => String(id || "").trim()).filter(Boolean) : [];
+      toolAudit = {
+        assistantIdSet: Boolean(assistantId),
+        attachedToolCount: toolIds.length,
+        tools: toolIds.map((toolId) => {
+          const tool = tools.find((record) => String(record?.id || "").trim() === toolId) || {};
+          return {
+            id: toolId,
+            name: getVapiNestedString(tool, ["function.name", "name"]) || "unknown",
+            type: getVapiNestedString(tool, ["type", "function.type"]) || "unknown",
+            serverUrlConfigured: Boolean(getVapiNestedString(tool, ["server.url", "function.server.url", "url"])),
+          };
+        }),
+      };
+    }
+
     res.json({
       success: true,
       ok: true,
@@ -4917,6 +4944,7 @@ app.post(
         matchingCount: matchingMessages.length,
         messages: matchingMessages,
       },
+      toolAudit,
     });
   })
 );
