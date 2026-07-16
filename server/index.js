@@ -4840,6 +4840,88 @@ app.post(
 );
 
 app.post(
+  "/api/integrations/provisioning/audit-latest-call",
+  requireProvisioningKey,
+  asyncRoute(async (req, res) => {
+    const ownerEmail = String(req.headers["x-signup-owner-email"] || req.body?.ownerEmail || "").trim().toLowerCase();
+    if (!ownerEmail || !isValidEmailAddress(ownerEmail)) {
+      return res.status(400).json({ error: "A valid ownerEmail is required." });
+    }
+    const signup = listSignupDashboardRecords().find((record) => String(record.ownerEmail || "").trim().toLowerCase() === ownerEmail);
+    if (!signup) return res.status(404).json({ error: "Signup record not found." });
+
+    const businessName = String(signup.businessName || "").trim();
+    const businessPhone = normalizePhoneForMatch(signup.businessPhone || "");
+    const lookup = [
+      businessName ? { name: { equals: businessName, mode: "insensitive" } } : undefined,
+      businessPhone ? { phone: businessPhone } : undefined,
+    ].filter(Boolean);
+    const business = lookup.length ? await prisma.business.findFirst({ where: { OR: lookup } }) : null;
+    const latestCall = business
+      ? await prisma.call.findFirst({ where: { businessId: business.id }, orderBy: { startedAt: "desc" } })
+      : null;
+
+    let matchingMessages = [];
+    if (TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN && latestCall) {
+      const url = new URL(`${TWILIO_API_BASE_URL}/2010-04-01/Accounts/${encodeURIComponent(TWILIO_ACCOUNT_SID)}/Messages.json`);
+      url.searchParams.set("PageSize", "100");
+      const response = await fetch(url, {
+        headers: { Authorization: getTwilioAuthHeader(), Accept: "application/json" },
+      });
+      const data = parseJsonObject(await response.text());
+      if (!response.ok) {
+        const err = new Error(data?.message || data?.error || `Twilio message audit failed with HTTP ${response.status}.`);
+        err.statusCode = response.status;
+        throw err;
+      }
+      const aiNumber = normalizePhoneForMatch(signup.twilioPhoneNumber);
+      const ownerNumber = normalizePhoneForMatch(signup.ownerPhone || signup.businessPhone);
+      const startedAtMs = new Date(latestCall.startedAt || 0).getTime();
+      matchingMessages = (data.messages || [])
+        .filter((message) => {
+          const from = normalizePhoneForMatch(message.from);
+          const to = normalizePhoneForMatch(message.to);
+          const sentAtMs = new Date(message.date_sent || message.date_created || 0).getTime();
+          const matchesNumbers = [from, to].includes(aiNumber) && [from, to].includes(ownerNumber);
+          return matchesNumbers && sentAtMs >= startedAtMs - 5 * 60 * 1000;
+        })
+        .map((message) => ({
+          sid: String(message.sid || "").trim(),
+          status: String(message.status || "").trim(),
+          direction: String(message.direction || "").trim(),
+          sentAt: message.date_sent || message.date_created || null,
+          errorCode: message.error_code || null,
+          bodyLength: String(message.body || "").length,
+        }));
+    }
+
+    res.json({
+      success: true,
+      ok: true,
+      businessId: business?.id || null,
+      latestCall: latestCall
+        ? {
+            id: latestCall.id,
+            status: latestCall.status,
+            startedAt: latestCall.startedAt,
+            durationSec: latestCall.durationSec,
+            transcriptAvailable: Boolean(latestCall.transcript),
+            recordingAvailable: Boolean(latestCall.recordingUrl),
+            summaryAvailable: Boolean(latestCall.aiSummary),
+            twilioCallSidSet: Boolean(latestCall.twilioCallSid),
+            vapiCost: latestCall.vapiCost,
+            totalInternalCost: latestCall.totalInternalCost,
+          }
+        : null,
+      sms: {
+        matchingCount: matchingMessages.length,
+        messages: matchingMessages,
+      },
+    });
+  })
+);
+
+app.post(
   "/api/integrations/vapi/sync-now",
   requireProvisioningKey,
   asyncRoute(async (req, res) => {
