@@ -125,8 +125,8 @@ const pricingCards = [
     featured: true,
     accent: "from-[#2db4ff] via-[#2563eb] to-[#ff8b1f]",
     tint: "bg-[linear-gradient(145deg,#ffffff_0%,#f7fbff_58%,#fff6eb_100%)]",
-    minuteNote: "Includes 60 AI call minutes. Extra minutes are $0.25/min.",
-    points: ["24/7 AI answering", "60 AI call minutes included", "Extra minutes billed at $0.25/min", "Text summaries for both sides"],
+    minuteNote: "Includes 60 AI call minutes.",
+    points: ["24/7 AI answering", "60 AI call minutes included", "Text summaries for both sides"],
   },
 ];
 
@@ -4901,7 +4901,7 @@ function LandingPage() {
               Clear pricing for businesses that just want calls handled properly.
             </h2>
             <p className="mx-auto mt-3 max-w-[900px] text-[clamp(1rem,1.3vw,1.16rem)] font-medium leading-8 text-[#334155]">
-              One simple plan for getting calls answered. Includes 60 AI call minutes, with extra minutes billed clearly at $0.25/min.
+              One simple plan for getting calls answered. Includes 60 AI call minutes.
             </p>
           </div>
 
@@ -4943,7 +4943,6 @@ function LandingPage() {
 
                     {[
                       ["phone", "60 AI call minutes", "AI answers calls and handles inquiries", "Included"],
-                      ["clock", "Extra minutes", "Billed clearly in 1-minute increments", "$0.25/min after that"],
                     ].map(([icon, title, body, price]) => (
                       <div key={title} className="grid grid-cols-[1fr_auto] items-center gap-4 border-b border-dashed border-[#d8e2ef] py-4">
                         <div className="flex min-w-0 items-center gap-3">
@@ -4972,6 +4971,18 @@ function LandingPage() {
                     <div className="flex items-center justify-between gap-4 pt-2">
                       <span className="text-[0.84rem] uppercase tracking-[0.14em] text-[#2563eb]">Total due today</span>
                       <span className="text-[clamp(1.55rem,3vw,2rem)] font-black tracking-[-0.04em] text-[#176bff]">$79.00 <span className="text-[1rem] text-[#475569]">/ month</span></span>
+                    </div>
+                  </div>
+
+                  <div className="relative mx-auto mt-6 max-w-[620px] -rotate-[0.35deg] border border-[#c9b86d] bg-[linear-gradient(180deg,#fffce3,#fff8bf)] px-5 py-5 text-center shadow-[0_18px_42px_-30px_rgba(71,55,8,0.65)] sm:px-8">
+                    <span className="absolute left-1/2 top-[-12px] h-6 w-28 -translate-x-1/2 rotate-[-1.5deg] bg-[#d9d2bc]/85 shadow-sm" aria-hidden="true" />
+                    <div className="relative space-y-0.5 text-[clamp(1rem,1.65vw,1.3rem)] font-black leading-[1.25] tracking-[0.025em] text-[#172033]">
+                      <p>SPECIAL OFFER.</p>
+                      <p>FIRST 2 WEEKS FREE!!</p>
+                      <p>IF YOUR AI ASSISTANT</p>
+                      <p>DOESN'T GET YOU EXTRA JOBS</p>
+                      <p>FROM MISSED CALLS</p>
+                      <p>SIMPLY CANCEL AT NO COST TO YOU!!</p>
                     </div>
                   </div>
 
@@ -5039,24 +5050,42 @@ function LandingPage() {
                 </div>
 
                 <div className="rounded-[10px] border border-[#d8e7fb] bg-white p-4 shadow-[0_22px_58px_-46px_rgba(15,23,42,0.35)]">
-                  <p className="text-center text-[0.82rem] font-black uppercase tracking-[0.15em] text-[#2563eb]">Pay only for extra minutes</p>
+                  <p className="text-center text-[0.82rem] font-black uppercase tracking-[0.15em] text-[#2563eb]">Pay only for chargeable minutes</p>
                   <div className="mt-4 grid items-center gap-3 text-center sm:grid-cols-[1fr_auto_1fr_auto_1fr]">
                     <div className="rounded-[8px] bg-[#eaf4ff] px-4 py-3 text-[#176bff]">
-                      <p className="text-[2rem] font-black leading-none">60</p>
-                      <p className="text-[0.74rem] font-black leading-tight text-[#334155]">included minutes</p>
+                      <p className="text-[0.9rem] font-black leading-tight text-[#334155]">USED MINUTES</p>
                     </div>
                     <span className="text-2xl font-black text-[#2563eb]">-</span>
                     <div className="rounded-[8px] bg-[#f8fbff] px-4 py-3 text-[#334155]">
-                      <p className="text-[0.9rem] font-black">minutes</p>
-                      <p className="text-[0.74rem] font-black">used</p>
+                      <p className="text-[2rem] font-black leading-none text-[#176bff]">60</p>
+                      <p className="text-[0.74rem] font-black leading-tight">FREE MINUTES</p>
                     </div>
                     <span className="text-2xl font-black text-[#2563eb]">=</span>
                     <div className="rounded-[8px] bg-[#e8f9ef] px-4 py-3 text-[#15803d]">
-                      <p className="text-[0.9rem] font-black">extra minutes</p>
-                      <p className="text-[0.74rem] font-black">x $0.25/min</p>
+                      <p className="text-[0.9rem] font-black leading-tight">CHARGEABLE MINUTES.</p>
                     </div>
                   </div>
                   <p className="mt-3 text-center text-[0.84rem] font-semibold text-[#64748b]">Billed in 1-minute increments. No surprises.</p>
+                </div>
+
+                <div className="rounded-[10px] border border-[#cfe1f6] bg-white p-5 shadow-[0_22px_58px_-46px_rgba(15,23,42,0.35)]">
+                  <div className="flex items-center gap-5">
+                    <span
+                      className="grid h-20 w-16 shrink-0 place-items-center bg-[linear-gradient(180deg,#2f8cff,#176bff)] text-white shadow-[0_18px_34px_-22px_rgba(23,107,255,0.95)] [clip-path:polygon(50%_0%,92%_18%,85%_72%,50%_100%,15%_72%,8%_18%)]"
+                      aria-hidden="true"
+                    >
+                      <HeroIcon type="check" className="h-8 w-8" />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-[1.2rem] font-black uppercase leading-tight tracking-[0.04em] text-[#176bff]">NO SURPRISES.</p>
+                      <p className="mt-2 text-[0.95rem] font-semibold leading-6 text-[#64748b]">
+                        Your minute usage stays clear from the first call to the last.
+                      </p>
+                      <span className="mt-3 inline-flex rounded-full bg-[#e8f9ef] px-4 py-2 text-[0.72rem] font-black uppercase tracking-[0.14em] text-[#15803d]">
+                        EASY TO TRACK
+                      </span>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
