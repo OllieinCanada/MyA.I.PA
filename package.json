@@ -48,6 +48,7 @@
     "diagnose:live-site": "node scripts/diagnose-live-site.js",
     "diagnose:signup": "node scripts/diagnose-signup.js",
     "diagnose:vapi-agents": "node scripts/diagnose-vapi-agents.js",
+    "diagnose:vapi-latest": "node scripts/diagnose-latest-vapi-call.js",
     "repair:make-vapi-routing": "node scripts/update-make-vapi-sms-routing.js --apply",
     "evals:vapi:dry-run": "node scripts/setup-vapi-evals.js --dry-run",
     "evals:vapi:sync": "node scripts/setup-vapi-evals.js --sync",
@@ -76,7 +77,7 @@
     "codex:wakeup": "powershell -ExecutionPolicy Bypass -File scripts/codex-wakeup.ps1",
     "codex:wakeup:install": "powershell -ExecutionPolicy Bypass -File scripts/codex-schedule-wakeup.ps1 -StartTime 02:11 -EveryHours 5 -LaunchCodex -RunNow",
     "test": "react-scripts test --env=jsdom",
-    "test:backend": "node --test tests/backend-security.test.js tests/twilio-sms.test.js tests/vapi-sms.test.js tests/lead-handoffs.test.js tests/safe-website-fetch.test.js",
+    "test:backend": "node --test tests/backend-security.test.js tests/twilio-sms.test.js tests/vapi-sms.test.js tests/vapi-call-diagnostics.test.js tests/lead-handoffs.test.js tests/safe-website-fetch.test.js",
     "eject": "react-scripts eject"
   },
   "devDependencies": {
