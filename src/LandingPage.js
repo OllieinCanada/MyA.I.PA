@@ -167,6 +167,49 @@ const faqs = [
   { q: "How hard is setup?", a: "It is meant to be simple: fill in your business info, test a call, then go live with no downtime." },
 ];
 
+const forwardingProviderDetails = {
+  BELL: {
+    title: "BELL MOBILITY",
+    subtitle: "FORWARD CALLS YOU DON'T ANSWER",
+    steps: [
+      "Open Call Settings.",
+      "Select Call Forwarding.",
+      "Choose calls you don't answer.",
+      "Enter your My AI PA number and activate.",
+    ],
+    offText: "Turn off in Call Settings.",
+    sourceText: "Based on Bell Support instructions",
+  },
+  ROGERS: {
+    title: "ROGERS MOBILE",
+    subtitle: "FORWARD CALLS YOU DON'T ANSWER",
+    code: "*61*2895550148#",
+    steps: ["Open the Phone app.", "Dial the ready-to-use code.", "Tap Call/Send.", "Wait for the confirmation message."],
+    offText: "Turn off anytime: dial ##61#",
+    sourceText: "Based on Rogers Support instructions",
+  },
+  TELUS: {
+    title: "TELUS MOBILE",
+    subtitle: "FORWARD CALLS YOU DON'T ANSWER",
+    code: "*61*2895550148#",
+    steps: ["Open the Phone app.", "Dial the ready-to-use code.", "Tap Call/Send.", "Wait for the confirmation message."],
+    offText: "Turn off anytime: dial #61#",
+    sourceText: "Based on TELUS Support instructions",
+  },
+  OTHER: {
+    title: "OTHER PROVIDER",
+    subtitle: "WE'LL HELP YOU FIND THE RIGHT METHOD",
+    steps: [
+      "Contact your phone provider.",
+      "Ask for unanswered-call forwarding.",
+      "Give them your My AI PA number.",
+      "Let a test call ring unanswered.",
+    ],
+    offText: "Your provider can also help you turn it off.",
+    sourceText: "Provider instructions can vary",
+  },
+};
+
 const trustCards = [
   {
     title: "Transparent AI calls",
@@ -1751,6 +1794,199 @@ function VoicemailLossesArtboard({ onStart, onPlayDemo }) {
   );
 }
 
+function ForwardingSetupWizard({ intro }) {
+  const [provider, setProvider] = useState("ROGERS");
+  const [copiedField, setCopiedField] = useState("");
+  const [testComplete, setTestComplete] = useState(false);
+  const providerDetails = forwardingProviderDetails[provider];
+  const displayNumber = "(289) 555-0148";
+  const copyNumber = "2895550148";
+
+  const copyToClipboard = async (value, field) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopiedField(field);
+      window.setTimeout(() => setCopiedField(""), 1800);
+    } catch (_err) {
+      setCopiedField("");
+    }
+  };
+
+  return (
+    <div className="border-t border-[#d7e7fb] bg-white px-4 pb-5 pt-4 sm:px-5">
+      <p className="text-[1rem] font-medium leading-7 text-[#334155]">{intro}</p>
+
+      <div className="mt-4 border-t border-[#d7e7fb] pt-5">
+        <p className="text-[0.74rem] font-black uppercase tracking-[0.18em] text-[#176bff]">Guided call forwarding</p>
+        <h3 className="mt-2 text-[clamp(1.4rem,2vw,1.85rem)] font-black leading-tight tracking-[-0.035em] text-[#07142a]">
+          Forward unanswered calls to My AI PA
+        </h3>
+        <p className="mt-2 text-[0.94rem] font-medium leading-6 text-[#475569]">
+          Choose your provider. We prepare the exact steps and forwarding code for you.
+        </p>
+
+        <div className="mt-5 grid grid-cols-[auto_1fr_auto_1fr_auto] items-center gap-2 text-[0.68rem] font-black uppercase tracking-[0.14em] text-[#94a3b8] sm:gap-3 sm:text-[0.74rem]">
+          <span className="inline-flex items-center gap-2 text-[#176bff]">
+            <span className="grid h-8 w-8 place-items-center rounded-full bg-[#176bff] text-white">1</span>
+            <span className="hidden sm:inline">Provider</span>
+          </span>
+          <span className="h-px bg-[#94a3b8]" />
+          <span className="inline-flex items-center gap-2">
+            <span className="grid h-8 w-8 place-items-center rounded-full bg-[#94a3b8] text-white">2</span>
+            <span className="hidden sm:inline">Connect</span>
+          </span>
+          <span className="h-px bg-[#94a3b8]" />
+          <span className="inline-flex items-center gap-2">
+            <span className="grid h-8 w-8 place-items-center rounded-full bg-[#94a3b8] text-white">3</span>
+            <span className="hidden sm:inline">Test</span>
+          </span>
+        </div>
+
+        <div className="mt-4 grid grid-cols-2 overflow-hidden rounded-t-[10px] border border-[#cfe1f6] bg-[#f8fbff] sm:grid-cols-4">
+          {Object.keys(forwardingProviderDetails).map((providerName) => {
+            const selected = provider === providerName;
+            return (
+              <button
+                key={providerName}
+                type="button"
+                onClick={() => {
+                  setProvider(providerName);
+                  setCopiedField("");
+                  setTestComplete(false);
+                }}
+                className={
+                  "min-h-[46px] border-[#cfe1f6] px-3 py-3 text-[0.8rem] font-black uppercase tracking-[0.12em] transition first:border-l-0 sm:border-l " +
+                  (selected ? "bg-[#176bff] text-white shadow-[0_12px_28px_-20px_rgba(23,107,255,0.95)]" : "bg-white text-[#475569] hover:bg-[#eef6ff] hover:text-[#176bff]")
+                }
+                aria-pressed={selected}
+              >
+                {providerName}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="grid gap-3 border-x border-b border-[#cfe1f6] bg-[#fbfdff] p-3 lg:grid-cols-[0.84fr_1.22fr_1fr]">
+          <section className="rounded-[10px] border border-[#cfe1f6] bg-white p-4 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.28)]">
+            <p className="text-[0.66rem] font-black uppercase tracking-[0.14em] text-[#176bff]">Your My AI PA number</p>
+            <div className="mt-4 flex items-center gap-3">
+              <span className="text-[#176bff]">
+                <HeroIcon type="phone" className="h-7 w-7" />
+              </span>
+              <p className="whitespace-nowrap text-[clamp(1.05rem,1.55vw,1.28rem)] font-black tracking-[-0.035em] text-[#07142a]">{displayNumber}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => copyToClipboard(copyNumber, "number")}
+              className="mt-4 inline-flex min-h-[42px] w-full items-center justify-center gap-2 rounded-[8px] border-2 border-[#176bff] bg-white px-3 text-[0.75rem] font-black uppercase tracking-[0.1em] text-[#176bff] transition hover:bg-[#eef6ff]"
+            >
+              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                <rect x="8" y="8" width="11" height="12" rx="2" />
+                <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h2" />
+              </svg>
+              {copiedField === "number" ? "Copied" : "Copy number"}
+            </button>
+            <p className="mt-4 text-[0.78rem] font-medium leading-5 text-[#475569]">
+              We insert this number into your forwarding code automatically.
+            </p>
+          </section>
+
+          <section className="rounded-[10px] border border-[#cfe1f6] bg-white p-4 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.28)]">
+            <p className="text-[0.86rem] font-black uppercase tracking-[0.08em] text-[#176bff]">{providerDetails.title}</p>
+            <p className="mt-1 text-[0.66rem] font-black uppercase tracking-[0.1em] text-[#176bff]">{providerDetails.subtitle}</p>
+            <ol className="mt-4 space-y-2 text-[0.82rem] font-medium leading-5 text-[#172033]">
+              {providerDetails.steps.map((step, stepIndex) => (
+                <li key={step} className="grid grid-cols-[20px_1fr] gap-2">
+                  <span className="font-black">{stepIndex + 1}.</span>
+                  {providerDetails.code && stepIndex === 1 ? (
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span>Dial</span>
+                      <code className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap rounded-[6px] border border-[#9fc5ff] bg-[#f8fbff] px-2 py-1 text-[0.75rem] font-black text-[#07142a]">
+                        {providerDetails.code}
+                      </code>
+                      <button
+                        type="button"
+                        onClick={() => copyToClipboard(providerDetails.code, "code")}
+                        className="shrink-0 text-[#176bff] transition hover:text-[#0b4fc8]"
+                        aria-label="Copy ready-to-dial forwarding code"
+                      >
+                        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                          <rect x="8" y="8" width="11" height="12" rx="2" />
+                          <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h2" />
+                        </svg>
+                      </button>
+                    </span>
+                  ) : (
+                    <span>{step}</span>
+                  )}
+                </li>
+              ))}
+            </ol>
+            {providerDetails.code ? (
+              <button
+                type="button"
+                onClick={() => copyToClipboard(providerDetails.code, "code")}
+                className="mt-4 inline-flex min-h-[42px] w-full items-center justify-center gap-2 rounded-[8px] border-2 border-[#176bff] bg-white px-3 text-[0.7rem] font-black uppercase tracking-[0.08em] text-[#176bff] transition hover:bg-[#eef6ff]"
+              >
+                <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                  <rect x="8" y="8" width="11" height="12" rx="2" />
+                  <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h2" />
+                </svg>
+                {copiedField === "code" ? "Code copied" : "Copy ready-to-dial code"}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => copyToClipboard(copyNumber, "number")}
+                className="mt-4 inline-flex min-h-[42px] w-full items-center justify-center rounded-[8px] border-2 border-[#176bff] bg-white px-3 text-[0.7rem] font-black uppercase tracking-[0.08em] text-[#176bff] transition hover:bg-[#eef6ff]"
+              >
+                {copiedField === "number" ? "Number copied" : "Copy My AI PA number"}
+              </button>
+            )}
+          </section>
+
+          <section className="flex flex-col rounded-[10px] border border-[#cfe1f6] bg-white p-4 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.28)]">
+            <p className="text-center text-[0.82rem] font-black uppercase tracking-[0.1em] text-[#15803d]">Final check</p>
+            <span className="mx-auto mt-3 grid h-10 w-10 place-items-center rounded-full border-2 border-[#16a34a] text-[#16a34a]">
+              <HeroIcon type="check" className="h-6 w-6" />
+            </span>
+            <p className="mt-4 flex-1 text-[0.84rem] font-medium leading-5 text-[#172033]">
+              Call your business number and let it ring unanswered. My AI PA should answer.
+            </p>
+            <button
+              type="button"
+              onClick={() => setTestComplete((complete) => !complete)}
+              className={
+                "mt-4 inline-flex min-h-[46px] w-full items-center justify-center rounded-[8px] px-3 text-[0.72rem] font-black uppercase tracking-[0.08em] text-white shadow-[0_16px_34px_-24px_rgba(255,106,0,0.92)] transition hover:-translate-y-0.5 " +
+                (testComplete ? "bg-[#15803d]" : "bg-[linear-gradient(180deg,#ff8b1f,#ff6b00)]")
+              }
+            >
+              {testComplete ? "Test completed" : "I completed the test"}
+            </button>
+          </section>
+        </div>
+
+        <div className="grid gap-2 rounded-b-[10px] border-x border-b border-[#cfe1f6] bg-white px-3 py-3 text-[0.73rem] font-semibold leading-5 text-[#475569] sm:grid-cols-3 sm:divide-x sm:divide-[#d8e7fb]">
+          <p className="flex items-center gap-2 sm:px-3">
+            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[#e8f9ef] text-[#15803d]">
+              <HeroIcon type="shield" className="h-4 w-4" />
+            </span>
+            {providerDetails.offText}
+          </p>
+          <p className="flex items-center gap-2 sm:px-3">
+            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[#eef6ff] font-black text-[#176bff]">i</span>
+            {providerDetails.sourceText}
+          </p>
+          <p className="flex items-center gap-2 sm:px-3">
+            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[#eef6ff] font-black text-[#176bff]">$</span>
+            Carrier charges may apply.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function LandingPage() {
   const demoRef = useRef(null);
   const pricingRef = useRef(null);
@@ -1761,7 +1997,7 @@ function LandingPage() {
   const [audioTime, setAudioTime] = useState(0);
   const [audioDuration, setAudioDuration] = useState(133);
   const [audioError, setAudioError] = useState("");
-  const [openFaq, setOpenFaq] = useState(0);
+  const [openFaq, setOpenFaq] = useState(4);
   const [showHeader, setShowHeader] = useState(false);
   const headerHideTimerRef = useRef(null);
 
@@ -4968,10 +5204,6 @@ function LandingPage() {
                       <span>Taxes</span>
                       <span>-</span>
                     </div>
-                    <div className="flex items-center justify-between gap-4 pt-2">
-                      <span className="text-[0.84rem] uppercase tracking-[0.14em] text-[#2563eb]">Total due today</span>
-                      <span className="text-[clamp(1.55rem,3vw,2rem)] font-black tracking-[-0.04em] text-[#176bff]">$79.00 <span className="text-[1rem] text-[#475569]">/ month</span></span>
-                    </div>
                   </div>
 
                   <div className="relative mx-auto mt-6 max-w-[620px] -rotate-[0.35deg] border border-[#c9b86d] bg-[linear-gradient(180deg,#fffce3,#fff8bf)] px-5 py-5 text-center shadow-[0_18px_42px_-30px_rgba(71,55,8,0.65)] sm:px-8">
@@ -5315,7 +5547,7 @@ function LandingPage() {
       </section>
 
       <section id="faq" ref={faqRef} className="scroll-mt-[96px] bg-[linear-gradient(180deg,#f4faff_0%,#eaf6ff_100%)]">
-        <div className="mx-auto grid w-full max-w-[1180px] gap-7 px-4 py-14 sm:px-6 lg:grid-cols-[0.74fr_1.26fr] lg:px-8 lg:py-20">
+        <div className="mx-auto grid w-full max-w-[1320px] gap-7 px-4 py-14 sm:px-6 lg:grid-cols-[0.62fr_1.38fr] lg:px-8 lg:py-20">
           <div>
             <p className="inline-flex rounded-full border border-[#b9d8ff] bg-white px-5 py-2 text-[0.84rem] font-black uppercase tracking-[0.18em] text-[#2563eb] shadow-[0_16px_44px_-34px_rgba(37,99,235,0.65)]">Before you start</p>
             <h2 className="mt-5 text-[clamp(2.2rem,4vw,3.5rem)] font-black leading-[1.05] tracking-[-0.052em] text-[#07142a]">Quick answers before you try it.</h2>
@@ -5343,9 +5575,13 @@ function LandingPage() {
                     <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[#eaf3ff] text-[1.6rem] font-black leading-none text-[#2563eb]">{isOpen ? "-" : "+"}</span>
                   </button>
                   {isOpen ? (
-                    <div className="border-t border-[#d7e7fb] bg-[#f8fbff] px-5 py-4 sm:pl-[76px]">
-                      <p className="text-[1.04rem] font-medium leading-8 text-[#334155]">{item.a}</p>
-                    </div>
+                    index === 4 ? (
+                      <ForwardingSetupWizard intro={item.a} />
+                    ) : (
+                      <div className="border-t border-[#d7e7fb] bg-[#f8fbff] px-5 py-4 sm:pl-[76px]">
+                        <p className="text-[1.04rem] font-medium leading-8 text-[#334155]">{item.a}</p>
+                      </div>
+                    )
                   ) : null}
                 </div>
               );
