@@ -164,7 +164,7 @@ const faqs = [
   { q: "Do I have to change my business number?", a: "No. Keep your current number and forward calls to your My AI PA number." },
   { q: "What if someone calls after hours?", a: "Your AI assistant can still answer, help the caller, and send both sides a text follow-up." },
   { q: "Can I control what it says?", a: "Yes. You set the custom greeting and common questions so it fits your business." },
-  { q: "How hard is setup?", a: "It is meant to be simple: fill in your business info, test a call, then go live with no downtime." },
+  { q: "How hard is setup?", a: "Easy to set-up. Scroll below for details" },
 ];
 
 const forwardingProviderDetails = {
@@ -1794,7 +1794,7 @@ function VoicemailLossesArtboard({ onStart, onPlayDemo }) {
   );
 }
 
-function ForwardingSetupWizard({ intro }) {
+function ForwardingSetupWizard() {
   const [provider, setProvider] = useState("ROGERS");
   const [copiedField, setCopiedField] = useState("");
   const [testComplete, setTestComplete] = useState(false);
@@ -1813,10 +1813,8 @@ function ForwardingSetupWizard({ intro }) {
   };
 
   return (
-    <div className="border-t border-[#d7e7fb] bg-white px-4 pb-5 pt-4 sm:px-5">
-      <p className="text-[1rem] font-medium leading-7 text-[#334155]">{intro}</p>
-
-      <div className="mt-4 border-t border-[#d7e7fb] pt-5">
+    <div className="rounded-[18px] border border-[#cfe1f6] bg-white px-4 py-5 shadow-[0_28px_82px_-58px_rgba(18,32,51,0.34)] sm:px-6 lg:px-8 lg:py-8">
+      <div>
         <p className="text-[0.74rem] font-black uppercase tracking-[0.18em] text-[#176bff]">Guided call forwarding</p>
         <h3 className="mt-2 text-[clamp(1.4rem,2vw,1.85rem)] font-black leading-tight tracking-[-0.035em] text-[#07142a]">
           Forward unanswered calls to My AI PA
@@ -5201,8 +5199,11 @@ function LandingPage() {
                       <span>$79.00</span>
                     </div>
                     <div className="flex items-center justify-between gap-4 border-b-2 border-[#73a6ef] pb-3">
-                      <span>Taxes</span>
-                      <span>-</span>
+                      <span className="flex min-w-0 items-center gap-2">
+                        <span className="text-[1.25rem] leading-none text-[#176bff]" aria-hidden="true">+</span>
+                        <span>Taxes</span>
+                      </span>
+                      <span className="max-w-[150px] text-right text-[0.82rem] leading-5 text-[#64748b]">Not currently charged</span>
                     </div>
                   </div>
 
@@ -5575,18 +5576,20 @@ function LandingPage() {
                     <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[#eaf3ff] text-[1.6rem] font-black leading-none text-[#2563eb]">{isOpen ? "-" : "+"}</span>
                   </button>
                   {isOpen ? (
-                    index === 4 ? (
-                      <ForwardingSetupWizard intro={item.a} />
-                    ) : (
-                      <div className="border-t border-[#d7e7fb] bg-[#f8fbff] px-5 py-4 sm:pl-[76px]">
-                        <p className="text-[1.04rem] font-medium leading-8 text-[#334155]">{item.a}</p>
-                      </div>
-                    )
+                    <div className="border-t border-[#d7e7fb] bg-[#f8fbff] px-5 py-4 sm:pl-[76px]">
+                      <p className="text-[1.04rem] font-medium leading-8 text-[#334155]">{item.a}</p>
+                    </div>
                   ) : null}
                 </div>
               );
             })}
           </div>
+        </div>
+      </section>
+
+      <section id="guided-call-forwarding" className="scroll-mt-[96px] bg-[linear-gradient(180deg,#eaf6ff_0%,#dff1ff_100%)]">
+        <div className="mx-auto w-full max-w-[1320px] px-4 py-14 sm:px-6 lg:px-8 lg:py-20">
+          <ForwardingSetupWizard />
         </div>
       </section>
 
