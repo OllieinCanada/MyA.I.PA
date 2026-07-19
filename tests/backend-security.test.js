@@ -209,6 +209,24 @@ test("Vapi end-of-call reports normalize duration, status, cost, and artifacts",
   assert.equal(__test.getVapiRecordingUrl(report), "https://example.com/test-recording.wav");
 });
 
+test("customer setup blocks readiness until isolated SMS routing is verified", () => {
+  const base = {
+    signup: {},
+    business: { vapiMappings: [] },
+    calls: [],
+    envStatus: { vapiApiKeyConfigured: true, twilioConfigured: true },
+  };
+  assert.equal(__test.deriveCustomerSetupStep("sms_routing", base).status, "waiting");
+  assert.equal(__test.deriveCustomerSetupStep("sms_routing", {
+    ...base,
+    signup: { smsRoutingStatus: "failed", smsRoutingError: "Protected routing mismatch." },
+  }).status, "failed");
+  assert.equal(__test.deriveCustomerSetupStep("sms_routing", {
+    ...base,
+    signup: { smsRoutingStatus: "healthy" },
+  }).status, "done");
+});
+
 test("authenticated Vapi end-of-call reports require a call id before database work", async () => {
   const response = await request("/api/webhooks/voice", {
     method: "POST",

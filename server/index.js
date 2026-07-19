@@ -27,6 +27,9 @@ const {
   processDueLeadHandoffs,
   recordExternalOwnerSmsResult,
 } = require("./leadHandoffs");
+const {
+  provisionIsolatedSmsRouting,
+} = require("./vapiIsolatedSmsProvisioning");
 
 loadPowerShellEnvAssignments(path.join(__dirname, "..", ".env.local"));
 
@@ -93,6 +96,7 @@ const LEAD_HANDOFF_CHECK_INTERVAL_MS = parsePositiveInt(process.env.LEAD_HANDOFF
 const TWILIO_ACCOUNT_SID = String(process.env.TWILIO_ACCOUNT_SID || "").trim();
 const TWILIO_AUTH_TOKEN = String(process.env.TWILIO_AUTH_TOKEN || "").trim();
 const TWILIO_API_BASE_URL = String(process.env.TWILIO_API_BASE_URL || "https://api.twilio.com").trim().replace(/\/+$/, "");
+const TWILIO_STATUS_CALLBACK_URL = String(process.env.TWILIO_STATUS_CALLBACK_URL || "").trim();
 const INTEGRATION_API_KEY = String(process.env.INTEGRATION_API_KEY || process.env.MAKE_SIGNUP_WEBHOOK_API_KEY || "").trim();
 const FIXED_MONTHLY_COSTS_JSON = String(process.env.FIXED_MONTHLY_COSTS_JSON || "").trim();
 const FIXED_MONTHLY_COST_USD = numberOrNull(process.env.FIXED_MONTHLY_COST_USD) || 0;
@@ -1159,24 +1163,6 @@ async function patchVapiAssistant(assistantId, patch) {
   return data && typeof data === "object" ? data : null;
 }
 
-function upsertVapiSmsRoutingPrompt(prompt, aiNumber, ownerNumber) {
-  const startMarker = "## MYAIPA SMS ROUTING (DO NOT GUESS)";
-  const endMarker = "## END MYAIPA SMS ROUTING";
-  const withoutExisting = String(prompt || "")
-    .replace(new RegExp(`${startMarker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[\\s\\S]*?${endMarker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "g"), "")
-    .trim();
-  const block = [
-    startMarker,
-    `- Assigned AI/Twilio sender number: ${aiNumber}`,
-    `- Owner notification number: ${ownerNumber}`,
-    "- For both SMS tools, pass the assigned sender number above as fromNumber.",
-    "- For send_owner_sms_dynamic, pass the owner notification number above as toNumber.",
-    "- Never substitute a placeholder, example number, caller number, or another customer's number.",
-    endMarker,
-  ].join("\n");
-  return `${withoutExisting}\n\n${block}`;
-}
-
 async function fetchVapiCollection(resourcePath, collectionKeys = []) {
   if (!VAPI_API_KEY) {
     const err = new Error("VAPI_API_KEY is not configured.");
@@ -1207,6 +1193,119 @@ async function fetchVapiCollection(resourcePath, collectionKeys = []) {
     if (Array.isArray(data?.[key])) return data[key];
   }
   return [];
+}
+
+async function requestVapiResource(resourcePath, { method = "GET", body } = {}) {
+  if (!VAPI_API_KEY) {
+    const err = new Error("VAPI_API_KEY is not configured.");
+    err.statusCode = 503;
+    throw err;
+  }
+  const response = await fetch(`${VAPI_API_BASE_URL}/${String(resourcePath || "").replace(/^\/+/, "")}`, {
+    method,
+    headers: {
+      Authorization: `Bearer ${VAPI_API_KEY}`,
+      Accept: "application/json",
+      ...(body ? { "Content-Type": "application/json" } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const rawText = await response.text();
+  const data = parseJsonObject(rawText);
+  if (!response.ok) {
+    const err = new Error(data?.message || data?.error || `Vapi ${method} request failed with HTTP ${response.status}.`);
+    err.statusCode = response.status;
+    throw err;
+  }
+  return data && typeof data === "object" ? data : {};
+}
+
+async function provisionIsolatedSmsForAssistant({ assistantId, aiNumber, ownerNumber }) {
+  if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN) {
+    const err = new Error("Twilio credentials are not configured.");
+    err.statusCode = 503;
+    throw err;
+  }
+  const id = String(assistantId || "").trim();
+  if (!id) {
+    const err = new Error("Vapi assistant id is required.");
+    err.statusCode = 400;
+    throw err;
+  }
+  const [assistant, tools] = await Promise.all([
+    requestVapiResource(`assistant/${encodeURIComponent(id)}`),
+    fetchVapiCollection("tool", ["tools"]),
+  ]);
+  const result = await provisionIsolatedSmsRouting({
+    assistant,
+    tools,
+    aiNumber,
+    ownerNumber,
+    twilioAccountSid: TWILIO_ACCOUNT_SID,
+    twilioAuthToken: TWILIO_AUTH_TOKEN,
+    statusCallbackUrl: TWILIO_STATUS_CALLBACK_URL,
+    createTool: (payload) => requestVapiResource("tool", { method: "POST", body: payload }),
+    patchAssistant: patchVapiAssistant,
+    fetchAssistant: (targetId) => requestVapiResource(`assistant/${encodeURIComponent(targetId)}`),
+    fetchTool: (toolId) => requestVapiResource(`tool/${encodeURIComponent(toolId)}`),
+    deleteTool: (toolId) => requestVapiResource(`tool/${encodeURIComponent(toolId)}`, { method: "DELETE" }),
+  });
+  return {
+    created: result.created,
+    reused: result.reused,
+    updated: result.updated,
+    assistantId: String(result.assistant?.id || id),
+    toolId: String(result.tool?.id || ""),
+    toolName: String(result.tool?.function?.name || result.tool?.name || ""),
+    audit: result.audit,
+  };
+}
+
+async function provisionIsolatedSmsForSignup({ ownerEmail, assistantId, aiNumber, ownerNumber }) {
+  const email = String(ownerEmail || "").trim().toLowerCase();
+  const signup = email && isValidEmailAddress(email)
+    ? listSignupDashboardRecords().find((record) => String(record.ownerEmail || "").trim().toLowerCase() === email)
+    : null;
+  const resolvedOwnerNumber = normalizeVapiImportPhone(ownerNumber || signup?.ownerPhone || signup?.businessPhone);
+  const resolvedAiNumber = normalizeVapiImportPhone(aiNumber || signup?.twilioPhoneNumber);
+  const resolvedAssistantId = String(assistantId || signup?.vapiAssistantId || "").trim();
+  if (!resolvedOwnerNumber || !resolvedAiNumber || !resolvedAssistantId) {
+    return {
+      skipped: true,
+      reason: !resolvedOwnerNumber ? "owner_phone_missing" : !resolvedAiNumber ? "ai_phone_missing" : "assistant_missing",
+    };
+  }
+  const result = await provisionIsolatedSmsForAssistant({
+    assistantId: resolvedAssistantId,
+    aiNumber: resolvedAiNumber,
+    ownerNumber: resolvedOwnerNumber,
+  });
+  return {
+    skipped: false,
+    created: result.created,
+    reused: result.reused,
+    updated: result.updated,
+    toolId: result.toolId,
+    toolName: result.toolName,
+    healthy: result.audit?.healthy === true,
+    checks: result.audit?.checks || {},
+    aiNumberLast4: resolvedAiNumber.slice(-4),
+    ownerNumberLast4: resolvedOwnerNumber.slice(-4),
+  };
+}
+
+async function safelyProvisionIsolatedSmsForSignup(input) {
+  try {
+    return await provisionIsolatedSmsForSignup(input);
+  } catch (error) {
+    return {
+      skipped: false,
+      failed: true,
+      healthy: false,
+      reason: "isolated_sms_provisioning_failed",
+      error: String(error?.message || "Vapi isolated SMS provisioning failed.").slice(0, 240),
+    };
+  }
 }
 
 function normalizeVapiImportPhone(value) {
@@ -2424,6 +2523,7 @@ const CUSTOMER_SETUP_STEPS = [
   { key: "make", label: "Make handoff completed", nextAction: "Check the Make scenario run history, then rerun the setup handoff if needed." },
   { key: "vapi", label: "Vapi assistant mapped", nextAction: "Create or confirm the Vapi assistant/phone mapping for this business." },
   { key: "twilio", label: "Twilio number connected", nextAction: "Add the Twilio/Vapi phone number and confirm it maps to the right business." },
+  { key: "sms_routing", label: "Owner and caller texts protected", nextAction: "Run the isolated SMS routing repair and verify the protected owner and caller destinations." },
   { key: "first_call", label: "First call received", nextAction: "Place a test call after the number is connected." },
   { key: "dashboard", label: "Customer dashboard ready", nextAction: "Make sure the customer has signup email plus owner or business phone for dashboard access." },
 ];
@@ -2509,6 +2609,13 @@ function deriveCustomerSetupStep(stepKey, { signup, business, calls, envStatus }
   if (stepKey === "twilio") {
     if (signup.twilioPhoneNumber || phoneMappings.length) return setupStep("done", "AI phone number is mapped.");
     return setupStep("waiting", "No AI/Twilio phone number is recorded yet.");
+  }
+
+  if (stepKey === "sms_routing") {
+    if (signup.smsRoutingStatus === "healthy") return setupStep("done", "Protected per-business owner and caller routing is verified.");
+    if (signup.smsRoutingStatus === "failed") return setupStep("failed", signup.smsRoutingError || "SMS routing verification failed.");
+    if (!envStatus.vapiApiKeyConfigured || !envStatus.twilioConfigured) return setupStep("manual", "Vapi and Twilio credentials are required to isolate SMS routing.");
+    return setupStep("waiting", "Protected per-business SMS routing has not been verified yet.");
   }
 
   if (stepKey === "first_call") {
@@ -5214,44 +5321,37 @@ app.post(
       return res.status(409).json({ error: "The assigned AI number and owner notification number are required." });
     }
 
-    const [vapiNumbers, assistants] = await Promise.all([
-      fetchVapiCollection("phone-number", ["phoneNumbers", "phone_numbers"]),
-      fetchVapiCollection("assistant", ["assistants", "agents"]),
-    ]);
+    const vapiNumbers = await fetchVapiCollection("phone-number", ["phoneNumbers", "phone_numbers"]);
     const vapiNumber = vapiNumbers.find(
       (record) => normalizePhoneForMatch(getVapiPhoneNumber(record)) === normalizePhoneForMatch(aiNumber)
     );
     const assistantId = getVapiAssistantId(vapiNumber);
-    const assistant = assistants.find((record) => String(record?.id || "").trim() === assistantId);
-    if (!assistantId || !assistant) {
+    if (!assistantId) {
       return res.status(404).json({ error: "The Vapi assistant assigned to this phone number was not found." });
     }
 
-    const messages = Array.isArray(assistant?.model?.messages) ? assistant.model.messages : [];
-    let systemMessageUpdated = false;
-    const updatedMessages = messages.map((message) => {
-      if (!systemMessageUpdated && message?.role === "system") {
-        systemMessageUpdated = true;
-        return { ...message, content: upsertVapiSmsRoutingPrompt(message.content, aiNumber, ownerNumber) };
-      }
-      return message;
+    const result = await provisionIsolatedSmsForAssistant({ assistantId, aiNumber, ownerNumber });
+    upsertSignupDashboardRecord({
+      ownerEmail,
+      smsRoutingStatus: result.audit?.healthy ? "healthy" : "failed",
+      smsRoutingToolId: result.toolId,
+      smsRoutingToolName: result.toolName,
+      smsRoutingVerifiedAt: result.audit?.healthy ? new Date().toISOString() : "",
+      smsRoutingError: result.audit?.healthy ? "" : "Vapi read-back did not verify isolated routing.",
     });
-    if (!systemMessageUpdated) {
-      return res.status(409).json({ error: "The Vapi assistant has no system prompt to update." });
-    }
-
-    const updated = await patchVapiAssistant(assistantId, {
-      model: { ...assistant.model, messages: updatedMessages },
-    });
-    const updatedPrompt = (updated?.model?.messages || []).find((message) => message?.role === "system")?.content || "";
     res.json({
       success: true,
       ok: true,
-      assistantId,
+      assistantId: result.assistantId,
+      toolId: result.toolId,
+      toolName: result.toolName,
+      created: result.created,
+      reused: result.reused,
+      updated: result.updated,
       aiNumberLast4: aiNumber.slice(-4),
       ownerNumberLast4: ownerNumber.slice(-4),
-      senderRoutingConfigured: updatedPrompt.includes(`Assigned AI/Twilio sender number: ${aiNumber}`),
-      ownerRoutingConfigured: updatedPrompt.includes(`Owner notification number: ${ownerNumber}`),
+      isolatedRoutingConfigured: result.audit?.healthy === true,
+      checks: result.audit?.checks || {},
     });
   })
 );
@@ -5380,6 +5480,23 @@ app.post(
       });
     }
 
+    const smsRouting = await safelyProvisionIsolatedSmsForSignup({
+      ownerEmail,
+      assistantId: result.assistantId,
+      aiNumber: result.number || phoneNumber,
+      ownerNumber: body.ownerPhone,
+    });
+    if (ownerEmail && isValidEmailAddress(ownerEmail)) {
+      upsertSignupDashboardRecord({
+        ownerEmail,
+        smsRoutingStatus: smsRouting.healthy ? "healthy" : smsRouting.skipped ? "waiting" : "failed",
+        smsRoutingToolId: smsRouting.toolId || "",
+        smsRoutingToolName: smsRouting.toolName || "",
+        smsRoutingVerifiedAt: smsRouting.healthy ? new Date().toISOString() : "",
+        smsRoutingError: smsRouting.skipped ? smsRouting.reason : smsRouting.healthy ? "" : smsRouting.error || "Vapi read-back did not verify isolated routing.",
+      });
+    }
+
     res.status(reused ? 200 : 201).json({
       success: true,
       ok: true,
@@ -5387,6 +5504,7 @@ app.post(
       twilioPhoneNumber: result.number || phoneNumber,
       phoneNumberId: result.id,
       assistantId: result.assistantId,
+      smsRouting,
     });
   })
 );
@@ -5429,11 +5547,29 @@ app.post(
       });
     }
 
+    const smsRouting = await safelyProvisionIsolatedSmsForSignup({
+      ownerEmail,
+      assistantId: result.assistantId || String(body.assistantId || "").trim(),
+      aiNumber: result.number,
+      ownerNumber: body.ownerPhone,
+    });
+    if (ownerEmail && isValidEmailAddress(ownerEmail)) {
+      upsertSignupDashboardRecord({
+        ownerEmail,
+        smsRoutingStatus: smsRouting.healthy ? "healthy" : smsRouting.skipped ? "waiting" : "failed",
+        smsRoutingToolId: smsRouting.toolId || "",
+        smsRoutingToolName: smsRouting.toolName || "",
+        smsRoutingVerifiedAt: smsRouting.healthy ? new Date().toISOString() : "",
+        smsRoutingError: smsRouting.skipped ? smsRouting.reason : smsRouting.healthy ? "" : smsRouting.error || "Vapi read-back did not verify isolated routing.",
+      });
+    }
+
     res.status(201).json({
       success: true,
       ok: true,
       twilioPhoneNumber: result.number,
       phoneNumberId: result.id,
+      smsRouting,
       result,
     });
   })
@@ -6617,6 +6753,7 @@ module.exports = {
   app,
   startServer,
   __test: {
+    deriveCustomerSetupStep,
     getVapiCost,
     getVapiDurationSeconds,
     getVapiRecordingUrl,
