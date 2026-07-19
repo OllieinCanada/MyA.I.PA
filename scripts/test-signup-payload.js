@@ -3,6 +3,7 @@ const fs = require("fs");
 
 const env = loadProjectEnv();
 const shouldPost = process.argv.includes("--post");
+const reviewOnly = process.argv.includes("--review-only");
 const outputPathIndex = process.argv.indexOf("--out");
 const outputPath = outputPathIndex >= 0 ? process.argv[outputPathIndex + 1] : "";
 const argValue = (name, fallback = "") => {
@@ -10,8 +11,17 @@ const argValue = (name, fallback = "") => {
   const found = process.argv.find((arg) => arg.startsWith(prefix));
   return found ? found.slice(prefix.length) : fallback;
 };
-const sampleBusinessName = argValue("business-name", "Sample Electrical Services");
-const sampleBusinessPhone = argValue("business-phone", "2495033301");
+const sandboxSuffix = Date.now();
+const sampleBusinessName = argValue(
+  "business-name",
+  reviewOnly ? `My AI PA Sandbox Verification ${sandboxSuffix}` : "Sample Electrical Services"
+);
+const sampleBusinessPhone = argValue("business-phone", reviewOnly ? "19055550199" : "2495033301");
+const sampleOwnerPhone = argValue("owner-phone", reviewOnly ? "19055550198" : sampleBusinessPhone);
+const sampleOwnerEmail = argValue(
+  "owner-email",
+  reviewOnly ? `myaipa-sandbox-${sandboxSuffix}@mailinator.com` : "owner@example.com"
+);
 const defaultApiBase = "https://api.myaipa.ca";
 const signupApiPath = "/api/integrations/signup-complete";
 const configuredSignupEndpoint = env.MAKE_SIGNUP_WEBHOOK_URL || env.REACT_APP_MAKE_SIGNUP_WEBHOOK_URL || "";
@@ -27,8 +37,8 @@ const payload = {
   country: "ca",
   businessName: sampleBusinessName,
   ownerName: "Oliver Slapinski",
-  ownerEmail: "owner@example.com",
-  email: "owner@example.com",
+  ownerEmail: sampleOwnerEmail,
+  email: sampleOwnerEmail,
   businessPhone: sampleBusinessPhone,
   phone: sampleBusinessPhone,
   businessAddress: "277 Mud St E, Toronto, ON, L3M 4E7",
@@ -73,8 +83,8 @@ const payload = {
   },
   setupDetails: {
     ownerName: "Oliver Slapinski",
-    ownerEmail: "owner@example.com",
-    ownerPhone: sampleBusinessPhone,
+    ownerEmail: sampleOwnerEmail,
+    ownerPhone: sampleOwnerPhone,
     businessAddress: "277 Mud St E, Toronto, ON, L3M 4E7",
     streetAddress: "277 Mud St E",
     city: "Toronto",
@@ -150,7 +160,28 @@ if (shouldPost) {
       const text = await response.text();
       console.log(`POST ${response.status} ${response.statusText}`);
       console.log(text || "(empty response)");
-      if (!response.ok) process.exitCode = 1;
+      if (!response.ok) {
+        process.exitCode = 1;
+        return;
+      }
+      if (reviewOnly) {
+        let result = {};
+        try {
+          result = text ? JSON.parse(text) : {};
+        } catch {
+          throw new Error("Sandbox response was not valid JSON.");
+        }
+        const externalResourceCreated = Boolean(
+          result.twilioPhoneNumber
+          || result.stripeCustomerId
+          || result.subscriptionId
+          || result.vapiAssistantId
+        );
+        if (response.status !== 202 || result.reviewRequired !== true || externalResourceCreated) {
+          throw new Error("Sandbox safety assertion failed: expected review-only response with no external resources.");
+        }
+        console.log("Sandbox safety verified: complete signup stored for review; no Twilio, Stripe, or Vapi resource was created.");
+      }
     })
     .catch((error) => {
       console.error(error.message);
