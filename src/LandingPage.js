@@ -1815,12 +1815,12 @@ function ForwardingSetupWizard() {
   return (
     <div className="rounded-[18px] border border-[#cfe1f6] bg-white px-4 py-5 shadow-[0_28px_82px_-58px_rgba(18,32,51,0.34)] sm:px-6 lg:px-8 lg:py-8">
       <div>
-        <p className="text-[0.74rem] font-black uppercase tracking-[0.18em] text-[#176bff]">Guided call forwarding</p>
+        <p className="text-[0.74rem] font-black uppercase tracking-[0.18em] text-[#176bff]">Easy phone setup</p>
         <h3 className="mt-2 text-[clamp(1.4rem,2vw,1.85rem)] font-black leading-tight tracking-[-0.035em] text-[#07142a]">
-          Forward unanswered calls to My AI PA
+          Send calls you don&apos;t answer to My AI PA
         </h3>
         <p className="mt-2 text-[0.94rem] font-medium leading-6 text-[#475569]">
-          Choose your provider. We prepare the exact steps and forwarding code for you.
+          Pick your phone company. We&apos;ll show you exactly what to press, step by step.
         </p>
 
         <div className="mt-5 grid grid-cols-[auto_1fr_auto_1fr_auto] items-center gap-2 text-[0.68rem] font-black uppercase tracking-[0.14em] text-[#94a3b8] sm:gap-3 sm:text-[0.74rem]">
@@ -1974,10 +1974,6 @@ function ForwardingSetupWizard() {
           <p className="flex items-center gap-2 sm:px-3">
             <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[#eef6ff] font-black text-[#176bff]">i</span>
             {providerDetails.sourceText}
-          </p>
-          <p className="flex items-center gap-2 sm:px-3">
-            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[#eef6ff] font-black text-[#176bff]">$</span>
-            Carrier charges may apply.
           </p>
         </div>
       </div>
@@ -5171,12 +5167,12 @@ function LandingPage() {
 
                   <div className="mt-5">
                     <div className="grid grid-cols-[1fr_auto] gap-4 border-b border-[#e2e8f0] pb-2 text-[0.78rem] font-black uppercase tracking-[0.14em] text-[#64748b]">
-                      <span>Description</span>
+                      <span>PRICE INCLUDES:</span>
                       <span>Price</span>
                     </div>
 
                     {[
-                      ["phone", "60 AI call minutes", "AI answers calls and handles inquiries", "Included"],
+                      ["phone", "60 AI call minutes", "OVER TIME MINUTES, BILLED AT $0.25/minute.", "Included"],
                     ].map(([icon, title, body, price]) => (
                       <div key={title} className="grid grid-cols-[1fr_auto] items-center gap-4 border-b border-dashed border-[#d8e2ef] py-4">
                         <div className="flex min-w-0 items-center gap-3">
@@ -5198,23 +5194,23 @@ function LandingPage() {
                       <span>Subtotal</span>
                       <span>$79.00</span>
                     </div>
-                    <div className="flex items-center justify-between gap-4 border-b-2 border-[#73a6ef] pb-3">
+                    <div className="flex items-center gap-4 border-b-2 border-[#73a6ef] pb-3">
                       <span className="flex min-w-0 items-center gap-2">
                         <span className="text-[1.25rem] leading-none text-[#176bff]" aria-hidden="true">+</span>
-                        <span>Taxes</span>
+                        <span>APPLICABLE TAXES</span>
                       </span>
-                      <span className="max-w-[150px] text-right text-[0.82rem] leading-5 text-[#64748b]">Not currently charged</span>
                     </div>
                   </div>
 
-                  <div className="relative mx-auto mt-6 max-w-[620px] -rotate-[0.35deg] border border-[#c9b86d] bg-[linear-gradient(180deg,#fffce3,#fff8bf)] px-5 py-5 text-center shadow-[0_18px_42px_-30px_rgba(71,55,8,0.65)] sm:px-8">
+                  <p className="mt-6 text-center text-[0.76rem] font-black uppercase tracking-[0.18em] text-[#2563eb]">LIMITED TIME OFFER!!!</p>
+                  <div className="relative mx-auto mt-3 max-w-[620px] -rotate-[0.35deg] border border-[#c9b86d] bg-[linear-gradient(180deg,#fffce3,#fff8bf)] px-5 py-5 text-center shadow-[0_18px_42px_-30px_rgba(71,55,8,0.65)] sm:px-8">
                     <span className="absolute left-1/2 top-[-12px] h-6 w-28 -translate-x-1/2 rotate-[-1.5deg] bg-[#d9d2bc]/85 shadow-sm" aria-hidden="true" />
                     <div className="relative space-y-0.5 text-[clamp(1rem,1.65vw,1.3rem)] font-black leading-[1.25] tracking-[0.025em] text-[#172033]">
-                      <p>SPECIAL OFFER.</p>
+                      <p>OUR GUARANTEE</p>
                       <p>FIRST 2 WEEKS FREE!!</p>
                       <p>IF YOUR AI ASSISTANT</p>
                       <p>DOESN'T GET YOU EXTRA JOBS</p>
-                      <p>FROM MISSED CALLS</p>
+                      <p>FROM MISSED CALLS - DURING THE FIRST 14 DAYS</p>
                       <p>SIMPLY CANCEL AT NO COST TO YOU!!</p>
                     </div>
                   </div>
@@ -5286,7 +5282,7 @@ function LandingPage() {
                   <p className="text-center text-[0.82rem] font-black uppercase tracking-[0.15em] text-[#2563eb]">Pay only for chargeable minutes</p>
                   <div className="mt-4 grid items-center gap-3 text-center sm:grid-cols-[1fr_auto_1fr_auto_1fr]">
                     <div className="rounded-[8px] bg-[#eaf4ff] px-4 py-3 text-[#176bff]">
-                      <p className="text-[0.9rem] font-black leading-tight text-[#334155]">USED MINUTES</p>
+                      <p className="text-[0.9rem] font-black leading-tight text-[#334155]">USED MINUTES PER MONTH</p>
                     </div>
                     <span className="text-2xl font-black text-[#2563eb]">-</span>
                     <div className="rounded-[8px] bg-[#f8fbff] px-4 py-3 text-[#334155]">
