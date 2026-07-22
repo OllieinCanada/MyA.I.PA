@@ -38,21 +38,21 @@ const problemMoments = [
     art: "problem",
   },
   {
-    body: "Your professional AI agent engages the customer and collects details for easy follow-up.",
+    body: "Your AI assistant talks with the customer and collects the job details you need for a callback.",
     bodyLines: [
-      "Your professional AI agent",
-      "engages the customer",
-      "and collects details that are",
+      "Your AI assistant",
+      "talks with the customer",
+      "and collects job details that are",
       "sent by text to your phone",
     ],
     art: "agent",
   },
   {
-    body: "With a clear plan, the customer feels heard and is more open to a future callback.",
+    body: "The customer gets a clear confirmation and knows what happens next while waiting for your callback.",
     bodyLines: [
-      "With a clear plan, the customer",
-      "feels heard and is now open",
-      "to a future callback.",
+      "The customer gets confirmation,",
+      "knows what happens next,",
+      "and waits for your callback.",
     ],
     art: "callback",
     artClassName: "h-[94px] w-[146px]",
@@ -65,32 +65,32 @@ const benefitCards = [
     eyebrow: "Catch every call",
     accent: "from-blue-600 to-blue-500",
     glow: "shadow-[0_18px_40px_-30px_rgba(56,189,248,0.42)]",
-    title: "Never miss another opportunity.",
-    body: "Each inquiry is answered while you are on-site or on the ladder.",
+    title: "Answer while the work keeps moving.",
+    body: "Service calls are answered while you are on a job, driving, or with family.",
   },
   {
     code: "CLIPBOARD",
     eyebrow: "Stay organized",
     accent: "from-blue-400 to-blue-500",
     glow: "shadow-[0_18px_40px_-30px_rgba(96,165,250,0.42)]",
-    title: "All details get collected.",
-    body: "Job notes, caller info, and timing arrive by text after the call.",
+    title: "The quote details get collected.",
+    body: "Get the problem, service address, urgency, preferred timing, and callback number.",
   },
   {
     code: "TOOLS",
     eyebrow: "Work-life balance",
     accent: "from-emerald-500 to-emerald-400",
     glow: "shadow-[0_18px_40px_-30px_rgba(52,211,153,0.42)]",
-    title: "Handle calls after hours.",
-    body: "Let the agent answer without breaking focus or family time.",
+    title: "Handle after-hours and urgent calls.",
+    body: "Urgent requests are flagged for a fast callback without diagnosing or promising an arrival time.",
   },
   {
     code: "CHART",
     eyebrow: "Grow your business",
     accent: "from-orange-500 to-orange-400",
     glow: "shadow-[0_18px_40px_-30px_rgba(250,204,21,0.34)]",
-    title: "More calls answered means more booked jobs.",
-    body: "Better reviews, cleaner follow-up, and higher revenue.",
+    title: "Quote and schedule faster.",
+    body: "Know what the customer needs before you return the call.",
   },
 ];
 
@@ -125,8 +125,8 @@ const pricingCards = [
     featured: true,
     accent: "from-[#2db4ff] via-[#2563eb] to-[#ff8b1f]",
     tint: "bg-[linear-gradient(145deg,#ffffff_0%,#f7fbff_58%,#fff6eb_100%)]",
-    minuteNote: "Includes 60 AI call minutes. Extra minutes are $0.25/min.",
-    points: ["24/7 AI answering", "60 AI call minutes included", "Extra minutes billed at $0.25/min", "Text summaries for both sides"],
+    minuteNote: "Includes 60 AI call minutes.",
+    points: ["24/7 AI answering", "60 AI call minutes included", "Text summaries for both sides"],
   },
 ];
 
@@ -143,9 +143,9 @@ const testimonialCards = [
     role: "Common contractor workflow",
   },
   {
-    quote: "Evening rental inquiries used to sit until morning. Now callers get an immediate response and our team wakes up to clean lead details instead of a pile of missed calls.",
+    quote: "Evening rental service calls used to sit until morning. Now callers get an immediate response and our team wakes up to job details ready for follow-up instead of a pile of missed calls.",
     name: "Property management example",
-    role: "After-hours inquiry workflow",
+    role: "After-hours service-call workflow",
   },
   {
     quote: "Roof repair calls used to interrupt me while I was on ladders or meeting homeowners. Now the caller gets helped and I get the job details by text.",
@@ -153,7 +153,7 @@ const testimonialCards = [
     role: "On-site service workflow",
   },
   {
-    quote: "Service calls come in while we are driving between plumbing jobs. My AI PA keeps the lead warm, answers basics, and sends us the follow-up details.",
+    quote: "Service calls come in while we are driving between plumbing jobs. My AI PA talks with the customer, answers basic questions, and sends us the job details.",
     name: "Plumbing example",
     role: "In-transit service workflow",
   },
@@ -162,10 +162,54 @@ const testimonialCards = [
 const faqs = [
   { q: "Will callers know they are speaking with an AI assistant?", a: "Yes. The goal is to sound clear, professional, and helpful while answering questions and collecting the right job details." },
   { q: "Do I have to change my business number?", a: "No. Keep your current number and forward calls to your My AI PA number." },
-  { q: "What if someone calls after hours?", a: "Your AI assistant can still answer, help the caller, and send both sides a text follow-up." },
-  { q: "Can I control what it says?", a: "Yes. You set the custom greeting and common questions so it fits your business." },
-  { q: "How hard is setup?", a: "It is meant to be simple: fill in your business info, test a call, then go live with no downtime." },
+  { q: "What if someone calls after hours?", a: "Your AI assistant can answer after hours, collect the job details, and flag an urgent request for a fast callback. It does not diagnose the problem or promise an arrival time." },
+  { q: "Can I control what it says?", a: "Yes. You provide the greeting and answers about your hours, service area, estimates, emergency availability, warranties, and other common questions. You also choose the callback wording and timeframe callers hear." },
+  { q: "What job details does it collect?", a: "It can collect the customer's problem, service address, urgency, preferred timing, and best callback number so you can quote and schedule faster." },
+  { q: "How hard is setup?", a: "Easy to set-up. Scroll below for details" },
 ];
+
+const forwardingProviderDetails = {
+  BELL: {
+    title: "BELL MOBILITY",
+    subtitle: "FORWARD CALLS YOU DON'T ANSWER",
+    steps: [
+      "Open Call Settings.",
+      "Select Call Forwarding.",
+      "Choose calls you don't answer.",
+      "Enter your My AI PA number and activate.",
+    ],
+    offText: "Turn off in Call Settings.",
+    sourceText: "Based on Bell Support instructions",
+  },
+  ROGERS: {
+    title: "ROGERS MOBILE",
+    subtitle: "FORWARD CALLS YOU DON'T ANSWER",
+    code: "*61*2895550148#",
+    steps: ["Open the Phone app.", "Dial the ready-to-use code.", "Tap Call/Send.", "Wait for the confirmation message."],
+    offText: "Turn off anytime: dial ##61#",
+    sourceText: "Based on Rogers Support instructions",
+  },
+  TELUS: {
+    title: "TELUS MOBILE",
+    subtitle: "FORWARD CALLS YOU DON'T ANSWER",
+    code: "*61*2895550148#",
+    steps: ["Open the Phone app.", "Dial the ready-to-use code.", "Tap Call/Send.", "Wait for the confirmation message."],
+    offText: "Turn off anytime: dial #61#",
+    sourceText: "Based on TELUS Support instructions",
+  },
+  OTHER: {
+    title: "OTHER PROVIDER",
+    subtitle: "WE'LL HELP YOU FIND THE RIGHT METHOD",
+    steps: [
+      "Contact your phone provider.",
+      "Ask for unanswered-call forwarding.",
+      "Give them your My AI PA number.",
+      "Let a test call ring unanswered.",
+    ],
+    offText: "Your provider can also help you turn it off.",
+    sourceText: "Provider instructions can vary",
+  },
+};
 
 const trustCards = [
   {
@@ -1099,7 +1143,7 @@ function LegacyVoicemailLossesArtboard() {
   const assistantBenefits = [
     ["Always Responds", "After 3 Rings"],
     ["Always answers when", "you can't - 24/7"],
-    ["Engages customers,", "answers questions,", "collects job details."],
+    ["Talks with customers,", "answers questions,", "collects job details."],
   ];
 
   const processCards = [
@@ -1584,7 +1628,8 @@ function VoicemailLossesArtboard({ onStart, onPlayDemo }) {
               <span className="grid h-14 w-14 place-items-center rounded-full bg-[linear-gradient(180deg,#3185ff,#1d4ed8)] text-3xl font-black text-white shadow-[0_18px_34px_-24px_rgba(29,78,216,1)]">2</span>
               <p className="text-[clamp(1.55rem,2vw,2rem)] font-black leading-tight tracking-[-0.04em] text-[#1d7df2]">Assistant answers live</p>
             </div>
-            <h3 className="mt-3 max-w-[360px] text-[clamp(1.22rem,1.45vw,1.52rem)] font-black leading-tight text-[#07142a]">Asks why they called and answers FAQ questions</h3>
+            <h3 className="mt-3 max-w-[360px] text-[clamp(1.22rem,1.45vw,1.52rem)] font-black leading-tight text-[#07142a]">Instantly connects with customer</h3>
+            <p className="mt-2 max-w-[360px] text-[clamp(1rem,1.12vw,1.16rem)] font-bold leading-snug text-[#405476]">Asks why they called and answers FAQ questions.</p>
 
             <div className="mt-4 grid gap-4 xl:grid-cols-[1fr_150px]">
               <div className="min-w-0">
@@ -1593,14 +1638,14 @@ function VoicemailLossesArtboard({ onStart, onPlayDemo }) {
                 </p>
                 <div className="space-y-3">
                   {[
-                    ["My AI PA", "Hi! Thanks for calling. What can I help you with today?"],
-                    ["Caller", "I need a hot tub electrical setup at my home."],
-                    ["My AI PA", "Sure, we can help. We can also answer common questions before collecting the details."],
-                  ].map(([speaker, text], index) => (
+                    ["My AI PA", "Hi! Thanks for calling. What can I help you with today?", "6:10 PM"],
+                    ["Caller", "I need a hot tub electrical setup at my home.", "6:10 PM"],
+                    ["My AI PA", "Sure, we can help. I can also answer common questions before I collect the details.", "6:10 PM"],
+                  ].map(([speaker, text, time], index) => (
                     <div key={speaker + index} className="rounded-lg border border-[#d7e7fb] bg-[linear-gradient(180deg,#ffffff,#eef6ff)] px-3 py-2 shadow-[0_14px_32px_-30px_rgba(37,99,235,0.8)]">
                       <div className="flex items-center justify-between gap-3">
                         <p className="text-sm font-black text-[#07142a]">{speaker}</p>
-                        <p className="text-xs font-bold text-[#64748b]">10:15 AM</p>
+                        <p className="text-xs font-bold text-[#64748b]">{time}</p>
                       </div>
                       <p className="mt-1 text-sm font-semibold leading-5 text-[#334155]">{text}</p>
                     </div>
@@ -1636,10 +1681,10 @@ function VoicemailLossesArtboard({ onStart, onPlayDemo }) {
               <div>
                 <div className="flex items-center gap-4">
                   <span className="grid h-14 w-14 place-items-center rounded-full bg-[linear-gradient(180deg,#22c55e,#15803d)] text-3xl font-black text-white shadow-[0_18px_34px_-24px_rgba(21,128,61,1)]">3</span>
-                  <p className="text-[clamp(1.4rem,1.75vw,1.8rem)] font-black leading-tight tracking-[-0.04em] text-[#13833c]">Clear text summaries sent</p>
+                  <p className="text-[clamp(1.4rem,1.75vw,1.8rem)] font-black leading-tight tracking-[-0.04em] text-[#13833c]">Job description texted to your phone</p>
                 </div>
                 <h3 className="mt-3 text-[clamp(1.08rem,1.25vw,1.34rem)] font-black leading-tight text-[#07142a]">
-                  Owner and caller both get clear follow-up texts providing a clear background for future conversation.
+                  Owner and caller both get clear follow-up texts for an easy callback.
                 </h3>
               </div>
 
@@ -1656,22 +1701,22 @@ function VoicemailLossesArtboard({ onStart, onPlayDemo }) {
                         <HeroIcon type={icon} className="h-5 w-5" />
                       </span>
                       <p className="min-w-0 flex-1 text-sm font-black leading-5 text-[#07142a] min-[1500px]:text-base">{text}</p>
-                      <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[#16a34a] text-white shadow-[0_8px_18px_-10px_rgba(22,163,74,0.9)]" aria-label="Completed">
-                        <HeroIcon type="check" className="h-4 w-4" />
+                      <span className="grid h-6 w-6 shrink-0 place-items-center text-[#16a34a]" aria-label="Completed">
+                        <HeroIcon type="check" className="h-6 w-6" />
                       </span>
                     </div>
                   ))}
                 </div>
 
-                <div className="mx-auto h-[270px] w-full max-w-[190px] rounded-[24px] border-[4px] border-[#07142a] bg-white p-2 shadow-[0_22px_48px_-34px_rgba(15,23,42,0.95)] xl:h-[286px] min-[1500px]:h-[300px] min-[1500px]:w-[170px] min-[1500px]:rounded-[28px] min-[1500px]:border-[5px]">
+                <div className="mx-auto h-[300px] w-full max-w-[190px] overflow-hidden rounded-[24px] border-[4px] border-[#07142a] bg-white p-2 shadow-[0_22px_48px_-34px_rgba(15,23,42,0.95)] xl:h-[316px] min-[1500px]:h-[330px] min-[1500px]:w-[170px] min-[1500px]:rounded-[28px] min-[1500px]:border-[5px]">
                   <div className="mx-auto h-2 w-14 rounded-full bg-[#07142a] min-[1500px]:w-16" />
                   <div className="px-1 pt-3 text-center min-[1500px]:px-2 min-[1500px]:pt-4">
                     <p className="text-[0.66rem] font-black text-[#07142a] min-[1500px]:text-[0.76rem]">My AI PA</p>
                     <p className="mt-2 text-[0.58rem] font-semibold text-[#94a3b8] min-[1500px]:text-[0.68rem]">Today 10:16 AM</p>
                   </div>
-                  <div className="mt-3 space-y-2">
+                  <div className="mt-3 space-y-2 pb-2">
                     <div className="rounded-lg bg-[#ecfdf5] p-2.5">
-                      <p className="text-[0.62rem] font-black uppercase tracking-[0.08em] text-[#16a34a]">Owner alert</p>
+                      <p className="text-[0.62rem] font-black uppercase tracking-[0.08em] text-[#16a34a]">Job description to owner</p>
                       <div className="mt-1 space-y-0.5 text-[0.53rem] font-bold leading-3 text-[#07142a] xl:text-[0.58rem] min-[1500px]:text-[0.68rem] min-[1500px]:leading-4">
                         <p>Brian Smith</p>
                         <p>905-555-1234</p>
@@ -1689,7 +1734,7 @@ function VoicemailLossesArtboard({ onStart, onPlayDemo }) {
                 </div>
               </div>
               <p className="rounded-lg bg-[#ecfdf5] px-4 py-3 text-sm font-bold leading-5 text-[#27543a]">
-                The business owner can follow up fully informed once they are safely off the ladder or finished dinner with their family.
+                The business owner instantly receives the job details for an easy callback once they are safely down from the ladder or finished dinner with their family.
               </p>
             </div>
           </article>
@@ -1750,6 +1795,196 @@ function VoicemailLossesArtboard({ onStart, onPlayDemo }) {
   );
 }
 
+function ForwardingSetupWizard() {
+  const [provider, setProvider] = useState("ROGERS");
+  const [copiedField, setCopiedField] = useState("");
+  const [testComplete, setTestComplete] = useState(false);
+  const providerDetails = forwardingProviderDetails[provider];
+  const displayNumber = "(289) 555-0148";
+  const copyNumber = "2895550148";
+
+  const copyToClipboard = async (value, field) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopiedField(field);
+      window.setTimeout(() => setCopiedField(""), 1800);
+    } catch (_err) {
+      setCopiedField("");
+    }
+  };
+
+  return (
+    <div className="rounded-[18px] border border-[#cfe1f6] bg-white px-4 py-5 shadow-[0_28px_82px_-58px_rgba(18,32,51,0.34)] sm:px-6 lg:px-8 lg:py-8">
+      <div>
+        <p className="text-[0.74rem] font-black uppercase tracking-[0.18em] text-[#176bff]">Easy phone setup</p>
+        <h3 className="mt-2 text-[clamp(1.4rem,2vw,1.85rem)] font-black leading-tight tracking-[-0.035em] text-[#07142a]">
+          Send calls you don&apos;t answer to My AI PA
+        </h3>
+        <p className="mt-2 text-[0.94rem] font-medium leading-6 text-[#475569]">
+          Pick your phone company. We&apos;ll show you exactly what to press, step by step.
+        </p>
+
+        <div className="mt-5 grid grid-cols-[auto_1fr_auto_1fr_auto] items-center gap-2 text-[0.68rem] font-black uppercase tracking-[0.14em] text-[#94a3b8] sm:gap-3 sm:text-[0.74rem]">
+          <span className="inline-flex items-center gap-2 text-[#176bff]">
+            <span className="grid h-8 w-8 place-items-center rounded-full bg-[#176bff] text-white">1</span>
+            <span className="hidden sm:inline">Provider</span>
+          </span>
+          <span className="h-px bg-[#94a3b8]" />
+          <span className="inline-flex items-center gap-2">
+            <span className="grid h-8 w-8 place-items-center rounded-full bg-[#94a3b8] text-white">2</span>
+            <span className="hidden sm:inline">Connect</span>
+          </span>
+          <span className="h-px bg-[#94a3b8]" />
+          <span className="inline-flex items-center gap-2">
+            <span className="grid h-8 w-8 place-items-center rounded-full bg-[#94a3b8] text-white">3</span>
+            <span className="hidden sm:inline">Test</span>
+          </span>
+        </div>
+
+        <div className="mt-4 grid grid-cols-2 overflow-hidden rounded-t-[10px] border border-[#cfe1f6] bg-[#f8fbff] sm:grid-cols-4">
+          {Object.keys(forwardingProviderDetails).map((providerName) => {
+            const selected = provider === providerName;
+            return (
+              <button
+                key={providerName}
+                type="button"
+                onClick={() => {
+                  setProvider(providerName);
+                  setCopiedField("");
+                  setTestComplete(false);
+                }}
+                className={
+                  "min-h-[46px] border-[#cfe1f6] px-3 py-3 text-[0.8rem] font-black uppercase tracking-[0.12em] transition first:border-l-0 sm:border-l " +
+                  (selected ? "bg-[#176bff] text-white shadow-[0_12px_28px_-20px_rgba(23,107,255,0.95)]" : "bg-white text-[#475569] hover:bg-[#eef6ff] hover:text-[#176bff]")
+                }
+                aria-pressed={selected}
+              >
+                {providerName}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="grid gap-3 border-x border-b border-[#cfe1f6] bg-[#fbfdff] p-3 lg:grid-cols-[0.84fr_1.22fr_1fr]">
+          <section className="rounded-[10px] border border-[#cfe1f6] bg-white p-4 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.28)]">
+            <p className="text-[0.66rem] font-black uppercase tracking-[0.14em] text-[#176bff]">Your My AI PA number</p>
+            <div className="mt-4 flex items-center gap-3">
+              <span className="text-[#176bff]">
+                <HeroIcon type="phone" className="h-7 w-7" />
+              </span>
+              <p className="whitespace-nowrap text-[clamp(1.05rem,1.55vw,1.28rem)] font-black tracking-[-0.035em] text-[#07142a]">{displayNumber}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => copyToClipboard(copyNumber, "number")}
+              className="mt-4 inline-flex min-h-[42px] w-full items-center justify-center gap-2 rounded-[8px] border-2 border-[#176bff] bg-white px-3 text-[0.75rem] font-black uppercase tracking-[0.1em] text-[#176bff] transition hover:bg-[#eef6ff]"
+            >
+              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                <rect x="8" y="8" width="11" height="12" rx="2" />
+                <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h2" />
+              </svg>
+              {copiedField === "number" ? "Copied" : "Copy number"}
+            </button>
+            <p className="mt-4 text-[0.78rem] font-medium leading-5 text-[#475569]">
+              We insert this number into your forwarding code automatically.
+            </p>
+          </section>
+
+          <section className="rounded-[10px] border border-[#cfe1f6] bg-white p-4 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.28)]">
+            <p className="text-[0.86rem] font-black uppercase tracking-[0.08em] text-[#176bff]">{providerDetails.title}</p>
+            <p className="mt-1 text-[0.66rem] font-black uppercase tracking-[0.1em] text-[#176bff]">{providerDetails.subtitle}</p>
+            <ol className="mt-4 space-y-2 text-[0.82rem] font-medium leading-5 text-[#172033]">
+              {providerDetails.steps.map((step, stepIndex) => (
+                <li key={step} className="grid grid-cols-[20px_1fr] gap-2">
+                  <span className="font-black">{stepIndex + 1}.</span>
+                  {providerDetails.code && stepIndex === 1 ? (
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span>Dial</span>
+                      <code className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap rounded-[6px] border border-[#9fc5ff] bg-[#f8fbff] px-2 py-1 text-[0.75rem] font-black text-[#07142a]">
+                        {providerDetails.code}
+                      </code>
+                      <button
+                        type="button"
+                        onClick={() => copyToClipboard(providerDetails.code, "code")}
+                        className="shrink-0 text-[#176bff] transition hover:text-[#0b4fc8]"
+                        aria-label="Copy ready-to-dial forwarding code"
+                      >
+                        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                          <rect x="8" y="8" width="11" height="12" rx="2" />
+                          <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h2" />
+                        </svg>
+                      </button>
+                    </span>
+                  ) : (
+                    <span>{step}</span>
+                  )}
+                </li>
+              ))}
+            </ol>
+            {providerDetails.code ? (
+              <button
+                type="button"
+                onClick={() => copyToClipboard(providerDetails.code, "code")}
+                className="mt-4 inline-flex min-h-[42px] w-full items-center justify-center gap-2 rounded-[8px] border-2 border-[#176bff] bg-white px-3 text-[0.7rem] font-black uppercase tracking-[0.08em] text-[#176bff] transition hover:bg-[#eef6ff]"
+              >
+                <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                  <rect x="8" y="8" width="11" height="12" rx="2" />
+                  <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h2" />
+                </svg>
+                {copiedField === "code" ? "Code copied" : "Copy ready-to-dial code"}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => copyToClipboard(copyNumber, "number")}
+                className="mt-4 inline-flex min-h-[42px] w-full items-center justify-center rounded-[8px] border-2 border-[#176bff] bg-white px-3 text-[0.7rem] font-black uppercase tracking-[0.08em] text-[#176bff] transition hover:bg-[#eef6ff]"
+              >
+                {copiedField === "number" ? "Number copied" : "Copy My AI PA number"}
+              </button>
+            )}
+          </section>
+
+          <section className="flex flex-col rounded-[10px] border border-[#cfe1f6] bg-white p-4 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.28)]">
+            <p className="text-center text-[0.82rem] font-black uppercase tracking-[0.1em] text-[#15803d]">Final check</p>
+            <span className="mx-auto mt-3 grid h-10 w-10 place-items-center rounded-full border-2 border-[#16a34a] text-[#16a34a]">
+              <HeroIcon type="check" className="h-6 w-6" />
+            </span>
+            <p className="mt-4 flex-1 text-[0.84rem] font-medium leading-5 text-[#172033]">
+              Call your business number and let it ring unanswered. My AI PA should answer.
+            </p>
+            <p className="mt-3 text-center text-[0.78rem] font-black leading-5 text-[#176bff]">
+              Problems? Call our customer support at <a href="tel:+12495033301" className="whitespace-nowrap underline decoration-2 underline-offset-2">(249) 503-3301</a>
+            </p>
+            <button
+              type="button"
+              onClick={() => setTestComplete((complete) => !complete)}
+              className={
+                "mt-4 inline-flex min-h-[46px] w-full items-center justify-center rounded-[8px] px-3 text-[0.72rem] font-black uppercase tracking-[0.08em] text-white shadow-[0_16px_34px_-24px_rgba(255,106,0,0.92)] transition hover:-translate-y-0.5 " +
+                (testComplete ? "bg-[#15803d]" : "bg-[linear-gradient(180deg,#ff8b1f,#ff6b00)]")
+              }
+            >
+              {testComplete ? "Test completed" : "I completed the test"}
+            </button>
+          </section>
+        </div>
+
+        <div className="grid gap-2 rounded-b-[10px] border-x border-b border-[#cfe1f6] bg-white px-3 py-3 text-[0.73rem] font-semibold leading-5 text-[#475569] sm:grid-cols-3 sm:divide-x sm:divide-[#d8e7fb]">
+          <p className="flex items-center gap-2 sm:px-3">
+            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[#e8f9ef] text-[#15803d]">
+              <HeroIcon type="shield" className="h-4 w-4" />
+            </span>
+            {providerDetails.offText}
+          </p>
+          <p className="flex items-center gap-2 sm:px-3">
+            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[#eef6ff] font-black text-[#176bff]">i</span>
+            {providerDetails.sourceText}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function LandingPage() {
   const demoRef = useRef(null);
   const pricingRef = useRef(null);
@@ -1760,7 +1995,7 @@ function LandingPage() {
   const [audioTime, setAudioTime] = useState(0);
   const [audioDuration, setAudioDuration] = useState(133);
   const [audioError, setAudioError] = useState("");
-  const [openFaq, setOpenFaq] = useState(0);
+  const [openFaq, setOpenFaq] = useState(4);
   const [showHeader, setShowHeader] = useState(false);
   const headerHideTimerRef = useRef(null);
 
@@ -4202,6 +4437,32 @@ function LandingPage() {
               line-height: 1.05 !important;
             }
           }
+          /* Keep the complete conversation visible instead of clipping the final caller response. */
+          @media (min-width: 1024px) {
+            .landing-call-dashboard > div {
+              height: auto !important;
+              min-height: 760px !important;
+              max-height: none !important;
+            }
+            .landing-call-dashboard > div > div,
+            .landing-call-panel,
+            .landing-conversation-column {
+              height: auto !important;
+              min-height: 760px !important;
+            }
+            .landing-conversation-panel {
+              flex: 0 0 auto !important;
+              overflow: visible !important;
+            }
+          }
+          @media (min-width: 1024px) and (max-height: 820px) {
+            .landing-call-dashboard > div,
+            .landing-call-dashboard > div > div,
+            .landing-call-panel,
+            .landing-conversation-column {
+              min-height: 720px !important;
+            }
+          }
         `}</style>
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_16%_18%,rgba(187,222,255,0.74),transparent_30%),radial-gradient(circle_at_78%_12%,rgba(213,235,255,0.70),transparent_32%),linear-gradient(180deg,#ffffff_0%,#f6fbff_28%,#e9f6ff_100%)]" />
         <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgba(37,99,235,0.06)_1px,transparent_1px),linear-gradient(rgba(37,99,235,0.045)_1px,transparent_1px)] bg-[size:76px_76px] opacity-[0.32]" />
@@ -4249,15 +4510,15 @@ function LandingPage() {
               </div>
 
               <p className="landing-hero-copy mt-4 max-w-[540px] text-[1.06rem] font-medium leading-7 text-[#111827] sm:text-[1.12rem] 2xl:text-[1.16rem] 2xl:leading-8">
-                <span className="font-black">24/7 AI call answering</span> for <span className="marker-highlight whitespace-nowrap">busy trade businesses.</span>
+                <span className="font-black">24/7 AI call answering</span> for <span className="marker-highlight">busy trades across Hamilton, Grimsby, and the surrounding area.</span>
               </p>
 
               <div className="landing-hero-points mt-5 space-y-3">
                 {[
-                  ["phone", "Welcomes customers with a professional greeting"],
-                  ["faq", "Answers FAQs"],
-                  ["clipboard", "Collects job details"],
-                  ["sms", "Sends a text for easy follow-up"],
+                  ["phone", "Answers while you're on the job, driving, or with family"],
+                  ["faq", "Answers questions about your hours, service area, estimates, and warranties"],
+                  ["clipboard", "Gets the problem, address, urgency, timing, and callback number"],
+                  ["sms", "Texts you the details so you can quote and schedule faster"],
                 ].map(([icon, label]) => (
                   <div key={label} className="landing-hero-point flex items-center gap-4 text-[1rem] font-semibold text-[#111827] 2xl:text-[1.06rem]">
                     <span className="landing-hero-point-icon grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#0c4da0] text-white shadow-[0_10px_28px_-16px_rgba(59,130,246,1)]">
@@ -4512,7 +4773,7 @@ function LandingPage() {
                   <p className="inline-block max-w-[18rem] -translate-x-3 -translate-y-7 rounded-2xl border border-[#8b5cff]/70 bg-black/70 px-4 py-3 text-[0.9rem] font-black uppercase leading-tight tracking-[0.02em] text-white shadow-[0_0_28px_rgba(139,92,246,0.34)]">
                     <span className="block whitespace-nowrap">Instant text messages</span>
                     <span className="block whitespace-nowrap">sent after each</span>
-                    <span className="block whitespace-nowrap">Interaction!</span>
+                    <span className="block whitespace-nowrap">Call!</span>
                   </p>
                 </div>
               </div>
@@ -4607,7 +4868,7 @@ function LandingPage() {
                   <div className="mt-7 space-y-4 text-[clamp(1rem,1.2vw,1.28rem)] font-medium leading-7 text-[#eafff9] min-[1700px]:leading-8">
                     {[
                       "Responds instantly",
-                      "Engages callers and answers questions",
+                      "Talks with callers and answers questions",
                       "Answers every call after 2 rings",
                       "Talks to customers naturally",
                       "Collects job details for easy follow-up",
@@ -4630,7 +4891,7 @@ function LandingPage() {
           <div className="min-w-0 pt-0 min-[1700px]:pt-[10px]">
             <div className="min-h-[76px] rounded-[28px] border border-white/55 bg-[#071832]/80 px-5 py-5 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] min-[1700px]:h-[84px] min-[1700px]:px-12 min-[1700px]:py-6">
               <p className="text-[clamp(1.35rem,2vw,2rem)] font-black leading-tight tracking-[-0.04em] text-white">
-                How AI Converts <span className="text-[#ff9d22]">cold callers into customers</span>
+                How AI Turns <span className="text-[#ff9d22]">missed callers into customers</span>
               </p>
             </div>
 
@@ -4648,7 +4909,7 @@ function LandingPage() {
                 },
                 {
                   number: "3",
-                  text: "The customer gets a clear confirmation, feels heard, stops searching elsewhere, and expects your callback next.",
+                  text: "The customer gets a clear confirmation, knows what happens next, and waits for your callback.",
                   image: "/illustrations/events-calendar.svg",
                 },
               ].map((item) => (
@@ -4677,7 +4938,7 @@ function LandingPage() {
               Designed for contractors who cannot pause the job to answer every call.
             </h2>
             <p className="mx-auto mt-3 max-w-[780px] text-[0.98rem] font-medium leading-7 text-[#475569] sm:text-[1.08rem]">
-              Electrical, plumbing, HVAC, and contractor teams get a practical assistant that answers, collects details, and sends clean follow-up while the crew keeps moving.
+              Electrical, plumbing, HVAC, and contractor teams get a practical assistant that answers service calls, collects quote details, and texts the crew while the work keeps moving.
             </p>
           </div>
 
@@ -4709,10 +4970,10 @@ function LandingPage() {
               <div className="min-w-0">
                 <p className="text-[0.72rem] font-black uppercase tracking-[0.16em] text-[#64c9ff]">Proof in action</p>
                 <h3 className="mt-2 max-w-[610px] text-[clamp(1.55rem,2.8vw,2.45rem)] font-black leading-[1.02] tracking-[-0.045em] text-white">
-                  Hear a real example of the agent taking a customer inquiry.
+                  Hear a real example of the agent taking a service call.
                 </h3>
                 <p className="mt-3 max-w-[590px] text-[0.96rem] font-medium leading-7 text-[#cfe7ff]">
-                  Hear a sample of a real-life conversation. The caller is engaged in meaningful dialogue, gets FAQs answered, and is prompted to provide job details along with an expected callback.
+                  Hear a real-life service call. The assistant answers common questions and gathers the problem, service address, preferred timing, and callback number.
                 </p>
 
                 <div className="mt-4 rounded-[8px] border border-[#21476f] bg-[#092646] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
@@ -4732,7 +4993,7 @@ function LandingPage() {
                         <p className="text-[0.72rem] font-black uppercase tracking-[0.14em] text-[#7dd3fc]">Real call example</p>
                         <p className="mt-1 text-[1.05rem] font-black leading-tight text-white sm:text-[1.22rem]">Electrical setup lead</p>
                         <p className="mt-1 max-w-[440px] text-[0.86rem] font-medium leading-6 text-[#cfe7ff]">
-                          My AI PA captures the caller&apos;s name, job details, address, and best callback time.
+                          My AI PA captures the problem, service address, urgency, preferred timing, and best callback number.
                         </p>
                       </div>
                     </div>
@@ -4846,7 +5107,7 @@ function LandingPage() {
                     <span className="whitespace-nowrap rounded-full bg-[#dff7e9] px-2.5 py-1 text-[0.62rem] font-black uppercase tracking-[0.08em] text-[#15803d]">Confirmed</span>
                   </div>
                   <p className="px-4 py-3 text-[0.88rem] font-medium leading-6 text-[#12302d]">
-                    Thanks for calling Tim&apos;s Electrical. Your hot tub setup request has been sent to the team, and someone will follow up based on the details you provided.
+                    Thanks for calling Tim&apos;s Electrical. Your hot tub setup request has been sent to the team. WE WILL GET BACK TO YOU SHORTLY.
                   </p>
                 </div>
 
@@ -4854,7 +5115,7 @@ function LandingPage() {
                   {[
                     ["shield", "No missed calls", "24/7 AI answering"],
                     ["clock", "Work keeps moving", "You never stop the job"],
-                    ["chat", "Clean follow-up", "Texts both you and the caller"],
+                    ["chat", "Job details ready", "Texts both you and the caller"],
                     ["people", "Built for trades", "Contractor-focused conversations"],
                   ].map(([icon, title, body]) => (
                     <div key={title} className="flex items-start gap-2 rounded-[7px] border border-[#e2e8f0] bg-[#f8fbff] px-3 py-2">
@@ -4874,7 +5135,7 @@ function LandingPage() {
             <div className="grid gap-3 border-t border-white/12 px-4 py-3 text-[#dbeafe] sm:grid-cols-3 sm:px-5 lg:px-7">
               {[
                 ["shield", "Trusted by contractors", "across North America"],
-                ["people", "1,000+ contractors", "already using My AI PA"],
+                ["people", "Project a professional image", "for about the price of a cup of coffee per day"],
                 ["lock", "100% risk-free", "14-day free trial"],
               ].map(([icon, title, body]) => (
                 <div key={title} className="flex items-center gap-3 sm:justify-center">
@@ -4895,13 +5156,17 @@ function LandingPage() {
       <section id="pricing" ref={pricingRef} className="scroll-mt-[96px] bg-[linear-gradient(180deg,#edf7ff_0%,#f8fcff_55%,#eef8ff_100%)]">
         <div className="mx-auto w-full max-w-[1320px] px-4 py-14 sm:px-6 lg:px-8 lg:py-20">
           <div className="mx-auto max-w-5xl text-center">
-            <p className="inline-flex rounded-full border border-[#c7ddff] bg-white/86 px-5 py-2 text-[0.84rem] font-black uppercase tracking-[0.18em] text-[#2563eb] shadow-[0_16px_44px_-36px_rgba(37,99,235,0.58)]">Simple monthly plan</p>
+            <p className="inline-flex rounded-full border border-[#c7ddff] bg-white/86 px-5 py-2 text-[0.84rem] font-black uppercase tracking-[0.18em] text-[#2563eb] shadow-[0_16px_44px_-36px_rgba(37,99,235,0.58)]">Cancel anytime</p>
             <h2 className="mx-auto mt-4 max-w-[980px] text-[clamp(2.1rem,4vw,3.35rem)] font-black leading-[1.04] tracking-[-0.052em] text-[#07142a]">
               Clear pricing for businesses that just want calls handled properly.
             </h2>
             <p className="mx-auto mt-3 max-w-[900px] text-[clamp(1rem,1.3vw,1.16rem)] font-medium leading-8 text-[#334155]">
-              One simple plan for getting calls answered. Includes 60 AI call minutes, with extra minutes billed clearly at $0.25/min.
+              One simple plan for getting calls answered. Includes 60 AI call minutes.
             </p>
+            <div className="mx-auto mt-5 max-w-[760px] rounded-[10px] border border-[#f0c36d] bg-[#fff9e8] px-4 py-3 text-left shadow-[0_18px_42px_-34px_rgba(161,98,7,0.32)] sm:flex sm:items-center sm:gap-4 sm:px-5">
+              <p className="shrink-0 text-[0.72rem] font-black uppercase tracking-[0.16em] text-[#a15c00]">Important</p>
+              <p className="mt-1 text-[0.88rem] font-bold leading-6 text-[#5f4a25] sm:mt-0">Call length and the number of calls from the same number may be limited.</p>
+            </div>
           </div>
 
           {pricingCards.map((plan) => (
@@ -4936,13 +5201,12 @@ function LandingPage() {
 
                   <div className="mt-5">
                     <div className="grid grid-cols-[1fr_auto] gap-4 border-b border-[#e2e8f0] pb-2 text-[0.78rem] font-black uppercase tracking-[0.14em] text-[#64748b]">
-                      <span>Description</span>
+                      <span>PRICE INCLUDES:</span>
                       <span>Price</span>
                     </div>
 
                     {[
-                      ["phone", "60 AI call minutes", "AI answers calls and handles inquiries", "Included"],
-                      ["clock", "Extra minutes", "Billed clearly in 1-minute increments", "$0.25/min after that"],
+                      ["phone", "60 AI call minutes per month", "CALLS OVER 60 min, BILLED AT $0.25 PER MINUTE.", "60 minutes included"],
                     ].map(([icon, title, body, price]) => (
                       <div key={title} className="grid grid-cols-[1fr_auto] items-center gap-4 border-b border-dashed border-[#d8e2ef] py-4">
                         <div className="flex min-w-0 items-center gap-3">
@@ -4964,13 +5228,24 @@ function LandingPage() {
                       <span>Subtotal</span>
                       <span>$79.00</span>
                     </div>
-                    <div className="flex items-center justify-between gap-4 border-b-2 border-[#73a6ef] pb-3">
-                      <span>Taxes</span>
-                      <span>-</span>
+                    <div className="flex items-center gap-4 border-b-2 border-[#73a6ef] pb-3">
+                      <span className="flex min-w-0 items-center gap-2">
+                        <span className="text-[1.25rem] leading-none text-[#176bff]" aria-hidden="true">+</span>
+                        <span>APPLICABLE TAXES</span>
+                      </span>
                     </div>
-                    <div className="flex items-center justify-between gap-4 pt-2">
-                      <span className="text-[0.84rem] uppercase tracking-[0.14em] text-[#2563eb]">Total due today</span>
-                      <span className="text-[clamp(1.55rem,3vw,2rem)] font-black tracking-[-0.04em] text-[#176bff]">$79.00 <span className="text-[1rem] text-[#475569]">/ month</span></span>
+                  </div>
+
+                  <p className="mt-6 text-center text-[clamp(1.5rem,2.6vw,2rem)] font-black uppercase leading-none tracking-[0.08em] text-[#2563eb]">LIMITED TIME OFFER!!!</p>
+                  <div className="relative mx-auto mt-3 max-w-[620px] -rotate-[0.35deg] border border-[#c9b86d] bg-[linear-gradient(180deg,#fffce3,#fff8bf)] px-5 py-5 text-center shadow-[0_18px_42px_-30px_rgba(71,55,8,0.65)] sm:px-8">
+                    <span className="absolute left-1/2 top-[-12px] h-6 w-28 -translate-x-1/2 rotate-[-1.5deg] bg-[#d9d2bc]/85 shadow-sm" aria-hidden="true" />
+                    <div className="relative space-y-0.5 text-[clamp(1rem,1.65vw,1.3rem)] font-black leading-[1.25] tracking-[0.025em] text-[#172033]">
+                      <p className="pb-1 text-[clamp(1.15rem,1.8vw,1.45rem)] leading-none tracking-[0.04em] text-[#dc2626]">OUR GUARANTEE</p>
+                      <p>FREE 14 DAY TRIAL</p>
+                      <p>IF YOUR AI ASSISTANT</p>
+                      <p>DOESN'T GET YOU EXTRA JOBS</p>
+                      <p className="text-[clamp(0.9rem,1.4vw,1.08rem)] tracking-[0.01em] sm:whitespace-nowrap">FROM MISSED CALLS - DURING THE FIRST 14 DAYS</p>
+                      <p>SIMPLY CANCEL AT NO COST TO YOU!!</p>
                     </div>
                   </div>
 
@@ -4995,11 +5270,11 @@ function LandingPage() {
                     </button>
                   </div>
 
-                  <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2 text-[0.8rem] font-bold text-[#64748b]">
+                  <div className="mt-5 flex flex-wrap items-center gap-3 text-[1rem] font-black text-[#15803d]">
                     {["14-day free trial", "No setup fee", "Cancel anytime"].map((item) => (
-                      <span key={item} className="inline-flex items-center gap-2">
-                        <span className="grid h-5 w-5 place-items-center rounded-full border border-[#cbd5e1] text-[#64748b]">
-                          <HeroIcon type="check" className="h-3 w-3" />
+                      <span key={item} className="inline-flex items-center gap-2 rounded-full border border-[#bbf7d0] bg-[#f0fdf4] px-3 py-2">
+                        <span className="grid h-6 w-6 place-items-center rounded-full border-2 border-[#16a34a] text-[#16a34a]">
+                          <HeroIcon type="check" className="h-4 w-4" />
                         </span>
                         {item}
                       </span>
@@ -5038,60 +5313,51 @@ function LandingPage() {
                 </div>
 
                 <div className="rounded-[10px] border border-[#d8e7fb] bg-white p-4 shadow-[0_22px_58px_-46px_rgba(15,23,42,0.35)]">
-                  <p className="text-center text-[0.82rem] font-black uppercase tracking-[0.15em] text-[#2563eb]">Pay only for extra minutes</p>
+                  <p className="text-center text-[0.82rem] font-black uppercase tracking-[0.15em] text-[#2563eb]">Pay only for chargeable minutes</p>
                   <div className="mt-4 grid items-center gap-3 text-center sm:grid-cols-[1fr_auto_1fr_auto_1fr]">
                     <div className="rounded-[8px] bg-[#eaf4ff] px-4 py-3 text-[#176bff]">
-                      <p className="text-[2rem] font-black leading-none">60</p>
-                      <p className="text-[0.74rem] font-black leading-tight text-[#334155]">included minutes</p>
+                      <p className="text-[0.9rem] font-black leading-tight text-[#334155]">USED MINUTES PER MONTH</p>
                     </div>
                     <span className="text-2xl font-black text-[#2563eb]">-</span>
                     <div className="rounded-[8px] bg-[#f8fbff] px-4 py-3 text-[#334155]">
-                      <p className="text-[0.9rem] font-black">minutes</p>
-                      <p className="text-[0.74rem] font-black">used</p>
+                      <p className="text-[2rem] font-black leading-none text-[#176bff]">60</p>
+                      <p className="text-[0.74rem] font-black leading-tight">FREE MINUTES</p>
                     </div>
                     <span className="text-2xl font-black text-[#2563eb]">=</span>
                     <div className="rounded-[8px] bg-[#e8f9ef] px-4 py-3 text-[#15803d]">
-                      <p className="text-[0.9rem] font-black">extra minutes</p>
-                      <p className="text-[0.74rem] font-black">x $0.25/min</p>
+                      <p className="text-[0.9rem] font-black leading-tight">CHARGEABLE MINUTES.</p>
+                      <p className="mt-1 text-[0.7rem] font-black leading-tight">BILLED AT $0.25 PER MINUTE</p>
                     </div>
                   </div>
                   <p className="mt-3 text-center text-[0.84rem] font-semibold text-[#64748b]">Billed in 1-minute increments. No surprises.</p>
+                  <p className="mt-2 text-center text-[0.8rem] font-bold leading-5 text-[#334155]">
+                    Each completed call adds its call time to your monthly usage. Call customer support anytime for your current monthly total.
+                  </p>
+                </div>
+
+                <div className="rounded-[10px] border border-[#cfe1f6] bg-white p-5 shadow-[0_22px_58px_-46px_rgba(15,23,42,0.35)]">
+                  <div className="flex items-center gap-5">
+                    <span
+                      className="grid h-20 w-16 shrink-0 place-items-center bg-[linear-gradient(180deg,#2f8cff,#176bff)] text-white shadow-[0_18px_34px_-22px_rgba(23,107,255,0.95)] [clip-path:polygon(50%_0%,92%_18%,85%_72%,50%_100%,15%_72%,8%_18%)]"
+                      aria-hidden="true"
+                    >
+                      <HeroIcon type="check" className="h-8 w-8" />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-[1.2rem] font-black uppercase leading-tight tracking-[0.04em] text-[#176bff]">NO SURPRISES.</p>
+                      <p className="mt-2 text-[0.95rem] font-semibold leading-6 text-[#64748b]">
+                        Your completed-call minutes are tracked throughout the month.
+                      </p>
+                      <span className="mt-3 inline-flex rounded-full bg-[#e8f9ef] px-4 py-2 text-[0.72rem] font-black uppercase tracking-[0.14em] text-[#15803d]">
+                        EASY TO TRACK
+                      </span>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
           ))}
 
-          <div className="mt-7 grid gap-3 rounded-[10px] border border-[#d8e7fb] bg-white px-4 py-4 shadow-[0_22px_58px_-48px_rgba(15,23,42,0.35)] sm:grid-cols-2 lg:grid-cols-4">
-            {[
-              ["shield", "No setup fee", "Start in minutes."],
-              ["calendar", "14-day free trial", "Try risk-free."],
-              ["refresh", "Cancel anytime", "No long-term contracts."],
-              ["lock", "Secure & private", "Your data stays protected."],
-            ].map(([icon, title, body]) => (
-              <div key={title} className="flex items-center gap-3 px-3 py-2 lg:border-l lg:first:border-l-0 lg:border-[#e2e8f0]">
-                <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-[linear-gradient(180deg,#2f8cff,#176bff)] text-white shadow-[0_16px_30px_-22px_rgba(23,107,255,0.95)]">
-                  {icon === "calendar" ? (
-                    <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2.1" aria-hidden="true">
-                      <rect x="4" y="5.5" width="16" height="14" rx="2" />
-                      <path d="M8 3.5v4M16 3.5v4M4 10h16" strokeLinecap="round" />
-                    </svg>
-                  ) : icon === "refresh" ? (
-                    <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2.1" aria-hidden="true">
-                      <path d="M20 7v5h-5" strokeLinecap="round" strokeLinejoin="round" />
-                      <path d="M4 17v-5h5" strokeLinecap="round" strokeLinejoin="round" />
-                      <path d="M18.2 9A7 7 0 0 0 6.3 6.8M5.8 15a7 7 0 0 0 11.9 2.2" strokeLinecap="round" />
-                    </svg>
-                  ) : (
-                    <HeroIcon type={icon} className="h-6 w-6" />
-                  )}
-                </span>
-                <div className="min-w-0">
-                  <p className="text-[0.95rem] font-black leading-tight text-[#07142a]">{title}</p>
-                  <p className="mt-1 text-[0.82rem] font-medium leading-5 text-[#64748b]">{body}</p>
-                </div>
-              </div>
-            ))}
-          </div>
         </div>
       </section>
 
@@ -5228,7 +5494,7 @@ function LandingPage() {
               <div className="mt-6 grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
                 {[
                   ["4", "missed-call moments"],
-                  ["Ontario", "built first"],
+                  ["Hamilton + Grimsby", "local trade focus"],
                   ["Demo", "before hype"],
                 ].map(([value, label]) => (
                   <div key={label} className="rounded-[10px] border border-[#d8e7fb] bg-white px-4 py-3 shadow-[0_16px_38px_-34px_rgba(15,23,42,0.25)]">
@@ -5269,7 +5535,7 @@ function LandingPage() {
 
               <div className="grid gap-4 rounded-[14px] border border-[#b9e8d4] bg-[#f4fffa] p-4 md:grid-cols-3">
                 {[
-                  ["Ontario-built", "Made for local service-business expectations before broad expansion."],
+                  ["Hamilton and Grimsby focused", "Built in Ontario for busy trades across Hamilton, Grimsby, and the surrounding area."],
                   ["Privacy-aware workflow", "Privacy and terms pages explain consent, safeguards, limited use, transcripts, and text messages."],
                   ["Concrete demos", "Demo audio, transcripts, and text follow-up examples keep the claims grounded."],
                 ].map(([title, body]) => (
@@ -5285,7 +5551,7 @@ function LandingPage() {
       </section>
 
       <section id="faq" ref={faqRef} className="scroll-mt-[96px] bg-[linear-gradient(180deg,#f4faff_0%,#eaf6ff_100%)]">
-        <div className="mx-auto grid w-full max-w-[1180px] gap-7 px-4 py-14 sm:px-6 lg:grid-cols-[0.74fr_1.26fr] lg:px-8 lg:py-20">
+        <div className="mx-auto grid w-full max-w-[1320px] gap-7 px-4 py-14 sm:px-6 lg:grid-cols-[0.62fr_1.38fr] lg:px-8 lg:py-20">
           <div>
             <p className="inline-flex rounded-full border border-[#b9d8ff] bg-white px-5 py-2 text-[0.84rem] font-black uppercase tracking-[0.18em] text-[#2563eb] shadow-[0_16px_44px_-34px_rgba(37,99,235,0.65)]">Before you start</p>
             <h2 className="mt-5 text-[clamp(2.2rem,4vw,3.5rem)] font-black leading-[1.05] tracking-[-0.052em] text-[#07142a]">Quick answers before you try it.</h2>
@@ -5321,6 +5587,12 @@ function LandingPage() {
               );
             })}
           </div>
+        </div>
+      </section>
+
+      <section id="guided-call-forwarding" className="scroll-mt-[96px] bg-[linear-gradient(180deg,#eaf6ff_0%,#dff1ff_100%)]">
+        <div className="mx-auto w-full max-w-[1320px] px-4 py-14 sm:px-6 lg:px-8 lg:py-20">
+          <ForwardingSetupWizard />
         </div>
       </section>
 
@@ -5369,7 +5641,7 @@ function LandingPage() {
               <p className="inline-flex rounded-full border border-white/16 bg-white/10 px-5 py-2 text-[0.84rem] font-black uppercase tracking-[0.18em] text-[#a9e8ff]">Ready when you are</p>
               <h2 className="mt-5 text-[clamp(2.25rem,4vw,3.85rem)] font-black leading-[1.06] tracking-[-0.05em]">Stop letting missed calls decide where the next job goes.</h2>
               <p className="mt-5 max-w-[720px] text-[1.12rem] font-medium leading-8 text-[#dbeafe]">
-                Try My AI PA free, hear how it sounds, and see how quickly missed calls can turn into clean follow-up opportunities.
+                Try My AI PA free, hear how it sounds, and see how quickly missed calls can become job details ready for your callback.
               </p>
               <div className="mt-8 flex flex-col gap-4 sm:flex-row">
                 <PrimaryButton onClick={goToSignup} className="text-lg">Start Free Trial</PrimaryButton>
@@ -5399,7 +5671,7 @@ function LandingPage() {
           </div>
 
           <footer className="flex flex-col gap-4 px-1 pt-7 text-[1.05rem] font-semibold leading-7 text-[#334155] sm:flex-row sm:items-center sm:justify-between">
-            <p>My AI PA is positioned for Ontario first. Made and Loved in Canada.</p>
+            <p>Built in Ontario for busy trades across Hamilton, Grimsby, and the surrounding area. Made and loved in Canada.</p>
             <div className="flex flex-wrap items-center gap-4">
               <a href="mailto:hello@myaipa.com" className="transition hover:text-[#2563eb]">
                 hello@myaipa.com
