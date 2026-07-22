@@ -5162,10 +5162,6 @@ function LandingPage() {
             <p className="mx-auto mt-3 max-w-[900px] text-[clamp(1rem,1.3vw,1.16rem)] font-medium leading-8 text-[#334155]">
               One simple plan for getting calls answered. Includes 60 AI call minutes.
             </p>
-            <div className="mx-auto mt-5 max-w-[760px] rounded-[10px] border border-[#f0c36d] bg-[#fff9e8] px-4 py-3 text-left shadow-[0_18px_42px_-34px_rgba(161,98,7,0.32)] sm:flex sm:items-center sm:gap-4 sm:px-5">
-              <p className="shrink-0 text-[0.72rem] font-black uppercase tracking-[0.16em] text-[#a15c00]">Important</p>
-              <p className="mt-1 text-[0.88rem] font-bold leading-6 text-[#5f4a25] sm:mt-0">Call length and the number of calls from the same number may be limited.</p>
-            </div>
           </div>
 
           {pricingCards.map((plan) => (
@@ -5496,8 +5492,8 @@ function LandingPage() {
                   <p className="mt-1 text-[0.78rem] font-black uppercase tracking-[0.12em] text-[#64748b]">missed-call moments</p>
                 </div>
                 <div className="flex items-center gap-4 rounded-[10px] border border-[#fecaca] bg-white px-4 py-4 shadow-[0_16px_38px_-34px_rgba(15,23,42,0.25)]">
-                  <svg aria-hidden="true" viewBox="0 0 100 100" className="h-14 w-14 shrink-0 fill-[#ef232e]">
-                    <path d="M50 2 58 20 72 12 68 30 88 27 78 43 94 50 73 58 76 78 55 72 57 98 43 98 45 72 24 78 27 58 6 50 22 43 12 27 32 30 28 12 42 20Z" />
+                  <svg aria-hidden="true" viewBox="0 0 100 100" className="h-16 w-16 shrink-0 fill-[#ef232e]">
+                    <path d="M50 3 56 24 68 15 65 34 83 27 76 46 94 43 82 58 91 64 60 70 62 83 54 79 55 98 45 98 46 79 38 83 40 70 9 64 18 58 6 43 24 46 17 27 35 34 32 15 44 24Z" />
                   </svg>
                   <div>
                     <p className="text-[1rem] font-black uppercase leading-tight tracking-[0.06em] text-[#ef232e]">PROUDLY DESIGNED IN CANADA</p>
