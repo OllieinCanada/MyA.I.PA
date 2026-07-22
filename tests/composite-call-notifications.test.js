@@ -78,6 +78,22 @@ test("owner failure does not prevent the customer confirmation", async () => {
   assert.equal(result.requiresReconciliation, true);
 });
 
+test("owner SMS can be disabled while customer confirmation remains successful", async () => {
+  const mock = makeFetch([
+    { ok: true, status: 201, payload: { sid: "SM_CUSTOMER", status: "queued" } },
+  ]);
+  const result = await execute(mock.fetchImpl, { env: { OWNER_SMS_ENABLED: "false" } });
+  assert.deepEqual(result.executionOrder, ["customer"]);
+  assert.deepEqual(mock.calls.map((call) => call.to), [args.rawPhoneNumber]);
+  assert.equal(result.owner.attempted, false);
+  assert.equal(result.owner.skipped, true);
+  assert.equal(result.owner.status, "disabled_by_policy");
+  assert.equal(result.customer.sent, true);
+  assert.equal(result.ownerSmsEnabled, false);
+  assert.equal(result.complete, true);
+  assert.equal(result.requiresReconciliation, false);
+});
+
 test("customer failure preserves the successful owner result", async () => {
   const mock = makeFetch([
     { ok: true, status: 201, payload: { sid: "SM_OWNER", status: "queued" } },
@@ -135,6 +151,13 @@ test("caller-number prompt acknowledges the calling number without exposing digi
   assert.match(prompt, /Do not speak a closing sentence/);
   assert.match(prompt, /call endCall before send_call_summaries_test returns/);
   assert.match(prompt, /earlier SMS tool names are retired and unavailable/);
+});
+
+test("caller-number prompt describes customer-only delivery when owner SMS is disabled", () => {
+  const prompt = callerNumberFallbackPrompt("send_call_summaries_test", { ownerSmsEnabled: false });
+  assert.match(prompt, /caller confirmation only/);
+  assert.match(prompt, /Owner SMS is temporarily disabled by policy/);
+  assert.doesNotMatch(prompt, /sends both the owner summary and the caller confirmation/);
 });
 
 test("recipient notification keys are stable and distinct", () => {

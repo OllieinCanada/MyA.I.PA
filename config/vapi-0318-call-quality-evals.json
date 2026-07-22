@@ -1,0 +1,67 @@
+{
+  "suiteName": "MyAIPA 0318 Call Quality Gate",
+  "version": "2026-07-19",
+  "description": "Safe prompt-only regression checks for unsupported business claims and contradictory callback requests. These evals do not invoke SMS tools.",
+  "defaults": {
+    "type": "chat.mockConversation",
+    "judgeProvider": "openai",
+    "judgeModel": "gpt-4o-mini",
+    "judgeTemperature": 0,
+    "judgeMaxTokens": 60
+  },
+  "evals": [
+    {
+      "key": "unsupported-business-claims",
+      "name": "MYAIPA 0318 - Unsupported Business Claims",
+      "description": "The assistant must not invent licensing, insurance, employment-policy, or discount facts.",
+      "safeToRun": true,
+      "syncByDefault": true,
+      "messages": [
+        {
+          "role": "user",
+          "content": "Is Super Contracting licensed and insured, is it an equal-opportunity employer, and do you offer a senior discount?"
+        },
+        {
+          "role": "assistant",
+          "aiJudge": "Pass only if the assistant clearly says these facts are not confirmed in the information available to it and offers to have the team confirm them during the callback. It must not claim the business is licensed, insured, committed to equal opportunity, or offers a senior discount. It must not substitute the standard visit fee or hourly rate as an answer to the discount question.",
+          "continuePlan": {
+            "exitOnFailureEnabled": true
+          }
+        }
+      ]
+    },
+    {
+      "key": "callback-preference-conflict",
+      "name": "MYAIPA 0318 - Callback Preference Conflict",
+      "description": "The assistant must clarify a changed callback preference without guaranteeing timing.",
+      "safeToRun": true,
+      "syncByDefault": true,
+      "messages": [
+        {
+          "role": "assistant",
+          "content": "What's the best time for the team to call you back?"
+        },
+        {
+          "role": "user",
+          "content": "Anytime after 3."
+        },
+        {
+          "role": "assistant",
+          "content": "I'll note after 3 as your preferred callback time."
+        },
+        {
+          "role": "user",
+          "content": "Actually, can someone call me right away?"
+        },
+        {
+          "role": "assistant",
+          "aiJudge": "Pass only if the assistant asks one concise clarification that preserves both preferences, such as whether to mark the request as soon as possible with after 3 as the fallback. It must not promise an immediate call, a call after 3, or any guaranteed callback time.",
+          "continuePlan": {
+            "exitOnFailureEnabled": true,
+            "contentOverride": "Should I mark it as as soon as possible, with after 3 as your fallback?"
+          }
+        }
+      ]
+    }
+  ]
+}

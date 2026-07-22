@@ -13,7 +13,10 @@ function parseArgs(argv) {
     sync: false,
     allowLiveTools: false,
     targetAssistantId: "",
+    targetPhone: "",
     suiteFile: "",
+    keys: [],
+    pruneLegacy: false,
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -27,8 +30,13 @@ function parseArgs(argv) {
     else if (arg === "--allow-live-tools") options.allowLiveTools = true;
     else if (arg === "--target") options.targetAssistantId = argv[++index] || "";
     else if (arg.startsWith("--target=")) options.targetAssistantId = arg.slice("--target=".length);
+    else if (arg === "--target-phone") options.targetPhone = argv[++index] || "";
+    else if (arg.startsWith("--target-phone=")) options.targetPhone = arg.slice("--target-phone=".length);
     else if (arg === "--suite") options.suiteFile = argv[++index] || "";
     else if (arg.startsWith("--suite=")) options.suiteFile = arg.slice("--suite=".length);
+    else if (arg === "--keys") options.keys = String(argv[++index] || "").split(",").map((value) => value.trim()).filter(Boolean);
+    else if (arg.startsWith("--keys=")) options.keys = arg.slice("--keys=".length).split(",").map((value) => value.trim()).filter(Boolean);
+    else if (arg === "--prune-legacy") options.pruneLegacy = true;
     else if (arg === "--help" || arg === "-h") options.help = true;
     else throw new Error(`Unknown argument: ${arg}`);
   }
@@ -53,7 +61,10 @@ function usage() {
     "  --run-all --allow-live-tools",
     "                            Run every eval, including tool-call evals",
     "  --target <assistant-id>   Override the target assistant ID",
+    "  --target-phone <number>   Resolve the target from an assigned phone number or last four digits",
     "  --suite <path>            Override the suite JSON file",
+    "  --keys <key,key>          Limit sync/run to selected local eval keys",
+    "  --prune-legacy            Delete duplicate evals with listed legacy names after sync",
   ].join("\n");
 }
 
@@ -134,21 +145,27 @@ function requireApiKey() {
 function buildClient(apiKey) {
   const baseUrl = (env.VAPI_API_BASE_URL || "https://api.vapi.ai").replace(/\/+$/, "");
   return async function api(path, options = {}, label = path) {
-    const response = await fetch(`${baseUrl}${path}`, {
-      method: options.method || "GET",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        ...(options.body ? { "Content-Type": "application/json" } : {}),
-      },
-      body: options.body ? JSON.stringify(options.body) : undefined,
-    });
-    const text = await response.text();
-    const data = text ? JSON.parse(text) : null;
-    if (!response.ok) {
+    const method = options.method || "GET";
+    for (let attempt = 1; attempt <= 4; attempt += 1) {
+      const response = await fetch(`${baseUrl}${path}`, {
+        method,
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          ...(options.body ? { "Content-Type": "application/json" } : {}),
+        },
+        body: options.body ? JSON.stringify(options.body) : undefined,
+      });
+      const text = await response.text();
+      const data = text ? JSON.parse(text) : null;
+      if (response.ok) return data;
+      if (method === "GET" && (response.status === 429 || response.status >= 500) && attempt < 4) {
+        await sleep(attempt * 750);
+        continue;
+      }
       const detail = text ? `: ${text.slice(0, 700)}` : "";
       throw new Error(`${label} failed with HTTP ${response.status}${detail}`);
     }
-    return data;
+    throw new Error(`${label} failed after read-only retries.`);
   };
 }
 
@@ -156,6 +173,21 @@ async function listRemoteEvals(api) {
   const data = await api("/eval?limit=1000&page=1", {}, "List evals");
   if (Array.isArray(data)) return data;
   return data.results || data.data || [];
+}
+
+async function resolveTargetAssistantFromPhone(api, targetPhone) {
+  const digits = String(targetPhone || "").replace(/\D/g, "");
+  if (digits.length < 4) throw new Error("--target-phone requires at least the last four digits.");
+  const data = await api("/phone-number?limit=1000", {}, "List phone numbers for eval target");
+  const phones = Array.isArray(data) ? data : data.results || data.data || data.phoneNumbers || [];
+  const matches = phones.filter((phone) => {
+    const value = String(phone?.number || phone?.phoneNumber || phone?.twilioPhoneNumber || "").replace(/\D/g, "");
+    return value.endsWith(digits);
+  });
+  if (matches.length !== 1) throw new Error(`Expected one Vapi phone ending in ${digits.slice(-4)}, found ${matches.length}.`);
+  const assistantId = String(matches[0]?.assistantId || matches[0]?.assistant?.id || "").trim();
+  if (!assistantId) throw new Error(`The Vapi phone ending in ${digits.slice(-4)} has no assigned assistant.`);
+  return assistantId;
 }
 
 function findExistingEval(localEval, payload, existingByName) {
@@ -170,8 +202,25 @@ function findExistingEval(localEval, payload, existingByName) {
 async function upsertEval(api, localEval, payload, existingByName) {
   const existing = findExistingEval(localEval, payload, existingByName);
   if (existing) {
-    const updated = await api(`/eval/${existing.id}`, { method: "PATCH", body: payload }, `Update ${payload.name}`);
-    return { action: "updated", eval: updated || existing };
+    let lastError;
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        const updated = await api(`/eval/${existing.id}`, { method: "PATCH", body: payload }, `Update ${payload.name}`);
+        return { action: "updated", eval: updated || existing };
+      } catch (error) {
+        lastError = error;
+        if (!/HTTP (?:429|5\d\d)\b/.test(String(error?.message || "")) || attempt === 3) break;
+        await sleep(attempt * 750);
+      }
+    }
+    if (/HTTP 5\d\d\b/.test(String(lastError?.message || ""))) {
+      return {
+        action: "kept-existing-after-vapi-error",
+        eval: existing,
+        warning: String(lastError.message || lastError),
+      };
+    }
+    throw lastError;
   }
   const created = await api("/eval", { method: "POST", body: payload }, `Create ${payload.name}`);
   return { action: "created", eval: created };
@@ -278,15 +327,23 @@ async function main() {
   }
 
   const { suite, resolved } = readSuite(options.suiteFile);
-  const targetAssistantId =
-    options.targetAssistantId ||
-    env.VAPI_EVAL_TARGET_ASSISTANT_ID ||
-    suite.targetAssistantIdDefault;
-  if (!targetAssistantId) throw new Error("Set VAPI_EVAL_TARGET_ASSISTANT_ID or pass --target.");
+  const targetPhone = options.targetPhone
+    || env.VAPI_EVAL_TARGET_PHONE
+    || (!options.targetAssistantId && !env.VAPI_EVAL_TARGET_ASSISTANT_ID ? suite.recommendedTargetPhoneLast4 : "");
+  let targetAssistantId = options.targetPhone
+    ? ""
+    : options.targetAssistantId || env.VAPI_EVAL_TARGET_ASSISTANT_ID || suite.targetAssistantIdDefault;
+  if (!targetAssistantId && !targetPhone) throw new Error("Set VAPI_EVAL_TARGET_ASSISTANT_ID, VAPI_EVAL_TARGET_PHONE, --target, or --target-phone.");
 
-  const syncItems = selectedForSync(suite.evals, options.includeToolEvals);
-  const runItems = selectedForRun(suite.evals, options);
-  printLocalSummary(suite, syncItems, runItems, options, targetAssistantId, resolved);
+  const scopedEvals = options.keys.length
+    ? suite.evals.filter((item) => options.keys.includes(item.key))
+    : suite.evals;
+  if (options.keys.length && scopedEvals.length !== new Set(options.keys).size) {
+    throw new Error("One or more --keys values do not match an eval in the suite.");
+  }
+  const syncItems = selectedForSync(scopedEvals, options.includeToolEvals);
+  const runItems = selectedForRun(scopedEvals, options);
+  printLocalSummary(suite, syncItems, runItems, options, targetPhone ? `phone ending ${String(targetPhone).replace(/\D/g, "").slice(-4)}` : targetAssistantId, resolved);
 
   if (options.list) return;
   if (options.dryRun) {
@@ -297,6 +354,7 @@ async function main() {
 
   const apiKey = requireApiKey();
   const api = buildClient(apiKey);
+  if (targetPhone) targetAssistantId = await resolveTargetAssistantFromPhone(api, targetPhone);
   console.log("");
   console.log(`Vapi API: ${(env.VAPI_API_BASE_URL || "https://api.vapi.ai").replace(/\/+$/, "")} (${redact(apiKey)})`);
 
@@ -313,6 +371,7 @@ async function main() {
       syncedByKey.set(item.key, result.eval);
       existingByName.set(payload.name, result.eval);
       console.log(`- ${result.action}: ${payload.name} (${result.eval.id})`);
+      if (result.warning) console.log(`  warning: ${result.warning.slice(0, 300)}`);
     }
 
     const skipped = suite.evals.filter((item) => !syncItems.includes(item));
@@ -320,6 +379,24 @@ async function main() {
       console.log("");
       console.log("Skipped by default");
       for (const item of skipped) console.log(`- ${item.name}: ${item.description}`);
+    }
+
+    if (options.pruneLegacy) {
+      console.log("");
+      console.log("Pruning renamed duplicate evals");
+      let pruned = 0;
+      for (const item of syncItems) {
+        const canonical = syncedByKey.get(item.key);
+        for (const legacyName of item.legacyNames || []) {
+          const legacy = existingByName.get(legacyName);
+          if (!legacy?.id || legacy.id === canonical?.id) continue;
+          await api(`/eval/${legacy.id}`, { method: "DELETE", body: {} }, `Delete legacy eval ${legacyName}`);
+          existingByName.delete(legacyName);
+          pruned += 1;
+          console.log(`- deleted: ${legacyName} (${legacy.id})`);
+        }
+      }
+      if (!pruned) console.log("- none");
     }
   }
 

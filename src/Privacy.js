@@ -24,6 +24,14 @@ const sections = [
     ],
   },
   {
+    title: "Connected Google and Microsoft Calendars",
+    body: [
+      "Calendar connections are optional and are authorized only by a business owner or staff member. Customers do not need to connect a calendar account. If enabled, we process the connected account email, encrypted authorization credentials, calendar and event identifiers, free/busy results, appointment times, synchronization status, and appointment details needed to check availability and create, update, or cancel events.",
+      "We use connected-calendar information only to provide the scheduling features the user enabled. We do not sell calendar data, use it for unrelated advertising, or build a separate history of unrelated calendar events. Disconnecting removes usable stored credentials, and a verified user may request deletion of the remaining connection record.",
+      "My AI PA’s use and transfer of information received from Google APIs adheres to the Google API Services User Data Policy, including the Limited Use requirements. Detailed controls and deletion instructions are available at www.myaipa.ca/calendar-data.html.",
+    ],
+  },
+  {
     title: "4. Call Audio, Transcripts, and AI Processing",
     body: [
       "The service may record, transcribe, summarize, analyze, and route calls so that customer businesses can receive accurate job details and follow-up information. Customers are responsible for configuring their use of the service in a way that complies with applicable call recording, consent, privacy, consumer protection, and communications laws.",
@@ -97,7 +105,7 @@ function Privacy() {
         <div className="mx-auto w-full max-w-5xl px-4 py-9 sm:px-8 lg:py-14">
           <a href="#/" className="text-base font-black uppercase tracking-[0.16em] text-[#8ec5ff] transition hover:text-white">My AI PA</a>
           <h1 className="mt-6 text-[clamp(2rem,9vw,4.5rem)] font-black leading-tight tracking-[-0.05em]">Privacy Policy</h1>
-          <p className="mt-4 max-w-3xl text-lg font-medium leading-8 text-[#d8e7f7] sm:text-xl">Effective date: May 11, 2026</p>
+          <p className="mt-4 max-w-3xl text-lg font-medium leading-8 text-[#d8e7f7] sm:text-xl">Effective date: July 22, 2026</p>
           <p className="mt-4 max-w-3xl text-base font-medium leading-7 text-[#c8d7ea] sm:text-lg sm:leading-8">
             This policy is written for a business phone-answering service that may process calls, texts, transcripts, summaries, and job details.
           </p>
@@ -119,7 +127,7 @@ function Privacy() {
         </div>
 
         <div className="mt-8 rounded-[24px] border border-[#2b74d8]/50 bg-[#0b2144] p-5 text-base font-medium leading-7 text-[#d8e7f7]">
-          This page is provided for business transparency and should be reviewed by qualified legal counsel before public launch or commercial reliance.
+          Manage or delete connected-calendar data at <a className="font-black text-[#8ec5ff] underline" href="/calendar-data.html">Calendar Data &amp; Deletion</a>, or email <a className="font-black text-[#8ec5ff] underline" href="mailto:hello@myaipa.com">hello@myaipa.com</a>.
         </div>
       </section>
     </main>

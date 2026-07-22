@@ -63,6 +63,38 @@ enum TaskStatus {
   ARCHIVED
 }
 
+enum AppointmentStatus {
+  PENDING
+  PROPOSED
+  CHANGE_REQUESTED
+  CONFIRMED
+  DECLINED
+  CANCELLED
+}
+
+enum CalendarProvider {
+  GOOGLE
+  MICROSOFT
+}
+
+enum CalendarConnectionStatus {
+  CONNECTED
+  ERROR
+  REVOKED
+}
+
+enum CalendarBookingMode {
+  MANUAL_APPROVAL
+  AUTO_BOOK_CONNECTED
+  EMAIL_INVITES_ONLY
+}
+
+enum CalendarSyncStatus {
+  SYNCED
+  ERROR
+  CANCELLED
+}
+
 enum LeadHandoffStatus {
   PENDING
   SEND_REQUESTED
@@ -88,30 +120,51 @@ enum NotificationAttemptStatus {
   FAILED
 }
 
+enum SupportReportStatus {
+  NEW
+  INVESTIGATING
+  WAITING_FOR_CUSTOMER
+  RESOLVED
+}
+
+enum SupportReportSeverity {
+  LOW
+  MEDIUM
+  HIGH
+}
+
 model Business {
-  id           Int                   @id @default(autoincrement())
-  name         String
-  phone        String
-  timezone     String
-  createdAt    DateTime              @default(now())
-  settings     Settings?
-  faqs         FAQ[]
-  calls        Call[]
-  leads        Lead[]
-  leadHandoffs LeadHandoff[]
-  vapiMappings VapiBusinessMapping[]
+  id                  Int                   @id @default(autoincrement())
+  name                String
+  phone               String
+  timezone            String
+  createdAt           DateTime              @default(now())
+  settings            Settings?
+  faqs                FAQ[]
+  calls               Call[]
+  leads               Lead[]
+  leadHandoffs        LeadHandoff[]
+  appointmentRequests AppointmentRequest[]
+  staffMembers        StaffMember[]
+  calendarConnections CalendarConnection[]
+  vapiMappings        VapiBusinessMapping[]
+  supportReports      SupportReport[]
 }
 
 model Settings {
-  id               Int            @id @default(autoincrement())
-  businessId       Int            @unique
-  answerAfterRings Int            @default(3)
-  afterHoursMode   AfterHoursMode @default(AI_ALWAYS_ON)
-  ownerPhone       String
-  backupPhone      String?
-  bookingLink      String?
-  createdAt        DateTime       @default(now())
-  business         Business       @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  id                       Int                 @id @default(autoincrement())
+  businessId               Int                 @unique
+  answerAfterRings         Int                 @default(3)
+  afterHoursMode           AfterHoursMode      @default(AI_ALWAYS_ON)
+  ownerPhone               String
+  backupPhone              String?
+  bookingLink              String?
+  bookingHours             Json?
+  appointmentBufferMinutes Int                 @default(15)
+  reminderHours            Json?
+  calendarBookingMode      CalendarBookingMode @default(MANUAL_APPROVAL)
+  createdAt                DateTime            @default(now())
+  business                 Business            @relation(fields: [businessId], references: [id], onDelete: Cascade)
 }
 
 model Caller {
@@ -124,36 +177,51 @@ model Caller {
 }
 
 model Call {
-  id                Int           @id @default(autoincrement())
-  businessId        Int
-  callerId          Int
-  startedAt         DateTime
-  endedAt           DateTime?
-  durationSec       Int?
-  status            CallStatus
-  recordingUrl      String?
-  transcript        String?
-  externalProvider  String?
-  externalId        String?
-  outcome           CallOutcome   @default(UNREVIEWED)
-  qualityScore      Int?
-  aiSummary         String?
-  followUpNeeded    Boolean       @default(false)
-  lastAlertAt       DateTime?
-  twilioCallSid     String?       @unique
-  twilioPrice       Float?
-  twilioPriceUnit   String?
-  vapiCost          Float?
-  vapiCostBreakdown Json?
-  totalInternalCost Float?
-  costSyncedAt      DateTime?
-  createdAt         DateTime      @default(now())
-  business          Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  caller            Caller        @relation(fields: [callerId], references: [id], onDelete: Cascade)
-  lead              Lead?
-  notes             CallNote[]
-  tasks             CallTask[]
-  leadHandoffs      LeadHandoff[]
+  id                        Int                  @id @default(autoincrement())
+  businessId                Int
+  callerId                  Int
+  startedAt                 DateTime
+  endedAt                   DateTime?
+  durationSec               Int?
+  status                    CallStatus
+  recordingUrl              String?
+  transcript                String?
+  externalProvider          String?
+  externalId                String?
+  outcome                   CallOutcome          @default(UNREVIEWED)
+  qualityScore              Int?
+  aiSummary                 String?
+  followUpNeeded            Boolean              @default(false)
+  endedReason               String?
+  endedMessage              String?
+  successEvaluation         String?
+  structuredData            Json?
+  structuredOutputs         Json?
+  artifactMessages          Json?
+  artifactMetrics           Json?
+  toolCallSummary           Json?
+  recordingConsentType      String?
+  recordingConsentGrantedAt DateTime?
+  transcriptExpiresAt       DateTime?
+  recordingExpiresAt        DateTime?
+  providerLogUrl            String?
+  lastAlertAt               DateTime?
+  twilioCallSid             String?              @unique
+  twilioPrice               Float?
+  twilioPriceUnit           String?
+  vapiCost                  Float?
+  vapiCostBreakdown         Json?
+  totalInternalCost         Float?
+  costSyncedAt              DateTime?
+  createdAt                 DateTime             @default(now())
+  business                  Business             @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  caller                    Caller               @relation(fields: [callerId], references: [id], onDelete: Cascade)
+  lead                      Lead?
+  notes                     CallNote[]
+  tasks                     CallTask[]
+  leadHandoffs              LeadHandoff[]
+  appointmentRequests       AppointmentRequest[]
+  supportReports            SupportReport[]
 
   @@unique([externalProvider, externalId])
   @@index([businessId, startedAt])
@@ -162,6 +230,144 @@ model Call {
   @@index([outcome])
   @@index([twilioCallSid])
   @@index([costSyncedAt])
+}
+
+model SupportReport {
+  id                       String                @id @default(cuid())
+  businessId               Int
+  callId                   Int?
+  description              String
+  aiSummary                String?
+  likelyCause              String?
+  suggestions              Json
+  diagnostics              Json
+  includeSensitiveCallData Boolean               @default(false)
+  contactAllowed           Boolean               @default(true)
+  status                   SupportReportStatus   @default(NEW)
+  severity                 SupportReportSeverity @default(MEDIUM)
+  internalNote             String?
+  customerMessage          String?
+  resolvedAt               DateTime?
+  customerNotifiedAt       DateTime?
+  telegramAlertedAt        DateTime?
+  githubIssueNumber        Int?
+  githubIssueUrl           String?
+  githubIssueCreatedAt     DateTime?
+  codexTaskStatus          String?
+  codexTaskPrompt          String?
+  codexTaskPreparedAt      DateTime?
+  codexTaskExternalId      String?
+  codexTaskUrl             String?
+  createdAt                DateTime              @default(now())
+  updatedAt                DateTime              @updatedAt
+  business                 Business              @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  call                     Call?                 @relation(fields: [callId], references: [id], onDelete: SetNull)
+
+  @@index([businessId, status, createdAt])
+  @@index([callId])
+}
+
+model AppointmentRequest {
+  id                  String             @id @default(cuid())
+  businessId          Int
+  callId              Int?
+  staffMemberId       String?
+  sourceEventId       String?            @unique
+  customerName        String
+  customerEmail       String?
+  customerPhone       String
+  ownerEmail          String?
+  ownerPhone          String?
+  service             String
+  address             String?
+  requestedStart      DateTime
+  confirmedStart      DateTime?
+  durationMinutes     Int                @default(60)
+  timezone            String             @default("America/Toronto")
+  status              AppointmentStatus  @default(PENDING)
+  ownerNote           String?
+  customerNote        String?
+  calendarToken       String             @unique
+  ownerRespondedAt    DateTime?
+  customerRespondedAt DateTime?
+  proposalSentAt      DateTime?
+  inviteSentAt        DateTime?
+  reminder24hSentAt   DateTime?
+  reminder2hSentAt    DateTime?
+  cancelledAt         DateTime?
+  rescheduledAt       DateTime?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  business            Business           @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  call                Call?              @relation(fields: [callId], references: [id], onDelete: SetNull)
+  staffMember         StaffMember?       @relation(fields: [staffMemberId], references: [id], onDelete: SetNull)
+  externalEvent       CalendarEventLink?
+
+  @@index([businessId, status, requestedStart])
+  @@index([callId])
+  @@index([staffMemberId, status, confirmedStart])
+}
+
+model StaffMember {
+  id                  String               @id @default(cuid())
+  businessId          Int
+  name                String
+  email               String?
+  phone               String?
+  color               String               @default("#126dff")
+  active              Boolean              @default(true)
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  business            Business             @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  appointments        AppointmentRequest[]
+  calendarConnections CalendarConnection[]
+
+  @@index([businessId, active, name])
+}
+
+model CalendarConnection {
+  id                    String                   @id @default(cuid())
+  businessId            Int
+  staffMemberId         String?
+  provider              CalendarProvider
+  status                CalendarConnectionStatus @default(CONNECTED)
+  accountEmail          String
+  calendarId            String                   @default("primary")
+  accessTokenEncrypted  String
+  refreshTokenEncrypted String?
+  tokenExpiresAt        DateTime?
+  scope                 String?
+  lastError             String?
+  connectedAt           DateTime                 @default(now())
+  lastSyncedAt          DateTime?
+  createdAt             DateTime                 @default(now())
+  updatedAt             DateTime                 @updatedAt
+  business              Business                 @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  staffMember           StaffMember?             @relation(fields: [staffMemberId], references: [id], onDelete: Cascade)
+  events                CalendarEventLink[]
+
+  @@unique([provider, businessId, staffMemberId])
+  @@index([businessId, status])
+}
+
+model CalendarEventLink {
+  id                 String             @id @default(cuid())
+  appointmentId      String             @unique
+  connectionId       String
+  provider           CalendarProvider
+  externalEventId    String
+  externalCalendarId String
+  webLink            String?
+  etag               String?
+  status             CalendarSyncStatus @default(SYNCED)
+  lastError          String?
+  lastSyncedAt       DateTime           @default(now())
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  appointment        AppointmentRequest @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  connection         CalendarConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@index([connectionId, status])
 }
 
 model Lead {
@@ -199,7 +405,7 @@ model LeadHandoff {
   status                   LeadHandoffStatus         @default(PENDING)
   ownerPhone               String
   backupPhone              String?
-  acknowledgementRequired Boolean                   @default(true)
+  acknowledgementRequired  Boolean                   @default(true)
   acknowledgementKey       String                    @unique
   acknowledgementExpiresAt DateTime
   acknowledgedAt           DateTime?
@@ -307,6 +513,25 @@ model VapiBusinessMapping {
 
   @@index([businessId])
   @@index([matchType])
+}
+
+model VapiToolExecution {
+  id             String    @id @default(cuid())
+  idempotencyKey String    @unique
+  toolCallId     String
+  toolName       String
+  businessId     Int
+  callExternalId String?
+  status         String    @default("PROCESSING")
+  result         Json?
+  errorCode      String?
+  createdAt      DateTime  @default(now())
+  completedAt    DateTime?
+  updatedAt      DateTime  @updatedAt
+
+  @@index([businessId, createdAt])
+  @@index([callExternalId])
+  @@index([status, createdAt])
 }
 
 model FAQ {

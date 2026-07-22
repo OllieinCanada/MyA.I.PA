@@ -25,12 +25,12 @@ function setStoredAdminPassword(value) {
   }
 }
 
-async function api(path, { method = "GET", body } = {}) {
+async function api(path, { method = "GET", body, timeoutMs = ADMIN_API_TIMEOUT_MS } = {}) {
   const headers = { "Content-Type": "application/json" };
   const storedAdminPassword = getStoredAdminPassword();
   if (storedAdminPassword) headers["X-Admin-Password"] = storedAdminPassword;
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), ADMIN_API_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const res = await fetch(`${API_BASE}${path}`, {
@@ -59,6 +59,15 @@ async function api(path, { method = "GET", body } = {}) {
   }
 }
 
+function getInitialAdminTab() {
+  try {
+    const query = String(window.location.hash || "").split("?")[1] || "";
+    return new URLSearchParams(query).get("tab") || "overview";
+  } catch (_error) {
+    return "overview";
+  }
+}
+
 function dt(value) {
   if (!value) return "—";
   const d = new Date(value);
@@ -70,6 +79,17 @@ function daysText(value) {
   if (value < 0) return `${Math.abs(value)}d overdue`;
   if (value === 0) return "Ends today";
   return `${value}d left`;
+}
+
+function billingCountdown(value) {
+  const dueAt = new Date(value).getTime();
+  if (!Number.isFinite(dueAt)) return "Date unavailable";
+  const remainingMs = dueAt - Date.now();
+  if (remainingMs <= 0) return "Due now";
+  const hours = Math.ceil(remainingMs / 3600000);
+  if (hours < 24) return `In ${hours} hour${hours === 1 ? "" : "s"}`;
+  const days = Math.ceil(hours / 24);
+  return `In ${days} day${days === 1 ? "" : "s"}`;
 }
 
 function expiryClasses(color) {
@@ -1110,11 +1130,149 @@ function ConceptOverview({
   );
 }
 
+function SupportReportCard({ report, integrations, busyAction, onSave, onGithub, onCodex, onMessage }) {
+  const [draft, setDraft] = useState({
+    status: report.status || "NEW",
+    internalNote: report.internalNote || "",
+    customerMessage: report.customerMessage || "",
+  });
+
+  useEffect(() => {
+    setDraft({
+      status: report.status || "NEW",
+      internalNote: report.internalNote || "",
+      customerMessage: report.customerMessage || "",
+    });
+  }, [report.customerMessage, report.internalNote, report.status]);
+
+  const copyCodexTask = async () => {
+    try {
+      await navigator.clipboard.writeText(report.codexTaskPrompt || "");
+      onMessage(`${report.ticketNumber} Codex task copied.`);
+    } catch (_error) {
+      onMessage("Copy failed. Select the task text and copy it manually.");
+    }
+  };
+  const diagnostics = report.diagnostics && typeof report.diagnostics === "object" ? report.diagnostics : {};
+  const isBusy = String(busyAction || "").startsWith(`${report.id}:`);
+  const severity = String(report.severity || "MEDIUM").toLowerCase();
+  return (
+    <article className={`admin-support-card is-${severity}`}>
+      <header>
+        <div>
+          <div className="admin-support-ticket-row">
+            <strong>{report.ticketNumber}</strong>
+            <span className={`admin-support-severity is-${severity}`}>{report.severity}</span>
+            {report.includeSensitiveCallData ? <span className="admin-support-private">Private call details included</span> : null}
+          </div>
+          <h3>{report.business?.name || `Business ${report.businessId}`}</h3>
+          <p>Reported {dt(report.createdAt)}{report.callId ? ` · Call #${report.callId}` : " · General dashboard report"}</p>
+        </div>
+        <select value={draft.status} onChange={(event) => setDraft((current) => ({ ...current, status: event.target.value }))} aria-label={`Status for ${report.ticketNumber}`}>
+          <option value="NEW">New</option>
+          <option value="INVESTIGATING">Investigating</option>
+          <option value="WAITING_FOR_CUSTOMER">Waiting for customer</option>
+          <option value="RESOLVED">Resolved</option>
+        </select>
+      </header>
+
+      <div className="admin-support-problem">
+        <span>Customer report</span>
+        <p>{report.description}</p>
+      </div>
+      <div className="admin-support-findings">
+        <div><span>Diagnostic summary</span><p>{report.aiSummary || "No summary available."}</p></div>
+        <div><span>Likely cause</span><p>{report.likelyCause || "Not established."}</p></div>
+      </div>
+      {Array.isArray(report.suggestions) && report.suggestions.length ? (
+        <ol className="admin-support-suggestions">{report.suggestions.map((item, index) => <li key={`${index}-${item}`}>{item}</li>)}</ol>
+      ) : null}
+
+      <div className="admin-support-notes">
+        <label>Internal repair note<textarea rows={3} value={draft.internalNote} onChange={(event) => setDraft((current) => ({ ...current, internalNote: event.target.value }))} placeholder="What you checked or changed. Customers cannot see this." /></label>
+        <label>Customer update<textarea rows={3} value={draft.customerMessage} onChange={(event) => setDraft((current) => ({ ...current, customerMessage: event.target.value }))} placeholder="Plain-language update shown in their dashboard and included in the resolution text." /></label>
+      </div>
+      <div className="admin-support-save-row">
+        <button type="button" onClick={() => onSave(report.id, draft)} disabled={isBusy}>{busyAction === `${report.id}:save` ? "Saving…" : "Save status and update"}</button>
+        <span>{report.customerNotifiedAt ? `Customer notified ${dt(report.customerNotifiedAt)}` : report.contactAllowed ? "Resolution can notify the customer" : "Customer opted out of contact"}</span>
+      </div>
+
+      <div className="admin-support-choice">
+        <div>
+          <strong>Choose one repair handoff</strong>
+          <span>Create a trackable GitHub issue or prepare a scoped task for Codex.</span>
+        </div>
+        {report.githubIssueUrl ? (
+          <a href={report.githubIssueUrl} target="_blank" rel="noreferrer">Open GitHub issue #{report.githubIssueNumber}</a>
+        ) : (
+          <button type="button" onClick={() => onGithub(report.id)} disabled={isBusy || !integrations.githubConfigured} title={integrations.githubConfigured ? "Create an issue now" : "Configure the GitHub support token on Render first"}>
+            {busyAction === `${report.id}:github` ? "Creating…" : "Create GitHub issue"}
+          </button>
+        )}
+        {report.codexTaskPrompt ? (
+          <button type="button" onClick={copyCodexTask}>Copy Codex repair task</button>
+        ) : (
+          <button type="button" onClick={() => onCodex(report.id)} disabled={isBusy}>{busyAction === `${report.id}:codex` ? "Preparing…" : "Prepare Codex task"}</button>
+        )}
+      </div>
+      {!integrations.githubConfigured && !report.githubIssueUrl ? <p className="admin-support-config-note">GitHub needs GITHUB_SUPPORT_TOKEN on Render. Codex task preparation works without it.</p> : null}
+
+      {report.codexTaskPrompt ? (
+        <details className="admin-support-codex" open>
+          <summary>Prepared Codex task</summary>
+          <textarea readOnly rows={12} value={report.codexTaskPrompt} onFocus={(event) => event.target.select()} />
+          <div><button type="button" onClick={copyCodexTask}>Copy task</button><a href={report.codexTaskUrl || "https://chatgpt.com/codex"} target="_blank" rel="noreferrer">Open Codex</a></div>
+        </details>
+      ) : null}
+
+      <details className="admin-support-diagnostics">
+        <summary>Diagnostic snapshot</summary>
+        <pre>{JSON.stringify(diagnostics, null, 2)}</pre>
+      </details>
+      <footer>
+        <span>Updated {dt(report.updatedAt)}</span>
+        <span>{report.telegramAlertedAt ? "High-priority Telegram alert sent" : report.severity === "HIGH" ? "Telegram alert not confirmed" : "Standard priority"}</span>
+      </footer>
+    </article>
+  );
+}
+
+function SupportInbox({ reports, integrations, busyAction, message, onRefresh, onSave, onGithub, onCodex, onMessage }) {
+  const [filter, setFilter] = useState("OPEN");
+  const visible = reports.filter((report) => filter === "ALL"
+    || (filter === "OPEN" && report.status !== "RESOLVED")
+    || report.status === filter);
+  const openCount = reports.filter((report) => report.status !== "RESOLVED").length;
+  const highCount = reports.filter((report) => report.status !== "RESOLVED" && report.severity === "HIGH").length;
+  return (
+    <div className="admin-support-page">
+      <div className="admin-support-heading">
+        <div><span>Support command center</span><h2>Customer problem reports</h2><p>Diagnose, track, hand off, and close every customer-reported issue from one place.</p></div>
+        <button type="button" onClick={onRefresh}>Refresh reports</button>
+      </div>
+      <div className="admin-support-metrics">
+        <div><span>Open</span><strong>{openCount}</strong></div>
+        <div><span>High priority</span><strong>{highCount}</strong></div>
+        <div><span>Resolved</span><strong>{reports.filter((report) => report.status === "RESOLVED").length}</strong></div>
+        <div><span>Telegram alerts</span><strong>{integrations.telegramConfigured ? "Ready" : "Setup needed"}</strong></div>
+      </div>
+      <div className="admin-support-toolbar">
+        <label>Show<select value={filter} onChange={(event) => setFilter(event.target.value)}><option value="OPEN">Open reports</option><option value="NEW">New</option><option value="INVESTIGATING">Investigating</option><option value="WAITING_FOR_CUSTOMER">Waiting for customer</option><option value="RESOLVED">Resolved</option><option value="ALL">All reports</option></select></label>
+        <span>GitHub: {integrations.githubConfigured ? integrations.githubRepo : "setup required"} · Codex: task preparation ready</span>
+      </div>
+      {message ? <div className="admin-support-message" role="status">{message}</div> : null}
+      <div className="admin-support-list">
+        {visible.length ? visible.map((report) => <SupportReportCard key={report.id} report={report} integrations={integrations} busyAction={busyAction} onSave={onSave} onGithub={onGithub} onCodex={onCodex} onMessage={onMessage} />) : <div className="admin-support-empty">No reports match this view.</div>}
+      </div>
+    </div>
+  );
+}
+
 export default function AdminDashboard() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authChecked, setAuthChecked] = useState(false);
   const [candidate, setCandidate] = useState("");
-  const [activeTab, setActiveTab] = useState("overview");
+  const [activeTab, setActiveTab] = useState(getInitialAdminTab);
   const [selectedCustomerKey, setSelectedCustomerKey] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -1138,6 +1296,10 @@ export default function AdminDashboard() {
   const [faqs, setFaqs] = useState([]);
   const [settings, setSettings] = useState(null);
   const [leadHandoffs, setLeadHandoffs] = useState({ summary: {}, handoffs: [] });
+  const [supportReports, setSupportReports] = useState([]);
+  const [supportIntegrations, setSupportIntegrations] = useState({ githubConfigured: false, githubRepo: "", telegramConfigured: false, codexMode: "prepare" });
+  const [supportBusyAction, setSupportBusyAction] = useState("");
+  const [supportMessage, setSupportMessage] = useState("");
 
   const [leadFilters, setLeadFilters] = useState({ status: "", intent: "", urgency: "" });
   const [callFilters, setCallFilters] = useState({ status: "", minDuration: "", outcome: "", search: "" });
@@ -1913,6 +2075,7 @@ export default function AdminDashboard() {
         items: [
           ["overview", "Overview", "Control center"],
           ["customers", "Businesses", "See every business and its next action"],
+          ["support", "Support Inbox", "Resolve customer-reported problems"],
           ["setup", "Business Setup", "Finish businesses that are not ready"],
           ["calls", "Leads & Calls", "Review calls and move leads forward"],
           ["trials", "Trials", "Live Stripe trial status"],
@@ -1962,6 +2125,54 @@ export default function AdminDashboard() {
   const loadLeadHandoffs = async () => {
     const data = await api("/api/admin/lead-handoffs");
     setLeadHandoffs({ summary: data.summary || {}, handoffs: data.handoffs || [] });
+  };
+
+  const loadSupportReports = async () => {
+    const data = await api("/api/admin/support-reports", { timeoutMs: 15000 });
+    setSupportReports(data.reports || []);
+    setSupportIntegrations((current) => ({ ...current, ...(data.integrations || {}) }));
+  };
+
+  const saveSupportReport = async (id, body) => {
+    setSupportBusyAction(`${id}:save`);
+    setSupportMessage("");
+    try {
+      const data = await api(`/api/admin/support-reports/${encodeURIComponent(id)}`, { method: "PATCH", body, timeoutMs: 15000 });
+      setSupportMessage(data.customerNotification?.error || `${data.report?.ticketNumber || "Report"} updated${data.customerNotification?.sent ? " and the customer was notified" : ""}.`);
+      await loadSupportReports();
+    } catch (requestError) {
+      setSupportMessage(cleanErrorMessage(requestError.message));
+    } finally {
+      setSupportBusyAction("");
+    }
+  };
+
+  const createSupportGithubIssue = async (id) => {
+    setSupportBusyAction(`${id}:github`);
+    setSupportMessage("");
+    try {
+      const data = await api(`/api/admin/support-reports/${encodeURIComponent(id)}/github-issue`, { method: "POST", timeoutMs: 20000 });
+      setSupportMessage(`GitHub issue #${data.issue?.number || data.report?.githubIssueNumber} created.`);
+      await loadSupportReports();
+    } catch (requestError) {
+      setSupportMessage(cleanErrorMessage(requestError.message));
+    } finally {
+      setSupportBusyAction("");
+    }
+  };
+
+  const prepareSupportCodexTask = async (id) => {
+    setSupportBusyAction(`${id}:codex`);
+    setSupportMessage("");
+    try {
+      const data = await api(`/api/admin/support-reports/${encodeURIComponent(id)}/codex-task`, { method: "POST", timeoutMs: 15000 });
+      setSupportMessage(`${data.report?.ticketNumber || "Codex repair task"} prepared. Copy it or open Codex.`);
+      await loadSupportReports();
+    } catch (requestError) {
+      setSupportMessage(cleanErrorMessage(requestError.message));
+    } finally {
+      setSupportBusyAction("");
+    }
   };
 
   const loadAnalytics = async () => {
@@ -2145,6 +2356,7 @@ export default function AdminDashboard() {
         loadDigest(),
         loadSettings(),
         loadLeadHandoffs(),
+        loadSupportReports(),
       ]);
       setVapiSyncStatus("Dashboard refreshed.");
     } catch (e) {
@@ -2167,6 +2379,7 @@ export default function AdminDashboard() {
       if (activeTab === "customers") {
         await Promise.allSettled([loadOpsOverview(), loadCustomerSetup(), loadTrialHealth(), loadSignups(), loadCalls(), loadLeads(), loadCostAudit(), loadVapiMappings(), loadVapiInventory()]);
       }
+      if (activeTab === "support") await loadSupportReports();
       if (activeTab === "setup") await loadCustomerSetup();
       if (activeTab === "businesses") await loadOpsOverview();
       if (activeTab === "calls") await Promise.allSettled([loadCalls(), loadLeadHandoffs()]);
@@ -2259,6 +2472,9 @@ export default function AdminDashboard() {
       setDigest(null);
       setFaqs([]);
       setSettings(null);
+      setSupportReports([]);
+      setSupportMessage("");
+      setSupportBusyAction("");
       setSelectedCustomerKey("");
     }
   };
@@ -2502,6 +2718,20 @@ export default function AdminDashboard() {
             leadHandoffs={leadHandoffs}
             onOpenTab={setActiveTab}
             onSyncCalls={syncVapiCalls}
+          />
+        ) : null}
+
+        {activeTab === "support" ? (
+          <SupportInbox
+            reports={supportReports}
+            integrations={supportIntegrations}
+            busyAction={supportBusyAction}
+            message={supportMessage}
+            onRefresh={loadSupportReports}
+            onSave={saveSupportReport}
+            onGithub={createSupportGithubIssue}
+            onCodex={prepareSupportCodexTask}
+            onMessage={setSupportMessage}
           />
         ) : null}
 
@@ -3514,6 +3744,52 @@ export default function AdminDashboard() {
                 ))}
               </div>
             ) : null}
+
+            <section className="admin-money-card admin-phone-billing-card">
+              <div className="admin-money-card-head">
+                <div>
+                  <span>Phone Billing Schedule</span>
+                  <h3>When every AI phone number renews monthly</h3>
+                  <p>{costAudit?.twilioPhoneBilling?.basis || "Load Twilio billing data to see each phone number's estimated monthly renewal."}</p>
+                </div>
+                <div className="admin-money-actions">
+                  {costAudit?.twilioPhoneBilling?.billingConsoleUrl ? (
+                    <a href={costAudit.twilioPhoneBilling.billingConsoleUrl} target="_blank" rel="noreferrer" className="admin-money-primary">Open Twilio Billing</a>
+                  ) : null}
+                  {costAudit?.twilioPhoneBilling?.activeNumbersUrl ? (
+                    <a href={costAudit.twilioPhoneBilling.activeNumbersUrl} target="_blank" rel="noreferrer">Manage Phone Numbers</a>
+                  ) : null}
+                </div>
+              </div>
+              <div className="admin-money-table-wrap">
+                <table className="admin-money-table">
+                  <thead>
+                    <tr>
+                      <th>AI Phone</th>
+                      <th>Customer</th>
+                      <th>Next Estimated Charge</th>
+                      <th>Time Remaining</th>
+                      <th>Originally Added</th>
+                      <th>Cycle</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {costAudit?.twilioPhoneBilling?.records?.length ? costAudit.twilioPhoneBilling.records.map((record) => (
+                      <tr key={record.sid || record.phoneNumber}>
+                        <td><strong>{record.phoneNumber}</strong><small>{record.sid || "No Twilio SID"}</small></td>
+                        <td>{record.customer || "Unmapped number"}</td>
+                        <td><strong>{dt(record.nextEstimatedRenewalAt)}</strong></td>
+                        <td><span className="admin-money-badge admin-money-badge-info">{billingCountdown(record.nextEstimatedRenewalAt)}</span></td>
+                        <td>{dt(record.acquiredAt)}</td>
+                        <td>Monthly</td>
+                      </tr>
+                    )) : (
+                      <tr><td colSpan="6">No Twilio phone billing dates loaded yet. Use Refresh after Twilio is connected.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
 
             <div className="admin-money-grid">
               <section className="admin-money-card admin-money-main-card">

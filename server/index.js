@@ -8,9 +8,33 @@ const express = require("express");
 const fs = require("fs");
 const nodemailer = require("nodemailer");
 const path = require("path");
+const { Readable } = require("stream");
 const Stripe = require("stripe");
 const { prisma } = require("./prisma");
 const { fetchPublicWebsite } = require("./safeWebsiteFetch");
+const { sendSmsViaTwilio } = require("./twilioSms");
+const {
+  formatAppointmentDate,
+  createStaffMember,
+  deactivateStaffMember,
+  getAppointmentProposal,
+  getCalendarInvite,
+  getManagedAppointment,
+  getSchedulingSettings,
+  manageCustomerAppointment,
+  processAppointmentReminders,
+  respondToAppointment,
+  respondToAppointmentProposal,
+  updateSchedulingSettings,
+} = require("./appointmentRequests");
+const {
+  buildCustomerCalendarLinks,
+  completeOAuthConnection,
+  disconnectCalendar,
+  getAuthorizationUrl,
+  isProviderConfigured,
+  sanitizeCalendarConnection,
+} = require("./calendarIntegrations");
 const {
   createLead,
   logCall,
@@ -28,8 +52,17 @@ const {
   recordExternalOwnerSmsResult,
 } = require("./leadHandoffs");
 const {
+  inspectIsolatedConfiguration,
+  isManagedIsolatedTool,
   provisionIsolatedSmsRouting,
 } = require("./vapiIsolatedSmsProvisioning");
+const {
+  buildTrustedVapiLeadInput,
+  claimVapiToolExecution,
+  completeVapiToolExecution,
+  failVapiToolExecution,
+  isVapiNotificationTool,
+} = require("./vapiToolSecurity");
 
 loadPowerShellEnvAssignments(path.join(__dirname, "..", ".env.local"));
 
@@ -43,11 +76,14 @@ const signupIdentityRateLimit = new Map();
 const signupDuplicateSubmissions = new Map();
 const customerDashboardIpRateLimit = new Map();
 const customerDashboardLookupRateLimit = new Map();
+const customerDashboardLoginCodes = new Map();
+const customerSupportSuggestionRateLimit = new Map();
 const pendingSignupPath = path.join(dataDir, "pending-signup-verifications.json");
 const pendingStripeSignupPath = path.join(dataDir, "pending-stripe-signups.json");
 const trialReminderPath = path.join(dataDir, "trial-reminders.json");
 const signupDashboardPath = path.join(dataDir, "signup-dashboard.json");
 const vapiCallSyncPath = path.join(dataDir, "vapi-call-sync.json");
+const webhookReplayPath = path.join(dataDir, "webhook-replay.json");
 const GOOGLE_RECAPTCHA_TEST_SECRET_KEY = "6LeIxAcTAAAAAGG-vFI1TnRWxMZNFuojJ4WifJWe";
 const ASSISTANT_MAX_CHARS = 2000;
 const ASSISTANT_WINDOW_MS = 60 * 1000;
@@ -67,6 +103,12 @@ const CUSTOMER_DASHBOARD_IP_WINDOW_MS = parsePositiveInt(process.env.CUSTOMER_DA
 const CUSTOMER_DASHBOARD_IP_MAX_REQUESTS = parsePositiveInt(process.env.CUSTOMER_DASHBOARD_IP_MAX_REQUESTS, 30);
 const CUSTOMER_DASHBOARD_LOOKUP_WINDOW_MS = parsePositiveInt(process.env.CUSTOMER_DASHBOARD_LOOKUP_WINDOW_MS, 60 * 60 * 1000);
 const CUSTOMER_DASHBOARD_LOOKUP_MAX_REQUESTS = parsePositiveInt(process.env.CUSTOMER_DASHBOARD_LOOKUP_MAX_REQUESTS, 8);
+const CUSTOMER_DASHBOARD_SESSION_COOKIE = "myaipa_customer_dashboard_session";
+const CUSTOMER_DASHBOARD_SESSION_TTL_MS = parsePositiveInt(process.env.CUSTOMER_DASHBOARD_SESSION_TTL_MS, 12 * 60 * 60 * 1000);
+const CUSTOMER_DASHBOARD_CODE_TTL_MS = parsePositiveInt(process.env.CUSTOMER_DASHBOARD_CODE_TTL_MS, 10 * 60 * 1000);
+const CUSTOMER_DASHBOARD_CODE_MAX_ATTEMPTS = Math.max(1, Math.min(10, parsePositiveInt(process.env.CUSTOMER_DASHBOARD_CODE_MAX_ATTEMPTS, 5)));
+const CUSTOMER_SUPPORT_SUGGESTION_WINDOW_MS = 15 * 60 * 1000;
+const CUSTOMER_SUPPORT_SUGGESTION_MAX_REQUESTS = 6;
 const WEBSITE_FETCH_TIMEOUT_MS = 8000;
 const WEBSITE_MAX_HTML_CHARS = 250000;
 const WEBSITE_MAX_EXTRA_PAGES = 3;
@@ -85,6 +127,15 @@ const STRIPE_PRICE_ID = String(process.env.STRIPE_PRICE_ID || "").trim();
 const STRIPE_WEBHOOK_SECRET = String(process.env.STRIPE_WEBHOOK_SECRET || "").trim();
 const STRIPE_TRIAL_DAYS = Math.max(0, Number(process.env.STRIPE_TRIAL_DAYS || 14) || 0);
 const STRIPE_ADMIN_SUBSCRIPTION_LIMIT = Math.max(1, Math.min(500, Number(process.env.STRIPE_ADMIN_SUBSCRIPTION_LIMIT || 100) || 100));
+const WEBHOOK_REPLAY_RETENTION_MS = Math.min(
+  30 * 24 * 60 * 60 * 1000,
+  parsePositiveInt(process.env.WEBHOOK_REPLAY_RETENTION_MS, 7 * 24 * 60 * 60 * 1000)
+);
+const WEBHOOK_PROCESSING_LEASE_MS = Math.min(
+  30 * 60 * 1000,
+  parsePositiveInt(process.env.WEBHOOK_PROCESSING_LEASE_MS, 5 * 60 * 1000)
+);
+const WEBHOOK_REPLAY_MAX_ENTRIES = Math.min(50000, parsePositiveInt(process.env.WEBHOOK_REPLAY_MAX_ENTRIES, 5000));
 const stripe = STRIPE_SECRET_KEY ? new Stripe(STRIPE_SECRET_KEY) : null;
 const VAPI_API_KEY = String(process.env.VAPI_API_KEY || "").trim();
 const VAPI_API_BASE_URL = String(process.env.VAPI_API_BASE_URL || "https://api.vapi.ai").trim().replace(/\/+$/, "");
@@ -95,13 +146,20 @@ const VAPI_AUTO_SYNC_ENABLED = isEnabled(process.env.VAPI_AUTO_SYNC_ENABLED);
 const LEAD_HANDOFF_CHECK_INTERVAL_MS = parsePositiveInt(process.env.LEAD_HANDOFF_CHECK_INTERVAL_MS, 60 * 1000);
 const TWILIO_ACCOUNT_SID = String(process.env.TWILIO_ACCOUNT_SID || "").trim();
 const TWILIO_AUTH_TOKEN = String(process.env.TWILIO_AUTH_TOKEN || "").trim();
-const TWILIO_API_BASE_URL = String(process.env.TWILIO_API_BASE_URL || "https://api.twilio.com").trim().replace(/\/+$/, "");
 const TWILIO_STATUS_CALLBACK_URL = String(process.env.TWILIO_STATUS_CALLBACK_URL || "").trim();
+const TWILIO_API_BASE_URL = String(process.env.TWILIO_API_BASE_URL || "https://api.twilio.com").trim().replace(/\/+$/, "");
 const INTEGRATION_API_KEY = String(process.env.INTEGRATION_API_KEY || process.env.MAKE_SIGNUP_WEBHOOK_API_KEY || "").trim();
+const VAPI_WEBHOOK_SECRET = String(process.env.VAPI_WEBHOOK_SECRET || "").trim();
 const FIXED_MONTHLY_COSTS_JSON = String(process.env.FIXED_MONTHLY_COSTS_JSON || "").trim();
 const FIXED_MONTHLY_COST_USD = numberOrNull(process.env.FIXED_MONTHLY_COST_USD) || 0;
 const MISSED_CALL_ALERT_ENABLED = isEnabled(process.env.MISSED_CALL_ALERT_ENABLED);
 const DAILY_DIGEST_ENABLED = isEnabled(process.env.DAILY_DIGEST_ENABLED);
+const FRONTEND_APP_URL = String(process.env.FRONTEND_APP_URL || "https://www.myaipa.ca").trim().replace(/\/+$/, "");
+const TELEGRAM_BOT_TOKEN = String(process.env.TELEGRAM_BOT_TOKEN || "").trim();
+const TELEGRAM_CHAT_ID = String(process.env.TELEGRAM_CHAT_ID || "").trim();
+const GITHUB_SUPPORT_TOKEN = String(process.env.GITHUB_SUPPORT_TOKEN || "").trim();
+const GITHUB_SUPPORT_REPO = String(process.env.GITHUB_SUPPORT_REPO || "OllieinCanada/MyA.I.PA").trim();
+const GITHUB_SUPPORT_LABELS = parseCsv(process.env.GITHUB_SUPPORT_LABELS || "");
 const DEFAULT_ALLOWED_ORIGINS = [
   "https://www.myaipa.ca",
   "https://myaipa.ca",
@@ -140,89 +198,100 @@ app.post("/api/payments/stripe-webhook", express.raw({ type: "application/json" 
     return res.status(400).send(`Webhook Error: ${error.message}`);
   }
 
-  const object = event.data?.object || {};
-  if (
-    event.type === "checkout.session.completed" ||
-    event.type === "customer.subscription.created" ||
-    event.type === "customer.subscription.updated" ||
-    event.type === "customer.subscription.deleted" ||
-    event.type === "invoice.payment_failed"
-  ) {
-    console.log("[stripe:webhook] received", {
-      type: event.type,
-      id: object.id,
-      customer: object.customer || object.customer_email || null,
-      status: object.status || object.payment_status || null,
-      metadata: object.metadata || {},
-    });
+  const replayClaim = claimWebhookEvent({ provider: "stripe", eventId: event.id, eventType: event.type });
+  if (replayClaim.duplicate) {
+    return res.json({ received: true, duplicate: true });
   }
 
-  if (event.type === "checkout.session.completed") {
-    await scheduleTrialReminderFromCheckoutSession(object);
-    const pendingSignup = takePendingStripeSignup(object.id);
-    const checkoutRecord = upsertSignupDashboardFromCheckoutSession(object, {
-      status: "checkout_completed",
-      ...(pendingSignup?.summary || {}),
-    });
-    if (pendingSignup?.payload) {
-      const makePayload = buildStripeSignupMakePayload(pendingSignup.payload, object);
-      try {
-        const makeResult = await sendMakeSignupCompleted(makePayload);
-        const makeData = makeResult.data || {};
-        if (!getMakeSignupSuccess(makeData)) {
+  try {
+    const object = event.data?.object || {};
+    if (
+      event.type === "checkout.session.completed" ||
+      event.type === "customer.subscription.created" ||
+      event.type === "customer.subscription.updated" ||
+      event.type === "customer.subscription.deleted" ||
+      event.type === "invoice.payment_failed"
+    ) {
+      console.log("[stripe:webhook] received", {
+        type: event.type,
+        id: object.id,
+        customer: object.customer || object.customer_email || null,
+        status: object.status || object.payment_status || null,
+        metadata: object.metadata || {},
+      });
+    }
+
+    if (event.type === "checkout.session.completed") {
+      await scheduleTrialReminderFromCheckoutSession(object);
+      const pendingSignup = takePendingStripeSignup(object.id);
+      const checkoutRecord = upsertSignupDashboardFromCheckoutSession(object, {
+        status: "checkout_completed",
+        ...(pendingSignup?.summary || {}),
+      });
+      if (pendingSignup?.payload) {
+        const makePayload = buildStripeSignupMakePayload(pendingSignup.payload, object);
+        try {
+          const makeResult = await sendMakeSignupCompleted(makePayload);
+          const makeData = makeResult.data || {};
+          if (!getMakeSignupSuccess(makeData)) {
+            upsertSignupDashboardRecord({
+              ...checkoutRecord,
+              ...(pendingSignup.summary || {}),
+              status: "setup_error",
+              makeStatus: makeResult.status,
+              makeError: makeData?.error || "Make webhook did not complete after Stripe checkout.",
+            });
+          } else {
+            upsertSignupDashboardRecord({
+              ...checkoutRecord,
+              ...(pendingSignup.summary || {}),
+              status: "setup_started",
+              makeStatus: makeResult.status,
+              twilioPhoneNumber: getMakeTwilioPhoneNumber(makeData) || getMakeTwilioPhoneNumberFromText(makeResult.body),
+            });
+          }
+        } catch (error) {
+          console.error("[stripe:webhook] Make handoff after checkout failed", {
+            checkoutSessionId: object.id,
+            message: error?.message || String(error),
+          });
           upsertSignupDashboardRecord({
             ...checkoutRecord,
             ...(pendingSignup.summary || {}),
             status: "setup_error",
-            makeStatus: makeResult.status,
-            makeError: makeData?.error || "Make webhook did not complete after Stripe checkout.",
-          });
-        } else {
-          upsertSignupDashboardRecord({
-            ...checkoutRecord,
-            ...(pendingSignup.summary || {}),
-            status: "setup_started",
-            makeStatus: makeResult.status,
-            twilioPhoneNumber: getMakeTwilioPhoneNumber(makeData) || getMakeTwilioPhoneNumberFromText(makeResult.body),
+            makeError: error?.message || "Make handoff failed after Stripe checkout.",
           });
         }
-      } catch (error) {
-        console.error("[stripe:webhook] Make handoff after checkout failed", {
-          checkoutSessionId: object.id,
-          message: error?.message || String(error),
-        });
-        upsertSignupDashboardRecord({
-          ...checkoutRecord,
-          ...(pendingSignup.summary || {}),
-          status: "setup_error",
-          makeError: error?.message || "Make handoff failed after Stripe checkout.",
-        });
       }
     }
-  }
 
-  if (event.type === "customer.subscription.created" || event.type === "customer.subscription.updated") {
-    scheduleTrialReminderFromSubscription(object);
-    upsertSignupDashboardFromSubscription(object);
-  }
+    if (event.type === "customer.subscription.created" || event.type === "customer.subscription.updated") {
+      scheduleTrialReminderFromSubscription(object);
+      upsertSignupDashboardFromSubscription(object);
+    }
 
-  if (event.type === "customer.subscription.deleted") {
-    markTrialReminderCancelled(object.id);
-    upsertSignupDashboardFromSubscription(object, { status: "subscription_cancelled" });
-  }
+    if (event.type === "customer.subscription.deleted") {
+      markTrialReminderCancelled(object.id);
+      upsertSignupDashboardFromSubscription(object, { status: "subscription_cancelled" });
+    }
 
-  if (event.type === "invoice.payment_failed") {
-    upsertSignupDashboardRecord({
-      subscriptionId: typeof object.subscription === "string" ? object.subscription : object.subscription?.id || "",
-      customerId: typeof object.customer === "string" ? object.customer : object.customer?.id || "",
-      ownerEmail: String(object.customer_email || "").trim(),
-      paymentStatus: "payment_failed",
-      lastPaymentFailedAt: new Date().toISOString(),
-      status: "payment_failed",
-    });
-  }
+    if (event.type === "invoice.payment_failed") {
+      upsertSignupDashboardRecord({
+        subscriptionId: typeof object.subscription === "string" ? object.subscription : object.subscription?.id || "",
+        customerId: typeof object.customer === "string" ? object.customer : object.customer?.id || "",
+        ownerEmail: String(object.customer_email || "").trim(),
+        paymentStatus: "payment_failed",
+        lastPaymentFailedAt: new Date().toISOString(),
+        status: "payment_failed",
+      });
+    }
 
-  res.json({ received: true });
+    completeWebhookEvent(replayClaim);
+    res.json({ received: true, duplicate: false });
+  } catch (error) {
+    releaseWebhookEvent(replayClaim);
+    throw error;
+  }
 }));
 
 app.use(express.json({ limit: JSON_BODY_LIMIT }));
@@ -403,6 +472,143 @@ function clearAdminSessionCookie(res) {
   res.setHeader("Set-Cookie", cookie.join("; "));
 }
 
+function getCustomerDashboardSessionSecret() {
+  const secret = String(process.env.CUSTOMER_DASHBOARD_SESSION_SECRET || process.env.ADMIN_SESSION_SECRET || "").trim();
+  if (secret) return secret;
+  if (process.env.NODE_ENV === "production") {
+    const err = new Error("CUSTOMER_DASHBOARD_SESSION_SECRET or ADMIN_SESSION_SECRET must be configured.");
+    err.statusCode = 500;
+    throw err;
+  }
+  return "myaipa-local-customer-dashboard-session";
+}
+
+function getCustomerDashboardLookupHash(email, phone) {
+  const normalizedEmail = String(email || "").trim().toLowerCase();
+  const normalizedPhone = normalizePhoneForMatch(phone);
+  if (!normalizedEmail || !normalizedPhone) return "";
+  return hashKey(`${normalizedEmail}|${normalizedPhone}`);
+}
+
+function hashCustomerDashboardCode(lookupHash, code) {
+  return crypto
+    .createHmac("sha256", getCustomerDashboardSessionSecret())
+    .update(`customer-dashboard-code:${lookupHash}:${String(code || "")}`)
+    .digest("hex");
+}
+
+function createCustomerDashboardLoginCode(lookupHash, now = Date.now()) {
+  const normalizedLookupHash = String(lookupHash || "").trim().toLowerCase();
+  if (!/^[a-f0-9]{32}$/.test(normalizedLookupHash)) return "";
+  const code = String(crypto.randomInt(100000, 1000000));
+  customerDashboardLoginCodes.set(normalizedLookupHash, {
+    codeHash: hashCustomerDashboardCode(normalizedLookupHash, code),
+    expiresAt: now + CUSTOMER_DASHBOARD_CODE_TTL_MS,
+    attempts: 0,
+  });
+  for (const [key, record] of customerDashboardLoginCodes.entries()) {
+    if (!record || Number(record.expiresAt || 0) <= now) customerDashboardLoginCodes.delete(key);
+  }
+  return code;
+}
+
+function verifyCustomerDashboardLoginCode(lookupHash, code, now = Date.now()) {
+  const normalizedLookupHash = String(lookupHash || "").trim().toLowerCase();
+  const record = customerDashboardLoginCodes.get(normalizedLookupHash);
+  if (!record || Number(record.expiresAt || 0) <= now) {
+    customerDashboardLoginCodes.delete(normalizedLookupHash);
+    return { ok: false, reason: "expired" };
+  }
+  record.attempts += 1;
+  if (record.attempts > CUSTOMER_DASHBOARD_CODE_MAX_ATTEMPTS) {
+    customerDashboardLoginCodes.delete(normalizedLookupHash);
+    return { ok: false, reason: "attempts" };
+  }
+  const suppliedHash = hashCustomerDashboardCode(normalizedLookupHash, String(code || "").replace(/\D/g, ""));
+  if (!safeEqualString(suppliedHash, record.codeHash)) {
+    customerDashboardLoginCodes.set(normalizedLookupHash, record);
+    return { ok: false, reason: "invalid", remainingAttempts: Math.max(0, CUSTOMER_DASHBOARD_CODE_MAX_ATTEMPTS - record.attempts) };
+  }
+  customerDashboardLoginCodes.delete(normalizedLookupHash);
+  return { ok: true };
+}
+
+function maskCustomerDashboardPhone(phone) {
+  const digits = String(phone || "").replace(/\D/g, "");
+  return digits.length >= 4 ? `••• ••• ${digits.slice(-4)}` : "your registered phone";
+}
+
+function signCustomerDashboardSessionPayload(payload) {
+  return crypto
+    .createHmac("sha256", getCustomerDashboardSessionSecret())
+    .update(`customer-dashboard:${payload}`)
+    .digest("hex");
+}
+
+function createCustomerDashboardSessionToken({ email, phone }) {
+  const lookupHash = getCustomerDashboardLookupHash(email, phone);
+  if (!lookupHash) return "";
+  const payload = Buffer.from(
+    JSON.stringify({
+      v: 1,
+      lookupHash,
+      exp: Date.now() + CUSTOMER_DASHBOARD_SESSION_TTL_MS,
+    })
+  ).toString("base64url");
+  return `${payload}.${signCustomerDashboardSessionPayload(payload)}`;
+}
+
+function getCustomerDashboardSessionLookupHash(req) {
+  const token = parseCookies(req)[CUSTOMER_DASHBOARD_SESSION_COOKIE];
+  if (!token || !token.includes(".")) return "";
+  const [payload, signature] = token.split(".");
+  if (!payload || !signature) return "";
+
+  const expectedSignature = signCustomerDashboardSessionPayload(payload);
+  const providedBuffer = Buffer.from(signature);
+  const expectedBuffer = Buffer.from(expectedSignature);
+  if (
+    providedBuffer.length !== expectedBuffer.length ||
+    !crypto.timingSafeEqual(providedBuffer, expectedBuffer)
+  ) {
+    return "";
+  }
+
+  try {
+    const data = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+    if (data?.v !== 1 || Number(data?.exp || 0) <= Date.now()) return "";
+    return /^[a-f0-9]{32}$/.test(String(data?.lookupHash || "")) ? data.lookupHash : "";
+  } catch (_err) {
+    return "";
+  }
+}
+
+function setCustomerDashboardSessionCookie(res, token) {
+  const isProduction = process.env.NODE_ENV === "production";
+  const cookie = [
+    `${CUSTOMER_DASHBOARD_SESSION_COOKIE}=${encodeURIComponent(token)}`,
+    "Path=/api/customer/dashboard",
+    "HttpOnly",
+    "SameSite=Lax",
+    `Max-Age=${Math.floor(CUSTOMER_DASHBOARD_SESSION_TTL_MS / 1000)}`,
+  ];
+  if (isProduction) cookie.push("Secure");
+  res.setHeader("Set-Cookie", cookie.join("; "));
+}
+
+function clearCustomerDashboardSessionCookie(res) {
+  const isProduction = process.env.NODE_ENV === "production";
+  const cookie = [
+    `${CUSTOMER_DASHBOARD_SESSION_COOKIE}=`,
+    "Path=/api/customer/dashboard",
+    "HttpOnly",
+    "SameSite=Lax",
+    "Max-Age=0",
+  ];
+  if (isProduction) cookie.push("Secure");
+  res.setHeader("Set-Cookie", cookie.join("; "));
+}
+
 function hasValidAdminPassword(req) {
   const supplied = req.headers["x-admin-password"] || req.body?.password;
   return safeEqualString(supplied, getAdminPassword());
@@ -439,9 +645,24 @@ function hasValidIntegrationKey(req) {
     String(req.headers["x-vapi-secret"] || "").trim() ||
     String(req.headers["x-api-key"] || "").trim() ||
     String(req.headers["x-make-apikey"] || "").trim() ||
-    String(bearerMatch?.[1] || "").trim() ||
-    String(req.body?.integrationKey || "").trim();
+    String(bearerMatch?.[1] || "").trim();
   return safeEqualString(supplied, INTEGRATION_API_KEY);
+}
+
+function getVapiWebhookSecret() {
+  // INTEGRATION_API_KEY remains a migration fallback until VAPI_WEBHOOK_SECRET
+  // is configured in the deployment environment.
+  return VAPI_WEBHOOK_SECRET || INTEGRATION_API_KEY;
+}
+
+function hasValidVapiWebhookKey(req) {
+  const expected = getVapiWebhookSecret();
+  if (!expected) return false;
+  const authHeader = String(req.headers.authorization || "").trim();
+  const bearerMatch = authHeader.match(/^Bearer\s+(.+)$/i);
+  const supplied = String(req.headers["x-vapi-secret"] || "").trim()
+    || String(bearerMatch?.[1] || "").trim();
+  return safeEqualString(supplied, expected);
 }
 
 function getPublicBaseUrl(req) {
@@ -717,6 +938,120 @@ function writeVapiCallSyncStore(store) {
   fs.writeFileSync(vapiCallSyncPath, `${JSON.stringify(store, null, 2)}\n`);
 }
 
+function ensureWebhookReplayStore() {
+  fs.mkdirSync(path.dirname(webhookReplayPath), { recursive: true });
+  if (!fs.existsSync(webhookReplayPath)) {
+    fs.writeFileSync(webhookReplayPath, "{}\n");
+  }
+}
+
+function readWebhookReplayStore() {
+  ensureWebhookReplayStore();
+  try {
+    const data = JSON.parse(fs.readFileSync(webhookReplayPath, "utf8"));
+    return data && typeof data === "object" && !Array.isArray(data) ? data : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeWebhookReplayStore(store) {
+  ensureWebhookReplayStore();
+  const temporaryPath = `${webhookReplayPath}.${process.pid}.tmp`;
+  fs.writeFileSync(temporaryPath, `${JSON.stringify(store, null, 2)}\n`);
+  fs.renameSync(temporaryPath, webhookReplayPath);
+}
+
+function getWebhookReplayKey(provider, eventId) {
+  const normalizedProvider = String(provider || "").trim().toLowerCase().slice(0, 80);
+  const normalizedEventId = String(eventId || "").trim().slice(0, 240);
+  if (!normalizedProvider || !normalizedEventId) return "";
+  return hashKey(`${normalizedProvider}:${normalizedEventId}`);
+}
+
+function pruneWebhookReplayStore(store, now = Date.now(), maxEntries = WEBHOOK_REPLAY_MAX_ENTRIES) {
+  const result = store && typeof store === "object" && !Array.isArray(store) ? store : {};
+  for (const [key, record] of Object.entries(result)) {
+    if (!record || Number(record.expiresAt || 0) <= now) delete result[key];
+  }
+
+  const entries = Object.entries(result);
+  if (entries.length > maxEntries) {
+    entries
+      .sort((a, b) => Number(a[1]?.claimedAt || 0) - Number(b[1]?.claimedAt || 0))
+      .slice(0, entries.length - maxEntries)
+      .forEach(([key]) => delete result[key]);
+  }
+  return result;
+}
+
+function claimWebhookReplayStore(store, { provider, eventId, eventType = "", now = Date.now(), claimToken = "" } = {}) {
+  const key = getWebhookReplayKey(provider, eventId);
+  if (!key) return { claimed: false, duplicate: false, skipped: true, key: "" };
+
+  const normalizedStore = pruneWebhookReplayStore(store, now);
+  const existing = normalizedStore[key];
+  if (
+    existing?.status === "completed" ||
+    (existing?.status === "processing" && Number(existing.leaseExpiresAt || 0) > now)
+  ) {
+    return {
+      claimed: false,
+      duplicate: true,
+      skipped: false,
+      key,
+      status: existing.status,
+    };
+  }
+
+  const token = claimToken || crypto.randomBytes(18).toString("base64url");
+  normalizedStore[key] = {
+    provider: String(provider || "").trim().toLowerCase().slice(0, 80),
+    eventIdHash: hashKey(String(eventId || "").trim()),
+    eventType: String(eventType || "").trim().slice(0, 160),
+    status: "processing",
+    claimToken: token,
+    claimedAt: now,
+    leaseExpiresAt: now + WEBHOOK_PROCESSING_LEASE_MS,
+    expiresAt: now + WEBHOOK_REPLAY_RETENTION_MS,
+  };
+  pruneWebhookReplayStore(normalizedStore, now);
+  return { claimed: true, duplicate: false, skipped: false, key, claimToken: token };
+}
+
+function claimWebhookEvent(details) {
+  const store = readWebhookReplayStore();
+  const result = claimWebhookReplayStore(store, details);
+  if (result.claimed) writeWebhookReplayStore(store);
+  return result;
+}
+
+function completeWebhookEvent(claim, now = Date.now()) {
+  if (!claim?.claimed || !claim.key || !claim.claimToken) return false;
+  const store = pruneWebhookReplayStore(readWebhookReplayStore(), now);
+  const record = store[claim.key];
+  if (!record || record.claimToken !== claim.claimToken) return false;
+  store[claim.key] = {
+    ...record,
+    status: "completed",
+    completedAt: now,
+    leaseExpiresAt: null,
+    expiresAt: now + WEBHOOK_REPLAY_RETENTION_MS,
+  };
+  writeWebhookReplayStore(store);
+  return true;
+}
+
+function releaseWebhookEvent(claim) {
+  if (!claim?.claimed || !claim.key || !claim.claimToken) return false;
+  const store = readWebhookReplayStore();
+  const record = store[claim.key];
+  if (!record || record.claimToken !== claim.claimToken) return false;
+  delete store[claim.key];
+  writeWebhookReplayStore(store);
+  return true;
+}
+
 function parseVapiBusinessMap() {
   const raw = String(process.env.VAPI_BUSINESS_MAP || "").trim();
   if (!raw) return {};
@@ -871,6 +1206,20 @@ function summarizeVapiToolResults(call) {
       skipped: typeof parsed.skipped === "boolean" ? parsed.skipped : null,
       status: String(parsed.status || "").trim().slice(0, 80),
       error: String(parsed.error || parsed.message || "").trim().slice(0, 240),
+      owner: parsed.owner && typeof parsed.owner === "object" ? {
+        sent: parsed.owner.sent === true,
+        status: String(parsed.owner.status || "").trim().slice(0, 80),
+        errorCode: String(parsed.owner.errorCode || "").trim().slice(0, 80),
+        toLast4: String(parsed.owner.toLast4 || "").replace(/\D/g, "").slice(-4),
+        fromLast4: String(parsed.owner.fromLast4 || "").replace(/\D/g, "").slice(-4),
+      } : null,
+      customer: parsed.customer && typeof parsed.customer === "object" ? {
+        sent: parsed.customer.sent === true,
+        status: String(parsed.customer.status || "").trim().slice(0, 80),
+        errorCode: String(parsed.customer.errorCode || "").trim().slice(0, 80),
+        toLast4: String(parsed.customer.toLast4 || "").replace(/\D/g, "").slice(-4),
+        fromLast4: String(parsed.customer.fromLast4 || "").replace(/\D/g, "").slice(-4),
+      } : null,
     };
   }
 
@@ -912,6 +1261,53 @@ function summarizeVapiToolResults(call) {
     (result, index, items) =>
       index === items.findIndex((item) => JSON.stringify(item) === JSON.stringify(result))
   );
+}
+
+function summarizeCompositeNotificationHealth({ toolResults = [], aiNumber, ownerNumber, customerNumber } = {}) {
+  const result = toolResults.find((item) => /^send_call_summaries_/i.test(String(item?.name || "")));
+  if (!result) {
+    return {
+      status: "critical",
+      code: "COMPOSITE_TOOL_RESULT_MISSING",
+      summary: "No combined owner/customer notification result was recorded.",
+    };
+  }
+  const expectedAi = normalizePhoneForMatch(aiNumber).slice(-4);
+  const expectedOwner = normalizePhoneForMatch(ownerNumber).slice(-4);
+  const expectedCustomer = normalizePhoneForMatch(customerNumber).slice(-4);
+  const routingMismatch = Boolean(
+    (expectedAi && [result.owner?.fromLast4, result.customer?.fromLast4].filter(Boolean).some((value) => value !== expectedAi)) ||
+    (expectedOwner && result.owner?.toLast4 && result.owner.toLast4 !== expectedOwner) ||
+    (expectedCustomer && result.customer?.toLast4 && result.customer.toLast4 !== expectedCustomer)
+  );
+  if (routingMismatch) {
+    return {
+      status: "critical",
+      code: "SMS_ROUTING_MISMATCH",
+      summary: "A notification sender or destination did not match the assigned business routing.",
+    };
+  }
+  if (result.owner?.sent !== true) {
+    return {
+      status: "critical",
+      code: "OWNER_SMS_FAILED",
+      summary: "The owner notification was not accepted by Twilio.",
+      errorCode: result.owner?.errorCode || "",
+    };
+  }
+  if (result.customer?.sent !== true) {
+    return {
+      status: "warning",
+      code: "CUSTOMER_SMS_FAILED",
+      summary: "The owner notification succeeded, but the caller confirmation did not.",
+      errorCode: result.customer?.errorCode || "",
+    };
+  }
+  return {
+    status: "healthy",
+    code: "BOTH_SMS_ACCEPTED",
+    summary: "Both owner and caller notifications were accepted with the expected routing.",
+  };
 }
 
 async function resolveBusinessIdForVapiCall(call) {
@@ -1009,12 +1405,68 @@ function getVapiRecordingUrl(call) {
       "recording.url",
       "artifact.recordingUrl",
       "artifact.recording.url",
+      "artifact.recording.stereoUrl",
+      "artifact.recording.mono.combinedUrl",
+      "artifact.recording.mono.customerUrl",
       "artifact.recording.mono.url",
       "artifact.recording.stereo.url",
       "artifact.recording",
       "stereoRecordingUrl",
     ]) || null
   );
+}
+
+function getVapiCustomerSafeMessages(call) {
+  const candidates = [
+    getVapiNestedValue(call, "artifact.messages"),
+    call?.messages,
+  ];
+  const messages = candidates.find(Array.isArray) || [];
+  return messages.slice(0, 500).map((item) => ({
+    role: String(item?.role || item?.speaker || item?.speakerLabel || "speaker").trim().slice(0, 40),
+    message: String(item?.message || item?.text || item?.content || item?.transcript || "").trim().slice(0, 5000),
+    secondsFromStart: numberOrNull(item?.secondsFromStart ?? item?.time ?? item?.startTime),
+    duration: numberOrNull(item?.duration),
+  })).filter((item) => item.message);
+}
+
+function getVapiArtifactMetrics(call) {
+  const candidates = [
+    getVapiNestedValue(call, "artifact.performanceMetrics"),
+    getVapiNestedValue(call, "artifact.metrics"),
+    getVapiNestedValue(call, "performanceMetrics"),
+  ];
+  const metrics = candidates.find((item) => item && typeof item === "object" && !Array.isArray(item));
+  if (!metrics) return null;
+  const allowed = [
+    "modelLatencyAverage",
+    "voiceLatencyAverage",
+    "transcriberLatencyAverage",
+    "endpointingLatencyAverage",
+    "turnLatencyAverage",
+    "fromTransportLatencyAverage",
+    "toTransportLatencyAverage",
+    "numUserInterrupted",
+    "numAssistantInterrupted",
+  ];
+  return Object.fromEntries(
+    allowed.map((key) => [key, numberOrNull(metrics[key])]).filter(([, value]) => value != null)
+  );
+}
+
+function getVapiRecordingConsent(call) {
+  const consent = getVapiNestedValue(call, "compliance.recordingConsent") || {};
+  return {
+    type: String(consent?.type || "").trim().slice(0, 80),
+    grantedAt: consent?.grantedAt || null,
+  };
+}
+
+function getSensitiveArtifactExpiry(days, basis = Date.now()) {
+  const retentionDays = Math.max(0, Number(days || 0));
+  if (!retentionDays) return null;
+  const basisMs = new Date(basis || Date.now()).getTime();
+  return new Date((Number.isFinite(basisMs) ? basisMs : Date.now()) + retentionDays * 24 * 60 * 60 * 1000).toISOString();
 }
 
 function getVapiTwilioCallSid(call) {
@@ -1245,6 +1697,7 @@ async function provisionIsolatedSmsForAssistant({ assistantId, aiNumber, ownerNu
     twilioAuthToken: TWILIO_AUTH_TOKEN,
     statusCallbackUrl: TWILIO_STATUS_CALLBACK_URL,
     createTool: (payload) => requestVapiResource("tool", { method: "POST", body: payload }),
+    patchTool: (toolId, payload) => requestVapiResource(`tool/${encodeURIComponent(toolId)}`, { method: "PATCH", body: payload }),
     patchAssistant: patchVapiAssistant,
     fetchAssistant: (targetId) => requestVapiResource(`assistant/${encodeURIComponent(targetId)}`),
     fetchTool: (toolId) => requestVapiResource(`tool/${encodeURIComponent(toolId)}`),
@@ -1564,6 +2017,11 @@ async function upsertVapiCall(fullCall, store) {
   const transcript = getVapiTranscript(fullCall);
   const summary = getVapiSummary(fullCall);
   const recordingUrl = getVapiRecordingUrl(fullCall);
+  const recordingConsent = getVapiRecordingConsent(fullCall);
+  const toolCalls = summarizeVapiToolCalls(fullCall);
+  const toolResults = summarizeVapiToolResults(fullCall);
+  const artifactMessages = getVapiCustomerSafeMessages(fullCall);
+  const artifactBasis = endedAt || startedAt || Date.now();
   const localCall = await logCall({
     callId: existingStore.localCallId || existingCall?.id,
     businessId,
@@ -1578,6 +2036,19 @@ async function upsertVapiCall(fullCall, store) {
     externalProvider: "vapi",
     externalId: vapiCallId,
     aiSummary: summary || undefined,
+    endedReason: fullCall.endedReason || fullCall.ended_reason || undefined,
+    endedMessage: fullCall.endedMessage || fullCall.ended_message || undefined,
+    successEvaluation: getVapiNestedString(fullCall, ["analysis.successEvaluation"]) || undefined,
+    structuredData: getVapiNestedValue(fullCall, "analysis.structuredData") || undefined,
+    structuredOutputs: getVapiNestedValue(fullCall, "artifact.structuredOutputs") || undefined,
+    artifactMessages: artifactMessages.length ? artifactMessages : undefined,
+    artifactMetrics: getVapiArtifactMetrics(fullCall) || undefined,
+    toolCallSummary: { ...toolCalls, results: toolResults },
+    recordingConsentType: recordingConsent.type || undefined,
+    recordingConsentGrantedAt: recordingConsent.grantedAt || undefined,
+    transcriptExpiresAt: transcript ? getSensitiveArtifactExpiry(CALL_TRANSCRIPT_RETENTION_DAYS, artifactBasis) : undefined,
+    recordingExpiresAt: recordingUrl ? getSensitiveArtifactExpiry(CALL_RECORDING_RETENTION_DAYS, artifactBasis) : undefined,
+    providerLogUrl: getVapiNestedString(fullCall, ["artifact.logUrl"]) || undefined,
     twilioCallSid,
     vapiCost,
     vapiCostBreakdown: getVapiCostBreakdown(fullCall),
@@ -2058,6 +2529,79 @@ function normalizeTwilioInventoryNumber(record) {
   };
 }
 
+function addUtcMonthsPreservingAnniversary(value, monthsToAdd) {
+  const source = new Date(value);
+  if (Number.isNaN(source.getTime())) return null;
+  const targetMonthIndex = source.getUTCMonth() + Number(monthsToAdd || 0);
+  const targetYear = source.getUTCFullYear() + Math.floor(targetMonthIndex / 12);
+  const targetMonth = ((targetMonthIndex % 12) + 12) % 12;
+  const lastDay = new Date(Date.UTC(targetYear, targetMonth + 1, 0)).getUTCDate();
+  return new Date(Date.UTC(
+    targetYear,
+    targetMonth,
+    Math.min(source.getUTCDate(), lastDay),
+    source.getUTCHours(),
+    source.getUTCMinutes(),
+    source.getUTCSeconds(),
+    source.getUTCMilliseconds()
+  ));
+}
+
+function getNextMonthlyAnniversary(value, now = new Date()) {
+  const source = new Date(value);
+  const current = new Date(now);
+  if (Number.isNaN(source.getTime()) || Number.isNaN(current.getTime())) return null;
+  const elapsedMonths = Math.max(
+    0,
+    (current.getUTCFullYear() - source.getUTCFullYear()) * 12 + current.getUTCMonth() - source.getUTCMonth()
+  );
+  let candidate = addUtcMonthsPreservingAnniversary(source, elapsedMonths);
+  if (!candidate || candidate.getTime() <= current.getTime()) {
+    candidate = addUtcMonthsPreservingAnniversary(source, elapsedMonths + 1);
+  }
+  return candidate;
+}
+
+async function getTwilioPhoneBillingSchedule() {
+  const numbers = (await fetchTwilioIncomingPhoneNumbers())
+    .map(normalizeTwilioInventoryNumber)
+    .filter((record) => record.phoneNumber);
+  const signupByNumber = new Map();
+  for (const signup of listSignupDashboardRecords()) {
+    const phoneNumber = normalizePhoneForMatch(signup.twilioPhoneNumber || "");
+    if (phoneNumber && !signupByNumber.has(phoneNumber)) signupByNumber.set(phoneNumber, signup);
+  }
+  const now = new Date();
+  const records = numbers.map((record) => {
+    const signup = signupByNumber.get(record.phoneNumber);
+    const nextRenewal = getNextMonthlyAnniversary(record.dateCreated, now);
+    return {
+      sid: record.sid,
+      phoneNumber: record.rawPhoneNumber || record.phoneNumber,
+      normalizedPhoneNumber: record.phoneNumber,
+      customer: String(signup?.businessName || signup?.ownerEmail || "Unmapped number").trim(),
+      acquiredAt: record.dateCreated,
+      nextEstimatedRenewalAt: nextRenewal?.toISOString() || null,
+      billingDayOfMonth: record.dateCreated ? new Date(record.dateCreated).getUTCDate() : null,
+      estimateAvailable: Boolean(nextRenewal),
+    };
+  });
+  return {
+    available: true,
+    fetchedAt: now.toISOString(),
+    billingConsoleUrl: "https://console.twilio.com/us1/billing/manage-billing/billing-overview",
+    activeNumbersUrl: "https://console.twilio.com/us1/develop/phone-numbers/manage/incoming",
+    basis: "Estimated from each Twilio number's acquisition timestamp. Confirm the account payment date and invoice status in Twilio Billing.",
+    totalNumbers: records.length,
+    records: records.sort(
+      (left, right) =>
+        new Date(left.nextEstimatedRenewalAt || 8640000000000000).getTime() -
+          new Date(right.nextEstimatedRenewalAt || 8640000000000000).getTime() ||
+        left.phoneNumber.localeCompare(right.phoneNumber)
+    ),
+  };
+}
+
 function addNumberEvidence(map, phoneNumber, evidence) {
   const normalized = normalizePhoneForMatch(phoneNumber || "");
   if (!normalized) return;
@@ -2333,7 +2877,9 @@ async function getCostAudit({ days = 30 } = {}) {
   const { start, end } = getDateRange(days);
   let databaseWarning = "";
   let twilioUsageWarning = "";
+  let twilioPhoneBillingWarning = "";
   let twilioAccountUsage = null;
+  let twilioPhoneBilling = null;
   const fixedCosts = getFixedMonthlyCosts({ days });
   let calls = [];
   try {
@@ -2360,15 +2906,31 @@ async function getCostAudit({ days = 30 } = {}) {
   }
 
   if (TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN) {
-    try {
-      twilioAccountUsage = await withTimeout(
+    const [usageResult, phoneBillingResult] = await Promise.allSettled([
+      withTimeout(
         getTwilioAccountUsage({ days }),
         10000,
         "Twilio account usage did not respond while loading cost audit."
-      );
-    } catch (error) {
+      ),
+      withTimeout(
+        getTwilioPhoneBillingSchedule(),
+        10000,
+        "Twilio phone billing schedule did not respond while loading cost audit."
+      ),
+    ]);
+    if (usageResult.status === "fulfilled") {
+      twilioAccountUsage = usageResult.value;
+    } else {
+      const error = usageResult.reason;
       twilioUsageWarning = error?.message || "Twilio account usage could not be loaded.";
       console.warn("[admin:cost-audit] Twilio account usage unavailable", { message: twilioUsageWarning });
+    }
+    if (phoneBillingResult.status === "fulfilled") {
+      twilioPhoneBilling = phoneBillingResult.value;
+    } else {
+      const error = phoneBillingResult.reason;
+      twilioPhoneBillingWarning = error?.message || "Twilio phone billing schedule could not be loaded.";
+      console.warn("[admin:cost-audit] Twilio phone billing unavailable", { message: twilioPhoneBillingWarning });
     }
   }
 
@@ -2443,6 +3005,7 @@ async function getCostAudit({ days = 30 } = {}) {
       totalInternalCost: Number((Number(call.twilioPrice || 0) + Number(call.vapiCost || 0)).toFixed(4)),
     })),
     twilioAccountUsage,
+    twilioPhoneBilling,
     fixedCosts,
     env: {
       databaseAvailable: !databaseWarning,
@@ -2453,6 +3016,7 @@ async function getCostAudit({ days = 30 } = {}) {
       databaseWarning,
       !TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN ? "Twilio credentials are not configured, so Twilio per-call prices cannot sync." : "",
       twilioUsageWarning,
+      twilioPhoneBillingWarning,
       fixedCosts.warning || "",
       !VAPI_API_KEY ? "VAPI_API_KEY is not configured, so Vapi call costs cannot refresh." : "",
     ].filter(Boolean),
@@ -3025,6 +3589,7 @@ function upsertSignupDashboardRecord(record) {
     createdAt: existing.createdAt || record.createdAt || signedUpAt,
     updatedAt: new Date().toISOString(),
   });
+  if (record.smsRoutingStatus === "healthy") delete merged.smsRoutingError;
 
   store[existingKey] = merged;
   for (const alias of aliases) {
@@ -3336,15 +3901,115 @@ function listSignupDashboardRecords() {
     .sort((a, b) => Number(new Date(b.signedUpAt || b.createdAt || 0)) - Number(new Date(a.signedUpAt || a.createdAt || 0)));
 }
 
+function findCustomerDashboardSignup({ email, phone }) {
+  const ownerEmail = String(email || "").trim().toLowerCase();
+  const phoneMatch = normalizePhoneForMatch(phone);
+  if (!ownerEmail || !isValidEmailAddress(ownerEmail) || !phoneMatch) return null;
+  return listSignupDashboardRecords().find((record) => {
+    const recordEmail = String(record.ownerEmail || "").trim().toLowerCase();
+    if (recordEmail !== ownerEmail) return false;
+    const phones = [record.ownerPhone, record.businessPhone].map(normalizePhoneForMatch).filter(Boolean);
+    return phones.includes(phoneMatch);
+  }) || null;
+}
+
+function findCustomerDashboardSignupByLookupHash(lookupHash) {
+  const normalizedLookupHash = String(lookupHash || "").trim().toLowerCase();
+  if (!/^[a-f0-9]{32}$/.test(normalizedLookupHash)) return null;
+  for (const record of listSignupDashboardRecords()) {
+    const email = String(record.ownerEmail || "").trim().toLowerCase();
+    if (!email) continue;
+    const matchingPhone = [record.ownerPhone, record.businessPhone]
+      .filter(Boolean)
+      .find((phone) => getCustomerDashboardLookupHash(email, phone) === normalizedLookupHash);
+    if (matchingPhone) return { signup: record, matchingPhone };
+  }
+  return null;
+}
+
+function sanitizeCustomerStructuredData(value, depth = 0) {
+  if (value == null || depth > 3) return null;
+  if (["string", "number", "boolean"].includes(typeof value)) return value;
+  if (Array.isArray(value)) return value.slice(0, 30).map((item) => sanitizeCustomerStructuredData(item, depth + 1)).filter((item) => item != null);
+  if (typeof value !== "object") return null;
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([key]) => !/(?:secret|token|password|authorization|api.?key|credential|system.?prompt)/i.test(key))
+      .slice(0, 60)
+      .map(([key, item]) => [key, sanitizeCustomerStructuredData(item, depth + 1)])
+      .filter(([, item]) => item != null)
+  );
+}
+
+function getCustomerNotificationSummary(call) {
+  const attempts = (call.leadHandoffs || []).flatMap((handoff) => handoff.attempts || []);
+  return attempts.map((attempt) => ({
+    recipient: String(attempt.recipientRole || "").toLowerCase(),
+    status: String(attempt.status || "").toLowerCase(),
+    requestedAt: attempt.requestedAt || null,
+    sentAt: attempt.sentAt || attempt.acceptedAt || null,
+    deliveredAt: attempt.deliveredAt || null,
+    failedAt: attempt.failedAt || null,
+    problem: attempt.failedAt ? "Message delivery failed" : "",
+  }));
+}
+
+function buildCustomerCallTimeline(call, notifications) {
+  const events = [
+    { type: "call_started", label: "Call received", at: call.startedAt },
+    call.endedAt ? { type: "call_ended", label: "Call completed", at: call.endedAt } : null,
+    call.aiSummary || call.transcript ? { type: "summary_ready", label: "Call summary ready", at: call.endedAt || call.startedAt } : null,
+    ...notifications.map((item) => ({
+      type: `${item.recipient || "message"}_text_${item.status || "updated"}`,
+      label: `${item.recipient === "owner" ? "Owner" : item.recipient === "customer" ? "Customer" : "Backup"} text ${item.failedAt ? "needs attention" : item.deliveredAt ? "delivered" : item.sentAt ? "sent" : "requested"}`,
+      at: item.deliveredAt || item.failedAt || item.sentAt || item.requestedAt,
+    })),
+  ].filter(Boolean);
+  return events.sort((a, b) => new Date(a.at || 0) - new Date(b.at || 0));
+}
+
 function sanitizeCustomerCall(call) {
+  const now = Date.now();
+  const transcriptAvailable = Boolean(call.transcript) && (!call.transcriptExpiresAt || new Date(call.transcriptExpiresAt).getTime() > now);
+  const recordingConsentGranted = Boolean(call.recordingConsentGrantedAt);
+  const recordingAvailable = Boolean(call.recordingUrl) && recordingConsentGranted && (!call.recordingExpiresAt || new Date(call.recordingExpiresAt).getTime() > now);
+  const notifications = getCustomerNotificationSummary(call);
   return {
     id: call.id,
     startedAt: call.startedAt,
     durationSec: call.durationSec,
     status: call.status,
     outcome: call.outcome,
+    endedReason: call.endedReason || "",
+    endedMessage: call.endedMessage || "",
     aiSummary: call.aiSummary || (call.transcript ? "Call summary is being prepared." : ""),
     followUpNeeded: Boolean(call.followUpNeeded || ["FOLLOW_UP", "QUOTE_NEEDED", "EMERGENCY"].includes(call.outcome)),
+    transcript: transcriptAvailable ? call.transcript : "",
+    transcriptAvailable,
+    transcriptExpiresAt: call.transcriptExpiresAt || null,
+    recordingAvailable,
+    recordingPath: recordingAvailable ? `/api/customer/dashboard/calls/${call.id}/recording` : "",
+    recordingExpiresAt: call.recordingExpiresAt || null,
+    recordingConsent: {
+      type: call.recordingConsentType || "",
+      grantedAt: call.recordingConsentGrantedAt || null,
+    },
+    lead: call.lead ? {
+      name: call.lead.name || "",
+      callbackNumber: call.lead.callbackNumber || "",
+      summary: call.lead.summary || "",
+      intent: call.lead.intent || "",
+      urgency: call.lead.urgency || "",
+      status: call.lead.status || "",
+    } : null,
+    details: sanitizeCustomerStructuredData(call.structuredData || call.structuredOutputs || {}),
+    successEvaluation: call.successEvaluation || "",
+    quality: {
+      score: call.qualityScore ?? null,
+      metrics: sanitizeCustomerStructuredData(call.artifactMetrics || {}),
+    },
+    notifications,
+    timeline: buildCustomerCallTimeline(call, notifications),
     caller: {
       phone: call.caller?.phone || "",
       name: call.caller?.name || "",
@@ -3352,17 +4017,42 @@ function sanitizeCustomerCall(call) {
   };
 }
 
-async function getCustomerDashboard({ email, phone }) {
-  const ownerEmail = String(email || "").trim().toLowerCase();
-  const phoneMatch = normalizePhoneForMatch(phone);
-  if (!ownerEmail || !isValidEmailAddress(ownerEmail) || !phoneMatch) return null;
+function sanitizeCustomerAppointment(appointment) {
+  return {
+    id: appointment.id,
+    customerName: appointment.customerName,
+    customerEmail: appointment.customerEmail || "",
+    customerPhone: appointment.customerPhone,
+    service: appointment.service,
+    address: appointment.address || "",
+    requestedStart: appointment.requestedStart,
+    confirmedStart: appointment.confirmedStart,
+    durationMinutes: appointment.durationMinutes,
+    timezone: appointment.timezone,
+    status: appointment.status,
+    ownerNote: appointment.ownerNote || "",
+    customerNote: appointment.customerNote || "",
+    proposalSentAt: appointment.proposalSentAt,
+    customerRespondedAt: appointment.customerRespondedAt,
+    inviteSentAt: appointment.inviteSentAt,
+    reminder24hSentAt: appointment.reminder24hSentAt,
+    reminder2hSentAt: appointment.reminder2hSentAt,
+    cancelledAt: appointment.cancelledAt,
+    rescheduledAt: appointment.rescheduledAt,
+    staffMember: appointment.staffMember ? {
+      id: appointment.staffMember.id,
+      name: appointment.staffMember.name,
+      color: appointment.staffMember.color,
+    } : null,
+    calendarPath: appointment.status === "CONFIRMED"
+      ? `/api/appointments/${encodeURIComponent(appointment.id)}/calendar?token=${encodeURIComponent(appointment.calendarToken)}`
+      : "",
+    createdAt: appointment.createdAt,
+  };
+}
 
-  const signup = listSignupDashboardRecords().find((record) => {
-    const recordEmail = String(record.ownerEmail || "").trim().toLowerCase();
-    if (recordEmail !== ownerEmail) return false;
-    const phones = [record.ownerPhone, record.businessPhone].map(normalizePhoneForMatch).filter(Boolean);
-    return phones.includes(phoneMatch);
-  });
+async function getCustomerDashboard({ email, phone }) {
+  const signup = findCustomerDashboardSignup({ email, phone });
 
   if (!signup) return null;
 
@@ -3377,11 +4067,30 @@ async function getCustomerDashboard({ email, phone }) {
         where: { OR: businessLookup },
         include: {
           settings: true,
+          staffMembers: { where: { active: true }, orderBy: { name: "asc" } },
+          calendarConnections: {
+            where: { status: { not: "REVOKED" } },
+            include: { staffMember: true },
+            orderBy: { connectedAt: "desc" },
+          },
           vapiMappings: true,
           faqs: { orderBy: { updatedAt: "desc" }, take: 6 },
           calls: {
-            include: { caller: true },
+            include: {
+              caller: true,
+              lead: true,
+              leadHandoffs: { include: { attempts: { orderBy: { createdAt: "asc" } } } },
+            },
             orderBy: { startedAt: "desc" },
+            take: 50,
+          },
+          appointmentRequests: {
+            include: { staffMember: true },
+            orderBy: [{ status: "asc" }, { requestedStart: "asc" }],
+            take: 100,
+          },
+          supportReports: {
+            orderBy: { createdAt: "desc" },
             take: 50,
           },
         },
@@ -3402,6 +4111,7 @@ async function getCustomerDashboard({ email, phone }) {
   ];
 
   return {
+    businessId: business?.id || null,
     signup: {
       businessName: signup.businessName || business?.name || "Your business",
       ownerName: signup.ownerName || "",
@@ -3436,6 +4146,7 @@ async function getCustomerDashboard({ email, phone }) {
       followUps,
       bookedCalls,
       averageDurationSec: calls.length ? Math.round(calls.reduce((sum, call) => sum + Number(call.durationSec || 0), 0) / calls.length) : 0,
+      totalMinutes: Number((calls.reduce((sum, call) => sum + Number(call.durationSec || 0), 0) / 60).toFixed(1)),
       lastCallAt: calls[0]?.startedAt || null,
     },
     setup: {
@@ -3443,6 +4154,22 @@ async function getCustomerDashboard({ email, phone }) {
       readinessPercent: Math.round((setupChecklist.filter((item) => item.done).length / setupChecklist.length) * 100),
     },
     recentCalls: calls.slice(0, 8).map(sanitizeCustomerCall),
+    calls: calls.map(sanitizeCustomerCall),
+    appointments: (business?.appointmentRequests || []).map(sanitizeCustomerAppointment),
+    scheduling: getSchedulingSettings(business?.settings || {}),
+    calendarProviders: {
+      googleConfigured: isProviderConfigured("GOOGLE"),
+      microsoftConfigured: isProviderConfigured("MICROSOFT"),
+    },
+    calendarConnections: (business?.calendarConnections || []).map(sanitizeCalendarConnection),
+    staffMembers: (business?.staffMembers || []).map((staff) => ({
+      id: staff.id,
+      name: staff.name,
+      email: staff.email || "",
+      phone: staff.phone || "",
+      color: staff.color,
+    })),
+    supportReports: (business?.supportReports || []).map(sanitizeCustomerSupportReport),
     faqs: (business?.faqs || []).map((faq) => ({
       id: faq.id,
       question: faq.question,
@@ -3450,6 +4177,434 @@ async function getCustomerDashboard({ email, phone }) {
       tags: faq.tags,
       updatedAt: faq.updatedAt,
     })),
+  };
+}
+
+async function getCustomerDashboardByLookupHash(lookupHash) {
+  const match = findCustomerDashboardSignupByLookupHash(lookupHash);
+  if (!match) return null;
+  return getCustomerDashboard({ email: match.signup.ownerEmail, phone: match.matchingPhone });
+}
+
+function sanitizeSupportDescription(value) {
+  return String(value || "").replace(/\s+/g, " ").trim().slice(0, 1200);
+}
+
+function redactSupportTextForAi(value) {
+  return sanitizeSupportDescription(value)
+    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[email removed]")
+    .replace(/(?:\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}/g, "[phone removed]")
+    .replace(/\b\d{6,}\b/g, "[number removed]");
+}
+
+function buildCustomerSupportDiagnostics(dashboard, callId, includeSensitiveCallData = false) {
+  const normalizedCallId = Number(callId);
+  const call = Number.isInteger(normalizedCallId)
+    ? (dashboard?.calls || []).find((item) => Number(item.id) === normalizedCallId)
+    : null;
+  const diagnostics = {
+    capturedAt: new Date().toISOString(),
+    page: "customer-dashboard",
+    businessId: dashboard?.businessId || null,
+    setupReadinessPercent: Number(dashboard?.setup?.readinessPercent || 0),
+    aiNumberAssigned: Boolean(dashboard?.assistant?.aiNumber),
+    totalCallsVisible: Number(dashboard?.stats?.totalCalls || 0),
+    lastCallAt: dashboard?.stats?.lastCallAt || null,
+    call: call ? {
+      id: call.id,
+      startedAt: call.startedAt || null,
+      durationSec: Number(call.durationSec || 0),
+      status: call.status || "",
+      outcome: call.outcome || "",
+      endedReason: call.endedReason || "",
+      transcriptAvailable: Boolean(call.transcriptAvailable),
+      recordingAvailable: Boolean(call.recordingAvailable),
+      notifications: (call.notifications || []).map((item) => ({
+        recipient: item.recipient || "",
+        status: item.status || "",
+        problem: item.problem || "",
+      })),
+    } : null,
+  };
+
+  if (call && includeSensitiveCallData) {
+    diagnostics.callDetails = {
+      caller: call.caller || null,
+      lead: call.lead || null,
+      summary: call.aiSummary || "",
+      transcript: call.transcriptAvailable ? call.transcript || "" : "",
+      details: call.details || null,
+    };
+  }
+  return diagnostics;
+}
+
+function getRuleBasedSupportAnalysis({ description, diagnostics }) {
+  const issue = sanitizeSupportDescription(description).toLowerCase();
+  const call = diagnostics?.call || null;
+  const notificationProblems = (call?.notifications || []).filter((item) => item.problem || item.status === "failed");
+  const textIssue = /\b(text|sms|message|notification)\b/.test(issue);
+  const callMissing = /\b(call|calls)\b/.test(issue) && /\b(missing|not showing|cannot see|can't see|didn't show|doesn't show|not updating)\b/.test(issue);
+  const transcriptIssue = /\b(transcript|summary|log)\b/.test(issue);
+  const recordingIssue = /\b(recording|audio|playback)\b/.test(issue);
+  const outageLanguage = /\b(nothing works|all calls|every call|down|offline|cannot receive calls|can't receive calls)\b/.test(issue);
+
+  if (textIssue && notificationProblems.length) {
+    return {
+      summary: "A linked text delivery attempt shows a failure.",
+      likelyCause: "The message provider rejected or could not deliver at least one notification for this call.",
+      severity: "HIGH",
+      suggestions: [
+        "Confirm the owner or customer cellphone number shown for this call is correct.",
+        "Refresh the dashboard once to see whether the provider posted a newer delivery result.",
+        "If it still shows failed, send the report so support can inspect the provider error without changing your assistant.",
+      ],
+    };
+  }
+  if (textIssue) {
+    return {
+      summary: "No confirmed text-delivery failure is attached to the selected call yet.",
+      likelyCause: "The text may still be processing, or the selected call is not the one connected to the missing message.",
+      severity: "MEDIUM",
+      suggestions: [
+        "Open the affected call and check Text delivery for owner and customer status.",
+        "Refresh once after a minute because delivery updates can arrive after the call ends.",
+        "If the text is still missing, send the report with the affected call selected.",
+      ],
+    };
+  }
+  if (callMissing) {
+    return {
+      summary: "The dashboard may be waiting for the completed call to sync.",
+      likelyCause: "Calls normally appear after the provider posts its end-of-call data; an unfinished call or delayed provider event can postpone that update.",
+      severity: outageLanguage ? "HIGH" : "MEDIUM",
+      suggestions: [
+        "Wait one minute after hanging up, then select Refresh now.",
+        "Confirm the call was made to the AI number displayed at the top of this dashboard.",
+        "If the call still does not appear, send the report with the call time in your description.",
+      ],
+    };
+  }
+  if (transcriptIssue) {
+    return {
+      summary: "The transcript or call summary is unavailable or incomplete.",
+      likelyCause: call?.transcriptAvailable === false
+        ? "The transcript has not arrived, was not produced, or has passed its retention period."
+        : "The call data is present, but the transcript or summary may still be processing.",
+      severity: "MEDIUM",
+      suggestions: [
+        "Refresh the dashboard once after the call has fully ended.",
+        "Check whether the selected call says the transcript is unavailable or expired.",
+        "Send the report if a recent completed call still has no transcript.",
+      ],
+    };
+  }
+  if (recordingIssue) {
+    return {
+      summary: "The selected call recording is not available for playback.",
+      likelyCause: call?.recordingAvailable === false
+        ? "A recording can be hidden when consent was not captured, the recording has not arrived, or its retention period ended."
+        : "The browser may be unable to load the available audio file.",
+      severity: "LOW",
+      suggestions: [
+        "Check whether the call card says a consent-backed recording is available.",
+        "Refresh once, then try the download link if playback does not start.",
+        "Send the report if a recent consented recording still cannot be opened.",
+      ],
+    };
+  }
+  if (!diagnostics?.aiNumberAssigned) {
+    return {
+      summary: "Your AI phone number is not shown as assigned yet.",
+      likelyCause: "The business setup or phone-number mapping is incomplete.",
+      severity: "HIGH",
+      suggestions: [
+        "Check the Setup checklist for the unfinished AI number step.",
+        "Do not forward customer calls until the AI number appears at the top of the dashboard.",
+        "Send the report so support can finish or repair the number mapping.",
+      ],
+    };
+  }
+  return {
+    summary: "The dashboard did not find a confirmed provider failure from the available status information.",
+    likelyCause: "More context or the affected call is needed to isolate the problem safely.",
+    severity: outageLanguage ? "HIGH" : "MEDIUM",
+    suggestions: [
+      "Select the affected call if this happened during or after a call.",
+      "Refresh the dashboard once and try the same action again.",
+      "If the issue continues, send the report so support receives the diagnostic snapshot.",
+    ],
+  };
+}
+
+function normalizeSupportAnalysis(value, fallback) {
+  const severity = ["LOW", "MEDIUM", "HIGH"].includes(String(value?.severity || "").toUpperCase())
+    ? String(value.severity).toUpperCase()
+    : fallback.severity;
+  const suggestions = Array.isArray(value?.suggestions)
+    ? value.suggestions.map((item) => sanitizeSupportDescription(item)).filter(Boolean).slice(0, 3)
+    : [];
+  return {
+    summary: sanitizeSupportDescription(value?.summary) || fallback.summary,
+    likelyCause: sanitizeSupportDescription(value?.likelyCause) || fallback.likelyCause,
+    severity,
+    suggestions: suggestions.length >= 2 ? suggestions : fallback.suggestions,
+  };
+}
+
+function getSupportSuggestionRateLimitDecision(lookupHash, now = Date.now()) {
+  const key = String(lookupHash || "");
+  const existing = customerSupportSuggestionRateLimit.get(key);
+  const state = !existing || now - existing.windowStartedAt >= CUSTOMER_SUPPORT_SUGGESTION_WINDOW_MS
+    ? { windowStartedAt: now, count: 0 }
+    : existing;
+  state.count += 1;
+  customerSupportSuggestionRateLimit.set(key, state);
+  return {
+    blocked: state.count > CUSTOMER_SUPPORT_SUGGESTION_MAX_REQUESTS,
+    retryAfterMs: Math.max(0, CUSTOMER_SUPPORT_SUGGESTION_WINDOW_MS - (now - state.windowStartedAt)),
+  };
+}
+
+function extractOpenAiResponseText(data) {
+  if (typeof data?.output_text === "string" && data.output_text.trim()) return data.output_text.trim();
+  for (const item of data?.output || []) {
+    for (const content of item?.content || []) {
+      if (content?.type === "output_text" && typeof content.text === "string") return content.text.trim();
+    }
+  }
+  return "";
+}
+
+async function getCustomerSupportAnalysis({ description, diagnostics }) {
+  const fallback = getRuleBasedSupportAnalysis({ description, diagnostics });
+  const apiKey = String(process.env.OPENAI_API_KEY || "").trim();
+  if (!apiKey) return { ...fallback, source: "rules" };
+
+  const safeContext = {
+    issue: redactSupportTextForAi(description),
+    diagnostics: {
+      setupReadinessPercent: diagnostics?.setupReadinessPercent,
+      aiNumberAssigned: diagnostics?.aiNumberAssigned,
+      totalCallsVisible: diagnostics?.totalCallsVisible,
+      call: diagnostics?.call || null,
+    },
+    ruleBasedFinding: fallback,
+  };
+  try {
+    const response = await withTimeout(fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: process.env.OPENAI_SUPPORT_MODEL || process.env.OPENAI_ASSISTANT_MODEL || "gpt-4o-mini",
+        store: false,
+        max_output_tokens: 450,
+        input: [
+          {
+            role: "system",
+            content: "You explain customer-dashboard troubleshooting for My AI PA. Use only the supplied facts. Never invent provider errors, promise a repair, change settings, or advise exposing secrets. Give short, plain-language steps a non-technical business owner can follow. Preserve the rule-based finding unless the supplied diagnostics clearly support a more precise explanation.",
+          },
+          { role: "user", content: JSON.stringify(safeContext) },
+        ],
+        text: {
+          format: {
+            type: "json_schema",
+            name: "customer_support_suggestion",
+            strict: true,
+            schema: {
+              type: "object",
+              additionalProperties: false,
+              properties: {
+                summary: { type: "string" },
+                likelyCause: { type: "string" },
+                severity: { type: "string", enum: ["LOW", "MEDIUM", "HIGH"] },
+                suggestions: { type: "array", minItems: 2, maxItems: 3, items: { type: "string" } },
+              },
+              required: ["summary", "likelyCause", "severity", "suggestions"],
+            },
+          },
+        },
+      }),
+    }), 12000, "AI support suggestions timed out.");
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      logOpenAiProviderError("customer-support", response, data);
+      return { ...fallback, source: "rules" };
+    }
+    const parsed = JSON.parse(extractOpenAiResponseText(data));
+    return { ...normalizeSupportAnalysis(parsed, fallback), source: "ai" };
+  } catch (error) {
+    console.warn("[openai:customer-support] using rule-based fallback", { message: error?.message || String(error) });
+    return { ...fallback, source: "rules" };
+  }
+}
+
+function getSupportTicketNumber(id) {
+  return `MYAIPA-${String(id || "").replace(/[^a-z0-9]/gi, "").slice(-8).toUpperCase()}`;
+}
+
+function sanitizeCustomerSupportReport(report) {
+  return {
+    id: report.id,
+    ticketNumber: getSupportTicketNumber(report.id),
+    callId: report.callId || null,
+    description: report.description,
+    status: report.status,
+    severity: report.severity,
+    customerMessage: report.customerMessage || "",
+    createdAt: report.createdAt,
+    updatedAt: report.updatedAt,
+    resolvedAt: report.resolvedAt || null,
+  };
+}
+
+function sanitizeAdminSupportReport(report) {
+  return {
+    ...report,
+    ticketNumber: getSupportTicketNumber(report.id),
+    githubConfigured: Boolean(GITHUB_SUPPORT_TOKEN && /^[^/\s]+\/[^/\s]+$/.test(GITHUB_SUPPORT_REPO)),
+    telegramConfigured: Boolean(TELEGRAM_BOT_TOKEN && TELEGRAM_CHAT_ID),
+  };
+}
+
+function getSafeRepairDiagnostics(report) {
+  const diagnostics = report?.diagnostics && typeof report.diagnostics === "object" ? report.diagnostics : {};
+  return {
+    capturedAt: diagnostics.capturedAt || null,
+    page: diagnostics.page || "customer-dashboard",
+    businessId: diagnostics.businessId || report?.businessId || null,
+    setupReadinessPercent: diagnostics.setupReadinessPercent ?? null,
+    aiNumberAssigned: Boolean(diagnostics.aiNumberAssigned),
+    totalCallsVisible: diagnostics.totalCallsVisible ?? null,
+    lastCallAt: diagnostics.lastCallAt || null,
+    call: diagnostics.call || null,
+  };
+}
+
+function buildSupportRepairBrief(report) {
+  const ticketNumber = getSupportTicketNumber(report?.id);
+  const suggestions = Array.isArray(report?.suggestions) ? report.suggestions : [];
+  const diagnostics = getSafeRepairDiagnostics(report);
+  const redact = (value) => redactSupportTextForAi(value);
+  return [
+    `# Codex repair task: ${ticketNumber}`,
+    "",
+    `Repository: ${GITHUB_SUPPORT_REPO}`,
+    `Business: ${report?.business?.name || `Business ${report?.businessId || "unknown"}`}`,
+    `Severity: ${report?.severity || "MEDIUM"}`,
+    `Affected call: ${report?.callId || "Not linked"}`,
+    "",
+    "## Objective",
+    redact(report?.description),
+    "",
+    "## Current diagnosis",
+    `Summary: ${redact(report?.aiSummary) || "No AI summary"}`,
+    `Likely cause: ${redact(report?.likelyCause) || "Not established"}`,
+    "",
+    "## Suggested checks",
+    ...(suggestions.length ? suggestions.map((item) => `- ${redact(item)}`) : ["- Reproduce and isolate the failure before changing code."]),
+    "",
+    "## Safe diagnostic snapshot",
+    "```json",
+    JSON.stringify(diagnostics, null, 2),
+    "```",
+    "",
+    "## Required workflow",
+    "1. Reproduce or verify the reported behavior from repository evidence and tests.",
+    "2. State the root cause before making changes.",
+    "3. Implement the smallest business-scoped fix and preserve unrelated work.",
+    "4. Add or update regression tests.",
+    "5. Run the relevant build and test commands.",
+    "6. Do not change live Vapi, Twilio, Make, DNS, billing, or customer data without separate explicit approval.",
+    "7. Do not commit, push, merge, or deploy unless separately requested.",
+    "",
+    "## Completion evidence",
+    "Report changed files, tests run, results, remaining risks, and any live verification still required.",
+  ].join("\n");
+}
+
+function buildGithubSupportIssue(report) {
+  const ticketNumber = getSupportTicketNumber(report?.id);
+  const brief = buildSupportRepairBrief(report);
+  return {
+    title: `[${ticketNumber}] ${redactSupportTextForAi(report?.aiSummary || report?.description).slice(0, 120)}`,
+    body: `${brief}\n\n---\nCreated from the My AI PA admin support inbox. Sensitive transcript and caller details are intentionally excluded.`,
+  };
+}
+
+async function createGithubSupportIssue(report, { fetchImpl = fetch, token = GITHUB_SUPPORT_TOKEN, repo = GITHUB_SUPPORT_REPO } = {}) {
+  const normalizedRepo = String(repo || "").trim();
+  if (!token || !/^[^/\s]+\/[^/\s]+$/.test(normalizedRepo)) {
+    const err = new Error("GitHub issue creation is not configured. Add GITHUB_SUPPORT_TOKEN and GITHUB_SUPPORT_REPO on Render.");
+    err.statusCode = 503;
+    throw err;
+  }
+  const draft = buildGithubSupportIssue(report);
+  const response = await withTimeout(fetchImpl(`https://api.github.com/repos/${normalizedRepo}/issues`, {
+    method: "POST",
+    headers: {
+      Accept: "application/vnd.github+json",
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      "User-Agent": "MyAIPA-Support-Inbox",
+      "X-GitHub-Api-Version": "2022-11-28",
+    },
+    body: JSON.stringify({
+      ...draft,
+      ...(GITHUB_SUPPORT_LABELS.length ? { labels: GITHUB_SUPPORT_LABELS } : {}),
+    }),
+  }), 12000, "GitHub issue creation timed out.");
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || !data?.html_url) {
+    const err = new Error(data?.message ? `GitHub rejected the issue: ${data.message}` : `GitHub issue creation failed (${response.status}).`);
+    err.statusCode = 502;
+    throw err;
+  }
+  return { number: Number(data.number), url: String(data.html_url), title: draft.title };
+}
+
+async function sendSupportTelegramAlert(report, { fetchImpl = fetch } = {}) {
+  if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID || report?.severity !== "HIGH") return { sent: false, skipped: true };
+  const ticketNumber = getSupportTicketNumber(report.id);
+  const safeDescription = redactSupportTextForAi(report.description).slice(0, 500);
+  const adminUrl = `${FRONTEND_APP_URL}/#/admin?tab=support&ticket=${encodeURIComponent(ticketNumber)}`;
+  const response = await withTimeout(fetchImpl(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      chat_id: TELEGRAM_CHAT_ID,
+      disable_web_page_preview: true,
+      text: [
+        `HIGH priority My AI PA report: ${ticketNumber}`,
+        `Business: ${report.business?.name || `Business ${report.businessId}`}`,
+        `Problem: ${safeDescription}`,
+        `Review: ${adminUrl}`,
+      ].join("\n"),
+    }),
+  }), 10000, "Telegram support alert timed out.");
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data?.ok === false) throw new Error(data?.description || `Telegram support alert failed (${response.status}).`);
+  return { sent: true, skipped: false };
+}
+
+async function getAppointmentOwnerContact(businessId) {
+  const business = await prisma.business.findUnique({
+    where: { id: Number(businessId) },
+    include: { settings: true },
+  });
+  if (!business) return { ownerEmail: "", ownerPhone: "" };
+  const businessPhone = normalizePhoneForMatch(business.phone);
+  const signup = listSignupDashboardRecords().find((record) => {
+    const sameName = String(record.businessName || "").trim().toLowerCase() === String(business.name || "").trim().toLowerCase();
+    const samePhone = businessPhone && normalizePhoneForMatch(record.businessPhone) === businessPhone;
+    return sameName || samePhone;
+  });
+  return {
+    ownerEmail: String(signup?.ownerEmail || "").trim(),
+    ownerPhone: String(signup?.ownerPhone || business.settings?.ownerPhone || "").trim(),
   };
 }
 
@@ -3670,6 +4825,95 @@ function escapeHtml(value) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
+}
+
+function renderCustomerCalendarButtons(appointment) {
+  if (!appointment?.id || appointment.status !== "CONFIRMED") return "";
+  const links = buildCustomerCalendarLinks(appointment, "");
+  return `<section class="calendar-actions" aria-label="Add this appointment to a calendar"><strong>Add to your calendar</strong><div><a href="${escapeHtml(links.google)}" target="_blank" rel="noopener">Google Calendar</a><a href="${escapeHtml(links.outlook)}" target="_blank" rel="noopener">Outlook or Hotmail</a><a href="${escapeHtml(links.apple)}">Apple / calendar file</a></div><small>No account connection is required.</small></section>`;
+}
+
+function sendAppointmentProposalPage(res, { appointment, state = "review", statusCode = 200 }) {
+  const businessName = appointment?.business?.name || "the business";
+  const when = appointment?.confirmedStart
+    ? formatAppointmentDate(appointment.confirmedStart, appointment.timezone)
+    : "the proposed time";
+  const title = state === "accepted"
+    ? "Your appointment is confirmed"
+    : state === "change_requested"
+      ? "Your reply was sent"
+      : "Does this new time work?";
+  const intro = state === "accepted"
+    ? `${businessName} has been notified. Your calendar invitation is on its way.`
+    : state === "change_requested"
+      ? `${businessName} will review your request and send you another time. Nothing is booked yet.`
+      : `${businessName} proposed a different time. The appointment will only be booked after you accept it.`;
+  const token = escapeHtml(appointment?.calendarToken || "");
+  const appointmentId = encodeURIComponent(appointment?.id || "");
+  const controls = state === "review" ? `
+    <form method="post" action="/api/appointments/${appointmentId}/customer-response">
+      <input type="hidden" name="token" value="${token}">
+      <button class="accept" type="submit" name="action" value="ACCEPT">Accept this time</button>
+    </form>
+    <details>
+      <summary>I need another time</summary>
+      <form class="change-form" method="post" action="/api/appointments/${appointmentId}/customer-response">
+        <input type="hidden" name="token" value="${token}">
+        <input type="hidden" name="action" value="REQUEST_CHANGE">
+        <label for="customer-note">What time would work better? <span>(optional)</span></label>
+        <textarea id="customer-note" name="customerNote" maxlength="500" placeholder="For example: Any weekday after 3 PM"></textarea>
+        <button class="change" type="submit">Request another time</button>
+      </form>
+    </details>` : "";
+  const icon = state === "accepted" ? "✓" : state === "change_requested" ? "↗" : "?";
+  const calendarButtons = state === "accepted" ? renderCustomerCalendarButtons(appointment) : "";
+  res.status(statusCode);
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.setHeader("Cache-Control", "private, no-store, max-age=0");
+  res.send(`<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${escapeHtml(title)} | My AI PA</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f2f7fc;color:#07142a;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.page{min-height:100vh;display:grid;place-items:center;padding:24px}.card{width:min(100%,590px);background:#fff;border:1px solid #cfe0f2;border-radius:22px;padding:clamp(24px,6vw,46px);box-shadow:0 24px 70px rgba(18,72,126,.14)}.brand{color:#126dff;font-size:14px;font-weight:900;letter-spacing:.18em;text-transform:uppercase}.icon{display:grid;place-items:center;width:52px;height:52px;margin:28px 0 18px;border-radius:50%;background:#eaf3ff;color:#126dff;font-size:28px;font-weight:900}h1{margin:0;font-size:clamp(30px,7vw,45px);line-height:1.02;letter-spacing:-.045em}p{color:#526b85;line-height:1.6}.details{display:grid;gap:12px;margin:26px 0;padding:20px;border-radius:15px;background:#f7faff;border:1px solid #dbe8f5}.details div{display:grid;gap:4px}.details span,label{color:#62788f;font-size:12px;font-weight:900;letter-spacing:.08em;text-transform:uppercase}.details strong{font-size:17px}form{margin:0}button{width:100%;min-height:52px;border-radius:12px;padding:12px 18px;font:inherit;font-weight:900;cursor:pointer}.accept{border:1px solid #126dff;background:#126dff;color:#fff}.accept:hover{background:#075dda}details{margin-top:14px;border-top:1px solid #e2ebf4;padding-top:14px}summary{cursor:pointer;color:#35516f;font-weight:800;text-align:center;list-style:none}.change-form{display:grid;gap:11px;margin-top:18px}.change-form label span{font-weight:700;text-transform:none;letter-spacing:0}.change-form textarea{min-height:96px;resize:vertical;border:1px solid #bdcee1;border-radius:10px;padding:12px;font:inherit}.change{border:1px solid #9bb2ca;background:#fff;color:#193652}.fine{margin:18px 0 0;font-size:12px;text-align:center}.confirmed .icon{background:#e6f8ef;color:#067647}.calendar-actions{display:grid;gap:12px;margin:20px 0;padding:18px;border:1px solid #cfe0f2;border-radius:15px;background:#f7faff}.calendar-actions>div{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.calendar-actions a{display:grid;place-items:center;min-height:46px;padding:9px;border:1px solid #126dff;border-radius:10px;color:#075dda;font-size:13px;font-weight:900;text-align:center;text-decoration:none}.calendar-actions small{color:#62788f}@media(max-width:560px){.calendar-actions>div{grid-template-columns:1fr}}
+</style></head><body><main class="page"><section class="card ${state === "accepted" ? "confirmed" : ""}"><div class="brand">My AI PA appointment reply</div><div class="icon" aria-hidden="true">${icon}</div><h1>${escapeHtml(title)}</h1><p>${escapeHtml(intro)}</p><div class="details"><div><span>Business</span><strong>${escapeHtml(businessName)}</strong></div><div><span>${state === "review" ? "Proposed time" : state === "accepted" ? "Confirmed time" : "Time offered"}</span><strong>${escapeHtml(when)}</strong></div>${appointment?.service ? `<div><span>Service</span><strong>${escapeHtml(appointment.service)}</strong></div>` : ""}${appointment?.address ? `<div><span>Location</span><strong>${escapeHtml(appointment.address)}</strong></div>` : ""}</div>${calendarButtons}${controls}<p class="fine">This private link is for this appointment only.</p></section></main></body></html>`);
+}
+
+function sendAppointmentManagePage(res, { appointment, state = "manage", statusCode = 200 }) {
+  const businessName = appointment?.business?.name || "the business";
+  const when = appointment?.confirmedStart
+    ? formatAppointmentDate(appointment.confirmedStart, appointment.timezone)
+    : "the proposed time";
+  const title = state === "cancelled" ? "Appointment cancelled" : state === "rescheduled" ? "New time requested" : "Manage your appointment";
+  const intro = state === "cancelled"
+    ? `${businessName} has been notified that you cancelled.`
+    : state === "rescheduled"
+      ? `Your new requested time was sent to ${businessName}. It is not booked until the business confirms it.`
+      : "Need to make a change? You can request another time or cancel here.";
+  const token = escapeHtml(appointment?.calendarToken || "");
+  const appointmentId = encodeURIComponent(appointment?.id || "");
+  const controls = state === "manage" ? `
+    <details open><summary>Request another time</summary>
+      <form method="post" action="/api/appointments/${appointmentId}/manage">
+        <input type="hidden" name="token" value="${token}"><input type="hidden" name="action" value="RESCHEDULE">
+        <label for="requested-start">New preferred date and time</label><input id="requested-start" name="requestedStart" type="datetime-local" required>
+        <label for="customer-note">Note <span>(optional)</span></label><textarea id="customer-note" name="customerNote" maxlength="500" placeholder="For example: Any time after 3 PM"></textarea>
+        <button class="primary" type="submit">Send new time request</button>
+      </form>
+    </details>
+    <details><summary>Cancel appointment</summary>
+      <form method="post" action="/api/appointments/${appointmentId}/manage">
+        <input type="hidden" name="token" value="${token}"><input type="hidden" name="action" value="CANCEL">
+        <p class="warning">This tells the business you will not attend this appointment.</p>
+        <button class="danger" type="submit">Cancel appointment</button>
+      </form>
+    </details>` : "";
+  const calendarButtons = state === "manage" ? renderCustomerCalendarButtons(appointment) : "";
+  res.status(statusCode);
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.setHeader("Cache-Control", "private, no-store, max-age=0");
+  res.send(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)} | My AI PA</title><style>
+*{box-sizing:border-box}body{margin:0;background:#f2f7fc;color:#07142a;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.page{min-height:100vh;display:grid;place-items:center;padding:24px}.card{width:min(100%,620px);background:#fff;border:1px solid #cfe0f2;border-radius:22px;padding:clamp(24px,6vw,46px);box-shadow:0 24px 70px rgba(18,72,126,.14)}.brand{color:#126dff;font-size:14px;font-weight:900;letter-spacing:.18em;text-transform:uppercase}h1{margin:26px 0 8px;font-size:clamp(30px,7vw,44px);line-height:1.04;letter-spacing:-.04em}p{color:#526b85;line-height:1.55}.details{display:grid;gap:12px;margin:24px 0;padding:20px;border-radius:15px;background:#f7faff;border:1px solid #dbe8f5}.details div,form{display:grid;gap:9px}.details span,label{color:#62788f;font-size:12px;font-weight:900;letter-spacing:.08em;text-transform:uppercase}.details strong{font-size:17px}details{margin-top:12px;border:1px solid #dbe8f5;border-radius:13px;padding:15px}summary{cursor:pointer;font-weight:900;color:#193652}form{margin-top:16px}input,textarea{width:100%;border:1px solid #bdcee1;border-radius:10px;padding:12px;font:inherit}textarea{min-height:88px;resize:vertical}button{min-height:50px;border-radius:10px;padding:12px 16px;font:inherit;font-weight:900;cursor:pointer}.primary{border:1px solid #126dff;background:#126dff;color:#fff}.danger{border:1px solid #d92d20;background:#fff;color:#b42318}.warning{font-size:13px}.fine{margin-top:18px;font-size:12px;text-align:center}.calendar-actions{display:grid;gap:12px;margin:20px 0;padding:18px;border:1px solid #cfe0f2;border-radius:15px;background:#f7faff}.calendar-actions>div{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.calendar-actions a{display:grid;place-items:center;min-height:46px;padding:9px;border:1px solid #126dff;border-radius:10px;color:#075dda;font-size:13px;font-weight:900;text-align:center;text-decoration:none}.calendar-actions small{color:#62788f}@media(max-width:560px){.calendar-actions>div{grid-template-columns:1fr}}
+</style></head><body><main class="page"><section class="card"><div class="brand">My AI PA appointment</div><h1>${escapeHtml(title)}</h1><p>${escapeHtml(intro)}</p><div class="details"><div><span>Business</span><strong>${escapeHtml(businessName)}</strong></div><div><span>${state === "manage" ? "Current time" : "Previous time"}</span><strong>${escapeHtml(when)}</strong></div>${appointment?.service ? `<div><span>Service</span><strong>${escapeHtml(appointment.service)}</strong></div>` : ""}${appointment?.staffMember?.name ? `<div><span>Assigned to</span><strong>${escapeHtml(appointment.staffMember.name)}</strong></div>` : ""}</div>${calendarButtons}${controls}<p class="fine">This private link is for this appointment only.</p></section></main></body></html>`);
 }
 
 function isValidEmailAddress(value) {
@@ -4174,6 +5418,16 @@ function requireIntegrationKey(req, res, next) {
   }
   if (!hasValidIntegrationKey(req)) {
     return res.status(401).json({ error: "Invalid integration key." });
+  }
+  return next();
+}
+
+function requireVapiWebhookKey(req, res, next) {
+  if (!getVapiWebhookSecret()) {
+    return res.status(503).json({ error: "Vapi webhook authentication is not configured." });
+  }
+  if (!hasValidVapiWebhookKey(req)) {
+    return res.status(401).json({ error: "Invalid Vapi webhook secret." });
   }
   return next();
 }
@@ -4800,6 +6054,97 @@ app.get("/api/health", (_req, res) => {
   res.json({ ok: true, service: "my-ai-pa-api", time: new Date().toISOString() });
 });
 
+app.get(
+  "/api/appointments/:id/proposal",
+  enforcePublicRouteRateLimit("appointment-proposal-view", 60),
+  asyncRoute(async (req, res) => {
+    const appointment = await getAppointmentProposal({
+      appointmentId: req.params.id,
+      token: req.query.token,
+    });
+    sendAppointmentProposalPage(res, { appointment });
+  })
+);
+
+app.post(
+  "/api/appointments/:id/customer-response",
+  express.urlencoded({ extended: false, limit: "8kb" }),
+  enforcePublicRouteRateLimit("appointment-proposal-response", 20),
+  asyncRoute(async (req, res) => {
+    const result = await respondToAppointmentProposal({
+      appointmentId: req.params.id,
+      token: req.body?.token,
+      action: req.body?.action,
+      customerNote: req.body?.customerNote,
+      publicBaseUrl: getPublicBaseUrl(req),
+    });
+    sendAppointmentProposalPage(res, {
+      appointment: result.appointment,
+      state: result.action === "ACCEPT" ? "accepted" : "change_requested",
+    });
+  })
+);
+
+app.get(
+  "/api/appointments/:id/manage",
+  enforcePublicRouteRateLimit("appointment-manage-view", 60),
+  asyncRoute(async (req, res) => {
+    const appointment = await getManagedAppointment({ appointmentId: req.params.id, token: req.query.token });
+    sendAppointmentManagePage(res, { appointment });
+  })
+);
+
+app.post(
+  "/api/appointments/:id/manage",
+  express.urlencoded({ extended: false, limit: "8kb" }),
+  enforcePublicRouteRateLimit("appointment-manage-submit", 20),
+  asyncRoute(async (req, res) => {
+    const result = await manageCustomerAppointment({
+      appointmentId: req.params.id,
+      token: req.body?.token,
+      action: req.body?.action,
+      requestedStart: req.body?.requestedStart,
+      customerNote: req.body?.customerNote,
+      publicBaseUrl: getPublicBaseUrl(req),
+    });
+    sendAppointmentManagePage(res, {
+      appointment: result.appointment,
+      state: result.action === "CANCEL" ? "cancelled" : "rescheduled",
+    });
+  })
+);
+
+app.get(
+  "/api/appointments/:id/calendar",
+  asyncRoute(async (req, res) => {
+    const { appointment, calendar } = await getCalendarInvite({
+      appointmentId: req.params.id,
+      token: req.query.token,
+    });
+    const filename = `${String(appointment.business?.name || "appointment").replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() || "appointment"}-confirmed.ics`;
+    res.setHeader("Content-Type", "text/calendar; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.setHeader("Cache-Control", "private, no-store, max-age=0");
+    res.send(calendar);
+  })
+);
+
+app.post(
+  "/api/appointments/request",
+  requireIntegrationKey,
+  asyncRoute(async (req, res) => {
+    const businessId = Number(req.body?.businessId || 1);
+    const ownerContact = await getAppointmentOwnerContact(businessId);
+    const result = await createBooking({
+      ...(req.body || {}),
+      businessId,
+      ...ownerContact,
+      publicBaseUrl: getPublicBaseUrl(req),
+    });
+    res.status(result.duplicate ? 200 : 201).json(result);
+  })
+);
+
 app.post(
   "/api/business/enrich",
   enforcePublicRouteRateLimit("business-enrich", BUSINESS_ENRICH_IP_MAX_REQUESTS),
@@ -5027,7 +6372,7 @@ app.post(
 
 app.post(
   "/api/webhooks/voice",
-  requireIntegrationKey,
+  requireVapiWebhookKey,
   asyncRoute(async (req, res) => {
     const payload = req.body || {};
     const vapiMessage = payload.message && typeof payload.message === "object" ? payload.message : null;
@@ -5043,36 +6388,64 @@ app.post(
     if (vapiMessageType === "tool-calls") {
       const calls = Array.isArray(vapiMessage.toolCallList) ? vapiMessage.toolCallList : [];
       const results = [];
+      const routedBusinessId = await resolveBusinessIdForVapiCall(vapiMessage.call || vapiMessage);
       for (const toolCall of calls) {
         const toolName = String(toolCall.name || "").toLowerCase();
         const parameters = toolCall.parameters && typeof toolCall.parameters === "object" ? toolCall.parameters : {};
-        if (["send_owner_sms_dynamic", "record_lead_and_notify_owner", "create_lead_handoff"].includes(toolName)) {
-          const sourceEventId = toolCall.id ? `vapi-tool:${String(toolCall.id).trim()}` : null;
-          const existingHandoff = sourceEventId ? await prisma.leadHandoff.findUnique({ where: { sourceEventId } }) : null;
-          if (existingHandoff) {
-            results.push({ name: toolCall.name, toolCallId: toolCall.id, result: JSON.stringify({ ok: true, duplicate: true, handoffId: existingHandoff.id, status: existingHandoff.status }) });
+        if (isVapiNotificationTool(toolName)) {
+          const claim = await claimVapiToolExecution({
+            prisma,
+            toolCall,
+            businessId: routedBusinessId,
+            call: vapiMessage.call || vapiMessage,
+          });
+          if (!claim.claimed) {
+            results.push({
+              name: toolCall.name,
+              toolCallId: toolCall.id,
+              result: JSON.stringify({
+                ok: claim.execution.status === "COMPLETED",
+                duplicate: true,
+                status: claim.execution.status,
+                ...(claim.execution.result && typeof claim.execution.result === "object" ? claim.execution.result : {}),
+              }),
+            });
             continue;
           }
-          const address = [parameters.streetAddress, parameters.city].map((value) => String(value || "").trim()).filter(Boolean).join(", ");
-          const summary = [parameters.jobDetails, address && `Address: ${address}`, parameters.bestCallbackTime && `Best callback time: ${parameters.bestCallbackTime}`]
-            .filter(Boolean)
-            .join(". ") || "New service request";
-          const lead = await createLead({
-            businessId: parameters.businessId || 1,
-            name: parameters.name || "Unknown caller",
-            callerPhone: parameters.rawPhoneNumber || parameters.callbackNumber,
-            callbackNumber: parameters.rawPhoneNumber || parameters.callbackNumber,
-            summary,
-            intent: parameters.intent || "QUOTE",
-            urgency: parameters.urgency || "MEDIUM",
+          try {
+            const lead = await createLead(buildTrustedVapiLeadInput(parameters, routedBusinessId));
+            const handoff = await createAndDispatchLeadHandoff({
+              lead,
+              businessId: routedBusinessId,
+              sourceEventId: `vapi-tool:${claim.identity.idempotencyKey}`,
+              message: parameters.message || "",
+            });
+            const executionResult = { ok: true, leadId: lead.id, handoffId: handoff.handoffId, status: handoff.status };
+            await completeVapiToolExecution({ prisma, id: claim.execution.id, result: executionResult });
+            results.push({ name: toolCall.name, toolCallId: toolCall.id, result: JSON.stringify(executionResult) });
+          } catch (error) {
+            await failVapiToolExecution({ prisma, id: claim.execution.id, error }).catch(() => {});
+            throw error;
+          }
+        } else if (["request_appointment", "create_appointment_request"].includes(toolName)) {
+          const ownerContact = await getAppointmentOwnerContact(routedBusinessId);
+          const booking = await createBooking({
+            ...parameters,
+            businessId: routedBusinessId,
+            ...ownerContact,
+            sourceEventId: toolCall.id ? `vapi-appointment:${String(toolCall.id).trim()}` : null,
+            publicBaseUrl: getPublicBaseUrl(req),
           });
-          const handoff = await createAndDispatchLeadHandoff({
-            lead,
-            businessId: parameters.businessId || 1,
-            sourceEventId,
-            message: parameters.message || "",
+          results.push({
+            name: toolCall.name,
+            toolCallId: toolCall.id,
+            result: JSON.stringify({
+              ok: true,
+              appointmentId: booking.appointment?.id,
+              status: booking.status || booking.appointment?.status,
+              customerMessage: booking.customerMessage,
+            }),
           });
-          results.push({ name: toolCall.name, toolCallId: toolCall.id, result: JSON.stringify({ ok: true, leadId: lead.id, handoffId: handoff.handoffId, status: handoff.status }) });
         } else {
           results.push({ name: toolCall.name, toolCallId: toolCall.id, result: JSON.stringify({ ok: false, error: `Unsupported tool '${toolCall.name}'.` }) });
         }
@@ -5123,7 +6496,12 @@ app.post(
         });
       }
     } else if (eventType === "booking.request") {
-      toolResults.push({ tool: "createBooking", result: await createBooking(payload) });
+      const businessId = Number(payload.businessId || 1);
+      const ownerContact = await getAppointmentOwnerContact(businessId);
+      toolResults.push({
+        tool: "createBooking",
+        result: await createBooking({ ...payload, businessId, ...ownerContact, publicBaseUrl: getPublicBaseUrl(req) }),
+      });
     } else if (eventType === "human.escalation") {
       toolResults.push({ tool: "escalateToHuman", result: await escalateToHuman(payload) });
     } else {
@@ -5156,7 +6534,7 @@ app.post(
     ].filter(Boolean);
     const business = lookup.length ? await prisma.business.findFirst({ where: { OR: lookup } }) : null;
     const latestCall = business
-      ? await prisma.call.findFirst({ where: { businessId: business.id }, orderBy: { startedAt: "desc" } })
+      ? await prisma.call.findFirst({ where: { businessId: business.id }, include: { caller: true }, orderBy: { startedAt: "desc" } })
       : null;
 
     let matchingMessages = [];
@@ -5211,8 +6589,9 @@ app.post(
       };
     }
 
-    let toolAudit = { assistantIdSet: false, attachedToolCount: 0, tools: [] };
+    let toolAudit = { assistantIdSet: false, attachedToolCount: 0, tools: [], routingHealth: { status: "unknown", issues: ["assistant_not_audited"] } };
     let vapiCallAudit = { available: false, endedReason: "", toolCallCount: 0, toolNames: [], toolResults: [] };
+    let notificationHealth = { status: "unknown", code: "NO_VAPI_CALL_AUDITED", summary: "No Vapi call was available for notification reconciliation." };
     if (signup.twilioPhoneNumber) {
       const [vapiNumbers, assistants, tools] = await Promise.all([
         fetchVapiCollection("phone-number", ["phoneNumbers", "phone_numbers"]),
@@ -5222,55 +6601,83 @@ app.post(
       const aiNumber = normalizePhoneForMatch(signup.twilioPhoneNumber);
       const vapiNumber = vapiNumbers.find((record) => normalizePhoneForMatch(getVapiPhoneNumber(record)) === aiNumber);
       const assistantId = getVapiAssistantId(vapiNumber);
-      const assistant = assistants.find((record) => String(record?.id || "").trim() === assistantId);
+      const assistantSummary = assistants.find((record) => String(record?.id || "").trim() === assistantId);
+      const assistant = assistantId
+        ? await requestVapiResource(`assistant/${encodeURIComponent(assistantId)}`).catch(() => assistantSummary)
+        : assistantSummary;
       const toolIds = Array.isArray(assistant?.model?.toolIds) ? assistant.model.toolIds.map((id) => String(id || "").trim()).filter(Boolean) : [];
+      const auditedTools = toolIds.map((toolId) => {
+        const tool = tools.find((record) => String(record?.id || "").trim() === toolId) || {};
+        const code = String(tool.code || "");
+        const toolName = getVapiNestedString(tool, ["function.name", "name"]) || "unknown";
+        const isLegacySmsTool = ["send_customer_sms_dynamic", "send_owner_sms_dynamic"].includes(toolName);
+        const isIsolatedSmsTool = isManagedIsolatedTool(tool);
+        const isolatedConfiguration = isIsolatedSmsTool
+          ? inspectIsolatedConfiguration({ assistant, tool, aiNumber, ownerNumber: signup.ownerPhone || signup.businessPhone })
+          : null;
+        return {
+          id: toolId,
+          name: toolName,
+          type: getVapiNestedString(tool, ["type", "function.type"]) || "unknown",
+          serverUrlConfigured: Boolean(getVapiNestedString(tool, ["server.url", "function.server.url", "url"])),
+          codeConfigured: Boolean(code.trim()),
+          legacySharedSmsTool: isLegacySmsTool,
+          isolatedSmsTool: isIsolatedSmsTool,
+          isolatedConfiguration,
+          twilioEnvironmentReferences: ["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "DEFAULT_FROM_NUMBER", "DEFAULT_OWNER_TO_NUMBER", "CALLER_NUMBER", "CALL_ID"]
+            .filter((name) => code.includes(`env.${name}`)),
+          environmentVariables: summarizeVapiToolEnvironmentVariables(tool),
+          matchesBackendEnvironment: (isLegacySmsTool || isIsolatedSmsTool)
+            ? {
+                twilioAccountSid: getVapiToolEnvironmentVariableValue(tool, "TWILIO_ACCOUNT_SID") === TWILIO_ACCOUNT_SID,
+                twilioAuthToken: getVapiToolEnvironmentVariableValue(tool, "TWILIO_AUTH_TOKEN") === TWILIO_AUTH_TOKEN,
+                defaultFromNumber:
+                  normalizePhoneForMatch(getVapiToolEnvironmentVariableValue(tool, "DEFAULT_FROM_NUMBER")) ===
+                  normalizePhoneForMatch(signup.twilioPhoneNumber),
+                defaultOwnerNumber:
+                  normalizePhoneForMatch(getVapiToolEnvironmentVariableValue(tool, "DEFAULT_OWNER_TO_NUMBER")) ===
+                  normalizePhoneForMatch(signup.ownerPhone || signup.businessPhone),
+              }
+            : null,
+          configurationKeys: Object.keys(tool).filter((key) => !["code", "function"].includes(key)).sort(),
+        };
+      });
+      const isolatedTools = auditedTools.filter((tool) => tool.isolatedSmsTool);
+      const routingIssues = [
+        ...(!assistantId ? ["assistant_missing"] : []),
+        ...(auditedTools.some((tool) => tool.legacySharedSmsTool) ? ["legacy_shared_sms_tool_attached"] : []),
+        ...(isolatedTools.length === 0 ? ["isolated_sms_tool_missing"] : []),
+        ...(isolatedTools.length > 1 ? ["multiple_isolated_sms_tools_attached"] : []),
+        ...(isolatedTools.some((tool) => tool.isolatedConfiguration?.healthy !== true) ? ["isolated_sms_routing_mismatch"] : []),
+      ];
       toolAudit = {
         assistantIdSet: Boolean(assistantId),
         attachedToolCount: toolIds.length,
-        tools: toolIds.map((toolId) => {
-          const tool = tools.find((record) => String(record?.id || "").trim() === toolId) || {};
-          const code = String(tool.code || "");
-          const toolName = getVapiNestedString(tool, ["function.name", "name"]) || "unknown";
-          const isSmsTool = ["send_customer_sms_dynamic", "send_owner_sms_dynamic"].includes(toolName);
-          return {
-            id: toolId,
-            name: toolName,
-            type: getVapiNestedString(tool, ["type", "function.type"]) || "unknown",
-            serverUrlConfigured: Boolean(getVapiNestedString(tool, ["server.url", "function.server.url", "url"])),
-            codeConfigured: Boolean(code.trim()),
-            twilioEnvironmentReferences: ["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "DEFAULT_FROM_NUMBER", "DEFAULT_OWNER_TO_NUMBER"]
-              .filter((name) => code.includes(`env.${name}`)),
-            environmentVariables: summarizeVapiToolEnvironmentVariables(tool),
-            matchesBackendEnvironment: isSmsTool
-              ? {
-                  twilioAccountSid: getVapiToolEnvironmentVariableValue(tool, "TWILIO_ACCOUNT_SID") === TWILIO_ACCOUNT_SID,
-                  twilioAuthToken: getVapiToolEnvironmentVariableValue(tool, "TWILIO_AUTH_TOKEN") === TWILIO_AUTH_TOKEN,
-                  defaultFromNumber:
-                    normalizePhoneForMatch(getVapiToolEnvironmentVariableValue(tool, "DEFAULT_FROM_NUMBER")) ===
-                    normalizePhoneForMatch(signup.twilioPhoneNumber),
-                  defaultOwnerNumber:
-                    toolName === "send_owner_sms_dynamic"
-                      ? normalizePhoneForMatch(getVapiToolEnvironmentVariableValue(tool, "DEFAULT_OWNER_TO_NUMBER")) ===
-                        normalizePhoneForMatch(signup.ownerPhone || signup.businessPhone)
-                      : null,
-                }
-              : null,
-            configurationKeys: Object.keys(tool).filter((key) => !["code", "function"].includes(key)).sort(),
-          };
-        }),
+        tools: auditedTools,
+        routingHealth: {
+          status: routingIssues.length ? "critical" : "healthy",
+          issues: routingIssues,
+        },
       };
     }
 
     if (latestCall?.externalProvider === "vapi" && latestCall.externalId) {
       const fullCall = await fetchVapiCallDetail(latestCall.externalId);
       const toolCalls = summarizeVapiToolCalls(fullCall);
+      const toolResults = summarizeVapiToolResults(fullCall);
       vapiCallAudit = {
         available: true,
         endedReason: String(fullCall?.endedReason || "").trim(),
         toolCallCount: toolCalls.count,
         toolNames: toolCalls.toolNames,
-        toolResults: summarizeVapiToolResults(fullCall),
+        toolResults,
       };
+      notificationHealth = summarizeCompositeNotificationHealth({
+        toolResults,
+        aiNumber: signup.twilioPhoneNumber,
+        ownerNumber: signup.ownerPhone || signup.businessPhone,
+        customerNumber: latestCall.caller?.phone,
+      });
     }
 
     res.json({
@@ -5298,6 +6705,7 @@ app.post(
       },
       toolAudit,
       vapiCallAudit,
+      notificationHealth,
     });
   })
 );
@@ -5356,6 +6764,13 @@ app.post(
   })
 );
 
+/*
+ * Legacy prompt-only routing was removed here. Phone numbers in a system prompt
+ * are model instructions, not a security boundary, and caused a real owner SMS
+ * to be sent to the wrong destination. The route now provisions one protected
+ * tool per business through provisionIsolatedSmsForAssistant().
+ */
+
 app.post(
   "/api/integrations/vapi/sync-now",
   requireProvisioningKey,
@@ -5393,9 +6808,9 @@ app.post(
           update: { ownerPhone: String(signup.ownerPhone || signup.businessPhone || "").trim() },
           create: {
             businessId: business.id,
+            ownerPhone: String(signup.ownerPhone || signup.businessPhone || "").trim(),
             answerAfterRings: 3,
             afterHoursMode: "AI_ALWAYS_ON",
-            ownerPhone: String(signup.ownerPhone || signup.businessPhone || "").trim(),
           },
         });
 
@@ -6076,8 +7491,206 @@ app.post(
   })
 );
 
-app.post(
+app.get(
   "/api/customer/dashboard",
+  asyncRoute(async (req, res) => {
+    const lookupHash = getCustomerDashboardSessionLookupHash(req);
+    if (!lookupHash) {
+      return res.status(401).json({ error: "Your dashboard refresh session has expired. Sign in again." });
+    }
+
+    const dashboard = await getCustomerDashboardByLookupHash(lookupHash);
+    if (!dashboard) {
+      clearCustomerDashboardSessionCookie(res);
+      return res.status(404).json({ error: "This customer dashboard is no longer available." });
+    }
+
+    res.json({ ok: true, dashboard, refreshedAt: new Date().toISOString() });
+  })
+);
+
+app.get(
+  "/api/customer/dashboard/calendar/connect/:provider",
+  asyncRoute(async (req, res) => {
+    const lookupHash = getCustomerDashboardSessionLookupHash(req);
+    if (!lookupHash) return res.status(401).json({ error: "Your dashboard session has expired. Sign in again." });
+    const dashboard = await getCustomerDashboardByLookupHash(lookupHash);
+    if (!dashboard?.businessId) return res.status(404).json({ error: "Your business scheduling profile is not available." });
+    const staffMemberId = String(req.query.staffMemberId || "").trim() || null;
+    if (staffMemberId && !dashboard.staffMembers.some((member) => member.id === staffMemberId)) {
+      return res.status(404).json({ error: "That team member is not available." });
+    }
+    res.redirect(getAuthorizationUrl({
+      businessId: dashboard.businessId,
+      staffMemberId,
+      provider: req.params.provider,
+    }));
+  })
+);
+
+app.delete(
+  "/api/customer/dashboard/calendar/connections/:id",
+  asyncRoute(async (req, res) => {
+    const lookupHash = getCustomerDashboardSessionLookupHash(req);
+    if (!lookupHash) return res.status(401).json({ error: "Your dashboard session has expired. Sign in again." });
+    const dashboard = await getCustomerDashboardByLookupHash(lookupHash);
+    if (!dashboard?.businessId) return res.status(404).json({ error: "Your business scheduling profile is not available." });
+    await disconnectCalendar({ businessId: dashboard.businessId, connectionId: req.params.id });
+    res.json({ ok: true });
+  })
+);
+
+for (const provider of ["google", "microsoft"]) {
+  app.get(
+    `/api/calendar/oauth/${provider}/callback`,
+    enforcePublicRouteRateLimit(`calendar-oauth-${provider}`, 60),
+    asyncRoute(async (req, res) => {
+      if (req.query.error) {
+        return res.status(400).send(`Calendar connection was cancelled: ${escapeHtml(req.query.error_description || req.query.error)}`);
+      }
+      await completeOAuthConnection({ state: req.query.state, code: req.query.code, provider });
+      const frontend = String(process.env.FRONTEND_APP_URL || process.env.WEBSITE_URL || (process.env.NODE_ENV === "production" ? "https://www.myaipa.ca" : "http://localhost:3000")).replace(/\/+$/, "");
+      res.redirect(`${frontend}/#/dashboard?calendar=connected`);
+    })
+  );
+}
+
+app.get(
+  "/api/customer/dashboard/calls/:callId/recording",
+  asyncRoute(async (req, res) => {
+    const lookupHash = getCustomerDashboardSessionLookupHash(req);
+    if (!lookupHash) return res.status(401).json({ error: "Your dashboard session has expired. Sign in again." });
+    const dashboard = await getCustomerDashboardByLookupHash(lookupHash);
+    const callId = Number(req.params.callId);
+    const visibleCall = Number.isInteger(callId) && dashboard?.calls?.find((call) => call.id === callId);
+    if (!visibleCall) return res.status(404).json({ error: "Recording not found." });
+    if (!visibleCall.recordingAvailable) return res.status(403).json({ error: "This recording is unavailable or does not have recorded consent." });
+
+    const call = await prisma.call.findUnique({
+      where: { id: callId },
+      select: { recordingUrl: true, externalProvider: true, externalId: true },
+    });
+    const headers = { Accept: "audio/*,application/octet-stream" };
+    if (req.headers.range) headers.Range = String(req.headers.range).slice(0, 200);
+    let recordingUrl;
+    let redirect = "error";
+    if (call?.externalProvider === "vapi" && call.externalId) {
+      if (!VAPI_API_KEY) return res.status(503).json({ error: "Recording access is temporarily unavailable." });
+      recordingUrl = new URL(`${VAPI_API_BASE_URL}/call/${encodeURIComponent(call.externalId)}/mono-recording`);
+      headers.Authorization = `Bearer ${VAPI_API_KEY}`;
+      redirect = "follow";
+    } else {
+      try {
+        recordingUrl = new URL(String(call?.recordingUrl || ""));
+      } catch (_err) {
+        return res.status(404).json({ error: "Recording not found." });
+      }
+      const hostname = recordingUrl.hostname.toLowerCase();
+      const privateHost = hostname === "localhost" || hostname === "::1" || /^(?:127\.|10\.|192\.168\.|169\.254\.|172\.(?:1[6-9]|2\d|3[01])\.)/.test(hostname);
+      if (recordingUrl.protocol !== "https:" || privateHost) return res.status(502).json({ error: "Recording storage location is invalid." });
+    }
+
+    const upstream = await fetch(recordingUrl, { headers, redirect });
+    if (!upstream.ok && upstream.status !== 206) return res.status(502).json({ error: "Recording could not be loaded." });
+
+    res.status(upstream.status);
+    for (const header of ["content-type", "content-length", "content-range", "accept-ranges"]) {
+      const value = upstream.headers.get(header);
+      if (value) res.setHeader(header, value);
+    }
+    res.setHeader("Cache-Control", "private, no-store, max-age=0");
+    const contentType = upstream.headers.get("content-type") || "";
+    const extension = /mpeg|mp3/i.test(contentType) ? "mp3" : /wav|wave/i.test(contentType) ? "wav" : "audio";
+    res.setHeader("Content-Disposition", `${req.query.download === "1" ? "attachment" : "inline"}; filename="call-${callId}.${extension}"`);
+    if (!upstream.body) return res.end();
+    Readable.fromWeb(upstream.body).on("error", () => res.destroy()).pipe(res);
+  })
+);
+
+app.post(
+  "/api/customer/dashboard/support/suggest",
+  asyncRoute(async (req, res) => {
+    const lookupHash = getCustomerDashboardSessionLookupHash(req);
+    if (!lookupHash) return res.status(401).json({ error: "Your dashboard session has expired. Sign in again." });
+    const rateLimit = getSupportSuggestionRateLimitDecision(lookupHash);
+    if (rateLimit.blocked) {
+      setRetryAfterHeader(res, rateLimit.retryAfterMs);
+      return res.status(429).json({ error: "Too many suggestion requests. Wait a few minutes or send the report now." });
+    }
+    const dashboard = await getCustomerDashboardByLookupHash(lookupHash);
+    if (!dashboard?.businessId) return res.status(409).json({ error: "Business setup must finish before support diagnostics are available." });
+    const description = sanitizeSupportDescription(req.body?.description);
+    if (description.length < 8) return res.status(400).json({ error: "Briefly describe what is not working." });
+    const callId = req.body?.callId == null || req.body.callId === "" ? null : Number(req.body.callId);
+    const diagnostics = buildCustomerSupportDiagnostics(dashboard, callId, false);
+    if (callId != null && !diagnostics.call) return res.status(404).json({ error: "That call is not available in this business dashboard." });
+    const analysis = await getCustomerSupportAnalysis({ description, diagnostics });
+    res.json({ ok: true, analysis, callLinked: Boolean(diagnostics.call) });
+  })
+);
+
+app.post(
+  "/api/customer/dashboard/support/reports",
+  asyncRoute(async (req, res) => {
+    const lookupHash = getCustomerDashboardSessionLookupHash(req);
+    if (!lookupHash) return res.status(401).json({ error: "Your dashboard session has expired. Sign in again." });
+    const dashboard = await getCustomerDashboardByLookupHash(lookupHash);
+    if (!dashboard?.businessId) return res.status(409).json({ error: "Business setup must finish before a support report can be sent." });
+    const description = sanitizeSupportDescription(req.body?.description);
+    if (description.length < 8) return res.status(400).json({ error: "Briefly describe what is not working." });
+    const callId = req.body?.callId == null || req.body.callId === "" ? null : Number(req.body.callId);
+    const includeSensitiveCallData = Boolean(req.body?.includeSensitiveCallData && callId != null);
+    const diagnostics = buildCustomerSupportDiagnostics(dashboard, callId, includeSensitiveCallData);
+    if (callId != null && !diagnostics.call) return res.status(404).json({ error: "That call is not available in this business dashboard." });
+    diagnostics.request = {
+      userAgent: String(req.headers["user-agent"] || "").slice(0, 240),
+      contactAllowed: req.body?.contactAllowed !== false,
+    };
+    const fallback = getRuleBasedSupportAnalysis({ description, diagnostics });
+    const analysis = normalizeSupportAnalysis(req.body?.analysis || {}, fallback);
+    let report = await prisma.supportReport.create({
+      data: {
+        businessId: dashboard.businessId,
+        callId: diagnostics.call?.id || null,
+        description,
+        aiSummary: analysis.summary,
+        likelyCause: analysis.likelyCause,
+        suggestions: analysis.suggestions,
+        diagnostics,
+        includeSensitiveCallData,
+        contactAllowed: req.body?.contactAllowed !== false,
+        severity: analysis.severity,
+      },
+      include: { business: { select: { id: true, name: true, phone: true } } },
+    });
+    let telegramAlert = { sent: false, skipped: true };
+    if (report.severity === "HIGH") {
+      try {
+        telegramAlert = await sendSupportTelegramAlert(report);
+        if (telegramAlert.sent) {
+          report = await prisma.supportReport.update({
+            where: { id: report.id },
+            data: { telegramAlertedAt: new Date() },
+            include: { business: { select: { id: true, name: true, phone: true } } },
+          });
+        }
+      } catch (error) {
+        console.error("[support:telegram] high-priority alert failed", { ticketNumber: getSupportTicketNumber(report.id), message: error?.message || String(error) });
+        telegramAlert = { sent: false, skipped: false, error: "Telegram alert could not be sent." };
+      }
+    }
+    res.status(201).json({
+      ok: true,
+      ticketNumber: getSupportTicketNumber(report.id),
+      status: report.status,
+      createdAt: report.createdAt,
+      telegramAlert,
+    });
+  })
+);
+
+app.post(
+  "/api/customer/dashboard/request-code",
   asyncRoute(async (req, res) => {
     const body = req.body || {};
     const email = String(body.email || body.ownerEmail || "").trim();
@@ -6093,14 +7706,148 @@ app.post(
       return res.status(400).json({ error: "Enter the signup email and phone number for this business." });
     }
 
-    const dashboard = await getCustomerDashboard({ email, phone });
-    if (!dashboard) {
-      return res.status(404).json({ error: "No customer dashboard was found for that email and phone number." });
+    const signup = findCustomerDashboardSignup({ email, phone });
+    if (!signup) {
+      return res.status(404).json({ error: "We could not send a code. Check the signup email and phone number." });
     }
 
-    res.json({ ok: true, dashboard });
+    const lookupHash = getCustomerDashboardLookupHash(email, phone);
+    const code = createCustomerDashboardLoginCode(lookupHash);
+    const destination = signup.ownerPhone || signup.businessPhone;
+    const sms = await sendSmsViaTwilio({
+      to: destination,
+      message: `Your My AI PA dashboard code is ${code}. It expires in 10 minutes. Do not share this code.`,
+    });
+    res.status(202).json({
+      ok: true,
+      codeSent: true,
+      destination: maskCustomerDashboardPhone(destination),
+      expiresInSeconds: Math.floor(CUSTOMER_DASHBOARD_CODE_TTL_MS / 1000),
+      ...(sms.mocked && process.env.NODE_ENV !== "production" ? { devCode: code } : {}),
+    });
   })
 );
+
+app.post(
+  "/api/customer/dashboard/verify-code",
+  asyncRoute(async (req, res) => {
+    const body = req.body || {};
+    const email = String(body.email || body.ownerEmail || "").trim();
+    const phone = String(body.phone || body.ownerPhone || body.businessPhone || "").trim();
+    const code = String(body.code || "").replace(/\D/g, "");
+    if (!email || !isValidEmailAddress(email) || !phone || !/^\d{6}$/.test(code)) {
+      return res.status(400).json({ error: "Enter the six-digit code sent to the registered phone." });
+    }
+
+    const signup = findCustomerDashboardSignup({ email, phone });
+    if (!signup) return res.status(401).json({ error: "The code is invalid or has expired." });
+    const lookupHash = getCustomerDashboardLookupHash(email, phone);
+    const verification = verifyCustomerDashboardLoginCode(lookupHash, code);
+    if (!verification.ok) {
+      return res.status(401).json({
+        error: verification.reason === "attempts"
+          ? "Too many incorrect attempts. Request a new code."
+          : "The code is invalid or has expired.",
+      });
+    }
+
+    const dashboard = await getCustomerDashboard({ email, phone });
+    if (!dashboard) return res.status(404).json({ error: "This customer dashboard is no longer available." });
+    setCustomerDashboardSessionCookie(res, createCustomerDashboardSessionToken({ email, phone }));
+    res.json({ ok: true, dashboard, refreshedAt: new Date().toISOString() });
+  })
+);
+
+app.post(
+  "/api/customer/dashboard/appointments/:id/respond",
+  asyncRoute(async (req, res) => {
+    const lookupHash = getCustomerDashboardSessionLookupHash(req);
+    if (!lookupHash) {
+      return res.status(401).json({ error: "Your dashboard session has expired. Sign in again." });
+    }
+    const dashboard = await getCustomerDashboardByLookupHash(lookupHash);
+    if (!dashboard) {
+      clearCustomerDashboardSessionCookie(res);
+      return res.status(404).json({ error: "This customer dashboard is no longer available." });
+    }
+    if (!dashboard.businessId) {
+      return res.status(409).json({ error: "Your business setup must finish before appointment requests can be managed." });
+    }
+    const body = req.body || {};
+    const result = await respondToAppointment({
+      appointmentId: req.params.id,
+      businessId: dashboard.businessId,
+      action: body.action,
+      confirmedStart: body.confirmedStart,
+      ownerNote: body.ownerNote,
+      ownerEmail: dashboard.signup?.ownerEmail,
+      ownerPhone: dashboard.signup?.ownerPhone,
+      staffMemberId: body.staffMemberId,
+      publicBaseUrl: getPublicBaseUrl(req),
+    });
+    res.json({
+      ok: true,
+      unchanged: Boolean(result.unchanged),
+      appointment: sanitizeCustomerAppointment(result.appointment),
+      calendarUrl: result.calendarUrl || "",
+      proposalUrl: result.proposalUrl || "",
+      customerAcceptanceRequired: Boolean(result.customerAcceptanceRequired),
+      calendarSync: result.calendarSync || null,
+      notifications: result.notifications || [],
+    });
+  })
+);
+
+app.put(
+  "/api/customer/dashboard/scheduling",
+  asyncRoute(async (req, res) => {
+    const lookupHash = getCustomerDashboardSessionLookupHash(req);
+    if (!lookupHash) return res.status(401).json({ error: "Your dashboard session has expired. Sign in again." });
+    const dashboard = await getCustomerDashboardByLookupHash(lookupHash);
+    if (!dashboard?.businessId) return res.status(404).json({ error: "Your business scheduling profile is not available." });
+    const settings = await updateSchedulingSettings({
+      businessId: dashboard.businessId,
+      bookingHours: req.body?.bookingHours,
+      bufferMinutes: req.body?.bufferMinutes,
+      reminderHours: req.body?.reminderHours,
+      calendarBookingMode: req.body?.calendarBookingMode,
+    });
+    res.json({ ok: true, scheduling: getSchedulingSettings(settings) });
+  })
+);
+
+app.post(
+  "/api/customer/dashboard/staff",
+  asyncRoute(async (req, res) => {
+    const lookupHash = getCustomerDashboardSessionLookupHash(req);
+    if (!lookupHash) return res.status(401).json({ error: "Your dashboard session has expired. Sign in again." });
+    const dashboard = await getCustomerDashboardByLookupHash(lookupHash);
+    if (!dashboard?.businessId) return res.status(404).json({ error: "Your business scheduling profile is not available." });
+    const staffMember = await createStaffMember({ businessId: dashboard.businessId, ...(req.body || {}) });
+    res.status(201).json({ ok: true, staffMember });
+  })
+);
+
+app.delete(
+  "/api/customer/dashboard/staff/:id",
+  asyncRoute(async (req, res) => {
+    const lookupHash = getCustomerDashboardSessionLookupHash(req);
+    if (!lookupHash) return res.status(401).json({ error: "Your dashboard session has expired. Sign in again." });
+    const dashboard = await getCustomerDashboardByLookupHash(lookupHash);
+    if (!dashboard?.businessId) return res.status(404).json({ error: "Your business scheduling profile is not available." });
+    const staffMember = await deactivateStaffMember({ businessId: dashboard.businessId, staffMemberId: req.params.id });
+    res.json({ ok: true, staffMember });
+  })
+);
+
+app.post("/api/customer/dashboard", (_req, res) => {
+  res.status(426).json({ error: "A one-time code is required. Request a dashboard sign-in code first." });
+});
+
+app.post("/api/customer/dashboard/logout", (req, res) => {
+  clearCustomerDashboardSessionCookie(res);
+  res.status(204).end();
+});
 
 app.post(
   "/api/admin/login",
@@ -6119,6 +7866,132 @@ app.get(
   requireAdmin,
   asyncRoute(async (_req, res) => {
     res.json({ ok: true });
+  })
+);
+
+app.get(
+  "/api/admin/support-reports",
+  requireAdmin,
+  asyncRoute(async (req, res) => {
+    const requestedStatus = String(req.query.status || "").toUpperCase();
+    const where = ["NEW", "INVESTIGATING", "WAITING_FOR_CUSTOMER", "RESOLVED"].includes(requestedStatus)
+      ? { status: requestedStatus }
+      : {};
+    const reports = await prisma.supportReport.findMany({
+      where,
+      include: {
+        business: { select: { id: true, name: true, phone: true } },
+        call: { select: { id: true, startedAt: true, status: true, outcome: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 200,
+    });
+    res.json({
+      ok: true,
+      integrations: {
+        githubConfigured: Boolean(GITHUB_SUPPORT_TOKEN && /^[^/\s]+\/[^/\s]+$/.test(GITHUB_SUPPORT_REPO)),
+        githubRepo: GITHUB_SUPPORT_REPO,
+        telegramConfigured: Boolean(TELEGRAM_BOT_TOKEN && TELEGRAM_CHAT_ID),
+        codexMode: "prepare",
+      },
+      reports: reports.map(sanitizeAdminSupportReport),
+    });
+  })
+);
+
+app.patch(
+  "/api/admin/support-reports/:id",
+  requireAdmin,
+  asyncRoute(async (req, res) => {
+    const existing = await prisma.supportReport.findUnique({
+      where: { id: String(req.params.id || "") },
+      include: { business: { select: { id: true, name: true, phone: true } }, call: { select: { id: true, startedAt: true, status: true, outcome: true } } },
+    });
+    if (!existing) return res.status(404).json({ error: "Support report not found." });
+    const requestedStatus = String(req.body?.status || existing.status).toUpperCase();
+    if (!["NEW", "INVESTIGATING", "WAITING_FOR_CUSTOMER", "RESOLVED"].includes(requestedStatus)) {
+      return res.status(400).json({ error: "Choose a valid support status." });
+    }
+    const internalNote = sanitizeSupportDescription(req.body?.internalNote ?? existing.internalNote);
+    const customerMessage = sanitizeSupportDescription(req.body?.customerMessage ?? existing.customerMessage);
+    let report = await prisma.supportReport.update({
+      where: { id: existing.id },
+      data: {
+        status: requestedStatus,
+        internalNote: internalNote || null,
+        customerMessage: customerMessage || null,
+        resolvedAt: requestedStatus === "RESOLVED" ? (existing.resolvedAt || new Date()) : null,
+      },
+      include: { business: { select: { id: true, name: true, phone: true } }, call: { select: { id: true, startedAt: true, status: true, outcome: true } } },
+    });
+
+    let customerNotification = { sent: false, skipped: true };
+    if (requestedStatus === "RESOLVED" && existing.status !== "RESOLVED" && report.contactAllowed) {
+      try {
+        const contact = await getAppointmentOwnerContact(report.businessId);
+        if (contact.ownerPhone) {
+          const message = `My AI PA support: ${getSupportTicketNumber(report.id)} has been resolved. ${customerMessage || "Open your dashboard to see the update."}`.slice(0, 1500);
+          const sms = await sendSmsViaTwilio({ to: contact.ownerPhone, message });
+          customerNotification = { sent: true, skipped: false, mocked: Boolean(sms.mocked) };
+          report = await prisma.supportReport.update({
+            where: { id: report.id },
+            data: { customerNotifiedAt: new Date() },
+            include: { business: { select: { id: true, name: true, phone: true } }, call: { select: { id: true, startedAt: true, status: true, outcome: true } } },
+          });
+        }
+      } catch (error) {
+        console.error("[support:customer-notification] resolution text failed", { ticketNumber: getSupportTicketNumber(report.id), message: error?.message || String(error) });
+        customerNotification = { sent: false, skipped: false, error: "Resolution was saved, but the customer text failed." };
+      }
+    }
+    res.json({ ok: true, report: sanitizeAdminSupportReport(report), customerNotification });
+  })
+);
+
+app.post(
+  "/api/admin/support-reports/:id/github-issue",
+  requireAdmin,
+  asyncRoute(async (req, res) => {
+    let report = await prisma.supportReport.findUnique({
+      where: { id: String(req.params.id || "") },
+      include: { business: { select: { id: true, name: true, phone: true } }, call: { select: { id: true, startedAt: true, status: true, outcome: true } } },
+    });
+    if (!report) return res.status(404).json({ error: "Support report not found." });
+    if (report.githubIssueUrl) return res.json({ ok: true, unchanged: true, report: sanitizeAdminSupportReport(report) });
+    const issue = await createGithubSupportIssue(report);
+    report = await prisma.supportReport.update({
+      where: { id: report.id },
+      data: { githubIssueNumber: issue.number, githubIssueUrl: issue.url, githubIssueCreatedAt: new Date() },
+      include: { business: { select: { id: true, name: true, phone: true } }, call: { select: { id: true, startedAt: true, status: true, outcome: true } } },
+    });
+    res.status(201).json({ ok: true, issue, report: sanitizeAdminSupportReport(report) });
+  })
+);
+
+app.post(
+  "/api/admin/support-reports/:id/codex-task",
+  requireAdmin,
+  asyncRoute(async (req, res) => {
+    let report = await prisma.supportReport.findUnique({
+      where: { id: String(req.params.id || "") },
+      include: { business: { select: { id: true, name: true, phone: true } }, call: { select: { id: true, startedAt: true, status: true, outcome: true } } },
+    });
+    if (!report) return res.status(404).json({ error: "Support report not found." });
+    const wasPrepared = Boolean(report.codexTaskPrompt);
+    if (!wasPrepared) {
+      const prompt = buildSupportRepairBrief(report);
+      report = await prisma.supportReport.update({
+        where: { id: report.id },
+        data: {
+          codexTaskStatus: "PREPARED",
+          codexTaskPrompt: prompt,
+          codexTaskPreparedAt: new Date(),
+          codexTaskUrl: "https://chatgpt.com/codex",
+        },
+        include: { business: { select: { id: true, name: true, phone: true } }, call: { select: { id: true, startedAt: true, status: true, outcome: true } } },
+      });
+    }
+    res.status(wasPrepared ? 200 : 201).json({ ok: true, report: sanitizeAdminSupportReport(report), task: { status: report.codexTaskStatus, prompt: report.codexTaskPrompt, url: report.codexTaskUrl } });
   })
 );
 
@@ -6684,6 +8557,10 @@ app.use((err, _req, res, _next) => {
 });
 
 function startBackgroundJobs() {
+  processAppointmentReminders().catch((err) => {
+    console.error("[appointment-reminder] initial run failed", err);
+  });
+
   cleanupSensitiveCallData().catch((err) => {
     console.error("[call-data-cleanup] initial run failed", err);
   });
@@ -6713,6 +8590,12 @@ function startBackgroundJobs() {
       console.error("[lead-handoff] scheduled run failed", err);
     });
   }, LEAD_HANDOFF_CHECK_INTERVAL_MS);
+
+  setInterval(() => {
+    processAppointmentReminders().catch((err) => {
+      console.error("[appointment-reminder] scheduled run failed", err);
+    });
+  }, 5 * 60 * 1000);
 
   if (VAPI_AUTO_SYNC_ENABLED) {
     syncVapiCalls().catch((err) => {
@@ -6757,8 +8640,38 @@ module.exports = {
     getVapiCost,
     getVapiDurationSeconds,
     getVapiRecordingUrl,
+    getNextMonthlyAnniversary,
+    getWebhookReplayKey,
+    claimWebhookReplayStore,
+    pruneWebhookReplayStore,
     mapVapiStatus,
     mergeVapiEndOfCallReport,
+    summarizeCompositeNotificationHealth,
+    createCustomerDashboardLoginCode,
+    verifyCustomerDashboardLoginCode,
+    maskCustomerDashboardPhone,
+    createCustomerDashboardSessionToken,
+    getCustomerDashboardSessionLookupHash,
+    getCustomerDashboardLookupHash,
+    sanitizeCustomerStructuredData,
+    sanitizeCustomerCall,
+    sanitizeSupportDescription,
+    redactSupportTextForAi,
+    buildCustomerSupportDiagnostics,
+    getRuleBasedSupportAnalysis,
+    normalizeSupportAnalysis,
+    getSupportSuggestionRateLimitDecision,
+    extractOpenAiResponseText,
+    getSupportTicketNumber,
+    sanitizeCustomerSupportReport,
+    getSafeRepairDiagnostics,
+    buildSupportRepairBrief,
+    buildGithubSupportIssue,
+    createGithubSupportIssue,
+    sendSupportTelegramAlert,
+    getVapiCustomerSafeMessages,
+    getVapiArtifactMetrics,
+    getVapiRecordingConsent,
     normalizeTwilioProvisioningAreaCode,
     normalizeTwilioProvisioningVoiceUrl,
     purchaseTwilioPhoneNumber,

@@ -1,5 +1,6 @@
 const { prisma } = require("./prisma");
 const { sendSmsViaTwilio } = require("./twilioSms");
+const { createAppointmentRequest } = require("./appointmentRequests");
 
 const STORE_CALL_TRANSCRIPTS = /^(1|true|yes|on)$/i.test(String(process.env.STORE_CALL_TRANSCRIPTS || ""));
 const STORE_CALL_RECORDING_URLS = /^(1|true|yes|on)$/i.test(String(process.env.STORE_CALL_RECORDING_URLS || ""));
@@ -93,6 +94,29 @@ async function upsertCaller({ phone, name }) {
   });
 }
 
+function callArtifactData(payload, existing = {}) {
+  const dateValue = (value, fallback) => {
+    if (value == null || value === "") return fallback ?? null;
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? (fallback ?? null) : date;
+  };
+  return {
+    endedReason: payload.endedReason == null ? existing.endedReason : optionalString(payload.endedReason, 240),
+    endedMessage: payload.endedMessage == null ? existing.endedMessage : optionalString(payload.endedMessage, 1000),
+    successEvaluation: payload.successEvaluation == null ? existing.successEvaluation : optionalString(payload.successEvaluation, 2000),
+    structuredData: payload.structuredData == null ? existing.structuredData : payload.structuredData,
+    structuredOutputs: payload.structuredOutputs == null ? existing.structuredOutputs : payload.structuredOutputs,
+    artifactMessages: payload.artifactMessages == null ? existing.artifactMessages : payload.artifactMessages,
+    artifactMetrics: payload.artifactMetrics == null ? existing.artifactMetrics : payload.artifactMetrics,
+    toolCallSummary: payload.toolCallSummary == null ? existing.toolCallSummary : payload.toolCallSummary,
+    recordingConsentType: payload.recordingConsentType == null ? existing.recordingConsentType : optionalString(payload.recordingConsentType, 80),
+    recordingConsentGrantedAt: dateValue(payload.recordingConsentGrantedAt, existing.recordingConsentGrantedAt),
+    transcriptExpiresAt: dateValue(payload.transcriptExpiresAt, existing.transcriptExpiresAt),
+    recordingExpiresAt: dateValue(payload.recordingExpiresAt, existing.recordingExpiresAt),
+    providerLogUrl: payload.providerLogUrl == null ? existing.providerLogUrl : sanitizeRecordingUrl(payload.providerLogUrl),
+  };
+}
+
 async function logCall(payload) {
   const business = await ensureBusiness(payload.businessId);
   const caller = await upsertCaller({
@@ -140,6 +164,7 @@ async function logCall(payload) {
           vapiCostBreakdown: payload.vapiCostBreakdown == null ? existing.vapiCostBreakdown : payload.vapiCostBreakdown,
           totalInternalCost: payload.totalInternalCost == null ? existing.totalInternalCost : Number(payload.totalInternalCost),
           costSyncedAt: payload.costSyncedAt == null ? existing.costSyncedAt : new Date(payload.costSyncedAt),
+          ...callArtifactData(payload, existing),
           callerId: caller.id,
           businessId: business.id,
         },
@@ -176,6 +201,7 @@ async function logCall(payload) {
           vapiCostBreakdown: payload.vapiCostBreakdown == null ? existingExternal.vapiCostBreakdown : payload.vapiCostBreakdown,
           totalInternalCost: payload.totalInternalCost == null ? existingExternal.totalInternalCost : Number(payload.totalInternalCost),
           costSyncedAt: payload.costSyncedAt == null ? existingExternal.costSyncedAt : new Date(payload.costSyncedAt),
+          ...callArtifactData(payload, existingExternal),
         },
         include: { caller: true, business: true },
       });
@@ -205,6 +231,7 @@ async function logCall(payload) {
       vapiCostBreakdown: payload.vapiCostBreakdown || undefined,
       totalInternalCost: payload.totalInternalCost == null ? null : Number(payload.totalInternalCost),
       costSyncedAt: payload.costSyncedAt ? new Date(payload.costSyncedAt) : null,
+      ...callArtifactData(payload),
     },
     include: { caller: true, business: true },
   });
@@ -298,13 +325,7 @@ async function sendOwnerSms(payload) {
 }
 
 async function createBooking(payload) {
-  return {
-    ok: true,
-    stub: true,
-    bookingLink: payload.bookingLink || null,
-    requestedAt: new Date().toISOString(),
-    note: "Integrate with Calendly/Google Calendar later.",
-  };
+  return createAppointmentRequest(payload, { publicBaseUrl: payload.publicBaseUrl || "" });
 }
 
 async function escalateToHuman(payload) {

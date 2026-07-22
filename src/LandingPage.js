@@ -5605,10 +5605,10 @@ function LandingPage() {
               <p className="text-[0.84rem] font-black uppercase tracking-[0.18em] text-[#8bdcff]">Trust and transparency</p>
               <h2 className="mt-4 text-[clamp(2rem,3vw,3.05rem)] font-black leading-[1.06] tracking-[-0.045em]">Clear rules for calls, texts, and customer details.</h2>
               <div className="mt-6 flex flex-wrap gap-3">
-                <a href="#/privacy" className="rounded-[10px] border border-white/18 bg-white/10 px-4 py-3 text-sm font-black uppercase tracking-[0.12em] text-white transition hover:-translate-y-0.5">
+                <a href="/privacy.html" className="rounded-[10px] border border-white/18 bg-white/10 px-4 py-3 text-sm font-black uppercase tracking-[0.12em] text-white transition hover:-translate-y-0.5">
                   Privacy Policy
                 </a>
-                <a href="#/terms" className="rounded-[10px] border border-white/18 bg-white/10 px-4 py-3 text-sm font-black uppercase tracking-[0.12em] text-white transition hover:-translate-y-0.5">
+                <a href="/terms.html" className="rounded-[10px] border border-white/18 bg-white/10 px-4 py-3 text-sm font-black uppercase tracking-[0.12em] text-white transition hover:-translate-y-0.5">
                   Terms
                 </a>
               </div>
@@ -5673,16 +5673,22 @@ function LandingPage() {
           </div>
 
           <footer className="flex flex-col gap-4 px-1 pt-7 text-[1.05rem] font-semibold leading-7 text-[#334155] sm:flex-row sm:items-center sm:justify-between">
-            <p>Built in Ontario for busy trades across Hamilton, Grimsby, and the surrounding area. Made and loved in Canada.</p>
+            <div>
+              <p>Built in Ontario for busy trades across Hamilton, Grimsby, and the surrounding area. Made and loved in Canada.</p>
+              <p className="mt-1 max-w-2xl text-sm font-medium text-[#64748b]">Optional Google and Microsoft calendar access is used only to check availability and manage appointments authorized by the business owner or staff member.</p>
+            </div>
             <div className="flex flex-wrap items-center gap-4">
               <a href="mailto:hello@myaipa.com" className="transition hover:text-[#2563eb]">
                 hello@myaipa.com
               </a>
-              <a href="#/privacy" className="transition hover:text-[#2563eb]">
+              <a href="/privacy.html" className="transition hover:text-[#2563eb]">
                 Privacy
               </a>
-              <a href="#/terms" className="transition hover:text-[#2563eb]">
+              <a href="/terms.html" className="transition hover:text-[#2563eb]">
                 Terms
+              </a>
+              <a href="/calendar-data.html" className="transition hover:text-[#2563eb]">
+                Calendar data
               </a>
             </div>
           </footer>

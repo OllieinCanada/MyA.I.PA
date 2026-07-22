@@ -20,7 +20,52 @@ server-live.log
 phone-share/
 build-codex-preview/
 build-pages-output/
+data/x-job-finder-results.json
+data/x-job-finder-seen.json
+output/x-job-finder-report.md
 laptop-screen.png
 rustdesk-*.exe
 .DS_Store
 Thumbs.db
+
+# Local Codex/worktree state and downloaded toolchains
+.codex/
+.worktrees/
+agent-canvas/
+tools_bin/
+
+# Generated previews, reports, and runtime state
+output/
+.frontend.*.log
+.preview-build.*.log
+data/*.json
+
+# Private release/legal/incident planning (the GitHub repository is public)
+INCIDENT_LOG.md
+SHIP_READINESS_TODO.md
+RELEASE_CHANGE_INVENTORY.md
+TOMORROW_MORNING_TODO.md
+legal/
+docs/OWNER_SMS_RELIABILITY_DESIGN.md
+docs/VAPI_CALL_QUALITY_ROLLOUT_2026-07-19.md
+
+# Local job-finder side project
+X_JOB_FINDER_TASK_SHEET.md
+config/x-job-finder.json
+config/x-job-finder.example.json
+scripts/x-job-finder.js
+
+# Local asset-generation and preview helpers
+tools/
+scripts/make-gif.py
+scripts/start-frontend-3000.cmd
+
+# Unused duplicate source media and transcript working files
+public/Tim's Electrical*.wav
+public/call-secretary-avatar.png
+public/star-runner-icon.svg
+docs/Tim's Electrical*.wav
+docs/Tims_Electrical_2_Transcript.*
+docs/Tims_Electrical_2_Transcript_Polished.txt
+docs/call-secretary-avatar.png
+docs/star-runner-icon.svg

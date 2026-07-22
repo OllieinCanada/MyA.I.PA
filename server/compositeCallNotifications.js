@@ -69,16 +69,40 @@ function buildCustomerBody(args) {
   return `Thanks for calling ${businessName}. We received your service request regarding ${job}${location ? ` at ${location}` : ""}. Our team will call you back as soon as possible.`.slice(0, 1600);
 }
 
-function callerNumberFallbackPrompt(toolName) {
+function callerNumberFallbackPrompt(toolName, { ownerSmsEnabled = true } = {}) {
   const name = cleanText(toolName, 160);
   if (!name) throw new Error("A tool name is required for caller-number fallback instructions.");
-  return `This is the highest-priority final routing and closing instruction. It supersedes every earlier phone-number, SMS-tool, SMS-workflow, and call-closing instruction. The only allowed SMS notification tool is ${name}; any earlier SMS tool names are retired and unavailable.
-MANDATORY TOOL GATE: After all required intake details have been confirmed, your next action must be a silent call to ${name}. Do not speak a closing sentence, claim the details were sent, or call endCall before ${name} returns a result. This one silent tool sends both the owner summary and the caller confirmation.
+  const deliveryScope = ownerSmsEnabled
+    ? "This one silent tool sends both the owner summary and the caller confirmation."
+    : "This one silent tool sends the caller confirmation only. Owner SMS is temporarily disabled by policy.";
+  return `This is the highest-priority final routing, business-claims, callback, tool-message, and closing instruction. It supersedes every earlier phone-number, SMS-tool, SMS-workflow, business-claims, callback-promise, and call-closing instruction. The only allowed SMS notification tool is ${name}; any earlier SMS tool names are retired and unavailable.
+
+UNSUPPORTED BUSINESS CLAIMS:
+- Treat only facts explicitly stated in the verified Business context as confirmed.
+- Never infer or claim that the business is licensed, insured, bonded, certified, unionized, an equal-opportunity employer, offers a warranty, offers a discount, or follows a specific policy unless that exact fact is explicitly present in the verified Business context.
+- If a requested fact is not explicitly verified, say: "I don't have that confirmed in the information available to me. The team can confirm when they call you back."
+- If asked about an unverified discount, do not substitute the standard visit fee or hourly rate as the answer. State that the discount is unconfirmed, then offer to collect the caller's request for the team.
+
+CALLBACK CONSISTENCY:
+- A requested callback time is a preference, not a booked appointment or guarantee.
+- Never promise that someone will call immediately, at a specific time, or within a specific period unless an explicit scheduling tool confirms it.
+- Say "I'll note that preference for the team" rather than "we'll call you then" or "we'll have someone reach out then."
+- If the caller changes to a callback preference that conflicts with an earlier one, do not continue intake and do not merely acknowledge the new preference. Your required next response is one concise clarification that preserves both preferences.
+- When the earlier preference was after 3 and the caller then asks for "right away" or "as soon as possible," ask exactly: "Should I mark it as as soon as possible, with after 3 as your fallback?" Wait for the answer before continuing.
+- Pass the caller's final clarified preference in bestCallbackTime.
+
+MANDATORY TOOL GATE: After all required intake details have been confirmed, your next action must be a silent call to ${name}. Do not speak a closing sentence, claim the details were sent, or call endCall before ${name} returns a result. ${deliveryScope}
+EXECUTION CONFIRMATION:
+- Before calling ${name}, summarize the destination-neutral request details and ask exactly: "Should I send this request to the team now?"
+- Call ${name} only when the caller's immediately following message clearly confirms that action.
+- A confirmation from earlier in the call, including agreement to pricing or intake, is not permission to send.
+- If the caller says cancel, stop, never mind, do not send, or otherwise withdraws consent, do not call the tool. A later send requires a fresh summary and confirmation.
 The tool receives trusted caller ID automatically. Do not ask the caller to repeat their number and do not invent rawPhoneNumber when caller ID is available.
 If the caller says "use the number I am calling from," "call me back on this number," or words with the same meaning, acknowledge naturally: "Absolutely — I'll use the number you're calling from." Do not claim you can see or recite the digits, and do not ask for the digits during intake. Continue collecting the remaining details; the silent tool will verify caller-ID availability when it runs.
 Pass businessName, requestType, name, jobDetails, streetAddress, city, preferredStartDate, bestCallbackTime, and message when applicable.
 If and only if the tool result says needsCustomerNumber is true, explain that caller ID was unavailable, ask for the best mobile number, repeat the full number back for confirmation, and call ${name} exactly one more time with that confirmed number as rawPhoneNumber.
-If needsCustomerNumber is false, never call the tool again during that call. Only after the tool returns may you give the brief natural closing and call endCall. Never promise that a confirmation was sent unless complete is true.`;
+If needsCustomerNumber is false, never call the tool again during that call. The tool's configured request-start message may say "Got it." Do not add model-generated waiting language such as "one moment," "hold on," or "this will just take a sec" before, during, or after the tool call.
+Only after the tool returns may you say exactly: "Thanks, I have everything I need. The team will review your request and call you back. Goodbye." Then call endCall immediately. Never promise that a confirmation was sent unless complete is true.`;
 }
 
 function safeProviderError(error, fallbackCode = "tool_error") {
@@ -152,6 +176,7 @@ async function sendTwilioMessage({ to, from, body, notificationKey, env, fetchIm
 async function executeCompositeNotifications({ args, env, fetchImpl, btoaImpl, URLSearchParamsImpl }) {
   const input = args && typeof args === "object" ? args : {};
   const settings = env && typeof env === "object" ? env : {};
+  const ownerSmsEnabled = String(settings.OWNER_SMS_ENABLED ?? "true").trim().toLowerCase() !== "false";
   const fromNumber = normalizeE164(settings.DEFAULT_FROM_NUMBER);
   const ownerNumber = normalizeE164(settings.DEFAULT_OWNER_TO_NUMBER);
   const customerNumber = normalizeE164(settings.CALLER_NUMBER) || normalizeE164(input.rawPhoneNumber || input.callbackNumber);
@@ -163,12 +188,19 @@ async function executeCompositeNotifications({ args, env, fetchImpl, btoaImpl, U
       partialSuccess: false,
       needsCustomerNumber: true,
       executionOrder: [],
-      owner: {
+      owner: ownerSmsEnabled ? {
         attempted: false,
         sent: false,
         skipped: true,
         status: "waiting_for_customer_number",
         errorCode: "customer_number_required",
+        notificationKey: keys.owner,
+      } : {
+        attempted: false,
+        sent: false,
+        skipped: true,
+        status: "disabled_by_policy",
+        errorCode: "owner_sms_disabled",
         notificationKey: keys.owner,
       },
       customer: {
@@ -181,22 +213,33 @@ async function executeCompositeNotifications({ args, env, fetchImpl, btoaImpl, U
       },
       bodyBuiltByTool: false,
       requiresReconciliation: false,
+      ownerSmsEnabled,
     };
   }
   const trustedInput = { ...input, rawPhoneNumber: customerNumber };
   const order = [];
 
-  order.push("owner");
-  const owner = await sendTwilioMessage({
-    to: ownerNumber,
-    from: fromNumber,
-    body: buildOwnerBody(trustedInput),
+  let owner = {
+    attempted: false,
+    sent: false,
+    skipped: true,
+    status: "disabled_by_policy",
+    errorCode: "owner_sms_disabled",
     notificationKey: keys.owner,
-    env: settings,
-    fetchImpl,
-    btoaImpl,
-    URLSearchParamsImpl,
-  });
+  };
+  if (ownerSmsEnabled) {
+    order.push("owner");
+    owner = await sendTwilioMessage({
+      to: ownerNumber,
+      from: fromNumber,
+      body: buildOwnerBody(trustedInput),
+      notificationKey: keys.owner,
+      env: settings,
+      fetchImpl,
+      btoaImpl,
+      URLSearchParamsImpl,
+    });
+  }
 
   order.push("customer");
   const customer = await sendTwilioMessage({
@@ -211,15 +254,16 @@ async function executeCompositeNotifications({ args, env, fetchImpl, btoaImpl, U
   });
 
   return {
-    ok: Boolean(owner.sent && customer.sent),
-    complete: Boolean(owner.sent && customer.sent),
-    partialSuccess: Boolean(owner.sent) !== Boolean(customer.sent),
+    ok: Boolean((!ownerSmsEnabled || owner.sent) && customer.sent),
+    complete: Boolean((!ownerSmsEnabled || owner.sent) && customer.sent),
+    partialSuccess: ownerSmsEnabled ? Boolean(owner.sent) !== Boolean(customer.sent) : false,
     needsCustomerNumber: false,
     executionOrder: order,
     owner,
     customer,
     bodyBuiltByTool: true,
-    requiresReconciliation: !owner.sent || !customer.sent,
+    requiresReconciliation: !customer.sent || (ownerSmsEnabled && !owner.sent),
+    ownerSmsEnabled,
   };
 }
 
@@ -272,6 +316,7 @@ function getVapiCompositeToolDefinition() {
       "TWILIO_AUTH_TOKEN",
       "DEFAULT_FROM_NUMBER",
       "DEFAULT_OWNER_TO_NUMBER",
+      "OWNER_SMS_ENABLED",
       "CALLER_NUMBER",
       "CALL_ID",
       "TWILIO_STATUS_CALLBACK_URL",

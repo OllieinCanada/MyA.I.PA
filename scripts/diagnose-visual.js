@@ -20,9 +20,9 @@ const viewports = [
 ];
 
 const requiredText = {
-  home: ["Answers the phone", "Start Free Trial", "Hear Agent", "Owner Text", "Instantly sends"],
+  home: ["Answers the phone", "Start Free Trial", "Hear Agent", "Owner Phone (Cellphone)", "Instantly sends"],
   signup: ["Business setup", "Choose your trade"],
-  dashboard: ["Customer dashboard", "Signup email", "Open Dashboard"],
+  dashboard: ["Owner dashboard", "Signup email", "Welcome back"],
   admin: ["Admin Dashboard", "Admin Password", "Unlock Admin"],
 };
 

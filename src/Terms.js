@@ -31,6 +31,13 @@ const sections = [
     ],
   },
   {
+    title: "Connected Calendar Authorization",
+    body: [
+      "Only a calendar owner or properly authorized user may connect an account. By connecting Google or Microsoft, you authorize My AI PA to check availability and create, update, or cancel appointment events according to your selected booking mode.",
+      "You may disconnect at any time. You remain responsible for staff authorization, scheduling rules, reviewing important appointments, and resolving provider or synchronization errors shown in the service.",
+    ],
+  },
+  {
     title: "5. Acceptable Use",
     body: [
       "You may not use the service to break the law, deceive callers, impersonate others, send unlawful spam, harass people, collect information without proper authority, violate privacy rights, transmit malware, interfere with the service, reverse engineer systems, or attempt unauthorized access.",
@@ -112,7 +119,7 @@ function Terms() {
         <div className="mx-auto w-full max-w-5xl px-4 py-9 sm:px-8 lg:py-14">
           <a href="#/" className="text-base font-black uppercase tracking-[0.16em] text-[#ffb36b] transition hover:text-white">My AI PA</a>
           <h1 className="mt-6 text-[clamp(2rem,9vw,4.5rem)] font-black leading-tight tracking-[-0.05em]">Terms of Service</h1>
-          <p className="mt-4 max-w-3xl text-lg font-medium leading-8 text-[#d8e7f7] sm:text-xl">Effective date: May 11, 2026</p>
+          <p className="mt-4 max-w-3xl text-lg font-medium leading-8 text-[#d8e7f7] sm:text-xl">Effective date: July 22, 2026</p>
           <p className="mt-4 max-w-3xl text-base font-medium leading-7 text-[#c8d7ea] sm:text-lg sm:leading-8">
             These terms are designed for an AI phone answering service used by trades and local service businesses.
           </p>

@@ -45,7 +45,11 @@ SIGNUP_REVIEW_DUPLICATES=true
 
 `PUBLIC_APP_URL` is the public backend URL. Keep the Stripe return URLs pointed at the website so customers come back to `www.myaipa.ca` after Checkout instead of landing on the API host.
 
+`FRONTEND_APP_URL` is the public website URL used in owner appointment-request messages. Appointment requests remain pending until the owner approves them in the dashboard. Once approved, the API sends both parties a universal `.ics` calendar link that opens in Google Calendar, Outlook/Hotmail, or Apple Calendar.
+
 Trial reminder emails are enabled by default. Configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, and `EMAIL_FROM` in Render before relying on reminders, or set `TRIAL_REMINDER_DISABLE=true` until outbound email is ready.
+
+The support inbox stores reports without extra credentials. For high-priority Telegram alerts, set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`. For the admin inbox's one-click GitHub issue option, set a narrowly scoped `GITHUB_SUPPORT_TOKEN` with issue-write access and confirm `GITHUB_SUPPORT_REPO`. The Codex option prepares a scoped, copy-ready task and does not silently execute code or deploy changes.
 
 `SIGNUP_REVIEW_DUPLICATES=true` is recommended for launch so repeat submissions are held for admin review instead of starting duplicate Make/Vapi setup handoffs.
 
@@ -103,6 +107,35 @@ Then rebuild and deploy the frontend:
 npm run build:pages
 npm run deploy:pages
 ```
+
+## Optional Google, Outlook, and Hotmail Calendars
+
+Calendar OAuth is only for the business owner or a staff member. Customers never connect an account: they accept by text/email and receive Google, Outlook/Hotmail, Apple Calendar, and `.ics` choices.
+
+The owner dashboard supports three modes:
+
+- `MANUAL_APPROVAL`: the owner approves requests; a connected calendar is checked and updated when available.
+- `AUTO_BOOK_CONNECTED`: My AI PA confirms immediately only when a connected calendar and the internal schedule are clear. A conflict or unavailable connection leaves the request pending for owner approval.
+- `EMAIL_INVITES_ONLY`: no OAuth is used; confirmations are sent by text/email with universal calendar links.
+
+Configure these production values in Render:
+
+```text
+CALENDAR_TOKEN_ENCRYPTION_KEY=<random 32+ character secret>
+CALENDAR_OAUTH_STATE_SECRET=<different random secret>
+GOOGLE_CALENDAR_CLIENT_ID=
+GOOGLE_CALENDAR_CLIENT_SECRET=
+GOOGLE_CALENDAR_REDIRECT_URI=https://api.myaipa.ca/api/calendar/oauth/google/callback
+MICROSOFT_CALENDAR_CLIENT_ID=
+MICROSOFT_CALENDAR_CLIENT_SECRET=
+MICROSOFT_CALENDAR_REDIRECT_URI=https://api.myaipa.ca/api/calendar/oauth/microsoft/callback
+```
+
+In Google Cloud, enable Google Calendar API, create a web OAuth client, and register the exact Google redirect URI above. Start with named test users; public use of Calendar scopes may require Google's verification process.
+
+In Microsoft Entra, create a web app registration, allow organizational and personal Microsoft accounts, register the exact Microsoft redirect URI above, create a client secret, and grant delegated `User.Read`, `Calendars.ReadWrite`, and `offline_access` permissions.
+
+OAuth access and refresh tokens are encrypted before database storage. Never put provider secrets in the frontend or commit them to Git.
 
 ## Render Blueprint
 

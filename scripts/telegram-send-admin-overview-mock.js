@@ -3,7 +3,12 @@ const path = require("path");
 const { chromium } = require("playwright");
 const { nodeCommand, rootPath, run } = require("./_helpers");
 
-const screenshotName = "telegram-admin-overview-tab.png";
+function hasFlag(name) {
+  return process.argv.includes(`--${name}`);
+}
+
+const supportPreview = hasFlag("support");
+const screenshotName = supportPreview ? "telegram-admin-support-inbox.png" : "telegram-admin-overview-tab.png";
 const screenshotPath = rootPath("diagnostics", "browser-drive", screenshotName);
 const phoneSharePath = rootPath("phone-share", screenshotName);
 const url = process.env.TELEGRAM_ADMIN_MOCK_URL || "http://localhost:3000/#/admin";
@@ -153,6 +158,32 @@ const responses = {
   },
   "/api/admin/daily-digest": { digest: { followUps: calls.slice(0, 2) } },
   "/api/admin/settings": { settings: { businessId: 1, answerAfterRings: 3, afterHoursMode: "AI_ALWAYS_ON", ownerPhone: "905-555-1234", bookingLink: "" } },
+  "/api/admin/lead-handoffs": { summary: { total: 12, ownerNotified: 11, delivered: 8, acknowledged: 7, awaitingAcknowledgement: 3, retryDue: 1, escalationDue: 0, escalated: 1, failed: 0 }, handoffs: [] },
+  "/api/admin/support-reports": {
+    integrations: { githubConfigured: true, githubRepo: "OllieinCanada/MyA.I.PA", telegramConfigured: true, codexMode: "prepare" },
+    reports: [{
+      id: "support_sample_1",
+      ticketNumber: "MYAIPA-SAMPLE01",
+      businessId: 1,
+      callId: 101,
+      business: { id: 1, name: "Smith Heating & Cooling", phone: "+12495033301" },
+      call: { id: 101, startedAt: now.toISOString(), status: "COMPLETED", outcome: "FOLLOW_UP" },
+      description: "The owner text did not arrive after the most recent call.",
+      aiSummary: "A linked owner text delivery attempt shows a failure.",
+      likelyCause: "The message provider could not deliver the owner notification for this call.",
+      suggestions: ["Confirm the owner cellphone number is correct.", "Refresh once for a newer delivery update.", "Inspect the provider error if it remains failed."],
+      diagnostics: { page: "customer-dashboard", businessId: 1, aiNumberAssigned: true, call: { id: 101, status: "COMPLETED", notifications: [{ recipient: "owner", status: "failed", problem: "Message delivery failed" }] } },
+      includeSensitiveCallData: false,
+      contactAllowed: true,
+      status: "NEW",
+      severity: "HIGH",
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+      telegramAlertedAt: now.toISOString(),
+      githubIssueUrl: null,
+      codexTaskPrompt: null,
+    }],
+  },
 };
 
 function responseFor(requestUrl) {
@@ -179,17 +210,23 @@ async function main() {
     });
     await page.goto(url, { waitUntil: "domcontentloaded", timeout: 20000 });
     await page.waitForTimeout(1500);
-    await page.screenshot({ path: screenshotPath, fullPage: false });
+    if (supportPreview) {
+      await page.getByRole("button", { name: /Support Inbox/i }).first().click();
+      await page.locator(".admin-support-card").waitFor({ state: "visible", timeout: 10000 });
+    }
+    await page.screenshot({ path: screenshotPath, fullPage: supportPreview });
   } finally {
     await browser?.close();
   }
 
   fs.copyFileSync(screenshotPath, phoneSharePath);
-  run(nodeCommand(), [
-    path.join("scripts", "telegram-send-photo.js"),
-    `--photo=${screenshotPath}`,
-    "--caption=MyAIPA admin Overview mock screenshot",
-  ]);
+  if (!hasFlag("no-send")) {
+    run(nodeCommand(), [
+      path.join("scripts", "telegram-send-photo.js"),
+      `--photo=${screenshotPath}`,
+      `--caption=MyAIPA admin ${supportPreview ? "Support Inbox" : "Overview"} mock screenshot`,
+    ]);
+  }
 }
 
 main().catch((error) => {

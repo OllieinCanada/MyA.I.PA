@@ -248,10 +248,11 @@ async function checkToolSimulation(customerTool, ownerTool) {
   return checks;
 }
 
-function assistantChecks(assistant) {
+function assistantChecks(assistant, isolatedToolIds = new Set()) {
   const prompt = systemPrompt(assistant);
   const json = JSON.stringify(assistant);
   const toolIds = assistant.model?.toolIds || [];
+  const hasIsolatedSmsTool = toolIds.some((id) => isolatedToolIds.has(id));
 
   return [
     prompt.includes(AGENT_VERSION)
@@ -260,9 +261,9 @@ function assistantChecks(assistant) {
     prompt.includes(DETERMINISTIC_MARKER)
       ? ok("has deterministic final override marker")
       : fail("has deterministic final override marker", "Missing deterministic final override marker"),
-    /how are you today\?/i.test(assistant.firstMessage || "")
-      ? ok("first message asks how caller is")
-      : fail("first message asks how caller is", `First message: ${assistant.firstMessage || "(missing)"}`),
+    /(?:how (?:are you|can I help you) today|is that okay)\?/i.test(assistant.firstMessage || "")
+      ? ok("first message opens with a caller-centered question")
+      : fail("first message opens with a caller-centered question", `First message: ${assistant.firstMessage || "(missing)"}`),
     /pass structured fields only/i.test(prompt)
       ? ok("instructs structured SMS fields only")
       : fail("instructs structured SMS fields only", "Missing structured SMS field instruction"),
@@ -278,10 +279,10 @@ function assistantChecks(assistant) {
     /Thanks, I have everything I need\. We'll follow up with you as soon as possible\. Goodbye\./i.test(prompt)
       ? ok("has exact clean closing")
       : fail("has exact clean closing", "Missing exact closing line"),
-    toolIds.includes(CUSTOMER_TOOL_ID) || json.includes(CUSTOMER_TOOL_ID)
+    hasIsolatedSmsTool || toolIds.includes(CUSTOMER_TOOL_ID) || json.includes(CUSTOMER_TOOL_ID)
       ? ok("has customer SMS tool")
       : fail("has customer SMS tool", "Missing customer SMS tool ID"),
-    toolIds.includes(OWNER_TOOL_ID) || json.includes(OWNER_TOOL_ID)
+    hasIsolatedSmsTool || toolIds.includes(OWNER_TOOL_ID) || json.includes(OWNER_TOOL_ID)
       ? ok("has owner SMS tool")
       : fail("has owner SMS tool", "Missing owner SMS tool ID"),
     toolIds.includes(END_CALL_TOOL_ID) || json.includes(END_CALL_TOOL_ID)
@@ -311,14 +312,20 @@ async function main() {
   const vapiHeaders = { Authorization: `Bearer ${VAPI_API_KEY}` };
   const makeHeaders = { Authorization: `Token ${MAKE_API_TOKEN}` };
 
-  const [customerTool, ownerTool, assistantList, makeBlueprintResponse] = await Promise.all([
+  const [customerTool, ownerTool, toolList, assistantList, makeBlueprintResponse] = await Promise.all([
     getJson(`${VAPI_API_BASE_URL}/tool/${CUSTOMER_TOOL_ID}`, vapiHeaders, "Fetch customer SMS tool"),
     getJson(`${VAPI_API_BASE_URL}/tool/${OWNER_TOOL_ID}`, vapiHeaders, "Fetch owner SMS tool"),
+    getJson(`${VAPI_API_BASE_URL}/tool?limit=1000`, vapiHeaders, "Fetch Vapi tools"),
     getJson(`${VAPI_API_BASE_URL}/assistant?limit=1000`, vapiHeaders, "Fetch Vapi assistants"),
     getJson(`${MAKE_API_BASE_URL}/scenarios/${MAKE_SCENARIO_ID}/blueprint`, makeHeaders, "Fetch Make blueprint"),
   ]);
 
   const listedAssistants = Array.isArray(assistantList) ? assistantList : assistantList.data || [];
+  const listedTools = Array.isArray(toolList) ? toolList : toolList.data || toolList.tools || [];
+  const isolatedToolIds = new Set(listedTools
+    .filter((tool) => /^send_call_summaries_(?:pilot_)?\d{4}(?:_[a-f0-9]{8})?_v\d+$/i.test(String(tool?.function?.name || tool?.name || "")))
+    .map((tool) => String(tool?.id || ""))
+    .filter(Boolean));
   const targetAssistantSummaries = listedAssistants.filter((assistant) => {
     const json = JSON.stringify(assistant);
     return (
@@ -351,7 +358,7 @@ async function main() {
     id: assistant.id,
     name: assistant.name || "(unnamed)",
     firstMessage: assistant.firstMessage || "",
-    checks: assistantChecks(assistant),
+    checks: assistantChecks(assistant, isolatedToolIds),
   }));
   const assistantChecksFlat = assistantResults.flatMap((assistant) =>
     assistant.checks.map((check) => ({ ...check, assistantId: assistant.id, assistantName: assistant.name }))

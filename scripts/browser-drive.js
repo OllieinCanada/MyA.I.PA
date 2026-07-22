@@ -250,7 +250,8 @@ function mockAdminResponse(url) {
   if (pathname.endsWith("/vapi/mappings")) return { mappings: [], businesses: [] };
   if (pathname.endsWith("/daily-digest")) return { digest: null };
   if (pathname.endsWith("/faqs")) return { faqs: [] };
-  if (pathname.endsWith("/settings")) return { settings: { ownerPhone: "+19057885488" } };
+  if (pathname.endsWith("/settings")) return { settings: { ownerPhone: "+19057885488", backupPhone: "+19055550199" } };
+  if (pathname.endsWith("/lead-handoffs")) return { summary: { total: 8, ownerNotified: 7, delivered: 6, acknowledged: 5, awaitingAcknowledgement: 2, retryDue: 0, escalationDue: 0, escalated: 1, failed: 0 }, handoffs: [] };
   if (pathname.endsWith("/cost-audit") || pathname.endsWith("/cost-sync")) {
     return { audit: {
       days: 30,

@@ -1,5 +1,19 @@
 # Deploy Status
 
+## 2026-07-22 Support Workflow Release Handoff
+
+- Local release gate: passed, including 104/104 backend/provider tests, legal draft structure, tracked-secret scan, Render blueprint validation, backend preflight, Prisma validation, zero production dependency vulnerabilities, signup diagnostics, and the GitHub Pages production build.
+- Support workflow: customer reporting, AI suggestions, admin Support Inbox, customer-visible updates, high-priority Telegram alerts, one-click GitHub issue creation, and one-click Codex repair-task preparation are implemented locally.
+- Privacy: repair handoffs exclude call transcripts/caller details and redact phone numbers, email addresses, and long account-like numbers typed into report text.
+- Live API: `https://api.myaipa.ca/api/health` returned HTTP 200 on 2026-07-22.
+- Public website drift: `www.myaipa.ca` serves the older `main.3cae7c72.js` bundle; local deployable `docs/` now contains `main.93f5e5e1.js` and the builds do not match.
+- Visual QA: signup, dashboard login, and admin have no overflow/clipping warnings. The homepage call demonstration intentionally extends 34px below a 1365x768 fold and 147px below a 1536x650 fold so the full conversation and final caller response remain readable instead of being compressed or clipped; this is a known readability-versus-no-scroll tradeoff, not a horizontal layout failure.
+- Database deployment: `render.yaml` runs `npm run db:push` as its pre-deploy command, so the SupportReport schema additions will be applied when the updated backend is deployed.
+- Git state: current branch is `agent/require-sms-before-end-call`, two commits ahead of its remote tracking branch, with a large mixed working tree containing several earlier feature sets. Do not make a blanket commit without reviewing the intended release scope.
+- Remaining credentials: local GitHub support token is not configured, and live Render support-variable status could not be verified without Render dashboard/API access.
+- Security action required: rotate the current Telegram bot token before production because it appeared in local diagnostic output, then update both the local secret file and Render.
+- No commit, push, live database mutation, provider change, or deployment was performed during this readiness pass.
+
 Last updated: 2026-07-12
 
 ## Morning Executive Summary
@@ -11,6 +25,28 @@ Last updated: 2026-07-12
 - Checks blocked: `npm run diagnose:vapi-agents` could not run because `VAPI_API_KEY` and `MAKE_API_TOKEN` are not set in the local environment.
 - Review item: A broad local secret-pattern scan matched likely false positives in lockfile/old backup files (`package-lock.json`, `src/Hello.js`, backup copies); review before deployment, but no secrets were printed or edited. A stale old-API generated bundle also remains under `output/build-check/`; it is not the deployable `docs/` bundle.
 - Next 3 human actions: create the Render Blueprint from `render.yaml`; fill Render secrets, including SMTP or set `TRIAL_REMINDER_DISABLE=true`; add DNS for `api.myaipa.ca`, verify `/api/health`, then open live `/#/admin` -> `Trials` to confirm real Stripe trials. After credentials are available, sync/run the safe Vapi evals explicitly.
+
+## Shipping Readiness Review Note
+
+Next planning pass should deliberately inspect two things before more feature work:
+
+1. Output of the most recent work:
+   - Confirm `www.myaipa.ca` still serves `main.7186918e.js` and `main.9f678dae.css`.
+   - Confirm `/#/signup`, `/#/dashboard`, `/#/admin`, and admin `Trials` load correctly against the live backend after `api.myaipa.ca` is configured.
+   - Verify the read-only Stripe Trials view shows the real live trials, including the `c***@example.com` live-mode test-looking customer, without exposing secrets or payment method details.
+   - Recheck homepage trust/copy, PWA metadata, mobile layout, signup return URLs, privacy/security headers, customer dashboard lookup behavior, and stale `localhost`/old Render URL leaks.
+   - Compare `DEPLOY_STATUS.md`, `BACKEND_DEPLOY.md`, `render.yaml`, and `config/backend.env.example` against the actual Render service after it exists.
+
+2. Natural SaaS progression from the current milestone:
+   - Current milestone: frontend is live, backend code is deployment-ready, but the public API, Render secrets, DNS, and live admin verification are not done.
+   - Shipping milestone 1: make the backend reachable at `https://api.myaipa.ca/api/health`, with Render env vars set, CORS correct, and signup/admin routes working from the live site.
+   - Shipping milestone 2: complete a real end-to-end signup path: homepage CTA -> signup -> Stripe trial -> backend record -> owner/admin visibility -> customer dashboard lookup -> cancellation/error handling.
+   - Shipping milestone 3: prove the service delivery loop for one pilot trade business: Vapi answers, qualifies job type/urgency/address/contact, sends owner handoff, records call data, and creates an auditable admin/customer view.
+   - Shipping milestone 4: cover trust and operations basics: privacy/PIPEDA page accuracy, terms, support contact, refund/cancellation language, email deliverability, admin auth, backup/export plan, monitoring, and incident fallback.
+   - Shipping milestone 5: define launch metrics and manual operating rhythm: missed calls captured, qualified leads, booked jobs, trial conversion, failed signups, failed webhooks, Stripe trial endings, Vapi/Twilio cost per customer, and daily owner follow-up.
+   - Shipping milestone 6: run a limited pilot before broad traffic: 1-3 trades, known phone numbers, explicit consent, clear AI disclosure, real owner feedback, and a morning/evening admin review routine.
+
+Use this review to decide what is blocking shipping versus what can wait. Favor reliability, trust, billing correctness, owner handoff quality, and supportability over new features until the first live pilot is stable.
 
 ## Latest www.myaipa.ca Frontend Build
 

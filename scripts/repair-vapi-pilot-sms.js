@@ -1,6 +1,7 @@
 const crypto = require("crypto");
 const { loadProjectEnv } = require("./_helpers");
 const { callerNumberFallbackPrompt, getVapiCompositeToolDefinition, normalizeE164 } = require("../server/compositeCallNotifications");
+const { TOOL_REQUEST_START_MESSAGE, assistantTimingPatch, inspectAssistantTiming } = require("../server/vapiIsolatedSmsProvisioning");
 
 const env = loadProjectEnv();
 const apiKey = String(env.VAPI_API_KEY || env.VAPI_KEY || env.VAPI_TOKEN || "").trim();
@@ -77,7 +78,7 @@ function promptOverride(toolName) {
   return `${PILOT_PROMPT_MARKER}
 For this assistant only, do not call send_customer_sms_dynamic or send_owner_sms_dynamic.
 ${callerNumberFallbackPrompt(toolName)}
-Never announce tool names, routing, or technical results to the caller. After the tool finishes, give a brief natural closing and end the call.`;
+Never announce tool names, routing, or technical results to the caller. After the tool finishes, use the exact closing in the highest-priority instruction and end the call.`;
 }
 
 function withPromptOverride(messages, toolName) {
@@ -113,6 +114,9 @@ function createToolPayload({ toolName, twilioAccountSid, twilioAuthToken, aiPhon
     },
     code: definition.code,
     environmentVariables,
+    messages: [
+      { type: "request-start", content: TOOL_REQUEST_START_MESSAGE, blocking: false },
+    ],
     timeoutSeconds: 20,
   };
 }
@@ -185,6 +189,8 @@ async function main() {
       throw new Error("The existing pilot tool does not match the protected routing configuration. Refusing to modify the assistant.");
     }
     const existingToolId = String(existingPilotTool.id || "").trim();
+    const originalTool = existingPilotDetail;
+    const toolPayload = createToolPayload({ toolName, twilioAccountSid, twilioAuthToken, aiPhone, ownerPhone, statusCallback });
     const originalModel = assistant.model;
     const { tools: _expandedTools, ...modelWithoutExpandedTools } = originalModel || {};
     const nextModel = {
@@ -195,25 +201,41 @@ async function main() {
       messages: withPromptOverride(originalModel?.messages || [], toolName),
     };
     let assistantPatched = false;
+    let toolPatched = false;
     try {
+      await request(`/tool/${encodeURIComponent(existingToolId)}`, {
+        method: "PATCH",
+        body: toolPayload,
+        label: "Refresh isolated pilot tool",
+      });
+      toolPatched = true;
       await request(`/assistant/${encodeURIComponent(assistantId)}`, {
         method: "PATCH",
-        body: { model: nextModel },
+        body: { model: nextModel, ...assistantTimingPatch() },
         label: "Refresh isolated pilot prompt",
       });
       assistantPatched = true;
       const verified = await request(`/assistant/${encodeURIComponent(assistantId)}`, { label: "Verify refreshed pilot assistant" });
       const verifiedToolIds = Array.isArray(verified?.model?.toolIds) ? verified.model.toolIds : [];
       const verifiedPrompt = systemPrompt(verified);
-      const valid = verifiedToolIds.includes(existingToolId)
-        && !verifiedToolIds.includes(SHARED_CUSTOMER_TOOL_ID)
-        && !verifiedToolIds.includes(SHARED_OWNER_TOOL_ID)
-        && verifiedPrompt.includes(PILOT_PROMPT_MARKER)
-        && verifiedPrompt.includes(toolName)
-        && verifiedPrompt.includes("I'll use the number you're calling from")
-        && verifiedPrompt.includes("Do not claim you can see or recite the digits")
-        && verifiedPrompt.includes("MANDATORY TOOL GATE")
-        && verifiedPrompt.includes("Do not speak a closing sentence");
+      const verifiedTool = await request(`/tool/${encodeURIComponent(existingToolId)}`, { label: "Verify refreshed pilot tool" });
+      const requestStart = (Array.isArray(verifiedTool?.messages) ? verifiedTool.messages : []).find((message) => message?.type === "request-start");
+      const verificationChecks = {
+        pilotToolAttached: verifiedToolIds.includes(existingToolId),
+        sharedCustomerRemoved: !verifiedToolIds.includes(SHARED_CUSTOMER_TOOL_ID),
+        sharedOwnerRemoved: !verifiedToolIds.includes(SHARED_OWNER_TOOL_ID),
+        promptMarkerInstalled: verifiedPrompt.includes(PILOT_PROMPT_MARKER),
+        toolNameInstalled: verifiedPrompt.includes(toolName),
+        callerAcknowledgementInstalled: verifiedPrompt.includes("I'll use the number you're calling from"),
+        callerDigitsGuardInstalled: verifiedPrompt.includes("Do not claim you can see or recite the digits"),
+        mandatoryToolGateInstalled: verifiedPrompt.includes("MANDATORY TOOL GATE") && verifiedPrompt.includes("Do not speak a closing sentence"),
+        unsupportedClaimsGuardInstalled: verifiedPrompt.includes("UNSUPPORTED BUSINESS CLAIMS"),
+        callbackConsistencyGuardInstalled: verifiedPrompt.includes("CALLBACK CONSISTENCY"),
+        deterministicToolMessageInstalled: requestStart?.content === TOOL_REQUEST_START_MESSAGE && requestStart?.blocking === false,
+        ...inspectAssistantTiming(verified),
+      };
+      const valid = Object.values(verificationChecks).every(Boolean);
+      if (!valid) console.error(JSON.stringify({ verificationChecks }, null, 2));
       if (!valid) throw new Error("Live verification did not confirm the refreshed caller-ID acknowledgement prompt.");
       console.log(JSON.stringify({
         applied: true,
@@ -226,6 +248,10 @@ async function main() {
         sharedSmsToolsRemoved: true,
         callerAcknowledgementInstalled: true,
         mandatoryToolGateInstalled: true,
+        unsupportedClaimsGuardInstalled: true,
+        callbackConsistencyGuardInstalled: true,
+        deterministicToolMessageInstalled: true,
+        timingPlanInstalled: true,
       }, null, 2));
       return;
     } catch (error) {
@@ -234,6 +260,20 @@ async function main() {
           method: "PATCH",
           body: { model: originalModel },
           label: "Rollback refreshed pilot assistant",
+        }).catch(() => {});
+      }
+      if (toolPatched && originalTool) {
+        await request(`/tool/${encodeURIComponent(existingToolId)}`, {
+          method: "PATCH",
+          body: {
+            type: originalTool.type,
+            function: originalTool.function,
+            code: originalTool.code,
+            environmentVariables: originalTool.environmentVariables,
+            messages: originalTool.messages,
+            timeoutSeconds: originalTool.timeoutSeconds,
+          },
+          label: "Rollback refreshed pilot tool",
         }).catch(() => {});
       }
       throw error;
@@ -257,7 +297,7 @@ async function main() {
     };
     await request(`/assistant/${encodeURIComponent(assistantId)}`, {
       method: "PATCH",
-      body: { model: nextModel },
+      body: { model: nextModel, ...assistantTimingPatch() },
       label: "Attach isolated pilot tool",
     });
     assistantPatched = true;
