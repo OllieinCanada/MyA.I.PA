@@ -1533,14 +1533,14 @@ function VoicemailLossesArtboard({ onStart, onPlayDemo }) {
 
         <div className="mt-4 text-center">
           <p className="inline-flex rounded-full border border-[#d7e7fb] bg-[#eef6ff] px-6 py-2 text-[0.86rem] font-black uppercase tracking-[0.22em] text-[#1d65bd] shadow-[0_18px_44px_-36px_rgba(37,99,235,0.72)]">
-            AI phone answering assistant for trades businesses
+            AI phone answering assistant for the trades
           </p>
           <h2 className="mx-auto mt-4 max-w-[1420px] text-[clamp(3rem,5.25vw,5rem)] font-black leading-[0.95] tracking-[-0.058em] text-[#07142a]">
             Voicemail loses jobs. <span className="text-[#1d7df2]">My AI PA</span>
             <span className="block">catches them.</span>
           </h2>
           <p className="mx-auto mt-4 max-w-[960px] text-[clamp(1.18rem,1.65vw,1.55rem)] font-medium leading-8 text-[#405476]">
-            When you cannot get to the phone, the telephone assistant answers, collects the job details, and texts both sides for easy follow-up.
+            When you cannot get to the phone, the telephone assistant answers calls, talks with your customer, collects the job details, and texts both the business owner and caller for an easy follow-up.
           </p>
         </div>
 
@@ -1562,7 +1562,7 @@ function VoicemailLossesArtboard({ onStart, onPlayDemo }) {
                 <div className="space-y-1 text-[clamp(0.96rem,1.18vw,1.12rem)] font-black uppercase leading-[1.18] tracking-[-0.015em] text-[#07142a]">
                   <p className="text-[#cc0f1f]">Answering machine:</p>
                   <p>Cold / Impersonal</p>
-                  <p>Customer wants actions</p>
+                  <p>Customer wants action</p>
                   <p>Hangs up. Customer moves on</p>
                 </div>
               </div>
@@ -5106,7 +5106,7 @@ function LandingPage() {
                     <span className="whitespace-nowrap rounded-full bg-[#dff7e9] px-2.5 py-1 text-[0.62rem] font-black uppercase tracking-[0.08em] text-[#15803d]">Confirmed</span>
                   </div>
                   <p className="px-4 py-3 text-[0.88rem] font-medium leading-6 text-[#12302d]">
-                    Thanks for calling Tim&apos;s Electrical. Your hot tub setup request has been sent to the team. WE WILL GET BACK TO YOU SHORTLY.
+                    Thanks for calling Tim&apos;s Electrical. Your hot tub setup request has been sent to the team. We will get back to you shortly.
                   </p>
                 </div>
 
@@ -5155,7 +5155,7 @@ function LandingPage() {
       <section id="pricing" ref={pricingRef} className="scroll-mt-[96px] bg-[linear-gradient(180deg,#edf7ff_0%,#f8fcff_55%,#eef8ff_100%)]">
         <div className="mx-auto w-full max-w-[1320px] px-4 py-14 sm:px-6 lg:px-8 lg:py-20">
           <div className="mx-auto max-w-5xl text-center">
-            <p className="inline-flex rounded-full border border-[#c7ddff] bg-white/86 px-5 py-2 text-[0.84rem] font-black uppercase tracking-[0.18em] text-[#2563eb] shadow-[0_16px_44px_-36px_rgba(37,99,235,0.58)]">Cancel anytime</p>
+            <p className="inline-flex rounded-full border border-[#c7ddff] bg-white/86 px-5 py-2 text-[0.84rem] font-black uppercase tracking-[0.18em] text-[#2563eb] shadow-[0_16px_44px_-36px_rgba(37,99,235,0.58)]">SIMPLE MONTHLY PLAN - Cancel anytime</p>
             <h2 className="mx-auto mt-4 max-w-[980px] text-[clamp(2.1rem,4vw,3.35rem)] font-black leading-[1.04] tracking-[-0.052em] text-[#07142a]">
               Clear pricing for businesses that just want calls handled properly.
             </h2>
@@ -5235,12 +5235,11 @@ function LandingPage() {
                     </div>
                   </div>
 
-                  <p className="mt-6 text-center text-[clamp(1.5rem,2.6vw,2rem)] font-black uppercase leading-none tracking-[0.08em] text-[#2563eb]">LIMITED TIME OFFER!!!</p>
                   <div className="relative mx-auto mt-3 max-w-[620px] -rotate-[0.35deg] border border-[#c9b86d] bg-[linear-gradient(180deg,#fffce3,#fff8bf)] px-5 py-5 text-center shadow-[0_18px_42px_-30px_rgba(71,55,8,0.65)] sm:px-8">
                     <span className="absolute left-1/2 top-[-12px] h-6 w-28 -translate-x-1/2 rotate-[-1.5deg] bg-[#d9d2bc]/85 shadow-sm" aria-hidden="true" />
                     <div className="relative space-y-0.5 text-[clamp(1rem,1.65vw,1.3rem)] font-black leading-[1.25] tracking-[0.025em] text-[#172033]">
                       <p className="pb-1 text-[clamp(1.15rem,1.8vw,1.45rem)] leading-none tracking-[0.04em] text-[#dc2626]">OUR GUARANTEE</p>
-                      <p>FREE 14 DAY TRIAL</p>
+                      <p className="text-[clamp(1.25rem,2vw,1.65rem)] text-[#ef232e]">FREE 14 DAY TRIAL</p>
                       <p>IF YOUR AI ASSISTANT</p>
                       <p>DOESN'T GET YOU EXTRA JOBS</p>
                       <p className="text-[clamp(0.9rem,1.4vw,1.08rem)] tracking-[0.01em] sm:whitespace-nowrap">FROM MISSED CALLS - DURING THE FIRST 14 DAYS</p>
@@ -5390,7 +5389,7 @@ function LandingPage() {
                 <div className="mt-6 grid gap-3">
                   {[
                     ["Current business number", "Keep what customers already know", "phone"],
-                    ["My AI PA answers", "Questions handled and details collected", "headset"],
+                    ["My AI PA answers after 3 rings", "Questions handled and details collected", "headset"],
                     ["Text summary sent", "Owner and caller both get follow-up", "chat"],
                   ].map(([title, body, icon], index) => (
                     <div key={title} className="grid grid-cols-[44px_1fr] items-center gap-3 rounded-[10px] border border-white/12 bg-white/[0.07] px-3 py-3">
@@ -5492,16 +5491,23 @@ function LandingPage() {
                 These examples focus on the real workflow: fewer voicemail chases, cleaner lead details, and faster response without stopping the job.
               </p>
               <div className="mt-6 grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
-                {[
-                  ["4", "missed-call moments"],
-                  ["Hamilton + Grimsby", "local trade focus"],
-                  ["Demo", "before hype"],
-                ].map(([value, label]) => (
-                  <div key={label} className="rounded-[10px] border border-[#d8e7fb] bg-white px-4 py-3 shadow-[0_16px_38px_-34px_rgba(15,23,42,0.25)]">
-                    <p className="text-[1.35rem] font-black leading-none text-[#176bff]">{value}</p>
-                    <p className="mt-1 text-[0.78rem] font-black uppercase tracking-[0.12em] text-[#64748b]">{label}</p>
+                <div className="rounded-[10px] border border-[#d8e7fb] bg-white px-4 py-3 shadow-[0_16px_38px_-34px_rgba(15,23,42,0.25)]">
+                  <p className="text-[1.35rem] font-black leading-none text-[#176bff]">4</p>
+                  <p className="mt-1 text-[0.78rem] font-black uppercase tracking-[0.12em] text-[#64748b]">missed-call moments</p>
+                </div>
+                <div className="flex items-center gap-4 rounded-[10px] border border-[#fecaca] bg-white px-4 py-4 shadow-[0_16px_38px_-34px_rgba(15,23,42,0.25)]">
+                  <svg aria-hidden="true" viewBox="0 0 100 100" className="h-14 w-14 shrink-0 fill-[#ef232e]">
+                    <path d="M50 2 58 20 72 12 68 30 88 27 78 43 94 50 73 58 76 78 55 72 57 98 43 98 45 72 24 78 27 58 6 50 22 43 12 27 32 30 28 12 42 20Z" />
+                  </svg>
+                  <div>
+                    <p className="text-[1rem] font-black uppercase leading-tight tracking-[0.06em] text-[#ef232e]">PROUDLY DESIGNED IN CANADA</p>
+                    <p className="mt-1 text-[0.74rem] font-black uppercase leading-snug tracking-[0.08em] text-[#475569]">BY CANADIANS FOR BUSY CANADIAN TRADES PEOPLE</p>
                   </div>
-                ))}
+                </div>
+                <div className="rounded-[10px] border border-[#d8e7fb] bg-white px-4 py-3 shadow-[0_16px_38px_-34px_rgba(15,23,42,0.25)]">
+                  <p className="text-[1.35rem] font-black leading-none text-[#176bff]">Demo</p>
+                  <p className="mt-1 text-[0.78rem] font-black uppercase tracking-[0.12em] text-[#64748b]">before hype</p>
+                </div>
               </div>
             </div>
 
