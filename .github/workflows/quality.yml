@@ -1,0 +1,55 @@
+name: Quality and release gate
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CI: "true"
+      DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/ci
+      REACT_APP_API_BASE_URL: https://api.myaipa.ca
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Backend security and provider tests
+        run: npm run test:backend
+
+      - name: Validate private legal drafts when present
+        run: npm run legal:validate
+
+      - name: Scan tracked files for common secret formats
+        run: npm run security:scan-secrets
+
+      - name: Validate deploy configuration
+        run: |
+          npm run render:validate
+          npm run backend:check
+          npx prisma validate
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev
+
+      - name: Build GitHub Pages output
+        run: npm run build:pages
+
+      - name: Verify generated Pages files are reproducible
+        run: git diff --exit-code -- docs
