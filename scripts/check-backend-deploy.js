@@ -56,6 +56,10 @@ for (const file of [
   "server/twilioSms.js",
   "server/vapiSms.js",
   "server/leadHandoffs.js",
+  "server/revenueRescue.js",
+  "server/jobberIntegration.js",
+  "server/tradePlaybooks.js",
+  "config/playbooks/electrician-v1.json",
 ]) {
   readText(file);
 }
@@ -95,6 +99,11 @@ expectIncludes("config/backend.env.example", "GITHUB_SUPPORT_REPO=");
 expectIncludes("config/backend.env.example", "TELEGRAM_BOT_TOKEN=");
 expectIncludes("config/backend.env.example", "TELEGRAM_CHAT_ID=");
 expectIncludes("prisma/schema.prisma", "model LeadHandoff");
+expectIncludes("prisma/schema.prisma", "model LeadOutcomeEvent");
+expectIncludes("prisma/schema.prisma", "model FieldServiceConnection");
+expectIncludes("prisma/schema.prisma", "model VapiToolExecution");
+expectIncludes("config/backend.env.example", "VAPI_REQUIRE_BUSINESS_MAPPING=true");
+expectIncludes("config/backend.env.example", "JOBBER_CLIENT_ID=");
 
 if (fs.existsSync(rootPath("scripts/validate-render-blueprint.js"))) {
   runNodeScript("scripts/validate-render-blueprint.js");

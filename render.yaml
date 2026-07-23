@@ -181,6 +181,8 @@ services:
         value: 100
       - key: VAPI_DEFAULT_BUSINESS_ID
         value: 1
+      - key: VAPI_REQUIRE_BUSINESS_MAPPING
+        value: true
       - key: VAPI_BUSINESS_MAP
         sync: false
       - key: VAPI_AUTO_SYNC_ENABLED
@@ -196,7 +198,7 @@ services:
       - key: LEAD_ACK_SECRET
         generateValue: true
       - key: LEAD_ACK_TIMEOUT_MINUTES
-        value: 10
+        value: 2
       - key: LEAD_ACK_TOKEN_TTL_HOURS
         value: 72
       - key: LEAD_NOTIFICATION_MAX_RETRIES
@@ -205,6 +207,18 @@ services:
         value: 2
       - key: LEAD_HANDOFF_CHECK_INTERVAL_MS
         value: 60000
+      - key: FIELD_SERVICE_TOKEN_ENCRYPTION_KEY
+        generateValue: true
+      - key: FIELD_SERVICE_OAUTH_STATE_SECRET
+        generateValue: true
+      - key: JOBBER_CLIENT_ID
+        sync: false
+      - key: JOBBER_CLIENT_SECRET
+        sync: false
+      - key: JOBBER_REDIRECT_URI
+        value: https://api.myaipa.ca/api/integrations/jobber/oauth/callback
+      - key: JOBBER_GRAPHQL_VERSION
+        value: 2025-04-16
       - key: STORE_CALL_TRANSCRIPTS
         value: true
       - key: STORE_CALL_RECORDING_URLS

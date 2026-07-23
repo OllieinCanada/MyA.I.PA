@@ -78,6 +78,10 @@ function fmtDuration(seconds) {
   return `${minutes}m ${remainder}s`;
 }
 
+function fmtMoney(cents) {
+  return new Intl.NumberFormat(undefined, { style: "currency", currency: "CAD", maximumFractionDigits: 0 }).format(Number(cents || 0) / 100);
+}
+
 function readableKey(value) {
   return String(value || "")
     .replace(/([a-z])([A-Z])/g, "$1 $2")
@@ -181,6 +185,38 @@ async function removeStaffMember(staffMemberId) {
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data?.error || "Team member could not be removed.");
+  return data;
+}
+
+async function saveLeadOutcome(leadId, payload) {
+  const response = await fetch(`${API_BASE}/api/customer/dashboard/leads/${encodeURIComponent(leadId)}/outcome`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || !data?.lead) throw new Error(data?.error || "The lead outcome could not be saved.");
+  return data;
+}
+
+async function disconnectJobberIntegration() {
+  const response = await fetch(`${API_BASE}/api/customer/dashboard/integrations/jobber/disconnect`, {
+    method: "POST",
+    credentials: "include",
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data?.error || "Jobber could not be disconnected.");
+  return data;
+}
+
+async function retryJobberLeadSync(leadId) {
+  const response = await fetch(`${API_BASE}/api/customer/dashboard/integrations/jobber/leads/${encodeURIComponent(leadId)}/sync`, {
+    method: "POST",
+    credentials: "include",
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data?.error || "The Jobber sync could not be retried.");
   return data;
 }
 
@@ -815,6 +851,106 @@ function CallDetails({ call, onReport }) {
   );
 }
 
+function LeadOutcomeRow({ lead, jobberConnected, onUpdated }) {
+  const [status, setStatus] = useState(lead.status || "NEW");
+  const [estimatedValue, setEstimatedValue] = useState(lead.estimatedValueCents == null ? "" : String(lead.estimatedValueCents / 100));
+  const [actualRevenue, setActualRevenue] = useState(lead.actualRevenueCents == null ? "" : String(lead.actualRevenueCents / 100));
+  const [reason, setReason] = useState(lead.outcomeReason || "");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+
+  const save = async () => {
+    setBusy(true); setMessage("");
+    try {
+      const result = await saveLeadOutcome(lead.id, {
+        status,
+        estimatedValueCents: estimatedValue === "" ? null : Math.round(Number(estimatedValue) * 100),
+        actualRevenueCents: actualRevenue === "" ? null : Math.round(Number(actualRevenue) * 100),
+        reason,
+        syncToJobber: jobberConnected,
+      });
+      setMessage(result.jobber?.error ? `Outcome saved · Jobber needs attention: ${result.jobber.error}` : jobberConnected ? "Outcome saved · Jobber sync recorded" : "Outcome saved");
+      await onUpdated();
+    } catch (error) {
+      setMessage(error.message || "Outcome could not be saved.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <article className="customer-revenue-lead">
+      <div className="customer-revenue-lead-copy">
+        <strong>{lead.name || fmtPhone(lead.callbackNumber)}</strong>
+        <span>{statusLabel(lead.intent)} · {fmtTime(lead.createdAt)}</span>
+        <p>{lead.summary || "Lead summary pending."}</p>
+        {lead.handoff ? <small className={lead.handoff.acknowledgedAt ? "is-good" : "is-warn"}>{lead.handoff.acknowledgedAt ? `Acknowledged ${fmtTime(lead.handoff.acknowledgedAt)}` : lead.handoff.escalatedAt ? "Escalated to backup" : `Handoff ${statusLabel(lead.handoff.status)}`}</small> : null}
+      </div>
+      <div className="customer-revenue-outcome-form">
+        <label>Outcome<select value={status} onChange={(event) => setStatus(event.target.value)}><option value="NEW">New</option><option value="REVIEWED">Reviewed</option><option value="CONTACTED">Contacted</option><option value="WON">Won</option><option value="LOST">Lost</option><option value="ARCHIVED">Archived</option></select></label>
+        <label>Est. value ($)<input inputMode="decimal" min="0" type="number" value={estimatedValue} onChange={(event) => setEstimatedValue(event.target.value)} /></label>
+        <label>Won revenue ($)<input inputMode="decimal" min="0" type="number" required={status === "WON"} value={actualRevenue} onChange={(event) => setActualRevenue(event.target.value)} /></label>
+        <label className="customer-revenue-reason">Reason / note<input maxLength="500" value={reason} onChange={(event) => setReason(event.target.value)} placeholder={status === "LOST" ? "Why was it lost?" : "Optional note"} /></label>
+        <button type="button" onClick={save} disabled={busy || (status === "WON" && actualRevenue === "")}>{busy ? "Saving…" : "Save outcome"}</button>
+        {message ? <p className={/attention|could not/i.test(message) ? "has-error" : "has-success"} role="status">{message}</p> : null}
+      </div>
+    </article>
+  );
+}
+
+function RevenueRescuePanel({ revenueRescue = {}, jobber = {}, onUpdated }) {
+  const sla = revenueRescue.handoffSla || {};
+  const leads = revenueRescue.leads || [];
+  return (
+    <section id="revenue" className="customer-panel customer-revenue-panel">
+      <div className="customer-panel-head">
+        <div><p className="customer-eyebrow">Revenue Rescue Ledger</p><h2>Every lead, handoff, and outcome</h2></div>
+        <span>{revenueRescue.measuredLeads || 0} outcomes measured</span>
+      </div>
+      <div className="customer-revenue-kpis">
+        <div><span>Recovered revenue</span><strong>{fmtMoney(revenueRescue.recoveredRevenueCents)}</strong><em>owner-confirmed won work</em></div>
+        <div><span>Open pipeline</span><strong>{fmtMoney(revenueRescue.pipelineValueCents)}</strong><em>{revenueRescue.activeLeads || 0} active leads</em></div>
+        <div><span>Lead conversion</span><strong>{revenueRescue.conversionRate == null ? "—" : `${revenueRescue.conversionRate}%`}</strong><em>{revenueRescue.wonLeads || 0} won · {revenueRescue.lostLeads || 0} lost</em></div>
+        <div><span>2-minute SLA</span><strong>{sla.metSlaRate == null ? "—" : `${sla.metSlaRate}%`}</strong><em>{sla.overdue || 0} overdue now</em></div>
+      </div>
+      <p className="customer-revenue-intro">Update what happened after each call. Won revenue and lost reasons turn call activity into measurable return on investment.</p>
+      <div className="customer-revenue-leads">
+        {leads.length ? leads.map((lead) => <LeadOutcomeRow key={lead.id} lead={lead} jobberConnected={jobber.connected} onUpdated={onUpdated} />) : <p className="customer-empty">Qualified calls will appear here as soon as the assistant creates a lead.</p>}
+      </div>
+    </section>
+  );
+}
+
+function JobberIntegrationPanel({ jobber = {}, onUpdated }) {
+  const [busy, setBusy] = useState("");
+  const [message, setMessage] = useState("");
+  const disconnect = async () => {
+    setBusy("disconnect"); setMessage("");
+    try { await disconnectJobberIntegration(); setMessage("Jobber disconnected."); await onUpdated(); }
+    catch (error) { setMessage(error.message || "Jobber could not be disconnected."); }
+    finally { setBusy(""); }
+  };
+  const retry = async (leadId) => {
+    setBusy(`sync-${leadId}`); setMessage("");
+    try { await retryJobberLeadSync(leadId); setMessage("Jobber sync completed."); await onUpdated(); }
+    catch (error) { setMessage(error.message || "Jobber sync could not be retried."); }
+    finally { setBusy(""); }
+  };
+  return (
+    <section id="integrations" className="customer-panel customer-jobber-panel">
+      <div className="customer-panel-head"><div><p className="customer-eyebrow">Field-service integration</p><h2>Jobber</h2></div><span className={jobber.connected ? "is-connected" : ""}>{jobber.connected ? "Connected" : jobber.configured ? "Ready to connect" : "Setup required"}</span></div>
+      <div className="customer-jobber-summary">
+        <div><strong>{jobber.accountName || "Send MyAIPA leads into Jobber"}</strong><p>Owner-confirmed lead outcomes create an idempotent Jobber client sync, with failures visible here instead of disappearing silently.</p></div>
+        {jobber.connected ? <button type="button" onClick={disconnect} disabled={Boolean(busy)}>{busy === "disconnect" ? "Disconnecting…" : "Disconnect"}</button> : jobber.configured ? <a href={`${API_BASE}/api/customer/dashboard/integrations/jobber/connect`}>Connect Jobber</a> : <span className="customer-jobber-config-note">Add the Jobber app credentials on the backend to enable OAuth.</span>}
+      </div>
+      <div className="customer-jobber-syncs">
+        {(jobber.recentSyncs || []).length ? jobber.recentSyncs.map((sync) => <div key={sync.id}><span><strong>{sync.leadName || `Lead #${sync.leadId}`}</strong><small>{statusLabel(sync.status)} · {fmtTime(sync.syncedAt || sync.createdAt)}</small>{sync.lastError ? <em>{sync.lastError}</em> : null}</span>{sync.status === "FAILED" ? <button type="button" onClick={() => retry(sync.leadId)} disabled={Boolean(busy)}>{busy === `sync-${sync.leadId}` ? "Retrying…" : "Retry"}</button> : null}</div>) : <p className="customer-empty">No Jobber sync attempts yet.</p>}
+      </div>
+      {message ? <p className="customer-jobber-message" role="status">{message}</p> : null}
+    </section>
+  );
+}
+
 function CustomerDashboardView({ dashboard, onSignOut, onRefresh, refreshing, refreshError, refreshedAt }) {
   const signup = dashboard.signup || {};
   const stats = dashboard.stats || {};
@@ -833,6 +969,8 @@ function CustomerDashboardView({ dashboard, onSignOut, onRefresh, refreshing, re
   const actionRequiredAppointments = appointments.filter((appointment) => ["PENDING", "CHANGE_REQUESTED"].includes(appointment.status)).length;
   const confirmedAppointments = appointments.filter((appointment) => appointment.status === "CONFIRMED").length;
   const automaticCalendarBooking = dashboard.scheduling?.calendarBookingMode === "AUTO_BOOK_CONNECTED";
+  const revenueRescue = dashboard.revenueRescue || {};
+  const jobber = dashboard.integrations?.jobber || {};
 
   const trialText = useMemo(() => {
     if (!signup.trialEndAt) return "Trial date pending";
@@ -849,11 +987,13 @@ function CustomerDashboardView({ dashboard, onSignOut, onRefresh, refreshing, re
         <Brand />
         <nav>
           <a href="#overview">Overview</a>
+          <a href="#revenue">Revenue</a>
           <a href="#appointments">Appointments</a>
           <a href="#calls">Calls</a>
           <a href="#support">Support</a>
           <a href="#setup">Setup</a>
           <a href="#faqs">FAQs</a>
+          <a href="#integrations">Integrations</a>
         </nav>
         <button type="button" onClick={onSignOut}>Switch account</button>
       </aside>
@@ -889,6 +1029,8 @@ function CustomerDashboardView({ dashboard, onSignOut, onRefresh, refreshing, re
           <StatCard label="Appointments" value={confirmedAppointments} sub={`${actionRequiredAppointments} need your reply`} />
           <StatCard label="Trial" value={trialText} sub={signup.trialEndAt ? `Ends ${fmtDate(signup.trialEndAt)}` : statusLabel(signup.subscriptionStatus)} />
         </section>
+
+        <RevenueRescuePanel revenueRescue={revenueRescue} jobber={jobber} onUpdated={onRefresh} />
 
         <section id="appointments" className="customer-panel customer-appointments-panel">
           <div className="customer-panel-head">
@@ -997,6 +1139,8 @@ function CustomerDashboardView({ dashboard, onSignOut, onRefresh, refreshing, re
             )) : <p className="customer-empty">No reports yet. If something is not working, describe it once and the diagnostic details will be attached automatically.</p>}
           </div>
         </section>
+
+        <JobberIntegrationPanel jobber={jobber} onUpdated={onRefresh} />
 
         <section id="faqs" className="customer-panel">
           <div className="customer-panel-head">

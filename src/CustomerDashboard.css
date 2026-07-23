@@ -2068,6 +2068,212 @@
   font-size: 0.72rem;
 }
 
+.customer-revenue-panel,
+.customer-jobber-panel {
+  display: grid;
+  gap: 1rem;
+}
+
+.customer-revenue-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.customer-revenue-kpis > div {
+  display: grid;
+  gap: 0.3rem;
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid #d5e5f7;
+  border-radius: 0.9rem;
+  background: linear-gradient(145deg, #f9fcff, #edf6ff);
+}
+
+.customer-revenue-kpis span,
+.customer-revenue-kpis em {
+  color: #526b88;
+  font-size: 0.75rem;
+  font-style: normal;
+  font-weight: 750;
+}
+
+.customer-revenue-kpis strong {
+  color: #08285f;
+  font-size: clamp(1.35rem, 2vw, 1.85rem);
+  font-weight: 950;
+}
+
+.customer-revenue-intro {
+  margin: 0;
+  color: #405977;
+  line-height: 1.55;
+}
+
+.customer-revenue-leads {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.customer-revenue-lead {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.85fr) minmax(420px, 1.5fr);
+  gap: 1rem;
+  padding: 1rem;
+  border: 1px solid #d8e7f6;
+  border-radius: 0.9rem;
+  background: #fff;
+}
+
+.customer-revenue-lead-copy {
+  display: grid;
+  align-content: start;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.customer-revenue-lead-copy > span,
+.customer-revenue-lead-copy > small {
+  color: #607a98;
+  font-size: 0.75rem;
+  font-weight: 750;
+}
+
+.customer-revenue-lead-copy > small.is-good { color: #067647; }
+.customer-revenue-lead-copy > small.is-warn { color: #b54708; }
+
+.customer-revenue-lead-copy p {
+  margin: 0.35rem 0;
+  color: #405977;
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.customer-revenue-outcome-form {
+  display: grid;
+  grid-template-columns: minmax(115px, 0.8fr) repeat(2, minmax(110px, 0.7fr)) minmax(160px, 1.2fr) auto;
+  align-items: end;
+  gap: 0.6rem;
+}
+
+.customer-revenue-outcome-form label {
+  display: grid;
+  gap: 0.35rem;
+  color: #405977;
+  font-size: 0.72rem;
+  font-weight: 850;
+}
+
+.customer-revenue-outcome-form input,
+.customer-revenue-outcome-form select {
+  width: 100%;
+  min-width: 0;
+  min-height: 2.5rem;
+  box-sizing: border-box;
+  border: 1px solid #b9cde4;
+  border-radius: 0.55rem;
+  background: #fff;
+  padding: 0.55rem 0.65rem;
+  color: #07142a;
+  font: inherit;
+}
+
+.customer-revenue-outcome-form button,
+.customer-jobber-summary button,
+.customer-jobber-summary a,
+.customer-jobber-syncs button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.5rem;
+  border: 0;
+  border-radius: 0.58rem;
+  background: #126dff;
+  color: #fff;
+  padding: 0.6rem 0.85rem;
+  font-size: 0.8rem;
+  font-weight: 900;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.customer-revenue-outcome-form > p {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.customer-revenue-outcome-form > p.has-error { color: #b42318; }
+.customer-revenue-outcome-form > p.has-success { color: #067647; }
+
+.customer-jobber-panel .customer-panel-head span.is-connected {
+  background: #e7f8ef;
+  color: #067647;
+}
+
+.customer-jobber-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem;
+  border: 1px solid #d8e7f6;
+  border-radius: 0.9rem;
+  background: #f8fbff;
+}
+
+.customer-jobber-summary p {
+  max-width: 760px;
+  margin: 0.35rem 0 0;
+  color: #526b88;
+  line-height: 1.5;
+}
+
+.customer-jobber-config-note {
+  max-width: 300px;
+  color: #b54708;
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-align: right;
+}
+
+.customer-jobber-syncs {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.customer-jobber-syncs > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid #e0eaf5;
+  border-radius: 0.7rem;
+}
+
+.customer-jobber-syncs > div > span {
+  display: grid;
+  gap: 0.18rem;
+}
+
+.customer-jobber-syncs small,
+.customer-jobber-syncs em {
+  color: #607a98;
+  font-size: 0.72rem;
+  font-style: normal;
+}
+
+.customer-jobber-syncs em { color: #b42318; }
+
+.customer-jobber-message {
+  margin: 0;
+  color: #0b5fd3;
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
 .customer-support-success {
   display: grid;
   justify-items: center;
@@ -2119,6 +2325,20 @@
   .customer-faq-grid,
   .customer-appointment-list {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .customer-revenue-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .customer-revenue-lead,
+  .customer-revenue-outcome-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .customer-revenue-lead-copy,
+  .customer-revenue-outcome-form > button {
+    grid-column: 1 / -1;
   }
 }
 
@@ -2246,6 +2466,28 @@
   .customer-faq-grid,
   .customer-sidebar nav {
     grid-template-columns: 1fr;
+  }
+
+  .customer-revenue-kpis,
+  .customer-revenue-lead,
+  .customer-revenue-outcome-form {
+    grid-template-columns: 1fr;
+  }
+
+  .customer-revenue-lead-copy,
+  .customer-revenue-outcome-form > button {
+    grid-column: auto;
+  }
+
+  .customer-jobber-summary,
+  .customer-jobber-syncs > div {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .customer-jobber-config-note {
+    max-width: none;
+    text-align: left;
   }
 
   .customer-call-list > div {

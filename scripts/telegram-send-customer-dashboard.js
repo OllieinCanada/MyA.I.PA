@@ -106,6 +106,31 @@ const dashboard = {
     totalMinutes: 34.6,
     lastCallAt: sampleCall.startedAt,
   },
+  revenueRescue: {
+    qualifiedLeads: 6,
+    activeLeads: 3,
+    wonLeads: 2,
+    lostLeads: 1,
+    measuredLeads: 3,
+    conversionRate: 66.7,
+    recoveredRevenueCents: 485000,
+    pipelineValueCents: 720000,
+    handoffSla: { targetMinutes: 2, sent: 6, acknowledged: 5, metSla: 4, metSlaRate: 80, overdue: 1, medianAcknowledgementSeconds: 74 },
+    leads: [
+      { id: 501, callId: 101, name: "Brian Smith", callbackNumber: "+19055550123", summary: "Hot tub electrical installation", intent: "QUOTE", urgency: "MEDIUM", status: "CONTACTED", estimatedValueCents: 320000, actualRevenueCents: null, outcomeReason: "", createdAt: minutesAgo(18), handoff: { status: "ACKNOWLEDGED", ownerAcceptedAt: minutesAgo(15), acknowledgedAt: minutesAgo(14), acknowledgementDueAt: minutesAgo(13), acknowledgementSlaMinutes: 2 } },
+      { id: 502, callId: 102, name: "Jamie Lee", callbackNumber: "+19055550177", summary: "Panel inspection and quote", intent: "BOOKING", urgency: "MEDIUM", status: "WON", estimatedValueCents: 210000, actualRevenueCents: 185000, outcomeReason: "Panel upgrade approved", createdAt: minutesAgo(95), handoff: { status: "ACKNOWLEDGED", ownerAcceptedAt: minutesAgo(92), acknowledgedAt: minutesAgo(91), acknowledgementDueAt: minutesAgo(90), acknowledgementSlaMinutes: 2 } },
+      { id: 503, callId: null, name: "Morgan Chen", callbackNumber: "+19055550188", summary: "EV charger installation", intent: "QUOTE", urgency: "LOW", status: "NEW", estimatedValueCents: 400000, actualRevenueCents: null, outcomeReason: "", createdAt: minutesAgo(140), handoff: { status: "ESCALATED", ownerAcceptedAt: minutesAgo(138), acknowledgedAt: null, acknowledgementDueAt: minutesAgo(136), acknowledgementSlaMinutes: 2, escalatedAt: minutesAgo(134) } }
+    ],
+  },
+  integrations: {
+    jobber: {
+      provider: "jobber", configured: true, connected: true, status: "CONNECTED", accountName: "Smith Electrical", lastSyncedAt: minutesAgo(30), lastError: "",
+      recentSyncs: [
+        { id: "sync-1", leadId: 502, leadName: "Jamie Lee", entityType: "CLIENT", status: "SYNCED", externalId: "sample-jobber-client", attempts: 1, lastError: "", syncedAt: minutesAgo(90), createdAt: minutesAgo(91) }
+      ],
+    },
+  },
+  playbook: { tradeType: "ELECTRICAL", version: "electrician-v1" },
   setup: {
     readinessPercent: 100,
     checklist: [
@@ -267,7 +292,9 @@ async function main() {
   let browser;
   try {
     browser = await launchBrowser();
-    const page = await browser.newPage({ viewport: { width: 1440, height: 1050 }, deviceScaleFactor: 1 });
+    const width = Math.max(320, Number(getArg("width", "1440")) || 1440);
+    const height = Math.max(480, Number(getArg("height", "1050")) || 1050);
+    const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: 1 });
     await page.route("**/api/customer/dashboard", async (route) => {
       await route.fulfill({
         status: 200,

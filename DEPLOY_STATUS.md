@@ -1,5 +1,18 @@
 # Deploy Status
 
+## 2026-07-22 Revenue Rescue and Electrician Playbook Release
+
+- Added an auditable lead outcome ledger with estimated value, actual won revenue, lost reasons, immutable outcome events, and owner-dashboard editing.
+- Added Revenue Rescue reporting for recovered revenue, open pipeline, conversion, and the two-minute owner acknowledgement SLA.
+- Extended database idempotency to both Vapi notification and appointment tools, required trusted Vapi business mappings in production, and removed the broad integration-key fallback from the production voice webhook.
+- Added an encrypted Jobber OAuth connector with refresh-token rotation, idempotent client sync, observable failures, retries, and owner-dashboard connection controls. Jobber stays disabled until app credentials are entered in Render.
+- Added the versioned `electrician-v1` trade playbook and expanded the Vapi suite from 18 to 25 scenarios.
+- Applied electrician playbook v1.0.2 to eight electrical assistants with 8/8 readback verification. The explicitly named plumbing/heating assistant was excluded.
+- Vapi QA: the expanded safe suite passed 19/20 initially; the EV-installation prompt conflict was corrected and the failed case passed on targeted rerun, accounting for 20/20 safe evals passing.
+- Local verification: Prisma generate/format/validate passed, Render and backend deployment preflights passed, 111/111 backend tests passed, the production React and GitHub Pages builds passed, and desktop/mobile owner-dashboard screenshots showed no clipping or horizontal overflow.
+- Live API before deployment: `https://api.myaipa.ca/api/health` returned HTTP 200.
+- Deployment note: the feature branch diverges from `origin/main`; integrate through a clean commit/cherry-pick or merge and do not force-push main.
+
 ## 2026-07-22 Support Workflow Release Handoff
 
 - Local release gate: passed, including 104/104 backend/provider tests, legal draft structure, tracked-secret scan, Render blueprint validation, backend preflight, Prisma validation, zero production dependency vulnerabilities, signup diagnostics, and the GitHub Pages production build.
