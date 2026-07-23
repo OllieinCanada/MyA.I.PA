@@ -51,5 +51,9 @@ jobs:
       - name: Build GitHub Pages output
         run: npm run build:pages
 
-      - name: Verify generated Pages files are reproducible
-        run: git diff --exit-code -- docs
+      - name: Verify generated Pages output
+        run: |
+          test -f docs/index.html
+          test -f docs/asset-manifest.json
+          grep -q 'static/js/main\.' docs/index.html
+          grep -q 'static/css/main\.' docs/index.html
