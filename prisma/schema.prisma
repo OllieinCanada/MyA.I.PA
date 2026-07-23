@@ -134,21 +134,24 @@ enum SupportReportSeverity {
 }
 
 model Business {
-  id                  Int                   @id @default(autoincrement())
-  name                String
-  phone               String
-  timezone            String
-  createdAt           DateTime              @default(now())
-  settings            Settings?
-  faqs                FAQ[]
-  calls               Call[]
-  leads               Lead[]
-  leadHandoffs        LeadHandoff[]
-  appointmentRequests AppointmentRequest[]
-  staffMembers        StaffMember[]
-  calendarConnections CalendarConnection[]
-  vapiMappings        VapiBusinessMapping[]
-  supportReports      SupportReport[]
+  id                      Int                      @id @default(autoincrement())
+  name                    String
+  phone                   String
+  timezone                String
+  createdAt               DateTime                 @default(now())
+  settings                Settings?
+  faqs                    FAQ[]
+  calls                   Call[]
+  leads                   Lead[]
+  leadHandoffs            LeadHandoff[]
+  appointmentRequests     AppointmentRequest[]
+  staffMembers            StaffMember[]
+  calendarConnections     CalendarConnection[]
+  vapiMappings            VapiBusinessMapping[]
+  supportReports          SupportReport[]
+  leadOutcomeEvents       LeadOutcomeEvent[]
+  fieldServiceConnections FieldServiceConnection[]
+  fieldServiceSyncs       FieldServiceSync[]
 }
 
 model Settings {
@@ -163,6 +166,10 @@ model Settings {
   appointmentBufferMinutes Int                 @default(15)
   reminderHours            Json?
   calendarBookingMode      CalendarBookingMode @default(MANUAL_APPROVAL)
+  leadAckSlaMinutes        Int                 @default(2)
+  averageJobValueCents     Int                 @default(0)
+  tradeType                String              @default("ELECTRICAL")
+  playbookVersion          String              @default("electrician-v1")
   createdAt                DateTime            @default(now())
   business                 Business            @relation(fields: [businessId], references: [id], onDelete: Cascade)
 }
@@ -371,23 +378,30 @@ model CalendarEventLink {
 }
 
 model Lead {
-  id             Int          @id @default(autoincrement())
-  businessId     Int
-  callerId       Int
-  callId         Int?         @unique
-  intent         LeadIntent
-  urgency        LeadUrgency
-  summary        String
-  callbackNumber String
-  name           String
-  qualityScore   Int?
-  outcomeTag     String?
-  createdAt      DateTime     @default(now())
-  status         LeadStatus   @default(NEW)
-  business       Business     @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  caller         Caller       @relation(fields: [callerId], references: [id], onDelete: Cascade)
-  call           Call?        @relation(fields: [callId], references: [id], onDelete: SetNull)
-  handoff        LeadHandoff?
+  id                  Int                @id @default(autoincrement())
+  businessId          Int
+  callerId            Int
+  callId              Int?               @unique
+  intent              LeadIntent
+  urgency             LeadUrgency
+  summary             String
+  callbackNumber      String
+  name                String
+  qualityScore        Int?
+  outcomeTag          String?
+  estimatedValueCents Int?
+  actualRevenueCents  Int?
+  outcomeReason       String?
+  outcomeRecordedAt   DateTime?
+  outcomeSource       String?
+  createdAt           DateTime           @default(now())
+  status              LeadStatus         @default(NEW)
+  business            Business           @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  caller              Caller             @relation(fields: [callerId], references: [id], onDelete: Cascade)
+  call                Call?              @relation(fields: [callId], references: [id], onDelete: SetNull)
+  handoff             LeadHandoff?
+  outcomeEvents       LeadOutcomeEvent[]
+  fieldServiceSyncs   FieldServiceSync[]
 
   @@index([businessId, createdAt])
   @@index([intent])
@@ -395,41 +409,109 @@ model Lead {
   @@index([status])
 }
 
+model LeadOutcomeEvent {
+  id                  String     @id @default(cuid())
+  leadId              Int
+  businessId          Int
+  fromStatus          LeadStatus
+  toStatus            LeadStatus
+  estimatedValueCents Int?
+  actualRevenueCents  Int?
+  reason              String?
+  source              String
+  recordedAt          DateTime   @default(now())
+  lead                Lead       @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  business            Business   @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId, recordedAt])
+  @@index([leadId, recordedAt])
+}
+
 model LeadHandoff {
-  id                       String                    @id @default(cuid())
-  sourceEventId            String?                   @unique
-  leadId                   Int                       @unique
-  businessId               Int
-  callId                   Int?
-  provider                 String                    @default("VAPI")
-  status                   LeadHandoffStatus         @default(PENDING)
-  ownerPhone               String
-  backupPhone              String?
-  acknowledgementRequired  Boolean                   @default(true)
-  acknowledgementKey       String                    @unique
-  acknowledgementExpiresAt DateTime
-  acknowledgedAt           DateTime?
-  acknowledgedIpHash       String?
-  ownerAcceptedAt          DateTime?
-  deliveredAt              DateTime?
-  failedAt                 DateTime?
-  escalatedAt              DateTime?
-  retryCount               Int                       @default(0)
-  maxRetries               Int                       @default(2)
-  nextActionAt             DateTime?
-  lastErrorCode            String?
-  lastErrorMessage         String?
-  createdAt                DateTime                  @default(now())
-  updatedAt                DateTime                  @updatedAt
-  lead                     Lead                      @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  business                 Business                  @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  call                     Call?                     @relation(fields: [callId], references: [id], onDelete: SetNull)
-  attempts                 LeadNotificationAttempt[]
-  events                   LeadNotificationEvent[]
+  id                        String                    @id @default(cuid())
+  sourceEventId             String?                   @unique
+  leadId                    Int                       @unique
+  businessId                Int
+  callId                    Int?
+  provider                  String                    @default("VAPI")
+  status                    LeadHandoffStatus         @default(PENDING)
+  ownerPhone                String
+  backupPhone               String?
+  acknowledgementRequired   Boolean                   @default(true)
+  acknowledgementKey        String                    @unique
+  acknowledgementExpiresAt  DateTime
+  acknowledgementDueAt      DateTime?
+  acknowledgementSlaMinutes Int                       @default(2)
+  acknowledgedAt            DateTime?
+  acknowledgedIpHash        String?
+  ownerAcceptedAt           DateTime?
+  deliveredAt               DateTime?
+  failedAt                  DateTime?
+  escalatedAt               DateTime?
+  retryCount                Int                       @default(0)
+  maxRetries                Int                       @default(2)
+  nextActionAt              DateTime?
+  lastErrorCode             String?
+  lastErrorMessage          String?
+  createdAt                 DateTime                  @default(now())
+  updatedAt                 DateTime                  @updatedAt
+  lead                      Lead                      @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  business                  Business                  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  call                      Call?                     @relation(fields: [callId], references: [id], onDelete: SetNull)
+  attempts                  LeadNotificationAttempt[]
+  events                    LeadNotificationEvent[]
 
   @@index([businessId, createdAt])
   @@index([status, nextActionAt])
   @@index([callId])
+}
+
+model FieldServiceConnection {
+  id                    String             @id @default(cuid())
+  businessId            Int
+  provider              String
+  status                String             @default("CONNECTED")
+  externalAccountId     String?
+  externalAccountName   String?
+  accessTokenEncrypted  String
+  refreshTokenEncrypted String?
+  tokenExpiresAt        DateTime?
+  scope                 String?
+  lastError             String?
+  lastSyncedAt          DateTime?
+  connectedAt           DateTime           @default(now())
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+  business              Business           @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  syncs                 FieldServiceSync[]
+
+  @@unique([businessId, provider])
+  @@index([provider, status])
+}
+
+model FieldServiceSync {
+  id             String                  @id @default(cuid())
+  businessId     Int
+  connectionId   String?
+  leadId         Int?
+  provider       String
+  entityType     String
+  idempotencyKey String                  @unique
+  status         String                  @default("PENDING")
+  externalId     String?
+  attempts       Int                     @default(0)
+  payloadDigest  String?
+  lastError      String?
+  syncedAt       DateTime?
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+  business       Business                @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  connection     FieldServiceConnection? @relation(fields: [connectionId], references: [id], onDelete: SetNull)
+  lead           Lead?                   @relation(fields: [leadId], references: [id], onDelete: SetNull)
+
+  @@index([businessId, createdAt])
+  @@index([connectionId, status])
+  @@index([leadId])
 }
 
 model LeadNotificationAttempt {

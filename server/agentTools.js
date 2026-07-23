@@ -277,6 +277,7 @@ async function createLead(payload) {
       name,
       qualityScore: payload.qualityScore == null ? null : Math.max(0, Math.min(100, Number(payload.qualityScore) || 0)),
       outcomeTag: optionalString(payload.outcomeTag, 80),
+      estimatedValueCents: payload.estimatedValueCents == null ? null : Math.max(0, Math.min(1_000_000_000, Number(payload.estimatedValueCents) || 0)),
       status,
     },
     include: {

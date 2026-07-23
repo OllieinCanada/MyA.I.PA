@@ -1,8 +1,9 @@
 const crypto = require("crypto");
 const { prisma } = require("./prisma");
 const { sendSmsViaVapi } = require("./vapiSms");
+const { handoffSlaResult } = require("./revenueRescue");
 
-const ACK_TIMEOUT_MINUTES = positiveInt(process.env.LEAD_ACK_TIMEOUT_MINUTES, 10);
+const ACK_TIMEOUT_MINUTES = positiveInt(process.env.LEAD_ACK_TIMEOUT_MINUTES, 2);
 const RETRY_DELAY_MINUTES = positiveInt(process.env.LEAD_NOTIFICATION_RETRY_MINUTES, 2);
 const MAX_RETRIES = Math.min(5, positiveInt(process.env.LEAD_NOTIFICATION_MAX_RETRIES, 2));
 const ACK_TOKEN_TTL_HOURS = positiveInt(process.env.LEAD_ACK_TOKEN_TTL_HOURS, 72);
@@ -172,7 +173,14 @@ async function dispatchLeadHandoff(handoffId, recipientRole = "OWNER", options =
       where: { id: handoff.id },
       data: role === "BACKUP"
         ? { status: "ESCALATED", escalatedAt: acceptedAt, nextActionAt: null, lastErrorCode: null, lastErrorMessage: null }
-        : { status: "SENT", ownerAcceptedAt: acceptedAt, nextActionAt: new Date(acceptedAt.getTime() + ACK_TIMEOUT_MINUTES * 60 * 1000), lastErrorCode: null, lastErrorMessage: null },
+        : {
+            status: "SENT",
+            ownerAcceptedAt: acceptedAt,
+            acknowledgementDueAt: new Date(acceptedAt.getTime() + Math.max(1, handoff.acknowledgementSlaMinutes || ACK_TIMEOUT_MINUTES) * 60 * 1000),
+            nextActionAt: new Date(acceptedAt.getTime() + Math.max(1, handoff.acknowledgementSlaMinutes || ACK_TIMEOUT_MINUTES) * 60 * 1000),
+            lastErrorCode: null,
+            lastErrorMessage: null,
+          },
     });
     await recordEvent({
       handoffId: handoff.id,
@@ -222,6 +230,7 @@ async function createAndDispatchLeadHandoff({ lead, businessId, callId = null, s
   if (existing) return { handoffId: existing.id, status: existing.status, duplicate: true };
 
   const settings = await prisma.settings.findUnique({ where: { businessId: Number(businessId || lead.businessId) } });
+  const acknowledgementSlaMinutes = Math.max(1, Number(settings?.leadAckSlaMinutes || ACK_TIMEOUT_MINUTES));
   const acknowledgementKey = crypto.randomBytes(24).toString("base64url");
   const now = new Date();
   const handoff = await prisma.leadHandoff.create({
@@ -234,6 +243,7 @@ async function createAndDispatchLeadHandoff({ lead, businessId, callId = null, s
       backupPhone: cleanLine(settings?.backupPhone) || null,
       acknowledgementKey,
       acknowledgementExpiresAt: new Date(now.getTime() + ACK_TOKEN_TTL_HOURS * 60 * 60 * 1000),
+      acknowledgementSlaMinutes,
       maxRetries: MAX_RETRIES,
       nextActionAt: now,
     },
@@ -471,23 +481,30 @@ async function applyProviderEvent(payload = {}) {
   return { duplicate: false, event };
 }
 
-async function getLeadHandoffDashboard() {
+async function getLeadHandoffDashboard({ businessId = null, limit = 50 } = {}) {
+  const businessWhere = Number.isInteger(Number(businessId)) && Number(businessId) > 0
+    ? { businessId: Number(businessId) }
+    : {};
   const [total, ownerNotified, awaitingAcknowledgement, delivered, acknowledged, retryDue, escalationDue, escalated, failed, recent] = await Promise.all([
-    prisma.leadHandoff.count(),
-    prisma.leadHandoff.count({ where: { ownerAcceptedAt: { not: null } } }),
-    prisma.leadHandoff.count({ where: { acknowledgementRequired: true, acknowledgedAt: null, status: { in: ["SENT", "DELIVERED"] } } }),
-    prisma.leadHandoff.count({ where: { deliveredAt: { not: null } } }),
-    prisma.leadHandoff.count({ where: { status: "ACKNOWLEDGED" } }),
-    prisma.leadHandoff.count({ where: { status: "RETRY_DUE" } }),
-    prisma.leadHandoff.count({ where: { status: "ESCALATION_DUE" } }),
-    prisma.leadHandoff.count({ where: { status: "ESCALATED" } }),
-    prisma.leadHandoff.count({ where: { status: "FAILED" } }),
+    prisma.leadHandoff.count({ where: businessWhere }),
+    prisma.leadHandoff.count({ where: { ...businessWhere, ownerAcceptedAt: { not: null } } }),
+    prisma.leadHandoff.count({ where: { ...businessWhere, acknowledgementRequired: true, acknowledgedAt: null, status: { in: ["SENT", "DELIVERED"] } } }),
+    prisma.leadHandoff.count({ where: { ...businessWhere, deliveredAt: { not: null } } }),
+    prisma.leadHandoff.count({ where: { ...businessWhere, status: "ACKNOWLEDGED" } }),
+    prisma.leadHandoff.count({ where: { ...businessWhere, status: "RETRY_DUE" } }),
+    prisma.leadHandoff.count({ where: { ...businessWhere, status: "ESCALATION_DUE" } }),
+    prisma.leadHandoff.count({ where: { ...businessWhere, status: "ESCALATED" } }),
+    prisma.leadHandoff.count({ where: { ...businessWhere, status: "FAILED" } }),
     prisma.leadHandoff.findMany({
+      where: businessWhere,
       include: { lead: { select: { id: true, name: true, intent: true, summary: true, callbackNumber: true } }, attempts: { orderBy: { createdAt: "desc" }, take: 3 }, events: { orderBy: { occurredAt: "desc" }, take: 5 } },
       orderBy: { createdAt: "desc" },
-      take: 50,
+      take: Math.max(1, Math.min(200, Number(limit) || 50)),
     }),
   ]);
+  const slaRows = recent.filter((handoff) => handoff.ownerAcceptedAt).map((handoff) => handoffSlaResult(handoff));
+  const respondedRows = slaRows.filter((row) => row.acknowledgementSeconds != null);
+  const metSla = respondedRows.filter((row) => row.metSla).length;
   return {
     summary: {
       total,
@@ -499,6 +516,16 @@ async function getLeadHandoffDashboard() {
       escalationDue,
       escalated,
       failed,
+      acknowledgementSla: {
+        measured: respondedRows.length,
+        met: metSla,
+        rate: respondedRows.length ? Number(((metSla / respondedRows.length) * 100).toFixed(1)) : null,
+        overdue: recent.filter((handoff) => {
+          if (handoff.acknowledgedAt || !handoff.ownerAcceptedAt) return false;
+          const row = handoffSlaResult(handoff);
+          return row.dueAt && row.dueAt.getTime() < Date.now();
+        }).length,
+      },
     },
     handoffs: recent.map((handoff) => ({
       id: handoff.id,
@@ -508,6 +535,10 @@ async function getLeadHandoffDashboard() {
       ownerAcceptedAt: handoff.ownerAcceptedAt,
       deliveredAt: handoff.deliveredAt,
       acknowledgedAt: handoff.acknowledgedAt,
+      acknowledgementDueAt: handoff.acknowledgementDueAt,
+      acknowledgementSlaMinutes: handoff.acknowledgementSlaMinutes,
+      acknowledgementSeconds: handoffSlaResult(handoff).acknowledgementSeconds,
+      metAcknowledgementSla: handoffSlaResult(handoff).metSla,
       acknowledgementRequired: handoff.acknowledgementRequired,
       escalatedAt: handoff.escalatedAt,
       retryCount: handoff.retryCount,

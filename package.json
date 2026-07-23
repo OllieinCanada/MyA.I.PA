@@ -59,6 +59,7 @@
     "simulate:vapi-composite-sms": "node scripts/simulate-vapi-composite-sms.js",
     "repair:vapi-pilot-sms": "node scripts/repair-vapi-pilot-sms.js",
     "deploy:vapi-call-quality": "node scripts/deploy-vapi-call-quality.js",
+    "deploy:vapi-electrician-playbook": "node scripts/deploy-vapi-electrician-playbook.js",
     "test:vapi-0318-call": "node scripts/run-vapi-0318-controlled-call.js",
     "repair:make-vapi-routing": "node scripts/update-make-vapi-sms-routing.js --apply",
     "evals:vapi:dry-run": "node scripts/setup-vapi-evals.js --dry-run",
@@ -98,7 +99,7 @@
     "codex:wakeup": "powershell -ExecutionPolicy Bypass -File scripts/codex-wakeup.ps1",
     "codex:wakeup:install": "powershell -ExecutionPolicy Bypass -File scripts/codex-schedule-wakeup.ps1 -StartTime 02:11 -EveryHours 5 -LaunchCodex -RunNow",
     "test": "react-scripts test --env=jsdom",
-    "test:backend": "node --test tests/backend-security.test.js tests/twilio-sms.test.js tests/vapi-sms.test.js tests/vapi-call-diagnostics.test.js tests/vapi-isolated-sms-provisioning.test.js tests/vapi-tool-security.test.js tests/composite-call-notifications.test.js tests/lead-handoffs.test.js tests/safe-website-fetch.test.js tests/appointment-requests.test.js tests/calendar-integrations.test.js",
+    "test:backend": "node --test tests/backend-security.test.js tests/twilio-sms.test.js tests/vapi-sms.test.js tests/vapi-call-diagnostics.test.js tests/vapi-isolated-sms-provisioning.test.js tests/vapi-tool-security.test.js tests/composite-call-notifications.test.js tests/lead-handoffs.test.js tests/revenue-rescue.test.js tests/jobber-integration.test.js tests/trade-playbooks.test.js tests/safe-website-fetch.test.js tests/appointment-requests.test.js tests/calendar-integrations.test.js",
     "eject": "react-scripts eject"
   },
   "devDependencies": {

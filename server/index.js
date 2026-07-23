@@ -63,6 +63,18 @@ const {
   failVapiToolExecution,
   isVapiNotificationTool,
 } = require("./vapiToolSecurity");
+const {
+  recordLeadOutcome,
+  summarizeRevenueRescue,
+} = require("./revenueRescue");
+const {
+  completeOAuth: completeJobberOAuth,
+  disconnectJobber,
+  getAuthorizationUrl: getJobberAuthorizationUrl,
+  isConfigured: isJobberConfigured,
+  sanitizeConnection: sanitizeJobberConnection,
+  syncLeadToJobber,
+} = require("./jobberIntegration");
 
 loadPowerShellEnvAssignments(path.join(__dirname, "..", ".env.local"));
 
@@ -141,6 +153,9 @@ const VAPI_API_KEY = String(process.env.VAPI_API_KEY || "").trim();
 const VAPI_API_BASE_URL = String(process.env.VAPI_API_BASE_URL || "https://api.vapi.ai").trim().replace(/\/+$/, "");
 const VAPI_CALL_LIMIT = Math.max(1, Math.min(1000, Number(process.env.VAPI_CALL_LIMIT || 100) || 100));
 const VAPI_DEFAULT_BUSINESS_ID = parsePositiveInt(process.env.VAPI_DEFAULT_BUSINESS_ID, 1);
+const VAPI_REQUIRE_BUSINESS_MAPPING = process.env.VAPI_REQUIRE_BUSINESS_MAPPING == null
+  ? String(process.env.NODE_ENV || "").toLowerCase() === "production"
+  : isEnabled(process.env.VAPI_REQUIRE_BUSINESS_MAPPING);
 const VAPI_AUTO_SYNC_INTERVAL_MS = parsePositiveInt(process.env.VAPI_AUTO_SYNC_INTERVAL_MS, 15 * 60 * 1000);
 const VAPI_AUTO_SYNC_ENABLED = isEnabled(process.env.VAPI_AUTO_SYNC_ENABLED);
 const LEAD_HANDOFF_CHECK_INTERVAL_MS = parsePositiveInt(process.env.LEAD_HANDOFF_CHECK_INTERVAL_MS, 60 * 1000);
@@ -650,8 +665,7 @@ function hasValidIntegrationKey(req) {
 }
 
 function getVapiWebhookSecret() {
-  // INTEGRATION_API_KEY remains a migration fallback until VAPI_WEBHOOK_SECRET
-  // is configured in the deployment environment.
+  if (String(process.env.NODE_ENV || "").toLowerCase() === "production") return VAPI_WEBHOOK_SECRET;
   return VAPI_WEBHOOK_SECRET || INTEGRATION_API_KEY;
 }
 
@@ -1352,6 +1366,12 @@ async function resolveBusinessIdForVapiCall(call) {
     if (matched) return matched.id;
   }
 
+  if (VAPI_REQUIRE_BUSINESS_MAPPING) {
+    const error = new Error("No trusted business mapping matched this Vapi call.");
+    error.statusCode = 422;
+    error.code = "VAPI_BUSINESS_ROUTE_REQUIRED";
+    throw error;
+  }
   return VAPI_DEFAULT_BUSINESS_ID;
 }
 
@@ -3995,12 +4015,17 @@ function sanitizeCustomerCall(call) {
       grantedAt: call.recordingConsentGrantedAt || null,
     },
     lead: call.lead ? {
+      id: call.lead.id,
       name: call.lead.name || "",
       callbackNumber: call.lead.callbackNumber || "",
       summary: call.lead.summary || "",
       intent: call.lead.intent || "",
       urgency: call.lead.urgency || "",
       status: call.lead.status || "",
+      estimatedValueCents: call.lead.estimatedValueCents ?? null,
+      actualRevenueCents: call.lead.actualRevenueCents ?? null,
+      outcomeReason: call.lead.outcomeReason || "",
+      outcomeRecordedAt: call.lead.outcomeRecordedAt || null,
     } : null,
     details: sanitizeCustomerStructuredData(call.structuredData || call.structuredOutputs || {}),
     successEvaluation: call.successEvaluation || "",
@@ -4014,6 +4039,32 @@ function sanitizeCustomerCall(call) {
       phone: call.caller?.phone || "",
       name: call.caller?.name || "",
     },
+  };
+}
+
+function sanitizeCustomerLead(lead) {
+  return {
+    id: lead.id,
+    callId: lead.callId || null,
+    name: lead.name || "",
+    callbackNumber: lead.callbackNumber || "",
+    summary: lead.summary || "",
+    intent: lead.intent || "",
+    urgency: lead.urgency || "",
+    status: lead.status || "NEW",
+    estimatedValueCents: lead.estimatedValueCents ?? null,
+    actualRevenueCents: lead.actualRevenueCents ?? null,
+    outcomeReason: lead.outcomeReason || "",
+    outcomeRecordedAt: lead.outcomeRecordedAt || null,
+    createdAt: lead.createdAt,
+    handoff: lead.handoff ? {
+      status: lead.handoff.status,
+      ownerAcceptedAt: lead.handoff.ownerAcceptedAt,
+      acknowledgedAt: lead.handoff.acknowledgedAt,
+      acknowledgementDueAt: lead.handoff.acknowledgementDueAt,
+      acknowledgementSlaMinutes: lead.handoff.acknowledgementSlaMinutes,
+      escalatedAt: lead.handoff.escalatedAt,
+    } : null,
   };
 }
 
@@ -4074,6 +4125,17 @@ async function getCustomerDashboard({ email, phone }) {
             orderBy: { connectedAt: "desc" },
           },
           vapiMappings: true,
+          leads: {
+            include: { handoff: true },
+            orderBy: { createdAt: "desc" },
+            take: 200,
+          },
+          fieldServiceConnections: true,
+          fieldServiceSyncs: {
+            include: { lead: { select: { id: true, name: true } } },
+            orderBy: { createdAt: "desc" },
+            take: 25,
+          },
           faqs: { orderBy: { updatedAt: "desc" }, take: 6 },
           calls: {
             include: {
@@ -4102,6 +4164,13 @@ async function getCustomerDashboard({ email, phone }) {
   const missedCalls = calls.filter((call) => ["MISSED", "ABANDONED", "FAILED"].includes(call.status)).length;
   const followUps = calls.filter((call) => call.followUpNeeded || ["FOLLOW_UP", "QUOTE_NEEDED", "EMERGENCY"].includes(call.outcome)).length;
   const bookedCalls = calls.filter((call) => call.outcome === "BOOKED").length;
+  const leads = business?.leads || [];
+  const revenueRescue = summarizeRevenueRescue({
+    leads,
+    handoffs: leads.map((lead) => lead.handoff).filter(Boolean),
+    averageJobValueCents: business?.settings?.averageJobValueCents || 0,
+  });
+  const jobberConnection = business?.fieldServiceConnections?.find((connection) => connection.provider === "JOBBER");
   const billingChecklist = getBillingReadinessForSignup(signup);
   const setupChecklist = [
     ...billingChecklist,
@@ -4148,6 +4217,32 @@ async function getCustomerDashboard({ email, phone }) {
       averageDurationSec: calls.length ? Math.round(calls.reduce((sum, call) => sum + Number(call.durationSec || 0), 0) / calls.length) : 0,
       totalMinutes: Number((calls.reduce((sum, call) => sum + Number(call.durationSec || 0), 0) / 60).toFixed(1)),
       lastCallAt: calls[0]?.startedAt || null,
+    },
+    revenueRescue: {
+      ...revenueRescue,
+      averageJobValueCents: business?.settings?.averageJobValueCents || 0,
+      leads: leads.map(sanitizeCustomerLead),
+    },
+    integrations: {
+      jobber: {
+        ...sanitizeJobberConnection(jobberConnection, isJobberConfigured()),
+        recentSyncs: (business?.fieldServiceSyncs || []).filter((sync) => sync.provider === "JOBBER").map((sync) => ({
+          id: sync.id,
+          leadId: sync.leadId,
+          leadName: sync.lead?.name || "",
+          entityType: sync.entityType,
+          status: sync.status,
+          externalId: sync.externalId || "",
+          attempts: sync.attempts,
+          lastError: sync.lastError || "",
+          syncedAt: sync.syncedAt,
+          createdAt: sync.createdAt,
+        })),
+      },
+    },
+    playbook: {
+      tradeType: business?.settings?.tradeType || "ELECTRICAL",
+      version: business?.settings?.playbookVersion || "electrician-v1",
     },
     setup: {
       checklist: setupChecklist,
@@ -6428,24 +6523,36 @@ app.post(
             throw error;
           }
         } else if (["request_appointment", "create_appointment_request"].includes(toolName)) {
-          const ownerContact = await getAppointmentOwnerContact(routedBusinessId);
-          const booking = await createBooking({
-            ...parameters,
-            businessId: routedBusinessId,
-            ...ownerContact,
-            sourceEventId: toolCall.id ? `vapi-appointment:${String(toolCall.id).trim()}` : null,
-            publicBaseUrl: getPublicBaseUrl(req),
-          });
-          results.push({
-            name: toolCall.name,
-            toolCallId: toolCall.id,
-            result: JSON.stringify({
+          const claim = await claimVapiToolExecution({ prisma, toolCall, businessId: routedBusinessId, call: vapiMessage.call || vapiMessage });
+          if (!claim.claimed) {
+            results.push({
+              name: toolCall.name,
+              toolCallId: toolCall.id,
+              result: JSON.stringify({ ok: claim.execution.status === "COMPLETED", duplicate: true, status: claim.execution.status, ...(claim.execution.result || {}) }),
+            });
+            continue;
+          }
+          try {
+            const ownerContact = await getAppointmentOwnerContact(routedBusinessId);
+            const booking = await createBooking({
+              ...parameters,
+              businessId: routedBusinessId,
+              ...ownerContact,
+              sourceEventId: `vapi-appointment:${claim.identity.idempotencyKey}`,
+              publicBaseUrl: getPublicBaseUrl(req),
+            });
+            const executionResult = {
               ok: true,
               appointmentId: booking.appointment?.id,
               status: booking.status || booking.appointment?.status,
               customerMessage: booking.customerMessage,
-            }),
-          });
+            };
+            await completeVapiToolExecution({ prisma, id: claim.execution.id, result: executionResult });
+            results.push({ name: toolCall.name, toolCallId: toolCall.id, result: JSON.stringify(executionResult) });
+          } catch (error) {
+            await failVapiToolExecution({ prisma, id: claim.execution.id, error }).catch(() => {});
+            throw error;
+          }
         } else {
           results.push({ name: toolCall.name, toolCallId: toolCall.id, result: JSON.stringify({ ok: false, error: `Unsupported tool '${toolCall.name}'.` }) });
         }
@@ -6454,6 +6561,7 @@ app.post(
     }
     const eventType = String(payload.eventType || payload.type || "unknown").toLowerCase();
     const toolResults = [];
+    const routedBusinessId = await resolveBusinessIdForVapiCall(payload.call || payload);
 
     if (eventType === "call.started") {
       toolResults.push({ tool: "logCall", result: await logCall({ status: "STARTED", ...payload }) });
@@ -6463,32 +6571,32 @@ app.post(
         const sourceEventId = payload.eventId || payload.id || null;
         const existingHandoff = sourceEventId ? await prisma.leadHandoff.findUnique({ where: { sourceEventId: String(sourceEventId).slice(0, 180) } }) : null;
         if (existingHandoff) return res.json({ ok: true, eventType, duplicate: true, handoffId: existingHandoff.id, toolResults });
-        const lead = await createLead({ businessId: payload.businessId || 1, ...payload.lead });
+        const lead = await createLead({ ...payload.lead, businessId: routedBusinessId });
         toolResults.push({ tool: "createLead", result: lead });
         if (payload.notifyOwner !== false) {
           toolResults.push({
             tool: "sendOwnerViaVapi",
-            result: await createAndDispatchLeadHandoff({ lead, businessId: payload.businessId || 1, callId: lead.callId || null, sourceEventId, message: payload.smsMessage || "" }),
+            result: await createAndDispatchLeadHandoff({ lead, businessId: routedBusinessId, callId: lead.callId || null, sourceEventId, message: payload.smsMessage || "" }),
           });
         }
       }
     } else if (eventType === "faq.lookup") {
       toolResults.push({
         tool: "searchFaq",
-        result: await searchFaq({ q: payload.q || payload.query || "", businessId: payload.businessId || 1, limit: payload.limit || 5 }),
+        result: await searchFaq({ q: payload.q || payload.query || "", businessId: routedBusinessId, limit: payload.limit || 5 }),
       });
     } else if (eventType === "lead.capture") {
       const sourceEventId = payload.eventId || payload.id || null;
       const existingHandoff = sourceEventId ? await prisma.leadHandoff.findUnique({ where: { sourceEventId: String(sourceEventId).slice(0, 180) } }) : null;
       if (existingHandoff) return res.json({ ok: true, eventType, duplicate: true, handoffId: existingHandoff.id, toolResults });
-      const lead = await createLead({ businessId: payload.businessId || 1, ...payload });
+      const lead = await createLead({ ...payload, businessId: routedBusinessId });
       toolResults.push({ tool: "createLead", result: lead });
       if (payload.notifyOwner !== false) {
         toolResults.push({
           tool: "sendOwnerViaVapi",
           result: await createAndDispatchLeadHandoff({
             lead,
-            businessId: payload.businessId || 1,
+            businessId: routedBusinessId,
             callId: lead.callId || null,
             sourceEventId,
             message: payload.smsMessage || "",
@@ -6496,7 +6604,7 @@ app.post(
         });
       }
     } else if (eventType === "booking.request") {
-      const businessId = Number(payload.businessId || 1);
+      const businessId = routedBusinessId;
       const ownerContact = await getAppointmentOwnerContact(businessId);
       toolResults.push({
         tool: "createBooking",
@@ -7509,6 +7617,77 @@ app.get(
   })
 );
 
+app.post(
+  "/api/customer/dashboard/leads/:leadId/outcome",
+  asyncRoute(async (req, res) => {
+    const lookupHash = getCustomerDashboardSessionLookupHash(req);
+    if (!lookupHash) return res.status(401).json({ error: "Your dashboard session has expired. Sign in again." });
+    const dashboard = await getCustomerDashboardByLookupHash(lookupHash);
+    if (!dashboard?.businessId) return res.status(404).json({ error: "Business dashboard not found." });
+    const lead = await recordLeadOutcome({
+      prisma,
+      businessId: dashboard.businessId,
+      leadId: req.params.leadId,
+      input: { ...(req.body || {}), source: "OWNER_DASHBOARD" },
+    });
+    let jobber = { skipped: true, reason: "not_requested" };
+    if (req.body?.syncToJobber !== false) {
+      try {
+        jobber = await syncLeadToJobber({ prisma, businessId: dashboard.businessId, leadId: lead.id });
+      } catch (error) {
+        jobber = { synced: false, error: String(error.message || error).slice(0, 500) };
+      }
+    }
+    res.json({ ok: true, lead: sanitizeCustomerLead(lead), jobber });
+  })
+);
+
+app.get(
+  "/api/customer/dashboard/integrations/jobber/connect",
+  asyncRoute(async (req, res) => {
+    const lookupHash = getCustomerDashboardSessionLookupHash(req);
+    if (!lookupHash) return res.status(401).send("Your dashboard session has expired. Sign in again.");
+    const dashboard = await getCustomerDashboardByLookupHash(lookupHash);
+    if (!dashboard?.businessId) return res.status(404).send("Business dashboard not found.");
+    res.redirect(302, getJobberAuthorizationUrl({ businessId: dashboard.businessId }));
+  })
+);
+
+app.get(
+  "/api/integrations/jobber/oauth/callback",
+  asyncRoute(async (req, res) => {
+    const code = String(req.query.code || "").trim();
+    const state = String(req.query.state || "").trim();
+    if (!code || !state) return res.status(400).send("Jobber did not return a complete authorization response.");
+    await completeJobberOAuth({ prisma, code, state });
+    res.redirect(302, `${FRONTEND_APP_URL}/#/dashboard?integration=jobber-connected`);
+  })
+);
+
+app.post(
+  "/api/customer/dashboard/integrations/jobber/disconnect",
+  asyncRoute(async (req, res) => {
+    const lookupHash = getCustomerDashboardSessionLookupHash(req);
+    if (!lookupHash) return res.status(401).json({ error: "Your dashboard session has expired. Sign in again." });
+    const dashboard = await getCustomerDashboardByLookupHash(lookupHash);
+    if (!dashboard?.businessId) return res.status(404).json({ error: "Business dashboard not found." });
+    await disconnectJobber({ prisma, businessId: dashboard.businessId });
+    res.json({ ok: true });
+  })
+);
+
+app.post(
+  "/api/customer/dashboard/integrations/jobber/leads/:leadId/sync",
+  asyncRoute(async (req, res) => {
+    const lookupHash = getCustomerDashboardSessionLookupHash(req);
+    if (!lookupHash) return res.status(401).json({ error: "Your dashboard session has expired. Sign in again." });
+    const dashboard = await getCustomerDashboardByLookupHash(lookupHash);
+    if (!dashboard?.businessId) return res.status(404).json({ error: "Business dashboard not found." });
+    const result = await syncLeadToJobber({ prisma, businessId: dashboard.businessId, leadId: req.params.leadId });
+    res.json({ ok: true, ...result });
+  })
+);
+
 app.get(
   "/api/customer/dashboard/calendar/connect/:provider",
   asyncRoute(async (req, res) => {
@@ -8516,6 +8695,10 @@ app.put(
     const afterHoursMode = allowedModes.includes(String(body.afterHoursMode || "").toUpperCase())
       ? String(body.afterHoursMode).toUpperCase()
       : "AI_ALWAYS_ON";
+    const leadAckSlaMinutes = Math.max(1, Math.min(30, Number(body.leadAckSlaMinutes || 2)));
+    const averageJobValueCents = Math.max(0, Math.min(1_000_000_000, Number(body.averageJobValueCents || 0)));
+    const tradeType = String(body.tradeType || "ELECTRICAL").trim().toUpperCase().slice(0, 80);
+    const playbookVersion = String(body.playbookVersion || "electrician-v1").trim().toLowerCase().slice(0, 80);
 
     const settings = await prisma.settings.upsert({
       where: { businessId },
@@ -8525,6 +8708,10 @@ app.put(
         ownerPhone: String(body.ownerPhone || "").trim(),
         backupPhone: body.backupPhone ? String(body.backupPhone).trim() : null,
         bookingLink: body.bookingLink ? String(body.bookingLink).trim() : null,
+        leadAckSlaMinutes,
+        averageJobValueCents,
+        tradeType,
+        playbookVersion,
       },
       create: {
         businessId,
@@ -8533,6 +8720,10 @@ app.put(
         ownerPhone: String(body.ownerPhone || "").trim(),
         backupPhone: body.backupPhone ? String(body.backupPhone).trim() : null,
         bookingLink: body.bookingLink ? String(body.bookingLink).trim() : null,
+        leadAckSlaMinutes,
+        averageJobValueCents,
+        tradeType,
+        playbookVersion,
       },
     });
 

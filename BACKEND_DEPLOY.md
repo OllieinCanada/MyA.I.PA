@@ -95,6 +95,29 @@ The acknowledgement URL uses a confirmation page: opening the link does not muta
 
 The `CUSTOMER_DASHBOARD_*` rate-limit defaults protect the email+phone customer dashboard lookup from rapid guessing while still allowing normal owner refreshes.
 
+### Revenue Rescue and acknowledgement SLA
+
+The owner dashboard now records a lead's lifecycle (`NEW`, `REVIEWED`, `CONTACTED`, `WON`, `LOST`, or `ARCHIVED`), estimated value, actual won revenue, and the reason for the outcome. Every change also creates an immutable `LeadOutcomeEvent` audit row. The dashboard reports recovered revenue, open pipeline, conversion, and the percentage of owner acknowledgements completed inside the configured SLA.
+
+New businesses default to a two-minute acknowledgement target. The business-level fields are `Settings.leadAckSlaMinutes`, `Settings.averageJobValueCents`, `Settings.tradeType`, and `Settings.playbookVersion`. `render.yaml` also sets `LEAD_ACK_TIMEOUT_MINUTES=2` as the deployment fallback.
+
+Production Vapi tool calls now require a trusted assistant or phone mapping when `VAPI_REQUIRE_BUSINESS_MAPPING=true`. Notification and appointment tool calls both use `VapiToolExecution` database claims so repeated provider deliveries cannot create duplicate handoffs or appointment requests.
+
+## Optional Jobber field-service integration
+
+Jobber uses OAuth 2.0. Register the callback below in the Jobber Developer Center and configure:
+
+```text
+FIELD_SERVICE_TOKEN_ENCRYPTION_KEY=<generated 32+ character secret>
+FIELD_SERVICE_OAUTH_STATE_SECRET=<different generated secret>
+JOBBER_CLIENT_ID=
+JOBBER_CLIENT_SECRET=
+JOBBER_REDIRECT_URI=https://api.myaipa.ca/api/integrations/jobber/oauth/callback
+JOBBER_GRAPHQL_VERSION=2025-04-16
+```
+
+Owners connect Jobber from the customer dashboard. Access and refresh tokens are encrypted at rest. Owner-confirmed lead outcomes create an idempotent Jobber client sync, and failures remain visible with an explicit retry action. Leave the credentials blank to keep the connector safely disabled.
+
 After the backend is hosted, set the frontend build variable:
 
 ```text
