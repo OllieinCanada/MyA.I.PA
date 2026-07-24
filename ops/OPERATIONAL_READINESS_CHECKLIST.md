@@ -1,6 +1,6 @@
 # My AI PA Legal and Operational Readiness Checklist
 
-Last updated: July 23, 2026
+Last updated: July 24, 2026
 Status: controlled pilot only; counsel and production evidence remain required
 
 This checklist separates controls implemented in the repository from facts and approvals that only an authorized person, provider dashboard, accountant, or qualified Canadian lawyer can complete.
@@ -19,6 +19,7 @@ This checklist separates controls implemented in the repository from facts and a
 - [x] `npm run ops:backup` creates a private PostgreSQL custom-format backup, verifies its archive structure, and writes a SHA-256 manifest.
 - [x] Backup output and operational diagnostics are excluded from Git.
 - [x] Runbooks exist for retention/deletion, backup/restore, monitoring, incidents, privacy requests, and counsel review.
+- [x] Central SMS suppression, signed inbound STOP/START handling, fail-closed send checks, and provider-neutral dashboard visibility are implemented and tested locally.
 - [x] Local and GitHub release gates validate the operational controls on every release.
 - [x] Legal drafts remain private, marked as drafts, and excluded from the public repository.
 
@@ -35,9 +36,9 @@ This checklist separates controls implemented in the repository from facts and a
 - [ ] Select protected backup storage and approve access, encryption, residency, retention, and deletion.
 - [ ] Schedule monitoring outside the production API and test a real failure alert.
 - [ ] Verify provider-side deletion for Vapi, Twilio, OpenAI, Make, Render logs, Stripe, email, and any monitoring service.
-- [ ] Implement and test central SMS suppression and inbound `STOP`.
+- [ ] Activate the production messaging webhook and complete one authorized live `STOP`/`START` exercise using `ops/SMS_CONSENT_RUNBOOK.md`.
 - [ ] Complete a privacy incident tabletop exercise and retain its signed report.
-- [ ] Complete one privacy access/correction/deletion exercise using synthetic data.
+- [x] Complete one privacy access/correction/deletion exercise using synthetic data (`npm run ops:privacy:drill`; local evidence excludes personal information).
 
 ## Repeatable commands
 
@@ -45,6 +46,7 @@ This checklist separates controls implemented in the repository from facts and a
 npm run legal:validate
 npm run ops:validate
 npm run ops:retention:audit
+npm run ops:privacy:drill
 npm run ops:backup:check
 npm run ops:monitor
 npm run render:validate

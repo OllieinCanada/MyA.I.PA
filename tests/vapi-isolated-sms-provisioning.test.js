@@ -19,6 +19,10 @@ const {
 
 const aiNumber = "+12494682588";
 const ownerNumber = "+19055555488";
+const suppression = {
+  suppressionCheckUrl: "https://api.example.test/api/integrations/sms/suppression/check",
+  suppressionApiKey: "suppression-test-key",
+};
 
 function assistant(id = "assistant-a") {
   const value = {
@@ -43,6 +47,7 @@ function hydratedTool(id = "isolated-tool") {
       ownerNumber,
       twilioAccountSid: "AC_TEST",
       twilioAuthToken: "AUTH_TEST",
+      ...suppression,
     }),
   };
 }
@@ -55,6 +60,8 @@ test("isolated tool payload keeps all routing outside model parameters", () => {
   assert.equal(payload.environmentVariables.find((item) => item.name === "DEFAULT_FROM_NUMBER").value, aiNumber);
   assert.equal(payload.environmentVariables.find((item) => item.name === "DEFAULT_OWNER_TO_NUMBER").value, ownerNumber);
   assert.equal(payload.environmentVariables.find((item) => item.name === "CALLER_NUMBER").value, "{{ customer.number }}");
+  assert.equal(payload.environmentVariables.find((item) => item.name === "SMS_SUPPRESSION_CHECK_URL").value, suppression.suppressionCheckUrl);
+  assert.equal(payload.environmentVariables.find((item) => item.name === "SMS_SUPPRESSION_API_KEY").value, suppression.suppressionApiKey);
   assert.deepEqual(payload.function.parameters.required, ["businessName", "requestType", "name"]);
   assert.deepEqual(payload.messages, [{ type: "request-start", content: TOOL_REQUEST_START_MESSAGE, blocking: false }]);
   assert.deepEqual(payload.rejectionPlan, toolRejectionPlan());
@@ -177,6 +184,7 @@ test("provisioning is idempotent and does not create a duplicate tool", async ()
     ownerNumber,
     twilioAccountSid: "AC_TEST",
     twilioAuthToken: "AUTH_TEST",
+    ...suppression,
     createTool: async () => { createCount += 1; return tool; },
     patchAssistant: async () => { patchCount += 1; },
     fetchAssistant: async () => configured,
@@ -189,8 +197,8 @@ test("provisioning is idempotent and does not create a duplicate tool", async ()
 });
 
 test("two businesses get different isolated tools and cannot share owner routing", () => {
-  const first = buildIsolatedToolPayload({ aiNumber, ownerNumber, twilioAccountSid: "AC", twilioAuthToken: "TOKEN" });
-  const second = buildIsolatedToolPayload({ aiNumber: "+12895550123", ownerNumber: "+12895550999", twilioAccountSid: "AC", twilioAuthToken: "TOKEN" });
+  const first = buildIsolatedToolPayload({ aiNumber, ownerNumber, twilioAccountSid: "AC", twilioAuthToken: "TOKEN", ...suppression });
+  const second = buildIsolatedToolPayload({ aiNumber: "+12895550123", ownerNumber: "+12895550999", twilioAccountSid: "AC", twilioAuthToken: "TOKEN", ...suppression });
   assert.notEqual(first.function.name, second.function.name);
   assert.notEqual(
     first.environmentVariables.find((item) => item.name === "DEFAULT_OWNER_TO_NUMBER").value,
@@ -207,6 +215,7 @@ test("rotating an owner removes the previously attached isolated tool", () => {
     ownerNumber: "+19055550000",
     twilioAccountSid: "AC",
     twilioAuthToken: "TOKEN",
+    ...suppression,
   });
   const model = buildIsolatedAssistantModel(
     source,
@@ -231,6 +240,7 @@ test("failed verification rolls back the assistant and removes a newly created t
       ownerNumber,
       twilioAccountSid: "AC_TEST",
       twilioAuthToken: "AUTH_TEST",
+      ...suppression,
       createTool: async () => created,
       patchAssistant: async (_id, patch) => { patches.push(patch); },
       fetchAssistant: async () => source,

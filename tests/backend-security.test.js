@@ -8,6 +8,7 @@ process.env.MAKE_SIGNUP_WEBHOOK_API_KEY = "test-make-signup-key-42";
 process.env.MAKE_SIGNUP_WEBHOOK_URL = "https://hook.us2.make.com/test-private-webhook-token-42";
 process.env.TWILIO_ACCOUNT_SID = "ACtestaccountsid";
 process.env.TWILIO_AUTH_TOKEN = "test-twilio-auth-token";
+process.env.SMS_SUPPRESSION_API_KEY = "test-suppression-api-key-42";
 process.env.ADMIN_PASSWORD = "test-admin-password-42";
 process.env.ADMIN_SESSION_SECRET = "test-admin-session-secret-42";
 process.env.TRIAL_REMINDER_DISABLE = "true";
@@ -21,6 +22,7 @@ process.env.DAILY_DIGEST_ENABLED = "false";
 
 const { app, __test } = require("../server/index");
 const { prisma } = require("../server/prisma");
+const { getTwilioSignature } = require("../server/smsSuppression");
 
 let server;
 let baseUrl;
@@ -59,6 +61,84 @@ test("health endpoint remains public and carries baseline security headers", asy
   assert.equal(response.headers.get("x-robots-tag"), "noindex, nofollow");
   const payload = await response.json();
   assert.equal(payload.ok, true);
+});
+
+test("inbound messaging preferences require a valid provider signature", async () => {
+  const response = await request("/api/webhooks/sms", {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      From: "+19055550123",
+      To: "+12495550100",
+      Body: "STOP",
+      MessageSid: "SM_INVALID",
+    }).toString(),
+  });
+  assert.equal(response.status, 401);
+});
+
+test("a signed STOP webhook records one central suppression preference", async () => {
+  const originalUpsert = prisma.smsSuppression.upsert;
+  const writes = [];
+  prisma.smsSuppression.upsert = async (operation) => {
+    writes.push(operation);
+    return {
+      ...operation.create,
+      updatedAt: new Date("2026-07-24T05:00:00.000Z"),
+    };
+  };
+  const form = {
+    From: "+19055550123",
+    To: "+12495550100",
+    Body: "STOP",
+    MessageSid: "SM_SIGNED_STOP",
+  };
+  process.env.TWILIO_INBOUND_WEBHOOK_URL = `${baseUrl}/api/webhooks/sms`;
+  try {
+    const response = await request("/api/webhooks/sms", {
+      method: "POST",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        "x-twilio-signature": getTwilioSignature(
+          process.env.TWILIO_INBOUND_WEBHOOK_URL,
+          form,
+          process.env.TWILIO_AUTH_TOKEN
+        ),
+      },
+      body: new URLSearchParams(form).toString(),
+    });
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get("content-type") || "", /xml/i);
+    assert.equal(writes.length, 1);
+    assert.equal(writes[0].where.phoneNumber, "+19055550123");
+    assert.equal(writes[0].create.suppressed, true);
+  } finally {
+    prisma.smsSuppression.upsert = originalUpsert;
+  }
+});
+
+test("the private consent endpoint hides phone details and requires its dedicated key", async () => {
+  const unauthorized = await request("/api/integrations/sms/suppression/check", {
+    method: "POST",
+    body: { phoneNumber: "+19055550123" },
+  });
+  assert.equal(unauthorized.status, 401);
+
+  const originalFindUnique = prisma.smsSuppression.findUnique;
+  prisma.smsSuppression.findUnique = async () => ({ suppressed: true });
+  try {
+    const response = await request("/api/integrations/sms/suppression/check", {
+      method: "POST",
+      headers: { authorization: `Bearer ${process.env.SMS_SUPPRESSION_API_KEY}` },
+      body: { phoneNumber: "+19055550123" },
+    });
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.deepEqual(payload, { allowed: false, suppressed: true });
+    assert.equal(JSON.stringify(payload).includes("50123"), false);
+  } finally {
+    prisma.smsSuppression.findUnique = originalFindUnique;
+  }
 });
 
 test("readiness endpoint verifies database connectivity without exposing connection details", async () => {

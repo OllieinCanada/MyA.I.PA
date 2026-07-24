@@ -635,3 +635,19 @@ model RuntimeStore {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
+
+model SmsSuppression {
+  id             String    @id @default(cuid())
+  phoneNumber    String    @unique
+  suppressed     Boolean   @default(true)
+  keyword        String?
+  source         String
+  lastMessageSid String?
+  lastInboundAt  DateTime?
+  suppressedAt   DateTime?
+  resumedAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([suppressed, updatedAt])
+}

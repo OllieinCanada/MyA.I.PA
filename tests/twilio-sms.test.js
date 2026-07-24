@@ -55,6 +55,7 @@ test("configured Twilio requests use Basic auth and form-encoded message fields"
       TWILIO_API_BASE_URL: "https://api.twilio.test",
     },
     fetchImpl,
+    suppressionChecker: async () => false,
   });
 
   assert.equal(result.mocked, false);
@@ -85,7 +86,56 @@ test("provider failures return a safe gateway error", async () => {
         TWILIO_FROM_NUMBER: "+19055550199",
       },
       fetchImpl,
+      suppressionChecker: async () => false,
     }),
     (error) => error.statusCode === 502 && error.providerCode === 21211 && !error.message.includes("provider detail")
   );
+});
+
+test("suppressed recipients are blocked before a provider request is made", async () => {
+  let providerCalled = false;
+  await assert.rejects(
+    sendSmsViaTwilio({
+      to: "+12495033301",
+      message: "Service update",
+      env: {
+        NODE_ENV: "production",
+        TWILIO_ACCOUNT_SID: "AC_test_123",
+        TWILIO_AUTH_TOKEN: "test-token",
+        TWILIO_FROM_NUMBER: "+19055550199",
+      },
+      fetchImpl: async () => {
+        providerCalled = true;
+        throw new Error("should not run");
+      },
+      suppressionChecker: async () => true,
+    }),
+    (error) => error.statusCode === 409 && error.code === "SMS_RECIPIENT_SUPPRESSED"
+  );
+  assert.equal(providerCalled, false);
+});
+
+test("SMS sends fail closed when consent status cannot be checked", async () => {
+  let providerCalled = false;
+  await assert.rejects(
+    sendSmsViaTwilio({
+      to: "+12495033301",
+      message: "Service update",
+      env: {
+        NODE_ENV: "production",
+        TWILIO_ACCOUNT_SID: "AC_test_123",
+        TWILIO_AUTH_TOKEN: "test-token",
+        TWILIO_FROM_NUMBER: "+19055550199",
+      },
+      fetchImpl: async () => {
+        providerCalled = true;
+        throw new Error("should not run");
+      },
+      suppressionChecker: async () => {
+        throw new Error("database unavailable");
+      },
+    }),
+    (error) => error.statusCode === 503 && error.code === "SMS_SUPPRESSION_CHECK_UNAVAILABLE"
+  );
+  assert.equal(providerCalled, false);
 });

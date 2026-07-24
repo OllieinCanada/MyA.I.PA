@@ -38,6 +38,7 @@ tools_bin/
 # Generated previews, reports, and runtime state
 output/
 .frontend.*.log
+.overnight-*.log
 .preview-build.*.log
 data/*.json
 

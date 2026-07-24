@@ -26,17 +26,30 @@ const env = {
   DEFAULT_FROM_NUMBER: "+12495550100",
   DEFAULT_OWNER_TO_NUMBER: "+19055550123",
   CALL_ID: "call-test-123",
+  SMS_SUPPRESSION_CHECK_URL: "https://api.example.test/api/integrations/sms/suppression/check",
+  SMS_SUPPRESSION_API_KEY: "suppression-test-key",
 };
 
-function makeFetch(outcomes) {
+function makeFetch(outcomes, { suppressed = [] } = {}) {
   const calls = [];
-  const fetchImpl = async (_url, options) => {
+  const checks = [];
+  const fetchImpl = async (url, options) => {
+    if (String(options.headers?.["Content-Type"] || "").includes("application/json")) {
+      const payload = JSON.parse(String(options.body || "{}"));
+      checks.push({ url, phoneNumber: payload.phoneNumber, authorization: options.headers.Authorization });
+      const isSuppressed = suppressed.includes(payload.phoneNumber);
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ allowed: !isSuppressed, suppressed: isSuppressed }),
+      };
+    }
     const params = new URLSearchParams(String(options.body || ""));
     calls.push({ to: params.get("To"), from: params.get("From"), body: params.get("Body") });
     const outcome = outcomes[calls.length - 1] || { ok: true, status: 201, payload: { sid: `SM${calls.length}`, status: "queued" } };
     return { ok: outcome.ok, status: outcome.status, json: async () => outcome.payload };
   };
-  return { calls, fetchImpl };
+  return { calls, checks, fetchImpl };
 }
 
 function execute(fetchImpl, overrides = {}) {
@@ -103,6 +116,28 @@ test("customer failure preserves the successful owner result", async () => {
   assert.equal(result.owner.sent, true);
   assert.equal(result.customer.sent, false);
   assert.equal(result.customer.errorCode, "30007");
+  assert.equal(result.complete, false);
+});
+
+test("a suppressed recipient is skipped before the provider request", async () => {
+  const mock = makeFetch([], { suppressed: [args.rawPhoneNumber] });
+  const result = await execute(mock.fetchImpl);
+  assert.deepEqual(mock.calls.map((call) => call.to), [env.DEFAULT_OWNER_TO_NUMBER]);
+  assert.deepEqual(mock.checks.map((check) => check.phoneNumber), [env.DEFAULT_OWNER_TO_NUMBER, args.rawPhoneNumber]);
+  assert.equal(result.owner.sent, true);
+  assert.equal(result.customer.sent, false);
+  assert.equal(result.customer.skipped, true);
+  assert.equal(result.customer.status, "suppressed");
+  assert.equal(result.customer.errorCode, "recipient_opted_out");
+  assert.equal(result.complete, false);
+});
+
+test("notification delivery fails closed when the consent service is unavailable", async () => {
+  const mock = makeFetch([]);
+  const result = await execute(mock.fetchImpl, { env: { SMS_SUPPRESSION_API_KEY: "" } });
+  assert.equal(mock.calls.length, 0);
+  assert.equal(result.owner.status, "suppression_check_unavailable");
+  assert.equal(result.customer.status, "suppression_check_unavailable");
   assert.equal(result.complete, false);
 });
 
@@ -181,12 +216,17 @@ test("generated Vapi code tool is self-contained and uses one structured call", 
   assert.doesNotMatch(JSON.stringify(definition.function.parameters), /fromNumber|toNumber/);
   assert.match(code, /executeCompositeNotifications/);
   assert.match(code, /DEFAULT_OWNER_TO_NUMBER/);
+  assert.match(code, /checkSmsPermission/);
+  assert.match(code, /suppression_check_unavailable/);
   assert.match(code, /return await executeCompositeNotifications/);
 });
 
 test("generated code executes inside the Vapi code-tool runtime shape", async () => {
   const calls = [];
   const fakeFetch = async (_url, options) => {
+    if (String(options.headers?.["Content-Type"] || "").includes("application/json")) {
+      return { ok: true, status: 200, json: async () => ({ allowed: true, suppressed: false }) };
+    }
     const params = new URLSearchParams(String(options.body || ""));
     calls.push(params.get("To"));
     return { ok: true, status: 201, json: async () => ({ sid: `SM${calls.length}`, status: "queued" }) };

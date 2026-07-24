@@ -42,4 +42,8 @@ Information in immutable or isolated backups remains protected and unavailable f
 
 Assign an impartial reviewer, preserve evidence, investigate the relevant privacy principle/control, communicate a written outcome, and identify regulator recourse where required. Track root cause and corrective action separately from the requester’s personal-information file.
 
+## Synthetic exercise
+
+Run `npm run ops:privacy:drill` after material privacy-workflow changes and before a release review. The drill uses no production data and verifies tenant-scoped access, correction, consent withdrawal, active-data deletion, preservation of another tenant, and replay of the deletion ledger after a simulated restore. Keep the generated local report with release evidence; it is not a substitute for provider-side deletion proof or accountable approval.
+
 Official reference: https://www.priv.gc.ca/media/2038/guide_org_e.pdf

@@ -634,6 +634,70 @@
   letter-spacing: -0.045em;
 }
 
+.customer-message-state {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: min(100%, 640px);
+  margin-top: 1rem;
+  border: 1px solid #bde8cf;
+  border-radius: 0.75rem;
+  background: #effcf5;
+  padding: 0.75rem 0.85rem;
+}
+
+.customer-message-state > span {
+  display: grid;
+  flex: 0 0 auto;
+  width: 1.75rem;
+  height: 1.75rem;
+  place-items: center;
+  border-radius: 999px;
+  background: #17a765;
+  color: #fff;
+  font-weight: 950;
+}
+
+.customer-message-state strong {
+  display: block;
+  color: #075b38;
+  font-size: 0.92rem;
+  font-weight: 950;
+}
+
+.customer-message-state p {
+  margin: 0.15rem 0 0;
+  color: #317257;
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.customer-message-state.is-paused {
+  border-color: #f2cf8c;
+  background: #fff8e8;
+}
+
+.customer-message-state.is-paused > span {
+  background: #c26100;
+}
+
+.customer-message-state.is-paused strong {
+  color: #8a4300;
+}
+
+.customer-message-state.is-paused p {
+  color: #80521f;
+}
+
+.customer-message-state.is-not-configured {
+  border-color: #d6e1ec;
+  background: #f6faff;
+}
+
+.customer-message-state.is-not-configured > span {
+  background: #6b7f95;
+}
+
 .customer-readiness {
   display: grid;
   place-items: center;

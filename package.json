@@ -33,6 +33,7 @@
     "ops:validate": "node scripts/validate-operational-readiness.js",
     "ops:monitor": "node scripts/monitor-production.js",
     "ops:retention:audit": "node scripts/retention-audit.js",
+    "ops:privacy:drill": "node scripts/privacy-request-drill.js",
     "ops:backup": "node scripts/database-backup.js",
     "ops:backup:check": "node scripts/database-backup.js --check",
     "oauth:validate": "node scripts/validate-calendar-oauth-readiness.js",
@@ -107,7 +108,7 @@
     "codex:wakeup": "powershell -ExecutionPolicy Bypass -File scripts/codex-wakeup.ps1",
     "codex:wakeup:install": "powershell -ExecutionPolicy Bypass -File scripts/codex-schedule-wakeup.ps1 -StartTime 02:11 -EveryHours 5 -LaunchCodex -RunNow",
     "test": "react-scripts test --env=jsdom",
-    "test:backend": "node --test tests/backend-security.test.js tests/twilio-sms.test.js tests/vapi-sms.test.js tests/vapi-call-diagnostics.test.js tests/vapi-isolated-sms-provisioning.test.js tests/vapi-tool-security.test.js tests/vapi-webhook-auth.test.js tests/composite-call-notifications.test.js tests/lead-handoffs.test.js tests/revenue-rescue.test.js tests/jobber-integration.test.js tests/trade-playbooks.test.js tests/safe-website-fetch.test.js tests/appointment-requests.test.js tests/calendar-integrations.test.js",
+    "test:backend": "node --test tests/backend-security.test.js tests/sms-suppression.test.js tests/twilio-sms.test.js tests/vapi-sms.test.js tests/vapi-call-diagnostics.test.js tests/vapi-isolated-sms-provisioning.test.js tests/vapi-tool-security.test.js tests/vapi-webhook-auth.test.js tests/composite-call-notifications.test.js tests/lead-handoffs.test.js tests/revenue-rescue.test.js tests/jobber-integration.test.js tests/trade-playbooks.test.js tests/safe-website-fetch.test.js tests/appointment-requests.test.js tests/calendar-integrations.test.js",
     "eject": "react-scripts eject"
   },
   "devDependencies": {
