@@ -36,7 +36,7 @@ This checklist separates controls implemented in the repository from facts and a
 - [ ] Select protected backup storage and approve access, encryption, residency, retention, and deletion.
 - [ ] Schedule monitoring outside the production API and test a real failure alert.
 - [ ] Verify provider-side deletion for Vapi, Twilio, OpenAI, Make, Render logs, Stripe, email, and any monitoring service.
-- [ ] Activate the production messaging webhook and complete one authorized live `STOP`/`START` exercise using `ops/SMS_CONSENT_RUNBOOK.md`.
+- [x] Activate the production messaging webhook and complete one authorized live `STOP`/`START` exercise using `ops/SMS_CONSENT_RUNBOOK.md` (controlled provider-path exercise completed July 24, 2026; all nine active routes read back successfully and the test number finished active).
 - [ ] Complete a privacy incident tabletop exercise and retain its signed report.
 - [x] Complete one privacy access/correction/deletion exercise using synthetic data (`npm run ops:privacy:drill`; local evidence excludes personal information).
 
