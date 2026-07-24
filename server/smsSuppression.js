@@ -71,6 +71,84 @@ function verifyTwilioWebhookRequest(req, env = process.env) {
   return safeEqual(supplied, getTwilioSignature(url, req.body || {}, authToken));
 }
 
+function normalizeSmsUpstreamUrl(value) {
+  let url;
+  try {
+    url = new URL(String(value || "").trim());
+  } catch {
+    throw httpError("The inbound SMS upstream URL is invalid.", 400, "SMS_UPSTREAM_INVALID");
+  }
+  if (
+    url.protocol !== "https:"
+    || url.hostname.toLowerCase() !== "api.vapi.ai"
+    || url.username
+    || url.password
+    || (url.port && url.port !== "443")
+  ) {
+    throw httpError("The inbound SMS upstream URL is not allowed.", 400, "SMS_UPSTREAM_NOT_ALLOWED");
+  }
+  return url.toString();
+}
+
+async function getSmsInboundRoute(phoneNumber, { prismaClient = prisma } = {}) {
+  const normalized = normalizeSmsPhone(phoneNumber, "To");
+  return prismaClient.smsInboundRoute.findUnique({ where: { phoneNumber: normalized } });
+}
+
+function appendFormValue(form, key, value) {
+  if (Array.isArray(value)) {
+    for (const item of value) form.append(key, String(item ?? ""));
+    return;
+  }
+  form.append(key, String(value ?? ""));
+}
+
+async function forwardSmsToUpstream({
+  phoneNumber,
+  params,
+  authToken,
+  prismaClient = prisma,
+  fetchImpl = global.fetch,
+}) {
+  const route = await getSmsInboundRoute(phoneNumber, { prismaClient });
+  if (!route) {
+    throw httpError("Inbound SMS routing is temporarily unavailable.", 503, "SMS_UPSTREAM_ROUTE_MISSING");
+  }
+  const upstreamUrl = normalizeSmsUpstreamUrl(route.upstreamUrl);
+  if (String(route.upstreamMethod || "POST").toUpperCase() !== "POST") {
+    throw httpError("Inbound SMS routing is temporarily unavailable.", 503, "SMS_UPSTREAM_METHOD_INVALID");
+  }
+  if (!String(authToken || "").trim() || typeof fetchImpl !== "function") {
+    throw httpError("Inbound SMS routing is temporarily unavailable.", 503, "SMS_UPSTREAM_AUTH_UNAVAILABLE");
+  }
+  const form = new URLSearchParams();
+  for (const [key, value] of Object.entries(params || {})) appendFormValue(form, key, value);
+  let response;
+  try {
+    response = await fetchImpl(upstreamUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+        "X-Twilio-Signature": getTwilioSignature(upstreamUrl, params || {}, authToken),
+      },
+      body: form.toString(),
+      signal: AbortSignal.timeout(10000),
+    });
+  } catch {
+    throw httpError("Inbound SMS routing is temporarily unavailable.", 502, "SMS_UPSTREAM_UNAVAILABLE");
+  }
+  const body = (await response.text()).slice(0, 1024 * 1024);
+  if (!response.ok) {
+    throw httpError("Inbound SMS routing is temporarily unavailable.", 502, "SMS_UPSTREAM_REJECTED");
+  }
+  return {
+    status: response.status,
+    contentType: String(response.headers.get("content-type") || "application/xml"),
+    body,
+    upstreamHost: new URL(upstreamUrl).hostname,
+  };
+}
+
 async function getSmsSuppression(phoneNumber, { prismaClient = prisma } = {}) {
   const normalized = normalizeSmsPhone(phoneNumber);
   return prismaClient.smsSuppression.findUnique({ where: { phoneNumber: normalized } });
@@ -144,11 +222,14 @@ module.exports = {
   OPT_OUT_KEYWORDS,
   classifySmsPreference,
   getSmsSuppression,
+  getSmsInboundRoute,
   getTwilioSignature,
   getTwilioWebhookUrl,
+  forwardSmsToUpstream,
   hasValidSuppressionApiKey,
   isSmsSuppressed,
   normalizeSmsPhone,
+  normalizeSmsUpstreamUrl,
   recordSmsPreference,
   verifyTwilioWebhookRequest,
 };

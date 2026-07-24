@@ -19,6 +19,7 @@ const requiredOperationalScripts = [
   "scripts/monitor-production.js",
   "scripts/retention-audit.js",
   "scripts/privacy-request-drill.js",
+  "scripts/activate-sms-consent-production.js",
   "scripts/validate-operational-readiness.js",
 ];
 const failures = [];
@@ -41,6 +42,9 @@ for (const script of [
   "ops:monitor",
   "ops:retention:audit",
   "ops:privacy:drill",
+  "activate:sms-consent",
+  "activate:sms-consent:webhooks",
+  "activate:sms-consent:test",
   "ops:backup",
   "ops:backup:check",
 ]) {

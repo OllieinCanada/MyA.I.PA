@@ -15,6 +15,7 @@ const { fetchPublicWebsite } = require("./safeWebsiteFetch");
 const { sendSmsViaTwilio } = require("./twilioSms");
 const {
   classifySmsPreference,
+  forwardSmsToUpstream,
   getSmsSuppression,
   hasValidSuppressionApiKey,
   isSmsSuppressed,
@@ -6227,6 +6228,21 @@ app.post(
         action: result.action,
         phoneLast4: result.phoneNumber.slice(-4),
       });
+    }
+    if (preference.action === "NONE") {
+      const forwarded = await forwardSmsToUpstream({
+        phoneNumber: req.body?.To,
+        params: req.body || {},
+        authToken: TWILIO_AUTH_TOKEN,
+      });
+      console.log("[sms:inbound] forwarded", {
+        toLast4: normalizeSmsPhone(req.body?.To, "To").slice(-4),
+        upstreamHost: forwarded.upstreamHost,
+      });
+      return res
+        .status(forwarded.status)
+        .type(forwarded.contentType)
+        .send(forwarded.body);
     }
     res.type("application/xml").send("<Response></Response>");
   })
