@@ -1,6 +1,9 @@
-function createHttpError(message, statusCode) {
+const { isSmsSuppressed } = require("./smsSuppression");
+
+function createHttpError(message, statusCode, code) {
   const error = new Error(message);
   error.statusCode = statusCode;
+  if (code) error.code = code;
   return error;
 }
 
@@ -27,11 +30,18 @@ function getTwilioSmsConfig(env = process.env) {
   };
 }
 
-async function sendSmsViaTwilio({ to, message, env = process.env, fetchImpl = global.fetch }) {
+async function sendSmsViaTwilio({
+  to,
+  message,
+  env = process.env,
+  fetchImpl = global.fetch,
+  suppressionChecker = isSmsSuppressed,
+}) {
   const text = String(message || "").trim();
   if (!text) throw createHttpError("message is required", 400);
   if (text.length > 1600) throw createHttpError("message must be 1600 characters or fewer", 400);
 
+  const normalizedTo = normalizeE164(to, "to");
   const config = getTwilioSmsConfig(env);
   const configured = Boolean(config.accountSid && config.authToken && config.from);
   if (!configured) {
@@ -41,7 +51,7 @@ async function sendSmsViaTwilio({ to, message, env = process.env, fetchImpl = gl
     return {
       mocked: true,
       provider: "console",
-      to: normalizeE164(to, "to"),
+      to: normalizedTo,
       from: config.from || null,
       message: text,
       status: "mocked",
@@ -53,7 +63,16 @@ async function sendSmsViaTwilio({ to, message, env = process.env, fetchImpl = gl
     throw createHttpError("SMS transport is unavailable.", 503);
   }
 
-  const normalizedTo = normalizeE164(to, "to");
+  let suppressed;
+  try {
+    suppressed = await suppressionChecker(normalizedTo);
+  } catch (_error) {
+    throw createHttpError("SMS consent status could not be verified.", 503, "SMS_SUPPRESSION_CHECK_UNAVAILABLE");
+  }
+  if (suppressed) {
+    throw createHttpError("This recipient has paused service text messages.", 409, "SMS_RECIPIENT_SUPPRESSED");
+  }
+
   const normalizedFrom = normalizeE164(config.from, "TWILIO_FROM_NUMBER");
   const body = new URLSearchParams({ To: normalizedTo, From: normalizedFrom, Body: text });
   const response = await fetchImpl(

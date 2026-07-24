@@ -94,7 +94,16 @@ function withPromptOverride(messages, toolName) {
   return updated;
 }
 
-function createToolPayload({ toolName, twilioAccountSid, twilioAuthToken, aiPhone, ownerPhone, statusCallback }) {
+function createToolPayload({
+  toolName,
+  twilioAccountSid,
+  twilioAuthToken,
+  aiPhone,
+  ownerPhone,
+  statusCallback,
+  suppressionCheckUrl,
+  suppressionApiKey,
+}) {
   const definition = getVapiCompositeToolDefinition();
   const environmentVariables = [
     { name: "TWILIO_ACCOUNT_SID", value: twilioAccountSid },
@@ -104,6 +113,8 @@ function createToolPayload({ toolName, twilioAccountSid, twilioAuthToken, aiPhon
     { name: "CALLER_NUMBER", value: "{{ customer.number }}" },
     { name: "CALL_ID", value: "{{ call.id }}" },
     { name: "TWILIO_STATUS_CALLBACK_URL", value: /^https:\/\//i.test(statusCallback || "") ? statusCallback : "" },
+    { name: "SMS_SUPPRESSION_CHECK_URL", value: suppressionCheckUrl },
+    { name: "SMS_SUPPRESSION_API_KEY", value: suppressionApiKey },
   ];
   return {
     type: "code",
@@ -126,8 +137,13 @@ async function main() {
   const apply = hasFlag("apply");
   const aiPhone = normalizeE164(argument("phone", "+12494682588"));
   const ownerPhone = normalizeE164(argument("owner-phone", env.MYAIPA_TEST_OWNER_PHONE || ""));
+  const suppressionCheckUrl = String(env.SMS_SUPPRESSION_CHECK_URL || "https://api.myaipa.ca/api/integrations/sms/suppression/check").trim();
+  const suppressionApiKey = String(env.SMS_SUPPRESSION_API_KEY || "").trim();
   if (!aiPhone) throw new Error("--phone must be a valid E.164 phone number.");
   if (!ownerPhone) throw new Error("--owner-phone must be a valid E.164 phone number.");
+  if (!/^https:\/\//i.test(suppressionCheckUrl) || !usableSecret(suppressionApiKey)) {
+    throw new Error("SMS_SUPPRESSION_CHECK_URL and SMS_SUPPRESSION_API_KEY are required.");
+  }
   const toolName = `send_call_summaries_pilot_${aiPhone.slice(-4)}_v1`;
 
   const phoneList = listFrom(await request("/phone-number?limit=1000", { label: "List phone numbers" }), ["phoneNumbers"]);
@@ -190,7 +206,16 @@ async function main() {
     }
     const existingToolId = String(existingPilotTool.id || "").trim();
     const originalTool = existingPilotDetail;
-    const toolPayload = createToolPayload({ toolName, twilioAccountSid, twilioAuthToken, aiPhone, ownerPhone, statusCallback });
+    const toolPayload = createToolPayload({
+      toolName,
+      twilioAccountSid,
+      twilioAuthToken,
+      aiPhone,
+      ownerPhone,
+      statusCallback,
+      suppressionCheckUrl,
+      suppressionApiKey,
+    });
     const originalModel = assistant.model;
     const { tools: _expandedTools, ...modelWithoutExpandedTools } = originalModel || {};
     const nextModel = {
@@ -280,7 +305,16 @@ async function main() {
     }
   }
 
-  const toolPayload = createToolPayload({ toolName, twilioAccountSid, twilioAuthToken, aiPhone, ownerPhone, statusCallback });
+  const toolPayload = createToolPayload({
+    toolName,
+    twilioAccountSid,
+    twilioAuthToken,
+    aiPhone,
+    ownerPhone,
+    statusCallback,
+    suppressionCheckUrl,
+    suppressionApiKey,
+  });
   let createdTool = null;
   let assistantPatched = false;
   const originalModel = assistant.model;

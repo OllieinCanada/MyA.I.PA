@@ -152,12 +152,23 @@ function isManagedIsolatedTool(tool) {
   return /^send_call_summaries_(?:pilot_)?\d{4}(?:_[a-f0-9]{8})?_v\d+$/i.test(name);
 }
 
-function buildIsolatedToolPayload({ aiNumber, ownerNumber, twilioAccountSid, twilioAuthToken, statusCallbackUrl = "" }) {
+function buildIsolatedToolPayload({
+  aiNumber,
+  ownerNumber,
+  twilioAccountSid,
+  twilioAuthToken,
+  statusCallbackUrl = "",
+  suppressionCheckUrl,
+  suppressionApiKey,
+}) {
   const aiPhone = normalizeE164(aiNumber);
   const ownerPhone = normalizeE164(ownerNumber);
   if (!aiPhone || !ownerPhone) throw new Error("Valid AI and owner phone numbers are required.");
   if (!String(twilioAccountSid || "").trim() || !String(twilioAuthToken || "").trim()) {
     throw new Error("Twilio credentials are required for isolated SMS routing.");
+  }
+  if (!/^https:\/\//i.test(String(suppressionCheckUrl || "").trim()) || !String(suppressionApiKey || "").trim()) {
+    throw new Error("A secure SMS suppression check URL and API key are required for isolated SMS routing.");
   }
   const definition = getVapiCompositeToolDefinition();
   const name = isolatedToolName(aiPhone, ownerPhone);
@@ -177,6 +188,8 @@ function buildIsolatedToolPayload({ aiNumber, ownerNumber, twilioAccountSid, twi
       { name: "CALLER_NUMBER", value: "{{ customer.number }}" },
       { name: "CALL_ID", value: "{{ call.id }}" },
       { name: "TWILIO_STATUS_CALLBACK_URL", value: /^https:\/\//i.test(String(statusCallbackUrl || "")) ? String(statusCallbackUrl).trim() : "" },
+      { name: "SMS_SUPPRESSION_CHECK_URL", value: String(suppressionCheckUrl).trim() },
+      { name: "SMS_SUPPRESSION_API_KEY", value: String(suppressionApiKey).trim() },
     ],
     messages: [
       { type: "request-start", content: TOOL_REQUEST_START_MESSAGE, blocking: false },
@@ -263,6 +276,10 @@ function inspectIsolatedConfiguration({ assistant, tool, aiNumber, ownerNumber }
     ownerProtected: normalizeE164(env.DEFAULT_OWNER_TO_NUMBER) === ownerPhone,
     callerProtected: env.CALLER_NUMBER === "{{ customer.number }}",
     callIdProtected: env.CALL_ID === "{{ call.id }}",
+    suppressionCheckProtected: /^https:\/\//i.test(env.SMS_SUPPRESSION_CHECK_URL)
+      && Boolean(env.SMS_SUPPRESSION_API_KEY)
+      && code.includes("checkSmsPermission")
+      && code.includes("suppression_check_unavailable"),
     callerFallbackSchema: !required.includes("rawPhoneNumber"),
     callerFallbackCode: code.includes("needsCustomerNumber") && code.includes("waiting_for_customer_number"),
     promptInstalled: Boolean(toolName && prompt.includes(PROMPT_MARKER) && prompt.includes(toolName)),
@@ -323,6 +340,8 @@ async function provisionIsolatedSmsRouting({
   twilioAccountSid,
   twilioAuthToken,
   statusCallbackUrl,
+  suppressionCheckUrl,
+  suppressionApiKey,
   createTool,
   patchTool,
   patchAssistant,
@@ -330,7 +349,15 @@ async function provisionIsolatedSmsRouting({
   fetchTool,
   deleteTool,
 }) {
-  const payload = buildIsolatedToolPayload({ aiNumber, ownerNumber, twilioAccountSid, twilioAuthToken, statusCallbackUrl });
+  const payload = buildIsolatedToolPayload({
+    aiNumber,
+    ownerNumber,
+    twilioAccountSid,
+    twilioAuthToken,
+    statusCallbackUrl,
+    suppressionCheckUrl,
+    suppressionApiKey,
+  });
   const toolName = payload.function.name;
   const existingSummary = (tools || []).find((tool) => String(tool?.function?.name || tool?.name || "") === toolName);
   const existingTool = existingSummary?.id && fetchTool ? await fetchTool(existingSummary.id) : existingSummary;

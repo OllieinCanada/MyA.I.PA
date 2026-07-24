@@ -11,12 +11,14 @@ const requiredOpsFiles = [
   "ops/MONITORING_RUNBOOK.md",
   "ops/INCIDENT_RESPONSE_RUNBOOK.md",
   "ops/PRIVACY_REQUEST_RUNBOOK.md",
+  "ops/SMS_CONSENT_RUNBOOK.md",
   "ops/COUNSEL_REVIEW_HANDOFF.md",
 ];
 const requiredOperationalScripts = [
   "scripts/database-backup.js",
   "scripts/monitor-production.js",
   "scripts/retention-audit.js",
+  "scripts/privacy-request-drill.js",
   "scripts/validate-operational-readiness.js",
 ];
 const failures = [];
@@ -38,6 +40,7 @@ for (const script of [
   "ops:validate",
   "ops:monitor",
   "ops:retention:audit",
+  "ops:privacy:drill",
   "ops:backup",
   "ops:backup:check",
 ]) {
@@ -69,7 +72,7 @@ if (!renderValidator.includes('expectEqual("healthCheckPath", service.healthChec
 }
 
 const releaseGate = read("scripts/release-gate.js");
-if (!releaseGate.includes('["Operational readiness validation", npmCommand, ["run", "ops:validate"]]')) {
+if (!releaseGate.includes('["Operational readiness validation", nodeCommand(), [path.join("scripts", "validate-operational-readiness.js")]]')) {
   failures.push("local release gate must run operational readiness validation");
 }
 

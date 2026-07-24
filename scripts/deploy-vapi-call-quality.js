@@ -11,6 +11,8 @@ const { normalizeE164 } = require("../server/compositeCallNotifications");
 const env = loadProjectEnv();
 const apiKey = String(env.VAPI_API_KEY || env.VAPI_KEY || env.VAPI_TOKEN || "").trim();
 const apiBaseUrl = String(env.VAPI_API_BASE_URL || "https://api.vapi.ai").replace(/\/+$/, "");
+const suppressionCheckUrl = String(env.SMS_SUPPRESSION_CHECK_URL || "https://api.myaipa.ca/api/integrations/sms/suppression/check").trim();
+const suppressionApiKey = String(env.SMS_SUPPRESSION_API_KEY || "").trim();
 const apply = process.argv.slice(2).includes("--apply");
 
 function shortHash(value) {
@@ -77,6 +79,9 @@ function mutableToolPayload(tool) {
 
 async function main() {
   if (!apiKey) throw new Error("VAPI_API_KEY is not configured.");
+  if (apply && (!/^https:\/\//i.test(suppressionCheckUrl) || !usableSecret(suppressionApiKey))) {
+    throw new Error("SMS_SUPPRESSION_CHECK_URL and SMS_SUPPRESSION_API_KEY are required before applying call-quality updates.");
+  }
   const [phonePayload, assistantPayload, toolPayload] = await Promise.all([
     request("/phone-number?limit=1000"),
     request("/assistant?limit=1000"),
@@ -175,6 +180,8 @@ async function main() {
         twilioAccountSid: routing.TWILIO_ACCOUNT_SID,
         twilioAuthToken: routing.TWILIO_AUTH_TOKEN,
         statusCallbackUrl: candidate.statusCallbackUrl,
+        suppressionCheckUrl,
+        suppressionApiKey,
         createTool: (payload) => request("/tool", { method: "POST", body: payload }),
         patchTool: (id, payload) => request(`/tool/${encodeURIComponent(id)}`, { method: "PATCH", body: payload }),
         patchAssistant: (id, payload) => request(`/assistant/${encodeURIComponent(id)}`, { method: "PATCH", body: payload }),

@@ -2,20 +2,37 @@ const path = require("path");
 const { nodeCommand, rootPath, run } = require("./_helpers");
 
 const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
-const npxCommand = process.platform === "win32" ? "npx.cmd" : "npx";
 const skipPages = process.argv.includes("--skip-pages");
+const backendTestFiles = [
+  "tests/backend-security.test.js",
+  "tests/sms-suppression.test.js",
+  "tests/twilio-sms.test.js",
+  "tests/vapi-sms.test.js",
+  "tests/vapi-call-diagnostics.test.js",
+  "tests/vapi-isolated-sms-provisioning.test.js",
+  "tests/vapi-tool-security.test.js",
+  "tests/vapi-webhook-auth.test.js",
+  "tests/composite-call-notifications.test.js",
+  "tests/lead-handoffs.test.js",
+  "tests/revenue-rescue.test.js",
+  "tests/jobber-integration.test.js",
+  "tests/trade-playbooks.test.js",
+  "tests/safe-website-fetch.test.js",
+  "tests/appointment-requests.test.js",
+  "tests/calendar-integrations.test.js",
+];
 
 const steps = [
-  ["Backend security and provider unit tests", npmCommand, ["run", "test:backend"]],
-  ["Legal draft package validation", npmCommand, ["run", "legal:validate"]],
-  ["Operational readiness validation", npmCommand, ["run", "ops:validate"]],
+  ["Backend security and provider unit tests", nodeCommand(), ["--test", ...backendTestFiles]],
+  ["Legal draft package validation", nodeCommand(), [path.join("scripts", "validate-legal-drafts.js")]],
+  ["Operational readiness validation", nodeCommand(), [path.join("scripts", "validate-operational-readiness.js")]],
   ["Tracked secret scan", nodeCommand(), [path.join("scripts", "scan-secrets.js")]],
-  ["Render blueprint validation", npmCommand, ["run", "render:validate"]],
-  ["Backend deployment preflight", npmCommand, ["run", "backend:check"]],
+  ["Render blueprint validation", nodeCommand(), [path.join("scripts", "validate-render-blueprint.js")]],
+  ["Backend deployment preflight", nodeCommand(), [path.join("scripts", "check-backend-deploy.js")]],
   [
     "Prisma schema validation",
-    npxCommand,
-    ["prisma", "validate"],
+    nodeCommand(),
+    [path.join("node_modules", "prisma", "build", "index.js"), "validate"],
     {
       env: {
         DATABASE_URL:
@@ -25,8 +42,8 @@ const steps = [
     },
   ],
   ["Production dependency audit", npmCommand, ["audit", "--omit=dev"]],
-  ["Signup configuration diagnostic", npmCommand, ["run", "diagnose:signup"]],
-  ...(!skipPages ? [["Production Pages build", npmCommand, ["run", "build:pages"]]] : []),
+  ["Signup configuration diagnostic", nodeCommand(), [path.join("scripts", "diagnose-signup.js")]],
+  ...(!skipPages ? [["Production Pages build", nodeCommand(), [path.join("scripts", "build-pages.js")]]] : []),
 ];
 
 console.log("My AI PA local release gate");
@@ -37,5 +54,5 @@ for (const [label, command, args, options = {}] of steps) {
 }
 
 console.log("\nRelease gate passed.");
-if (skipPages) console.log("Production Pages build was intentionally skipped for this non-website commit; CI and the combined release must run it.");
+if (skipPages) console.log("Production Pages build was intentionally skipped for this run; execute it separately or through the combined release before publishing.");
 console.log("Live API, provider credentials, real calls/messages, completed legal documents, counsel approval, and external deployment still require separate verification.");

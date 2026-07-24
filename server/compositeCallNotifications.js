@@ -139,6 +139,50 @@ function safeProviderError(error, fallbackCode = "tool_error") {
   };
 }
 
+async function checkSmsPermission({ to, env, fetchImpl }) {
+  const endpoint = cleanText(env.SMS_SUPPRESSION_CHECK_URL, 500);
+  const apiKey = String(env.SMS_SUPPRESSION_API_KEY || "").trim();
+  const normalizedTo = normalizeE164(to);
+  if (!normalizedTo) {
+    return { allowed: false, suppressed: false, status: "invalid_routing", errorCode: "invalid_phone_number" };
+  }
+  if (!/^https:\/\//i.test(endpoint) || !apiKey) {
+    return {
+      allowed: false,
+      suppressed: false,
+      status: "suppression_check_unavailable",
+      errorCode: "suppression_check_not_configured",
+    };
+  }
+  try {
+    const response = await fetchImpl(endpoint, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ phoneNumber: normalizedTo }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || payload?.allowed !== true) {
+      return {
+        allowed: false,
+        suppressed: payload?.suppressed === true,
+        status: payload?.suppressed === true ? "suppressed" : "suppression_check_unavailable",
+        errorCode: payload?.suppressed === true ? "recipient_opted_out" : "suppression_check_failed",
+      };
+    }
+    return { allowed: true, suppressed: false, status: "allowed", errorCode: "" };
+  } catch (_error) {
+    return {
+      allowed: false,
+      suppressed: false,
+      status: "suppression_check_unavailable",
+      errorCode: "suppression_check_unreachable",
+    };
+  }
+}
+
 async function sendTwilioMessage({ to, from, body, notificationKey, env, fetchImpl, btoaImpl, URLSearchParamsImpl }) {
   const accountSid = cleanText(env.TWILIO_ACCOUNT_SID, 80);
   const authToken = String(env.TWILIO_AUTH_TOKEN || "").trim();
@@ -149,6 +193,17 @@ async function sendTwilioMessage({ to, from, body, notificationKey, env, fetchIm
   }
   if (!normalizedTo || !normalizedFrom) {
     return { attempted: false, sent: false, status: "invalid_routing", errorCode: "invalid_phone_number", notificationKey };
+  }
+  const permission = await checkSmsPermission({ to: normalizedTo, env, fetchImpl });
+  if (!permission.allowed) {
+    return {
+      attempted: false,
+      sent: false,
+      skipped: true,
+      status: permission.status,
+      errorCode: permission.errorCode,
+      notificationKey,
+    };
   }
   const params = new URLSearchParamsImpl({ To: normalizedTo, From: normalizedFrom, Body: String(body || "").slice(0, 1600) });
   const statusCallback = cleanText(env.TWILIO_STATUS_CALLBACK_URL, 500);
@@ -323,6 +378,7 @@ function getVapiCompositeToolCode() {
     buildOwnerBody,
     buildCustomerBody,
     safeProviderError,
+    checkSmsPermission,
     sendTwilioMessage,
     executeCompositeNotifications,
   ].map((fn) => fn.toString()).join("\n\n") +
@@ -347,6 +403,8 @@ function getVapiCompositeToolDefinition() {
       "CALLER_NUMBER",
       "CALL_ID",
       "TWILIO_STATUS_CALLBACK_URL",
+      "SMS_SUPPRESSION_CHECK_URL",
+      "SMS_SUPPRESSION_API_KEY",
     ],
   };
 }
@@ -358,6 +416,7 @@ module.exports = {
   callerNumberFallbackPrompt,
   buildNotificationKeys,
   buildOwnerBody,
+  checkSmsPermission,
   executeCompositeNotifications,
   getVapiCompositeToolCode,
   getVapiCompositeToolDefinition,

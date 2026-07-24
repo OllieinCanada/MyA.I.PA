@@ -955,6 +955,7 @@ function CustomerDashboardView({ dashboard, onSignOut, onRefresh, refreshing, re
   const signup = dashboard.signup || {};
   const stats = dashboard.stats || {};
   const assistant = dashboard.assistant || {};
+  const messaging = dashboard.messaging || {};
   const checklist = dashboard.setup?.checklist || [];
   const readiness = dashboard.setup?.readinessPercent || 0;
   const nextStep = checklist.find((item) => !item.done);
@@ -1014,6 +1015,13 @@ function CustomerDashboardView({ dashboard, onSignOut, onRefresh, refreshing, re
             <h2>{assistant.aiNumber ? "Your AI number is ready to test." : "Your AI number is being prepared."}</h2>
             <p>Forward missed calls here once setup feels right. Keep your current business number for customers.</p>
             <div className="customer-number">{fmtPhone(assistant.aiNumber || signup.twilioPhoneNumber)}</div>
+            <div className={`customer-message-state is-${String(messaging.status || "not-configured").toLowerCase().replace("_", "-")}`}>
+              <span aria-hidden="true">{messaging.serviceTextsActive ? "✓" : messaging.status === "PAUSED" ? "!" : "·"}</span>
+              <div>
+                <strong>Service texts {messaging.status === "PAUSED" ? "paused" : messaging.serviceTextsActive ? "active" : "not configured"}</strong>
+                <p>{messaging.guidance || "Add an owner phone number to receive service text updates."}</p>
+              </div>
+            </div>
           </div>
           <div className="customer-readiness" style={{ "--ready": `${readiness}%` }}>
             <strong>{readiness}%</strong>
@@ -1075,6 +1083,7 @@ function CustomerDashboardView({ dashboard, onSignOut, onRefresh, refreshing, re
               <div><span>Answer after</span><strong>{assistant.answerAfterRings ?? 3} rings</strong></div>
               <div><span>Business phone</span><strong>{fmtPhone(signup.businessPhone)}</strong></div>
               <div><span>Owner phone</span><strong>{fmtPhone(signup.ownerPhone)}</strong></div>
+              <div><span>Service texts</span><strong>{messaging.status === "PAUSED" ? "Paused" : messaging.serviceTextsActive ? "Active" : "Not configured"}</strong></div>
               <div><span>Booking link</span><strong>{assistant.bookingLink || "Not added"}</strong></div>
               <div><span>Appointment booking</span><strong>{automaticCalendarBooking ? "Automatic when clear" : dashboard.scheduling?.calendarBookingMode === "EMAIL_INVITES_ONLY" ? "Email and text only" : "Owner confirms first"}</strong></div>
             </div>

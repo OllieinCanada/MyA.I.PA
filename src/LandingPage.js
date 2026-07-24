@@ -4438,28 +4438,40 @@ function LandingPage() {
           }
           /* Keep the complete conversation visible instead of clipping the final caller response. */
           @media (min-width: 1024px) {
-            .landing-call-dashboard > div {
-              height: auto !important;
-              min-height: 760px !important;
-              max-height: none !important;
-            }
-            .landing-call-dashboard > div > div,
-            .landing-call-panel,
-            .landing-conversation-column {
-              height: auto !important;
-              min-height: 760px !important;
-            }
             .landing-conversation-panel {
               flex: 0 0 auto !important;
               overflow: visible !important;
             }
           }
-          @media (min-width: 1024px) and (max-height: 820px) {
-            .landing-call-dashboard > div,
-            .landing-call-dashboard > div > div,
-            .landing-call-panel,
-            .landing-conversation-column {
-              min-height: 720px !important;
+          @media (min-width: 1024px) and (max-height: 660px) {
+            .landing-hero-visual {
+              transform: translateY(-1.25rem) !important;
+            }
+            .landing-conversation-panel {
+              flex: 0 0 20rem !important;
+              padding: 0.48rem 0.65rem !important;
+            }
+            .landing-conversation-panel > p {
+              font-size: 0.58rem !important;
+              line-height: 1 !important;
+            }
+            .landing-conversation-panel > div,
+            .landing-conversation-panel .landing-conversation-long-bubble,
+            .landing-conversation-panel .landing-conversation-caller-detail {
+              margin-top: 0.16rem !important;
+              padding: 0.26rem 0.48rem !important;
+              font-size: 0.58rem !important;
+              line-height: 1.04 !important;
+            }
+            .landing-conversation-panel .landing-conversation-long-bubble ul {
+              margin-top: 0.08rem !important;
+            }
+            .landing-conversation-panel .landing-conversation-caller-detail {
+              margin-bottom: 0.45rem !important;
+            }
+            .landing-customer-text-body {
+              font-size: 0.68rem !important;
+              line-height: 1.08 !important;
             }
           }
         `}</style>

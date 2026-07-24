@@ -14,6 +14,15 @@ const { prisma } = require("./prisma");
 const { fetchPublicWebsite } = require("./safeWebsiteFetch");
 const { sendSmsViaTwilio } = require("./twilioSms");
 const {
+  classifySmsPreference,
+  getSmsSuppression,
+  hasValidSuppressionApiKey,
+  isSmsSuppressed,
+  normalizeSmsPhone,
+  recordSmsPreference,
+  verifyTwilioWebhookRequest,
+} = require("./smsSuppression");
+const {
   formatAppointmentDate,
   createStaffMember,
   deactivateStaffMember,
@@ -164,6 +173,10 @@ const TWILIO_ACCOUNT_SID = String(process.env.TWILIO_ACCOUNT_SID || "").trim();
 const TWILIO_AUTH_TOKEN = String(process.env.TWILIO_AUTH_TOKEN || "").trim();
 const TWILIO_STATUS_CALLBACK_URL = String(process.env.TWILIO_STATUS_CALLBACK_URL || "").trim();
 const TWILIO_API_BASE_URL = String(process.env.TWILIO_API_BASE_URL || "https://api.twilio.com").trim().replace(/\/+$/, "");
+const SMS_SUPPRESSION_API_KEY = String(process.env.SMS_SUPPRESSION_API_KEY || "").trim();
+const SMS_SUPPRESSION_CHECK_URL = String(
+  process.env.SMS_SUPPRESSION_CHECK_URL || "https://api.myaipa.ca/api/integrations/sms/suppression/check"
+).trim();
 const INTEGRATION_API_KEY = String(process.env.INTEGRATION_API_KEY || process.env.MAKE_SIGNUP_WEBHOOK_API_KEY || "").trim();
 const VAPI_WEBHOOK_SECRET = String(process.env.VAPI_WEBHOOK_SECRET || "").trim();
 const FIXED_MONTHLY_COSTS_JSON = String(process.env.FIXED_MONTHLY_COSTS_JSON || "").trim();
@@ -1722,6 +1735,8 @@ async function provisionIsolatedSmsForAssistant({ assistantId, aiNumber, ownerNu
     twilioAccountSid: TWILIO_ACCOUNT_SID,
     twilioAuthToken: TWILIO_AUTH_TOKEN,
     statusCallbackUrl: TWILIO_STATUS_CALLBACK_URL,
+    suppressionCheckUrl: SMS_SUPPRESSION_CHECK_URL,
+    suppressionApiKey: SMS_SUPPRESSION_API_KEY,
     createTool: (payload) => requestVapiResource("tool", { method: "POST", body: payload }),
     patchTool: (toolId, payload) => requestVapiResource(`tool/${encodeURIComponent(toolId)}`, { method: "PATCH", body: payload }),
     patchAssistant: patchVapiAssistant,
@@ -4177,6 +4192,9 @@ async function getCustomerDashboard({ email, phone }) {
     averageJobValueCents: business?.settings?.averageJobValueCents || 0,
   });
   const jobberConnection = business?.fieldServiceConnections?.find((connection) => connection.provider === "JOBBER");
+  const ownerTextPhone = business?.settings?.ownerPhone || signup.ownerPhone || "";
+  const ownerTextSuppression = ownerTextPhone ? await getSmsSuppression(ownerTextPhone) : null;
+  const ownerTextsPaused = Boolean(ownerTextSuppression?.suppressed);
   const billingChecklist = getBillingReadinessForSignup(signup);
   const setupChecklist = [
     ...billingChecklist,
@@ -4213,6 +4231,17 @@ async function getCustomerDashboard({ email, phone }) {
         value: mapping.matchValue,
         label: mapping.label || "",
       })),
+    },
+    messaging: {
+      status: ownerTextPhone ? (ownerTextsPaused ? "PAUSED" : "ACTIVE") : "NOT_CONFIGURED",
+      serviceTextsActive: Boolean(ownerTextPhone && !ownerTextsPaused),
+      pausedAt: ownerTextsPaused ? ownerTextSuppression?.suppressedAt || ownerTextSuppression?.updatedAt || null : null,
+      resumedAt: !ownerTextsPaused ? ownerTextSuppression?.resumedAt || null : null,
+      guidance: !ownerTextPhone
+        ? "Add an owner phone number to receive service text updates."
+        : ownerTextsPaused
+          ? "Reply START in the business text thread to resume service text updates."
+          : "Service text updates are active for the owner phone.",
     },
     stats: {
       totalCalls: calls.length,
@@ -6179,6 +6208,44 @@ app.get("/api/health/ready", async (_req, res) => {
     });
   }
 });
+
+app.post(
+  "/api/webhooks/sms",
+  express.urlencoded({ extended: false, limit: "8kb" }),
+  asyncRoute(async (req, res) => {
+    if (!verifyTwilioWebhookRequest(req)) {
+      return res.status(401).json({ error: "Invalid messaging webhook signature." });
+    }
+    const preference = classifySmsPreference(req.body?.Body);
+    if (["SUPPRESS", "RESUME"].includes(preference.action)) {
+      const result = await recordSmsPreference({
+        phoneNumber: req.body?.From,
+        keyword: preference.keyword,
+        messageSid: req.body?.MessageSid,
+      });
+      console.log("[sms:preference] recorded", {
+        action: result.action,
+        phoneLast4: result.phoneNumber.slice(-4),
+      });
+    }
+    res.type("application/xml").send("<Response></Response>");
+  })
+);
+
+app.post(
+  "/api/integrations/sms/suppression/check",
+  asyncRoute(async (req, res) => {
+    if (!SMS_SUPPRESSION_API_KEY) {
+      return res.status(503).json({ error: "SMS consent checks are not configured." });
+    }
+    if (!hasValidSuppressionApiKey(req)) {
+      return res.status(401).json({ error: "Invalid SMS consent credential." });
+    }
+    const phoneNumber = normalizeSmsPhone(req.body?.phoneNumber);
+    const suppressed = await isSmsSuppressed(phoneNumber);
+    res.json({ allowed: !suppressed, suppressed });
+  })
+);
 
 app.get(
   "/api/appointments/:id/proposal",
