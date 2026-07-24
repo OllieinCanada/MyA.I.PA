@@ -651,3 +651,15 @@ model SmsSuppression {
 
   @@index([suppressed, updatedAt])
 }
+
+model SmsInboundRoute {
+  id             String   @id @default(cuid())
+  phoneNumber    String   @unique
+  upstreamUrl    String
+  upstreamMethod String   @default("POST")
+  source         String   @default("TWILIO_NUMBER")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([updatedAt])
+}

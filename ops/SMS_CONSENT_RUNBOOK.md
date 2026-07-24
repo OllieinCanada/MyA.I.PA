@@ -19,12 +19,15 @@ Repository code alone does not activate inbound preference handling.
 
 1. Deploy the schema change and confirm the `SmsSuppression` table exists.
 2. Confirm Render has a strong `SMS_SUPPRESSION_API_KEY`, the public HTTPS `SMS_SUPPRESSION_CHECK_URL`, and the exact `TWILIO_INBOUND_WEBHOOK_URL`.
-3. Configure the inbound messaging webhook for every active service-text number to POST to `https://api.myaipa.ca/api/webhooks/sms`.
-4. Verify the provider signs inbound webhooks and that invalid signatures receive `401`.
-5. Roll the current isolated SMS tool configuration to each active phone assistant. Read-back must show both suppression environment variables and the suppression code check.
-6. Using an authorized test handset, send `STOP`; verify one global suppression row, no subsequent provider send attempt, and `Paused` in the customer dashboard.
-7. Send `START`; verify the same row is resumed, a subsequent test service text is accepted, and the dashboard returns to `Active`.
-8. Confirm the provider’s required automatic STOP/HELP/START confirmation language and behaviour with counsel before a paid external pilot. The application webhook intentionally returns empty TwiML so it does not create duplicate replies.
+3. Run `npm run activate:sms-consent` inside a Render one-off job. Review the masked dry-run and require zero blocked or skipped active numbers.
+4. The dry run must identify the existing `api.vapi.ai` inbound route for every target. Do not replace an unrecognized existing webhook.
+5. Configure every active service-text number by running a guarded Render one-off job with `SMS_CONSENT_ACTIVATION_CONFIRM=configure-live-sms-consent npm run activate:sms-consent:webhooks`.
+6. Require the apply result to confirm the MyAIPA HTTPS `POST` webhook, the original Vapi fallback, and the database-backed Vapi proxy route for every changed number. Ordinary customer replies must continue to reach Vapi; failures at MyAIPA must fall back through Twilio to the original Vapi URL.
+7. Verify the provider signs inbound webhooks and that invalid signatures receive `401`.
+8. Roll the current isolated SMS tool configuration to each active phone assistant. Read-back must show both suppression environment variables and the suppression code check.
+9. Run the reversible provider-path exercise from two authorized service numbers using a guarded Render job with `SMS_CONSENT_TEST_CONFIRM=run-live-stop-start`, distinct `SMS_CONSENT_TEST_FROM_LAST4` / `SMS_CONSENT_TEST_TO_LAST4`, and `npm run activate:sms-consent:test`. Require paused and resumed states to be observed and `finalSuppressed` to be `false`.
+10. Using an authorized test handset, send `STOP`; verify one global suppression row, no subsequent provider send attempt, and `Paused` in the customer dashboard. Send `START`; verify the same row is resumed, a subsequent test service text is accepted, and the dashboard returns to `Active`.
+11. Confirm the provider’s required automatic STOP/HELP/START confirmation language and behaviour with counsel before a paid external pilot. The application webhook intentionally returns empty TwiML so it does not create duplicate replies.
 
 ## Troubleshooting
 

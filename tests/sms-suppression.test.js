@@ -2,8 +2,10 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
   classifySmsPreference,
+  forwardSmsToUpstream,
   getTwilioSignature,
   normalizeSmsPhone,
+  normalizeSmsUpstreamUrl,
   recordSmsPreference,
 } = require("../server/smsSuppression");
 
@@ -35,6 +37,64 @@ test("signed webhook input uses the documented URL plus sorted form fields", () 
     { From: "+19055550123", Body: "STOP", To: "+12495550100" },
     "auth-token"
   ));
+});
+
+test("ordinary inbound SMS forwarding only permits the Vapi HTTPS upstream", () => {
+  assert.equal(
+    normalizeSmsUpstreamUrl("https://api.vapi.ai/twilio/inbound/test"),
+    "https://api.vapi.ai/twilio/inbound/test"
+  );
+  assert.throws(
+    () => normalizeSmsUpstreamUrl("https://example.invalid/collect"),
+    /not allowed/i
+  );
+  assert.throws(
+    () => normalizeSmsUpstreamUrl("http://api.vapi.ai/insecure"),
+    /not allowed/i
+  );
+});
+
+test("ordinary inbound SMS is re-signed and forwarded to the stored Vapi route", async () => {
+  const calls = [];
+  const upstreamUrl = "https://api.vapi.ai/twilio/inbound/test";
+  const params = {
+    From: "+19055550123",
+    To: "+12495550100",
+    Body: "Can you call me tomorrow?",
+    MessageSid: "SM_ORDINARY",
+  };
+  const result = await forwardSmsToUpstream({
+    phoneNumber: params.To,
+    params,
+    authToken: "twilio-auth-token",
+    prismaClient: {
+      smsInboundRoute: {
+        findUnique: async ({ where }) => {
+          assert.equal(where.phoneNumber, params.To);
+          return { upstreamUrl, upstreamMethod: "POST" };
+        },
+      },
+    },
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers({ "content-type": "application/xml" }),
+        text: async () => "<Response></Response>",
+      };
+    },
+  });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, upstreamUrl);
+  assert.equal(calls[0].options.method, "POST");
+  assert.equal(
+    calls[0].options.headers["X-Twilio-Signature"],
+    getTwilioSignature(upstreamUrl, params, "twilio-auth-token")
+  );
+  assert.equal(new URLSearchParams(calls[0].options.body).get("Body"), params.Body);
+  assert.equal(result.body, "<Response></Response>");
+  assert.equal(result.upstreamHost, "api.vapi.ai");
 });
 
 test("preference records are global per phone number and can be resumed", async () => {
