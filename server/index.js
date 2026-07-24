@@ -6149,6 +6149,31 @@ app.get("/api/health", (_req, res) => {
   res.json({ ok: true, service: "my-ai-pa-api", time: new Date().toISOString() });
 });
 
+app.get("/api/health/ready", async (_req, res) => {
+  const startedAt = Date.now();
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    res.json({
+      ok: true,
+      service: "my-ai-pa-api",
+      dependencies: { database: "reachable" },
+      responseTimeMs: Date.now() - startedAt,
+      time: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error("[health-readiness] database check failed", {
+      code: String(error?.code || "DATABASE_UNAVAILABLE").slice(0, 80),
+    });
+    res.status(503).json({
+      ok: false,
+      service: "my-ai-pa-api",
+      dependencies: { database: "unavailable" },
+      responseTimeMs: Date.now() - startedAt,
+      time: new Date().toISOString(),
+    });
+  }
+});
+
 app.get(
   "/api/appointments/:id/proposal",
   enforcePublicRouteRateLimit("appointment-proposal-view", 60),

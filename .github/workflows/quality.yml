@@ -36,6 +36,9 @@ jobs:
       - name: Validate private legal drafts when present
         run: npm run legal:validate
 
+      - name: Validate operational readiness controls
+        run: npm run ops:validate
+
       - name: Scan tracked files for common secret formats
         run: npm run security:scan-secrets
 

@@ -8,6 +8,7 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 diagnostics/
+private-backups/
 .codex-resume-prompt.txt
 .codex-wakeup.log
 .codex-remote-attachments/

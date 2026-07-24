@@ -61,6 +61,41 @@ test("health endpoint remains public and carries baseline security headers", asy
   assert.equal(payload.ok, true);
 });
 
+test("readiness endpoint verifies database connectivity without exposing connection details", async () => {
+  const originalQueryRaw = prisma.$queryRaw;
+  prisma.$queryRaw = async () => [{ "?column?": 1 }];
+  try {
+    const response = await request("/api/health/ready");
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.ok, true);
+    assert.equal(payload.dependencies.database, "reachable");
+    assert.equal(JSON.stringify(payload).includes("DATABASE_URL"), false);
+  } finally {
+    prisma.$queryRaw = originalQueryRaw;
+  }
+});
+
+test("readiness endpoint fails closed without exposing database errors", async () => {
+  const originalQueryRaw = prisma.$queryRaw;
+  prisma.$queryRaw = async () => {
+    const error = new Error("postgresql://operator:secret@example.invalid/private");
+    error.code = "P1001";
+    throw error;
+  };
+  try {
+    const response = await request("/api/health/ready");
+    assert.equal(response.status, 503);
+    const payload = await response.json();
+    assert.equal(payload.ok, false);
+    assert.equal(payload.dependencies.database, "unavailable");
+    assert.equal(JSON.stringify(payload).includes("secret"), false);
+    assert.equal(JSON.stringify(payload).includes("example.invalid"), false);
+  } finally {
+    prisma.$queryRaw = originalQueryRaw;
+  }
+});
+
 test("customer support routes require a signed dashboard session", async () => {
   for (const path of ["/api/customer/dashboard/support/suggest", "/api/customer/dashboard/support/reports"]) {
     const response = await request(path, { method: "POST", body: { description: "My latest call is missing." } });

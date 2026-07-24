@@ -15,6 +15,7 @@ const requiredFiles = [
   "CASL_AND_MESSAGING_COMPLIANCE_DRAFT.md",
   "CUSTOMER_COMPLIANCE_ACKNOWLEDGEMENT_DRAFT.md",
   "LEGAL_REVIEW_ISSUES.md",
+  "OPERATOR_FACTS_AND_APPROVALS.md",
 ];
 
 if (!fs.existsSync(legalDir)) {

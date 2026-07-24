@@ -54,7 +54,7 @@ if (!service) {
   expectEqual("buildCommand", service.buildCommand, "npm install --include=dev --legacy-peer-deps && npm run backend:prepare");
   expectEqual("preDeployCommand", service.preDeployCommand, "npm run db:push");
   expectEqual("startCommand", service.startCommand, "npm run server:prod");
-  expectEqual("healthCheckPath", service.healthCheckPath, "/api/health");
+  expectEqual("healthCheckPath", service.healthCheckPath, "/api/health/ready");
 
   expectEqual("disk name", service.disk && service.disk.name, "myaipa-data");
   expectEqual("disk mountPath", service.disk && service.disk.mountPath, "/data");
