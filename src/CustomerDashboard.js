@@ -749,7 +749,7 @@ function SupportReportModal({ open, call, onClose, onSubmitted }) {
                 <button type="button" className="primary" onClick={suggest} disabled={Boolean(busy) || description.trim().length < 8}>{busy === "suggest" ? "Checking…" : "Get suggestions"}</button>
               </div>
             )}
-            <p className="customer-support-safety">Suggestions never change your Vapi, Twilio, phone, or dashboard settings.</p>
+            <p className="customer-support-safety">Suggestions never change your phone service, messaging, or dashboard settings.</p>
           </>
         )}
       </section>
@@ -1112,7 +1112,7 @@ function CustomerDashboardView({ dashboard, onSignOut, onRefresh, refreshing, re
                 </button>
                 {openCallId === call.id ? <CallDetails call={call} onReport={openSupport} /> : null}
               </article>
-            )) : <p className="customer-empty">No synced calls yet. Once Vapi/Twilio sync is connected, calls will show here.</p>}
+            )) : <p className="customer-empty">No calls are showing yet. New calls will appear here automatically after they finish.</p>}
           </div>
         </section>
 
