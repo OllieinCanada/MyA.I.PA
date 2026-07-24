@@ -15,7 +15,7 @@ services:
     buildCommand: npm install --include=dev --legacy-peer-deps && npm run backend:prepare
     preDeployCommand: npm run db:push
     startCommand: npm run server:prod
-    healthCheckPath: /api/health
+    healthCheckPath: /api/health/ready
     disk:
       name: myaipa-data
       mountPath: /data

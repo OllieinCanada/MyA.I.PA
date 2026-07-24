@@ -1,5 +1,16 @@
 # Deploy Status
 
+## 2026-07-23 Legal and Operational Readiness Package
+
+- Added database-aware readiness at `/api/health/ready`; Render will use it so a web process with an unavailable database is not treated as ready.
+- Added repeatable operational validation, redacted production monitoring, retention auditing with a guarded apply mode, verified PostgreSQL logical-backup tooling, and private-output exclusions.
+- Added runbooks for retention/deletion, backup/restore, monitoring, incidents, privacy requests, and Canadian counsel review.
+- Wired `npm run ops:validate` into the local release gate and GitHub quality workflow.
+- Private legal drafts remain outside the public repository. All 11 draft files pass structure validation but still contain operator placeholders and require qualified Canadian counsel.
+- Full local release gate passed: 114/114 backend tests, operational validation, secret scan, Render validation, backend preflight, Prisma validation, zero production dependency vulnerabilities, signup diagnostics, and the production Pages build.
+- Public site and API liveness monitoring passed. Database retention evidence and backup creation remain blocked locally because this computer does not have a reachable production `DATABASE_URL` or PostgreSQL backup tools.
+- No retention apply, database backup, restore, provider mutation, production deployment, commit, or push was performed in this readiness pass.
+
 ## 2026-07-22 Revenue Rescue and Electrician Playbook Release
 
 - Added an auditable lead outcome ledger with estimated value, actual won revenue, lost reasons, immutable outcome events, and owner-dashboard editing.
