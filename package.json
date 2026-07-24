@@ -69,6 +69,7 @@
     "deploy:vapi-call-quality": "node scripts/deploy-vapi-call-quality.js",
     "deploy:vapi-electrician-playbook": "node scripts/deploy-vapi-electrician-playbook.js",
     "deploy:vapi-webhook-security": "node scripts/deploy-vapi-webhook-security.js",
+    "rollback:vapi-webhook-security": "node scripts/rollback-vapi-webhook-security.js",
     "test:vapi-0318-call": "node scripts/run-vapi-0318-controlled-call.js",
     "repair:make-vapi-routing": "node scripts/update-make-vapi-sms-routing.js --apply",
     "evals:vapi:dry-run": "node scripts/setup-vapi-evals.js --dry-run",

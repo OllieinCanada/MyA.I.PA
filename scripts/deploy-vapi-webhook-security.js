@@ -83,12 +83,19 @@ function isWebhookRouted(assistant) {
   return status.urlCorrect && status.endOfCallReportEnabled && status.toolCallsEnabled;
 }
 
-async function probeBackend(assistantId) {
+async function probeBackend({ assistantId, phoneNumberId, phone }) {
   const response = await fetch(webhookUrl, {
     method: "POST",
     signal: AbortSignal.timeout(15_000),
     headers: { "Content-Type": "application/json", "X-Vapi-Secret": webhookSecret },
-    body: JSON.stringify({ eventType: "test.noop", call: { assistantId } }),
+    body: JSON.stringify({
+      eventType: "test.noop",
+      call: {
+        assistantId,
+        phoneNumberId,
+        phoneNumber: { id: phoneNumberId, number: phone, twilioPhoneNumber: phone },
+      },
+    }),
   });
   let payload = {};
   try { payload = await response.json(); } catch (_error) { payload = {}; }
@@ -137,7 +144,7 @@ async function main() {
     })
     .map((assistant) => {
       const phone = phoneNumber(phonesByAssistant.get(String(assistant.id))?.[0]);
-      return { assistant, phone };
+      return { assistant, phone, phoneRecord: phonesByAssistant.get(String(assistant.id))?.[0] || {} };
     })
     .filter((item) => !phoneLast4Filter || item.phone.endsWith(phoneLast4Filter));
 
@@ -178,7 +185,11 @@ async function main() {
       });
     }
     const verified = await request(`/assistant/${encodeURIComponent(item.assistant.id)}`);
-    const probe = await probeBackend(item.assistant.id);
+    const probe = await probeBackend({
+      assistantId: item.assistant.id,
+      phoneNumberId: String(item.phoneRecord?.id || ""),
+      phone: item.phone,
+    });
     results.push({
       assistantIdHash: shortHash(item.assistant.id),
       phoneLast4: item.phone.slice(-4),
