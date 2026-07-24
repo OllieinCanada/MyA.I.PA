@@ -68,14 +68,19 @@ function webhookStatus(assistant) {
   const messages = Array.isArray(assistant?.serverMessages) ? assistant.serverMessages.map(String) : [];
   return {
     urlCorrect: String(server.url || assistant?.serverUrl || "") === webhookUrl,
-    authenticationConfigured: Boolean(server.credentialId || server.secret || assistant?.serverUrlSecret),
+    authenticationReadback: server.credentialId
+      ? "credential-id-visible"
+      : server.secret || assistant?.serverUrlSecret
+        ? "legacy-secret-visible"
+        : "redacted-or-absent",
     endOfCallReportEnabled: messages.includes("end-of-call-report"),
     toolCallsEnabled: messages.includes("tool-calls"),
   };
 }
 
-function isWebhookCurrent(assistant) {
-  return Object.values(webhookStatus(assistant)).every(Boolean);
+function isWebhookRouted(assistant) {
+  const status = webhookStatus(assistant);
+  return status.urlCorrect && status.endOfCallReportEnabled && status.toolCallsEnabled;
 }
 
 async function probeBackend(assistantId) {
@@ -140,7 +145,7 @@ async function main() {
     assistantIdHash: shortHash(item.assistant.id),
     name: String(item.assistant.name || ""),
     phoneLast4: item.phone.slice(-4),
-    current: isWebhookCurrent(item.assistant),
+    current: isWebhookRouted(item.assistant),
     status: webhookStatus(item.assistant),
   }));
   console.log(JSON.stringify({
@@ -179,7 +184,7 @@ async function main() {
       phoneLast4: item.phone.slice(-4),
       readback: webhookStatus(verified),
       probe,
-      ok: isWebhookCurrent(verified) && probe.ok,
+      ok: isWebhookRouted(verified) && probe.ok,
     });
   }
 
