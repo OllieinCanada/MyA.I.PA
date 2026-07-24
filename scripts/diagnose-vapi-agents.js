@@ -1,4 +1,5 @@
 const { loadProjectEnv, redact } = require("./_helpers");
+const { POST_SEND_CLOSING_MARKER } = require("../server/compositeCallNotifications");
 
 const env = loadProjectEnv();
 
@@ -276,9 +277,12 @@ function assistantChecks(assistant, isolatedToolIds = new Set()) {
     /This'll just take a sec/i.test(prompt) && /Absolutely do not say/i.test(prompt)
       ? ok("explicitly bans filler while tools run")
       : fail("explicitly bans filler while tools run", "Missing explicit filler ban"),
-    /Thanks, I have everything I need\. We'll follow up with you as soon as possible\. Goodbye\./i.test(prompt)
-      ? ok("has exact clean closing")
-      : fail("has exact clean closing", "Missing exact closing line"),
+    prompt.includes(POST_SEND_CLOSING_MARKER)
+      && /Is there anything else I can help you with today\?/i.test(prompt)
+      && /Let the entire final sentence finish before calling endCall/i.test(prompt)
+      && !/Then call endCall immediately/i.test(prompt)
+      ? ok("has natural post-send closing")
+      : fail("has natural post-send closing", "Missing the wait-for-caller closing or a retired immediate-end instruction remains"),
     hasIsolatedSmsTool || toolIds.includes(CUSTOMER_TOOL_ID) || json.includes(CUSTOMER_TOOL_ID)
       ? ok("has customer SMS tool")
       : fail("has customer SMS tool", "Missing customer SMS tool ID"),

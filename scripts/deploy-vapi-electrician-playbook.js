@@ -59,6 +59,17 @@ function systemPrompt(assistant) {
   return (assistant?.model?.messages || []).filter((message) => message?.role === "system").map((message) => String(message.content || "")).join("\n\n");
 }
 
+function webhookStatus(assistant) {
+  const server = assistant?.server && typeof assistant.server === "object" ? assistant.server : {};
+  const messages = Array.isArray(assistant?.serverMessages) ? assistant.serverMessages.map(String) : [];
+  return {
+    serverUrl: String(server.url || assistant?.serverUrl || ""),
+    credentialConfigured: Boolean(server.credentialId),
+    legacySecretConfigured: Boolean(server.secret || assistant?.serverUrlSecret),
+    endOfCallReportEnabled: messages.includes("end-of-call-report"),
+  };
+}
+
 function withPlaybook(messages) {
   let replaced = false;
   const next = (messages || []).map((message) => {
@@ -108,7 +119,13 @@ async function main() {
 
   console.log(JSON.stringify({
     mode: apply ? "apply" : "dry-run", playbook: { id: playbook.id, version: playbook.version },
-    candidates: candidates.map((item) => ({ assistantIdHash: shortHash(item.assistant.id), name: item.assistant.name || "", phoneLast4: item.phone.slice(-4), alreadyCurrent: item.alreadyCurrent })),
+    candidates: candidates.map((item) => ({
+      assistantIdHash: shortHash(item.assistant.id),
+      name: item.assistant.name || "",
+      phoneLast4: item.phone.slice(-4),
+      alreadyCurrent: item.alreadyCurrent,
+      webhook: webhookStatus(item.assistant),
+    })),
   }, null, 2));
   if (!apply) return;
 

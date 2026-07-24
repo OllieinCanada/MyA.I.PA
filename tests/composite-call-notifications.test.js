@@ -151,6 +151,12 @@ test("caller-number prompt acknowledges the calling number without exposing digi
   assert.match(prompt, /Do not speak a closing sentence/);
   assert.match(prompt, /call endCall before send_call_summaries_test returns/);
   assert.match(prompt, /earlier SMS tool names are retired and unavailable/);
+  assert.match(prompt, /MYAIPA NATURAL POST-SEND CLOSING/);
+  assert.match(prompt, /Is there anything else I can help you with today/);
+  assert.match(prompt, /Stop and wait for the caller's answer/);
+  assert.match(prompt, /Let the entire final sentence finish before calling endCall/);
+  assert.match(prompt, /Never say "Goodbye" as a standalone closing/);
+  assert.doesNotMatch(prompt, /Then call endCall immediately/);
 });
 
 test("caller-number prompt describes customer-only delivery when owner SMS is disabled", () => {

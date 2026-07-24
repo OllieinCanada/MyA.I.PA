@@ -1,5 +1,11 @@
 const crypto = require("crypto");
-const { callerNumberFallbackPrompt, getVapiCompositeToolDefinition, normalizeE164 } = require("./compositeCallNotifications");
+const {
+  POST_SEND_CLOSING_MARKER,
+  callerNumberFallbackPrompt,
+  getVapiCompositeToolDefinition,
+  normalizeE164,
+  removeLegacyAbruptClosingInstructions,
+} = require("./compositeCallNotifications");
 
 const SHARED_CUSTOMER_TOOL_ID = "baf9269b-6f71-4694-aaec-859209fb77a5";
 const SHARED_OWNER_TOOL_ID = "a2b67aee-f59e-4056-bff5-bf60dbc97ab0";
@@ -210,9 +216,9 @@ function updateMessages(messages, toolName) {
   const output = (messages || []).map((message) => {
     if (updatedSystem || message?.role !== "system") return message;
     updatedSystem = true;
-    const content = String(message.content || "")
+    const content = removeLegacyAbruptClosingInstructions(String(message.content || "")
       .replace(new RegExp(`\\n*${start}[\\s\\S]*?${end}`, "g"), "")
-      .replace(new RegExp(`\\n*${legacyPilotStart}[\\s\\S]*$`, "g"), "")
+      .replace(new RegExp(`\\n*${legacyPilotStart}[\\s\\S]*$`, "g"), ""))
       .trimEnd();
     return { ...message, content: `${content}\n\n${promptOverride(toolName)}` };
   });
@@ -263,6 +269,10 @@ function inspectIsolatedConfiguration({ assistant, tool, aiNumber, ownerNumber }
     callerFallbackInstalled: prompt.includes("trusted caller ID") && prompt.includes("needsCustomerNumber") && prompt.includes("unless complete is true"),
     callerAcknowledgementInstalled: prompt.includes("I'll use the number you're calling from") && prompt.includes("Do not claim you can see or recite the digits"),
     mandatoryToolGateInstalled: prompt.includes("MANDATORY TOOL GATE") && prompt.includes("Do not speak a closing sentence") && prompt.includes("call endCall before"),
+    naturalPostSendClosingInstalled: prompt.includes(POST_SEND_CLOSING_MARKER)
+      && prompt.includes("Is there anything else I can help you with today?")
+      && prompt.includes("Let the entire final sentence finish before calling endCall")
+      && prompt.includes("Never say \"Goodbye\" as a standalone closing"),
     businessClaimsSafetyInstalled: prompt.includes("UNSUPPORTED BUSINESS CLAIMS") && prompt.includes("Never infer or claim that the business is licensed"),
     emergencySafetyInstalled: prompt.includes("EMERGENCY SAFETY") && prompt.includes("call 911 or local emergency services now"),
     contextAcknowledgementInstalled: prompt.includes("CONTEXT ACKNOWLEDGEMENT") && prompt.includes("acknowledge both"),

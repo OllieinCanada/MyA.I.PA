@@ -75,6 +75,7 @@ const {
   sanitizeConnection: sanitizeJobberConnection,
   syncLeadToJobber,
 } = require("./jobberIntegration");
+const { resolveVapiWebhookSecret } = require("./vapiWebhookAuth");
 
 loadPowerShellEnvAssignments(path.join(__dirname, "..", ".env.local"));
 
@@ -665,8 +666,13 @@ function hasValidIntegrationKey(req) {
 }
 
 function getVapiWebhookSecret() {
-  if (String(process.env.NODE_ENV || "").toLowerCase() === "production") return VAPI_WEBHOOK_SECRET;
-  return VAPI_WEBHOOK_SECRET || INTEGRATION_API_KEY;
+  const resolved = resolveVapiWebhookSecret({
+    configuredSecret: VAPI_WEBHOOK_SECRET,
+    apiKey: VAPI_API_KEY,
+    nodeEnv: process.env.NODE_ENV,
+  });
+  if (resolved.secret) return resolved.secret;
+  return String(process.env.NODE_ENV || "").toLowerCase() === "production" ? "" : INTEGRATION_API_KEY;
 }
 
 function hasValidVapiWebhookKey(req) {

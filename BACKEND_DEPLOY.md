@@ -64,9 +64,11 @@ The following backend routes reject unauthenticated requests:
 - `POST /api/webhooks/voice`
 - `POST /api/integrations/vapi/lead-handoffs/events`
 
-Approved server-to-server callers can authenticate with `Authorization: Bearer <INTEGRATION_API_KEY>`, `X-MyAIPA-Key`, or `X-Vapi-Secret`. Never put this key in frontend code or a public build.
+Approved server-to-server callers use `INTEGRATION_API_KEY` on the general integration routes. `POST /api/webhooks/voice` is deliberately separate: it accepts only the Vapi webhook credential through `Authorization: Bearer ...` or `X-Vapi-Secret`. It does not accept `INTEGRATION_API_KEY`, request-body credentials, or caller-supplied tenant IDs. Never put either credential in frontend code or a public build.
 
-Before enabling a Vapi assistant in production, create a Vapi custom credential containing the same secret and attach that credential to every assistant, phone-number, or tool server URL that calls these routes. A deployment is not ready until an authenticated Vapi test event succeeds and the same event without a credential returns `401` without changing data or sending a message.
+Set an independent `VAPI_WEBHOOK_SECRET` when account-level secret management is available. If it is absent, production derives a stable, one-way, webhook-only credential from `VAPI_API_KEY`; this keeps the webhook credential distinct from both the private API key itself and the broader integration credential. `npm run deploy:vapi-webhook-security -- --apply --confirm=APPLY_VAPI_WEBHOOK_SECURITY_V1` attaches that value to managed assistants without printing it. Rotating `VAPI_API_KEY` requires rerunning this rollout when the derived mode is in use.
+
+Before enabling a Vapi assistant in production, attach the matching Vapi custom credential to every assistant, phone-number, or tool server URL that calls these routes. The rollout script currently uses Vapi's backward-compatible inline secret field because it can be applied and audited through the API; migrate it to a reusable Vapi Custom Credential when dashboard/API credential management is available. A deployment is not ready until an authenticated test event succeeds, tenant mapping succeeds, and the same event without a credential returns `401` without changing data or sending a message.
 
 `X-Vapi-Secret` verifies knowledge of the configured shared secret. Provider event identifiers should also be stored and checked for duplicate/replayed events before relying on the webhook for billing or message delivery.
 

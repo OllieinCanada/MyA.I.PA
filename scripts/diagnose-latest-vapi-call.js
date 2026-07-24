@@ -251,7 +251,7 @@ async function main() {
   const aiPhone = normalizePhone(argument("phone", env.MYAIPA_TEST_AI_PHONE || "+12494682588"));
   const ownerPhone = normalizePhone(argument("owner-phone", env.MYAIPA_TEST_OWNER_PHONE || ""));
   const ownerLast4 = argument("owner-last4", "").replace(/\D/g, "").slice(-4);
-  const sinceMinutes = Math.max(5, Math.min(1440, Number(argument("since-minutes", "180")) || 180));
+  const sinceMinutes = Math.max(5, Math.min(18720, Number(argument("since-minutes", "180")) || 180));
   const limit = Math.max(1, Math.min(100, Number(argument("limit", "20")) || 20));
   const call = await findLatestCall({ aiPhone, sinceMinutes, limit });
   const report = analyzeVapiSmsCall(call, { aiPhone, ownerPhone, ownerLast4, customerPhone: customerPhone(call) });

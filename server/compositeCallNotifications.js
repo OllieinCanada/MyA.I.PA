@@ -1,4 +1,5 @@
 const COMPOSITE_TOOL_NAME = "send_call_summaries_dynamic";
+const POST_SEND_CLOSING_MARKER = "## MYAIPA NATURAL POST-SEND CLOSING";
 
 function cleanText(value, maxLength = 500) {
   return String(value || "").replace(/\s+/g, " ").trim().slice(0, maxLength);
@@ -69,6 +70,30 @@ function buildCustomerBody(args) {
   return `Thanks for calling ${businessName}. We received your service request regarding ${job}${location ? ` at ${location}` : ""}. Our team will call you back as soon as possible.`.slice(0, 1600);
 }
 
+function postSendClosingPrompt() {
+  return `${POST_SEND_CLOSING_MARKER}
+This is the highest-priority post-send closing instruction and supersedes every earlier instruction that requires an immediate goodbye or immediate endCall.
+- After the notification tool returns with complete set to true, say naturally: "You're all set — I've sent your request to the team and a confirmation text to you. Is there anything else I can help you with today?"
+- Stop and wait for the caller's answer. Do not call endCall while waiting.
+- If the caller asks another in-scope question, answer it briefly, then ask once more whether there is anything else you can help with.
+- When the caller says no, thanks, that's all, goodbye, bye, or otherwise clearly ends the conversation, say: "Thanks for calling. Take care, and have a great day."
+- Let the entire final sentence finish before calling endCall. Never say "Goodbye" as a standalone closing and never call endCall in the same turn as the first post-send question.
+- If complete is not true, do not claim both texts were sent. Briefly explain that you could not confirm both messages, tell the caller the team has their request only if the tool result confirms that, and ask whether there is anything else you can help with.
+## END MYAIPA NATURAL POST-SEND CLOSING`;
+}
+
+function removeLegacyAbruptClosingInstructions(value) {
+  return String(value || "")
+    .replace(
+      /\n*## Ending\s*After both SMS tool results return, say exactly:\s*"[^"]*Goodbye\."\s*Then call endCall immediately\.\s*Do not add any other words before or after that exact closing line\.\s*Do not wait for another caller response\./gi,
+      ""
+    )
+    .replace(
+      /\n*-\s*After both SMS tool results return, say exactly:\s*"[^"]*Goodbye\."\s*Then call endCall immediately\.\s*Do not add any other words\./gi,
+      ""
+    );
+}
+
 function callerNumberFallbackPrompt(toolName, { ownerSmsEnabled = true } = {}) {
   const name = cleanText(toolName, 160);
   if (!name) throw new Error("A tool name is required for caller-number fallback instructions.");
@@ -102,7 +127,9 @@ If the caller says "use the number I am calling from," "call me back on this num
 Pass businessName, requestType, name, jobDetails, streetAddress, city, preferredStartDate, bestCallbackTime, and message when applicable.
 If and only if the tool result says needsCustomerNumber is true, explain that caller ID was unavailable, ask for the best mobile number, repeat the full number back for confirmation, and call ${name} exactly one more time with that confirmed number as rawPhoneNumber.
 If needsCustomerNumber is false, never call the tool again during that call. The tool's configured request-start message may say "Got it." Do not add model-generated waiting language such as "one moment," "hold on," or "this will just take a sec" before, during, or after the tool call.
-Only after the tool returns may you say exactly: "Thanks, I have everything I need. The team will review your request and call you back. Goodbye." Then call endCall immediately. Never promise that a confirmation was sent unless complete is true.`;
+Never promise that a confirmation was sent unless complete is true.
+
+${postSendClosingPrompt()}`;
 }
 
 function safeProviderError(error, fallbackCode = "tool_error") {
@@ -326,6 +353,7 @@ function getVapiCompositeToolDefinition() {
 
 module.exports = {
   COMPOSITE_TOOL_NAME,
+  POST_SEND_CLOSING_MARKER,
   buildCustomerBody,
   callerNumberFallbackPrompt,
   buildNotificationKeys,
@@ -334,4 +362,6 @@ module.exports = {
   getVapiCompositeToolCode,
   getVapiCompositeToolDefinition,
   normalizeE164,
+  postSendClosingPrompt,
+  removeLegacyAbruptClosingInstructions,
 };
