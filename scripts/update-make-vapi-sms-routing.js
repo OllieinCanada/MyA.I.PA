@@ -1,4 +1,9 @@
 const { loadProjectEnv, redact } = require("./_helpers");
+const {
+  POST_SEND_CLOSING_MARKER,
+  postSendClosingPrompt,
+  removeLegacyAbruptClosingInstructions,
+} = require("../server/compositeCallNotifications");
 
 const env = loadProjectEnv();
 const MAKE_API_BASE_URL = env.MAKE_API_BASE_URL || "https://us2.make.com/api/v2";
@@ -16,6 +21,7 @@ const ROUTING_BLOCK = [
   "- For both SMS tools, pass the assigned sender number above as fromNumber.",
   "- For send_owner_sms_dynamic, pass the owner notification number above as toNumber.",
   "- Never substitute a placeholder, example number, caller number, or another customer's number.",
+  postSendClosingPrompt(),
   END_MARKER,
 ].join("\n");
 
@@ -24,9 +30,9 @@ function escapeRegExp(value) {
 }
 
 function upsertRoutingBlock(prompt) {
-  const withoutExisting = String(prompt || "")
+  const withoutExisting = removeLegacyAbruptClosingInstructions(String(prompt || "")
     .replace(new RegExp(`${escapeRegExp(START_MARKER)}[\\s\\S]*?${escapeRegExp(END_MARKER)}`, "g"), "")
-    .trim();
+    .trim());
   return `${withoutExisting}\n\n${ROUTING_BLOCK}`;
 }
 
@@ -73,6 +79,9 @@ function verifyBlueprint(data) {
   return {
     senderNumberMapped: prompt.includes("Assigned AI/Twilio sender number: {{9.data.phone_number}}"),
     ownerNumberMapped: prompt.includes("Owner notification number: {{21.setupDetails.ownerPhone}}"),
+    naturalPostSendClosingMapped: prompt.includes(POST_SEND_CLOSING_MARKER)
+      && prompt.includes("Is there anything else I can help you with today?")
+      && prompt.includes("Let the entire final sentence finish before calling endCall"),
   };
 }
 
@@ -92,12 +101,12 @@ async function main() {
     body: JSON.stringify({ blueprint: JSON.stringify(blueprint) }),
   });
   const verified = verifyBlueprint(await requestJson(`/scenarios/${MAKE_SCENARIO_ID}/blueprint`));
-  if (!verified.senderNumberMapped || !verified.ownerNumberMapped) {
-    throw new Error("Make accepted the update, but the SMS routing mappings did not verify.");
+  if (!verified.senderNumberMapped || !verified.ownerNumberMapped || !verified.naturalPostSendClosingMapped) {
+    throw new Error("Make accepted the update, but the SMS routing or natural closing instructions did not verify.");
   }
   console.log(`Updated Make scenario ${MAKE_SCENARIO_ID}, module ${MAKE_ASSISTANT_MODULE_ID}.`);
   console.log(`Make API token: ${redact(MAKE_API_TOKEN)}`);
-  console.log("Verified: assigned AI sender and owner notification mappings are present.");
+  console.log("Verified: assigned AI sender, owner notification, and natural post-send closing instructions are present.");
 }
 
 main().catch((error) => {

@@ -55,6 +55,8 @@
     "diagnose:signup": "node scripts/diagnose-signup.js",
     "diagnose:vapi-agents": "node scripts/diagnose-vapi-agents.js",
     "diagnose:vapi-latest": "node scripts/diagnose-latest-vapi-call.js",
+    "diagnose:vapi-closings": "node scripts/inspect-recent-vapi-closings.js",
+    "repair:vapi-latest-closing": "node scripts/repair-latest-vapi-closing.js --apply",
     "analyze:vapi-grimsby-latest": "node scripts/analyze-latest-grimsby-call.js",
     "audit:twilio-inactive": "node scripts/audit-twilio-inactive-numbers.js",
     "audit:make-hooks": "node scripts/audit-make-hooks.js",
