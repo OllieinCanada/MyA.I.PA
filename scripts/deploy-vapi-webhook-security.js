@@ -68,22 +68,34 @@ function webhookStatus(assistant) {
   const messages = Array.isArray(assistant?.serverMessages) ? assistant.serverMessages.map(String) : [];
   return {
     urlCorrect: String(server.url || assistant?.serverUrl || "") === webhookUrl,
-    authenticationConfigured: Boolean(server.credentialId || server.secret || assistant?.serverUrlSecret),
+    authenticationReadback: server.credentialId
+      ? "credential-id-visible"
+      : server.secret || assistant?.serverUrlSecret
+        ? "legacy-secret-visible"
+        : "redacted-or-absent",
     endOfCallReportEnabled: messages.includes("end-of-call-report"),
     toolCallsEnabled: messages.includes("tool-calls"),
   };
 }
 
-function isWebhookCurrent(assistant) {
-  return Object.values(webhookStatus(assistant)).every(Boolean);
+function isWebhookRouted(assistant) {
+  const status = webhookStatus(assistant);
+  return status.urlCorrect && status.endOfCallReportEnabled && status.toolCallsEnabled;
 }
 
-async function probeBackend(assistantId) {
+async function probeBackend({ assistantId, phoneNumberId, phone }) {
   const response = await fetch(webhookUrl, {
     method: "POST",
     signal: AbortSignal.timeout(15_000),
     headers: { "Content-Type": "application/json", "X-Vapi-Secret": webhookSecret },
-    body: JSON.stringify({ eventType: "test.noop", call: { assistantId } }),
+    body: JSON.stringify({
+      eventType: "test.noop",
+      call: {
+        assistantId,
+        phoneNumberId,
+        phoneNumber: { id: phoneNumberId, number: phone, twilioPhoneNumber: phone },
+      },
+    }),
   });
   let payload = {};
   try { payload = await response.json(); } catch (_error) { payload = {}; }
@@ -132,7 +144,7 @@ async function main() {
     })
     .map((assistant) => {
       const phone = phoneNumber(phonesByAssistant.get(String(assistant.id))?.[0]);
-      return { assistant, phone };
+      return { assistant, phone, phoneRecord: phonesByAssistant.get(String(assistant.id))?.[0] || {} };
     })
     .filter((item) => !phoneLast4Filter || item.phone.endsWith(phoneLast4Filter));
 
@@ -140,7 +152,7 @@ async function main() {
     assistantIdHash: shortHash(item.assistant.id),
     name: String(item.assistant.name || ""),
     phoneLast4: item.phone.slice(-4),
-    current: isWebhookCurrent(item.assistant),
+    current: isWebhookRouted(item.assistant),
     status: webhookStatus(item.assistant),
   }));
   console.log(JSON.stringify({
@@ -173,13 +185,17 @@ async function main() {
       });
     }
     const verified = await request(`/assistant/${encodeURIComponent(item.assistant.id)}`);
-    const probe = await probeBackend(item.assistant.id);
+    const probe = await probeBackend({
+      assistantId: item.assistant.id,
+      phoneNumberId: String(item.phoneRecord?.id || ""),
+      phone: item.phone,
+    });
     results.push({
       assistantIdHash: shortHash(item.assistant.id),
       phoneLast4: item.phone.slice(-4),
       readback: webhookStatus(verified),
       probe,
-      ok: isWebhookCurrent(verified) && probe.ok,
+      ok: isWebhookRouted(verified) && probe.ok,
     });
   }
 
