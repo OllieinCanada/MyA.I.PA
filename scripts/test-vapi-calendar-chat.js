@@ -84,6 +84,10 @@ function collectBookingEvidence(...roots) {
     invoked: false,
     statuses: new Set(),
     appointmentIdHashes: new Set(),
+    calendarSyncStatuses: new Set(),
+    calendarProviders: new Set(),
+    calendarEventIdHashes: new Set(),
+    calendarEventHosts: new Set(),
     failed: false,
   };
   const visited = new Set();
@@ -116,8 +120,21 @@ function collectBookingEvidence(...roots) {
     if (name === toolName) evidence.invoked = true;
     const status = String(value?.status || "").toUpperCase();
     if (["CONFIRMED", "PENDING"].includes(status)) evidence.statuses.add(status);
+    if (["SYNCED", "SKIPPED", "ERROR", "NOT_REPORTED"].includes(status)) evidence.calendarSyncStatuses.add(status);
+    const provider = String(value?.provider || "").toUpperCase();
+    if (["GOOGLE", "MICROSOFT"].includes(provider)) evidence.calendarProviders.add(provider);
     const appointmentId = String(value?.appointmentId || value?.appointment?.id || "").trim();
     if (appointmentId) evidence.appointmentIdHashes.add(shortId(appointmentId));
+    const calendarEventId = String(value?.eventId || "").trim();
+    if (calendarEventId) evidence.calendarEventIdHashes.add(shortId(calendarEventId));
+    const calendarEventUrl = String(value?.eventUrl || "").trim();
+    if (calendarEventUrl) {
+      try {
+        evidence.calendarEventHosts.add(new URL(calendarEventUrl).hostname);
+      } catch {
+        evidence.failed = true;
+      }
+    }
     if (value?.ok === false || value?.failed === true) evidence.failed = true;
     Object.values(value).forEach(visit);
   }
@@ -127,6 +144,10 @@ function collectBookingEvidence(...roots) {
     invoked: evidence.invoked,
     statuses: [...evidence.statuses],
     appointmentIdHashes: [...evidence.appointmentIdHashes],
+    calendarSyncStatuses: [...evidence.calendarSyncStatuses],
+    calendarProviders: [...evidence.calendarProviders],
+    calendarEventIdHashes: [...evidence.calendarEventIdHashes],
+    calendarEventHosts: [...evidence.calendarEventHosts],
     failed: evidence.failed,
   };
 }
@@ -253,13 +274,31 @@ async function main() {
   if (!statuses.includes("CONFIRMED") && !statuses.includes("PENDING")) {
     throw new Error("The appointment tool was invoked, but no authoritative booking status was returned.");
   }
+  if (statuses.includes("CONFIRMED")) {
+    if (!final.evidence.calendarSyncStatuses.includes("SYNCED")) {
+      throw new Error("The appointment was confirmed, but the tool did not return successful calendar sync proof.");
+    }
+    if (!final.evidence.calendarProviders.includes("GOOGLE")) {
+      throw new Error("The appointment was confirmed, but the tool did not identify Google as the synced provider.");
+    }
+    if (!final.evidence.calendarEventIdHashes.length) {
+      throw new Error("The appointment was confirmed, but the tool did not return a Google event ID.");
+    }
+  }
 
   console.log(JSON.stringify({
     completed: true,
     toolInvoked: true,
     status: statuses.includes("CONFIRMED") ? "CONFIRMED" : "PENDING",
     appointmentIdHashes: final.evidence.appointmentIdHashes,
-    googleCalendarEventExpected: statuses.includes("CONFIRMED"),
+    calendarSyncStatuses: final.evidence.calendarSyncStatuses,
+    calendarProviders: final.evidence.calendarProviders,
+    calendarEventIdHashes: final.evidence.calendarEventIdHashes,
+    calendarEventHosts: final.evidence.calendarEventHosts,
+    googleCalendarEventVerified: statuses.includes("CONFIRMED")
+      && final.evidence.calendarSyncStatuses.includes("SYNCED")
+      && final.evidence.calendarProviders.includes("GOOGLE")
+      && final.evidence.calendarEventIdHashes.length > 0,
   }, null, 2));
 }
 
