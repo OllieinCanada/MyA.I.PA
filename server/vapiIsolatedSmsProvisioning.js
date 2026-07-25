@@ -24,7 +24,7 @@ function toolRejectionPlan() {
       conditions: [
         {
           type: "regex",
-          regex: "(?i)\\b(yes|yeah|yep|correct|confirm(?:ed)?|send (?:it|that)|please do|go ahead|looks good|that(?:'s| is) right)\\b",
+          regex: "(?i)(?:^\\s*(?:yes|yeah|yep|sure|perfect|absolutely|okay|ok)(?:\\s+(?:please|thanks?))?\\s*[.!]?\\s*$|\\b(?:correct|confirmed|send (?:it|that)|please do|go ahead|looks good|that(?:'s| is) right|sounds good)\\b)",
           target,
           negate: true,
         },

@@ -67,6 +67,17 @@ test("isolated tool payload keeps all routing outside model parameters", () => {
   assert.deepEqual(payload.rejectionPlan, toolRejectionPlan());
 });
 
+test("tool confirmation accepts natural approval without accepting ambiguity", () => {
+  const raw = toolRejectionPlan().conditions[0].conditions[0].regex;
+  const acceptance = new RegExp(raw.replace(/^\(\?i\)/, ""), "i");
+  for (const phrase of ["Yes.", "Perfect.", "Sure", "Absolutely!", "Okay", "Sounds good.", "Go ahead."]) {
+    assert.match(phrase, acceptance);
+  }
+  for (const phrase of ["I'm not sure.", "Maybe.", "Let me think.", "Not yet."]) {
+    assert.doesNotMatch(phrase, acceptance);
+  }
+});
+
 test("assistant update preserves unrelated tools and removes both shared SMS tools", () => {
   const source = assistant();
   const model = buildIsolatedAssistantModel(source, "isolated-tool", isolatedToolName(aiNumber, ownerNumber));

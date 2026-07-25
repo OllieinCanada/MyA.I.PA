@@ -61,9 +61,9 @@ const intakeQuestions = [
 const faq = [
   "Grimsby Electric has served the Greater Niagara Area and Southern Ontario since 1982.",
   "The company handles residential, commercial, and industrial electrical work.",
-  `Published services include: ${services.join(", ")}.`,
-  `Published service areas include: ${serviceAreas.join(", ")}.`,
-  "The published ECRA/ESA licence number is 7001754, and the website states that a master electrician is on staff.",
+  `Approved services include: ${services.join(", ")}.`,
+  `Approved service areas include: ${serviceAreas.join(", ")}.`,
+  "The ECRA/ESA licence number is 7001754, and a master electrician is on staff.",
   "Online business listings tied to 905-945-1055 show normal hours as Monday through Friday, 8:00 AM to 5:00 PM, with Saturday and Sunday closed. Treat these hours as listing-derived and let the team confirm holiday or special hours.",
   noQuotePolicy,
 ].join("\n");

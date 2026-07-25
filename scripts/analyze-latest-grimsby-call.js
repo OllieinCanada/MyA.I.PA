@@ -1,4 +1,5 @@
 const crypto = require("crypto");
+const zlib = require("zlib");
 const { loadProjectEnv } = require("./_helpers");
 const { normalizeE164 } = require("../server/compositeCallNotifications");
 
@@ -29,6 +30,42 @@ function clean(value, max = 10000) {
   return String(value || "").replace(/\r/g, "").trim().slice(0, max);
 }
 
+function sanitizeProviderLogLine(value) {
+  return clean(value, 1200)
+    .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer [redacted]")
+    .replace(/\b(?:AC|SK|SM|CA)[A-Za-z0-9]{20,}\b/g, "[provider-id]")
+    .replace(/\+?\d[\d().\s-]{8,}\d/g, "[phone]")
+    .replace(/https?:\/\/\S+/gi, "[url]");
+}
+
+function summarizeProviderLogLine(line) {
+  let entry;
+  try { entry = JSON.parse(line); } catch { return null; }
+  const attributes = entry?.attributes && typeof entry.attributes === "object" ? entry.attributes : {};
+  const body = clean(entry?.body, 240);
+  const event = clean(attributes.event, 120);
+  const eventStatus = clean(attributes.eventStatus, 40);
+  const category = clean(attributes.category, 40);
+  const relevant = category === "tool"
+    || eventStatus === "fail"
+    || /tool execution|tool calls received/i.test(body);
+  if (!relevant) return null;
+  return {
+    severity: clean(entry?.severityText || entry?.level, 24),
+    body,
+    event,
+    eventStatus,
+    toolNames: Array.isArray(attributes.toolNames) ? attributes.toolNames.map((name) => clean(name, 160)) : [],
+    errors: Array.isArray(attributes.errors)
+      ? attributes.errors.map((error) => ({
+        name: clean(error?.name, 160),
+        error: sanitizeProviderLogLine(error?.error || error?.message),
+      }))
+      : [],
+    providerError: sanitizeProviderLogLine(attributes.error || ""),
+  };
+}
+
 function parseObject(value) {
   if (value && typeof value === "object") return value;
   if (typeof value !== "string" || !value.trim()) return {};
@@ -44,6 +81,30 @@ async function request(pathname) {
   try { payload = text ? JSON.parse(text) : {}; } catch { payload = {}; }
   if (!response.ok) throw new Error(`GET ${pathname} failed with HTTP ${response.status}: ${payload.message || payload.error || "request failed"}`);
   return payload;
+}
+
+async function providerLogDiagnostics(call) {
+  const logUrl = String(call?.artifact?.presignedLogUrl || call?.artifact?.logUrl || "").trim();
+  if (!/^https:\/\//i.test(logUrl)) return { available: false, reason: "No provider log URL was available." };
+  try {
+    const response = await fetch(logUrl, { headers: { Accept: "text/plain,application/json" } });
+    if (!response.ok) return { available: false, reason: `Provider log returned HTTP ${response.status}.` };
+    const contentType = response.headers.get("content-type") || "";
+    const raw = Buffer.from(await response.arrayBuffer());
+    const body = /gzip/i.test(contentType) || (raw[0] === 0x1f && raw[1] === 0x8b)
+      ? zlib.gunzipSync(raw).toString("utf8")
+      : raw.toString("utf8");
+    const entries = body.split(/\r?\n/).map(summarizeProviderLogLine).filter(Boolean);
+    return {
+      available: true,
+      contentType,
+      bodyLength: body.length,
+      matchingLineCount: entries.length,
+      lines: entries.slice(-40),
+    };
+  } catch (error) {
+    return { available: false, reason: clean(error?.message || error, 240) };
+  }
 }
 
 function messageCollections(call) {
@@ -156,6 +217,11 @@ async function main() {
   const startedMs = callTime(call);
   const endedMs = new Date(call?.endedAt || call?.ended_at || 0).getTime() || 0;
   const messages = safeMessages(call);
+  const providerLogs = await providerLogDiagnostics(call);
+  if (process.argv.includes("--log-only")) {
+    console.log(JSON.stringify(providerLogs, null, 2));
+    return;
+  }
   const report = {
     call: {
       idHash: hash(call?.id || call?.callId),
@@ -172,6 +238,7 @@ async function main() {
     responseTiming: responseTiming(messages),
     performanceMetrics: call?.artifact?.performanceMetrics || null,
     toolCallCount: messages.reduce((sum, message) => sum + message.toolCalls.length, 0),
+    providerLogDiagnostics: providerLogs,
     structuredOutputs: structuredOutputs(call),
     scorecards: scorecards(call),
     summary: clean(call?.analysis?.summary || call?.summary, 5000),

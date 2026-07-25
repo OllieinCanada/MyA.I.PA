@@ -11,7 +11,7 @@ const targetPhone = "+12494956809";
 const apply = process.argv.includes("--apply");
 const confirmation = process.argv.find((arg) => arg.startsWith("--confirm="))?.slice(10) || "";
 const confirmationPhrase = "GRIMSBY-VAPI-UPGRADE-6809";
-const requiredPromptMarker = "## GRIMSBY ELECTRIC WEBSITE-TAILORED OVERRIDE v1";
+const requiredPromptMarker = "## GRIMSBY ELECTRIC AUTHORITATIVE POLICY v2";
 const isolatedToolMarker = "send_call_summaries_pilot_6809_v1";
 const scorecardName = "Grimsby Call Quality v1";
 
