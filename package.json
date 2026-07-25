@@ -112,7 +112,7 @@
     "codex:wakeup": "powershell -ExecutionPolicy Bypass -File scripts/codex-wakeup.ps1",
     "codex:wakeup:install": "powershell -ExecutionPolicy Bypass -File scripts/codex-schedule-wakeup.ps1 -StartTime 02:11 -EveryHours 5 -LaunchCodex -RunNow",
     "test": "react-scripts test --env=jsdom",
-    "test:backend": "node --test tests/backend-security.test.js tests/sms-suppression.test.js tests/twilio-sms.test.js tests/vapi-sms.test.js tests/vapi-call-diagnostics.test.js tests/vapi-isolated-sms-provisioning.test.js tests/vapi-tool-security.test.js tests/vapi-webhook-auth.test.js tests/composite-call-notifications.test.js tests/lead-handoffs.test.js tests/revenue-rescue.test.js tests/jobber-integration.test.js tests/trade-playbooks.test.js tests/safe-website-fetch.test.js tests/appointment-requests.test.js tests/calendar-integrations.test.js",
+    "test:backend": "node --test tests/backend-security.test.js tests/sms-suppression.test.js tests/twilio-sms.test.js tests/vapi-sms.test.js tests/vapi-call-diagnostics.test.js tests/vapi-isolated-sms-provisioning.test.js tests/vapi-tool-calls.test.js tests/vapi-tool-security.test.js tests/vapi-webhook-auth.test.js tests/composite-call-notifications.test.js tests/lead-handoffs.test.js tests/revenue-rescue.test.js tests/jobber-integration.test.js tests/trade-playbooks.test.js tests/safe-website-fetch.test.js tests/appointment-requests.test.js tests/calendar-integrations.test.js",
     "eject": "react-scripts eject"
   },
   "devDependencies": {

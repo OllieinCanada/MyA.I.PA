@@ -73,6 +73,7 @@ const {
   failVapiToolExecution,
   isVapiNotificationTool,
 } = require("./vapiToolSecurity");
+const { normalizeVapiToolCall } = require("./vapiToolCalls");
 const {
   recordLeadOutcome,
   summarizeRevenueRescue,
@@ -6598,9 +6599,10 @@ app.post(
       const calls = Array.isArray(vapiMessage.toolCallList) ? vapiMessage.toolCallList : [];
       const results = [];
       const routedBusinessId = await resolveBusinessIdForVapiCall(vapiMessage.call || vapiMessage);
-      for (const toolCall of calls) {
+      for (const rawToolCall of calls) {
+        const toolCall = normalizeVapiToolCall(rawToolCall);
         const toolName = String(toolCall.name || "").toLowerCase();
-        const parameters = toolCall.parameters && typeof toolCall.parameters === "object" ? toolCall.parameters : {};
+        const parameters = toolCall.parameters;
         if (isVapiNotificationTool(toolName)) {
           const claim = await claimVapiToolExecution({
             prisma,

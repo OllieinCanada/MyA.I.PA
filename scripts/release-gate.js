@@ -10,6 +10,7 @@ const backendTestFiles = [
   "tests/vapi-sms.test.js",
   "tests/vapi-call-diagnostics.test.js",
   "tests/vapi-isolated-sms-provisioning.test.js",
+  "tests/vapi-tool-calls.test.js",
   "tests/vapi-tool-security.test.js",
   "tests/vapi-webhook-auth.test.js",
   "tests/composite-call-notifications.test.js",
