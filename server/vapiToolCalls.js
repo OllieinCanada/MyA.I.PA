@@ -61,7 +61,84 @@ function normalizeVapiToolCall(value = {}) {
   };
 }
 
+function cleanString(value, maxLength) {
+  return String(value || "").trim().slice(0, maxLength);
+}
+
+function safeCalendarEventUrl(value, provider) {
+  const candidate = cleanString(value, 2000);
+  if (!candidate) return "";
+  try {
+    const parsed = new URL(candidate);
+    const allowedHosts = provider === "GOOGLE"
+      ? new Set(["calendar.google.com"])
+      : new Set(["outlook.live.com", "outlook.office.com", "outlook.office365.com"]);
+    return parsed.protocol === "https:" && allowedHosts.has(parsed.hostname.toLowerCase())
+      ? parsed.toString()
+      : "";
+  } catch {
+    return "";
+  }
+}
+
+function summarizeVapiCalendarSync(calendarSync, appointmentStatus) {
+  const status = cleanString(appointmentStatus, 40).toUpperCase();
+  const sync = calendarSync && typeof calendarSync === "object" && !Array.isArray(calendarSync)
+    ? calendarSync
+    : null;
+  if (!sync) {
+    return status === "CONFIRMED"
+      ? { ok: false, status: "NOT_REPORTED" }
+      : null;
+  }
+
+  const externalEvent = sync.externalEvent && typeof sync.externalEvent === "object" && !Array.isArray(sync.externalEvent)
+    ? sync.externalEvent
+    : {};
+  const providerValue = cleanString(sync.provider || externalEvent.provider, 20).toUpperCase();
+  const provider = ["GOOGLE", "MICROSOFT"].includes(providerValue) ? providerValue : "";
+  const externalStatus = cleanString(externalEvent.status, 40).toUpperCase();
+  const syncStatus = sync.ok === true
+    ? (externalStatus || "SYNCED")
+    : (sync.skipped === true ? "SKIPPED" : "ERROR");
+  const eventId = cleanString(externalEvent.externalEventId, 500);
+  const eventUrl = safeCalendarEventUrl(externalEvent.webLink, provider);
+  const reasonValue = cleanString(sync.reason, 100).toLowerCase();
+  const reason = ["email_invites_only", "no_connected_calendar", "not_confirmed"].includes(reasonValue)
+    ? reasonValue
+    : "";
+
+  return {
+    ok: sync.ok === true,
+    status: syncStatus,
+    ...(provider ? { provider } : {}),
+    ...(eventId ? { eventId } : {}),
+    ...(eventUrl ? { eventUrl } : {}),
+    ...(!sync.ok && reason ? { reason } : {}),
+  };
+}
+
+function buildVapiAppointmentExecutionResult(booking = {}) {
+  const source = booking && typeof booking === "object" && !Array.isArray(booking) ? booking : {};
+  const appointment = source.appointment && typeof source.appointment === "object" && !Array.isArray(source.appointment)
+    ? source.appointment
+    : {};
+  const status = cleanString(source.status || appointment.status, 40).toUpperCase();
+  const appointmentId = cleanString(appointment.id, 180);
+  const customerMessage = cleanString(source.customerMessage, 500);
+
+  return {
+    ok: source.ok !== false,
+    ...(appointmentId ? { appointmentId } : {}),
+    ...(status ? { status } : {}),
+    ...(customerMessage ? { customerMessage } : {}),
+    calendarSync: summarizeVapiCalendarSync(source.calendarSync, status),
+  };
+}
+
 module.exports = {
+  buildVapiAppointmentExecutionResult,
   normalizeVapiToolCall,
   parseObject,
+  summarizeVapiCalendarSync,
 };

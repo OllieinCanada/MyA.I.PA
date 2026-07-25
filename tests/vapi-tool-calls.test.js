@@ -1,6 +1,11 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { normalizeVapiToolCall, parseObject } = require("../server/vapiToolCalls");
+const {
+  buildVapiAppointmentExecutionResult,
+  normalizeVapiToolCall,
+  parseObject,
+  summarizeVapiCalendarSync,
+} = require("../server/vapiToolCalls");
 const { getVapiToolExecutionIdentity } = require("../server/vapiToolSecurity");
 
 const booking = {
@@ -88,4 +93,90 @@ test("invalid serialized tool arguments safely become an empty object", () => {
     id: "invalid-call",
     function: { name: "request_appointment", arguments: "{not-json" },
   }).parameters, {});
+});
+
+test("confirmed Vapi bookings expose sanitized Google sync proof", () => {
+  const result = buildVapiAppointmentExecutionResult({
+    ok: true,
+    status: "CONFIRMED",
+    customerMessage: "Your appointment is confirmed.",
+    appointment: { id: "appointment-17", calendarToken: "must-not-leak" },
+    calendarSync: {
+      ok: true,
+      provider: "GOOGLE",
+      connectionId: "must-not-leak",
+      externalEvent: {
+        provider: "GOOGLE",
+        status: "SYNCED",
+        externalEventId: "google-event-17",
+        webLink: "https://calendar.google.com/calendar/event?eid=17",
+        etag: "must-not-leak",
+        accessTokenEncrypted: "must-not-leak",
+      },
+    },
+  });
+
+  assert.deepEqual(result, {
+    ok: true,
+    appointmentId: "appointment-17",
+    status: "CONFIRMED",
+    customerMessage: "Your appointment is confirmed.",
+    calendarSync: {
+      ok: true,
+      status: "SYNCED",
+      provider: "GOOGLE",
+      eventId: "google-event-17",
+      eventUrl: "https://calendar.google.com/calendar/event?eid=17",
+    },
+  });
+  assert.doesNotMatch(JSON.stringify(result), /calendarToken|connectionId|etag|accessToken|must-not-leak/i);
+});
+
+test("confirmed bookings no longer imply calendar success when sync proof is absent", () => {
+  const result = buildVapiAppointmentExecutionResult({
+    status: "CONFIRMED",
+    appointment: { id: "appointment-18" },
+    customerMessage: "Your appointment is confirmed.",
+  });
+  assert.deepEqual(result.calendarSync, { ok: false, status: "NOT_REPORTED" });
+});
+
+test("calendar sync failures expose a bounded state without provider error details", () => {
+  const result = summarizeVapiCalendarSync({
+    ok: false,
+    provider: "GOOGLE",
+    error: "Provider error with private customer and token details",
+  }, "CONFIRMED");
+  assert.deepEqual(result, { ok: false, status: "ERROR", provider: "GOOGLE" });
+  assert.doesNotMatch(JSON.stringify(result), /private|token|customer/i);
+});
+
+test("pending bookings do not claim a calendar sync result", () => {
+  const result = buildVapiAppointmentExecutionResult({
+    status: "PENDING",
+    appointment: { id: "appointment-19" },
+  });
+  assert.equal(result.calendarSync, null);
+});
+
+test("unsafe provider links are omitted from Vapi calendar proof", () => {
+  for (const webLink of [
+    "javascript:alert(document.domain)",
+    "https://attacker.example/calendar?token=must-not-leak",
+  ]) {
+    const result = summarizeVapiCalendarSync({
+      ok: true,
+      provider: "GOOGLE",
+      externalEvent: {
+        externalEventId: "google-event-20",
+        webLink,
+      },
+    }, "CONFIRMED");
+    assert.deepEqual(result, {
+      ok: true,
+      status: "SYNCED",
+      provider: "GOOGLE",
+      eventId: "google-event-20",
+    });
+  }
 });

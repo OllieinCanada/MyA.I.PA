@@ -73,7 +73,10 @@ const {
   failVapiToolExecution,
   isVapiNotificationTool,
 } = require("./vapiToolSecurity");
-const { normalizeVapiToolCall } = require("./vapiToolCalls");
+const {
+  buildVapiAppointmentExecutionResult,
+  normalizeVapiToolCall,
+} = require("./vapiToolCalls");
 const {
   recordLeadOutcome,
   summarizeRevenueRescue,
@@ -6657,12 +6660,7 @@ app.post(
               sourceEventId: `vapi-appointment:${claim.identity.idempotencyKey}`,
               publicBaseUrl: getPublicBaseUrl(req),
             });
-            const executionResult = {
-              ok: true,
-              appointmentId: booking.appointment?.id,
-              status: booking.status || booking.appointment?.status,
-              customerMessage: booking.customerMessage,
-            };
+            const executionResult = buildVapiAppointmentExecutionResult(booking);
             await completeVapiToolExecution({ prisma, id: claim.execution.id, result: executionResult });
             results.push({ name: toolCall.name, toolCallId: toolCall.id, result: JSON.stringify(executionResult) });
           } catch (error) {
