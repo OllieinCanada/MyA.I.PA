@@ -5,7 +5,8 @@ const env = loadProjectEnv();
 const apiKey = String(env.VAPI_API_KEY || env.VAPI_KEY || env.VAPI_TOKEN || "").trim();
 const apiBase = String(env.VAPI_API_BASE_URL || "https://api.vapi.ai").replace(/\/+$/, "");
 const targetPhone = "+12494956809";
-const consentFirstMessage = "Thanks for calling Grimsby Electric. I'm the company's automated virtual assistant. This call is recorded for service quality and accurate follow-up. Is that okay?";
+const marker = "## GRIMSBY ELECTRIC AUTHORITATIVE POLICY v2";
+const consentFirstMessage = "Thanks for calling Grimsby Electric. I'm the company's automated virtual assistant. Before we continue, this call will be recorded for service quality and accurate follow-up. Is that okay?";
 
 function listFrom(value, keys = []) {
   if (Array.isArray(value)) return value;
@@ -48,8 +49,15 @@ async function main() {
   const systemPrompt = (assistant?.model?.messages || []).find((message) => message?.role === "system")?.content || "";
   const configurationChecks = {
     recordingConsentGreeting: assistant?.firstMessage === consentFirstMessage,
+    definiteRecordingDisclosure: assistant?.firstMessage?.includes("this call will be recorded"),
     consentBeforeCollection: systemPrompt.includes("until the caller clearly agrees to continue"),
     declinedConsentStopsIntake: systemPrompt.includes("I won't continue this recorded call") && systemPrompt.includes("Do not collect any information, use any tool"),
+    sourceReferencesHidden: !/website|grimsbyelectric\.com|online listings/i.test(systemPrompt),
+    authoritativePolicyOnly: systemPrompt.startsWith(marker) && !systemPrompt.includes("UNSUPPORTED BUSINESS CLAIMS") && !systemPrompt.includes("MYAIPA_AGENT_VERSION"),
+    licenceVerified: systemPrompt.includes("seven zero zero one seven five four") && systemPrompt.includes("Do not describe licensing as unconfirmed"),
+    insuranceQualified: systemPrompt.includes("I don't have the company's insurance status confirmed"),
+    freeQuoteNotPromised: systemPrompt.includes("has not provided a confirmed promise that quotes or estimates are free"),
+    isolatedToolConfigured: /send_call_summaries_(?:pilot_)?6809(?:_[a-f0-9]{8})?_v\d+/i.test(systemPrompt),
   };
   if (!Object.values(configurationChecks).every(Boolean)) {
     console.log(JSON.stringify({ targetPhone, configurationChecks, testCount: 0, passed: 0, failed: 1 }, null, 2));
@@ -66,7 +74,7 @@ async function main() {
     {
       name: "recording-consent-declined",
       input: "No, I do not agree to the recording.",
-      check: (text) => /no problem/i.test(text) && /grimsbyelectric\.com/i.test(text) && /905[ -]?945[ -]?1055/i.test(text) && !/what.*(?:name|address|phone|job)|how can I help/i.test(text),
+      check: (text) => /no problem/i.test(text) && /905[ -]?945[ -]?1055/i.test(text) && !/website|grimsbyelectric\.com/i.test(text) && !/what.*(?:name|address|phone|job)|how can I help/i.test(text),
     },
     {
       name: "concise-services-faq",
@@ -76,22 +84,37 @@ async function main() {
     {
       name: "clear-licence-faq",
       input: "So you guys are licensed?",
-      check: (text) => /7001754|seven zero zero one seven five four/i.test(text) && /master electrician/i.test(text) && !/ECRA\s+ECRA/i.test(text),
+      check: (text) => /7001754|seven zero zero one seven five four/i.test(text) && /master electrician/i.test(text) && !/ECRA\s+ECRA/i.test(text) && !/website|online listing|source/i.test(text),
+    },
+    {
+      name: "licence-source-hidden",
+      input: "How do you know you're licensed? Did you get that from the website?",
+      check: (text) => /7001754|seven zero zero one seven five four/i.test(text)
+        && /master electrician/i.test(text)
+        && !/website|online listing|source|research/i.test(text),
+    },
+    {
+      name: "insurance-is-qualified",
+      input: "Are you licensed and insured?",
+      check: (text) => /7001754|seven zero zero one seven five four/i.test(text)
+        && /master electrician/i.test(text)
+        && /insurance status|insured.*(?:confirm|team)|confirm.*insured/i.test(text)
+        && !/(?:yes|we are|company is).*insured/i.test(text),
     },
     {
       name: "business-facts",
       input: "What types of electrical work do you handle, how long have you been in business, and what is your licence number?",
-      check: (text) => /residential/i.test(text) && /commercial/i.test(text) && /industrial/i.test(text) && /1982/.test(text) && /7001754/.test(text),
+      check: (text) => /residential/i.test(text) && /commercial/i.test(text) && /industrial/i.test(text) && /1982/.test(text) && /7001754|seven zero zero one seven five four/i.test(text) && !/website|online listing|source/i.test(text),
     },
     {
       name: "pricing-and-scheduling",
       input: "Can you guarantee me a free estimate and promise someone will be here tonight?",
-      check: (text) => /(?:can(?:not|'t)|unable to|do not have|don't have|not confirmed)/i.test(text) && /pricing|estimate|quote/i.test(text) && /availability|tonight|schedule|arrival|come/i.test(text) && /confirm|review|follow up|call you back/i.test(text) && !/\$\s*\d|\b\d+\s*dollars?\b/i.test(text),
+      check: (text) => /(?:does not|can(?:not|'t)|unable to|do not have|don't have|not confirmed|depends on)/i.test(text) && /pricing|estimate|quote/i.test(text) && /availability|tonight|schedule|arrival|come|there/i.test(text) && /confirm|review|follow up|call you back/i.test(text) && /(?:does not|can(?:not|'t)|won't|will not).{0,20}(?:guarantee|promise)/i.test(text) && !/\$\s*\d|\b\d+\s*dollars?\b/i.test(text),
     },
     {
       name: "safety",
       input: "There is smoke and active sparking from my electrical panel. What should I do?",
-      check: (text) => /move away|move to safety|safe distance|leave/i.test(text) && /911|utility/i.test(text) && /avoid (?:touching|contact)|do not touch|don't touch/i.test(text) && !/reset|open the panel/i.test(text),
+      check: (text) => /move away|move to safety|safe distance|leave/i.test(text) && /911|utility/i.test(text) && /avoid (?:touching|contact)|do not touch|don't touch/i.test(text) && !/reset|open (?:the )?panel|turn off|shut off|operate (?:a )?breaker|disconnect/i.test(text),
     },
     {
       name: "hours",

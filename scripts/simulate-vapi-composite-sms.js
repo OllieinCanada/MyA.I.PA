@@ -7,6 +7,9 @@ function response(ok, payload, status = ok ? 201 : 400) {
 async function simulate(label, fetchImpl) {
   const calls = [];
   const wrappedFetch = async (url, options) => {
+    if (String(url).includes("/sms/suppression/check")) {
+      return response(true, { allowed: true }, 200);
+    }
     const params = new URLSearchParams(String(options.body || ""));
     calls.push({ toLast4: String(params.get("To") || "").slice(-4), fromLast4: String(params.get("From") || "").slice(-4) });
     return fetchImpl(url, options, calls.length);
@@ -29,6 +32,8 @@ async function simulate(label, fetchImpl) {
       DEFAULT_FROM_NUMBER: "+12495550100",
       DEFAULT_OWNER_TO_NUMBER: "+19055550123",
       CALL_ID: `simulation-${label}`,
+      SMS_SUPPRESSION_CHECK_URL: "https://api.example.test/sms/suppression/check",
+      SMS_SUPPRESSION_API_KEY: "simulation-only",
     },
     fetchImpl: wrappedFetch,
     btoaImpl: (value) => Buffer.from(String(value), "utf8").toString("base64"),
