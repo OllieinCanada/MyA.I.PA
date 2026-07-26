@@ -1156,7 +1156,7 @@ function SignupSuccessPage({ result, onStartAnother }) {
                 <div className="mt-5 rounded-3xl border border-blue-100 bg-[linear-gradient(180deg,#f7fbff,#eef6ff)] p-4">
                   <p className="text-sm font-black uppercase tracking-[0.16em] text-blue-600">Free trial</p>
                   <p className="mt-2 text-base font-semibold leading-7 text-slate-700">
-                    Your 14-day trial has started without collecting a credit card. Billing can be set up after the trial is approved and ready.
+                    Your 14-day trial has started without collecting a credit card. It includes up to 60 AI call minutes, with a usage notice after 20 minutes. Billing can be set up after the trial is approved and ready.
                   </p>
                 </div>
               ) : null}

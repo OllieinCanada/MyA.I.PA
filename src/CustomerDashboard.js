@@ -956,6 +956,7 @@ function CustomerDashboardView({ dashboard, onSignOut, onRefresh, refreshing, re
   const stats = dashboard.stats || {};
   const assistant = dashboard.assistant || {};
   const messaging = dashboard.messaging || {};
+  const trialUsage = dashboard.trialUsage || {};
   const checklist = dashboard.setup?.checklist || [];
   const readiness = dashboard.setup?.readinessPercent || 0;
   const nextStep = checklist.find((item) => !item.done);
@@ -1031,11 +1032,19 @@ function CustomerDashboardView({ dashboard, onSignOut, onRefresh, refreshing, re
 
         <section className="customer-stats">
           <StatCard label="Calls handled" value={stats.totalCalls || 0} sub="updates automatically" />
-          <StatCard label="Minutes used" value={stats.totalMinutes || 0} sub="voice time shown to you" />
+          <StatCard
+            label={trialUsage.lifecycle === "trial" ? "Trial minutes" : "Minutes used"}
+            value={trialUsage.lifecycle === "trial" ? `${trialUsage.usedMinutes || 0} / ${trialUsage.limitMinutes || 60}` : stats.totalMinutes || 0}
+            sub={trialUsage.lifecycle === "trial" ? `${trialUsage.remainingMinutes ?? 60} minutes remaining` : "voice time shown to you"}
+          />
           <StatCard label="Missed calls" value={stats.missedCalls || 0} sub="needs attention" />
           <StatCard label="Follow-ups" value={stats.followUps || 0} sub="quotes or callbacks" />
           <StatCard label="Appointments" value={confirmedAppointments} sub={`${actionRequiredAppointments} need your reply`} />
-          <StatCard label="Trial" value={trialText} sub={signup.trialEndAt ? `Ends ${fmtDate(signup.trialEndAt)}` : statusLabel(signup.subscriptionStatus)} />
+          <StatCard
+            label="Trial"
+            value={trialUsage.limitReached ? "Minute limit reached" : trialText}
+            sub={trialUsage.warningSentAt ? "20-minute usage notice sent" : signup.trialEndAt ? `Ends ${fmtDate(signup.trialEndAt)}` : statusLabel(signup.subscriptionStatus)}
+          />
         </section>
 
         <RevenueRescuePanel revenueRescue={revenueRescue} jobber={jobber} onUpdated={onRefresh} />

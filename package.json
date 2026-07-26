@@ -63,6 +63,7 @@
     "audit:make-hooks": "node scripts/audit-make-hooks.js",
     "audit:vapi-release-safety": "node scripts/audit-vapi-release-safety.js",
     "audit:live-phone-dependencies": "node scripts/audit-live-phone-dependencies.js",
+    "audit:call-economics": "node scripts/audit-call-unit-economics.js",
     "activate:sms-consent": "node scripts/activate-sms-consent-production.js",
     "activate:sms-consent:webhooks": "node scripts/activate-sms-consent-production.js --apply-webhooks",
     "activate:sms-consent:test": "node scripts/activate-sms-consent-production.js --test-stop-start",
@@ -112,7 +113,7 @@
     "codex:wakeup": "powershell -ExecutionPolicy Bypass -File scripts/codex-wakeup.ps1",
     "codex:wakeup:install": "powershell -ExecutionPolicy Bypass -File scripts/codex-schedule-wakeup.ps1 -StartTime 02:11 -EveryHours 5 -LaunchCodex -RunNow",
     "test": "react-scripts test --env=jsdom",
-    "test:backend": "node --test tests/backend-security.test.js tests/sms-suppression.test.js tests/twilio-sms.test.js tests/vapi-sms.test.js tests/vapi-call-diagnostics.test.js tests/vapi-isolated-sms-provisioning.test.js tests/vapi-tool-calls.test.js tests/vapi-tool-security.test.js tests/vapi-webhook-auth.test.js tests/composite-call-notifications.test.js tests/lead-handoffs.test.js tests/revenue-rescue.test.js tests/jobber-integration.test.js tests/trade-playbooks.test.js tests/safe-website-fetch.test.js tests/appointment-requests.test.js tests/calendar-integrations.test.js",
+    "test:backend": "node --test tests/backend-security.test.js tests/sms-suppression.test.js tests/twilio-sms.test.js tests/vapi-sms.test.js tests/vapi-call-diagnostics.test.js tests/vapi-isolated-sms-provisioning.test.js tests/vapi-tool-calls.test.js tests/vapi-tool-security.test.js tests/vapi-webhook-auth.test.js tests/composite-call-notifications.test.js tests/lead-handoffs.test.js tests/revenue-rescue.test.js tests/jobber-integration.test.js tests/trade-playbooks.test.js tests/safe-website-fetch.test.js tests/appointment-requests.test.js tests/calendar-integrations.test.js tests/trial-usage-policy.test.js",
     "eject": "react-scripts eject"
   },
   "devDependencies": {

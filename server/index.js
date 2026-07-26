@@ -82,6 +82,15 @@ const {
   summarizeRevenueRescue,
 } = require("./revenueRescue");
 const {
+  DEFAULT_MAX_CALL_SECONDS,
+  buildTrialUsageNotification,
+  decideTrialCall,
+  getPendingTrialMilestone,
+  getTrialLifecycle,
+  getTrialUsage,
+  sanitizeTransientAssistant,
+} = require("./trialUsagePolicy");
+const {
   completeOAuth: completeJobberOAuth,
   disconnectJobber,
   getAuthorizationUrl: getJobberAuthorizationUrl,
@@ -149,6 +158,19 @@ const SENSITIVE_CALL_CLEANUP_INTERVAL_MS = 1000 * 60 * 60 * 6;
 const SIGNUP_VERIFICATION_TTL_MS = parsePositiveInt(process.env.SIGNUP_VERIFICATION_TTL_MS, 24 * 60 * 60 * 1000);
 const TRIAL_REMINDER_CHECK_INTERVAL_MS = parsePositiveInt(process.env.TRIAL_REMINDER_CHECK_INTERVAL_MS, 60 * 60 * 1000);
 const TRIAL_HALFWAY_REMINDER_DAYS = parsePositiveInt(process.env.TRIAL_HALFWAY_REMINDER_DAYS, 7);
+const TRIAL_USAGE_LIMIT_ENABLED = isEnabled(process.env.TRIAL_USAGE_LIMIT_ENABLED);
+const TRIAL_USAGE_WARNING_SECONDS = parsePositiveInt(process.env.TRIAL_USAGE_WARNING_SECONDS, 20 * 60);
+const TRIAL_USAGE_LIMIT_SECONDS = Math.max(
+  TRIAL_USAGE_WARNING_SECONDS,
+  parsePositiveInt(process.env.TRIAL_USAGE_LIMIT_SECONDS, 60 * 60)
+);
+const TRIAL_USAGE_POLICY_INTERVAL_MS = parsePositiveInt(process.env.TRIAL_USAGE_POLICY_INTERVAL_MS, 5 * 60 * 1000);
+const TRIAL_USAGE_MIN_CALL_SECONDS = parsePositiveInt(process.env.TRIAL_USAGE_MIN_CALL_SECONDS, 15);
+const TRIAL_USAGE_RESERVATION_GRACE_SECONDS = parsePositiveInt(process.env.TRIAL_USAGE_RESERVATION_GRACE_SECONDS, 120);
+const TRIAL_USAGE_GATE_WEBHOOK_URL = String(
+  process.env.TRIAL_USAGE_GATE_WEBHOOK_URL
+    || `${String(process.env.PUBLIC_APP_URL || "https://api.myaipa.ca").trim().replace(/\/+$/, "")}/api/webhooks/voice`
+).trim();
 const STRIPE_SECRET_KEY = String(process.env.STRIPE_SECRET_KEY || "").trim();
 const STRIPE_PRICE_ID = String(process.env.STRIPE_PRICE_ID || "").trim();
 const STRIPE_WEBHOOK_SECRET = String(process.env.STRIPE_WEBHOOK_SECRET || "").trim();
@@ -2134,6 +2156,7 @@ async function ingestVapiEndOfCallReport(message) {
   const store = readVapiCallSyncStore();
   const result = await upsertVapiCall(fullCall, store);
   writeVapiCallSyncStore(store);
+  await reconcileTrialUsageAfterCall(result);
   return result;
 }
 
@@ -2165,7 +2188,9 @@ async function syncVapiCalls(options = {}) {
       detailErrors.push({ vapiCallId, message: error?.message || "Could not fetch Vapi call detail." });
     }
 
-    results.push(await upsertVapiCall(fullCall, store));
+    const result = await upsertVapiCall(fullCall, store);
+    results.push(result);
+    await reconcileTrialUsageAfterCall(result);
   }
 
   writeVapiCallSyncStore(store);
@@ -3947,6 +3972,630 @@ function listSignupDashboardRecords() {
     .sort((a, b) => Number(new Date(b.signedUpAt || b.createdAt || 0)) - Number(new Date(a.signedUpAt || a.createdAt || 0)));
 }
 
+function getTrialPolicyIdentity(signup = {}) {
+  const source = String(
+    signup.subscriptionId
+      || signup.checkoutSessionId
+      || signup.ownerEmail
+      || `${signup.businessName || ""}:${signup.ownerPhone || signup.businessPhone || ""}`
+  ).trim();
+  return hashKey(source || "unknown-trial");
+}
+
+function getTrialGateRuntimeKeys({ phoneNumberId, phoneNumber } = {}) {
+  return [
+    String(phoneNumberId || "").trim() ? `trial-voice-gate:phone-id:${String(phoneNumberId).trim()}` : "",
+    normalizePhoneForMatch(phoneNumber) ? `trial-voice-gate:number:${normalizePhoneForMatch(phoneNumber)}` : "",
+  ].filter(Boolean);
+}
+
+function getTrialUsageStateKey(signup = {}) {
+  return `trial-usage-state:${getTrialPolicyIdentity(signup)}`;
+}
+
+function getTrialReservationKey(signup = {}, businessId) {
+  return `trial-call-reservations:${getTrialPolicyIdentity(signup)}:${Number(businessId || 0)}`;
+}
+
+function getTrialCallIndexKey(callId) {
+  return `trial-call-index:${hashKey(String(callId || ""))}`;
+}
+
+function findSignupForBusiness(business, signups = listSignupDashboardRecords()) {
+  if (!business) return null;
+  const businessName = normalizeForKey(business.name || "");
+  const businessPhone = normalizePhoneForMatch(business.phone || "");
+  const mappedValues = new Set((business.vapiMappings || []).map((mapping) => normalizePhoneForMatch(mapping.matchValue)).filter(Boolean));
+  return signups.find((record) => {
+    const sameName = businessName && normalizeForKey(record.businessName || "") === businessName;
+    const samePhone = businessPhone && [
+      record.businessPhone,
+      record.ownerPhone,
+      record.twilioPhoneNumber,
+    ].some((value) => normalizePhoneForMatch(value) === businessPhone);
+    const sameAiNumber = normalizePhoneForMatch(record.twilioPhoneNumber)
+      && mappedValues.has(normalizePhoneForMatch(record.twilioPhoneNumber));
+    return sameName || samePhone || sameAiNumber;
+  }) || null;
+}
+
+async function findBusinessForSignup(signup = {}) {
+  const aiNumber = normalizePhoneForMatch(signup.twilioPhoneNumber || "");
+  if (aiNumber) {
+    const mapping = await prisma.vapiBusinessMapping.findUnique({
+      where: { matchValue: aiNumber },
+      include: { business: { include: { settings: true, vapiMappings: true } } },
+    });
+    if (mapping?.business) return mapping.business;
+  }
+
+  const lookup = [
+    signup.businessName ? { name: { equals: String(signup.businessName).trim(), mode: "insensitive" } } : undefined,
+    normalizePhoneForMatch(signup.businessPhone || "") ? { phone: normalizePhoneForMatch(signup.businessPhone) } : undefined,
+  ].filter(Boolean);
+  return lookup.length
+    ? prisma.business.findFirst({
+        where: { OR: lookup },
+        include: { settings: true, vapiMappings: true },
+      })
+    : null;
+}
+
+async function ensureTrialBusinessAndMappings(signup, vapiPhone) {
+  let business = await findBusinessForSignup(signup);
+  const aiNumber = normalizePhoneForMatch(getVapiPhoneNumber(vapiPhone) || signup.twilioPhoneNumber || "");
+  const fallbackPhone = normalizePhoneForMatch(signup.businessPhone || signup.ownerPhone || aiNumber);
+  if (!business) {
+    business = await prisma.business.create({
+      data: {
+        name: String(signup.businessName || signup.ownerName || "My AI PA Trial").trim().slice(0, 160),
+        phone: fallbackPhone,
+        timezone: "America/Toronto",
+      },
+      include: { settings: true, vapiMappings: true },
+    });
+  }
+
+  const ownerPhone = String(signup.ownerPhone || signup.businessPhone || fallbackPhone).trim();
+  if (!business.settings) {
+    await prisma.settings.create({
+      data: {
+        businessId: business.id,
+        ownerPhone,
+        answerAfterRings: 3,
+        afterHoursMode: "AI_ALWAYS_ON",
+      },
+    });
+  } else if (ownerPhone && ownerPhone !== business.settings.ownerPhone) {
+    await prisma.settings.update({ where: { businessId: business.id }, data: { ownerPhone } });
+  }
+
+  const mappings = [
+    { matchType: "phoneNumber", matchValue: aiNumber },
+    { matchType: "phoneNumberId", matchValue: String(vapiPhone?.id || "").trim().toLowerCase() },
+    { matchType: "assistantId", matchValue: getVapiAssistantId(vapiPhone).toLowerCase() },
+  ].filter((mapping) => mapping.matchValue);
+  for (const mapping of mappings) {
+    await prisma.vapiBusinessMapping.upsert({
+      where: { matchValue: mapping.matchValue },
+      update: {
+        businessId: business.id,
+        matchType: mapping.matchType,
+        label: String(signup.businessName || business.name).slice(0, 120),
+      },
+      create: {
+        businessId: business.id,
+        ...mapping,
+        label: String(signup.businessName || business.name).slice(0, 120),
+      },
+    });
+  }
+  return prisma.business.findUnique({
+    where: { id: business.id },
+    include: { settings: true, vapiMappings: true },
+  });
+}
+
+async function getTrialUsedSeconds(signup, businessId, db = prisma) {
+  const lifecycle = getTrialLifecycle(signup);
+  if (!businessId || !lifecycle.startAt) return 0;
+  const startedAt = {
+    gte: new Date(lifecycle.startAt),
+    ...(lifecycle.endAt ? { lte: new Date(lifecycle.endAt) } : {}),
+  };
+  const aggregate = await db.call.aggregate({
+    where: {
+      businessId: Number(businessId),
+      externalProvider: "vapi",
+      startedAt,
+    },
+    _sum: { durationSec: true },
+  });
+  return Math.max(0, Math.floor(Number(aggregate?._sum?.durationSec || 0)));
+}
+
+async function getTrialUsageSnapshot(signup, businessId) {
+  const lifecycle = getTrialLifecycle(signup);
+  const usedSeconds = businessId ? await getTrialUsedSeconds(signup, businessId) : 0;
+  const usage = getTrialUsage({
+    usedSeconds,
+    warningSeconds: TRIAL_USAGE_WARNING_SECONDS,
+    limitSeconds: TRIAL_USAGE_LIMIT_SECONDS,
+  });
+  const state = await prisma.runtimeStore.findUnique({ where: { key: getTrialUsageStateKey(signup) } }).catch(() => null);
+  return {
+    enabled: TRIAL_USAGE_LIMIT_ENABLED,
+    lifecycle: lifecycle.state,
+    subscriptionStatus: lifecycle.status,
+    trialStartAt: lifecycle.startAt ? new Date(lifecycle.startAt).toISOString() : null,
+    trialEndAt: lifecycle.endAt ? new Date(lifecycle.endAt).toISOString() : null,
+    ...usage,
+    warningSentAt: state?.data?.warningSentAt || null,
+    limitSentAt: state?.data?.limitSentAt || null,
+  };
+}
+
+async function writeTrialGateConfiguration(config) {
+  const keys = getTrialGateRuntimeKeys(config);
+  if (!keys.length) throw new Error("Trial gate configuration requires a Vapi phone number id or phone number.");
+  for (const key of keys) {
+    await prisma.runtimeStore.upsert({
+      where: { key },
+      update: { data: config },
+      create: { key, data: config },
+    });
+  }
+  return config;
+}
+
+async function readTrialGateConfiguration(call = {}) {
+  const keys = getTrialGateRuntimeKeys({
+    phoneNumberId: call.phoneNumberId || call.phoneNumber?.id,
+    phoneNumber: call.phoneNumber?.number || call.phoneNumber?.twilioPhoneNumber || call.destination?.number || call.to,
+  });
+  if (!keys.length) return null;
+  const row = await prisma.runtimeStore.findFirst({ where: { key: { in: keys } } });
+  return row?.data && typeof row.data === "object" ? row.data : null;
+}
+
+async function configureTrialGateForSignup(signup, phoneInventory = null) {
+  if (!TRIAL_USAGE_LIMIT_ENABLED) return { configured: false, skipped: true, reason: "disabled" };
+  const lifecycle = getTrialLifecycle(signup);
+  if (lifecycle.state !== "trial") return { configured: false, skipped: true, reason: lifecycle.state };
+  const aiNumber = normalizePhoneForMatch(signup.twilioPhoneNumber || "");
+  if (!aiNumber) return { configured: false, skipped: true, reason: "missing-ai-number" };
+
+  const phones = phoneInventory || await fetchVapiCollection("phone-number", ["phoneNumbers", "phone_numbers"]);
+  const phone = phones.find((record) => normalizePhoneForMatch(getVapiPhoneNumber(record)) === aiNumber);
+  if (!phone?.id) return { configured: false, skipped: true, reason: "vapi-phone-not-found" };
+
+  const existingConfig = await readTrialGateConfiguration({
+    phoneNumberId: phone.id,
+    phoneNumber: { id: phone.id, number: aiNumber },
+  });
+  const currentAssistantId = getVapiAssistantId(phone);
+  if (!currentAssistantId && existingConfig?.assistantId) {
+    const currentServerUrl = getVapiNestedString(phone, ["server.url", "serverUrl"]);
+    if (currentServerUrl !== TRIAL_USAGE_GATE_WEBHOOK_URL) {
+      await requestVapiResource(`phone-number/${encodeURIComponent(String(phone.id))}`, {
+        method: "PATCH",
+        body: {
+          assistantId: null,
+          squadId: null,
+          server: {
+            url: TRIAL_USAGE_GATE_WEBHOOK_URL,
+            secret: getVapiWebhookSecret(),
+          },
+        },
+      });
+    }
+    const business = await ensureTrialBusinessAndMappings(signup, {
+      ...phone,
+      assistantId: existingConfig.assistantId,
+    });
+    const current = {
+      ...existingConfig,
+      businessId: business.id,
+      subscriptionId: signup.subscriptionId || existingConfig.subscriptionId || "",
+      ownerEmail: signup.ownerEmail || existingConfig.ownerEmail || "",
+      status: "active",
+      verifiedAt: new Date().toISOString(),
+    };
+    await writeTrialGateConfiguration(current);
+    return { configured: true, reused: true, businessId: business.id, phoneNumberId: phone.id };
+  }
+  if (!currentAssistantId) {
+    return { configured: false, skipped: true, reason: "dynamic-phone-missing-gate-backup" };
+  }
+
+  const assistant = await requestVapiResource(`assistant/${encodeURIComponent(currentAssistantId)}`);
+  const assistantMaxSeconds = Math.min(
+    DEFAULT_MAX_CALL_SECONDS,
+    Math.max(TRIAL_USAGE_MIN_CALL_SECONDS, Number(assistant.maxDurationSeconds || DEFAULT_MAX_CALL_SECONDS))
+  );
+  const assistantSnapshot = sanitizeTransientAssistant(assistant, {
+    maxDurationSeconds: assistantMaxSeconds,
+  });
+  if (assistantSnapshot.server && typeof assistantSnapshot.server === "object") {
+    delete assistantSnapshot.server.secret;
+  }
+  const business = await ensureTrialBusinessAndMappings(signup, phone);
+  const config = {
+    version: 1,
+    status: "prepared",
+    businessId: business.id,
+    subscriptionId: signup.subscriptionId || "",
+    ownerEmail: signup.ownerEmail || "",
+    phoneNumberId: String(phone.id),
+    phoneNumber: aiNumber,
+    assistantId: currentAssistantId,
+    assistantMaxSeconds,
+    assistantSnapshot,
+    preparedAt: new Date().toISOString(),
+  };
+  await writeTrialGateConfiguration(config);
+
+  const webhookSecret = getVapiWebhookSecret();
+  if (!webhookSecret) throw new Error("Vapi webhook authentication must be configured before enabling trial limits.");
+  await requestVapiResource(`phone-number/${encodeURIComponent(String(phone.id))}`, {
+    method: "PATCH",
+    body: {
+      assistantId: null,
+      squadId: null,
+      server: {
+        url: TRIAL_USAGE_GATE_WEBHOOK_URL,
+        secret: webhookSecret,
+      },
+    },
+  });
+
+  const activated = { ...config, status: "active", activatedAt: new Date().toISOString() };
+  await writeTrialGateConfiguration(activated);
+  upsertSignupDashboardRecord({
+    subscriptionId: signup.subscriptionId || "",
+    ownerEmail: signup.ownerEmail || "",
+    trialUsageGateStatus: "active",
+    trialUsageGateActivatedAt: activated.activatedAt,
+    trialUsageLimitMinutes: Number((TRIAL_USAGE_LIMIT_SECONDS / 60).toFixed(1)),
+    trialUsageWarningMinutes: Number((TRIAL_USAGE_WARNING_SECONDS / 60).toFixed(1)),
+  });
+  return { configured: true, reused: false, businessId: business.id, phoneNumberId: phone.id };
+}
+
+async function claimTrialUsageMilestone(signup, milestone, usage) {
+  const key = getTrialUsageStateKey(signup);
+  const field = milestone === "limit" ? "limitSentAt" : "warningSentAt";
+  const claimField = milestone === "limit" ? "limitClaimedAt" : "warningClaimedAt";
+  return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))`;
+    const row = await tx.runtimeStore.findUnique({ where: { key } });
+    const data = row?.data && typeof row.data === "object" ? row.data : {};
+    if (data[field]) return { claimed: false, reason: "already-sent" };
+    const claimedAt = Number(new Date(data[claimField] || 0).getTime());
+    if (claimedAt && claimedAt > Date.now() - 10 * 60 * 1000) {
+      return { claimed: false, reason: "already-processing" };
+    }
+    const next = {
+      ...data,
+      [claimField]: new Date().toISOString(),
+      lastUsageSeconds: usage.usedSeconds,
+      updatedAt: new Date().toISOString(),
+    };
+    await tx.runtimeStore.upsert({
+      where: { key },
+      update: { data: next },
+      create: { key, data: next },
+    });
+    return { claimed: true, key, data: next };
+  });
+}
+
+async function finishTrialUsageMilestone({ key, milestone, result, error }) {
+  const field = milestone === "limit" ? "limitSentAt" : "warningSentAt";
+  const errorField = milestone === "limit" ? "limitLastError" : "warningLastError";
+  const row = await prisma.runtimeStore.findUnique({ where: { key } });
+  const data = row?.data && typeof row.data === "object" ? row.data : {};
+  const next = {
+    ...data,
+    ...(result?.sent ? { [field]: new Date().toISOString(), [errorField]: "" } : { [errorField]: error?.message || "Notification was not sent." }),
+    lastNotificationChannels: result?.channels || [],
+    updatedAt: new Date().toISOString(),
+  };
+  await prisma.runtimeStore.upsert({
+    where: { key },
+    update: { data: next },
+    create: { key, data: next },
+  });
+}
+
+async function deliverTrialUsageNotification(signup, milestone, usage) {
+  const notification = buildTrialUsageNotification({
+    milestone,
+    businessName: signup.businessName,
+    trialEndAt: signup.trialEndAt || signup.currentPeriodEndAt || signup.periodEndAt,
+    usage,
+    dashboardUrl: `${FRONTEND_APP_URL}/#/dashboard`,
+  });
+  const channels = [];
+  const errors = [];
+  const ownerPhone = String(signup.ownerPhone || signup.businessPhone || "").trim();
+  if (ownerPhone) {
+    try {
+      const sms = await sendSmsViaTwilio({ to: ownerPhone, message: notification.text });
+      if (!sms.mocked) channels.push("sms");
+    } catch (error) {
+      errors.push(`SMS: ${error?.message || "failed"}`);
+    }
+  }
+
+  const emailConfig = getEmailTransportConfig();
+  if (signup.ownerEmail && emailConfig) {
+    try {
+      const transporter = nodemailer.createTransport(emailConfig.transport);
+      await transporter.sendMail({
+        from: emailConfig.from,
+        to: signup.ownerEmail,
+        subject: notification.subject,
+        text: notification.text,
+        html: `<div style="font-family:Arial,sans-serif;line-height:1.55;color:#0f172a;max-width:640px"><h1>${escapeHtml(notification.subject)}</h1><p>${escapeHtml(notification.text)}</p></div>`,
+      });
+      channels.push("email");
+    } catch (error) {
+      errors.push(`Email: ${error?.message || "failed"}`);
+    }
+  }
+
+  if (!channels.length) {
+    const error = new Error(errors.join("; ") || "No trial notification channel is configured.");
+    error.code = "TRIAL_NOTIFICATION_NOT_SENT";
+    throw error;
+  }
+  return { sent: true, channels };
+}
+
+async function evaluateTrialUsageForSignup(signup, businessId) {
+  if (!TRIAL_USAGE_LIMIT_ENABLED || !signup || !businessId) return null;
+  const lifecycle = getTrialLifecycle(signup);
+  if (!["trial", "ended"].includes(lifecycle.state)) return null;
+  const snapshot = await getTrialUsageSnapshot(signup, businessId);
+  const pending = getPendingTrialMilestone({
+    usedSeconds: snapshot.usedSeconds,
+    warningSentAt: snapshot.warningSentAt,
+    limitSentAt: snapshot.limitSentAt,
+    warningSeconds: TRIAL_USAGE_WARNING_SECONDS,
+    limitSeconds: TRIAL_USAGE_LIMIT_SECONDS,
+  });
+  if (!pending.milestone) return snapshot;
+  const claim = await claimTrialUsageMilestone(signup, pending.milestone, pending.usage);
+  if (!claim.claimed) return snapshot;
+  try {
+    const result = await deliverTrialUsageNotification(signup, pending.milestone, pending.usage);
+    await finishTrialUsageMilestone({ key: claim.key, milestone: pending.milestone, result });
+  } catch (error) {
+    await finishTrialUsageMilestone({ key: claim.key, milestone: pending.milestone, error }).catch(() => {});
+    console.error("[trial-usage] milestone notification failed", {
+      milestone: pending.milestone,
+      businessId,
+      message: error?.message || String(error),
+    });
+  }
+  return getTrialUsageSnapshot(signup, businessId);
+}
+
+async function processTrialUsagePolicies() {
+  if (!TRIAL_USAGE_LIMIT_ENABLED) return { enabled: false, processed: 0, configured: 0, errors: [] };
+  const signups = listSignupDashboardRecords().filter((signup) => getTrialLifecycle(signup).state === "trial");
+  if (!signups.length) return { enabled: true, processed: 0, configured: 0, errors: [] };
+  const phones = await fetchVapiCollection("phone-number", ["phoneNumbers", "phone_numbers"]);
+  const results = [];
+  const errors = [];
+  for (const signup of signups) {
+    try {
+      const gate = await configureTrialGateForSignup(signup, phones);
+      const business = gate.businessId ? { id: gate.businessId } : await findBusinessForSignup(signup);
+      const usage = business?.id ? await evaluateTrialUsageForSignup(signup, business.id) : null;
+      results.push({ ownerEmailHash: hashKey(signup.ownerEmail || ""), gate, usage });
+    } catch (error) {
+      errors.push({
+        ownerEmailHash: hashKey(signup.ownerEmail || ""),
+        message: error?.message || String(error),
+      });
+    }
+  }
+  return {
+    enabled: true,
+    processed: signups.length,
+    configured: results.filter((result) => result.gate?.configured).length,
+    results,
+    errors,
+  };
+}
+
+async function getTrialUsageDashboard() {
+  const signups = listSignupDashboardRecords().filter((signup) => {
+    const lifecycle = getTrialLifecycle(signup);
+    return lifecycle.state === "trial" || lifecycle.state === "ended";
+  });
+  const accounts = [];
+  for (const signup of signups) {
+    const business = await findBusinessForSignup(signup);
+    const usage = await getTrialUsageSnapshot(signup, business?.id || null);
+    const gate = signup.twilioPhoneNumber
+      ? await readTrialGateConfiguration({ phoneNumber: { number: signup.twilioPhoneNumber } })
+      : null;
+    accounts.push({
+      businessId: business?.id || null,
+      businessName: signup.businessName || business?.name || "Unnamed business",
+      ownerEmail: signup.ownerEmail || "",
+      aiNumberLast4: normalizePhoneForMatch(signup.twilioPhoneNumber).slice(-4),
+      subscriptionId: signup.subscriptionId || "",
+      gateStatus: gate?.status || signup.trialUsageGateStatus || "not-configured",
+      ...usage,
+    });
+  }
+  return {
+    enabled: TRIAL_USAGE_LIMIT_ENABLED,
+    warningMinutes: Number((TRIAL_USAGE_WARNING_SECONDS / 60).toFixed(1)),
+    limitMinutes: Number((TRIAL_USAGE_LIMIT_SECONDS / 60).toFixed(1)),
+    accounts,
+    totals: {
+      accounts: accounts.length,
+      warningReached: accounts.filter((account) => account.warningReached).length,
+      limitReached: accounts.filter((account) => account.limitReached).length,
+      gated: accounts.filter((account) => account.gateStatus === "active").length,
+    },
+  };
+}
+
+async function reserveTrialCall({ signup, config, callId }) {
+  const businessId = Number(config.businessId || 0);
+  const key = getTrialReservationKey(signup, businessId);
+  const callIndexKey = getTrialCallIndexKey(callId);
+  return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))`;
+    const [reservationRow, usedSeconds] = await Promise.all([
+      tx.runtimeStore.findUnique({ where: { key } }),
+      getTrialUsedSeconds(signup, businessId, tx),
+    ]);
+    const reservationData = reservationRow?.data && typeof reservationRow.data === "object" ? reservationRow.data : {};
+    const now = Date.now();
+    const reservations = Object.fromEntries(
+      Object.entries(reservationData.reservations || {}).filter(([, record]) => Number(record?.expiresAt || 0) > now)
+    );
+    if (reservations[callId]) {
+      const allowanceSeconds = Number(reservations[callId].allowanceSeconds || 0);
+      return {
+        action: allowanceSeconds < Number(config.assistantMaxSeconds || DEFAULT_MAX_CALL_SECONDS)
+          ? "allow-transient"
+          : "allow-saved",
+        allowanceSeconds,
+        duplicateReservation: true,
+      };
+    }
+    const reservedSeconds = Object.values(reservations).reduce(
+      (sum, record) => sum + Math.max(0, Number(record?.allowanceSeconds || 0)),
+      0
+    );
+    const lifecycle = getTrialLifecycle(signup);
+    const decision = decideTrialCall({
+      lifecycle,
+      usedSeconds,
+      reservedSeconds,
+      assistantMaxSeconds: config.assistantMaxSeconds || DEFAULT_MAX_CALL_SECONDS,
+      warningSeconds: TRIAL_USAGE_WARNING_SECONDS,
+      limitSeconds: TRIAL_USAGE_LIMIT_SECONDS,
+      minCallSeconds: TRIAL_USAGE_MIN_CALL_SECONDS,
+    });
+    if (!decision.action.startsWith("allow") || lifecycle.state === "paid") return decision;
+
+    reservations[callId] = {
+      allowanceSeconds: decision.allowanceSeconds,
+      createdAt: new Date(now).toISOString(),
+      expiresAt: now + (decision.allowanceSeconds + TRIAL_USAGE_RESERVATION_GRACE_SECONDS) * 1000,
+    };
+    const next = {
+      ...reservationData,
+      reservations,
+      updatedAt: new Date().toISOString(),
+    };
+    await tx.runtimeStore.upsert({
+      where: { key },
+      update: { data: next },
+      create: { key, data: next },
+    });
+    await tx.runtimeStore.upsert({
+      where: { key: callIndexKey },
+      update: { data: { reservationKey: key, callId, businessId } },
+      create: { key: callIndexKey, data: { reservationKey: key, callId, businessId } },
+    });
+    return decision;
+  });
+}
+
+async function releaseTrialCallReservation(callId) {
+  if (!callId) return;
+  const callIndexKey = getTrialCallIndexKey(callId);
+  const index = await prisma.runtimeStore.findUnique({ where: { key: callIndexKey } });
+  const reservationKey = String(index?.data?.reservationKey || "");
+  if (!reservationKey) return;
+  await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${reservationKey}))`;
+    const row = await tx.runtimeStore.findUnique({ where: { key: reservationKey } });
+    const data = row?.data && typeof row.data === "object" ? row.data : {};
+    const reservations = { ...(data.reservations || {}) };
+    delete reservations[callId];
+    await tx.runtimeStore.upsert({
+      where: { key: reservationKey },
+      update: { data: { ...data, reservations, updatedAt: new Date().toISOString() } },
+      create: { key: reservationKey, data: { reservations, updatedAt: new Date().toISOString() } },
+    });
+    await tx.runtimeStore.delete({ where: { key: callIndexKey } }).catch(() => {});
+  });
+}
+
+async function handleTrialAssistantRequest(message) {
+  if (!TRIAL_USAGE_LIMIT_ENABLED) {
+    return { error: "This phone assistant is not available right now. Please try again later." };
+  }
+  const call = message?.call && typeof message.call === "object" ? message.call : {};
+  const config = await readTrialGateConfiguration(call);
+  if (!config?.assistantId || !config?.businessId) {
+    return { error: "This phone assistant is temporarily unavailable. Please try again later." };
+  }
+  const signups = listSignupDashboardRecords();
+  const signup = signups.find((record) => (
+    (config.subscriptionId && record.subscriptionId === config.subscriptionId)
+    || (config.ownerEmail && String(record.ownerEmail || "").toLowerCase() === String(config.ownerEmail).toLowerCase())
+    || normalizePhoneForMatch(record.twilioPhoneNumber) === normalizePhoneForMatch(config.phoneNumber)
+  ));
+  if (!signup) {
+    return { error: "This phone assistant is temporarily unavailable. Please try again later." };
+  }
+
+  const lifecycle = getTrialLifecycle(signup);
+  if (lifecycle.state === "paid") return { assistantId: config.assistantId };
+  const callId = String(call.id || call.callId || "").trim();
+  if (!callId) return { error: "This phone assistant is temporarily unavailable. Please try again later." };
+  const decision = await reserveTrialCall({ signup, config, callId });
+  if (decision.action === "block") {
+    setImmediate(() => {
+      evaluateTrialUsageForSignup(signup, config.businessId).catch((error) => {
+        console.error("[trial-usage] blocked-call evaluation failed", { message: error?.message || String(error) });
+      });
+    });
+    return {
+      error: decision.reason === "minute-limit-reached"
+        ? "This business's free-trial phone time has been used. Please contact the business another way."
+        : "This phone assistant is temporarily unavailable. Please try again later.",
+    };
+  }
+  if (decision.action === "allow-saved") return { assistantId: config.assistantId };
+  if (!config.assistantSnapshot) {
+    await releaseTrialCallReservation(callId);
+    return { error: "This phone assistant is temporarily unavailable. Please try again later." };
+  }
+  return {
+    assistant: sanitizeTransientAssistant(config.assistantSnapshot, {
+      maxDurationSeconds: decision.allowanceSeconds,
+      serverUrl: TRIAL_USAGE_GATE_WEBHOOK_URL,
+      serverSecret: getVapiWebhookSecret(),
+    }),
+  };
+}
+
+async function reconcileTrialUsageAfterCall(result) {
+  if (!TRIAL_USAGE_LIMIT_ENABLED || !result?.businessId) return;
+  await releaseTrialCallReservation(result.vapiCallId).catch((error) => {
+    console.warn("[trial-usage] reservation release failed", { message: error?.message || String(error) });
+  });
+  const business = await prisma.business.findUnique({
+    where: { id: Number(result.businessId) },
+    include: { vapiMappings: true },
+  });
+  const signup = findSignupForBusiness(business);
+  if (signup) await evaluateTrialUsageForSignup(signup, result.businessId);
+}
+
 function findCustomerDashboardSignup({ email, phone }) {
   const ownerEmail = String(email || "").trim().toLowerCase();
   const phoneMatch = normalizePhoneForMatch(phone);
@@ -4207,6 +4856,7 @@ async function getCustomerDashboard({ email, phone }) {
     { key: "ai-number", label: "AI number mapped", done: Boolean(signup.twilioPhoneNumber || business?.vapiMappings?.length) },
     { key: "faq", label: "Starter FAQs added", done: Boolean(business?.faqs?.length) },
   ];
+  const trialUsage = await getTrialUsageSnapshot(signup, business?.id || null);
 
   return {
     businessId: business?.id || null,
@@ -4248,6 +4898,7 @@ async function getCustomerDashboard({ email, phone }) {
           ? "Reply START in the business text thread to resume service text updates."
           : "Service text updates are active for the owner phone.",
     },
+    trialUsage,
     stats: {
       totalCalls: calls.length,
       completedCalls,
@@ -5398,6 +6049,13 @@ async function attachNoCardStripeTrialToSignup(payload, extra = {}) {
       stripeTrialType: "no-card",
       stripeTrialReused: Boolean(trialResult.reused),
     });
+    if (TRIAL_USAGE_LIMIT_ENABLED) {
+      setImmediate(() => {
+        processTrialUsagePolicies().catch((error) => {
+          console.error("[trial-usage] post-signup policy run failed", { message: error?.message || String(error) });
+        });
+      });
+    }
 
     return trialResult;
   } catch (error) {
@@ -6590,6 +7248,9 @@ app.post(
     const payload = req.body || {};
     const vapiMessage = payload.message && typeof payload.message === "object" ? payload.message : null;
     const vapiMessageType = String(vapiMessage?.type || "").toLowerCase();
+    if (vapiMessageType === "assistant-request") {
+      return res.json(await handleTrialAssistantRequest(vapiMessage));
+    }
     if (vapiMessageType === "end-of-call-report") {
       const result = await ingestVapiEndOfCallReport(vapiMessage);
       return res.status(result.duplicate ? 200 : 201).json({
@@ -8464,6 +9125,22 @@ app.get(
 );
 
 app.get(
+  "/api/admin/trial-usage",
+  requireAdmin,
+  asyncRoute(async (_req, res) => {
+    res.json({ ok: true, ...(await getTrialUsageDashboard()) });
+  })
+);
+
+app.post(
+  "/api/admin/trial-usage/reconcile",
+  requireAdmin,
+  asyncRoute(async (_req, res) => {
+    res.json({ ok: true, ...(await processTrialUsagePolicies()) });
+  })
+);
+
+app.get(
   "/api/admin/stripe-trials",
   requireAdmin,
   asyncRoute(async (_req, res) => {
@@ -8874,6 +9551,10 @@ function startBackgroundJobs() {
     console.error("[stripe:trial-reminder] initial run failed", err);
   });
 
+  processTrialUsagePolicies().catch((err) => {
+    console.error("[trial-usage] initial policy run failed", err);
+  });
+
   processDueLeadHandoffs().catch((err) => {
     console.error("[lead-handoff] initial run failed", err);
   });
@@ -8889,6 +9570,12 @@ function startBackgroundJobs() {
       console.error("[stripe:trial-reminder] scheduled run failed", err);
     });
   }, TRIAL_REMINDER_CHECK_INTERVAL_MS);
+
+  setInterval(() => {
+    processTrialUsagePolicies().catch((err) => {
+      console.error("[trial-usage] scheduled policy run failed", err);
+    });
+  }, TRIAL_USAGE_POLICY_INTERVAL_MS);
 
   setInterval(() => {
     processDueLeadHandoffs().catch((err) => {

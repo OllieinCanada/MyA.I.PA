@@ -56,6 +56,7 @@ const sections = [
     title: "7. Trials, Fees, Billing, and Cancellation",
     body: [
       "Trials, subscriptions, setup fees, usage fees, and plan limits may be described during signup or in a separate order, invoice, or checkout flow. Taxes, telecom charges, overages, and third-party fees may apply where stated.",
+      "The standard 14-day free trial includes up to 60 AI call minutes. We may send a usage notice after 20 minutes. When 60 minutes are used, AI call handling is paused until the account is activated or we agree to a different limit in writing. Calls that arrive while the trial is paused may receive an unavailability message.",
       "Unless otherwise agreed, paid services may renew automatically until cancelled. You are responsible for cancelling before renewal if you do not want charges to continue. Fees already incurred may be non-refundable except where required by law or expressly stated in writing.",
     ],
   },
@@ -119,7 +120,7 @@ function Terms() {
         <div className="mx-auto w-full max-w-5xl px-4 py-9 sm:px-8 lg:py-14">
           <a href="#/" className="text-base font-black uppercase tracking-[0.16em] text-[#ffb36b] transition hover:text-white">My AI PA</a>
           <h1 className="mt-6 text-[clamp(2rem,9vw,4.5rem)] font-black leading-tight tracking-[-0.05em]">Terms of Service</h1>
-          <p className="mt-4 max-w-3xl text-lg font-medium leading-8 text-[#d8e7f7] sm:text-xl">Effective date: July 22, 2026</p>
+          <p className="mt-4 max-w-3xl text-lg font-medium leading-8 text-[#d8e7f7] sm:text-xl">Effective date: July 25, 2026</p>
           <p className="mt-4 max-w-3xl text-base font-medium leading-7 text-[#c8d7ea] sm:text-lg sm:leading-8">
             These terms are designed for an AI phone answering service used by trades and local service businesses.
           </p>
