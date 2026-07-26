@@ -107,6 +107,33 @@ New businesses default to a two-minute acknowledgement target. The business-leve
 
 Production Vapi tool calls now require a trusted assistant or phone mapping when `VAPI_REQUIRE_BUSINESS_MAPPING=true`. Notification and appointment tool calls both use `VapiToolExecution` database claims so repeated provider deliveries cannot create duplicate handoffs or appointment requests.
 
+## Trial call-minute enforcement
+
+The no-card trial has an enforced 60-minute AI call ceiling and an owner notification at 20 minutes. The backend changes each active trial phone number from a fixed assistant to a secured Vapi `assistant-request` gate. Normal calls still use the saved business assistant. The final call receives only the exact remaining seconds, and database reservations prevent simultaneous calls from spending the same remaining minutes.
+
+Configure:
+
+```text
+TRIAL_USAGE_LIMIT_ENABLED=true
+TRIAL_USAGE_WARNING_SECONDS=1200
+TRIAL_USAGE_LIMIT_SECONDS=3600
+TRIAL_USAGE_POLICY_INTERVAL_MS=300000
+TRIAL_USAGE_MIN_CALL_SECONDS=15
+TRIAL_USAGE_RESERVATION_GRACE_SECONDS=120
+TRIAL_USAGE_GATE_WEBHOOK_URL=https://api.myaipa.ca/api/webhooks/voice
+```
+
+`VAPI_WEBHOOK_SECRET`, `VAPI_API_KEY`, the Vapi business mappings, and at least one owner notification channel must also be configured. SMS uses `TWILIO_FROM_NUMBER`; email uses the SMTP settings. The gate fails closed if it cannot verify a trial or paid subscription.
+
+Admin operations:
+
+```text
+GET  /api/admin/trial-usage
+POST /api/admin/trial-usage/reconcile
+```
+
+The reconciliation endpoint installs or verifies gates for active trials, calculates synchronized Vapi minutes, and retries unsent 20-minute or 60-minute owner notices. Paid Stripe subscriptions bypass the trial cap automatically.
+
 ## Optional Jobber field-service integration
 
 Jobber uses OAuth 2.0. Register the callback below in the Jobber Developer Center and configure:
