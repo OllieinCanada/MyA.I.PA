@@ -235,6 +235,9 @@ function repairedDemoTool(tool) {
     code: String(tool.code || "")
       .replace(/Arscott Plumbing and Heating Inc\.?/gi, "My AI PA")
       .replace(/arscott plumbing and heating inc/gi, "my ai pa"),
+    ...(Array.isArray(tool.environmentVariables)
+      ? { environmentVariables: tool.environmentVariables }
+      : {}),
   };
   return next;
 }
@@ -304,6 +307,14 @@ async function main() {
     demoTemplateNeedsRepair,
     legacyDemoToolUsageCounts: Object.fromEntries(
       legacyDemoTools.map((tool) => [functionName(tool), toolUsage[String(tool.id)] || 0])
+    ),
+    legacyDemoToolEnvironmentVariables: Object.fromEntries(
+      legacyDemoTools.map((tool) => [
+        functionName(tool),
+        Array.isArray(tool.environmentVariables)
+          ? tool.environmentVariables.map((entry) => String(entry?.name || "")).filter(Boolean)
+          : [],
+      ])
     ),
     plannedActions: [
       ...(!signupTool ? ["create guarded phone-signup tool"] : []),
