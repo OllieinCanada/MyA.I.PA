@@ -8,7 +8,13 @@ function hasFlag(name) {
 }
 
 const supportPreview = hasFlag("support");
-const screenshotName = supportPreview ? "telegram-admin-support-inbox.png" : "telegram-admin-overview-tab.png";
+const fullPagePreview = hasFlag("full-page");
+const mobilePreview = hasFlag("mobile");
+const screenshotName = supportPreview
+  ? "telegram-admin-support-inbox.png"
+  : mobilePreview
+    ? "telegram-admin-overview-mobile.png"
+    : "telegram-admin-overview-tab.png";
 const screenshotPath = rootPath("diagnostics", "browser-drive", screenshotName);
 const phoneSharePath = rootPath("phone-share", screenshotName);
 const url = process.env.TELEGRAM_ADMIN_MOCK_URL || "http://localhost:3000/#/admin";
@@ -204,7 +210,7 @@ async function main() {
   }
 
   try {
-    const page = await browser.newPage({ viewport: { width: 1365, height: 768 } });
+    const page = await browser.newPage({ viewport: mobilePreview ? { width: 430, height: 932 } : { width: 1365, height: 768 } });
     await page.route("**/api/admin/**", async (route) => {
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(responseFor(route.request().url())) });
     });
@@ -214,7 +220,7 @@ async function main() {
       await page.getByRole("button", { name: /Support Inbox/i }).first().click();
       await page.locator(".admin-support-card").waitFor({ state: "visible", timeout: 10000 });
     }
-    await page.screenshot({ path: screenshotPath, fullPage: supportPreview });
+    await page.screenshot({ path: screenshotPath, fullPage: supportPreview || fullPagePreview });
   } finally {
     await browser?.close();
   }

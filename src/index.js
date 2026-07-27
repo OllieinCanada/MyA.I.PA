@@ -6,6 +6,8 @@ import CustomerDashboard from "./CustomerDashboard";
 import Signup from "./Signup";
 import Privacy from "./Privacy";
 import Terms from "./Terms";
+import LinksPage from "./LinksPage";
+import TryDemo from "./TryDemo";
 import "./style.css";
 
 const getRoute = () => {
@@ -37,6 +39,8 @@ function RouterRoot() {
   else if (route === "signup") page = <Signup />;
   else if (route === "privacy") page = <Privacy />;
   else if (route === "terms") page = <Terms />;
+  else if (route === "links") page = <LinksPage />;
+  else if (route === "try-demo") page = <TryDemo />;
 
   return page;
 }

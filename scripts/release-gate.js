@@ -21,6 +21,8 @@ const backendTestFiles = [
   "tests/safe-website-fetch.test.js",
   "tests/appointment-requests.test.js",
   "tests/calendar-integrations.test.js",
+  "tests/trial-usage-policy.test.js",
+  "tests/voice-signup.test.js",
 ];
 
 const steps = [

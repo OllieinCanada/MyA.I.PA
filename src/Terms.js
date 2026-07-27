@@ -56,7 +56,7 @@ const sections = [
     title: "7. Trials, Fees, Billing, and Cancellation",
     body: [
       "Trials, subscriptions, setup fees, usage fees, and plan limits may be described during signup or in a separate order, invoice, or checkout flow. Taxes, telecom charges, overages, and third-party fees may apply where stated.",
-      "The standard 14-day free trial includes up to 60 AI call minutes. We may send a usage notice after 20 minutes. When 60 minutes are used, AI call handling is paused until the account is activated or we agree to a different limit in writing. Calls that arrive while the trial is paused may receive an unavailability message.",
+      "The standard 14-day free trial includes up to 60 AI call minutes. We may send usage notices after 20, 45, and 55 minutes. New AI calls may pause at 55 minutes so the final five minutes are protected for a call already in progress. Calls arriving after that pause may be transferred to a configured fallback number or receive a neutral unavailability message until the account is activated or we agree to a different limit in writing. Forwarded calls may still incur ordinary telecommunications usage.",
       "Unless otherwise agreed, paid services may renew automatically until cancelled. You are responsible for cancelling before renewal if you do not want charges to continue. Fees already incurred may be non-refundable except where required by law or expressly stated in writing.",
     ],
   },

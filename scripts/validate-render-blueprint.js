@@ -106,6 +106,10 @@ if (!service) {
   expectEnvValue(service, "OPENAI_TRANSCRIBE_MODEL", "whisper-1");
   expectEnvValue(service, "OPENAI_TRANSCRIBE_LANGUAGE", "en");
   expectEnvValue(service, "VAPI_REQUIRE_BUSINESS_MAPPING", true);
+  expectEnvValue(service, "TRIAL_USAGE_LIMIT_ENABLED", true);
+  expectEnvValue(service, "TRIAL_USAGE_WARNING_SECONDS", 1200);
+  expectEnvValue(service, "TRIAL_USAGE_LIMIT_SECONDS", 3600);
+  expectEnvValue(service, "TRIAL_USAGE_COMPLETION_RESERVE_SECONDS", 300);
   expectEnvValue(service, "LEAD_ACK_TIMEOUT_MINUTES", 2);
   expectEnvValue(service, "JOBBER_GRAPHQL_VERSION", "2025-04-16");
   if (!hasEnv(service, "DATABASE_URL", (item) => item.fromDatabase && item.fromDatabase.name === "myaipa-postgres")) {

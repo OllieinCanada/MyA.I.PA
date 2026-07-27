@@ -34,6 +34,8 @@ Thumbs.db
 .worktrees/
 agent-canvas/
 tools_bin/
+.tools/
+.release-*.log
 
 # Generated previews, reports, and runtime state
 output/
