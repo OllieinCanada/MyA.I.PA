@@ -99,6 +99,10 @@ const {
   syncLeadToJobber,
 } = require("./jobberIntegration");
 const { resolveVapiWebhookSecret } = require("./vapiWebhookAuth");
+const {
+  buildVoiceSignupPayload,
+  isVapiVoiceSignupTool,
+} = require("./voiceSignup");
 
 loadPowerShellEnvAssignments(path.join(__dirname, "..", ".env.local"));
 
@@ -930,6 +934,92 @@ async function sendSignupVerificationEmail({ req, ownerEmail, ownerName, busines
   });
 
   return { sent: true };
+}
+
+function removePendingSignupVerification(token) {
+  const tokenHash = hashSignupVerificationToken(token);
+  const store = prunePendingSignupStore(readPendingSignupStore());
+  if (!store[tokenHash]) return;
+  delete store[tokenHash];
+  writePendingSignupStore(store);
+}
+
+async function beginVoiceSignupVerification({ req, parameters, call }) {
+  const payload = buildVoiceSignupPayload(parameters, {
+    callId: call?.id || call?.callId || call?.externalId || "",
+  });
+  const owner = payload.owner || {};
+  const business = payload.business || {};
+  const token = createPendingSignupVerification({
+    payload,
+    ownerEmail: owner.email,
+    businessName: business.name,
+    reviewReasons: [],
+    ipHash: hashKey(`voice:${payload.source?.callId || owner.phone || owner.email}`),
+  });
+  const verificationUrl = getSignupVerificationUrl(req, token);
+  let emailResult = null;
+  let emailError = null;
+  let smsResult = null;
+  let smsError = null;
+
+  try {
+    emailResult = await sendSignupVerificationEmail({
+      req,
+      ownerEmail: owner.email,
+      ownerName: owner.name,
+      businessName: business.name,
+      token,
+    });
+  } catch (error) {
+    emailError = error;
+  }
+
+  try {
+    smsResult = await sendSmsViaTwilio({
+      to: owner.phone,
+      message: `My AI PA signup for ${business.name}: verify your contact details to continue setup. ${verificationUrl} This link expires in 24 hours.`,
+    });
+  } catch (error) {
+    smsError = error;
+  }
+
+  const emailSent = emailResult?.sent === true;
+  const smsSent = Boolean(smsResult && smsResult.mocked !== true);
+  if (!emailSent && !smsSent) {
+    removePendingSignupVerification(token);
+    const error = new Error("The signup details were valid, but the verification link could not be delivered.");
+    error.statusCode = 503;
+    error.code = "VOICE_SIGNUP_VERIFICATION_DELIVERY_FAILED";
+    error.deliveryErrors = {
+      email: emailError?.code || emailError?.message || "not_sent",
+      sms: smsError?.code || smsError?.message || "not_sent",
+    };
+    throw error;
+  }
+
+  upsertSignupDashboardFromPayload(payload, {
+    status: "pending_email_verification",
+    emailVerificationRequired: true,
+    emailVerificationSentAt: emailSent ? new Date().toISOString() : undefined,
+    smsVerificationSentAt: smsSent ? new Date().toISOString() : undefined,
+    signupSource: "voice",
+    vapiCallId: payload.source?.callId || "",
+    reviewRequired: false,
+    reviewReasons: [],
+  });
+
+  const deliveryChannels = [
+    ...(emailSent ? ["email"] : []),
+    ...(smsSent ? ["text message"] : []),
+  ];
+  return {
+    ok: true,
+    businessName: business.name,
+    verificationRequired: true,
+    deliveryChannels,
+    message: `The signup details are saved. A verification link was sent by ${deliveryChannels.join(" and ")}. Setup begins only after the owner opens that link.`,
+  };
 }
 
 function ensureTrialReminderStore() {
@@ -7298,6 +7388,42 @@ app.post(
             const executionResult = { ok: true, leadId: lead.id, handoffId: handoff.handoffId, status: handoff.status };
             await completeVapiToolExecution({ prisma, id: claim.execution.id, result: executionResult });
             results.push({ name: toolCall.name, toolCallId: toolCall.id, result: JSON.stringify(executionResult) });
+          } catch (error) {
+            await failVapiToolExecution({ prisma, id: claim.execution.id, error }).catch(() => {});
+            throw error;
+          }
+        } else if (isVapiVoiceSignupTool(toolName)) {
+          const claim = await claimVapiToolExecution({
+            prisma,
+            toolCall,
+            businessId: routedBusinessId,
+            call: vapiMessage.call || vapiMessage,
+          });
+          if (!claim.claimed) {
+            results.push({
+              name: toolCall.name,
+              toolCallId: toolCall.id,
+              result: JSON.stringify({
+                ok: claim.execution.status === "COMPLETED",
+                duplicate: true,
+                status: claim.execution.status,
+                ...(claim.execution.result && typeof claim.execution.result === "object" ? claim.execution.result : {}),
+              }),
+            });
+            continue;
+          }
+          try {
+            const executionResult = await beginVoiceSignupVerification({
+              req,
+              parameters,
+              call: vapiMessage.call || vapiMessage,
+            });
+            await completeVapiToolExecution({ prisma, id: claim.execution.id, result: executionResult });
+            results.push({
+              name: toolCall.name,
+              toolCallId: toolCall.id,
+              result: JSON.stringify(executionResult),
+            });
           } catch (error) {
             await failVapiToolExecution({ prisma, id: claim.execution.id, error }).catch(() => {});
             throw error;
