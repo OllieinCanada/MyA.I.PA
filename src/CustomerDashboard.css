@@ -727,6 +727,129 @@
   margin-top: 0.85rem;
 }
 
+.customer-stats.is-trial {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.customer-trial-meter {
+  margin-top: 0.85rem;
+  border: 1px solid #a8d8ff;
+  border-radius: 0.9rem;
+  background: linear-gradient(135deg, #f8fcff 0%, #eaf6ff 100%);
+  box-shadow: 0 18px 58px rgba(13, 88, 160, 0.09);
+  padding: 1.3rem 1.4rem;
+}
+
+.customer-trial-meter-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+}
+
+.customer-trial-meter h2 {
+  margin: 0.28rem 0 0;
+  color: #07142a;
+  font-size: clamp(1.7rem, 3vw, 2.45rem);
+  line-height: 1.08;
+  font-weight: 950;
+  letter-spacing: -0.035em;
+}
+
+.customer-trial-meter-head > div:first-child > p:last-child {
+  margin: 0.55rem 0 0;
+  color: #375675;
+  font-size: 1rem;
+  line-height: 1.5;
+  font-weight: 750;
+}
+
+.customer-trial-meter-balance {
+  display: grid;
+  flex: 0 0 auto;
+  min-width: 9.25rem;
+  justify-items: center;
+  border: 1px solid #bfddf7;
+  border-radius: 0.8rem;
+  background: #fff;
+  padding: 0.85rem 1rem;
+}
+
+.customer-trial-meter-balance strong {
+  color: #0b66d8;
+  font-size: 2.25rem;
+  line-height: 1;
+  font-weight: 950;
+}
+
+.customer-trial-meter-balance span {
+  margin-top: 0.28rem;
+  color: #526b85;
+  font-size: 0.78rem;
+  font-weight: 850;
+}
+
+.customer-trial-progress {
+  height: 0.9rem;
+  margin-top: 1.15rem;
+  overflow: hidden;
+  border: 1px solid #c7def1;
+  border-radius: 999px;
+  background: #dcecf7;
+}
+
+.customer-trial-progress > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #126dff, #04a676);
+  transition: width 240ms ease;
+}
+
+.customer-trial-meter-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 0.9rem;
+}
+
+.customer-trial-meter-foot p {
+  margin: 0;
+  color: #526b85;
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+.customer-trial-meter-foot a {
+  flex: 0 0 auto;
+  border-radius: 0.7rem;
+  background: #126dff;
+  color: #fff;
+  padding: 0.72rem 1rem;
+  font-size: 0.9rem;
+  font-weight: 900;
+  text-decoration: none;
+}
+
+.customer-trial-meter-foot a:hover,
+.customer-trial-meter-foot a:focus-visible {
+  background: #0759bf;
+}
+
+.customer-trial-meter.is-paused {
+  border-color: #f0c678;
+  background: linear-gradient(135deg, #fffaf0 0%, #fff3d8 100%);
+}
+
+.customer-trial-meter.is-paused .customer-trial-progress > span {
+  background: linear-gradient(90deg, #d66b00, #f19a1a);
+}
+
+.customer-trial-meter.is-paused .customer-trial-meter-balance strong {
+  color: #9a4a00;
+}
+
 .customer-stat-card {
   padding: 1rem;
 }
@@ -2391,6 +2514,10 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .customer-stats.is-trial {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .customer-revenue-kpis {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -2509,6 +2636,21 @@
     grid-template-columns: 1fr;
   }
 
+  .customer-trial-meter-head,
+  .customer-trial-meter-foot {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .customer-trial-meter-balance {
+    min-width: 0;
+    justify-items: start;
+  }
+
+  .customer-trial-meter-foot a {
+    text-align: center;
+  }
+
   .customer-topbar {
     display: grid;
   }
@@ -2529,6 +2671,10 @@
   .customer-appointment-list,
   .customer-faq-grid,
   .customer-sidebar nav {
+    grid-template-columns: 1fr;
+  }
+
+  .customer-stats.is-trial {
     grid-template-columns: 1fr;
   }
 

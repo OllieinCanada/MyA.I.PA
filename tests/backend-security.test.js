@@ -63,6 +63,16 @@ test("health endpoint remains public and carries baseline security headers", asy
   assert.equal(payload.ok, true);
 });
 
+test("the public Vapi preview configuration never falls back to the private key", async () => {
+  const response = await request("/api/public/vapi-preview-config");
+  assert.equal(response.status, 200);
+  const payload = await response.json();
+  assert.equal(payload.enabled, false);
+  assert.equal(payload.assistantId, "");
+  assert.equal(payload.maxDurationSeconds, 30);
+  assert.equal(payload.maxConcurrentCalls, 2);
+});
+
 test("inbound messaging preferences require a valid provider signature", async () => {
   const response = await request("/api/webhooks/sms", {
     method: "POST",

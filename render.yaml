@@ -91,6 +91,8 @@ services:
         value: 1200
       - key: TRIAL_USAGE_LIMIT_SECONDS
         value: 3600
+      - key: TRIAL_USAGE_COMPLETION_RESERVE_SECONDS
+        value: 300
       - key: TRIAL_USAGE_POLICY_INTERVAL_MS
         value: 300000
       - key: TRIAL_USAGE_MIN_CALL_SECONDS
@@ -197,6 +199,10 @@ services:
         sync: false
       - key: VAPI_API_BASE_URL
         value: https://api.vapi.ai
+      - key: VAPI_PREVIEW_ASSISTANT_ID
+        sync: false
+      - key: VAPI_PREVIEW_MAX_DURATION_SECONDS
+        value: 30
       - key: VAPI_CALL_LIMIT
         value: 100
       - key: VAPI_DEFAULT_BUSINESS_ID

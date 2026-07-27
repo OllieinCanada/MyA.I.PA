@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import Vapi from "@vapi-ai/web";
 
 import {
   AREA_OPTIONS,
@@ -14,6 +15,8 @@ import {
   SIGNUP_SUBMIT_URL,
   SPECIALIZATION_OPTIONS,
   TRADE_OPTIONS,
+  VAPI_PREVIEW_CONFIG_URL,
+  VAPI_PREVIEW_SESSION_URL,
 } from "./features/signup/signupConfig";
 import {
   buildPricingScript,
@@ -604,12 +607,229 @@ function VoiceVisualizer({ active }) {
   );
 }
 
-function VoiceDemoStep({ agent }) {
+function getVoicePreviewErrorMessage(error) {
+  const message = String(error?.message || error?.error || error || "").toLowerCase();
+  if (/microphone|permission|notallowed|not allowed|denied/.test(message)) {
+    return "Please allow microphone access to start the test call. You can still use the recording below.";
+  }
+  if (/busy|concurr|limit|quota|429/.test(message)) {
+    return "The live preview is busy right now. Use the recording below or try again in a moment.";
+  }
+  if (/network|connect|offline|timeout/.test(message)) {
+    return "The live preview could not connect. Check your internet connection or use the recording below.";
+  }
+  return "The live preview is unavailable right now. You can continue setup or use the recording below.";
+}
+
+export function VoiceDemoStep({ agent, businessName, trade, areas, standalone = false }) {
   const audioRef = useRef(null);
+  const vapiRef = useRef(null);
+  const previewSessionIdRef = useRef("");
+  const callEndTimerRef = useRef(null);
+  const callStartedAtRef = useRef(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [audioTime, setAudioTime] = useState(0);
   const [audioDuration, setAudioDuration] = useState(0);
+  const [previewConfig, setPreviewConfig] = useState(null);
+  const [callState, setCallState] = useState("loading");
+  const [callError, setCallError] = useState("");
+  const [callElapsed, setCallElapsed] = useState(0);
+  const [assistantSpeaking, setAssistantSpeaking] = useState(false);
+  const [localVolume, setLocalVolume] = useState(0);
+  const [showRecording, setShowRecording] = useState(false);
   const progress = audioDuration ? Math.min(100, Math.max(0, (audioTime / audioDuration) * 100)) : 0;
+  const safeBusinessName = String(businessName || "").trim().slice(0, 80) || "your business";
+  const tradeLabel = String(trade?.label || "Trade business").trim();
+  const primaryArea = Array.isArray(areas) && areas.length ? String(areas[0]) : "Southern Ontario";
+  const greeting = `Hi, thanks for calling ${safeBusinessName}. How can I help you today?`;
+  const maxDurationSeconds = Math.max(15, Math.min(60, Number(previewConfig?.maxDurationSeconds || 30) || 30));
+  const callIsActive = callState === "connecting" || callState === "active" || callState === "ending";
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setCallState("loading");
+    fetch(VAPI_PREVIEW_CONFIG_URL, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data?.error || `Preview configuration failed with HTTP ${response.status}.`);
+        return data;
+      })
+      .then((data) => {
+        if (!data?.enabled || !data?.assistantId) {
+          setPreviewConfig(null);
+          setCallState("unavailable");
+          setShowRecording(true);
+          return;
+        }
+        setPreviewConfig({
+          assistantId: String(data.assistantId),
+          maxDurationSeconds: Math.max(15, Math.min(60, Number(data.maxDurationSeconds || 30) || 30)),
+        });
+        setCallState("ready");
+      })
+      .catch((error) => {
+        if (error?.name === "AbortError") return;
+        setPreviewConfig(null);
+        setCallState("unavailable");
+        setCallError(getVoicePreviewErrorMessage(error));
+        setShowRecording(true);
+      });
+
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    if (callState !== "active") return undefined;
+    const timer = window.setInterval(() => {
+      const elapsed = Math.max(0, Math.floor((Date.now() - callStartedAtRef.current) / 1000));
+      setCallElapsed(Math.min(maxDurationSeconds, elapsed));
+    }, 250);
+    return () => window.clearInterval(timer);
+  }, [callState, maxDurationSeconds]);
+
+  useEffect(
+    () => () => {
+      if (callEndTimerRef.current) window.clearTimeout(callEndTimerRef.current);
+      const vapi = vapiRef.current;
+      vapiRef.current = null;
+      if (vapi) {
+        vapi.removeAllListeners();
+        Promise.resolve(vapi.stop()).catch(() => {});
+      }
+      const audio = audioRef.current;
+      if (audio) audio.pause();
+      const previewSessionId = previewSessionIdRef.current;
+      previewSessionIdRef.current = "";
+      if (previewSessionId) {
+        fetch(`${VAPI_PREVIEW_SESSION_URL}/release`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId: previewSessionId }),
+          keepalive: true,
+        }).catch(() => {});
+      }
+    },
+    []
+  );
+
+  const releasePreviewSession = () => {
+    const previewSessionId = previewSessionIdRef.current;
+    previewSessionIdRef.current = "";
+    if (!previewSessionId) return;
+    fetch(`${VAPI_PREVIEW_SESSION_URL}/release`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId: previewSessionId }),
+      keepalive: true,
+    }).catch(() => {});
+  };
+
+  const finishLiveCall = () => {
+    if (callEndTimerRef.current) {
+      window.clearTimeout(callEndTimerRef.current);
+      callEndTimerRef.current = null;
+    }
+    setAssistantSpeaking(false);
+    setLocalVolume(0);
+    setCallElapsed(0);
+    setCallState(previewConfig ? "ready" : "unavailable");
+    releasePreviewSession();
+    const vapi = vapiRef.current;
+    vapiRef.current = null;
+    if (vapi) {
+      vapi.removeAllListeners();
+      Promise.resolve(vapi.stop()).catch(() => {});
+    }
+  };
+
+  const startLiveCall = async () => {
+    if (!previewConfig || callIsActive) return;
+    setCallError("");
+    setCallElapsed(0);
+    setAssistantSpeaking(false);
+    setLocalVolume(0);
+    setCallState("connecting");
+
+    try {
+      const sessionResponse = await fetch(VAPI_PREVIEW_SESSION_URL, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          businessName: safeBusinessName,
+        }),
+      });
+      const session = await sessionResponse.json().catch(() => ({}));
+      if (!sessionResponse.ok || !session?.token || !session?.assistantId || !session?.sessionId) {
+        throw new Error(session?.error || `The live preview could not start (HTTP ${sessionResponse.status}).`);
+      }
+      previewSessionIdRef.current = String(session.sessionId);
+      const sessionMaxDurationSeconds = Math.max(15, Math.min(60, Number(session.maxDurationSeconds || previewConfig.maxDurationSeconds) || 30));
+      const vapi = new Vapi(String(session.token));
+      vapiRef.current = vapi;
+      vapi.on("call-start", () => {
+        callStartedAtRef.current = Date.now();
+        setCallState("active");
+        setCallElapsed(0);
+        callEndTimerRef.current = window.setTimeout(() => {
+          setCallState("ending");
+          vapi.end();
+        }, sessionMaxDurationSeconds * 1000);
+      });
+      vapi.on("call-end", finishLiveCall);
+      vapi.on("speech-start", () => setAssistantSpeaking(true));
+      vapi.on("speech-end", () => setAssistantSpeaking(false));
+      vapi.on("local-volume-level", (volume) => setLocalVolume(Math.max(0, Math.min(1, Number(volume) || 0))));
+      vapi.on("error", (error) => {
+        setCallError(getVoicePreviewErrorMessage(error));
+        setShowRecording(true);
+        finishLiveCall();
+      });
+      vapi.on("call-start-failed", (event) => {
+        setCallError(getVoicePreviewErrorMessage(event?.error || event));
+        setShowRecording(true);
+        finishLiveCall();
+      });
+
+      const call = await vapi.start(String(session.assistantId), {
+        firstMessage: greeting,
+        firstMessageMode: "assistant-speaks-first",
+        firstMessageInterruptionsEnabled: true,
+        maxDurationSeconds: sessionMaxDurationSeconds,
+        backgroundSound: "off",
+        variableValues: {
+          businessName: safeBusinessName,
+          trade: tradeLabel,
+          serviceArea: primaryArea,
+          previewMode: "true",
+        },
+      });
+      if (!call) {
+        throw new Error("The live preview could not start.");
+      }
+    } catch (error) {
+      setCallError(getVoicePreviewErrorMessage(error));
+      setShowRecording(true);
+      finishLiveCall();
+    }
+  };
+
+  const stopLiveCall = () => {
+    const vapi = vapiRef.current;
+    if (!vapi || !callIsActive) return;
+    setCallState("ending");
+    try {
+      vapi.end();
+    } catch (_error) {
+      finishLiveCall();
+    }
+  };
 
   const togglePlayback = () => {
     const audio = audioRef.current;
@@ -624,39 +844,185 @@ function VoiceDemoStep({ agent }) {
 
   return (
     <section className="mt-5 grid gap-6">
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white/96 shadow-[0_34px_90px_-70px_rgba(15,23,42,0.8)]">
-        <div className="p-4 sm:p-6">
-          <div className="flex items-start gap-4">
-            <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-blue-100 text-blue-600 shadow-[0_18px_34px_-24px_rgba(37,99,235,0.9)]">
-              <span className="grid h-9 w-9 place-items-center rounded-xl bg-blue-600 text-white">
-                <Icon name="volume" className="h-5 w-5" />
-              </span>
-            </span>
+      <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white/96 shadow-[0_34px_90px_-70px_rgba(15,23,42,0.8)]">
+        <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/70 px-5 py-4 sm:px-8">
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">
+            {standalone ? "Personalized live demo" : "Live voice preview"}
+          </p>
+          <p className="text-xs font-black text-slate-400">{standalone ? "Ready to try" : "2 of 3"}</p>
+        </div>
+
+        <div className="grid gap-6 p-5 sm:p-8 lg:grid-cols-[360px_minmax(0,1fr)] lg:p-10 xl:grid-cols-[390px_minmax(0,1fr)]">
+          <div className="flex flex-col justify-between rounded-3xl border border-blue-100 bg-blue-50/70 p-5 sm:p-8">
             <div>
-              <h2 className="text-[1.45rem] font-black leading-tight tracking-[-0.03em] text-slate-950 sm:text-[26px]">3. Hear your agent's voice</h2>
-              <p className="mt-1.5 text-base font-medium leading-6 text-blue-700/75">Preview the assistant voice before launch.</p>
+              <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">
+                {standalone ? "Your demo" : "Step 2"}
+              </p>
+              <h2 className="mt-2 text-[clamp(2rem,3vw,3.1rem)] font-black leading-tight tracking-[-0.04em] text-slate-950">Try your assistant</h2>
+              <p className="mt-4 text-lg font-medium leading-8 text-slate-600">
+                Have a quick conversation using your microphone before you launch.
+              </p>
+            </div>
+            <div className="mt-7 rounded-2xl border border-blue-100 bg-white/85 p-4">
+              <p className="text-xs font-black uppercase tracking-[0.14em] text-blue-600">Set up for</p>
+              <p className="mt-2 text-lg font-black text-slate-950">{safeBusinessName}</p>
+              <p className="mt-1 text-sm font-bold text-slate-500">{tradeLabel} · {primaryArea}</p>
             </div>
           </div>
 
-          <div className="mt-6 rounded-2xl border border-blue-100 bg-blue-50/70 p-4 sm:p-5">
-            <div className="text-xs font-black uppercase tracking-[0.16em] text-blue-600/70">Assistant voice sample</div>
-            <div className="mt-2 text-xl font-black text-slate-950">{agent.label}</div>
-            <div className="mt-5 grid gap-4 lg:grid-cols-[auto_1fr] lg:items-center">
+          <div className="rounded-3xl border border-blue-100 bg-gradient-to-br from-blue-50/80 to-violet-50/80 p-5 sm:p-7">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">Quick browser call</div>
+                <div className="mt-2 text-2xl font-black tracking-[-0.03em] text-slate-950">{agent.label}</div>
+                <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">Ask one short question, just like a customer would.</p>
+              </div>
+              <span
+                className={
+                  "inline-flex items-center gap-2 rounded-full border px-3 py-2 text-xs font-black " +
+                  (callState === "active"
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                    : callState === "connecting" || callState === "ending"
+                      ? "border-blue-200 bg-blue-50 text-blue-700"
+                      : callState === "ready"
+                        ? "border-emerald-200 bg-white text-emerald-700"
+                        : "border-slate-200 bg-white text-slate-500")
+                }
+              >
+                <span
+                  className={
+                    "h-2 w-2 rounded-full " +
+                    (callState === "active" ? "animate-pulse bg-emerald-500" : callState === "ready" ? "bg-emerald-500" : "bg-slate-300")
+                  }
+                />
+                {callState === "loading"
+                  ? "Checking availability"
+                  : callState === "connecting"
+                    ? "Connecting"
+                    : callState === "active"
+                      ? assistantSpeaking
+                        ? "Assistant speaking"
+                        : "Listening"
+                      : callState === "ending"
+                        ? "Ending call"
+                        : callState === "ready"
+                          ? "Ready to call"
+                          : "Recording available"}
+              </span>
+            </div>
+
+            <div className="mt-6 rounded-2xl border border-white/90 bg-white/90 p-4 shadow-[0_22px_55px_-42px_rgba(15,23,42,0.8)] sm:p-5">
+              <div className="grid gap-4 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center">
+                <button
+                  type="button"
+                  onClick={callIsActive ? stopLiveCall : startLiveCall}
+                  disabled={callState === "loading" || callState === "unavailable" || callState === "ending"}
+                  className={
+                    "group grid h-20 w-20 place-items-center rounded-2xl text-white transition focus:outline-none focus:ring-4 " +
+                    (callState === "active"
+                      ? "bg-rose-600 shadow-[0_22px_45px_-24px_rgba(225,29,72,0.95)] hover:bg-rose-700 focus:ring-rose-200"
+                      : callState === "loading" || callState === "unavailable"
+                        ? "cursor-not-allowed bg-slate-300"
+                        : "bg-gradient-to-br from-blue-600 to-violet-600 shadow-[0_22px_45px_-24px_rgba(37,99,235,0.95)] hover:-translate-y-0.5 hover:shadow-[0_30px_54px_-24px_rgba(37,99,235,1)] focus:ring-blue-200")
+                  }
+                  aria-label={callIsActive ? "End test call" : "Start test call"}
+                >
+                  <Icon
+                    name="phone"
+                    className={`h-8 w-8 ${callState === "active" ? "rotate-[135deg]" : ""}`}
+                  />
+                </button>
+                <div>
+                  <p className="text-lg font-black text-slate-950">
+                    {callState === "active"
+                      ? assistantSpeaking
+                        ? "Your assistant is speaking"
+                        : "Go ahead — say something"
+                      : callState === "connecting"
+                        ? "Starting your secure browser call…"
+                        : callState === "ending"
+                          ? "Ending the test call…"
+                          : callState === "unavailable"
+                            ? "Live test is not configured yet"
+                            : "Start a quick test call"}
+                  </p>
+                  <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">
+                    {callState === "active"
+                      ? `${callElapsed}s of ${maxDurationSeconds}s · Tap the red phone to end early.`
+                      : `Microphone permission required · Ends automatically after ${maxDurationSeconds} seconds.`}
+                  </p>
+                  <div className="mt-4 flex h-7 items-end gap-1" aria-hidden="true">
+                    {Array.from({ length: 22 }).map((_, index) => {
+                      const baseHeight = 7 + ((index * 11) % 16);
+                      const boost = callState === "active" ? Math.round((assistantSpeaking ? 12 : localVolume * 18) * (0.45 + ((index % 5) / 7))) : 0;
+                      return (
+                        <span
+                          key={`live-bar-${index}`}
+                          className={
+                            "w-1 rounded-full transition-all duration-150 " +
+                            (callState === "active" ? "bg-gradient-to-t from-blue-600 to-violet-500" : "bg-blue-200")
+                          }
+                          style={{ height: `${Math.min(28, baseHeight + boost)}px` }}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+              <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-blue-600 to-violet-600 transition-[width] duration-300"
+                  style={{ width: `${callState === "active" ? Math.min(100, (callElapsed / maxDurationSeconds) * 100) : 0}%` }}
+                />
+              </div>
+            </div>
+
+            <div className="mt-5 border-l-2 border-violet-500 pl-4">
+              <p className="text-[0.68rem] font-black uppercase tracking-[0.16em] text-violet-600">Your personalized greeting</p>
+              <p className="mt-2 text-base font-black leading-7 text-slate-950">“{greeting}”</p>
+            </div>
+
+            {callError ? (
+              <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold leading-6 text-amber-900" role="status">
+                {callError}
+              </div>
+            ) : null}
+
+            <div className="mt-5 border-t border-blue-100 pt-4">
               <button
                 type="button"
-                onClick={togglePlayback}
-                className="group grid h-20 w-20 place-items-center rounded-2xl bg-gradient-to-br from-blue-600 to-violet-600 text-white shadow-[0_22px_45px_-24px_rgba(37,99,235,0.95)] transition hover:-translate-y-0.5 hover:shadow-[0_30px_54px_-24px_rgba(37,99,235,1)] focus:outline-none focus:ring-4 focus:ring-blue-200"
-                aria-label={isPlaying ? "Pause voice sample" : "Play voice sample"}
+                onClick={() => {
+                  setShowRecording((value) => !value);
+                  if (showRecording && audioRef.current) audioRef.current.pause();
+                }}
+                className="text-sm font-black text-blue-700 underline decoration-blue-200 underline-offset-4 transition hover:text-blue-900"
               >
-                <Icon name={isPlaying ? "pause" : "play"} className={`h-8 w-8 ${isPlaying ? "" : "ml-1"}`} />
+                {showRecording ? "Hide the backup recording" : "Prefer not to use your microphone? Play the recording"}
               </button>
-              <VoiceVisualizer active={isPlaying} />
-            </div>
-            <div className="mt-4 h-2 overflow-hidden rounded-full bg-white shadow-[inset_0_1px_2px_rgba(15,23,42,0.1)]">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-blue-600 to-violet-600 transition-[width] duration-200"
-                style={{ width: `${progress}%` }}
-              />
+              {showRecording ? (
+                <div className="mt-4 rounded-2xl border border-blue-100 bg-white/90 p-4">
+                  <div className="grid gap-4 sm:grid-cols-[auto_1fr] sm:items-center">
+                    <button
+                      type="button"
+                      onClick={togglePlayback}
+                      className="group grid h-16 w-16 place-items-center rounded-2xl bg-gradient-to-br from-blue-600 to-violet-600 text-white shadow-[0_22px_45px_-24px_rgba(37,99,235,0.95)] transition hover:-translate-y-0.5 focus:outline-none focus:ring-4 focus:ring-blue-200"
+                      aria-label={isPlaying ? "Pause backup voice recording" : "Play backup voice recording"}
+                    >
+                      <Icon name={isPlaying ? "pause" : "play"} className={`h-7 w-7 ${isPlaying ? "" : "ml-1"}`} />
+                    </button>
+                    <div>
+                      <p className="text-sm font-black text-slate-950">Backup voice recording</p>
+                      <VoiceVisualizer active={isPlaying} />
+                    </div>
+                  </div>
+                  <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100 shadow-[inset_0_1px_2px_rgba(15,23,42,0.1)]">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-blue-600 to-violet-600 transition-[width] duration-200"
+                      style={{ width: `${progress}%` }}
+                    />
+                  </div>
+                </div>
+              ) : null}
             </div>
             <audio
               ref={audioRef}
@@ -676,10 +1042,14 @@ function VoiceDemoStep({ agent }) {
           </div>
         </div>
 
-        <div className="border-t border-slate-200 bg-slate-50/50 px-4 py-4 sm:px-6">
+        <div className="border-t border-slate-200 bg-slate-50/50 px-5 py-4 sm:px-8">
           <div className="flex items-center gap-3 text-sm font-medium text-blue-700/75">
             <Icon name="info" className="h-5 w-5 shrink-0 text-blue-600" />
-            <span>This live assistant's voice is subject to change due to how cellular voice is transferred in your area.</span>
+            <span>
+              {standalone
+                ? "This 30-second demo uses your browser microphone and is not recorded. The backup recording works without microphone access."
+                : "This optional preview uses your browser microphone. If it is unavailable, you can still continue setup normally."}
+            </span>
           </div>
         </div>
       </div>
@@ -1156,7 +1526,7 @@ function SignupSuccessPage({ result, onStartAnother }) {
                 <div className="mt-5 rounded-3xl border border-blue-100 bg-[linear-gradient(180deg,#f7fbff,#eef6ff)] p-4">
                   <p className="text-sm font-black uppercase tracking-[0.16em] text-blue-600">Free trial</p>
                   <p className="mt-2 text-base font-semibold leading-7 text-slate-700">
-                    Your 14-day trial has started without collecting a credit card. It includes up to 60 AI call minutes, with a usage notice after 20 minutes. Billing can be set up after the trial is approved and ready.
+                    Your 14-day trial has started without collecting a credit card. It includes up to 60 AI call minutes, with friendly usage updates along the way. New AI calls pause near the limit so the final five minutes are protected for a call already in progress. Later calls use your fallback routing. Billing can be set up after the trial is approved and ready.
                   </p>
                 </div>
               ) : null}
@@ -1979,7 +2349,12 @@ export default function Signup() {
         ) : null}
 
         {currentStep === 2 ? (
-          <VoiceDemoStep agent={selectedAgent} />
+          <VoiceDemoStep
+            agent={selectedAgent}
+            businessName={details.businessName}
+            trade={selectedTrade}
+            areas={selectedAreas}
+          />
         ) : null}
 
         {currentStep === 3 ? (
@@ -2054,7 +2429,7 @@ export default function Signup() {
 
           <div className="mt-1 flex items-center justify-center gap-2 text-center text-sm font-medium text-slate-500 sm:text-base">
             <Icon name="lock" className="h-4 w-4" />
-            Your data is secure and will never be shared.
+            Your information is protected and used to set up and operate your service.
           </div>
         </div>
 

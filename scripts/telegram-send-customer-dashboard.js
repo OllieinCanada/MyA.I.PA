@@ -106,6 +106,18 @@ const dashboard = {
     totalMinutes: 34.6,
     lastCallAt: sampleCall.startedAt,
   },
+  trialUsage: {
+    lifecycle: "trial",
+    usedMinutes: 34.6,
+    limitMinutes: 60,
+    remainingMinutes: 25.4,
+    percentUsed: 58,
+    completionReserveMinutes: 5,
+    newCallsPaused: false,
+    limitReached: false,
+    estimatedCallsRemaining: 9,
+    fallbackRoutingReady: true,
+  },
   revenueRescue: {
     qualifiedLeads: 6,
     activeLeads: 3,

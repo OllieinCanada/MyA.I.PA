@@ -6,6 +6,7 @@ const crypto = require("crypto");
 const cors = require("cors");
 const express = require("express");
 const fs = require("fs");
+const jwt = require("jsonwebtoken");
 const nodemailer = require("nodemailer");
 const path = require("path");
 const { Readable } = require("stream");
@@ -83,6 +84,7 @@ const {
 } = require("./revenueRescue");
 const {
   DEFAULT_MAX_CALL_SECONDS,
+  buildTrialFallbackDestination,
   buildTrialUsageNotification,
   decideTrialCall,
   getPendingTrialMilestone,
@@ -168,6 +170,10 @@ const TRIAL_USAGE_LIMIT_SECONDS = Math.max(
   TRIAL_USAGE_WARNING_SECONDS,
   parsePositiveInt(process.env.TRIAL_USAGE_LIMIT_SECONDS, 60 * 60)
 );
+const TRIAL_USAGE_COMPLETION_RESERVE_SECONDS = Math.min(
+  TRIAL_USAGE_LIMIT_SECONDS,
+  parsePositiveInt(process.env.TRIAL_USAGE_COMPLETION_RESERVE_SECONDS, 5 * 60)
+);
 const TRIAL_USAGE_POLICY_INTERVAL_MS = parsePositiveInt(process.env.TRIAL_USAGE_POLICY_INTERVAL_MS, 5 * 60 * 1000);
 const TRIAL_USAGE_MIN_CALL_SECONDS = parsePositiveInt(process.env.TRIAL_USAGE_MIN_CALL_SECONDS, 15);
 const TRIAL_USAGE_RESERVATION_GRACE_SECONDS = parsePositiveInt(process.env.TRIAL_USAGE_RESERVATION_GRACE_SECONDS, 120);
@@ -192,6 +198,11 @@ const WEBHOOK_REPLAY_MAX_ENTRIES = Math.min(50000, parsePositiveInt(process.env.
 const stripe = STRIPE_SECRET_KEY ? new Stripe(STRIPE_SECRET_KEY) : null;
 const VAPI_API_KEY = String(process.env.VAPI_API_KEY || "").trim();
 const VAPI_API_BASE_URL = String(process.env.VAPI_API_BASE_URL || "https://api.vapi.ai").trim().replace(/\/+$/, "");
+const VAPI_PREVIEW_ASSISTANT_ID = String(process.env.VAPI_PREVIEW_ASSISTANT_ID || "").trim();
+const VAPI_PREVIEW_MAX_DURATION_SECONDS = Math.max(
+  15,
+  Math.min(60, Number(process.env.VAPI_PREVIEW_MAX_DURATION_SECONDS || 30) || 30)
+);
 const VAPI_CALL_LIMIT = Math.max(1, Math.min(1000, Number(process.env.VAPI_CALL_LIMIT || 100) || 100));
 const VAPI_DEFAULT_BUSINESS_ID = parsePositiveInt(process.env.VAPI_DEFAULT_BUSINESS_ID, 1);
 const VAPI_REQUIRE_BUSINESS_MAPPING = process.env.VAPI_REQUIRE_BUSINESS_MAPPING == null
@@ -227,6 +238,9 @@ const DEFAULT_ALLOWED_ORIGINS = [
   "http://127.0.0.1:3000",
 ];
 const ALLOWED_ORIGINS = parseCsv(process.env.ALLOWED_ORIGINS || process.env.CORS_ORIGINS);
+let vapiPreviewJwtMaterialCache = null;
+const vapiPreviewCallLeases = new Map();
+const VAPI_PREVIEW_MAX_CONCURRENT_CALLS = 2;
 
 app.set("trust proxy", 1);
 
@@ -4131,6 +4145,13 @@ async function findBusinessForSignup(signup = {}) {
     : null;
 }
 
+function getTrialFallbackPhone(signup = {}, aiNumber = "") {
+  const normalizedAiNumber = normalizePhoneForMatch(aiNumber);
+  return [signup.ownerPhone, signup.businessPhone]
+    .map((value) => String(value || "").trim())
+    .find((value) => value && normalizePhoneForMatch(value) !== normalizedAiNumber) || "";
+}
+
 async function ensureTrialBusinessAndMappings(signup, vapiPhone) {
   let business = await findBusinessForSignup(signup);
   const aiNumber = normalizePhoneForMatch(getVapiPhoneNumber(vapiPhone) || signup.twilioPhoneNumber || "");
@@ -4186,9 +4207,11 @@ async function ensureTrialBusinessAndMappings(signup, vapiPhone) {
   });
 }
 
-async function getTrialUsedSeconds(signup, businessId, db = prisma) {
+async function getTrialCallUsage(signup, businessId, db = prisma) {
   const lifecycle = getTrialLifecycle(signup);
-  if (!businessId || !lifecycle.startAt) return 0;
+  if (!businessId || !lifecycle.startAt) {
+    return { usedSeconds: 0, callCount: 0, averageCallSeconds: 0 };
+  }
   const startedAt = {
     gte: new Date(lifecycle.startAt),
     ...(lifecycle.endAt ? { lte: new Date(lifecycle.endAt) } : {}),
@@ -4200,18 +4223,36 @@ async function getTrialUsedSeconds(signup, businessId, db = prisma) {
       startedAt,
     },
     _sum: { durationSec: true },
+    _count: { _all: true },
   });
-  return Math.max(0, Math.floor(Number(aggregate?._sum?.durationSec || 0)));
+  const usedSeconds = Math.max(0, Math.floor(Number(aggregate?._sum?.durationSec || 0)));
+  const callCount = Math.max(0, Math.floor(Number(aggregate?._count?._all || 0)));
+  return {
+    usedSeconds,
+    callCount,
+    averageCallSeconds: callCount ? Math.max(1, Math.round(usedSeconds / callCount)) : 0,
+  };
+}
+
+async function getTrialUsedSeconds(signup, businessId, db = prisma) {
+  return (await getTrialCallUsage(signup, businessId, db)).usedSeconds;
 }
 
 async function getTrialUsageSnapshot(signup, businessId) {
   const lifecycle = getTrialLifecycle(signup);
-  const usedSeconds = businessId ? await getTrialUsedSeconds(signup, businessId) : 0;
+  const callUsage = businessId
+    ? await getTrialCallUsage(signup, businessId)
+    : { usedSeconds: 0, callCount: 0, averageCallSeconds: 0 };
   const usage = getTrialUsage({
-    usedSeconds,
+    usedSeconds: callUsage.usedSeconds,
     warningSeconds: TRIAL_USAGE_WARNING_SECONDS,
     limitSeconds: TRIAL_USAGE_LIMIT_SECONDS,
+    completionReserveSeconds: TRIAL_USAGE_COMPLETION_RESERVE_SECONDS,
   });
+  const planningCallSeconds = callUsage.averageCallSeconds || 96;
+  const estimatedCallsRemaining = usage.newCallsPaused
+    ? 0
+    : Math.max(0, Math.floor(usage.newCallSecondsRemaining / planningCallSeconds));
   const state = await prisma.runtimeStore.findUnique({ where: { key: getTrialUsageStateKey(signup) } }).catch(() => null);
   return {
     enabled: TRIAL_USAGE_LIMIT_ENABLED,
@@ -4220,7 +4261,15 @@ async function getTrialUsageSnapshot(signup, businessId) {
     trialStartAt: lifecycle.startAt ? new Date(lifecycle.startAt).toISOString() : null,
     trialEndAt: lifecycle.endAt ? new Date(lifecycle.endAt).toISOString() : null,
     ...usage,
+    callCount: callUsage.callCount,
+    averageCallMinutes: callUsage.averageCallSeconds
+      ? Number((callUsage.averageCallSeconds / 60).toFixed(1))
+      : 1.6,
+    estimatedCallsRemaining,
+    fallbackRoutingReady: Boolean(getTrialFallbackPhone(signup, signup.twilioPhoneNumber)),
     warningSentAt: state?.data?.warningSentAt || null,
+    fifteenRemainingSentAt: state?.data?.fifteenRemainingSentAt || null,
+    fiveRemainingSentAt: state?.data?.fiveRemainingSentAt || null,
     limitSentAt: state?.data?.limitSentAt || null,
   };
 }
@@ -4288,6 +4337,7 @@ async function configureTrialGateForSignup(signup, phoneInventory = null) {
       businessId: business.id,
       subscriptionId: signup.subscriptionId || existingConfig.subscriptionId || "",
       ownerEmail: signup.ownerEmail || existingConfig.ownerEmail || "",
+      fallbackPhone: getTrialFallbackPhone(signup, aiNumber) || existingConfig.fallbackPhone || "",
       status: "active",
       verifiedAt: new Date().toISOString(),
     };
@@ -4318,6 +4368,7 @@ async function configureTrialGateForSignup(signup, phoneInventory = null) {
     ownerEmail: signup.ownerEmail || "",
     phoneNumberId: String(phone.id),
     phoneNumber: aiNumber,
+    fallbackPhone: getTrialFallbackPhone(signup, aiNumber),
     assistantId: currentAssistantId,
     assistantMaxSeconds,
     assistantSnapshot,
@@ -4348,14 +4399,20 @@ async function configureTrialGateForSignup(signup, phoneInventory = null) {
     trialUsageGateActivatedAt: activated.activatedAt,
     trialUsageLimitMinutes: Number((TRIAL_USAGE_LIMIT_SECONDS / 60).toFixed(1)),
     trialUsageWarningMinutes: Number((TRIAL_USAGE_WARNING_SECONDS / 60).toFixed(1)),
+    trialUsageCompletionReserveMinutes: Number((TRIAL_USAGE_COMPLETION_RESERVE_SECONDS / 60).toFixed(1)),
   });
   return { configured: true, reused: false, businessId: business.id, phoneNumberId: phone.id };
 }
 
 async function claimTrialUsageMilestone(signup, milestone, usage) {
   const key = getTrialUsageStateKey(signup);
-  const field = milestone === "limit" ? "limitSentAt" : "warningSentAt";
-  const claimField = milestone === "limit" ? "limitClaimedAt" : "warningClaimedAt";
+  const fields = {
+    warning: ["warningSentAt", "warningClaimedAt", "warningLastError"],
+    "fifteen-remaining": ["fifteenRemainingSentAt", "fifteenRemainingClaimedAt", "fifteenRemainingLastError"],
+    "five-remaining": ["fiveRemainingSentAt", "fiveRemainingClaimedAt", "fiveRemainingLastError"],
+    limit: ["limitSentAt", "limitClaimedAt", "limitLastError"],
+  };
+  const [field, claimField] = fields[milestone] || fields.warning;
   return prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))`;
     const row = await tx.runtimeStore.findUnique({ where: { key } });
@@ -4381,8 +4438,13 @@ async function claimTrialUsageMilestone(signup, milestone, usage) {
 }
 
 async function finishTrialUsageMilestone({ key, milestone, result, error }) {
-  const field = milestone === "limit" ? "limitSentAt" : "warningSentAt";
-  const errorField = milestone === "limit" ? "limitLastError" : "warningLastError";
+  const fields = {
+    warning: ["warningSentAt", "warningLastError"],
+    "fifteen-remaining": ["fifteenRemainingSentAt", "fifteenRemainingLastError"],
+    "five-remaining": ["fiveRemainingSentAt", "fiveRemainingLastError"],
+    limit: ["limitSentAt", "limitLastError"],
+  };
+  const [field, errorField] = fields[milestone] || fields.warning;
   const row = await prisma.runtimeStore.findUnique({ where: { key } });
   const data = row?.data && typeof row.data === "object" ? row.data : {};
   const next = {
@@ -4450,10 +4512,15 @@ async function evaluateTrialUsageForSignup(signup, businessId) {
   const snapshot = await getTrialUsageSnapshot(signup, businessId);
   const pending = getPendingTrialMilestone({
     usedSeconds: snapshot.usedSeconds,
+    callCount: snapshot.callCount,
+    estimatedCallsRemaining: snapshot.estimatedCallsRemaining,
     warningSentAt: snapshot.warningSentAt,
+    fifteenRemainingSentAt: snapshot.fifteenRemainingSentAt,
+    fiveRemainingSentAt: snapshot.fiveRemainingSentAt,
     limitSentAt: snapshot.limitSentAt,
     warningSeconds: TRIAL_USAGE_WARNING_SECONDS,
     limitSeconds: TRIAL_USAGE_LIMIT_SECONDS,
+    completionReserveSeconds: TRIAL_USAGE_COMPLETION_RESERVE_SECONDS,
   });
   if (!pending.milestone) return snapshot;
   const claim = await claimTrialUsageMilestone(signup, pending.milestone, pending.usage);
@@ -4527,6 +4594,8 @@ async function getTrialUsageDashboard() {
     enabled: TRIAL_USAGE_LIMIT_ENABLED,
     warningMinutes: Number((TRIAL_USAGE_WARNING_SECONDS / 60).toFixed(1)),
     limitMinutes: Number((TRIAL_USAGE_LIMIT_SECONDS / 60).toFixed(1)),
+    completionReserveMinutes: Number((TRIAL_USAGE_COMPLETION_RESERVE_SECONDS / 60).toFixed(1)),
+    newCallCutoffMinutes: Number(((TRIAL_USAGE_LIMIT_SECONDS - TRIAL_USAGE_COMPLETION_RESERVE_SECONDS) / 60).toFixed(1)),
     accounts,
     totals: {
       accounts: accounts.length,
@@ -4574,6 +4643,7 @@ async function reserveTrialCall({ signup, config, callId }) {
       assistantMaxSeconds: config.assistantMaxSeconds || DEFAULT_MAX_CALL_SECONDS,
       warningSeconds: TRIAL_USAGE_WARNING_SECONDS,
       limitSeconds: TRIAL_USAGE_LIMIT_SECONDS,
+      completionReserveSeconds: TRIAL_USAGE_COMPLETION_RESERVE_SECONDS,
       minCallSeconds: TRIAL_USAGE_MIN_CALL_SECONDS,
     });
     if (!decision.action.startsWith("allow") || lifecycle.state === "paid") return decision;
@@ -4653,11 +4723,12 @@ async function handleTrialAssistantRequest(message) {
         console.error("[trial-usage] blocked-call evaluation failed", { message: error?.message || String(error) });
       });
     });
-    return {
-      error: decision.reason === "minute-limit-reached"
-        ? "This business's free-trial phone time has been used. Please contact the business another way."
-        : "This phone assistant is temporarily unavailable. Please try again later.",
-    };
+    const fallback = buildTrialFallbackDestination({
+      fallbackPhone: config.fallbackPhone || getTrialFallbackPhone(signup, config.phoneNumber),
+      aiPhone: config.phoneNumber,
+    });
+    if (fallback) return fallback;
+    return { error: "The team is unavailable right now. Please try again shortly." };
   }
   if (decision.action === "allow-saved") return { assistantId: config.assistantId };
   if (!config.assistantSnapshot) {
@@ -6936,6 +7007,108 @@ async function getOpenAiTranscription({ audioBase64, mimeType, detailed = false 
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true, service: "my-ai-pa-api", time: new Date().toISOString() });
 });
+
+async function getVapiPreviewJwtMaterial() {
+  const now = Date.now();
+  if (vapiPreviewJwtMaterialCache && vapiPreviewJwtMaterialCache.expiresAt > now) {
+    return vapiPreviewJwtMaterialCache;
+  }
+  const assistant = await requestVapiResource(`assistant/${encodeURIComponent(VAPI_PREVIEW_ASSISTANT_ID)}`);
+  if (!assistant?.orgId) {
+    const error = new Error("Vapi preview assistant organization is unavailable.");
+    error.statusCode = 503;
+    throw error;
+  }
+  vapiPreviewJwtMaterialCache = {
+    orgId: String(assistant.orgId),
+    jwtSecret: VAPI_API_KEY,
+    expiresAt: now + 10 * 60 * 1000,
+  };
+  return vapiPreviewJwtMaterialCache;
+}
+
+function reserveVapiPreviewCallSlot(now = Date.now()) {
+  for (const [sessionId, expiresAt] of vapiPreviewCallLeases.entries()) {
+    if (expiresAt <= now) vapiPreviewCallLeases.delete(sessionId);
+  }
+  if (vapiPreviewCallLeases.size >= VAPI_PREVIEW_MAX_CONCURRENT_CALLS) return null;
+  const sessionId = crypto.randomBytes(18).toString("hex");
+  vapiPreviewCallLeases.set(sessionId, now + (VAPI_PREVIEW_MAX_DURATION_SECONDS + 15) * 1000);
+  return sessionId;
+}
+
+app.get(
+  "/api/public/vapi-preview-config",
+  enforcePublicRouteRateLimit("vapi-preview-config", 30),
+  (_req, res) => {
+    res.setHeader("Cache-Control", "public, max-age=60");
+    res.json({
+      enabled: Boolean(VAPI_API_KEY && VAPI_PREVIEW_ASSISTANT_ID),
+      assistantId: VAPI_PREVIEW_ASSISTANT_ID || "",
+      maxDurationSeconds: VAPI_PREVIEW_MAX_DURATION_SECONDS,
+      maxConcurrentCalls: VAPI_PREVIEW_MAX_CONCURRENT_CALLS,
+    });
+  }
+);
+
+app.post(
+  "/api/public/vapi-preview-session",
+  enforcePublicRouteRateLimit("vapi-preview-session", 8),
+  asyncRoute(async (req, res) => {
+    res.setHeader("Cache-Control", "no-store, max-age=0");
+    if (!VAPI_API_KEY || !VAPI_PREVIEW_ASSISTANT_ID) {
+      return res.status(503).json({ error: "The live preview is not configured." });
+    }
+    const sessionId = reserveVapiPreviewCallSlot();
+    if (!sessionId) {
+      return res.status(429).json({ error: "The live preview is busy. Try again in a moment." });
+    }
+    try {
+      const signingMaterial = await getVapiPreviewJwtMaterial();
+      const requestOrigin = String(req.headers.origin || "").trim();
+      const allowedOrigin = requestOrigin && isAllowedOrigin(requestOrigin) ? requestOrigin : FRONTEND_APP_URL;
+      const token = jwt.sign(
+        {
+          orgId: signingMaterial.orgId,
+          token: {
+            tag: "public",
+            restrictions: {
+              enabled: true,
+              allowedOrigins: [allowedOrigin],
+              allowedAssistantIds: [VAPI_PREVIEW_ASSISTANT_ID],
+              allowTransientAssistant: false,
+            },
+          },
+        },
+        signingMaterial.jwtSecret,
+        {
+          algorithm: "HS256",
+          expiresIn: "5m",
+          jwtid: sessionId,
+        }
+      );
+      return res.json({
+        token,
+        assistantId: VAPI_PREVIEW_ASSISTANT_ID,
+        maxDurationSeconds: VAPI_PREVIEW_MAX_DURATION_SECONDS,
+        sessionId,
+      });
+    } catch (error) {
+      vapiPreviewCallLeases.delete(sessionId);
+      throw error;
+    }
+  })
+);
+
+app.post(
+  "/api/public/vapi-preview-session/release",
+  enforcePublicRouteRateLimit("vapi-preview-release", 20),
+  (req, res) => {
+    const sessionId = String(req.body?.sessionId || "").trim();
+    if (/^[a-f0-9]{36}$/.test(sessionId)) vapiPreviewCallLeases.delete(sessionId);
+    res.status(204).end();
+  }
+);
 
 app.get("/api/health/ready", async (_req, res) => {
   const startedAt = Date.now();

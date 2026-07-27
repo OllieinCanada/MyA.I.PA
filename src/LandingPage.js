@@ -1998,6 +1998,15 @@ function LandingPage() {
   const [showHeader, setShowHeader] = useState(false);
   const headerHideTimerRef = useRef(null);
 
+  useEffect(() => {
+    const section = new URLSearchParams(window.location.search).get("section");
+    if (!section) return undefined;
+    const timer = window.setTimeout(() => {
+      document.getElementById(section)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, []);
+
   const activeTranscript =
     transcriptMoments.find((item) => audioTime >= item.start && audioTime < item.end) || transcriptMoments[transcriptMoments.length - 1];
 
@@ -4500,8 +4509,27 @@ function LandingPage() {
 
           <div className="landing-hero-grid grid flex-1 gap-10 py-5 lg:grid-cols-[minmax(380px,0.7fr)_minmax(620px,1.3fr)] lg:items-center xl:grid-cols-[minmax(430px,0.72fr)_minmax(680px,1.28fr)] xl:gap-16 2xl:gap-16 2xl:py-5">
             <div className="relative z-10 min-w-0 max-w-[500px] xl:max-w-[520px] lg:-translate-y-1">
-              <div className="landing-hero-label text-[1.16rem] font-medium leading-tight tracking-[-0.02em] text-[#0b315f] 2xl:text-[1.22rem]">
-                AI Telephone Answering Assistant
+              <div className="landing-hero-label inline-flex max-w-full items-center gap-3 rounded-2xl border border-[#9ccaff] bg-[linear-gradient(135deg,rgba(255,255,255,0.94),rgba(222,240,255,0.9))] px-3 py-2 text-[#0b315f] shadow-[0_14px_35px_-24px_rgba(12,77,160,0.85),inset_0_1px_0_rgba(255,255,255,0.95)] sm:px-4">
+                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-[linear-gradient(145deg,#0c5fc3,#073d84)] text-white shadow-[0_10px_22px_-13px_rgba(12,77,160,0.95)]">
+                  <svg viewBox="0 0 40 40" className="h-8 w-8" fill="none" aria-hidden="true">
+                    <path d="M8 21v-2.5C8 11.6 13.4 6 20 6s12 5.6 12 12.5V21" stroke="currentColor" strokeWidth="3.4" strokeLinecap="round" />
+                    <rect x="5.5" y="18" width="6" height="11" rx="3" fill="#73d3ff" />
+                    <rect x="28.5" y="18" width="6" height="11" rx="3" fill="#73d3ff" />
+                    <rect x="14" y="17" width="2.8" height="9" rx="1.4" fill="#ff9a22" />
+                    <rect x="18.6" y="13" width="2.8" height="17" rx="1.4" fill="#ff7a00" />
+                    <rect x="23.2" y="16" width="2.8" height="11" rx="1.4" fill="#ff9a22" />
+                    <path d="M31.5 27.5c-1.2 4-4.8 6-9.4 6" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" />
+                    <circle cx="20.8" cy="33.5" r="2" fill="#64e572" />
+                  </svg>
+                </span>
+                <span className="min-w-0 py-0.5">
+                  <span className="block whitespace-nowrap text-[0.94rem] font-black uppercase leading-none tracking-[0.08em] sm:text-[1.04rem] 2xl:text-[1.1rem]">
+                    <span className="text-[#1674df]">AI</span> Telephone Answering
+                  </span>
+                  <span className="mt-1.5 block text-[0.66rem] font-black uppercase leading-none tracking-[0.22em] text-[#426488] sm:text-[0.72rem]">
+                    Built for the trades
+                  </span>
+                </span>
               </div>
 
               <h1 className="landing-hero-title mt-2 text-[clamp(2.8rem,11vw,3.8rem)] font-black leading-[1.02] tracking-[-0.055em] text-[#07142a] 2xl:text-[3.95rem]">
@@ -4558,7 +4586,7 @@ function LandingPage() {
               </div>
 
               <p className="landing-hero-footnote mt-4 whitespace-nowrap text-[0.82rem] font-black uppercase leading-none tracking-[-0.01em] text-[#111827] 2xl:text-[0.9rem]">
-                PIPEDA COMPLIANCE - 14-DAY FREE TRIAL - NO CREDIT CARD REQUIRED
+                PIPEDA-ALIGNED SETUP - 14-DAY FREE TRIAL - NO CREDIT CARD REQUIRED
               </p>
             </div>
 
@@ -5124,7 +5152,7 @@ function LandingPage() {
 
                 <div className="grid gap-2 rounded-[8px] bg-white px-3 py-3 sm:grid-cols-2">
                   {[
-                    ["shield", "No missed calls", "24/7 AI answering"],
+                    ["shield", "Calls covered", "When call forwarding is active"],
                     ["clock", "Work keeps moving", "You never stop the job"],
                     ["chat", "Job details ready", "Texts both you and the caller"],
                     ["people", "Built for trades", "Contractor-focused conversations"],
@@ -5145,9 +5173,9 @@ function LandingPage() {
 
             <div className="grid gap-3 border-t border-white/12 px-4 py-3 text-[#dbeafe] sm:grid-cols-3 sm:px-5 lg:px-7">
               {[
-                ["shield", "Trusted by contractors", "across North America"],
+                ["shield", "Designed for contractors", "across Southern Ontario"],
                 ["people", "Project a professional image", "for about the price of a cup of coffee per day"],
-                ["lock", "100% risk-free", "14-day free trial"],
+                ["lock", "No-card trial", "14 days to try it"],
               ].map(([icon, title, body]) => (
                 <div key={title} className="flex items-center gap-3 sm:justify-center">
                   <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-white/18 bg-white/8 text-[#a9e8ff]">

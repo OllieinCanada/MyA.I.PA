@@ -19,6 +19,8 @@ export const SIGNUP_SUBMIT_URL = MAKE_SIGNUP_WEBHOOK_URL
 
 export const CHECKOUT_API_BASE = normalizeApiBase(RAW_CHECKOUT_API_BASE || (IS_MAKE_WEBHOOK ? getDefaultApiBaseUrl() : API_BASE));
 export const CHECKOUT_SESSION_URL = `${CHECKOUT_API_BASE}${CHECKOUT_API_PATH}`;
+export const VAPI_PREVIEW_CONFIG_URL = `${API_BASE}/api/public/vapi-preview-config`;
+export const VAPI_PREVIEW_SESSION_URL = `${API_BASE}/api/public/vapi-preview-session`;
 
 export const CAPTCHA_PROVIDER = "";
 export const RECAPTCHA_SITE_KEY = "";

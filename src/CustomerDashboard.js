@@ -408,6 +408,57 @@ function StatCard({ label, value, sub }) {
   );
 }
 
+function TrialUsageCard({ usage = {}, trialText = "", trialEndAt = "" }) {
+  const used = Math.max(0, Number(usage.usedMinutes || 0));
+  const limit = Math.max(1, Number(usage.limitMinutes || 60));
+  const remaining = Math.max(0, Number(usage.remainingMinutes ?? limit));
+  const percent = Math.max(0, Math.min(100, Number(usage.percentUsed ?? Math.round((used / limit) * 100))));
+  const estimatedCallsRemaining = Math.max(0, Number(usage.estimatedCallsRemaining || 0));
+  const newCallsPaused = Boolean(usage.newCallsPaused || usage.limitReached);
+  const fallbackCopy = usage.fallbackRoutingReady
+    ? "New calls now connect to your fallback number."
+    : "AI answering is paused. Contact us to confirm your fallback number.";
+  const statusCopy = newCallsPaused
+    ? fallbackCopy
+    : estimatedCallsRemaining
+      ? `About ${estimatedCallsRemaining} typical ${estimatedCallsRemaining === 1 ? "call" : "calls"} remain before fallback routing.`
+      : `${remaining} AI answering minutes remain.`;
+
+  return (
+    <section className={`customer-trial-meter${newCallsPaused ? " is-paused" : ""}`} aria-labelledby="trial-usage-title">
+      <div className="customer-trial-meter-head">
+        <div>
+          <p className="customer-eyebrow">14-day free trial</p>
+          <h2 id="trial-usage-title">{used} of {limit} AI minutes used</h2>
+          <p>{statusCopy}</p>
+        </div>
+        <div className="customer-trial-meter-balance">
+          <strong>{remaining}</strong>
+          <span>{newCallsPaused && remaining ? "minutes protected" : "minutes remaining"}</span>
+        </div>
+      </div>
+      <div
+        className="customer-trial-progress"
+        role="progressbar"
+        aria-label="Trial AI minutes used"
+        aria-valuemin="0"
+        aria-valuemax={limit}
+        aria-valuenow={Math.min(limit, used)}
+      >
+        <span style={{ width: `${percent}%` }} />
+      </div>
+      <div className="customer-trial-meter-foot">
+        <p>
+          <strong>{trialText}</strong>
+          {trialEndAt ? ` · Ends ${fmtDate(trialEndAt)}` : ""}
+          {!newCallsPaused ? ` · The final ${usage.completionReserveMinutes || 5} minutes are protected for a call already in progress.` : ""}
+        </p>
+        <a href="mailto:hello@myaipa.com?subject=Activate%20My%20AI%20PA%20service">Activate service</a>
+      </div>
+    </section>
+  );
+}
+
 function AppointmentRequestCard({ appointment, staffMembers = [], onUpdated }) {
   const [start, setStart] = useState(toDateTimeInput(appointment.confirmedStart || appointment.requestedStart));
   const [staffMemberId, setStaffMemberId] = useState(staffMembers.some((staff) => staff.id === appointment.staffMember?.id) ? appointment.staffMember.id : "");
@@ -1030,21 +1081,29 @@ function CustomerDashboardView({ dashboard, onSignOut, onRefresh, refreshing, re
           </div>
         </section>
 
-        <section className="customer-stats">
-          <StatCard label="Calls handled" value={stats.totalCalls || 0} sub="updates automatically" />
-          <StatCard
-            label={trialUsage.lifecycle === "trial" ? "Trial minutes" : "Minutes used"}
-            value={trialUsage.lifecycle === "trial" ? `${trialUsage.usedMinutes || 0} / ${trialUsage.limitMinutes || 60}` : stats.totalMinutes || 0}
-            sub={trialUsage.lifecycle === "trial" ? `${trialUsage.remainingMinutes ?? 60} minutes remaining` : "voice time shown to you"}
+        {trialUsage.lifecycle === "trial" ? (
+          <TrialUsageCard
+            usage={trialUsage}
+            trialText={trialText}
+            trialEndAt={signup.trialEndAt}
           />
+        ) : null}
+
+        <section className={`customer-stats${trialUsage.lifecycle === "trial" ? " is-trial" : ""}`}>
+          <StatCard label="Calls handled" value={stats.totalCalls || 0} sub="updates automatically" />
+          {trialUsage.lifecycle !== "trial" ? (
+            <StatCard label="Minutes used" value={stats.totalMinutes || 0} sub="voice time shown to you" />
+          ) : null}
           <StatCard label="Missed calls" value={stats.missedCalls || 0} sub="needs attention" />
           <StatCard label="Follow-ups" value={stats.followUps || 0} sub="quotes or callbacks" />
           <StatCard label="Appointments" value={confirmedAppointments} sub={`${actionRequiredAppointments} need your reply`} />
-          <StatCard
-            label="Trial"
-            value={trialUsage.limitReached ? "Minute limit reached" : trialText}
-            sub={trialUsage.warningSentAt ? "20-minute usage notice sent" : signup.trialEndAt ? `Ends ${fmtDate(signup.trialEndAt)}` : statusLabel(signup.subscriptionStatus)}
-          />
+          {trialUsage.lifecycle !== "trial" ? (
+            <StatCard
+              label="Service status"
+              value={trialText}
+              sub={statusLabel(signup.subscriptionStatus)}
+            />
+          ) : null}
         </section>
 
         <RevenueRescuePanel revenueRescue={revenueRescue} jobber={jobber} onUpdated={onRefresh} />

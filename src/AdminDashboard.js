@@ -566,6 +566,29 @@ function ConceptLogo() {
   );
 }
 
+function AdminNavIcon({ name }) {
+  const common = {
+    width: 20,
+    height: 20,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.8,
+    strokeLinecap: "round",
+    strokeLinejoin: "round",
+    "aria-hidden": true,
+  };
+
+  if (name === "overview") return <svg {...common}><rect x="3" y="3" width="7" height="7" rx="2" /><rect x="14" y="3" width="7" height="7" rx="2" /><rect x="3" y="14" width="7" height="7" rx="2" /><rect x="14" y="14" width="7" height="7" rx="2" /></svg>;
+  if (name === "customers") return <svg {...common}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" /></svg>;
+  if (name === "support") return <svg {...common}><path d="M21 15a4 4 0 0 1-4 4H8l-5 3v-7a4 4 0 0 1-1-2.6V7a4 4 0 0 1 4-4h11a4 4 0 0 1 4 4Z" /><path d="M8 8h8M8 12h5" /></svg>;
+  if (name === "setup") return <svg {...common}><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3" /><path d="M1 14h6M9 8h6M17 16h6" /></svg>;
+  if (name === "calls") return <svg {...common}><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.12.9.33 1.78.62 2.63a2 2 0 0 1-.45 2.11L8 9.73a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.85.29 1.73.5 2.63.62A2 2 0 0 1 22 16.92Z" /></svg>;
+  if (name === "trials") return <svg {...common}><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>;
+  if (name === "costs") return <svg {...common}><rect x="2" y="5" width="20" height="14" rx="3" /><path d="M2 10h20M6 15h4" /></svg>;
+  return <svg {...common}><path d="M20 7h-7l2.5-2.5M4 17h7l-2.5 2.5" /><path d="M18.5 4.5A9 9 0 0 1 21 11M5.5 19.5A9 9 0 0 1 3 13" /></svg>;
+}
+
 function ConceptSidebar({ groups, activeTab, onSelect, onLock }) {
   return (
     <aside className="admin-concept-sidebar">
@@ -581,8 +604,9 @@ function ConceptSidebar({ groups, activeTab, onSelect, onLock }) {
                 onClick={() => onSelect(key)}
                 className={"admin-concept-nav-item " + (activeTab === key ? "is-active" : "")}
                 title={desc}
+                aria-current={activeTab === key ? "page" : undefined}
               >
-                <span className="admin-concept-nav-icon">{label.slice(0, 1)}</span>
+                <span className="admin-concept-nav-icon"><AdminNavIcon name={key} /></span>
                 <span>{label}</span>
               </button>
             ))}
@@ -604,25 +628,27 @@ function ConceptSidebar({ groups, activeTab, onSelect, onLock }) {
 }
 
 function ConceptTopBar({ loading, apiBase, apiSourceLabel, onRefresh, onRefreshAll, onSyncCalls, onSite }) {
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+  const today = new Intl.DateTimeFormat("en-CA", { weekday: "long", month: "long", day: "numeric" }).format(new Date());
+
   return (
     <header className="admin-concept-topbar">
-      <div>
-        <h1>Lead &amp; Business Overview</h1>
-        <p>See what needs attention, follow every lead, and keep each business ready.</p>
+      <div className="admin-concept-heading">
+        <h1>{greeting}, Ollie</h1>
+        <p>{today} · Here’s what is moving across your businesses.</p>
         <div className="admin-api-source" title={apiBase}>
           <span className={apiSourceLabel === "Live Render API" ? "is-live" : "is-local"} />
-          {apiSourceLabel}: {apiBase}
+          {loading ? "Checking systems…" : apiSourceLabel === "Live Render API" ? "Live systems connected" : "Local preview"}
         </div>
       </div>
       <div className="admin-concept-top-actions">
-        <div className="admin-concept-search">All businesses and calls</div>
-        <div className="admin-concept-range">Last 30 days</div>
         <button type="button" className="admin-concept-status" onClick={onRefresh}>
-          {loading ? "Checking..." : "Check Status"}
+          Check status
         </button>
-        <button type="button" className="admin-concept-ghost" onClick={onRefreshAll}>Refresh Dashboard</button>
-        <button type="button" className="admin-concept-primary" onClick={onSyncCalls}>Check Calls</button>
-        <button type="button" className="admin-concept-ghost" onClick={onSite}>View Website</button>
+        <button type="button" className="admin-concept-ghost" onClick={onSyncCalls}>Sync calls</button>
+        <button type="button" className="admin-concept-ghost" onClick={onSite}>View website</button>
+        <button type="button" className="admin-concept-primary" onClick={onRefreshAll}>{loading ? "Refreshing…" : "Refresh"}</button>
       </div>
     </header>
   );
@@ -958,8 +984,12 @@ function SystemHealthPanel({ setupItems, signups, apiSourceLabel, onOpen }) {
         {items.map((item) => (
           <button key={item.label} type="button" onClick={() => onOpen(item.label === "Vapi" ? "vapi" : item.label === "Twilio" ? "costs" : item.label === "Stripe checkout" ? "trials" : "sync")}>
             <span className={"admin-v2-health-dot " + (item.ok ? "is-ok" : "is-warn")} />
-            <strong>{item.label}</strong>
-            <em>{item.detail}</em>
+            <span className="admin-v2-health-copy">
+              <strong>{item.label}</strong>
+              <em>{item.detail}</em>
+            </span>
+            <span className={"admin-v2-health-state " + (item.ok ? "is-ok" : "is-warn")}>{item.ok ? "Connected" : "Needs attention"}</span>
+            <span className="admin-v2-row-chevron" aria-hidden="true">›</span>
           </button>
         ))}
       </div>
@@ -1028,40 +1058,53 @@ function ConceptOverview({
   const unreviewed = calls.filter((call) => !call.outcome || call.outcome === "UNREVIEWED").length;
   const followUps = calls.filter((call) => call.followUpNeeded || call.outcome === "FOLLOW_UP" || call.outcome === "QUOTE_NEEDED").length;
   const booked = calls.filter((call) => call.outcome === "BOOKED").length;
+  const pulseAction = fixRows[0];
+  const pulseActionTab = pulseAction?.actionTab || "calls";
 
   return (
     <div className="admin-v2-overview">
+      <section className={"admin-v2-pulse " + (fixRows.length ? "has-attention" : "is-clear")}>
+        <span className="admin-v2-pulse-icon" aria-hidden="true">{fixRows.length ? "!" : "✓"}</span>
+        <div>
+          <span>Today’s pulse</span>
+          <h2>{fixRows.length ? `${fixRows.length} clear next ${fixRows.length === 1 ? "step" : "steps"}` : "Everything is caught up"}</h2>
+          <p>{liveCustomers} {liveCustomers === 1 ? "business is" : "businesses are"} live and {totalCalls} calls are ready to track.</p>
+        </div>
+        <button type="button" onClick={() => (pulseAction?.actionLabel === "Sync Calls" ? onSyncCalls() : onOpenTab(pulseActionTab))}>
+          {fixRows.length ? "Start with the first one" : "Review calls"}
+          <span aria-hidden="true">→</span>
+        </button>
+      </section>
+
+      <div className="admin-v2-section-intro">
+        <div>
+          <span>At a glance</span>
+          <h2>Your business pulse</h2>
+        </div>
+        <p>Choose any number to see the details.</p>
+      </div>
       <div className="admin-v2-kpis">
         <button type="button" onClick={() => onOpenTab("customers")} className="admin-v2-kpi">
-          <span>Live Businesses</span>
+          <span className="admin-v2-kpi-heading"><span className="admin-v2-kpi-icon is-green"><AdminNavIcon name="customers" /></span>Live businesses</span>
           <strong>{liveCustomers}</strong>
           <em>{customerAccounts.length || stats.owners} total businesses</em>
         </button>
         <button type="button" onClick={() => onOpenTab("setup")} className="admin-v2-kpi is-warning">
-          <span>Business Setup Needed</span>
+          <span className="admin-v2-kpi-heading"><span className="admin-v2-kpi-icon is-orange"><AdminNavIcon name="setup" /></span>Need setup</span>
           <strong>{needsAction}</strong>
           <em>Setup, payment, or phone connection</em>
         </button>
         <button type="button" onClick={() => onOpenTab("calls")} className="admin-v2-kpi">
-          <span>Calls Captured</span>
+          <span className="admin-v2-kpi-heading"><span className="admin-v2-kpi-icon is-blue"><AdminNavIcon name="calls" /></span>Calls captured</span>
           <strong>{totalCalls}</strong>
           <em>{calls.length} ready for lead review</em>
         </button>
         <button type="button" onClick={() => onOpenTab("costs")} className="admin-v2-kpi">
-          <span>Provider Cost</span>
+          <span className="admin-v2-kpi-heading"><span className="admin-v2-kpi-icon is-purple"><AdminNavIcon name="costs" /></span>Provider cost</span>
           <strong>{moneyCompact(monthlyCost)}</strong>
           <em>{costAudit?.totals?.pricedCalls || 0} priced calls</em>
         </button>
       </div>
-
-      <LeadJourney
-        totalCalls={totalCalls}
-        unreviewed={unreviewed}
-        followUps={followUps}
-        booked={booked}
-        handoffSummary={leadHandoffs?.summary}
-        onOpen={() => onOpenTab("calls")}
-      />
 
       <div className="admin-v2-main-grid">
         <section className="admin-v2-card admin-v2-fix">
@@ -1093,6 +1136,15 @@ function ConceptOverview({
         <SystemHealthPanel setupItems={setupItems} signups={signups} apiSourceLabel={apiSourceLabel} onOpen={onOpenTab} />
       </div>
 
+      <LeadJourney
+        totalCalls={totalCalls}
+        unreviewed={unreviewed}
+        followUps={followUps}
+        booked={booked}
+        handoffSummary={leadHandoffs?.summary}
+        onOpen={() => onOpenTab("calls")}
+      />
+
       <section className="admin-v2-card admin-v2-customers">
         <div className="admin-v2-card-head">
           <div>
@@ -1108,9 +1160,14 @@ function ConceptOverview({
           {customerRows.length ? customerRows.map((account) => {
             const status = customerStatusLabel(account);
             const action = customerNextAction(account);
+            const businessName = account.businessName || account.ownerName || "Unnamed business";
+            const initials = businessName.split(/\s+/).filter(Boolean).slice(0, 2).map((word) => word[0]).join("").toUpperCase();
             return (
               <div key={account.key} className="admin-v2-table-row">
-                <span><strong>{account.businessName || account.ownerName || "Unnamed business"}</strong><small>{account.ownerEmail || account.ownerPhone || "No owner contact"}</small></span>
+                <span className="admin-v2-business-cell">
+                  <span className="admin-v2-business-avatar" aria-hidden="true">{initials}</span>
+                  <span><strong>{businessName}</strong><small>{account.ownerEmail || account.ownerPhone || "No owner contact"}</small></span>
+                </span>
                 <span><em className={"admin-v2-badge " + dashboardBadgeClass(status)}>{status === "Live" ? "Live" : account.subscriptionStatus || status}</em></span>
                 <span>{account.aiNumbers[0] || account.twilioPhoneNumber || "Not assigned"}</span>
                 <span><em className={"admin-v2-badge " + dashboardBadgeClass(status)}>{status}</em></span>
@@ -2071,13 +2128,23 @@ export default function AdminDashboard() {
   const navGroups = useMemo(
     () => [
       {
-        title: "Command",
+        title: "Dashboard",
         items: [
           ["overview", "Overview", "Control center"],
+        ],
+      },
+      {
+        title: "Operations",
+        items: [
           ["customers", "Businesses", "See every business and its next action"],
-          ["support", "Support Inbox", "Resolve customer-reported problems"],
-          ["setup", "Business Setup", "Finish businesses that are not ready"],
           ["calls", "Leads & Calls", "Review calls and move leads forward"],
+          ["support", "Support inbox", "Resolve customer-reported problems"],
+        ],
+      },
+      {
+        title: "System",
+        items: [
+          ["setup", "Business setup", "Finish businesses that are not ready"],
           ["trials", "Trials", "Live Stripe trial status"],
           ["costs", "Billing", "Vapi and Twilio spend"],
           ["sync", "Connections", "Service connection and refresh status"],
@@ -2701,8 +2768,8 @@ export default function AdminDashboard() {
           <button type="button" onClick={refresh} className="ml-auto rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm font-bold text-white/80">Refresh</button>
         </div>
 
-        {error ? <p className="mt-3 text-sm font-semibold text-rose-200">{error}</p> : null}
-        {loading ? <p className="mt-3 text-sm font-semibold text-white/65">Loading...</p> : null}
+        {error ? <p className="mt-3 text-sm font-semibold text-rose-200" role="alert">{error}</p> : null}
+        {loading ? <p className="mt-3 text-sm font-semibold text-white/65" role="status">Loading…</p> : null}
 
         {activeTab === "overview" ? (
           <ConceptOverview
