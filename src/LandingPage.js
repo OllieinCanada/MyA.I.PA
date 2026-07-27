@@ -4255,7 +4255,7 @@ function LandingPage() {
               gap: 0.65rem !important;
               font-size: clamp(0.96rem, 1.65vw, 1.12rem) !important;
             }
-            .landing-revenue-line > span:first-child {
+            .landing-revenue-icon {
               height: 1.8rem !important;
               width: 2.25rem !important;
             }
@@ -4541,12 +4541,11 @@ function LandingPage() {
 
               <p className="landing-hero-kicker mt-2 text-[clamp(2rem,7vw,2.6rem)] font-black leading-[1] tracking-[-0.055em] text-[#e11408] drop-shadow-[0_4px_0_rgba(255,169,92,0.34)] 2xl:text-[2.72rem]">Never Miss A Call Again!</p>
 
-              <div className="landing-revenue-line mt-4 flex items-center gap-3 text-[1.34rem] font-black uppercase leading-none text-[#17951f] 2xl:text-[1.42rem]">
-                <span className="grid h-8 w-10 place-items-center rounded-md border-2 border-[#23a425] bg-[#dfffe1] text-[#17951f]">
-                  <HeroIcon type="dollar" className="h-6 w-6" />
-                </span>
-                <span>MISSED CALLS = LOST REVENUE</span>
-              </div>
+              <p className="landing-revenue-line mt-4 whitespace-nowrap text-[clamp(0.76rem,3.2vw,1.12rem)] font-black uppercase leading-none tracking-[-0.025em]">
+                <span className="text-[#dc1717]">STOP LOSING CUSTOMERS.</span>
+                <span className="mx-2 text-[#123b68]" aria-hidden="true">→</span>
+                <span className="text-[#17951f]">START WINNING JOBS.</span>
+              </p>
 
               <p className="landing-hero-copy mt-4 max-w-[540px] text-[1.06rem] font-medium leading-7 text-[#111827] sm:text-[1.12rem] 2xl:text-[1.16rem] 2xl:leading-8">
                 <span className="font-black">24/7 AI call answering</span> for <span className="marker-highlight">busy trades across Hamilton, Grimsby, and the surrounding area.</span>
