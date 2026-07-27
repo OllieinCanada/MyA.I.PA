@@ -4539,12 +4539,12 @@ function LandingPage() {
                 </span>
               </h1>
 
-              <p className="landing-hero-kicker mt-2 text-[clamp(2rem,7vw,2.6rem)] font-black leading-[1] tracking-[-0.055em] text-[#e11408] drop-shadow-[0_4px_0_rgba(255,169,92,0.34)] 2xl:text-[2.72rem]">Never Miss A Call Again!</p>
+              <p className="landing-hero-kicker mt-2 text-[clamp(2rem,7vw,2.6rem)] font-black leading-[1] tracking-[-0.055em] text-[#e11408] drop-shadow-[0_4px_0_rgba(255,169,92,0.34)] 2xl:text-[2.72rem]">Missed Calls = Missed Jobs</p>
 
               <p className="landing-revenue-line mt-4 whitespace-nowrap text-[clamp(0.76rem,3.2vw,1.12rem)] font-black uppercase leading-none tracking-[-0.025em]">
                 <span className="text-[#dc1717]">STOP LOSING CUSTOMERS.</span>
                 <span className="mx-2 text-[#123b68]" aria-hidden="true">→</span>
-                <span className="text-[#17951f]">START WINNING JOBS.</span>
+                <span className="text-[#17951f]">START WINNING TODAY!</span>
               </p>
 
               <p className="landing-hero-copy mt-4 max-w-[540px] text-[1.06rem] font-medium leading-7 text-[#111827] sm:text-[1.12rem] 2xl:text-[1.16rem] 2xl:leading-8">
