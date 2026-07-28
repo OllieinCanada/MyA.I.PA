@@ -26,6 +26,10 @@ This checklist separates controls implemented in the repository from facts and a
 - [x] Customer support-report submission has a dedicated rate limit and cannot escalate severity from customer-supplied analysis.
 - [x] The Render blueprint disables external Postgres access and uses the same-region private database connection.
 - [x] A sanitized credential-readiness audit is available with `npm run audit:credential-readiness`.
+- [x] Production Postgres external access is disabled (`ipAllowList: []`) and database-aware readiness still returns HTTP 200.
+- [x] Dashboard one-time codes, security rate limits, and webhook replay claims have PostgreSQL-backed release-candidate implementations and regression tests.
+- [x] A fail-closed Vapi mapping audit is available with `npm run audit:vapi-business-mappings`.
+- [x] A review-only signup harness verifies health, readiness, admin visibility, and the absence of external provisioning identifiers.
 
 ## Required before a paid external pilot
 
@@ -36,7 +40,7 @@ This checklist separates controls implemented in the repository from facts and a
 - [ ] Have an accountant confirm financial and tax record categories and retention.
 - [ ] Confirm every live provider, legal name, role, processing location, DPA, retention, deletion mechanism, subprocessor list, and incident commitment.
 - [ ] Verify the production Render database is a paid instance with recovery enabled and record the actual PITR window.
-- [ ] Apply the reviewed database external-access restriction and verify the API continues to use Render's internal database URL.
+- [x] Apply the reviewed database external-access restriction and verify the API continues to use Render's internal database URL.
 - [ ] Create an encrypted logical database export and complete an isolated restore drill.
 - [ ] Select protected backup storage and approve access, encryption, residency, retention, and deletion.
 - [ ] Schedule monitoring outside the production API and test a real failure alert.
@@ -46,7 +50,9 @@ This checklist separates controls implemented in the repository from facts and a
 - [x] Complete one privacy access/correction/deletion exercise using synthetic data (`npm run ops:privacy:drill`; local evidence excludes personal information).
 - [ ] Configure Turnstile and test valid, missing, expired, and replayed challenges before public signup promotion.
 - [ ] Install a working Twilio reporting API key pair and verify call, text-message, and phone-number costs without authentication warnings.
-- [ ] Complete two end-to-end sandbox signups covering both supported paths, dashboard data, texts, cost allocation, consent, and cancellation.
+- [ ] Confirm or decommission six Vapi numbers that currently have no provable customer mapping. Do not infer ownership from assistant names.
+- [x] Complete a review-only production signup with no external telephone, agent, customer, subscription, or checkout resource created.
+- [ ] Complete two authorized end-to-end sandbox signups covering both supported paths, dashboard data, texts, cost allocation, consent, and cancellation.
 
 ## Repeatable commands
 
@@ -58,6 +64,8 @@ npm run ops:privacy:drill
 npm run ops:backup:check
 npm run ops:monitor
 npm run audit:credential-readiness
+npm run audit:vapi-business-mappings
+npm run test:signup-sandbox:dry
 npm run render:validate
 npm run backend:check
 npm run test:backend

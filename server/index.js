@@ -105,28 +105,26 @@ const {
   buildVoiceSignupPayload,
   isVapiVoiceSignupTool,
 } = require("./voiceSignup");
+const {
+  claimWebhookReplay,
+  completeWebhookReplay,
+  consumeRateLimit,
+  releaseWebhookReplay,
+  storeDashboardLoginCode,
+  verifyDashboardLoginCode,
+} = require("./persistentSecurityState");
 
 loadPowerShellEnvAssignments(path.join(__dirname, "..", ".env.local"));
 
 const app = express();
 const PORT = Number(process.env.PORT || 8787);
 const dataDir = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.join(__dirname, "..", "data");
-const assistantRateLimit = new Map();
-const publicRouteRateLimit = new Map();
-const signupIpRateLimit = new Map();
-const signupIdentityRateLimit = new Map();
 const signupDuplicateSubmissions = new Map();
-const customerDashboardIpRateLimit = new Map();
-const customerDashboardLookupRateLimit = new Map();
-const customerDashboardLoginCodes = new Map();
-const customerSupportSuggestionRateLimit = new Map();
-const customerSupportReportRateLimit = new Map();
 const pendingSignupPath = path.join(dataDir, "pending-signup-verifications.json");
 const pendingStripeSignupPath = path.join(dataDir, "pending-stripe-signups.json");
 const trialReminderPath = path.join(dataDir, "trial-reminders.json");
 const signupDashboardPath = path.join(dataDir, "signup-dashboard.json");
 const vapiCallSyncPath = path.join(dataDir, "vapi-call-sync.json");
-const webhookReplayPath = path.join(dataDir, "webhook-replay.json");
 const GOOGLE_RECAPTCHA_TEST_SECRET_KEY = "6LeIxAcTAAAAAGG-vFI1TnRWxMZNFuojJ4WifJWe";
 const ASSISTANT_MAX_CHARS = 2000;
 const ASSISTANT_WINDOW_MS = 60 * 1000;
@@ -277,9 +275,14 @@ app.post("/api/payments/stripe-webhook", express.raw({ type: "application/json" 
     return res.status(400).send(`Webhook Error: ${error.message}`);
   }
 
-  const replayClaim = claimWebhookEvent({ provider: "stripe", eventId: event.id, eventType: event.type });
+  const replayClaim = await claimWebhookEvent({ provider: "stripe", eventId: event.id, eventType: event.type });
   if (replayClaim.duplicate) {
     return res.json({ received: true, duplicate: true });
+  }
+  if (!replayClaim.claimed) {
+    const error = new Error("The webhook replay claim could not be established.");
+    error.statusCode = 503;
+    throw error;
   }
 
   try {
@@ -365,10 +368,15 @@ app.post("/api/payments/stripe-webhook", express.raw({ type: "application/json" 
       });
     }
 
-    completeWebhookEvent(replayClaim);
+    const replayCompleted = await completeWebhookEvent(replayClaim);
+    if (!replayCompleted) {
+      const error = new Error("The webhook replay claim could not be completed.");
+      error.statusCode = 503;
+      throw error;
+    }
     res.json({ received: true, duplicate: false });
   } catch (error) {
-    releaseWebhookEvent(replayClaim);
+    await releaseWebhookEvent(replayClaim);
     throw error;
   }
 }));
@@ -576,40 +584,28 @@ function hashCustomerDashboardCode(lookupHash, code) {
     .digest("hex");
 }
 
-function createCustomerDashboardLoginCode(lookupHash, now = Date.now()) {
+async function createCustomerDashboardLoginCode(lookupHash, now = Date.now()) {
   const normalizedLookupHash = String(lookupHash || "").trim().toLowerCase();
   if (!/^[a-f0-9]{32}$/.test(normalizedLookupHash)) return "";
   const code = String(crypto.randomInt(100000, 1000000));
-  customerDashboardLoginCodes.set(normalizedLookupHash, {
+  await storeDashboardLoginCode({
+    lookupHash: normalizedLookupHash,
     codeHash: hashCustomerDashboardCode(normalizedLookupHash, code),
     expiresAt: now + CUSTOMER_DASHBOARD_CODE_TTL_MS,
-    attempts: 0,
+    now,
   });
-  for (const [key, record] of customerDashboardLoginCodes.entries()) {
-    if (!record || Number(record.expiresAt || 0) <= now) customerDashboardLoginCodes.delete(key);
-  }
   return code;
 }
 
-function verifyCustomerDashboardLoginCode(lookupHash, code, now = Date.now()) {
+async function verifyCustomerDashboardLoginCode(lookupHash, code, now = Date.now()) {
   const normalizedLookupHash = String(lookupHash || "").trim().toLowerCase();
-  const record = customerDashboardLoginCodes.get(normalizedLookupHash);
-  if (!record || Number(record.expiresAt || 0) <= now) {
-    customerDashboardLoginCodes.delete(normalizedLookupHash);
-    return { ok: false, reason: "expired" };
-  }
-  record.attempts += 1;
-  if (record.attempts > CUSTOMER_DASHBOARD_CODE_MAX_ATTEMPTS) {
-    customerDashboardLoginCodes.delete(normalizedLookupHash);
-    return { ok: false, reason: "attempts" };
-  }
   const suppliedHash = hashCustomerDashboardCode(normalizedLookupHash, String(code || "").replace(/\D/g, ""));
-  if (!safeEqualString(suppliedHash, record.codeHash)) {
-    customerDashboardLoginCodes.set(normalizedLookupHash, record);
-    return { ok: false, reason: "invalid", remainingAttempts: Math.max(0, CUSTOMER_DASHBOARD_CODE_MAX_ATTEMPTS - record.attempts) };
-  }
-  customerDashboardLoginCodes.delete(normalizedLookupHash);
-  return { ok: true };
+  return verifyDashboardLoginCode({
+    lookupHash: normalizedLookupHash,
+    codeHash: suppliedHash,
+    maxAttempts: CUSTOMER_DASHBOARD_CODE_MAX_ATTEMPTS,
+    now,
+  });
 }
 
 function maskCustomerDashboardPhone(phone) {
@@ -1107,30 +1103,6 @@ function writeVapiCallSyncStore(store) {
   fs.writeFileSync(vapiCallSyncPath, `${JSON.stringify(store, null, 2)}\n`);
 }
 
-function ensureWebhookReplayStore() {
-  fs.mkdirSync(path.dirname(webhookReplayPath), { recursive: true });
-  if (!fs.existsSync(webhookReplayPath)) {
-    fs.writeFileSync(webhookReplayPath, "{}\n");
-  }
-}
-
-function readWebhookReplayStore() {
-  ensureWebhookReplayStore();
-  try {
-    const data = JSON.parse(fs.readFileSync(webhookReplayPath, "utf8"));
-    return data && typeof data === "object" && !Array.isArray(data) ? data : {};
-  } catch {
-    return {};
-  }
-}
-
-function writeWebhookReplayStore(store) {
-  ensureWebhookReplayStore();
-  const temporaryPath = `${webhookReplayPath}.${process.pid}.tmp`;
-  fs.writeFileSync(temporaryPath, `${JSON.stringify(store, null, 2)}\n`);
-  fs.renameSync(temporaryPath, webhookReplayPath);
-}
-
 function getWebhookReplayKey(provider, eventId) {
   const normalizedProvider = String(provider || "").trim().toLowerCase().slice(0, 80);
   const normalizedEventId = String(eventId || "").trim().slice(0, 240);
@@ -1188,37 +1160,33 @@ function claimWebhookReplayStore(store, { provider, eventId, eventType = "", now
   return { claimed: true, duplicate: false, skipped: false, key, claimToken: token };
 }
 
-function claimWebhookEvent(details) {
-  const store = readWebhookReplayStore();
-  const result = claimWebhookReplayStore(store, details);
-  if (result.claimed) writeWebhookReplayStore(store);
-  return result;
+async function claimWebhookEvent(details) {
+  const key = getWebhookReplayKey(details?.provider, details?.eventId);
+  return claimWebhookReplay({
+    key,
+    provider: details?.provider,
+    eventIdHash: hashKey(String(details?.eventId || "").trim()),
+    eventType: details?.eventType,
+    now: details?.now,
+    claimToken: details?.claimToken,
+    leaseMs: WEBHOOK_PROCESSING_LEASE_MS,
+    retentionMs: WEBHOOK_REPLAY_RETENTION_MS,
+  });
 }
 
-function completeWebhookEvent(claim, now = Date.now()) {
+async function completeWebhookEvent(claim, now = Date.now()) {
   if (!claim?.claimed || !claim.key || !claim.claimToken) return false;
-  const store = pruneWebhookReplayStore(readWebhookReplayStore(), now);
-  const record = store[claim.key];
-  if (!record || record.claimToken !== claim.claimToken) return false;
-  store[claim.key] = {
-    ...record,
-    status: "completed",
-    completedAt: now,
-    leaseExpiresAt: null,
-    expiresAt: now + WEBHOOK_REPLAY_RETENTION_MS,
-  };
-  writeWebhookReplayStore(store);
-  return true;
+  return completeWebhookReplay({
+    key: claim.key,
+    claimToken: claim.claimToken,
+    retentionMs: WEBHOOK_REPLAY_RETENTION_MS,
+    now,
+  });
 }
 
-function releaseWebhookEvent(claim) {
+async function releaseWebhookEvent(claim) {
   if (!claim?.claimed || !claim.key || !claim.claimToken) return false;
-  const store = readWebhookReplayStore();
-  const record = store[claim.key];
-  if (!record || record.claimToken !== claim.claimToken) return false;
-  delete store[claim.key];
-  writeWebhookReplayStore(store);
-  return true;
+  return releaseWebhookReplay({ key: claim.key, claimToken: claim.claimToken });
 }
 
 function parseVapiBusinessMap() {
@@ -2274,6 +2242,7 @@ async function syncVapiCalls(options = {}) {
   const store = readVapiCallSyncStore();
   const results = [];
   const detailErrors = [];
+  const routingErrors = [];
   let detailsFetched = 0;
 
   for (const call of calls) {
@@ -2297,13 +2266,44 @@ async function syncVapiCalls(options = {}) {
       detailErrors.push({ vapiCallId, message: error?.message || "Could not fetch Vapi call detail." });
     }
 
-    const result = await upsertVapiCall(fullCall, store);
-    results.push(result);
-    await reconcileTrialUsageAfterCall(result);
+    try {
+      const result = await upsertVapiCall(fullCall, store);
+      results.push(result);
+      await reconcileTrialUsageAfterCall(result);
+    } catch (error) {
+      if (error?.code !== "VAPI_BUSINESS_ROUTE_REQUIRED") throw error;
+      routingErrors.push({
+        vapiCallId,
+        code: error.code,
+        assistantId: String(fullCall?.assistantId || fullCall?.assistant?.id || "").trim(),
+        phoneNumberId: String(fullCall?.phoneNumberId || fullCall?.phoneNumber?.id || "").trim(),
+        destinationLast4: normalizePhoneForMatch(
+          fullCall?.phoneNumber?.number ||
+            fullCall?.phoneNumber?.twilioPhoneNumber ||
+            fullCall?.destination?.number ||
+            fullCall?.to ||
+            ""
+        ).slice(-4),
+      });
+    }
   }
 
   writeVapiCallSyncStore(store);
-  return { fetched: calls.length, detailsFetched, detailErrors, synced: results.length, results };
+  if (routingErrors.length) {
+    console.warn("[vapi:sync] calls skipped because no trusted business mapping matched", {
+      skipped: routingErrors.length,
+      callIds: routingErrors.slice(0, 20).map((item) => item.vapiCallId),
+    });
+  }
+  return {
+    fetched: calls.length,
+    detailsFetched,
+    detailErrors,
+    routingErrors,
+    synced: results.length,
+    skippedUnmapped: routingErrors.length,
+    results,
+  };
 }
 
 async function fetchTwilioCalls({ days = 30, limit = 1000 } = {}) {
@@ -5543,17 +5543,17 @@ function normalizeSupportAnalysis(value, fallback) {
   };
 }
 
-function getSupportSuggestionRateLimitDecision(lookupHash, now = Date.now()) {
-  const key = String(lookupHash || "");
-  const existing = customerSupportSuggestionRateLimit.get(key);
-  const state = !existing || now - existing.windowStartedAt >= CUSTOMER_SUPPORT_SUGGESTION_WINDOW_MS
-    ? { windowStartedAt: now, count: 0 }
-    : existing;
-  state.count += 1;
-  customerSupportSuggestionRateLimit.set(key, state);
+async function getSupportSuggestionRateLimitDecision(lookupHash, now = Date.now()) {
+  const state = await consumeNamedRateLimit(
+    "customer-support-suggestion",
+    lookupHash,
+    CUSTOMER_SUPPORT_SUGGESTION_MAX_REQUESTS,
+    CUSTOMER_SUPPORT_SUGGESTION_WINDOW_MS,
+    now
+  );
   return {
-    blocked: state.count > CUSTOMER_SUPPORT_SUGGESTION_MAX_REQUESTS,
-    retryAfterMs: Math.max(0, CUSTOMER_SUPPORT_SUGGESTION_WINDOW_MS - (now - state.windowStartedAt)),
+    blocked: !state.allowed,
+    retryAfterMs: state.retryAfterMs,
   };
 }
 
@@ -5564,17 +5564,17 @@ function normalizeSubmittedSupportAnalysis(value, fallback) {
   };
 }
 
-function getSupportReportRateLimitDecision(lookupHash, now = Date.now()) {
-  const key = String(lookupHash || "");
-  const existing = customerSupportReportRateLimit.get(key);
-  const state = !existing || now - existing.windowStartedAt >= CUSTOMER_SUPPORT_REPORT_WINDOW_MS
-    ? { windowStartedAt: now, count: 0 }
-    : existing;
-  state.count += 1;
-  customerSupportReportRateLimit.set(key, state);
+async function getSupportReportRateLimitDecision(lookupHash, now = Date.now()) {
+  const state = await consumeNamedRateLimit(
+    "customer-support-report",
+    lookupHash,
+    CUSTOMER_SUPPORT_REPORT_MAX_REQUESTS,
+    CUSTOMER_SUPPORT_REPORT_WINDOW_MS,
+    now
+  );
   return {
-    blocked: state.count > CUSTOMER_SUPPORT_REPORT_MAX_REQUESTS,
-    retryAfterMs: Math.max(0, CUSTOMER_SUPPORT_REPORT_WINDOW_MS - (now - state.windowStartedAt)),
+    blocked: !state.allowed,
+    retryAfterMs: state.retryAfterMs,
   };
 }
 
@@ -6175,17 +6175,22 @@ function checkWindowLimit(store, key, maxRequests, windowMs) {
   };
 }
 
+function consumeNamedRateLimit(namespace, rawKey, maxRequests, windowMs, now = Date.now()) {
+  const key = `security-rate:${String(namespace || "general").slice(0, 80)}:${hashKey(rawKey)}`;
+  return consumeRateLimit({ key, maxRequests, windowMs, now });
+}
+
 function setRetryAfterHeader(res, retryAfterMs) {
   if (!retryAfterMs) return;
   res.setHeader("Retry-After", String(Math.max(1, Math.ceil(retryAfterMs / 1000))));
 }
 
-function getCustomerDashboardRateLimitDecision(req, { email, phone }) {
+async function getCustomerDashboardRateLimitDecision(req, { email, phone }) {
   const ip = getClientIp(req);
   const limits = [];
-  const ipLimit = checkWindowLimit(
-    customerDashboardIpRateLimit,
-    hashKey(ip),
+  const ipLimit = await consumeNamedRateLimit(
+    "customer-dashboard-ip",
+    ip,
     CUSTOMER_DASHBOARD_IP_MAX_REQUESTS,
     CUSTOMER_DASHBOARD_IP_WINDOW_MS
   );
@@ -6193,9 +6198,9 @@ function getCustomerDashboardRateLimitDecision(req, { email, phone }) {
 
   const lookupKeySource = [email, normalizePhoneForMatch(phone)].map(normalizeForKey).join("|");
   if (lookupKeySource.trim() !== "|") {
-    const lookupLimit = checkWindowLimit(
-      customerDashboardLookupRateLimit,
-      hashKey(lookupKeySource),
+    const lookupLimit = await consumeNamedRateLimit(
+      "customer-dashboard-lookup",
+      lookupKeySource,
       CUSTOMER_DASHBOARD_LOOKUP_MAX_REQUESTS,
       CUSTOMER_DASHBOARD_LOOKUP_WINDOW_MS
     );
@@ -6308,13 +6313,23 @@ async function getSignupSecurityDecision(req, body, fields) {
     reasons.push(captcha.reason || "captcha_failed");
   }
 
-  const ipLimit = checkWindowLimit(signupIpRateLimit, hashKey(ip), SIGNUP_IP_MAX_REQUESTS, SIGNUP_IP_WINDOW_MS);
+  const ipLimit = await consumeNamedRateLimit(
+    "signup-ip",
+    ip,
+    SIGNUP_IP_MAX_REQUESTS,
+    SIGNUP_IP_WINDOW_MS
+  );
   if (!ipLimit.allowed) {
     reasons.push("ip_rate_limit");
   }
 
   const identityKey = hashKey([fields.ownerEmail, fields.ownerPhone, fields.businessName].map(normalizeForKey).join("|"));
-  const identityLimit = checkWindowLimit(signupIdentityRateLimit, identityKey, SIGNUP_IDENTITY_MAX_REQUESTS, SIGNUP_IDENTITY_WINDOW_MS);
+  const identityLimit = await consumeNamedRateLimit(
+    "signup-identity",
+    identityKey,
+    SIGNUP_IDENTITY_MAX_REQUESTS,
+    SIGNUP_IDENTITY_WINDOW_MS
+  );
   if (!identityLimit.allowed) {
     reasons.push("identity_rate_limit");
   }
@@ -6731,57 +6746,44 @@ async function cleanupSensitiveCallData() {
   });
 }
 
-function enforceAssistantRateLimit(req, res, next) {
+async function enforceAssistantRateLimit(req, res, next) {
   const ip = getClientIp(req);
-  const now = Date.now();
-  const existing = assistantRateLimit.get(ip) || [];
-  const recent = existing.filter((ts) => now - ts < ASSISTANT_WINDOW_MS);
-
-  if (recent.length >= ASSISTANT_MAX_REQUESTS_PER_WINDOW) {
-    return res.status(429).json({
-      error: "Too many assistant requests. Please wait a minute and try again.",
-    });
-  }
-
-  recent.push(now);
-  assistantRateLimit.set(ip, recent);
-
-  // Lightweight cleanup to avoid unbounded growth.
-  if (assistantRateLimit.size > 500) {
-    for (const [key, timestamps] of assistantRateLimit.entries()) {
-      const kept = timestamps.filter((ts) => now - ts < ASSISTANT_WINDOW_MS);
-      if (kept.length === 0) assistantRateLimit.delete(key);
-      else assistantRateLimit.set(key, kept);
+  try {
+    const decision = await consumeNamedRateLimit(
+      "public-assistant",
+      ip,
+      ASSISTANT_MAX_REQUESTS_PER_WINDOW,
+      ASSISTANT_WINDOW_MS
+    );
+    if (!decision.allowed) {
+      setRetryAfterHeader(res, decision.retryAfterMs);
+      return res.status(429).json({
+        error: "Too many assistant requests. Please wait a minute and try again.",
+      });
     }
+    return next();
+  } catch (error) {
+    return next(error);
   }
-
-  next();
 }
 
 function enforcePublicRouteRateLimit(routeKey, maxRequests) {
-  return (req, res, next) => {
-    const now = Date.now();
-    const key = `${routeKey}:${getClientIp(req)}`;
-    const recent = (publicRouteRateLimit.get(key) || []).filter((timestamp) => now - timestamp < PUBLIC_ROUTE_WINDOW_MS);
-
-    if (recent.length >= maxRequests) {
-      const oldest = recent[0] || now;
-      setRetryAfterHeader(res, Math.max(1000, PUBLIC_ROUTE_WINDOW_MS - (now - oldest)));
-      return res.status(429).json({ error: "Too many requests. Wait a few minutes and try again." });
-    }
-
-    recent.push(now);
-    publicRouteRateLimit.set(key, recent);
-
-    if (publicRouteRateLimit.size > 1000) {
-      for (const [storedKey, timestamps] of publicRouteRateLimit.entries()) {
-        const kept = timestamps.filter((timestamp) => now - timestamp < PUBLIC_ROUTE_WINDOW_MS);
-        if (kept.length) publicRouteRateLimit.set(storedKey, kept);
-        else publicRouteRateLimit.delete(storedKey);
+  return async (req, res, next) => {
+    try {
+      const decision = await consumeNamedRateLimit(
+        `public-route:${routeKey}`,
+        getClientIp(req),
+        maxRequests,
+        PUBLIC_ROUTE_WINDOW_MS
+      );
+      if (!decision.allowed) {
+        setRetryAfterHeader(res, decision.retryAfterMs);
+        return res.status(429).json({ error: "Too many requests. Wait a few minutes and try again." });
       }
+      return next();
+    } catch (error) {
+      return next(error);
     }
-
-    return next();
   };
 }
 
@@ -9121,7 +9123,7 @@ app.post(
   asyncRoute(async (req, res) => {
     const lookupHash = getCustomerDashboardSessionLookupHash(req);
     if (!lookupHash) return res.status(401).json({ error: "Your dashboard session has expired. Sign in again." });
-    const rateLimit = getSupportSuggestionRateLimitDecision(lookupHash);
+    const rateLimit = await getSupportSuggestionRateLimitDecision(lookupHash);
     if (rateLimit.blocked) {
       setRetryAfterHeader(res, rateLimit.retryAfterMs);
       return res.status(429).json({ error: "Too many suggestion requests. Wait a few minutes or send the report now." });
@@ -9143,7 +9145,7 @@ app.post(
   asyncRoute(async (req, res) => {
     const lookupHash = getCustomerDashboardSessionLookupHash(req);
     if (!lookupHash) return res.status(401).json({ error: "Your dashboard session has expired. Sign in again." });
-    const rateLimit = getSupportReportRateLimitDecision(lookupHash);
+    const rateLimit = await getSupportReportRateLimitDecision(lookupHash);
     if (rateLimit.blocked) {
       setRetryAfterHeader(res, rateLimit.retryAfterMs);
       return res.status(429).json({ error: "Too many support reports. Wait before sending another report." });
@@ -9209,7 +9211,7 @@ app.post(
     const body = req.body || {};
     const email = String(body.email || body.ownerEmail || "").trim();
     const phone = String(body.phone || body.ownerPhone || body.businessPhone || "").trim();
-    const rateLimit = getCustomerDashboardRateLimitDecision(req, { email, phone });
+    const rateLimit = await getCustomerDashboardRateLimitDecision(req, { email, phone });
 
     if (rateLimit.blocked) {
       setRetryAfterHeader(res, rateLimit.retryAfterMs);
@@ -9226,7 +9228,7 @@ app.post(
     }
 
     const lookupHash = getCustomerDashboardLookupHash(email, phone);
-    const code = createCustomerDashboardLoginCode(lookupHash);
+    const code = await createCustomerDashboardLoginCode(lookupHash);
     const destination = signup.ownerPhone || signup.businessPhone;
     const sms = await sendSmsViaTwilio({
       to: destination,
@@ -9256,7 +9258,7 @@ app.post(
     const signup = findCustomerDashboardSignup({ email, phone });
     if (!signup) return res.status(401).json({ error: "The code is invalid or has expired." });
     const lookupHash = getCustomerDashboardLookupHash(email, phone);
-    const verification = verifyCustomerDashboardLoginCode(lookupHash, code);
+    const verification = await verifyCustomerDashboardLoginCode(lookupHash, code);
     if (!verification.ok) {
       return res.status(401).json({
         error: verification.reason === "attempts"

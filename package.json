@@ -5,17 +5,17 @@
   "homepage": ".",
   "proxy": "http://localhost:8787",
   "dependencies": {
-    "@prisma/client": "^6.19.2",
+    "@prisma/client": "^6.19.3",
     "@vapi-ai/web": "^2.6.1",
     "cors": "^2.8.6",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "jsonwebtoken": "^9.0.3",
-    "nodemailer": "^9.0.1",
+    "nodemailer": "^9.0.3",
     "pg": "^8.22.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "stripe": "^22.3.0"
+    "stripe": "^22.3.2"
   },
   "scripts": {
     "build:tailwind": "tailwindcss build src/tailwind.css -o src/tailwind.generated.css",
@@ -71,6 +71,7 @@
     "audit:twilio-inactive": "node scripts/audit-twilio-inactive-numbers.js",
     "audit:make-hooks": "node scripts/audit-make-hooks.js",
     "audit:vapi-release-safety": "node scripts/audit-vapi-release-safety.js",
+    "audit:vapi-business-mappings": "node scripts/audit-vapi-business-mappings.js",
     "audit:live-phone-dependencies": "node scripts/audit-live-phone-dependencies.js",
     "audit:call-economics": "node scripts/audit-call-unit-economics.js",
     "audit:credential-readiness": "node scripts/audit-credential-readiness.js",
@@ -95,7 +96,8 @@
     "x:jobs:status": "node scripts/x-job-finder.js --status",
     "x:jobs:watch": "node scripts/x-job-finder.js --watch --interval-minutes=5 --telegram",
     "test:signup-payload": "node scripts/test-signup-payload.js",
-    "test:signup-sandbox": "node scripts/test-signup-payload.js --post --review-only",
+    "test:signup-sandbox": "node scripts/test-signup-sandbox-harness.js --post",
+    "test:signup-sandbox:dry": "node scripts/test-signup-sandbox-harness.js",
     "signup:grimsby-electric": "node scripts/signup-grimsby-electric.js",
     "configure:vapi-grimsby": "node scripts/configure-grimsby-vapi.js",
     "configure:vapi-signup-preview": "node scripts/configure-vapi-signup-preview.js",
@@ -131,15 +133,15 @@
     "codex:wakeup": "powershell -ExecutionPolicy Bypass -File scripts/codex-wakeup.ps1",
     "codex:wakeup:install": "powershell -ExecutionPolicy Bypass -File scripts/codex-schedule-wakeup.ps1 -StartTime 02:11 -EveryHours 5 -LaunchCodex -RunNow",
     "test": "react-scripts test --env=jsdom",
-    "test:backend": "node --test tests/backend-security.test.js tests/sms-suppression.test.js tests/twilio-sms.test.js tests/vapi-sms.test.js tests/vapi-call-diagnostics.test.js tests/vapi-isolated-sms-provisioning.test.js tests/vapi-tool-calls.test.js tests/vapi-tool-security.test.js tests/vapi-webhook-auth.test.js tests/composite-call-notifications.test.js tests/lead-handoffs.test.js tests/revenue-rescue.test.js tests/jobber-integration.test.js tests/trade-playbooks.test.js tests/safe-website-fetch.test.js tests/appointment-requests.test.js tests/calendar-integrations.test.js tests/trial-usage-policy.test.js tests/voice-signup.test.js",
+    "test:backend": "node --test tests/backend-security.test.js tests/persistent-security-state.test.js tests/sms-suppression.test.js tests/twilio-sms.test.js tests/vapi-sms.test.js tests/vapi-call-diagnostics.test.js tests/vapi-isolated-sms-provisioning.test.js tests/vapi-tool-calls.test.js tests/vapi-tool-security.test.js tests/vapi-webhook-auth.test.js tests/composite-call-notifications.test.js tests/lead-handoffs.test.js tests/revenue-rescue.test.js tests/jobber-integration.test.js tests/trade-playbooks.test.js tests/safe-website-fetch.test.js tests/appointment-requests.test.js tests/calendar-integrations.test.js tests/trial-usage-policy.test.js tests/voice-signup.test.js",
     "eject": "react-scripts eject"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",
     "cross-env": "^7.0.3",
-    "eslint-plugin-react-hooks": "^7.0.1",
-    "playwright": "^1.61.0",
-    "prisma": "^6.19.2",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "playwright": "^1.62.0",
+    "prisma": "^6.19.3",
     "qrcode": "^1.5.4",
     "react-scripts": "5.0.1"
   },

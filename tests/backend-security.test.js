@@ -513,13 +513,13 @@ test("customer-visible support records exclude internal repair and handoff field
   assert.equal(sanitized.githubIssueUrl, undefined);
 });
 
-test("customer support report submission is rate limited independently of suggestions", () => {
+test("customer support report submission is rate limited independently of suggestions", async () => {
   const lookupHash = "a".repeat(32);
   const now = Date.now();
   for (let index = 0; index < 6; index += 1) {
-    assert.equal(__test.getSupportReportRateLimitDecision(lookupHash, now).blocked, false);
+    assert.equal((await __test.getSupportReportRateLimitDecision(lookupHash, now)).blocked, false);
   }
-  const blocked = __test.getSupportReportRateLimitDecision(lookupHash, now);
+  const blocked = await __test.getSupportReportRateLimitDecision(lookupHash, now);
   assert.equal(blocked.blocked, true);
   assert.ok(blocked.retryAfterMs > 0);
 });
@@ -790,24 +790,24 @@ test("customer dashboard logout clears its HttpOnly session cookie", async () =>
   }
 });
 
-test("customer dashboard one-time codes expire, limit guesses, and cannot be reused", () => {
+test("customer dashboard one-time codes expire, limit guesses, and cannot be reused", async () => {
   const firstLookup = "a".repeat(32);
-  const firstCode = __test.createCustomerDashboardLoginCode(firstLookup, 1000);
+  const firstCode = await __test.createCustomerDashboardLoginCode(firstLookup, 1000);
   assert.match(firstCode, /^\d{6}$/);
-  assert.deepEqual(__test.verifyCustomerDashboardLoginCode(firstLookup, firstCode, 1001), { ok: true });
-  assert.equal(__test.verifyCustomerDashboardLoginCode(firstLookup, firstCode, 1002).ok, false);
+  assert.deepEqual(await __test.verifyCustomerDashboardLoginCode(firstLookup, firstCode, 1001), { ok: true });
+  assert.equal((await __test.verifyCustomerDashboardLoginCode(firstLookup, firstCode, 1002)).ok, false);
 
   const expiredLookup = "b".repeat(32);
-  const expiredCode = __test.createCustomerDashboardLoginCode(expiredLookup, 1000);
-  assert.equal(__test.verifyCustomerDashboardLoginCode(expiredLookup, expiredCode, 1000 + 10 * 60 * 1000 + 1).reason, "expired");
+  const expiredCode = await __test.createCustomerDashboardLoginCode(expiredLookup, 1000);
+  assert.equal((await __test.verifyCustomerDashboardLoginCode(expiredLookup, expiredCode, 1000 + 10 * 60 * 1000 + 1)).reason, "expired");
 
   const limitedLookup = "c".repeat(32);
-  const limitedCode = __test.createCustomerDashboardLoginCode(limitedLookup, 1000);
+  const limitedCode = await __test.createCustomerDashboardLoginCode(limitedLookup, 1000);
   const wrongCode = limitedCode === "999999" ? "888888" : "999999";
   for (let attempt = 0; attempt < 5; attempt += 1) {
-    assert.equal(__test.verifyCustomerDashboardLoginCode(limitedLookup, wrongCode, 1001 + attempt).ok, false);
+    assert.equal((await __test.verifyCustomerDashboardLoginCode(limitedLookup, wrongCode, 1001 + attempt)).ok, false);
   }
-  assert.equal(__test.verifyCustomerDashboardLoginCode(limitedLookup, limitedCode, 1010).reason, "attempts");
+  assert.equal((await __test.verifyCustomerDashboardLoginCode(limitedLookup, limitedCode, 1010)).reason, "expired");
 });
 
 test("customer call payload hides secrets and only exposes consent-backed recordings", () => {

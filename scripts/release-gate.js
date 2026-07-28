@@ -5,6 +5,7 @@ const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
 const skipPages = process.argv.includes("--skip-pages");
 const backendTestFiles = [
   "tests/backend-security.test.js",
+  "tests/persistent-security-state.test.js",
   "tests/sms-suppression.test.js",
   "tests/twilio-sms.test.js",
   "tests/vapi-sms.test.js",
@@ -27,6 +28,7 @@ const backendTestFiles = [
 
 const steps = [
   ["Backend security and provider unit tests", nodeCommand(), ["--test", ...backendTestFiles]],
+  ["Frontend security and signup regression tests", npmCommand, ["test", "--", "--watchAll=false"]],
   ["Legal draft package validation", nodeCommand(), [path.join("scripts", "validate-legal-drafts.js")]],
   ["Operational readiness validation", nodeCommand(), [path.join("scripts", "validate-operational-readiness.js")]],
   ["Tracked secret scan", nodeCommand(), [path.join("scripts", "scan-secrets.js")]],

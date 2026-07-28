@@ -636,6 +636,46 @@ model RuntimeStore {
   updatedAt DateTime @updatedAt
 }
 
+model SecurityRateLimit {
+  key             String   @id
+  count           Int
+  windowStartedAt DateTime
+  expiresAt       DateTime
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([expiresAt])
+}
+
+model CustomerDashboardLoginCode {
+  lookupHash String   @id
+  codeHash   String
+  attempts   Int      @default(0)
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([expiresAt])
+}
+
+model WebhookReplayClaim {
+  key            String    @id
+  provider       String
+  eventIdHash    String
+  eventType      String?
+  status         String    @default("PROCESSING")
+  claimToken     String
+  claimedAt      DateTime  @default(now())
+  leaseExpiresAt DateTime?
+  expiresAt      DateTime
+  completedAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([provider, expiresAt])
+  @@index([status, leaseExpiresAt])
+}
+
 model SmsSuppression {
   id             String    @id @default(cuid())
   phoneNumber    String    @unique
