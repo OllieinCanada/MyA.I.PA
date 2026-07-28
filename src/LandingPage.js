@@ -947,17 +947,133 @@ function HeroSummaryStack() {
   );
 }
 
-function HeroCallDashboard() {
+function HeroGridOwnerArrow({ gridRef, originRef, destinationRef }) {
+  const [geometry, setGeometry] = useState(null);
+
+  useEffect(() => {
+    let frameId = 0;
+
+    const measure = () => {
+      const grid = gridRef.current;
+      const origin = originRef.current;
+      const destination = destinationRef.current;
+      if (!grid || !origin || !destination) {
+        setGeometry(null);
+        return;
+      }
+
+      const gridBox = grid.getBoundingClientRect();
+      const originBox = origin.getBoundingClientRect();
+      const destinationBox = destination.getBoundingClientRect();
+      const isTwoColumn =
+        window.matchMedia("(min-width: 1024px)").matches &&
+        destinationBox.left > originBox.right + 24;
+
+      if (!isTwoColumn || gridBox.width <= 0 || gridBox.height <= 0) {
+        setGeometry(null);
+        return;
+      }
+
+      const startX = originBox.right - gridBox.left + 6;
+      const startY = originBox.top - gridBox.top + originBox.height * 0.5;
+      const endX = destinationBox.left - gridBox.left + 3;
+      const endY = destinationBox.top - gridBox.top + 28;
+      const travel = Math.max(44, endX - startX);
+      const firstControlX = startX + Math.max(17, travel * 0.34);
+      const secondControlX = endX - Math.max(15, travel * 0.32);
+
+      setGeometry({
+        width: gridBox.width,
+        height: gridBox.height,
+        startX,
+        startY,
+        endX,
+        endY,
+        path: `M ${startX} ${startY} C ${firstControlX} ${startY}, ${secondControlX} ${endY - 11}, ${endX} ${endY}`,
+      });
+    };
+
+    const scheduleMeasure = () => {
+      window.cancelAnimationFrame(frameId);
+      frameId = window.requestAnimationFrame(measure);
+    };
+
+    scheduleMeasure();
+    window.addEventListener("resize", scheduleMeasure);
+
+    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(scheduleMeasure) : null;
+    [gridRef.current, originRef.current, destinationRef.current].forEach((element) => {
+      if (element) observer?.observe(element);
+    });
+    document.fonts?.ready?.then(scheduleMeasure).catch(() => {});
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      window.removeEventListener("resize", scheduleMeasure);
+      observer?.disconnect();
+    };
+  }, [destinationRef, gridRef, originRef]);
+
+  if (!geometry) return null;
+
+  return (
+    <svg
+      className="landing-hero-owner-arrow pointer-events-none absolute inset-0 z-20 hidden h-full w-full overflow-visible lg:block"
+      viewBox={`0 0 ${geometry.width} ${geometry.height}`}
+      preserveAspectRatio="none"
+      fill="none"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <defs>
+        <linearGradient id="landing-owner-arrow-gradient" gradientUnits="userSpaceOnUse" x1={geometry.startX} y1={geometry.startY} x2={geometry.endX} y2={geometry.endY}>
+          <stop offset="0" stopColor="#0c5fc3" />
+          <stop offset="1" stopColor="#39cfff" />
+        </linearGradient>
+        <filter id="landing-owner-arrow-shadow" x="-20%" y="-30%" width="150%" height="165%">
+          <feDropShadow dx="0" dy="1" stdDeviation="1.25" floodColor="#1674df" floodOpacity="0.24" />
+        </filter>
+        <marker id="landing-owner-arrowhead" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse">
+          <path d="M0 0 8 4 0 8Z" fill="#39cfff" />
+        </marker>
+      </defs>
+      <circle
+        className="landing-hero-owner-arrow-origin"
+        cx={geometry.startX}
+        cy={geometry.startY}
+        r="3.25"
+        fill="#0c5fc3"
+        stroke="rgba(255,255,255,0.95)"
+        strokeWidth="1.25"
+        vectorEffect="non-scaling-stroke"
+      />
+      <path
+        className="landing-hero-owner-arrow-path"
+        d={geometry.path}
+        pathLength="1"
+        stroke="url(#landing-owner-arrow-gradient)"
+        strokeWidth="2.75"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        markerEnd="url(#landing-owner-arrowhead)"
+        filter="url(#landing-owner-arrow-shadow)"
+        vectorEffect="non-scaling-stroke"
+      />
+    </svg>
+  );
+}
+
+function HeroCallDashboard({ ownerCardRef }) {
   return (
     <div className="landing-call-dashboard relative mx-auto w-full max-w-[690px]">
-      <div className="relative overflow-hidden rounded-[32px] border border-[#142033] bg-[#050913] text-white shadow-[0_28px_78px_-42px_rgba(0,0,0,0.9),inset_0_1px_0_rgba(255,255,255,0.06)]">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_12%_34%,rgba(36,99,235,0.24),transparent_28%),radial-gradient(circle_at_74%_82%,rgba(37,99,235,0.28),transparent_30%),linear-gradient(90deg,rgba(255,255,255,0.04)_1px,transparent_1px)] bg-[size:auto,auto,1px_100%]" />
+      <div className="relative overflow-hidden rounded-[32px] border border-[#1d2a3c] bg-[#050913] text-white shadow-[0_22px_60px_-42px_rgba(0,0,0,0.76),inset_0_1px_0_rgba(255,255,255,0.045)]">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_12%_34%,rgba(36,99,235,0.17),transparent_28%),radial-gradient(circle_at_74%_82%,rgba(37,99,235,0.19),transparent_30%),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:auto,auto,1px_100%]" />
 
         <div className="relative grid h-full grid-cols-[0.62fr_1.38fr]">
           <section className="landing-call-panel relative flex flex-col border-r border-[#1b2638] px-7 py-6 2xl:px-8">
             <div className="landing-call-status flex items-center justify-between text-[1.04rem] font-black">
               <span className="inline-flex items-center gap-3">
-                <span className="h-3.5 w-3.5 rounded-full bg-[#00d66f] shadow-[0_0_22px_rgba(0,214,111,0.95)]" />
+                <span className="landing-call-live-dot h-3.5 w-3.5 rounded-full bg-[#00d66f] shadow-[0_0_14px_rgba(0,214,111,0.68)]" />
                 Live Call
               </span>
               <span>02:37</span>
@@ -978,10 +1094,10 @@ function HeroCallDashboard() {
               </span>
             </div>
 
-            <div className="landing-call-owner-card relative mt-6 rounded-[18px] border border-[#92f28f] bg-white px-3.5 py-3 text-[#111827] shadow-[0_0_0_2px_rgba(34,197,94,0.24),0_18px_44px_-28px_rgba(34,197,94,0.9)]">
+            <div ref={ownerCardRef} className="landing-call-owner-card relative -mx-1 mt-6 rounded-[18px] border-2 border-[#78dc73] bg-white px-3.5 py-3 text-[#111827] shadow-[0_0_0_1px_rgba(34,197,94,0.16),0_16px_38px_-29px_rgba(34,197,94,0.72)]">
               <svg
                 viewBox="0 0 70 44"
-                className="landing-owner-text-arrow pointer-events-none absolute left-[-0.18rem] top-[-1.55rem] h-10 w-16 text-[#39cfff] drop-shadow-[0_0_8px_rgba(56,189,248,0.48)]"
+                className="landing-owner-text-arrow pointer-events-none absolute left-[-0.18rem] top-[-1.55rem] h-10 w-16 text-[#39cfff] drop-shadow-[0_0_5px_rgba(56,189,248,0.34)] lg:hidden"
                 fill="none"
                 stroke="currentColor"
                 strokeWidth="4.5"
@@ -991,7 +1107,7 @@ function HeroCallDashboard() {
                 <path d="m42 29 11 5 2-11" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
               <div className="flex items-center justify-between gap-2">
-                <span className="landing-call-owner-title inline-flex items-center gap-2 font-black">
+                <span className="landing-call-owner-title inline-flex items-center gap-2 text-[1.04rem] font-black">
                   <span className="landing-call-owner-icon grid place-items-center rounded-lg bg-[#66e83f] text-white">
                     <HeroIcon type="chat" className="h-4 w-4" />
                   </span>
@@ -1079,14 +1195,14 @@ function HeroCallDashboard() {
 
             <div className="landing-dashboard-bottom mt-3">
               <div className="landing-lead-stack grid gap-2">
-                <div className="landing-lead-note flex items-center justify-center gap-3 text-center text-[1.02rem] font-black italic leading-[1.04] text-[#39cfff] drop-shadow-[0_0_12px_rgba(56,189,248,0.42)]">
+                <div className="landing-lead-note flex items-center justify-center gap-3 text-center text-[1.02rem] font-black italic leading-[1.04] text-[#39cfff] drop-shadow-[0_0_7px_rgba(56,189,248,0.28)]">
                   <svg viewBox="0 0 42 28" className="h-7 w-10 shrink-0" fill="none" stroke="currentColor" strokeWidth="4" aria-hidden="true">
                     <path d="M3 6c12 2 22 8 29 17" strokeLinecap="round" />
                     <path d="m25 22 9 2 1-9" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                   <span>Instantly sends you and the customer a text message.</span>
                 </div>
-                <div className="landing-customer-text-card rounded-[14px] border border-[#92f28f] bg-white px-4 py-3 text-[#0f2b1a] shadow-[0_18px_44px_-32px_rgba(34,197,94,0.95)]">
+                <div className="landing-customer-text-card rounded-[14px] border border-[#92f28f] bg-white px-4 py-3 text-[#0f2b1a] shadow-[0_14px_34px_-31px_rgba(34,197,94,0.68)]">
                   <div className="flex items-center justify-between">
                     <span className="landing-customer-text-title inline-flex items-center gap-3 font-black">
                       <span className="landing-message-icon grid place-items-center rounded-xl bg-[#22c55e] text-white">
@@ -1989,6 +2105,9 @@ function LandingPage() {
   const pricingRef = useRef(null);
   const faqRef = useRef(null);
   const audioRef = useRef(null);
+  const heroGridRef = useRef(null);
+  const heroArrowOriginRef = useRef(null);
+  const heroOwnerCardRef = useRef(null);
 
   const [audioPlaying, setAudioPlaying] = useState(false);
   const [audioTime, setAudioTime] = useState(0);
@@ -4021,9 +4140,9 @@ function LandingPage() {
               justify-content: space-between !important;
             }
             .landing-call-dashboard > div {
-              height: clamp(580px, calc(100vh - 100px), 720px) !important;
-              min-height: 580px !important;
-              max-height: 720px !important;
+              height: clamp(560px, calc(100vh - 128px), 692px) !important;
+              min-height: 560px !important;
+              max-height: 692px !important;
             }
             .landing-call-owner-body {
               margin-top: 0.45rem !important;
@@ -4036,7 +4155,7 @@ function LandingPage() {
             }
             .landing-conversation-panel {
               position: relative !important;
-              flex-basis: 24.15rem !important;
+              flex-basis: 22.55rem !important;
               padding: 0.68rem 0.85rem !important;
             }
             .landing-conversation-panel > p {
@@ -4048,7 +4167,7 @@ function LandingPage() {
             .landing-conversation-panel .landing-conversation-caller-detail {
               padding-top: 0.34rem !important;
               padding-bottom: 0.34rem !important;
-              font-size: 0.82rem !important;
+              font-size: 0.78rem !important;
               line-height: 1.18 !important;
             }
             .landing-customer-text-card {
@@ -4152,30 +4271,30 @@ function LandingPage() {
           }
           .landing-hero-point {
             position: relative;
-            min-height: 3.05rem;
+            min-height: 2.92rem;
             gap: 0 !important;
-            border: 1.5px solid rgba(58, 135, 219, 0.55);
+            border: 1px solid rgba(58, 135, 219, 0.34);
             border-radius: 0.95rem;
-            background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,252,255,0.96));
-            padding: 0.5rem 0.85rem 0.5rem 3.65rem;
-            box-shadow: 0 12px 28px -24px rgba(12, 77, 160, 0.8), inset 0 1px 0 rgba(255,255,255,0.95);
+            background: linear-gradient(180deg, rgba(255,255,255,0.82), rgba(248,252,255,0.72));
+            padding: 0.46rem 0.8rem 0.46rem 3.48rem;
+            box-shadow: 0 8px 22px -23px rgba(12, 77, 160, 0.52), inset 0 1px 0 rgba(255,255,255,0.82);
           }
           .landing-hero-point-icon {
             position: absolute !important;
             z-index: 2;
             top: 50%;
             left: 0.08rem;
-            height: 3.15rem !important;
-            width: 3.15rem !important;
+            height: 2.95rem !important;
+            width: 2.95rem !important;
             transform: translateY(-50%);
-            border: 3px solid white;
-            background: radial-gradient(circle at 35% 22%, #2d8cff, #0d57b4 52%, #073f89 100%) !important;
-            box-shadow: 0 9px 20px -12px rgba(5, 72, 156, 0.95), inset 0 1px 0 rgba(255,255,255,0.35) !important;
+            border: 2px solid rgba(255,255,255,0.92);
+            background: radial-gradient(circle at 35% 22%, #398fe9, #155fae 55%, #0a498f 100%) !important;
+            box-shadow: 0 7px 17px -13px rgba(5, 72, 156, 0.72), inset 0 1px 0 rgba(255,255,255,0.28) !important;
           }
           .landing-hero-point-icon svg {
-            height: 1.55rem !important;
-            width: 1.55rem !important;
-            stroke-width: 2.35;
+            height: 1.42rem !important;
+            width: 1.42rem !important;
+            stroke-width: 2.25;
           }
           .landing-hero-point > span:last-child {
             position: relative;
@@ -4185,7 +4304,7 @@ function LandingPage() {
           @media (min-width: 1024px) and (max-height: 820px) {
             .landing-hero-points {
               gap: 0.48rem;
-              margin-top: 0.75rem !important;
+              margin-top: 1rem !important;
             }
             .landing-hero-point {
               min-height: 2.72rem;
@@ -4454,7 +4573,11 @@ function LandingPage() {
           }
           @media (min-width: 1024px) and (max-height: 660px) {
             .landing-hero-visual {
-              transform: translateY(-1.25rem) !important;
+              transform: translateY(-0.5rem) !important;
+            }
+            .landing-call-dashboard > div {
+              height: calc(100vh - 84px) !important;
+              min-height: 0 !important;
             }
             .landing-conversation-panel {
               flex: 0 0 20rem !important;
@@ -4483,6 +4606,127 @@ function LandingPage() {
               line-height: 1.08 !important;
             }
           }
+          @keyframes landing-live-call-sequence {
+            0%, 100% {
+              transform: scale(1);
+              box-shadow: 0 0 12px rgba(0, 214, 111, 0.58);
+            }
+            6% {
+              transform: scale(1.32);
+              box-shadow: 0 0 22px rgba(0, 214, 111, 0.9);
+            }
+            13% {
+              transform: scale(1);
+              box-shadow: 0 0 14px rgba(0, 214, 111, 0.68);
+            }
+          }
+          @keyframes landing-owner-route-sequence {
+            0%, 14% {
+              stroke-dashoffset: 1;
+              opacity: 0.16;
+            }
+            31%, 86% {
+              stroke-dashoffset: 0;
+              opacity: 1;
+            }
+            96%, 100% {
+              stroke-dashoffset: 0;
+              opacity: 0.38;
+            }
+          }
+          @keyframes landing-route-origin-sequence {
+            0%, 12%, 100% {
+              transform: scale(0.78);
+              opacity: 0.45;
+            }
+            18%, 28% {
+              transform: scale(1.28);
+              opacity: 1;
+            }
+            36%, 88% {
+              transform: scale(1);
+              opacity: 0.9;
+            }
+          }
+          @keyframes landing-owner-card-sequence {
+            0%, 27%, 100% {
+              transform: translateY(0);
+              box-shadow: 0 0 0 1px rgba(34,197,94,0.16), 0 16px 38px -29px rgba(34,197,94,0.72);
+            }
+            35%, 45% {
+              transform: translateY(-2px);
+              box-shadow: 0 0 0 3px rgba(57,207,255,0.18), 0 18px 42px -26px rgba(34,197,94,0.88);
+            }
+            54%, 84% {
+              transform: translateY(0);
+              box-shadow: 0 0 0 1px rgba(34,197,94,0.2), 0 16px 38px -29px rgba(34,197,94,0.72);
+            }
+          }
+          @keyframes landing-customer-route-sequence {
+            0%, 48%, 100% {
+              transform: translate(-3px, -1px);
+              opacity: 0.48;
+            }
+            58%, 82% {
+              transform: translate(0, 0);
+              opacity: 1;
+            }
+          }
+          @keyframes landing-customer-card-sequence {
+            0%, 57%, 100% {
+              transform: translateY(0);
+              box-shadow: 0 14px 34px -31px rgba(34,197,94,0.68);
+            }
+            66%, 78% {
+              transform: translateY(-2px);
+              box-shadow: 0 0 0 3px rgba(34,197,94,0.15), 0 18px 42px -28px rgba(34,197,94,0.82);
+            }
+            87% {
+              transform: translateY(0);
+              box-shadow: 0 14px 34px -31px rgba(34,197,94,0.68);
+            }
+          }
+          .landing-call-live-dot {
+            transform-origin: center;
+            animation: landing-live-call-sequence 7.2s ease-in-out infinite;
+          }
+          .landing-hero-owner-arrow-path {
+            stroke-dasharray: 1;
+            stroke-dashoffset: 1;
+            animation: landing-owner-route-sequence 7.2s ease-in-out infinite;
+          }
+          .landing-hero-owner-arrow-origin {
+            transform-box: fill-box;
+            transform-origin: center;
+            animation: landing-route-origin-sequence 7.2s ease-in-out infinite;
+          }
+          .landing-call-owner-card {
+            will-change: transform, box-shadow;
+            animation: landing-owner-card-sequence 7.2s ease-in-out infinite;
+          }
+          .landing-lead-note svg {
+            will-change: transform, opacity;
+            animation: landing-customer-route-sequence 7.2s ease-in-out infinite;
+          }
+          .landing-customer-text-card {
+            will-change: transform, box-shadow;
+            animation: landing-customer-card-sequence 7.2s ease-in-out infinite;
+          }
+          @media (prefers-reduced-motion: reduce) {
+            .landing-call-live-dot,
+            .landing-hero-owner-arrow-path,
+            .landing-hero-owner-arrow-origin,
+            .landing-call-owner-card,
+            .landing-lead-note svg,
+            .landing-customer-text-card {
+              animation: none !important;
+              transform: none !important;
+              opacity: 1 !important;
+            }
+            .landing-hero-owner-arrow-path {
+              stroke-dashoffset: 0 !important;
+            }
+          }
         `}</style>
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_16%_18%,rgba(187,222,255,0.74),transparent_30%),radial-gradient(circle_at_78%_12%,rgba(213,235,255,0.70),transparent_32%),linear-gradient(180deg,#ffffff_0%,#f6fbff_28%,#e9f6ff_100%)]" />
         <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgba(37,99,235,0.06)_1px,transparent_1px),linear-gradient(rgba(37,99,235,0.045)_1px,transparent_1px)] bg-[size:76px_76px] opacity-[0.32]" />
@@ -4490,28 +4734,33 @@ function LandingPage() {
         <div className="landing-hero-shell relative z-10 mx-auto flex w-full max-w-[1360px] flex-col px-5 py-5 sm:px-8 lg:min-h-[calc(100vh-76px)] lg:px-10 lg:py-5 2xl:px-10 2xl:py-5">
           <nav className="grid shrink-0 gap-5 lg:grid-cols-[auto_1fr_auto] lg:items-center">
             <HeroLogoMark />
-            <div className="hidden justify-self-center text-center lg:block">
-              <p className="text-sm font-black uppercase tracking-[0.14em] text-[#334155]">Hear the agent live right now:</p>
-              <a href="tel:+12495033301" className="mt-1 block text-xl font-black tracking-[-0.02em] text-[#ff9a22] transition hover:text-[#ffb35c]">
-                (249) 503-3301
+            <div className="hidden justify-self-center lg:block">
+              <a href="tel:+12495033301" className="inline-flex items-center gap-3 rounded-xl border border-[#a9cbed] bg-white/72 px-3.5 py-2 text-left text-[#0b315f] shadow-[0_10px_24px_-22px_rgba(12,77,160,0.62)] transition hover:border-[#6da8df] hover:bg-white">
+                <span className="grid h-9 w-9 place-items-center rounded-lg bg-[#0c5fc3] text-white">
+                  <HeroIcon type="phone" className="h-5 w-5" />
+                </span>
+                <span>
+                  <span className="block text-[0.68rem] font-black uppercase leading-none tracking-[0.14em] text-[#52677f]">Call the Live Demo</span>
+                  <span className="mt-1 block text-[1.02rem] font-black leading-none tracking-[-0.02em] text-[#0c5fc3]">(249) 503-3301</span>
+                </span>
               </a>
             </div>
             <div className="flex flex-wrap items-center gap-3 sm:gap-5 lg:justify-end">
               <button
                 type="button"
                 onClick={goToSignup}
-                className="rounded-xl bg-[linear-gradient(180deg,#ff7a00,#ff6500)] px-5 py-3 text-base font-black text-white shadow-[0_18px_42px_-24px_rgba(255,106,0,0.95)] transition hover:-translate-y-0.5 hover:brightness-110 sm:px-6 sm:py-3.5 sm:text-lg 2xl:px-7 2xl:py-4 2xl:text-xl"
+                className="inline-flex min-w-[230px] items-center justify-center whitespace-nowrap rounded-xl bg-[linear-gradient(180deg,#ff7a00,#ff6500)] px-4 py-3 text-base font-black text-white shadow-[0_18px_42px_-24px_rgba(255,106,0,0.95)] transition hover:-translate-y-0.5 hover:brightness-110 sm:py-3.5 2xl:min-w-[250px] 2xl:px-6 2xl:py-4 2xl:text-lg"
               >
-                Start Free Trial
+                Start Your Free Trial
               </button>
             </div>
           </nav>
 
-          <div className="landing-hero-grid grid flex-1 gap-10 py-5 lg:grid-cols-[minmax(380px,0.7fr)_minmax(620px,1.3fr)] lg:items-center xl:grid-cols-[minmax(430px,0.72fr)_minmax(680px,1.28fr)] xl:gap-16 2xl:gap-16 2xl:py-5">
+          <div ref={heroGridRef} className="landing-hero-grid relative grid flex-1 gap-10 py-5 lg:grid-cols-[minmax(380px,0.7fr)_minmax(620px,1.3fr)] lg:items-center xl:grid-cols-[minmax(430px,0.72fr)_minmax(680px,1.28fr)] xl:gap-16 2xl:gap-16 2xl:py-5">
             <div className="relative z-10 min-w-0 max-w-[500px] xl:max-w-[520px] lg:-translate-y-1">
-              <div className="landing-hero-label inline-flex max-w-full items-center gap-3 rounded-2xl border border-[#9ccaff] bg-[linear-gradient(135deg,rgba(255,255,255,0.94),rgba(222,240,255,0.9))] px-3 py-2 text-[#0b315f] shadow-[0_14px_35px_-24px_rgba(12,77,160,0.85),inset_0_1px_0_rgba(255,255,255,0.95)] sm:px-4">
-                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-[linear-gradient(145deg,#0c5fc3,#073d84)] text-white shadow-[0_10px_22px_-13px_rgba(12,77,160,0.95)]">
-                  <svg viewBox="0 0 40 40" className="h-8 w-8" fill="none" aria-hidden="true">
+              <div className="landing-hero-label inline-flex max-w-full items-center gap-3 rounded-2xl border border-[#c9e2fb] bg-[linear-gradient(135deg,rgba(255,255,255,0.9),rgba(238,247,255,0.78))] px-3 py-1.5 text-[#0b315f] shadow-[0_10px_28px_-25px_rgba(12,77,160,0.58),inset_0_1px_0_rgba(255,255,255,0.9)] sm:px-4">
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[linear-gradient(145deg,#166fcf,#0a4c99)] text-white shadow-[0_8px_18px_-14px_rgba(12,77,160,0.78)]">
+                  <svg viewBox="0 0 40 40" className="h-7 w-7" fill="none" aria-hidden="true">
                     <path d="M8 21v-2.5C8 11.6 13.4 6 20 6s12 5.6 12 12.5V21" stroke="currentColor" strokeWidth="3.4" strokeLinecap="round" />
                     <rect x="5.5" y="18" width="6" height="11" rx="3" fill="#73d3ff" />
                     <rect x="28.5" y="18" width="6" height="11" rx="3" fill="#73d3ff" />
@@ -4539,19 +4788,24 @@ function LandingPage() {
                 </span>
               </h1>
 
-              <p className="landing-hero-kicker mt-2 text-[clamp(2rem,7vw,2.6rem)] font-black leading-[1] tracking-[-0.055em] text-[#e11408] drop-shadow-[0_4px_0_rgba(255,169,92,0.34)] 2xl:text-[2.72rem]">Missed Calls = Missed Jobs</p>
+              <div className="landing-hero-conversion-block mt-3 rounded-xl border border-[#d7e4f2] border-l-4 border-l-[#d91d12] bg-white/65 px-3 py-2.5 shadow-[0_10px_26px_-25px_rgba(12,77,160,0.52)]">
+                <p className="landing-hero-kicker text-[clamp(1.66rem,5.8vw,2.14rem)] font-black leading-[1] tracking-[-0.05em] text-[#d91d12] 2xl:text-[2.24rem]">
+                  Missed Calls = Missed Jobs
+                </p>
 
-              <p className="landing-revenue-line mt-4 whitespace-nowrap text-[clamp(0.76rem,3.2vw,1.12rem)] font-black uppercase leading-none tracking-[-0.025em]">
-                <span className="text-[#dc1717]">STOP LOSING CUSTOMERS.</span>
-                <span className="mx-2 text-[#123b68]" aria-hidden="true">→</span>
-                <span className="text-[#17951f]">START WINNING TODAY!</span>
+                <p className="landing-revenue-line mt-2.5 whitespace-nowrap text-[clamp(0.74rem,3vw,1.04rem)] font-black uppercase leading-none tracking-[-0.025em]">
+                  <span className="text-[#123b68]">STOP LOSING CUSTOMERS.</span>
+                  <span className="mx-2 text-[#64748b]" aria-hidden="true">→</span>
+                  <span ref={heroArrowOriginRef} className="landing-hero-arrow-origin text-[#17951f]">START WINNING TODAY!</span>
+                </p>
+              </div>
+
+              <p className="landing-hero-copy mt-3 max-w-[540px] text-[1rem] font-medium leading-6 text-[#425b76] sm:text-[1.04rem] 2xl:text-[1.08rem] 2xl:leading-7">
+                <span className="font-bold text-[#294967]">24/7 Call Coverage.</span>{" "}
+                <span className="font-semibold text-[#52677f]">Never Miss A Call Again!</span>
               </p>
 
-              <p className="landing-hero-copy mt-4 max-w-[540px] text-[1.06rem] font-medium leading-7 text-[#111827] sm:text-[1.12rem] 2xl:text-[1.16rem] 2xl:leading-8">
-                <span className="font-black">24/7 AI call answering</span> for <span className="marker-highlight">busy trades across Hamilton, Grimsby, and the surrounding area.</span>
-              </p>
-
-              <div className="landing-hero-points mt-5 space-y-3">
+              <div className="landing-hero-points mt-6 space-y-3">
                 {[
                   ["phone", "Answers while you're on the job, driving, or with family"],
                   ["faq", "Answers questions about your hours, service area, estimates, and warranties"],
@@ -4573,25 +4827,39 @@ function LandingPage() {
                   onClick={goToSignup}
                   className="landing-hero-cta inline-flex min-h-[46px] items-center justify-center rounded-lg bg-[linear-gradient(180deg,#ff8a13,#ff3f16)] px-9 text-[1.02rem] font-black text-white shadow-[0_18px_38px_-25px_rgba(255,106,0,1)] transition hover:-translate-y-0.5 hover:brightness-110 2xl:min-h-[48px] 2xl:text-[1.08rem]"
                 >
-                  Start Free Trial
+                  Start Your Free Trial
                 </button>
                 <button
                   type="button"
                   onClick={playDemo}
                   className="landing-hero-cta inline-flex min-h-[46px] items-center justify-center rounded-lg border-2 border-[#1d5ea8]/80 bg-white/50 px-9 text-[1.02rem] font-black text-[#0b3b7a] transition hover:bg-white 2xl:min-h-[48px] 2xl:text-[1.08rem]"
                 >
+                  <svg viewBox="0 0 24 24" className="mr-2 h-5 w-5" fill="currentColor" aria-hidden="true">
+                    <path d="M8.2 5.6v12.8L18 12 8.2 5.6Z" />
+                  </svg>
                   Hear Agent Voice
                 </button>
               </div>
 
-              <p className="landing-hero-footnote mt-4 whitespace-nowrap text-[0.82rem] font-black uppercase leading-none tracking-[-0.01em] text-[#111827] 2xl:text-[0.9rem]">
-                PIPEDA-ALIGNED SETUP - 14-DAY FREE TRIAL - NO CREDIT CARD REQUIRED
-              </p>
+              <div className="landing-hero-footnote mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-[0.78rem] font-black text-[#294967] 2xl:text-[0.84rem]">
+                {["14-Day Free Trial", "No Credit Card", "Cancel Anytime"].map((label) => (
+                  <span key={label} className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                    <span className="text-[#17951f]" aria-hidden="true">✓</span>
+                    {label}
+                  </span>
+                ))}
+              </div>
             </div>
 
             <div className="landing-hero-visual relative z-0 mt-8 flex justify-end lg:mt-2 lg:self-center">
-              <HeroCallDashboard />
+              <div className="landing-hero-proof-wrap w-full">
+                <p className="landing-hero-proof-heading mb-2 text-center text-[0.78rem] font-black uppercase tracking-[0.12em] text-[#294967]">
+                  See exactly what happens after a missed call.
+                </p>
+                <HeroCallDashboard ownerCardRef={heroOwnerCardRef} />
+              </div>
             </div>
+            <HeroGridOwnerArrow gridRef={heroGridRef} originRef={heroArrowOriginRef} destinationRef={heroOwnerCardRef} />
           </div>
 
         </div>
