@@ -432,6 +432,42 @@ async function main() {
   await page.screenshot(screenshotOptions);
   console.log(`Screenshot saved: ${screenshotPath}`);
 
+  const layout = await page.evaluate(() => {
+    const viewportWidth = window.innerWidth;
+    const scrollWidth = Math.max(document.body.scrollWidth, document.documentElement.scrollWidth);
+    const offscreenElements = Array.from(document.querySelectorAll("body *"))
+      .map((element) => {
+        const rect = element.getBoundingClientRect();
+        return {
+          tag: element.tagName.toLowerCase(),
+          className: String(element.className || "").slice(0, 120),
+          text: String(element.innerText || "").trim().replace(/\s+/g, " ").slice(0, 80),
+          left: Math.round(rect.left),
+          right: Math.round(rect.right),
+          width: Math.round(rect.width),
+        };
+      })
+      .filter((element) => element.width > 0 && (element.left < -2 || element.right > viewportWidth + 2))
+      .slice(0, 10);
+    const pricingGrid = document.querySelector(".pricing-plan-grid");
+    const pricingGridRect = pricingGrid?.getBoundingClientRect();
+    return {
+      viewportWidth,
+      scrollWidth,
+      horizontalOverflow: scrollWidth - viewportWidth,
+      offscreenElements,
+      pricingGrid: pricingGridRect
+        ? {
+            left: Math.round(pricingGridRect.left),
+            right: Math.round(pricingGridRect.right),
+            width: Math.round(pricingGridRect.width),
+            columns: window.getComputedStyle(pricingGrid).gridTemplateColumns,
+          }
+        : null,
+    };
+  });
+  console.log(`Layout: ${JSON.stringify(layout)}`);
+
   if (showBrowser) {
     console.log("Browser left open for 30 seconds because --show was used.");
     await page.waitForTimeout(30000);

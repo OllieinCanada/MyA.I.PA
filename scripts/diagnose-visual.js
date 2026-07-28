@@ -16,6 +16,10 @@ const viewports = [
   { name: "desktop", width: 1440, height: 900 },
   { name: "firefox-window", width: 1536, height: 650 },
   { name: "laptop", width: 1365, height: 768 },
+  { name: "ipad-landscape", width: 1024, height: 768 },
+  { name: "ipad-portrait", width: 768, height: 1024 },
+  { name: "ipad-air-landscape", width: 1180, height: 820 },
+  { name: "ipad-air-portrait", width: 820, height: 1180 },
   { name: "mobile", width: 390, height: 844 },
 ];
 

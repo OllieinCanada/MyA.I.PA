@@ -2408,6 +2408,23 @@ function LandingPage() {
             width: 1.2rem !important;
             height: 1.2rem !important;
           }
+          @media (min-width: 1024px) and (max-width: 1100px) {
+            .pricing-plan-grid {
+              grid-template-columns: minmax(0, 1.38fr) minmax(0, 0.92fr) !important;
+              max-width: 100%;
+            }
+            .pricing-plan-grid > * {
+              min-width: 0;
+              max-width: 100%;
+            }
+            .pricing-side-column {
+              grid-template-columns: minmax(0, 1fr);
+            }
+            .pricing-side-column > * {
+              min-width: 0;
+              max-width: 100%;
+            }
+          }
           @media (max-width: 767px) {
             .landing-hero-shell {
               padding-left: 1rem !important;
@@ -5472,7 +5489,7 @@ function LandingPage() {
           </div>
 
           {pricingCards.map((plan) => (
-            <div key={plan.name} className="mt-8 grid items-start gap-6 lg:grid-cols-[1.38fr_0.92fr]">
+            <div key={plan.name} className="pricing-plan-grid mt-8 grid min-w-0 items-start gap-6 lg:grid-cols-[1.38fr_0.92fr]">
               <div className="relative min-w-0 overflow-hidden rounded-[10px] border border-[#d8e7fb] bg-white shadow-[0_30px_84px_-56px_rgba(15,23,42,0.38)]">
                 <div className="absolute bottom-0 left-0 top-0 hidden w-[58px] border-r border-dashed border-[#d7e7fb] bg-[#fbfdff] sm:block" aria-hidden="true">
                   <div className="flex h-full flex-col items-center justify-around py-4">
@@ -5584,7 +5601,7 @@ function LandingPage() {
                 </div>
               </div>
 
-              <div className="grid min-w-0 gap-4">
+              <div className="pricing-side-column grid min-w-0 gap-4">
                 <div className="relative rounded-[10px] border-[5px] border-[#07142a] bg-white p-5 shadow-[0_24px_64px_-44px_rgba(7,20,42,0.52)]">
                   <div className="absolute left-1/2 top-[-20px] h-10 w-[112px] -translate-x-1/2 rounded-b-[18px] rounded-t-[8px] bg-[linear-gradient(180deg,#334155,#0f172a)] shadow-[0_14px_28px_-20px_rgba(7,20,42,0.72)]" aria-hidden="true">
                     <span className="absolute left-1/2 top-[-10px] h-5 w-10 -translate-x-1/2 rounded-t-full bg-[#cbd5e1]" />
