@@ -4,6 +4,10 @@ databases:
     user: myaipa
     plan: basic-256mb
     region: ohio
+    # The API uses Render's same-region private connection. Keep the database
+    # unavailable through its external URL unless a temporary, approved IP rule
+    # is required for a controlled maintenance task.
+    ipAllowList: []
 
 services:
   - type: web
@@ -102,6 +106,10 @@ services:
       - key: TRIAL_USAGE_GATE_WEBHOOK_URL
         value: https://api.myaipa.ca/api/webhooks/voice
       - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_API_KEY_SID
+        sync: false
+      - key: TWILIO_API_KEY_SECRET
         sync: false
       - key: TWILIO_AUTH_TOKEN
         sync: false

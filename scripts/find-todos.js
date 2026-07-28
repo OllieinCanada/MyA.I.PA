@@ -1,3 +1,4 @@
+const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const {
@@ -9,6 +10,7 @@ const {
 
 const outputDir = rootPath("diagnostics", "todos");
 const visualReportPath = rootPath("diagnostics", "visual", "report.json");
+const firefoxReviewPath = rootPath("diagnostics", "visual", "firefox-window-review.json");
 const reportPath = path.join(outputDir, "todo-report.md");
 const jsonPath = path.join(outputDir, "todo-report.json");
 
@@ -29,6 +31,15 @@ function readTextIfExists(filePath) {
 function readJsonIfExists(filePath) {
   if (!fs.existsSync(filePath)) return null;
   return JSON.parse(fs.readFileSync(filePath, "utf8"));
+}
+
+function hasCurrentFirefoxReview(check) {
+  const review = readJsonIfExists(firefoxReviewPath);
+  if (!review || review.status !== "pass" || !check?.screenshot) return false;
+  const screenshotPath = path.isAbsolute(check.screenshot) ? check.screenshot : rootPath(check.screenshot);
+  if (!fs.existsSync(screenshotPath)) return false;
+  const digest = crypto.createHash("sha256").update(fs.readFileSync(screenshotPath)).digest("hex");
+  return String(review.screenshotSha256 || "").toLowerCase() === digest;
 }
 
 function addTodo(todos, item) {
@@ -90,7 +101,7 @@ function collectVisualTodos(todos) {
     const diagnostics = check.diagnostics || {};
     if (check.route === "home" && check.viewport === "firefox-window") {
       const dashboard = diagnostics.dashboard || {};
-      if (!warnings.length && dashboard.dashboardRect) {
+      if (!warnings.length && dashboard.dashboardRect && !hasCurrentFirefoxReview(check)) {
         addTodo(todos, {
           severity: "low",
           area: "Visual QA",

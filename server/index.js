@@ -120,6 +120,7 @@ const customerDashboardIpRateLimit = new Map();
 const customerDashboardLookupRateLimit = new Map();
 const customerDashboardLoginCodes = new Map();
 const customerSupportSuggestionRateLimit = new Map();
+const customerSupportReportRateLimit = new Map();
 const pendingSignupPath = path.join(dataDir, "pending-signup-verifications.json");
 const pendingStripeSignupPath = path.join(dataDir, "pending-stripe-signups.json");
 const trialReminderPath = path.join(dataDir, "trial-reminders.json");
@@ -151,6 +152,8 @@ const CUSTOMER_DASHBOARD_CODE_TTL_MS = parsePositiveInt(process.env.CUSTOMER_DAS
 const CUSTOMER_DASHBOARD_CODE_MAX_ATTEMPTS = Math.max(1, Math.min(10, parsePositiveInt(process.env.CUSTOMER_DASHBOARD_CODE_MAX_ATTEMPTS, 5)));
 const CUSTOMER_SUPPORT_SUGGESTION_WINDOW_MS = 15 * 60 * 1000;
 const CUSTOMER_SUPPORT_SUGGESTION_MAX_REQUESTS = 6;
+const CUSTOMER_SUPPORT_REPORT_WINDOW_MS = 60 * 60 * 1000;
+const CUSTOMER_SUPPORT_REPORT_MAX_REQUESTS = 6;
 const WEBSITE_FETCH_TIMEOUT_MS = 8000;
 const WEBSITE_MAX_HTML_CHARS = 250000;
 const WEBSITE_MAX_EXTRA_PAGES = 3;
@@ -213,6 +216,8 @@ const VAPI_AUTO_SYNC_ENABLED = isEnabled(process.env.VAPI_AUTO_SYNC_ENABLED);
 const LEAD_HANDOFF_CHECK_INTERVAL_MS = parsePositiveInt(process.env.LEAD_HANDOFF_CHECK_INTERVAL_MS, 60 * 1000);
 const TWILIO_ACCOUNT_SID = String(process.env.TWILIO_ACCOUNT_SID || "").trim();
 const TWILIO_AUTH_TOKEN = String(process.env.TWILIO_AUTH_TOKEN || "").trim();
+const TWILIO_API_KEY_SID = String(process.env.TWILIO_API_KEY_SID || "").trim();
+const TWILIO_API_KEY_SECRET = String(process.env.TWILIO_API_KEY_SECRET || "").trim();
 const TWILIO_STATUS_CALLBACK_URL = String(process.env.TWILIO_STATUS_CALLBACK_URL || "").trim();
 const TWILIO_API_BASE_URL = String(process.env.TWILIO_API_BASE_URL || "https://api.twilio.com").trim().replace(/\/+$/, "");
 const SMS_SUPPRESSION_API_KEY = String(process.env.SMS_SUPPRESSION_API_KEY || "").trim();
@@ -683,8 +688,8 @@ function clearCustomerDashboardSessionCookie(res) {
   res.setHeader("Set-Cookie", cookie.join("; "));
 }
 
-function hasValidAdminPassword(req) {
-  const supplied = req.headers["x-admin-password"] || req.body?.password;
+function hasValidAdminPassword(req, { allowBody = false } = {}) {
+  const supplied = req.headers["x-admin-password"] || (allowBody ? req.body?.password : "");
   return safeEqualString(supplied, getAdminPassword());
 }
 
@@ -2302,8 +2307,8 @@ async function syncVapiCalls(options = {}) {
 }
 
 async function fetchTwilioCalls({ days = 30, limit = 1000 } = {}) {
-  if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN) {
-    const err = new Error("Twilio credentials are not configured.");
+  if (!TWILIO_REST_AUTH.configured) {
+    const err = new Error(TWILIO_REST_AUTH.warning || "Twilio reporting credentials are not configured.");
     err.statusCode = 503;
     throw err;
   }
@@ -2313,10 +2318,9 @@ async function fetchTwilioCalls({ days = 30, limit = 1000 } = {}) {
   url.searchParams.set("PageSize", String(Math.max(1, Math.min(1000, Number(limit) || 1000))));
   url.searchParams.set("StartTimeAfter", start.toISOString().slice(0, 10));
 
-  const auth = Buffer.from(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`).toString("base64");
   const response = await fetch(url, {
     headers: {
-      Authorization: `Basic ${auth}`,
+      Authorization: getTwilioAuthHeader(),
       Accept: "application/json",
     },
   });
@@ -2336,13 +2340,69 @@ function dateOnly(value) {
   return new Date(value).toISOString().slice(0, 10);
 }
 
+function resolveTwilioRestAuth(env = process.env) {
+  const accountSid = String(env.TWILIO_ACCOUNT_SID || "").trim();
+  const authToken = String(env.TWILIO_AUTH_TOKEN || "").trim();
+  const apiKeySid = String(env.TWILIO_API_KEY_SID || "").trim();
+  const apiKeySecret = String(env.TWILIO_API_KEY_SECRET || "").trim();
+
+  if (accountSid && apiKeySid && apiKeySecret) {
+    return {
+      configured: true,
+      accountSid,
+      username: apiKeySid,
+      password: apiKeySecret,
+      mode: "api-key",
+      warning: "",
+    };
+  }
+  if (accountSid && authToken) {
+    return {
+      configured: true,
+      accountSid,
+      username: accountSid,
+      password: authToken,
+      mode: "auth-token",
+      warning: apiKeySid || apiKeySecret
+        ? "The Twilio reporting API key is incomplete, so reporting is using the account Auth Token."
+        : "",
+    };
+  }
+
+  const missing = [];
+  if (!accountSid) missing.push("TWILIO_ACCOUNT_SID");
+  if (!(apiKeySid && apiKeySecret) && !authToken) {
+    missing.push("TWILIO_API_KEY_SID + TWILIO_API_KEY_SECRET (preferred) or TWILIO_AUTH_TOKEN");
+  }
+  return {
+    configured: false,
+    accountSid,
+    username: "",
+    password: "",
+    mode: "none",
+    warning: `Twilio reporting credentials are incomplete: ${missing.join(", ")}.`,
+  };
+}
+
+const TWILIO_REST_AUTH = resolveTwilioRestAuth({
+  TWILIO_ACCOUNT_SID,
+  TWILIO_AUTH_TOKEN,
+  TWILIO_API_KEY_SID,
+  TWILIO_API_KEY_SECRET,
+});
+
 function getTwilioAuthHeader() {
-  return `Basic ${Buffer.from(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`).toString("base64")}`;
+  if (!TWILIO_REST_AUTH.configured) {
+    const err = new Error(TWILIO_REST_AUTH.warning || "Twilio reporting credentials are not configured.");
+    err.statusCode = 503;
+    throw err;
+  }
+  return `Basic ${Buffer.from(`${TWILIO_REST_AUTH.username}:${TWILIO_REST_AUTH.password}`).toString("base64")}`;
 }
 
 async function fetchTwilioIncomingPhoneNumbers() {
-  if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN) {
-    const err = new Error("Twilio credentials are not configured.");
+  if (!TWILIO_REST_AUTH.configured) {
+    const err = new Error(TWILIO_REST_AUTH.warning || "Twilio reporting credentials are not configured.");
     err.statusCode = 503;
     throw err;
   }
@@ -2514,8 +2574,8 @@ async function purchaseTwilioPhoneNumber({ areaCode = "249", voiceUrl, voiceMeth
 }
 
 async function fetchTwilioUsageRecords({ days = 30 } = {}) {
-  if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN) {
-    const err = new Error("Twilio credentials are not configured.");
+  if (!TWILIO_REST_AUTH.configured) {
+    const err = new Error(TWILIO_REST_AUTH.warning || "Twilio reporting credentials are not configured.");
     err.statusCode = 503;
     throw err;
   }
@@ -2544,6 +2604,57 @@ async function fetchTwilioUsageRecords({ days = 30 } = {}) {
   return Array.isArray(data?.usage_records) ? data.usage_records : [];
 }
 
+async function fetchTwilioMessages({ days = 30, limit = 3000 } = {}) {
+  if (!TWILIO_REST_AUTH.configured) {
+    const err = new Error(TWILIO_REST_AUTH.warning || "Twilio reporting credentials are not configured.");
+    err.statusCode = 503;
+    throw err;
+  }
+
+  const { start } = getDateRange(days);
+  const records = [];
+  let nextUrl = new URL(`${TWILIO_API_BASE_URL}/2010-04-01/Accounts/${encodeURIComponent(TWILIO_ACCOUNT_SID)}/Messages.json`);
+  nextUrl.searchParams.set("DateSent>", dateOnly(start));
+  nextUrl.searchParams.set("PageSize", String(Math.max(1, Math.min(1000, Number(limit) || 1000))));
+
+  for (let page = 0; nextUrl && page < 10 && records.length < limit; page += 1) {
+    const response = await fetch(nextUrl, {
+      headers: {
+        Authorization: getTwilioAuthHeader(),
+        Accept: "application/json",
+      },
+    });
+    const rawText = await response.text();
+    const data = parseJsonObject(rawText);
+
+    if (!response.ok) {
+      const err = new Error(data?.message || data?.error || `Twilio message fetch failed with HTTP ${response.status}.`);
+      err.statusCode = response.status;
+      throw err;
+    }
+
+    records.push(...(Array.isArray(data?.messages) ? data.messages : []));
+    nextUrl = data?.next_page_uri ? new URL(data.next_page_uri, TWILIO_API_BASE_URL) : null;
+  }
+
+  return records.slice(0, limit);
+}
+
+function normalizeTwilioMessage(message) {
+  const rawPrice = numberOrNull(message?.price);
+  return {
+    sid: String(message?.sid || "").trim(),
+    from: normalizePhoneForMatch(message?.from || ""),
+    to: normalizePhoneForMatch(message?.to || ""),
+    direction: String(message?.direction || "").trim(),
+    status: String(message?.status || "").trim(),
+    sentAt: message?.date_sent || message?.date_created || null,
+    segments: Math.max(0, Number(message?.num_segments || 0) || 0),
+    price: rawPrice == null ? null : Math.abs(rawPrice),
+    priceUnit: String(message?.price_unit || "").trim() || null,
+  };
+}
+
 function normalizeTwilioUsageRecord(record) {
   const price = Math.abs(numberOrNull(record?.price) || 0);
   return {
@@ -2556,6 +2667,24 @@ function normalizeTwilioUsageRecord(record) {
     price,
     priceUnit: String(record?.price_unit || "USD").trim() || "USD",
   };
+}
+
+function getTwilioUsageCostByPrefix(accountUsage, prefix) {
+  const normalizedPrefix = String(prefix || "").trim().toLowerCase();
+  if (!normalizedPrefix || !Array.isArray(accountUsage?.records)) return 0;
+  const matching = accountUsage.records.filter((record) => {
+    const key = getTwilioUsageCategoryKey(record);
+    return key === normalizedPrefix || key.startsWith(`${normalizedPrefix}-`);
+  });
+  if (!matching.length) return 0;
+  const exact = matching.find((record) => getTwilioUsageCategoryKey(record) === normalizedPrefix);
+  if (exact) return Number(exact.price || 0);
+  const keys = matching.map(getTwilioUsageCategoryKey);
+  return matching.reduce((sum, record) => {
+    const key = getTwilioUsageCategoryKey(record);
+    const hasChild = keys.some((otherKey) => otherKey !== key && otherKey.startsWith(`${key}-`));
+    return hasChild ? sum : sum + Number(record.price || 0);
+  }, 0);
 }
 
 function getTwilioUsageCategoryKey(record) {
@@ -3053,21 +3182,31 @@ async function getCostAudit({ days = 30 } = {}) {
   let databaseWarning = "";
   let twilioUsageWarning = "";
   let twilioPhoneBillingWarning = "";
+  let twilioMessagesWarning = "";
   let twilioAccountUsage = null;
   let twilioPhoneBilling = null;
+  let twilioMessages = [];
   const fixedCosts = getFixedMonthlyCosts({ days });
   let calls = [];
+  let businesses = [];
   try {
-    calls = await withTimeout(
-      prisma.call.findMany({
-        where: { startedAt: { gte: start, lte: end } },
-        include: {
-          caller: true,
-          business: { include: { vapiMappings: true } },
-        },
-        orderBy: { startedAt: "desc" },
-        take: 2000,
-      }),
+    [calls, businesses] = await withTimeout(
+      Promise.all([
+        prisma.call.findMany({
+          where: { startedAt: { gte: start, lte: end } },
+          include: {
+            caller: true,
+            business: { include: { vapiMappings: true } },
+          },
+          orderBy: { startedAt: "desc" },
+          take: 2000,
+        }),
+        prisma.business.findMany({
+          include: { vapiMappings: true },
+          orderBy: { id: "asc" },
+          take: 1000,
+        }),
+      ]),
       8000,
       "Database did not respond while loading cost audit."
     );
@@ -3080,8 +3219,8 @@ async function getCostAudit({ days = 30 } = {}) {
     calls = [];
   }
 
-  if (TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN) {
-    const [usageResult, phoneBillingResult] = await Promise.allSettled([
+  if (TWILIO_REST_AUTH.configured) {
+    const [usageResult, phoneBillingResult, messagesResult] = await Promise.allSettled([
       withTimeout(
         getTwilioAccountUsage({ days }),
         10000,
@@ -3091,6 +3230,11 @@ async function getCostAudit({ days = 30 } = {}) {
         getTwilioPhoneBillingSchedule(),
         10000,
         "Twilio phone billing schedule did not respond while loading cost audit."
+      ),
+      withTimeout(
+        fetchTwilioMessages({ days, limit: 3000 }),
+        15000,
+        "Twilio text-message costs did not respond while loading cost audit."
       ),
     ]);
     if (usageResult.status === "fulfilled") {
@@ -3107,26 +3251,50 @@ async function getCostAudit({ days = 30 } = {}) {
       twilioPhoneBillingWarning = error?.message || "Twilio phone billing schedule could not be loaded.";
       console.warn("[admin:cost-audit] Twilio phone billing unavailable", { message: twilioPhoneBillingWarning });
     }
+    if (messagesResult.status === "fulfilled") {
+      twilioMessages = messagesResult.value.map(normalizeTwilioMessage).filter((message) => message.sid);
+    } else {
+      const error = messagesResult.reason;
+      twilioMessagesWarning = error?.message || "Twilio text-message costs could not be loaded.";
+      console.warn("[admin:cost-audit] Twilio message costs unavailable", { message: twilioMessagesWarning });
+    }
   }
 
   const groups = new Map();
-  for (const call of calls) {
-    const phoneMappings = (call.business?.vapiMappings || []).filter((mapping) => String(mapping.matchType || "").toLowerCase().includes("phone"));
-    const phoneNumber = phoneMappings[0]?.matchValue || call.business?.phone || `Business ${call.businessId}`;
-    const key = `${call.businessId}:${phoneNumber}`;
+  const ensureGroup = ({ businessId, businessName, phoneNumber }) => {
+    const normalizedPhone = normalizePhoneForMatch(phoneNumber || "");
+    const key = `${businessId}:${normalizedPhone || phoneNumber || "unmapped"}`;
     const row = groups.get(key) || {
-      businessId: call.businessId,
-      businessName: call.business?.name || `Business ${call.businessId}`,
-      phoneNumber,
+      businessId,
+      businessName: businessName || `Business ${businessId}`,
+      phoneNumber: normalizedPhone || phoneNumber || "Unmapped number",
       totalCalls: 0,
       pricedCalls: 0,
+      messageCount: 0,
+      pricedMessages: 0,
+      twilioCallCost: 0,
+      twilioMessageCost: 0,
+      phoneNumberCost: 0,
       twilioCost: 0,
       vapiCost: 0,
       totalInternalCost: 0,
       totalDurationSec: 0,
-      currency: call.twilioPriceUnit || "USD",
+      currency: "USD",
       lastCallAt: null,
+      lastMessageAt: null,
     };
+    groups.set(key, row);
+    return row;
+  };
+
+  for (const call of calls) {
+    const phoneMappings = (call.business?.vapiMappings || []).filter((mapping) => String(mapping.matchType || "").toLowerCase().includes("phone"));
+    const phoneNumber = phoneMappings[0]?.matchValue || call.business?.phone || `Business ${call.businessId}`;
+    const row = ensureGroup({
+      businessId: call.businessId,
+      businessName: call.business?.name || `Business ${call.businessId}`,
+      phoneNumber,
+    });
 
     const twilioCost = Number(call.twilioPrice || 0);
     const vapiCost = Number(call.vapiCost || 0);
@@ -3134,17 +3302,78 @@ async function getCostAudit({ days = 30 } = {}) {
 
     row.totalCalls += 1;
     if (call.costSyncedAt || twilioCost || vapiCost || totalInternalCost) row.pricedCalls += 1;
+    row.twilioCallCost += twilioCost;
     row.twilioCost += twilioCost;
     row.vapiCost += vapiCost;
     row.totalInternalCost += totalInternalCost;
     row.totalDurationSec += Number(call.durationSec || 0);
     row.currency = call.twilioPriceUnit || row.currency;
     row.lastCallAt = row.lastCallAt && new Date(row.lastCallAt) > new Date(call.startedAt) ? row.lastCallAt : call.startedAt;
-    groups.set(key, row);
+  }
+
+  const signupRecords = listSignupDashboardRecords();
+  const businessByNumber = new Map();
+  const inventoryNumbers = new Set(
+    (twilioPhoneBilling?.records || [])
+      .map((record) => normalizePhoneForMatch(record.normalizedPhoneNumber || record.phoneNumber))
+      .filter(Boolean)
+  );
+
+  for (const business of businesses) {
+    const signup = findSignupForBusiness(business, signupRecords);
+    const phoneNumbers = [
+      ...(business.vapiMappings || [])
+        .filter((mapping) => /phone/i.test(String(mapping.matchType || "")))
+        .map((mapping) => mapping.matchValue),
+      signup?.twilioPhoneNumber,
+      inventoryNumbers.has(normalizePhoneForMatch(business.phone)) ? business.phone : "",
+    ].map(normalizePhoneForMatch).filter(Boolean);
+
+    for (const phoneNumber of new Set(phoneNumbers)) {
+      businessByNumber.set(phoneNumber, {
+        businessId: business.id,
+        businessName: business.name || signup?.businessName || `Business ${business.id}`,
+        phoneNumber,
+      });
+    }
+  }
+
+  for (const message of twilioMessages) {
+    const match = businessByNumber.get(message.from) || businessByNumber.get(message.to);
+    if (!match) continue;
+    const row = ensureGroup(match);
+    const messageCost = Number(message.price || 0);
+    row.messageCount += 1;
+    if (message.price != null) row.pricedMessages += 1;
+    row.twilioMessageCost += messageCost;
+    row.twilioCost += messageCost;
+    row.totalInternalCost += messageCost;
+    row.currency = message.priceUnit || row.currency;
+    row.lastMessageAt = row.lastMessageAt && new Date(row.lastMessageAt) > new Date(message.sentAt)
+      ? row.lastMessageAt
+      : message.sentAt;
+  }
+
+  const phoneNumberCostTotal = Number(getTwilioUsageCostByPrefix(twilioAccountUsage, "phonenumbers").toFixed(4));
+  const phoneNumberCostShare = inventoryNumbers.size
+    ? Number((phoneNumberCostTotal / inventoryNumbers.size).toFixed(6))
+    : 0;
+  if (phoneNumberCostShare) {
+    for (const phoneNumber of inventoryNumbers) {
+      const match = businessByNumber.get(phoneNumber);
+      if (!match) continue;
+      const row = ensureGroup(match);
+      row.phoneNumberCost += phoneNumberCostShare;
+      row.twilioCost += phoneNumberCostShare;
+      row.totalInternalCost += phoneNumberCostShare;
+    }
   }
 
   const summary = Array.from(groups.values()).map((row) => ({
     ...row,
+    twilioCallCost: Number(row.twilioCallCost.toFixed(4)),
+    twilioMessageCost: Number(row.twilioMessageCost.toFixed(4)),
+    phoneNumberCost: Number(row.phoneNumberCost.toFixed(4)),
     twilioCost: Number(row.twilioCost.toFixed(4)),
     vapiCost: Number(row.vapiCost.toFixed(4)),
     totalInternalCost: Number(row.totalInternalCost.toFixed(4)),
@@ -3153,8 +3382,17 @@ async function getCostAudit({ days = 30 } = {}) {
   }));
 
   const twilioCallCost = Number(calls.reduce((sum, call) => sum + Number(call.twilioPrice || 0), 0).toFixed(4));
+  const twilioMessageCost = Number(
+    twilioMessages.reduce((sum, message) => sum + Number(message.price || 0), 0).toFixed(4)
+  );
+  const matchedTwilioMessageCost = Number(
+    summary.reduce((sum, row) => sum + Number(row.twilioMessageCost || 0), 0).toFixed(4)
+  );
+  const matchedPhoneNumberCost = Number(
+    summary.reduce((sum, row) => sum + Number(row.phoneNumberCost || 0), 0).toFixed(4)
+  );
   const vapiCost = Number(calls.reduce((sum, call) => sum + Number(call.vapiCost || 0), 0).toFixed(4));
-  const callUsageCost = Number((twilioCallCost + vapiCost).toFixed(4));
+  const callUsageCost = Number((twilioCallCost + matchedTwilioMessageCost + matchedPhoneNumberCost + vapiCost).toFixed(4));
   const twilioUsageCost = twilioAccountUsage?.available ? Number(twilioAccountUsage.totalCost || 0) : null;
   const effectiveTwilioCost = twilioUsageCost ?? twilioCallCost;
   const fixedCost = Number(fixedCosts.totalCost || 0);
@@ -3166,6 +3404,10 @@ async function getCostAudit({ days = 30 } = {}) {
       totalCalls: calls.length,
       pricedCalls: calls.filter((call) => call.costSyncedAt || call.twilioPrice || call.vapiCost || call.totalInternalCost).length,
       twilioCallCost,
+      twilioMessageCost,
+      matchedTwilioMessageCost,
+      phoneNumberCost: phoneNumberCostTotal,
+      matchedPhoneNumberCost,
       twilioUsageCost,
       twilioCost: Number(effectiveTwilioCost.toFixed(4)),
       vapiCost,
@@ -3184,17 +3426,19 @@ async function getCostAudit({ days = 30 } = {}) {
     fixedCosts,
     env: {
       databaseAvailable: !databaseWarning,
-      twilioConfigured: Boolean(TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN),
+      twilioConfigured: TWILIO_REST_AUTH.configured,
+      twilioCredentialMode: TWILIO_REST_AUTH.mode,
       vapiConfigured: Boolean(VAPI_API_KEY),
     },
-    warnings: [
+    warnings: [...new Set([
       databaseWarning,
-      !TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN ? "Twilio credentials are not configured, so Twilio per-call prices cannot sync." : "",
+      TWILIO_REST_AUTH.warning,
       twilioUsageWarning,
       twilioPhoneBillingWarning,
+      twilioMessagesWarning,
       fixedCosts.warning || "",
       !VAPI_API_KEY ? "VAPI_API_KEY is not configured, so Vapi call costs cannot refresh." : "",
-    ].filter(Boolean),
+    ].filter(Boolean))],
   };
 }
 
@@ -5313,6 +5557,27 @@ function getSupportSuggestionRateLimitDecision(lookupHash, now = Date.now()) {
   };
 }
 
+function normalizeSubmittedSupportAnalysis(value, fallback) {
+  return {
+    ...normalizeSupportAnalysis(value, fallback),
+    severity: fallback.severity,
+  };
+}
+
+function getSupportReportRateLimitDecision(lookupHash, now = Date.now()) {
+  const key = String(lookupHash || "");
+  const existing = customerSupportReportRateLimit.get(key);
+  const state = !existing || now - existing.windowStartedAt >= CUSTOMER_SUPPORT_REPORT_WINDOW_MS
+    ? { windowStartedAt: now, count: 0 }
+    : existing;
+  state.count += 1;
+  customerSupportReportRateLimit.set(key, state);
+  return {
+    blocked: state.count > CUSTOMER_SUPPORT_REPORT_MAX_REQUESTS,
+    retryAfterMs: Math.max(0, CUSTOMER_SUPPORT_REPORT_WINDOW_MS - (now - state.windowStartedAt)),
+  };
+}
+
 function extractOpenAiResponseText(data) {
   if (typeof data?.output_text === "string" && data.output_text.trim()) return data.output_text.trim();
   for (const item of data?.output || []) {
@@ -5890,8 +6155,7 @@ function hashKey(value) {
 }
 
 function getClientIp(req) {
-  const forwarded = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
-  return forwarded || req.socket?.remoteAddress || req.ip || "unknown";
+  return String(req.ip || req.socket?.remoteAddress || "unknown").trim() || "unknown";
 }
 
 function checkWindowLimit(store, key, maxRequests, windowMs) {
@@ -6402,14 +6666,6 @@ function requireProvisioningKey(req, res, next) {
     return res.status(503).json({ error: "Provisioning authentication is not configured." });
   }
   return res.status(401).json({ error: "Invalid provisioning key." });
-}
-
-function getClientIp(req) {
-  const forwarded = req.headers["x-forwarded-for"];
-  if (typeof forwarded === "string" && forwarded.trim()) {
-    return forwarded.split(",")[0].trim();
-  }
-  return req.ip || req.socket?.remoteAddress || "unknown";
 }
 
 function sanitizeAdminCall(call) {
@@ -8887,6 +9143,11 @@ app.post(
   asyncRoute(async (req, res) => {
     const lookupHash = getCustomerDashboardSessionLookupHash(req);
     if (!lookupHash) return res.status(401).json({ error: "Your dashboard session has expired. Sign in again." });
+    const rateLimit = getSupportReportRateLimitDecision(lookupHash);
+    if (rateLimit.blocked) {
+      setRetryAfterHeader(res, rateLimit.retryAfterMs);
+      return res.status(429).json({ error: "Too many support reports. Wait before sending another report." });
+    }
     const dashboard = await getCustomerDashboardByLookupHash(lookupHash);
     if (!dashboard?.businessId) return res.status(409).json({ error: "Business setup must finish before a support report can be sent." });
     const description = sanitizeSupportDescription(req.body?.description);
@@ -8900,7 +9161,7 @@ app.post(
       contactAllowed: req.body?.contactAllowed !== false,
     };
     const fallback = getRuleBasedSupportAnalysis({ description, diagnostics });
-    const analysis = normalizeSupportAnalysis(req.body?.analysis || {}, fallback);
+    const analysis = normalizeSubmittedSupportAnalysis(req.body?.analysis || {}, fallback);
     let report = await prisma.supportReport.create({
       data: {
         businessId: dashboard.businessId,
@@ -9106,7 +9367,7 @@ app.post(
   "/api/admin/login",
   enforcePublicRouteRateLimit("admin-login", ADMIN_LOGIN_IP_MAX_REQUESTS),
   asyncRoute(async (req, res) => {
-    if (!hasValidAdminPassword(req)) {
+    if (!hasValidAdminPassword(req, { allowBody: true })) {
       return res.status(401).json({ error: "Invalid admin password." });
     }
     setAdminSessionCookie(res, createAdminSessionToken());
@@ -9951,7 +10212,10 @@ module.exports = {
     buildCustomerSupportDiagnostics,
     getRuleBasedSupportAnalysis,
     normalizeSupportAnalysis,
+    normalizeSubmittedSupportAnalysis,
     getSupportSuggestionRateLimitDecision,
+    getSupportReportRateLimitDecision,
+    getClientIp,
     extractOpenAiResponseText,
     getSupportTicketNumber,
     sanitizeCustomerSupportReport,
@@ -9963,6 +10227,9 @@ module.exports = {
     getVapiCustomerSafeMessages,
     getVapiArtifactMetrics,
     getVapiRecordingConsent,
+    resolveTwilioRestAuth,
+    normalizeTwilioMessage,
+    getTwilioUsageCostByPrefix,
     normalizeTwilioProvisioningAreaCode,
     normalizeTwilioProvisioningVoiceUrl,
     purchaseTwilioPhoneNumber,

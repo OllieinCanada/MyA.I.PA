@@ -144,13 +144,16 @@ async function collectPageDiagnostics(page, pageName) {
     const conversationRect = rectFor(".landing-conversation-panel");
     const leadNoteRect = rectFor(".landing-lead-note");
     const leadCardRect = rectFor(".landing-lead-card");
+    const ownerCardRect = rectFor(".landing-call-owner-card");
+    const callControlsRect = rectFor(".landing-call-controls");
+    const hangupButtonRect = rectFor(".landing-hangup-button");
     const dashboardIssues = [];
 
     if (dashboardRect && viewportWidth >= 1024) {
       if (dashboardRect.right > viewportWidth + 2) {
         dashboardIssues.push(`Dashboard extends ${Math.round(dashboardRect.right - viewportWidth)}px past viewport right edge`);
       }
-      if (dashboardRect.bottom > viewportHeight + 12) {
+      if (dashboardRect.bottom > viewportHeight + 2) {
         dashboardIssues.push(`Dashboard extends ${Math.round(dashboardRect.bottom - viewportHeight)}px below visible viewport`);
       }
     }
@@ -165,6 +168,12 @@ async function collectPageDiagnostics(page, pageName) {
     }
     if (viewportWidth >= 1024 && leadNoteRect && leadCardRect && overlapAmount(leadNoteRect, leadCardRect) > 0) {
       dashboardIssues.push("Lead note overlaps lead card");
+    }
+    if (viewportWidth >= 1024 && dashboardRect && hangupButtonRect && hangupButtonRect.bottom > dashboardRect.bottom + 2) {
+      dashboardIssues.push(`Hang-up button is clipped by dashboard bottom (${Math.round(hangupButtonRect.bottom - dashboardRect.bottom)}px)`);
+    }
+    if (viewportWidth >= 1024 && ownerCardRect && hangupButtonRect && overlapAmount(ownerCardRect, hangupButtonRect) > 0) {
+      dashboardIssues.push("Hang-up button overlaps owner text card");
     }
 
     const missingText = expectedText.filter((item) => !text.includes(String(item).toLowerCase()));
@@ -185,6 +194,9 @@ async function collectPageDiagnostics(page, pageName) {
         conversationRect,
         leadNoteRect,
         leadCardRect,
+        ownerCardRect,
+        callControlsRect,
+        hangupButtonRect,
         issues: dashboardIssues,
       },
     };

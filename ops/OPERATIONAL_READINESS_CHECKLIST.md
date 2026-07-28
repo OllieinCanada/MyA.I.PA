@@ -1,6 +1,6 @@
 # My AI PA Legal and Operational Readiness Checklist
 
-Last updated: July 24, 2026
+Last updated: July 28, 2026
 Status: controlled pilot only; counsel and production evidence remain required
 
 This checklist separates controls implemented in the repository from facts and approvals that only an authorized person, provider dashboard, accountant, or qualified Canadian lawyer can complete.
@@ -22,6 +22,10 @@ This checklist separates controls implemented in the repository from facts and a
 - [x] Central SMS suppression, signed inbound STOP/START handling, fail-closed send checks, and provider-neutral dashboard visibility are implemented and tested locally.
 - [x] Local and GitHub release gates validate the operational controls on every release.
 - [x] Legal drafts remain private, marked as drafts, and excluded from the public repository.
+- [x] Admin browser authentication uses an HttpOnly session cookie instead of retaining the master password in browser storage.
+- [x] Customer support-report submission has a dedicated rate limit and cannot escalate severity from customer-supplied analysis.
+- [x] The Render blueprint disables external Postgres access and uses the same-region private database connection.
+- [x] A sanitized credential-readiness audit is available with `npm run audit:credential-readiness`.
 
 ## Required before a paid external pilot
 
@@ -32,6 +36,7 @@ This checklist separates controls implemented in the repository from facts and a
 - [ ] Have an accountant confirm financial and tax record categories and retention.
 - [ ] Confirm every live provider, legal name, role, processing location, DPA, retention, deletion mechanism, subprocessor list, and incident commitment.
 - [ ] Verify the production Render database is a paid instance with recovery enabled and record the actual PITR window.
+- [ ] Apply the reviewed database external-access restriction and verify the API continues to use Render's internal database URL.
 - [ ] Create an encrypted logical database export and complete an isolated restore drill.
 - [ ] Select protected backup storage and approve access, encryption, residency, retention, and deletion.
 - [ ] Schedule monitoring outside the production API and test a real failure alert.
@@ -39,6 +44,9 @@ This checklist separates controls implemented in the repository from facts and a
 - [x] Activate the production messaging webhook and complete one authorized live `STOP`/`START` exercise using `ops/SMS_CONSENT_RUNBOOK.md` (controlled provider-path exercise completed July 24, 2026; all nine active routes read back successfully and the test number finished active).
 - [ ] Complete a privacy incident tabletop exercise and retain its signed report.
 - [x] Complete one privacy access/correction/deletion exercise using synthetic data (`npm run ops:privacy:drill`; local evidence excludes personal information).
+- [ ] Configure Turnstile and test valid, missing, expired, and replayed challenges before public signup promotion.
+- [ ] Install a working Twilio reporting API key pair and verify call, text-message, and phone-number costs without authentication warnings.
+- [ ] Complete two end-to-end sandbox signups covering both supported paths, dashboard data, texts, cost allocation, consent, and cancellation.
 
 ## Repeatable commands
 
@@ -49,6 +57,7 @@ npm run ops:retention:audit
 npm run ops:privacy:drill
 npm run ops:backup:check
 npm run ops:monitor
+npm run audit:credential-readiness
 npm run render:validate
 npm run backend:check
 npm run test:backend

@@ -6,29 +6,9 @@ const CONFIGURED_API_BASE = process.env.REACT_APP_API_BASE_URL || "";
 const API_BASE = normalizeApiBase(getApiBaseUrl(CONFIGURED_API_BASE));
 const API_SOURCE_LABEL = /localhost|127\.0\.0\.1/i.test(API_BASE) ? "Local API" : "Live Render API";
 const ADMIN_API_TIMEOUT_MS = 6500;
-const ADMIN_PASSWORD_SESSION_KEY = "myaipa_admin_password";
-
-function getStoredAdminPassword() {
-  try {
-    return window.sessionStorage.getItem(ADMIN_PASSWORD_SESSION_KEY) || "";
-  } catch (_err) {
-    return "";
-  }
-}
-
-function setStoredAdminPassword(value) {
-  try {
-    if (value) window.sessionStorage.setItem(ADMIN_PASSWORD_SESSION_KEY, value);
-    else window.sessionStorage.removeItem(ADMIN_PASSWORD_SESSION_KEY);
-  } catch (_err) {
-    // Session storage can be unavailable in strict browser modes. The cookie/header login still works for the current request.
-  }
-}
 
 async function api(path, { method = "GET", body, timeoutMs = ADMIN_API_TIMEOUT_MS } = {}) {
   const headers = { "Content-Type": "application/json" };
-  const storedAdminPassword = getStoredAdminPassword();
-  if (storedAdminPassword) headers["X-Admin-Password"] = storedAdminPassword;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -1602,7 +1582,43 @@ export default function AdminDashboard() {
 
     (costAudit?.summary || []).forEach((row) => {
       const account = ensureAccount(row);
-      account.cost = row;
+      const previous = account.cost;
+      if (!previous) {
+        account.cost = {
+          ...row,
+          phoneNumbers: row.phoneNumber ? [row.phoneNumber] : [],
+        };
+      } else {
+        const summedFields = [
+          "totalCalls",
+          "pricedCalls",
+          "messageCount",
+          "pricedMessages",
+          "twilioCallCost",
+          "twilioMessageCost",
+          "phoneNumberCost",
+          "twilioCost",
+          "vapiCost",
+          "totalInternalCost",
+          "totalDurationSec",
+        ];
+        const merged = {
+          ...previous,
+          phoneNumbers: Array.from(new Set([
+            ...(previous.phoneNumbers || [previous.phoneNumber]).filter(Boolean),
+            row.phoneNumber,
+          ].filter(Boolean))),
+          lastCallAt: newestDate(previous.lastCallAt, row.lastCallAt),
+          lastMessageAt: newestDate(previous.lastMessageAt, row.lastMessageAt),
+        };
+        summedFields.forEach((field) => {
+          merged[field] = Number(previous[field] || 0) + Number(row[field] || 0);
+        });
+        merged.averageCost = merged.totalCalls
+          ? Number((merged.totalInternalCost / merged.totalCalls).toFixed(4))
+          : 0;
+        account.cost = merged;
+      }
       account.callCount = Math.max(account.callCount, Number(row.totalCalls || 0));
       account.lastCallAt = newestDate(account.lastCallAt, row.lastCallAt);
       addUnique(account.aiNumbers, row.phoneNumber);
@@ -2505,7 +2521,6 @@ export default function AdminDashboard() {
     setError("");
     try {
       await api("/api/admin/login", { method: "POST", body: { password: candidate } });
-      setStoredAdminPassword(candidate);
       setIsAuthenticated(true);
       setCandidate("");
     } catch (err) {
@@ -2522,7 +2537,6 @@ export default function AdminDashboard() {
     } catch (_err) {
       // no-op
     } finally {
-      setStoredAdminPassword("");
       setIsAuthenticated(false);
       setLeads([]);
       setCalls([]);
@@ -3936,8 +3950,12 @@ export default function AdminDashboard() {
                 <p>{customerFinancialRows.days}-day window</p>
               </div>
               <div className="admin-money-breakdown">
-                <div><span>Matched Vapi + Twilio calls</span><strong>{moneyDashboard(costAudit?.totals?.callUsageCost)}</strong></div>
-                <div><span>Whole Twilio account</span><strong>{moneyDashboard(costAudit?.totals?.twilioCost)}</strong></div>
+                <div><span>Matched customer usage</span><strong>{moneyDashboard(costAudit?.totals?.callUsageCost)}</strong></div>
+                <div><span>AI call processing</span><strong>{moneyDashboard(costAudit?.totals?.vapiCost)}</strong></div>
+                <div><span>Telephone calls</span><strong>{moneyDashboard(costAudit?.totals?.twilioCallCost)}</strong></div>
+                <div><span>Text messages</span><strong>{moneyDashboard(costAudit?.totals?.matchedTwilioMessageCost)}</strong></div>
+                <div><span>Phone-number rental</span><strong>{moneyDashboard(costAudit?.totals?.matchedPhoneNumberCost)}</strong></div>
+                <div><span>Whole telephone/text account</span><strong>{moneyDashboard(costAudit?.totals?.twilioCost)}</strong></div>
                 <div><span>Fixed / other</span><strong>{moneyDashboard(costAudit?.totals?.fixedCost)}</strong></div>
                 <div><span>Unallocated account spend</span><strong>{moneyDashboard(customerFinancialRows.totals.unallocatedWindowSpend)}</strong></div>
               </div>
@@ -3993,22 +4011,23 @@ export default function AdminDashboard() {
                 <div className="admin-money-detail-title">Matched Cost By AI Number</div>
                 <table className="admin-money-table">
                   <thead>
-                    <tr><th>Business</th><th>Phone</th><th>Calls</th><th>Priced</th><th>Vapi</th><th>Twilio</th><th>Total</th><th>Avg</th><th>Last Call</th></tr>
+                    <tr><th>Business</th><th>Phone</th><th>Calls</th><th>Texts</th><th>AI</th><th>Phone Calls</th><th>Texts</th><th>Number</th><th>Total</th><th>Last Activity</th></tr>
                   </thead>
                   <tbody>
                     {costAudit?.summary?.length ? costAudit.summary.map((row) => (
                       <tr key={`${row.businessId}:${row.phoneNumber}`}>
                         <td>{row.businessName}</td>
                         <td>{row.phoneNumber}</td>
-                        <td>{row.totalCalls}</td>
-                        <td>{row.pricedCalls}</td>
+                        <td>{row.totalCalls} <small>{row.pricedCalls} priced</small></td>
+                        <td>{row.messageCount || 0} <small>{row.pricedMessages || 0} priced</small></td>
                         <td>{money(row.vapiCost, row.currency)}</td>
-                        <td>{money(row.twilioCost, row.currency)}</td>
+                        <td>{money(row.twilioCallCost, row.currency)}</td>
+                        <td>{money(row.twilioMessageCost, row.currency)}</td>
+                        <td>{money(row.phoneNumberCost, row.currency)}</td>
                         <td>{money(row.totalInternalCost, row.currency)}</td>
-                        <td>{money(row.averageCost, row.currency)}</td>
-                        <td>{dt(row.lastCallAt)}</td>
+                        <td>{dt(row.lastCallAt || row.lastMessageAt)}</td>
                       </tr>
-                    )) : <tr><td colSpan="9">No cost data found for this window.</td></tr>}
+                    )) : <tr><td colSpan="10">No cost data found for this window.</td></tr>}
                   </tbody>
                 </table>
               </div>

@@ -323,6 +323,67 @@ test("Twilio provisioning only accepts valid area codes and Make webhook URLs", 
   assert.throws(() => __test.normalizeTwilioProvisioningVoiceUrl("https://example.com/webhook"), /Make webhook/i);
 });
 
+test("Twilio reporting prefers a dedicated API key and safely falls back to the Auth Token", () => {
+  const apiKey = __test.resolveTwilioRestAuth({
+    TWILIO_ACCOUNT_SID: "AC_account",
+    TWILIO_AUTH_TOKEN: "legacy-token",
+    TWILIO_API_KEY_SID: "SK_reporting",
+    TWILIO_API_KEY_SECRET: "reporting-secret",
+  });
+  assert.equal(apiKey.configured, true);
+  assert.equal(apiKey.mode, "api-key");
+  assert.equal(apiKey.username, "SK_reporting");
+  assert.equal(apiKey.password, "reporting-secret");
+
+  const fallback = __test.resolveTwilioRestAuth({
+    TWILIO_ACCOUNT_SID: "AC_account",
+    TWILIO_AUTH_TOKEN: "legacy-token",
+  });
+  assert.equal(fallback.configured, true);
+  assert.equal(fallback.mode, "auth-token");
+  assert.equal(fallback.username, "AC_account");
+
+  const incomplete = __test.resolveTwilioRestAuth({
+    TWILIO_ACCOUNT_SID: "AC_account",
+    TWILIO_API_KEY_SID: "SK_reporting",
+  });
+  assert.equal(incomplete.configured, false);
+  assert.match(incomplete.warning, /incomplete/i);
+});
+
+test("Twilio reporting normalizes message prices and avoids double-counting usage parents", () => {
+  const message = __test.normalizeTwilioMessage({
+    sid: "SM_test",
+    from: "+1 (249) 555-0101",
+    to: "+1 (905) 555-0102",
+    direction: "outbound-api",
+    status: "delivered",
+    date_sent: "Tue, 28 Jul 2026 12:00:00 +0000",
+    num_segments: "2",
+    price: "-0.015",
+    price_unit: "USD",
+  });
+  assert.equal(message.from, "+12495550101");
+  assert.equal(message.to, "+19055550102");
+  assert.equal(message.price, 0.015);
+  assert.equal(message.segments, 2);
+
+  assert.equal(__test.getTwilioUsageCostByPrefix({
+    records: [
+      { category: "phonenumbers", price: 20 },
+      { category: "phonenumbers-local", price: 18 },
+      { category: "phonenumbers-mobile", price: 2 },
+    ],
+  }, "phonenumbers"), 20);
+  assert.equal(__test.getTwilioUsageCostByPrefix({
+    records: [
+      { category: "phonenumbers-local", price: 18 },
+      { category: "phonenumbers-local-ca", price: 18 },
+      { category: "phonenumbers-mobile", price: 2 },
+    ],
+  }, "phonenumbers"), 20);
+});
+
 test("customer support diagnostics redact contact details before AI analysis", () => {
   const redacted = __test.redactSupportTextForAi("Call me at 905-788-5488 or Oliver@example.com about account 123456789.");
   assert.doesNotMatch(redacted, /905|5488|Oliver@example|123456789/i);
@@ -450,6 +511,33 @@ test("customer-visible support records exclude internal repair and handoff field
   assert.equal(sanitized.internalNote, undefined);
   assert.equal(sanitized.codexTaskPrompt, undefined);
   assert.equal(sanitized.githubIssueUrl, undefined);
+});
+
+test("customer support report submission is rate limited independently of suggestions", () => {
+  const lookupHash = "a".repeat(32);
+  const now = Date.now();
+  for (let index = 0; index < 6; index += 1) {
+    assert.equal(__test.getSupportReportRateLimitDecision(lookupHash, now).blocked, false);
+  }
+  const blocked = __test.getSupportReportRateLimitDecision(lookupHash, now);
+  assert.equal(blocked.blocked, true);
+  assert.ok(blocked.retryAfterMs > 0);
+});
+
+test("customer-submitted support analysis cannot escalate its own severity", () => {
+  const fallback = {
+    summary: "Needs review",
+    likelyCause: "Unknown",
+    severity: "LOW",
+    suggestions: ["Refresh", "Try again"],
+  };
+  const analysis = __test.normalizeSubmittedSupportAnalysis({
+    summary: "Everything is down",
+    likelyCause: "Provider outage",
+    severity: "HIGH",
+    suggestions: ["Escalate", "Page everyone"],
+  }, fallback);
+  assert.equal(analysis.severity, "LOW");
 });
 
 test("Make signup authentication is accepted by provisioning routes", async () => {
@@ -806,6 +894,22 @@ test("admin sessions use an HttpOnly, Secure, SameSite=Lax cookie in production"
   } finally {
     process.env.NODE_ENV = previousNodeEnv;
   }
+});
+
+test("admin routes do not accept the master password from an arbitrary request body", async () => {
+  const response = await request("/api/admin/settings", {
+    method: "PUT",
+    body: { password: process.env.ADMIN_PASSWORD, businessId: 1 },
+  });
+  assert.equal(response.status, 401);
+});
+
+test("rate limits rely on Express's trusted-proxy client address", () => {
+  assert.equal(__test.getClientIp({
+    ip: "203.0.113.42",
+    headers: { "x-forwarded-for": "198.51.100.9" },
+    socket: { remoteAddress: "10.0.0.2" },
+  }), "203.0.113.42");
 });
 
 test("admin login attempts are rate limited", async () => {

@@ -27,6 +27,16 @@ Create a hosted Node service using either:
 
 Set environment variables from `config/backend.env.example`.
 
+The Render blueprint intentionally sets the Postgres `ipAllowList` to an empty
+list. The API and database are in the same Render region and should use the
+private/internal database URL. If an external maintenance connection is
+temporarily required, approve a single operator IP as a `/32`, remove it after
+the task, and verify `/api/health/ready`. Do not restore `0.0.0.0/0`.
+
+Before a release, run `npm run audit:credential-readiness`. The audit reports
+whether required credentials are present and performs limited read-only checks
+without printing secret values. See `ops/CREDENTIAL_SETUP_GUIDE.md`.
+
 Minimum required production variables:
 
 ```text
@@ -96,6 +106,32 @@ LEAD_HANDOFF_CHECK_INTERVAL_MS=60000
 The legacy `POST /api/notify/owner-sms` route now returns `410` and never calls Twilio. Vapi should call `POST /api/webhooks/voice` with `lead.capture`, or use a server tool named `send_owner_sms_dynamic`, `record_lead_and_notify_owner`, or `create_lead_handoff`. Include a stable `eventId` or Vapi tool-call ID so retries are deduplicated.
 
 The acknowledgement URL uses a confirmation page: opening the link does not mutate data. The owner must press the button, which prevents SMS link scanners from acknowledging a lead accidentally. Do not enable backup escalation until the business has approved the backup phone stored in Admin Settings.
+
+## Complete cost reporting
+
+Use a dedicated Twilio API key for production reporting. Keep `TWILIO_AUTH_TOKEN` configured because inbound webhook signature validation and legacy SMS tooling still require it.
+
+```env
+TWILIO_ACCOUNT_SID=AC...
+TWILIO_API_KEY_SID=SK...
+TWILIO_API_KEY_SECRET=...
+```
+
+A Standard API key is sufficient. A Restricted key must be able to read Usage Records, Calls, Messages, and Incoming Phone Numbers. The Money Dashboard uses those feeds to assign AI usage, telephone calls, text messages, and phone-number rental to the customer mapped to each AI number.
+
+Validate the stored Render credentials without printing secrets:
+
+```powershell
+npm run repair:twilio-cost-reporting
+```
+
+If the command identifies a valid local key, apply it to Render and request a backend deployment:
+
+```powershell
+npm run repair:twilio-cost-reporting -- --apply --confirm=REPAIR_TWILIO_COST_REPORTING
+```
+
+After the deployment finishes, run `npm run report:admin-stats`. Cost-report warnings should be empty, telephone/text totals should be non-null, and customer spend should include calls, texts, and phone-number rental.
 
 The `CUSTOMER_DASHBOARD_*` rate-limit defaults protect the email+phone customer dashboard lookup from rapid guessing while still allowing normal owner refreshes.
 
