@@ -966,8 +966,8 @@ function HeroGridOwnerArrow({ gridRef, originRef, destinationRef }) {
       const originBox = origin.getBoundingClientRect();
       const destinationBox = destination.getBoundingClientRect();
       const isTwoColumn =
-        window.matchMedia("(min-width: 1024px)").matches &&
-        destinationBox.left > originBox.right + 24;
+        window.matchMedia("(min-width: 1536px)").matches &&
+        destinationBox.left - originBox.right >= 72;
 
       if (!isTwoColumn || gridBox.width <= 0 || gridBox.height <= 0) {
         setGeometry(null);
@@ -1018,7 +1018,7 @@ function HeroGridOwnerArrow({ gridRef, originRef, destinationRef }) {
 
   return (
     <svg
-      className="landing-hero-owner-arrow pointer-events-none absolute inset-0 z-20 hidden h-full w-full overflow-visible lg:block"
+      className="landing-hero-owner-arrow pointer-events-none absolute inset-0 z-20 hidden h-full w-full overflow-visible 2xl:block"
       viewBox={`0 0 ${geometry.width} ${geometry.height}`}
       preserveAspectRatio="none"
       fill="none"
@@ -1090,14 +1090,14 @@ function HeroCallDashboard({ ownerCardRef }) {
               <h3 className="landing-caller-name mt-5 text-[2rem] font-black leading-none tracking-[-0.045em]">Tim&apos;s Electrical AI</h3>
               <p className="landing-caller-phone mt-3 text-[1.42rem] font-bold tracking-[-0.035em] text-white/82">905-555-2345</p>
               <span className="landing-caller-tag mt-4 inline-flex max-w-[13.5rem] rounded-full bg-white/10 px-5 py-2.5 text-center text-[1rem] font-black leading-[1.12] text-white/92 shadow-[inset_0_1px_0_rgba(255,255,255,0.07)]">
-                AI assistant picked up after 3 Rings
+                AI assistant picked up after 3 rings.
               </span>
             </div>
 
             <div ref={ownerCardRef} className="landing-call-owner-card relative -mx-1 mt-6 rounded-[18px] border-2 border-[#78dc73] bg-white px-3.5 py-3 text-[#111827] shadow-[0_0_0_1px_rgba(34,197,94,0.16),0_16px_38px_-29px_rgba(34,197,94,0.72)]">
               <svg
                 viewBox="0 0 70 44"
-                className="landing-owner-text-arrow pointer-events-none absolute left-[-0.18rem] top-[-1.55rem] h-10 w-16 text-[#39cfff] drop-shadow-[0_0_5px_rgba(56,189,248,0.34)] lg:hidden"
+                className="landing-owner-text-arrow pointer-events-none absolute left-[-0.18rem] top-[-1.55rem] h-10 w-16 text-[#39cfff] drop-shadow-[0_0_5px_rgba(56,189,248,0.34)] 2xl:hidden"
                 fill="none"
                 stroke="currentColor"
                 strokeWidth="4.5"
@@ -1111,7 +1111,7 @@ function HeroCallDashboard({ ownerCardRef }) {
                   <span className="landing-call-owner-icon grid place-items-center rounded-lg bg-[#66e83f] text-white">
                     <HeroIcon type="chat" className="h-4 w-4" />
                   </span>
-                  Owner Phone (Cellphone)
+                  Owner Phone
                 </span>
                 <span className="landing-call-owner-now text-[0.68rem] font-black text-gray-400">now</span>
               </div>
@@ -1152,17 +1152,17 @@ function HeroCallDashboard({ ownerCardRef }) {
 
           <section className="landing-conversation-column relative flex flex-col px-8 py-7 2xl:px-9">
             <div className="landing-conversation-header flex items-center justify-between">
-              <h3 className="landing-conversation-title text-[1.38rem] font-black tracking-[-0.025em] 2xl:text-[1.55rem]">An Example of A Real Conversation</h3>
+              <h3 className="landing-conversation-title text-[1.38rem] font-black tracking-[-0.025em] 2xl:text-[1.55rem]">An Example of a Real Conversation</h3>
               <span className="landing-summary-ready-badge rounded-full bg-[#063a83]/80 px-4 py-2 text-[0.92rem] font-black uppercase tracking-[0.1em] text-[#9edaff]">Summary ready</span>
             </div>
 
             <div className="landing-conversation-panel mt-4 rounded-[26px] border border-white/8 bg-black/18 px-5 py-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-              <p className="text-[0.92rem] font-black uppercase tracking-[0.06em] text-white/38">AI Assistant</p>
-              <div className="mt-2.5 max-w-[78%] rounded-[16px] bg-white/10 px-5 py-3 text-[1.12rem] font-bold leading-[1.26] text-white/92">
-                <span className="block">Hi thanks for calling Tim&apos;s Electrical! How can we help you today?</span>
-                <span className="mt-2 block">Are you looking for a new installation, maintenance or repairs?</span>
+              <p className="landing-conversation-opening-label text-[0.92rem] font-black uppercase tracking-[0.06em] text-white/38">AI Assistant</p>
+              <div className="landing-conversation-opening mt-2.5 max-w-[78%] rounded-[16px] bg-white/10 px-5 py-3 text-[1.12rem] font-bold leading-[1.26] text-white/92">
+                <span className="block">Hi, thanks for calling Tim&apos;s Electrical. How can we help you today?</span>
+                <span className="mt-2 block">Are you calling about a new installation, maintenance, or repair?</span>
               </div>
-              <p className="landing-conversation-time mt-1 text-right text-[0.74rem] font-bold text-white/35">10:32 AM</p>
+              <p className="landing-conversation-opening-time landing-conversation-time mt-1 text-right text-[0.74rem] font-bold text-white/35">10:32 AM</p>
 
               <p className="mt-3 text-[0.92rem] font-black uppercase tracking-[0.06em] text-[#78b7ff]">Caller</p>
               <div className="landing-service-message ml-auto mt-2.5 flex max-w-[92%] items-center gap-2.5 rounded-[20px] bg-[#0b376d] px-3.5 py-2.5 text-[1.1rem] font-bold leading-[1.2] text-white/96 shadow-[0_18px_42px_-30px_rgba(37,99,235,0.95)]">
@@ -1177,18 +1177,17 @@ function HeroCallDashboard({ ownerCardRef }) {
               <div className="landing-conversation-long-bubble mt-2.5 max-w-[84%] rounded-[16px] bg-white/10 px-5 py-3 text-[1.02rem] font-bold leading-[1.18] text-white/92">
                 <span className="block">Sure, we can help you with that. I just need a few details:</span>
                 <ul className="mt-1.5 grid gap-y-0.5">
-                  <li className="flex gap-1"><span aria-hidden="true">-</span><span>Can I get your name?</span></li>
-                  <li className="flex gap-1"><span aria-hidden="true">-</span><span>What&apos;s the address? In What city?</span></li>
-                  <li className="flex gap-1"><span aria-hidden="true">-</span><span>When do you need the work done?</span></li>
-                  <li className="flex gap-1"><span aria-hidden="true">-</span><span>What is the best number to reach you?</span></li>
-                  <li className="flex gap-1"><span aria-hidden="true">-</span><span>What is your best call back time?</span></li>
+                  <li className="flex gap-1"><span aria-hidden="true">-</span><span>Your name and callback number</span></li>
+                  <li className="flex gap-1"><span aria-hidden="true">-</span><span>Job address and city</span></li>
+                  <li className="flex gap-1"><span aria-hidden="true">-</span><span>When you need the work done</span></li>
+                  <li className="flex gap-1"><span aria-hidden="true">-</span><span>Best time to reach you</span></li>
                 </ul>
               </div>
               <p className="landing-conversation-time mt-1 text-right text-[0.74rem] font-bold text-white/35">10:32 AM</p>
 
               <p className="mt-3 text-[0.92rem] font-black uppercase tracking-[0.06em] text-[#78b7ff]">Caller</p>
               <div className="landing-conversation-caller-detail ml-auto mt-2.5 max-w-[78%] rounded-[20px] bg-[#0b376d] px-5 py-3 text-[1rem] font-bold leading-[1.18] text-white/96 shadow-[0_18px_42px_-30px_rgba(37,99,235,0.95)]">
-                My name is Brian Smith, my address is 23 Robb Street in the city of Hamilton. I&apos;d like to start right away. Call me back on this number as the best time to call me back is afternoons or after 5 pm.
+                My name is Brian Smith. The address is 23 Robb Street, Hamilton. I&apos;d like to start right away. Afternoons or after 5 PM is the best time to reach me at this number.
               </div>
               <p className="landing-conversation-time mt-1 text-right text-[0.74rem] font-bold text-white/35">10:33 AM</p>
             </div>
@@ -1200,7 +1199,7 @@ function HeroCallDashboard({ ownerCardRef }) {
                     <path d="M3 6c12 2 22 8 29 17" strokeLinecap="round" />
                     <path d="m25 22 9 2 1-9" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
-                  <span>Instantly sends you and the customer a text message.</span>
+                  <span>Both you and the customer get a text.</span>
                 </div>
                 <div className="landing-customer-text-card rounded-[14px] border border-[#92f28f] bg-white px-4 py-3 text-[#0f2b1a] shadow-[0_14px_34px_-31px_rgba(34,197,94,0.68)]">
                   <div className="flex items-center justify-between">
@@ -1208,12 +1207,12 @@ function HeroCallDashboard({ ownerCardRef }) {
                       <span className="landing-message-icon grid place-items-center rounded-xl bg-[#22c55e] text-white">
                         <HeroIcon type="phone" className="h-5 w-5" />
                       </span>
-                      Customer Text (Cellphone)
+                      Customer Text
                     </span>
                     <span className="landing-customer-text-now text-[0.82rem] font-black text-[#7a9a86]">now</span>
                   </div>
                   <p className="landing-customer-text-body mt-3 font-black tracking-[-0.02em]">
-                    Thanks for calling TIM&apos;S ELECTRICAL. Your hot tub installation request at 23 Robb St, Hamilton has been received. We will get back to you for a free quote.
+                    Thanks for calling Tim&apos;s Electrical. We received your hot tub installation request for 23 Robb St, Hamilton. We&apos;ll follow up with your free quote.
                   </p>
                 </div>
               </div>
@@ -4623,6 +4622,299 @@ function LandingPage() {
               line-height: 1.08 !important;
             }
           }
+          /* Final laptop pass: protect the sales/demo gutter and keep both outcomes above the fold. */
+          .landing-hero-conversion-block {
+            border-radius: 1rem !important;
+            border-color: rgba(217, 29, 18, 0.18) !important;
+            border-left-color: #d91d12 !important;
+            background: linear-gradient(135deg, rgba(255, 248, 247, 0.94), rgba(255, 255, 255, 0.76)) !important;
+          }
+          .landing-hero-proof-heading {
+            color: #123b68 !important;
+            font-weight: 900 !important;
+            letter-spacing: 0.1em !important;
+          }
+          .landing-call-owner-card,
+          .landing-customer-text-card {
+            border-width: 2px !important;
+            border-color: #78dc73 !important;
+          }
+          @media (min-width: 1024px) and (max-width: 1535px) {
+            .landing-hero-shell {
+              max-width: 1365px !important;
+              min-height: 100vh !important;
+              padding: 0.65rem 1.5rem 0.75rem !important;
+            }
+            .landing-hero-shell nav {
+              gap: 1rem !important;
+            }
+            .landing-hero-grid {
+              grid-template-columns: minmax(390px, 0.72fr) minmax(0, 1.28fr) !important;
+              gap: clamp(2.5rem, 3.6vw, 3.1rem) !important;
+              align-items: center !important;
+              padding-top: 0.35rem !important;
+              padding-bottom: 0 !important;
+            }
+            .landing-hero-grid > div:first-child {
+              display: block !important;
+              width: 100% !important;
+              max-width: 470px !important;
+              min-height: 0 !important;
+            }
+            .landing-hero-title {
+              margin-top: 0.5rem !important;
+              font-size: clamp(2.55rem, 3.55vw, 3rem) !important;
+              line-height: 0.98 !important;
+            }
+            .landing-hero-conversion-block {
+              margin-top: 0.45rem !important;
+              padding: 0.48rem 0.68rem !important;
+            }
+            .landing-hero-kicker {
+              font-size: clamp(1.62rem, 2.35vw, 1.95rem) !important;
+            }
+            .landing-revenue-line {
+              margin-top: 0.45rem !important;
+              font-size: clamp(0.78rem, 1.05vw, 0.9rem) !important;
+            }
+            .landing-hero-copy {
+              margin-top: 0.5rem !important;
+              font-size: 0.9rem !important;
+              line-height: 1.25 !important;
+            }
+            .landing-hero-points {
+              gap: 0.34rem !important;
+              margin-top: 0.65rem !important;
+            }
+            .landing-hero-point {
+              min-height: 2.25rem !important;
+              border-radius: 0.72rem !important;
+              padding: 0.26rem 0.55rem 0.26rem 2.8rem !important;
+              font-size: 0.8rem !important;
+            }
+            .landing-hero-point-icon {
+              left: 0.04rem !important;
+              width: 2.35rem !important;
+              height: 2.35rem !important;
+            }
+            .landing-hero-point-icon svg {
+              width: 1.12rem !important;
+              height: 1.12rem !important;
+            }
+            .landing-hero-points::before {
+              left: 1.18rem !important;
+              top: 1.2rem !important;
+              bottom: 1.2rem !important;
+            }
+            .landing-hero-ctas {
+              gap: 0.55rem !important;
+              margin-top: 0.7rem !important;
+            }
+            .landing-hero-cta {
+              min-width: 0 !important;
+              min-height: 2.55rem !important;
+              flex: 1 1 0 !important;
+              padding: 0.42rem 0.55rem !important;
+              font-size: 0.82rem !important;
+            }
+            .landing-hero-trial-secondary {
+              background: rgba(255, 255, 255, 0.82) !important;
+              box-shadow: none !important;
+            }
+            .landing-hero-footnote {
+              gap: 0.65rem !important;
+              margin-top: 0.55rem !important;
+              font-size: 0.7rem !important;
+            }
+            .landing-hero-visual {
+              width: 100% !important;
+              min-width: 0 !important;
+              margin-top: 0 !important;
+            }
+            .landing-hero-proof-heading {
+              margin-bottom: 0.35rem !important;
+              padding: 0 0.3rem !important;
+              font-size: 0.7rem !important;
+            }
+            .landing-call-dashboard {
+              width: 100% !important;
+              max-width: 700px !important;
+              min-width: 0 !important;
+            }
+            .landing-call-dashboard > div {
+              width: 100% !important;
+              height: min(580px, calc(100vh - 112px)) !important;
+              min-height: 540px !important;
+              max-height: 580px !important;
+              border-radius: 24px !important;
+            }
+            .landing-call-dashboard > div > div {
+              height: 100% !important;
+              min-height: 0 !important;
+              max-height: none !important;
+              grid-template-columns: minmax(250px, 0.82fr) minmax(0, 1.18fr) !important;
+            }
+            .landing-call-panel {
+              min-width: 0 !important;
+              padding: 0.85rem !important;
+            }
+            .landing-call-status {
+              font-size: 0.82rem !important;
+            }
+            .landing-caller-card {
+              margin-top: 0.65rem !important;
+            }
+            .landing-caller-avatar {
+              width: 3.7rem !important;
+              height: 3.7rem !important;
+            }
+            .landing-caller-name {
+              margin-top: 0.55rem !important;
+              font-size: 1.18rem !important;
+              line-height: 1.05 !important;
+            }
+            .landing-caller-phone {
+              position: relative !important;
+              z-index: 2 !important;
+              margin-top: 0.35rem !important;
+              font-size: 1.02rem !important;
+              line-height: 1.1 !important;
+              white-space: nowrap !important;
+            }
+            .landing-caller-tag {
+              margin-top: 0.5rem !important;
+              max-width: 100% !important;
+              padding: 0.42rem 0.65rem !important;
+              font-size: 0.72rem !important;
+              line-height: 1.15 !important;
+            }
+            .landing-call-owner-card {
+              width: calc(100% + 0.4rem) !important;
+              margin-top: 0.7rem !important;
+              margin-right: -0.2rem !important;
+              margin-left: -0.2rem !important;
+              border-radius: 14px !important;
+              padding: 0.65rem 0.72rem !important;
+            }
+            .landing-call-owner-title {
+              font-size: 0.92rem !important;
+            }
+            .landing-call-owner-icon {
+              width: 1.7rem !important;
+              height: 1.7rem !important;
+            }
+            .landing-call-owner-body {
+              display: grid !important;
+              gap: 0.12rem !important;
+              margin-top: 0.42rem !important;
+              font-size: 0.72rem !important;
+              line-height: 1.2 !important;
+            }
+            .landing-call-controls {
+              display: none !important;
+            }
+            .landing-conversation-column {
+              min-width: 0 !important;
+              padding: 0.85rem !important;
+            }
+            .landing-conversation-header {
+              gap: 0.65rem !important;
+            }
+            .landing-conversation-title {
+              font-size: 1rem !important;
+              line-height: 1.08 !important;
+            }
+            .landing-summary-ready-badge {
+              padding: 0.38rem 0.55rem !important;
+              font-size: 0.62rem !important;
+            }
+            .landing-conversation-panel {
+              position: relative !important;
+              flex: 0 0 auto !important;
+              margin-top: 0.45rem !important;
+              border-radius: 17px !important;
+              padding: 0.55rem 0.68rem !important;
+              overflow: visible !important;
+            }
+            .landing-conversation-panel > p:not(.landing-conversation-time) {
+              margin-top: 0.4rem !important;
+              font-size: 0.68rem !important;
+              line-height: 1.05 !important;
+            }
+            .landing-conversation-panel > p:first-child {
+              margin-top: 0 !important;
+            }
+            .landing-conversation-opening-label,
+            .landing-conversation-opening,
+            .landing-conversation-opening-time {
+              display: none !important;
+            }
+            .landing-conversation-panel > div,
+            .landing-conversation-panel .landing-conversation-long-bubble,
+            .landing-conversation-panel .landing-conversation-caller-detail {
+              max-width: 94% !important;
+              margin-top: 0.28rem !important;
+              border-radius: 11px !important;
+              padding: 0.38rem 0.52rem !important;
+              font-size: 0.76rem !important;
+              line-height: 1.14 !important;
+            }
+            .landing-conversation-panel .landing-service-message {
+              max-width: 98% !important;
+            }
+            .landing-service-badge {
+              padding: 0.2rem 0.35rem !important;
+              font-size: 0.55rem !important;
+            }
+            .landing-conversation-panel .landing-conversation-long-bubble ul {
+              margin-top: 0.18rem !important;
+              row-gap: 0 !important;
+            }
+            .landing-conversation-panel .landing-conversation-caller-detail {
+              margin-bottom: 0 !important;
+            }
+            .landing-conversation-time {
+              position: static !important;
+              margin: 0.16rem 0 0 !important;
+              padding: 0 !important;
+              transform: none !important;
+              font-size: 0.66rem !important;
+              line-height: 1 !important;
+              color: rgba(255, 255, 255, 0.68) !important;
+            }
+            .landing-dashboard-bottom {
+              margin-top: 0.42rem !important;
+            }
+            .landing-lead-stack {
+              gap: 0.3rem !important;
+            }
+            .landing-lead-note {
+              justify-content: flex-start !important;
+              gap: 0.5rem !important;
+              font-size: 0.76rem !important;
+              line-height: 1.1 !important;
+            }
+            .landing-lead-note svg {
+              width: 2rem !important;
+              height: 1.25rem !important;
+            }
+            .landing-customer-text-card {
+              border-radius: 14px !important;
+              padding: 0.58rem 0.72rem !important;
+            }
+            .landing-customer-text-title {
+              font-size: 0.9rem !important;
+            }
+            .landing-message-icon {
+              width: 1.7rem !important;
+              height: 1.7rem !important;
+            }
+            .landing-customer-text-body {
+              margin-top: 0.4rem !important;
+              font-size: 0.74rem !important;
+              line-height: 1.2 !important;
+            }
+          }
           @keyframes landing-live-call-sequence {
             0%, 100% {
               transform: scale(1);
@@ -4842,7 +5134,7 @@ function LandingPage() {
                 <button
                   type="button"
                   onClick={goToSignup}
-                  className="landing-hero-cta inline-flex min-h-[46px] items-center justify-center rounded-lg bg-[linear-gradient(180deg,#ff8a13,#ff3f16)] px-9 text-[1.02rem] font-black text-white shadow-[0_18px_38px_-25px_rgba(255,106,0,1)] transition hover:-translate-y-0.5 hover:brightness-110 2xl:min-h-[48px] 2xl:text-[1.08rem]"
+                  className="landing-hero-cta landing-hero-trial-secondary inline-flex min-h-[46px] items-center justify-center rounded-lg border-2 border-[#1d5ea8]/80 bg-white/72 px-9 text-[1.02rem] font-black text-[#0b3b7a] transition hover:-translate-y-0.5 hover:bg-white 2xl:min-h-[48px] 2xl:text-[1.08rem]"
                 >
                   Start Your Free Trial
                 </button>
@@ -4854,7 +5146,7 @@ function LandingPage() {
                   <svg viewBox="0 0 24 24" className="mr-2 h-5 w-5" fill="currentColor" aria-hidden="true">
                     <path d="M8.2 5.6v12.8L18 12 8.2 5.6Z" />
                   </svg>
-                  Hear Agent Voice
+                  Play Recorded Sample
                 </button>
               </div>
 
