@@ -4915,6 +4915,270 @@ function LandingPage() {
               line-height: 1.2 !important;
             }
           }
+          /* Mobile homepage: one clear action, compact proof points, and an earlier demo. */
+          @media (max-width: 639px) {
+            .landing-hero-shell {
+              min-height: 0 !important;
+              padding: 0.75rem 0.9rem 1.25rem !important;
+            }
+            .landing-hero-shell nav {
+              grid-template-columns: minmax(0, 1fr) auto !important;
+              align-items: center !important;
+              gap: 0.65rem !important;
+            }
+            .landing-hero-shell nav > div:first-child {
+              min-width: 0 !important;
+              gap: 0.5rem !important;
+            }
+            .landing-hero-shell nav > div:first-child > div:first-child {
+              width: 2.55rem !important;
+              height: 2.55rem !important;
+            }
+            .landing-hero-shell nav > div:first-child > div:last-child {
+              font-size: clamp(1.45rem, 7.2vw, 1.75rem) !important;
+              white-space: nowrap !important;
+            }
+            .landing-hero-shell nav > div:last-child {
+              justify-self: end !important;
+            }
+            .landing-hero-shell nav > div:last-child button {
+              min-width: 0 !important;
+              border-radius: 0.75rem !important;
+              padding: 0.72rem 0.82rem !important;
+              font-size: 0.72rem !important;
+              line-height: 1.05 !important;
+            }
+            .landing-hero-grid {
+              gap: 0 !important;
+              padding-top: 0.9rem !important;
+              padding-bottom: 0 !important;
+            }
+            .landing-hero-label {
+              gap: 0.55rem !important;
+              border-radius: 0.85rem !important;
+              padding: 0.35rem 0.55rem !important;
+            }
+            .landing-hero-label > span:first-child {
+              width: 2.15rem !important;
+              height: 2.15rem !important;
+              border-radius: 0.65rem !important;
+            }
+            .landing-hero-label > span:first-child svg {
+              width: 1.55rem !important;
+              height: 1.55rem !important;
+            }
+            .landing-hero-label > span:last-child > span:first-child {
+              font-size: clamp(0.75rem, 3.55vw, 0.86rem) !important;
+            }
+            .landing-hero-label > span:last-child > span:last-child {
+              margin-top: 0.28rem !important;
+              font-size: 0.57rem !important;
+              letter-spacing: 0.17em !important;
+            }
+            .landing-hero-title {
+              margin-top: 0.7rem !important;
+              font-size: clamp(2rem, 9.6vw, 2.35rem) !important;
+              line-height: 0.98 !important;
+              letter-spacing: -0.055em !important;
+            }
+            .landing-hero-title > span:first-child {
+              white-space: nowrap !important;
+            }
+            .landing-hero-title > span:last-child {
+              padding-bottom: 0.2rem !important;
+            }
+            .landing-hero-conversion-block {
+              margin-top: 0.65rem !important;
+              padding: 0.65rem 0.75rem !important;
+            }
+            .landing-hero-kicker {
+              font-size: clamp(1.36rem, 6.15vw, 1.55rem) !important;
+              line-height: 1.02 !important;
+              letter-spacing: -0.045em !important;
+              white-space: nowrap !important;
+            }
+            .landing-revenue-line {
+              display: flex !important;
+              flex-wrap: wrap !important;
+              justify-content: center !important;
+              gap: 0.24rem 0.35rem !important;
+              margin-top: 0.55rem !important;
+              white-space: normal !important;
+              font-size: clamp(0.65rem, 3.1vw, 0.74rem) !important;
+              line-height: 1.1 !important;
+              letter-spacing: -0.015em !important;
+              text-align: center !important;
+            }
+            .landing-revenue-line > span:first-child {
+              flex-basis: 100% !important;
+            }
+            .landing-revenue-line > span:nth-child(2) {
+              margin: 0 !important;
+            }
+            .landing-hero-copy {
+              margin-top: 0.7rem !important;
+              font-size: 0.86rem !important;
+              line-height: 1.25 !important;
+              text-align: center !important;
+            }
+            .landing-hero-points {
+              display: grid !important;
+              gap: 0 !important;
+              margin-top: 0.8rem !important;
+              padding: 0 !important;
+              overflow: hidden !important;
+              border: 1px solid rgba(58, 135, 219, 0.3) !important;
+              border-radius: 0.95rem !important;
+              background: rgba(255, 255, 255, 0.78) !important;
+              box-shadow: 0 14px 32px -28px rgba(12, 77, 160, 0.58) !important;
+            }
+            .landing-hero-points::before {
+              display: none !important;
+            }
+            .landing-hero-point {
+              position: relative !important;
+              min-height: 3.1rem !important;
+              flex-direction: row !important;
+              align-items: center !important;
+              gap: 0.62rem !important;
+              border: 0 !important;
+              border-radius: 0 !important;
+              background: transparent !important;
+              padding: 0.55rem 0.68rem !important;
+              box-shadow: none !important;
+              font-size: 0.76rem !important;
+              line-height: 1.18 !important;
+            }
+            .landing-hero-point:not(:last-child) {
+              border-bottom: 1px solid rgba(58, 135, 219, 0.2) !important;
+            }
+            .landing-hero-point-icon {
+              position: static !important;
+              width: 2.2rem !important;
+              height: 2.2rem !important;
+              transform: none !important;
+              border-width: 1px !important;
+            }
+            .landing-hero-point-icon svg {
+              width: 1.05rem !important;
+              height: 1.05rem !important;
+            }
+            .landing-hero-point > span:last-child {
+              min-width: 0 !important;
+              line-height: 1.18 !important;
+            }
+            .landing-hero-ctas {
+              margin-top: 0.8rem !important;
+              gap: 0 !important;
+            }
+            .landing-hero-trial-secondary {
+              display: none !important;
+            }
+            .landing-hero-cta {
+              width: 100% !important;
+              min-width: 0 !important;
+              min-height: 2.85rem !important;
+              padding: 0.55rem 0.85rem !important;
+              font-size: 0.86rem !important;
+            }
+            .landing-hero-footnote {
+              display: grid !important;
+              grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+              gap: 0.35rem !important;
+              margin-top: 0.65rem !important;
+              white-space: normal !important;
+              font-size: 0.64rem !important;
+              line-height: 1.1 !important;
+              letter-spacing: -0.025em !important;
+              text-align: center !important;
+            }
+            .landing-hero-footnote > span {
+              justify-content: center !important;
+              white-space: nowrap !important;
+            }
+            .landing-hero-visual {
+              margin-top: 1rem !important;
+              justify-content: center !important;
+            }
+            .landing-hero-proof-heading {
+              margin-bottom: 0.55rem !important;
+              font-size: 0.64rem !important;
+              line-height: 1.15 !important;
+              letter-spacing: 0.08em !important;
+            }
+            .landing-call-dashboard {
+              width: 100% !important;
+              max-width: 360px !important;
+            }
+            .landing-call-dashboard > div {
+              border-radius: 1.25rem !important;
+            }
+            .landing-call-panel {
+              min-height: 0 !important;
+              padding: 0.9rem !important;
+            }
+            .landing-caller-card {
+              margin-top: 0.75rem !important;
+            }
+            .landing-caller-avatar {
+              width: 3.8rem !important;
+              height: 3.8rem !important;
+            }
+            .landing-caller-name {
+              margin-top: 0.65rem !important;
+              font-size: 1.3rem !important;
+            }
+            .landing-caller-phone {
+              margin-top: 0.35rem !important;
+              font-size: 0.96rem !important;
+            }
+            .landing-caller-tag {
+              margin-top: 0.55rem !important;
+              padding: 0.45rem 0.7rem !important;
+              font-size: 0.72rem !important;
+            }
+            .landing-call-owner-card {
+              margin-top: 0.75rem !important;
+              padding: 0.75rem !important;
+            }
+            .landing-call-owner-title {
+              font-size: 0.86rem !important;
+            }
+            .landing-call-owner-body {
+              margin-top: 0.4rem !important;
+              font-size: 0.68rem !important;
+              line-height: 1.18 !important;
+            }
+            .landing-call-controls {
+              display: none !important;
+            }
+            .landing-conversation-column {
+              padding: 0.9rem !important;
+            }
+            .landing-conversation-header h3 {
+              font-size: 1rem !important;
+            }
+            .landing-conversation-panel {
+              margin-top: 0.65rem !important;
+              padding: 0.72rem !important;
+            }
+            .landing-conversation-panel div {
+              font-size: 0.72rem !important;
+              line-height: 1.16 !important;
+            }
+            .landing-customer-text-card {
+              min-height: 0 !important;
+              padding: 0.85rem !important;
+            }
+            .landing-customer-text-title {
+              font-size: 1rem !important;
+            }
+            .landing-customer-text-body {
+              margin-top: 0.55rem !important;
+              font-size: 0.76rem !important;
+              line-height: 1.18 !important;
+            }
+          }
           @keyframes landing-live-call-sequence {
             0%, 100% {
               transform: scale(1);
