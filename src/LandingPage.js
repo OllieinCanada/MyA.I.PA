@@ -5258,6 +5258,284 @@ function LandingPage() {
               margin-left: 0.625rem;
             }
           }
+          /* Preserve the desktop hero on full-width iPads, including Safari viewports
+             that report slightly less than Tailwind's 1024px desktop breakpoint. */
+          @media (min-width: 900px) and (max-width: 1279px) and (orientation: landscape) {
+            .landing-hero-shell {
+              min-height: 100vh !important;
+              max-width: none !important;
+              padding: 0.65rem 1.25rem 0.8rem !important;
+            }
+            .landing-hero-shell nav {
+              grid-template-columns: auto 1fr auto !important;
+              align-items: center !important;
+              gap: 1rem !important;
+            }
+            .landing-hero-shell nav > div:nth-child(2) {
+              display: block !important;
+              justify-self: center !important;
+            }
+            .landing-hero-shell nav > div:last-child {
+              justify-self: end !important;
+            }
+            .landing-hero-grid {
+              display: grid !important;
+              grid-template-columns: minmax(330px, 0.72fr) minmax(0, 1.28fr) !important;
+              align-items: center !important;
+              gap: clamp(1rem, 2.2vw, 1.75rem) !important;
+              padding-top: 0.35rem !important;
+              padding-bottom: 0 !important;
+            }
+            .landing-hero-grid > div:first-child {
+              display: block !important;
+              width: 100% !important;
+              max-width: 430px !important;
+              min-height: 0 !important;
+            }
+            .landing-hero-copy-column {
+              margin-left: 0 !important;
+              transform: none !important;
+            }
+            .landing-hero-title {
+              margin-top: 0 !important;
+              font-size: clamp(2.35rem, 4.25vw, 3rem) !important;
+              line-height: 0.98 !important;
+            }
+            .landing-hero-coverage {
+              margin-top: 0.75rem !important;
+            }
+            .landing-hero-points-clean {
+              margin-top: 0.85rem !important;
+              gap: 0.52rem !important;
+            }
+            .landing-hero-points-clean .landing-hero-point-clean {
+              grid-template-columns: 1.8rem minmax(0, 1fr) !important;
+              column-gap: 0.6rem !important;
+              font-size: 0.8rem !important;
+            }
+            .landing-hero-points-clean .landing-hero-point-check {
+              width: 1.8rem !important;
+              height: 1.8rem !important;
+            }
+            .landing-hero-actions {
+              margin-top: 0.85rem !important;
+            }
+            .landing-hero-trust {
+              margin-top: 0.55rem !important;
+              gap: 0.35rem 0.65rem !important;
+              font-size: 0.65rem !important;
+            }
+            .landing-hero-visual,
+            .landing-hero-proof-wrap,
+            .landing-call-dashboard {
+              display: flex !important;
+              width: 100% !important;
+              min-width: 0 !important;
+              max-width: none !important;
+              visibility: visible !important;
+              opacity: 1 !important;
+            }
+            .landing-hero-visual {
+              margin-top: 0 !important;
+              transform: none !important;
+            }
+            .landing-hero-proof-wrap {
+              flex-direction: column !important;
+            }
+            .landing-call-dashboard > div {
+              display: block !important;
+              width: 100% !important;
+              height: min(580px, calc(100vh - 112px)) !important;
+              min-height: 540px !important;
+              max-height: 580px !important;
+              visibility: visible !important;
+              opacity: 1 !important;
+            }
+            .landing-call-dashboard > div > div {
+              display: grid !important;
+              height: 100% !important;
+              min-height: 0 !important;
+              max-height: none !important;
+              grid-template-columns: minmax(235px, 0.82fr) minmax(0, 1.18fr) !important;
+            }
+            .landing-call-panel,
+            .landing-conversation-column {
+              display: flex !important;
+              height: 100% !important;
+              min-height: 0 !important;
+              visibility: visible !important;
+            }
+            .landing-caller-card,
+            .landing-caller-avatar,
+            .landing-caller-avatar img {
+              display: block !important;
+              visibility: visible !important;
+              opacity: 1 !important;
+            }
+            .landing-caller-avatar {
+              width: 4.1rem !important;
+              height: 4.1rem !important;
+            }
+            .landing-call-controls {
+              display: none !important;
+            }
+          }
+          @media (min-width: 900px) and (max-width: 1023px) and (orientation: landscape) {
+            .landing-hero-grid {
+              grid-template-columns: minmax(285px, 0.65fr) minmax(0, 1.35fr) !important;
+            }
+            .landing-call-dashboard > div > div {
+              grid-template-columns: minmax(205px, 0.72fr) minmax(0, 1.28fr) !important;
+            }
+            .landing-call-panel,
+            .landing-conversation-column {
+              padding: 0.72rem !important;
+            }
+            .landing-call-status {
+              font-size: 0.76rem !important;
+            }
+            .landing-caller-card {
+              margin-top: 0.5rem !important;
+            }
+            .landing-caller-avatar {
+              width: 3.25rem !important;
+              height: 3.25rem !important;
+            }
+            .landing-caller-name {
+              margin-top: 0.45rem !important;
+              font-size: 1rem !important;
+              line-height: 1.02 !important;
+            }
+            .landing-caller-phone {
+              margin-top: 0.3rem !important;
+              font-size: 0.88rem !important;
+              line-height: 1 !important;
+              white-space: nowrap !important;
+            }
+            .landing-caller-tag {
+              margin-top: 0.42rem !important;
+              max-width: 100% !important;
+              padding: 0.36rem 0.48rem !important;
+              font-size: 0.62rem !important;
+              line-height: 1.08 !important;
+            }
+            .landing-call-owner-card {
+              width: 100% !important;
+              margin: 0.58rem 0 0 !important;
+              border-radius: 13px !important;
+            }
+            .landing-imessage-preview {
+              padding: 0.55rem !important;
+            }
+            .landing-imessage-preview-title {
+              font-size: 0.6rem !important;
+            }
+            .landing-imessage-preview-meta {
+              font-size: 0.46rem !important;
+            }
+            .landing-imessage-bubble {
+              max-width: 100% !important;
+              padding: 0.46rem 0.52rem !important;
+              font-size: 0.52rem !important;
+              line-height: 1.12 !important;
+            }
+            .landing-conversation-header {
+              gap: 0.45rem !important;
+            }
+            .landing-conversation-title {
+              font-size: 0.9rem !important;
+              line-height: 1.04 !important;
+            }
+            .landing-summary-ready-badge {
+              padding: 0.32rem 0.45rem !important;
+              font-size: 0.55rem !important;
+            }
+            .landing-conversation-panel {
+              position: relative !important;
+              flex: 0 0 auto !important;
+              margin-top: 0.38rem !important;
+              border-radius: 15px !important;
+              padding: 0.48rem 0.56rem !important;
+              overflow: visible !important;
+            }
+            .landing-conversation-opening-label,
+            .landing-conversation-opening,
+            .landing-conversation-opening-time {
+              display: none !important;
+            }
+            .landing-conversation-panel > p:not(.landing-conversation-time) {
+              margin-top: 0.28rem !important;
+              font-size: 0.6rem !important;
+              line-height: 1.02 !important;
+            }
+            .landing-conversation-panel > p:first-child {
+              margin-top: 0 !important;
+            }
+            .landing-conversation-panel > div,
+            .landing-conversation-panel .landing-conversation-long-bubble,
+            .landing-conversation-panel .landing-conversation-caller-detail {
+              max-width: 96% !important;
+              margin-top: 0.24rem !important;
+              border-radius: 10px !important;
+              padding: 0.34rem 0.44rem !important;
+              font-size: 0.64rem !important;
+              line-height: 1.08 !important;
+            }
+            .landing-conversation-panel .landing-service-message {
+              max-width: 100% !important;
+            }
+            .landing-service-badge {
+              padding: 0.16rem 0.28rem !important;
+              font-size: 0.48rem !important;
+            }
+            .landing-conversation-panel .landing-conversation-long-bubble ul {
+              margin-top: 0.12rem !important;
+              row-gap: 0 !important;
+            }
+            .landing-conversation-panel .landing-conversation-caller-detail {
+              margin-bottom: 0 !important;
+            }
+            .landing-conversation-time {
+              position: static !important;
+              margin: 0.12rem 0 0 !important;
+              padding: 0 !important;
+              transform: none !important;
+              font-size: 0.56rem !important;
+              line-height: 1 !important;
+            }
+            .landing-dashboard-bottom {
+              margin-top: 0.34rem !important;
+              flex: 0 0 auto !important;
+            }
+            .landing-lead-stack {
+              height: auto !important;
+              grid-template-rows: auto auto !important;
+              align-content: start !important;
+            }
+            .landing-lead-note {
+              gap: 0.36rem !important;
+              font-size: 0.64rem !important;
+              line-height: 1.05 !important;
+            }
+            .landing-lead-note svg {
+              width: 1.7rem !important;
+              height: 1.05rem !important;
+            }
+            .landing-customer-text-card {
+              flex: 0 0 auto !important;
+              height: auto !important;
+              border-radius: 13px !important;
+              padding: 0.5rem 0.58rem !important;
+            }
+            .landing-customer-text-title {
+              font-size: 0.72rem !important;
+            }
+            .landing-customer-text-body {
+              margin-top: 0.3rem !important;
+              font-size: 0.6rem !important;
+              line-height: 1.1 !important;
+            }
+          }
           @media (max-width: 639px) {
             .landing-hero-coverage {
               margin-top: 0.9rem !important;
