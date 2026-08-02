@@ -978,7 +978,7 @@ function HeroCallDashboard({ ownerCardRef }) {
               </span>
             </div>
 
-            <div ref={ownerCardRef} className="landing-call-owner-card relative -mx-1 mt-6 rounded-[18px] border-2 border-[#78dc73] bg-white px-3.5 py-3 text-[#111827] shadow-[0_0_0_1px_rgba(34,197,94,0.16),0_16px_38px_-29px_rgba(34,197,94,0.72)]">
+            <div ref={ownerCardRef} className="landing-call-owner-card landing-imessage-card relative -mx-1 mt-6 overflow-hidden rounded-[18px] border border-[#d1d1d6] bg-white p-0 text-[#111827] shadow-[0_16px_38px_-29px_rgba(0,0,0,0.72)]">
               <svg
                 viewBox="0 0 70 44"
                 className="landing-owner-text-arrow pointer-events-none absolute left-[-0.18rem] top-[-1.55rem] h-10 w-16 text-[#39cfff] drop-shadow-[0_0_5px_rgba(56,189,248,0.34)] 2xl:hidden"
@@ -990,23 +990,22 @@ function HeroCallDashboard({ ownerCardRef }) {
                 <path d="M5 6c17 1 31 9 45 25" strokeLinecap="round" />
                 <path d="m42 29 11 5 2-11" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
-              <div className="flex items-center justify-between gap-2">
-                <span className="landing-call-owner-title inline-flex items-center gap-2 text-[1.04rem] font-black">
-                  <span className="landing-call-owner-icon grid place-items-center rounded-lg bg-[#66e83f] text-white">
-                    <HeroIcon type="chat" className="h-4 w-4" />
+              <div className="landing-imessage-preview bg-white px-3 py-3">
+                <div className="landing-imessage-preview-head flex items-center gap-2">
+                  <span className="landing-imessage-contact grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[linear-gradient(145deg,#2d93ff,#0868df)] text-[0.58rem] font-black text-white">
+                    PA
                   </span>
-                  Owner Phone
-                </span>
-                <span className="landing-call-owner-now text-[0.68rem] font-black text-gray-400">now</span>
-              </div>
-              <div className="landing-call-owner-body mt-2 font-bold tracking-[-0.01em]">
-                <p>New service request received.</p>
-                <p>&bull; Name: Brian Smith</p>
-                <p>&bull; Phone: 905-555-1234</p>
-                <p>&bull; Job: Hot tub installation</p>
-                <p>&bull; Preferred starting date: Right away</p>
-                <p>&bull; Address: 23 Robb St, Hamilton</p>
-                <p>&bull; Callback: Afternoons or after 5 PM</p>
+                  <span className="min-w-0">
+                    <strong className="landing-imessage-preview-title block font-black">Owner receives this text</strong>
+                    <small className="landing-imessage-preview-meta mt-0.5 block font-bold text-[#8e8e93]">My AI PA · now</small>
+                  </span>
+                </div>
+                <div className="landing-imessage-bubble landing-imessage-bubble-received mt-2 rounded-[16px_16px_16px_5px] bg-[#e9e9eb] px-3 py-2.5 font-bold leading-[1.2] text-[#111111]">
+                  <p>New service request received.</p>
+                  <p>Brian Smith · 905-555-1234</p>
+                  <p>Hot tub installation · 23 Robb St., Hamilton</p>
+                  <p>Callback: After 5 PM</p>
+                </div>
               </div>
             </div>
 
@@ -1085,19 +1084,22 @@ function HeroCallDashboard({ ownerCardRef }) {
                   </svg>
                   <span>Both you and the customer get a text.</span>
                 </div>
-                <div className="landing-customer-text-card rounded-[14px] border border-[#92f28f] bg-white px-4 py-3 text-[#0f2b1a] shadow-[0_14px_34px_-31px_rgba(34,197,94,0.68)]">
-                  <div className="flex items-center justify-between">
-                    <span className="landing-customer-text-title inline-flex items-center gap-3 font-black">
-                      <span className="landing-message-icon grid place-items-center rounded-xl bg-[#22c55e] text-white">
-                        <HeroIcon type="phone" className="h-5 w-5" />
+                <div className="landing-customer-text-card landing-imessage-card overflow-hidden rounded-[14px] border border-[#d1d1d6] bg-white p-0 text-[#111111] shadow-[0_14px_34px_-31px_rgba(0,0,0,0.68)]">
+                  <div className="landing-imessage-preview bg-white px-3 py-2.5">
+                    <div className="landing-imessage-preview-head flex items-center gap-2">
+                      <span className="landing-imessage-contact grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[linear-gradient(145deg,#2d93ff,#0868df)] text-[0.58rem] font-black text-white">
+                        TE
                       </span>
-                      Customer Text
-                    </span>
-                    <span className="landing-customer-text-now text-[0.82rem] font-black text-[#7a9a86]">now</span>
+                      <span className="min-w-0">
+                        <strong className="landing-imessage-preview-title block font-black">Customer receives this text</strong>
+                        <small className="landing-imessage-preview-meta mt-0.5 block font-bold text-[#8e8e93]">Tim&apos;s Electrical · now</small>
+                      </span>
+                    </div>
+                    <div className="landing-imessage-bubble landing-imessage-bubble-sent ml-auto mt-2 rounded-[16px_16px_5px_16px] bg-[#0a84ff] px-3 py-2 font-bold leading-[1.18] text-white">
+                      Thanks for calling Tim&apos;s Electrical. We received your hot tub installation request for 23 Robb St., Hamilton. We&apos;ll follow up with your free quote.
+                    </div>
+                    <span className="landing-imessage-delivered mt-1 block text-right text-[0.52rem] font-bold text-[#8e8e93]">Delivered</span>
                   </div>
-                  <p className="landing-customer-text-body mt-3 font-black tracking-[-0.02em]">
-                    Thanks for calling Tim&apos;s Electrical. We received your hot tub installation request for 23 Robb St, Hamilton. We&apos;ll follow up with your free quote.
-                  </p>
                 </div>
               </div>
             </div>
@@ -5182,6 +5184,120 @@ function LandingPage() {
               stroke-dashoffset: 0 !important;
             }
           }
+
+          /* Approved homepage hierarchy: retain the live diagram, simplify the sales copy, and make both texts read like familiar message bubbles. */
+          .landing-hero-points-clean {
+            gap: 0.72rem !important;
+            padding-left: 0 !important;
+          }
+          .landing-hero-points-clean::before {
+            display: none !important;
+          }
+          .landing-hero-points-clean .landing-hero-point-clean {
+            display: grid !important;
+            grid-template-columns: 2rem minmax(0, 1fr) !important;
+            column-gap: 0.75rem !important;
+            min-height: 0 !important;
+            border: 0 !important;
+            border-radius: 0 !important;
+            padding: 0 !important;
+            background: transparent !important;
+            box-shadow: none !important;
+          }
+          .landing-hero-points-clean .landing-hero-point-check {
+            position: static !important;
+            top: auto !important;
+            left: auto !important;
+            width: 2rem !important;
+            height: 2rem !important;
+            transform: none !important;
+          }
+          .landing-hero-points-clean .landing-hero-point-clean > span:last-child {
+            line-height: 1.25 !important;
+          }
+          .landing-imessage-card {
+            overflow: hidden !important;
+            border-width: 1px !important;
+            border-color: #d1d1d6 !important;
+            padding: 0 !important;
+            color: #111111 !important;
+            background: #ffffff !important;
+            box-shadow: 0 10px 26px -18px rgba(0, 0, 0, 0.55) !important;
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+          }
+          .landing-imessage-preview-title {
+            color: #111111 !important;
+            font-size: 0.68rem !important;
+            line-height: 1.05 !important;
+          }
+          .landing-imessage-contact {
+            width: 1.75rem !important;
+            height: 1.75rem !important;
+            font-size: 0.58rem !important;
+            line-height: 1 !important;
+          }
+          .landing-imessage-preview-meta {
+            font-size: 0.5rem !important;
+            line-height: 1 !important;
+          }
+          .landing-imessage-bubble {
+            width: fit-content;
+            max-width: 96%;
+            font-size: 0.62rem !important;
+            line-height: 1.18 !important;
+          }
+          .landing-imessage-bubble-sent {
+            margin-left: auto !important;
+          }
+          .landing-imessage-delivered {
+            font-size: 0.43rem !important;
+            line-height: 1 !important;
+          }
+          @media (min-width: 1024px) {
+            .landing-hero-copy-column {
+              margin-left: 0.625rem;
+            }
+          }
+          @media (max-width: 639px) {
+            .landing-hero-coverage {
+              margin-top: 0.9rem !important;
+              font-size: 0.92rem !important;
+            }
+            .landing-hero-points-clean {
+              margin-top: 1rem !important;
+              gap: 0.65rem !important;
+            }
+            .landing-hero-points-clean .landing-hero-point-clean {
+              grid-template-columns: 1.85rem minmax(0, 1fr) !important;
+              column-gap: 0.65rem !important;
+              font-size: 0.86rem !important;
+            }
+            .landing-hero-points-clean .landing-hero-point-check {
+              width: 1.85rem !important;
+              height: 1.85rem !important;
+            }
+            .landing-hero-actions {
+              margin-top: 1.1rem !important;
+            }
+            .landing-hero-trust {
+              justify-content: center;
+              gap: 0.45rem 0.9rem !important;
+            }
+            .landing-imessage-preview {
+              padding: 0.7rem !important;
+            }
+            .landing-imessage-preview-title {
+              font-size: 0.78rem !important;
+            }
+            .landing-imessage-preview-meta {
+              font-size: 0.58rem !important;
+            }
+            .landing-imessage-bubble {
+              max-width: 100% !important;
+              font-size: 0.7rem !important;
+              line-height: 1.2 !important;
+            }
+          }
         `}</style>
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_16%_18%,rgba(187,222,255,0.74),transparent_30%),radial-gradient(circle_at_78%_12%,rgba(213,235,255,0.70),transparent_32%),linear-gradient(180deg,#ffffff_0%,#f6fbff_28%,#e9f6ff_100%)]" />
         <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgba(37,99,235,0.06)_1px,transparent_1px),linear-gradient(rgba(37,99,235,0.045)_1px,transparent_1px)] bg-[size:76px_76px] opacity-[0.32]" />
@@ -5212,7 +5328,7 @@ function LandingPage() {
           </nav>
 
           <div className="landing-hero-grid relative grid flex-1 gap-10 py-5 lg:grid-cols-[minmax(380px,0.7fr)_minmax(620px,1.3fr)] lg:items-center xl:grid-cols-[minmax(430px,0.72fr)_minmax(680px,1.28fr)] xl:gap-16 2xl:gap-16 2xl:py-5">
-            <div className="relative z-10 min-w-0 max-w-[500px] xl:max-w-[520px] lg:-translate-y-1">
+            <div className="landing-hero-copy-column relative z-10 min-w-0 max-w-[500px] xl:max-w-[520px] lg:-translate-y-1">
               <h1 className="landing-hero-title text-[clamp(3rem,11vw,4.25rem)] font-black leading-[0.98] tracking-[-0.055em] text-[#07142a] 2xl:text-[4.5rem]">
                 <span className="block drop-shadow-[0_3px_0_rgba(148,190,255,0.45)]">Never miss a call again</span>
                 <span className="mt-4 block text-[0.58em] leading-none tracking-[-0.045em] text-[#d91d12] sm:mt-5">
@@ -5220,20 +5336,51 @@ function LandingPage() {
                 </span>
               </h1>
 
-              <div className="landing-hero-points mt-8 space-y-3 sm:mt-10">
+              <p className="landing-hero-coverage mt-4 inline-block border-l-4 border-[#17951f] bg-[#e1f8e5]/90 px-3 py-2 text-[1.05rem] font-black leading-tight text-[#147d1b]">
+                We&apos;ve got you covered 24/7.
+              </p>
+
+              <div className="landing-hero-points landing-hero-points-clean mt-5 space-y-3">
                 {[
-                  ["phone", "Answers while you're on the job, driving, or with family"],
-                  ["faq", "Answers questions about your hours, service area, estimates, and warranties"],
-                  ["clipboard", "Gets the problem, address, urgency, timing, and callback number"],
-                  ["sms", "Texts you the details so you can quote and schedule faster"],
-                ].map(([icon, label]) => (
-                  <div key={label} className="landing-hero-point flex items-center gap-4 text-[1rem] font-semibold text-[#111827] 2xl:text-[1.06rem]">
-                    <span className="landing-hero-point-icon grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#0c4da0] text-white shadow-[0_10px_28px_-16px_rgba(59,130,246,1)]">
-                      <HeroIcon type={icon} className="h-5 w-5" />
+                  "Every call answered professionally after 3 rings",
+                  "Answers FAQs and speaks naturally with customers",
+                  "Collects complete job and callback details",
+                  "Texts you the details and sends the customer a thank-you reminder",
+                ].map((label) => (
+                  <div key={label} className="landing-hero-point landing-hero-point-clean grid grid-cols-[2rem_minmax(0,1fr)] items-center gap-3 text-[0.94rem] font-bold leading-[1.25] text-[#111827] 2xl:text-[1rem]">
+                    <span className="landing-hero-point-icon landing-hero-point-check grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#0c4da0] text-[0.88rem] font-black text-white shadow-[0_10px_28px_-16px_rgba(59,130,246,1)]" aria-hidden="true">
+                      ✓
                     </span>
                     <span>{label}</span>
                   </div>
                 ))}
+              </div>
+
+              <div className="landing-hero-actions mt-5">
+                <div className="flex flex-col gap-2.5 sm:flex-row">
+                  <button
+                    type="button"
+                    onClick={goToSignup}
+                    className="inline-flex min-h-[46px] items-center justify-center rounded-xl bg-[linear-gradient(180deg,#ff7a00,#ff6500)] px-5 text-[0.86rem] font-black text-white shadow-[0_16px_32px_-22px_rgba(255,106,0,0.95)] transition hover:-translate-y-0.5 hover:brightness-110"
+                  >
+                    Start Your Free Trial
+                  </button>
+                  <button
+                    type="button"
+                    onClick={playDemo}
+                    className="inline-flex min-h-[46px] items-center justify-center rounded-xl border border-[#79aee0] bg-white/80 px-5 text-[0.86rem] font-black text-[#0c5fc3] transition hover:-translate-y-0.5 hover:bg-white"
+                  >
+                    Hear the Live Demo
+                  </button>
+                </div>
+                <div className="landing-hero-trust mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-[0.68rem] font-black text-[#294967]">
+                  {["14-Day Free Trial", "No Credit Card", "Cancel Anytime"].map((label) => (
+                    <span key={label} className="inline-flex items-center gap-1.5">
+                      <span className="text-[#17951f]" aria-hidden="true">✓</span>
+                      {label}
+                    </span>
+                  ))}
+                </div>
               </div>
             </div>
 
