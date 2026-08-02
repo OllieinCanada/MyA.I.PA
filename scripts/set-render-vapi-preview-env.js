@@ -11,6 +11,7 @@ const confirmation = args.find((arg) => arg.startsWith("--confirm="))?.slice("--
 const confirmationPhrase = "SET_RENDER_VAPI_PREVIEW";
 const serviceId = String(env.RENDER_SERVICE_ID || "").trim();
 const assistantId = String(env.VAPI_PREVIEW_ASSISTANT_ID || "").trim();
+const maxDurationSeconds = 60;
 const renderConfigPath = path.join(process.env.USERPROFILE || process.env.HOME || "", ".render", "cli.yaml");
 
 function hash(value) {
@@ -72,8 +73,9 @@ async function main() {
   console.log(JSON.stringify({
     mode: apply ? "apply" : "dry-run",
     serviceId,
-    key: "VAPI_PREVIEW_ASSISTANT_ID",
+    keys: ["VAPI_PREVIEW_ASSISTANT_ID", "VAPI_PREVIEW_MAX_DURATION_SECONDS"],
     assistantIdHash: hash(assistantId),
+    maxDurationSeconds,
   }, null, 2));
 
   if (!apply) {
@@ -85,20 +87,39 @@ async function main() {
   }
 
   const credentials = readRenderCredentials();
-  const endpoint = `/services/${encodeURIComponent(serviceId)}/env-vars/VAPI_PREVIEW_ASSISTANT_ID`;
-  await renderRequest(credentials, endpoint, {
+  const assistantEndpoint = `/services/${encodeURIComponent(serviceId)}/env-vars/VAPI_PREVIEW_ASSISTANT_ID`;
+  const durationEndpoint = `/services/${encodeURIComponent(serviceId)}/env-vars/VAPI_PREVIEW_MAX_DURATION_SECONDS`;
+  await renderRequest(credentials, assistantEndpoint, {
     method: "PUT",
     body: JSON.stringify({ value: assistantId }),
   });
-  const storedValue = envValue(await renderRequest(credentials, endpoint));
-  if (storedValue !== assistantId) throw new Error("Render did not return the expected stored value.");
+  await renderRequest(credentials, durationEndpoint, {
+    method: "PUT",
+    body: JSON.stringify({ value: String(maxDurationSeconds) }),
+  });
+  const storedAssistantId = envValue(await renderRequest(credentials, assistantEndpoint));
+  const storedDuration = envValue(await renderRequest(credentials, durationEndpoint));
+  if (storedAssistantId !== assistantId || storedDuration !== String(maxDurationSeconds)) {
+    throw new Error("Render did not return the expected preview environment values.");
+  }
+  const deploy = await renderRequest(
+    credentials,
+    `/services/${encodeURIComponent(serviceId)}/deploys`,
+    {
+      method: "POST",
+      body: JSON.stringify({ deployMode: "deploy_only" }),
+    }
+  );
 
   console.log(JSON.stringify({
     ok: true,
     serviceId,
-    key: "VAPI_PREVIEW_ASSISTANT_ID",
-    valueVerified: true,
+    keys: ["VAPI_PREVIEW_ASSISTANT_ID", "VAPI_PREVIEW_MAX_DURATION_SECONDS"],
+    valuesVerified: true,
     assistantIdHash: hash(assistantId),
+    maxDurationSeconds,
+    deployId: deploy?.id || deploy?.deploy?.id || "",
+    deployStatus: deploy?.status || deploy?.deploy?.status || "requested",
   }, null, 2));
 }
 

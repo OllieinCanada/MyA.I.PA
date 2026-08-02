@@ -77,7 +77,7 @@ export default function TryDemo() {
           <section className="mx-auto max-w-5xl pb-12 pt-8 sm:pt-14" aria-labelledby="demo-title">
             <div className="text-center">
               <div className="inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50/80 px-4 py-2 text-xs font-black uppercase tracking-[0.16em] text-blue-700">
-                30-second live voice demo
+                1-minute live voice demo
               </div>
               <h1 id="demo-title" className="mx-auto mt-5 max-w-4xl text-[clamp(2.35rem,6vw,5rem)] font-black leading-[0.98] tracking-[-0.055em] text-slate-950">
                 Hear My AI PA answer for your business.
@@ -180,7 +180,7 @@ export default function TryDemo() {
 
                 <div className="grid gap-4 border-t border-slate-100 pt-6 sm:grid-cols-[1fr_auto] sm:items-center">
                   <p className="text-sm font-semibold leading-6 text-slate-500">
-                    Your answers personalize this demo only. The 30-second call is not recorded.
+                    Your answers personalize this demo only. The 1-minute call is not recorded.
                   </p>
                   <button
                     type="submit"

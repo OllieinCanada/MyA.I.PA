@@ -55,7 +55,7 @@ function buildPreviewPayload(sourceAssistant) {
   if (!sourceAssistant?.transcriber) throw new Error("The source assistant has no transcriber configuration to clone.");
   return {
     name: previewName,
-    firstMessage: "Hi, thanks for calling {{businessName}}. How can I help you today?",
+    firstMessage: "Hi, thanks for calling {{businessName}}. Do you need an installation, repair, or maintenance today?",
     firstMessageMode: "assistant-speaks-first",
     firstMessageInterruptionsEnabled: true,
     transcriber: sourceAssistant.transcriber,
@@ -69,7 +69,9 @@ function buildPreviewPayload(sourceAssistant) {
           role: "system",
           content: [
             "You are the safe, short My AI PA signup preview for {{businessName}}, a {{trade}} serving {{serviceArea}}.",
-            "This is only a website demonstration. Answer one simple customer-style question naturally in no more than 25 words.",
+            "This is only a website demonstration. Have one brief, natural service conversation and keep every response under 25 words.",
+            "If the caller says installation, repair, or maintenance, acknowledge it and ask one relevant follow-up question.",
+            "If the caller asks a simple customer-style question, answer it briefly and naturally.",
             "Do not book appointments, send messages, call tools, collect contact details, promise follow-up, or claim any action was completed.",
             "If asked to perform an action, say this is a short preview and the full assistant can be configured after signup.",
             "Remain friendly, professional, and concise.",
@@ -78,7 +80,7 @@ function buildPreviewPayload(sourceAssistant) {
       ],
       tools: [],
     },
-    maxDurationSeconds: 30,
+    maxDurationSeconds: 60,
     backgroundSound: "off",
     voicemailDetection: "off",
     artifactPlan: {
@@ -138,7 +140,7 @@ async function main() {
     : await request("/assistant", { method: "POST", body: desired });
   const verified = await request(`/assistant/${encodeURIComponent(saved.id)}`);
   const toolCount = Array.isArray(verified?.model?.tools) ? verified.model.tools.length : 0;
-  if (toolCount !== 0 || verified?.artifactPlan?.recordingEnabled !== false || Number(verified?.maxDurationSeconds) !== 30) {
+  if (toolCount !== 0 || verified?.artifactPlan?.recordingEnabled !== false || Number(verified?.maxDurationSeconds) !== 60) {
     throw new Error("Vapi preview assistant read-back failed its safety checks.");
   }
 

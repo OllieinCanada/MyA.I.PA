@@ -11,7 +11,9 @@ const env = loadProjectEnv();
 process.env.VAPI_API_KEY = String(env.VAPI_API_KEY || "").trim();
 process.env.VAPI_API_BASE_URL = String(env.VAPI_API_BASE_URL || "https://api.vapi.ai").trim();
 process.env.VAPI_PREVIEW_ASSISTANT_ID = previewAssistantId;
-process.env.VAPI_PREVIEW_MAX_DURATION_SECONDS = "30";
+process.env.VAPI_PREVIEW_MAX_DURATION_SECONDS = "60";
+process.env.NODE_ENV = "test";
+process.env.SECURITY_STATE_FORCE_DATABASE = "false";
 process.env.VAPI_AUTO_SYNC_ENABLED = "false";
 process.env.TRIAL_REMINDER_DISABLE = "true";
 process.env.MISSED_CALL_ALERT_ENABLED = "false";
@@ -40,7 +42,7 @@ async function main() {
     const config = await response.json();
     assert.equal(config.enabled, true);
     assert.equal(config.assistantId, previewAssistantId);
-    assert.equal(config.maxDurationSeconds, 30);
+    assert.equal(config.maxDurationSeconds, 60);
     assert.equal(config.maxConcurrentCalls, 2);
 
     const sessionResponse = await fetch(`${baseUrl}/api/public/vapi-preview-session`, {
@@ -56,7 +58,7 @@ async function main() {
     assert.match(sessionResponse.headers.get("cache-control") || "", /no-store/);
     const payload = await sessionResponse.json();
     assert.equal(payload.assistantId, previewAssistantId);
-    assert.equal(payload.maxDurationSeconds, 30);
+    assert.equal(payload.maxDurationSeconds, 60);
     assert.ok(payload.token);
     assert.match(payload.sessionId, /^[a-f0-9]{36}$/);
 

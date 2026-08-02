@@ -210,7 +210,7 @@ services:
       - key: VAPI_PREVIEW_ASSISTANT_ID
         sync: false
       - key: VAPI_PREVIEW_MAX_DURATION_SECONDS
-        value: 30
+        value: 60
       - key: VAPI_CALL_LIMIT
         value: 100
       - key: VAPI_DEFAULT_BUSINESS_ID

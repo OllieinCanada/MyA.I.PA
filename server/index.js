@@ -202,7 +202,7 @@ const VAPI_API_BASE_URL = String(process.env.VAPI_API_BASE_URL || "https://api.v
 const VAPI_PREVIEW_ASSISTANT_ID = String(process.env.VAPI_PREVIEW_ASSISTANT_ID || "").trim();
 const VAPI_PREVIEW_MAX_DURATION_SECONDS = Math.max(
   15,
-  Math.min(60, Number(process.env.VAPI_PREVIEW_MAX_DURATION_SECONDS || 30) || 30)
+  Math.min(60, Number(process.env.VAPI_PREVIEW_MAX_DURATION_SECONDS || 60) || 60)
 );
 const VAPI_CALL_LIMIT = Math.max(1, Math.min(1000, Number(process.env.VAPI_CALL_LIMIT || 100) || 100));
 const VAPI_DEFAULT_BUSINESS_ID = parsePositiveInt(process.env.VAPI_DEFAULT_BUSINESS_ID, 1);

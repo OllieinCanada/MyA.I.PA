@@ -299,7 +299,7 @@ function Benefit({ icon, children }) {
 
 function Stepper({ currentStep }) {
   return (
-    <div className="mx-auto mt-3 flex w-full max-w-full snap-x items-center justify-start gap-2 overflow-x-auto px-1 pb-1 sm:max-w-[590px] sm:justify-center sm:gap-3 sm:overflow-visible sm:px-3 sm:pb-0">
+    <div className="signup-macro-stepper mx-auto mt-3 flex w-full max-w-full snap-x items-center justify-start gap-2 overflow-x-auto px-1 pb-1 sm:max-w-[590px] sm:justify-center sm:gap-3 sm:overflow-visible sm:px-3 sm:pb-0">
       {SETUP_STEPS.map((step, index) => (
         <React.Fragment key={step.number}>
           <div className="flex shrink-0 snap-center items-center gap-2 sm:gap-3">
@@ -320,6 +320,36 @@ function Stepper({ currentStep }) {
           {index < SETUP_STEPS.length - 1 ? <div className="h-px w-8 shrink-0 bg-slate-200 sm:w-24" /> : null}
         </React.Fragment>
       ))}
+    </div>
+  );
+}
+
+function MobileSignupProgress({ currentStep, businessSlide, tradeSetupPanel }) {
+  const stepNumber = currentStep === 1 ? businessSlide : currentStep === 2 ? 6 : 7;
+  const title =
+    currentStep === 2
+      ? "Try your assistant"
+      : currentStep === 3
+        ? "Review and start"
+        : businessSlide === 1
+          ? tradeSetupPanel === "trade" ? "Choose your trade" : "Choose work types"
+          : businessSlide === 2
+            ? "Choose service areas"
+            : businessSlide === 3
+              ? "Add business details"
+              : businessSlide === 4
+                ? "Set your pricing"
+                : "Review your setup";
+
+  return (
+    <div className="signup-mobile-progress" aria-label={`Step ${stepNumber} of 7: ${title}`}>
+      <div className="signup-mobile-progress-copy">
+        <span>Step {stepNumber} of 7</span>
+        <strong>{title}</strong>
+      </div>
+      <div className="signup-mobile-progress-track" aria-hidden="true">
+        <span style={{ width: `${(stepNumber / 7) * 100}%` }} />
+      </div>
     </div>
   );
 }
@@ -391,7 +421,7 @@ function SpecializationCard({ item, selected, onClick }) {
   );
 }
 
-function LabeledInput({ label, icon, value, onChange, onBlur, placeholder, type = "text", className = "", error = "" }) {
+function LabeledInput({ label, icon, value, onChange, onBlur, placeholder, type = "text", className = "", error = "", autoComplete, inputMode }) {
   const inputId = `${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-input`;
   const errorId = `${inputId}-error`;
 
@@ -414,6 +444,8 @@ function LabeledInput({ label, icon, value, onChange, onBlur, placeholder, type 
           onChange={onChange}
           onBlur={onBlur}
           placeholder={placeholder}
+          autoComplete={autoComplete}
+          inputMode={inputMode}
           aria-invalid={Boolean(error)}
           aria-describedby={error ? errorId : undefined}
           className="min-w-0 flex-1 bg-transparent text-base font-medium text-slate-950 outline-none placeholder:text-slate-400"
@@ -641,8 +673,16 @@ export function VoiceDemoStep({ agent, businessName, trade, areas, standalone = 
   const safeBusinessName = String(businessName || "").trim().slice(0, 80) || "your business";
   const tradeLabel = String(trade?.label || "Trade business").trim();
   const primaryArea = Array.isArray(areas) && areas.length ? String(areas[0]) : "Southern Ontario";
-  const greeting = `Hi, thanks for calling ${safeBusinessName}. How can I help you today?`;
-  const maxDurationSeconds = Math.max(15, Math.min(60, Number(previewConfig?.maxDurationSeconds || 30) || 30));
+  const greeting = standalone
+    ? `Hi, thanks for calling ${safeBusinessName}. Do you need an installation, repair, or maintenance today?`
+    : `Hi, thanks for calling ${safeBusinessName}. How can I help you today?`;
+  const configuredMaxDurationSeconds = Math.max(
+    15,
+    Math.min(60, Number(previewConfig?.maxDurationSeconds || (standalone ? 60 : 30)) || (standalone ? 60 : 30))
+  );
+  const maxDurationSeconds = standalone
+    ? configuredMaxDurationSeconds
+    : Math.min(30, configuredMaxDurationSeconds);
   const callIsActive = callState === "connecting" || callState === "active" || callState === "ending";
 
   useEffect(() => {
@@ -770,7 +810,16 @@ export function VoiceDemoStep({ agent, businessName, trade, areas, standalone = 
         throw new Error(session?.error || `The live preview could not start (HTTP ${sessionResponse.status}).`);
       }
       previewSessionIdRef.current = String(session.sessionId);
-      const sessionMaxDurationSeconds = Math.max(15, Math.min(60, Number(session.maxDurationSeconds || previewConfig.maxDurationSeconds) || 30));
+      const sessionDurationLimit = Math.max(
+        15,
+        Math.min(
+          60,
+          Number(session.maxDurationSeconds || previewConfig.maxDurationSeconds) || (standalone ? 60 : 30)
+        )
+      );
+      const sessionMaxDurationSeconds = standalone
+        ? sessionDurationLimit
+        : Math.min(30, sessionDurationLimit);
       const vapi = new Vapi(String(session.token));
       vapiRef.current = vapi;
       vapi.on("call-start", () => {
@@ -843,39 +892,43 @@ export function VoiceDemoStep({ agent, businessName, trade, areas, standalone = 
   };
 
   return (
-    <section className="mt-5 grid gap-6">
-      <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white/96 shadow-[0_34px_90px_-70px_rgba(15,23,42,0.8)]">
-        <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/70 px-5 py-4 sm:px-8">
+    <section className="signup-voice-step mt-5 grid gap-6">
+      <div className="signup-voice-shell overflow-hidden rounded-3xl border border-slate-200 bg-white/96 shadow-[0_34px_90px_-70px_rgba(15,23,42,0.8)]">
+        <div className="signup-voice-desktop-head flex items-center justify-between border-b border-slate-100 bg-slate-50/70 px-5 py-4 sm:px-8">
           <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">
-            {standalone ? "Personalized live demo" : "Live voice preview"}
+            {standalone ? "1-minute live voice demo" : "Live voice preview"}
           </p>
           <p className="text-xs font-black text-slate-400">{standalone ? "Ready to try" : "2 of 3"}</p>
         </div>
 
-        <div className="grid gap-6 p-5 sm:p-8 lg:grid-cols-[360px_minmax(0,1fr)] lg:p-10 xl:grid-cols-[390px_minmax(0,1fr)]">
-          <div className="flex flex-col justify-between rounded-3xl border border-blue-100 bg-blue-50/70 p-5 sm:p-8">
+        <div className="signup-voice-layout grid gap-6 p-5 sm:p-8 lg:grid-cols-[360px_minmax(0,1fr)] lg:p-10 xl:grid-cols-[390px_minmax(0,1fr)]">
+          <div className="signup-voice-intro flex flex-col justify-between rounded-3xl border border-blue-100 bg-blue-50/70 p-5 sm:p-8">
             <div>
               <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">
                 {standalone ? "Your demo" : "Step 2"}
               </p>
-              <h2 className="mt-2 text-[clamp(2rem,3vw,3.1rem)] font-black leading-tight tracking-[-0.04em] text-slate-950">Try your assistant</h2>
+              <h2 className="mt-2 text-[clamp(2rem,3vw,3.1rem)] font-black leading-tight tracking-[-0.04em] text-slate-950">Try your assistant<span className="sm:hidden"> (optional)</span></h2>
               <p className="mt-4 text-lg font-medium leading-8 text-slate-600">
                 Have a quick conversation using your microphone before you launch.
               </p>
             </div>
-            <div className="mt-7 rounded-2xl border border-blue-100 bg-white/85 p-4">
+            <div className="signup-voice-business-card mt-7 rounded-2xl border border-blue-100 bg-white/85 p-4">
               <p className="text-xs font-black uppercase tracking-[0.14em] text-blue-600">Set up for</p>
               <p className="mt-2 text-lg font-black text-slate-950">{safeBusinessName}</p>
               <p className="mt-1 text-sm font-bold text-slate-500">{tradeLabel} · {primaryArea}</p>
             </div>
           </div>
 
-          <div className="rounded-3xl border border-blue-100 bg-gradient-to-br from-blue-50/80 to-violet-50/80 p-5 sm:p-7">
+          <div className="signup-voice-call-card rounded-3xl border border-blue-100 bg-gradient-to-br from-blue-50/80 to-violet-50/80 p-5 sm:p-7">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <div className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">Quick browser call</div>
                 <div className="mt-2 text-2xl font-black tracking-[-0.03em] text-slate-950">{agent.label}</div>
-                <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">Ask one short question, just like a customer would.</p>
+                <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">
+                  {standalone
+                    ? "Your assistant will ask whether you need an installation, repair, or maintenance today."
+                    : "Ask one short question, just like a customer would."}
+                </p>
               </div>
               <span
                 className={
@@ -912,13 +965,13 @@ export function VoiceDemoStep({ agent, businessName, trade, areas, standalone = 
             </div>
 
             <div className="mt-6 rounded-2xl border border-white/90 bg-white/90 p-4 shadow-[0_22px_55px_-42px_rgba(15,23,42,0.8)] sm:p-5">
-              <div className="grid gap-4 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center">
+              <div className="signup-voice-call-control grid gap-4 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center">
                 <button
                   type="button"
                   onClick={callIsActive ? stopLiveCall : startLiveCall}
                   disabled={callState === "loading" || callState === "unavailable" || callState === "ending"}
                   className={
-                    "group grid h-20 w-20 place-items-center rounded-2xl text-white transition focus:outline-none focus:ring-4 " +
+                    "signup-voice-call-button group grid h-20 w-20 place-items-center rounded-2xl text-white transition focus:outline-none focus:ring-4 " +
                     (callState === "active"
                       ? "bg-rose-600 shadow-[0_22px_45px_-24px_rgba(225,29,72,0.95)] hover:bg-rose-700 focus:ring-rose-200"
                       : callState === "loading" || callState === "unavailable"
@@ -931,8 +984,11 @@ export function VoiceDemoStep({ agent, businessName, trade, areas, standalone = 
                     name="phone"
                     className={`h-8 w-8 ${callState === "active" ? "rotate-[135deg]" : ""}`}
                   />
+                  <span className="hidden sm:hidden">
+                    {callIsActive ? "End test call" : "Start test call"}
+                  </span>
                 </button>
-                <div>
+                <div className="signup-voice-call-copy">
                   <p className="text-lg font-black text-slate-950">
                     {callState === "active"
                       ? assistantSpeaking
@@ -944,7 +1000,9 @@ export function VoiceDemoStep({ agent, businessName, trade, areas, standalone = 
                           ? "Ending the test call…"
                           : callState === "unavailable"
                             ? "Live test is not configured yet"
-                            : "Start a quick test call"}
+                            : standalone
+                              ? "Start my 1-minute demo"
+                              : "Start a quick test call"}
                   </p>
                   <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">
                     {callState === "active"
@@ -1047,7 +1105,7 @@ export function VoiceDemoStep({ agent, businessName, trade, areas, standalone = 
             <Icon name="info" className="h-5 w-5 shrink-0 text-blue-600" />
             <span>
               {standalone
-                ? "This 30-second demo uses your browser microphone and is not recorded. The backup recording works without microphone access."
+                ? "This 1-minute demo uses your browser microphone and is not recorded. The backup recording works without microphone access."
                 : "This optional preview uses your browser microphone. If it is unavailable, you can still continue setup normally."}
             </span>
           </div>
@@ -1063,7 +1121,12 @@ function ReviewPanel({ trade, areas, specializations, voice, details, pricing, o
   const optionItems = [
     ["Trade", trade.label, () => onEditBusinessSlide?.(1, "trade")],
     ["Service area", areas.join(", "), () => onEditBusinessSlide?.(2)],
-    ["Pricing script", pricingScript, () => onEditBusinessSlide?.(4)],
+    [
+      "Pricing script",
+      pricingScript,
+      () => onEditBusinessSlide?.(4),
+      `${pricing?.installationFreeEstimate !== false ? "Free install estimates · " : ""}$${pricing?.repairVisitFee || "100"} visit · $${pricing?.repairHourlyRate || "100"}/hour`,
+    ],
     ["Specializations", specializations.join(", "), () => onEditBusinessSlide?.(1, "specialization")],
     ["Assistant voice", voice.label, onEditVoice],
   ];
@@ -1073,18 +1136,21 @@ function ReviewPanel({ trade, areas, specializations, voice, details, pricing, o
       <h2 className="text-xl font-black tracking-[-0.02em] text-slate-950">Review your setup</h2>
       <p className="mt-1 text-sm font-medium text-slate-500">Confirm the basics before we send the setup brief.</p>
       <div className="mt-5 grid gap-3 sm:grid-cols-2">
-        {optionItems.map(([label, value, onEdit]) => (
+        {optionItems.map(([label, value, onEdit, mobileValue]) => (
           <div key={label} className="rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="text-xs font-black uppercase tracking-[0.14em] text-slate-400">{label}</div>
-                <div className="mt-1 text-sm font-bold text-slate-950">{value || "Not added yet"}</div>
+                <div className="mt-1 text-sm font-bold text-slate-950">
+                  <span className="signup-review-value-desktop">{value || "Not added yet"}</span>
+                  <span className="signup-review-value-mobile">{mobileValue || value || "Not added yet"}</span>
+                </div>
               </div>
               {onEdit ? (
                 <button
                   type="button"
                   onClick={onEdit}
-                  className="rounded-lg border border-blue-100 bg-white px-3 py-1 text-xs font-black uppercase tracking-[0.08em] text-blue-600 transition hover:border-blue-300 hover:bg-blue-50"
+                  className="signup-review-edit-link rounded-lg border border-blue-100 bg-white px-3 py-1 text-xs font-black uppercase tracking-[0.08em] text-blue-600 transition hover:border-blue-300 hover:bg-blue-50"
                 >
                   Change
                 </button>
@@ -1094,7 +1160,7 @@ function ReviewPanel({ trade, areas, specializations, voice, details, pricing, o
         ))}
 
         {onUpdateDetails ? (
-          <>
+          <div className="signup-review-edit-fields contents">
             <LabeledInput
               label="Business name"
               icon="briefcase"
@@ -1169,7 +1235,7 @@ function ReviewPanel({ trade, areas, specializations, voice, details, pricing, o
               placeholder="M5V 2T6"
               error={getFieldError?.("postalCode") || ""}
             />
-          </>
+          </div>
         ) : (
           <>
             <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3">
@@ -1194,6 +1260,30 @@ function ReviewPanel({ trade, areas, specializations, voice, details, pricing, o
             </div>
           </>
         )}
+        {onUpdateDetails ? (
+          <div className="signup-mobile-review-contact rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-xs font-black uppercase tracking-[0.14em] text-slate-400">Business and contact</div>
+                <div className="mt-1 text-sm font-bold leading-6 text-slate-950">
+                  {details.businessName || "Not added yet"}<br />
+                  <span className="font-semibold text-slate-600">{details.ownerName} · {details.phone}</span><br />
+                  <span className="font-semibold text-slate-600">{details.email}</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => onEditBusinessSlide?.(3)}
+                className="signup-review-edit-link min-h-[44px] rounded-lg border border-blue-100 bg-white px-3 text-xs font-black uppercase tracking-[0.08em] text-blue-600"
+              >
+                Edit
+              </button>
+            </div>
+            <div className="mt-3 border-t border-slate-200 pt-3 text-sm font-semibold leading-6 text-slate-600">
+              {businessAddress || "No business address added"}
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );
@@ -1632,6 +1722,40 @@ export default function Signup() {
   const maxBusinessSlide = businessValidation.isValid && selectedAreas.length > 0 ? 5 : selectedAreas.length > 0 ? 3 : 2;
   const voiceStepDisabled = false;
   const securityStepDisabled = Boolean(CAPTCHA_PROVIDER && !captchaToken);
+  const mobilePrimaryLabel =
+    currentStep === 2
+      ? "Review setup"
+      : currentStep === 3
+        ? "Start my free 14-day trial"
+        : businessSlide === 1
+          ? tradeSetupPanel === "trade" ? "Choose work types" : "Continue to service area"
+          : businessSlide === 2
+            ? "Continue to business details"
+            : businessSlide === 3
+              ? "Continue to pricing"
+              : businessSlide === 4
+                ? "Review setup"
+                : "Try your assistant";
+  const mobilePrimaryDisabled = currentStep === 1 ? businessSlideDisabled : currentStep === 2 ? voiceStepDisabled : securityStepDisabled;
+
+  const goBackFromMobileStep = () => {
+    setError("");
+    if (currentStep === 3) {
+      setCurrentStep(2);
+      return;
+    }
+    if (currentStep === 2) {
+      setCurrentStep(1);
+      setBusinessSlide(5);
+      return;
+    }
+    if (businessSlide > 1) {
+      setBusinessSlide((slide) => Math.max(1, slide - 1));
+      if (businessSlide === 2) setTradeSetupPanel("specialization");
+      return;
+    }
+    if (tradeSetupPanel === "specialization") setTradeSetupPanel("trade");
+  };
 
   const updateDetails = (field) => (event) => {
     setDetails((prev) => ({ ...prev, [field]: event.target.value }));
@@ -1754,6 +1878,11 @@ export default function Signup() {
         setBusinessStepAttempted(true);
         setTouchedDetails({ ownerName: true, businessName: true, phone: true, email: true, streetAddress: true, city: true, province: true, postalCode: true });
         setError("Please complete the business details properly before continuing.");
+        window.requestAnimationFrame?.(() => {
+          const firstInvalid = document.querySelector("#signup-business-details [aria-invalid='true']");
+          firstInvalid?.focus();
+          firstInvalid?.scrollIntoView?.({ behavior: "smooth", block: "center" });
+        });
         return;
       }
       if (businessSlide === 3) {
@@ -1947,6 +2076,426 @@ export default function Signup() {
               animation: none;
             }
           }
+
+          .signup-mobile-progress,
+          .signup-mobile-action-bar,
+          .signup-mobile-selected-count,
+          .signup-mobile-field-group,
+          .signup-mobile-review-contact {
+            display: none;
+          }
+
+          .signup-review-value-mobile {
+            display: none;
+          }
+
+          @media (max-width: 639px) {
+            .signup-mobile-flow {
+              min-height: 100dvh;
+              padding: 0 16px calc(128px + env(safe-area-inset-bottom));
+            }
+
+            .signup-page-header {
+              padding: 14px 0 10px;
+              text-align: left;
+            }
+
+            .signup-page-header h1 {
+              font-size: 1.65rem;
+              line-height: 1.08;
+              letter-spacing: -0.035em;
+            }
+
+            .signup-page-header > p,
+            .signup-page-benefits,
+            .signup-macro-stepper,
+            .signup-desktop-tabs,
+            .signup-task-explainer,
+            .signup-inline-actions,
+            .signup-inline-action,
+            .signup-desktop-action-footer,
+            .signup-privacy-footer {
+              display: none !important;
+            }
+
+            .signup-mobile-progress {
+              display: block;
+              border-top: 1px solid #e2e8f0;
+              padding: 10px 0 12px;
+            }
+
+            .signup-mobile-progress-copy {
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              gap: 12px;
+              font-size: 0.82rem;
+              line-height: 1.2;
+            }
+
+            .signup-mobile-progress-copy span {
+              color: #2563eb;
+              font-weight: 800;
+              white-space: nowrap;
+            }
+
+            .signup-mobile-progress-copy strong {
+              min-width: 0;
+              overflow: hidden;
+              color: #0f172a;
+              font-weight: 800;
+              text-overflow: ellipsis;
+              white-space: nowrap;
+            }
+
+            .signup-mobile-progress-track {
+              height: 4px;
+              margin-top: 8px;
+              overflow: hidden;
+              border-radius: 999px;
+              background: #dbeafe;
+            }
+
+            .signup-mobile-progress-track span {
+              display: block;
+              height: 100%;
+              border-radius: inherit;
+              background: linear-gradient(90deg, #2563eb, #7c3aed);
+              transition: width 240ms ease;
+            }
+
+            .signup-task-section {
+              margin-top: 0;
+            }
+
+            .signup-task-shell {
+              border: 0;
+              border-radius: 0;
+              background: transparent;
+              box-shadow: none;
+            }
+
+            .signup-task-window {
+              display: block;
+              overflow: visible;
+              padding: 10px 0 20px;
+              animation-duration: 280ms;
+            }
+
+            .signup-task-window::after {
+              display: none;
+            }
+
+            .signup-task-layout {
+              display: block;
+            }
+
+            .signup-task-content {
+              display: block;
+              border: 0;
+              border-radius: 0;
+            }
+
+            .signup-task-content-title {
+              margin-bottom: 14px;
+            }
+
+            .signup-task-content-title p:first-child {
+              font-size: 0.75rem;
+            }
+
+            .signup-task-content-title p:last-child {
+              margin-top: 4px;
+              font-size: 1rem;
+              line-height: 1.5;
+            }
+
+            .signup-mobile-task-heading {
+              display: block;
+              margin-bottom: 14px;
+            }
+
+            .signup-mobile-task-heading h2 {
+              margin: 0;
+              color: #0f172a;
+              font-size: clamp(1.75rem, 8vw, 2rem);
+              font-weight: 900;
+              letter-spacing: -0.04em;
+              line-height: 1.05;
+            }
+
+            .signup-mobile-task-heading p {
+              margin-top: 7px;
+              color: #475569;
+              font-size: 1rem;
+              font-weight: 600;
+              line-height: 1.45;
+            }
+
+            .signup-trade-grid,
+            .signup-specialization-grid {
+              gap: 10px;
+            }
+
+            .signup-trade-grid > button {
+              min-height: 92px;
+              border-radius: 16px;
+              padding: 12px 8px;
+            }
+
+            .signup-specialization-grid > button {
+              min-height: 88px;
+              border-radius: 16px;
+              padding: 10px 8px;
+            }
+
+            .signup-area-list {
+              display: grid;
+              height: auto;
+              max-height: none;
+              overflow: visible;
+              padding: 0;
+            }
+
+            .signup-area-grid {
+              display: grid;
+              grid-template-columns: repeat(2, minmax(0, 1fr));
+              gap: 10px;
+            }
+
+            .signup-area-grid > button:not(.signup-inline-action) {
+              display: flex;
+              min-width: 0;
+              min-height: 48px;
+              align-items: center;
+              justify-content: space-between;
+              border-radius: 14px;
+              padding: 10px 12px;
+              font-size: 0.95rem;
+              line-height: 1.2;
+              text-align: left;
+            }
+
+            .signup-mobile-selected-count {
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              margin-bottom: 12px;
+              border-radius: 12px;
+              background: #eff6ff;
+              padding: 10px 12px;
+              color: #1d4ed8;
+              font-size: 0.9rem;
+              font-weight: 800;
+            }
+
+            .signup-business-fields {
+              display: block;
+            }
+
+            .signup-business-fields > label {
+              display: block;
+              margin-bottom: 16px;
+            }
+
+            .signup-business-fields label > span:nth-child(2) {
+              min-height: 52px;
+            }
+
+            .signup-mobile-field-group {
+              display: block;
+              margin: 6px 0 14px;
+              color: #1e40af;
+              font-size: 0.78rem;
+              font-weight: 900;
+              letter-spacing: 0.12em;
+              text-transform: uppercase;
+            }
+
+            .signup-mobile-field-group.address {
+              margin-top: 24px;
+              padding-top: 18px;
+              border-top: 1px solid #e2e8f0;
+            }
+
+            .signup-mobile-action-bar {
+              position: fixed;
+              right: 0;
+              bottom: 0;
+              left: 0;
+              z-index: 50;
+              display: grid;
+              grid-template-columns: minmax(92px, 0.36fr) minmax(0, 1fr);
+              gap: 10px;
+              border-top: 1px solid rgba(203, 213, 225, 0.9);
+              background: rgba(255, 255, 255, 0.96);
+              padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+              box-shadow: 0 -16px 34px -28px rgba(15, 23, 42, 0.65);
+              backdrop-filter: blur(14px);
+            }
+
+            .signup-mobile-action-bar.is-first-step {
+              grid-template-columns: 1fr;
+            }
+
+            .signup-mobile-action-bar button {
+              min-height: 52px;
+              border-radius: 14px;
+              font-size: 0.98rem;
+              font-weight: 900;
+            }
+
+            .signup-mobile-back {
+              border: 1px solid #cbd5e1;
+              background: #fff;
+              color: #334155;
+            }
+
+            .signup-mobile-primary {
+              display: inline-flex;
+              align-items: center;
+              justify-content: center;
+              gap: 8px;
+              border: 0;
+              background: linear-gradient(90deg, #2563eb, #4f46e5);
+              color: #fff;
+              box-shadow: 0 14px 30px -20px rgba(37, 99, 235, 0.95);
+            }
+
+            .signup-mobile-primary:disabled {
+              background: #cbd5e1;
+              color: #64748b;
+              box-shadow: none;
+            }
+
+            .signup-mobile-disabled-reason {
+              grid-column: 1 / -1;
+              margin: -3px 2px 0;
+              color: #64748b;
+              font-size: 0.78rem;
+              font-weight: 650;
+              line-height: 1.3;
+              text-align: right;
+            }
+
+            .signup-voice-step {
+              margin-top: 0;
+              gap: 0;
+            }
+
+            .signup-voice-shell {
+              border: 0;
+              border-radius: 0;
+              background: transparent;
+              box-shadow: none;
+            }
+
+            .signup-voice-desktop-head {
+              display: none;
+            }
+
+            .signup-voice-layout {
+              display: block;
+              padding: 10px 0 20px;
+            }
+
+            .signup-voice-intro {
+              border: 0;
+              border-radius: 0;
+              background: transparent;
+              padding: 0;
+            }
+
+            .signup-voice-intro h2 {
+              font-size: 1.9rem;
+            }
+
+            .signup-voice-intro > div:first-child > p:last-child {
+              margin-top: 7px;
+              font-size: 1rem;
+              line-height: 1.5;
+            }
+
+            .signup-voice-intro > div:first-child > p:first-child {
+              display: none;
+            }
+
+            .signup-voice-business-card {
+              margin-top: 14px;
+              border-radius: 14px;
+              padding: 14px;
+            }
+
+            .signup-voice-call-card {
+              margin-top: 14px;
+              border-radius: 18px;
+              padding: 16px;
+            }
+
+            .signup-voice-call-control {
+              display: block;
+            }
+
+            .signup-voice-call-button {
+              display: flex;
+              width: 100%;
+              height: 56px;
+              align-items: center;
+              justify-content: center;
+              gap: 10px;
+            }
+
+            .signup-voice-call-button svg {
+              width: 22px;
+              height: 22px;
+            }
+
+            .signup-voice-call-button span {
+              display: inline;
+              font-size: 1rem;
+              font-weight: 900;
+            }
+
+            .signup-voice-call-copy {
+              margin-top: 12px;
+            }
+
+            .signup-voice-call-copy > p:first-child {
+              display: none;
+            }
+
+            .signup-review-edit-fields {
+              display: none;
+            }
+
+            .signup-mobile-review-contact {
+              display: block;
+            }
+
+            .signup-review-value-desktop {
+              display: none;
+            }
+
+            .signup-review-value-mobile {
+              display: inline;
+            }
+
+            .signup-review-edit-link {
+              min-width: 76px;
+              min-height: 44px;
+              padding: 0 12px;
+              white-space: nowrap;
+            }
+
+            .signup-review-step {
+              margin-top: 0;
+              padding-top: 10px;
+            }
+
+            .signup-review-step .rounded-3xl {
+              border-radius: 16px;
+            }
+          }
         `}
       </style>
       <header className="hidden bg-[#020918] shadow-[0_24px_60px_-48px_rgba(15,23,42,0.85)]">
@@ -1955,14 +2504,14 @@ export default function Signup() {
         </div>
       </header>
 
-      <form onSubmit={submitSignup} className="mx-auto flex min-h-screen w-full max-w-[1680px] flex-col px-3 pb-5 pt-1 sm:px-6 lg:px-8">
-        <section className="shrink-0 text-center">
+      <form onSubmit={submitSignup} className="signup-mobile-flow mx-auto flex min-h-screen w-full max-w-[1680px] flex-col px-3 pb-5 pt-1 sm:px-6 lg:px-8">
+        <section className="signup-page-header shrink-0 text-center">
           <h1 className="text-[clamp(1.65rem,3.8vw,2.55rem)] font-black leading-tight tracking-[-0.04em] text-slate-950">
             Create your AI phone assistant
           </h1>
           <p className="mt-0.5 text-base font-medium text-slate-600 sm:text-lg">Set up your business assistant in minutes.</p>
 
-          <div className="mt-2 flex flex-wrap justify-center gap-x-8 gap-y-1.5">
+          <div className="signup-page-benefits mt-2 flex flex-wrap justify-center gap-x-8 gap-y-1.5">
             <Benefit icon="shield">Free for 14 days</Benefit>
             <Benefit icon="card">No credit card required</Benefit>
             <Benefit icon="refresh">Cancel anytime</Benefit>
@@ -1982,10 +2531,12 @@ export default function Signup() {
           <Stepper currentStep={currentStep} />
         </section>
 
+        <MobileSignupProgress currentStep={currentStep} businessSlide={businessSlide} tradeSetupPanel={tradeSetupPanel} />
+
         {currentStep === 1 ? (
-          <section className="mt-2 flex flex-1 flex-col">
-            <div className="flex flex-1 flex-col rounded-3xl border border-slate-200 bg-white/96 shadow-[0_34px_90px_-70px_rgba(15,23,42,0.8)]">
-              <div className="border-b border-slate-100 bg-slate-50/70 px-4 py-4 sm:px-8">
+          <section className="signup-task-section mt-2 flex flex-1 flex-col">
+            <div className="signup-task-shell flex flex-1 flex-col rounded-3xl border border-slate-200 bg-white/96 shadow-[0_34px_90px_-70px_rgba(15,23,42,0.8)]">
+              <div className="signup-desktop-tabs border-b border-slate-100 bg-slate-50/70 px-4 py-4 sm:px-8">
                 <div className="flex items-center justify-between gap-3">
                   <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">Business setup</p>
                   <p className="text-xs font-black text-slate-400">{businessSlide} of 5</p>
@@ -2023,10 +2574,10 @@ export default function Signup() {
                 </div>
               </div>
 
-              <div key={businessSlide} className="business-slide-window relative flex flex-1 p-5 sm:p-8 lg:p-10">
+              <div key={businessSlide} className="signup-task-window business-slide-window relative flex flex-1 p-5 sm:p-8 lg:p-10">
               {businessSlide === 1 ? (
-                <section className="grid w-full gap-6 lg:grid-cols-[360px_minmax(0,1fr)] xl:grid-cols-[390px_minmax(0,1fr)] lg:items-stretch">
-                  <div className="flex flex-col justify-center rounded-3xl border border-blue-100 bg-blue-50/70 p-8">
+                <section className="signup-task-layout grid w-full gap-6 lg:grid-cols-[360px_minmax(0,1fr)] xl:grid-cols-[390px_minmax(0,1fr)] lg:items-stretch">
+                  <div className="signup-task-explainer flex flex-col justify-center rounded-3xl border border-blue-100 bg-blue-50/70 p-8">
                     <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">Step 1</p>
                     <h2 className="mt-2 text-[clamp(2rem,3vw,3.1rem)] font-black leading-tight tracking-[-0.04em] text-slate-950">
                       {tradeSetupPanel === "trade" ? "Choose your trade" : "Choose specializations"}
@@ -2040,16 +2591,20 @@ export default function Signup() {
                       <span className="font-black text-blue-600">Selected:</span> {selectedTrade.label} for {selectedSpecializationLabels.join(", ").toLowerCase()} work.
                     </div>
                   </div>
-                  <div className="relative grid content-center">
+                  <div className="signup-task-content relative grid content-center">
                     {tradeSetupPanel === "trade" ? (
                     <div key="trade-panel" className="trade-choice-panel">
-                      <div className="mb-4 flex items-end justify-between gap-3">
+                      <div className="signup-mobile-task-heading">
+                        <h2>Choose your trade</h2>
+                        <p>Pick the main type of work your business handles.</p>
+                      </div>
+                      <div className="signup-task-content-title mb-4 flex items-end justify-between gap-3">
                         <div>
                           <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">Trade</p>
                           <p className="mt-1 text-sm font-semibold text-slate-500">Tap a trade to continue to specialization.</p>
                         </div>
                       </div>
-                      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:gap-5">
+                      <div className="signup-trade-grid grid grid-cols-2 gap-4 sm:grid-cols-3 xl:gap-5">
                         {TRADE_OPTIONS.map((trade) => (
                           <TradeCard
                             key={trade.id}
@@ -2062,7 +2617,11 @@ export default function Signup() {
                     </div>
                     ) : (
                     <div key="specialization-panel" className="trade-choice-panel grid gap-5">
-                      <div className="flex flex-wrap items-end justify-between gap-3">
+                      <div className="signup-mobile-task-heading">
+                        <h2>Choose work types</h2>
+                        <p>Select everything your assistant should answer calls about.</p>
+                      </div>
+                      <div className="signup-task-content-title flex flex-wrap items-end justify-between gap-3">
                         <div>
                           <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">Specialization</p>
                           <p className="mt-1 text-sm font-semibold text-slate-500">Choose at least one. You can select multiple.</p>
@@ -2078,7 +2637,7 @@ export default function Signup() {
                           Back to trades
                         </button>
                       </div>
-                      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-5 xl:gap-5">
+                      <div className="signup-specialization-grid grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-5 xl:gap-5">
                         {SPECIALIZATION_OPTIONS.map((item) => (
                           <SpecializationCard
                             key={item.id}
@@ -2089,9 +2648,9 @@ export default function Signup() {
                         ))}
                       </div>
 
-                      <div className="grid gap-3 sm:grid-cols-[1fr_220px] sm:items-center">
+                      <div className="signup-inline-actions grid gap-3 sm:grid-cols-[1fr_220px] sm:items-center">
                         <p className="text-sm font-semibold leading-6 text-slate-500">
-                          These choices are sent to Make.com and included in the assistant setup prompt.
+                          Your assistant will use these choices to recognize the work customers ask about.
                         </p>
                         <button
                           type="submit"
@@ -2114,22 +2673,30 @@ export default function Signup() {
               ) : null}
 
               {businessSlide === 2 ? (
-              <section className="grid min-h-0 w-full gap-6 lg:grid-cols-[360px_minmax(0,1fr)] xl:grid-cols-[390px_minmax(0,1fr)] lg:items-stretch">
-                <div className="flex flex-col justify-center rounded-3xl border border-blue-100 bg-blue-50/70 p-8">
+              <section className="signup-task-layout grid min-h-0 w-full gap-6 lg:grid-cols-[360px_minmax(0,1fr)] xl:grid-cols-[390px_minmax(0,1fr)] lg:items-stretch">
+                <div className="signup-task-explainer flex flex-col justify-center rounded-3xl border border-blue-100 bg-blue-50/70 p-8">
                   <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">Step 2</p>
                   <h2 className="mt-2 text-[clamp(2rem,3vw,3.1rem)] font-black leading-tight tracking-[-0.04em] text-slate-950">Service area</h2>
                   <p className="mt-4 text-lg font-medium leading-8 text-slate-600">Select the Southern Ontario areas you serve.</p>
                 </div>
-                <div className="min-h-0 overflow-hidden rounded-3xl">
-                  <div className="flex h-full max-h-[42vh] content-start items-start overflow-y-auto pr-2 pb-2 [scrollbar-width:thin] sm:max-h-[46vh] lg:max-h-full">
-                    <div className="flex flex-wrap content-start items-start gap-3 xl:gap-4">
+                <div className="signup-task-content min-h-0 overflow-hidden rounded-3xl">
+                  <div className="signup-mobile-task-heading">
+                    <h2>Where do you work?</h2>
+                    <p>Select every area where you take jobs.</p>
+                  </div>
+                  <div className="signup-mobile-selected-count">
+                    <span>Selected areas</span>
+                    <span>{selectedAreas.length}</span>
+                  </div>
+                  <div className="signup-area-list flex h-full max-h-[42vh] content-start items-start overflow-y-auto pr-2 pb-2 [scrollbar-width:thin] sm:max-h-[46vh] lg:max-h-full">
+                    <div className="signup-area-grid flex flex-wrap content-start items-start gap-3 xl:gap-4">
                       {AREA_OPTIONS.map((area) => (
                         <AreaChip key={area} area={area} selected={selectedAreas.includes(area)} onClick={() => toggleArea(area)} />
                       ))}
                       <button
                         type="button"
                         onClick={() => setBusinessSlide(1)}
-                        className="min-h-[54px] min-w-[160px] rounded-2xl border border-slate-200 bg-white px-6 py-3 text-base font-bold text-slate-600 transition hover:border-blue-300 hover:text-blue-600 sm:text-lg"
+                        className="signup-inline-action min-h-[54px] min-w-[160px] rounded-2xl border border-slate-200 bg-white px-6 py-3 text-base font-bold text-slate-600 transition hover:border-blue-300 hover:text-blue-600 sm:text-lg"
                       >
                         Back
                       </button>
@@ -2137,7 +2704,7 @@ export default function Signup() {
                         type="submit"
                         disabled={businessSlideDisabled || busy}
                         className={
-                          "inline-flex min-h-[54px] min-w-[260px] items-center justify-center gap-3 rounded-2xl px-6 py-3 text-base font-black text-white transition sm:text-lg " +
+                          "signup-inline-action inline-flex min-h-[54px] min-w-[260px] items-center justify-center gap-3 rounded-2xl px-6 py-3 text-base font-black text-white transition sm:text-lg " +
                           (businessSlideDisabled || busy
                             ? "cursor-not-allowed bg-slate-300"
                             : "bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 shadow-[0_16px_42px_-28px_rgba(79,70,229,0.95)] hover:-translate-y-0.5 hover:brightness-110")
@@ -2153,14 +2720,20 @@ export default function Signup() {
               ) : null}
 
               {businessSlide === 3 ? (
-              <section className="grid w-full gap-6 lg:grid-cols-[360px_minmax(0,1fr)] xl:grid-cols-[390px_minmax(0,1fr)] lg:items-stretch">
-                <div className="flex flex-col justify-center rounded-3xl border border-blue-100 bg-blue-50/70 p-8">
+              <section id="signup-business-details" className="signup-task-layout grid w-full gap-6 lg:grid-cols-[360px_minmax(0,1fr)] xl:grid-cols-[390px_minmax(0,1fr)] lg:items-stretch">
+                <div className="signup-task-explainer flex flex-col justify-center rounded-3xl border border-blue-100 bg-blue-50/70 p-8">
                   <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">Step 3</p>
                   <h2 className="mt-2 text-[clamp(2rem,3vw,3.1rem)] font-black leading-tight tracking-[-0.04em] text-slate-950">Business details</h2>
                   <p className="mt-4 text-lg font-medium leading-8 text-slate-600">Enter real, complete business details. These are required before you can continue.</p>
                   <p className="mt-4 text-sm font-semibold leading-6 text-slate-500">Street address, city, province, and postal code help us serve your callers better.</p>
                 </div>
-                <div className="grid content-start gap-4 sm:grid-cols-2 xl:grid-cols-4 xl:gap-5">
+                <div className="signup-task-content">
+                  <div className="signup-mobile-task-heading">
+                    <h2>Tell us about your business</h2>
+                    <p>We use these details to personalize your assistant.</p>
+                  </div>
+                  <div className="signup-business-fields grid content-start gap-4 sm:grid-cols-2 xl:grid-cols-4 xl:gap-5">
+                  <p className="signup-mobile-field-group">Contact</p>
                   <LabeledInput
                     label="Business owner's name"
                     icon="user"
@@ -2168,6 +2741,7 @@ export default function Signup() {
                     onChange={updateDetails("ownerName")}
                     onBlur={markDetailTouched("ownerName")}
                     placeholder="e.g., Jamie Smith"
+                    autoComplete="name"
                     error={getBusinessFieldError("ownerName")}
                   />
                   <LabeledInput
@@ -2177,6 +2751,7 @@ export default function Signup() {
                     onChange={updateDetails("businessName")}
                     onBlur={markDetailTouched("businessName")}
                     placeholder={`e.g., ${selectedTrade.label === "Electrician" ? "Smith Electrical Services" : `${selectedTrade.label} Services`}`}
+                    autoComplete="organization"
                     error={getBusinessFieldError("businessName")}
                   />
                   <LabeledInput
@@ -2186,6 +2761,8 @@ export default function Signup() {
                     onChange={updateDetails("phone")}
                     onBlur={markDetailTouched("phone")}
                     placeholder="(416) 555-1234"
+                    autoComplete="tel"
+                    inputMode="tel"
                     error={getBusinessFieldError("phone")}
                   />
                   <LabeledInput
@@ -2196,8 +2773,11 @@ export default function Signup() {
                     onBlur={markDetailTouched("email")}
                     placeholder="you@yourbusiness.com"
                     type="email"
+                    autoComplete="email"
+                    inputMode="email"
                     error={getBusinessFieldError("email")}
                   />
+                  <p className="signup-mobile-field-group address">Business address</p>
                   <LabeledInput
                     className="sm:col-span-2 lg:col-span-2"
                     label="Street address"
@@ -2206,6 +2786,7 @@ export default function Signup() {
                     onChange={updateDetails("streetAddress")}
                     onBlur={markDetailTouched("streetAddress")}
                     placeholder="123 Main St"
+                    autoComplete="street-address"
                     error={getBusinessFieldError("streetAddress")}
                   />
                   <LabeledInput
@@ -2215,6 +2796,7 @@ export default function Signup() {
                     onChange={updateDetails("city")}
                     onBlur={markDetailTouched("city")}
                     placeholder="Toronto"
+                    autoComplete="address-level2"
                     error={getBusinessFieldError("city")}
                   />
                   <LabeledSelect
@@ -2233,12 +2815,13 @@ export default function Signup() {
                     onChange={updateDetails("postalCode")}
                     onBlur={markDetailTouched("postalCode")}
                     placeholder="M5V 2T6"
+                    autoComplete="postal-code"
                     error={getBusinessFieldError("postalCode")}
                   />
                   <button
                     type="button"
                     onClick={() => setBusinessSlide(2)}
-                    className="mt-auto flex min-h-[54px] items-center justify-center rounded-xl border border-slate-200 bg-white px-5 text-base font-bold text-slate-600 transition hover:border-blue-300 hover:text-blue-600"
+                    className="signup-inline-action mt-auto flex min-h-[54px] items-center justify-center rounded-xl border border-slate-200 bg-white px-5 text-base font-bold text-slate-600 transition hover:border-blue-300 hover:text-blue-600"
                   >
                     Back
                   </button>
@@ -2246,7 +2829,7 @@ export default function Signup() {
                     type="submit"
                     disabled={businessSlideDisabled || busy}
                     className={
-                      "mt-auto inline-flex min-h-[54px] items-center justify-center gap-3 rounded-2xl px-6 text-base font-black text-white transition sm:text-lg xl:col-span-2 " +
+                      "signup-inline-action mt-auto inline-flex min-h-[54px] items-center justify-center gap-3 rounded-2xl px-6 text-base font-black text-white transition sm:text-lg xl:col-span-2 " +
                       (businessSlideDisabled || busy
                         ? "cursor-not-allowed bg-slate-300"
                         : "bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 shadow-[0_16px_42px_-28px_rgba(79,70,229,0.95)] hover:-translate-y-0.5 hover:brightness-110")
@@ -2255,18 +2838,24 @@ export default function Signup() {
                     {busy ? "Saving..." : businessSlideLabel}
                     <Icon name="arrow" className="h-5 w-5" />
                   </button>
+                  </div>
                 </div>
               </section>
               ) : null}
 
               {businessSlide === 4 ? (
-                <section className="grid w-full gap-6 lg:grid-cols-[360px_minmax(0,1fr)] xl:grid-cols-[390px_minmax(0,1fr)] lg:items-stretch">
-                  <div className="flex flex-col justify-center rounded-3xl border border-blue-100 bg-blue-50/70 p-8">
+                <section className="signup-task-layout grid w-full gap-6 lg:grid-cols-[360px_minmax(0,1fr)] xl:grid-cols-[390px_minmax(0,1fr)] lg:items-stretch">
+                  <div className="signup-task-explainer flex flex-col justify-center rounded-3xl border border-blue-100 bg-blue-50/70 p-8">
                     <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">Step 4</p>
                     <h2 className="mt-2 text-[clamp(2rem,3vw,3.1rem)] font-black leading-tight tracking-[-0.04em] text-slate-950">Pricing script</h2>
                     <p className="mt-4 text-lg font-medium leading-8 text-slate-600">Set the simple prices your assistant should explain before booking.</p>
                   </div>
-                  <div className="grid content-start gap-4 sm:grid-cols-2 xl:grid-cols-4 xl:gap-5">
+                  <div className="signup-task-content">
+                    <div className="signup-mobile-task-heading">
+                      <h2>What should your assistant quote?</h2>
+                      <p>Add the simple prices callers ask about most.</p>
+                    </div>
+                    <div className="grid content-start gap-4 sm:grid-cols-2 xl:grid-cols-4 xl:gap-5">
                     <label className="sm:col-span-2 xl:col-span-2">
                       <span className="mb-1.5 block text-sm font-semibold leading-none text-slate-700">Installations</span>
                       <span className="flex min-h-[54px] items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 text-lg font-semibold text-slate-950 shadow-[0_1px_0_rgba(15,23,42,0.02)]">
@@ -2295,18 +2884,23 @@ export default function Signup() {
                       placeholder="100"
                       type="number"
                     />
+                    </div>
                   </div>
                 </section>
               ) : null}
 
               {businessSlide === 5 ? (
-                <section className="grid w-full gap-6 lg:grid-cols-[360px_minmax(0,1fr)] xl:grid-cols-[390px_minmax(0,1fr)] lg:items-stretch">
-                  <div className="flex flex-col justify-center rounded-3xl border border-blue-100 bg-blue-50/70 p-8">
+                <section className="signup-task-layout grid w-full gap-6 lg:grid-cols-[360px_minmax(0,1fr)] xl:grid-cols-[390px_minmax(0,1fr)] lg:items-stretch">
+                  <div className="signup-task-explainer flex flex-col justify-center rounded-3xl border border-blue-100 bg-blue-50/70 p-8">
                     <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">Step 5</p>
                     <h2 className="mt-2 text-[clamp(2rem,3vw,3.1rem)] font-black leading-tight tracking-[-0.04em] text-slate-950">Review</h2>
                     <p className="mt-4 text-lg font-medium leading-8 text-slate-600">Check the details before continuing. Use Back or the top columns to change anything.</p>
                   </div>
-                  <div className="content-center">
+                  <div className="signup-task-content content-center">
+                    <div className="signup-mobile-task-heading">
+                      <h2>Check your setup</h2>
+                      <p>Make sure everything looks right before trying your assistant.</p>
+                    </div>
                     <ReviewPanel
                       trade={selectedTrade}
                       areas={selectedAreas}
@@ -2326,7 +2920,7 @@ export default function Signup() {
               </div>
 
               {businessSlide > 1 && businessSlide !== 2 && businessSlide !== 3 ? (
-                <div className="border-t border-slate-100 bg-slate-50/80 px-5 py-4 sm:px-8">
+                <div className="signup-desktop-action-footer border-t border-slate-100 bg-slate-50/80 px-5 py-4 sm:px-8">
                   <div className="mx-auto grid max-w-[920px] gap-3 sm:grid-cols-[220px_minmax(0,1fr)] sm:items-center">
                     <button
                       type="button"
@@ -2358,7 +2952,7 @@ export default function Signup() {
         ) : null}
 
         {currentStep === 3 ? (
-          <section className="mt-5">
+          <section className="signup-review-step mt-5">
             <ReviewPanel
               trade={selectedTrade}
               areas={selectedAreas}
@@ -2383,7 +2977,38 @@ export default function Signup() {
           <HumanVerificationCheck />
         ) : null}
 
-        <div className="shrink-0 pt-3">
+        <div
+          className={
+            "signup-mobile-action-bar " +
+            (currentStep === 1 && businessSlide === 1 && tradeSetupPanel === "trade" ? "is-first-step" : "")
+          }
+        >
+          {currentStep === 1 && businessSlide === 1 && tradeSetupPanel === "trade" ? null : (
+            <button type="button" onClick={goBackFromMobileStep} className="signup-mobile-back">
+              {currentStep === 2 ? "Skip for now" : "Back"}
+            </button>
+          )}
+          <button type="submit" disabled={mobilePrimaryDisabled || busy} className="signup-mobile-primary">
+            {busy ? "Saving…" : mobilePrimaryLabel}
+            <Icon name="arrow" className="h-4 w-4" />
+          </button>
+          {mobilePrimaryDisabled ? (
+            <p className="signup-mobile-disabled-reason">
+              {currentStep === 1 && businessSlide === 1
+                ? "Choose at least one work type to continue."
+                : currentStep === 1 && businessSlide === 2
+                  ? "Choose at least one service area to continue."
+                  : currentStep === 1 && businessSlide === 3
+                    ? "Complete the required business details to continue."
+                    : "Complete the verification above to start your trial."}
+            </p>
+          ) : null}
+          {currentStep === 3 ? (
+            <p className="signup-mobile-disabled-reason">Free for 14 days · No credit card required · Cancel anytime</p>
+          ) : null}
+        </div>
+
+        <div className="signup-desktop-action-footer shrink-0 pt-3">
           {currentStep === 1 ? null : (
             <div className="mx-auto grid max-w-[920px] gap-3 sm:grid-cols-[220px_minmax(0,1fr)] sm:items-center">
               {currentStep > 1 || businessSlide > 1 ? (
@@ -2427,7 +3052,7 @@ export default function Signup() {
             />
           </label>
 
-          <div className="mt-1 flex items-center justify-center gap-2 text-center text-sm font-medium text-slate-500 sm:text-base">
+          <div className="signup-privacy-footer mt-1 flex items-center justify-center gap-2 text-center text-sm font-medium text-slate-500 sm:text-base">
             <Icon name="lock" className="h-4 w-4" />
             Your information is protected and used to set up and operate your service.
           </div>

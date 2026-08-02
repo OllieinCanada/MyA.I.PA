@@ -11,6 +11,21 @@ const desktopReadyPath = path.join(outputDir, "try-demo-desktop-ready.png");
 const desktopActivePath = path.join(outputDir, "try-demo-desktop-active.png");
 const mobileReadyPath = path.join(outputDir, "try-demo-mobile-ready.png");
 
+async function mockPreviewAvailability(page) {
+  if (!screenshotsOnly) return;
+  await page.route("**/api/public/vapi-preview-config", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        enabled: true,
+        assistantId: "visual-test-assistant",
+        maxDurationSeconds: 60,
+      }),
+    })
+  );
+}
+
 async function answerQuestions(page) {
   await page.getByRole("button", { name: /Electrician/i }).click();
   await page.getByPlaceholder("e.g., Dan's Electrical").fill("Dapper Dan's Electrical");
@@ -39,12 +54,19 @@ async function main() {
     });
     await desktopContext.grantPermissions(["microphone"], { origin });
     const desktop = await desktopContext.newPage();
+    await mockPreviewAvailability(desktop);
     await desktop.goto(url, { waitUntil: "domcontentloaded", timeout: 20000 });
     await desktop.getByText("Hear My AI PA answer for your business.", { exact: true }).waitFor({ state: "visible" });
+    await desktop.getByText("1-minute live voice demo", { exact: true }).waitFor({ state: "visible" });
     await desktop.screenshot({ path: questionsPath, fullPage: true });
     await answerQuestions(desktop);
     await desktop.getByText("Dapper Dan's Electrical", { exact: true }).first().waitFor({ state: "visible" });
-    await desktop.getByText(/Hi, thanks for calling Dapper Dan's Electrical\./).waitFor({ state: "visible" });
+    await desktop.getByText(
+      "“Hi, thanks for calling Dapper Dan's Electrical. Do you need an installation, repair, or maintenance today?”",
+      { exact: true }
+    ).waitFor({ state: "visible" });
+    await desktop.getByText("Start my 1-minute demo", { exact: true }).waitFor({ state: "visible" });
+    await desktop.getByText(/Ends automatically after 60 seconds\./).waitFor({ state: "visible" });
     await desktop.screenshot({ path: desktopReadyPath, fullPage: true });
 
     if (!screenshotsOnly) {
@@ -61,6 +83,7 @@ async function main() {
       deviceScaleFactor: 1,
     });
     const mobile = await mobileContext.newPage();
+    await mockPreviewAvailability(mobile);
     await mobile.goto(url, { waitUntil: "domcontentloaded", timeout: 20000 });
     await answerQuestions(mobile);
     await mobile.screenshot({ path: mobileReadyPath, fullPage: true });
