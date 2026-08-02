@@ -5536,6 +5536,63 @@ function LandingPage() {
               line-height: 1.1 !important;
             }
           }
+          /* The 1024px-wide iPad portrait viewport must not inherit the tall,
+             vertically-centred desktop canvas. Keep the same two-column hero and
+             full right-side visual, but place it directly below the navigation. */
+          @media (min-width: 1024px) and (max-width: 1100px) and (orientation: portrait) {
+            .landing-hero-shell {
+              min-height: 0 !important;
+              max-width: none !important;
+              padding: 0.75rem 1.5rem 1.5rem !important;
+            }
+            .landing-hero-grid {
+              flex: 0 0 auto !important;
+              grid-template-columns: minmax(360px, 0.72fr) minmax(0, 1.28fr) !important;
+              align-items: start !important;
+              gap: 1.35rem !important;
+              padding-top: 2.25rem !important;
+              padding-bottom: 0 !important;
+            }
+            .landing-hero-grid > div:first-child {
+              width: 100% !important;
+              max-width: 390px !important;
+              min-height: 0 !important;
+            }
+            .landing-hero-copy-column {
+              margin-left: 0 !important;
+              transform: none !important;
+            }
+            .landing-hero-title {
+              margin-top: 1.15rem !important;
+              font-size: 2.7rem !important;
+              line-height: 0.98 !important;
+            }
+            .landing-hero-visual {
+              align-self: start !important;
+              margin-top: 0 !important;
+              transform: none !important;
+            }
+            .landing-hero-proof-wrap,
+            .landing-call-dashboard {
+              display: block !important;
+              width: 100% !important;
+              max-width: none !important;
+              visibility: visible !important;
+              opacity: 1 !important;
+            }
+            .landing-call-dashboard > div {
+              height: 580px !important;
+              min-height: 580px !important;
+              max-height: 580px !important;
+            }
+            .landing-caller-card,
+            .landing-caller-avatar,
+            .landing-caller-avatar img {
+              display: block !important;
+              visibility: visible !important;
+              opacity: 1 !important;
+            }
+          }
           @media (max-width: 639px) {
             .landing-hero-coverage {
               margin-top: 0.9rem !important;
