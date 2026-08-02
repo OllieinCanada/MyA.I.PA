@@ -5593,6 +5593,339 @@ function LandingPage() {
               opacity: 1 !important;
             }
           }
+          /* Standard iPad portrait widths (810px, 820px and 834px): retain the
+             desktop side-by-side story instead of switching to the old stacked artboard. */
+          @media (min-width: 768px) and (max-width: 1023px) and (orientation: portrait) {
+            .landing-hero-shell {
+              min-height: 0 !important;
+              max-width: none !important;
+              padding: 0.75rem 1.25rem 1.35rem !important;
+            }
+            .landing-hero-shell nav {
+              grid-template-columns: auto 1fr auto !important;
+              align-items: center !important;
+              gap: 0.7rem !important;
+            }
+            .landing-hero-shell nav > div:nth-child(2) {
+              display: block !important;
+              justify-self: center !important;
+            }
+            .landing-hero-shell nav > div:nth-child(2) a {
+              gap: 0.5rem !important;
+              padding: 0.45rem 0.6rem !important;
+            }
+            .landing-hero-shell nav > div:nth-child(2) a > span:first-child {
+              width: 2rem !important;
+              height: 2rem !important;
+            }
+            .landing-hero-shell nav > div:nth-child(2) a > span:last-child > span:first-child {
+              font-size: 0.52rem !important;
+            }
+            .landing-hero-shell nav > div:nth-child(2) a > span:last-child > span:last-child {
+              font-size: 0.76rem !important;
+            }
+            .landing-hero-shell nav > div:last-child {
+              justify-self: end !important;
+            }
+            .landing-hero-shell nav > div:last-child button {
+              min-width: 0 !important;
+              padding: 0.72rem 0.85rem !important;
+              font-size: 0.72rem !important;
+            }
+            .landing-hero-grid {
+              display: grid !important;
+              flex: 0 0 auto !important;
+              grid-template-columns: minmax(255px, 0.64fr) minmax(0, 1.36fr) !important;
+              align-items: start !important;
+              gap: 0.85rem !important;
+              padding-top: 1.25rem !important;
+              padding-bottom: 0 !important;
+            }
+            .landing-hero-grid > div:first-child {
+              display: block !important;
+              width: 100% !important;
+              max-width: none !important;
+              min-height: 0 !important;
+            }
+            .landing-hero-copy-column {
+              margin-left: 0 !important;
+              transform: none !important;
+            }
+            .landing-hero-title {
+              margin-top: 0.8rem !important;
+              font-size: clamp(2rem, 4.8vw, 2.45rem) !important;
+              line-height: 0.98 !important;
+            }
+            .landing-hero-title > span:nth-child(2) {
+              margin-top: 0.75rem !important;
+              font-size: 0.5em !important;
+            }
+            .landing-hero-coverage {
+              margin-top: 0.75rem !important;
+              padding: 0.48rem 0.6rem !important;
+              font-size: 0.78rem !important;
+            }
+            .landing-hero-points-clean {
+              grid-template-columns: minmax(0, 1fr) !important;
+              margin-top: 0.8rem !important;
+              gap: 0.42rem !important;
+            }
+            .landing-hero-points-clean .landing-hero-point-clean {
+              grid-template-columns: 1.55rem minmax(0, 1fr) !important;
+              column-gap: 0.48rem !important;
+              min-height: 0 !important;
+              padding: 0 !important;
+              font-size: 0.67rem !important;
+              line-height: 1.16 !important;
+            }
+            .landing-hero-points-clean .landing-hero-point-check {
+              width: 1.55rem !important;
+              height: 1.55rem !important;
+              font-size: 0.7rem !important;
+            }
+            .landing-hero-actions {
+              margin-top: 0.8rem !important;
+            }
+            .landing-hero-actions > div:first-child {
+              flex-direction: row !important;
+              gap: 0.45rem !important;
+            }
+            .landing-hero-cta {
+              min-width: 0 !important;
+              min-height: 2.5rem !important;
+              flex: 1 1 0 !important;
+              padding: 0.4rem 0.45rem !important;
+              font-size: 0.68rem !important;
+            }
+            .landing-hero-trust {
+              justify-content: flex-start !important;
+              gap: 0.3rem 0.55rem !important;
+              margin-top: 0.48rem !important;
+              font-size: 0.55rem !important;
+              line-height: 1.1 !important;
+            }
+            .landing-hero-visual {
+              display: flex !important;
+              align-self: start !important;
+              width: 100% !important;
+              min-width: 0 !important;
+              max-width: none !important;
+              margin: 0 !important;
+              transform: none !important;
+              visibility: visible !important;
+              opacity: 1 !important;
+            }
+            .landing-hero-proof-wrap,
+            .landing-call-dashboard {
+              display: flex !important;
+              width: 100% !important;
+              min-width: 0 !important;
+              max-width: none !important;
+              visibility: visible !important;
+              opacity: 1 !important;
+            }
+            .landing-hero-proof-wrap {
+              flex-direction: column !important;
+            }
+            .landing-hero-proof-heading {
+              margin-bottom: 0.3rem !important;
+              font-size: 0.54rem !important;
+              line-height: 1.1 !important;
+            }
+            .landing-call-dashboard > div {
+              display: block !important;
+              width: 100% !important;
+              height: 390px !important;
+              min-height: 390px !important;
+              max-height: 390px !important;
+              border-radius: 20px !important;
+              visibility: visible !important;
+              opacity: 1 !important;
+            }
+            .landing-call-dashboard > div > div {
+              display: grid !important;
+              height: 100% !important;
+              min-height: 0 !important;
+              max-height: none !important;
+              grid-template-columns: minmax(150px, 0.7fr) minmax(0, 1.3fr) !important;
+            }
+            .landing-call-panel,
+            .landing-conversation-column {
+              display: flex !important;
+              height: 100% !important;
+              min-height: 0 !important;
+              padding: 0.58rem !important;
+              visibility: visible !important;
+            }
+            .landing-call-status {
+              font-size: 0.62rem !important;
+            }
+            .landing-call-live-dot {
+              width: 0.62rem !important;
+              height: 0.62rem !important;
+            }
+            .landing-caller-card {
+              display: block !important;
+              margin-top: 0.42rem !important;
+              visibility: visible !important;
+              opacity: 1 !important;
+            }
+            .landing-caller-avatar,
+            .landing-caller-avatar img {
+              display: block !important;
+              visibility: visible !important;
+              opacity: 1 !important;
+            }
+            .landing-caller-avatar {
+              width: 2.8rem !important;
+              height: 2.8rem !important;
+            }
+            .landing-caller-name {
+              margin-top: 0.4rem !important;
+              font-size: 0.82rem !important;
+              line-height: 1.02 !important;
+            }
+            .landing-caller-phone {
+              margin-top: 0.25rem !important;
+              font-size: 0.7rem !important;
+              line-height: 1 !important;
+              white-space: nowrap !important;
+            }
+            .landing-caller-tag {
+              margin-top: 0.34rem !important;
+              max-width: 100% !important;
+              padding: 0.3rem 0.36rem !important;
+              font-size: 0.5rem !important;
+              line-height: 1.06 !important;
+            }
+            .landing-call-owner-card {
+              width: 100% !important;
+              margin: 0.48rem 0 0 !important;
+              border-radius: 11px !important;
+            }
+            .landing-imessage-preview {
+              padding: 0.46rem !important;
+            }
+            .landing-imessage-contact {
+              width: 1.35rem !important;
+              height: 1.35rem !important;
+              font-size: 0.42rem !important;
+            }
+            .landing-imessage-preview-title {
+              font-size: 0.5rem !important;
+            }
+            .landing-imessage-preview-meta {
+              font-size: 0.39rem !important;
+            }
+            .landing-imessage-bubble {
+              max-width: 100% !important;
+              padding: 0.38rem 0.4rem !important;
+              font-size: 0.43rem !important;
+              line-height: 1.08 !important;
+            }
+            .landing-call-controls {
+              display: none !important;
+            }
+            .landing-conversation-header {
+              gap: 0.35rem !important;
+            }
+            .landing-conversation-title {
+              font-size: 0.72rem !important;
+              line-height: 1.02 !important;
+            }
+            .landing-summary-ready-badge {
+              padding: 0.25rem 0.34rem !important;
+              font-size: 0.43rem !important;
+            }
+            .landing-conversation-panel {
+              position: relative !important;
+              flex: 0 0 auto !important;
+              margin-top: 0.3rem !important;
+              border-radius: 12px !important;
+              padding: 0.38rem 0.42rem !important;
+              overflow: visible !important;
+            }
+            .landing-conversation-opening-label,
+            .landing-conversation-opening,
+            .landing-conversation-opening-time {
+              display: none !important;
+            }
+            .landing-conversation-panel > p:not(.landing-conversation-time) {
+              margin-top: 0.2rem !important;
+              font-size: 0.48rem !important;
+              line-height: 1 !important;
+            }
+            .landing-conversation-panel > p:first-child {
+              margin-top: 0 !important;
+            }
+            .landing-conversation-panel > div,
+            .landing-conversation-panel .landing-conversation-long-bubble,
+            .landing-conversation-panel .landing-conversation-caller-detail {
+              max-width: 97% !important;
+              margin-top: 0.18rem !important;
+              border-radius: 8px !important;
+              padding: 0.26rem 0.32rem !important;
+              font-size: 0.51rem !important;
+              line-height: 1.04 !important;
+            }
+            .landing-conversation-panel .landing-service-message {
+              max-width: 100% !important;
+            }
+            .landing-service-badge {
+              padding: 0.12rem 0.2rem !important;
+              font-size: 0.38rem !important;
+            }
+            .landing-conversation-panel .landing-conversation-long-bubble ul {
+              margin-top: 0.08rem !important;
+              row-gap: 0 !important;
+            }
+            .landing-conversation-panel .landing-conversation-caller-detail {
+              margin-bottom: 0 !important;
+            }
+            .landing-conversation-time {
+              position: static !important;
+              margin: 0.08rem 0 0 !important;
+              padding: 0 !important;
+              transform: none !important;
+              font-size: 0.42rem !important;
+              line-height: 1 !important;
+            }
+            .landing-dashboard-bottom {
+              flex: 0 0 auto !important;
+              margin-top: 0.25rem !important;
+            }
+            .landing-lead-stack {
+              height: auto !important;
+              grid-template-rows: auto auto !important;
+              align-content: start !important;
+              gap: 0.2rem !important;
+            }
+            .landing-lead-note {
+              justify-content: flex-start !important;
+              gap: 0.3rem !important;
+              font-size: 0.5rem !important;
+              line-height: 1.02 !important;
+            }
+            .landing-lead-note svg {
+              width: 1.35rem !important;
+              height: 0.85rem !important;
+            }
+            .landing-customer-text-card {
+              flex: 0 0 auto !important;
+              height: auto !important;
+              min-height: 0 !important;
+              border-radius: 11px !important;
+              padding: 0 !important;
+            }
+            .landing-customer-text-title {
+              font-size: 0.58rem !important;
+            }
+            .landing-customer-text-body {
+              margin-top: 0.22rem !important;
+              font-size: 0.47rem !important;
+              line-height: 1.06 !important;
+            }
+          }
           @media (max-width: 639px) {
             .landing-hero-coverage {
               margin-top: 0.9rem !important;
