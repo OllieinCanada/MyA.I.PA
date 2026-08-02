@@ -947,122 +947,6 @@ function HeroSummaryStack() {
   );
 }
 
-function HeroGridOwnerArrow({ gridRef, originRef, destinationRef }) {
-  const [geometry, setGeometry] = useState(null);
-
-  useEffect(() => {
-    let frameId = 0;
-
-    const measure = () => {
-      const grid = gridRef.current;
-      const origin = originRef.current;
-      const destination = destinationRef.current;
-      if (!grid || !origin || !destination) {
-        setGeometry(null);
-        return;
-      }
-
-      const gridBox = grid.getBoundingClientRect();
-      const originBox = origin.getBoundingClientRect();
-      const destinationBox = destination.getBoundingClientRect();
-      const isTwoColumn =
-        window.matchMedia("(min-width: 1536px)").matches &&
-        destinationBox.left - originBox.right >= 72;
-
-      if (!isTwoColumn || gridBox.width <= 0 || gridBox.height <= 0) {
-        setGeometry(null);
-        return;
-      }
-
-      const startX = originBox.right - gridBox.left + 6;
-      const startY = originBox.top - gridBox.top + originBox.height * 0.5;
-      const endX = destinationBox.left - gridBox.left + 3;
-      const endY = destinationBox.top - gridBox.top + 28;
-      const travel = Math.max(44, endX - startX);
-      const firstControlX = startX + Math.max(17, travel * 0.34);
-      const secondControlX = endX - Math.max(15, travel * 0.32);
-
-      setGeometry({
-        width: gridBox.width,
-        height: gridBox.height,
-        startX,
-        startY,
-        endX,
-        endY,
-        path: `M ${startX} ${startY} C ${firstControlX} ${startY}, ${secondControlX} ${endY - 11}, ${endX} ${endY}`,
-      });
-    };
-
-    const scheduleMeasure = () => {
-      window.cancelAnimationFrame(frameId);
-      frameId = window.requestAnimationFrame(measure);
-    };
-
-    scheduleMeasure();
-    window.addEventListener("resize", scheduleMeasure);
-
-    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(scheduleMeasure) : null;
-    [gridRef.current, originRef.current, destinationRef.current].forEach((element) => {
-      if (element) observer?.observe(element);
-    });
-    document.fonts?.ready?.then(scheduleMeasure).catch(() => {});
-
-    return () => {
-      window.cancelAnimationFrame(frameId);
-      window.removeEventListener("resize", scheduleMeasure);
-      observer?.disconnect();
-    };
-  }, [destinationRef, gridRef, originRef]);
-
-  if (!geometry) return null;
-
-  return (
-    <svg
-      className="landing-hero-owner-arrow pointer-events-none absolute inset-0 z-20 hidden h-full w-full overflow-visible 2xl:block"
-      viewBox={`0 0 ${geometry.width} ${geometry.height}`}
-      preserveAspectRatio="none"
-      fill="none"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <defs>
-        <linearGradient id="landing-owner-arrow-gradient" gradientUnits="userSpaceOnUse" x1={geometry.startX} y1={geometry.startY} x2={geometry.endX} y2={geometry.endY}>
-          <stop offset="0" stopColor="#0c5fc3" />
-          <stop offset="1" stopColor="#39cfff" />
-        </linearGradient>
-        <filter id="landing-owner-arrow-shadow" x="-20%" y="-30%" width="150%" height="165%">
-          <feDropShadow dx="0" dy="1" stdDeviation="1.25" floodColor="#1674df" floodOpacity="0.24" />
-        </filter>
-        <marker id="landing-owner-arrowhead" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse">
-          <path d="M0 0 8 4 0 8Z" fill="#39cfff" />
-        </marker>
-      </defs>
-      <circle
-        className="landing-hero-owner-arrow-origin"
-        cx={geometry.startX}
-        cy={geometry.startY}
-        r="3.25"
-        fill="#0c5fc3"
-        stroke="rgba(255,255,255,0.95)"
-        strokeWidth="1.25"
-        vectorEffect="non-scaling-stroke"
-      />
-      <path
-        className="landing-hero-owner-arrow-path"
-        d={geometry.path}
-        pathLength="1"
-        stroke="url(#landing-owner-arrow-gradient)"
-        strokeWidth="2.75"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        markerEnd="url(#landing-owner-arrowhead)"
-        filter="url(#landing-owner-arrow-shadow)"
-        vectorEffect="non-scaling-stroke"
-      />
-    </svg>
-  );
-}
-
 function HeroCallDashboard({ ownerCardRef }) {
   return (
     <div className="landing-call-dashboard relative mx-auto w-full max-w-[690px]">
@@ -2104,8 +1988,6 @@ function LandingPage() {
   const pricingRef = useRef(null);
   const faqRef = useRef(null);
   const audioRef = useRef(null);
-  const heroGridRef = useRef(null);
-  const heroArrowOriginRef = useRef(null);
   const heroOwnerCardRef = useRef(null);
 
   const [audioPlaying, setAudioPlaying] = useState(false);
@@ -5329,56 +5211,16 @@ function LandingPage() {
             </div>
           </nav>
 
-          <div ref={heroGridRef} className="landing-hero-grid relative grid flex-1 gap-10 py-5 lg:grid-cols-[minmax(380px,0.7fr)_minmax(620px,1.3fr)] lg:items-center xl:grid-cols-[minmax(430px,0.72fr)_minmax(680px,1.28fr)] xl:gap-16 2xl:gap-16 2xl:py-5">
+          <div className="landing-hero-grid relative grid flex-1 gap-10 py-5 lg:grid-cols-[minmax(380px,0.7fr)_minmax(620px,1.3fr)] lg:items-center xl:grid-cols-[minmax(430px,0.72fr)_minmax(680px,1.28fr)] xl:gap-16 2xl:gap-16 2xl:py-5">
             <div className="relative z-10 min-w-0 max-w-[500px] xl:max-w-[520px] lg:-translate-y-1">
-              <div className="landing-hero-label inline-flex max-w-full items-center gap-3 rounded-2xl border border-[#c9e2fb] bg-[linear-gradient(135deg,rgba(255,255,255,0.9),rgba(238,247,255,0.78))] px-3 py-1.5 text-[#0b315f] shadow-[0_10px_28px_-25px_rgba(12,77,160,0.58),inset_0_1px_0_rgba(255,255,255,0.9)] sm:px-4">
-                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[linear-gradient(145deg,#166fcf,#0a4c99)] text-white shadow-[0_8px_18px_-14px_rgba(12,77,160,0.78)]">
-                  <svg viewBox="0 0 40 40" className="h-7 w-7" fill="none" aria-hidden="true">
-                    <path d="M8 21v-2.5C8 11.6 13.4 6 20 6s12 5.6 12 12.5V21" stroke="currentColor" strokeWidth="3.4" strokeLinecap="round" />
-                    <rect x="5.5" y="18" width="6" height="11" rx="3" fill="#73d3ff" />
-                    <rect x="28.5" y="18" width="6" height="11" rx="3" fill="#73d3ff" />
-                    <rect x="14" y="17" width="2.8" height="9" rx="1.4" fill="#ff9a22" />
-                    <rect x="18.6" y="13" width="2.8" height="17" rx="1.4" fill="#ff7a00" />
-                    <rect x="23.2" y="16" width="2.8" height="11" rx="1.4" fill="#ff9a22" />
-                    <path d="M31.5 27.5c-1.2 4-4.8 6-9.4 6" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" />
-                    <circle cx="20.8" cy="33.5" r="2" fill="#64e572" />
-                  </svg>
-                </span>
-                <span className="min-w-0 py-0.5">
-                  <span className="block whitespace-nowrap text-[0.94rem] font-black uppercase leading-none tracking-[0.08em] sm:text-[1.04rem] 2xl:text-[1.1rem]">
-                    <span className="text-[#1674df]">AI</span> Telephone Answering
-                  </span>
-                  <span className="mt-1.5 block text-[0.66rem] font-black uppercase leading-none tracking-[0.22em] text-[#426488] sm:text-[0.72rem]">
-                    Built for the trades
-                  </span>
-                </span>
-              </div>
-
-              <h1 className="landing-hero-title mt-2 text-[clamp(2.8rem,11vw,3.8rem)] font-black leading-[1.02] tracking-[-0.055em] text-[#07142a] 2xl:text-[3.95rem]">
-                <span className="block 2xl:whitespace-nowrap drop-shadow-[0_3px_0_rgba(148,190,255,0.45)]">Answers the phone</span>
-                <span className="landing-reflection-text block pb-2 bg-[linear-gradient(180deg,#ff8a13,#ff250f)] bg-clip-text text-transparent drop-shadow-[0_4px_0_rgba(255,107,0,0.16)]">
-                  when you can&apos;t.
+              <h1 className="landing-hero-title text-[clamp(3rem,11vw,4.25rem)] font-black leading-[0.98] tracking-[-0.055em] text-[#07142a] 2xl:text-[4.5rem]">
+                <span className="block drop-shadow-[0_3px_0_rgba(148,190,255,0.45)]">Never miss a call again</span>
+                <span className="mt-4 block text-[0.58em] leading-none tracking-[-0.045em] text-[#d91d12] sm:mt-5">
+                  Missed Calls = Missed Jobs
                 </span>
               </h1>
 
-              <div className="landing-hero-conversion-block mt-3 rounded-xl border border-[#d7e4f2] border-l-4 border-l-[#d91d12] bg-white/65 px-3 py-2.5 shadow-[0_10px_26px_-25px_rgba(12,77,160,0.52)]">
-                <p className="landing-hero-kicker text-[clamp(1.66rem,5.8vw,2.14rem)] font-black leading-[1] tracking-[-0.05em] text-[#d91d12] 2xl:text-[2.24rem]">
-                  Missed Calls = Missed Jobs
-                </p>
-
-                <p className="landing-revenue-line mt-2.5 whitespace-nowrap text-[clamp(0.74rem,3vw,1.04rem)] font-black uppercase leading-none tracking-[-0.025em]">
-                  <span className="text-[#123b68]">STOP LOSING CUSTOMERS.</span>
-                  <span className="mx-2 text-[#64748b]" aria-hidden="true">→</span>
-                  <span ref={heroArrowOriginRef} className="landing-hero-arrow-origin text-[#17951f]">START WINNING TODAY!</span>
-                </p>
-              </div>
-
-              <p className="landing-hero-copy mt-3 max-w-[540px] text-[1rem] font-medium leading-6 text-[#425b76] sm:text-[1.04rem] 2xl:text-[1.08rem] 2xl:leading-7">
-                <span className="font-bold text-[#294967]">24/7 Call Coverage.</span>{" "}
-                <span className="font-semibold text-[#52677f]">Never Miss A Call Again!</span>
-              </p>
-
-              <div className="landing-hero-points mt-6 space-y-3">
+              <div className="landing-hero-points mt-8 space-y-3 sm:mt-10">
                 {[
                   ["phone", "Answers while you're on the job, driving, or with family"],
                   ["faq", "Answers questions about your hours, service area, estimates, and warranties"],
@@ -5393,35 +5235,6 @@ function LandingPage() {
                   </div>
                 ))}
               </div>
-
-              <div className="landing-hero-ctas mt-5 flex flex-col gap-4 sm:flex-row">
-                <button
-                  type="button"
-                  onClick={goToSignup}
-                  className="landing-hero-cta landing-hero-trial-secondary inline-flex min-h-[46px] items-center justify-center rounded-lg border-2 border-[#1d5ea8]/80 bg-white/72 px-9 text-[1.02rem] font-black text-[#0b3b7a] transition hover:-translate-y-0.5 hover:bg-white 2xl:min-h-[48px] 2xl:text-[1.08rem]"
-                >
-                  Start Your Free Trial
-                </button>
-                <button
-                  type="button"
-                  onClick={playDemo}
-                  className="landing-hero-cta inline-flex min-h-[46px] items-center justify-center rounded-lg border-2 border-[#1d5ea8]/80 bg-white/50 px-9 text-[1.02rem] font-black text-[#0b3b7a] transition hover:bg-white 2xl:min-h-[48px] 2xl:text-[1.08rem]"
-                >
-                  <svg viewBox="0 0 24 24" className="mr-2 h-5 w-5" fill="currentColor" aria-hidden="true">
-                    <path d="M8.2 5.6v12.8L18 12 8.2 5.6Z" />
-                  </svg>
-                  Play Recorded Sample
-                </button>
-              </div>
-
-              <div className="landing-hero-footnote mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-[0.78rem] font-black text-[#294967] 2xl:text-[0.84rem]">
-                {["14-Day Free Trial", "No Credit Card", "Cancel Anytime"].map((label) => (
-                  <span key={label} className="inline-flex items-center gap-1.5 whitespace-nowrap">
-                    <span className="text-[#17951f]" aria-hidden="true">✓</span>
-                    {label}
-                  </span>
-                ))}
-              </div>
             </div>
 
             <div className="landing-hero-visual relative z-0 mt-8 flex justify-end lg:mt-2 lg:self-center">
@@ -5432,9 +5245,73 @@ function LandingPage() {
                 <HeroCallDashboard ownerCardRef={heroOwnerCardRef} />
               </div>
             </div>
-            <HeroGridOwnerArrow gridRef={heroGridRef} originRef={heroArrowOriginRef} destinationRef={heroOwnerCardRef} />
           </div>
 
+        </div>
+      </section>
+
+      <section id="homepage-hero-details" className="relative overflow-hidden border-y border-[#cfe2f5] bg-white">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_14%_20%,rgba(191,219,254,0.42),transparent_32%),radial-gradient(circle_at_88%_82%,rgba(219,234,254,0.58),transparent_34%)]" />
+        <div className="relative mx-auto grid w-full max-w-[1360px] gap-8 px-5 py-10 sm:px-8 sm:py-12 lg:grid-cols-[minmax(0,0.92fr)_minmax(440px,1.08fr)] lg:items-center lg:px-10 lg:py-14">
+          <div>
+            <div className="inline-flex max-w-full items-center gap-3 rounded-2xl border border-[#c9e2fb] bg-[#f4f9ff] px-3 py-2 text-[#0b315f] shadow-[0_12px_30px_-26px_rgba(12,77,160,0.62)] sm:px-4">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[linear-gradient(145deg,#166fcf,#0a4c99)] text-white">
+                <HeroIcon type="phone" className="h-5 w-5" />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-[0.94rem] font-black uppercase leading-none tracking-[0.08em] sm:text-[1.04rem]">
+                  <span className="text-[#1674df]">AI</span> Telephone Answering
+                </span>
+                <span className="mt-1.5 block text-[0.66rem] font-black uppercase leading-none tracking-[0.22em] text-[#426488] sm:text-[0.72rem]">
+                  Built for the trades
+                </span>
+              </span>
+            </div>
+
+            <h2 className="mt-5 max-w-[650px] text-[clamp(2.35rem,6vw,4.35rem)] font-black leading-[0.98] tracking-[-0.055em] text-[#07142a]">
+              Answers the phone <span className="text-[#1674df]">when you can&apos;t.</span>
+            </h2>
+            <p className="mt-5 text-[1.08rem] font-bold leading-7 text-[#294967] sm:text-[1.22rem]">
+              24/7 Call Coverage.
+            </p>
+          </div>
+
+          <div className="rounded-[28px] border border-[#c9dff3] bg-[linear-gradient(145deg,#f8fbff,#edf6ff)] p-5 shadow-[0_28px_70px_-48px_rgba(12,77,160,0.72)] sm:p-7">
+            <p className="text-[clamp(1.2rem,3vw,1.7rem)] font-black uppercase leading-tight tracking-[-0.025em]">
+              <span className="text-[#123b68]">Stop losing customers.</span>
+              <span className="mx-2 text-[#64748b]" aria-hidden="true">→</span>
+              <span className="text-[#17951f]">Start winning today!</span>
+            </p>
+
+            <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+              <button
+                type="button"
+                onClick={goToSignup}
+                className="inline-flex min-h-[50px] flex-1 items-center justify-center rounded-xl bg-[#0c5fc3] px-7 text-[1rem] font-black text-white shadow-[0_16px_32px_-20px_rgba(12,95,195,0.9)] transition hover:-translate-y-0.5 hover:bg-[#084fA6]"
+              >
+                Start Your Free Trial
+              </button>
+              <button
+                type="button"
+                onClick={playDemo}
+                className="inline-flex min-h-[50px] flex-1 items-center justify-center rounded-xl border-2 border-[#1d5ea8]/70 bg-white px-7 text-[1rem] font-black text-[#0b3b7a] transition hover:bg-[#f5faff]"
+              >
+                <svg viewBox="0 0 24 24" className="mr-2 h-5 w-5" fill="currentColor" aria-hidden="true">
+                  <path d="M8.2 5.6v12.8L18 12 8.2 5.6Z" />
+                </svg>
+                Play Recorded Sample
+              </button>
+            </div>
+
+            <div className="mt-5 grid grid-cols-3 gap-2 text-center text-[0.72rem] font-black text-[#294967] sm:text-[0.84rem]">
+              {["14-Day Free Trial", "No Credit Card", "Cancel Anytime"].map((label) => (
+                <span key={label} className="inline-flex items-center justify-center gap-1.5">
+                  <span className="text-[#17951f]" aria-hidden="true">✓</span>
+                  {label}
+                </span>
+              ))}
+            </div>
+          </div>
         </div>
       </section>
 
@@ -6558,6 +6435,9 @@ function LandingPage() {
               <p className="mt-1 max-w-2xl text-sm font-medium text-[#64748b]">Optional Google and Microsoft calendar access is used only to check availability and manage appointments authorized by the business owner or staff member.</p>
             </div>
             <div className="flex flex-wrap items-center gap-4">
+              <a href="#/trades" className="transition hover:text-[#2563eb]">
+                Trade pages
+              </a>
               <a href="mailto:hello@myaipa.com" className="transition hover:text-[#2563eb]">
                 hello@myaipa.com
               </a>
