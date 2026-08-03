@@ -4320,6 +4320,21 @@ function listSignupDashboardRecords() {
     .sort((a, b) => Number(new Date(b.signedUpAt || b.createdAt || 0)) - Number(new Date(a.signedUpAt || a.createdAt || 0)));
 }
 
+function getPublicSignupNetworkStats(now = new Date(), signups = listSignupDashboardRecords()) {
+  const currentTime = now instanceof Date ? now : new Date(now);
+  const monthStart = Date.UTC(currentTime.getUTCFullYear(), currentTime.getUTCMonth(), 1);
+  const newThisMonth = signups.filter((signup) => {
+    const signedUpAt = Number(new Date(signup.signedUpAt || signup.createdAt || 0));
+    return Number.isFinite(signedUpAt) && signedUpAt >= monthStart;
+  }).length;
+
+  return {
+    businessesSignedUp: signups.length,
+    newThisMonth,
+    updatedAt: currentTime.toISOString(),
+  };
+}
+
 function getTrialPolicyIdentity(signup = {}) {
   const source = String(
     signup.subscriptionId
@@ -7265,6 +7280,15 @@ async function getOpenAiTranscription({ audioBase64, mimeType, detailed = false 
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true, service: "my-ai-pa-api", time: new Date().toISOString() });
 });
+
+app.get(
+  "/api/public/signup-network-stats",
+  enforcePublicRouteRateLimit("signup-network-stats", 90),
+  (_req, res) => {
+    res.setHeader("Cache-Control", "public, max-age=10, stale-while-revalidate=20");
+    res.json({ ok: true, ...getPublicSignupNetworkStats() });
+  }
+);
 
 async function getVapiPreviewJwtMaterial() {
   const now = Date.now();
@@ -10234,6 +10258,7 @@ module.exports = {
     getTwilioUsageCostByPrefix,
     normalizeTwilioProvisioningAreaCode,
     normalizeTwilioProvisioningVoiceUrl,
+    getPublicSignupNetworkStats,
     purchaseTwilioPhoneNumber,
   },
 };

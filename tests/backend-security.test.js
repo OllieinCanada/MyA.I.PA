@@ -63,6 +63,34 @@ test("health endpoint remains public and carries baseline security headers", asy
   assert.equal(payload.ok, true);
 });
 
+test("public signup network stats expose aggregate counts without signup details", async () => {
+  const response = await request("/api/public/signup-network-stats");
+  assert.equal(response.status, 200);
+  const payload = await response.json();
+  assert.deepEqual(Object.keys(payload).sort(), ["businessesSignedUp", "newThisMonth", "ok", "updatedAt"]);
+  assert.equal(payload.ok, true);
+  assert.equal(Number.isInteger(payload.businessesSignedUp), true);
+  assert.equal(Number.isInteger(payload.newThisMonth), true);
+  assert.equal(payload.businessesSignedUp >= payload.newThisMonth, true);
+  assert.equal(Number.isNaN(Date.parse(payload.updatedAt)), false);
+  assert.equal(JSON.stringify(payload).includes("ownerEmail"), false);
+  assert.equal(JSON.stringify(payload).includes("ownerPhone"), false);
+  assert.equal(JSON.stringify(payload).includes("businessName"), false);
+});
+
+test("signup network stats count a newly completed signup in the current month", () => {
+  const stats = __test.getPublicSignupNetworkStats(new Date("2026-08-20T12:00:00.000Z"), [
+    { signedUpAt: "2026-07-31T23:59:59.000Z" },
+    { signedUpAt: "2026-08-01T00:00:00.000Z" },
+    { signedUpAt: "2026-08-20T11:59:59.000Z" },
+  ]);
+  assert.deepEqual(stats, {
+    businessesSignedUp: 3,
+    newThisMonth: 2,
+    updatedAt: "2026-08-20T12:00:00.000Z",
+  });
+});
+
 test("the public Vapi preview configuration never falls back to the private key", async () => {
   const response = await request("/api/public/vapi-preview-config");
   assert.equal(response.status, 200);

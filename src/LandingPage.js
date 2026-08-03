@@ -1,4 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
+import { getApiBaseUrl, normalizeApiBase } from "./config/apiBase";
+
+const landingApiBase = normalizeApiBase(getApiBaseUrl(process.env.REACT_APP_API_BASE_URL));
 const proofFeatureCards = [
   {
     eyebrow: "Fast onboarding",
@@ -562,6 +565,83 @@ function HeroLogoMark() {
         My <span className="bg-[linear-gradient(90deg,#2563eb,#8fbfff)] bg-clip-text text-transparent">AI PA</span>
       </div>
     </div>
+  );
+}
+
+function LiveSignupNetwork({ stats, status }) {
+  const businessesSignedUp = Number.isInteger(stats?.businessesSignedUp) ? stats.businessesSignedUp.toLocaleString("en-CA") : "—";
+  const newThisMonth = Number.isInteger(stats?.newThisMonth) ? stats.newThisMonth.toLocaleString("en-CA") : "—";
+  const inputs = [
+    { label: "Calls", detail: "Answered", icon: "phone" },
+    { label: "Job details", detail: "Captured", icon: "clipboard" },
+    { label: "Follow-up", detail: "Texted", icon: "sms" },
+  ];
+
+  return (
+    <section className="landing-live-network mt-4 sm:hidden" aria-label="Live My AI PA signup network">
+      <p className="landing-live-network-attention text-center text-[0.78rem] font-black uppercase tracking-[0.18em] text-[#e66500]">
+        Attention contractors
+      </p>
+      <div className="mt-2 overflow-hidden rounded-2xl border border-[#bcd7f1] bg-white/85 p-3 shadow-[0_18px_42px_-30px_rgba(12,77,160,0.72)] backdrop-blur-sm">
+        <div className="flex items-center justify-between gap-3 border-b border-[#dbe9f7] pb-2.5">
+          <div>
+            <p className="text-[0.62rem] font-black uppercase tracking-[0.16em] text-[#56708d]">Live My AI PA network</p>
+            <p className="mt-0.5 text-[0.82rem] font-black text-[#07142a]">From missed call to booked opportunity</p>
+          </div>
+          <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-[#e9f9ef] px-2 py-1 text-[0.6rem] font-black uppercase tracking-[0.1em] text-[#137a36]">
+            <span className="h-2 w-2 rounded-full bg-[#16a34a] shadow-[0_0_0_4px_rgba(22,163,74,0.13)]" aria-hidden="true" />
+            Live
+          </span>
+        </div>
+
+        <div className="mt-3 grid grid-cols-3 gap-1.5">
+          {inputs.map((item) => (
+            <div key={item.label} className="rounded-xl border border-[#d5e4f3] bg-[#f8fbff] px-1.5 py-2 text-center">
+              <span className="mx-auto grid h-7 w-7 place-items-center rounded-lg bg-[#e6f2ff] text-[#176bdb]">
+                <HeroIcon type={item.icon} className="h-4 w-4" />
+              </span>
+              <p className="mt-1.5 text-[0.61rem] font-black leading-tight text-[#10233e]">{item.label}</p>
+              <p className="mt-0.5 text-[0.53rem] font-bold uppercase tracking-[0.05em] text-[#5a7088]">{item.detail}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="relative mx-auto mt-2 grid h-14 w-[74%] place-items-center" aria-hidden="true">
+          <svg viewBox="0 0 260 56" className="absolute inset-0 h-full w-full" fill="none">
+            <path d="M28 2C28 25 67 20 105 37" stroke="#8db9e6" strokeWidth="2" strokeLinecap="round" />
+            <path d="M130 2V32" stroke="#8db9e6" strokeWidth="2" strokeLinecap="round" />
+            <path d="M232 2C232 25 193 20 155 37" stroke="#8db9e6" strokeWidth="2" strokeLinecap="round" />
+            <path d="m126 28 4 5 4-5" stroke="#176bdb" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          <div className="relative mt-6 inline-flex items-center gap-2 rounded-xl border border-[#83b8ed] bg-[linear-gradient(145deg,#0e5db7,#1679e6)] px-3 py-2 text-white shadow-[0_12px_24px_-16px_rgba(12,77,160,0.9)]">
+            <span className="grid h-7 w-7 place-items-center rounded-lg bg-white/15">
+              <HeroIcon type="phone" className="h-4 w-4" />
+            </span>
+            <span className="text-[0.72rem] font-black tracking-[-0.01em]">My AI PA</span>
+          </div>
+        </div>
+
+        <div className="mx-auto mt-1 flex h-5 w-8 items-center justify-center text-[#176bdb]" aria-hidden="true">
+          <svg viewBox="0 0 32 20" className="h-5 w-8" fill="none">
+            <path d="M16 1v14m0 0-5-5m5 5 5-5" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2" aria-live="polite">
+          <div className="rounded-xl border border-[#bad7f2] bg-[#edf6ff] px-3 py-2.5">
+            <p className="text-[0.56rem] font-black uppercase tracking-[0.11em] text-[#4d6985]">Businesses signed up</p>
+            <p className="mt-1 text-[1.55rem] font-black leading-none tracking-[-0.04em] text-[#0c5fc3]">{businessesSignedUp}</p>
+          </div>
+          <div className="rounded-xl border border-[#b9e3c6] bg-[#effaf3] px-3 py-2.5">
+            <p className="text-[0.56rem] font-black uppercase tracking-[0.11em] text-[#4d6985]">New this month</p>
+            <p className="mt-1 text-[1.55rem] font-black leading-none tracking-[-0.04em] text-[#15803d]">+{newThisMonth}</p>
+          </div>
+        </div>
+        <p className="mt-2 text-center text-[0.55rem] font-bold text-[#627990]">
+          {status === "ready" ? "Updates automatically from completed signups" : status === "error" ? "Live count reconnecting…" : "Connecting to the live signup count…"}
+        </p>
+      </div>
+    </section>
   );
 }
 
@@ -2026,6 +2106,8 @@ function LandingPage() {
   const [audioError, setAudioError] = useState("");
   const [openFaq, setOpenFaq] = useState(-1);
   const [showHeader, setShowHeader] = useState(false);
+  const [signupNetworkStats, setSignupNetworkStats] = useState(null);
+  const [signupNetworkStatus, setSignupNetworkStatus] = useState("loading");
   const headerHideTimerRef = useRef(null);
 
   useEffect(() => {
@@ -2035,6 +2117,37 @@ function LandingPage() {
       document.getElementById(section)?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 250);
     return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.fetch !== "function") return undefined;
+    let active = true;
+
+    const loadSignupNetworkStats = async () => {
+      try {
+        const response = await window.fetch(`${landingApiBase}/api/public/signup-network-stats`, {
+          headers: { Accept: "application/json" },
+        });
+        if (!response.ok) throw new Error(`Signup network request failed with ${response.status}`);
+        const payload = await response.json();
+        if (!Number.isInteger(payload?.businessesSignedUp) || !Number.isInteger(payload?.newThisMonth)) {
+          throw new Error("Signup network response was incomplete");
+        }
+        if (active) {
+          setSignupNetworkStats(payload);
+          setSignupNetworkStatus("ready");
+        }
+      } catch (_error) {
+        if (active) setSignupNetworkStatus("error");
+      }
+    };
+
+    loadSignupNetworkStats();
+    const intervalId = window.setInterval(loadSignupNetworkStats, 30000);
+    return () => {
+      active = false;
+      window.clearInterval(intervalId);
+    };
   }, []);
 
   const activeTranscript =
@@ -6012,7 +6125,7 @@ function LandingPage() {
             #final-cta { order: 9; }
 
             .landing-hero-shell {
-              padding: 0.65rem 0.85rem 1rem !important;
+              padding: 0.8rem 0.95rem 1.1rem !important;
             }
             .landing-hero-shell nav {
               display: block !important;
@@ -6021,61 +6134,65 @@ function LandingPage() {
               gap: 0.45rem !important;
             }
             .landing-hero-shell nav > div:first-child > div:first-child {
-              width: 2.25rem !important;
-              height: 2.25rem !important;
+              width: 2.65rem !important;
+              height: 2.65rem !important;
             }
             .landing-hero-shell nav > div:first-child > div:last-child {
-              font-size: 1.5rem !important;
+              font-size: 1.8rem !important;
             }
             .landing-hero-shell nav > div:last-child {
               display: none !important;
             }
             .landing-hero-grid {
-              padding-top: 0.65rem !important;
+              gap: 0 !important;
+              padding-top: 1rem !important;
+            }
+            .landing-hero-copy-column {
+              min-height: calc(100svh - 9rem) !important;
             }
             .landing-hero-title {
               margin-top: 0 !important;
-              font-size: 2.05rem !important;
+              font-size: 2.35rem !important;
               line-height: 0.98 !important;
               letter-spacing: -0.05em !important;
             }
             .landing-hero-title > span:nth-child(2) {
-              margin-top: 0.55rem !important;
+              margin-top: 0.75rem !important;
               font-size: 0.54em !important;
             }
             .landing-hero-coverage {
-              margin-top: 0.7rem !important;
-              padding: 0.42rem 0.62rem !important;
-              border-left-width: 3px !important;
-              font-size: 0.8rem !important;
+              margin-top: 1rem !important;
+              padding: 0.62rem 0.8rem !important;
+              border-left-width: 4px !important;
+              font-size: 1rem !important;
             }
             .landing-hero-points-clean {
-              margin-top: 0.72rem !important;
+              margin-top: 1rem !important;
               gap: 0 !important;
-              padding: 0.25rem 0.68rem !important;
+              padding: 0.35rem 0.8rem !important;
               border: 1px solid #bfd8f1 !important;
               border-radius: 1rem !important;
               background: rgba(255, 255, 255, 0.72) !important;
             }
             .landing-hero-points-clean .landing-hero-point-clean {
-              min-height: 2.55rem !important;
-              grid-template-columns: 1.55rem minmax(0, 1fr) !important;
-              column-gap: 0.58rem !important;
-              padding: 0.42rem 0 !important;
-              font-size: 0.76rem !important;
+              min-height: 3.35rem !important;
+              grid-template-columns: 2rem minmax(0, 1fr) !important;
+              column-gap: 0.72rem !important;
+              padding: 0.56rem 0 !important;
+              font-size: 0.9rem !important;
               font-weight: 700 !important;
-              line-height: 1.18 !important;
+              line-height: 1.22 !important;
             }
             .landing-hero-points-clean .landing-hero-point-clean + .landing-hero-point-clean {
               border-top: 1px solid rgba(148, 180, 214, 0.34) !important;
             }
             .landing-hero-points-clean .landing-hero-point-check {
-              width: 1.55rem !important;
-              height: 1.55rem !important;
-              font-size: 0.7rem !important;
+              width: 2rem !important;
+              height: 2rem !important;
+              font-size: 0.9rem !important;
             }
             .landing-hero-actions {
-              margin-top: 0.72rem !important;
+              margin-top: 1rem !important;
             }
             .landing-hero-actions > div:first-child {
               display: grid !important;
@@ -6085,17 +6202,17 @@ function LandingPage() {
             .landing-hero-actions button {
               width: 100% !important;
               min-width: 0 !important;
-              min-height: 2.7rem !important;
-              padding: 0.45rem 0.5rem !important;
-              font-size: 0.72rem !important;
+              min-height: 3.45rem !important;
+              padding: 0.65rem 0.6rem !important;
+              font-size: 0.86rem !important;
             }
             .landing-hero-trust {
               display: grid !important;
               width: 100% !important;
               grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
               gap: 0.35rem 0.55rem !important;
-              margin-top: 0.55rem !important;
-              padding: 0.55rem 0.65rem !important;
+              margin-top: 0.75rem !important;
+              padding: 0.7rem 0.75rem !important;
               box-sizing: border-box !important;
               border: 1px solid #9ee0b2 !important;
               border-radius: 0.7rem !important;
@@ -6108,26 +6225,27 @@ function LandingPage() {
               align-items: center !important;
               justify-content: center !important;
               color: #137a36 !important;
-              font-size: 0.78rem !important;
+              font-size: 0.88rem !important;
               font-weight: 900 !important;
               line-height: 1.15 !important;
             }
             .landing-hero-trust > span:first-child {
               grid-column: 1 / -1 !important;
-              padding-bottom: 0.35rem !important;
+              padding-bottom: 0.5rem !important;
               border-bottom: 1px solid rgba(19, 122, 54, 0.18) !important;
-              font-size: 1.02rem !important;
+              font-size: 1.2rem !important;
             }
             .landing-hero-trust > span:last-child {
               grid-column: auto !important;
             }
             .landing-hero-visual {
-              margin-top: 0.65rem !important;
+              margin-top: 0.25rem !important;
             }
             .landing-hero-proof-heading {
-              margin-bottom: 0.35rem !important;
-              font-size: 0.58rem !important;
-              letter-spacing: 0.1em !important;
+              margin-bottom: 0.65rem !important;
+              font-size: 0.78rem !important;
+              line-height: 1.2 !important;
+              letter-spacing: 0.105em !important;
             }
             .landing-owner-text-arrow {
               display: none !important;
@@ -6262,6 +6380,8 @@ function LandingPage() {
                   ))}
                 </div>
               </div>
+
+              <LiveSignupNetwork stats={signupNetworkStats} status={signupNetworkStatus} />
             </div>
 
             <div className="landing-hero-visual relative z-0 mt-8 flex justify-end lg:mt-2 lg:self-center">
