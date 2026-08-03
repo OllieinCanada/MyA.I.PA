@@ -1,4 +1,4 @@
-const CACHE_NAME = "myaipa-v3-20260803";
+const CACHE_NAME = "myaipa-v4-20260803-refresh";
 const APP_SHELL = ["/manifest.json", "/MyAIPA_logo.png"];
 
 function freshRequest(request) {
@@ -20,6 +20,14 @@ self.addEventListener("activate", (event) => {
       .keys()
       .then((keys) => Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))))
       .then(() => self.clients.claim())
+      .then(() => self.clients.matchAll({ type: "window", includeUncontrolled: true }))
+      .then((windows) =>
+        Promise.all(
+          windows.map((client) =>
+            client.navigate(client.url).catch(() => undefined)
+          )
+        )
+      )
   );
 });
 
