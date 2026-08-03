@@ -1197,6 +1197,61 @@ function HeroCallDashboard({ ownerCardRef }) {
   );
 }
 
+function MobileHeroCallProof() {
+  return (
+    <section className="landing-mobile-call-proof overflow-hidden rounded-[1.75rem] border border-[#15345a] bg-[linear-gradient(145deg,#07172d,#0b2849)] p-4 text-white shadow-[0_28px_58px_-32px_rgba(7,23,45,0.94)] sm:hidden" aria-label="Live example of a call answered by My AI PA">
+      <div className="flex items-center gap-3.5">
+        <img
+          src={`${process.env.PUBLIC_URL || ""}/NiceGirl.png`}
+          alt="My AI PA telephone assistant wearing a headset"
+          className="h-[4.25rem] w-[4.25rem] shrink-0 rounded-full border-[3px] border-[#238cec] object-cover shadow-[0_12px_28px_-18px_rgba(35,140,236,1)]"
+        />
+        <div className="min-w-0">
+          <span className="inline-flex items-center gap-2 text-[0.7rem] font-black uppercase tracking-[0.1em] text-[#b6f6cc]">
+            <span className="h-2.5 w-2.5 rounded-full bg-[#15c85a] shadow-[0_0_0_5px_rgba(21,200,90,0.12)]" aria-hidden="true" />
+            Live call
+          </span>
+          <h2 className="mt-1.5 text-[1.25rem] font-black leading-tight tracking-[-0.035em]">Tim&apos;s Electrical AI</h2>
+          <p className="mt-1 text-[0.72rem] font-bold text-[#9bc7f3]">Ring 3 · My AI PA answered</p>
+        </div>
+      </div>
+
+      <div className="landing-mobile-proof-conversation relative mt-4 space-y-2.5 border-l-2 border-[#2587f5]/55 pl-3.5">
+        <div className="ml-4 rounded-[1rem_1rem_0.35rem_1rem] bg-[#edf6ff] px-3.5 py-2.5 text-[0.77rem] font-semibold leading-[1.35] text-[#102f51]">
+          <span className="mb-1 block text-[0.58rem] font-black uppercase tracking-[0.12em] text-[#1876d2]">My AI PA</span>
+          Thanks for calling Tim&apos;s Electrical. Are you calling about maintenance, a repair, or a new installation today?
+        </div>
+        <div className="rounded-[1rem_1rem_1rem_0.35rem] bg-[#15375d] px-3.5 py-2.5 text-[0.77rem] font-semibold leading-[1.35] text-white">
+          <span className="mb-1 block text-[0.58rem] font-black uppercase tracking-[0.12em] text-[#8fc7ff]">Caller</span>
+          A new hot tub installation. I need the electrical hookup completed.
+        </div>
+        <div className="ml-4 rounded-[1rem_1rem_0.35rem_1rem] bg-[#edf6ff] px-3.5 py-2.5 text-[0.77rem] font-semibold leading-[1.35] text-[#102f51]">
+          <span className="mb-1 block text-[0.58rem] font-black uppercase tracking-[0.12em] text-[#1876d2]">My AI PA</span>
+          Perfect. What&apos;s the job address and best callback time?
+        </div>
+      </div>
+
+      <div className="mt-3.5 rounded-[1.2rem] bg-white p-3 text-[#111827] shadow-[0_16px_32px_-26px_rgba(0,0,0,0.75)]">
+        <div className="flex items-center gap-2.5">
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[linear-gradient(145deg,#2d93ff,#0868df)] text-[0.64rem] font-black text-white">PA</span>
+          <span className="min-w-0">
+            <strong className="block text-[0.78rem] font-black leading-tight">Qualified job delivered</strong>
+            <small className="mt-0.5 block text-[0.6rem] font-bold leading-none text-[#8e8e93]">My AI PA · now</small>
+          </span>
+        </div>
+        <div className="mt-2.5 rounded-[1rem_1rem_1rem_0.35rem] bg-[#e9e9eb] px-3 py-2.5 text-[0.74rem] font-bold leading-[1.28] text-[#111111]">
+          New installation · Hot tub electrical hookup · 23 Robb St., Hamilton · Callback after 5 PM
+        </div>
+      </div>
+
+      <div className="mt-3 flex items-center justify-center gap-2 text-[0.68rem] font-black uppercase tracking-[0.08em] text-[#b6f6cc]">
+        <span className="grid h-5 w-5 place-items-center rounded-full bg-[#16a05d] text-[0.68rem] text-white" aria-hidden="true">✓</span>
+        Sent to owner + customer
+      </div>
+    </section>
+  );
+}
+
 function HeroTradeStrip() {
   const trades = [
     ["bolt", "Electricians"],
@@ -6270,6 +6325,228 @@ function LandingPage() {
               margin-top: 0.15rem !important;
             }
 
+            /* Clean mobile revamp selected from the visual concepts. */
+            .landing-hero-shell {
+              padding: 0.9rem 1.15rem 1.3rem !important;
+            }
+            .landing-mobile-contractor-label {
+              font-size: clamp(0.68rem, 3vw, 0.76rem) !important;
+              letter-spacing: 0.18em !important;
+              color: #e96300 !important;
+            }
+            .landing-hero-grid {
+              padding-top: 0.85rem !important;
+              padding-bottom: 0 !important;
+            }
+            .landing-hero-copy-column {
+              width: 100% !important;
+              max-width: none !important;
+              min-height: 0 !important;
+              margin-inline: auto !important;
+            }
+            .landing-mobile-proof-first {
+              width: 100%;
+              margin-inline: auto;
+            }
+            .landing-mobile-proof-title {
+              max-width: 23rem;
+              margin-inline: auto;
+              text-align: center;
+              font-size: clamp(2.62rem, 11.3vw, 2.82rem);
+              line-height: 0.96;
+              text-wrap: balance;
+            }
+            .landing-mobile-proof-title > span:last-child {
+              margin-top: 0.08em;
+            }
+            .landing-mobile-proof-pain {
+              margin-top: 0.72rem;
+              text-align: center;
+              font-size: clamp(1.14rem, 5.25vw, 1.34rem);
+              line-height: 1.15;
+              letter-spacing: -0.025em;
+            }
+            .landing-mobile-coverage-card {
+              display: grid;
+              min-height: 3.85rem;
+              margin: 1.35rem auto 0;
+              place-items: center;
+              border: 1px solid #b7e1c4;
+              border-radius: 1.12rem;
+              background: rgba(234, 248, 239, 0.92);
+              text-align: center;
+              color: #0b7834;
+              font-size: clamp(1.06rem, 4.8vw, 1.22rem);
+              font-weight: 850;
+              line-height: 1.1;
+              letter-spacing: -0.02em;
+            }
+            .landing-mobile-benefit-list {
+              overflow: hidden;
+              margin-top: 1.1rem;
+              border: 1px solid #d4e2ed;
+              border-radius: 1.25rem;
+              background: rgba(255, 255, 255, 0.86);
+              box-shadow: 0 16px 36px rgba(17, 54, 87, 0.075);
+            }
+            .landing-mobile-benefit-row {
+              display: grid;
+              min-height: 3.9rem;
+              grid-template-columns: 2.4rem minmax(0, 1fr);
+              align-items: center;
+              gap: 0.8rem;
+              margin-inline: 0.9rem;
+              padding-block: 0.72rem;
+              color: #152a43;
+              font-size: clamp(0.88rem, 3.85vw, 0.97rem);
+              font-weight: 750;
+              line-height: 1.28;
+              letter-spacing: -0.015em;
+            }
+            .landing-mobile-benefit-row + .landing-mobile-benefit-row {
+              border-top: 1px solid #dce7f0;
+            }
+            .landing-mobile-benefit-symbol {
+              display: grid;
+              width: 2.38rem;
+              height: 2.38rem;
+              place-items: center;
+              border-radius: 0.75rem;
+              background: #147fd8;
+              color: white;
+              box-shadow: 0 7px 16px rgba(20, 127, 216, 0.18);
+            }
+            .landing-mobile-proof-actions {
+              display: grid;
+              grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr);
+              gap: 0.65rem;
+              margin-top: 1.15rem;
+            }
+            .landing-mobile-proof-primary {
+              min-height: 3.65rem;
+              font-size: clamp(0.86rem, 3.75vw, 0.97rem);
+            }
+            .landing-mobile-proof-secondary {
+              min-height: 3.65rem;
+              font-size: clamp(0.86rem, 3.75vw, 0.97rem);
+            }
+            .landing-mobile-proof-trust {
+              display: grid;
+              min-height: 3.3rem;
+              grid-template-columns: 1.1fr 1fr 0.95fr;
+              align-items: center;
+              margin-top: 0.75rem;
+              border: 1px solid #bee4c8;
+              border-radius: 0.95rem;
+              background: rgba(248, 255, 250, 0.92);
+              color: #24643c;
+              font-size: clamp(0.62rem, 2.75vw, 0.72rem);
+              font-weight: 800;
+              line-height: 1.1;
+            }
+            .landing-mobile-proof-trust > span {
+              display: flex;
+              min-width: 0;
+              align-items: center;
+              justify-content: center;
+              gap: 0.25rem;
+              white-space: nowrap;
+            }
+            .landing-mobile-proof-trust > span + span {
+              border-left: 1px solid #d9ecdf;
+            }
+            .landing-mobile-proof-trust b {
+              color: #159447;
+              font-size: 0.86rem;
+            }
+            .landing-hero-title {
+              max-width: 22rem !important;
+              margin-inline: auto !important;
+              font-size: clamp(2.42rem, 10.7vw, 2.68rem) !important;
+              line-height: 0.97 !important;
+            }
+            .landing-hero-title > span:first-child {
+              white-space: normal !important;
+              text-wrap: balance !important;
+            }
+            .landing-hero-title > span:nth-child(2) {
+              margin-top: 0.85rem !important;
+              font-size: 0.51em !important;
+              line-height: 1.05 !important;
+            }
+            .landing-hero-coverage {
+              width: auto !important;
+              margin: 0.8rem auto 0 !important;
+              padding: 0 !important;
+              border: 0 !important;
+              border-radius: 0 !important;
+              background: transparent !important;
+              box-shadow: none !important;
+              text-align: center !important;
+              font-size: 1.08rem !important;
+            }
+            .landing-hero-points-mobile {
+              margin-top: 1.2rem !important;
+              padding: 0 !important;
+              border: 0 !important;
+              border-top: 1px solid rgba(132, 171, 209, 0.42) !important;
+              border-bottom: 1px solid rgba(132, 171, 209, 0.42) !important;
+              border-radius: 0 !important;
+              background: transparent !important;
+            }
+            .landing-hero-points-desktop {
+              display: none !important;
+            }
+            .landing-hero-points-mobile .landing-hero-point-clean {
+              min-height: 4.3rem !important;
+              grid-template-columns: 2.65rem minmax(0, 1fr) !important;
+              column-gap: 0.85rem !important;
+              padding: 0.82rem 0.15rem !important;
+              font-size: clamp(0.94rem, 4vw, 1.02rem) !important;
+              font-weight: 800 !important;
+              line-height: 1.28 !important;
+            }
+            .landing-hero-points-mobile .landing-hero-point-check {
+              width: 2.65rem !important;
+              height: 2.65rem !important;
+              background: linear-gradient(145deg, #2b91ee, #0867c7) !important;
+              font-size: 1.15rem !important;
+              box-shadow: 0 9px 20px -12px rgba(12, 95, 195, 0.95) !important;
+            }
+            .landing-hero-actions {
+              margin-top: 1.25rem !important;
+            }
+            .landing-hero-actions > div:first-child {
+              grid-template-columns: minmax(0, 1.03fr) minmax(0, 0.97fr) !important;
+              gap: 0.65rem !important;
+            }
+            .landing-hero-actions button {
+              min-height: 3.5rem !important;
+              font-size: 0.86rem !important;
+            }
+            .landing-hero-trust {
+              margin-top: 0.8rem !important;
+              padding: 0 !important;
+              border: 0 !important;
+              border-radius: 0 !important;
+              background: transparent !important;
+              gap: 0.25rem !important;
+            }
+            .landing-hero-trust > span,
+            .landing-hero-trust > span:first-child {
+              font-size: clamp(0.67rem, 3vw, 0.75rem) !important;
+              letter-spacing: -0.02em !important;
+            }
+            .landing-mobile-call-proof {
+              margin-top: 1.35rem !important;
+            }
+            .landing-live-network {
+              margin-top: 1.25rem !important;
+            }
+            .landing-hero-visual {
+              display: none !important;
+            }
+
             #contractor-proof > div {
               display: flex;
               flex-direction: column;
@@ -6308,6 +6585,11 @@ function LandingPage() {
               padding-bottom: 2.5rem !important;
             }
           }
+          @media (max-width: 370px) {
+            .landing-mobile-proof-title {
+              font-size: 2.5rem !important;
+            }
+          }
         `}</style>
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_16%_18%,rgba(187,222,255,0.74),transparent_30%),radial-gradient(circle_at_78%_12%,rgba(213,235,255,0.70),transparent_32%),linear-gradient(180deg,#ffffff_0%,#f6fbff_28%,#e9f6ff_100%)]" />
         <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgba(37,99,235,0.06)_1px,transparent_1px),linear-gradient(rgba(37,99,235,0.045)_1px,transparent_1px)] bg-[size:76px_76px] opacity-[0.32]" />
@@ -6344,8 +6626,60 @@ function LandingPage() {
 
           <div className="landing-hero-grid relative grid flex-1 gap-10 py-5 lg:grid-cols-[minmax(380px,0.7fr)_minmax(620px,1.3fr)] lg:items-center xl:grid-cols-[minmax(430px,0.72fr)_minmax(680px,1.28fr)] xl:gap-16 2xl:gap-16 2xl:py-5">
             <div className="landing-hero-copy-column relative z-10 min-w-0 max-w-[500px] xl:max-w-[520px] lg:-translate-y-1">
+              <div className="landing-mobile-proof-first sm:hidden">
+                <h1 className="landing-mobile-proof-title font-black tracking-[-0.055em] text-[#07142a]">
+                  <span className="block">Never miss a call</span>
+                  <span className="block">again</span>
+                </h1>
+                <p className="landing-mobile-proof-pain font-black text-[#c92a20]">Missed Calls = Missed Jobs</p>
+
+                <p className="landing-mobile-coverage-card">We&apos;ve got you covered 24/7.</p>
+
+                <section className="landing-mobile-benefit-list" aria-label="What My AI PA does">
+                  {[
+                    ["phone", "Every call answered professionally after 3 rings"],
+                    ["faq", "Answers FAQs and speaks naturally with customers"],
+                    ["clipboard", "Collects complete job and callback details"],
+                    ["sms", "Texts you the details and sends the customer a thank-you reminder"],
+                  ].map(([icon, label]) => (
+                    <div key={label} className="landing-mobile-benefit-row">
+                      <span className="landing-mobile-benefit-symbol" aria-hidden="true">
+                        <HeroIcon type={icon} className="h-[1.28rem] w-[1.28rem]" />
+                      </span>
+                      <span>{label}</span>
+                    </div>
+                  ))}
+                </section>
+
+                <div className="landing-mobile-proof-actions">
+                  <button
+                    type="button"
+                    onClick={goToSignup}
+                    className="landing-mobile-proof-primary inline-flex w-full items-center justify-center rounded-2xl bg-[#ff6a00] px-4 font-black text-white shadow-[0_14px_28px_-20px_rgba(255,106,0,0.9)] transition hover:brightness-110"
+                  >
+                    Start Your Free Trial
+                  </button>
+                  <button
+                    type="button"
+                    onClick={playDemo}
+                    className="landing-mobile-proof-secondary inline-flex w-full items-center justify-center rounded-2xl border border-[#5f9fd9] bg-white/90 px-3 font-black text-[#0c5fc3]"
+                  >
+                    Hear Demo
+                  </button>
+                </div>
+
+                <div className="landing-mobile-proof-trust" aria-label="Trial details">
+                  {["14-Day Free Trial", "No Credit Card", "Cancel Anytime"].map((label) => (
+                    <span key={label}><b aria-hidden="true">✓</b>{label}</span>
+                  ))}
+                </div>
+
+                <MobileHeroCallProof />
+              </div>
+
+              <div className="hidden sm:block">
               <h1 className="landing-hero-title text-[clamp(3rem,11vw,4.25rem)] font-black leading-[0.98] tracking-[-0.055em] text-[#07142a] 2xl:text-[4.5rem]">
-                <span className="block drop-shadow-[0_3px_0_rgba(148,190,255,0.45)]">Never miss a call again</span>
+                <span className="block drop-shadow-[0_3px_0_rgba(148,190,255,0.45)]">Never miss a call again<span className="sm:hidden">.</span></span>
                 <span className="mt-4 block text-[0.58em] leading-none tracking-[-0.045em] text-[#d91d12] sm:mt-5">
                   Missed Calls = Missed Jobs
                 </span>
@@ -6355,7 +6689,7 @@ function LandingPage() {
                 We&apos;ve got you covered 24/7.
               </p>
 
-              <div className="landing-hero-points landing-hero-points-clean mt-5 space-y-3">
+              <div className="landing-hero-points landing-hero-points-clean landing-hero-points-desktop mt-5 hidden space-y-3 sm:block">
                 {[
                   "Every call answered professionally after 3 rings",
                   "Answers FAQs and speaks naturally with customers",
@@ -6378,32 +6712,39 @@ function LandingPage() {
                     onClick={goToSignup}
                     className="inline-flex min-h-[46px] items-center justify-center rounded-xl bg-[linear-gradient(180deg,#ff7a00,#ff6500)] px-5 text-[0.86rem] font-black text-white shadow-[0_16px_32px_-22px_rgba(255,106,0,0.95)] transition hover:-translate-y-0.5 hover:brightness-110"
                   >
-                    Start Your Free Trial
+                    <span className="sm:hidden">Start Free Trial</span>
+                    <span className="hidden sm:inline">Start Your Free Trial</span>
                   </button>
                   <button
                     type="button"
                     onClick={playDemo}
                     className="inline-flex min-h-[46px] items-center justify-center rounded-xl border border-[#79aee0] bg-white/80 px-5 text-[0.86rem] font-black text-[#0c5fc3] transition hover:-translate-y-0.5 hover:bg-white"
                   >
-                    <span className="sm:hidden">Hear Demo</span>
+                    <span className="sm:hidden">Hear Live Demo</span>
                     <span className="hidden sm:inline">Hear the Live Demo</span>
                   </button>
                 </div>
                 <div className="landing-hero-trust mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-[0.68rem] font-black text-[#294967]">
-                  {["14-Day Free Trial", "No Credit Card", "Cancel Anytime"].map((label) => (
-                    <span key={label} className="inline-flex items-center gap-1.5">
+                  {[
+                    { desktop: "14-Day Free Trial", mobile: "14 days free" },
+                    { desktop: "No Credit Card", mobile: "No card" },
+                    { desktop: "Cancel Anytime", mobile: "Cancel anytime" },
+                  ].map((label) => (
+                    <span key={label.desktop} className="inline-flex items-center gap-1.5">
                       <span className="text-[#17951f]" aria-hidden="true">✓</span>
-                      {label}
+                      <span className="sm:hidden">{label.mobile}</span>
+                      <span className="hidden sm:inline">{label.desktop}</span>
                     </span>
                   ))}
                 </div>
               </div>
 
+              </div>
               <LiveSignupNetwork stats={signupNetworkStats} status={signupNetworkStatus} />
 
             </div>
 
-            <div className="landing-hero-visual relative z-0 mt-8 flex justify-end lg:mt-2 lg:self-center">
+            <div className="landing-hero-visual relative z-0 mt-8 hidden justify-end sm:flex lg:mt-2 lg:self-center">
               <div className="landing-hero-proof-wrap w-full">
                 <p className="landing-hero-proof-heading mb-2 text-center text-[0.78rem] font-black uppercase tracking-[0.12em] text-[#294967]">
                   See exactly what happens after a missed call.
