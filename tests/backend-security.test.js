@@ -97,7 +97,7 @@ test("the public Vapi preview configuration never falls back to the private key"
   const payload = await response.json();
   assert.equal(payload.enabled, false);
   assert.equal(payload.assistantId, "");
-  assert.equal(payload.maxDurationSeconds, 30);
+  assert.equal(payload.maxDurationSeconds, 60);
   assert.equal(payload.maxConcurrentCalls, 2);
 });
 
