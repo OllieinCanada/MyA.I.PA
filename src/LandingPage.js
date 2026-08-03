@@ -578,66 +578,63 @@ function LiveSignupNetwork({ stats, status }) {
   ];
 
   return (
-    <section className="landing-live-network mt-4 sm:hidden" aria-label="Live My AI PA signup network">
-      <p className="landing-live-network-attention text-center text-[0.78rem] font-black uppercase tracking-[0.18em] text-[#e66500]">
-        Attention contractors
-      </p>
-      <div className="mt-2 overflow-hidden rounded-2xl border border-[#bcd7f1] bg-white/85 p-3 shadow-[0_18px_42px_-30px_rgba(12,77,160,0.72)] backdrop-blur-sm">
-        <div className="flex items-center justify-between gap-3 border-b border-[#dbe9f7] pb-2.5">
+    <section className="landing-live-network mt-3 sm:hidden" aria-label="Live My AI PA signup network">
+      <div className="overflow-hidden rounded-2xl border border-[#bcd7f1] bg-white/85 p-2.5 shadow-[0_18px_42px_-30px_rgba(12,77,160,0.72)] backdrop-blur-sm">
+        <div className="flex items-center justify-between gap-2 border-b border-[#dbe9f7] pb-2">
           <div>
-            <p className="text-[0.62rem] font-black uppercase tracking-[0.16em] text-[#56708d]">Live My AI PA network</p>
-            <p className="mt-0.5 text-[0.82rem] font-black text-[#07142a]">From missed call to booked opportunity</p>
+            <p className="text-[0.56rem] font-black uppercase tracking-[0.14em] text-[#56708d]">Live My AI PA network</p>
+            <p className="mt-0.5 text-[0.72rem] font-black text-[#07142a]">From missed call to booked opportunity</p>
           </div>
-          <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-[#e9f9ef] px-2 py-1 text-[0.6rem] font-black uppercase tracking-[0.1em] text-[#137a36]">
-            <span className="h-2 w-2 rounded-full bg-[#16a34a] shadow-[0_0_0_4px_rgba(22,163,74,0.13)]" aria-hidden="true" />
+          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[#e9f9ef] px-1.5 py-0.5 text-[0.52rem] font-black uppercase tracking-[0.08em] text-[#137a36]">
+            <span className="h-1.5 w-1.5 rounded-full bg-[#16a34a] shadow-[0_0_0_3px_rgba(22,163,74,0.13)]" aria-hidden="true" />
             Live
           </span>
         </div>
 
-        <div className="mt-3 grid grid-cols-3 gap-1.5">
+        <div className="mt-2 grid grid-cols-3 gap-1.5">
           {inputs.map((item) => (
-            <div key={item.label} className="rounded-xl border border-[#d5e4f3] bg-[#f8fbff] px-1.5 py-2 text-center">
-              <span className="mx-auto grid h-7 w-7 place-items-center rounded-lg bg-[#e6f2ff] text-[#176bdb]">
-                <HeroIcon type={item.icon} className="h-4 w-4" />
+            <div key={item.label} className="rounded-lg border border-[#d5e4f3] bg-[#f8fbff] px-1 py-1.5 text-center">
+              <span className="mx-auto grid h-6 w-6 place-items-center rounded-md bg-[#e6f2ff] text-[#176bdb]">
+                <HeroIcon type={item.icon} className="h-3.5 w-3.5" />
               </span>
-              <p className="mt-1.5 text-[0.61rem] font-black leading-tight text-[#10233e]">{item.label}</p>
-              <p className="mt-0.5 text-[0.53rem] font-bold uppercase tracking-[0.05em] text-[#5a7088]">{item.detail}</p>
+              <p className="mt-1 text-[0.55rem] font-black leading-tight text-[#10233e]">{item.label}</p>
+              <p className="mt-0.5 text-[0.46rem] font-bold uppercase tracking-[0.04em] text-[#5a7088]">{item.detail}</p>
             </div>
           ))}
         </div>
 
-        <div className="relative mx-auto mt-2 grid h-14 w-[74%] place-items-center" aria-hidden="true">
+        <div className="relative mx-auto mt-1 grid h-10 w-[74%] place-items-center" aria-hidden="true">
           <svg viewBox="0 0 260 56" className="absolute inset-0 h-full w-full" fill="none">
             <path d="M28 2C28 25 67 20 105 37" stroke="#8db9e6" strokeWidth="2" strokeLinecap="round" />
             <path d="M130 2V32" stroke="#8db9e6" strokeWidth="2" strokeLinecap="round" />
             <path d="M232 2C232 25 193 20 155 37" stroke="#8db9e6" strokeWidth="2" strokeLinecap="round" />
             <path d="m126 28 4 5 4-5" stroke="#176bdb" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
-          <div className="relative mt-6 inline-flex items-center gap-2 rounded-xl border border-[#83b8ed] bg-[linear-gradient(145deg,#0e5db7,#1679e6)] px-3 py-2 text-white shadow-[0_12px_24px_-16px_rgba(12,77,160,0.9)]">
-            <span className="grid h-7 w-7 place-items-center rounded-lg bg-white/15">
-              <HeroIcon type="phone" className="h-4 w-4" />
+          <div className="relative mt-4 inline-flex items-center gap-1.5 rounded-lg border border-[#83b8ed] bg-[linear-gradient(145deg,#0e5db7,#1679e6)] px-2.5 py-1.5 text-white shadow-[0_12px_24px_-16px_rgba(12,77,160,0.9)]">
+            <span className="grid h-6 w-6 place-items-center rounded-md bg-white/15">
+              <HeroIcon type="phone" className="h-3.5 w-3.5" />
             </span>
-            <span className="text-[0.72rem] font-black tracking-[-0.01em]">My AI PA</span>
+            <span className="text-[0.64rem] font-black tracking-[-0.01em]">My AI PA</span>
           </div>
         </div>
 
-        <div className="mx-auto mt-1 flex h-5 w-8 items-center justify-center text-[#176bdb]" aria-hidden="true">
-          <svg viewBox="0 0 32 20" className="h-5 w-8" fill="none">
+        <div className="mx-auto flex h-3 w-8 items-center justify-center text-[#176bdb]" aria-hidden="true">
+          <svg viewBox="0 0 32 20" className="h-3 w-8" fill="none">
             <path d="M16 1v14m0 0-5-5m5 5 5-5" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </div>
 
-        <div className="grid grid-cols-2 gap-2" aria-live="polite">
-          <div className="rounded-xl border border-[#bad7f2] bg-[#edf6ff] px-3 py-2.5">
-            <p className="text-[0.56rem] font-black uppercase tracking-[0.11em] text-[#4d6985]">Businesses signed up</p>
-            <p className="mt-1 text-[1.55rem] font-black leading-none tracking-[-0.04em] text-[#0c5fc3]">{businessesSignedUp}</p>
+        <div className="grid grid-cols-2 gap-1.5" aria-live="polite">
+          <div className="rounded-lg border border-[#bad7f2] bg-[#edf6ff] px-2.5 py-1.5">
+            <p className="text-[0.48rem] font-black uppercase tracking-[0.08em] text-[#4d6985]">Businesses signed up</p>
+            <p className="mt-0.5 text-[1.22rem] font-black leading-none tracking-[-0.04em] text-[#0c5fc3]">{businessesSignedUp}</p>
           </div>
-          <div className="rounded-xl border border-[#b9e3c6] bg-[#effaf3] px-3 py-2.5">
-            <p className="text-[0.56rem] font-black uppercase tracking-[0.11em] text-[#4d6985]">New this month</p>
-            <p className="mt-1 text-[1.55rem] font-black leading-none tracking-[-0.04em] text-[#15803d]">+{newThisMonth}</p>
+          <div className="rounded-lg border border-[#b9e3c6] bg-[#effaf3] px-2.5 py-1.5">
+            <p className="text-[0.48rem] font-black uppercase tracking-[0.08em] text-[#4d6985]">New this month</p>
+            <p className="mt-0.5 text-[1.22rem] font-black leading-none tracking-[-0.04em] text-[#15803d]">+{newThisMonth}</p>
           </div>
         </div>
-        <p className="mt-2 text-center text-[0.55rem] font-bold text-[#627990]">
+        <p className="mt-1 text-center text-[0.48rem] font-bold text-[#627990]">
           {status === "ready" ? "Updates automatically from completed signups" : status === "error" ? "Live count reconnecting…" : "Connecting to the live signup count…"}
         </p>
       </div>
@@ -6130,15 +6127,19 @@ function LandingPage() {
             .landing-hero-shell nav {
               display: block !important;
             }
-            .landing-hero-shell nav > div:first-child {
-              gap: 0.45rem !important;
+            .landing-desktop-brand {
+              display: none !important;
             }
-            .landing-hero-shell nav > div:first-child > div:first-child {
-              width: 2.65rem !important;
-              height: 2.65rem !important;
-            }
-            .landing-hero-shell nav > div:first-child > div:last-child {
-              font-size: 1.8rem !important;
+            .landing-mobile-contractor-label {
+              display: block !important;
+              width: 100% !important;
+              color: #e66500 !important;
+              text-align: center !important;
+              font-size: 1rem !important;
+              font-weight: 950 !important;
+              line-height: 1 !important;
+              letter-spacing: 0.18em !important;
+              text-transform: uppercase !important;
             }
             .landing-hero-shell nav > div:last-child {
               display: none !important;
@@ -6152,6 +6153,7 @@ function LandingPage() {
             }
             .landing-hero-title {
               margin-top: 0 !important;
+              text-align: center !important;
               font-size: 2.35rem !important;
               line-height: 0.98 !important;
               letter-spacing: -0.05em !important;
@@ -6162,9 +6164,16 @@ function LandingPage() {
             }
             .landing-hero-coverage {
               margin-top: 1rem !important;
-              padding: 0.62rem 0.8rem !important;
-              border-left-width: 4px !important;
-              font-size: 1rem !important;
+              display: block !important;
+              width: 100% !important;
+              box-sizing: border-box !important;
+              padding: 0.82rem 0.9rem !important;
+              border: 1px solid #9ee0b2 !important;
+              border-radius: 0.8rem !important;
+              text-align: center !important;
+              font-size: 1.2rem !important;
+              line-height: 1.12 !important;
+              box-shadow: 0 12px 28px -24px rgba(21, 128, 61, 0.65) !important;
             }
             .landing-hero-points-clean {
               margin-top: 1rem !important;
@@ -6209,10 +6218,10 @@ function LandingPage() {
             .landing-hero-trust {
               display: grid !important;
               width: 100% !important;
-              grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-              gap: 0.35rem 0.55rem !important;
+              grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+              gap: 0.25rem !important;
               margin-top: 0.75rem !important;
-              padding: 0.7rem 0.75rem !important;
+              padding: 0.7rem 0.42rem !important;
               box-sizing: border-box !important;
               border: 1px solid #9ee0b2 !important;
               border-radius: 0.7rem !important;
@@ -6225,15 +6234,16 @@ function LandingPage() {
               align-items: center !important;
               justify-content: center !important;
               color: #137a36 !important;
-              font-size: 0.88rem !important;
+              font-size: clamp(0.62rem, 2.55vw, 0.76rem) !important;
               font-weight: 900 !important;
               line-height: 1.15 !important;
+              white-space: nowrap !important;
             }
             .landing-hero-trust > span:first-child {
-              grid-column: 1 / -1 !important;
-              padding-bottom: 0.5rem !important;
-              border-bottom: 1px solid rgba(19, 122, 54, 0.18) !important;
-              font-size: 1.2rem !important;
+              grid-column: auto !important;
+              padding-bottom: 0 !important;
+              border-bottom: 0 !important;
+              font-size: clamp(0.62rem, 2.55vw, 0.76rem) !important;
             }
             .landing-hero-trust > span:last-child {
               grid-column: auto !important;
@@ -6301,7 +6311,12 @@ function LandingPage() {
 
         <div className="landing-hero-shell relative z-10 mx-auto flex w-full max-w-[1360px] flex-col px-5 py-5 sm:px-8 lg:min-h-[calc(100vh-76px)] lg:px-10 lg:py-5 2xl:px-10 2xl:py-5">
           <nav className="grid shrink-0 gap-5 lg:grid-cols-[auto_1fr_auto] lg:items-center">
-            <HeroLogoMark />
+            <div className="landing-desktop-brand">
+              <HeroLogoMark />
+            </div>
+            <p className="landing-mobile-contractor-label hidden" aria-label="Attention contractors">
+              Attention contractors
+            </p>
             <div className="hidden justify-self-center lg:block">
               <a href="tel:+12495033301" className="inline-flex items-center gap-3 rounded-xl border border-[#a9cbed] bg-white/72 px-3.5 py-2 text-left text-[#0b315f] shadow-[0_10px_24px_-22px_rgba(12,77,160,0.62)] transition hover:border-[#6da8df] hover:bg-white">
                 <span className="grid h-9 w-9 place-items-center rounded-lg bg-[#0c5fc3] text-white">
@@ -6382,6 +6397,7 @@ function LandingPage() {
               </div>
 
               <LiveSignupNetwork stats={signupNetworkStats} status={signupNetworkStatus} />
+
             </div>
 
             <div className="landing-hero-visual relative z-0 mt-8 flex justify-end lg:mt-2 lg:self-center">
@@ -6680,6 +6696,7 @@ function LandingPage() {
                   </p>
                 </div>
               </div>
+
             </div>
 
             <div className="mt-1 inline-flex max-w-full rounded-full bg-[#8b5cff] p-[2px] shadow-[0_28px_70px_-30px_rgba(139,92,246,0.62)]">
