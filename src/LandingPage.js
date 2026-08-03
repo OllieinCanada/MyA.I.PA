@@ -569,8 +569,10 @@ function HeroLogoMark() {
 }
 
 function LiveSignupNetwork({ stats, status }) {
-  const businessesSignedUp = Number.isInteger(stats?.businessesSignedUp) ? stats.businessesSignedUp.toLocaleString("en-CA") : "—";
-  const newThisMonth = Number.isInteger(stats?.newThisMonth) ? stats.newThisMonth.toLocaleString("en-CA") : "—";
+  const callsAnswered = Number.isInteger(stats?.callsAnswered) ? stats.callsAnswered.toLocaleString("en-CA") : "—";
+  const jobOpportunitiesCaptured = Number.isInteger(stats?.jobOpportunitiesCaptured)
+    ? stats.jobOpportunitiesCaptured.toLocaleString("en-CA")
+    : "—";
   const inputs = [
     { label: "Calls", detail: "Answered", icon: "phone" },
     { label: "Job details", detail: "Captured", icon: "clipboard" },
@@ -626,16 +628,16 @@ function LiveSignupNetwork({ stats, status }) {
 
         <div className="grid grid-cols-2 gap-1.5" aria-live="polite">
           <div className="rounded-lg border border-[#bad7f2] bg-[#edf6ff] px-2.5 py-1.5">
-            <p className="text-[0.48rem] font-black uppercase tracking-[0.08em] text-[#4d6985]">Businesses signed up</p>
-            <p className="mt-0.5 text-[1.22rem] font-black leading-none tracking-[-0.04em] text-[#0c5fc3]">{businessesSignedUp}</p>
+            <p className="text-[0.48rem] font-black uppercase tracking-[0.08em] text-[#4d6985]">Calls answered</p>
+            <p className="mt-0.5 text-[1.22rem] font-black leading-none tracking-[-0.04em] text-[#0c5fc3]">{callsAnswered}</p>
           </div>
           <div className="rounded-lg border border-[#b9e3c6] bg-[#effaf3] px-2.5 py-1.5">
-            <p className="text-[0.48rem] font-black uppercase tracking-[0.08em] text-[#4d6985]">New this month</p>
-            <p className="mt-0.5 text-[1.22rem] font-black leading-none tracking-[-0.04em] text-[#15803d]">+{newThisMonth}</p>
+            <p className="text-[0.48rem] font-black uppercase tracking-[0.08em] text-[#4d6985]">Job opportunities captured</p>
+            <p className="mt-0.5 text-[1.22rem] font-black leading-none tracking-[-0.04em] text-[#15803d]">{jobOpportunitiesCaptured}</p>
           </div>
         </div>
         <p className="mt-1 text-center text-[0.48rem] font-bold text-[#627990]">
-          {status === "ready" ? "Updates automatically from completed signups" : status === "error" ? "Live count reconnecting…" : "Connecting to the live signup count…"}
+          {status === "ready" ? "Updates automatically from completed calls" : status === "error" ? "Live totals reconnecting…" : "Connecting to live call totals…"}
         </p>
       </div>
     </section>
@@ -2127,7 +2129,7 @@ function LandingPage() {
         });
         if (!response.ok) throw new Error(`Signup network request failed with ${response.status}`);
         const payload = await response.json();
-        if (!Number.isInteger(payload?.businessesSignedUp) || !Number.isInteger(payload?.newThisMonth)) {
+        if (!Number.isInteger(payload?.callsAnswered) || !Number.isInteger(payload?.jobOpportunitiesCaptured)) {
           throw new Error("Signup network response was incomplete");
         }
         if (active) {
@@ -6252,10 +6254,11 @@ function LandingPage() {
               margin-top: 0.25rem !important;
             }
             .landing-hero-proof-heading {
-              margin-bottom: 0.65rem !important;
-              font-size: 0.78rem !important;
-              line-height: 1.2 !important;
-              letter-spacing: 0.105em !important;
+              margin-bottom: 0.45rem !important;
+              padding-inline: 0.2rem !important;
+              font-size: 0.92rem !important;
+              line-height: 1.12 !important;
+              letter-spacing: 0.075em !important;
             }
             .landing-owner-text-arrow {
               display: none !important;

@@ -24,6 +24,11 @@ const { app, __test } = require("../server/index");
 const { prisma } = require("../server/prisma");
 const { getTwilioSignature } = require("../server/smsSuppression");
 
+__test.setPublicNetworkStatsLoaderForTests(async () => ({
+  callsAnswered: 12,
+  jobOpportunitiesCaptured: 8,
+}));
+
 let server;
 let baseUrl;
 
@@ -63,30 +68,28 @@ test("health endpoint remains public and carries baseline security headers", asy
   assert.equal(payload.ok, true);
 });
 
-test("public signup network stats expose aggregate counts without signup details", async () => {
+test("public call network stats expose aggregate counts without customer details", async () => {
   const response = await request("/api/public/signup-network-stats");
   assert.equal(response.status, 200);
   const payload = await response.json();
-  assert.deepEqual(Object.keys(payload).sort(), ["businessesSignedUp", "newThisMonth", "ok", "updatedAt"]);
+  assert.deepEqual(Object.keys(payload).sort(), ["callsAnswered", "jobOpportunitiesCaptured", "ok", "updatedAt"]);
   assert.equal(payload.ok, true);
-  assert.equal(Number.isInteger(payload.businessesSignedUp), true);
-  assert.equal(Number.isInteger(payload.newThisMonth), true);
-  assert.equal(payload.businessesSignedUp >= payload.newThisMonth, true);
+  assert.equal(payload.callsAnswered, 12);
+  assert.equal(payload.jobOpportunitiesCaptured, 8);
   assert.equal(Number.isNaN(Date.parse(payload.updatedAt)), false);
   assert.equal(JSON.stringify(payload).includes("ownerEmail"), false);
   assert.equal(JSON.stringify(payload).includes("ownerPhone"), false);
   assert.equal(JSON.stringify(payload).includes("businessName"), false);
 });
 
-test("signup network stats count a newly completed signup in the current month", () => {
-  const stats = __test.getPublicSignupNetworkStats(new Date("2026-08-20T12:00:00.000Z"), [
-    { signedUpAt: "2026-07-31T23:59:59.000Z" },
-    { signedUpAt: "2026-08-01T00:00:00.000Z" },
-    { signedUpAt: "2026-08-20T11:59:59.000Z" },
-  ]);
+test("call network stats return live business outcomes with a stable timestamp", async () => {
+  const stats = await __test.getPublicSignupNetworkStats(
+    new Date("2026-08-20T12:00:00.000Z"),
+    async () => ({ callsAnswered: 37, jobOpportunitiesCaptured: 24 })
+  );
   assert.deepEqual(stats, {
-    businessesSignedUp: 3,
-    newThisMonth: 2,
+    callsAnswered: 37,
+    jobOpportunitiesCaptured: 24,
     updatedAt: "2026-08-20T12:00:00.000Z",
   });
 });

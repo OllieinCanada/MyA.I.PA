@@ -4320,17 +4320,27 @@ function listSignupDashboardRecords() {
     .sort((a, b) => Number(new Date(b.signedUpAt || b.createdAt || 0)) - Number(new Date(a.signedUpAt || a.createdAt || 0)));
 }
 
-function getPublicSignupNetworkStats(now = new Date(), signups = listSignupDashboardRecords()) {
+let publicNetworkStatsLoader = async () => {
+  const [callsAnswered, jobOpportunitiesCaptured] = await prisma.$transaction([
+    prisma.call.count({ where: { status: "COMPLETED" } }),
+    prisma.lead.count(),
+  ]);
+  return { callsAnswered, jobOpportunitiesCaptured };
+};
+
+function setPublicNetworkStatsLoaderForTests(loader) {
+  if (process.env.NODE_ENV !== "test") throw new Error("Public network stats loader can only be replaced in tests.");
+  if (typeof loader !== "function") throw new TypeError("Public network stats loader must be a function.");
+  publicNetworkStatsLoader = loader;
+}
+
+async function getPublicSignupNetworkStats(now = new Date(), loadStats = publicNetworkStatsLoader) {
   const currentTime = now instanceof Date ? now : new Date(now);
-  const monthStart = Date.UTC(currentTime.getUTCFullYear(), currentTime.getUTCMonth(), 1);
-  const newThisMonth = signups.filter((signup) => {
-    const signedUpAt = Number(new Date(signup.signedUpAt || signup.createdAt || 0));
-    return Number.isFinite(signedUpAt) && signedUpAt >= monthStart;
-  }).length;
+  const { callsAnswered, jobOpportunitiesCaptured } = await loadStats();
 
   return {
-    businessesSignedUp: signups.length,
-    newThisMonth,
+    callsAnswered,
+    jobOpportunitiesCaptured,
     updatedAt: currentTime.toISOString(),
   };
 }
@@ -7284,9 +7294,14 @@ app.get("/api/health", (_req, res) => {
 app.get(
   "/api/public/signup-network-stats",
   enforcePublicRouteRateLimit("signup-network-stats", 90),
-  (_req, res) => {
+  async (_req, res) => {
     res.setHeader("Cache-Control", "public, max-age=10, stale-while-revalidate=20");
-    res.json({ ok: true, ...getPublicSignupNetworkStats() });
+    try {
+      res.json({ ok: true, ...(await getPublicSignupNetworkStats()) });
+    } catch (error) {
+      console.error("Unable to load public call network stats", error);
+      res.status(503).json({ error: "Live call totals are temporarily unavailable." });
+    }
   }
 );
 
@@ -10259,6 +10274,7 @@ module.exports = {
     normalizeTwilioProvisioningAreaCode,
     normalizeTwilioProvisioningVoiceUrl,
     getPublicSignupNetworkStats,
+    setPublicNetworkStatsLoaderForTests,
     purchaseTwilioPhoneNumber,
   },
 };
