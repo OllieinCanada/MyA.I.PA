@@ -570,8 +570,8 @@ function HeroLogoMark() {
 
 function LiveSignupNetwork({ stats, status }) {
   const callsAnswered = Number.isInteger(stats?.callsAnswered) ? stats.callsAnswered.toLocaleString("en-CA") : "—";
-  const jobOpportunitiesCaptured = Number.isInteger(stats?.jobOpportunitiesCaptured)
-    ? stats.jobOpportunitiesCaptured.toLocaleString("en-CA")
+  const followUpOpportunities = Number.isInteger(stats?.followUpOpportunities)
+    ? stats.followUpOpportunities.toLocaleString("en-CA")
     : "—";
   const inputs = [
     { label: "Calls", detail: "Answered", icon: "phone" },
@@ -632,8 +632,8 @@ function LiveSignupNetwork({ stats, status }) {
             <p className="mt-0.5 text-[1.22rem] font-black leading-none tracking-[-0.04em] text-[#0c5fc3]">{callsAnswered}</p>
           </div>
           <div className="rounded-lg border border-[#b9e3c6] bg-[#effaf3] px-2.5 py-1.5">
-            <p className="text-[0.48rem] font-black uppercase tracking-[0.08em] text-[#4d6985]">Job opportunities captured</p>
-            <p className="mt-0.5 text-[1.22rem] font-black leading-none tracking-[-0.04em] text-[#15803d]">{jobOpportunitiesCaptured}</p>
+            <p className="text-[0.48rem] font-black uppercase tracking-[0.08em] text-[#4d6985]">Follow-up opportunities</p>
+            <p className="mt-0.5 text-[1.22rem] font-black leading-none tracking-[-0.04em] text-[#15803d]">{followUpOpportunities}</p>
           </div>
         </div>
         <p className="mt-1 text-center text-[0.48rem] font-bold text-[#627990]">
@@ -2129,7 +2129,7 @@ function LandingPage() {
         });
         if (!response.ok) throw new Error(`Signup network request failed with ${response.status}`);
         const payload = await response.json();
-        if (!Number.isInteger(payload?.callsAnswered) || !Number.isInteger(payload?.jobOpportunitiesCaptured)) {
+        if (!Number.isInteger(payload?.callsAnswered) || !Number.isInteger(payload?.followUpOpportunities)) {
           throw new Error("Signup network response was incomplete");
         }
         if (active) {

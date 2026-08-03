@@ -4321,11 +4321,18 @@ function listSignupDashboardRecords() {
 }
 
 let publicNetworkStatsLoader = async () => {
-  const [callsAnswered, jobOpportunitiesCaptured] = await prisma.$transaction([
+  const [callsAnswered, followUpOpportunities] = await prisma.$transaction([
     prisma.call.count({ where: { status: "COMPLETED" } }),
-    prisma.lead.count(),
+    prisma.call.count({
+      where: {
+        OR: [
+          { followUpNeeded: true },
+          { outcome: { in: ["FOLLOW_UP", "QUOTE_NEEDED", "EMERGENCY"] } },
+        ],
+      },
+    }),
   ]);
-  return { callsAnswered, jobOpportunitiesCaptured };
+  return { callsAnswered, followUpOpportunities };
 };
 
 function setPublicNetworkStatsLoaderForTests(loader) {
@@ -4336,11 +4343,11 @@ function setPublicNetworkStatsLoaderForTests(loader) {
 
 async function getPublicSignupNetworkStats(now = new Date(), loadStats = publicNetworkStatsLoader) {
   const currentTime = now instanceof Date ? now : new Date(now);
-  const { callsAnswered, jobOpportunitiesCaptured } = await loadStats();
+  const { callsAnswered, followUpOpportunities } = await loadStats();
 
   return {
     callsAnswered,
-    jobOpportunitiesCaptured,
+    followUpOpportunities,
     updatedAt: currentTime.toISOString(),
   };
 }
