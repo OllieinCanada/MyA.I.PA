@@ -978,6 +978,14 @@ function HeroCallDashboard({ ownerCardRef }) {
               </span>
             </div>
 
+            <div className="landing-owner-flow mt-3 flex flex-col items-center justify-center text-center text-[#52d8ff] sm:hidden" aria-hidden="true">
+              <span className="rounded-full border border-[#52d8ff]/40 bg-[#52d8ff]/10 px-3 py-1.5 text-[0.72rem] font-black leading-none">
+                Job details sent instantly
+              </span>
+              <span className="mt-1 h-2.5 w-0.5 rounded-full bg-[#52d8ff] shadow-[0_0_7px_rgba(82,216,255,0.42)]" />
+              <span className="-mt-1 text-[1.15rem] font-black leading-none">↓</span>
+            </div>
+
             <div ref={ownerCardRef} className="landing-call-owner-card landing-imessage-card relative -mx-1 mt-6 overflow-hidden rounded-[18px] border border-[#d1d1d6] bg-white p-0 text-[#111827] shadow-[0_16px_38px_-29px_rgba(0,0,0,0.72)]">
               <svg
                 viewBox="0 0 70 44"
@@ -1527,7 +1535,27 @@ function VoicemailLossesArtboard({ onStart, onPlayDemo }) {
           }
         }
       `}</style>
-      <div className="mx-auto w-full max-w-[1720px] px-5 py-7 sm:px-8 lg:px-10 lg:py-9">
+      <div className="mx-auto w-full max-w-[720px] px-4 py-8 sm:hidden">
+        <p className="text-[0.7rem] font-black uppercase tracking-[0.16em] text-[#176bff]">What happens after a missed call</p>
+        <h2 className="mt-2 text-[1.8rem] font-black leading-none tracking-[-0.045em] text-[#07142a]">Three steps. No voicemail chase.</h2>
+        <div className="mt-5 grid gap-3">
+          {[
+            ["1", "My AI PA answers", "Your customer gets a professional answer after three rings."],
+            ["2", "The right details are collected", "Problem, address, urgency, timing, and callback number."],
+            ["3", "Both sides receive a text", "You get the job details. The customer gets confirmation."],
+          ].map(([number, title, body]) => (
+            <article key={number} className="grid grid-cols-[2.5rem_1fr] items-center gap-3 rounded-[14px] border border-[#cfe1f6] bg-white p-4 shadow-[0_18px_44px_-38px_rgba(15,23,42,0.28)]">
+              <span className="grid h-10 w-10 place-items-center rounded-full bg-[#176bff] text-base font-black text-white">{number}</span>
+              <div>
+                <h3 className="text-[1rem] font-black leading-tight text-[#07142a]">{title}</h3>
+                <p className="mt-1 text-[0.88rem] font-medium leading-5 text-[#475569]">{body}</p>
+              </div>
+            </article>
+          ))}
+        </div>
+      </div>
+
+      <div className="mx-auto hidden w-full max-w-[1720px] px-5 py-7 sm:block sm:px-8 lg:px-10 lg:py-9">
         <div className="mx-auto flex items-center justify-center gap-4">
           <HeroLogoMark />
         </div>
@@ -1996,7 +2024,7 @@ function LandingPage() {
   const [audioTime, setAudioTime] = useState(0);
   const [audioDuration, setAudioDuration] = useState(133);
   const [audioError, setAudioError] = useState("");
-  const [openFaq, setOpenFaq] = useState(4);
+  const [openFaq, setOpenFaq] = useState(-1);
   const [showHeader, setShowHeader] = useState(false);
   const headerHideTimerRef = useRef(null);
 
@@ -2096,7 +2124,7 @@ function LandingPage() {
   }, []);
 
   return (
-    <main className="min-h-screen bg-[linear-gradient(180deg,#ffffff_0%,#f7fbff_7%,#eaf6ff_22%,#dff1ff_100%)] text-[#07142a]">
+    <main className="landing-page-main min-h-screen bg-[linear-gradient(180deg,#ffffff_0%,#f7fbff_7%,#eaf6ff_22%,#dff1ff_100%)] text-[#07142a]">
       <header
         className={
           "fixed inset-x-0 top-0 z-40 border-b border-[#d7e7fb] bg-white/92 backdrop-blur transition-all duration-300 " +
@@ -5966,6 +5994,189 @@ function LandingPage() {
               line-height: 1.2 !important;
             }
           }
+
+          /* Mobile-first landing-page hierarchy approved in the visual review. */
+          @media (max-width: 639px) {
+            .landing-page-main {
+              display: flex;
+              flex-direction: column;
+            }
+            #homepage-hero { order: 1; }
+            #contractor-proof { order: 2; }
+            #voicemail-vs-ai { order: 3; }
+            #pricing { order: 4; }
+            #setup { order: 5; }
+            #customer-proof { order: 6; }
+            #faq { order: 7; }
+            #trust { order: 8; }
+            #final-cta { order: 9; }
+
+            .landing-hero-shell {
+              padding: 0.65rem 0.85rem 1rem !important;
+            }
+            .landing-hero-shell nav {
+              display: block !important;
+            }
+            .landing-hero-shell nav > div:first-child {
+              gap: 0.45rem !important;
+            }
+            .landing-hero-shell nav > div:first-child > div:first-child {
+              width: 2.25rem !important;
+              height: 2.25rem !important;
+            }
+            .landing-hero-shell nav > div:first-child > div:last-child {
+              font-size: 1.5rem !important;
+            }
+            .landing-hero-shell nav > div:last-child {
+              display: none !important;
+            }
+            .landing-hero-grid {
+              padding-top: 0.65rem !important;
+            }
+            .landing-hero-title {
+              margin-top: 0 !important;
+              font-size: 2.05rem !important;
+              line-height: 0.98 !important;
+              letter-spacing: -0.05em !important;
+            }
+            .landing-hero-title > span:nth-child(2) {
+              margin-top: 0.55rem !important;
+              font-size: 0.54em !important;
+            }
+            .landing-hero-coverage {
+              margin-top: 0.7rem !important;
+              padding: 0.42rem 0.62rem !important;
+              border-left-width: 3px !important;
+              font-size: 0.8rem !important;
+            }
+            .landing-hero-points-clean {
+              margin-top: 0.72rem !important;
+              gap: 0 !important;
+              padding: 0.25rem 0.68rem !important;
+              border: 1px solid #bfd8f1 !important;
+              border-radius: 1rem !important;
+              background: rgba(255, 255, 255, 0.72) !important;
+            }
+            .landing-hero-points-clean .landing-hero-point-clean {
+              min-height: 2.55rem !important;
+              grid-template-columns: 1.55rem minmax(0, 1fr) !important;
+              column-gap: 0.58rem !important;
+              padding: 0.42rem 0 !important;
+              font-size: 0.76rem !important;
+              font-weight: 700 !important;
+              line-height: 1.18 !important;
+            }
+            .landing-hero-points-clean .landing-hero-point-clean + .landing-hero-point-clean {
+              border-top: 1px solid rgba(148, 180, 214, 0.34) !important;
+            }
+            .landing-hero-points-clean .landing-hero-point-check {
+              width: 1.55rem !important;
+              height: 1.55rem !important;
+              font-size: 0.7rem !important;
+            }
+            .landing-hero-actions {
+              margin-top: 0.72rem !important;
+            }
+            .landing-hero-actions > div:first-child {
+              display: grid !important;
+              grid-template-columns: minmax(0, 1.18fr) minmax(0, 0.82fr) !important;
+              gap: 0.55rem !important;
+            }
+            .landing-hero-actions button {
+              width: 100% !important;
+              min-width: 0 !important;
+              min-height: 2.7rem !important;
+              padding: 0.45rem 0.5rem !important;
+              font-size: 0.72rem !important;
+            }
+            .landing-hero-trust {
+              display: grid !important;
+              width: 100% !important;
+              grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+              gap: 0.35rem 0.55rem !important;
+              margin-top: 0.55rem !important;
+              padding: 0.55rem 0.65rem !important;
+              box-sizing: border-box !important;
+              border: 1px solid #9ee0b2 !important;
+              border-radius: 0.7rem !important;
+              background: #eafaf0 !important;
+              color: #137a36 !important;
+              text-align: center !important;
+            }
+            .landing-hero-trust > span {
+              display: inline-flex !important;
+              align-items: center !important;
+              justify-content: center !important;
+              color: #137a36 !important;
+              font-size: 0.78rem !important;
+              font-weight: 900 !important;
+              line-height: 1.15 !important;
+            }
+            .landing-hero-trust > span:first-child {
+              grid-column: 1 / -1 !important;
+              padding-bottom: 0.35rem !important;
+              border-bottom: 1px solid rgba(19, 122, 54, 0.18) !important;
+              font-size: 1.02rem !important;
+            }
+            .landing-hero-trust > span:last-child {
+              grid-column: auto !important;
+            }
+            .landing-hero-visual {
+              margin-top: 0.65rem !important;
+            }
+            .landing-hero-proof-heading {
+              margin-bottom: 0.35rem !important;
+              font-size: 0.58rem !important;
+              letter-spacing: 0.1em !important;
+            }
+            .landing-owner-text-arrow {
+              display: none !important;
+            }
+            .landing-owner-flow {
+              display: flex !important;
+            }
+            .landing-call-owner-card {
+              margin-top: 0.15rem !important;
+            }
+
+            #contractor-proof > div {
+              display: flex;
+              flex-direction: column;
+              padding-top: 2rem !important;
+              padding-bottom: 2rem !important;
+            }
+            .contractor-proof-mobile-intro {
+              order: -3;
+            }
+            .contractor-proof-demo {
+              order: -2;
+              margin-top: 1.25rem !important;
+            }
+            .contractor-proof-demo h3 {
+              font-size: 1.45rem !important;
+              line-height: 1.2 !important;
+              letter-spacing: -0.035em !important;
+            }
+            .contractor-proof-transcript,
+            .contractor-benefit-repeated {
+              display: none !important;
+            }
+            #contractor-proof > div > .mx-auto {
+              order: 0;
+              margin-top: 2rem;
+            }
+            #contractor-proof > div > .mt-7 {
+              order: 1;
+            }
+            #contractor-proof h2 {
+              font-size: 1.75rem !important;
+            }
+            #pricing > div,
+            #faq > div {
+              padding-top: 2.5rem !important;
+              padding-bottom: 2.5rem !important;
+            }
+          }
         `}</style>
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_16%_18%,rgba(187,222,255,0.74),transparent_30%),radial-gradient(circle_at_78%_12%,rgba(213,235,255,0.70),transparent_32%),linear-gradient(180deg,#ffffff_0%,#f6fbff_28%,#e9f6ff_100%)]" />
         <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgba(37,99,235,0.06)_1px,transparent_1px),linear-gradient(rgba(37,99,235,0.045)_1px,transparent_1px)] bg-[size:76px_76px] opacity-[0.32]" />
@@ -6038,7 +6249,8 @@ function LandingPage() {
                     onClick={playDemo}
                     className="inline-flex min-h-[46px] items-center justify-center rounded-xl border border-[#79aee0] bg-white/80 px-5 text-[0.86rem] font-black text-[#0c5fc3] transition hover:-translate-y-0.5 hover:bg-white"
                   >
-                    Hear the Live Demo
+                    <span className="sm:hidden">Hear Demo</span>
+                    <span className="hidden sm:inline">Hear the Live Demo</span>
                   </button>
                 </div>
                 <div className="landing-hero-trust mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-[0.68rem] font-black text-[#294967]">
@@ -6065,7 +6277,7 @@ function LandingPage() {
         </div>
       </section>
 
-      <section id="homepage-hero-details" className="relative overflow-hidden border-y border-[#cfe2f5] bg-white">
+      <section id="homepage-hero-details" className="hidden overflow-hidden border-y border-[#cfe2f5] bg-white sm:block sm:relative">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_14%_20%,rgba(191,219,254,0.42),transparent_32%),radial-gradient(circle_at_88%_82%,rgba(219,234,254,0.58),transparent_34%)]" />
         <div className="relative mx-auto grid w-full max-w-[1360px] gap-8 px-5 py-10 sm:px-8 sm:py-12 lg:grid-cols-[minmax(0,0.92fr)_minmax(440px,1.08fr)] lg:items-center lg:px-10 lg:py-14">
           <div>
@@ -6503,7 +6715,13 @@ function LandingPage() {
 
       <section id="contractor-proof" ref={demoRef} className="scroll-mt-[96px] bg-[linear-gradient(180deg,#f7fbff_0%,#edf6ff_100%)]">
         <div className="mx-auto w-full max-w-[1260px] px-4 py-10 sm:px-6 lg:px-8 lg:py-14">
-          <div className="mx-auto max-w-[980px] text-center">
+          <div className="contractor-proof-mobile-intro sm:hidden">
+            <p className="text-[0.7rem] font-black uppercase tracking-[0.16em] text-[#176bff]">Proof before promises</p>
+            <h2 className="mt-2 text-[1.8rem] font-black leading-none tracking-[-0.045em] text-[#07142a]">Hear a real call become usable job details.</h2>
+            <p className="mt-3 text-[0.98rem] font-medium leading-6 text-[#475569]">Listen to the assistant answer, ask the right questions, and prepare the follow-up text.</p>
+          </div>
+
+          <div className="contractor-benefits-intro mx-auto max-w-[980px] text-center">
             <p className="text-[0.7rem] font-black uppercase tracking-[0.22em] text-[#1d7df2] sm:text-[0.78rem]">Designed for contractors</p>
             <h2 className="mx-auto mt-2 max-w-[860px] text-[clamp(2rem,4vw,3.2rem)] font-black leading-[0.98] tracking-[-0.052em] text-[#07142a]">
               Designed for contractors who cannot pause the job to answer every call.
@@ -6518,7 +6736,8 @@ function LandingPage() {
               <article
                 key={item.title}
                 className={
-                  "relative min-h-[132px] overflow-hidden rounded-[8px] border border-[#dbeafe] bg-white px-4 py-4 shadow-[0_18px_44px_-34px_rgba(15,23,42,0.32)] " +
+                  "contractor-benefit-card relative min-h-[132px] overflow-hidden rounded-[8px] border border-[#dbeafe] bg-white px-4 py-4 shadow-[0_18px_44px_-34px_rgba(15,23,42,0.32)] " +
+                  (item.eyebrow === "Catch every call" ? "contractor-benefit-repeated " : "") +
                   item.glow
                 }
               >
@@ -6536,7 +6755,7 @@ function LandingPage() {
             ))}
           </div>
 
-          <div className="mt-5 overflow-hidden rounded-[8px] border border-[#123253] bg-[#051d3b] shadow-[0_30px_80px_-48px_rgba(7,20,42,0.74)]">
+          <div className="contractor-proof-demo mt-5 overflow-hidden rounded-[8px] border border-[#123253] bg-[#051d3b] shadow-[0_30px_80px_-48px_rgba(7,20,42,0.74)]">
             <div className="grid gap-5 p-4 sm:p-5 lg:grid-cols-[1.05fr_0.95fr] lg:p-7">
               <div className="min-w-0">
                 <p className="text-[0.72rem] font-black uppercase tracking-[0.16em] text-[#64c9ff]">Proof in action</p>
@@ -6609,7 +6828,7 @@ function LandingPage() {
                   {audioError ? <p className="mt-3 text-sm font-bold text-rose-300">{audioError}</p> : null}
                 </div>
 
-                <div className="mt-3 rounded-[8px] border border-[#21476f] bg-[#092646] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
+                <div className="contractor-proof-transcript mt-3 rounded-[8px] border border-[#21476f] bg-[#092646] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2">
                       <span className="grid h-7 w-7 place-items-center rounded-full bg-[#0d3764] text-[#8bdcff]">
@@ -6805,13 +7024,12 @@ function LandingPage() {
 
                   <div className="relative mx-auto mt-3 max-w-[620px] -rotate-[0.35deg] border border-[#c9b86d] bg-[linear-gradient(180deg,#fffce3,#fff8bf)] px-5 py-5 text-center shadow-[0_18px_42px_-30px_rgba(71,55,8,0.65)] sm:px-8">
                     <span className="absolute left-1/2 top-[-12px] h-6 w-28 -translate-x-1/2 rotate-[-1.5deg] bg-[#d9d2bc]/85 shadow-sm" aria-hidden="true" />
-                    <div className="relative space-y-0.5 text-[clamp(1rem,1.65vw,1.3rem)] font-black leading-[1.25] tracking-[0.025em] text-[#172033]">
-                      <p className="pb-1 text-[clamp(1.15rem,1.8vw,1.45rem)] leading-none tracking-[0.04em] text-[#dc2626]">OUR GUARANTEE</p>
-                      <p className="text-[clamp(1.25rem,2vw,1.65rem)] text-[#ef232e]">FREE 14 DAY TRIAL</p>
-                      <p>IF YOUR AI ASSISTANT</p>
-                      <p>DOESN'T GET YOU EXTRA JOBS</p>
-                      <p className="text-[clamp(0.9rem,1.4vw,1.08rem)] tracking-[0.01em] sm:whitespace-nowrap">FROM MISSED CALLS - DURING THE FIRST 14 DAYS</p>
-                      <p>SIMPLY CANCEL AT NO COST TO YOU!!</p>
+                    <div className="relative grid gap-1.5 font-black text-[#172033]">
+                      <p className="text-[clamp(1rem,1.45vw,1.25rem)] leading-none tracking-[0.04em] text-[#dc2626]">OUR GUARANTEE</p>
+                      <p className="text-[clamp(1.25rem,2vw,1.65rem)] leading-tight text-[#ef232e]">FREE 14-DAY TRIAL</p>
+                      <p className="mx-auto max-w-[520px] text-[clamp(0.88rem,1.22vw,1.02rem)] leading-[1.45] tracking-normal normal-case">
+                        If your assistant does not help you win extra jobs from missed calls, cancel within 14 days at no cost.
+                      </p>
                     </div>
                   </div>
 
@@ -6829,7 +7047,7 @@ function LandingPage() {
                       onClick={goToSignup}
                       className="inline-flex min-h-[54px] items-center justify-center gap-3 rounded-[8px] bg-[linear-gradient(180deg,#ff8b1f,#ff6b00)] px-7 text-[1rem] font-black text-white shadow-[0_18px_42px_-24px_rgba(255,106,0,0.95)] transition hover:-translate-y-0.5 hover:brightness-110"
                     >
-                      Start Free Trial
+                      Start Your Free Trial
                       <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden="true">
                         <path d="M5 12h13M13 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
                       </svg>
@@ -6929,7 +7147,33 @@ function LandingPage() {
       </section>
 
       <section id="setup" className="scroll-mt-[96px] overflow-hidden bg-[linear-gradient(180deg,#eef8ff_0%,#dff1ff_100%)]">
-        <div className="mx-auto w-full max-w-[1320px] px-4 py-14 sm:px-6 lg:px-8 lg:py-20">
+        <div className="mx-auto w-full max-w-[720px] px-4 py-8 sm:hidden">
+          <p className="text-[0.7rem] font-black uppercase tracking-[0.16em] text-[#176bff]">Simple setup</p>
+          <h2 className="mt-2 text-[1.8rem] font-black leading-none tracking-[-0.045em] text-[#07142a]">Ready in three guided steps.</h2>
+          <p className="mt-3 text-[0.98rem] font-medium leading-6 text-[#475569]">No phone-number change. Detailed carrier instructions appear only after you are ready to connect.</p>
+          <div className="mt-5 grid gap-3">
+            {[
+              ["1", "Add your business", "Tell us what you do and how calls should be handled."],
+              ["2", "Hear a test call", "Listen to your assistant before anything goes live."],
+              ["3", "Forward missed calls", "Follow the guided steps when you are comfortable."],
+            ].map(([number, title, body]) => (
+              <article key={number} className="rounded-[14px] border border-[#cfe1f6] bg-white p-4 shadow-[0_18px_44px_-38px_rgba(15,23,42,0.28)]">
+                <span className="grid h-10 w-10 place-items-center rounded-full bg-[#176bff] text-base font-black text-white">{number}</span>
+                <h3 className="mt-4 text-[1rem] font-black leading-tight text-[#07142a]">{title}</h3>
+                <p className="mt-1 text-[0.88rem] font-medium leading-5 text-[#475569]">{body}</p>
+              </article>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={goToSignup}
+            className="mt-4 inline-flex min-h-[48px] items-center justify-center rounded-xl bg-[linear-gradient(180deg,#ff7a00,#ff6500)] px-5 text-[0.86rem] font-black text-white shadow-[0_16px_32px_-22px_rgba(255,106,0,0.95)]"
+          >
+            Start Your Free Trial
+          </button>
+        </div>
+
+        <div className="mx-auto hidden w-full max-w-[1320px] px-4 py-14 sm:block sm:px-6 lg:px-8 lg:py-20">
           <div className="mx-auto max-w-5xl text-center">
             <p className="inline-flex rounded-full border border-[#b9d8ff] bg-white/86 px-5 py-2 text-[0.84rem] font-black uppercase tracking-[0.18em] text-[#2563eb] shadow-[0_16px_44px_-36px_rgba(37,99,235,0.58)]">5-minute activation route</p>
             <h2 className="mx-auto mt-5 max-w-[920px] text-[clamp(2.35rem,4.7vw,4.2rem)] font-black leading-[1.04] tracking-[-0.052em] text-[#07142a]">
@@ -7050,7 +7294,24 @@ function LandingPage() {
       </section>
 
       <section id="customer-proof" className="scroll-mt-[96px] bg-[linear-gradient(180deg,#ffffff_0%,#f4faff_100%)]">
-        <div className="mx-auto w-full max-w-[1320px] px-4 py-14 sm:px-6 lg:px-8 lg:py-20">
+        <div className="mx-auto w-full max-w-[720px] px-4 py-8 sm:hidden">
+          <p className="text-[0.7rem] font-black uppercase tracking-[0.16em] text-[#176bff]">Real trade workflows</p>
+          <h2 className="mt-2 text-[1.8rem] font-black leading-none tracking-[-0.045em] text-[#07142a]">Built for calls that arrive while the work is happening.</h2>
+          <div className="mt-5 grid gap-3">
+            <article className="rounded-[14px] border border-[#18365d]/20 bg-[#07142a] p-5 text-white shadow-[0_26px_70px_-48px_rgba(7,20,42,0.82)]">
+              <p className="text-[0.72rem] font-black uppercase tracking-[0.14em] text-[#8bdcff]">Contractor example</p>
+              <p className="mt-4 text-[1rem] font-black leading-6">“I am usually on a job and not in a position to answer every call. Now people get a proper response and I get the details by text instead of chasing voicemails later.”</p>
+              <p className="mt-4 border-t border-white/15 pt-3 text-[0.78rem] font-black text-[#22c55e]">Lead details delivered by text</p>
+            </article>
+            <article className="rounded-[14px] border border-[#d8e7fb] bg-white p-5 shadow-[0_18px_46px_-38px_rgba(15,23,42,0.28)]">
+              <p className="text-[0.72rem] font-black uppercase tracking-[0.14em] text-[#176bff]">Plumbing example</p>
+              <p className="mt-4 text-[1rem] font-black leading-6 text-[#334155]">“Service calls come in while we are driving between plumbing jobs. My AI PA talks with the customer, answers basic questions, and sends us the job details.”</p>
+              <p className="mt-4 border-t border-[#e2e8f0] pt-3 text-[0.78rem] font-black text-[#16a34a]">Faster follow-up without stopping the job</p>
+            </article>
+          </div>
+        </div>
+
+        <div className="mx-auto hidden w-full max-w-[1320px] px-4 py-14 sm:block sm:px-6 lg:px-8 lg:py-20">
           <div className="grid gap-8 lg:grid-cols-[0.78fr_1.22fr] lg:items-start">
             <div className="lg:sticky lg:top-24">
               <p className="inline-flex rounded-full border border-[#b9d8ff] bg-white px-5 py-2 text-[0.84rem] font-black uppercase tracking-[0.18em] text-[#2563eb] shadow-[0_16px_44px_-34px_rgba(37,99,235,0.65)]">Field examples</p>
@@ -7164,14 +7425,38 @@ function LandingPage() {
         </div>
       </section>
 
-      <section id="guided-call-forwarding" className="scroll-mt-[96px] bg-[linear-gradient(180deg,#eaf6ff_0%,#dff1ff_100%)]">
+      <section id="guided-call-forwarding" className="hidden scroll-mt-[96px] bg-[linear-gradient(180deg,#eaf6ff_0%,#dff1ff_100%)] sm:block">
         <div className="mx-auto w-full max-w-[1320px] px-4 py-14 sm:px-6 lg:px-8 lg:py-20">
           <ForwardingSetupWizard />
         </div>
       </section>
 
       <section id="trust" className="scroll-mt-[96px] bg-[#eaf6ff]">
-        <div className="mx-auto w-full max-w-[1180px] px-4 pb-14 sm:px-6 lg:px-8">
+        <div className="mx-auto w-full max-w-[720px] px-4 py-8 sm:hidden">
+          <p className="text-[0.7rem] font-black uppercase tracking-[0.16em] text-[#176bff]">Trust and transparency</p>
+          <h2 className="mt-2 text-[1.8rem] font-black leading-none tracking-[-0.045em] text-[#07142a]">Clear rules before your first call.</h2>
+          <div className="mt-5 grid gap-3">
+            {[
+              ["Transparent AI calls", "Callers can be told they are speaking with an AI assistant."],
+              ["Privacy and terms published", "Review how calls, transcripts, and texts are handled."],
+              ["Consent-aware messaging", "Owner alerts and customer confirmations are treated as service messages."],
+            ].map(([title, body]) => (
+              <article key={title} className="grid grid-cols-[2.5rem_1fr] items-center gap-3 rounded-[14px] border border-[#cfe1f6] bg-white p-4">
+                <span className="grid h-10 w-10 place-items-center rounded-full bg-[#e8f9ef] text-lg font-black text-[#15803d]">✓</span>
+                <div>
+                  <h3 className="text-[1rem] font-black leading-tight text-[#07142a]">{title}</h3>
+                  <p className="mt-1 text-[0.88rem] font-medium leading-5 text-[#475569]">{body}</p>
+                </div>
+              </article>
+            ))}
+          </div>
+          <div className="mt-4 flex gap-2">
+            <a href="/privacy.html" className="rounded-[10px] border border-[#9cc7ef] bg-white px-4 py-3 text-[0.72rem] font-black uppercase tracking-[0.08em] text-[#1557a0]">Privacy Policy</a>
+            <a href="/terms.html" className="rounded-[10px] border border-[#9cc7ef] bg-white px-4 py-3 text-[0.72rem] font-black uppercase tracking-[0.08em] text-[#1557a0]">Terms</a>
+          </div>
+        </div>
+
+        <div className="mx-auto hidden w-full max-w-[1180px] px-4 pb-14 sm:block sm:px-6 lg:px-8">
           <div className="grid overflow-hidden rounded-[16px] border border-[#d7e7fb] bg-white shadow-[0_28px_82px_-58px_rgba(18,32,51,0.34)] lg:grid-cols-[0.78fr_1.22fr]">
             <div className="bg-[#07142a] p-6 text-white sm:p-8">
               <p className="text-[0.84rem] font-black uppercase tracking-[0.18em] text-[#8bdcff]">Trust and transparency</p>
@@ -7218,11 +7503,19 @@ function LandingPage() {
                 Try My AI PA free, hear how it sounds, and see how quickly missed calls can become job details ready for your callback.
               </p>
               <div className="mt-8 flex flex-col gap-4 sm:flex-row">
-                <PrimaryButton onClick={goToSignup} className="text-lg">Start Free Trial</PrimaryButton>
+                <PrimaryButton onClick={goToSignup} className="text-lg">Start Your Free Trial</PrimaryButton>
                 <SecondaryButton onClick={playDemo} dark className="text-lg">
-                  Hear Agent&apos;s Voice
+                  <span className="sm:hidden">Hear Demo</span>
+                  <span className="hidden sm:inline">Hear the Live Demo</span>
                 </SecondaryButton>
               </div>
+              <a
+                href="tel:+12495033301"
+                className="mt-4 flex flex-col items-start gap-1 rounded-[12px] border border-[#5aa9ff] bg-[#0d3764] px-4 py-3 text-white sm:hidden"
+              >
+                <span className="text-[0.72rem] font-black uppercase tracking-[0.1em]">Call the Live Demo</span>
+                <strong className="text-[1.15rem] font-black text-[#8bdcff]">(249) 503-3301</strong>
+              </a>
             </div>
 
             <div className="grid content-between gap-4 border-t border-white/12 bg-white/[0.06] p-6 text-white lg:border-l lg:border-t-0 sm:p-8">
