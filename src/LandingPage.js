@@ -1197,15 +1197,57 @@ function HeroCallDashboard({ ownerCardRef }) {
   );
 }
 
-function MobileHeroCallProof() {
+function TabletHero({ goToSignup, playDemo }) {
+  const benefits = [
+    ["phone", "Every call answered professionally after 3 rings"],
+    ["faq", "Answers FAQs and speaks naturally with customers"],
+    ["clipboard", "Collects complete job and callback details"],
+    ["sms", "Texts you the details and sends the customer a thank-you reminder"],
+  ];
+
+  return (
+    <div className="landing-tablet-hero">
+      <section className="landing-tablet-copy">
+        <p className="landing-tablet-eyebrow">Attention contractors</p>
+        <h1 className="landing-tablet-title">Never miss a call again</h1>
+        <p className="landing-tablet-pain">Missed Calls = Missed Jobs</p>
+        <p className="landing-tablet-coverage">We&apos;ve got you covered 24/7.</p>
+
+        <div className="landing-tablet-benefits" aria-label="What My AI PA does">
+          {benefits.map(([icon, label]) => (
+            <div key={label} className="landing-tablet-benefit">
+              <span className="landing-tablet-benefit-icon" aria-hidden="true"><HeroIcon type={icon} className="h-5 w-5" /></span>
+              <span>{label}</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="landing-tablet-actions">
+          <button type="button" onClick={goToSignup} className="landing-tablet-primary">Start Your Free Trial</button>
+          <button type="button" onClick={playDemo} className="landing-tablet-secondary">Hear Demo</button>
+        </div>
+        <div className="landing-tablet-trust" aria-label="Trial details">
+          {['14-Day Free Trial', 'No Credit Card', 'Cancel Anytime'].map((label) => <span key={label}><b aria-hidden="true">✓</b>{label}</span>)}
+        </div>
+      </section>
+
+      <div className="landing-tablet-card-wrap">
+        <MobileHeroCallProof className="landing-tablet-call-proof" />
+        <p className="landing-tablet-flip-hint">The card flips once after 3.5 seconds. Tap to switch sides.</p>
+      </div>
+    </div>
+  );
+}
+
+function MobileHeroCallProof({ className = "" }) {
   const stageRef = useRef(null);
   const [isFlipped, setIsFlipped] = useState(false);
   const hasAutoFlippedRef = useRef(false);
 
   useEffect(() => {
     const stage = stageRef.current;
-    const phoneViewport = window.matchMedia("(max-width: 639px)");
-    if (!stage || !phoneViewport.matches) return undefined;
+    const supportedViewport = window.matchMedia("(max-width: 1366px)");
+    if (!stage || !supportedViewport.matches) return undefined;
 
     let timer = null;
     const showTexts = () => {
@@ -1234,7 +1276,7 @@ function MobileHeroCallProof() {
   return (
     <section
       ref={stageRef}
-      className="landing-mobile-call-proof relative h-[25.125rem] overflow-visible sm:hidden"
+      className={`landing-mobile-call-proof relative h-[25.125rem] overflow-visible ${className}`}
       style={{ perspective: "1400px" }}
       aria-label="Timed example showing a live My AI PA call followed by owner and customer text messages"
       onClick={() => setIsFlipped((current) => !current)}
@@ -1248,46 +1290,46 @@ function MobileHeroCallProof() {
         }}
       >
         <div
-          className="absolute inset-0 overflow-hidden rounded-[1.65rem] border border-[#2b547d] bg-[linear-gradient(155deg,#133053,#071931)] p-4 text-white shadow-[0_30px_60px_-34px_rgba(0,0,0,0.9)]"
+          className="landing-timed-call-face landing-timed-call-front absolute inset-0 overflow-hidden rounded-[1.65rem] border border-[#2b547d] bg-[linear-gradient(155deg,#133053,#071931)] p-4 text-white shadow-[0_30px_60px_-34px_rgba(0,0,0,0.9)]"
           style={{ backfaceVisibility: "hidden", WebkitBackfaceVisibility: "hidden" }}
           aria-hidden={isFlipped}
         >
-          <div className="flex items-center justify-between text-[0.68rem] font-extrabold text-[#d9e8f7]">
+          <div className="landing-timed-call-status flex items-center justify-between text-[0.68rem] font-extrabold text-[#d9e8f7]">
             <span className="inline-flex items-center gap-2"><i className="h-2.5 w-2.5 rounded-full bg-[#15d56b] shadow-[0_0_0_5px_rgba(21,213,107,0.1),0_0_18px_rgba(21,213,107,0.65)]" />Call in progress</span>
             <span>00:18</span>
           </div>
-          <div className="mx-auto mt-[1.15rem] grid h-[7.875rem] w-[7.875rem] place-items-center rounded-full border-2 border-[#27c2ff]/40 shadow-[0_0_0_8px_rgba(39,194,255,0.055),0_0_42px_rgba(39,194,255,0.24)]">
+          <div className="landing-timed-call-avatar-wrap mx-auto mt-[1.15rem] grid h-[7.875rem] w-[7.875rem] place-items-center rounded-full border-2 border-[#27c2ff]/40 shadow-[0_0_0_8px_rgba(39,194,255,0.055),0_0_42px_rgba(39,194,255,0.24)]">
             <img
               src={`${process.env.PUBLIC_URL || ""}/NiceGirl.png`}
               alt="My AI PA telephone assistant wearing a headset"
-              className="h-28 w-28 rounded-full border-[3px] border-[#2abdf0] object-cover"
+              className="landing-timed-call-avatar h-28 w-28 rounded-full border-[3px] border-[#2abdf0] object-cover"
             />
           </div>
-          <h2 className="mt-4 text-center text-[1.58rem] font-black leading-none tracking-[-0.035em]">My AI PA Agent</h2>
-          <p className="mt-2 text-center text-[0.82rem] font-semibold text-[#a9bfd6]">Answering for <strong className="font-extrabold text-white">your business</strong></p>
+          <h2 className="landing-timed-call-agent mt-4 text-center text-[1.58rem] font-black leading-none tracking-[-0.035em]">My AI PA Agent</h2>
+          <p className="landing-timed-call-subtitle mt-2 text-center text-[0.82rem] font-semibold text-[#a9bfd6]">Answering for <strong className="font-extrabold text-white">your business</strong></p>
           <div className="landing-mobile-call-wave mt-2.5 flex h-12 items-center justify-center gap-1.5" aria-hidden="true">
             {[14, 25, 36, 46, 32, 46, 36, 25, 14].map((height, index) => (
               <i key={`${height}-${index}`} className="w-[5px] rounded-full bg-[linear-gradient(180deg,#5fe2ff,#157de2)] shadow-[0_0_12px_rgba(63,197,255,0.4)]" style={{ height }} />
             ))}
           </div>
-          <div className="mt-2.5 rounded-[1.1rem] border border-white/10 bg-white/[0.065] px-3.5 py-3.5 text-center text-[0.82rem] font-semibold leading-[1.4] text-[#e8f1fb]">
+          <div className="landing-timed-call-quote mt-2.5 rounded-[1.1rem] border border-white/10 bg-white/[0.065] px-3.5 py-3.5 text-center text-[0.82rem] font-semibold leading-[1.4] text-[#e8f1fb]">
             <strong className="font-extrabold text-white">“Thanks for calling.</strong> Are you looking for an installation, repair, or maintenance today?”
           </div>
         </div>
 
         <div
-          className="absolute inset-0 overflow-hidden rounded-[1.65rem] border border-[#2b547d] bg-[linear-gradient(155deg,#133053,#071931)] p-4 text-white shadow-[0_30px_60px_-34px_rgba(0,0,0,0.9)]"
+          className="landing-timed-call-face landing-timed-call-back absolute inset-0 overflow-hidden rounded-[1.65rem] border border-[#2b547d] bg-[linear-gradient(155deg,#133053,#071931)] p-4 text-white shadow-[0_30px_60px_-34px_rgba(0,0,0,0.9)]"
           style={{ transform: "rotateY(180deg)", backfaceVisibility: "hidden", WebkitBackfaceVisibility: "hidden" }}
           aria-hidden={!isFlipped}
         >
-          <div className="flex items-center justify-between text-[0.68rem] font-extrabold text-[#d9e8f7]">
+          <div className="landing-timed-call-status flex items-center justify-between text-[0.68rem] font-extrabold text-[#d9e8f7]">
             <span className="inline-flex items-center gap-2"><i className="h-2.5 w-2.5 rounded-full bg-[#15d56b] shadow-[0_0_0_5px_rgba(21,213,107,0.1),0_0_18px_rgba(21,213,107,0.65)]" />Call complete</span>
             <span>now</span>
           </div>
-          <h2 className="mt-3 text-center text-[1.35rem] font-black leading-none tracking-[-0.035em]">Both sides get a text</h2>
-          <p className="mt-1.5 text-center text-[0.68rem] font-bold text-[#9dbbd6]">The job details are ready before you call back.</p>
+          <h2 className="landing-timed-call-back-title mt-3 text-center text-[1.35rem] font-black leading-none tracking-[-0.035em]">Both sides get a text</h2>
+          <p className="landing-timed-call-back-intro mt-1.5 text-center text-[0.68rem] font-bold text-[#9dbbd6]">The job details are ready before you call back.</p>
 
-          <div className="mt-3.5 rounded-[1.05rem] bg-white p-3 text-[#111827]">
+          <div className="landing-timed-call-message mt-3.5 rounded-[1.05rem] bg-white p-3 text-[#111827]">
             <div className="grid grid-cols-[2rem_minmax(0,1fr)] items-center gap-2">
               <span className="grid h-8 w-8 place-items-center rounded-full bg-[#2587f5] text-[0.6rem] font-black text-white">PA</span>
               <span><strong className="block text-[0.72rem] font-black">Owner receives this text</strong><small className="mt-0.5 block text-[0.52rem] font-bold text-[#8e8e93]">My AI PA · now</small></span>
@@ -1295,7 +1337,7 @@ function MobileHeroCallProof() {
             <div className="mt-2 rounded-[0.9rem_0.9rem_0.9rem_0.35rem] bg-[#e9e9eb] px-2.5 py-2.5 text-[0.67rem] font-bold leading-[1.25] text-[#111]">New installation · Hot tub electrical hookup · 23 Robb St., Hamilton · Callback after 5 PM</div>
           </div>
 
-          <div className="mt-3 rounded-[1.05rem] bg-white p-3 text-[#111827]">
+          <div className="landing-timed-call-message landing-timed-call-customer mt-3 rounded-[1.05rem] bg-white p-3 text-[#111827]">
             <div className="grid grid-cols-[2rem_minmax(0,1fr)] items-center gap-2">
               <span className="grid h-8 w-8 place-items-center rounded-full bg-[#0a84ff] text-[0.6rem] font-black text-white">TE</span>
               <span><strong className="block text-[0.72rem] font-black">Customer receives this text</strong><small className="mt-0.5 block text-[0.52rem] font-bold text-[#8e8e93]">Tim&apos;s Electrical · now</small></span>
@@ -1303,7 +1345,7 @@ function MobileHeroCallProof() {
             <div className="ml-5 mt-2 rounded-[0.9rem_0.9rem_0.35rem_0.9rem] bg-[#0a84ff] px-2.5 py-2.5 text-[0.67rem] font-bold leading-[1.25] text-white">Thanks for calling Tim&apos;s Electrical. We received your request and will follow up shortly.</div>
           </div>
 
-          <div className="mt-3 flex items-center justify-center gap-2 text-[0.62rem] font-black uppercase tracking-[0.07em] text-[#b9f6cd]">
+          <div className="landing-timed-call-delivered mt-3 flex items-center justify-center gap-2 text-[0.62rem] font-black uppercase tracking-[0.07em] text-[#b9f6cd]">
             <span className="grid h-5 w-5 place-items-center rounded-full bg-[#16a05d] text-white" aria-hidden="true">✓</span>
             Job captured and delivered
           </div>
@@ -6660,6 +6702,309 @@ function LandingPage() {
               padding-bottom: 2.5rem !important;
             }
           }
+
+          .landing-tablet-hero,
+          .landing-hero-grid > .landing-tablet-hero:first-child {
+            display: none !important;
+          }
+          @media (min-width: 640px) and (max-width: 1024px),
+                 (min-width: 1025px) and (max-width: 1366px) and (pointer: coarse) {
+            .landing-hero-shell {
+              max-width: 74rem !important;
+              min-height: 100svh !important;
+              padding: 1.65rem 2.35rem 2.5rem !important;
+            }
+            .landing-hero-shell > nav {
+              display: none !important;
+            }
+            .landing-hero-grid {
+              display: block !important;
+              padding: 0 !important;
+            }
+            .landing-hero-grid > .landing-hero-copy-column,
+            .landing-hero-grid > .landing-hero-visual {
+              display: none !important;
+            }
+            .landing-tablet-hero,
+            .landing-hero-grid > .landing-tablet-hero:first-child {
+              display: grid !important;
+              width: 100%;
+              gap: 2.15rem;
+              align-items: center;
+            }
+            .landing-tablet-copy {
+              width: min(100%, 44.375rem);
+              margin-inline: auto;
+            }
+            .landing-tablet-eyebrow {
+              width: fit-content;
+              margin: 0 auto;
+              padding: 0.62rem 1.25rem;
+              border: 1px solid rgba(233, 99, 0, 0.34);
+              border-radius: 999px;
+              background: rgba(255, 245, 235, 0.95);
+              color: #d95e00;
+              font-size: 0.88rem;
+              font-weight: 900;
+              letter-spacing: 0.16em;
+              text-transform: uppercase;
+            }
+            .landing-tablet-title {
+              margin: 1.7rem 0 0;
+              color: #07142a;
+              text-align: center;
+              font-size: clamp(3.4rem, 7vw, 4.9rem);
+              font-weight: 950;
+              line-height: 0.94;
+              letter-spacing: -0.06em;
+            }
+            .landing-tablet-pain {
+              margin: 1.1rem 0 0;
+              color: #d91d12;
+              text-align: center;
+              font-size: clamp(1.55rem, 3.2vw, 2.25rem);
+              font-weight: 900;
+              line-height: 1;
+              letter-spacing: -0.035em;
+            }
+            .landing-tablet-coverage {
+              width: fit-content;
+              margin: 1.35rem auto 0;
+              padding: 0.82rem 1.5rem;
+              border: 1px solid #b7e1c4;
+              border-radius: 999px;
+              background: rgba(234, 248, 239, 0.94);
+              color: #0b7834;
+              font-size: 1.38rem;
+              font-weight: 900;
+              line-height: 1.1;
+            }
+            .landing-tablet-benefits {
+              display: grid;
+              overflow: hidden;
+              grid-template-columns: 1fr 1fr;
+              margin-top: 1.35rem;
+              border: 1px solid #cee0ef;
+              border-radius: 1.4rem;
+              background: rgba(255, 255, 255, 0.88);
+              box-shadow: 0 20px 40px -34px #123f6e;
+            }
+            .landing-tablet-benefit {
+              display: grid;
+              min-height: 3.7rem;
+              grid-template-columns: 2.5rem minmax(0, 1fr);
+              align-items: center;
+              gap: 0.75rem;
+              margin-inline: 1rem;
+              padding-block: 0.7rem;
+              color: #111827;
+              font-size: 0.98rem;
+              font-weight: 780;
+              line-height: 1.22;
+            }
+            .landing-tablet-benefit:nth-child(n + 3) {
+              border-top: 1px solid #dce7f0;
+            }
+            .landing-tablet-benefit:nth-child(even) {
+              margin-left: 0;
+              padding-left: 1rem;
+              border-left: 1px solid #dce7f0;
+            }
+            .landing-tablet-benefit-icon {
+              display: grid;
+              width: 2.4rem;
+              height: 2.4rem;
+              place-items: center;
+              border-radius: 0.78rem;
+              background: #147fd8;
+              color: white;
+              box-shadow: 0 8px 18px -12px #147fd8;
+            }
+            .landing-tablet-actions {
+              display: grid;
+              grid-template-columns: 1.45fr 1fr;
+              gap: 0.75rem;
+              margin-top: 1.25rem;
+            }
+            .landing-tablet-primary,
+            .landing-tablet-secondary {
+              display: grid;
+              min-height: 3.65rem;
+              place-items: center;
+              border-radius: 1.05rem;
+              font-size: 1.05rem;
+              font-weight: 900;
+            }
+            .landing-tablet-primary {
+              border: 0;
+              background: linear-gradient(180deg, #ff7a00, #ff6500);
+              color: white;
+              box-shadow: 0 18px 34px -25px #ff6a00;
+            }
+            .landing-tablet-secondary {
+              border: 1px solid #6fa9df;
+              background: rgba(255, 255, 255, 0.9);
+              color: #0c5fc3;
+            }
+            .landing-tablet-trust {
+              display: grid;
+              grid-template-columns: repeat(3, minmax(0, 1fr));
+              margin-top: 0.75rem;
+              padding: 0.82rem 0.5rem;
+              border: 1px solid #bee4c8;
+              border-radius: 0.95rem;
+              background: rgba(248, 255, 250, 0.94);
+              color: #21723b;
+              text-align: center;
+              font-size: 0.82rem;
+              font-weight: 850;
+            }
+            .landing-tablet-trust span + span {
+              border-left: 1px solid #d9ecdf;
+            }
+            .landing-tablet-trust b {
+              margin-right: 0.3rem;
+              color: #159447;
+            }
+            .landing-tablet-card-wrap {
+              width: min(100%, 44.375rem);
+              margin-inline: auto;
+            }
+            .landing-tablet-call-proof {
+              height: 31.25rem !important;
+              margin-top: 0 !important;
+            }
+            .landing-tablet-call-proof .landing-timed-call-face {
+              padding: 1.38rem !important;
+              border-radius: 1.9rem !important;
+            }
+            .landing-tablet-call-proof .landing-timed-call-status {
+              font-size: 0.82rem !important;
+            }
+            .landing-tablet-call-proof .landing-timed-call-avatar-wrap {
+              width: 10rem !important;
+              height: 10rem !important;
+              margin-top: 1.7rem !important;
+            }
+            .landing-tablet-call-proof .landing-timed-call-avatar {
+              width: 9rem !important;
+              height: 9rem !important;
+              border-width: 4px !important;
+            }
+            .landing-tablet-call-proof .landing-timed-call-agent {
+              margin-top: 1.35rem !important;
+              font-size: 2.1rem !important;
+            }
+            .landing-tablet-call-proof .landing-timed-call-subtitle {
+              font-size: 1rem !important;
+            }
+            .landing-tablet-call-proof .landing-mobile-call-wave {
+              height: 3.9rem !important;
+              margin-top: 0.7rem !important;
+            }
+            .landing-tablet-call-proof .landing-timed-call-quote {
+              margin-top: 0.62rem !important;
+              padding: 1.1rem !important;
+              font-size: 1.05rem !important;
+            }
+            .landing-tablet-call-proof .landing-timed-call-back-title {
+              margin-top: 1.1rem !important;
+              font-size: 1.9rem !important;
+            }
+            .landing-tablet-call-proof .landing-timed-call-back-intro {
+              font-size: 0.88rem !important;
+            }
+            .landing-tablet-call-proof .landing-timed-call-message {
+              margin-top: 1.1rem !important;
+              padding: 0.95rem !important;
+              border-radius: 1.25rem !important;
+            }
+            .landing-tablet-call-proof .landing-timed-call-message > div:first-child {
+              grid-template-columns: 2.65rem minmax(0, 1fr) !important;
+            }
+            .landing-tablet-call-proof .landing-timed-call-message > div:first-child > span:first-child {
+              width: 2.65rem !important;
+              height: 2.65rem !important;
+              font-size: 0.72rem !important;
+            }
+            .landing-tablet-call-proof .landing-timed-call-message strong {
+              font-size: 0.88rem !important;
+            }
+            .landing-tablet-call-proof .landing-timed-call-message small {
+              font-size: 0.62rem !important;
+            }
+            .landing-tablet-call-proof .landing-timed-call-message > div:last-child {
+              padding: 0.82rem 0.9rem !important;
+              font-size: 0.86rem !important;
+            }
+            .landing-tablet-call-proof .landing-timed-call-delivered {
+              margin-top: 1.1rem !important;
+              font-size: 0.75rem !important;
+            }
+            .landing-tablet-flip-hint {
+              margin-top: 0.65rem;
+              color: #63809c;
+              text-align: center;
+              font-size: 0.7rem;
+              font-weight: 750;
+            }
+          }
+          @media (min-width: 900px) and (max-width: 1024px) and (min-aspect-ratio: 4/3),
+                 (min-width: 1025px) and (max-width: 1366px) and (min-aspect-ratio: 4/3) and (pointer: coarse) {
+            .landing-hero-shell {
+              display: grid !important;
+              align-content: center !important;
+              padding: 1.4rem 1.9rem !important;
+            }
+            .landing-tablet-hero,
+            .landing-hero-grid > .landing-tablet-hero:first-child {
+              display: grid !important;
+              grid-template-columns: minmax(22.5rem, 0.8fr) minmax(32.5rem, 1.2fr);
+              gap: 2.5rem;
+            }
+            .landing-tablet-copy,
+            .landing-tablet-card-wrap {
+              width: 100%;
+            }
+            .landing-tablet-eyebrow {
+              margin-left: 0;
+              font-size: 0.78rem;
+            }
+            .landing-tablet-title {
+              margin-top: 1.35rem;
+              text-align: left;
+              font-size: clamp(3.4rem, 6.2vw, 4.7rem);
+            }
+            .landing-tablet-pain {
+              text-align: left;
+              font-size: clamp(1.55rem, 2.75vw, 2.05rem);
+            }
+            .landing-tablet-coverage {
+              margin-left: 0;
+              font-size: 1.18rem;
+            }
+            .landing-tablet-benefits {
+              display: block;
+              margin-top: 1.1rem;
+            }
+            .landing-tablet-benefit {
+              min-height: 3.25rem;
+              margin-inline: 0.9rem;
+              font-size: 0.86rem;
+            }
+            .landing-tablet-benefit:nth-child(n + 2),
+            .landing-tablet-benefit:nth-child(even) {
+              border-top: 1px solid #dce7f0;
+              border-left: 0;
+            }
+            .landing-tablet-benefit:nth-child(even) {
+              margin-left: 0.9rem;
+              padding-left: 0;
+            }
+            .landing-tablet-call-proof {
+              height: 35.625rem !important;
+            }
+          }
           @media (max-width: 370px) {
             .landing-mobile-proof-title {
               font-size: 2.3rem !important;
@@ -6700,6 +7045,7 @@ function LandingPage() {
           </nav>
 
           <div className="landing-hero-grid relative grid flex-1 gap-10 py-5 lg:grid-cols-[minmax(380px,0.7fr)_minmax(620px,1.3fr)] lg:items-center xl:grid-cols-[minmax(430px,0.72fr)_minmax(680px,1.28fr)] xl:gap-16 2xl:gap-16 2xl:py-5">
+            <TabletHero goToSignup={goToSignup} playDemo={playDemo} />
             <div className="landing-hero-copy-column relative z-10 min-w-0 max-w-[500px] xl:max-w-[520px] lg:-translate-y-1">
               <div className="landing-mobile-proof-first sm:hidden">
                 <h1 className="landing-mobile-proof-title font-black tracking-[-0.055em] text-[#07142a]">
