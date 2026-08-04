@@ -1199,19 +1199,20 @@ function HeroCallDashboard({ ownerCardRef }) {
 
 function TabletHero({ goToSignup, playDemo }) {
   const benefits = [
-    ["phone", "Every call answered professionally after 3 rings"],
-    ["faq", "Answers FAQs and speaks naturally with customers"],
-    ["clipboard", "Collects complete job and callback details"],
-    ["sms", "Texts you the details and sends the customer a thank-you reminder"],
+    ["phone", "Every call answered professionally after 3 rings — no more hangups"],
+    ["faq", "Connects with customers with a natural dialogue, answers FAQs and projects a professional image."],
+    ["clipboard", "Collects the job description, caller’s information for easy follow-up call."],
+    ["sms", "Texts you the call details and sends the customer a thank-you reminder."],
   ];
 
   return (
     <div className="landing-tablet-hero">
       <section className="landing-tablet-copy">
-        <p className="landing-tablet-eyebrow">Attention contractors</p>
-        <h1 className="landing-tablet-title">Never miss a call again</h1>
+        <p className="landing-tablet-eyebrow">Attention contractors!</p>
+        <h1 className="landing-tablet-title">Never miss a call again!</h1>
         <p className="landing-tablet-pain">Missed Calls = Missed Jobs</p>
         <p className="landing-tablet-coverage">We&apos;ve got you covered 24/7.</p>
+        <p className="landing-tablet-coffee">For about the price of a cup of coffee per day you get:</p>
 
         <div className="landing-tablet-benefits" aria-label="What My AI PA does">
           {benefits.map(([icon, label]) => (
@@ -6444,7 +6445,7 @@ function LandingPage() {
               border-radius: 999px !important;
               background: rgba(255, 245, 235, 0.94) !important;
               color: #d95e00 !important;
-              font-size: clamp(0.76rem, 3.35vw, 0.86rem) !important;
+              font-size: clamp(1.52rem, 6.7vw, 1.72rem) !important;
               letter-spacing: 0.15em !important;
               box-shadow: 0 10px 24px -22px rgba(217, 94, 0, 0.85) !important;
             }
@@ -6497,6 +6498,14 @@ function LandingPage() {
               font-weight: 850;
               line-height: 1.1;
               letter-spacing: -0.02em;
+            }
+            .landing-mobile-coffee {
+              margin: 0.85rem auto 0;
+              text-align: center;
+              color: #334155;
+              font-size: clamp(0.9rem, 4vw, 1rem);
+              font-weight: 750;
+              line-height: 1.3;
             }
             .landing-mobile-benefit-list {
               overflow: hidden;
@@ -6744,7 +6753,7 @@ function LandingPage() {
               border-radius: 999px;
               background: rgba(255, 245, 235, 0.95);
               color: #d95e00;
-              font-size: 0.88rem;
+              font-size: 1.76rem;
               font-weight: 900;
               letter-spacing: 0.16em;
               text-transform: uppercase;
@@ -6778,6 +6787,14 @@ function LandingPage() {
               font-size: 1.38rem;
               font-weight: 900;
               line-height: 1.1;
+            }
+            .landing-tablet-coffee {
+              margin: 0.9rem auto 0;
+              color: #334155;
+              text-align: center;
+              font-size: 1.05rem;
+              font-weight: 750;
+              line-height: 1.35;
             }
             .landing-tablet-benefits {
               display: grid;
@@ -6968,7 +6985,7 @@ function LandingPage() {
             }
             .landing-tablet-eyebrow {
               margin-left: 0;
-              font-size: 0.78rem;
+              font-size: 1.56rem;
             }
             .landing-tablet-title {
               margin-top: 1.35rem;
@@ -6982,6 +6999,10 @@ function LandingPage() {
             .landing-tablet-coverage {
               margin-left: 0;
               font-size: 1.18rem;
+            }
+            .landing-tablet-coffee {
+              margin-left: 0;
+              text-align: left;
             }
             .landing-tablet-benefits {
               display: block;
@@ -7020,7 +7041,7 @@ function LandingPage() {
               <HeroLogoMark />
             </div>
             <p className="landing-mobile-contractor-label hidden" aria-label="Attention contractors">
-              Attention contractors
+              Attention contractors!
             </p>
             <div className="hidden justify-self-center lg:block">
               <a href="tel:+12495033301" className="inline-flex items-center gap-3 rounded-xl border border-[#a9cbed] bg-white/72 px-3.5 py-2 text-left text-[#0b315f] shadow-[0_10px_24px_-22px_rgba(12,77,160,0.62)] transition hover:border-[#6da8df] hover:bg-white">
@@ -7050,18 +7071,19 @@ function LandingPage() {
               <div className="landing-mobile-proof-first sm:hidden">
                 <h1 className="landing-mobile-proof-title font-black tracking-[-0.055em] text-[#07142a]">
                   <span className="block">Never miss a call</span>
-                  <span className="block">again</span>
+                  <span className="block">again!</span>
                 </h1>
                 <p className="landing-mobile-proof-pain font-black text-[#c92a20]">Missed Calls = Missed Jobs</p>
 
                 <p className="landing-mobile-coverage-card">We&apos;ve got you covered 24/7.</p>
+                <p className="landing-mobile-coffee">For about the price of a cup of coffee per day you get:</p>
 
                 <section className="landing-mobile-benefit-list" aria-label="What My AI PA does">
                   {[
-                    ["phone", "Every call answered professionally after 3 rings"],
-                    ["faq", "Answers FAQs and speaks naturally with customers"],
-                    ["clipboard", "Collects complete job and callback details"],
-                    ["sms", "Texts you the details and sends the customer a thank-you reminder"],
+                    ["phone", "Every call answered professionally after 3 rings — no more hangups"],
+                    ["faq", "Connects with customers with a natural dialogue, answers FAQs and projects a professional image."],
+                    ["clipboard", "Collects the job description, caller’s information for easy follow-up call."],
+                    ["sms", "Texts you the call details and sends the customer a thank-you reminder."],
                   ].map(([icon, label]) => (
                     <div key={label} className="landing-mobile-benefit-row">
                       <span className="landing-mobile-benefit-symbol" aria-hidden="true">
@@ -7100,7 +7122,7 @@ function LandingPage() {
 
               <div className="hidden sm:block">
               <h1 className="landing-hero-title text-[clamp(3rem,11vw,4.25rem)] font-black leading-[0.98] tracking-[-0.055em] text-[#07142a] 2xl:text-[4.5rem]">
-                <span className="block drop-shadow-[0_3px_0_rgba(148,190,255,0.45)]">Never miss a call again<span className="sm:hidden">.</span></span>
+                <span className="block drop-shadow-[0_3px_0_rgba(148,190,255,0.45)]">Never miss a call again!</span>
                 <span className="mt-4 block text-[0.58em] leading-none tracking-[-0.045em] text-[#d91d12] sm:mt-5">
                   Missed Calls = Missed Jobs
                 </span>
@@ -7109,13 +7131,16 @@ function LandingPage() {
               <p className="landing-hero-coverage mt-4 inline-block border-l-4 border-[#17951f] bg-[#e1f8e5]/90 px-3 py-2 text-[1.05rem] font-black leading-tight text-[#147d1b]">
                 We&apos;ve got you covered 24/7.
               </p>
+              <p className="mt-3 text-[0.98rem] font-bold leading-[1.35] text-[#334155]">
+                For about the price of a cup of coffee per day you get:
+              </p>
 
               <div className="landing-hero-points landing-hero-points-clean landing-hero-points-desktop mt-5 hidden space-y-3 sm:block">
                 {[
-                  "Every call answered professionally after 3 rings",
-                  "Answers FAQs and speaks naturally with customers",
-                  "Collects complete job and callback details",
-                  "Texts you the details and sends the customer a thank-you reminder",
+                  "Every call answered professionally after 3 rings — no more hangups",
+                  "Connects with customers with a natural dialogue, answers FAQs and projects a professional image.",
+                  "Collects the job description, caller’s information for easy follow-up call.",
+                  "Texts you the call details and sends the customer a thank-you reminder.",
                 ].map((label) => (
                   <div key={label} className="landing-hero-point landing-hero-point-clean grid grid-cols-[2rem_minmax(0,1fr)] items-center gap-3 text-[0.94rem] font-bold leading-[1.25] text-[#111827] 2xl:text-[1rem]">
                     <span className="landing-hero-point-icon landing-hero-point-check grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#0c4da0] text-[0.88rem] font-black text-white shadow-[0_10px_28px_-16px_rgba(59,130,246,1)]" aria-hidden="true">
