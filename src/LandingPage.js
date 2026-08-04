@@ -1198,55 +1198,116 @@ function HeroCallDashboard({ ownerCardRef }) {
 }
 
 function MobileHeroCallProof() {
+  const stageRef = useRef(null);
+  const [isFlipped, setIsFlipped] = useState(false);
+  const hasAutoFlippedRef = useRef(false);
+
+  useEffect(() => {
+    const stage = stageRef.current;
+    const phoneViewport = window.matchMedia("(max-width: 639px)");
+    if (!stage || !phoneViewport.matches) return undefined;
+
+    let timer = null;
+    const showTexts = () => {
+      if (hasAutoFlippedRef.current) return;
+      hasAutoFlippedRef.current = true;
+      setIsFlipped(true);
+    };
+    const observer = new IntersectionObserver((entries) => {
+      const visible = entries.some((entry) => entry.isIntersecting && entry.intersectionRatio >= 0.6);
+      if (visible && !hasAutoFlippedRef.current && !timer) {
+        timer = window.setTimeout(showTexts, 3500);
+      }
+      if (!visible && timer && !hasAutoFlippedRef.current) {
+        window.clearTimeout(timer);
+        timer = null;
+      }
+    }, { threshold: [0.6] });
+
+    observer.observe(stage);
+    return () => {
+      observer.disconnect();
+      if (timer) window.clearTimeout(timer);
+    };
+  }, []);
+
   return (
-    <section className="landing-mobile-call-proof overflow-hidden rounded-[1.75rem] border border-[#15345a] bg-[linear-gradient(145deg,#07172d,#0b2849)] p-4 text-white shadow-[0_28px_58px_-32px_rgba(7,23,45,0.94)] sm:hidden" aria-label="Live example of a call answered by My AI PA">
-      <div className="flex items-center gap-3.5">
-        <img
-          src={`${process.env.PUBLIC_URL || ""}/NiceGirl.png`}
-          alt="My AI PA telephone assistant wearing a headset"
-          className="h-[4.25rem] w-[4.25rem] shrink-0 rounded-full border-[3px] border-[#238cec] object-cover shadow-[0_12px_28px_-18px_rgba(35,140,236,1)]"
-        />
-        <div className="min-w-0">
-          <span className="inline-flex items-center gap-2 text-[0.7rem] font-black uppercase tracking-[0.1em] text-[#b6f6cc]">
-            <span className="h-2.5 w-2.5 rounded-full bg-[#15c85a] shadow-[0_0_0_5px_rgba(21,200,90,0.12)]" aria-hidden="true" />
-            Live call
-          </span>
-          <h2 className="mt-1.5 text-[1.25rem] font-black leading-tight tracking-[-0.035em]">Tim&apos;s Electrical AI</h2>
-          <p className="mt-1 text-[0.72rem] font-bold text-[#9bc7f3]">Ring 3 · My AI PA answered</p>
+    <section
+      ref={stageRef}
+      className="landing-mobile-call-proof relative h-[25.125rem] overflow-visible sm:hidden"
+      style={{ perspective: "1400px" }}
+      aria-label="Timed example showing a live My AI PA call followed by owner and customer text messages"
+      onClick={() => setIsFlipped((current) => !current)}
+    >
+      <div
+        className="relative h-full w-full"
+        style={{
+          transform: isFlipped ? "rotateY(180deg)" : "rotateY(0deg)",
+          transformStyle: "preserve-3d",
+          transition: "transform 680ms cubic-bezier(.2,.72,.2,1)",
+        }}
+      >
+        <div
+          className="absolute inset-0 overflow-hidden rounded-[1.65rem] border border-[#2b547d] bg-[linear-gradient(155deg,#133053,#071931)] p-4 text-white shadow-[0_30px_60px_-34px_rgba(0,0,0,0.9)]"
+          style={{ backfaceVisibility: "hidden", WebkitBackfaceVisibility: "hidden" }}
+          aria-hidden={isFlipped}
+        >
+          <div className="flex items-center justify-between text-[0.68rem] font-extrabold text-[#d9e8f7]">
+            <span className="inline-flex items-center gap-2"><i className="h-2.5 w-2.5 rounded-full bg-[#15d56b] shadow-[0_0_0_5px_rgba(21,213,107,0.1),0_0_18px_rgba(21,213,107,0.65)]" />Call in progress</span>
+            <span>00:18</span>
+          </div>
+          <div className="mx-auto mt-[1.15rem] grid h-[7.875rem] w-[7.875rem] place-items-center rounded-full border-2 border-[#27c2ff]/40 shadow-[0_0_0_8px_rgba(39,194,255,0.055),0_0_42px_rgba(39,194,255,0.24)]">
+            <img
+              src={`${process.env.PUBLIC_URL || ""}/NiceGirl.png`}
+              alt="My AI PA telephone assistant wearing a headset"
+              className="h-28 w-28 rounded-full border-[3px] border-[#2abdf0] object-cover"
+            />
+          </div>
+          <h2 className="mt-4 text-center text-[1.58rem] font-black leading-none tracking-[-0.035em]">My AI PA Agent</h2>
+          <p className="mt-2 text-center text-[0.82rem] font-semibold text-[#a9bfd6]">Answering for <strong className="font-extrabold text-white">your business</strong></p>
+          <div className="landing-mobile-call-wave mt-2.5 flex h-12 items-center justify-center gap-1.5" aria-hidden="true">
+            {[14, 25, 36, 46, 32, 46, 36, 25, 14].map((height, index) => (
+              <i key={`${height}-${index}`} className="w-[5px] rounded-full bg-[linear-gradient(180deg,#5fe2ff,#157de2)] shadow-[0_0_12px_rgba(63,197,255,0.4)]" style={{ height }} />
+            ))}
+          </div>
+          <div className="mt-2.5 rounded-[1.1rem] border border-white/10 bg-white/[0.065] px-3.5 py-3.5 text-center text-[0.82rem] font-semibold leading-[1.4] text-[#e8f1fb]">
+            <strong className="font-extrabold text-white">“Thanks for calling.</strong> Are you looking for an installation, repair, or maintenance today?”
+          </div>
         </div>
-      </div>
 
-      <div className="landing-mobile-proof-conversation relative mt-4 space-y-2.5 border-l-2 border-[#2587f5]/55 pl-3.5">
-        <div className="ml-4 rounded-[1rem_1rem_0.35rem_1rem] bg-[#edf6ff] px-3.5 py-2.5 text-[0.77rem] font-semibold leading-[1.35] text-[#102f51]">
-          <span className="mb-1 block text-[0.58rem] font-black uppercase tracking-[0.12em] text-[#1876d2]">My AI PA</span>
-          Thanks for calling Tim&apos;s Electrical. Are you calling about maintenance, a repair, or a new installation today?
-        </div>
-        <div className="rounded-[1rem_1rem_1rem_0.35rem] bg-[#15375d] px-3.5 py-2.5 text-[0.77rem] font-semibold leading-[1.35] text-white">
-          <span className="mb-1 block text-[0.58rem] font-black uppercase tracking-[0.12em] text-[#8fc7ff]">Caller</span>
-          A new hot tub installation. I need the electrical hookup completed.
-        </div>
-        <div className="ml-4 rounded-[1rem_1rem_0.35rem_1rem] bg-[#edf6ff] px-3.5 py-2.5 text-[0.77rem] font-semibold leading-[1.35] text-[#102f51]">
-          <span className="mb-1 block text-[0.58rem] font-black uppercase tracking-[0.12em] text-[#1876d2]">My AI PA</span>
-          Perfect. What&apos;s the job address and best callback time?
-        </div>
-      </div>
+        <div
+          className="absolute inset-0 overflow-hidden rounded-[1.65rem] border border-[#2b547d] bg-[linear-gradient(155deg,#133053,#071931)] p-4 text-white shadow-[0_30px_60px_-34px_rgba(0,0,0,0.9)]"
+          style={{ transform: "rotateY(180deg)", backfaceVisibility: "hidden", WebkitBackfaceVisibility: "hidden" }}
+          aria-hidden={!isFlipped}
+        >
+          <div className="flex items-center justify-between text-[0.68rem] font-extrabold text-[#d9e8f7]">
+            <span className="inline-flex items-center gap-2"><i className="h-2.5 w-2.5 rounded-full bg-[#15d56b] shadow-[0_0_0_5px_rgba(21,213,107,0.1),0_0_18px_rgba(21,213,107,0.65)]" />Call complete</span>
+            <span>now</span>
+          </div>
+          <h2 className="mt-3 text-center text-[1.35rem] font-black leading-none tracking-[-0.035em]">Both sides get a text</h2>
+          <p className="mt-1.5 text-center text-[0.68rem] font-bold text-[#9dbbd6]">The job details are ready before you call back.</p>
 
-      <div className="mt-3.5 rounded-[1.2rem] bg-white p-3 text-[#111827] shadow-[0_16px_32px_-26px_rgba(0,0,0,0.75)]">
-        <div className="flex items-center gap-2.5">
-          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[linear-gradient(145deg,#2d93ff,#0868df)] text-[0.64rem] font-black text-white">PA</span>
-          <span className="min-w-0">
-            <strong className="block text-[0.78rem] font-black leading-tight">Qualified job delivered</strong>
-            <small className="mt-0.5 block text-[0.6rem] font-bold leading-none text-[#8e8e93]">My AI PA · now</small>
-          </span>
-        </div>
-        <div className="mt-2.5 rounded-[1rem_1rem_1rem_0.35rem] bg-[#e9e9eb] px-3 py-2.5 text-[0.74rem] font-bold leading-[1.28] text-[#111111]">
-          New installation · Hot tub electrical hookup · 23 Robb St., Hamilton · Callback after 5 PM
-        </div>
-      </div>
+          <div className="mt-3.5 rounded-[1.05rem] bg-white p-3 text-[#111827]">
+            <div className="grid grid-cols-[2rem_minmax(0,1fr)] items-center gap-2">
+              <span className="grid h-8 w-8 place-items-center rounded-full bg-[#2587f5] text-[0.6rem] font-black text-white">PA</span>
+              <span><strong className="block text-[0.72rem] font-black">Owner receives this text</strong><small className="mt-0.5 block text-[0.52rem] font-bold text-[#8e8e93]">My AI PA · now</small></span>
+            </div>
+            <div className="mt-2 rounded-[0.9rem_0.9rem_0.9rem_0.35rem] bg-[#e9e9eb] px-2.5 py-2.5 text-[0.67rem] font-bold leading-[1.25] text-[#111]">New installation · Hot tub electrical hookup · 23 Robb St., Hamilton · Callback after 5 PM</div>
+          </div>
 
-      <div className="mt-3 flex items-center justify-center gap-2 text-[0.68rem] font-black uppercase tracking-[0.08em] text-[#b6f6cc]">
-        <span className="grid h-5 w-5 place-items-center rounded-full bg-[#16a05d] text-[0.68rem] text-white" aria-hidden="true">✓</span>
-        Sent to owner + customer
+          <div className="mt-3 rounded-[1.05rem] bg-white p-3 text-[#111827]">
+            <div className="grid grid-cols-[2rem_minmax(0,1fr)] items-center gap-2">
+              <span className="grid h-8 w-8 place-items-center rounded-full bg-[#0a84ff] text-[0.6rem] font-black text-white">TE</span>
+              <span><strong className="block text-[0.72rem] font-black">Customer receives this text</strong><small className="mt-0.5 block text-[0.52rem] font-bold text-[#8e8e93]">Tim&apos;s Electrical · now</small></span>
+            </div>
+            <div className="ml-5 mt-2 rounded-[0.9rem_0.9rem_0.35rem_0.9rem] bg-[#0a84ff] px-2.5 py-2.5 text-[0.67rem] font-bold leading-[1.25] text-white">Thanks for calling Tim&apos;s Electrical. We received your request and will follow up shortly.</div>
+          </div>
+
+          <div className="mt-3 flex items-center justify-center gap-2 text-[0.62rem] font-black uppercase tracking-[0.07em] text-[#b9f6cd]">
+            <span className="grid h-5 w-5 place-items-center rounded-full bg-[#16a05d] text-white" aria-hidden="true">✓</span>
+            Job captured and delivered
+          </div>
+        </div>
       </div>
     </section>
   );
@@ -6330,12 +6391,23 @@ function LandingPage() {
               padding: 0.9rem 1.15rem 1.3rem !important;
             }
             .landing-mobile-contractor-label {
-              font-size: clamp(0.68rem, 3vw, 0.76rem) !important;
-              letter-spacing: 0.18em !important;
-              color: #e96300 !important;
+              display: flex !important;
+              width: min(100%, 22rem) !important;
+              min-height: 2.8rem !important;
+              align-items: center !important;
+              justify-content: center !important;
+              margin-inline: auto !important;
+              padding-inline: 0.8rem !important;
+              border: 1px solid rgba(233, 99, 0, 0.3) !important;
+              border-radius: 999px !important;
+              background: rgba(255, 245, 235, 0.94) !important;
+              color: #d95e00 !important;
+              font-size: clamp(0.76rem, 3.35vw, 0.86rem) !important;
+              letter-spacing: 0.15em !important;
+              box-shadow: 0 10px 24px -22px rgba(217, 94, 0, 0.85) !important;
             }
             .landing-hero-grid {
-              padding-top: 0.85rem !important;
+              padding-top: 1rem !important;
               padding-bottom: 0 !important;
             }
             .landing-hero-copy-column {
@@ -6349,34 +6421,37 @@ function LandingPage() {
               margin-inline: auto;
             }
             .landing-mobile-proof-title {
-              max-width: 23rem;
+              max-width: 21.5rem;
               margin-inline: auto;
               text-align: center;
-              font-size: clamp(2.62rem, 11.3vw, 2.82rem);
-              line-height: 0.96;
+              font-size: clamp(2.42rem, 10.6vw, 2.68rem);
+              line-height: 0.97;
+              letter-spacing: -0.048em !important;
               text-wrap: balance;
             }
             .landing-mobile-proof-title > span:last-child {
               margin-top: 0.08em;
             }
             .landing-mobile-proof-pain {
-              margin-top: 0.72rem;
+              margin-top: 0.9rem;
               text-align: center;
-              font-size: clamp(1.14rem, 5.25vw, 1.34rem);
+              font-size: clamp(1.08rem, 4.8vw, 1.22rem);
               line-height: 1.15;
               letter-spacing: -0.025em;
             }
             .landing-mobile-coverage-card {
               display: grid;
-              min-height: 3.85rem;
-              margin: 1.35rem auto 0;
+              width: fit-content;
+              min-height: 3.1rem;
+              margin: 1.15rem auto 0;
+              padding-inline: 1.25rem;
               place-items: center;
               border: 1px solid #b7e1c4;
-              border-radius: 1.12rem;
+              border-radius: 999px;
               background: rgba(234, 248, 239, 0.92);
               text-align: center;
               color: #0b7834;
-              font-size: clamp(1.06rem, 4.8vw, 1.22rem);
+              font-size: clamp(0.98rem, 4.35vw, 1.1rem);
               font-weight: 850;
               line-height: 1.1;
               letter-spacing: -0.02em;
@@ -6587,7 +6662,7 @@ function LandingPage() {
           }
           @media (max-width: 370px) {
             .landing-mobile-proof-title {
-              font-size: 2.5rem !important;
+              font-size: 2.3rem !important;
             }
           }
         `}</style>
