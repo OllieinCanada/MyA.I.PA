@@ -1118,16 +1118,23 @@ export function VoiceDemoStep({ agent, businessName, trade, areas, standalone = 
 function ReviewPanel({ trade, areas, specializations, voice, details, pricing, onUpdateDetails, onEditBusinessSlide, onEditVoice, getFieldError, onFieldBlur }) {
   const businessAddress = formatBusinessAddress(details);
   const pricingScript = pricing ? buildPricingScript(pricing) : "";
+  const pricingSummary =
+    pricing?.offersServiceCalls === true
+      ? `$${pricing.repairVisitFee} service call · $${pricing.repairHourlyRate}/hour`
+      : pricing?.offersServiceCalls === false
+        ? "No service calls"
+        : "Not selected";
+  const installationSummary = pricing?.installationFreeEstimate !== false ? "New installations · Free quote" : "Installation pricing confirmed later";
   const optionItems = [
-    ["Trade", trade.label, () => onEditBusinessSlide?.(1, "trade")],
-    ["Service area", areas.join(", "), () => onEditBusinessSlide?.(2)],
+    ["Trade", trade?.label || "Not selected", () => onEditBusinessSlide?.(1, "trade")],
+    ["Service areas", areas.join(", ") || "Not selected", () => onEditBusinessSlide?.(2)],
     [
-      "Pricing script",
+      "Service calls & installations",
       pricingScript,
       () => onEditBusinessSlide?.(4),
-      `${pricing?.installationFreeEstimate !== false ? "Free install estimates · " : ""}$${pricing?.repairVisitFee || "100"} visit · $${pricing?.repairHourlyRate || "100"}/hour`,
+      `${pricingSummary} · ${installationSummary}`,
     ],
-    ["Specializations", specializations.join(", "), () => onEditBusinessSlide?.(1, "specialization")],
+    ["Work types", specializations.join(", ") || "Not selected", () => onEditBusinessSlide?.(1, "specialization")],
     ["Assistant voice", voice.label, onEditVoice],
   ];
 
@@ -1652,9 +1659,9 @@ export default function Signup() {
   const [currentStep, setCurrentStep] = useState(1);
   const [businessSlide, setBusinessSlide] = useState(1);
   const [tradeSetupPanel, setTradeSetupPanel] = useState("trade");
-  const [selectedTradeId, setSelectedTradeId] = useState("electrician");
-  const [selectedAreas, setSelectedAreas] = useState(["Niagara Falls"]);
-  const [selectedSpecializationIds, setSelectedSpecializationIds] = useState(["residential", "commercial", "specialty"]);
+  const [selectedTradeId, setSelectedTradeId] = useState("");
+  const [selectedAreas, setSelectedAreas] = useState([]);
+  const [selectedSpecializationIds, setSelectedSpecializationIds] = useState([]);
   const [selectedDialogueId, setSelectedDialogueId] = useState("help-today");
   const [specializationNotes, setSpecializationNotes] = useState("");
   const [status, setStatus] = useState("");
@@ -1688,7 +1695,7 @@ export default function Signup() {
   }, [paymentReturnStatus]);
 
   const selectedTrade = useMemo(
-    () => TRADE_OPTIONS.find((trade) => trade.id === selectedTradeId) || TRADE_OPTIONS[0],
+    () => TRADE_OPTIONS.find((trade) => trade.id === selectedTradeId) || null,
     [selectedTradeId]
   );
   const selectedSpecializationLabels = useMemo(
@@ -1702,16 +1709,23 @@ export default function Signup() {
   const selectedAgent = ASSISTANT_AGENT;
   const businessValidation = useMemo(() => validateBusinessDetails(details), [details]);
 
-  const businessStepDisabled = !businessValidation.isValid || selectedAreas.length === 0;
+  const tradeStepDisabled = !selectedTradeId;
   const specializationStepDisabled = selectedSpecializationIds.length === 0;
+  const serviceCallDecisionMade = typeof pricing.offersServiceCalls === "boolean";
+  const hasValidServiceCallPricing =
+    pricing.offersServiceCalls !== true ||
+    (Number(pricing.repairVisitFee) > 0 && Number(pricing.repairHourlyRate) > 0);
+  const pricingStepDisabled = !serviceCallDecisionMade || !hasValidServiceCallPricing;
   const businessSlideDisabled =
     currentStep === 1 &&
-    ((businessSlide === 1 && tradeSetupPanel === "specialization" && specializationStepDisabled) ||
+    ((businessSlide === 1 && tradeSetupPanel === "trade" && tradeStepDisabled) ||
+      (businessSlide === 1 && tradeSetupPanel === "specialization" && specializationStepDisabled) ||
       (businessSlide === 2 && selectedAreas.length === 0) ||
-      (businessSlide === 3 && !businessValidation.isValid));
+      (businessSlide === 3 && !businessValidation.isValid) ||
+      (businessSlide === 4 && pricingStepDisabled));
   const businessSlideLabel =
     businessSlide === 1
-      ? "Next: Service area"
+      ? tradeSetupPanel === "trade" ? "Next: Work types" : "Next: Service area"
       : businessSlide === 2
         ? "Next: Business details"
         : businessSlide === 3
@@ -1719,7 +1733,16 @@ export default function Signup() {
           : businessSlide === 4
             ? "Review details"
             : "Continue to voice";
-  const maxBusinessSlide = businessValidation.isValid && selectedAreas.length > 0 ? 5 : selectedAreas.length > 0 ? 3 : 2;
+  const maxBusinessSlide =
+    !selectedTradeId || specializationStepDisabled
+      ? 1
+      : selectedAreas.length === 0
+        ? 2
+        : !businessValidation.isValid
+          ? 3
+          : pricingStepDisabled
+            ? 4
+            : 5;
   const voiceStepDisabled = false;
   const securityStepDisabled = Boolean(CAPTCHA_PROVIDER && !captchaToken);
   const mobilePrimaryLabel =
@@ -1770,6 +1793,16 @@ export default function Signup() {
     setError("");
   };
 
+  const selectServiceCalls = (offersServiceCalls) => {
+    setPricing((prev) => ({
+      ...prev,
+      offersServiceCalls,
+      ...(offersServiceCalls ? {} : { repairVisitFee: "", repairHourlyRate: "" }),
+    }));
+    setStatus("");
+    setError("");
+  };
+
   const markDetailTouched = (field) => () => {
     setTouchedDetails((prev) => ({ ...prev, [field]: true }));
   };
@@ -1782,7 +1815,7 @@ export default function Signup() {
   const toggleArea = (area) => {
     setSelectedAreas((prev) => {
       if (prev.includes(area)) {
-        return prev.length === 1 ? prev : prev.filter((item) => item !== area);
+        return prev.filter((item) => item !== area);
       }
       return [...prev, area];
     });
@@ -1791,7 +1824,6 @@ export default function Signup() {
   const selectTrade = (tradeId) => {
     setSelectedTradeId(tradeId);
     setError("");
-    setTradeSetupPanel("specialization");
   };
 
   const editBusinessSlideFromReview = (slideNumber, panel = "") => {
@@ -1810,7 +1842,7 @@ export default function Signup() {
 
   const toggleSpecialization = (id) => {
     setSelectedSpecializationIds((prev) => {
-      if (prev.includes(id)) return prev.length === 1 ? prev : prev.filter((item) => item !== id);
+      if (prev.includes(id)) return prev.filter((item) => item !== id);
       return [...prev, id];
     });
   };
@@ -1819,9 +1851,9 @@ export default function Signup() {
     setCurrentStep(1);
     setBusinessSlide(1);
     setTradeSetupPanel("trade");
-    setSelectedTradeId("electrician");
-    setSelectedAreas(["Niagara Falls"]);
-    setSelectedSpecializationIds(["residential", "commercial", "specialty"]);
+    setSelectedTradeId("");
+    setSelectedAreas([]);
+    setSelectedSpecializationIds([]);
     setSelectedDialogueId("help-today");
     setSpecializationNotes("");
     setStatus("");
@@ -1845,6 +1877,10 @@ export default function Signup() {
     if (currentStep === 1) {
       if (businessSlide === 1) {
         if (tradeSetupPanel === "trade") {
+          if (tradeStepDisabled) {
+            setError("Choose your trade before continuing.");
+            return;
+          }
           setTradeSetupPanel("specialization");
           return;
         }
@@ -1897,6 +1933,14 @@ export default function Signup() {
         return;
       }
       if (businessSlide === 4) {
+        if (!serviceCallDecisionMade) {
+          setError("Choose Yes or No for service calls before continuing.");
+          return;
+        }
+        if (!hasValidServiceCallPricing) {
+          setError("Enter both the service call price and hourly rate before continuing.");
+          return;
+        }
         setError("");
         if (returnToReviewAfterEdit) {
           setReturnToReviewAfterEdit(false);
@@ -1935,12 +1979,34 @@ export default function Signup() {
       return;
     }
 
-    if (!businessValidation.isValid || selectedAreas.length === 0) {
+    if (!selectedTrade || specializationStepDisabled || !businessValidation.isValid || selectedAreas.length === 0 || pricingStepDisabled) {
       setCurrentStep(1);
-      setBusinessSlide(!selectedAreas.length ? 2 : 5);
+      if (!selectedTrade) {
+        setBusinessSlide(1);
+        setTradeSetupPanel("trade");
+      } else if (specializationStepDisabled) {
+        setBusinessSlide(1);
+        setTradeSetupPanel("specialization");
+      } else if (!selectedAreas.length) {
+        setBusinessSlide(2);
+      } else if (!businessValidation.isValid) {
+        setBusinessSlide(3);
+      } else {
+        setBusinessSlide(4);
+      }
       setBusinessStepAttempted(true);
       setTouchedDetails({ ownerName: true, businessName: true, phone: true, email: true, streetAddress: true, city: true, province: true, postalCode: true });
-      setError(!selectedAreas.length ? "Select at least one service area before continuing." : "Please complete the business details properly before continuing.");
+      setError(
+        !selectedTrade
+          ? "Choose your trade before continuing."
+          : specializationStepDisabled
+            ? "Choose at least one work type before continuing."
+            : !selectedAreas.length
+              ? "Select at least one service area before continuing."
+              : !businessValidation.isValid
+                ? "Please complete the business details properly before continuing."
+                : "Complete the service-call pricing step before continuing."
+      );
       window.scrollTo?.({ top: 0, behavior: "smooth" });
       return;
     }
@@ -2585,10 +2651,12 @@ export default function Signup() {
                     <p className="mt-4 text-lg font-medium leading-8 text-slate-600">
                       {tradeSetupPanel === "trade"
                         ? "Pick the main business type. The next panel will ask which kinds of work you handle."
-                        : `Tell the assistant which types of ${selectedTrade.label.toLowerCase()} work to answer for.`}
+                        : `Tell the assistant which types of ${(selectedTrade?.label || "trade").toLowerCase()} work to answer for.`}
                     </p>
                     <div className="mt-6 rounded-2xl border border-blue-100 bg-white/80 p-4 text-sm font-semibold leading-6 text-slate-600">
-                      <span className="font-black text-blue-600">Selected:</span> {selectedTrade.label} for {selectedSpecializationLabels.join(", ").toLowerCase()} work.
+                      <span className="font-black text-blue-600">Selected:</span>{" "}
+                      {selectedTrade?.label || "Choose a trade"}
+                      {selectedSpecializationLabels.length ? ` for ${selectedSpecializationLabels.join(", ").toLowerCase()} work` : ""}.
                     </div>
                   </div>
                   <div className="signup-task-content relative grid content-center">
@@ -2601,7 +2669,7 @@ export default function Signup() {
                       <div className="signup-task-content-title mb-4 flex items-end justify-between gap-3">
                         <div>
                           <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">Trade</p>
-                          <p className="mt-1 text-sm font-semibold text-slate-500">Tap a trade to continue to specialization.</p>
+                          <p className="mt-1 text-sm font-semibold text-slate-500">Choose one trade, then press Next.</p>
                         </div>
                       </div>
                       <div className="signup-trade-grid grid grid-cols-2 gap-4 sm:grid-cols-3 xl:gap-5">
@@ -2750,7 +2818,7 @@ export default function Signup() {
                     value={details.businessName}
                     onChange={updateDetails("businessName")}
                     onBlur={markDetailTouched("businessName")}
-                    placeholder={`e.g., ${selectedTrade.label === "Electrician" ? "Smith Electrical Services" : `${selectedTrade.label} Services`}`}
+                    placeholder={`e.g., ${selectedTrade?.label === "Electrician" ? "Smith Electrical Services" : `${selectedTrade?.label || "Trade"} Services`}`}
                     autoComplete="organization"
                     error={getBusinessFieldError("businessName")}
                   />
@@ -2844,7 +2912,7 @@ export default function Signup() {
               ) : null}
 
               {businessSlide === 4 ? (
-                <section className="signup-task-layout grid w-full gap-6 lg:grid-cols-[360px_minmax(0,1fr)] xl:grid-cols-[390px_minmax(0,1fr)] lg:items-stretch">
+                <section id="signup-pricing" className="signup-task-layout grid w-full gap-6 lg:grid-cols-[360px_minmax(0,1fr)] xl:grid-cols-[390px_minmax(0,1fr)] lg:items-stretch">
                   <div className="signup-task-explainer flex flex-col justify-center rounded-3xl border border-blue-100 bg-blue-50/70 p-8">
                     <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">Step 4</p>
                     <h2 className="mt-2 text-[clamp(2rem,3vw,3.1rem)] font-black leading-tight tracking-[-0.04em] text-slate-950">Pricing script</h2>
@@ -2856,7 +2924,60 @@ export default function Signup() {
                       <p>Add the simple prices callers ask about most.</p>
                     </div>
                     <div className="grid content-start gap-4 sm:grid-cols-2 xl:grid-cols-4 xl:gap-5">
-                    <label className="sm:col-span-2 xl:col-span-2">
+                    <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-4 sm:col-span-2 xl:col-span-4">
+                      <span className="block text-sm font-black text-slate-950">Do you offer service calls?</span>
+                      <span className="mt-1 block text-sm font-medium text-slate-600">Choose one. Nothing is selected automatically.</span>
+                      <div className="mt-4 grid grid-cols-2 gap-3" role="group" aria-label="Do you offer service calls?">
+                        {[true, false].map((answer) => {
+                          const selected = pricing.offersServiceCalls === answer;
+                          return (
+                            <button
+                              key={String(answer)}
+                              type="button"
+                              aria-pressed={selected}
+                              onClick={() => selectServiceCalls(answer)}
+                              className={
+                                "min-h-[54px] rounded-xl border px-5 text-lg font-black transition " +
+                                (selected
+                                  ? "border-blue-600 bg-blue-600 text-white shadow-[0_14px_30px_-22px_rgba(37,99,235,0.95)]"
+                                  : "border-slate-200 bg-white text-slate-700 hover:border-blue-300 hover:text-blue-600")
+                              }
+                            >
+                              {answer ? "Yes" : "No"}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    {pricing.offersServiceCalls === true ? (
+                      <>
+                        <LabeledInput
+                          label="Service call price"
+                          icon="card"
+                          value={pricing.repairVisitFee}
+                          onChange={updatePricing("repairVisitFee")}
+                          placeholder="Enter price"
+                          type="number"
+                        />
+                        <LabeledInput
+                          label="Hourly rate"
+                          icon="card"
+                          value={pricing.repairHourlyRate}
+                          onChange={updatePricing("repairHourlyRate")}
+                          placeholder="Enter rate"
+                          type="number"
+                        />
+                        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold leading-6 text-emerald-900 sm:col-span-2 xl:col-span-2">
+                          Your assistant will explain these prices, then ask: “Would you like to continue?”
+                        </div>
+                      </>
+                    ) : null}
+                    {pricing.offersServiceCalls === false ? (
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold leading-6 text-slate-600 sm:col-span-2 xl:col-span-4">
+                        No service-call prices will be added to your assistant.
+                      </div>
+                    ) : null}
+                    <label className="sm:col-span-2 xl:col-span-4">
                       <span className="mb-1.5 block text-sm font-semibold leading-none text-slate-700">Installations</span>
                       <span className="flex min-h-[54px] items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 text-lg font-semibold text-slate-950 shadow-[0_1px_0_rgba(15,23,42,0.02)]">
                         <input
@@ -2865,25 +2986,9 @@ export default function Signup() {
                           onChange={updatePricing("installationFreeEstimate")}
                           className="h-5 w-5 rounded border-slate-300 text-blue-600 accent-blue-600"
                         />
-                        Free estimates for installations
+                        New installations – Free quote
                       </span>
                     </label>
-                    <LabeledInput
-                      label="Repairs / maintenance visit"
-                      icon="card"
-                      value={pricing.repairVisitFee}
-                      onChange={updatePricing("repairVisitFee")}
-                      placeholder="100"
-                      type="number"
-                    />
-                    <LabeledInput
-                      label="Hourly rate after that"
-                      icon="card"
-                      value={pricing.repairHourlyRate}
-                      onChange={updatePricing("repairHourlyRate")}
-                      placeholder="100"
-                      type="number"
-                    />
                     </div>
                   </div>
                 </section>
@@ -2995,11 +3100,15 @@ export default function Signup() {
           {mobilePrimaryDisabled ? (
             <p className="signup-mobile-disabled-reason">
               {currentStep === 1 && businessSlide === 1
-                ? "Choose at least one work type to continue."
+                ? tradeSetupPanel === "trade"
+                  ? "Choose one trade to continue."
+                  : "Choose at least one work type to continue."
                 : currentStep === 1 && businessSlide === 2
                   ? "Choose at least one service area to continue."
                   : currentStep === 1 && businessSlide === 3
                     ? "Complete the required business details to continue."
+                    : currentStep === 1 && businessSlide === 4
+                      ? "Choose service calls and complete any required prices."
                     : "Complete the verification above to start your trial."}
             </p>
           ) : null}

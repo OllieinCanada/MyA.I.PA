@@ -198,9 +198,10 @@ export const DEFAULT_DETAILS = {
 };
 
 export const DEFAULT_PRICING = {
+  offersServiceCalls: null,
   installationFreeEstimate: true,
-  repairVisitFee: "100",
-  repairHourlyRate: "100",
+  repairVisitFee: "",
+  repairHourlyRate: "",
 };
 
 export const SIGNUP_ATTEMPT_STORAGE_KEY = "myaipa_signup_attempts_v1";

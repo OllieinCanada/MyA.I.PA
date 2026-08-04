@@ -1,5 +1,6 @@
 import {
   buildSignupPayload,
+  buildPricingPayload,
   extractPhoneFromText,
   getSignupSuccess,
   getTwilioPhoneNumber,
@@ -53,6 +54,7 @@ test("the signup payload keeps owner, business, pricing, and agent fields aligne
   const payload = buildSignupPayload({
     details: validDetails,
     pricing: {
+      offersServiceCalls: true,
       installationFreeEstimate: true,
       repairVisitFee: "125",
       repairHourlyRate: "95",
@@ -79,8 +81,25 @@ test("the signup payload keeps owner, business, pricing, and agent fields aligne
   expect(payload.setupDetails.ownerPhone).toBe(validDetails.phone);
   expect(payload.setupDetails.callForwardingNumber).toBe(validDetails.phone);
   expect(payload.setupDetails.pricing.repairVisitFee).toBe("125");
+  expect(payload.setupDetails.offersServiceCalls).toBe(true);
   expect(payload.setupDetails.greetingScript).toContain("Taylor Electrical");
   expect(payload.security.turnstileToken).toBe("verified-token");
+});
+
+test("service-call pricing never inserts silent defaults", () => {
+  const pricing = buildPricingPayload({
+    offersServiceCalls: false,
+    installationFreeEstimate: true,
+    repairVisitFee: "",
+    repairHourlyRate: "",
+  });
+
+  expect(pricing.offersServiceCalls).toBe(false);
+  expect(pricing.repairVisitFee).toBe("");
+  expect(pricing.repairHourlyRate).toBe("");
+  expect(pricing.pricingScript).toContain("does not offer service calls");
+  expect(pricing.pricingScript).not.toContain("100");
+  expect(pricing.pricingScript).not.toContain("Would you like to continue?");
 });
 
 test("signup response helpers handle nested assigned numbers and explicit failures", () => {

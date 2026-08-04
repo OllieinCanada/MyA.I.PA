@@ -49,39 +49,55 @@ export function formatBusinessAddress(details) {
 }
 
 export function buildPricingScript(pricing) {
-  const visitFee = String(pricing.repairVisitFee ?? "").trim() || "100";
-  const hourlyRate = String(pricing.repairHourlyRate ?? "").trim() || "100";
+  const visitFee = String(pricing.repairVisitFee ?? "").trim();
+  const hourlyRate = String(pricing.repairHourlyRate ?? "").trim();
   const installationFreeEstimate = pricing.installationFreeEstimate !== false;
+  const offersServiceCalls =
+    typeof pricing.offersServiceCalls === "boolean"
+      ? pricing.offersServiceCalls
+      : Boolean(visitFee || hourlyRate);
 
   return [
     installationFreeEstimate
-      ? "Installations: Ask, \"Would you like us to come down and give you a free estimate?\""
+      ? "New installations: Offer a free quote."
       : "Installations: Tell the caller the team will confirm estimate pricing before scheduling.",
-    `Repairs or maintenance: ${visitFee} dollars to come out and ${hourlyRate} dollars per hour after that.`,
-    "Ask, \"Would you like to continue?\"",
+    offersServiceCalls && visitFee && hourlyRate
+      ? `Service calls: ${visitFee} dollars to come out and ${hourlyRate} dollars per hour.`
+      : offersServiceCalls
+        ? "Service calls: The owner will confirm pricing before scheduling."
+        : "Service calls: This business does not offer service calls.",
+    offersServiceCalls ? "Ask, \"Would you like to continue?\"" : "",
   ]
     .filter(Boolean)
     .join("\n");
 }
 
 export function buildPricingPayload(pricing) {
-  const repairVisitFee = String(pricing.repairVisitFee ?? "").trim() || "100";
-  const repairHourlyRate = String(pricing.repairHourlyRate ?? "").trim() || "100";
+  const rawVisitFee = String(pricing.repairVisitFee ?? "").trim();
+  const rawHourlyRate = String(pricing.repairHourlyRate ?? "").trim();
+  const offersServiceCalls =
+    typeof pricing.offersServiceCalls === "boolean"
+      ? pricing.offersServiceCalls
+      : Boolean(rawVisitFee || rawHourlyRate);
+  const repairVisitFee = offersServiceCalls ? rawVisitFee : "";
+  const repairHourlyRate = offersServiceCalls ? rawHourlyRate : "";
   const installationFreeEstimate = pricing.installationFreeEstimate !== false;
   const freeEstimateAnswer = installationFreeEstimate ? "yes we do" : "no we don't";
   const pricingScript = buildPricingScript({
     installationFreeEstimate,
+    offersServiceCalls,
     repairVisitFee,
     repairHourlyRate,
   });
 
   return {
+    offersServiceCalls,
     installationFreeEstimate,
     freeEstimateAnswer,
     repairVisitFee,
     repairHourlyRate,
-    repairVisitFeeText: `${repairVisitFee} dollars`,
-    repairHourlyRateText: `${repairHourlyRate} dollars per hour`,
+    repairVisitFeeText: repairVisitFee ? `${repairVisitFee} dollars` : "",
+    repairHourlyRateText: repairHourlyRate ? `${repairHourlyRate} dollars per hour` : "",
     pricingScript,
   };
 }
@@ -272,6 +288,7 @@ export function buildSignupPayload({
     specialityList: specializationList,
     specialtyList: specializationList,
     pricing: pricingDetails,
+    offersServiceCalls: pricingDetails.offersServiceCalls,
     installationFreeEstimate: pricingDetails.installationFreeEstimate,
     freeEstimateAnswer: pricingDetails.freeEstimateAnswer,
     repairVisitFee: pricingDetails.repairVisitFee,
@@ -315,6 +332,7 @@ export function buildSignupPayload({
       specialtyList: specializationList,
       specializationNotes: specializationNotes.trim(),
       pricing: pricingDetails,
+      offersServiceCalls: pricingDetails.offersServiceCalls,
       installationFreeEstimate: pricingDetails.installationFreeEstimate,
       freeEstimateAnswer: pricingDetails.freeEstimateAnswer,
       repairVisitFee: pricingDetails.repairVisitFee,
