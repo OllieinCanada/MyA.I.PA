@@ -1129,8 +1129,8 @@ function HeroCallDashboard({ ownerCardRef }) {
             <div className="landing-conversation-panel mt-4 rounded-[26px] border border-white/8 bg-black/18 px-5 py-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
               <p className="landing-conversation-opening-label text-[0.92rem] font-black uppercase tracking-[0.06em] text-white/38">AI Assistant</p>
               <div className="landing-conversation-opening mt-2.5 max-w-[78%] rounded-[16px] bg-white/10 px-5 py-3 text-[1.12rem] font-bold leading-[1.26] text-white/92">
-                <span className="block">Hi, thanks for calling Tim&apos;s Electrical. How can we help you today?</span>
-                <span className="mt-2 block">Are you calling about a new installation, maintenance, or repair?</span>
+                <span className="block">Hi, thanks for calling Tim&apos;s Electrical.</span>
+                <span className="mt-2 block">Are you calling about a new installation, repair, or maintenance?</span>
               </div>
               <p className="landing-conversation-opening-time landing-conversation-time mt-1 text-right text-[0.74rem] font-bold text-white/35">10:32 AM</p>
 
@@ -1289,7 +1289,7 @@ function MobileHeroCallProof({ className = "" }) {
   return (
     <section
       ref={stageRef}
-      className={`landing-mobile-call-proof relative h-[25.25rem] overflow-visible ${className}`}
+      className={`landing-mobile-call-proof relative h-[26.5rem] overflow-visible ${className}`}
       style={{ perspective: "1400px" }}
       aria-label={`Three-sided My AI PA demo card. Side ${activeFace + 1} of 3. Tap to turn.`}
       role="button"
@@ -1325,11 +1325,11 @@ function MobileHeroCallProof({ className = "" }) {
             <span>00:18</span>
           </div>
           <div className="landing-timed-call-agent-row mt-3 flex items-center gap-3">
-            <div className="landing-timed-call-avatar-wrap grid h-[4.65rem] w-[4.65rem] shrink-0 place-items-center rounded-full border-2 border-[#27c2ff]/40 shadow-[0_0_0_6px_rgba(39,194,255,0.055),0_0_32px_rgba(39,194,255,0.22)]">
+            <div className="landing-timed-call-avatar-wrap grid h-[4.35rem] w-[4.35rem] shrink-0 place-items-center rounded-full border-2 border-[#27c2ff]/40 shadow-[0_0_0_6px_rgba(39,194,255,0.055),0_0_32px_rgba(39,194,255,0.22)]">
               <img
                 src={`${process.env.PUBLIC_URL || ""}/NiceGirl.png`}
                 alt="My AI PA telephone assistant wearing a headset"
-                className="landing-timed-call-avatar h-[4.15rem] w-[4.15rem] rounded-full border-[3px] border-[#2abdf0] object-cover"
+                className="landing-timed-call-avatar h-[3.85rem] w-[3.85rem] rounded-full border-[3px] border-[#2abdf0] object-cover"
               />
             </div>
             <div className="min-w-0 flex-1">
@@ -1343,25 +1343,25 @@ function MobileHeroCallProof({ className = "" }) {
             </div>
           </div>
 
-          <div className="landing-timed-conversation mt-2.5 space-y-1.5">
-            <div className="landing-timed-conversation-turn landing-timed-conversation-ai mr-8 rounded-[1rem_1rem_1rem_0.35rem] border border-white/10 bg-white/[0.08] px-3 py-2">
+          <div className="landing-timed-conversation mt-2 space-y-1">
+            <div className="landing-timed-conversation-turn landing-timed-conversation-ai mr-3 rounded-[1rem_1rem_1rem_0.35rem] border border-white/10 bg-white/[0.08] px-3 py-1.5">
               <span className="block text-[0.55rem] font-black uppercase tracking-[0.09em] text-[#63d9ff]">My AI PA</span>
-              <p className="mt-0.5 text-[0.78rem] font-extrabold leading-[1.22] text-white">“Thanks for calling Tim&apos;s Electrical. How can I help?”</p>
+              <p className="mt-0.5 text-[0.78rem] font-extrabold leading-[1.22] text-white">“Thanks for calling Tim&apos;s Electrical. Are you calling about a new installation, repair, or maintenance?”</p>
             </div>
             {dialogueStep >= 2 && (
-              <div className="landing-dialogue-reveal landing-timed-conversation-turn landing-timed-conversation-caller ml-8 rounded-[1rem_1rem_0.35rem_1rem] bg-[#0a84ff] px-3 py-2">
+              <div className="landing-dialogue-reveal landing-timed-conversation-turn landing-timed-conversation-caller ml-3 rounded-[1rem_1rem_0.35rem_1rem] bg-[#0a84ff] px-3 py-1.5">
                 <span className="block text-[0.55rem] font-black uppercase tracking-[0.09em] text-[#d9efff]">Caller</span>
                 <p className="mt-0.5 text-[0.78rem] font-extrabold leading-[1.22] text-white">“I need a hot tub installation.”</p>
               </div>
             )}
             {dialogueStep >= 3 && (
-              <div className="landing-dialogue-reveal landing-timed-conversation-turn landing-timed-conversation-ai mr-4 rounded-[1rem_1rem_1rem_0.35rem] border border-white/10 bg-white/[0.08] px-3 py-2">
+              <div className="landing-dialogue-reveal landing-timed-conversation-turn landing-timed-conversation-ai mr-2 rounded-[1rem_1rem_1rem_0.35rem] border border-white/10 bg-white/[0.08] px-3 py-1.5">
                 <span className="block text-[0.55rem] font-black uppercase tracking-[0.09em] text-[#63d9ff]">My AI PA</span>
                 <p className="mt-0.5 text-[0.78rem] font-extrabold leading-[1.22] text-white">“Of course. May I have your name, phone number, job address, and best callback time?”</p>
               </div>
             )}
             {dialogueStep >= 4 && (
-              <div className="landing-dialogue-reveal landing-timed-conversation-turn landing-timed-conversation-caller ml-8 rounded-[1rem_1rem_0.35rem_1rem] bg-[#0a84ff] px-3 py-2">
+              <div className="landing-dialogue-reveal landing-timed-conversation-turn landing-timed-conversation-caller ml-3 rounded-[1rem_1rem_0.35rem_1rem] bg-[#0a84ff] px-3 py-1.5">
                 <span className="block text-[0.55rem] font-black uppercase tracking-[0.09em] text-[#d9efff]">Caller</span>
                 <p className="mt-0.5 text-[0.78rem] font-extrabold leading-[1.22] text-white">“I&apos;m Brian. My number is 905-555-1234. The address is 23 Robb St., Hamilton. After 5 PM works best.”</p>
               </div>
@@ -5589,16 +5589,20 @@ function LandingPage() {
           .landing-chalk-pain {
             width: fit-content;
             margin-inline: auto;
-            transform: rotate(-0.55deg);
-            color: #cf3028 !important;
-            font-family: "Segoe Print", "Comic Sans MS", cursive;
-            font-weight: 800 !important;
-            letter-spacing: 0.005em !important;
+            color: #c8241d !important;
+            background: linear-gradient(180deg, #ed493c 0%, #ca251e 54%, #981712 100%);
+            background-clip: text;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-family: "Arial Narrow", "Segoe UI Variable Display", "Segoe UI", sans-serif;
+            font-weight: 900 !important;
+            font-stretch: condensed;
+            letter-spacing: -0.035em !important;
+            -webkit-text-stroke: 0.4px rgba(119, 18, 14, 0.46);
             text-shadow:
-              0.7px 0 rgba(255, 122, 105, 0.58),
-              -0.7px -0.35px rgba(111, 22, 19, 0.32),
-              0.35px 0.8px rgba(150, 30, 25, 0.28),
-              0 3px 7px rgba(133, 31, 28, 0.12);
+              0 1px 0 rgba(255, 176, 164, 0.68),
+              0 2px 0 rgba(118, 19, 15, 0.2),
+              0 7px 15px rgba(126, 25, 20, 0.16);
           }
           .landing-call-live-dot {
             transform-origin: center;
@@ -6670,10 +6674,10 @@ function LandingPage() {
               letter-spacing: -0.025em;
             }
             .landing-mobile-proof-pain.landing-chalk-pain {
-              max-width: 23rem;
-              font-size: clamp(2.16rem, 9.6vw, 2.44rem);
-              line-height: 1.02;
-              text-wrap: balance;
+              max-width: none;
+              font-size: clamp(1.22rem, 6.2vw, 1.6rem);
+              line-height: 1;
+              white-space: nowrap;
             }
             .landing-mobile-coverage-card {
               display: grid;
