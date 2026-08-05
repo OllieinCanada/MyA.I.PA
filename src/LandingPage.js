@@ -1223,48 +1223,86 @@ function TabletHero({ goToSignup, playDemo }) {
   );
 }
 
+const HERO_NON_DIALOGUE_FACE_DURATION_MS = 8000;
+
 function MobileHeroCallProof({ className = "" }) {
   const stageRef = useRef(null);
   const [activeFace, setActiveFace] = useState(0);
+  const [dialogueStep, setDialogueStep] = useState(1);
+  const [textsCountdown, setTextsCountdown] = useState(null);
+  const [stageIsVisible, setStageIsVisible] = useState(false);
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
 
   useEffect(() => {
     const stage = stageRef.current;
     const supportedViewport = window.matchMedia("(max-width: 1366px)");
     if (!stage || !supportedViewport.matches) return undefined;
 
-    let timer = null;
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const updateMotionPreference = () => setPrefersReducedMotion(reducedMotion.matches);
+    updateMotionPreference();
     const observer = new IntersectionObserver((entries) => {
       const visible = entries.some((entry) => entry.isIntersecting && entry.intersectionRatio >= 0.6);
-      if (visible && !reducedMotion.matches && !timer) {
-        timer = window.setInterval(() => setActiveFace((current) => (current + 1) % 3), 4200);
-      }
-      if (!visible && timer) {
-        window.clearInterval(timer);
-        timer = null;
-      }
+      setStageIsVisible(visible);
     }, { threshold: [0.6] });
 
+    reducedMotion.addEventListener?.("change", updateMotionPreference);
     observer.observe(stage);
     return () => {
       observer.disconnect();
-      if (timer) window.clearInterval(timer);
+      reducedMotion.removeEventListener?.("change", updateMotionPreference);
     };
   }, []);
+
+  useEffect(() => {
+    const timers = [];
+    const schedule = (callback, delay) => timers.push(window.setTimeout(callback, delay));
+
+    if (!stageIsVisible) return undefined;
+    if (prefersReducedMotion) {
+      if (activeFace === 0) setDialogueStep(4);
+      setTextsCountdown(null);
+      return undefined;
+    }
+
+    if (activeFace === 0) {
+      setDialogueStep(1);
+      setTextsCountdown(null);
+      schedule(() => setDialogueStep(2), 1500);
+      schedule(() => setDialogueStep(3), 3200);
+      schedule(() => setDialogueStep(4), 5000);
+      schedule(() => setTextsCountdown(3), 6500);
+      schedule(() => setTextsCountdown(2), 7500);
+      schedule(() => setTextsCountdown(1), 8500);
+      schedule(() => {
+        setTextsCountdown(0);
+        setActiveFace(1);
+      }, 9500);
+    } else {
+      setTextsCountdown(null);
+      schedule(() => setActiveFace((face) => (face + 1) % 3), HERO_NON_DIALOGUE_FACE_DURATION_MS);
+    }
+
+    return () => timers.forEach((timer) => window.clearTimeout(timer));
+  }, [activeFace, prefersReducedMotion, stageIsVisible]);
 
   return (
     <section
       ref={stageRef}
-      className={`landing-mobile-call-proof relative h-[25.125rem] overflow-visible ${className}`}
+      className={`landing-mobile-call-proof relative h-[26.75rem] overflow-visible ${className}`}
       style={{ perspective: "1400px" }}
       aria-label={`Three-sided My AI PA demo card. Side ${activeFace + 1} of 3. Tap to turn.`}
       role="button"
       tabIndex={0}
-      onClick={() => setActiveFace((current) => (current + 1) % 3)}
+      onClick={() => {
+        setActiveFace((current) => (current + 1) % 3);
+        setTextsCountdown(null);
+      }}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
           setActiveFace((current) => (current + 1) % 3);
+          setTextsCountdown(null);
         }
       }}
     >
@@ -1305,19 +1343,35 @@ function MobileHeroCallProof({ className = "" }) {
             </div>
           </div>
 
-          <div className="landing-timed-conversation mt-3 space-y-2">
-            <div className="landing-timed-conversation-turn landing-timed-conversation-ai mr-8 rounded-[1rem_1rem_1rem_0.35rem] border border-white/10 bg-white/[0.08] px-3 py-2.5">
+          <div className="landing-timed-conversation mt-2.5 space-y-1.5">
+            <div className="landing-timed-conversation-turn landing-timed-conversation-ai mr-8 rounded-[1rem_1rem_1rem_0.35rem] border border-white/10 bg-white/[0.08] px-3 py-2">
               <span className="block text-[0.55rem] font-black uppercase tracking-[0.09em] text-[#63d9ff]">My AI PA</span>
-              <p className="mt-0.5 text-[0.74rem] font-extrabold leading-[1.25] text-white">“Thanks for calling.”</p>
+              <p className="mt-0.5 text-[0.78rem] font-extrabold leading-[1.22] text-white">“Thanks for calling Tim&apos;s Electrical. How can I help?”</p>
             </div>
-            <div className="landing-timed-conversation-turn landing-timed-conversation-caller ml-8 rounded-[1rem_1rem_0.35rem_1rem] bg-[#0a84ff] px-3 py-2.5">
-              <span className="block text-[0.55rem] font-black uppercase tracking-[0.09em] text-[#d9efff]">Caller</span>
-              <p className="mt-0.5 text-[0.74rem] font-extrabold leading-[1.25] text-white">“I need help setting up my hot tub.”</p>
-            </div>
-            <div className="landing-timed-conversation-turn landing-timed-conversation-ai mr-4 rounded-[1rem_1rem_1rem_0.35rem] border border-white/10 bg-white/[0.08] px-3 py-2.5">
-              <span className="block text-[0.55rem] font-black uppercase tracking-[0.09em] text-[#63d9ff]">My AI PA</span>
-              <p className="mt-0.5 text-[0.74rem] font-extrabold leading-[1.25] text-white">“Of course! let&apos;s start with your name and phone number.”</p>
-            </div>
+            {dialogueStep >= 2 && (
+              <div className="landing-dialogue-reveal landing-timed-conversation-turn landing-timed-conversation-caller ml-8 rounded-[1rem_1rem_0.35rem_1rem] bg-[#0a84ff] px-3 py-2">
+                <span className="block text-[0.55rem] font-black uppercase tracking-[0.09em] text-[#d9efff]">Caller</span>
+                <p className="mt-0.5 text-[0.78rem] font-extrabold leading-[1.22] text-white">“I need a hot tub installation.”</p>
+              </div>
+            )}
+            {dialogueStep >= 3 && (
+              <div className="landing-dialogue-reveal landing-timed-conversation-turn landing-timed-conversation-ai mr-4 rounded-[1rem_1rem_1rem_0.35rem] border border-white/10 bg-white/[0.08] px-3 py-2">
+                <span className="block text-[0.55rem] font-black uppercase tracking-[0.09em] text-[#63d9ff]">My AI PA</span>
+                <p className="mt-0.5 text-[0.78rem] font-extrabold leading-[1.22] text-white">“Of course. May I have your name, phone number, job address, and best callback time?”</p>
+              </div>
+            )}
+            {dialogueStep >= 4 && (
+              <div className="landing-dialogue-reveal landing-timed-conversation-turn landing-timed-conversation-caller ml-8 rounded-[1rem_1rem_0.35rem_1rem] bg-[#0a84ff] px-3 py-2">
+                <span className="block text-[0.55rem] font-black uppercase tracking-[0.09em] text-[#d9efff]">Caller</span>
+                <p className="mt-0.5 text-[0.78rem] font-extrabold leading-[1.22] text-white">“I&apos;m Brian. My number is 905-555-1234. The address is 23 Robb St., Hamilton. After 5 PM works best.”</p>
+              </div>
+            )}
+            {textsCountdown !== null && (
+              <p className="landing-dialogue-reveal landing-timed-conversation-result flex items-center justify-center gap-1.5 pt-0.5 text-[0.58rem] font-black uppercase tracking-[0.06em] text-[#b9f6cd]" aria-label={`Texts will be sent in ${textsCountdown} seconds`}>
+                <span className="grid h-4 w-4 place-items-center rounded-full bg-[#16a05d] text-[0.55rem] text-white" aria-hidden="true">↻</span>
+                Texts will be sent in <strong className="tabular-nums text-white">0:{String(textsCountdown).padStart(2, "0")}</strong>
+              </p>
+            )}
           </div>
         </div>
 
@@ -5475,6 +5529,19 @@ function LandingPage() {
               box-shadow: 0 14px 34px -31px rgba(34,197,94,0.68);
             }
           }
+          @keyframes landing-dialogue-reveal {
+            from {
+              opacity: 0;
+              transform: translateY(7px) scale(0.985);
+            }
+            to {
+              opacity: 1;
+              transform: translateY(0) scale(1);
+            }
+          }
+          .landing-dialogue-reveal {
+            animation: landing-dialogue-reveal 380ms cubic-bezier(.2,.72,.2,1) both;
+          }
           .landing-call-live-dot {
             transform-origin: center;
             animation: landing-live-call-sequence 7.2s ease-in-out infinite;
@@ -5504,6 +5571,9 @@ function LandingPage() {
           @media (prefers-reduced-motion: reduce) {
             .landing-mobile-call-prism {
               transition: none !important;
+            }
+            .landing-dialogue-reveal {
+              animation: none !important;
             }
             .landing-call-live-dot,
             .landing-hero-owner-arrow-path,
@@ -6471,12 +6541,12 @@ function LandingPage() {
             }
             .landing-mobile-contractor-label {
               display: flex !important;
-              width: min(92%, 19.5rem) !important;
-              min-height: 4.35rem !important;
+              width: 100% !important;
+              min-height: 6.7rem !important;
               align-items: center !important;
               justify-content: center !important;
               margin-inline: auto !important;
-              padding: 0.85rem 2.15rem !important;
+              padding: 1rem 1.35rem !important;
               border: 0 !important;
               border-radius: 0 !important;
               background:
@@ -6484,11 +6554,11 @@ function LandingPage() {
                 #ffdd24 !important;
               clip-path: polygon(50% 0%, 59% 15%, 75% 5%, 79% 23%, 97% 20%, 89% 39%, 100% 50%, 88% 60%, 97% 80%, 77% 78%, 73% 96%, 58% 85%, 50% 100%, 40% 85%, 25% 96%, 21% 77%, 2% 80%, 11% 60%, 0% 49%, 12% 39%, 3% 20%, 23% 23%, 27% 5%, 42% 15%);
               color: #ef2b32 !important;
-              font-size: clamp(1.2rem, 5.7vw, 1.48rem) !important;
-              line-height: 0.94 !important;
-              letter-spacing: 0.1em !important;
-              text-shadow: 1.5px 1.5px 0 #fff, 2.6px 2.6px 0 #07142a !important;
-              filter: drop-shadow(0 5px 0 #07142a) drop-shadow(0 13px 13px rgba(7, 20, 42, 0.18));
+              font-size: clamp(1.78rem, 8vw, 2rem) !important;
+              line-height: 0.86 !important;
+              letter-spacing: 0.065em !important;
+              text-shadow: 1.8px 1.8px 0 #fff, 3.2px 3.2px 0 #07142a !important;
+              filter: drop-shadow(0 6px 0 #07142a) drop-shadow(0 15px 15px rgba(7, 20, 42, 0.2));
               transform: rotate(-1.2deg);
             }
             .landing-hero-grid {
@@ -6508,11 +6578,19 @@ function LandingPage() {
             .landing-mobile-proof-title {
               max-width: 21.5rem;
               margin-inline: auto;
+              color: #06142b !important;
               text-align: center;
               font-size: clamp(2.42rem, 10.6vw, 2.68rem);
+              font-weight: 1000 !important;
               line-height: 0.97;
               letter-spacing: -0.048em !important;
               text-wrap: balance;
+              -webkit-text-stroke: 0.8px #48bff4;
+              paint-order: stroke fill;
+              text-shadow:
+                0 0 1px #e8fbff,
+                0 0 13px rgba(54, 190, 255, 0.24),
+                0 8px 18px rgba(7, 20, 42, 0.18);
             }
             .landing-mobile-proof-title > span:last-child {
               margin-top: 0.08em;
@@ -6789,11 +6867,11 @@ function LandingPage() {
             }
             .landing-tablet-eyebrow {
               display: grid;
-              width: min(100%, 21rem);
-              min-height: 5.1rem;
+              width: min(100%, 31rem);
+              min-height: 8rem;
               place-items: center;
               margin: 0 auto;
-              padding: 1rem 2.5rem;
+              padding: 1.2rem 3.5rem;
               border: 0;
               border-radius: 0;
               background:
@@ -6802,23 +6880,29 @@ function LandingPage() {
               clip-path: polygon(50% 0%, 59% 15%, 75% 5%, 79% 23%, 97% 20%, 89% 39%, 100% 50%, 88% 60%, 97% 80%, 77% 78%, 73% 96%, 58% 85%, 50% 100%, 40% 85%, 25% 96%, 21% 77%, 2% 80%, 11% 60%, 0% 49%, 12% 39%, 3% 20%, 23% 23%, 27% 5%, 42% 15%);
               color: #ef2b32;
               text-align: center;
-              font-size: 1.48rem;
+              font-size: 2.45rem;
               font-weight: 900;
-              line-height: 0.96;
-              letter-spacing: 0.11em;
-              text-shadow: 1.5px 1.5px 0 #fff, 2.8px 2.8px 0 #07142a;
+              line-height: 0.87;
+              letter-spacing: 0.075em;
+              text-shadow: 2px 2px 0 #fff, 3.6px 3.6px 0 #07142a;
               text-transform: uppercase;
               filter: drop-shadow(0 5px 0 #07142a) drop-shadow(0 14px 16px rgba(7, 20, 42, 0.18));
               transform: rotate(-1deg);
             }
             .landing-tablet-title {
               margin: 1.7rem 0 0;
-              color: #07142a;
+              color: #06142b;
               text-align: center;
               font-size: clamp(3.4rem, 7vw, 4.9rem);
-              font-weight: 950;
+              font-weight: 1000;
               line-height: 0.94;
               letter-spacing: -0.06em;
+              -webkit-text-stroke: 1.1px #48bff4;
+              paint-order: stroke fill;
+              text-shadow:
+                0 0 1px #e8fbff,
+                0 0 16px rgba(54, 190, 255, 0.24),
+                0 10px 22px rgba(7, 20, 42, 0.18);
             }
             .landing-tablet-pain {
               margin: 1.1rem 0 0;
@@ -7084,7 +7168,10 @@ function LandingPage() {
             }
             .landing-tablet-eyebrow {
               margin-left: 0;
-              font-size: 1.42rem;
+              width: min(100%, 23rem);
+              min-height: 6.5rem;
+              padding-inline: 2.5rem;
+              font-size: 2.08rem;
             }
             .landing-tablet-title {
               margin-top: 1.35rem;
