@@ -91,41 +91,45 @@ export const TRADE_OPTIONS = [
   },
 ];
 
-export const AREA_OPTIONS = [
-  "Niagara Falls",
-  "Welland",
-  "St. Catharines",
-  "Thorold",
-  "Port Colborne",
-  "Fort Erie",
-  "Grimsby",
-  "Hamilton",
-  "Burlington",
-  "Oakville",
-  "Milton",
-  "Mississauga",
-  "Brampton",
-  "Toronto",
-  "Vaughan",
-  "Markham",
-  "Richmond Hill",
-  "Pickering",
-  "Ajax",
-  "Whitby",
-  "Oshawa",
-  "Kitchener",
-  "Waterloo",
-  "Cambridge",
-  "Guelph",
-  "Brantford",
-  "London",
-  "Barrie",
+export const AREA_GROUPS = [
+  {
+    id: "niagara",
+    label: "Niagara Region",
+    areas: ["Niagara Falls", "Welland", "St. Catharines", "Thorold", "Port Colborne", "Fort Erie", "Grimsby"],
+  },
+  {
+    id: "hamilton-halton-brant",
+    label: "Hamilton, Halton & Brant",
+    areas: ["Hamilton", "Burlington", "Oakville", "Milton", "Brantford"],
+  },
+  {
+    id: "toronto-peel-york",
+    label: "Toronto, Peel & York",
+    areas: ["Mississauga", "Brampton", "Toronto", "Vaughan", "Markham", "Richmond Hill"],
+  },
+  {
+    id: "durham",
+    label: "Durham Region",
+    areas: ["Pickering", "Ajax", "Whitby", "Oshawa"],
+  },
+  {
+    id: "waterloo-wellington",
+    label: "Waterloo & Wellington",
+    areas: ["Kitchener", "Waterloo", "Cambridge", "Guelph"],
+  },
+  {
+    id: "other-ontario",
+    label: "Other Ontario areas",
+    areas: ["London", "Barrie"],
+  },
 ];
+
+export const AREA_OPTIONS = AREA_GROUPS.flatMap((group) => group.areas);
 
 export const SETUP_STEPS = [
   { number: 1, label: "Your business" },
-  { number: 2, label: "Hear voice" },
-  { number: 3, label: "Review & launch" },
+  { number: 2, label: "Voice preview" },
+  { number: 3, label: "Final review & launch" },
 ];
 
 export const ASSISTANT_SAMPLE_AUDIO_SRC = `${process.env.PUBLIC_URL || ""}/Assistant_Testing.wav`;
@@ -139,8 +143,9 @@ export const SPECIALIZATION_OPTIONS = [
   { id: "residential", label: "Residential", icon: "home" },
   { id: "commercial", label: "Commercial", icon: "building" },
   { id: "industrial", label: "Industrial", icon: "factory" },
-  { id: "agricultural", label: "Agricultural", icon: "leaf" },
+  { id: "agricultural", label: "Farm / Agricultural", icon: "leaf" },
   { id: "specialty", label: "Specialty", icon: "star" },
+  { id: "other", label: "Other", icon: "spark" },
 ];
 
 export const OPENING_DIALOGUE_OPTIONS = [
@@ -179,11 +184,11 @@ export const CANADIAN_PROVINCES = [
 ];
 
 export const BUSINESS_SLIDE_TABS = [
-  { number: 1, label: "Trade / Specialization" },
-  { number: 2, label: "Area" },
+  { number: 1, label: "Trade / Property types" },
+  { number: 2, label: "Service areas" },
   { number: 3, label: "Details" },
   { number: 4, label: "Pricing" },
-  { number: 5, label: "Review" },
+  { number: 5, label: "Setup summary" },
 ];
 
 export const DEFAULT_DETAILS = {

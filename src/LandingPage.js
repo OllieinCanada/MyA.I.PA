@@ -7076,6 +7076,7 @@ function LandingPage() {
                 <p className="landing-mobile-proof-pain font-black text-[#c92a20]">Missed Calls = Missed Jobs</p>
 
                 <p className="landing-mobile-coverage-card">We&apos;ve got you covered 24/7.</p>
+                <MobileHeroCallProof />
                 <p className="landing-mobile-coffee">For about the price of a cup of coffee per day you get:</p>
 
                 <section className="landing-mobile-benefit-list" aria-label="What My AI PA does">
@@ -7117,7 +7118,6 @@ function LandingPage() {
                   ))}
                 </div>
 
-                <MobileHeroCallProof />
               </div>
 
               <div className="hidden sm:block">
