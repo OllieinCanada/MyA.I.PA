@@ -1202,8 +1202,8 @@ function TabletHero({ goToSignup, playDemo }) {
     <div className="landing-tablet-hero">
       <section className="landing-tablet-copy">
         <p className="landing-tablet-eyebrow">Attention contractors!</p>
-        <h1 className="landing-tablet-title">Never miss a call again!</h1>
-        <p className="landing-tablet-pain">Missed Calls = Missed Jobs</p>
+        <h1 className="landing-tablet-title landing-stripe-headline">Never miss a call again!</h1>
+        <p className="landing-tablet-pain landing-chalk-pain">Missed Calls = Missed Jobs</p>
         <p className="landing-tablet-coverage">We&apos;ve got you covered 24/7.</p>
 
         <div className="landing-tablet-actions">
@@ -5542,6 +5542,64 @@ function LandingPage() {
           .landing-dialogue-reveal {
             animation: landing-dialogue-reveal 380ms cubic-bezier(.2,.72,.2,1) both;
           }
+          .landing-stripe-headline {
+            position: relative;
+            z-index: 0;
+            isolation: isolate;
+            display: block;
+            padding: 0.2em 0.13em 0.27em;
+            -webkit-text-stroke: 0.7px rgba(87, 205, 255, 0.78);
+            text-shadow:
+              0 2px 0 rgba(7, 20, 42, 0.28),
+              0 8px 15px rgba(7, 20, 42, 0.26),
+              0 0 10px rgba(72, 191, 244, 0.48),
+              0 0 24px rgba(72, 191, 244, 0.25);
+          }
+          .landing-stripe-headline::before,
+          .landing-stripe-headline::after {
+            content: "";
+            position: absolute;
+            inset: 0.08em -0.22em 0.02em;
+            pointer-events: none;
+            clip-path: polygon(2% 22%, 98% 0, 94% 80%, 5% 100%);
+          }
+          .landing-stripe-headline::before {
+            z-index: -2;
+            background:
+              radial-gradient(circle at 8% 35%, rgba(47, 128, 237, 0.24), transparent 36%),
+              radial-gradient(circle at 48% 68%, rgba(42, 201, 214, 0.18), transparent 44%),
+              radial-gradient(circle at 88% 30%, rgba(87, 134, 255, 0.2), transparent 38%),
+              rgba(248, 252, 255, 0.92);
+            border-block: 1px solid rgba(81, 151, 214, 0.22);
+            box-shadow:
+              0 12px 28px -26px rgba(7, 54, 104, 0.42),
+              inset 0 0 22px rgba(255, 255, 255, 0.5);
+            opacity: 0.94;
+          }
+          .landing-stripe-headline::after {
+            z-index: -1;
+            background: linear-gradient(
+              100deg,
+              rgba(255, 255, 255, 0.42),
+              transparent 36% 68%,
+              rgba(255, 255, 255, 0.28)
+            );
+            opacity: 0.38;
+          }
+          .landing-chalk-pain {
+            width: fit-content;
+            margin-inline: auto;
+            transform: rotate(-0.55deg);
+            color: #cf3028 !important;
+            font-family: "Segoe Print", "Comic Sans MS", cursive;
+            font-weight: 800 !important;
+            letter-spacing: 0.005em !important;
+            text-shadow:
+              0.7px 0 rgba(255, 122, 105, 0.58),
+              -0.7px -0.35px rgba(111, 22, 19, 0.32),
+              0.35px 0.8px rgba(150, 30, 25, 0.28),
+              0 3px 7px rgba(133, 31, 28, 0.12);
+          }
           .landing-call-live-dot {
             transform-origin: center;
             animation: landing-live-call-sequence 7.2s ease-in-out infinite;
@@ -6592,6 +6650,15 @@ function LandingPage() {
                 0 0 13px rgba(54, 190, 255, 0.24),
                 0 8px 18px rgba(7, 20, 42, 0.18);
             }
+            .landing-mobile-proof-title.landing-stripe-headline::before,
+            .landing-mobile-proof-title.landing-stripe-headline::after {
+              inset-block: 0.02em;
+              right: auto;
+              left: 50%;
+              width: 100vw;
+              clip-path: none;
+              transform: translateX(-50%);
+            }
             .landing-mobile-proof-title > span:last-child {
               margin-top: 0.08em;
             }
@@ -7255,11 +7322,11 @@ function LandingPage() {
             <TabletHero goToSignup={goToSignup} playDemo={playDemo} />
             <div className="landing-hero-copy-column relative z-10 min-w-0 max-w-[500px] xl:max-w-[520px] lg:-translate-y-1">
               <div className="landing-mobile-proof-first sm:hidden">
-                <h1 className="landing-mobile-proof-title font-black tracking-[-0.055em] text-[#07142a]">
+                <h1 className="landing-mobile-proof-title landing-stripe-headline font-black tracking-[-0.055em] text-[#07142a]">
                   <span className="block">Never miss a call</span>
                   <span className="block">again!</span>
                 </h1>
-                <p className="landing-mobile-proof-pain font-black text-[#c92a20]">Missed Calls = Missed Jobs</p>
+                <p className="landing-mobile-proof-pain landing-chalk-pain font-black text-[#c92a20]">Missed Calls = Missed Jobs</p>
 
                 <p className="landing-mobile-coverage-card">We&apos;ve got you covered 24/7.</p>
                 <MobileHeroCallProof />
@@ -7291,8 +7358,8 @@ function LandingPage() {
 
               <div className="hidden sm:block">
               <h1 className="landing-hero-title text-[clamp(3rem,11vw,4.25rem)] font-black leading-[0.98] tracking-[-0.055em] text-[#07142a] 2xl:text-[4.5rem]">
-                <span className="block drop-shadow-[0_3px_0_rgba(148,190,255,0.45)]">Never miss a call again!</span>
-                <span className="mt-4 block text-[0.58em] leading-none tracking-[-0.045em] text-[#d91d12] sm:mt-5">
+                <span className="landing-stripe-headline block drop-shadow-[0_3px_0_rgba(148,190,255,0.45)]">Never miss a call again!</span>
+                <span className="landing-chalk-pain mt-4 block text-[0.58em] leading-none tracking-[-0.045em] text-[#d91d12] sm:mt-5">
                   Missed Calls = Missed Jobs
                 </span>
               </h1>
