@@ -1204,7 +1204,7 @@ function TabletHero({ goToSignup, playDemo }) {
         <p className="landing-tablet-eyebrow">Attention contractors!</p>
         <h1 className="landing-tablet-title landing-stripe-headline">Never miss a call again!</h1>
         <p className="landing-tablet-pain landing-chalk-pain">Missed Calls = Missed Jobs</p>
-        <p className="landing-tablet-coverage">We&apos;ve got you covered 24/7.</p>
+        <p className="landing-tablet-coverage">We got you covered 24/7.</p>
 
         <div className="landing-tablet-actions">
           <button type="button" onClick={goToSignup} className="landing-tablet-primary">Start Your Free Trial</button>
@@ -1289,7 +1289,7 @@ function MobileHeroCallProof({ className = "" }) {
   return (
     <section
       ref={stageRef}
-      className={`landing-mobile-call-proof relative h-[26.75rem] overflow-visible ${className}`}
+      className={`landing-mobile-call-proof relative h-[25.25rem] overflow-visible ${className}`}
       style={{ perspective: "1400px" }}
       aria-label={`Three-sided My AI PA demo card. Side ${activeFace + 1} of 3. Tap to turn.`}
       role="button"
@@ -6669,6 +6669,12 @@ function LandingPage() {
               line-height: 1.15;
               letter-spacing: -0.025em;
             }
+            .landing-mobile-proof-pain.landing-chalk-pain {
+              max-width: 23rem;
+              font-size: clamp(2.16rem, 9.6vw, 2.44rem);
+              line-height: 1.02;
+              text-wrap: balance;
+            }
             .landing-mobile-coverage-card {
               display: grid;
               width: fit-content;
@@ -6731,9 +6737,9 @@ function LandingPage() {
             }
             .landing-mobile-proof-actions {
               display: grid;
-              grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr);
+              grid-template-columns: minmax(0, 1fr) minmax(0, 1.65fr);
               gap: 0.65rem;
-              margin-top: 1.15rem;
+              margin-top: 0.95rem;
             }
             .landing-mobile-proof-primary {
               min-height: 3.65rem;
@@ -7328,23 +7334,23 @@ function LandingPage() {
                 </h1>
                 <p className="landing-mobile-proof-pain landing-chalk-pain font-black text-[#c92a20]">Missed Calls = Missed Jobs</p>
 
-                <p className="landing-mobile-coverage-card">We&apos;ve got you covered 24/7.</p>
+                <p className="landing-mobile-coverage-card">We got you covered 24/7.</p>
                 <MobileHeroCallProof />
 
                 <div className="landing-mobile-proof-actions">
-                  <button
-                    type="button"
-                    onClick={goToSignup}
-                    className="landing-mobile-proof-primary inline-flex w-full items-center justify-center rounded-2xl bg-[#ff6a00] px-4 font-black text-white shadow-[0_14px_28px_-20px_rgba(255,106,0,0.9)] transition hover:brightness-110"
-                  >
-                    Start Your Free Trial
-                  </button>
                   <button
                     type="button"
                     onClick={playDemo}
                     className="landing-mobile-proof-secondary inline-flex w-full items-center justify-center rounded-2xl border border-[#5f9fd9] bg-white/90 px-3 font-black text-[#0c5fc3]"
                   >
                     Hear Demo
+                  </button>
+                  <button
+                    type="button"
+                    onClick={goToSignup}
+                    className="landing-mobile-proof-primary inline-flex w-full items-center justify-center rounded-2xl bg-[#ff6a00] px-4 font-black text-white shadow-[0_14px_28px_-20px_rgba(255,106,0,0.9)] transition hover:brightness-110"
+                  >
+                    Start Your Free Trial
                   </button>
                 </div>
 
@@ -7365,7 +7371,7 @@ function LandingPage() {
               </h1>
 
               <p className="landing-hero-coverage mt-4 inline-block border-l-4 border-[#17951f] bg-[#e1f8e5]/90 px-3 py-2 text-[1.05rem] font-black leading-tight text-[#147d1b]">
-                We&apos;ve got you covered 24/7.
+                We got you covered 24/7.
               </p>
               <p className="mt-3 text-[0.98rem] font-bold leading-[1.35] text-[#334155]">
                 For about the price of a cup of coffee per day you get:
