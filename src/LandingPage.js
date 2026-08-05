@@ -1198,13 +1198,6 @@ function HeroCallDashboard({ ownerCardRef }) {
 }
 
 function TabletHero({ goToSignup, playDemo }) {
-  const benefits = [
-    ["phone", "Every call answered professionally after 3 rings — no more hangups"],
-    ["faq", "Connects with customers with a natural dialogue, answers FAQs and projects a professional image."],
-    ["clipboard", "Collects the job description, caller’s information for easy follow-up call."],
-    ["sms", "Texts you the call details and sends the customer a thank-you reminder."],
-  ];
-
   return (
     <div className="landing-tablet-hero">
       <section className="landing-tablet-copy">
@@ -1212,16 +1205,6 @@ function TabletHero({ goToSignup, playDemo }) {
         <h1 className="landing-tablet-title">Never miss a call again!</h1>
         <p className="landing-tablet-pain">Missed Calls = Missed Jobs</p>
         <p className="landing-tablet-coverage">We&apos;ve got you covered 24/7.</p>
-        <p className="landing-tablet-coffee">For about the price of a cup of coffee per day you get:</p>
-
-        <div className="landing-tablet-benefits" aria-label="What My AI PA does">
-          {benefits.map(([icon, label]) => (
-            <div key={label} className="landing-tablet-benefit">
-              <span className="landing-tablet-benefit-icon" aria-hidden="true"><HeroIcon type={icon} className="h-5 w-5" /></span>
-              <span>{label}</span>
-            </div>
-          ))}
-        </div>
 
         <div className="landing-tablet-actions">
           <button type="button" onClick={goToSignup} className="landing-tablet-primary">Start Your Free Trial</button>
@@ -1234,7 +1217,7 @@ function TabletHero({ goToSignup, playDemo }) {
 
       <div className="landing-tablet-card-wrap">
         <MobileHeroCallProof className="landing-tablet-call-proof" />
-        <p className="landing-tablet-flip-hint">The card flips once after 3.5 seconds. Tap to switch sides.</p>
+        <p className="landing-tablet-flip-hint">The card rotates through three sides. Tap it to turn.</p>
       </div>
     </div>
   );
@@ -1242,8 +1225,7 @@ function TabletHero({ goToSignup, playDemo }) {
 
 function MobileHeroCallProof({ className = "" }) {
   const stageRef = useRef(null);
-  const [isFlipped, setIsFlipped] = useState(false);
-  const hasAutoFlippedRef = useRef(false);
+  const [activeFace, setActiveFace] = useState(0);
 
   useEffect(() => {
     const stage = stageRef.current;
@@ -1251,18 +1233,14 @@ function MobileHeroCallProof({ className = "" }) {
     if (!stage || !supportedViewport.matches) return undefined;
 
     let timer = null;
-    const showTexts = () => {
-      if (hasAutoFlippedRef.current) return;
-      hasAutoFlippedRef.current = true;
-      setIsFlipped(true);
-    };
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
     const observer = new IntersectionObserver((entries) => {
       const visible = entries.some((entry) => entry.isIntersecting && entry.intersectionRatio >= 0.6);
-      if (visible && !hasAutoFlippedRef.current && !timer) {
-        timer = window.setTimeout(showTexts, 3500);
+      if (visible && !reducedMotion.matches && !timer) {
+        timer = window.setInterval(() => setActiveFace((current) => (current + 1) % 3), 4200);
       }
-      if (!visible && timer && !hasAutoFlippedRef.current) {
-        window.clearTimeout(timer);
+      if (!visible && timer) {
+        window.clearInterval(timer);
         timer = null;
       }
     }, { threshold: [0.6] });
@@ -1270,7 +1248,7 @@ function MobileHeroCallProof({ className = "" }) {
     observer.observe(stage);
     return () => {
       observer.disconnect();
-      if (timer) window.clearTimeout(timer);
+      if (timer) window.clearInterval(timer);
     };
   }, []);
 
@@ -1279,49 +1257,74 @@ function MobileHeroCallProof({ className = "" }) {
       ref={stageRef}
       className={`landing-mobile-call-proof relative h-[25.125rem] overflow-visible ${className}`}
       style={{ perspective: "1400px" }}
-      aria-label="Timed example showing a live My AI PA call followed by owner and customer text messages"
-      onClick={() => setIsFlipped((current) => !current)}
+      aria-label={`Three-sided My AI PA demo card. Side ${activeFace + 1} of 3. Tap to turn.`}
+      role="button"
+      tabIndex={0}
+      onClick={() => setActiveFace((current) => (current + 1) % 3)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          setActiveFace((current) => (current + 1) % 3);
+        }
+      }}
     >
       <div
-        className="relative h-full w-full"
+        className="landing-mobile-call-prism relative h-full w-full"
         style={{
-          transform: isFlipped ? "rotateY(180deg)" : "rotateY(0deg)",
+          "--landing-prism-depth": "clamp(6rem, 27vw, 7rem)",
+          transform: `translateZ(calc(-1 * var(--landing-prism-depth))) rotateY(${-activeFace * 120}deg)`,
           transformStyle: "preserve-3d",
-          transition: "transform 680ms cubic-bezier(.2,.72,.2,1)",
+          transition: "transform 760ms cubic-bezier(.2,.72,.2,1)",
         }}
       >
         <div
           className="landing-timed-call-face landing-timed-call-front absolute inset-0 overflow-hidden rounded-[1.65rem] border border-[#2b547d] bg-[linear-gradient(155deg,#133053,#071931)] p-4 text-white shadow-[0_30px_60px_-34px_rgba(0,0,0,0.9)]"
-          style={{ backfaceVisibility: "hidden", WebkitBackfaceVisibility: "hidden" }}
-          aria-hidden={isFlipped}
+          style={{ transform: "rotateY(0deg) translateZ(var(--landing-prism-depth))", backfaceVisibility: "hidden", WebkitBackfaceVisibility: "hidden" }}
+          aria-hidden={activeFace !== 0}
         >
           <div className="landing-timed-call-status flex items-center justify-between text-[0.68rem] font-extrabold text-[#d9e8f7]">
             <span className="inline-flex items-center gap-2"><i className="h-2.5 w-2.5 rounded-full bg-[#15d56b] shadow-[0_0_0_5px_rgba(21,213,107,0.1),0_0_18px_rgba(21,213,107,0.65)]" />Call in progress</span>
             <span>00:18</span>
           </div>
-          <div className="landing-timed-call-avatar-wrap mx-auto mt-[1.15rem] grid h-[7.875rem] w-[7.875rem] place-items-center rounded-full border-2 border-[#27c2ff]/40 shadow-[0_0_0_8px_rgba(39,194,255,0.055),0_0_42px_rgba(39,194,255,0.24)]">
-            <img
-              src={`${process.env.PUBLIC_URL || ""}/NiceGirl.png`}
-              alt="My AI PA telephone assistant wearing a headset"
-              className="landing-timed-call-avatar h-28 w-28 rounded-full border-[3px] border-[#2abdf0] object-cover"
-            />
+          <div className="landing-timed-call-agent-row mt-3 flex items-center gap-3">
+            <div className="landing-timed-call-avatar-wrap grid h-[4.65rem] w-[4.65rem] shrink-0 place-items-center rounded-full border-2 border-[#27c2ff]/40 shadow-[0_0_0_6px_rgba(39,194,255,0.055),0_0_32px_rgba(39,194,255,0.22)]">
+              <img
+                src={`${process.env.PUBLIC_URL || ""}/NiceGirl.png`}
+                alt="My AI PA telephone assistant wearing a headset"
+                className="landing-timed-call-avatar h-[4.15rem] w-[4.15rem] rounded-full border-[3px] border-[#2abdf0] object-cover"
+              />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h2 className="landing-timed-call-agent text-[1.35rem] font-black leading-none tracking-[-0.035em]">My AI PA Agent</h2>
+              <p className="landing-timed-call-subtitle mt-1.5 text-[0.72rem] font-semibold text-[#a9bfd6]">Answering for <strong className="font-extrabold text-white">your business</strong></p>
+              <div className="landing-mobile-call-wave mt-2 flex h-6 items-center gap-1" aria-hidden="true">
+                {[7, 13, 20, 15, 22, 15, 20, 13, 7].map((height, index) => (
+                  <i key={`${height}-${index}`} className="w-[3px] rounded-full bg-[linear-gradient(180deg,#5fe2ff,#157de2)] shadow-[0_0_10px_rgba(63,197,255,0.38)]" style={{ height }} />
+                ))}
+              </div>
+            </div>
           </div>
-          <h2 className="landing-timed-call-agent mt-4 text-center text-[1.58rem] font-black leading-none tracking-[-0.035em]">My AI PA Agent</h2>
-          <p className="landing-timed-call-subtitle mt-2 text-center text-[0.82rem] font-semibold text-[#a9bfd6]">Answering for <strong className="font-extrabold text-white">your business</strong></p>
-          <div className="landing-mobile-call-wave mt-2.5 flex h-12 items-center justify-center gap-1.5" aria-hidden="true">
-            {[14, 25, 36, 46, 32, 46, 36, 25, 14].map((height, index) => (
-              <i key={`${height}-${index}`} className="w-[5px] rounded-full bg-[linear-gradient(180deg,#5fe2ff,#157de2)] shadow-[0_0_12px_rgba(63,197,255,0.4)]" style={{ height }} />
-            ))}
-          </div>
-          <div className="landing-timed-call-quote mt-2.5 rounded-[1.1rem] border border-white/10 bg-white/[0.065] px-3.5 py-3.5 text-center text-[0.82rem] font-semibold leading-[1.4] text-[#e8f1fb]">
-            <strong className="font-extrabold text-white">“Thanks for calling.</strong> Are you looking for an installation, repair, or maintenance today?”
+
+          <div className="landing-timed-conversation mt-3 space-y-2">
+            <div className="landing-timed-conversation-turn landing-timed-conversation-ai mr-8 rounded-[1rem_1rem_1rem_0.35rem] border border-white/10 bg-white/[0.08] px-3 py-2.5">
+              <span className="block text-[0.55rem] font-black uppercase tracking-[0.09em] text-[#63d9ff]">My AI PA</span>
+              <p className="mt-0.5 text-[0.74rem] font-extrabold leading-[1.25] text-white">“Thanks for calling.”</p>
+            </div>
+            <div className="landing-timed-conversation-turn landing-timed-conversation-caller ml-8 rounded-[1rem_1rem_0.35rem_1rem] bg-[#0a84ff] px-3 py-2.5">
+              <span className="block text-[0.55rem] font-black uppercase tracking-[0.09em] text-[#d9efff]">Caller</span>
+              <p className="mt-0.5 text-[0.74rem] font-extrabold leading-[1.25] text-white">“I need help setting up my hot tub.”</p>
+            </div>
+            <div className="landing-timed-conversation-turn landing-timed-conversation-ai mr-4 rounded-[1rem_1rem_1rem_0.35rem] border border-white/10 bg-white/[0.08] px-3 py-2.5">
+              <span className="block text-[0.55rem] font-black uppercase tracking-[0.09em] text-[#63d9ff]">My AI PA</span>
+              <p className="mt-0.5 text-[0.74rem] font-extrabold leading-[1.25] text-white">“Of course! let&apos;s start with your name and phone number.”</p>
+            </div>
           </div>
         </div>
 
         <div
           className="landing-timed-call-face landing-timed-call-back absolute inset-0 overflow-hidden rounded-[1.65rem] border border-[#2b547d] bg-[linear-gradient(155deg,#133053,#071931)] p-4 text-white shadow-[0_30px_60px_-34px_rgba(0,0,0,0.9)]"
-          style={{ transform: "rotateY(180deg)", backfaceVisibility: "hidden", WebkitBackfaceVisibility: "hidden" }}
-          aria-hidden={!isFlipped}
+          style={{ transform: "rotateY(120deg) translateZ(var(--landing-prism-depth))", backfaceVisibility: "hidden", WebkitBackfaceVisibility: "hidden" }}
+          aria-hidden={activeFace !== 1}
         >
           <div className="landing-timed-call-status flex items-center justify-between text-[0.68rem] font-extrabold text-[#d9e8f7]">
             <span className="inline-flex items-center gap-2"><i className="h-2.5 w-2.5 rounded-full bg-[#15d56b] shadow-[0_0_0_5px_rgba(21,213,107,0.1),0_0_18px_rgba(21,213,107,0.65)]" />Call complete</span>
@@ -1350,6 +1353,36 @@ function MobileHeroCallProof({ className = "" }) {
             <span className="grid h-5 w-5 place-items-center rounded-full bg-[#16a05d] text-white" aria-hidden="true">✓</span>
             Job captured and delivered
           </div>
+        </div>
+
+        <div
+          className="landing-timed-call-face landing-timed-call-benefits absolute inset-0 overflow-hidden rounded-[1.65rem] border border-[#8fc2ee] bg-[linear-gradient(160deg,#ffffff,#edf7ff)] p-4 text-[#07142a] shadow-[0_30px_60px_-34px_rgba(0,0,0,0.9)]"
+          style={{ transform: "rotateY(240deg) translateZ(var(--landing-prism-depth))", backfaceVisibility: "hidden", WebkitBackfaceVisibility: "hidden" }}
+          aria-hidden={activeFace !== 2}
+        >
+          <div className="landing-timed-benefits-meta flex items-center justify-between text-[0.66rem] font-black uppercase tracking-[0.1em] text-[#0c5fc3]">
+            <span>What you get</span>
+            <span>3 of 3</span>
+          </div>
+          <h2 className="landing-timed-benefits-title mt-3 text-center text-[1.12rem] font-black leading-[1.18] tracking-[-0.025em] text-[#18324f]">
+            For about the price of a cup of coffee per day you get:
+          </h2>
+          <div className="landing-timed-benefits-list mt-3 overflow-hidden rounded-[1.05rem] border border-[#c7daec] bg-white/90 shadow-[0_18px_38px_-32px_rgba(15,23,42,0.5)]">
+            {[
+              ["phone", "Every call answered professionally after 3 rings — no more hangups"],
+              ["faq", "Connects with customers with a natural dialogue, answers FAQs and projects a professional image."],
+              ["clipboard", "Collects the job description, caller’s information for easy follow-up call."],
+              ["sms", "Texts you the call details and sends the customer a thank-you reminder."],
+            ].map(([icon, label], index) => (
+              <div key={label} className={`landing-timed-benefits-row grid grid-cols-[2.35rem_minmax(0,1fr)] items-center gap-2.5 px-3 py-2.5 ${index ? "border-t border-[#d8e5f1]" : ""}`}>
+                <span className="landing-timed-benefits-icon grid h-9 w-9 place-items-center rounded-xl bg-[#1687dc] text-white" aria-hidden="true">
+                  <HeroIcon type={icon} className="h-[1.05rem] w-[1.05rem]" />
+                </span>
+                <span className="landing-timed-benefits-copy text-[0.69rem] font-black leading-[1.22] text-[#172b43]">{label}</span>
+              </div>
+            ))}
+          </div>
+          <p className="landing-timed-benefits-footer mt-2 text-center text-[0.6rem] font-black uppercase tracking-[0.08em] text-[#4f6b87]">Tap to see the live call</p>
         </div>
       </div>
     </section>
@@ -5469,6 +5502,9 @@ function LandingPage() {
             animation: landing-customer-card-sequence 7.2s ease-in-out infinite;
           }
           @media (prefers-reduced-motion: reduce) {
+            .landing-mobile-call-prism {
+              transition: none !important;
+            }
             .landing-call-live-dot,
             .landing-hero-owner-arrow-path,
             .landing-hero-owner-arrow-origin,
@@ -6435,19 +6471,25 @@ function LandingPage() {
             }
             .landing-mobile-contractor-label {
               display: flex !important;
-              width: min(100%, 22rem) !important;
-              min-height: 2.8rem !important;
+              width: min(92%, 19.5rem) !important;
+              min-height: 4.35rem !important;
               align-items: center !important;
               justify-content: center !important;
               margin-inline: auto !important;
-              padding-inline: 0.8rem !important;
-              border: 1px solid rgba(233, 99, 0, 0.3) !important;
-              border-radius: 999px !important;
-              background: rgba(255, 245, 235, 0.94) !important;
-              color: #d95e00 !important;
-              font-size: clamp(1.52rem, 6.7vw, 1.72rem) !important;
-              letter-spacing: 0.15em !important;
-              box-shadow: 0 10px 24px -22px rgba(217, 94, 0, 0.85) !important;
+              padding: 0.85rem 2.15rem !important;
+              border: 0 !important;
+              border-radius: 0 !important;
+              background:
+                radial-gradient(circle, rgba(7, 20, 42, 0.18) 0 1px, transparent 1.4px) 0 0 / 9px 9px,
+                #ffdd24 !important;
+              clip-path: polygon(50% 0%, 59% 15%, 75% 5%, 79% 23%, 97% 20%, 89% 39%, 100% 50%, 88% 60%, 97% 80%, 77% 78%, 73% 96%, 58% 85%, 50% 100%, 40% 85%, 25% 96%, 21% 77%, 2% 80%, 11% 60%, 0% 49%, 12% 39%, 3% 20%, 23% 23%, 27% 5%, 42% 15%);
+              color: #ef2b32 !important;
+              font-size: clamp(1.2rem, 5.7vw, 1.48rem) !important;
+              line-height: 0.94 !important;
+              letter-spacing: 0.1em !important;
+              text-shadow: 1.5px 1.5px 0 #fff, 2.6px 2.6px 0 #07142a !important;
+              filter: drop-shadow(0 5px 0 #07142a) drop-shadow(0 13px 13px rgba(7, 20, 42, 0.18));
+              transform: rotate(-1.2deg);
             }
             .landing-hero-grid {
               padding-top: 1rem !important;
@@ -6746,17 +6788,28 @@ function LandingPage() {
               margin-inline: auto;
             }
             .landing-tablet-eyebrow {
-              width: fit-content;
+              display: grid;
+              width: min(100%, 21rem);
+              min-height: 5.1rem;
+              place-items: center;
               margin: 0 auto;
-              padding: 0.62rem 1.25rem;
-              border: 1px solid rgba(233, 99, 0, 0.34);
-              border-radius: 999px;
-              background: rgba(255, 245, 235, 0.95);
-              color: #d95e00;
-              font-size: 1.76rem;
+              padding: 1rem 2.5rem;
+              border: 0;
+              border-radius: 0;
+              background:
+                radial-gradient(circle, rgba(7, 20, 42, 0.18) 0 1.1px, transparent 1.55px) 0 0 / 10px 10px,
+                #ffdd24;
+              clip-path: polygon(50% 0%, 59% 15%, 75% 5%, 79% 23%, 97% 20%, 89% 39%, 100% 50%, 88% 60%, 97% 80%, 77% 78%, 73% 96%, 58% 85%, 50% 100%, 40% 85%, 25% 96%, 21% 77%, 2% 80%, 11% 60%, 0% 49%, 12% 39%, 3% 20%, 23% 23%, 27% 5%, 42% 15%);
+              color: #ef2b32;
+              text-align: center;
+              font-size: 1.48rem;
               font-weight: 900;
-              letter-spacing: 0.16em;
+              line-height: 0.96;
+              letter-spacing: 0.11em;
+              text-shadow: 1.5px 1.5px 0 #fff, 2.8px 2.8px 0 #07142a;
               text-transform: uppercase;
+              filter: drop-shadow(0 5px 0 #07142a) drop-shadow(0 14px 16px rgba(7, 20, 42, 0.18));
+              transform: rotate(-1deg);
             }
             .landing-tablet-title {
               margin: 1.7rem 0 0;
@@ -6898,31 +6951,44 @@ function LandingPage() {
             .landing-tablet-call-proof .landing-timed-call-status {
               font-size: 0.82rem !important;
             }
+            .landing-tablet-call-proof .landing-timed-call-agent-row {
+              gap: 1rem !important;
+              margin-top: 1.2rem !important;
+            }
             .landing-tablet-call-proof .landing-timed-call-avatar-wrap {
-              width: 10rem !important;
-              height: 10rem !important;
-              margin-top: 1.7rem !important;
+              width: 7rem !important;
+              height: 7rem !important;
+              margin-top: 0 !important;
             }
             .landing-tablet-call-proof .landing-timed-call-avatar {
-              width: 9rem !important;
-              height: 9rem !important;
+              width: 6.35rem !important;
+              height: 6.35rem !important;
               border-width: 4px !important;
             }
             .landing-tablet-call-proof .landing-timed-call-agent {
-              margin-top: 1.35rem !important;
-              font-size: 2.1rem !important;
+              margin-top: 0 !important;
+              font-size: 1.9rem !important;
             }
             .landing-tablet-call-proof .landing-timed-call-subtitle {
-              font-size: 1rem !important;
+              margin-top: 0.55rem !important;
+              font-size: 0.94rem !important;
             }
             .landing-tablet-call-proof .landing-mobile-call-wave {
-              height: 3.9rem !important;
-              margin-top: 0.7rem !important;
+              height: 2.5rem !important;
+              margin-top: 0.55rem !important;
             }
-            .landing-tablet-call-proof .landing-timed-call-quote {
-              margin-top: 0.62rem !important;
-              padding: 1.1rem !important;
-              font-size: 1.05rem !important;
+            .landing-tablet-call-proof .landing-timed-conversation {
+              margin-top: 1.2rem !important;
+            }
+            .landing-tablet-call-proof .landing-timed-conversation-turn {
+              padding: 0.82rem 1rem !important;
+            }
+            .landing-tablet-call-proof .landing-timed-conversation-turn > span {
+              font-size: 0.64rem !important;
+            }
+            .landing-tablet-call-proof .landing-timed-conversation-turn > p {
+              font-size: 0.92rem !important;
+              line-height: 1.28 !important;
             }
             .landing-tablet-call-proof .landing-timed-call-back-title {
               margin-top: 1.1rem !important;
@@ -6958,6 +7024,39 @@ function LandingPage() {
               margin-top: 1.1rem !important;
               font-size: 0.75rem !important;
             }
+            .landing-tablet-call-proof .landing-timed-call-benefits {
+              display: flex !important;
+              flex-direction: column;
+              justify-content: center;
+              padding: 2rem !important;
+            }
+            .landing-tablet-call-proof .landing-timed-benefits-meta {
+              font-size: 0.78rem !important;
+            }
+            .landing-tablet-call-proof .landing-timed-benefits-title {
+              margin-top: 1rem !important;
+              font-size: 1.42rem !important;
+            }
+            .landing-tablet-call-proof .landing-timed-benefits-list {
+              margin-top: 1.25rem !important;
+            }
+            .landing-tablet-call-proof .landing-timed-benefits-row {
+              grid-template-columns: 3rem minmax(0, 1fr) !important;
+              gap: 0.9rem !important;
+              padding: 0.8rem 0.95rem !important;
+            }
+            .landing-tablet-call-proof .landing-timed-benefits-icon {
+              width: 2.75rem !important;
+              height: 2.75rem !important;
+            }
+            .landing-tablet-call-proof .landing-timed-benefits-copy {
+              font-size: 0.8rem !important;
+              line-height: 1.3 !important;
+            }
+            .landing-tablet-call-proof .landing-timed-benefits-footer {
+              margin-top: 0.85rem !important;
+              font-size: 0.69rem !important;
+            }
             .landing-tablet-flip-hint {
               margin-top: 0.65rem;
               color: #63809c;
@@ -6985,7 +7084,7 @@ function LandingPage() {
             }
             .landing-tablet-eyebrow {
               margin-left: 0;
-              font-size: 1.56rem;
+              font-size: 1.42rem;
             }
             .landing-tablet-title {
               margin-top: 1.35rem;
@@ -7077,23 +7176,6 @@ function LandingPage() {
 
                 <p className="landing-mobile-coverage-card">We&apos;ve got you covered 24/7.</p>
                 <MobileHeroCallProof />
-                <p className="landing-mobile-coffee">For about the price of a cup of coffee per day you get:</p>
-
-                <section className="landing-mobile-benefit-list" aria-label="What My AI PA does">
-                  {[
-                    ["phone", "Every call answered professionally after 3 rings — no more hangups"],
-                    ["faq", "Connects with customers with a natural dialogue, answers FAQs and projects a professional image."],
-                    ["clipboard", "Collects the job description, caller’s information for easy follow-up call."],
-                    ["sms", "Texts you the call details and sends the customer a thank-you reminder."],
-                  ].map(([icon, label]) => (
-                    <div key={label} className="landing-mobile-benefit-row">
-                      <span className="landing-mobile-benefit-symbol" aria-hidden="true">
-                        <HeroIcon type={icon} className="h-[1.28rem] w-[1.28rem]" />
-                      </span>
-                      <span>{label}</span>
-                    </div>
-                  ))}
-                </section>
 
                 <div className="landing-mobile-proof-actions">
                   <button
