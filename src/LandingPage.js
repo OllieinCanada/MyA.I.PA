@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { getApiBaseUrl, normalizeApiBase } from "./config/apiBase";
+import { tradePageOrder, tradePages } from "./tradePageData";
+import { propertyManagementAudience } from "./firstClassRentalsData";
 
 const landingApiBase = normalizeApiBase(getApiBaseUrl(process.env.REACT_APP_API_BASE_URL));
 const proofFeatureCards = [
@@ -652,6 +654,16 @@ function HeroIcon({ type, className = "h-6 w-6" }) {
       </svg>
     );
   }
+  if (type === "headset") {
+    return (
+      <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2.1" aria-hidden="true">
+        <path d="M4 13v-1a8 8 0 0 1 16 0v5" strokeLinecap="round" />
+        <rect x="3" y="12" width="4" height="7" rx="2" />
+        <rect x="17" y="12" width="4" height="7" rx="2" />
+        <path d="M17 19c0 1.1-.9 2-2 2h-3" strokeLinecap="round" />
+      </svg>
+    );
+  }
   if (type === "people") {
     return (
       <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
@@ -1241,6 +1253,7 @@ function MobileHeroCallProof({ className = "" }) {
   const [textsCountdown, setTextsCountdown] = useState(null);
   const [stageIsVisible, setStageIsVisible] = useState(false);
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+  const [showTurnHint, setShowTurnHint] = useState(false);
 
   const turnCard = (direction) => {
     setActiveFace((current) => (current + direction + 3) % 3);
@@ -1267,6 +1280,20 @@ function MobileHeroCallProof({ className = "" }) {
       reducedMotion.removeEventListener?.("change", updateMotionPreference);
     };
   }, []);
+
+  useEffect(() => {
+    if (!stageIsVisible || prefersReducedMotion) {
+      setShowTurnHint(false);
+      return undefined;
+    }
+
+    const revealHint = window.setTimeout(() => setShowTurnHint(true), 500);
+    const hideHint = window.setTimeout(() => setShowTurnHint(false), 1900);
+    return () => {
+      window.clearTimeout(revealHint);
+      window.clearTimeout(hideHint);
+    };
+  }, [stageIsVisible, prefersReducedMotion]);
 
   useEffect(() => {
     const timers = [];
@@ -1397,7 +1424,7 @@ function MobileHeroCallProof({ className = "" }) {
         </div>
 
         <div
-          className="landing-timed-call-face landing-timed-call-back absolute inset-0 overflow-hidden rounded-[1.65rem] border border-[#2b547d] bg-[linear-gradient(155deg,#133053,#071931)] p-4 text-white shadow-[0_30px_60px_-34px_rgba(0,0,0,0.9)]"
+          className="landing-timed-call-face landing-timed-call-back absolute inset-0 flex flex-col overflow-hidden rounded-[1.65rem] border border-[#2b547d] bg-[linear-gradient(155deg,#133053,#071931)] p-3 text-white shadow-[0_30px_60px_-34px_rgba(0,0,0,0.9)]"
           style={{ transform: "rotateY(120deg) translateZ(var(--landing-prism-depth))", backfaceVisibility: "hidden", WebkitBackfaceVisibility: "hidden" }}
           aria-hidden={activeFace !== 1}
         >
@@ -1405,10 +1432,10 @@ function MobileHeroCallProof({ className = "" }) {
             <span className="inline-flex items-center gap-2"><i className="h-2.5 w-2.5 rounded-full bg-[#15d56b] shadow-[0_0_0_5px_rgba(21,213,107,0.1),0_0_18px_rgba(21,213,107,0.65)]" />Call complete</span>
             <span>now</span>
           </div>
-          <h2 className="landing-timed-call-back-title mt-3 text-center text-[1.35rem] font-black leading-none tracking-[-0.035em]">Both sides get a text</h2>
-          <p className="landing-timed-call-back-intro mt-1.5 text-center text-[0.68rem] font-bold text-[#9dbbd6]">The job details are ready before you call back.</p>
+          <h2 className="landing-timed-call-back-title mt-2 text-center text-[1.35rem] font-black leading-none tracking-[-0.035em]">Both sides get a text</h2>
+          <p className="landing-timed-call-back-intro mt-1 text-center text-[0.68rem] font-bold text-[#9dbbd6]">The job details are ready before you call back.</p>
 
-          <div className="landing-timed-call-message mt-3.5 rounded-[1.05rem] bg-white p-3 text-[#111827]">
+          <div className="landing-timed-call-message mt-2.5 rounded-[1.05rem] bg-white p-2.5 text-[#111827]">
             <div className="grid grid-cols-[2rem_minmax(0,1fr)] items-center gap-2">
               <span className="grid h-8 w-8 place-items-center rounded-full bg-[#2587f5] text-[0.6rem] font-black text-white">PA</span>
               <span><strong className="block text-[0.72rem] font-black">Owner receives this text</strong><small className="mt-0.5 block text-[0.52rem] font-bold text-[#8e8e93]">My AI PA · now</small></span>
@@ -1416,7 +1443,7 @@ function MobileHeroCallProof({ className = "" }) {
             <div className="mt-2 rounded-[0.9rem_0.9rem_0.9rem_0.35rem] bg-[#e9e9eb] px-2.5 py-2.5 text-[0.67rem] font-bold leading-[1.25] text-[#111]">New installation · Hot tub electrical hookup · 23 Robb St., Hamilton · Callback after 5 PM</div>
           </div>
 
-          <div className="landing-timed-call-message landing-timed-call-customer mt-3 rounded-[1.05rem] bg-white p-3 text-[#111827]">
+          <div className="landing-timed-call-message landing-timed-call-customer mt-2 rounded-[1.05rem] bg-white p-2.5 text-[#111827]">
             <div className="grid grid-cols-[2rem_minmax(0,1fr)] items-center gap-2">
               <span className="grid h-8 w-8 place-items-center rounded-full bg-[#0a84ff] text-[0.6rem] font-black text-white">TE</span>
               <span><strong className="block text-[0.72rem] font-black">Customer receives this text</strong><small className="mt-0.5 block text-[0.52rem] font-bold text-[#8e8e93]">Tim&apos;s Electrical · now</small></span>
@@ -1424,8 +1451,8 @@ function MobileHeroCallProof({ className = "" }) {
             <div className="ml-5 mt-2 rounded-[0.9rem_0.9rem_0.35rem_0.9rem] bg-[#0a84ff] px-2.5 py-2.5 text-[0.67rem] font-bold leading-[1.25] text-white">Thanks for calling Tim&apos;s Electrical. We received your request and will follow up shortly.</div>
           </div>
 
-          <div className="landing-timed-call-delivered mt-3 flex items-center justify-center gap-2 text-[0.62rem] font-black uppercase tracking-[0.07em] text-[#b9f6cd]">
-            <span className="grid h-5 w-5 place-items-center rounded-full bg-[#16a05d] text-white" aria-hidden="true">✓</span>
+          <div className="landing-timed-call-delivered mt-auto flex items-center justify-center gap-2 pb-0.5 pt-2 text-[0.74rem] font-black uppercase tracking-[0.055em] text-[#c9ffda]">
+            <span className="grid h-6 w-6 place-items-center rounded-full bg-[#16a05d] text-[0.8rem] text-white shadow-[0_0_14px_rgba(22,160,93,0.45)]" aria-hidden="true">✓</span>
             Job captured and delivered
           </div>
         </div>
@@ -1460,8 +1487,9 @@ function MobileHeroCallProof({ className = "" }) {
           <p className="landing-timed-benefits-footer mt-2 text-center text-[0.6rem] font-black uppercase tracking-[0.08em] text-[#4f6b87]">Tap to see the live call</p>
         </div>
       </div>
-      <span className="pointer-events-none absolute left-2 top-1/2 z-20 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-full border border-white/30 bg-[#061a31]/75 text-xl font-black text-white shadow-lg backdrop-blur-sm" aria-hidden="true">‹</span>
-      <span className="pointer-events-none absolute right-2 top-1/2 z-20 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-full border border-white/30 bg-[#061a31]/75 text-xl font-black text-white shadow-lg backdrop-blur-sm" aria-hidden="true">›</span>
+      <span className={`landing-card-turn-hint ${showTurnHint ? "landing-card-turn-hint-visible" : ""} pointer-events-none absolute inset-x-0 bottom-3 z-20 mx-auto w-fit rounded-full border border-white/25 bg-[#061a31]/88 px-3 py-1.5 text-[0.66rem] font-black uppercase tracking-[0.08em] text-white shadow-lg backdrop-blur-sm`} aria-hidden="true">
+        Tap either side to turn
+      </span>
     </section>
   );
 }
@@ -1485,6 +1513,144 @@ function HeroTradeStrip() {
         </div>
       ))}
     </div>
+  );
+}
+
+function BuiltForYourTrade({ playDemo }) {
+  const [audienceType, setAudienceType] = useState("trades");
+  const [activeSlug, setActiveSlug] = useState(tradePageOrder[0]);
+  const activeTrade = tradePages[activeSlug] || tradePages[tradePageOrder[0]];
+  const isPropertyManagement = audienceType === "property-management";
+  const activeAudience = isPropertyManagement ? propertyManagementAudience : activeTrade;
+  const handledCalls = isPropertyManagement
+    ? propertyManagementAudience.handledCalls
+    : activeTrade.callerNeeds.slice(0, 4).map(([title]) => title);
+
+  return (
+    <section id="built-for-your-trade" className="border-y border-[#cfe2f5] bg-[linear-gradient(180deg,#f8fbff_0%,#edf6ff_100%)]">
+      <div className="mx-auto w-full max-w-[1280px] px-4 py-10 sm:px-6 sm:py-14 lg:px-8 lg:py-16">
+        <div className="mx-auto max-w-[820px] text-center">
+          <p className="text-[0.72rem] font-black uppercase tracking-[0.18em] text-[#f06a00]">Built for Canadian service businesses</p>
+          <h2 className="mt-3 text-[clamp(2rem,5vw,4rem)] font-black leading-[0.98] tracking-[-0.055em] text-[#07142a]">Choose your audience. See the calls we handle.</h2>
+          <p className="mx-auto mt-4 max-w-[700px] text-[0.98rem] font-semibold leading-7 text-[#48627d] sm:text-[1.08rem]">
+            The workflow stays simple, but the questions and details change to match the people calling your business.
+          </p>
+        </div>
+
+        <div className="mx-auto mt-7 grid max-w-[720px] grid-cols-2 gap-2 rounded-[18px] border border-[#bfd8f1] bg-white p-1.5 shadow-[0_14px_34px_-28px_rgba(14,68,130,0.7)]" aria-label="Choose your audience">
+          <button
+            type="button"
+            onClick={() => setAudienceType("trades")}
+            aria-pressed={!isPropertyManagement}
+            className={`min-h-[52px] rounded-[13px] px-3 text-[0.82rem] font-black transition sm:text-[0.92rem] ${!isPropertyManagement ? "bg-[#176bff] text-white shadow-[0_12px_26px_-18px_rgba(23,107,255,0.95)]" : "text-[#17395f] hover:bg-[#f1f7ff]"}`}
+          >
+            Trades
+          </button>
+          <button
+            type="button"
+            onClick={() => setAudienceType("property-management")}
+            aria-pressed={isPropertyManagement}
+            className={`min-h-[52px] rounded-[13px] px-2 text-[0.76rem] font-black leading-tight transition sm:text-[0.9rem] ${isPropertyManagement ? "bg-[#6d4ce8] text-white shadow-[0_12px_26px_-18px_rgba(109,76,232,0.95)]" : "text-[#17395f] hover:bg-[#f7f4ff]"}`}
+          >
+            Property Managers &amp; Landlords
+          </button>
+        </div>
+
+        {!isPropertyManagement ? <div className="-mx-4 mt-4 overflow-x-auto px-4 pb-2 sm:mx-0 sm:px-0" aria-label="Choose your trade">
+          <div className="flex min-w-max gap-2 sm:min-w-0 sm:flex-wrap sm:justify-center">
+            {tradePageOrder.map((slug) => {
+              const trade = tradePages[slug];
+              const isActive = slug === activeSlug;
+              return (
+                <button
+                  key={slug}
+                  type="button"
+                  onClick={() => setActiveSlug(slug)}
+                  aria-pressed={isActive}
+                  className={`inline-flex min-h-[48px] items-center gap-2.5 rounded-full border px-4 text-[0.8rem] font-black transition sm:text-[0.88rem] ${isActive ? "border-[#176bff] bg-[#176bff] text-white shadow-[0_14px_34px_-22px_rgba(23,107,255,0.9)]" : "border-[#bfd8f1] bg-white text-[#17395f] hover:border-[#176bff] hover:text-[#0c5fc3]"}`}
+                >
+                  <span className={`grid h-7 w-7 place-items-center rounded-full ${isActive ? "bg-white/16" : "bg-[#edf6ff] text-[#176bff]"}`}>
+                    <HeroIcon type={trade.icon} className="h-4 w-4" />
+                  </span>
+                  {trade.label}
+                </button>
+              );
+            })}
+          </div>
+        </div> : null}
+
+        <div className="mt-6 overflow-hidden rounded-[24px] border border-[#bfd8f1] bg-white shadow-[0_30px_75px_-52px_rgba(14,68,130,0.58)] lg:grid lg:grid-cols-[0.9fr_1.1fr]">
+          <div className="p-5 sm:p-7 lg:p-9">
+            <div className="flex items-center gap-3">
+              <span className="grid h-12 w-12 shrink-0 place-items-center rounded-[14px] text-white shadow-[0_14px_34px_-23px_rgba(15,23,42,0.7)]" style={{ background: activeAudience.accent }}>
+                <HeroIcon type={activeAudience.icon} className="h-6 w-6" />
+              </span>
+              <div>
+                <p className="text-[0.7rem] font-black uppercase tracking-[0.14em] text-[#64748b]">Calls we handle</p>
+                <h3 className="mt-1 text-[1.45rem] font-black leading-tight tracking-[-0.035em] text-[#07142a]">{activeAudience.label}</h3>
+              </div>
+            </div>
+
+            <p className="mt-5 text-[1rem] font-semibold leading-7 text-[#425b76]">{activeAudience.ownerValue}</p>
+            <div className="mt-5 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+              {handledCalls.map((title) => (
+                <div key={title} className="flex items-center gap-2.5 rounded-xl border border-[#d7e6f5] bg-[#f7fbff] px-3 py-3 text-[0.82rem] font-black leading-tight text-[#17395f]">
+                  <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[#dff7e7] text-[0.75rem] text-[#139448]" aria-hidden="true">✓</span>
+                  {title}
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-6 grid gap-2.5 sm:grid-cols-2">
+              {isPropertyManagement ? (
+                <a href={propertyManagementAudience.pageHref} className="inline-flex min-h-[50px] items-center justify-center rounded-xl bg-[linear-gradient(180deg,#7c5cf0,#6541dc)] px-5 text-center text-[0.88rem] font-black text-white shadow-[0_16px_34px_-22px_rgba(109,76,232,0.9)] transition hover:-translate-y-0.5 hover:brightness-110">
+                  See the rental answering demo
+                </a>
+              ) : (
+                <button type="button" onClick={playDemo} className="inline-flex min-h-[50px] items-center justify-center rounded-xl bg-[linear-gradient(180deg,#ff7a00,#ff6500)] px-5 text-[0.88rem] font-black text-white shadow-[0_16px_34px_-22px_rgba(255,106,0,0.9)] transition hover:-translate-y-0.5 hover:brightness-110">
+                  Hear the {activeTrade.singular} demo
+                </button>
+              )}
+              <a href={isPropertyManagement ? "#/signup" : `#/trades/${activeSlug}`} className="inline-flex min-h-[50px] items-center justify-center rounded-xl border-2 border-[#8eb9e2] bg-white px-5 text-center text-[0.88rem] font-black text-[#0c5fc3] transition hover:-translate-y-0.5 hover:border-[#176bff] hover:bg-[#f6fbff]">
+                {isPropertyManagement ? "Build my property assistant" : `Explore the ${activeTrade.singular} page`}
+              </a>
+            </div>
+          </div>
+
+          <div className="border-t border-[#cfe2f5] bg-[#071a32] p-5 text-white sm:p-7 lg:border-l lg:border-t-0 lg:p-9">
+            <div className="flex items-center justify-between text-[0.68rem] font-black uppercase tracking-[0.12em] text-[#a9c6e2]">
+              <span>Example missed call</span>
+              <span className="inline-flex items-center gap-1.5 text-[#83f0aa]"><i className="h-2 w-2 rounded-full bg-[#19d66f]" />Handled</span>
+            </div>
+
+            <div className="mt-5 space-y-3">
+              <article className="ml-5 rounded-[16px_16px_5px_16px] bg-[#1679e8] px-4 py-3.5">
+                <p className="text-[0.64rem] font-black uppercase tracking-[0.11em] text-[#d9efff]">Caller</p>
+                <p className="mt-1.5 text-[0.9rem] font-bold leading-6">{activeAudience.scenario.caller}</p>
+              </article>
+              <article className="mr-5 rounded-[16px_16px_16px_5px] border border-white/12 bg-white/[0.08] px-4 py-3.5">
+                <p className="text-[0.64rem] font-black uppercase tracking-[0.11em] text-[#8bdcff]">My AI PA</p>
+                <p className="mt-1.5 text-[0.9rem] font-bold leading-6 text-[#eef7ff]">{activeAudience.scenario.assistant}</p>
+              </article>
+            </div>
+
+            <div className="mt-4 rounded-[18px] bg-white p-4 text-[#101827] shadow-[0_18px_46px_-34px_rgba(0,0,0,0.9)]">
+              <div className="flex items-center gap-2.5">
+                <span className="grid h-8 w-8 place-items-center rounded-full bg-[#2587f5] text-[0.62rem] font-black text-white">PA</span>
+                <span><strong className="block text-[0.78rem] font-black">Owner receives this text</strong><small className="mt-0.5 block text-[0.58rem] font-bold text-[#8e8e93]">My AI PA · now</small></span>
+              </div>
+              <p className="mt-3 rounded-[13px_13px_13px_5px] bg-[#e9e9eb] px-3 py-3 text-[0.76rem] font-bold leading-5 text-[#111]">{activeAudience.scenario.owner}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-6 text-center">
+          <a href="#/trades" className="inline-flex min-h-[46px] items-center justify-center gap-2 rounded-full border border-[#bfd8f1] bg-white px-5 text-[0.82rem] font-black text-[#0c5fc3] shadow-[0_12px_30px_-25px_rgba(12,95,195,0.72)] transition hover:-translate-y-0.5 hover:border-[#176bff]">
+            Browse every trade page <span aria-hidden="true">→</span>
+          </a>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -2361,6 +2527,314 @@ function ForwardingSetupWizard() {
   );
 }
 
+function MobileSideMenu({ open, onClose, onSignup }) {
+  const scrollToSection = (sectionId) => {
+    onClose();
+    window.setTimeout(() => {
+      document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 80);
+  };
+
+  const productLinks = [
+    ["How it works", "contractor-proof", "phone"],
+    ["Pricing", "pricing", "dollar"],
+    ["Easy setup", "setup", "check"],
+    ["Common questions", "faq", "faq"],
+  ];
+  const audienceLinks = [
+    ["Electricians", "#/trades/electricians", "bolt"],
+    ["Plumbing", "#/trades/plumbers", "faucet"],
+    ["Heating & cooling", "#/trades/hvac", "fan"],
+    ["Roofing", "#/trades/roofers", "home"],
+    ["General contractors", "#/trades/general-contractors", "briefcase"],
+    ["Property managers & landlords", "#/demo/first-class-rentals", "property"],
+  ];
+
+  return (
+    <div className={`fixed inset-0 z-[100] sm:hidden ${open ? "pointer-events-auto" : "pointer-events-none"}`} aria-hidden={!open}>
+      <style>{`
+        @keyframes mobileMenuSignalTravel {
+          0% { left: 8%; opacity: 0; }
+          12% { opacity: 1; }
+          88% { opacity: 1; }
+          100% { left: 88%; opacity: 0; }
+        }
+        @keyframes mobileMenuLivePulse {
+          0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(35, 211, 107, 0.5); }
+          50% { transform: scale(1.08); box-shadow: 0 0 0 6px rgba(35, 211, 107, 0); }
+        }
+        .mobile-menu-signal-dot { animation: mobileMenuSignalTravel 2.8s ease-in-out infinite; }
+        .mobile-menu-live-dot { animation: mobileMenuLivePulse 1.8s ease-in-out infinite; }
+        @media (prefers-reduced-motion: reduce) {
+          .mobile-menu-signal-dot, .mobile-menu-live-dot { animation: none !important; }
+          .mobile-menu-signal-dot { left: 50%; opacity: 1; }
+        }
+      `}</style>
+      <button
+        type="button"
+        aria-label="Close navigation"
+        onClick={onClose}
+        className={`absolute inset-0 bg-[#06101f]/60 backdrop-blur-[2px] transition-opacity duration-300 ${open ? "opacity-100" : "opacity-0"}`}
+      />
+      <aside
+        role="dialog"
+        aria-modal="true"
+        aria-label="Mobile navigation"
+        className={`absolute inset-y-0 right-0 flex w-[min(92vw,390px)] flex-col overflow-hidden border-l border-white/10 bg-[#07182d] text-white shadow-[-28px_0_70px_-35px_rgba(0,0,0,0.8)] transition-transform duration-300 ease-out ${open ? "translate-x-0" : "translate-x-full"}`}
+      >
+        <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-5 py-4">
+          <div className="rounded-xl bg-white px-3 py-2 shadow-sm"><HeroLogoMark /></div>
+          <button type="button" onClick={onClose} aria-label="Close menu" className="grid h-11 w-11 place-items-center rounded-full border border-white/15 bg-white/[0.07] text-2xl font-light text-white transition hover:bg-white/[0.12]">×</button>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-36 pt-4">
+          <div className="overflow-hidden rounded-[20px] border border-[#2a6fb2]/55 bg-[radial-gradient(circle_at_82%_18%,rgba(33,135,255,0.28),transparent_34%),linear-gradient(145deg,#0b2a4d,#091d36)] shadow-[0_20px_46px_-30px_rgba(42,148,255,0.9)]">
+            <div className="flex items-center justify-between px-4 pt-3.5">
+              <span className="inline-flex items-center gap-2 text-[0.62rem] font-black uppercase tracking-[0.15em] text-[#a8d5ff]"><i className="mobile-menu-live-dot h-2 w-2 rounded-full bg-[#23d36b]" />24/7 call rescue</span>
+              <span className="rounded-full border border-[#ff8a22]/40 bg-[#ff7a00]/15 px-2 py-1 text-[0.56rem] font-black uppercase tracking-[0.12em] text-[#ffad63]">Live</span>
+            </div>
+            <div className="px-4 pt-2">
+              <strong className="block text-[1.12rem] font-black tracking-[-0.035em] text-white">Your calls. Answered.</strong>
+              <span className="mt-0.5 block text-[0.7rem] font-semibold text-[#9bb9d5]">Watch one missed call become an owner-ready lead.</span>
+            </div>
+            <div className="relative mx-4 mt-3 grid grid-cols-3 items-center gap-2">
+              <div className="absolute left-[12%] right-[12%] top-4 h-px bg-[linear-gradient(90deg,#217ff0,#55c7ff,#ff8a22)] opacity-60" />
+              <i className="mobile-menu-signal-dot absolute top-[0.8rem] z-10 h-2 w-2 rounded-full bg-white shadow-[0_0_14px_4px_rgba(86,199,255,0.8)]" />
+              {[
+                ["phone", "Caller"],
+                ["headset", "My AI PA"],
+                ["sms", "Owner text"],
+              ].map(([icon, label], index) => (
+                <span key={label} className="relative z-20 flex flex-col items-center gap-1.5 text-center">
+                  <b className={`grid h-8 w-8 place-items-center rounded-full border text-white ${index === 1 ? "border-[#5bc9ff] bg-[#176bff] shadow-[0_0_20px_-5px_rgba(64,180,255,1)]" : index === 2 ? "border-[#ff9c46] bg-[#d95b00]" : "border-white/20 bg-[#123a64]"}`}><HeroIcon type={icon} className="h-4 w-4" /></b>
+                  <small className="text-[0.56rem] font-black uppercase tracking-[0.08em] text-[#b9d4ec]">{label}</small>
+                </span>
+              ))}
+            </div>
+            <a href="tel:+12495033301" className="mx-3 mb-3 mt-3 flex min-h-[48px] items-center justify-between rounded-xl bg-white px-3.5 text-[#07182d] shadow-sm">
+              <span className="flex items-center gap-2.5"><b className="grid h-8 w-8 place-items-center rounded-lg bg-[#176bff] text-white"><HeroIcon type="phone" className="h-4 w-4" /></b><span><small className="block text-[0.54rem] font-black uppercase tracking-[0.12em] text-[#61758a]">Try it live</small><strong className="block text-[0.9rem] tracking-[-0.02em]">(249) 503-3301</strong></span></span>
+              <span className="text-lg font-black text-[#ff6a00]">→</span>
+            </a>
+          </div>
+
+          <section className="mt-7">
+            <h2 className="px-2 text-[0.68rem] font-black uppercase tracking-[0.18em] text-[#7898b7]">Product</h2>
+            <div className="mt-2 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.035]">
+              {productLinks.map(([label, sectionId, icon], index) => (
+                <button key={label} type="button" onClick={() => scrollToSection(sectionId)} className={`flex min-h-[54px] w-full items-center gap-3 px-4 text-left text-[0.9rem] font-bold text-[#eaf4ff] transition hover:bg-white/[0.06] ${index ? "border-t border-white/[0.07]" : ""}`}>
+                  <span className="grid h-8 w-8 place-items-center rounded-lg bg-[#123a64] text-[#63b7ff]"><HeroIcon type={icon} className="h-4 w-4" /></span>
+                  <span className="flex-1">{label}</span><span className="text-lg text-[#6f8daa]">›</span>
+                </button>
+              ))}
+            </div>
+          </section>
+
+          <section className="mt-7">
+            <div className="flex items-end justify-between px-2">
+              <h2 className="text-[0.68rem] font-black uppercase tracking-[0.18em] text-[#7898b7]">Audiences</h2>
+              <a href="#/trades" onClick={onClose} className="text-[0.7rem] font-black text-[#66b7ff]">View all</a>
+            </div>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              {audienceLinks.map(([label, href, icon]) => (
+                <a key={label} href={href} onClick={onClose} className={`flex min-h-[58px] items-center gap-2.5 rounded-xl border px-3 py-2.5 text-[0.76rem] font-black leading-tight transition ${label.startsWith("Property") ? "col-span-2 border-[#7458d8]/55 bg-[#291f57]/70 text-[#e8e1ff]" : "border-white/10 bg-white/[0.035] text-[#eaf4ff] hover:bg-white/[0.07]"}`}>
+                  <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${label.startsWith("Property") ? "bg-[#6d4ce8] text-white" : "bg-[#123a64] text-[#63b7ff]"}`}><HeroIcon type={icon} className="h-4 w-4" /></span>
+                  {label}
+                </a>
+              ))}
+            </div>
+          </section>
+
+          <section className="mt-7">
+            <h2 className="px-2 text-[0.68rem] font-black uppercase tracking-[0.18em] text-[#7898b7]">Resources</h2>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <a href="#/try-demo" onClick={onClose} className="flex min-h-[54px] items-center justify-center rounded-xl border border-white/10 bg-white/[0.035] px-3 text-center text-[0.8rem] font-black text-[#eaf4ff]">Try the demo</a>
+              <button type="button" onClick={() => scrollToSection("customer-proof")} className="min-h-[54px] rounded-xl border border-white/10 bg-white/[0.035] px-3 text-[0.8rem] font-black text-[#eaf4ff]">Customer proof</button>
+            </div>
+          </section>
+        </div>
+
+        <div className="absolute inset-x-0 bottom-0 border-t border-white/10 bg-[#07182d]/95 p-4 backdrop-blur-xl">
+          <div className="grid gap-2">
+            <a href="#/dashboard" onClick={onClose} className="inline-flex min-h-[48px] items-center justify-center rounded-xl border border-white/15 bg-white/[0.04] text-[0.86rem] font-black text-white">Owner sign in</a>
+            <button type="button" onClick={() => { onClose(); onSignup(); }} className="inline-flex min-h-[52px] items-center justify-center rounded-xl bg-[linear-gradient(180deg,#ff7a00,#ff6500)] px-4 text-[0.92rem] font-black text-white shadow-[0_14px_34px_-20px_rgba(255,106,0,0.85)]">Start your 14-day free trial</button>
+          </div>
+        </div>
+      </aside>
+    </div>
+  );
+}
+
+function MobileScrollCallStory({ onHearDemo, audioPlaying }) {
+  const storyRef = useRef(null);
+  const [revealedSteps, setRevealedSteps] = useState(() => new Set([0]));
+
+  const storySteps = [
+    {
+      label: "Caller",
+      tone: "caller",
+      title: "A customer calls while you are busy",
+      text: "I need someone to wire up my hot tub.",
+    },
+    {
+      label: "My AI PA",
+      tone: "assistant",
+      title: "Your assistant answers",
+      text: "Thanks for calling Tim's Electrical. Are you calling about a new installation, repair, or maintenance?",
+    },
+    {
+      label: "Caller",
+      tone: "caller",
+      title: "The customer explains the job",
+      text: "A new installation. I need the electrical hookup for my hot tub.",
+    },
+    {
+      label: "My AI PA",
+      tone: "assistant",
+      title: "The right details are requested",
+      text: "Of course. May I have your name, phone number, service address, and best callback time?",
+    },
+    {
+      label: "Caller",
+      tone: "caller",
+      title: "Everything needed for follow-up",
+      text: "I'm Brian. My number is 905-555-1234. It's 23 Robb Street in Hamilton, and after 5 PM works best.",
+    },
+    {
+      label: "Owner text",
+      tone: "owner",
+      title: "You receive the job details",
+      text: "New installation · Hot tub electrical hookup · 23 Robb St., Hamilton · Callback after 5 PM",
+    },
+    {
+      label: "Customer text",
+      tone: "customer",
+      title: "The customer receives confirmation",
+      text: "Thanks for calling Tim's Electrical. We received your request and will follow up shortly.",
+    },
+  ];
+
+  useEffect(() => {
+    const root = storyRef.current;
+    if (!root || typeof IntersectionObserver === "undefined") return undefined;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting) return;
+          const index = Number(entry.target.getAttribute("data-story-step"));
+          setRevealedSteps((current) => {
+            if (current.has(index)) return current;
+            const next = new Set(current);
+            for (let stepIndex = 0; stepIndex <= index; stepIndex += 1) next.add(stepIndex);
+            return next;
+          });
+        });
+      },
+      { threshold: 0.08, rootMargin: "0px 0px -8% 0px" }
+    );
+
+    root.querySelectorAll("[data-story-step]").forEach((node) => observer.observe(node));
+    return () => observer.disconnect();
+  }, []);
+
+  const furthestStep = Math.max(...Array.from(revealedSteps));
+  const progress = storySteps.length > 1 ? (furthestStep / (storySteps.length - 1)) * 100 : 100;
+
+  return (
+    <div ref={storyRef} className="mobile-scroll-story sm:hidden">
+      <div className="px-1 pb-3 text-center">
+        <p className="text-[0.72rem] font-black uppercase tracking-[0.18em] text-[#176bff]">See how one missed call becomes a ready lead</p>
+        <h2 className="mx-auto mt-2 max-w-[350px] text-[2rem] font-black leading-[0.98] tracking-[-0.05em] text-[#07142a]">Scroll through the call.</h2>
+        <p className="mx-auto mt-3 max-w-[340px] text-[0.96rem] font-semibold leading-6 text-[#526277]">The conversation unfolds as you move down the page.</p>
+      </div>
+
+      <div className="relative mt-4">
+        <div className="absolute bottom-20 left-[17px] top-16 w-[3px] overflow-hidden rounded-full bg-[#d6e8fb]" aria-hidden="true">
+          <span
+            className="block w-full rounded-full bg-[linear-gradient(180deg,#1d8cff,#19b878)] transition-[height] duration-700 ease-out"
+            style={{ height: `${progress}%` }}
+          />
+        </div>
+
+        <div className="space-y-10">
+          {storySteps.map((step, index) => {
+            const visible = revealedSteps.has(index);
+            const isCaller = step.tone === "caller";
+            const isFinalText = step.tone === "owner" || step.tone === "customer";
+            return (
+              <article
+                id={`how-it-works-step-${index + 1}`}
+                key={`${step.label}-${step.title}`}
+                data-story-step={index}
+                className="relative min-h-[56svh] scroll-mt-24 pl-10"
+              >
+                <span
+                  className={
+                    "absolute left-[7px] top-7 z-10 grid h-[23px] w-[23px] place-items-center rounded-full border-[3px] border-[#edf6ff] shadow-[0_6px_18px_-8px_rgba(15,23,42,0.65)] transition duration-500 " +
+                    (visible ? "scale-100 bg-[#1689ef]" : "scale-75 bg-[#b9cde3]")
+                  }
+                  aria-hidden="true"
+                >
+                  <span className="h-1.5 w-1.5 rounded-full bg-white" />
+                </span>
+
+                <div
+                  className={
+                    "sticky top-[14vh] transition-all duration-700 ease-out " +
+                    (visible ? "translate-y-0 opacity-100" : "translate-y-10 opacity-20")
+                  }
+                >
+                  <p className="mb-2 text-[0.68rem] font-black uppercase tracking-[0.15em] text-[#4d627c]">{String(index + 1).padStart(2, "0")} · {step.title}</p>
+                  <div
+                    className={
+                      "overflow-hidden rounded-[24px] border px-4 py-4 shadow-[0_22px_50px_-34px_rgba(7,20,42,0.58)] " +
+                      (isFinalText
+                        ? "border-[#bfd9f8] bg-white"
+                        : isCaller
+                          ? "ml-7 border-[#167fe8] bg-[#1689ef] text-white"
+                          : "mr-4 border-[#254666] bg-[#0b2949] text-white")
+                    }
+                  >
+                    {isFinalText ? (
+                      <div className="mb-3 flex items-center gap-3 border-b border-[#e4edf7] pb-3">
+                        <span className="grid h-10 w-10 place-items-center rounded-full bg-[#1689ef] text-[0.78rem] font-black text-white">
+                          {step.tone === "owner" ? "PA" : "TE"}
+                        </span>
+                        <div>
+                          <p className="text-[0.94rem] font-black text-[#07142a]">{step.label}</p>
+                          <p className="text-[0.76rem] font-bold text-[#7a8798]">My AI PA · now</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className={"text-[0.68rem] font-black uppercase tracking-[0.15em] " + (isCaller ? "text-[#dff1ff]" : "text-[#72d7ff]")}>{step.label}</p>
+                    )}
+                    <p className={"mt-2 text-[1rem] font-black leading-[1.45] " + (isFinalText ? "rounded-[18px] bg-[#eef2f7] px-4 py-3 text-[#172033]" : "")}>{step.text}</p>
+                  </div>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      </div>
+
+      <div id="how-it-works-complete" className="relative z-10 -mt-16 scroll-mt-24 rounded-[24px] border border-[#bfe7ce] bg-[#effcf4] px-5 py-6 text-center shadow-[0_22px_50px_-34px_rgba(21,128,61,0.4)]">
+        <span className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-[#19a45b] text-white">
+          <HeroIcon type="check" className="h-6 w-6" />
+        </span>
+        <p className="mt-3 text-[1.3rem] font-black tracking-[-0.03em] text-[#0c6d3a]">Job captured and delivered.</p>
+        <p className="mt-2 text-[0.9rem] font-semibold leading-6 text-[#3d6550]">You call back with the problem, address, and timing already in hand.</p>
+        <button
+          type="button"
+          onClick={onHearDemo}
+          className="mt-5 inline-flex min-h-[50px] w-full items-center justify-center rounded-[14px] border-2 border-[#176bff] bg-white px-5 text-[0.95rem] font-black text-[#176bff]"
+        >
+          {audioPlaying ? "Pause the real call" : "Hear the real call"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function LandingPage() {
   const demoRef = useRef(null);
   const pricingRef = useRef(null);
@@ -2374,9 +2848,24 @@ function LandingPage() {
   const [audioError, setAudioError] = useState("");
   const [openFaq, setOpenFaq] = useState(-1);
   const [showHeader, setShowHeader] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [signupNetworkStats, setSignupNetworkStats] = useState(null);
   const [signupNetworkStatus, setSignupNetworkStatus] = useState("loading");
   const headerHideTimerRef = useRef(null);
+
+  useEffect(() => {
+    if (!mobileMenuOpen) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") setMobileMenuOpen(false);
+    };
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [mobileMenuOpen]);
 
   useEffect(() => {
     const section = new URLSearchParams(window.location.search).get("section");
@@ -2506,6 +2995,16 @@ function LandingPage() {
 
   return (
     <main className="landing-page-main min-h-screen bg-[linear-gradient(180deg,#ffffff_0%,#f7fbff_7%,#eaf6ff_22%,#dff1ff_100%)] text-[#07142a]">
+      <button
+        type="button"
+        onClick={() => setMobileMenuOpen(true)}
+        aria-label="Open navigation menu"
+        aria-expanded={mobileMenuOpen}
+        className="fixed right-3 top-3 z-[90] grid h-12 w-12 place-items-center rounded-full border border-[#b8d4ee] bg-white/95 text-[#07142a] shadow-[0_12px_32px_-18px_rgba(7,20,42,0.72)] backdrop-blur sm:hidden"
+      >
+        <span className="grid gap-1" aria-hidden="true"><i className="block h-0.5 w-5 rounded-full bg-current" /><i className="block h-0.5 w-5 rounded-full bg-current" /><i className="block h-0.5 w-5 rounded-full bg-current" /></span>
+      </button>
+      <MobileSideMenu open={mobileMenuOpen} onClose={() => setMobileMenuOpen(false)} onSignup={goToSignup} />
       <header
         className={
           "fixed inset-x-0 top-0 z-40 border-b border-[#d7e7fb] bg-white/92 backdrop-blur transition-all duration-300 " +
@@ -5562,8 +6061,24 @@ function LandingPage() {
               transform: translateY(0) scale(1);
             }
           }
+          @keyframes landing-card-turn-hint {
+            0%, 100% {
+              opacity: 0;
+              transform: translateY(0.4rem);
+            }
+            22%, 72% {
+              opacity: 1;
+              transform: translateY(0);
+            }
+          }
           .landing-dialogue-reveal {
             animation: landing-dialogue-reveal 380ms cubic-bezier(.2,.72,.2,1) both;
+          }
+          .landing-card-turn-hint {
+            opacity: 0;
+          }
+          .landing-card-turn-hint-visible {
+            animation: landing-card-turn-hint 1.4s ease-in-out 1 both;
           }
           .landing-stripe-headline {
             position: relative;
@@ -5656,6 +6171,10 @@ function LandingPage() {
           @media (prefers-reduced-motion: reduce) {
             .landing-mobile-call-prism {
               transition: none !important;
+            }
+            .landing-card-turn-hint {
+              animation: none !important;
+              opacity: 0 !important;
             }
             .landing-dialogue-reveal {
               animation: none !important;
@@ -7566,6 +8085,8 @@ function LandingPage() {
         </div>
       </section>
 
+      <BuiltForYourTrade playDemo={playDemo} />
+
       <section className="hidden">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_74%_20%,rgba(112,70,255,0.30),transparent_28%),radial-gradient(circle_at_58%_84%,rgba(93,76,255,0.42),transparent_22%),radial-gradient(circle_at_94%_70%,rgba(207,79,255,0.22),transparent_24%),linear-gradient(180deg,#030106_0%,#05040d_58%,#020106_100%)]" />
         <div className="pointer-events-none absolute inset-x-0 bottom-0 h-48 bg-[radial-gradient(ellipse_at_center,rgba(119,74,255,0.32),transparent_52%)]" />
@@ -7940,6 +8461,8 @@ function LandingPage() {
 
       <section id="contractor-proof" ref={demoRef} className="scroll-mt-[96px] bg-[linear-gradient(180deg,#f7fbff_0%,#edf6ff_100%)]">
         <div className="mx-auto w-full max-w-[1260px] px-4 py-10 sm:px-6 lg:px-8 lg:py-14">
+          <MobileScrollCallStory onHearDemo={toggleAudio} audioPlaying={audioPlaying} />
+          <div className="hidden sm:block">
           <div className="contractor-proof-mobile-intro sm:hidden">
             <p className="text-[0.7rem] font-black uppercase tracking-[0.16em] text-[#176bff]">Proof before promises</p>
             <h2 className="mt-2 text-[1.8rem] font-black leading-none tracking-[-0.045em] text-[#07142a]">Hear a real call become usable job details.</h2>
@@ -8164,6 +8687,7 @@ function LandingPage() {
                 </div>
               ))}
             </div>
+          </div>
           </div>
         </div>
       </section>
