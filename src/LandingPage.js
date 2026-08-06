@@ -582,8 +582,8 @@ function LiveSignupNetwork({ stats, status }) {
   ];
 
   return (
-    <section className="landing-live-network mt-3 sm:hidden" aria-label="Live My AI PA signup network">
-      <div className="overflow-hidden rounded-2xl border border-[#bcd7f1] bg-white/85 p-2.5 shadow-[0_18px_42px_-30px_rgba(12,77,160,0.72)] backdrop-blur-sm">
+    <section className="landing-live-network mt-3" aria-label="Live My AI PA signup network">
+      <div className="overflow-hidden rounded-2xl border border-[#bcd7f1] bg-white/85 p-2.5 shadow-[0_18px_42px_-30px_rgba(12,77,160,0.72)] backdrop-blur-sm sm:rounded-[24px] sm:p-5">
         <div className="flex items-center justify-between gap-2 border-b border-[#dbe9f7] pb-2">
           <div>
             <p className="text-[0.56rem] font-black uppercase tracking-[0.14em] text-[#56708d]">Live My AI PA network</p>
@@ -2771,15 +2771,15 @@ function MobileScrollCallStory({ onHearDemo, audioPlaying }) {
   const progress = storySteps.length > 1 ? (furthestStep / (storySteps.length - 1)) * 100 : 100;
 
   return (
-    <div ref={storyRef} className="mobile-scroll-story sm:hidden">
-      <div className="rounded-[28px] border border-[#c5dcf2] bg-white px-4 py-6 shadow-[0_28px_70px_-48px_rgba(14,68,130,0.62)]">
+    <div ref={storyRef} className="mobile-scroll-story">
+      <div className="rounded-[28px] border border-[#c5dcf2] bg-white px-4 py-6 shadow-[0_28px_70px_-48px_rgba(14,68,130,0.62)] sm:px-7 sm:py-9 lg:px-10">
         <div className="px-1 text-center">
-          <p className="text-[0.68rem] font-black uppercase tracking-[0.17em] text-[#f06a00]">Built for Canadian service businesses</p>
-          <h2 className="mx-auto mt-2.5 max-w-[350px] text-[2.15rem] font-black leading-[0.96] tracking-[-0.055em] text-[#07142a]">Choose the call you want to see.</h2>
-          <p className="mx-auto mt-3 max-w-[340px] text-[0.92rem] font-semibold leading-6 text-[#526277]">Pick your audience, then watch one real-world request move from first ring to ready follow-up.</p>
+          <p className="text-[0.68rem] font-black uppercase tracking-[0.17em] text-[#f06a00] sm:text-[0.78rem]">02 · Built for Canadian service businesses</p>
+          <h2 className="mx-auto mt-2.5 max-w-[350px] text-[2.15rem] font-black leading-[0.96] tracking-[-0.055em] text-[#07142a] sm:max-w-[760px] sm:text-[3rem] lg:text-[3.65rem]">Choose the call you want to see.</h2>
+          <p className="mx-auto mt-3 max-w-[340px] text-[0.92rem] font-semibold leading-6 text-[#526277] sm:max-w-[680px] sm:text-[1.08rem] sm:leading-8">Pick your audience, then watch one real-world request move from first ring to ready follow-up.</p>
         </div>
 
-        <div className="mt-5 grid grid-cols-2 gap-1.5 rounded-[16px] border border-[#c4daf0] bg-[#f4f8fc] p-1.5" aria-label="Choose your audience">
+        <div className="mx-auto mt-5 grid max-w-[760px] grid-cols-2 gap-1.5 rounded-[16px] border border-[#c4daf0] bg-[#f4f8fc] p-1.5" aria-label="Choose your audience">
           <button
             type="button"
             onClick={() => setAudienceType("trades")}
@@ -2798,7 +2798,7 @@ function MobileScrollCallStory({ onHearDemo, audioPlaying }) {
           </button>
         </div>
 
-        <p className="mt-5 text-[0.64rem] font-black uppercase tracking-[0.15em] text-[#5b7189]">Choose a call</p>
+        <p className="mt-5 text-[0.64rem] font-black uppercase tracking-[0.15em] text-[#5b7189] sm:text-center">Choose a call</p>
         <div className="-mx-1 mt-2 overflow-x-auto px-1 pb-2" aria-label="Choose the call example">
           <div className="flex min-w-max gap-2">
             {(isPropertyManagement
@@ -2839,14 +2839,14 @@ function MobileScrollCallStory({ onHearDemo, audioPlaying }) {
         </div>
       </div>
 
-      <div className="mt-7 px-1 text-center">
+      <div className="mx-auto mt-7 max-w-[920px] px-1 text-center sm:mt-10">
         <p className="text-[0.68rem] font-black uppercase tracking-[0.17em] text-[#176bff]">From missed call to ready opportunity</p>
         <h3 className="mx-auto mt-2 max-w-[350px] text-[1.75rem] font-black leading-[1] tracking-[-0.045em] text-[#07142a]">
           Watch one {activeCall.label.toLowerCase()} call from start to finish.
         </h3>
       </div>
 
-      <div className="relative mt-6">
+      <div className="relative mx-auto mt-6 max-w-[920px] sm:mt-8">
         <div className="absolute bottom-24 left-[17px] top-12 w-[3px] overflow-hidden rounded-full bg-[#d6e8fb]" aria-hidden="true">
           <span
             className="block w-full rounded-full bg-[linear-gradient(180deg,#1d8cff,#19b878)] transition-[height] duration-700 ease-out"
@@ -2921,7 +2921,7 @@ function MobileScrollCallStory({ onHearDemo, audioPlaying }) {
         </div>
       </div>
 
-      <div id="how-it-works-complete" className="relative z-10 mt-5 scroll-mt-24 rounded-[24px] border border-[#bfe7ce] bg-[#effcf4] px-5 py-6 text-center shadow-[0_22px_50px_-34px_rgba(21,128,61,0.4)]">
+      <div id="how-it-works-complete" className="relative z-10 mx-auto mt-5 max-w-[920px] scroll-mt-24 rounded-[24px] border border-[#bfe7ce] bg-[#effcf4] px-5 py-6 text-center shadow-[0_22px_50px_-34px_rgba(21,128,61,0.4)] sm:px-8 sm:py-8">
         <span className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-[#19a45b] text-white">
           <HeroIcon type="check" className="h-6 w-6" />
         </span>
@@ -2943,6 +2943,188 @@ function MobileScrollCallStory({ onHearDemo, audioPlaying }) {
           </a>
         </div>
       </div>
+    </div>
+  );
+}
+
+function LandingChapters({
+  goToSignup,
+  playDemo,
+  signupNetworkStats,
+  signupNetworkStatus,
+  openFaq,
+  setOpenFaq,
+}) {
+  const mobileBenefits = [
+    {
+      icon: "phone",
+      text: "Every call answered professionally after 3 rings — no more hangups",
+    },
+    {
+      icon: "chat",
+      text: "Connects with customers with a natural dialogue, answers FAQs and projects a professional image.",
+    },
+    {
+      icon: "clipboard",
+      text: "Collects the job description, caller’s information for easy follow-up call.",
+    },
+    {
+      icon: "sms",
+      text: "Texts you the call details and sends the customer a thank-you reminder.",
+    },
+  ];
+  const mobileFaqIndexes = [1, 2, 3, 5];
+
+  return (
+    <div id="landing-chapters">
+      <section id="mobile-value" className="border-t border-[#cfe2f5] bg-white">
+        <div className="mx-auto w-full max-w-[1180px] px-4 py-10 sm:px-6 sm:py-14 lg:px-8 lg:py-20">
+          <p className="text-center text-[0.68rem] font-black uppercase tracking-[0.17em] text-[#f06a00] sm:text-[0.78rem]">03 · What you get</p>
+          <h2 className="mx-auto mt-3 max-w-[355px] text-center text-[1.8rem] font-black leading-[1.02] tracking-[-0.045em] text-[#07142a] sm:max-w-[780px] sm:text-[2.7rem] lg:text-[3.35rem]">
+            For about the price of a cup of coffee per day you get:
+          </h2>
+          <div className="mt-6 grid gap-3 sm:mt-9 sm:grid-cols-2">
+            {mobileBenefits.map((item) => (
+              <article key={item.text} className="grid grid-cols-[46px_minmax(0,1fr)] items-center gap-3.5 rounded-[20px] border border-[#c7ddef] bg-[#f8fbff] px-4 py-4 shadow-[0_20px_48px_-42px_rgba(12,77,160,0.5)] sm:min-h-[132px] sm:grid-cols-[56px_minmax(0,1fr)] sm:gap-5 sm:px-6 sm:py-5">
+                <span className="grid h-[46px] w-[46px] place-items-center rounded-[14px] bg-[linear-gradient(145deg,#27a6f3,#176bdf)] text-white shadow-[0_14px_26px_-18px_rgba(23,107,223,0.88)]" aria-hidden="true">
+                  <HeroIcon type={item.icon} className="h-6 w-6" />
+                </span>
+                <p className="text-[0.96rem] font-black leading-[1.38] text-[#10233e] sm:text-[1.05rem]">{item.text}</p>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section id="mobile-proof" className="border-t border-[#cfe2f5] bg-[linear-gradient(180deg,#eef7ff_0%,#e7f3ff_100%)]">
+        <div className="mx-auto w-full max-w-[1180px] px-4 py-10 sm:px-6 sm:py-14 lg:px-8 lg:py-20">
+          <p className="text-center text-[0.68rem] font-black uppercase tracking-[0.17em] text-[#176bff] sm:text-[0.78rem]">04 · Proof</p>
+          <h2 className="mx-auto mt-3 max-w-[350px] text-center text-[1.9rem] font-black leading-[1.02] tracking-[-0.045em] text-[#07142a] sm:max-w-[760px] sm:text-[2.8rem] lg:text-[3.45rem]">See the work moving, not another sales claim.</h2>
+          <div className="mt-6 grid gap-4 sm:mt-9 lg:grid-cols-[1.12fr_0.88fr] lg:items-stretch">
+          <LiveSignupNetwork stats={signupNetworkStats} status={signupNetworkStatus} />
+          <article className="rounded-[22px] border border-[#24496d] bg-[#071d38] p-5 text-white shadow-[0_24px_58px_-42px_rgba(7,29,56,0.9)] sm:p-7">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-[0.66rem] font-black uppercase tracking-[0.15em] text-[#81d8ff]">Example call outcome</p>
+              <span className="rounded-full bg-[#0e6b3b] px-3 py-1 text-[0.62rem] font-black uppercase tracking-[0.1em] text-[#b7f7d0]">Ready</span>
+            </div>
+            <p className="mt-4 text-[1.12rem] font-black leading-6">Tim’s Electrical · hot tub installation</p>
+            <div className="mt-4 grid gap-2.5">
+              {["Customer’s request collected", "Owner receives the job details", "Customer receives confirmation"].map((item) => (
+                <p key={item} className="flex items-center gap-2.5 rounded-[12px] border border-white/10 bg-white/[0.07] px-3.5 py-3 text-[0.84rem] font-bold">
+                  <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[#19a45b] text-[0.72rem] font-black" aria-hidden="true">✓</span>
+                  {item}
+                </p>
+              ))}
+            </div>
+          </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="mobile-pricing" className="border-t border-[#cfe2f5] bg-white">
+        <div className="mx-auto w-full max-w-[1180px] px-4 py-10 sm:px-6 sm:py-14 lg:px-8 lg:py-20">
+          <p className="text-center text-[0.68rem] font-black uppercase tracking-[0.17em] text-[#f06a00] sm:text-[0.78rem]">05 · Simple pricing</p>
+          <h2 className="mx-auto mt-3 max-w-[345px] text-center text-[1.9rem] font-black leading-[1.02] tracking-[-0.045em] text-[#07142a] sm:max-w-[760px] sm:text-[2.8rem] lg:text-[3.4rem]">One plan. Clear minutes. No long contract.</h2>
+          <article className="mx-auto mt-6 max-w-[820px] overflow-hidden rounded-[26px] border border-[#bfd9f2] bg-[linear-gradient(145deg,#ffffff_0%,#f4f9ff_58%,#fff5e8_100%)] shadow-[0_28px_64px_-44px_rgba(12,77,160,0.55)] sm:mt-9">
+            <div className="flex items-end justify-between gap-4 border-b border-[#d6e4f1] px-5 py-5">
+              <div>
+                <p className="text-[0.64rem] font-black uppercase tracking-[0.16em] text-[#176bff]">Essential</p>
+                <p className="mt-1 text-[0.82rem] font-bold text-[#64748b]">Simple monthly plan</p>
+              </div>
+              <p className="text-right text-[2.75rem] font-black leading-none tracking-[-0.055em] text-[#07142a]">$79<span className="ml-1 text-[0.8rem] tracking-normal text-[#475569]">/month</span></p>
+            </div>
+            <div className="grid gap-3 px-5 py-5">
+              {["60 AI call minutes included", "$0.25 per minute after 60 minutes", "+ applicable taxes"].map((item) => (
+                <p key={item} className="flex items-center gap-3 text-[0.94rem] font-black leading-5 text-[#19324f]">
+                  <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[#e5f8ec] text-[#168349]" aria-hidden="true">✓</span>
+                  {item}
+                </p>
+              ))}
+            </div>
+            <div className="border-t border-[#d6e4f1] bg-[#edf9f1] px-5 py-4">
+              <p className="text-center text-[1rem] font-black text-[#13763c]">14-day free trial · No setup fee · Cancel anytime</p>
+            </div>
+            <div className="px-5 pb-5 pt-4">
+              <button type="button" onClick={goToSignup} className="inline-flex min-h-[56px] w-full items-center justify-center rounded-[15px] bg-[linear-gradient(180deg,#ff7a00,#ff6500)] px-5 text-[1rem] font-black text-white shadow-[0_16px_32px_-20px_rgba(255,106,0,0.9)]">
+                Start Your Free Trial
+              </button>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section id="mobile-setup-questions" className="border-t border-[#cfe2f5] bg-[linear-gradient(180deg,#f6fbff_0%,#edf6ff_100%)]">
+        <div className="mx-auto w-full max-w-[1180px] px-4 py-10 sm:px-6 sm:py-14 lg:px-8 lg:py-20">
+          <p className="text-center text-[0.68rem] font-black uppercase tracking-[0.17em] text-[#176bff] sm:text-[0.78rem]">06 · Setup + questions</p>
+          <h2 className="mx-auto mt-3 max-w-[350px] text-center text-[1.9rem] font-black leading-[1.02] tracking-[-0.045em] text-[#07142a] sm:max-w-[800px] sm:text-[2.8rem] lg:text-[3.4rem]">Try it before a single customer call is forwarded.</h2>
+          <div className="mt-6 grid gap-3 sm:mt-9 sm:grid-cols-3">
+            {["Add your business and common answers", "Hear a test call in your browser", "Forward unanswered calls when you are ready"].map((item, index) => (
+              <article key={item} className="grid grid-cols-[42px_minmax(0,1fr)] items-center gap-3 rounded-[16px] border border-[#cce0f4] bg-white px-4 py-4 shadow-[0_16px_38px_-34px_rgba(15,23,42,0.35)]">
+                <span className="grid h-[42px] w-[42px] place-items-center rounded-full bg-[#176bff] text-[0.92rem] font-black text-white">{index + 1}</span>
+                <p className="text-[0.95rem] font-black leading-5 text-[#10233e]">{item}</p>
+              </article>
+            ))}
+          </div>
+
+          <details className="mt-4 overflow-hidden rounded-[16px] border border-[#bcd9f4] bg-white sm:mt-5">
+            <summary className="cursor-pointer list-none px-4 py-4 text-[0.94rem] font-black text-[#0c5fc3]">How unanswered-call forwarding works</summary>
+            <div className="border-t border-[#d8e8f6] bg-[#f8fbff] px-4 py-4 text-[0.88rem] font-semibold leading-6 text-[#42566f]">
+              Keep your business number. Choose your provider, follow the prepared steps, and send only calls you do not answer to My AI PA. You can turn it off whenever you want.
+            </div>
+          </details>
+
+          <div className="mt-7">
+            <p className="text-[0.68rem] font-black uppercase tracking-[0.15em] text-[#64748b]">Quick answers</p>
+            <div className="mt-3 grid gap-2.5 sm:grid-cols-2">
+              {mobileFaqIndexes.map((faqIndex) => {
+                const item = faqs[faqIndex];
+                const isOpen = openFaq === faqIndex;
+                return (
+                  <article key={item.q} className="overflow-hidden rounded-[14px] border border-[#cfe1f4] bg-white">
+                    <button type="button" onClick={() => setOpenFaq(isOpen ? -1 : faqIndex)} className="grid w-full grid-cols-[1fr_32px] items-center gap-3 px-4 py-4 text-left">
+                      <span className="text-[0.92rem] font-black leading-5 text-[#10233e]">{item.q}</span>
+                      <span className="grid h-8 w-8 place-items-center rounded-full bg-[#edf5ff] text-[1.2rem] font-black text-[#176bff]">{isOpen ? "−" : "+"}</span>
+                    </button>
+                    {isOpen ? <p className="border-t border-[#d8e8f6] bg-[#f8fbff] px-4 py-4 text-[0.88rem] font-semibold leading-6 text-[#42566f]">{item.a}</p> : null}
+                  </article>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="mobile-final-decision" className="border-t border-[#18365d] bg-[#07142a]">
+        <div className="mx-auto w-full max-w-[1180px] px-4 py-11 text-white sm:px-6 sm:py-16 lg:px-8 lg:py-20">
+          <p className="text-center text-[0.68rem] font-black uppercase tracking-[0.17em] text-[#81d8ff] sm:text-[0.78rem]">07 · Your decision</p>
+          <h2 className="mx-auto mt-3 max-w-[355px] text-center text-[2rem] font-black leading-[1.02] tracking-[-0.045em] sm:max-w-[840px] sm:text-[3rem] lg:text-[3.65rem]">Stop letting missed calls decide where the next job goes.</h2>
+          <div className="mt-6 grid gap-2.5 sm:mt-9 sm:grid-cols-3">
+            {[
+              ["Transparent AI calls", "Callers can be told they are speaking with an AI assistant."],
+              ["Privacy and terms published", "See how calls, transcripts, and texts are handled."],
+              ["Consent-aware messaging", "Owner alerts and customer confirmations stay service-focused."],
+            ].map(([title, body]) => (
+              <article key={title} className="grid grid-cols-[34px_minmax(0,1fr)] gap-3 rounded-[14px] border border-white/12 bg-white/[0.07] px-4 py-4">
+                <span className="grid h-[34px] w-[34px] place-items-center rounded-full bg-[#168349] text-sm font-black">✓</span>
+                <div>
+                  <p className="text-[0.94rem] font-black">{title}</p>
+                  <p className="mt-1 text-[0.78rem] font-semibold leading-5 text-[#cbdcf0]">{body}</p>
+                </div>
+              </article>
+            ))}
+          </div>
+          <div className="mx-auto mt-6 grid max-w-[760px] gap-3 sm:grid-cols-2">
+            <button type="button" onClick={goToSignup} className="inline-flex min-h-[58px] items-center justify-center rounded-[15px] bg-[linear-gradient(180deg,#ff7a00,#ff6500)] px-5 text-[1rem] font-black text-white shadow-[0_18px_36px_-22px_rgba(255,106,0,0.95)]">Start Your Free Trial</button>
+            <button type="button" onClick={playDemo} className="inline-flex min-h-[54px] items-center justify-center rounded-[15px] border border-[#6cb8ff] bg-[#0d3159] px-5 text-[0.96rem] font-black text-white">Hear the Live Demo</button>
+          </div>
+          <div className="mt-5 flex items-center justify-center gap-5 text-[0.75rem] font-bold text-[#b9cee5]">
+            <a href="/privacy.html" className="underline decoration-white/35 underline-offset-4">Privacy</a>
+            <a href="/terms.html" className="underline decoration-white/35 underline-offset-4">Terms</a>
+            <a href="mailto:hello@myaipa.com" className="underline decoration-white/35 underline-offset-4">Contact</a>
+          </div>
+          <p className="mx-auto mt-6 max-w-[760px] text-center text-[0.72rem] font-semibold leading-5 text-[#8fa8c1]">Built in Ontario for busy Canadian service businesses across Hamilton, Grimsby, and the surrounding area.</p>
+        </div>
+      </section>
     </div>
   );
 }
@@ -7088,6 +7270,22 @@ function LandingPage() {
             }
           }
 
+          /* The former long-form sections remain in source for reference, but the
+             approved seven-chapter landing story replaces them at every size. */
+          #homepage-hero-details,
+          #built-for-your-trade,
+          #voicemail-vs-ai,
+          #contractor-proof,
+          #pricing,
+          #setup,
+          #customer-proof,
+          #faq,
+          #guided-call-forwarding,
+          #trust,
+          #final-cta {
+            display: none !important;
+          }
+
           /* Mobile-first landing-page hierarchy approved in the visual review. */
           @media (max-width: 639px) {
             .landing-page-main {
@@ -7096,15 +7294,17 @@ function LandingPage() {
             }
             #homepage-hero { order: 0; }
             #mobile-scroll-call-story { order: 1; }
-            #built-for-your-trade { order: 2; }
-            #contractor-proof { order: 3; }
-            #voicemail-vs-ai { order: 4; }
-            #pricing { order: 5; }
-            #setup { order: 6; }
-            #customer-proof { order: 7; }
-            #faq { order: 8; }
-            #trust { order: 9; }
-            #final-cta { order: 10; }
+            #landing-chapters { order: 2; }
+            #voicemail-vs-ai,
+            #contractor-proof,
+            #pricing,
+            #setup,
+            #customer-proof,
+            #faq,
+            #trust,
+            #final-cta {
+              display: none !important;
+            }
 
             .landing-hero-shell {
               padding: 0.8rem 0.95rem 1.1rem !important;
@@ -8117,8 +8317,6 @@ function LandingPage() {
               </div>
 
               </div>
-              <LiveSignupNetwork stats={signupNetworkStats} status={signupNetworkStatus} />
-
             </div>
 
             <div className="landing-hero-visual relative z-0 mt-8 hidden justify-end sm:flex lg:mt-2 lg:self-center">
@@ -8134,11 +8332,20 @@ function LandingPage() {
         </div>
       </section>
 
-      <section id="mobile-scroll-call-story" className="bg-[linear-gradient(180deg,#f7fbff_0%,#edf6ff_100%)] sm:hidden">
-        <div className="mx-auto w-full max-w-[1260px] px-4 py-10">
+      <section id="mobile-scroll-call-story" className="bg-[linear-gradient(180deg,#f7fbff_0%,#edf6ff_100%)]">
+        <div className="mx-auto w-full max-w-[1260px] px-4 py-10 sm:px-6 sm:py-14 lg:px-8 lg:py-20">
           <MobileScrollCallStory onHearDemo={toggleAudio} audioPlaying={audioPlaying} />
         </div>
       </section>
+
+      <LandingChapters
+        goToSignup={goToSignup}
+        playDemo={playDemo}
+        signupNetworkStats={signupNetworkStats}
+        signupNetworkStatus={signupNetworkStatus}
+        openFaq={openFaq}
+        setOpenFaq={setOpenFaq}
+      />
 
       <section id="homepage-hero-details" className="hidden overflow-hidden border-y border-[#cfe2f5] bg-white sm:block sm:relative">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_14%_20%,rgba(191,219,254,0.42),transparent_32%),radial-gradient(circle_at_88%_82%,rgba(219,234,254,0.58),transparent_34%)]" />
@@ -8204,8 +8411,6 @@ function LandingPage() {
           </div>
         </div>
       </section>
-
-      <BuiltForYourTrade playDemo={playDemo} />
 
       <section className="hidden">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_74%_20%,rgba(112,70,255,0.30),transparent_28%),radial-gradient(circle_at_58%_84%,rgba(93,76,255,0.42),transparent_22%),radial-gradient(circle_at_94%_70%,rgba(207,79,255,0.22),transparent_24%),linear-gradient(180deg,#030106_0%,#05040d_58%,#020106_100%)]" />
