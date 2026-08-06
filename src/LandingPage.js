@@ -1527,7 +1527,7 @@ function BuiltForYourTrade({ playDemo }) {
     : activeTrade.callerNeeds.slice(0, 4).map(([title]) => title);
 
   return (
-    <section id="built-for-your-trade" className="border-y border-[#cfe2f5] bg-[linear-gradient(180deg,#f8fbff_0%,#edf6ff_100%)]">
+    <section id="built-for-your-trade" className="hidden border-y border-[#cfe2f5] bg-[linear-gradient(180deg,#f8fbff_0%,#edf6ff_100%)] sm:block">
       <div className="mx-auto w-full max-w-[1280px] px-4 py-10 sm:px-6 sm:py-14 lg:px-8 lg:py-16">
         <div className="mx-auto max-w-[820px] text-center">
           <p className="text-[0.72rem] font-black uppercase tracking-[0.18em] text-[#f06a00]">Built for Canadian service businesses</p>
@@ -2667,49 +2667,79 @@ function MobileSideMenu({ open, onClose, onSignup }) {
 function MobileScrollCallStory({ onHearDemo, audioPlaying }) {
   const storyRef = useRef(null);
   const [revealedSteps, setRevealedSteps] = useState(() => new Set([0]));
+  const [audienceType, setAudienceType] = useState("trades");
+  const [activeTradeSlug, setActiveTradeSlug] = useState(tradePageOrder[0]);
+  const [activePropertyCallId, setActivePropertyCallId] = useState("maintenance");
+
+  const propertyCallOptions = [
+    {
+      id: "maintenance",
+      label: "Maintenance",
+      icon: "property",
+      accent: "#6d4ce8",
+      caller: propertyManagementAudience.scenario.caller,
+      assistant: propertyManagementAudience.scenario.assistant,
+      owner: propertyManagementAudience.scenario.owner,
+      customer: "Thanks. Your maintenance request has been recorded for the property manager to review.",
+    },
+    {
+      id: "rental",
+      label: "Rental inquiry",
+      icon: "home",
+      accent: "#7c5cf0",
+      caller: "I'm looking for a room near Fairview Mall for September.",
+      assistant: "I can take your details so the property manager can confirm what is available. May I have your name, callback number, move-in date, and preferred viewing time?",
+      owner: "RENTAL INQUIRY · Room near Fairview Mall · September move-in · Weekday-afternoon viewing preferred · Callback details captured",
+      customer: "Thanks. Your rental request has been recorded and the property manager will confirm availability.",
+    },
+    {
+      id: "application",
+      label: "Application help",
+      icon: "clipboard",
+      accent: "#6241d8",
+      caller: "I need the application link for the Geneva Street room.",
+      assistant: "I can help with the next step. I'll record the property you are applying for without collecting sensitive identification by phone.",
+      owner: "APPLICATION REQUEST · Geneva Street room · Secure application link requested · No sensitive information collected",
+      customer: "Thanks. Your application-link request has been recorded for follow-up.",
+    },
+  ];
+
+  const activeTrade = tradePages[activeTradeSlug] || tradePages[tradePageOrder[0]];
+  const activePropertyCall =
+    propertyCallOptions.find((option) => option.id === activePropertyCallId) || propertyCallOptions[0];
+  const isPropertyManagement = audienceType === "property-management";
+  const activeCall = isPropertyManagement
+    ? activePropertyCall
+    : {
+        id: activeTradeSlug,
+        label: activeTrade.label,
+        icon: activeTrade.icon,
+        accent: activeTrade.accent,
+        caller: activeTrade.scenario.caller,
+        assistant: activeTrade.scenario.assistant,
+        owner: activeTrade.scenario.owner,
+        customer: "Thanks. Your service request has been recorded and the business will follow up shortly.",
+      };
 
   const storySteps = [
     {
       label: "Caller",
       tone: "caller",
-      title: "A customer calls while you are busy",
-      text: "I need someone to wire up my hot tub.",
+      title: "Customer calls",
+      text: activeCall.caller,
     },
     {
       label: "My AI PA",
       tone: "assistant",
-      title: "Your assistant answers",
-      text: "Thanks for calling Tim's Electrical. Are you calling about a new installation, repair, or maintenance?",
+      title: "My AI PA answers",
+      text: activeCall.assistant,
     },
     {
-      label: "Caller",
-      tone: "caller",
-      title: "The customer explains the job",
-      text: "A new installation. I need the electrical hookup for my hot tub.",
-    },
-    {
-      label: "My AI PA",
-      tone: "assistant",
-      title: "The right details are requested",
-      text: "Of course. May I have your name, phone number, service address, and best callback time?",
-    },
-    {
-      label: "Caller",
-      tone: "caller",
-      title: "Everything needed for follow-up",
-      text: "I'm Brian. My number is 905-555-1234. It's 23 Robb Street in Hamilton, and after 5 PM works best.",
-    },
-    {
-      label: "Owner text",
-      tone: "owner",
-      title: "You receive the job details",
-      text: "New installation · Hot tub electrical hookup · 23 Robb St., Hamilton · Callback after 5 PM",
-    },
-    {
-      label: "Customer text",
-      tone: "customer",
-      title: "The customer receives confirmation",
-      text: "Thanks for calling Tim's Electrical. We received your request and will follow up shortly.",
+      label: "Ready for follow-up",
+      tone: "delivered",
+      title: "Job details delivered",
+      owner: activeCall.owner,
+      customer: activeCall.customer,
     },
   ];
 
@@ -2730,7 +2760,7 @@ function MobileScrollCallStory({ onHearDemo, audioPlaying }) {
           });
         });
       },
-      { threshold: 0.08, rootMargin: "0px 0px -8% 0px" }
+      { threshold: 0.22, rootMargin: "0px 0px -10% 0px" }
     );
 
     root.querySelectorAll("[data-story-step]").forEach((node) => observer.observe(node));
@@ -2742,35 +2772,103 @@ function MobileScrollCallStory({ onHearDemo, audioPlaying }) {
 
   return (
     <div ref={storyRef} className="mobile-scroll-story sm:hidden">
-      <div className="px-1 pb-3 text-center">
-        <p className="text-[0.72rem] font-black uppercase tracking-[0.18em] text-[#176bff]">See how one missed call becomes a ready lead</p>
-        <h2 className="mx-auto mt-2 max-w-[350px] text-[2rem] font-black leading-[0.98] tracking-[-0.05em] text-[#07142a]">Scroll through the call.</h2>
-        <p className="mx-auto mt-3 max-w-[340px] text-[0.96rem] font-semibold leading-6 text-[#526277]">The conversation unfolds as you move down the page.</p>
+      <div className="rounded-[28px] border border-[#c5dcf2] bg-white px-4 py-6 shadow-[0_28px_70px_-48px_rgba(14,68,130,0.62)]">
+        <div className="px-1 text-center">
+          <p className="text-[0.68rem] font-black uppercase tracking-[0.17em] text-[#f06a00]">Built for Canadian service businesses</p>
+          <h2 className="mx-auto mt-2.5 max-w-[350px] text-[2.15rem] font-black leading-[0.96] tracking-[-0.055em] text-[#07142a]">Choose the call you want to see.</h2>
+          <p className="mx-auto mt-3 max-w-[340px] text-[0.92rem] font-semibold leading-6 text-[#526277]">Pick your audience, then watch one real-world request move from first ring to ready follow-up.</p>
+        </div>
+
+        <div className="mt-5 grid grid-cols-2 gap-1.5 rounded-[16px] border border-[#c4daf0] bg-[#f4f8fc] p-1.5" aria-label="Choose your audience">
+          <button
+            type="button"
+            onClick={() => setAudienceType("trades")}
+            aria-pressed={!isPropertyManagement}
+            className={"min-h-[48px] rounded-[12px] px-3 text-[0.78rem] font-black transition " + (!isPropertyManagement ? "bg-[#176bff] text-white shadow-[0_12px_24px_-18px_rgba(23,107,255,0.95)]" : "text-[#17395f]")}
+          >
+            Trades
+          </button>
+          <button
+            type="button"
+            onClick={() => setAudienceType("property-management")}
+            aria-pressed={isPropertyManagement}
+            className={"min-h-[48px] rounded-[12px] px-2 text-[0.7rem] font-black leading-tight transition " + (isPropertyManagement ? "bg-[#6d4ce8] text-white shadow-[0_12px_24px_-18px_rgba(109,76,232,0.95)]" : "text-[#17395f]")}
+          >
+            Property Managers &amp; Landlords
+          </button>
+        </div>
+
+        <p className="mt-5 text-[0.64rem] font-black uppercase tracking-[0.15em] text-[#5b7189]">Choose a call</p>
+        <div className="-mx-1 mt-2 overflow-x-auto px-1 pb-2" aria-label="Choose the call example">
+          <div className="flex min-w-max gap-2">
+            {(isPropertyManagement
+              ? propertyCallOptions
+              : tradePageOrder.map((slug) => ({
+                  id: slug,
+                  label: tradePages[slug].label,
+                  icon: tradePages[slug].icon,
+                  accent: tradePages[slug].accent,
+                }))
+            ).map((option) => {
+              const selected = isPropertyManagement
+                ? option.id === activePropertyCallId
+                : option.id === activeTradeSlug;
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => {
+                    if (isPropertyManagement) setActivePropertyCallId(option.id);
+                    else setActiveTradeSlug(option.id);
+                  }}
+                  aria-pressed={selected}
+                  className={"inline-flex min-h-[48px] items-center gap-2 rounded-full border px-3.5 text-[0.76rem] font-black transition " + (selected ? "border-[#176bff] bg-[#eaf4ff] text-[#0c5fc3] shadow-[0_12px_26px_-22px_rgba(23,107,255,0.8)]" : "border-[#cfdfef] bg-white text-[#405a74]")}
+                >
+                  <span
+                    className="grid h-7 w-7 place-items-center rounded-full text-white"
+                    style={{ background: option.accent }}
+                    aria-hidden="true"
+                  >
+                    <HeroIcon type={option.icon} className="h-3.5 w-3.5" />
+                  </span>
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
-      <div className="relative mt-4">
-        <div className="absolute bottom-20 left-[17px] top-16 w-[3px] overflow-hidden rounded-full bg-[#d6e8fb]" aria-hidden="true">
+      <div className="mt-7 px-1 text-center">
+        <p className="text-[0.68rem] font-black uppercase tracking-[0.17em] text-[#176bff]">From missed call to ready opportunity</p>
+        <h3 className="mx-auto mt-2 max-w-[350px] text-[1.75rem] font-black leading-[1] tracking-[-0.045em] text-[#07142a]">
+          Watch one {activeCall.label.toLowerCase()} call from start to finish.
+        </h3>
+      </div>
+
+      <div className="relative mt-6">
+        <div className="absolute bottom-24 left-[17px] top-12 w-[3px] overflow-hidden rounded-full bg-[#d6e8fb]" aria-hidden="true">
           <span
             className="block w-full rounded-full bg-[linear-gradient(180deg,#1d8cff,#19b878)] transition-[height] duration-700 ease-out"
             style={{ height: `${progress}%` }}
           />
         </div>
 
-        <div className="space-y-10">
+        <div className="space-y-5" aria-live="polite">
           {storySteps.map((step, index) => {
             const visible = revealedSteps.has(index);
             const isCaller = step.tone === "caller";
-            const isFinalText = step.tone === "owner" || step.tone === "customer";
+            const isDelivered = step.tone === "delivered";
             return (
               <article
                 id={`how-it-works-step-${index + 1}`}
                 key={`${step.label}-${step.title}`}
                 data-story-step={index}
-                className="relative min-h-[56svh] scroll-mt-24 pl-10"
+                className="relative scroll-mt-24 pl-10"
               >
                 <span
                   className={
-                    "absolute left-[7px] top-7 z-10 grid h-[23px] w-[23px] place-items-center rounded-full border-[3px] border-[#edf6ff] shadow-[0_6px_18px_-8px_rgba(15,23,42,0.65)] transition duration-500 " +
+                    "absolute left-[7px] top-6 z-10 grid h-[23px] w-[23px] place-items-center rounded-full border-[3px] border-[#edf6ff] shadow-[0_6px_18px_-8px_rgba(15,23,42,0.65)] transition duration-500 " +
                     (visible ? "scale-100 bg-[#1689ef]" : "scale-75 bg-[#b9cde3]")
                   }
                   aria-hidden="true"
@@ -2780,35 +2878,41 @@ function MobileScrollCallStory({ onHearDemo, audioPlaying }) {
 
                 <div
                   className={
-                    "sticky top-[14vh] transition-all duration-700 ease-out " +
-                    (visible ? "translate-y-0 opacity-100" : "translate-y-10 opacity-20")
+                    "transition-all duration-700 ease-out " +
+                    (visible ? "translate-y-0 opacity-100" : "translate-y-8 opacity-25")
                   }
                 >
                   <p className="mb-2 text-[0.68rem] font-black uppercase tracking-[0.15em] text-[#4d627c]">{String(index + 1).padStart(2, "0")} · {step.title}</p>
                   <div
                     className={
-                      "overflow-hidden rounded-[24px] border px-4 py-4 shadow-[0_22px_50px_-34px_rgba(7,20,42,0.58)] " +
-                      (isFinalText
-                        ? "border-[#bfd9f8] bg-white"
+                      "overflow-hidden rounded-[22px] border px-4 py-4 shadow-[0_22px_50px_-34px_rgba(7,20,42,0.58)] " +
+                      (isDelivered
+                        ? "border-[#bfe1cb] bg-[#f7fffa]"
                         : isCaller
                           ? "ml-7 border-[#167fe8] bg-[#1689ef] text-white"
                           : "mr-4 border-[#254666] bg-[#0b2949] text-white")
                     }
                   >
-                    {isFinalText ? (
-                      <div className="mb-3 flex items-center gap-3 border-b border-[#e4edf7] pb-3">
-                        <span className="grid h-10 w-10 place-items-center rounded-full bg-[#1689ef] text-[0.78rem] font-black text-white">
-                          {step.tone === "owner" ? "PA" : "TE"}
-                        </span>
-                        <div>
-                          <p className="text-[0.94rem] font-black text-[#07142a]">{step.label}</p>
-                          <p className="text-[0.76rem] font-bold text-[#7a8798]">My AI PA · now</p>
+                    {isDelivered ? (
+                      <>
+                        <div className="flex items-center gap-2.5">
+                          <span className="grid h-9 w-9 place-items-center rounded-full bg-[#2587f5] text-[0.64rem] font-black text-white">PA</span>
+                          <div>
+                            <p className="text-[0.86rem] font-black text-[#07142a]">Owner receives the details</p>
+                            <p className="text-[0.66rem] font-bold text-[#7a8798]">My AI PA · now</p>
+                          </div>
                         </div>
-                      </div>
+                        <p className="mt-3 rounded-[16px_16px_16px_5px] bg-[#e9e9eb] px-3.5 py-3 text-[0.8rem] font-bold leading-5 text-[#111]">{step.owner}</p>
+                        <div className="my-3 h-px bg-[#dce9e1]" />
+                        <p className="text-[0.64rem] font-black uppercase tracking-[0.13em] text-[#198c4d]">Customer confirmation</p>
+                        <p className="ml-6 mt-2 rounded-[16px_16px_5px_16px] bg-[#1689ef] px-3.5 py-3 text-[0.8rem] font-bold leading-5 text-white">{step.customer}</p>
+                      </>
                     ) : (
-                      <p className={"text-[0.68rem] font-black uppercase tracking-[0.15em] " + (isCaller ? "text-[#dff1ff]" : "text-[#72d7ff]")}>{step.label}</p>
+                      <>
+                        <p className={"text-[0.66rem] font-black uppercase tracking-[0.15em] " + (isCaller ? "text-[#dff1ff]" : "text-[#72d7ff]")}>{step.label}</p>
+                        <p className="mt-2 text-[0.94rem] font-black leading-[1.45]">{step.text}</p>
+                      </>
                     )}
-                    <p className={"mt-2 text-[1rem] font-black leading-[1.45] " + (isFinalText ? "rounded-[18px] bg-[#eef2f7] px-4 py-3 text-[#172033]" : "")}>{step.text}</p>
                   </div>
                 </div>
               </article>
@@ -2817,19 +2921,27 @@ function MobileScrollCallStory({ onHearDemo, audioPlaying }) {
         </div>
       </div>
 
-      <div id="how-it-works-complete" className="relative z-10 -mt-16 scroll-mt-24 rounded-[24px] border border-[#bfe7ce] bg-[#effcf4] px-5 py-6 text-center shadow-[0_22px_50px_-34px_rgba(21,128,61,0.4)]">
+      <div id="how-it-works-complete" className="relative z-10 mt-5 scroll-mt-24 rounded-[24px] border border-[#bfe7ce] bg-[#effcf4] px-5 py-6 text-center shadow-[0_22px_50px_-34px_rgba(21,128,61,0.4)]">
         <span className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-[#19a45b] text-white">
           <HeroIcon type="check" className="h-6 w-6" />
         </span>
-        <p className="mt-3 text-[1.3rem] font-black tracking-[-0.03em] text-[#0c6d3a]">Job captured and delivered.</p>
-        <p className="mt-2 text-[0.9rem] font-semibold leading-6 text-[#3d6550]">You call back with the problem, address, and timing already in hand.</p>
-        <button
-          type="button"
-          onClick={onHearDemo}
-          className="mt-5 inline-flex min-h-[50px] w-full items-center justify-center rounded-[14px] border-2 border-[#176bff] bg-white px-5 text-[0.95rem] font-black text-[#176bff]"
-        >
-          {audioPlaying ? "Pause the real call" : "Hear the real call"}
-        </button>
+        <p className="mt-3 text-[1.3rem] font-black tracking-[-0.03em] text-[#0c6d3a]">One call. Ready for follow-up.</p>
+        <p className="mt-2 text-[0.9rem] font-semibold leading-6 text-[#3d6550]">You receive the problem, contact details, location, and timing without chasing voicemail.</p>
+        <div className="mt-5 grid grid-cols-2 gap-2.5">
+          <button
+            type="button"
+            onClick={onHearDemo}
+            className="inline-flex min-h-[52px] items-center justify-center rounded-[14px] border-2 border-[#176bff] bg-white px-3 text-[0.83rem] font-black text-[#176bff]"
+          >
+            {audioPlaying ? "Pause real call" : "Hear real call"}
+          </button>
+          <a
+            href="#/signup"
+            className="inline-flex min-h-[52px] items-center justify-center rounded-[14px] bg-[linear-gradient(180deg,#ff7a00,#ff6500)] px-3 text-center text-[0.83rem] font-black text-white shadow-[0_14px_28px_-20px_rgba(255,106,0,0.88)]"
+          >
+            Start free trial
+          </a>
+        </div>
       </div>
     </div>
   );
@@ -6983,15 +7095,16 @@ function LandingPage() {
               flex-direction: column;
             }
             #homepage-hero { order: 0; }
-            #built-for-your-trade { order: 1; }
-            #contractor-proof { order: 2; }
-            #voicemail-vs-ai { order: 3; }
-            #pricing { order: 4; }
-            #setup { order: 5; }
-            #customer-proof { order: 6; }
-            #faq { order: 7; }
-            #trust { order: 8; }
-            #final-cta { order: 9; }
+            #mobile-scroll-call-story { order: 1; }
+            #built-for-your-trade { order: 2; }
+            #contractor-proof { order: 3; }
+            #voicemail-vs-ai { order: 4; }
+            #pricing { order: 5; }
+            #setup { order: 6; }
+            #customer-proof { order: 7; }
+            #faq { order: 8; }
+            #trust { order: 9; }
+            #final-cta { order: 10; }
 
             .landing-hero-shell {
               padding: 0.8rem 0.95rem 1.1rem !important;
@@ -8021,6 +8134,12 @@ function LandingPage() {
         </div>
       </section>
 
+      <section id="mobile-scroll-call-story" className="bg-[linear-gradient(180deg,#f7fbff_0%,#edf6ff_100%)] sm:hidden">
+        <div className="mx-auto w-full max-w-[1260px] px-4 py-10">
+          <MobileScrollCallStory onHearDemo={toggleAudio} audioPlaying={audioPlaying} />
+        </div>
+      </section>
+
       <section id="homepage-hero-details" className="hidden overflow-hidden border-y border-[#cfe2f5] bg-white sm:block sm:relative">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_14%_20%,rgba(191,219,254,0.42),transparent_32%),radial-gradient(circle_at_88%_82%,rgba(219,234,254,0.58),transparent_34%)]" />
         <div className="relative mx-auto grid w-full max-w-[1360px] gap-8 px-5 py-10 sm:px-8 sm:py-12 lg:grid-cols-[minmax(0,0.92fr)_minmax(440px,1.08fr)] lg:items-center lg:px-10 lg:py-14">
@@ -8462,7 +8581,6 @@ function LandingPage() {
 
       <section id="contractor-proof" ref={demoRef} className="scroll-mt-[96px] bg-[linear-gradient(180deg,#f7fbff_0%,#edf6ff_100%)]">
         <div className="mx-auto w-full max-w-[1260px] px-4 py-10 sm:px-6 lg:px-8 lg:py-14">
-          <MobileScrollCallStory onHearDemo={toggleAudio} audioPlaying={audioPlaying} />
           <div className="hidden sm:block">
           <div className="contractor-proof-mobile-intro sm:hidden">
             <p className="text-[0.7rem] font-black uppercase tracking-[0.16em] text-[#176bff]">Proof before promises</p>
