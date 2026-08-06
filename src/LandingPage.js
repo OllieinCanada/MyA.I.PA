@@ -6982,7 +6982,8 @@ function LandingPage() {
               display: flex;
               flex-direction: column;
             }
-            #homepage-hero { order: 1; }
+            #homepage-hero { order: 0; }
+            #built-for-your-trade { order: 1; }
             #contractor-proof { order: 2; }
             #voicemail-vs-ai { order: 3; }
             #pricing { order: 4; }
