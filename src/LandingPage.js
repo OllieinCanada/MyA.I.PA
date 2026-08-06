@@ -1217,13 +1217,22 @@ function TabletHero({ goToSignup, playDemo }) {
 
       <div className="landing-tablet-card-wrap">
         <MobileHeroCallProof className="landing-tablet-call-proof" />
-        <p className="landing-tablet-flip-hint">The card rotates through three sides. Tap it to turn.</p>
+        <p className="landing-tablet-flip-hint">The card rotates through three sides. Tap left or right to move between them.</p>
       </div>
     </div>
   );
 }
 
 const HERO_NON_DIALOGUE_FACE_DURATION_MS = 8000;
+const HERO_DIALOGUE_TIMELINE_MS = Object.freeze({
+  callerRequest: 2200,
+  assistantDetailRequest: 5000,
+  callerDetails: 7800,
+  countdownThree: 11500,
+  countdownTwo: 12500,
+  countdownOne: 13500,
+  faceAdvance: 14500,
+});
 
 function MobileHeroCallProof({ className = "" }) {
   const stageRef = useRef(null);
@@ -1232,6 +1241,11 @@ function MobileHeroCallProof({ className = "" }) {
   const [textsCountdown, setTextsCountdown] = useState(null);
   const [stageIsVisible, setStageIsVisible] = useState(false);
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+
+  const turnCard = (direction) => {
+    setActiveFace((current) => (current + direction + 3) % 3);
+    setTextsCountdown(null);
+  };
 
   useEffect(() => {
     const stage = stageRef.current;
@@ -1268,16 +1282,16 @@ function MobileHeroCallProof({ className = "" }) {
     if (activeFace === 0) {
       setDialogueStep(1);
       setTextsCountdown(null);
-      schedule(() => setDialogueStep(2), 1500);
-      schedule(() => setDialogueStep(3), 3200);
-      schedule(() => setDialogueStep(4), 5000);
-      schedule(() => setTextsCountdown(3), 6500);
-      schedule(() => setTextsCountdown(2), 7500);
-      schedule(() => setTextsCountdown(1), 8500);
+      schedule(() => setDialogueStep(2), HERO_DIALOGUE_TIMELINE_MS.callerRequest);
+      schedule(() => setDialogueStep(3), HERO_DIALOGUE_TIMELINE_MS.assistantDetailRequest);
+      schedule(() => setDialogueStep(4), HERO_DIALOGUE_TIMELINE_MS.callerDetails);
+      schedule(() => setTextsCountdown(3), HERO_DIALOGUE_TIMELINE_MS.countdownThree);
+      schedule(() => setTextsCountdown(2), HERO_DIALOGUE_TIMELINE_MS.countdownTwo);
+      schedule(() => setTextsCountdown(1), HERO_DIALOGUE_TIMELINE_MS.countdownOne);
       schedule(() => {
         setTextsCountdown(0);
         setActiveFace(1);
-      }, 9500);
+      }, HERO_DIALOGUE_TIMELINE_MS.faceAdvance);
     } else {
       setTextsCountdown(null);
       schedule(() => setActiveFace((face) => (face + 1) % 3), HERO_NON_DIALOGUE_FACE_DURATION_MS);
@@ -1289,20 +1303,27 @@ function MobileHeroCallProof({ className = "" }) {
   return (
     <section
       ref={stageRef}
-      className={`landing-mobile-call-proof relative h-[26.5rem] overflow-visible ${className}`}
+      className={`landing-mobile-call-proof relative h-[22.75rem] overflow-visible ${className}`}
       style={{ perspective: "1400px" }}
-      aria-label={`Three-sided My AI PA demo card. Side ${activeFace + 1} of 3. Tap to turn.`}
+      data-active-face={activeFace}
+      data-dialogue-step={dialogueStep}
+      aria-label={`Three-sided My AI PA demo card. Side ${activeFace + 1} of 3. Tap the left side for the previous side or the right side for the next side.`}
       role="button"
       tabIndex={0}
-      onClick={() => {
-        setActiveFace((current) => (current + 1) % 3);
-        setTextsCountdown(null);
+      onClick={(event) => {
+        const bounds = event.currentTarget.getBoundingClientRect();
+        const tappedLeftSide = event.clientX < bounds.left + (bounds.width / 2);
+        turnCard(tappedLeftSide ? -1 : 1);
       }}
       onKeyDown={(event) => {
+        if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+          event.preventDefault();
+          turnCard(event.key === "ArrowLeft" ? -1 : 1);
+          return;
+        }
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
-          setActiveFace((current) => (current + 1) % 3);
-          setTextsCountdown(null);
+          turnCard(1);
         }
       }}
     >
@@ -1439,6 +1460,8 @@ function MobileHeroCallProof({ className = "" }) {
           <p className="landing-timed-benefits-footer mt-2 text-center text-[0.6rem] font-black uppercase tracking-[0.08em] text-[#4f6b87]">Tap to see the live call</p>
         </div>
       </div>
+      <span className="pointer-events-none absolute left-2 top-1/2 z-20 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-full border border-white/30 bg-[#061a31]/75 text-xl font-black text-white shadow-lg backdrop-blur-sm" aria-hidden="true">‹</span>
+      <span className="pointer-events-none absolute right-2 top-1/2 z-20 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-full border border-white/30 bg-[#061a31]/75 text-xl font-black text-white shadow-lg backdrop-blur-sm" aria-hidden="true">›</span>
     </section>
   );
 }
@@ -6743,7 +6766,7 @@ function LandingPage() {
               display: grid;
               grid-template-columns: minmax(0, 1fr) minmax(0, 1.65fr);
               gap: 0.65rem;
-              margin-top: 0.95rem;
+              margin-top: 0.6rem;
             }
             .landing-mobile-proof-primary {
               min-height: 3.65rem;
@@ -6758,7 +6781,7 @@ function LandingPage() {
               min-height: 3.3rem;
               grid-template-columns: 1.1fr 1fr 0.95fr;
               align-items: center;
-              margin-top: 0.75rem;
+              margin-top: 0.5rem;
               border: 1px solid #bee4c8;
               border-radius: 0.95rem;
               background: rgba(248, 255, 250, 0.92);
@@ -6861,7 +6884,36 @@ function LandingPage() {
               letter-spacing: -0.02em !important;
             }
             .landing-mobile-call-proof {
-              margin-top: 1.35rem !important;
+              margin-top: 0.85rem !important;
+            }
+            .landing-mobile-call-proof .landing-timed-call-front {
+              padding: 0.72rem !important;
+            }
+            .landing-mobile-call-proof .landing-timed-call-front .landing-timed-call-agent-row {
+              gap: 0.65rem !important;
+              margin-top: 0.55rem !important;
+            }
+            .landing-mobile-call-proof .landing-timed-call-front .landing-timed-call-avatar-wrap {
+              width: 3.85rem !important;
+              height: 3.85rem !important;
+            }
+            .landing-mobile-call-proof .landing-timed-call-front .landing-timed-call-avatar {
+              width: 3.42rem !important;
+              height: 3.42rem !important;
+            }
+            .landing-mobile-call-proof .landing-timed-call-front .landing-mobile-call-wave {
+              height: 1.3rem !important;
+              margin-top: 0.35rem !important;
+            }
+            .landing-mobile-call-proof .landing-timed-call-front .landing-timed-conversation {
+              margin-top: 0.35rem !important;
+            }
+            .landing-mobile-call-proof .landing-timed-call-front .landing-timed-conversation-turn {
+              padding: 0.3rem 0.65rem !important;
+            }
+            .landing-mobile-call-proof .landing-timed-call-front .landing-timed-conversation-turn > p {
+              font-size: 0.74rem !important;
+              line-height: 1.18 !important;
             }
             .landing-live-network {
               margin-top: 1.25rem !important;
