@@ -31,6 +31,7 @@ The agent keeps facts already supplied by the caller, asks one question at a tim
 
 - 12 of 12 live Vapi conversation cases passed.
 - A controlled PSTN call to `249-315-4508` was answered, recognized a no-heat report, marked it urgent, and avoided a dispatch promise.
+- A caller-held-open hang-up test heard “goodbye,” spoke the approved closing once, asked no further question, and ended with Vapi reason `assistant-said-end-call-phrase`.
 - Protected owner and caller SMS sends were accepted and confirmed delivered to the authorized test recipient.
 - The demo form visually exposes the same urgent-matter classification used by the phone workflow.
 

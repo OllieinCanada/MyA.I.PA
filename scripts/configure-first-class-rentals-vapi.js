@@ -17,6 +17,7 @@ const confirmationPhrase = "FIRST-CLASS-RENTALS-4508";
 const marker = "## FIRST CLASS RENTALS NIAGARA AUTHORITATIVE POLICY v1";
 const firstMessage =
   "Thanks for calling the First Class Rentals Niagara private demo. I'm the virtual receptionist, and this call may be recorded. Is that okay?";
+const closingMessage = "Thanks for calling First Class Rentals Niagara. Take care.";
 
 function listFrom(value, keys = []) {
   if (Array.isArray(value)) return value;
@@ -355,6 +356,7 @@ async function main() {
     body: {
       name: "First Class Rentals Niagara AI",
       firstMessage,
+      endCallPhrases: [closingMessage],
       model: {
         ...modelWithoutExpandedTools,
         toolIds: currentToolIds,
@@ -384,6 +386,9 @@ async function main() {
     isolatedAssistant: assignedPhones.length === 1 && assignedPhones[0] === targetPhone,
     name: verifiedAssistant?.name === "First Class Rentals Niagara AI",
     firstMessage: verifiedAssistant?.firstMessage === firstMessage,
+    deterministicClosingPhrase: Array.isArray(verifiedAssistant?.endCallPhrases)
+      && verifiedAssistant.endCallPhrases.length === 1
+      && verifiedAssistant.endCallPhrases[0] === closingMessage,
     tailoredMarker: prompt.includes(marker),
     privateDemoDisclosure: prompt.includes("private demonstration") && prompt.includes("not yet an approved or operated"),
     sensitiveDataGuard: prompt.includes("Social Insurance Number") && prompt.includes("banking information"),
