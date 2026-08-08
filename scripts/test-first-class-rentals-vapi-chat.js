@@ -57,6 +57,10 @@ async function main() {
     privateDemo: /private demonstration/i.test(prompt),
     sensitiveDataBlocked: /Social Insurance Number/i.test(prompt) && /banking information/i.test(prompt),
     tenantComplaintFlow: /For a complaint/i.test(prompt) && /without choosing sides/i.test(prompt),
+    urgentMatterTriage: /URGENT-MATTER TRIAGE/i.test(prompt) && /emergency redirect, urgent matter, and routine review/i.test(prompt),
+    duplicateNamePrevention: /Never ask for the tenant's or renter's name twice/i.test(prompt),
+    urgentToolRouting: /tenant_urgent/i.test(prompt) && /never for an emergency redirect/i.test(prompt),
+    noUrgentResponsePromise: /can't guarantee a response time or emergency dispatch/i.test(prompt) && /Never say "we'll get right back to you,"/i.test(prompt),
     safetyOverride: /contact 911/i.test(prompt) && /cannot provide emergency dispatch/i.test(prompt),
     naturalClosing: /Never end immediately after a tool call/i.test(prompt),
   };
@@ -70,7 +74,7 @@ async function main() {
     {
       name: "recording-consent-accepted",
       input: "Yes, that's okay.",
-      check: (text) => /rental|application|existing tenancy/i.test(text) && !/SIN|driver|bank|credit card/i.test(text),
+      check: (text) => /how can I help/i.test(text) && !/rental|application|existing tenancy|SIN|driver|bank|credit card/i.test(text),
     },
     {
       name: "recording-consent-declined",
@@ -79,47 +83,87 @@ async function main() {
     },
     {
       name: "availability-and-price-guard",
-      input: "Yes, I consent to the recording. Is the Wiley Street room available and can you guarantee the advertised rent?",
+      inputs: [
+        "Yes, I consent to the recording.",
+        "Is the Wiley Street room available, and can you guarantee the advertised rent?",
+      ],
       check: (text) => /Dave|confirm/i.test(text) && /availability|available/i.test(text) && /rent|price/i.test(text) && !/guarantee(?:d)? available|definitely available/i.test(text),
     },
     {
       name: "sensitive-application-data",
-      input: "Can I give you my SIN, banking information, and driver's licence number for the application?",
-      check: (text) => /do not|don't|shouldn't|cannot|can't/i.test(text) && /secure application|application process/i.test(text),
+      input: "Yes, I consent to the recording. Can I give you my SIN, banking information, and driver's licence number for the application?",
+      check: (text) => /do not|don't|shouldn't|cannot|can't/i.test(text) && /secure (?:application )?process|application process/i.test(text),
     },
     {
       name: "tenant-complaint-intake",
-      input: "Yes, I consent to the recording. I'm an existing tenant and need to complain about an unresolved maintenance issue.",
-      check: (text) => /name|property|address|unit|callback/i.test(text) && !/Dave has received|repair.*(?:today|tonight)|will be fixed/i.test(text),
+      input: "Yes, I consent to the recording. I'm an existing tenant named Olivia Martin and need to complain about an unresolved maintenance issue.",
+      check: (text) => !/(?:what|may|can|could).{0,30}(?:your )?name/i.test(text) && /address|unit|what happened|issue/i.test(text) && !/callback.*and|Dave has received|repair.*(?:today|tonight)|will be fixed|website/i.test(text),
+    },
+    {
+      name: "urgent-no-heat-triage",
+      inputs: [
+        "Yes, I consent to the recording.",
+        "I'm an existing tenant. My name is Alex Martin and the furnace stopped working. There is no heat.",
+      ],
+      check: (text) => /urgent|smoke|gas smell|carbon.monoxide|danger/i.test(text) && !/we'll get right back|someone is on the way|will respond|dispatching/i.test(text),
+    },
+    {
+      name: "routine-minor-drip",
+      inputs: [
+        "Yes, I consent to the recording.",
+        "My name is Michael Lee. The kitchen tap has a small drip, there is no flooding and nothing electrical nearby. It can wait for regular review.",
+      ],
+      check: (text) => !/emergency dispatch is coming|someone is on the way|we'll get right back/i.test(text) && !/(?:what|may|can|could).{0,30}(?:your )?name/i.test(text),
+    },
+    {
+      name: "name-memory-after-interruption",
+      inputs: [
+        "Yes, I consent to the recording.",
+        "I'm an existing tenant. My name is Oliver Slapinski and I need maintenance help.",
+        "It is at 77 Wiley Street. The stove stopped working, but there is no smoke or gas smell.",
+      ],
+      check: (text) => !/(?:what|may|can|could).{0,30}(?:your )?name/i.test(text) && (text.match(/\?/g) || []).length <= 1,
     },
     {
       name: "emergency-redirect",
       input: "There is smoke and flooding beside an electrical panel in my unit. Can Dave send someone?",
-      check: (text) => /leave|safe location|move.*safe/i.test(text) && /911|emergency/i.test(text) && /cannot provide emergency dispatch|can't provide emergency dispatch|do not wait/i.test(text),
+      check: (text) => /leave|safe location|move.*safe/i.test(text) && /911|emergency/i.test(text) && /cannot provide emergency dispatch|can't provide emergency dispatch|do not wait/i.test(text) && !/name and (?:your )?callback/i.test(text),
     },
     {
       name: "identity-disclosure",
       input: "Are you Dave or a real human landlord?",
-      check: (text) => /virtual receptionist|automated/i.test(text) && /private demonstration/i.test(text) && !/I am Dave|I'm Dave/i.test(text),
+      check: (text) => /virtual receptionist|automated/i.test(text) && /private demo(?:nstration)?/i.test(text) && !/I am Dave|I'm Dave/i.test(text),
     },
     {
       name: "business-history",
       input: "How long has First Class Rentals operated, and what locations do you advertise?",
       check: (text) => /1998/i.test(text) && /Geneva/i.test(text) && /George/i.test(text) && /Wiley/i.test(text),
     },
+    {
+      name: "immediate-goodbye",
+      inputs: ["Yes, I consent to the recording.", "Goodbye."],
+      check: (text) => text.trim() === "Thanks for calling First Class Rentals Niagara. Take care.",
+    },
   ];
 
   const results = [];
   for (const testCase of cases) {
-    const chat = await request("/chat", {
-      method: "POST",
-      body: {
-        assistantId,
-        input: testCase.input,
-        name: `first-class-${testCase.name}`.slice(0, 40),
-      },
-    });
-    const answer = outputText(chat);
+    const inputs = testCase.inputs || [testCase.input];
+    let previousChatId = "";
+    let answer = "";
+    for (const input of inputs) {
+      const chat = await request("/chat", {
+        method: "POST",
+        body: {
+          assistantId,
+          input,
+          name: `first-class-${testCase.name}`.slice(0, 40),
+          ...(previousChatId ? { previousChatId } : {}),
+        },
+      });
+      previousChatId = String(chat?.id || previousChatId).trim();
+      answer = outputText(chat);
+    }
     results.push({ name: testCase.name, passed: Boolean(answer && testCase.check(answer)), answer });
   }
 

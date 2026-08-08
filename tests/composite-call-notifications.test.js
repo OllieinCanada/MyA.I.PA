@@ -1,12 +1,74 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
+  buildCustomerBody,
   buildNotificationKeys,
+  buildOwnerBody,
   callerNumberFallbackPrompt,
   executeCompositeNotifications,
   getVapiCompositeToolCode,
   getVapiCompositeToolDefinition,
 } = require("../server/compositeCallNotifications");
+
+test("routing verification messages are explicit and promise no callback", () => {
+  const routingTest = { businessName: "First Class Rentals Niagara", requestType: "routing_test" };
+  assert.match(buildOwnerBody(routingTest), /MY AI PA TEST/);
+  assert.match(buildCustomerBody(routingTest), /MY AI PA TEST/);
+  assert.match(buildOwnerBody(routingTest), /No response or callback is required/);
+  assert.match(buildCustomerBody(routingTest), /No response or callback is required/);
+});
+
+test("private constituent demo messages cannot imply official delivery or a callback", () => {
+  const input = {
+    businessName: "My AI PA private demonstration",
+    requestType: "constituent_demo",
+    name: "Test Caller",
+    rawPhoneNumber: "+19055551234",
+    city: "Grimsby",
+    jobDetails: "passport application delay",
+    preferredStartDate: "request a status follow-up",
+    bestCallbackTime: "weekday afternoons",
+    message: "The application has been delayed beyond the published estimate.",
+  };
+  const ownerBody = buildOwnerBody(input);
+  const customerBody = buildCustomerBody(input);
+  assert.match(ownerBody, /MY AI PA PRIVATE DEMO/);
+  assert.match(ownerBody, /Unofficial test only/);
+  assert.match(ownerBody, /not sent to Dean Allison or his office/i);
+  assert.match(customerBody, /not sent to or received by Dean Allison or his office/i);
+  assert.match(customerBody, /no response from that office is expected/i);
+  assert.doesNotMatch(customerBody, /will call you back/i);
+});
+
+test("urgent tenant messages are visibly prioritized without promising dispatch or timing", () => {
+  const input = {
+    businessName: "First Class Rentals Niagara",
+    requestType: "tenant_urgent",
+    name: "Alex Martin",
+    rawPhoneNumber: "+19055551234",
+    jobDetails: "Furnace stopped working; no heat; no smoke, gas smell, or CO alarm reported",
+    streetAddress: "23 Wiley Street, upstairs unit",
+    city: "St. Catharines",
+    bestCallbackTime: "As soon as available",
+  };
+  const ownerBody = buildOwnerBody(input);
+  const customerBody = buildCustomerBody(input);
+  assert.match(ownerBody, /^URGENT TENANT MESSAGE:/);
+  assert.match(ownerBody, /response time and emergency dispatch are not guaranteed/i);
+  assert.match(customerBody, /urgent tenant message/i);
+  assert.match(customerBody, /not guaranteed/i);
+  assert.match(customerBody, /call 911/i);
+  assert.doesNotMatch(customerBody, /will call you back|right away|technician is on the way/i);
+});
+
+for (const requestType of ["tenant_maintenance", "tenant_complaint"]) {
+  test(`${requestType} confirmation avoids a callback-time promise`, () => {
+    const body = buildCustomerBody({ businessName: "First Class Rentals Niagara", requestType });
+    assert.match(body, /received for review/i);
+    assert.match(body, /response time is not guaranteed/i);
+    assert.doesNotMatch(body, /will call you back|as soon as possible/i);
+  });
+}
 
 const args = {
   businessName: "Example Electrical",

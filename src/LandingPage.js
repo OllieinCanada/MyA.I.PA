@@ -5675,10 +5675,10 @@ function LandingPage() {
           }
           @media (min-width: 1024px) and (max-height: 660px) {
             .landing-hero-visual {
-              transform: translateY(-0.5rem) !important;
+              transform: translateY(-0.35rem) !important;
             }
             .landing-call-dashboard > div {
-              height: calc(100vh - 84px) !important;
+              height: calc(100vh - 110px) !important;
               min-height: 0 !important;
             }
             .landing-conversation-panel {
@@ -8177,6 +8177,27 @@ function LandingPage() {
           @media (max-width: 370px) {
             .landing-mobile-proof-title {
               font-size: 2.3rem !important;
+            }
+          }
+          /* Short desktop browser windows: keep the complete live-call card and
+             hang-up control visible without changing the standard laptop layout. */
+          @media (min-width: 1367px) and (max-height: 660px) and (pointer: fine) {
+            .landing-hero-shell {
+              min-height: 100vh !important;
+              padding-top: 0.55rem !important;
+              padding-bottom: 0.55rem !important;
+            }
+            .landing-hero-grid {
+              padding-top: 0.25rem !important;
+              padding-bottom: 0 !important;
+            }
+            .landing-call-dashboard > div {
+              height: calc(100vh - 118px) !important;
+              min-height: 0 !important;
+              max-height: calc(100vh - 118px) !important;
+            }
+            .landing-call-controls {
+              transform: translateY(-0.65rem) !important;
             }
           }
         `}</style>

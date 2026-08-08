@@ -24,6 +24,23 @@ describe("First Class Rentals demo safety and intake logic", () => {
   });
 
   test.each([
+    "A major plumbing leak is pouring through the ceiling",
+    "The furnace is not working and there is no heat",
+    "The electrical outlets are not working",
+    "The stove is broken",
+    "The A/C is not working",
+  ])("marks an urgent maintenance problem: %s", (description) => {
+    const result = classifyTenantConcern(description);
+    expect(result.level).toBe("priority_review");
+    expect(result.label).toBe("Urgent matter");
+    expect(result.instruction).toMatch(/without promising a response time or emergency dispatch/i);
+  });
+
+  test("allows a tenant to explicitly mark a non-emergency concern as urgent", () => {
+    expect(classifyTenantConcern("The appliance is making a noise", { urgentMatter: true }).level).toBe("priority_review");
+  });
+
+  test.each([
     "My SIN is 123 456 789",
     "Here is my driver's licence number",
     "I want to provide my banking information",
@@ -54,12 +71,15 @@ describe("First Class Rentals demo safety and intake logic", () => {
       callbackTime: "After 5 p.m.",
       ongoing: true,
       textConsent: true,
+      urgentMatter: true,
     });
 
     expect(result.ok).toBe(true);
     expect(result.request.recipient).toBe("Dave");
     expect(result.request.deliveryStatus).toMatch(/not sent/i);
     expect(result.request.textConsent).toBe(true);
+    expect(result.request.urgentMatter).toBe(true);
+    expect(result.request.urgency).toBe("Urgent matter");
   });
 
   test("does not prepare an ordinary complaint when immediate danger is described", () => {
@@ -89,6 +109,7 @@ describe("First Class Rentals demo safety and intake logic", () => {
       "application-help",
       "maintenance",
       "complaint",
+      "urgent-maintenance",
       "emergency",
     ]);
   });
