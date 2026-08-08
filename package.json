@@ -74,6 +74,8 @@
     "audit:vapi-business-mappings": "node scripts/audit-vapi-business-mappings.js",
     "audit:live-phone-dependencies": "node scripts/audit-live-phone-dependencies.js",
     "audit:call-economics": "node scripts/audit-call-unit-economics.js",
+    "audit:vapi-call-playbooks": "node scripts/audit-vapi-call-playbooks.js",
+    "test:audit:vapi-call-playbooks": "node --test tests/vapi-call-playbook-audit.test.js",
     "audit:credential-readiness": "node scripts/audit-credential-readiness.js",
     "activate:sms-consent": "node scripts/activate-sms-consent-production.js",
     "activate:sms-consent:webhooks": "node scripts/activate-sms-consent-production.js --apply-webhooks",
