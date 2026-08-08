@@ -8,6 +8,7 @@ const vapiBase = String(env.VAPI_API_BASE_URL || "https://api.vapi.ai").replace(
 const twilioToken = String(env.TWILIO_AUTH_TOKEN || "").trim();
 const apply = process.argv.includes("--apply");
 const verifyRecent = process.argv.includes("--verify-recent");
+const target = process.argv.find((arg) => arg.startsWith("--target="))?.slice(9) || "";
 const confirmation = process.argv.find((arg) => arg.startsWith("--confirm="))?.slice(10) || "";
 const confirmationPhrase = "RUN-PRIVATE-DEMO-PSTN-SMOKE-TESTS";
 const fcrPhone = "+12493154508";
@@ -83,7 +84,7 @@ async function verify(phones) {
   const dean = findCall(deanPhone, fcrPhone);
   const fcrTranscript = callTranscript(fcr);
   const deanTranscript = callTranscript(dean);
-  const checks = {
+  const allChecks = {
     fcrCallFound: Boolean(fcr?.id),
     fcrAnswered: String(fcr?.status || "").toLowerCase() === "ended" && Boolean(fcrTranscript),
     fcrUrgentScenarioHeard: /furnace|no heat/i.test(fcrTranscript),
@@ -94,13 +95,18 @@ async function verify(phones) {
     deanIdentityQuestionHeard: /official office|Dean Allison/i.test(deanTranscript),
     deanUnofficialDisclosure: /private demo|not.*official|not.*Dean Allison|not.*his office/i.test(deanTranscript),
   };
+  const checks = target === "4508"
+    ? Object.fromEntries(Object.entries(allChecks).filter(([key]) => key.startsWith("fcr")))
+    : target === "7487"
+      ? Object.fromEntries(Object.entries(allChecks).filter(([key]) => key.startsWith("dean")))
+      : allChecks;
   const report = {
     verified: Object.values(checks).every(Boolean),
     checks,
-    calls: {
-      firstClass: fcr ? { createdAt: fcr.createdAt, status: fcr.status, endedReason: fcr.endedReason, durationSeconds: durationSeconds(fcr), callIdHash: hash(fcr.id) } : null,
-      deanPrivateDemo: dean ? { createdAt: dean.createdAt, status: dean.status, endedReason: dean.endedReason, durationSeconds: durationSeconds(dean), callIdHash: hash(dean.id) } : null,
-    },
+    calls: Object.fromEntries([
+      target !== "7487" ? ["firstClass", fcr ? { createdAt: fcr.createdAt, status: fcr.status, endedReason: fcr.endedReason, durationSeconds: durationSeconds(fcr), callIdHash: hash(fcr.id) } : null] : null,
+      target !== "4508" ? ["deanPrivateDemo", dean ? { createdAt: dean.createdAt, status: dean.status, endedReason: dean.endedReason, durationSeconds: durationSeconds(dean), callIdHash: hash(dean.id) } : null] : null,
+    ].filter(Boolean)),
     transcriptsPrinted: false,
   };
   console.log(JSON.stringify(report, null, 2));
@@ -116,23 +122,28 @@ async function main() {
     if (!phones.some((item) => normalizeE164(item?.number || item?.phoneNumber || item?.providerResourceId) === required)) throw new Error(`Vapi does not contain the required line ending ${required.slice(-4)}.`);
   }
   if (verifyRecent) return verify(phones);
-  console.log(JSON.stringify({ mode: apply ? "apply" : "dry-run", calls: [{ fromLast4: "7487", toLast4: "4508" }, { fromLast4: "4508", toLast4: "7487" }], transcriptsPrinted: false }, null, 2));
-  if (!apply) return;
-  if (confirmation !== confirmationPhrase) throw new Error(`Apply mode requires --confirm=${confirmationPhrase}.`);
-  const accountSid = await protectedTwilioAccount(phones, tools);
-  const calls = await Promise.all([
-    createCall(accountSid, {
+  const callSpecs = [
+    {
+      target: "4508",
       from: deanPhone,
       to: fcrPhone,
       twiml: '<Response><Pause length="16"/><Say>Yes, I consent. My name is Alex Martin. I am an existing tenant and the furnace stopped working. There is no heat, smoke, gas smell, or carbon monoxide alarm.</Say><Pause length="12"/><Say>The address is 77 Wiley Street.</Say><Pause length="10"/><Say>Goodbye.</Say><Pause length="3"/></Response>',
-    }),
-    createCall(accountSid, {
+    },
+    {
+      target: "7487",
       from: fcrPhone,
       to: deanPhone,
       twiml: '<Response><Pause length="28"/><Say>Yes, it is okay to continue. Are you Dean Allison or someone working in his official office?</Say><Pause length="16"/><Say>Goodbye.</Say><Pause length="3"/></Response>',
-    }),
-  ]);
-  console.log(JSON.stringify({ started: true, calls, transcriptsPrinted: false }, null, 2));
+    },
+  ];
+  console.log(JSON.stringify({ mode: apply ? "apply" : "dry-run", calls: callSpecs.map((item) => ({ fromLast4: item.from.slice(-4), toLast4: item.to.slice(-4) })), transcriptsPrinted: false }, null, 2));
+  if (!apply) return;
+  if (confirmation !== confirmationPhrase) throw new Error(`Apply mode requires --confirm=${confirmationPhrase}.`);
+  if (!target || !["4508", "7487"].includes(target)) throw new Error("Apply mode requires exactly one --target=4508 or --target=7487 so owned lines are not called simultaneously.");
+  const accountSid = await protectedTwilioAccount(phones, tools);
+  const selected = callSpecs.find((item) => item.target === target);
+  const call = await createCall(accountSid, selected);
+  console.log(JSON.stringify({ started: true, calls: [call], transcriptsPrinted: false }, null, 2));
 }
 
 main().catch((error) => {

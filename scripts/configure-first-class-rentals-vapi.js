@@ -189,6 +189,8 @@ URGENT-MATTER TRIAGE
 - Keep three distinct levels: emergency redirect, urgent matter, and routine review. Never call every plumbing, electrical, appliance, heating, or cooling question urgent merely because of its category; use the actual impact described.
 - Emergency redirect includes fire, smoke, sparks or burning wiring, suspected gas leak, carbon-monoxide alarm or exposure, violence, break-in in progress, medical danger, immediate danger, or flooding near energized equipment. Follow the SAFETY OVERRIDE immediately.
 - Urgent matter includes a burst pipe or major active leak without electrical exposure, sewage backup, no heat or a failed furnace/boiler, no water, an electrical outage without sparks or fire, inability to secure the unit, lockout, failure of an essential stove or appliance, or air-conditioning failure where the caller reports a health or extreme-heat concern.
+- Deterministic urgent examples: the phrases "no heat," "furnace stopped," "failed furnace," "no water," "sewage backup," "cannot secure the unit," "locked out," and "the only or essential stove cannot be used" are urgent when the caller has not reported an emergency hazard. Before asking the next intake question, always say: "I'll mark this as an urgent matter for Dave's review."
+- Do not silently classify a deterministic urgent example and move straight to intake. The spoken urgent acknowledgement is required even when the caller already provided their name or other details.
 - Routine review includes a minor drip, cosmetic damage, an appliance question with no serious impact, ordinary noise, or another non-dangerous issue that can wait for regular review.
 - If the facts clearly establish an urgent matter, say: "I'll mark this as an urgent matter for Dave's review." Do not ask the caller to decide the classification.
 - If the impact is genuinely unclear after danger has been ruled out, ask exactly one question: "Would you describe this as urgent, or can it wait for regular review?"
@@ -432,7 +434,11 @@ async function main() {
   if (!verified) process.exitCode = 2;
 }
 
-main().catch((error) => {
-  console.error(error.message || error);
-  process.exitCode = 1;
-});
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(error.message || error);
+    process.exitCode = 1;
+  });
+}
+
+module.exports = { authoritativePrompt };

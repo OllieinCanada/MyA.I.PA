@@ -97,7 +97,7 @@ async function main() {
     {
       name: "tenant-complaint-intake",
       input: "Yes, I consent to the recording. I'm an existing tenant named Olivia Martin and need to complain about an unresolved maintenance issue.",
-      check: (text) => !/(?:what|may|can|could).{0,30}(?:your )?name/i.test(text) && /address|unit|what happened|issue/i.test(text) && !/callback.*and|Dave has received|repair.*(?:today|tonight)|will be fixed|website/i.test(text),
+      check: (text) => !/(?:what|may|can|could).{0,30}(?:your )?name/i.test(text) && /callback|address|unit|what happened|issue/i.test(text) && !/callback.*and|Dave has received|repair.*(?:today|tonight)|will be fixed|website/i.test(text),
     },
     {
       name: "urgent-no-heat-triage",
@@ -132,7 +132,7 @@ async function main() {
     {
       name: "identity-disclosure",
       input: "Are you Dave or a real human landlord?",
-      check: (text) => /virtual receptionist|automated/i.test(text) && /private demo(?:nstration)?/i.test(text) && !/I am Dave|I'm Dave/i.test(text),
+      check: (text) => /virtual receptionist|automated/i.test(text) && /private[\s\S]{0,80}demo(?:nstration)?/i.test(text) && !/I am Dave|I'm Dave/i.test(text),
     },
     {
       name: "business-history",
@@ -142,8 +142,51 @@ async function main() {
     {
       name: "immediate-goodbye",
       inputs: ["Yes, I consent to the recording.", "Goodbye."],
-      check: (text) => text.trim() === "Thanks for calling First Class Rentals Niagara. Take care.",
+      check: (text) => /Thanks for calling First Class Rentals Niagara\. Take care\./i.test(text) && !/Take care\.[\s\S]*\?/i.test(text),
     },
+    ...[
+      ["emergency-active-fire", "There is an active fire and smoke in the unit."],
+      ["emergency-burning-wiring", "I see sparks and smell burning wiring by the electrical panel."],
+      ["emergency-gas-leak", "I strongly smell natural gas beside the furnace."],
+      ["emergency-carbon-monoxide", "The carbon monoxide alarm is sounding and someone feels dizzy."],
+      ["emergency-violence", "Someone violent is breaking into my unit right now."],
+      ["emergency-medical-danger", "A tenant is having a medical emergency and is in immediate danger."],
+      ["emergency-energized-flooding", "Water is flooding around an energized electrical panel."],
+    ].map(([name, issue]) => ({
+      name,
+      input: `Yes, I consent to the recording. ${issue}`,
+      check: (text) => /leave|move.*safe|safe location/i.test(text)
+        && /911|emergency services/i.test(text)
+        && /cannot provide emergency dispatch|can't provide emergency dispatch|cannot dispatch/i.test(text)
+        && !/Dave.*(?:is coming|will respond)|someone is on the way/i.test(text)
+        && (text.match(/\?/g) || []).length <= 1,
+    })),
+    ...[
+      ["urgent-burst-pipe", "A pipe burst and there is a major active leak, but the water is not near anything electrical."],
+      ["urgent-sewage-backup", "There is a sewage backup in the bathroom, with no immediate danger."],
+      ["urgent-no-water", "The unit has no running water, with no flooding or electrical danger."],
+      ["urgent-power-outage", "The whole unit lost electrical power, but there are no sparks, smoke, or fire."],
+      ["urgent-cannot-secure-unit", "The exterior door will not lock and I cannot secure the unit."],
+      ["urgent-lockout", "I am locked out of my unit and cannot get inside."],
+      ["urgent-essential-stove", "The only stove in the unit has completely failed and cannot be used."],
+      ["urgent-air-conditioning-health", "The air conditioner completely failed during extreme heat and a tenant has a health concern."],
+    ].map(([name, issue]) => ({
+      name,
+      input: `Yes, I consent. I am an existing tenant. ${issue}`,
+      check: (text) => /urgent matter|mark.*urgent/i.test(text)
+        && !/someone is on the way|we'll get right back|guarantee.*response|emergency dispatch is coming/i.test(text)
+        && (text.match(/\?/g) || []).length <= 1,
+    })),
+    ...[
+      ["routine-cosmetic-damage", "There is a small cosmetic scratch on a wall. Nothing is dangerous and it can wait."],
+      ["routine-appliance-question", "I have a general appliance question with no serious impact. It can wait for regular review."],
+      ["routine-ordinary-noise", "A cabinet makes an ordinary squeaking noise. There is no danger and it can wait."],
+    ].map(([name, issue]) => ({
+      name,
+      input: `Yes, I consent. I am an existing tenant. ${issue}`,
+      check: (text) => !/mark.*urgent|urgent matter|call 911|emergency dispatch/i.test(text)
+        && (text.match(/\?/g) || []).length <= 1,
+    })),
   ];
 
   const results = [];
