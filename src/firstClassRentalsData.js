@@ -1,6 +1,7 @@
 export const firstClassRentalsCompany = {
   name: "First Class Rentals Niagara",
   publicPhone: "905-964-7422",
+  privateDemoPhone: "249-315-4508",
   contactName: "Dave",
   city: "St. Catharines",
   foundedClaim: "Serving renters since 1998",
@@ -107,11 +108,20 @@ For application questions, explain the approved process and direct the caller to
 
 For tenant complaints, acknowledge the concern without assigning blame. Collect the tenant's name, address and unit, callback number, category, what happened, when it occurred, whether it is ongoing, the resolution requested, and the best time for Dave to respond. Explain that the information will be prepared for Dave; do not claim that Dave has received it unless delivery is confirmed.
 
+Remember every detail already supplied and never ask for the tenant's name twice unless it was unclear or corrected. Ask exactly one question at a time.
+
+Classify existing-tenant problems as emergency redirect, urgent matter, or routine review. Emergencies include fire, smoke, sparks, gas smell, a carbon-monoxide alarm, violence, medical danger, or flooding near energized equipment. Urgent matters include major active leaks, sewage backup, no heat or a failed furnace, no water, a non-sparking electrical outage, inability to secure the unit, an essential stove failure, or air-conditioning failure with a stated health or extreme-heat impact. Mark urgent requests clearly, but never promise a response time or emergency dispatch.
+
 If the caller reports fire, smoke, a suspected gas leak, a carbon-monoxide alarm, violence, a break-in in progress, medical danger, or flooding near energized equipment, stop ordinary intake and direct the caller to leave danger and call 911 or the appropriate emergency utility from a safe location. Do not give repair instructions.
 
 When asked if you are human, say: “I’m a virtual receptionist created for this private demonstration. I can organize your rental or tenant-service request for Dave, but I cannot approve applications, confirm availability, or provide emergency dispatch.”`;
 
 export const complaintCategories = [
+  "Plumbing or water leak",
+  "Electrical problem",
+  "Heating or furnace",
+  "Stove or essential appliance",
+  "Air-conditioning",
   "Maintenance not resolved",
   "Property condition",
   "Noise or another tenant",
@@ -133,10 +143,14 @@ export const demoScenarios = [
     transcript: [
       { speaker: "assistant", text: "Thanks for calling First Class Rentals. I’m the virtual receptionist. Are you calling about a rental, an application, or an existing tenancy?" },
       { speaker: "caller", text: "I’m looking for a room near Fairview Mall for September." },
-      { speaker: "assistant", text: "I can take your details so Dave can confirm what is available. May I get your name and the best number to reach you?" },
-      { speaker: "caller", text: "Jane Smith, 905-555-0123." },
-      { speaker: "assistant", text: "Thank you. What monthly budget and viewing times work best for you?" },
-      { speaker: "caller", text: "Around $800. Weekday afternoons are best." },
+      { speaker: "assistant", text: "I can take your details so Dave can confirm what is available. May I get your name?" },
+      { speaker: "caller", text: "Jane Smith." },
+      { speaker: "assistant", text: "What is the best number to reach you?" },
+      { speaker: "caller", text: "905-555-0123." },
+      { speaker: "assistant", text: "What monthly budget are you considering?" },
+      { speaker: "caller", text: "Around $800." },
+      { speaker: "assistant", text: "What viewing times work best for you?" },
+      { speaker: "caller", text: "Weekday afternoons are best." },
       { speaker: "assistant", text: "I’ll prepare that for Dave. Availability, rent, and exact inclusions still need his confirmation." },
     ],
     collected: ["Jane Smith", "905-555-0123", "September move-in", "$800 approximate budget", "Weekday afternoons"],
@@ -171,12 +185,18 @@ export const demoScenarios = [
     route: "Dave · maintenance review",
     stages: ["Tenant identified", "Issue documented", "Safety checked", "Summary ready"],
     transcript: [
-      { speaker: "assistant", text: "I can document the maintenance issue for Dave. What is your name, address, and unit?" },
-      { speaker: "caller", text: "Michael Lee, 23 Wiley Street, main-floor room." },
-      { speaker: "assistant", text: "What is happening, and is there active flooding or water near electrical equipment?" },
-      { speaker: "caller", text: "The kitchen tap is dripping steadily, but there’s no flooding and nothing electrical nearby." },
-      { speaker: "assistant", text: "What is the best number and time for Dave to contact you?" },
-      { speaker: "caller", text: "905-555-0190, after 5 p.m." },
+      { speaker: "assistant", text: "I can document the maintenance issue for Dave. What is your name?" },
+      { speaker: "caller", text: "Michael Lee." },
+      { speaker: "assistant", text: "What is the property address and unit?" },
+      { speaker: "caller", text: "23 Wiley Street, main-floor room." },
+      { speaker: "assistant", text: "What is happening?" },
+      { speaker: "caller", text: "The kitchen tap is dripping steadily." },
+      { speaker: "assistant", text: "Is there active flooding or water near electrical equipment?" },
+      { speaker: "caller", text: "No, there’s no flooding and nothing electrical nearby." },
+      { speaker: "assistant", text: "What is the best number for Dave to contact you?" },
+      { speaker: "caller", text: "905-555-0190." },
+      { speaker: "assistant", text: "What callback time do you prefer?" },
+      { speaker: "caller", text: "After 5 p.m." },
       { speaker: "assistant", text: "I’ll prepare the maintenance details for Dave. I can’t promise a response time, but your preferred contact time will be included." },
     ],
     collected: ["Michael Lee", "23 Wiley Street · main floor", "905-555-0190", "Dripping kitchen tap", "No immediate safety flag", "After 5 p.m."],
@@ -194,15 +214,43 @@ export const demoScenarios = [
     transcript: [
       { speaker: "assistant", text: "I can document your concern and prepare a request for Dave. Would you like to describe the issue, or only request a callback?" },
       { speaker: "caller", text: "I’ve reported a hallway light twice and it still goes out. I want to speak with Dave." },
-      { speaker: "assistant", text: "I’ll record that without assigning blame. May I have your name, property address, and best callback number?" },
-      { speaker: "caller", text: "Priya Shah, 18 George Street, 905-555-0177." },
-      { speaker: "assistant", text: "When did you last report it, and what would you like Dave to do next?" },
-      { speaker: "caller", text: "Last Thursday. I want a callback and an update on when it will be inspected." },
+      { speaker: "assistant", text: "I’ll record that without assigning blame. May I have your name?" },
+      { speaker: "caller", text: "Priya Shah." },
+      { speaker: "assistant", text: "What is the property address?" },
+      { speaker: "caller", text: "18 George Street." },
+      { speaker: "assistant", text: "What is the best callback number?" },
+      { speaker: "caller", text: "905-555-0177." },
+      { speaker: "assistant", text: "When did you last report it?" },
+      { speaker: "caller", text: "Last Thursday." },
+      { speaker: "assistant", text: "What would you like Dave to do next?" },
+      { speaker: "caller", text: "I want a callback and an update on when it will be inspected." },
       { speaker: "assistant", text: "I’ll prepare that request for Dave. I can’t promise an outcome or response time, but I’ll include that evenings are best." },
     ],
     collected: ["Priya Shah", "18 George Street", "905-555-0177", "Hallway-light concern", "Previously reported", "Evening callback"],
     missing: ["Unit number"],
     summary: "Priya asks to speak with Dave about a hallway light she says was previously reported. She wants an inspection update and prefers an evening callback.",
+  },
+  {
+    id: "urgent-maintenance",
+    shortLabel: "Urgent matter",
+    title: "Tenant reports that the furnace stopped working",
+    intent: "Urgent tenant maintenance",
+    priority: "Urgent matter",
+    route: "Dave · urgent review",
+    stages: ["Danger ruled out", "Urgency confirmed", "Details collected", "Urgent summary ready"],
+    transcript: [
+      { speaker: "caller", text: "My name is Alex Martin. The furnace stopped working and there is no heat." },
+      { speaker: "assistant", text: "Is there smoke, a gas smell, a carbon-monoxide alarm, or any immediate danger?" },
+      { speaker: "caller", text: "No. It is just getting very cold inside." },
+      { speaker: "assistant", text: "What is the property address and unit?" },
+      { speaker: "caller", text: "23 Wiley Street, upstairs unit." },
+      { speaker: "assistant", text: "What number should Dave use to contact you?" },
+      { speaker: "caller", text: "Use the number I’m calling from." },
+      { speaker: "assistant", text: "I’ll mark this as an urgent matter for Dave’s review. I can’t guarantee a response time or emergency dispatch." },
+    ],
+    collected: ["Alex Martin", "23 Wiley Street · upstairs", "No heat", "No immediate-danger indicators", "Calling number approved"],
+    missing: ["Access notes", "Preferred callback time"],
+    summary: "URGENT TENANT MESSAGE — Alex reports that the furnace stopped working and the upstairs unit has no heat. No smoke, gas smell, carbon-monoxide alarm, or immediate danger was reported. Response timing is not guaranteed.",
   },
   {
     id: "emergency",

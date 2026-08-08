@@ -1,0 +1,67 @@
+.daa-demo {
+  --fcr-blue: #b32632;
+  --fcr-aqua: #d39b45;
+  --fcr-deep: #112842;
+  --fcr-ink: #15283d;
+  --fcr-muted: #5b6b7d;
+  --fcr-line: #dce3ea;
+}
+
+.daa-demo .fcr-private-banner { color: #fff; background: #8f1f2c; }
+.daa-demo .fcr-brand-mark, .daa-demo .fcr-avatar { background: #b32632; }
+.daa-demo .fcr-header-live, .daa-header-status { color: #8f1f2c; }
+.daa-header-status { margin-left: auto; font-size: .67rem; font-weight: 900; letter-spacing: .12em; }
+.daa-demo .fcr-hero { background: linear-gradient(135deg, #f7f8fa 0%, #fffaf1 55%, #f5f8fb 100%); }
+.daa-demo .fcr-hero h1 em { color: #b32632; }
+.daa-demo .fcr-primary-button { background: linear-gradient(135deg, #b32632, #8e1e2a); }
+.daa-demo .fcr-flow-icon { color: #9b2430; background: #fae9ea; }
+.daa-demo .fcr-live-section { background: #112842; }
+.daa-demo .fcr-scenario-tabs button.active,
+.daa-demo .fcr-start-button,
+.daa-demo .fcr-status-pill.ready,
+.daa-demo .fcr-stage-row > div.done > span { color: #112842; background: #f2c66d; border-color: #f2c66d; }
+.daa-demo .fcr-progress-track span { background: #f2c66d; }
+.daa-demo .fcr-section-heading.light .fcr-kicker,
+.daa-demo .fcr-console-top .fcr-kicker,
+.daa-demo .fcr-summary-heading .fcr-kicker,
+.daa-demo .fcr-detail-columns li svg { color: #f2c66d; }
+.daa-demo .fcr-bubble.caller { background: #a42531; }
+.daa-live-number { width: fit-content; margin: 22px 0 2px; padding: 14px 18px; border: 1px solid rgba(179,38,50,.22); border-radius: 14px; background: rgba(255,255,255,.86); box-shadow: 0 14px 36px rgba(17,40,66,.08); }
+.daa-live-number span, .daa-live-number small { display: block; }
+.daa-live-number span { color: #8f1f2c; font-size: .66rem; font-weight: 900; letter-spacing: .13em; }
+.daa-live-number a { display: inline-block; margin: 4px 0; color: #112842; font-size: clamp(1.45rem, 3vw, 2rem); font-weight: 950; line-height: 1; text-decoration: none; }
+.daa-live-number small { color: #637184; font-size: .66rem; font-weight: 750; }
+
+.daa-civic-visual { position: relative; min-height: 475px; }
+.daa-building { position: absolute; inset: 18px 34px 42px 60px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; padding: 160px 44px 60px; border-radius: 10px; background: linear-gradient(145deg, #183652, #0f243b); box-shadow: 0 35px 80px rgba(17,40,66,.24); }
+.daa-building::before { content: ""; position: absolute; top: 58px; left: 50%; width: 170px; height: 72px; transform: translateX(-50%); clip-path: polygon(50% 0, 100% 100%, 0 100%); background: #e6c376; }
+.daa-building::after { content: ""; position: absolute; top: 122px; left: 38px; right: 38px; height: 15px; background: #e6c376; box-shadow: 0 185px 0 #e6c376; }
+.daa-building span { border-radius: 3px 3px 0 0; background: linear-gradient(#f6dd9f, #d7a94f); box-shadow: inset 0 -28px 38px rgba(122,75,20,.2); }
+.daa-building i { position: absolute; left: 50%; bottom: 15px; width: 70px; height: 100px; transform: translateX(-50%); border: 8px solid #d7b664; border-bottom: 0; border-radius: 36px 36px 0 0; }
+.daa-civic-visual .fcr-inquiry-card { left: -10px; }
+.daa-civic-visual .fcr-callback-card { right: -5px; }
+
+.daa-not-sent { margin: 16px 0 0; padding: 10px 12px; display: flex; align-items: center; gap: 8px; border-radius: 9px; color: #f5ddb0; background: rgba(179,38,50,.2); font-size: .66rem; font-weight: 800; }
+.daa-builder { background: #f5f7f9; }
+.daa-office-card { padding: 30px; border: 1px solid #d8e0e7; border-radius: 20px; background: #fff; box-shadow: 0 24px 60px rgba(17,40,66,.08); }
+.daa-office-card h3 { margin: 9px 0 22px; font-size: 1.45rem; }
+.daa-office-card dl { margin: 0; }
+.daa-office-card dl > div { padding: 12px 0; border-top: 1px solid #e8edf1; }
+.daa-office-card dt { color: #657487; font-size: .64rem; font-weight: 850; text-transform: uppercase; letter-spacing: .07em; }
+.daa-office-card dd { margin: 4px 0 0; color: #1d3349; font-size: .8rem; font-weight: 720; }
+.daa-office-card p { margin: 20px 0 0; padding: 12px; border-radius: 9px; color: #7b5523; background: #fff4dd; font-size: .7rem; line-height: 1.55; }
+.daa-demo .fcr-source-list small { margin-top: 3px; color: #8a98a7; font-size: .62rem; }
+
+@media (max-width: 980px) {
+  .daa-header-status { display: none; }
+  .daa-civic-visual { width: min(520px, 94%); margin: 0 auto; }
+}
+
+@media (max-width: 760px) {
+  .daa-civic-visual { min-height: 390px; }
+  .daa-building { inset: 4px 18px 38px 28px; padding: 130px 28px 50px; }
+  .daa-building::before { top: 42px; width: 135px; height: 58px; }
+  .daa-building::after { top: 94px; left: 26px; right: 26px; box-shadow: 0 150px 0 #e6c376; }
+  .daa-building i { height: 78px; }
+  .daa-civic-visual .fcr-inquiry-card { left: -2px; }
+}

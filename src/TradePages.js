@@ -44,8 +44,11 @@ function TradeHeader() {
         <Brand />
         <nav aria-label="Trade page navigation">
           <a href="#/trades">All trades</a>
-          <a href="#/try-demo">Try the voice</a>
-          <a className="trade-header-cta" href="#/signup">Start free trial</a>
+          <a className="trade-header-demo" href="tel:+12495033301">
+            <span>Call the live demo</span>
+            <strong>(249) 503-3301</strong>
+          </a>
+          <a className="trade-header-cta" href="#/signup">Start Your Free Trial</a>
         </nav>
       </div>
     </header>
@@ -190,25 +193,25 @@ function TradeHub() {
       <TradeHeader />
       <section className="trade-hub-hero">
         <div className="trade-shell">
-          <p className="trade-kicker">Built around the calls your business actually receives</p>
-          <h1>One answering service.<br /><span>A different playbook for every audience.</span></h1>
+          <p className="trade-kicker">AI telephone answering built for the trades</p>
+          <h1>Never send another good customer to voicemail.<br /><span>Choose your trade.</span></h1>
           <p className="trade-hub-lead">
-            An electrician should not get a plumbing script—and a property manager needs a completely different leasing and tenant workflow.
-            Choose an audience to see its caller questions, urgency boundaries, handoff details, and example text.
+            Your callers get a real conversation, the right questions for the job, and a clear next step. You get the details by text so you can call back prepared.
           </p>
           <div className="trade-hub-actions">
-            <a className="trade-primary-button" href="#/signup">Build my assistant</a>
-            <a className="trade-secondary-button" href="#/try-demo">Hear a live example</a>
+            <a className="trade-primary-button" href="#/signup">Start Your Free Trial</a>
+            <a className="trade-secondary-button" href="tel:+12495033301">Call the Live Demo</a>
           </div>
+          <div className="trade-trial-proof" aria-label="Trial details"><span>✓ 14-Day Free Trial</span><span>✓ No Credit Card</span><span>✓ Cancel Anytime</span></div>
         </div>
       </section>
 
       <section className="trade-hub-list">
         <div className="trade-shell">
           <SectionHeading
-            eyebrow="Choose your audience"
-            title="Start with your audience. Then configure the business."
-            body="Every page below explains what My AI PA can collect, what it must never invent, and how the owner receives a useful follow-up."
+            eyebrow="Built around your calls"
+            title="See what My AI PA can do for your business."
+            body="Pick your trade to see the calls it handles, the questions it asks, and the text summary you receive."
           />
           <label className="trade-search">
             <span className="trade-search-icon" aria-hidden="true">⌕</span>
@@ -274,9 +277,9 @@ function TradeHub() {
       <section className="trade-shared-flow">
         <div className="trade-shell">
           <SectionHeading
-            eyebrow="The shared foundation"
-            title="The workflow stays simple. The questions change by trade."
-            body="This is the same four-part journey every caller follows, with intake and safety rules tailored to the selected business."
+            eyebrow="How it works"
+            title="One call. Four simple steps. No mystery voicemail."
+            body="The conversation changes to fit your trade, but the result stays simple: the caller feels heard and you get the job details."
           />
           <CallFlow />
         </div>
@@ -308,27 +311,40 @@ function TradeDetail({ slug, trade }) {
             <div className="trade-detail-copy">
               <p className="trade-kicker">{trade.eyebrow}</p>
               <h1>{trade.headline}</h1>
+              <p className="trade-hero-pain">Missed calls = missed jobs.</p>
               <p className="trade-detail-lead">{trade.intro}</p>
               <div className="trade-hero-actions">
-                <a className="trade-primary-button" href="#/signup">Build my {trade.singular} assistant</a>
-                <a className="trade-secondary-button" href="#/try-demo">Try a 1-minute call</a>
+                <a className="trade-primary-button" href="#/signup">Start Your Free Trial</a>
+                <a className="trade-secondary-button" href="tel:+12495033301">Hear the Live Demo</a>
               </div>
               <ul className="trade-hero-trust">
                 <li><span>✓</span> Keep your current business number</li>
                 <li><span>✓</span> Owner-approved answers only</li>
                 <li><span>✓</span> No dispatch promises without confirmation</li>
               </ul>
+              <div className="trade-trial-proof" aria-label="Trial details"><span>✓ 14-Day Free Trial</span><span>✓ No Credit Card</span><span>✓ Cancel Anytime</span></div>
             </div>
             <HeroVisual trade={trade} />
           </div>
         </div>
       </section>
 
+      <section className="trade-flow-section trade-flow-section-first">
+        <div className="trade-shell">
+          <SectionHeading
+            eyebrow="What happens when you cannot answer"
+            title="The caller talks. My AI PA collects. You get the text."
+            body="No phone menu and no vague voicemail. The assistant speaks naturally, gathers the useful details, and prepares both sides for the callback."
+          />
+          <CallFlow />
+        </div>
+      </section>
+
       <section className="trade-use-cases">
         <div className="trade-shell">
           <SectionHeading
-            eyebrow={`Calls a ${trade.singular} receives`}
-            title="The assistant starts by understanding the type of work."
+            eyebrow={`Calls your ${trade.singular} business receives`}
+            title="It knows the difference between the jobs you handle."
             body={trade.ownerValue}
           />
           <div className="trade-use-grid">
@@ -348,8 +364,8 @@ function TradeDetail({ slug, trade }) {
           <div>
             <SectionHeading
               eyebrow="Useful intake, not an interrogation"
-              title="The details you need before calling back."
-              body="The assistant asks one clear question at a time. It does not dump a checklist on the caller."
+              title="The details you need—before you call back."
+              body="The assistant asks one clear question at a time, then organizes the answers into a useful job summary."
             />
             <div className="trade-intake-list">
               {trade.intake.map(([title, body], index) => (
@@ -362,7 +378,7 @@ function TradeDetail({ slug, trade }) {
           </div>
           <div className="trade-intake-aside">
             <p className="trade-kicker">What the owner sees</p>
-            <h3>A callback brief—not a mystery voicemail.</h3>
+            <h3>A useful text—not a mystery voicemail.</h3>
             <p>{trade.scenario.owner}</p>
             <div className="trade-summary-tags">
               <span>Request type</span><span>Location</span><span>Urgency</span>
@@ -376,8 +392,8 @@ function TradeDetail({ slug, trade }) {
         <div className="trade-shell">
           <SectionHeading
             eyebrow="A safer call path"
-            title="Routine, priority, and emergency are not treated the same."
-            body="The assistant can flag important language while staying inside conservative boundaries. It is not a substitute for emergency services or a qualified tradesperson."
+            title="Routine calls and real danger are not treated the same."
+            body="My AI PA flags urgent language, stays inside your approved rules, and sends genuine emergencies to the appropriate emergency service."
           />
           <div className="trade-priority-grid">
             {trade.priorities.map(([title, body], index) => (
@@ -391,23 +407,12 @@ function TradeDetail({ slug, trade }) {
         </div>
       </section>
 
-      <section className="trade-flow-section">
-        <div className="trade-shell">
-          <SectionHeading
-            eyebrow="See the entire handoff"
-            title="From incoming call to an informed callback."
-            body="The caller understands what happens next, and the business receives the context needed to continue the conversation."
-          />
-          <CallFlow />
-        </div>
-      </section>
-
       <section className="trade-knowledge-section">
         <div className="trade-shell trade-knowledge-grid">
           <div>
             <SectionHeading
               eyebrow="Business knowledge"
-              title="Questions the assistant can answer—when you approve the facts."
+              title="It answers the common questions you approve."
             />
             <div className="trade-question-list">
               {trade.questions.map((question) => <p key={question}><span>?</span>{question}</p>)}
@@ -415,7 +420,7 @@ function TradeDetail({ slug, trade }) {
           </div>
           <div className="trade-boundary-card">
             <p className="trade-kicker">Clear boundaries</p>
-            <h2>Helpful without pretending to be the tradesperson.</h2>
+            <h2>Helpful without pretending to be you.</h2>
             <ul>
               {trade.boundaries.map((boundary) => <li key={boundary}><span>✓</span>{boundary}</li>)}
             </ul>
@@ -427,12 +432,12 @@ function TradeDetail({ slug, trade }) {
         <div className="trade-shell trade-final-card">
           <div>
             <p className="trade-kicker">Make the next missed call useful</p>
-            <h2>Build a phone assistant around your actual {trade.label.toLowerCase()} business.</h2>
-            <p>Set the greeting, service area, hours, FAQs, intake questions, callback wording, and safety boundaries before forwarding a single live call.</p>
+            <h2>Stop losing {trade.label.toLowerCase()} jobs when you cannot reach the phone.</h2>
+            <p>We set up the greeting, service area, hours, FAQs, job questions, callback wording, and safety rules around your actual business.</p>
           </div>
           <div className="trade-final-actions">
-            <a className="trade-primary-button" href="#/signup">Start free trial</a>
-            <a className="trade-secondary-button" href="tel:+12495033301">Call (249) 503-3301</a>
+            <a className="trade-primary-button" href="#/signup">Start Your Free Trial</a>
+            <a className="trade-secondary-button" href="tel:+12495033301">Call the Live Demo</a>
           </div>
         </div>
       </section>

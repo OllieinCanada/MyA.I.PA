@@ -10,6 +10,7 @@ import LinksPage from "./LinksPage";
 import TryDemo from "./TryDemo";
 import TradePages from "./TradePages";
 import FirstClassRentalsDemo from "./FirstClassRentalsDemo";
+import DeanAllisonDemo from "./DeanAllisonDemo";
 import "./style.css";
 
 const getRoute = () => {
@@ -44,6 +45,7 @@ function RouterRoot() {
   else if (route === "links") page = <LinksPage />;
   else if (route === "try-demo") page = <TryDemo />;
   else if (route === "demo/first-class-rentals") page = <FirstClassRentalsDemo />;
+  else if (route === "demo/dean-allison") page = <DeanAllisonDemo />;
   else if (route === "trades") page = <TradePages />;
   else if (route.startsWith("trades/")) page = <TradePages slug={route.slice("trades/".length)} />;
 

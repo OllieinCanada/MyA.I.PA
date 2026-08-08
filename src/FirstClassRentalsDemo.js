@@ -125,6 +125,7 @@ const emptyComplaint = {
   resolution: "",
   callbackTime: "",
   ongoing: false,
+  urgentMatter: false,
   textConsent: false,
 };
 
@@ -163,6 +164,7 @@ function ComplaintSection() {
             <label className="full"><span>What would you like Dave to do next?</span><textarea name="resolution" value={form.resolution} onChange={update} rows="2" placeholder="For example: call me and provide an update." /></label>
             <div className="fcr-checkbox-row">
               <label><input type="checkbox" name="ongoing" checked={form.ongoing} onChange={update} /><span>The concern is ongoing</span></label>
+              <label className="fcr-urgent-control"><input type="checkbox" name="urgentMatter" checked={form.urgentMatter} onChange={update} /><span>Mark this as an urgent matter</span></label>
               <label><input type="checkbox" name="textConsent" checked={form.textConsent} onChange={update} /><span>I agree to receive a confirmation text</span></label>
             </div>
             <button className="fcr-primary-button" type="submit">Prepare request for Dave <Icon name="arrow" size={17} /></button>
@@ -181,7 +183,7 @@ function ComplaintSection() {
               <div className="fcr-emergency-result"><Icon name="shield" /><strong>Ordinary complaint intake stops here</strong><p>{result.safety.instruction}</p></div>
             )}
             {result?.ok && result.safety.level !== "emergency_redirect" && (
-              <div className="fcr-prepared-request">
+              <div className={`fcr-prepared-request ${result.request.urgentMatter ? "is-urgent" : ""}`}>
                 <div className="fcr-request-top"><span>CALLBACK REQUEST</span><strong>{result.safety.label}</strong></div>
                 <h3>For Dave · private review</h3>
                 <dl>
@@ -189,6 +191,7 @@ function ComplaintSection() {
                   <div><dt>Property</dt><dd>{result.request.address}</dd></div>
                   <div><dt>Callback</dt><dd>{result.request.callback}</dd></div>
                   <div><dt>Category</dt><dd>{result.request.category}</dd></div>
+                  <div><dt>Urgency</dt><dd>{result.request.urgency}</dd></div>
                   <div><dt>Concern</dt><dd>{result.request.concern}</dd></div>
                   <div><dt>Requested next step</dt><dd>{result.request.requestedResolution}</dd></div>
                   <div><dt>Best time</dt><dd>{result.request.callbackTime}</dd></div>
@@ -248,10 +251,10 @@ export default function FirstClassRentalsDemo() {
           <Brand />
           <nav aria-label="Private demo navigation">
             <a href="#/demo/first-class-rentals" onClick={(event) => scrollToDemoSection(event, "how-it-works")}>How it helps</a>
-            <a href="#/demo/first-class-rentals" onClick={(event) => scrollToDemoSection(event, "live-demo")}>Call demo</a>
             <a href="#/demo/first-class-rentals" onClick={(event) => scrollToDemoSection(event, "tenant-concerns")}>Tenant concerns</a>
+            <a className="fcr-header-live" href="tel:+12493154508"><span>Call the private rental demo</span><strong>(249) 315-4508</strong></a>
           </nav>
-          <a className="fcr-header-button" href="#/demo/first-class-rentals" onClick={(event) => scrollToDemoSection(event, "live-demo")}>Start demonstration</a>
+          <a className="fcr-header-button" href="#/signup">Start Your Free Trial</a>
         </div>
       </header>
 
@@ -259,12 +262,13 @@ export default function FirstClassRentalsDemo() {
         <div className="fcr-hero-glow one" /><div className="fcr-hero-glow two" />
         <div className="fcr-shell fcr-hero-grid">
           <div className="fcr-hero-copy">
-            <span className="fcr-eyebrow">My AI PA × First Class Rentals Niagara</span>
-            <h1>Every rental call becomes a <em>clear next step.</em></h1>
-            <p>A private demonstration of a virtual receptionist that helps prospective renters, organizes tenant maintenance, and gives existing tenants a respectful way to request a conversation with Dave.</p>
+            <span className="fcr-eyebrow">Private case study · My AI PA × First Class Rentals Niagara</span>
+            <h1>Rental calls answered. Tenant concerns organized. <em>Dave gets the details.</em></h1>
+            <p className="fcr-hero-pain">Missed calls should not become missed renters.</p>
+            <p>My AI PA talks with prospective renters, organizes tenant maintenance requests, and gives existing tenants a respectful way to ask Dave for a callback.</p>
             <div className="fcr-hero-actions">
-              <a className="fcr-primary-button" href="#/demo/first-class-rentals" onClick={(event) => scrollToDemoSection(event, "live-demo")}>Experience the call <Icon name="arrow" size={17} /></a>
-              <a className="fcr-secondary-button" href="#/demo/first-class-rentals" onClick={(event) => scrollToDemoSection(event, "tenant-concerns")}>Preview a complaint</a>
+              <a className="fcr-primary-button" href="tel:+12493154508"><Icon name="phone" size={17} /> Call 249-315-4508</a>
+              <a className="fcr-secondary-button" href="#/demo/first-class-rentals" onClick={(event) => scrollToDemoSection(event, "live-demo")}>Watch the Call Demo</a>
             </div>
             <div className="fcr-hero-proof"><span><Icon name="check" size={16} /> No availability promises</span><span><Icon name="check" size={16} /> No sensitive application data</span><span><Icon name="check" size={16} /> Clear handoff to Dave</span></div>
           </div>
@@ -278,14 +282,14 @@ export default function FirstClassRentalsDemo() {
 
       <section className="fcr-section" id="how-it-works">
         <div className="fcr-shell">
-          <div className="fcr-section-heading"><span className="fcr-kicker">One receptionist · four clear paths</span><h2>Helpful without overstepping.</h2><p>The assistant knows what to collect, what requires Dave’s confirmation, and when ordinary intake must stop for safety.</p></div>
+          <div className="fcr-section-heading"><span className="fcr-kicker">What happens when Dave cannot answer</span><h2>The caller talks. My AI PA organizes the next step.</h2><p>The assistant knows what to collect, what Dave must confirm, and when an ordinary request must stop for safety.</p></div>
           <div className="fcr-flow-grid">{flowCards.map((flow, index) => <article key={flow.title}><span className="fcr-flow-number">0{index + 1}</span><span className="fcr-flow-icon"><Icon name={flow.icon} /></span><h3>{flow.title}</h3><p>{flow.text}</p></article>)}</div>
         </div>
       </section>
 
       <section className="fcr-section fcr-live-section" id="live-demo">
         <div className="fcr-shell">
-          <div className="fcr-section-heading light"><span className="fcr-kicker">Live call simulation</span><h2>See exactly what the receptionist captures.</h2><p>Choose a realistic call. This private demo uses simulated information and does not contact a renter or Dave.</p></div>
+          <div className="fcr-section-heading light"><span className="fcr-kicker">See the call, then see the text</span><h2>Watch a rental call become a useful summary.</h2><p>Choose a realistic situation. This private demo uses simulated information and does not contact a renter or Dave.</p></div>
           <div className="fcr-scenario-tabs" role="tablist" aria-label="Demonstration scenarios">{demoScenarios.map((item) => <button type="button" role="tab" aria-selected={scenario.id === item.id} className={scenario.id === item.id ? "active" : ""} key={item.id} onClick={() => chooseScenario(item.id)}>{item.shortLabel}</button>)}</div>
           <div className="fcr-live-grid">
             <DemoPhone scenario={scenario} visibleLines={visibleLines} running={running} />
@@ -304,14 +308,14 @@ export default function FirstClassRentalsDemo() {
 
       <section className="fcr-section fcr-knowledge-section">
         <div className="fcr-shell fcr-knowledge-grid">
-          <div><span className="fcr-kicker">Conservative knowledge</span><h2>The agent distinguishes facts from items Dave must confirm.</h2><p>Published listing pages currently contain conflicting prices and property labels. The demonstration therefore captures interest without quoting a live price or promising availability.</p><div className="fcr-source-list">{approvedKnowledge.map((item) => <div key={item.id}><Icon name="check" size={16} /><span><strong>{item.label}</strong>{item.value}</span></div>)}</div></div>
+          <div><span className="fcr-kicker">Answers Dave approves</span><h2>Helpful information without making things up.</h2><p>When a price, property detail, or availability needs confirmation, the assistant collects the renter’s interest and leaves the final answer to Dave.</p><div className="fcr-source-list">{approvedKnowledge.map((item) => <div key={item.id}><Icon name="check" size={16} /><span><strong>{item.label}</strong>{item.value}</span></div>)}</div></div>
           <div className="fcr-confirm-card"><div className="fcr-confirm-heading"><Icon name="shield" /><div><strong>Requires confirmation</strong><span>Before a live receptionist may say it</span></div></div>{listingKnowledge.map((item) => <div className="fcr-listing-row" key={item.id}><span><strong>{item.label}</strong>{item.advertisedDetails}</span><b>VERIFY</b></div>)}</div>
         </div>
       </section>
 
       <section className="fcr-boundary-section"><div className="fcr-shell"><div className="fcr-boundary-card"><div><span className="fcr-kicker">Built-in protection</span><h2>Private data stays out of ordinary calls and texts.</h2></div><ul>{blockedClaims.slice(0, 5).map((claim) => <li key={claim}><Icon name="check" size={16} />{claim}</li>)}</ul></div></div></section>
 
-      <footer className="fcr-footer"><div className="fcr-shell"><Brand /><p>Private demonstration prepared by My AI PA. Live routing and notifications remain disabled until authorized recipients and policies are configured.</p><a href="#/">Return to My AI PA</a></div></footer>
+      <footer className="fcr-footer"><div className="fcr-shell"><Brand /><p>Private demonstration prepared by My AI PA. The test line and protected test summaries are active; official operation, guaranteed response times, and emergency dispatch remain disabled.</p><a href="#/">Return to My AI PA</a></div></footer>
     </main>
   );
 }

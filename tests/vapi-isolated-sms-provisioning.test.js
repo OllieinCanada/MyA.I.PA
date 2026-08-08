@@ -70,7 +70,7 @@ test("isolated tool payload keeps all routing outside model parameters", () => {
 test("tool confirmation accepts natural approval without accepting ambiguity", () => {
   const raw = toolRejectionPlan().conditions[0].conditions[0].regex;
   const acceptance = new RegExp(raw.replace(/^\(\?i\)/, ""), "i");
-  for (const phrase of ["Yes.", "Perfect.", "Sure", "Absolutely!", "Okay", "Sounds good.", "Go ahead."]) {
+  for (const phrase of ["Yes.", "Perfect.", "Sure", "Absolutely!", "Okay", "Sounds good.", "Go ahead.", "Uh, yes.", "Um yes please.", "Alright, yep."]) {
     assert.match(phrase, acceptance);
   }
   for (const phrase of ["I'm not sure.", "Maybe.", "Let me think.", "Not yet."]) {

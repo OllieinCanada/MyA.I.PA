@@ -34,6 +34,44 @@ function buildOwnerBody(args) {
   const requestType = cleanText(args.requestType || "service", 40).toLowerCase();
   const name = cleanText(args.name || "Unknown caller", 120);
   const phone = normalizeE164(args.rawPhoneNumber || args.callbackNumber) || cleanText(args.rawPhoneNumber || args.callbackNumber, 40);
+  if (requestType === "routing_test") {
+    return "MY AI PA TEST — First Class Rentals notification routing is working. No response or callback is required.";
+  }
+  if (requestType === "constituent_demo") {
+    const lines = [
+      "MY AI PA PRIVATE DEMO — Simulated constituent message:",
+      `- Name: ${name}`,
+      `- Phone: ${phone || "Not provided"}`,
+    ];
+    const community = cleanText(args.city, 120);
+    const topic = cleanText(args.jobDetails, 300);
+    const requestedAction = cleanText(args.preferredStartDate, 220);
+    const preferredContact = cleanText(args.bestCallbackTime, 160);
+    const message = cleanText(args.message, 600);
+    if (community) lines.push(`- Community: ${community}`);
+    if (topic) lines.push(`- Federal topic: ${topic}`);
+    if (requestedAction) lines.push(`- Requested next step: ${requestedAction}`);
+    if (preferredContact) lines.push(`- Preferred contact: ${preferredContact}`);
+    if (message) lines.push(`- Message: ${message}`);
+    lines.push("Unofficial test only — not sent to Dean Allison or his office.");
+    return lines.join("\n").slice(0, 1600);
+  }
+  if (requestType === "tenant_urgent") {
+    const lines = [
+      "URGENT TENANT MESSAGE:",
+      `- Tenant: ${name}`,
+      `- Phone: ${phone || "Not provided"}`,
+      `- Issue: ${cleanText(args.jobDetails || args.message || "Not provided", 500)}`,
+    ];
+    const property = cleanText(args.streetAddress, 180);
+    const city = cleanText(args.city, 120);
+    const callbackTime = cleanText(args.bestCallbackTime, 160);
+    if (property) lines.push(`- Property: ${property}`);
+    if (city) lines.push(`- City: ${city}`);
+    if (callbackTime) lines.push(`- Preferred contact: ${callbackTime}`);
+    lines.push("Urgent review requested — response time and emergency dispatch are not guaranteed.");
+    return lines.join("\n").slice(0, 1600);
+  }
   if (requestType === "message") {
     return [
       "Message request:",
@@ -62,6 +100,19 @@ function buildOwnerBody(args) {
 function buildCustomerBody(args) {
   const businessName = cleanText(args.businessName || "our team", 140);
   const requestType = cleanText(args.requestType || "service", 40).toLowerCase();
+  if (requestType === "routing_test") {
+    return `MY AI PA TEST — ${businessName} customer confirmation routing is working. No response or callback is required.`;
+  }
+  if (requestType === "constituent_demo") {
+    return "MY AI PA PRIVATE DEMO — Your simulated constituent-service message was recorded for this demonstration. It was not sent to or received by Dean Allison or his office, and no response from that office is expected.";
+  }
+  if (requestType === "tenant_urgent") {
+    return `Thanks for calling ${businessName}. Your urgent tenant message has been received for review. A response time and emergency dispatch are not guaranteed. If anyone is in immediate danger, leave the area and call 911.`.slice(0, 1600);
+  }
+  if (requestType === "tenant_maintenance" || requestType === "tenant_complaint") {
+    const label = requestType === "tenant_maintenance" ? "maintenance message" : "tenant concern";
+    return `Thanks for calling ${businessName}. Your ${label} has been received for review. Your preferred contact time was noted, but a response time is not guaranteed.`.slice(0, 1600);
+  }
   if (requestType === "message") {
     return `Thanks for calling ${businessName}. We received your message: "${cleanText(args.message || "No message provided", 500)}" Our team will call you back as soon as possible.`.slice(0, 1600);
   }
@@ -354,7 +405,7 @@ function compositeToolParameters() {
     type: "object",
     properties: {
       businessName: { type: "string", description: "Business name used in the caller confirmation." },
-      requestType: { type: "string", enum: ["installation", "repair", "maintenance", "quote", "message", "service"] },
+      requestType: { type: "string", enum: ["installation", "repair", "maintenance", "quote", "message", "service", "rental", "application", "tenant_maintenance", "tenant_complaint", "tenant_urgent", "constituent_demo"] },
       name: { type: "string", description: "Caller's name." },
       rawPhoneNumber: { type: "string", description: "Fallback callback number, used only when trusted caller ID is unavailable and the caller has confirmed the full number." },
       callbackNumber: { type: "string", description: "Optional callback-number alias when rawPhoneNumber is unavailable." },

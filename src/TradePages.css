@@ -442,6 +442,82 @@
 .trade-footer-grid { display: flex; justify-content: space-between; gap: 30px; align-items: center; }
 .trade-footer-grid > div:first-child > p { margin: 12px 0 0; color: #5d748a; font-size: 0.84rem; font-weight: 600; }
 
+/* Keep the audience pages inside the same visual language as the My AI PA homepage. */
+.trade-site {
+  background: #fff;
+  color: #07142a;
+}
+.trade-header { border-bottom-color: #cfe2f5; }
+.trade-header-inner { min-height: 76px; }
+.trade-header nav { gap: 18px; }
+.trade-header-demo {
+  display: grid;
+  gap: 3px;
+  padding: 8px 14px;
+  border: 1px solid #a9cbed;
+  border-radius: 12px;
+  background: #f7fbff;
+  text-align: left;
+}
+.trade-header-demo span { color: #52677f; font-size: .62rem; font-weight: 950; letter-spacing: .12em; text-transform: uppercase; }
+.trade-header-demo strong { color: #0c5fc3; font-size: .96rem; line-height: 1; }
+.trade-header-cta {
+  border-radius: 12px;
+  background: linear-gradient(180deg, #ff7a00, #ff6500);
+  box-shadow: 0 18px 42px -24px rgba(255,106,0,.95);
+}
+.trade-kicker { color: #f06a00; }
+.trade-primary-button {
+  border-radius: 12px;
+  background: linear-gradient(180deg, #ff7a00, #ff6500);
+  box-shadow: 0 18px 42px -24px rgba(255,106,0,.95);
+}
+.trade-secondary-button { border-color: #79aee0; border-radius: 12px; color: #0c5fc3; }
+.trade-hub-hero,
+.trade-detail-hero {
+  background:
+    linear-gradient(90deg, rgba(37,99,235,.055) 1px, transparent 1px),
+    linear-gradient(rgba(37,99,235,.045) 1px, transparent 1px),
+    radial-gradient(circle at 16% 18%, rgba(187,222,255,.74), transparent 30%),
+    linear-gradient(180deg,#fff 0%,#f6fbff 35%,#e9f6ff 100%);
+  background-size: 76px 76px, 76px 76px, auto, auto;
+}
+.trade-hub-hero { padding: 86px 0 82px; text-align: left; }
+.trade-hub-hero h1 { max-width: 1010px; margin-inline: 0; font-weight: 950 !important; }
+.trade-hub-hero h1 span { color: #1674df; }
+.trade-hub-lead { max-width: 790px; margin-inline: 0; color: #294967; font-weight: 700; }
+.trade-hub-actions { justify-content: flex-start; }
+.trade-trial-proof { display: flex; flex-wrap: wrap; gap: 9px 20px; margin-top: 17px; color: #294967; font-size: .76rem; font-weight: 900; }
+.trade-trial-proof span::first-letter { color: #17951f; }
+.trade-hero-pain { margin: 18px 0 0; color: #c92a20; font-size: clamp(1.35rem, 2.7vw, 2rem); font-weight: 950; line-height: 1; letter-spacing: -.035em; }
+.trade-detail-lead { margin-top: 17px; color: #294967; font-weight: 700; }
+.trade-hero-trust { margin-top: 22px; }
+.trade-hero-visual { border-color: #183b66; background: linear-gradient(155deg, #0d2b51, #06152b); }
+.trade-call-bubble.is-caller { background: #1679e8; }
+.trade-call-bubble.is-assistant { border: 1px solid rgba(191,219,254,.28); background: #17304f; }
+.trade-owner-text { border-color: #57d68c; }
+.trade-section-heading h2,
+.trade-detail-copy h1,
+.trade-final-card h2 { font-weight: 950; }
+.trade-use-cases { background: #f7fbff; }
+.trade-use-card,
+.trade-intake-list article,
+.trade-priority-card,
+.trade-question-list p { box-shadow: 0 18px 45px -38px rgba(15,56,99,.45); }
+.trade-flow-section-first { padding: 82px 0; }
+.trade-flow-section-first .trade-kicker,
+.trade-shared-flow .trade-kicker { color: #9edaff; }
+.trade-intake-aside { background: linear-gradient(145deg, #0d315d, #071832); }
+.trade-final-card {
+  color: #fff;
+  border-color: #173f6b;
+  background: linear-gradient(135deg, #0d315d, #071832);
+  box-shadow: 0 30px 70px -48px rgba(7,24,50,.9);
+}
+.trade-final-card .trade-kicker { color: #9edaff; }
+.trade-final-card p:not(.trade-kicker) { color: #cfe2f5; }
+.trade-final-card .trade-secondary-button { border-color: #8fbce7; background: rgba(255,255,255,.08); color: #fff; }
+
 @media (max-width: 1050px) {
   .trade-detail-hero-grid { grid-template-columns: 1fr; }
   .trade-hero-visual { max-width: 700px; }
@@ -496,6 +572,10 @@
   .trade-final-actions { min-width: 0; }
   .trade-footer-grid { align-items: flex-start; flex-direction: column; }
   .trade-footer-links { align-items: flex-start; flex-wrap: wrap; gap: 15px 20px; }
+  .trade-hub-hero { padding-top: 62px; }
+  .trade-hub-hero h1 { font-size: clamp(2.65rem, 13vw, 4rem); }
+  .trade-trial-proof { display: grid; gap: 7px; }
+  .trade-hero-pain { font-size: 1.55rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {

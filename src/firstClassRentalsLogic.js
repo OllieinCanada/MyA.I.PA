@@ -22,7 +22,17 @@ const sensitiveApplicationPatterns = [
   /\bpassport(?: number)?\b/i,
 ];
 
-export function classifyTenantConcern(value = "") {
+const urgentMaintenancePatterns = [
+  /\b(?:burst pipe|major (?:plumbing )?leak|active leak|water pouring|ceiling leak|plumbing backup|sewage backup|toilet overflow)\b/i,
+  /\b(?:no heat|heat is out|furnace (?:is )?(?:out|broken|not working)|boiler (?:is )?(?:out|broken|not working))\b/i,
+  /\b(?:no water|water is off)\b/i,
+  /\b(?:power is out|electrical (?:failure|outage)|outlets? (?:are )?(?:dead|not working))\b/i,
+  /\b(?:stove|oven) (?:is )?(?:broken|not working|out)\b/i,
+  /\b(?:air conditioning|a\/?c) (?:is )?(?:broken|not working|out)\b/i,
+  /\b(?:cannot lock|can't lock|door will not lock|locked out)\b/i,
+];
+
+export function classifyTenantConcern(value = "", { urgentMatter = false } = {}) {
   const text = String(value).trim();
   if (emergencyPatterns.some((pattern) => pattern.test(text))) {
     return {
@@ -33,11 +43,11 @@ export function classifyTenantConcern(value = "") {
     };
   }
 
-  if (/\b(no heat|no water|sewage|cannot lock|locked out|major leak|ceiling leak)\b/i.test(text)) {
+  if (urgentMatter || urgentMaintenancePatterns.some((pattern) => pattern.test(text))) {
     return {
       level: "priority_review",
-      label: "Priority review",
-      instruction: "Prepare the details for Dave and clearly identify the impact without promising a response time.",
+      label: "Urgent matter",
+      instruction: "Mark the request as urgent for Dave's review without promising a response time or emergency dispatch.",
     };
   }
 
@@ -69,7 +79,9 @@ export function getMissingComplaintFields(form = {}) {
 
 export function buildComplaintRequest(form = {}) {
   const missing = getMissingComplaintFields(form);
-  const safety = classifyTenantConcern(form.description);
+  const safety = classifyTenantConcern(`${form.category || ""} ${form.description || ""}`, {
+    urgentMatter: Boolean(form.urgentMatter),
+  });
 
   if (missing.length) {
     return { ok: false, missing, safety };
@@ -101,6 +113,8 @@ export function buildComplaintRequest(form = {}) {
       requestedResolution: String(form.resolution || "Callback requested").trim(),
       callbackTime: String(form.callbackTime).trim(),
       textConsent: Boolean(form.textConsent),
+      urgentMatter: safety.level === "priority_review",
+      urgency: safety.label,
       deliveryStatus: "Demo preview only — not sent",
     },
   };

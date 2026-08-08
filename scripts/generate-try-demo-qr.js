@@ -4,15 +4,15 @@ const QRCode = require("qrcode");
 const { rootPath } = require("./_helpers");
 
 const targetUrl = String(
-  process.env.TRY_DEMO_URL || "https://www.myaipa.ca/#/try-demo?source=qr"
+  process.env.QR_TARGET_URL || "https://www.myaipa.ca/"
 ).trim();
-const publicPng = rootPath("public", "my-ai-pa-try-demo-qr.png");
-const publicSvg = rootPath("public", "my-ai-pa-try-demo-qr.svg");
-const phoneSharePng = rootPath("phone-share", "my-ai-pa-try-demo-qr.png");
+const publicPng = rootPath("public", "my-ai-pa-homepage-qr.png");
+const publicSvg = rootPath("public", "my-ai-pa-homepage-qr.svg");
+const phoneSharePng = rootPath("phone-share", "my-ai-pa-homepage-qr.png");
 
 async function main() {
-  if (!/^https:\/\/www\.myaipa\.ca\/#\/try-demo(?:\?|$)/i.test(targetUrl)) {
-    throw new Error("TRY_DEMO_URL must point to the public My AI PA try-demo route.");
+  if (!/^https:\/\/www\.myaipa\.ca\/$/i.test(targetUrl)) {
+    throw new Error("QR_TARGET_URL must be the public My AI PA homepage: https://www.myaipa.ca/");
   }
 
   fs.mkdirSync(path.dirname(phoneSharePng), { recursive: true });

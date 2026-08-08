@@ -16,9 +16,9 @@ export const tradePages = {
     accentSoft: "#fff7db",
     accentDark: "#9a5b00",
     eyebrow: "AI telephone answering for electrical contractors",
-    headline: "Finish the electrical job. Your calls still get answered.",
+    headline: "Keep working. Every electrical lead still gets answered.",
     intro:
-      "My AI PA gives electrical callers a clear first response, answers owner-approved questions, gathers the scope of the work, and sends a structured callback summary to the electrical business.",
+      "My AI PA answers when you cannot, talks naturally with the caller, collects the electrical job details, and texts you a clear summary for follow-up.",
     ownerValue:
       "See whether the caller needs a repair, installation, commercial visit, or simple message before returning the call.",
     callerNeeds: [
@@ -71,9 +71,9 @@ export const tradePages = {
     accentSoft: "#e7f8ff",
     accentDark: "#075f86",
     eyebrow: "AI telephone answering for plumbing companies",
-    headline: "Stay under the sink. The next plumbing lead still gets handled.",
+    headline: "Stay on the plumbing job. Your next caller still gets help.",
     intro:
-      "My AI PA helps plumbing callers explain the leak, blockage, fixture, hot-water problem, or installation they need, then sends the plumbing company the facts needed for a useful callback.",
+      "My AI PA answers when you cannot, helps the caller explain the plumbing problem, and texts you the facts you need for a useful callback.",
     ownerValue:
       "Know what is leaking, whether water is still flowing, which fixture is affected, and when the caller needs help.",
     callerNeeds: [
@@ -126,9 +126,9 @@ export const tradePages = {
     accentSoft: "#f1ebff",
     accentDark: "#5020a7",
     eyebrow: "AI telephone answering for HVAC companies",
-    headline: "Keep the service call moving—even during peak heating and cooling season.",
+    headline: "Busy season should not send HVAC customers to voicemail.",
     intro:
-      "My AI PA separates repair, maintenance, and replacement inquiries, collects the equipment and comfort details, and gives the HVAC team a concise callback brief.",
+      "My AI PA answers when you cannot, separates repairs from maintenance and replacement calls, and texts your team a clear callback summary.",
     ownerValue:
       "Know whether the call is about no heat, no cooling, maintenance, a replacement estimate, or a commercial comfort problem.",
     callerNeeds: [
@@ -181,9 +181,9 @@ export const tradePages = {
     accentSoft: "#fff0e7",
     accentDark: "#9a3412",
     eyebrow: "AI telephone answering for roofing companies",
-    headline: "Stay safely on the roof. Your callers still reach a helpful first response.",
+    headline: "Stay safely on the roof. Your next roofing lead gets answered.",
     intro:
-      "My AI PA gathers the location and visible symptoms of leaks, storm damage, missing materials, and replacement projects without asking callers to climb onto a roof.",
+      "My AI PA answers when you cannot, gathers the leak or project details, and texts you a clear summary without asking anyone to climb onto a roof.",
     ownerValue:
       "Return the call knowing whether it is an active leak, storm damage, repair request, inspection, or replacement estimate.",
     callerNeeds: [
@@ -236,9 +236,9 @@ export const tradePages = {
     accentSoft: "#eaf9ee",
     accentDark: "#166534",
     eyebrow: "AI telephone answering for general contractors",
-    headline: "Keep managing the project. New renovation inquiries still get qualified.",
+    headline: "Keep the project moving. New construction leads still get answered.",
     intro:
-      "My AI PA helps homeowners, property managers, and commercial contacts explain the project, location, stage, desired timing, and decision process before the contractor returns the call.",
+      "My AI PA answers when you cannot, helps the caller explain the project, and texts you the location, scope, timing, and contact details.",
     ownerValue:
       "Separate serious renovation and construction opportunities from incomplete inquiries and simple vendor messages.",
     callerNeeds: [
