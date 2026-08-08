@@ -136,12 +136,14 @@ async function main() {
       twiml: '<Response><Pause length="28"/><Say>Yes, it is okay to continue. Are you Dean Allison or someone working in his official office?</Say><Pause length="16"/><Say>Goodbye.</Say><Pause length="3"/></Response>',
     },
   ];
-  console.log(JSON.stringify({ mode: apply ? "apply" : "dry-run", calls: callSpecs.map((item) => ({ fromLast4: item.from.slice(-4), toLast4: item.to.slice(-4) })), transcriptsPrinted: false }, null, 2));
+  if (target && !["4508", "7487"].includes(target)) throw new Error("--target must be 4508 or 7487.");
+  const plannedCalls = target ? callSpecs.filter((item) => item.target === target) : callSpecs;
+  console.log(JSON.stringify({ mode: apply ? "apply" : "dry-run", calls: plannedCalls.map((item) => ({ fromLast4: item.from.slice(-4), toLast4: item.to.slice(-4) })), transcriptsPrinted: false }, null, 2));
   if (!apply) return;
   if (confirmation !== confirmationPhrase) throw new Error(`Apply mode requires --confirm=${confirmationPhrase}.`);
   if (!target || !["4508", "7487"].includes(target)) throw new Error("Apply mode requires exactly one --target=4508 or --target=7487 so owned lines are not called simultaneously.");
   const accountSid = await protectedTwilioAccount(phones, tools);
-  const selected = callSpecs.find((item) => item.target === target);
+  const selected = plannedCalls[0];
   const call = await createCall(accountSid, selected);
   console.log(JSON.stringify({ started: true, calls: [call], transcriptsPrinted: false }, null, 2));
 }
