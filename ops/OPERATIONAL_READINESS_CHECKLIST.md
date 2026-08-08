@@ -1,6 +1,6 @@
 # My AI PA Legal and Operational Readiness Checklist
 
-Last updated: July 28, 2026
+Last updated: August 8, 2026
 Status: controlled pilot only; counsel and production evidence remain required
 
 This checklist separates controls implemented in the repository from facts and approvals that only an authorized person, provider dashboard, accountant, or qualified Canadian lawyer can complete.
@@ -30,6 +30,9 @@ This checklist separates controls implemented in the repository from facts and a
 - [x] Dashboard one-time codes, security rate limits, and webhook replay claims have PostgreSQL-backed release-candidate implementations and regression tests.
 - [x] A fail-closed Vapi mapping audit is available with `npm run audit:vapi-business-mappings`.
 - [x] A review-only signup harness verifies health, readiness, admin visibility, and the absence of external provisioning identifiers.
+- [x] A privacy-minimized 60-day Vapi call-playbook audit identifies repeated questions, closing failures, business-name drift, and notification-tool failures without retaining transcripts, recordings, full caller numbers, or raw call identifiers.
+- [x] Private-demo regression suites cover every documented First Class Rentals emergency, urgent, and routine route plus Dean-demo identity, consent, sensitive-data, neutrality, emergency, and official-delivery safeguards.
+- [x] Owner/customer notification routing, suppression, failure isolation, protected destinations, and webhook replay prevention are covered by the backend release gate.
 
 ## Required before a paid external pilot
 
@@ -49,7 +52,6 @@ This checklist separates controls implemented in the repository from facts and a
 - [ ] Complete a privacy incident tabletop exercise and retain its signed report.
 - [x] Complete one privacy access/correction/deletion exercise using synthetic data (`npm run ops:privacy:drill`; local evidence excludes personal information).
 - [ ] Configure Turnstile and test valid, missing, expired, and replayed challenges before public signup promotion.
-- [ ] Install a working Twilio reporting API key pair and verify call, text-message, and phone-number costs without authentication warnings.
 - [ ] Confirm or decommission six Vapi numbers that currently have no provable customer mapping. Do not infer ownership from assistant names.
 - [x] Complete a review-only production signup with no external telephone, agent, customer, subscription, or checkout resource created.
 - [ ] Complete two authorized end-to-end sandbox signups covering both supported paths, dashboard data, texts, cost allocation, consent, and cancellation.
