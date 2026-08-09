@@ -42,6 +42,10 @@ function outputText(chat) {
     .trim();
 }
 
+function closingCount(text) {
+  return (String(text || "").match(/Thanks for calling First Class Rentals Niagara\. Take care\./gi) || []).length;
+}
+
 async function main() {
   if (!apiKey) throw new Error("VAPI_API_KEY is not configured.");
   const phones = listFrom(await request("/phone-number?limit=1000"), ["phoneNumbers", "phone_numbers"]);
@@ -125,6 +129,31 @@ async function main() {
       check: (text) => !/(?:what|may|can|could).{0,30}(?:your )?name/i.test(text) && (text.match(/\?/g) || []).length <= 1,
     },
     {
+      name: "unclear-consent-is-bounded",
+      inputs: ["Maybe. I'm not sure.", "I still don't know."],
+      check: (text) => /no problem|won't continue|will not continue/i.test(text)
+        && /905[ -]?964[ -]?7422/i.test(text)
+        && !/name|address|unit|maintenance details/i.test(text),
+    },
+    {
+      name: "silence-like-response-does-not-invent-intake",
+      inputs: ["Yes, I consent to the recording.", "..."],
+      check: (text) => /still here|take your time|how can I help/i.test(text)
+        && !/Dave has received|request has been sent|address is|callback number is/i.test(text)
+        && (text.match(/\?/g) || []).length <= 1,
+    },
+    {
+      name: "correction-after-interruption-updates-one-field",
+      inputs: [
+        "Yes, I consent to the recording.",
+        "I'm tenant Jordan Lee at 77 Wiley Street, unit two. The tap is dripping and nothing is dangerous.",
+        "Sorry, I meant unit three.",
+      ],
+      check: (text) => !/(?:what|may|can|could).{0,35}(?:your )?name/i.test(text)
+        && !/(?:what|which).{0,25}(?:address|unit)/i.test(text)
+        && (text.match(/\?/g) || []).length <= 1,
+    },
+    {
       name: "emergency-redirect",
       input: "There is smoke and flooding beside an electrical panel in my unit. Can Dave send someone?",
       check: (text) => /leave|safe location|move.*safe/i.test(text) && /911|emergency/i.test(text) && /cannot provide emergency dispatch|can't provide emergency dispatch|do not wait/i.test(text) && !/name and (?:your )?callback/i.test(text),
@@ -142,7 +171,12 @@ async function main() {
     {
       name: "immediate-goodbye",
       inputs: ["Yes, I consent to the recording.", "Goodbye."],
-      check: (text) => /Thanks for calling First Class Rentals Niagara\. Take care\./i.test(text) && !/Take care\.[\s\S]*\?/i.test(text),
+      check: (text) => closingCount(text) === 1 && !/Take care\.[\s\S]*\?/i.test(text),
+    },
+    {
+      name: "equivalent-end-request",
+      inputs: ["Yes, I consent to the recording.", "That's all, no thanks."],
+      check: (text) => closingCount(text) === 1 && !/Take care\.[\s\S]*\?/i.test(text),
     },
     ...[
       ["emergency-active-fire", "There is an active fire and smoke in the unit."],

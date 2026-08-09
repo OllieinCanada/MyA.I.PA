@@ -49,4 +49,29 @@ test("notification and closing safeguards remain in the local candidate", () => 
   assert.match(prompt, /Use tenant_urgent only for the urgent-matter level, never for an emergency redirect/i);
   assert.match(prompt, /Do not say Dave has received, accepted, or acted on it unless the notification tool confirms delivery/i);
   assert.match(prompt, /Thanks for calling First Class Rentals Niagara\. Take care\./i);
+  assert.equal((prompt.match(/Thanks for calling First Class Rentals Niagara\. Take care\./gi) || []).length, 1);
+});
+
+test("interruptions continue from the next missing field without restarting intake", () => {
+  assert.match(prompt, /If the caller interrupts, stop speaking, listen to the new information, store every usable detail/i);
+  assert.match(prompt, /ask only the next still-missing item/i);
+  assert.match(prompt, /Never restart the route or repeat a field the caller already answered/i);
+});
+
+test("unclear answers receive one narrow clarification and are never guessed", () => {
+  assert.match(prompt, /ask one narrow clarification about that detail only/i);
+  assert.match(prompt, /Never guess consent, a phone number, an address, urgency, or a safety fact/i);
+});
+
+test("silence recovery is bounded and cannot create an incomplete request", () => {
+  assert.match(prompt, /I'm still here\. Take your time/i);
+  assert.match(prompt, /repeat only the current question once/i);
+  assert.match(prompt, /After a second unusable response/i);
+  assert.match(prompt, /Do not create or send a request from incomplete information/i);
+});
+
+test("notification failures are reported from tool results rather than assumed", () => {
+  assert.match(prompt, /Never claim a notification succeeded because the tool was called/i);
+  assert.match(prompt, /Use only the returned owner and customer delivery results/i);
+  assert.match(prompt, /If complete is not true, say: "I couldn't confirm that the request was delivered/i);
 });
