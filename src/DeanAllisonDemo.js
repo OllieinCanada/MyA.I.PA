@@ -128,11 +128,6 @@ export default function DeanAllisonDemo() {
   const complete = visibleLines >= scenario.transcript.length;
 
   useEffect(() => {
-    document.title = "Unofficial Constituency Receptionist Demo | My AI PA";
-    window.scrollTo?.(0, 0);
-  }, []);
-
-  useEffect(() => {
     if (!running) return undefined;
     if (visibleLines >= scenario.transcript.length) {
       setRunning(false);
