@@ -5,6 +5,8 @@ const { ensureDir, rootPath } = require("./_helpers");
 
 const outputDir = rootPath("diagnostics", "visual");
 const baseUrlArg = process.argv.find((arg) => arg.startsWith("--url="));
+const routeArg = process.argv.find((arg) => arg.startsWith("--route="))?.slice(8) || "";
+const viewportArg = process.argv.find((arg) => arg.startsWith("--viewport="))?.slice(11) || "";
 const baseUrl = (baseUrlArg ? baseUrlArg.split("=").slice(1).join("=") : process.env.VISUAL_TEST_URL || "http://localhost:3000").replace(/\/+$/, "");
 const routes = [
   { name: "home", path: "/" },
@@ -43,6 +45,16 @@ async function checkServerReachable(url) {
   }
 }
 
+function withTimeout(promise, timeoutMs, label) {
+  let timer;
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs);
+    }),
+  ]).finally(() => clearTimeout(timer));
+}
+
 function slug(value) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
@@ -56,6 +68,7 @@ async function collectPageDiagnostics(page, pageName) {
     const text = (body.innerText || "").toLowerCase();
     const horizontalOverflow = Math.max(body.scrollWidth, html.scrollWidth) - viewportWidth;
     const fixedOrVisibleElements = Array.from(document.querySelectorAll("body *"))
+      .slice(0, 3000)
       .filter((element) => {
         const rect = element.getBoundingClientRect();
         const style = window.getComputedStyle(element);
@@ -234,11 +247,16 @@ async function main() {
     checks: [],
   };
 
-  for (const viewport of viewports) {
-    const context = await browser.newContext({ viewport });
-    const page = await context.newPage();
+  const selectedRoutes = routes.filter((route) => !routeArg || route.name === routeArg);
+  const selectedViewports = viewports.filter((viewport) => !viewportArg || viewport.name === viewportArg);
+  if (!selectedRoutes.length) throw new Error(`Unknown route filter: ${routeArg}`);
+  if (!selectedViewports.length) throw new Error(`Unknown viewport filter: ${viewportArg}`);
 
-    for (const route of routes) {
+  for (const viewport of selectedViewports) {
+    const context = await browser.newContext({ viewport });
+
+    for (const route of selectedRoutes) {
+      const page = await context.newPage();
       const url = `${baseUrl}${route.path}`;
       const screenshotName = `${route.name}-${viewport.name}.png`;
       const screenshotPath = path.join(outputDir, screenshotName);
@@ -247,8 +265,8 @@ async function main() {
       try {
         await page.goto(url, { waitUntil: "domcontentloaded", timeout: 12000 });
         await page.waitForTimeout(route.waitMs || 1200);
-        await page.screenshot({ path: screenshotPath, fullPage: true });
-        const diagnostics = await collectPageDiagnostics(page, route.name);
+        await withTimeout(page.screenshot({ path: screenshotPath, fullPage: false, timeout: 15000 }), 18000, "viewport screenshot");
+        const diagnostics = await withTimeout(collectPageDiagnostics(page, route.name), 15000, "page diagnostics");
         const warnings = [];
 
         if (diagnostics.horizontalOverflow > 2) {
@@ -287,13 +305,15 @@ async function main() {
           warnings: [`Failed to check page: ${error.message}`],
           diagnostics: null,
         });
+      } finally {
+        await withTimeout(page.close(), 5000, "page close").catch(() => {});
       }
     }
 
-    await context.close();
+    await withTimeout(context.close(), 5000, "context close").catch(() => {});
   }
 
-  await browser.close();
+  await withTimeout(browser.close(), 5000, "browser close").catch(() => {});
 
   const reportPath = path.join(outputDir, "report.json");
   fs.writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`);

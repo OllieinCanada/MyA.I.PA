@@ -1,9 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
-import { getApiBaseUrl, normalizeApiBase } from "./config/apiBase";
 import { tradePageOrder, tradePages } from "./tradePageData";
 import { propertyManagementAudience } from "./firstClassRentalsData";
+import { TimsElectricalLiveDemo } from "./TimsElectricalDemo";
 
-const landingApiBase = normalizeApiBase(getApiBaseUrl(process.env.REACT_APP_API_BASE_URL));
 const proofFeatureCards = [
   {
     eyebrow: "Fast onboarding",
@@ -570,82 +569,6 @@ function HeroLogoMark() {
   );
 }
 
-function LiveSignupNetwork({ stats, status }) {
-  const callsAnswered = Number.isInteger(stats?.callsAnswered) ? stats.callsAnswered.toLocaleString("en-CA") : "—";
-  const followUpOpportunities = Number.isInteger(stats?.followUpOpportunities)
-    ? stats.followUpOpportunities.toLocaleString("en-CA")
-    : "—";
-  const inputs = [
-    { label: "Calls", detail: "Answered", icon: "phone" },
-    { label: "Job details", detail: "Captured", icon: "clipboard" },
-    { label: "Follow-up", detail: "Texted", icon: "sms" },
-  ];
-
-  return (
-    <section className="landing-live-network mt-3" aria-label="Live My AI PA signup network">
-      <div className="overflow-hidden rounded-2xl border border-[#bcd7f1] bg-white/85 p-2.5 shadow-[0_18px_42px_-30px_rgba(12,77,160,0.72)] backdrop-blur-sm sm:rounded-[24px] sm:p-5">
-        <div className="flex items-center justify-between gap-2 border-b border-[#dbe9f7] pb-2">
-          <div>
-            <p className="text-[0.56rem] font-black uppercase tracking-[0.14em] text-[#56708d]">Live My AI PA network</p>
-            <p className="mt-0.5 text-[0.72rem] font-black text-[#07142a]">From missed call to booked opportunity</p>
-          </div>
-          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[#e9f9ef] px-1.5 py-0.5 text-[0.52rem] font-black uppercase tracking-[0.08em] text-[#137a36]">
-            <span className="h-1.5 w-1.5 rounded-full bg-[#16a34a] shadow-[0_0_0_3px_rgba(22,163,74,0.13)]" aria-hidden="true" />
-            Live
-          </span>
-        </div>
-
-        <div className="mt-2 grid grid-cols-3 gap-1.5">
-          {inputs.map((item) => (
-            <div key={item.label} className="rounded-lg border border-[#d5e4f3] bg-[#f8fbff] px-1 py-1.5 text-center">
-              <span className="mx-auto grid h-6 w-6 place-items-center rounded-md bg-[#e6f2ff] text-[#176bdb]">
-                <HeroIcon type={item.icon} className="h-3.5 w-3.5" />
-              </span>
-              <p className="mt-1 text-[0.55rem] font-black leading-tight text-[#10233e]">{item.label}</p>
-              <p className="mt-0.5 text-[0.46rem] font-bold uppercase tracking-[0.04em] text-[#5a7088]">{item.detail}</p>
-            </div>
-          ))}
-        </div>
-
-        <div className="relative mx-auto mt-1 grid h-10 w-[74%] place-items-center" aria-hidden="true">
-          <svg viewBox="0 0 260 56" className="absolute inset-0 h-full w-full" fill="none">
-            <path d="M28 2C28 25 67 20 105 37" stroke="#8db9e6" strokeWidth="2" strokeLinecap="round" />
-            <path d="M130 2V32" stroke="#8db9e6" strokeWidth="2" strokeLinecap="round" />
-            <path d="M232 2C232 25 193 20 155 37" stroke="#8db9e6" strokeWidth="2" strokeLinecap="round" />
-            <path d="m126 28 4 5 4-5" stroke="#176bdb" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-          <div className="relative mt-4 inline-flex items-center gap-1.5 rounded-lg border border-[#83b8ed] bg-[linear-gradient(145deg,#0e5db7,#1679e6)] px-2.5 py-1.5 text-white shadow-[0_12px_24px_-16px_rgba(12,77,160,0.9)]">
-            <span className="grid h-6 w-6 place-items-center rounded-md bg-white/15">
-              <HeroIcon type="phone" className="h-3.5 w-3.5" />
-            </span>
-            <span className="text-[0.64rem] font-black tracking-[-0.01em]">My AI PA</span>
-          </div>
-        </div>
-
-        <div className="mx-auto flex h-3 w-8 items-center justify-center text-[#176bdb]" aria-hidden="true">
-          <svg viewBox="0 0 32 20" className="h-3 w-8" fill="none">
-            <path d="M16 1v14m0 0-5-5m5 5 5-5" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </div>
-
-        <div className="grid grid-cols-2 gap-1.5" aria-live="polite">
-          <div className="rounded-lg border border-[#bad7f2] bg-[#edf6ff] px-2.5 py-1.5">
-            <p className="text-[0.48rem] font-black uppercase tracking-[0.08em] text-[#4d6985]">Calls answered</p>
-            <p className="mt-0.5 text-[1.22rem] font-black leading-none tracking-[-0.04em] text-[#0c5fc3]">{callsAnswered}</p>
-          </div>
-          <div className="rounded-lg border border-[#b9e3c6] bg-[#effaf3] px-2.5 py-1.5">
-            <p className="text-[0.48rem] font-black uppercase tracking-[0.08em] text-[#4d6985]">Follow-up opportunities</p>
-            <p className="mt-0.5 text-[1.22rem] font-black leading-none tracking-[-0.04em] text-[#15803d]">{followUpOpportunities}</p>
-          </div>
-        </div>
-        <p className="mt-1 text-center text-[0.48rem] font-bold text-[#627990]">
-          {status === "ready" ? "Updates automatically from completed calls" : status === "error" ? "Live totals reconnecting…" : "Connecting to live call totals…"}
-        </p>
-      </div>
-    </section>
-  );
-}
-
 function HeroIcon({ type, className = "h-6 w-6" }) {
   if (type === "phone") {
     return (
@@ -1209,7 +1132,7 @@ function HeroCallDashboard({ ownerCardRef }) {
   );
 }
 
-function TabletHero({ goToSignup, playDemo }) {
+function ResponsiveProofHero({ goToSignup, playDemo }) {
   return (
     <div className="landing-tablet-hero">
       <section className="landing-tablet-copy">
@@ -1220,7 +1143,7 @@ function TabletHero({ goToSignup, playDemo }) {
 
         <div className="landing-tablet-actions">
           <button type="button" onClick={goToSignup} className="landing-tablet-primary">Start Your Free Trial</button>
-          <button type="button" onClick={playDemo} className="landing-tablet-secondary">Hear Demo</button>
+          <button type="button" onClick={playDemo} className="landing-tablet-secondary">Watch Call Example</button>
         </div>
         <div className="landing-tablet-trust" aria-label="Trial details">
           {['14-Day Free Trial', 'No Credit Card', 'Cancel Anytime'].map((label) => <span key={label}><b aria-hidden="true">✓</b>{label}</span>)}
@@ -1262,8 +1185,7 @@ function MobileHeroCallProof({ className = "" }) {
 
   useEffect(() => {
     const stage = stageRef.current;
-    const supportedViewport = window.matchMedia("(max-width: 1366px)");
-    if (!stage || !supportedViewport.matches) return undefined;
+    if (!stage) return undefined;
 
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
     const updateMotionPreference = () => setPrefersReducedMotion(reducedMotion.matches);
@@ -2536,10 +2458,10 @@ function MobileSideMenu({ open, onClose, onSignup }) {
   };
 
   const productLinks = [
-    ["How it works", "contractor-proof", "phone"],
-    ["Pricing", "pricing", "dollar"],
-    ["Easy setup", "setup", "check"],
-    ["Common questions", "faq", "faq"],
+    ["How it works", "mobile-how-it-works", "phone"],
+    ["Pricing", "mobile-pricing", "dollar"],
+    ["Easy setup", "mobile-easy-setup", "check"],
+    ["Common questions", "mobile-common-questions", "faq"],
   ];
   const audienceLinks = [
     ["Electricians", "#/trades/electricians", "bolt"],
@@ -2947,11 +2869,89 @@ function MobileScrollCallStory({ onHearDemo, audioPlaying }) {
   );
 }
 
+function LandingStoryIntroduction() {
+  const howItWorks = [
+    {
+      icon: "phone",
+      title: "My AI PA answers",
+      text: "Your customer gets a professional answer after three rings.",
+    },
+    {
+      icon: "chat",
+      title: "The right details are collected",
+      text: "Problem, address, urgency, timing, and callback number.",
+    },
+    {
+      icon: "sms",
+      title: "Both sides receive a text",
+      text: "Owner and caller both get clear follow-up texts for an easy callback.",
+    },
+  ];
+
+  return (
+    <div id="landing-story-introduction">
+      <section id="mobile-problem" className="scroll-mt-[88px] border-t border-[#cfe2f5] bg-white">
+        <div className="mx-auto w-full max-w-[1180px] px-4 py-10 sm:px-6 sm:py-14 lg:px-8 lg:py-20">
+          <p className="text-center text-[0.68rem] font-black uppercase tracking-[0.17em] text-[#d83a2f] sm:text-[0.78rem]">01 · Why it matters</p>
+          <h2 className="mx-auto mt-3 max-w-[360px] text-center text-[1.95rem] font-black leading-[1.02] tracking-[-0.045em] text-[#07142a] sm:max-w-[780px] sm:text-[2.8rem] lg:text-[3.45rem]">
+            Voicemail loses jobs. <span className="text-[#1d7df2]">My AI PA</span> catches them.
+          </h2>
+          <p className="mx-auto mt-4 max-w-[960px] text-center text-[0.94rem] font-semibold leading-6 text-[#526277] sm:text-[1.05rem] sm:leading-8">
+            When you cannot get to the phone, the telephone assistant answers calls, talks with your customer, collects the job details, and texts both the business owner and caller for an easy follow-up.
+          </p>
+
+          <div className="mx-auto mt-7 grid max-w-[980px] gap-3 min-[520px]:grid-cols-2 sm:mt-9 sm:gap-5">
+            <article className="rounded-[22px] border border-[#f2b8b2] bg-[#fff8f7] p-5 shadow-[0_22px_54px_-44px_rgba(184,42,32,0.5)] sm:p-6">
+              <div className="flex items-center justify-between gap-3">
+                <span className="rounded-full bg-[#ffe5e2] px-3 py-1 text-[0.65rem] font-black uppercase tracking-[0.13em] text-[#b82920]">Without help</span>
+                <span className="grid h-10 w-10 place-items-center rounded-full bg-[#c92a20] text-white" aria-hidden="true"><HeroIcon type="phone" className="h-5 w-5 rotate-[135deg]" /></span>
+              </div>
+              <h3 className="mt-4 text-[1.18rem] font-black text-[#07142a]">Phone rings unanswered</h3>
+              <p className="mt-2 text-[0.9rem] font-semibold leading-6 text-[#5d6572]">Three rings. No answer. The customer moves on.</p>
+            </article>
+
+            <article className="rounded-[22px] border border-[#9ed7bd] bg-[#f4fff8] p-5 shadow-[0_22px_54px_-44px_rgba(19,118,60,0.45)] sm:p-6">
+              <div className="flex items-center justify-between gap-3">
+                <span className="rounded-full bg-[#dcf8e7] px-3 py-1 text-[0.65rem] font-black uppercase tracking-[0.13em] text-[#13763c]">With My AI PA</span>
+                <span className="grid h-10 w-10 place-items-center rounded-full bg-[#168349] text-white" aria-hidden="true"><HeroIcon type="check" className="h-5 w-5" /></span>
+              </div>
+              <h3 className="mt-4 text-[1.18rem] font-black text-[#07142a]">Assistant answers live</h3>
+              <p className="mt-2 text-[0.9rem] font-semibold leading-6 text-[#496455]">Instantly connects with customer. Asks why they called and answers FAQ questions.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="mobile-how-it-works" className="scroll-mt-[76px] border-t border-[#cfe2f5] bg-[linear-gradient(180deg,#f4f9ff_0%,#eaf4ff_100%)]">
+        <div className="mx-auto w-full max-w-[1180px] px-4 py-10 sm:px-6 sm:py-14 lg:px-8 lg:py-20">
+          <p className="text-center text-[0.68rem] font-black uppercase tracking-[0.17em] text-[#176bff] sm:text-[0.78rem]">02 · How it works</p>
+          <h2 className="mx-auto mt-3 max-w-[355px] text-center text-[1.95rem] font-black leading-[1.02] tracking-[-0.045em] text-[#07142a] sm:max-w-[760px] sm:text-[2.8rem] lg:text-[3.4rem]">
+            Three simple steps. Your current number stays yours.
+          </h2>
+          <div className="relative mx-auto mt-7 grid max-w-[1040px] gap-3 sm:mt-9 sm:grid-cols-3 sm:gap-5">
+            {howItWorks.map((item, index) => (
+              <article key={item.title} className="relative grid grid-cols-[48px_minmax(0,1fr)] gap-3 rounded-[20px] border border-[#bfd8ef] bg-white p-4 shadow-[0_22px_52px_-42px_rgba(12,77,160,0.45)] sm:block sm:min-h-[230px] sm:p-6">
+                <span className="grid h-12 w-12 place-items-center rounded-[14px] bg-[#0c5fc3] text-white shadow-[0_14px_28px_-18px_rgba(12,95,195,0.85)]" aria-hidden="true"><HeroIcon type={item.icon} className="h-6 w-6" /></span>
+                <div>
+                  <p className="text-[0.62rem] font-black uppercase tracking-[0.14em] text-[#176bff] sm:mt-7">Step {index + 1}</p>
+                  <h3 className="mt-1 text-[1rem] font-black leading-5 text-[#07142a] sm:text-[1.14rem]">{item.title}</h3>
+                  <p className="mt-1.5 text-[0.84rem] font-semibold leading-5 text-[#526277] sm:mt-2 sm:text-[0.9rem] sm:leading-6">{item.text}</p>
+                </div>
+              </article>
+            ))}
+          </div>
+          <p className="mx-auto mt-5 max-w-[760px] rounded-[14px] border border-[#b8d9f6] bg-white/80 px-4 py-3 text-center text-[0.82rem] font-black leading-5 text-[#17466f]">
+            Start with unanswered or after-hours calls. Your staff and existing phone workflow stay in place.
+          </p>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function LandingChapters({
   goToSignup,
   playDemo,
-  signupNetworkStats,
-  signupNetworkStatus,
   openFaq,
   setOpenFaq,
 }) {
@@ -2977,11 +2977,11 @@ function LandingChapters({
 
   return (
     <div id="landing-chapters">
-      <section id="mobile-value" className="border-t border-[#cfe2f5] bg-white">
+      <section id="mobile-value" className="scroll-mt-[88px] border-t border-[#cfe2f5] bg-white">
         <div className="mx-auto w-full max-w-[1180px] px-4 py-10 sm:px-6 sm:py-14 lg:px-8 lg:py-20">
-          <p className="text-center text-[0.68rem] font-black uppercase tracking-[0.17em] text-[#f06a00] sm:text-[0.78rem]">03 · What you get</p>
+          <p className="text-center text-[0.68rem] font-black uppercase tracking-[0.17em] text-[#f06a00] sm:text-[0.78rem]">04 · What you receive</p>
           <h2 className="mx-auto mt-3 max-w-[355px] text-center text-[1.8rem] font-black leading-[1.02] tracking-[-0.045em] text-[#07142a] sm:max-w-[780px] sm:text-[2.7rem] lg:text-[3.35rem]">
-            For about the price of a cup of coffee per day you get:
+            A professional answer and a job summary ready to use.
           </h2>
           <div className="mt-6 grid gap-3 sm:mt-9 sm:grid-cols-2">
             {mobileBenefits.map((item) => (
@@ -2996,34 +2996,30 @@ function LandingChapters({
         </div>
       </section>
 
-      <section id="mobile-proof" className="border-t border-[#cfe2f5] bg-[linear-gradient(180deg,#eef7ff_0%,#e7f3ff_100%)]">
+      <section id="mobile-safeguards" className="scroll-mt-[88px] border-t border-[#cfe2f5] bg-[linear-gradient(180deg,#eef7ff_0%,#e7f3ff_100%)]">
         <div className="mx-auto w-full max-w-[1180px] px-4 py-10 sm:px-6 sm:py-14 lg:px-8 lg:py-20">
-          <p className="text-center text-[0.68rem] font-black uppercase tracking-[0.17em] text-[#176bff] sm:text-[0.78rem]">04 · Proof</p>
-          <h2 className="mx-auto mt-3 max-w-[350px] text-center text-[1.9rem] font-black leading-[1.02] tracking-[-0.045em] text-[#07142a] sm:max-w-[760px] sm:text-[2.8rem] lg:text-[3.45rem]">See the work moving, not another sales claim.</h2>
-          <div className="mt-6 grid gap-4 sm:mt-9 lg:grid-cols-[1.12fr_0.88fr] lg:items-stretch">
-          <LiveSignupNetwork stats={signupNetworkStats} status={signupNetworkStatus} />
-          <article className="rounded-[22px] border border-[#24496d] bg-[#071d38] p-5 text-white shadow-[0_24px_58px_-42px_rgba(7,29,56,0.9)] sm:p-7">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-[0.66rem] font-black uppercase tracking-[0.15em] text-[#81d8ff]">Example call outcome</p>
-              <span className="rounded-full bg-[#0e6b3b] px-3 py-1 text-[0.62rem] font-black uppercase tracking-[0.1em] text-[#b7f7d0]">Ready</span>
-            </div>
-            <p className="mt-4 text-[1.12rem] font-black leading-6">Tim’s Electrical · hot tub installation</p>
-            <div className="mt-4 grid gap-2.5">
-              {["Customer’s request collected", "Owner receives the job details", "Customer receives confirmation"].map((item) => (
-                <p key={item} className="flex items-center gap-2.5 rounded-[12px] border border-white/10 bg-white/[0.07] px-3.5 py-3 text-[0.84rem] font-bold">
-                  <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[#19a45b] text-[0.72rem] font-black" aria-hidden="true">✓</span>
-                  {item}
-                </p>
-              ))}
-            </div>
-          </article>
+          <p className="text-center text-[0.68rem] font-black uppercase tracking-[0.17em] text-[#176bff] sm:text-[0.78rem]">05 · Built around your business</p>
+          <h2 className="mx-auto mt-3 max-w-[355px] text-center text-[1.9rem] font-black leading-[1.02] tracking-[-0.045em] text-[#07142a] sm:max-w-[780px] sm:text-[2.8rem] lg:text-[3.4rem]">Extra coverage without replacing the way you work.</h2>
+          <div className="mt-7 grid gap-3 min-[480px]:grid-cols-2 sm:mt-9 lg:grid-cols-4">
+            {[
+              ["phone", "Keep your business number", "Forward only the calls you want My AI PA to answer."],
+              ["check", "Start with overflow", "Use it after hours or when your team cannot pick up."],
+              ["chat", "Control the answers", "Your services, service area and common answers shape the receptionist."],
+              ["clipboard", "Clear, service-focused texts", "Owner summaries and customer confirmations support a proper follow-up."],
+            ].map(([icon, title, body]) => (
+              <article key={title} className="rounded-[18px] border border-[#c3dcef] bg-white p-5 shadow-[0_20px_48px_-40px_rgba(12,77,160,0.5)]">
+                <span className="grid h-11 w-11 place-items-center rounded-[13px] bg-[#e8f3ff] text-[#0c5fc3]" aria-hidden="true"><HeroIcon type={icon} className="h-5 w-5" /></span>
+                <h3 className="mt-4 text-[1rem] font-black leading-5 text-[#07142a]">{title}</h3>
+                <p className="mt-2 text-[0.84rem] font-semibold leading-6 text-[#526277]">{body}</p>
+              </article>
+            ))}
           </div>
         </div>
       </section>
 
-      <section id="mobile-pricing" className="border-t border-[#cfe2f5] bg-white">
+      <section id="mobile-pricing" className="scroll-mt-[88px] border-t border-[#cfe2f5] bg-white">
         <div className="mx-auto w-full max-w-[1180px] px-4 py-10 sm:px-6 sm:py-14 lg:px-8 lg:py-20">
-          <p className="text-center text-[0.68rem] font-black uppercase tracking-[0.17em] text-[#f06a00] sm:text-[0.78rem]">05 · Simple pricing</p>
+          <p className="text-center text-[0.68rem] font-black uppercase tracking-[0.17em] text-[#f06a00] sm:text-[0.78rem]">06 · Trial and pricing</p>
           <h2 className="mx-auto mt-3 max-w-[345px] text-center text-[1.9rem] font-black leading-[1.02] tracking-[-0.045em] text-[#07142a] sm:max-w-[760px] sm:text-[2.8rem] lg:text-[3.4rem]">One plan. Clear minutes. No long contract.</h2>
           <article className="mx-auto mt-6 max-w-[820px] overflow-hidden rounded-[26px] border border-[#bfd9f2] bg-[linear-gradient(145deg,#ffffff_0%,#f4f9ff_58%,#fff5e8_100%)] shadow-[0_28px_64px_-44px_rgba(12,77,160,0.55)] sm:mt-9">
             <div className="flex items-end justify-between gap-4 border-b border-[#d6e4f1] px-5 py-5">
@@ -3053,11 +3049,11 @@ function LandingChapters({
         </div>
       </section>
 
-      <section id="mobile-setup-questions" className="border-t border-[#cfe2f5] bg-[linear-gradient(180deg,#f6fbff_0%,#edf6ff_100%)]">
+      <section id="mobile-setup-questions" className="scroll-mt-[88px] border-t border-[#cfe2f5] bg-[linear-gradient(180deg,#f6fbff_0%,#edf6ff_100%)]">
         <div className="mx-auto w-full max-w-[1180px] px-4 py-10 sm:px-6 sm:py-14 lg:px-8 lg:py-20">
-          <p className="text-center text-[0.68rem] font-black uppercase tracking-[0.17em] text-[#176bff] sm:text-[0.78rem]">06 · Setup + questions</p>
+          <p className="text-center text-[0.68rem] font-black uppercase tracking-[0.17em] text-[#176bff] sm:text-[0.78rem]">07 · Setup and common questions</p>
           <h2 className="mx-auto mt-3 max-w-[350px] text-center text-[1.9rem] font-black leading-[1.02] tracking-[-0.045em] text-[#07142a] sm:max-w-[800px] sm:text-[2.8rem] lg:text-[3.4rem]">Try it before a single customer call is forwarded.</h2>
-          <div className="mt-6 grid gap-3 sm:mt-9 sm:grid-cols-3">
+          <div id="mobile-easy-setup" className="mt-6 grid scroll-mt-[88px] gap-3 sm:mt-9 sm:grid-cols-3">
             {["Add your business and common answers", "Hear a test call in your browser", "Forward unanswered calls when you are ready"].map((item, index) => (
               <article key={item} className="grid grid-cols-[42px_minmax(0,1fr)] items-center gap-3 rounded-[16px] border border-[#cce0f4] bg-white px-4 py-4 shadow-[0_16px_38px_-34px_rgba(15,23,42,0.35)]">
                 <span className="grid h-[42px] w-[42px] place-items-center rounded-full bg-[#176bff] text-[0.92rem] font-black text-white">{index + 1}</span>
@@ -3073,7 +3069,7 @@ function LandingChapters({
             </div>
           </details>
 
-          <div className="mt-7">
+          <div id="mobile-common-questions" className="mt-7 scroll-mt-[88px]">
             <p className="text-[0.68rem] font-black uppercase tracking-[0.15em] text-[#64748b]">Quick answers</p>
             <div className="mt-3 grid gap-2.5 sm:grid-cols-2">
               {mobileFaqIndexes.map((faqIndex) => {
@@ -3081,11 +3077,18 @@ function LandingChapters({
                 const isOpen = openFaq === faqIndex;
                 return (
                   <article key={item.q} className="overflow-hidden rounded-[14px] border border-[#cfe1f4] bg-white">
-                    <button type="button" onClick={() => setOpenFaq(isOpen ? -1 : faqIndex)} className="grid w-full grid-cols-[1fr_32px] items-center gap-3 px-4 py-4 text-left">
+                    <button
+                      type="button"
+                      id={`mobile-faq-button-${faqIndex}`}
+                      aria-expanded={isOpen}
+                      aria-controls={`mobile-faq-panel-${faqIndex}`}
+                      onClick={() => setOpenFaq(isOpen ? -1 : faqIndex)}
+                      className="grid w-full grid-cols-[1fr_32px] items-center gap-3 px-4 py-4 text-left"
+                    >
                       <span className="text-[0.92rem] font-black leading-5 text-[#10233e]">{item.q}</span>
                       <span className="grid h-8 w-8 place-items-center rounded-full bg-[#edf5ff] text-[1.2rem] font-black text-[#176bff]">{isOpen ? "−" : "+"}</span>
                     </button>
-                    {isOpen ? <p className="border-t border-[#d8e8f6] bg-[#f8fbff] px-4 py-4 text-[0.88rem] font-semibold leading-6 text-[#42566f]">{item.a}</p> : null}
+                    {isOpen ? <p id={`mobile-faq-panel-${faqIndex}`} role="region" aria-labelledby={`mobile-faq-button-${faqIndex}`} className="border-t border-[#d8e8f6] bg-[#f8fbff] px-4 py-4 text-[0.88rem] font-semibold leading-6 text-[#42566f]">{item.a}</p> : null}
                   </article>
                 );
               })}
@@ -3094,9 +3097,9 @@ function LandingChapters({
         </div>
       </section>
 
-      <section id="mobile-final-decision" className="border-t border-[#18365d] bg-[#07142a]">
+      <section id="mobile-final-decision" className="scroll-mt-[88px] border-t border-[#18365d] bg-[#07142a]">
         <div className="mx-auto w-full max-w-[1180px] px-4 py-11 text-white sm:px-6 sm:py-16 lg:px-8 lg:py-20">
-          <p className="text-center text-[0.68rem] font-black uppercase tracking-[0.17em] text-[#81d8ff] sm:text-[0.78rem]">07 · Your decision</p>
+          <p className="text-center text-[0.68rem] font-black uppercase tracking-[0.17em] text-[#81d8ff] sm:text-[0.78rem]">08 · Your decision</p>
           <h2 className="mx-auto mt-3 max-w-[355px] text-center text-[2rem] font-black leading-[1.02] tracking-[-0.045em] sm:max-w-[840px] sm:text-[3rem] lg:text-[3.65rem]">Stop letting missed calls decide where the next job goes.</h2>
           <div className="mt-6 grid gap-2.5 sm:mt-9 sm:grid-cols-3">
             {[
@@ -3115,7 +3118,7 @@ function LandingChapters({
           </div>
           <div className="mx-auto mt-6 grid max-w-[760px] gap-3 sm:grid-cols-2">
             <button type="button" onClick={goToSignup} className="inline-flex min-h-[58px] items-center justify-center rounded-[15px] bg-[linear-gradient(180deg,#ff7a00,#ff6500)] px-5 text-[1rem] font-black text-white shadow-[0_18px_36px_-22px_rgba(255,106,0,0.95)]">Start Your Free Trial</button>
-            <button type="button" onClick={playDemo} className="inline-flex min-h-[54px] items-center justify-center rounded-[15px] border border-[#6cb8ff] bg-[#0d3159] px-5 text-[0.96rem] font-black text-white">Hear the Live Demo</button>
+            <button type="button" onClick={playDemo} className="inline-flex min-h-[54px] items-center justify-center rounded-[15px] border border-[#6cb8ff] bg-[#0d3159] px-5 text-[0.96rem] font-black text-white">Watch Call Example</button>
           </div>
           <div className="mt-5 flex items-center justify-center gap-5 text-[0.75rem] font-bold text-[#b9cee5]">
             <a href="/privacy.html" className="underline decoration-white/35 underline-offset-4">Privacy</a>
@@ -3131,6 +3134,7 @@ function LandingChapters({
 
 function LandingPage() {
   const demoRef = useRef(null);
+  const landingDemoRef = useRef(null);
   const pricingRef = useRef(null);
   const faqRef = useRef(null);
   const audioRef = useRef(null);
@@ -3143,9 +3147,11 @@ function LandingPage() {
   const [openFaq, setOpenFaq] = useState(-1);
   const [showHeader, setShowHeader] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [signupNetworkStats, setSignupNetworkStats] = useState(null);
-  const [signupNetworkStatus, setSignupNetworkStatus] = useState("loading");
   const headerHideTimerRef = useRef(null);
+
+  useEffect(() => {
+    document.title = "My AI PA | AI Telephone Answering Assistant";
+  }, []);
 
   useEffect(() => {
     if (!mobileMenuOpen) return undefined;
@@ -3170,37 +3176,6 @@ function LandingPage() {
     return () => window.clearTimeout(timer);
   }, []);
 
-  useEffect(() => {
-    if (typeof window === "undefined" || typeof window.fetch !== "function") return undefined;
-    let active = true;
-
-    const loadSignupNetworkStats = async () => {
-      try {
-        const response = await window.fetch(`${landingApiBase}/api/public/signup-network-stats`, {
-          headers: { Accept: "application/json" },
-        });
-        if (!response.ok) throw new Error(`Signup network request failed with ${response.status}`);
-        const payload = await response.json();
-        if (!Number.isInteger(payload?.callsAnswered) || !Number.isInteger(payload?.followUpOpportunities)) {
-          throw new Error("Signup network response was incomplete");
-        }
-        if (active) {
-          setSignupNetworkStats(payload);
-          setSignupNetworkStatus("ready");
-        }
-      } catch (_error) {
-        if (active) setSignupNetworkStatus("error");
-      }
-    };
-
-    loadSignupNetworkStats();
-    const intervalId = window.setInterval(loadSignupNetworkStats, 30000);
-    return () => {
-      active = false;
-      window.clearInterval(intervalId);
-    };
-  }, []);
-
   const activeTranscript =
     transcriptMoments.find((item) => audioTime >= item.start && audioTime < item.end) || transcriptMoments[transcriptMoments.length - 1];
 
@@ -3214,15 +3189,10 @@ function LandingPage() {
 
   const playDemo = async () => {
     const audio = audioRef.current;
-    if (!audio) return;
-    scrollToRef(demoRef);
-    try {
-      setAudioError("");
-      await audio.play();
-      setAudioPlaying(true);
-    } catch (_err) {
-      setAudioError("The demo audio could not start. Please tap play again or refresh the page.");
-    }
+    audio?.pause();
+    setAudioPlaying(false);
+    setAudioError("");
+    scrollToRef(landingDemoRef);
   };
 
   const toggleAudio = async () => {
@@ -3300,8 +3270,9 @@ function LandingPage() {
       </button>
       <MobileSideMenu open={mobileMenuOpen} onClose={() => setMobileMenuOpen(false)} onSignup={goToSignup} />
       <header
+        style={{ backgroundColor: "rgba(255, 255, 255, 0.95)" }}
         className={
-          "fixed inset-x-0 top-0 z-40 border-b border-[#d7e7fb] bg-white/92 backdrop-blur transition-all duration-300 " +
+          "fixed inset-x-0 top-0 z-40 hidden border-b border-[#d7e7fb] backdrop-blur transition-all duration-300 sm:block " +
           (showHeader ? "translate-y-0 opacity-100" : "pointer-events-none -translate-y-full opacity-0")
         }
       >
@@ -7799,7 +7770,8 @@ function LandingPage() {
             display: none !important;
           }
           @media (min-width: 640px) and (max-width: 1024px),
-                 (min-width: 1025px) and (max-width: 1366px) and (pointer: coarse) {
+                 (min-width: 1025px) and (max-width: 1366px) and (pointer: coarse),
+                 (min-width: 1025px) and (pointer: fine) {
             .landing-hero-shell {
               max-width: 74rem !important;
               min-height: 100svh !important;
@@ -8112,7 +8084,8 @@ function LandingPage() {
             }
           }
           @media (min-width: 900px) and (max-width: 1024px) and (min-aspect-ratio: 4/3),
-                 (min-width: 1025px) and (max-width: 1366px) and (min-aspect-ratio: 4/3) and (pointer: coarse) {
+                 (min-width: 1025px) and (max-width: 1366px) and (min-aspect-ratio: 4/3) and (pointer: coarse),
+                 (min-width: 1025px) and (pointer: fine) {
             .landing-hero-shell {
               display: grid !important;
               align-content: center !important;
@@ -8172,6 +8145,59 @@ function LandingPage() {
             }
             .landing-tablet-call-proof {
               height: 35.625rem !important;
+            }
+          }
+          @media (min-width: 1025px) and (pointer: fine) {
+            .landing-hero-shell {
+              width: min(100%, 85rem) !important;
+              max-width: 85rem !important;
+              min-height: calc(100vh - 76px) !important;
+              padding: 1rem 2.5rem 1.35rem !important;
+            }
+            .landing-hero-shell > nav {
+              display: grid !important;
+              grid-template-columns: auto 1fr !important;
+            }
+            .landing-hero-shell > nav > div:nth-child(3) {
+              justify-self: end !important;
+            }
+            .landing-hero-shell > nav > div:last-child {
+              display: none !important;
+            }
+            .landing-hero-grid {
+              display: grid !important;
+              align-items: center !important;
+              padding: 0.75rem 0 0 !important;
+            }
+            .landing-tablet-hero,
+            .landing-hero-grid > .landing-tablet-hero:first-child {
+              grid-template-columns: minmax(22rem, 0.76fr) minmax(32rem, 1.24fr) !important;
+              gap: clamp(2rem, 4vw, 4.5rem) !important;
+            }
+            .landing-tablet-copy {
+              align-self: center;
+            }
+            .landing-tablet-eyebrow {
+              width: min(100%, 21rem);
+              min-height: 5.8rem;
+              padding: 0.95rem 2.25rem;
+              font-size: clamp(1.65rem, 2vw, 2rem);
+            }
+            .landing-tablet-title {
+              font-size: clamp(3.45rem, 5vw, 4.8rem);
+            }
+            .landing-tablet-pain {
+              font-size: clamp(1.55rem, 2.3vw, 2rem);
+            }
+            .landing-tablet-actions {
+              margin-top: 1.45rem;
+            }
+            .landing-tablet-call-proof {
+              height: clamp(31rem, calc(100vh - 180px), 35.625rem) !important;
+            }
+            .landing-tablet-flip-hint {
+              margin-top: 0.55rem;
+              font-size: 0.72rem;
             }
           }
           @media (max-width: 370px) {
@@ -8235,7 +8261,7 @@ function LandingPage() {
           </nav>
 
           <div className="landing-hero-grid relative grid flex-1 gap-10 py-5 lg:grid-cols-[minmax(380px,0.7fr)_minmax(620px,1.3fr)] lg:items-center xl:grid-cols-[minmax(430px,0.72fr)_minmax(680px,1.28fr)] xl:gap-16 2xl:gap-16 2xl:py-5">
-            <TabletHero goToSignup={goToSignup} playDemo={playDemo} />
+            <ResponsiveProofHero goToSignup={goToSignup} playDemo={playDemo} />
             <div className="landing-hero-copy-column relative z-10 min-w-0 max-w-[500px] xl:max-w-[520px] lg:-translate-y-1">
               <div className="landing-mobile-proof-first sm:hidden">
                 <h1 className="landing-mobile-proof-title landing-stripe-headline font-black tracking-[-0.055em] text-[#07142a]">
@@ -8253,7 +8279,7 @@ function LandingPage() {
                     onClick={playDemo}
                     className="landing-mobile-proof-secondary inline-flex w-full items-center justify-center rounded-2xl border border-[#5f9fd9] bg-white/90 px-3 font-black text-[#0c5fc3]"
                   >
-                    Hear Demo
+                    Watch Call Example
                   </button>
                   <button
                     type="button"
@@ -8318,8 +8344,8 @@ function LandingPage() {
                     onClick={playDemo}
                     className="inline-flex min-h-[46px] items-center justify-center rounded-xl border border-[#79aee0] bg-white/80 px-5 text-[0.86rem] font-black text-[#0c5fc3] transition hover:-translate-y-0.5 hover:bg-white"
                   >
-                    <span className="sm:hidden">Hear Live Demo</span>
-                    <span className="hidden sm:inline">Hear the Live Demo</span>
+                    <span className="sm:hidden">Watch Example</span>
+                    <span className="hidden sm:inline">Watch Call Example</span>
                   </button>
                 </div>
                 <div className="landing-hero-trust mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-[0.68rem] font-black text-[#294967]">
@@ -8353,17 +8379,15 @@ function LandingPage() {
         </div>
       </section>
 
-      <section id="mobile-scroll-call-story" className="bg-[linear-gradient(180deg,#f7fbff_0%,#edf6ff_100%)]">
-        <div className="mx-auto w-full max-w-[1260px] px-4 py-10 sm:px-6 sm:py-14 lg:px-8 lg:py-20">
-          <MobileScrollCallStory onHearDemo={toggleAudio} audioPlaying={audioPlaying} />
-        </div>
+      <LandingStoryIntroduction />
+
+      <section id="mobile-scroll-call-story" ref={landingDemoRef} className="fcr-demo tims-demo tims-demo-landing scroll-mt-[76px]">
+        <TimsElectricalLiveDemo embedded onSignup={goToSignup} />
       </section>
 
       <LandingChapters
         goToSignup={goToSignup}
         playDemo={playDemo}
-        signupNetworkStats={signupNetworkStats}
-        signupNetworkStatus={signupNetworkStatus}
         openFaq={openFaq}
         setOpenFaq={setOpenFaq}
       />
