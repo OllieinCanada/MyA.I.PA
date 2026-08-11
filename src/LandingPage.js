@@ -23,13 +23,13 @@ const heroCallTranscript = [
     time: "6:42 PM",
     speaker: "Caller",
     accent: "bg-[#9fb4cf]",
-    text: "Hi, I need someone to wire up my hot tub. I didn't expect anyone to pick up since I'm calling after hours.",
+    text: "Hi, I'm putting in a hot tub and need it wired. I didn't expect anyone to pick up after hours.",
   },
   {
     time: "6:42 PM",
     speaker: "My AI PA",
     accent: "bg-[#66e7b4]",
-    text: "At Tim's Electrical we're always here to help. Got it. I'll forward the details to our service team.",
+    text: "Absolutely—I can collect that for the team. When are you hoping to have the work done?",
   },
 ];
 
@@ -948,7 +948,7 @@ function HeroSummaryStack() {
               <p className="whitespace-nowrap text-[0.82rem] font-black uppercase tracking-[0.06em] text-[#6d28d9]">Caller cell phone summary</p>
             </div>
             <div className="mt-3 max-w-[94%] rounded-[20px] bg-[#e5e7eb] px-4 py-2.5 text-[1rem] font-semibold leading-[1.32rem] text-[#111827]">
-              Thanks for calling Tim&apos;s Electrical. We got your request and will follow up shortly.
+              Thanks for calling Tim&apos;s Electrical. We received your request. The team will follow up to discuss the details and next steps. Have a great day!
             </div>
           </section>
 
@@ -1023,10 +1023,11 @@ function HeroCallDashboard({ ownerCardRef }) {
                   </span>
                 </div>
                 <div className="landing-imessage-bubble landing-imessage-bubble-received mt-2 rounded-[16px_16px_16px_5px] bg-[#e9e9eb] px-3 py-2.5 font-bold leading-[1.2] text-[#111111]">
-                  <p>New service request received.</p>
+                  <p>New installation request received.</p>
                   <p>Brian Smith · 905-555-1234</p>
-                  <p>Hot tub installation · 23 Robb St., Hamilton</p>
-                  <p>Callback: After 5 PM</p>
+                  <p>Hot tub wiring · 23 Robb St., Hamilton</p>
+                  <p>Preferred start: Next week</p>
+                  <p>Best callback time: After 5 PM</p>
                 </div>
               </div>
             </div>
@@ -1065,7 +1066,7 @@ function HeroCallDashboard({ ownerCardRef }) {
               <p className="landing-conversation-opening-label text-[0.92rem] font-black uppercase tracking-[0.06em] text-white/38">AI Assistant</p>
               <div className="landing-conversation-opening mt-2.5 max-w-[78%] rounded-[16px] bg-white/10 px-5 py-3 text-[1.12rem] font-bold leading-[1.26] text-white/92">
                 <span className="block">Hi, thanks for calling Tim&apos;s Electrical.</span>
-                <span className="mt-2 block">Are you calling about a new installation, repair, or maintenance?</span>
+                <span className="mt-2 block">How can I help you today?</span>
               </div>
               <p className="landing-conversation-opening-time landing-conversation-time mt-1 text-right text-[0.74rem] font-bold text-white/35">10:32 AM</p>
 
@@ -1074,25 +1075,19 @@ function HeroCallDashboard({ ownerCardRef }) {
                 <span className="landing-service-badge shrink-0 whitespace-nowrap rounded-full border border-[#78b7ff]/75 bg-[#082c5a] px-2.5 py-1 text-[0.68rem] font-black uppercase tracking-[0.06em] text-[#b9dcff] shadow-[0_8px_22px_-14px_rgba(120,183,255,0.95)]">
                   (New Installation)
                 </span>
-                <span className="min-w-0">I need someone to wire up my hot tub.</span>
+                <span className="min-w-0">I&apos;m putting in a hot tub and need it wired.</span>
               </div>
               <p className="landing-conversation-time mt-1 text-right text-[0.74rem] font-bold text-white/35">10:32 AM</p>
 
               <p className="mt-3 text-[0.92rem] font-black uppercase tracking-[0.06em] text-white/38">AI Assistant</p>
               <div className="landing-conversation-long-bubble mt-2.5 max-w-[84%] rounded-[16px] bg-white/10 px-5 py-3 text-[1.02rem] font-bold leading-[1.18] text-white/92">
-                <span className="block">Sure, we can help you with that. I just need a few details:</span>
-                <ul className="mt-1.5 grid gap-y-0.5">
-                  <li className="flex gap-1"><span aria-hidden="true">-</span><span>Your name and callback number</span></li>
-                  <li className="flex gap-1"><span aria-hidden="true">-</span><span>Job address and city</span></li>
-                  <li className="flex gap-1"><span aria-hidden="true">-</span><span>When you need the work done</span></li>
-                  <li className="flex gap-1"><span aria-hidden="true">-</span><span>Best time to reach you</span></li>
-                </ul>
+                <span className="block">Absolutely—I can collect that for the team. When are you hoping to have the work done?</span>
               </div>
               <p className="landing-conversation-time mt-1 text-right text-[0.74rem] font-bold text-white/35">10:32 AM</p>
 
               <p className="mt-3 text-[0.92rem] font-black uppercase tracking-[0.06em] text-[#78b7ff]">Caller</p>
               <div className="landing-conversation-caller-detail ml-auto mt-2.5 max-w-[78%] rounded-[20px] bg-[#0b376d] px-5 py-3 text-[1rem] font-bold leading-[1.18] text-white/96 shadow-[0_18px_42px_-30px_rgba(37,99,235,0.95)]">
-                My name is Brian Smith. The address is 23 Robb Street, Hamilton. I&apos;d like to start right away. Afternoons or after 5 PM is the best time to reach me at this number.
+                Sometime next week. My name is Brian Smith, the address is 23 Robb Street in Hamilton, and after 5 PM is the best time to reach me at this number.
               </div>
               <p className="landing-conversation-time mt-1 text-right text-[0.74rem] font-bold text-white/35">10:33 AM</p>
             </div>
@@ -1118,7 +1113,7 @@ function HeroCallDashboard({ ownerCardRef }) {
                       </span>
                     </div>
                     <div className="landing-imessage-bubble landing-imessage-bubble-sent ml-auto mt-2 rounded-[16px_16px_5px_16px] bg-[#0a84ff] px-3 py-2 font-bold leading-[1.18] text-white">
-                      Thanks for calling Tim&apos;s Electrical. We received your hot tub installation request for 23 Robb St., Hamilton. We&apos;ll follow up with your free quote.
+                      Thanks for calling Tim&apos;s Electrical. We received your hot tub wiring request. The team will follow up to discuss the details and next steps. Have a great day!
                     </div>
                     <span className="landing-imessage-delivered mt-1 block text-right text-[0.52rem] font-bold text-[#8e8e93]">Delivered</span>
                   </div>
@@ -1136,14 +1131,17 @@ function ResponsiveProofHero({ goToSignup, playDemo }) {
   return (
     <div className="landing-tablet-hero">
       <section className="landing-tablet-copy">
-        <p className="landing-tablet-eyebrow">Attention contractors!</p>
+        <p className="landing-tablet-eyebrow">Stop losing jobs to missed calls</p>
         <h1 className="landing-tablet-title landing-stripe-headline">Never miss a call again!</h1>
         <p className="landing-tablet-pain landing-chalk-pain">Missed Calls = Missed Jobs</p>
-        <p className="landing-tablet-coverage">We got you covered 24/7.</p>
+        <p className="mx-auto mt-4 max-w-[40rem] text-center text-[0.98rem] font-bold leading-6 text-[#41556c] lg:mx-0 lg:text-left">
+          Meet My AI PA—the AI telephone answering assistant for trade businesses. It answers when you cannot, captures the job details, and prepares the follow-up.
+        </p>
+        <p className="landing-tablet-coverage">Keep your existing business number.</p>
 
         <div className="landing-tablet-actions">
           <button type="button" onClick={goToSignup} className="landing-tablet-primary">Start Your Free Trial</button>
-          <button type="button" onClick={playDemo} className="landing-tablet-secondary">Watch Call Example</button>
+          <button type="button" onClick={playDemo} className="landing-tablet-secondary">See a Sample Call</button>
         </div>
         <div className="landing-tablet-trust" aria-label="Trial details">
           {['14-Day Free Trial', 'No Credit Card', 'Cancel Anytime'].map((label) => <span key={label}><b aria-hidden="true">✓</b>{label}</span>)}
@@ -1158,7 +1156,7 @@ function ResponsiveProofHero({ goToSignup, playDemo }) {
   );
 }
 
-const HERO_NON_DIALOGUE_FACE_DURATION_MS = 8000;
+const HERO_NON_DIALOGUE_FACE_DURATION_MS = 7000;
 const HERO_DIALOGUE_TIMELINE_MS = Object.freeze({
   callerRequest: 2200,
   assistantDetailRequest: 5000,
@@ -1166,7 +1164,7 @@ const HERO_DIALOGUE_TIMELINE_MS = Object.freeze({
   countdownThree: 11500,
   countdownTwo: 12500,
   countdownOne: 13500,
-  faceAdvance: 14500,
+  faceAdvance: 14000,
 });
 
 function MobileHeroCallProof({ className = "" }) {
@@ -1177,10 +1175,12 @@ function MobileHeroCallProof({ className = "" }) {
   const [stageIsVisible, setStageIsVisible] = useState(false);
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
   const [showTurnHint, setShowTurnHint] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
 
   const turnCard = (direction) => {
     setActiveFace((current) => (current + direction + 3) % 3);
     setTextsCountdown(null);
+    setIsPaused(true);
   };
 
   useEffect(() => {
@@ -1204,7 +1204,7 @@ function MobileHeroCallProof({ className = "" }) {
   }, []);
 
   useEffect(() => {
-    if (!stageIsVisible || prefersReducedMotion) {
+    if (!stageIsVisible || prefersReducedMotion || isPaused) {
       setShowTurnHint(false);
       return undefined;
     }
@@ -1215,13 +1215,13 @@ function MobileHeroCallProof({ className = "" }) {
       window.clearTimeout(revealHint);
       window.clearTimeout(hideHint);
     };
-  }, [stageIsVisible, prefersReducedMotion]);
+  }, [stageIsVisible, prefersReducedMotion, isPaused]);
 
   useEffect(() => {
     const timers = [];
     const schedule = (callback, delay) => timers.push(window.setTimeout(callback, delay));
 
-    if (!stageIsVisible) return undefined;
+    if (!stageIsVisible || isPaused) return undefined;
     if (prefersReducedMotion) {
       if (activeFace === 0) setDialogueStep(4);
       setTextsCountdown(null);
@@ -1247,17 +1247,17 @@ function MobileHeroCallProof({ className = "" }) {
     }
 
     return () => timers.forEach((timer) => window.clearTimeout(timer));
-  }, [activeFace, prefersReducedMotion, stageIsVisible]);
+  }, [activeFace, isPaused, prefersReducedMotion, stageIsVisible]);
 
   return (
     <section
       ref={stageRef}
-      className={`landing-mobile-call-proof relative h-[22.75rem] overflow-visible ${className}`}
+      className={`landing-mobile-call-proof relative h-[25.25rem] overflow-visible ${className}`}
       style={{ perspective: "1400px" }}
       data-active-face={activeFace}
       data-dialogue-step={dialogueStep}
-      aria-label={`Three-sided My AI PA demo card. Side ${activeFace + 1} of 3. Tap the left side for the previous side or the right side for the next side.`}
-      role="button"
+      aria-label={`Three-sided My AI PA demo card. Side ${activeFace + 1} of 3. It advances automatically unless paused. Tap the left side for the previous side or the right side for the next side.`}
+      role="region"
       tabIndex={0}
       onClick={(event) => {
         const bounds = event.currentTarget.getBoundingClientRect();
@@ -1277,7 +1277,7 @@ function MobileHeroCallProof({ className = "" }) {
       }}
     >
       <div
-        className="landing-mobile-call-prism relative h-full w-full"
+        className="landing-mobile-call-prism relative h-[22.75rem] w-full"
         style={{
           "--landing-prism-depth": "clamp(6rem, 27vw, 7rem)",
           transform: `translateZ(calc(-1 * var(--landing-prism-depth))) rotateY(${-activeFace * 120}deg)`,
@@ -1316,24 +1316,24 @@ function MobileHeroCallProof({ className = "" }) {
           <div className="landing-timed-conversation mt-2 space-y-1">
             <div className="landing-timed-conversation-turn landing-timed-conversation-ai mr-3 rounded-[1rem_1rem_1rem_0.35rem] border border-white/10 bg-white/[0.08] px-3 py-1.5">
               <span className="block text-[0.55rem] font-black uppercase tracking-[0.09em] text-[#63d9ff]">My AI PA</span>
-              <p className="mt-0.5 text-[0.78rem] font-extrabold leading-[1.22] text-white">“Thanks for calling Tim&apos;s Electrical. Are you calling about a new installation, repair, or maintenance?”</p>
+              <p className="mt-0.5 text-[0.78rem] font-extrabold leading-[1.22] text-white">“Thanks for calling Tim&apos;s Electrical. How can I help you today?”</p>
             </div>
             {dialogueStep >= 2 && (
               <div className="landing-dialogue-reveal landing-timed-conversation-turn landing-timed-conversation-caller ml-3 rounded-[1rem_1rem_0.35rem_1rem] bg-[#0a84ff] px-3 py-1.5">
                 <span className="block text-[0.55rem] font-black uppercase tracking-[0.09em] text-[#d9efff]">Caller</span>
-                <p className="mt-0.5 text-[0.78rem] font-extrabold leading-[1.22] text-white">“I need a hot tub installation.”</p>
+                <p className="mt-0.5 text-[0.78rem] font-extrabold leading-[1.22] text-white">“I&apos;m putting in a hot tub and need it wired.”</p>
               </div>
             )}
             {dialogueStep >= 3 && (
               <div className="landing-dialogue-reveal landing-timed-conversation-turn landing-timed-conversation-ai mr-2 rounded-[1rem_1rem_1rem_0.35rem] border border-white/10 bg-white/[0.08] px-3 py-1.5">
                 <span className="block text-[0.55rem] font-black uppercase tracking-[0.09em] text-[#63d9ff]">My AI PA</span>
-                <p className="mt-0.5 text-[0.78rem] font-extrabold leading-[1.22] text-white">“Of course. May I have your name, phone number, job address, and best callback time?”</p>
+                <p className="mt-0.5 text-[0.78rem] font-extrabold leading-[1.22] text-white">“Absolutely—I can collect that for the team. When are you hoping to have the work done?”</p>
               </div>
             )}
             {dialogueStep >= 4 && (
               <div className="landing-dialogue-reveal landing-timed-conversation-turn landing-timed-conversation-caller ml-3 rounded-[1rem_1rem_0.35rem_1rem] bg-[#0a84ff] px-3 py-1.5">
                 <span className="block text-[0.55rem] font-black uppercase tracking-[0.09em] text-[#d9efff]">Caller</span>
-                <p className="mt-0.5 text-[0.78rem] font-extrabold leading-[1.22] text-white">“I&apos;m Brian. My number is 905-555-1234. The address is 23 Robb St., Hamilton. After 5 PM works best.”</p>
+                <p className="mt-0.5 text-[0.78rem] font-extrabold leading-[1.22] text-white">“Sometime next week.”</p>
               </div>
             )}
             {textsCountdown !== null && (
@@ -1357,20 +1357,24 @@ function MobileHeroCallProof({ className = "" }) {
           <h2 className="landing-timed-call-back-title mt-2 text-center text-[1.35rem] font-black leading-none tracking-[-0.035em]">Both sides get a text</h2>
           <p className="landing-timed-call-back-intro mt-1 text-center text-[0.68rem] font-bold text-[#9dbbd6]">The job details are ready before you call back.</p>
 
-          <div className="landing-timed-call-message mt-2.5 rounded-[1.05rem] bg-white p-2.5 text-[#111827]">
-            <div className="grid grid-cols-[2rem_minmax(0,1fr)] items-center gap-2">
-              <span className="grid h-8 w-8 place-items-center rounded-full bg-[#2587f5] text-[0.6rem] font-black text-white">PA</span>
-              <span><strong className="block text-[0.72rem] font-black">Owner receives this text</strong><small className="mt-0.5 block text-[0.52rem] font-bold text-[#8e8e93]">My AI PA · now</small></span>
+          <div className="landing-text-phone-grid mt-2.5 grid grid-cols-2 gap-2">
+            <div className="landing-text-phone rounded-[1.5rem] border-[4px] border-[#101827] bg-white p-1.5 text-[#111827] shadow-[0_18px_36px_-24px_rgba(0,0,0,0.7)]">
+              <div className="flex items-center justify-between px-1 text-[0.43rem] font-black text-[#475569]"><span>9:41</span><span className="h-1.5 w-9 rounded-full bg-[#101827]" /><span>5G</span></div>
+              <div className="mt-1 flex items-center gap-1.5 border-b border-[#e5e7eb] px-1 pb-1.5">
+                <span className="grid h-6 w-6 place-items-center rounded-full bg-[#2587f5] text-[0.48rem] font-black text-white">PA</span>
+                <span className="min-w-0"><strong className="block text-[0.56rem] font-black leading-tight">Owner&apos;s cellphone</strong><small className="block text-[0.42rem] font-bold text-[#8e8e93]">My AI PA · now</small></span>
+              </div>
+              <div className="mt-1.5 rounded-[0.75rem_0.75rem_0.75rem_0.25rem] bg-[#e9e9eb] px-2 py-1.5 text-[0.53rem] font-bold leading-[1.22] text-[#111]">New installation · Brian Smith · Hot tub wiring · 23 Robb St., Hamilton · Start next week · Callback after 5 PM</div>
             </div>
-            <div className="mt-2 rounded-[0.9rem_0.9rem_0.9rem_0.35rem] bg-[#e9e9eb] px-2.5 py-2.5 text-[0.67rem] font-bold leading-[1.25] text-[#111]">New installation · Hot tub electrical hookup · 23 Robb St., Hamilton · Callback after 5 PM</div>
-          </div>
 
-          <div className="landing-timed-call-message landing-timed-call-customer mt-2 rounded-[1.05rem] bg-white p-2.5 text-[#111827]">
-            <div className="grid grid-cols-[2rem_minmax(0,1fr)] items-center gap-2">
-              <span className="grid h-8 w-8 place-items-center rounded-full bg-[#0a84ff] text-[0.6rem] font-black text-white">TE</span>
-              <span><strong className="block text-[0.72rem] font-black">Customer receives this text</strong><small className="mt-0.5 block text-[0.52rem] font-bold text-[#8e8e93]">Tim&apos;s Electrical · now</small></span>
+            <div className="landing-text-phone rounded-[1.5rem] border-[4px] border-[#101827] bg-white p-1.5 text-[#111827] shadow-[0_18px_36px_-24px_rgba(0,0,0,0.7)]">
+              <div className="flex items-center justify-between px-1 text-[0.43rem] font-black text-[#475569]"><span>9:41</span><span className="h-1.5 w-9 rounded-full bg-[#101827]" /><span>5G</span></div>
+              <div className="mt-1 flex items-center gap-1.5 border-b border-[#e5e7eb] px-1 pb-1.5">
+                <span className="grid h-6 w-6 place-items-center rounded-full bg-[#0a84ff] text-[0.48rem] font-black text-white">TE</span>
+                <span className="min-w-0"><strong className="block text-[0.56rem] font-black leading-tight">Customer&apos;s cellphone</strong><small className="block text-[0.42rem] font-bold text-[#8e8e93]">Tim&apos;s Electrical · now</small></span>
+              </div>
+              <div className="ml-2 mt-1.5 rounded-[0.75rem_0.75rem_0.25rem_0.75rem] bg-[#0a84ff] px-2 py-1.5 text-[0.53rem] font-bold leading-[1.22] text-white">Thanks for calling Tim&apos;s Electrical. We received your hot tub wiring request. The team will follow up to discuss the details and next steps.</div>
             </div>
-            <div className="ml-5 mt-2 rounded-[0.9rem_0.9rem_0.35rem_0.9rem] bg-[#0a84ff] px-2.5 py-2.5 text-[0.67rem] font-bold leading-[1.25] text-white">Thanks for calling Tim&apos;s Electrical. We received your request and will follow up shortly.</div>
           </div>
 
           <div className="landing-timed-call-delivered mt-auto flex items-center justify-center gap-2 pb-0.5 pt-2 text-[0.74rem] font-black uppercase tracking-[0.055em] text-[#c9ffda]">
@@ -1409,9 +1413,23 @@ function MobileHeroCallProof({ className = "" }) {
           <p className="landing-timed-benefits-footer mt-2 text-center text-[0.6rem] font-black uppercase tracking-[0.08em] text-[#4f6b87]">Tap to see the live call</p>
         </div>
       </div>
-      <span className={`landing-card-turn-hint ${showTurnHint ? "landing-card-turn-hint-visible" : ""} pointer-events-none absolute inset-x-0 bottom-3 z-20 mx-auto w-fit rounded-full border border-white/25 bg-[#061a31]/88 px-3 py-1.5 text-[0.66rem] font-black uppercase tracking-[0.08em] text-white shadow-lg backdrop-blur-sm`} aria-hidden="true">
+      <span className={`landing-card-turn-hint ${showTurnHint ? "landing-card-turn-hint-visible" : ""} pointer-events-none absolute inset-x-0 bottom-11 z-20 mx-auto w-fit rounded-full border border-white/25 bg-[#061a31]/88 px-3 py-1.5 text-[0.66rem] font-black uppercase tracking-[0.08em] text-white shadow-lg backdrop-blur-sm`} aria-hidden="true">
         Tap either side to turn
       </span>
+      <div className="absolute inset-x-0 bottom-0 z-30 flex items-center justify-center gap-2 text-[0.58rem] font-black uppercase tracking-[0.06em] text-[#38536f]">
+        <span>{isPaused ? "Rotation paused" : "Auto-advances every 7 seconds"}</span>
+        <button
+          type="button"
+          className="inline-flex min-h-[30px] items-center justify-center rounded-full border border-[#73a9d7] bg-white px-3 text-[0.62rem] font-black text-[#0c5fc3] shadow-[0_10px_24px_-18px_rgba(12,95,195,0.8)]"
+          aria-pressed={isPaused}
+          onClick={(event) => {
+            event.stopPropagation();
+            setIsPaused((paused) => !paused);
+          }}
+        >
+          {isPaused ? "Play" : "Pause"}
+        </button>
+      </div>
     </section>
   );
 }
@@ -2873,18 +2891,21 @@ function LandingStoryIntroduction() {
   const howItWorks = [
     {
       icon: "phone",
-      title: "My AI PA answers",
-      text: "Your customer gets a professional answer after three rings.",
+      title: "My AI PA answers naturally",
+      text: "Your caller hears your approved business greeting, reaches a real conversation, and can get answers to approved FAQs.",
+      details: ["Professional greeting", "Approved FAQ answers"],
     },
     {
       icon: "chat",
       title: "The right details are collected",
-      text: "Problem, address, urgency, timing, and callback number.",
+      text: "The assistant organizes the information your team needs for a useful callback.",
+      details: ["Reason for the call", "Job details", "Service address", "Caller name", "Urgency", "Callback number and time"],
     },
     {
       icon: "sms",
       title: "Both sides receive a text",
-      text: "Owner and caller both get clear follow-up texts for an easy callback.",
+      text: "You receive an organized lead summary. The caller receives a concise confirmation and knows what happens next.",
+      details: ["Owner summary", "Caller confirmation"],
     },
   ];
 
@@ -2926,19 +2947,31 @@ function LandingStoryIntroduction() {
         <div className="mx-auto w-full max-w-[1180px] px-4 py-10 sm:px-6 sm:py-14 lg:px-8 lg:py-20">
           <p className="text-center text-[0.68rem] font-black uppercase tracking-[0.17em] text-[#176bff] sm:text-[0.78rem]">02 · How it works</p>
           <h2 className="mx-auto mt-3 max-w-[355px] text-center text-[1.95rem] font-black leading-[1.02] tracking-[-0.045em] text-[#07142a] sm:max-w-[760px] sm:text-[2.8rem] lg:text-[3.4rem]">
-            Three simple steps. Your current number stays yours.
+            Three simple steps. Keep the business number your customers already know.
           </h2>
+          <p className="mx-auto mt-4 flex w-fit items-center justify-center gap-2 rounded-full border border-[#9bc9ef] bg-white px-4 py-2 text-center text-[0.76rem] font-black text-[#0c5fc3] shadow-[0_12px_28px_-22px_rgba(12,95,195,0.65)] sm:text-[0.88rem]">
+            <HeroIcon type="phone" className="h-4 w-4" /> Your existing business number stays in place.
+          </p>
           <div className="relative mx-auto mt-7 grid max-w-[1040px] gap-3 sm:mt-9 sm:grid-cols-3 sm:gap-5">
             {howItWorks.map((item, index) => (
-              <article key={item.title} className="relative grid grid-cols-[48px_minmax(0,1fr)] gap-3 rounded-[20px] border border-[#bfd8ef] bg-white p-4 shadow-[0_22px_52px_-42px_rgba(12,77,160,0.45)] sm:block sm:min-h-[230px] sm:p-6">
+              <article key={item.title} className="relative grid grid-cols-[48px_minmax(0,1fr)] gap-3 rounded-[20px] border border-[#bfd8ef] bg-white p-4 shadow-[0_22px_52px_-42px_rgba(12,77,160,0.45)] sm:block sm:min-h-[300px] sm:p-6">
                 <span className="grid h-12 w-12 place-items-center rounded-[14px] bg-[#0c5fc3] text-white shadow-[0_14px_28px_-18px_rgba(12,95,195,0.85)]" aria-hidden="true"><HeroIcon type={item.icon} className="h-6 w-6" /></span>
                 <div>
                   <p className="text-[0.62rem] font-black uppercase tracking-[0.14em] text-[#176bff] sm:mt-7">Step {index + 1}</p>
                   <h3 className="mt-1 text-[1rem] font-black leading-5 text-[#07142a] sm:text-[1.14rem]">{item.title}</h3>
                   <p className="mt-1.5 text-[0.84rem] font-semibold leading-5 text-[#526277] sm:mt-2 sm:text-[0.9rem] sm:leading-6">{item.text}</p>
+                  <ul className="mt-3 flex flex-wrap gap-1.5" aria-label={`${item.title} includes`}>
+                    {item.details.map((detail) => (
+                      <li key={detail} className="rounded-full border border-[#c4ddf2] bg-[#eff7ff] px-2.5 py-1 text-[0.64rem] font-black leading-4 text-[#17466f]">{detail}</li>
+                    ))}
+                  </ul>
                 </div>
               </article>
             ))}
+          </div>
+          <div className="mx-auto mt-5 grid max-w-[1040px] gap-2 rounded-[16px] border border-[#f4c58d] bg-[#fff9f1] px-4 py-4 text-[#704116] shadow-[0_18px_38px_-34px_rgba(180,83,9,0.45)] sm:grid-cols-[auto_1fr] sm:items-center sm:gap-4 sm:px-5">
+            <strong className="text-[0.72rem] font-black uppercase tracking-[0.1em] text-[#b35a08]">Optional qualification</strong>
+            <span className="text-[0.82rem] font-bold leading-5">An approved service-call fee can be shared before the request is submitted, followed by “Would you like the team to continue?” My AI PA never invents pricing.</span>
           </div>
           <p className="mx-auto mt-5 max-w-[760px] rounded-[14px] border border-[#b8d9f6] bg-white/80 px-4 py-3 text-center text-[0.82rem] font-black leading-5 text-[#17466f]">
             Start with unanswered or after-hours calls. Your staff and existing phone workflow stay in place.
@@ -3118,7 +3151,7 @@ function LandingChapters({
           </div>
           <div className="mx-auto mt-6 grid max-w-[760px] gap-3 sm:grid-cols-2">
             <button type="button" onClick={goToSignup} className="inline-flex min-h-[58px] items-center justify-center rounded-[15px] bg-[linear-gradient(180deg,#ff7a00,#ff6500)] px-5 text-[1rem] font-black text-white shadow-[0_18px_36px_-22px_rgba(255,106,0,0.95)]">Start Your Free Trial</button>
-            <button type="button" onClick={playDemo} className="inline-flex min-h-[54px] items-center justify-center rounded-[15px] border border-[#6cb8ff] bg-[#0d3159] px-5 text-[0.96rem] font-black text-white">Watch Call Example</button>
+            <button type="button" onClick={playDemo} className="inline-flex min-h-[54px] items-center justify-center rounded-[15px] border border-[#6cb8ff] bg-[#0d3159] px-5 text-[0.96rem] font-black text-white">See a Sample Call</button>
           </div>
           <div className="mt-5 flex items-center justify-center gap-5 text-[0.75rem] font-bold text-[#b9cee5]">
             <a href="/privacy.html" className="underline decoration-white/35 underline-offset-4">Privacy</a>
@@ -8226,6 +8259,117 @@ function LandingPage() {
               transform: translateY(-0.65rem) !important;
             }
           }
+
+          /* Purpose-built desktop layout. Width determines structure; pointer
+             type is reserved for interaction styling so laptops, desktops and
+             touch-enabled monitors keep the same balanced composition. */
+          @media (min-width: 1200px) {
+            .landing-page-main {
+              --landing-desktop-max: 90rem;
+              --landing-chapter-max: 90rem;
+              --landing-desktop-gutter: clamp(2rem, 3.6vw, 4rem);
+            }
+            .landing-page-main > header > div {
+              max-width: var(--landing-desktop-max) !important;
+              padding-inline: var(--landing-desktop-gutter) !important;
+            }
+            .landing-hero-shell {
+              width: min(100%, var(--landing-desktop-max)) !important;
+              max-width: var(--landing-desktop-max) !important;
+              min-height: auto !important;
+              padding: 1rem var(--landing-desktop-gutter) clamp(3rem, 5vw, 4.75rem) !important;
+            }
+            .landing-hero-shell > nav {
+              display: grid !important;
+              grid-template-columns: auto 1fr auto !important;
+            }
+            .landing-hero-shell > nav > div:nth-child(3) {
+              justify-self: end !important;
+            }
+            .landing-hero-shell > nav > div:last-child {
+              display: flex !important;
+            }
+            .landing-tablet-hero,
+            .landing-hero-grid > .landing-tablet-hero:first-child {
+              display: none !important;
+            }
+            .landing-hero-grid {
+              display: grid !important;
+              min-height: 0 !important;
+              grid-template-columns: minmax(27rem, 5fr) minmax(38rem, 7fr) !important;
+              align-items: center !important;
+              gap: clamp(2.5rem, 4vw, 4.75rem) !important;
+              padding: clamp(2.25rem, 4.5vw, 4.25rem) 0 0 !important;
+            }
+            .landing-hero-grid > .landing-hero-copy-column {
+              display: block !important;
+              width: 100% !important;
+              max-width: 34rem !important;
+              transform: none !important;
+            }
+            .landing-hero-grid > .landing-hero-visual {
+              display: flex !important;
+              align-self: center !important;
+              justify-content: flex-end !important;
+              margin-top: 0 !important;
+            }
+            .landing-hero-proof-wrap {
+              width: 100% !important;
+              max-width: 53rem !important;
+              margin-left: auto !important;
+            }
+            .landing-call-dashboard > div {
+              height: clamp(34rem, calc(100svh - 10rem), 42rem) !important;
+              min-height: 0 !important;
+              max-height: 42rem !important;
+            }
+            #mobile-problem > div,
+            #mobile-how-it-works > div,
+            #mobile-value > div,
+            #mobile-safeguards > div,
+            #mobile-pricing > div,
+            #mobile-setup-questions > div,
+            #mobile-final-decision > div {
+              max-width: var(--landing-chapter-max) !important;
+              padding-inline: var(--landing-desktop-gutter) !important;
+            }
+            #mobile-problem h2,
+            #mobile-how-it-works h2,
+            #mobile-value h2,
+            #mobile-safeguards h2,
+            #mobile-pricing h2,
+            #mobile-setup-questions h2,
+            #mobile-final-decision h2 {
+              text-wrap: balance;
+            }
+          }
+          @media (min-width: 1600px) {
+            .landing-page-main {
+              --landing-desktop-max: 95rem;
+              --landing-chapter-max: 95rem;
+              --landing-desktop-gutter: 4rem;
+            }
+            .landing-hero-grid {
+              grid-template-columns: minmax(31rem, 5fr) minmax(0, 7fr) !important;
+              gap: 5rem !important;
+            }
+            .landing-hero-copy-column {
+              max-width: 36rem !important;
+            }
+          }
+          @media (min-width: 1200px) and (max-height: 760px) {
+            .landing-hero-shell {
+              padding-top: 0.75rem !important;
+              padding-bottom: 2rem !important;
+            }
+            .landing-hero-grid {
+              padding-top: 1.25rem !important;
+            }
+            .landing-call-dashboard > div {
+              height: clamp(30rem, calc(100svh - 9rem), 38rem) !important;
+              max-height: 38rem !important;
+            }
+          }
         `}</style>
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_16%_18%,rgba(187,222,255,0.74),transparent_30%),radial-gradient(circle_at_78%_12%,rgba(213,235,255,0.70),transparent_32%),linear-gradient(180deg,#ffffff_0%,#f6fbff_28%,#e9f6ff_100%)]" />
         <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgba(37,99,235,0.06)_1px,transparent_1px),linear-gradient(rgba(37,99,235,0.045)_1px,transparent_1px)] bg-[size:76px_76px] opacity-[0.32]" />
@@ -8264,13 +8408,14 @@ function LandingPage() {
             <ResponsiveProofHero goToSignup={goToSignup} playDemo={playDemo} />
             <div className="landing-hero-copy-column relative z-10 min-w-0 max-w-[500px] xl:max-w-[520px] lg:-translate-y-1">
               <div className="landing-mobile-proof-first sm:hidden">
+                <p className="mb-3 text-center text-[0.66rem] font-black uppercase tracking-[0.14em] text-[#c92a20]">Stop losing jobs to missed calls</p>
                 <h1 className="landing-mobile-proof-title landing-stripe-headline font-black tracking-[-0.055em] text-[#07142a]">
                   <span className="block">Never miss a call</span>
                   <span className="block">again!</span>
                 </h1>
                 <p className="landing-mobile-proof-pain landing-chalk-pain font-black text-[#c92a20]">Missed Calls = Missed Jobs</p>
-
-                <p className="landing-mobile-coverage-card">We got you covered 24/7.</p>
+                <p className="mx-auto mt-3 max-w-[21rem] text-center text-[0.78rem] font-bold leading-5 text-[#41556c]">My AI PA answers when you cannot, captures the job details, and prepares the follow-up.</p>
+                <p className="landing-mobile-coverage-card">Keep your existing business number.</p>
                 <MobileHeroCallProof />
 
                 <div className="landing-mobile-proof-actions">
@@ -8279,7 +8424,7 @@ function LandingPage() {
                     onClick={playDemo}
                     className="landing-mobile-proof-secondary inline-flex w-full items-center justify-center rounded-2xl border border-[#5f9fd9] bg-white/90 px-3 font-black text-[#0c5fc3]"
                   >
-                    Watch Call Example
+                    See a Sample Call
                   </button>
                   <button
                     type="button"
@@ -8299,6 +8444,7 @@ function LandingPage() {
               </div>
 
               <div className="hidden sm:block">
+              <p className="mb-3 text-[0.72rem] font-black uppercase tracking-[0.15em] text-[#c92a20]">Stop losing jobs to missed calls</p>
               <h1 className="landing-hero-title text-[clamp(3rem,11vw,4.25rem)] font-black leading-[0.98] tracking-[-0.055em] text-[#07142a] 2xl:text-[4.5rem]">
                 <span className="landing-stripe-headline block drop-shadow-[0_3px_0_rgba(148,190,255,0.45)]">Never miss a call again!</span>
                 <span className="landing-chalk-pain mt-4 block text-[0.58em] leading-none tracking-[-0.045em] text-[#d91d12] sm:mt-5">
@@ -8306,8 +8452,12 @@ function LandingPage() {
                 </span>
               </h1>
 
+              <p className="mt-4 max-w-[34rem] text-[0.96rem] font-bold leading-[1.45] text-[#41556c]">
+                Meet My AI PA—the AI telephone answering assistant for trade businesses. It answers when you cannot, captures the job details, and prepares the follow-up before the caller moves on.
+              </p>
+
               <p className="landing-hero-coverage mt-4 inline-block border-l-4 border-[#17951f] bg-[#e1f8e5]/90 px-3 py-2 text-[1.05rem] font-black leading-tight text-[#147d1b]">
-                We got you covered 24/7.
+                Keep your existing business number.
               </p>
               <p className="mt-3 text-[0.98rem] font-bold leading-[1.35] text-[#334155]">
                 For about the price of a cup of coffee per day you get:
@@ -8344,8 +8494,8 @@ function LandingPage() {
                     onClick={playDemo}
                     className="inline-flex min-h-[46px] items-center justify-center rounded-xl border border-[#79aee0] bg-white/80 px-5 text-[0.86rem] font-black text-[#0c5fc3] transition hover:-translate-y-0.5 hover:bg-white"
                   >
-                    <span className="sm:hidden">Watch Example</span>
-                    <span className="hidden sm:inline">Watch Call Example</span>
+                    <span className="sm:hidden">See Example</span>
+                    <span className="hidden sm:inline">See a Sample Call</span>
                   </button>
                 </div>
                 <div className="landing-hero-trust mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-[0.68rem] font-black text-[#294967]">
@@ -9014,7 +9164,7 @@ function LandingPage() {
                     <span className="whitespace-nowrap rounded-full bg-[#dff7e9] px-2.5 py-1 text-[0.62rem] font-black uppercase tracking-[0.08em] text-[#15803d]">Confirmed</span>
                   </div>
                   <p className="px-4 py-3 text-[0.88rem] font-medium leading-6 text-[#12302d]">
-                    Thanks for calling Tim&apos;s Electrical. Your hot tub setup request has been sent to the team. We will get back to you shortly.
+                    Thanks for calling Tim&apos;s Electrical. We received your hot tub wiring request. The team will follow up to discuss the details and next steps. Have a great day!
                   </p>
                 </div>
 

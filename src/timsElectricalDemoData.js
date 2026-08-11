@@ -40,12 +40,16 @@ export const timsElectricalKnowledge = [
     label: "Two-sided follow-up",
     value: "The owner receives an organized lead summary and the caller receives a concise confirmation when texting is enabled and consented.",
   },
+  {
+    label: "Optional price qualification",
+    value: "A business-approved service-call fee can be shared before handoff, followed by a simple choice to continue. No price is invented by the assistant.",
+  },
 ];
 
 export const timsElectricalConfirmations = [
   {
     label: "Price or estimate",
-    text: "Exact pricing and estimate terms must be confirmed by the electrical business.",
+    text: "Only a fee explicitly approved by the electrical business may be shared. All other pricing and estimate terms require team confirmation.",
   },
   {
     label: "Appointment or arrival time",
@@ -75,21 +79,23 @@ export const timsElectricalScenarios = [
     route: "Electrical team · quote follow-up",
     stages: ["Service identified", "Job details collected", "Timing confirmed", "Texts prepared"],
     transcript: [
-      { speaker: "assistant", text: "Thanks for calling Tim's Electrical. I'm the virtual receptionist. Are you calling about a new installation, a repair, or maintenance?" },
-      { speaker: "caller", text: "I need someone to wire up a hot tub on my back deck." },
-      { speaker: "assistant", text: "I can collect the project details for the team. May I get your name?" },
+      { speaker: "assistant", text: "Thanks for calling Tim's Electrical. How can I help you today?" },
+      { speaker: "caller", text: "I'm putting in a hot tub and need it wired." },
+      { speaker: "assistant", text: "Absolutely—I can collect that for the team. When are you hoping to have the work done?" },
+      { speaker: "caller", text: "Sometime next week." },
+      { speaker: "assistant", text: "Next week—got it. May I get your name?" },
       { speaker: "caller", text: "Brian Smith." },
       { speaker: "assistant", text: "What's the address and city where the work is needed?" },
       { speaker: "caller", text: "63 York Street in St. Catharines." },
       { speaker: "assistant", text: "What is the best number and time for the team to call you?" },
       { speaker: "caller", text: "905-555-0123, after 5 p.m." },
-      { speaker: "assistant", text: "I'll prepare those details for the team. They will confirm service availability, pricing, and scheduling with you." },
+      { speaker: "assistant", text: "Thanks. I'll prepare those details for the team. They will follow up to discuss the request and next steps. Have a great day!" },
     ],
-    collected: ["Brian Smith", "905-555-0123", "63 York Street · St. Catharines", "Hot tub wiring", "Callback after 5 p.m."],
-    missing: ["Preferred project date", "Site-access notes"],
-    summary: "Brian wants a quote for wiring a hot tub at 63 York Street in St. Catharines and prefers a callback after 5 p.m.",
-    ownerText: "NEW INSTALLATION · Brian Smith · 905-555-0123 · Hot tub wiring · 63 York Street, St. Catharines · Callback after 5 p.m. · Pricing and schedule require confirmation.",
-    customerText: "Thanks for calling Tim's Electrical. We received your hot tub wiring request. The team will follow up to confirm service availability, pricing, and scheduling.",
+    collected: ["Brian Smith", "905-555-0123", "63 York Street · St. Catharines", "Hot tub wiring", "Preferred start · Next week", "Callback after 5 p.m."],
+    missing: ["Site-access notes"],
+    summary: "Brian wants a quote for wiring a hot tub at 63 York Street in St. Catharines, hopes to start next week, and prefers a callback after 5 p.m.",
+    ownerText: "NEW INSTALLATION · Brian Smith · 905-555-0123 · Hot tub wiring · 63 York Street, St. Catharines · Preferred start: next week · Callback after 5 p.m. · Pricing and scheduling require confirmation.",
+    customerText: "Thanks for calling Tim's Electrical. We received your hot tub wiring request. The team will follow up to discuss the details and next steps. Have a great day!",
   },
   {
     id: "repair-request",
