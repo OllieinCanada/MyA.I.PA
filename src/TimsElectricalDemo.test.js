@@ -32,7 +32,7 @@ describe("Tim's Electrical preloaded landing-page demo", () => {
     act(() => jest.advanceTimersByTime(4000));
 
     expect(container.textContent).toMatch(/NEW INSTALLATION · Brian Smith/i);
-    expect(container.textContent).toMatch(/Preview owner text/i);
+    expect(container.textContent).toMatch(/Owner's cellphone/i);
     expect(container.textContent).toMatch(/100%/i);
   });
 
@@ -54,7 +54,7 @@ describe("Tim's Electrical preloaded landing-page demo", () => {
     expect(container.textContent).toMatch(/100%/i);
   });
 
-  test("uses accessible tab and text-preview controls", () => {
+  test("uses accessible tabs and phone-shaped text previews", () => {
     const tabs = Array.from(container.querySelectorAll('[role="tab"]'));
     expect(tabs).toHaveLength(6);
     expect(tabs[0].getAttribute("aria-controls")).toBe("tims-scenario-panel");
@@ -62,8 +62,9 @@ describe("Tim's Electrical preloaded landing-page demo", () => {
 
     act(() => jest.advanceTimersByTime(4000));
 
-    expect(container.textContent).toMatch(/Preview owner text/i);
-    expect(container.textContent).toMatch(/Preview customer text/i);
+    expect(container.textContent).toMatch(/Owner's cellphone/i);
+    expect(container.textContent).toMatch(/Customer's cellphone/i);
+    expect(container.querySelectorAll(".tims-message-preview")).toHaveLength(2);
     expect(container.textContent).not.toMatch(/Create task/i);
     expect(container.textContent).not.toMatch(/^Email$/i);
   });
