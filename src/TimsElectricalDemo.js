@@ -33,6 +33,7 @@ function Icon({ name, size = 22 }) {
   if (name === "shield") return <svg {...common}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" /><path d="m9 12 2 2 4-4" /></svg>;
   if (name === "copy") return <svg {...common}><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>;
   if (name === "play") return <svg {...common}><path d="m8 5 11 7-11 7z" /></svg>;
+  if (name === "pause") return <svg {...common}><path d="M9 5v14M15 5v14" /></svg>;
   return <svg {...common}><circle cx="12" cy="12" r="9" /><path d="M12 8v4M12 16h.01" /></svg>;
 }
 
@@ -50,11 +51,154 @@ function Brand() {
   );
 }
 
+export function buildTranscriptTimeline(transcript = [], durationSeconds = 0) {
+  if (!transcript.length || durationSeconds <= 0) return [];
+  const weights = transcript.map((line) => {
+    const wordCount = String(line.text || "").trim().split(/\s+/).filter(Boolean).length;
+    return Math.max(2.8, (wordCount / 2.7) + 1.2);
+  });
+  const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
+  let elapsedWeight = 0;
+  return weights.map((weight, index) => {
+    const start = (elapsedWeight / totalWeight) * durationSeconds;
+    elapsedWeight += weight;
+    return {
+      index,
+      start,
+      end: (elapsedWeight / totalWeight) * durationSeconds,
+    };
+  });
+}
+
+export function getActiveTranscriptIndex(timeline = [], currentTime = 0) {
+  if (!timeline.length) return -1;
+  const active = timeline.findIndex((segment) => currentTime < segment.end);
+  return active === -1 ? timeline.length - 1 : active;
+}
+
+function formatAudioTime(seconds = 0) {
+  const safeSeconds = Number.isFinite(seconds) ? Math.max(0, Math.round(seconds)) : 0;
+  return `${Math.floor(safeSeconds / 60)}:${String(safeSeconds % 60).padStart(2, "0")}`;
+}
+
+function ScenarioRecording({ scenario, onTranscriptPosition }) {
+  const recording = timsElectricalAudioManifest[scenario.id];
+  const available = recording?.status === "available" && recording?.src;
+  const audioRef = useRef(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(recording?.durationSeconds || 0);
+
+  useEffect(() => {
+    setIsPlaying(false);
+    setCurrentTime(0);
+    setDuration(recording?.durationSeconds || 0);
+    onTranscriptPosition?.(null);
+  }, [recording?.durationSeconds, recording?.src, onTranscriptPosition]);
+
+  const updatePosition = (nextTime) => {
+    setCurrentTime(nextTime);
+    onTranscriptPosition?.(nextTime);
+  };
+
+  const togglePlayback = async () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (!audio.paused) {
+      audio.pause();
+      return;
+    }
+    if (audio.ended || audio.currentTime >= (audio.duration || duration)) {
+      audio.currentTime = 0;
+      updatePosition(0);
+    }
+    try {
+      onTranscriptPosition?.(audio.currentTime || 0);
+      await audio.play();
+    } catch (_) {
+      setIsPlaying(false);
+    }
+  };
+
+  const seekRecording = (event) => {
+    const nextTime = Number(event.target.value);
+    if (audioRef.current) audioRef.current.currentTime = nextTime;
+    updatePosition(nextTime);
+  };
+
+  return (
+    <section className={`tims-scenario-recording tims-phone-recording ${available ? "is-available" : "is-planned"}`} aria-label={`${scenario.shortLabel} recorded call`}>
+      <div className="tims-recording-copy">
+        <span className="fcr-kicker">Recorded scenario call</span>
+        <strong>{available ? `Hear the ${scenario.shortLabel.toLowerCase()} conversation` : `${scenario.shortLabel} recording is being prepared`}</strong>
+      </div>
+      <div className={`tims-voice-visualizer ${isPlaying ? "is-speaking" : ""}`} aria-hidden="true">
+        <span className="tims-voice-orbit orbit-one" />
+        <span className="tims-voice-orbit orbit-two" />
+        <span className="tims-voice-core"><Icon name="bolt" size={19} /></span>
+        <span className="tims-voice-wave left">{Array.from({ length: 7 }, (_, index) => <i key={`left-${index}`} />)}</span>
+        <span className="tims-voice-wave right">{Array.from({ length: 7 }, (_, index) => <i key={`right-${index}`} />)}</span>
+      </div>
+      {available ? (
+        <>
+          <div className="tims-recording-controls">
+            <button type="button" onClick={togglePlayback} aria-label={isPlaying ? "Pause recorded scenario call" : "Play recorded scenario call"}>
+              <Icon name={isPlaying ? "pause" : "play"} size={17} />
+            </button>
+            <span>{formatAudioTime(currentTime)}</span>
+            <input
+              type="range"
+              min="0"
+              max={Math.max(duration, 1)}
+              step="0.1"
+              value={Math.min(currentTime, Math.max(duration, 1))}
+              onChange={seekRecording}
+              aria-label="Recorded call position"
+              style={{ "--tims-audio-progress": `${duration ? (currentTime / duration) * 100 : 0}%` }}
+            />
+            <span>{formatAudioTime(duration)}</span>
+          </div>
+          <small className="tims-recording-disclosure">Recorded demonstration · no real customer information</small>
+          <audio
+            className="tims-recording-audio"
+            key={`${scenario.id}-${recording.src}`}
+            ref={audioRef}
+            preload="metadata"
+            src={`${process.env.PUBLIC_URL || ""}${recording.src}`}
+            onLoadedMetadata={(event) => setDuration(Number.isFinite(event.currentTarget.duration) ? event.currentTarget.duration : recording.durationSeconds)}
+            onTimeUpdate={(event) => updatePosition(event.currentTarget.currentTime)}
+            onPlay={() => setIsPlaying(true)}
+            onPause={() => setIsPlaying(false)}
+            onEnded={() => setIsPlaying(false)}
+          >
+            Your browser does not support audio playback.
+          </audio>
+        </>
+      ) : <span className="tims-recording-status">COMING SOON</span>}
+    </section>
+  );
+}
+
 function DemoPhone({ scenario, visibleLines, complete }) {
   const transcriptRef = useRef(null);
+  const [recordingTime, setRecordingTime] = useState(null);
+  const recording = timsElectricalAudioManifest[scenario.id];
+  const transcriptTimeline = useMemo(
+    () => buildTranscriptTimeline(scenario.transcript, recording?.durationSeconds || 0),
+    [recording?.durationSeconds, scenario.transcript],
+  );
+  const activeRecordingLine = recordingTime === null ? -1 : getActiveTranscriptIndex(transcriptTimeline, recordingTime);
+  const displayedLineCount = recordingTime === null ? visibleLines : Math.max(1, activeRecordingLine + 1);
+
   useEffect(() => {
-    transcriptRef.current?.scrollTo({ top: transcriptRef.current.scrollHeight, behavior: "smooth" });
-  }, [visibleLines]);
+    const transcript = transcriptRef.current;
+    if (!transcript) return;
+    const activeLine = transcript.querySelector('[data-active="true"]');
+    const targetTop = activeLine
+      ? Math.max(0, activeLine.offsetTop - (transcript.clientHeight * 0.32))
+      : transcript.scrollHeight;
+    transcript.scrollTo({ top: targetTop, behavior: "smooth" });
+  }, [activeRecordingLine, displayedLineCount]);
 
   return (
     <div className="fcr-phone-shell">
@@ -64,13 +208,15 @@ function DemoPhone({ scenario, visibleLines, complete }) {
         <div><strong>Tim&apos;s Electrical</strong><small>{complete ? "Call summary ready" : "Simulated call in progress"}</small></div>
         <span className="fcr-live-dot is-live" />
       </div>
-      <div className="fcr-phone-transcript" ref={transcriptRef} aria-live="polite">
-        {visibleLines === 0 ? (
+      <ScenarioRecording scenario={scenario} onTranscriptPosition={setRecordingTime} />
+      <div className={`fcr-phone-transcript ${recordingTime !== null ? "is-audio-following" : ""}`} ref={transcriptRef} aria-live="polite">
+        {displayedLineCount === 0 ? (
           <div className="fcr-phone-empty"><Icon name="phone" size={30} /><strong>Loading the selected call…</strong><span>No real call or text will be sent.</span></div>
-        ) : scenario.transcript.slice(0, visibleLines).map((line, index) => {
+        ) : scenario.transcript.slice(0, displayedLineCount).map((line, index) => {
           const assistant = line.speaker === "assistant";
+          const isActive = recordingTime !== null && index === activeRecordingLine;
           return (
-            <div className={`tims-call-turn ${line.speaker}`} key={`${scenario.id}-${index}`}>
+            <div className={`tims-call-turn ${line.speaker} ${isActive ? "is-active" : ""}`} data-active={isActive ? "true" : undefined} key={`${scenario.id}-${index}`}>
               <span className="tims-call-avatar" aria-hidden="true">{assistant ? "AI" : "C"}</span>
               <div>
                 <small>{assistant ? "VIRTUAL RECEPTIONIST" : "CALLER"}</small>
@@ -81,7 +227,7 @@ function DemoPhone({ scenario, visibleLines, complete }) {
         })}
       </div>
       <div className="fcr-phone-footer tims-phone-footer">
-        <span className={complete ? "complete" : ""}><Icon name={complete ? "check" : "phone"} size={15} />{complete ? "Call complete" : "Simulation running"}</span>
+        <span className={complete && recordingTime === null ? "complete" : ""}><Icon name={complete && recordingTime === null ? "check" : "phone"} size={15} />{recordingTime !== null ? "Conversation follows the recording" : complete ? "Call complete" : "Simulation running"}</span>
       </div>
     </div>
   );
@@ -95,26 +241,6 @@ function MessagePreview({ label, status, text, tone }) {
       <div className="tims-text-phone-thread"><p>{text}</p></div>
       <div className="tims-text-phone-status"><span>{status}</span><small>Simulated text preview</small></div>
     </article>
-  );
-}
-
-function ScenarioRecording({ scenario }) {
-  const recording = timsElectricalAudioManifest[scenario.id];
-  const available = recording?.status === "available" && recording?.src;
-  return (
-    <section className={`tims-scenario-recording ${available ? "is-available" : "is-planned"}`} aria-label={`${scenario.shortLabel} recorded call`}>
-      <span className="tims-recording-icon"><Icon name={available ? "play" : "phone"} size={18} /></span>
-      <div className="tims-recording-copy">
-        <span className="fcr-kicker">Recorded scenario call</span>
-        <strong>{available ? `Hear the ${scenario.shortLabel.toLowerCase()} conversation` : `${scenario.shortLabel} recording is being prepared`}</strong>
-        <small>{available ? "A recorded demonstration—no real customer information." : "The on-screen simulation remains available while this audio is prepared."}</small>
-      </div>
-      {available ? (
-        <audio key={`${scenario.id}-${recording.src}`} controls preload="metadata" src={`${process.env.PUBLIC_URL || ""}${recording.src}`}>
-          Your browser does not support audio playback.
-        </audio>
-      ) : <span className="tims-recording-status">COMING SOON</span>}
-    </section>
   );
 }
 
@@ -233,14 +359,13 @@ export function TimsElectricalLiveDemo({ embedded = false, onSignup }) {
           ))}
         </div>
         <div className="fcr-live-grid" id="tims-scenario-panel" role="tabpanel" aria-labelledby={`tims-scenario-${scenario.id}`}>
-          <DemoPhone scenario={scenario} visibleLines={visibleLines} complete={complete} />
+          <DemoPhone key={scenario.id} scenario={scenario} visibleLines={visibleLines} complete={complete} />
           <div className="fcr-call-console">
             <div className="fcr-console-top">
               <div><span className="fcr-kicker">Current situation</span><h3>{scenario.title}</h3></div>
             </div>
             <div className="fcr-progress"><div><span>Call progress</span><strong>{progress}%</strong></div><div className="fcr-progress-track"><span style={{ width: `${progress}%` }} /></div></div>
             <div className="fcr-stage-row">{scenario.stages.map((stage, index) => { const done = progress >= ((index + 1) / scenario.stages.length) * 100; return <div className={done ? "done" : ""} key={stage}><span>{done ? <Icon name="check" size={14} /> : index + 1}</span>{stage}</div>; })}</div>
-            <ScenarioRecording scenario={scenario} />
             <CallSummary scenario={scenario} complete={complete} onAction={handleAction} />
             {actionMessage && <p className="fcr-action-message" role="status">{actionMessage}</p>}
           </div>

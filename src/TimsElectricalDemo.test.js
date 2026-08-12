@@ -1,6 +1,10 @@
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
-import { TimsElectricalLiveDemo } from "./TimsElectricalDemo";
+import {
+  buildTranscriptTimeline,
+  getActiveTranscriptIndex,
+  TimsElectricalLiveDemo,
+} from "./TimsElectricalDemo";
 
 describe("Tim's Electrical preloaded landing-page demo", () => {
   let container;
@@ -70,11 +74,15 @@ describe("Tim's Electrical preloaded landing-page demo", () => {
   });
 
   test("connects the selected scenario to a clearly disclosed recording", () => {
-    const audio = container.querySelector(".tims-scenario-recording audio");
+    const phone = container.querySelector(".fcr-phone-shell");
+    const audio = phone.querySelector(".tims-scenario-recording audio");
     expect(container.textContent).toMatch(/Recorded scenario call/i);
     expect(container.textContent).toMatch(/no real customer information/i);
     expect(audio).not.toBeNull();
     expect(audio.getAttribute("src")).toMatch(/audio\/tims-electrical\/new-installation\.wav/i);
+    expect(phone.querySelector(".tims-voice-visualizer")).not.toBeNull();
+    expect(phone.querySelector('button[aria-label="Play recorded scenario call"]')).not.toBeNull();
+    expect(container.querySelector(".fcr-call-console > .tims-scenario-recording")).toBeNull();
 
     const repairButton = Array.from(container.querySelectorAll("button")).find(
       (button) => button.textContent.trim() === "Repair request",
@@ -84,5 +92,22 @@ describe("Tim's Electrical preloaded landing-page demo", () => {
     expect(container.textContent).toMatch(/Hear the repair request conversation/i);
     expect(container.querySelector(".tims-scenario-recording audio")?.getAttribute("src"))
       .toMatch(/audio\/tims-electrical\/repair-request\.wav/i);
+  });
+
+  test("maps recording progress to a natural transcript flow", () => {
+    const transcript = [
+      { text: "A short greeting." },
+      { text: "This is a noticeably longer caller explanation with several details included." },
+      { text: "A final recap." },
+    ];
+    const timeline = buildTranscriptTimeline(transcript, 60);
+
+    expect(timeline).toHaveLength(3);
+    expect(timeline[0].start).toBe(0);
+    expect(timeline[2].end).toBeCloseTo(60, 5);
+    expect(timeline[1].end - timeline[1].start).toBeGreaterThan(timeline[0].end - timeline[0].start);
+    expect(getActiveTranscriptIndex(timeline, 0)).toBe(0);
+    expect(getActiveTranscriptIndex(timeline, timeline[1].start + 0.1)).toBe(1);
+    expect(getActiveTranscriptIndex(timeline, 60)).toBe(2);
   });
 });
