@@ -809,7 +809,7 @@ function HeroPhoneMockup() {
             <span className="h-2.5 w-2.5 rounded-full bg-[#39ff6a] shadow-[0_0_12px_rgba(57,255,106,0.95)]" />
             AI speaking now
           </div>
-          <p className="mt-1 text-[1.2rem] font-black tracking-[-0.03em] text-white">Live Call</p>
+          <p className="mt-1 text-[1.2rem] font-black tracking-[-0.03em] text-white">Sample Call</p>
           <p className="mt-0.5 text-[1.08rem] font-black text-[#ff7a00]">00:32</p>
           <HeroWave small />
         </div>
@@ -972,7 +972,7 @@ function HeroCallDashboard({ ownerCardRef }) {
             <div className="landing-call-status flex items-center justify-between text-[1.04rem] font-black">
               <span className="inline-flex items-center gap-3">
                 <span className="landing-call-live-dot h-3.5 w-3.5 rounded-full bg-[#00d66f] shadow-[0_0_14px_rgba(0,214,111,0.68)]" />
-                Live Call
+                Sample Call
               </span>
               <span>02:37</span>
             </div>
@@ -1018,7 +1018,7 @@ function HeroCallDashboard({ ownerCardRef }) {
                     PA
                   </span>
                   <span className="min-w-0">
-                    <strong className="landing-imessage-preview-title block font-black">Owner receives this text</strong>
+                    <strong className="landing-imessage-preview-title block font-black">Sample owner text</strong>
                     <small className="landing-imessage-preview-meta mt-0.5 block font-bold text-[#8e8e93]">My AI PA · now</small>
                   </span>
                 </div>
@@ -1058,8 +1058,8 @@ function HeroCallDashboard({ ownerCardRef }) {
 
           <section className="landing-conversation-column relative flex flex-col px-8 py-7 2xl:px-9">
             <div className="landing-conversation-header flex items-center justify-between">
-              <h3 className="landing-conversation-title text-[1.38rem] font-black tracking-[-0.025em] 2xl:text-[1.55rem]">An Example of a Real Conversation</h3>
-              <span className="landing-summary-ready-badge rounded-full bg-[#063a83]/80 px-4 py-2 text-[0.92rem] font-black uppercase tracking-[0.1em] text-[#9edaff]">Summary ready</span>
+              <h3 className="landing-conversation-title text-[1.38rem] font-black tracking-[-0.025em] 2xl:text-[1.55rem]">A Realistic Sample Conversation</h3>
+              <span className="landing-summary-ready-badge rounded-full bg-[#063a83]/80 px-4 py-2 text-[0.92rem] font-black uppercase tracking-[0.1em] text-[#9edaff]">Sample summary</span>
             </div>
 
             <div className="landing-conversation-panel mt-4 rounded-[26px] border border-white/8 bg-black/18 px-5 py-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
@@ -1108,7 +1108,7 @@ function HeroCallDashboard({ ownerCardRef }) {
                         TE
                       </span>
                       <span className="min-w-0">
-                        <strong className="landing-imessage-preview-title block font-black">Customer receives this text</strong>
+                        <strong className="landing-imessage-preview-title block font-black">Sample customer text</strong>
                         <small className="landing-imessage-preview-meta mt-0.5 block font-bold text-[#8e8e93]">Tim&apos;s Electrical · now</small>
                       </span>
                     </div>
@@ -2991,19 +2991,23 @@ function LandingChapters({
   const mobileBenefits = [
     {
       icon: "phone",
-      text: "Every call answered professionally after 3 rings — no more hangups",
-    },
-    {
-      icon: "chat",
-      text: "Connects with customers with a natural dialogue, answers FAQs and projects a professional image.",
+      title: "Callback information",
+      text: "Caller name, callback number, and the best time to reach them.",
     },
     {
       icon: "clipboard",
-      text: "Collects the job description, caller’s information for easy follow-up call.",
+      title: "Job and location",
+      text: "Reason for the call, requested work, service address, and city.",
+    },
+    {
+      icon: "chat",
+      title: "Timing and urgency",
+      text: "Preferred start date, availability, and any urgent non-emergency concern.",
     },
     {
       icon: "sms",
-      text: "Texts you the call details and sends the customer a thank-you reminder.",
+      title: "Two clear handoffs",
+      text: "An owner summary plus a concise confirmation for the caller.",
     },
   ];
   const mobileFaqIndexes = [1, 2, 3, 5];
@@ -3014,15 +3018,18 @@ function LandingChapters({
         <div className="mx-auto w-full max-w-[1180px] px-4 py-10 sm:px-6 sm:py-14 lg:px-8 lg:py-20">
           <p className="text-center text-[0.68rem] font-black uppercase tracking-[0.17em] text-[#f06a00] sm:text-[0.78rem]">04 · What you receive</p>
           <h2 className="mx-auto mt-3 max-w-[355px] text-center text-[1.8rem] font-black leading-[1.02] tracking-[-0.045em] text-[#07142a] sm:max-w-[780px] sm:text-[2.7rem] lg:text-[3.35rem]">
-            A professional answer and a job summary ready to use.
+            The details your team needs—already organized.
           </h2>
           <div className="mt-6 grid gap-3 sm:mt-9 sm:grid-cols-2">
             {mobileBenefits.map((item) => (
-              <article key={item.text} className="grid grid-cols-[46px_minmax(0,1fr)] items-center gap-3.5 rounded-[20px] border border-[#c7ddef] bg-[#f8fbff] px-4 py-4 shadow-[0_20px_48px_-42px_rgba(12,77,160,0.5)] sm:min-h-[132px] sm:grid-cols-[56px_minmax(0,1fr)] sm:gap-5 sm:px-6 sm:py-5">
+              <article key={item.title} className="grid grid-cols-[46px_minmax(0,1fr)] items-center gap-3.5 rounded-[20px] border border-[#c7ddef] bg-[#f8fbff] px-4 py-4 shadow-[0_20px_48px_-42px_rgba(12,77,160,0.5)] sm:min-h-[132px] sm:grid-cols-[56px_minmax(0,1fr)] sm:gap-5 sm:px-6 sm:py-5">
                 <span className="grid h-[46px] w-[46px] place-items-center rounded-[14px] bg-[linear-gradient(145deg,#27a6f3,#176bdf)] text-white shadow-[0_14px_26px_-18px_rgba(23,107,223,0.88)]" aria-hidden="true">
                   <HeroIcon type={item.icon} className="h-6 w-6" />
                 </span>
-                <p className="text-[0.96rem] font-black leading-[1.38] text-[#10233e] sm:text-[1.05rem]">{item.text}</p>
+                <div>
+                  <h3 className="text-[0.98rem] font-black leading-5 text-[#10233e] sm:text-[1.06rem]">{item.title}</h3>
+                  <p className="mt-1 text-[0.78rem] font-semibold leading-5 text-[#526277] sm:text-[0.84rem]">{item.text}</p>
+                </div>
               </article>
             ))}
           </div>
@@ -3180,7 +3187,6 @@ function LandingPage() {
   const [openFaq, setOpenFaq] = useState(-1);
   const [showHeader, setShowHeader] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const headerHideTimerRef = useRef(null);
 
   useEffect(() => {
     document.title = "My AI PA | AI Telephone Answering Assistant";
@@ -3258,36 +3264,13 @@ function LandingPage() {
   const playbackProgress = Math.max(0, Math.min(1, audioTime / Math.max(audioDuration, 1)));
 
   useEffect(() => {
-    const hideAfterIdle = () => {
-      if (headerHideTimerRef.current) {
-        window.clearTimeout(headerHideTimerRef.current);
-      }
-
-      headerHideTimerRef.current = window.setTimeout(() => {
-        setShowHeader(false);
-      }, 1500);
-    };
-
     const onScroll = () => {
-      if (window.scrollY > 40) {
-        setShowHeader(true);
-        hideAfterIdle();
-      } else {
-        setShowHeader(false);
-        if (headerHideTimerRef.current) {
-          window.clearTimeout(headerHideTimerRef.current);
-        }
-      }
+      setShowHeader(window.scrollY > 40);
     };
 
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
-    return () => {
-      window.removeEventListener("scroll", onScroll);
-      if (headerHideTimerRef.current) {
-        window.clearTimeout(headerHideTimerRef.current);
-      }
-    };
+    return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
   return (
@@ -3303,27 +3286,45 @@ function LandingPage() {
       </button>
       <MobileSideMenu open={mobileMenuOpen} onClose={() => setMobileMenuOpen(false)} onSignup={goToSignup} />
       <header
-        style={{ backgroundColor: "rgba(255, 255, 255, 0.95)" }}
+        style={{ backgroundColor: "#ffffff" }}
         className={
-          "fixed inset-x-0 top-0 z-40 hidden border-b border-[#d7e7fb] backdrop-blur transition-all duration-300 sm:block " +
+          "fixed inset-x-0 top-0 z-40 hidden border-b border-[#c9ddf2] shadow-[0_12px_32px_-26px_rgba(7,20,42,0.62)] transition-all duration-300 sm:block " +
           (showHeader ? "translate-y-0 opacity-100" : "pointer-events-none -translate-y-full opacity-0")
         }
       >
-        <div className="mx-auto grid w-full max-w-[1660px] grid-cols-[auto_1fr_auto] items-center gap-4 px-5 py-4 sm:px-8 lg:px-10">
+        <div className="mx-auto grid w-full max-w-[1660px] grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-5 py-3 sm:px-8 lg:px-10 xl:gap-5">
           <HeroLogoMark />
 
-          <div className="hidden justify-self-center text-center lg:block">
-            <p className="text-sm font-black uppercase tracking-[0.14em] text-[#334155]">Hear the agent live right now:</p>
-            <a href="tel:+12495033301" className="mt-1 block text-xl font-black tracking-[-0.02em] text-[#ff9a22] transition hover:text-[#ffb35c]">
-              (249) 503-3301
-            </a>
+          <div className="min-w-0 justify-self-center">
+            <div className="hidden text-center lg:block min-[1180px]:hidden">
+              <p className="text-xs font-black uppercase tracking-[0.14em] text-[#334155]">Hear the agent live:</p>
+              <a href="tel:+12495033301" className="mt-0.5 block text-lg font-black tracking-[-0.02em] text-[#f47a00] transition hover:text-[#ff9a22]">
+                (249) 503-3301
+              </a>
+            </div>
+            <nav className="hidden items-center justify-center gap-1 min-[1180px]:flex" aria-label="Page sections">
+              {[
+                ["Why it matters", "#mobile-problem"],
+                ["How it works", "#mobile-how-it-works"],
+                ["See it work", "#mobile-scroll-call-story"],
+                ["Pricing", "#mobile-pricing"],
+              ].map(([label, href]) => (
+                <a key={href} href={href} className="rounded-lg px-2.5 py-2 text-[0.7rem] font-black uppercase tracking-[0.055em] text-[#294967] transition hover:bg-[#edf6ff] hover:text-[#0c5fc3] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#176bff] xl:px-3 xl:text-[0.74rem]">
+                  {label}
+                </a>
+              ))}
+            </nav>
           </div>
 
-          <div className="flex items-center gap-5">
+          <div className="flex items-center gap-2.5 xl:gap-3">
+            <a href="tel:+12495033301" aria-label="Call the live demo at 249-503-3301" className="hidden h-11 items-center gap-2 rounded-xl border border-[#b8d4ee] bg-[#f7fbff] px-3 text-[#0c5fc3] transition hover:border-[#6da8df] hover:bg-white min-[1180px]:inline-flex">
+              <HeroIcon type="phone" className="h-5 w-5" />
+              <span className="hidden whitespace-nowrap text-[0.78rem] font-black min-[1360px]:inline">249-503-3301</span>
+            </a>
             <button
               type="button"
               onClick={goToSignup}
-              className="rounded-xl bg-[linear-gradient(180deg,#ff7a00,#ff6500)] px-5 py-3 text-sm font-black text-white shadow-[0_18px_42px_-24px_rgba(255,106,0,0.95)] transition hover:-translate-y-0.5 hover:brightness-110 sm:px-6 sm:text-base 2xl:px-7 2xl:py-4 2xl:text-xl"
+              className="whitespace-nowrap rounded-xl bg-[linear-gradient(180deg,#ff7a00,#ff6500)] px-4 py-3 text-sm font-black text-white shadow-[0_18px_42px_-24px_rgba(255,106,0,0.95)] transition hover:-translate-y-0.5 hover:brightness-110 sm:px-5 xl:text-[0.95rem] 2xl:px-6"
             >
               Start Free Trial
             </button>
@@ -8323,6 +8324,9 @@ function LandingPage() {
               min-height: 0 !important;
               max-height: 42rem !important;
             }
+            .landing-call-controls {
+              display: block !important;
+            }
             #mobile-problem > div,
             #mobile-how-it-works > div,
             #mobile-value > div,
@@ -8332,6 +8336,8 @@ function LandingPage() {
             #mobile-final-decision > div {
               max-width: var(--landing-chapter-max) !important;
               padding-inline: var(--landing-desktop-gutter) !important;
+              padding-top: 4rem !important;
+              padding-bottom: 4rem !important;
             }
             #mobile-problem h2,
             #mobile-how-it-works h2,
@@ -8519,7 +8525,7 @@ function LandingPage() {
             <div className="landing-hero-visual relative z-0 mt-8 hidden justify-end sm:flex lg:mt-2 lg:self-center">
               <div className="landing-hero-proof-wrap w-full">
                 <p className="landing-hero-proof-heading mb-2 text-center text-[0.78rem] font-black uppercase tracking-[0.12em] text-[#294967]">
-                  See exactly what happens after a missed call.
+                  See a realistic missed-call example.
                 </p>
                 <HeroCallDashboard ownerCardRef={heroOwnerCardRef} />
               </div>
