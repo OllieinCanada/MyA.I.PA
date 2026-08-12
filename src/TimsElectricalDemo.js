@@ -7,6 +7,7 @@ import {
   timsElectricalKnowledge,
   timsElectricalScenarios,
 } from "./timsElectricalDemoData";
+import timsElectricalAudioManifest from "./timsElectricalAudioManifest.json";
 import { getScenarioProgress } from "./firstClassRentalsLogic";
 import "./FirstClassRentalsDemo.css";
 import "./TimsElectricalDemo.css";
@@ -66,12 +67,18 @@ function DemoPhone({ scenario, visibleLines, complete }) {
       <div className="fcr-phone-transcript" ref={transcriptRef} aria-live="polite">
         {visibleLines === 0 ? (
           <div className="fcr-phone-empty"><Icon name="phone" size={30} /><strong>Loading the selected call…</strong><span>No real call or text will be sent.</span></div>
-        ) : scenario.transcript.slice(0, visibleLines).map((line, index) => (
-          <div className={`fcr-bubble ${line.speaker}`} key={`${scenario.id}-${index}`}>
-            <small>{line.speaker === "assistant" ? "VIRTUAL RECEPTIONIST" : "CALLER"}</small>
-            <p>{line.text}</p>
-          </div>
-        ))}
+        ) : scenario.transcript.slice(0, visibleLines).map((line, index) => {
+          const assistant = line.speaker === "assistant";
+          return (
+            <div className={`tims-call-turn ${line.speaker}`} key={`${scenario.id}-${index}`}>
+              <span className="tims-call-avatar" aria-hidden="true">{assistant ? "AI" : "C"}</span>
+              <div>
+                <small>{assistant ? "VIRTUAL RECEPTIONIST" : "CALLER"}</small>
+                <p>{line.text}</p>
+              </div>
+            </div>
+          );
+        })}
       </div>
       <div className="fcr-phone-footer tims-phone-footer">
         <span className={complete ? "complete" : ""}><Icon name={complete ? "check" : "phone"} size={15} />{complete ? "Call complete" : "Simulation running"}</span>
@@ -88,6 +95,26 @@ function MessagePreview({ label, status, text, tone }) {
       <div className="tims-text-phone-thread"><p>{text}</p></div>
       <div className="tims-text-phone-status"><span>{status}</span><small>Simulated text preview</small></div>
     </article>
+  );
+}
+
+function ScenarioRecording({ scenario }) {
+  const recording = timsElectricalAudioManifest[scenario.id];
+  const available = recording?.status === "available" && recording?.src;
+  return (
+    <section className={`tims-scenario-recording ${available ? "is-available" : "is-planned"}`} aria-label={`${scenario.shortLabel} recorded call`}>
+      <span className="tims-recording-icon"><Icon name={available ? "play" : "phone"} size={18} /></span>
+      <div className="tims-recording-copy">
+        <span className="fcr-kicker">Recorded scenario call</span>
+        <strong>{available ? `Hear the ${scenario.shortLabel.toLowerCase()} conversation` : `${scenario.shortLabel} recording is being prepared`}</strong>
+        <small>{available ? "A recorded demonstration—no real customer information." : "The on-screen simulation remains available while this audio is prepared."}</small>
+      </div>
+      {available ? (
+        <audio key={`${scenario.id}-${recording.src}`} controls preload="metadata" src={`${process.env.PUBLIC_URL || ""}${recording.src}`}>
+          Your browser does not support audio playback.
+        </audio>
+      ) : <span className="tims-recording-status">COMING SOON</span>}
+    </section>
   );
 }
 
@@ -213,6 +240,7 @@ export function TimsElectricalLiveDemo({ embedded = false, onSignup }) {
             </div>
             <div className="fcr-progress"><div><span>Call progress</span><strong>{progress}%</strong></div><div className="fcr-progress-track"><span style={{ width: `${progress}%` }} /></div></div>
             <div className="fcr-stage-row">{scenario.stages.map((stage, index) => { const done = progress >= ((index + 1) / scenario.stages.length) * 100; return <div className={done ? "done" : ""} key={stage}><span>{done ? <Icon name="check" size={14} /> : index + 1}</span>{stage}</div>; })}</div>
+            <ScenarioRecording scenario={scenario} />
             <CallSummary scenario={scenario} complete={complete} onAction={handleAction} />
             {actionMessage && <p className="fcr-action-message" role="status">{actionMessage}</p>}
           </div>

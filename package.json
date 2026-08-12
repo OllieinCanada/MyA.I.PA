@@ -133,6 +133,7 @@
     "telegram:send-voicemail-section-gif:local": "node scripts/record-voicemail-section-gif.js --url=http://localhost:3000/ --selector=#voicemail-vs-ai --viewport=1365x768 --frames=32 --delay=190 --name=landing-voicemail-section-animation.gif --caption=Local MyAIPA voicemail section animation",
     "usage:note": "node scripts/usage-note.js",
     "audio:update-tims": "node scripts/update-tims-audio.js",
+    "audio:generate-tims-vapi": "node scripts/generate-tims-vapi-recordings.js",
     "transcript:tim": "node scripts/transcript-tim.js",
     "codex:watch": "powershell -ExecutionPolicy Bypass -File scripts/codex-watch.ps1",
     "codex:wakeup": "powershell -ExecutionPolicy Bypass -File scripts/codex-wakeup.ps1",

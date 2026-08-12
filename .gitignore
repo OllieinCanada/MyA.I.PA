@@ -8,6 +8,7 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 diagnostics/
+artifacts/tims-electrical-vapi-recordings/
 private-backups/
 .codex-resume-prompt.txt
 .codex-wakeup.log

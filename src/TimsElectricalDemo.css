@@ -54,6 +54,15 @@
 .tims-detail-disclosures details > p { padding: 0 11px 9px; }
 .tims-message-waiting { min-height: 46px; margin: 18px 0 0; display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: 1px dashed rgba(139,220,255,.3); border-radius: 10px; color: #a9c5d3; font-size: .72rem; font-weight: 750; }
 
+.tims-scenario-recording { display: grid; grid-template-columns: 42px minmax(0,1fr) minmax(230px, .72fr); align-items: center; gap: 12px; margin: 0 0 14px; padding: 12px 14px; border: 1px solid rgba(125,211,252,.28); border-radius: 13px; background: rgba(5,29,59,.72); box-shadow: inset 0 1px 0 rgba(255,255,255,.04); }
+.tims-recording-icon { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 999px; color: #05233f; background: #7dd3fc; box-shadow: 0 12px 24px -17px rgba(125,211,252,.95); }
+.tims-recording-copy { min-width: 0; display: grid; gap: 2px; }
+.tims-recording-copy .fcr-kicker { font-size: .56rem; }
+.tims-recording-copy strong { color: #fff; font-size: .8rem; line-height: 1.2; }
+.tims-recording-copy small { color: #a9c5d3; font-size: .63rem; font-weight: 700; line-height: 1.3; }
+.tims-scenario-recording audio { width: 100%; height: 38px; color-scheme: dark; }
+.tims-recording-status { justify-self: end; padding: 7px 10px; border: 1px solid rgba(169,197,211,.24); border-radius: 999px; color: #a9c5d3; font-size: .58rem; font-weight: 950; letter-spacing: .08em; }
+
 .tims-phone-footer { justify-content: center; }
 .tims-phone-footer > span { width: auto; height: auto; display: inline-flex; align-items: center; gap: 6px; padding: 7px 11px; border: 1px solid #c9dbe5; border-radius: 999px; color: #49657b; background: #f4f9fc; font-size: .68rem; font-weight: 850; }
 .tims-phone-footer > span.complete { color: #13763c; border-color: #b8e8c8; background: #edf9f1; }
@@ -70,7 +79,14 @@
 
 .tims-demo-landing .fcr-section { padding: 64px 0; }
 .tims-demo-landing .fcr-phone-shell { height: 540px; }
-.tims-demo-landing .fcr-phone-transcript { overflow-y: hidden; }
+.tims-demo-landing .fcr-phone-transcript { overflow-y: auto; scrollbar-width: thin; scrollbar-color: #9cb7c8 transparent; }
+.tims-call-turn { display: grid; grid-template-columns: 30px minmax(0,1fr); align-items: start; gap: 9px; padding: 10px 0; border-bottom: 1px solid #e3edf2; }
+.tims-call-turn:last-child { border-bottom: 0; }
+.tims-call-avatar { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 999px; color: #fff; background: #0d3159; font-size: .58rem; font-weight: 950; }
+.tims-call-turn.caller .tims-call-avatar { color: #513000; background: #ffd59a; }
+.tims-call-turn > div { min-width: 0; }
+.tims-call-turn small { display: block; margin-bottom: 3px; color: #597184; font-size: .53rem; font-weight: 950; letter-spacing: .07em; }
+.tims-call-turn p { margin: 0; color: #12283a; font-size: .69rem; font-weight: 720; line-height: 1.38; }
 
 @media (min-width: 1200px) {
   .tims-demo-landing .fcr-shell {
@@ -136,10 +152,18 @@
   .tims-demo-landing .fcr-phone-shell { width: min(320px, 100%); height: 380px; }
   .tims-demo-landing .fcr-phone-call { padding: 12px 14px; }
   .tims-demo-landing .fcr-phone-transcript { padding-top: 12px; }
+  .tims-call-turn { grid-template-columns: 27px minmax(0,1fr); gap: 8px; padding: 8px 0; }
+  .tims-call-avatar { width: 27px; height: 27px; font-size: .52rem; }
+  .tims-call-turn p { font-size: .64rem; }
   .tims-demo-landing .fcr-phone-footer { height: 50px; }
   .tims-demo-landing .fcr-progress { margin: 16px 0 14px; }
   .tims-demo-landing .fcr-stage-row { margin-bottom: 14px; }
   .tims-demo-landing .fcr-stage-row > div { min-height: 42px; padding: 6px; font-size: .66rem; }
+  .tims-scenario-recording { grid-template-columns: 38px minmax(0,1fr); gap: 10px; }
+  .tims-recording-icon { width: 38px; height: 38px; }
+  .tims-scenario-recording audio,
+  .tims-recording-status { grid-column: 1 / -1; justify-self: stretch; }
+  .tims-recording-status { text-align: center; }
   .tims-demo-landing .fcr-summary-card { padding: 16px; }
   .tims-demo-landing .fcr-summary-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 14px 0; }
   .tims-demo-landing .fcr-summary-grid > div { padding: 8px 6px; }

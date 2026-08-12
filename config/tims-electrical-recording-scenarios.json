@@ -1,0 +1,77 @@
+[
+  {
+    "id": "new-installation",
+    "label": "New installation",
+    "callerName": "Brian Smith",
+    "opening": "I'm having a hot tub installed and need an electrician to wire it.",
+    "facts": [
+      "You need a licensed electrician to wire a newly installed hot tub.",
+      "The property is 23 Robb Street in Hamilton.",
+      "You hope to start next week.",
+      "Your callback number is 905-555-1234 and after 5 PM is best.",
+      "There is no smoke, sparking, burning smell, or immediate danger."
+    ]
+  },
+  {
+    "id": "repair-request",
+    "label": "Repair request",
+    "callerName": "Maya Chen",
+    "opening": "My kitchen outlet stopped working yesterday and I need help with a repair.",
+    "facts": [
+      "A kitchen outlet stopped working yesterday.",
+      "The property is 18 Lakeview Avenue in Grimsby.",
+      "You tried another appliance and the outlet still did not work.",
+      "Your callback number is 905-555-0168 and mornings are best.",
+      "There is no smoke, sparking, burning smell, heat, or immediate danger."
+    ]
+  },
+  {
+    "id": "maintenance",
+    "label": "Maintenance",
+    "callerName": "Daniel Ortiz",
+    "opening": "I'm calling about a preventive electrical inspection for an older home.",
+    "facts": [
+      "You want to ask about a preventive electrical inspection for an older home.",
+      "The property is 44 Maple Drive in Stoney Creek.",
+      "Nothing is broken and there is no urgent or dangerous condition.",
+      "Your callback number is 905-555-0144 and weekday afternoons are best."
+    ]
+  },
+  {
+    "id": "unresolved-concern",
+    "label": "Talk to the team",
+    "callerName": "Aisha Patel",
+    "opening": "I'm an existing customer and want to discuss an unresolved concern with the team.",
+    "facts": [
+      "You are an existing customer following up on an unresolved concern discussed last week.",
+      "You do not want the virtual receptionist to make a decision; you want a team member to call.",
+      "The property is 71 King Street in Hamilton.",
+      "Your callback number is 905-555-0171 and evenings are best.",
+      "There is no immediate safety concern."
+    ]
+  },
+  {
+    "id": "urgent-outage",
+    "label": "Urgent issue",
+    "callerName": "Noah Wilson",
+    "opening": "My entire home has lost power, but the neighbouring homes still have power.",
+    "facts": [
+      "Your entire home lost power but neighbouring homes still have power.",
+      "The property is 9 Orchard Lane in Grimsby.",
+      "There is no smoke, sparking, burning smell, gas smell, or medical emergency.",
+      "Your callback number is 905-555-0109 and you are available now.",
+      "You understand the receptionist cannot dispatch or promise an arrival time."
+    ]
+  },
+  {
+    "id": "safety-redirect",
+    "label": "Safety redirect",
+    "callerName": "Jordan Lee",
+    "opening": "I can see sparks and smoke coming from a wall outlet.",
+    "facts": [
+      "You see sparks and smoke coming from a wall outlet.",
+      "State the danger immediately and do not provide ordinary contact details.",
+      "When instructed to leave and call 911, confirm that you are leaving now and end the call."
+    ]
+  }
+]

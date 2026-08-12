@@ -1,0 +1,50 @@
+{
+  "new-installation": {
+    "status": "available",
+    "src": "/audio/tims-electrical/new-installation.wav",
+    "durationSeconds": 85,
+    "source": "synthetic-vapi-agents",
+    "recordedAt": "2026-08-12T08:25:04.387Z",
+    "disclosure": "Synthetic demonstration call recorded between two Vapi agents; no real customer information."
+  },
+  "repair-request": {
+    "status": "available",
+    "src": "/audio/tims-electrical/repair-request.wav",
+    "durationSeconds": 115,
+    "source": "synthetic-vapi-agents",
+    "recordedAt": "2026-08-12T08:28:29.298Z",
+    "disclosure": "Synthetic demonstration call recorded between two Vapi agents; no real customer information."
+  },
+  "maintenance": {
+    "status": "available",
+    "src": "/audio/tims-electrical/maintenance.wav",
+    "durationSeconds": 86,
+    "source": "synthetic-vapi-agents",
+    "recordedAt": "2026-08-12T15:12:59.848Z",
+    "disclosure": "Synthetic demonstration call recorded between two Vapi agents; no real customer information."
+  },
+  "unresolved-concern": {
+    "status": "available",
+    "src": "/audio/tims-electrical/unresolved-concern.wav",
+    "durationSeconds": 102,
+    "source": "synthetic-vapi-agents",
+    "recordedAt": "2026-08-12T15:14:53.257Z",
+    "disclosure": "Synthetic demonstration call recorded between two Vapi agents; no real customer information."
+  },
+  "urgent-outage": {
+    "status": "available",
+    "src": "/audio/tims-electrical/urgent-outage.wav",
+    "durationSeconds": 108,
+    "source": "synthetic-vapi-agents",
+    "recordedAt": "2026-08-12T15:16:53.456Z",
+    "disclosure": "Synthetic demonstration call recorded between two Vapi agents; no real customer information."
+  },
+  "safety-redirect": {
+    "status": "available",
+    "src": "/audio/tims-electrical/safety-redirect.wav",
+    "durationSeconds": 37,
+    "source": "synthetic-vapi-agents",
+    "recordedAt": "2026-08-12T15:17:39.528Z",
+    "disclosure": "Synthetic demonstration call recorded between two Vapi agents; no real customer information."
+  }
+}

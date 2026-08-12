@@ -68,4 +68,21 @@ describe("Tim's Electrical preloaded landing-page demo", () => {
     expect(container.textContent).not.toMatch(/Create task/i);
     expect(container.textContent).not.toMatch(/^Email$/i);
   });
+
+  test("connects the selected scenario to a clearly disclosed recording", () => {
+    const audio = container.querySelector(".tims-scenario-recording audio");
+    expect(container.textContent).toMatch(/Recorded scenario call/i);
+    expect(container.textContent).toMatch(/no real customer information/i);
+    expect(audio).not.toBeNull();
+    expect(audio.getAttribute("src")).toMatch(/audio\/tims-electrical\/new-installation\.wav/i);
+
+    const repairButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent.trim() === "Repair request",
+    );
+    act(() => repairButton.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+
+    expect(container.textContent).toMatch(/Hear the repair request conversation/i);
+    expect(container.querySelector(".tims-scenario-recording audio")?.getAttribute("src"))
+      .toMatch(/audio\/tims-electrical\/repair-request\.wav/i);
+  });
 });

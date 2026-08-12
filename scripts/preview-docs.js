@@ -16,6 +16,7 @@ const contentTypes = {
   ".png": "image/png",
   ".svg": "image/svg+xml",
   ".wav": "audio/wav",
+  ".mp3": "audio/mpeg",
 };
 
 function send(res, status, body, contentType = "text/plain; charset=utf-8") {

@@ -22,14 +22,30 @@ const heroCallTranscript = [
   {
     time: "6:42 PM",
     speaker: "Caller",
-    accent: "bg-[#9fb4cf]",
-    text: "Hi, I'm putting in a hot tub and need it wired. I didn't expect anyone to pick up after hours.",
+    role: "caller",
+    initials: "BR",
+    text: "Hi, I'm putting in a hot tub and need it wired.",
   },
   {
     time: "6:42 PM",
     speaker: "My AI PA",
-    accent: "bg-[#66e7b4]",
+    role: "assistant",
+    initials: "AI",
     text: "Absolutely—I can collect that for the team. When are you hoping to have the work done?",
+  },
+  {
+    time: "6:43 PM",
+    speaker: "Caller",
+    role: "caller",
+    initials: "BR",
+    text: "Next week. I'm Brian Smith at 23 Robb Street in Hamilton. After 5 PM is best.",
+  },
+  {
+    time: "6:43 PM",
+    speaker: "My AI PA",
+    role: "assistant",
+    initials: "AI",
+    text: "Thanks, Brian. I'll pass the installation details and callback preference to the team.",
   },
 ];
 
@@ -961,7 +977,7 @@ function HeroSummaryStack() {
   );
 }
 
-function HeroCallDashboard({ ownerCardRef }) {
+function HeroCallDashboard({ ownerCardRef, onToggleAudio, audioPlaying, audioTime, audioDuration }) {
   return (
     <div className="landing-call-dashboard relative mx-auto w-full max-w-[690px]">
       <div className="relative overflow-hidden rounded-[32px] border border-[#1d2a3c] bg-[#050913] text-white shadow-[0_22px_60px_-42px_rgba(0,0,0,0.76),inset_0_1px_0_rgba(255,255,255,0.045)]">
@@ -1058,38 +1074,47 @@ function HeroCallDashboard({ ownerCardRef }) {
 
           <section className="landing-conversation-column relative flex flex-col px-8 py-7 2xl:px-9">
             <div className="landing-conversation-header flex items-center justify-between">
-              <h3 className="landing-conversation-title text-[1.38rem] font-black tracking-[-0.025em] 2xl:text-[1.55rem]">A Realistic Sample Conversation</h3>
-              <span className="landing-summary-ready-badge rounded-full bg-[#063a83]/80 px-4 py-2 text-[0.92rem] font-black uppercase tracking-[0.1em] text-[#9edaff]">Sample summary</span>
+              <div>
+                <p className="text-[0.66rem] font-black uppercase tracking-[0.14em] text-[#72c8ff]">Recorded call transcript</p>
+                <h3 className="landing-conversation-title mt-1 text-[1.38rem] font-black tracking-[-0.025em] 2xl:text-[1.55rem]">A real conversation—not a text thread</h3>
+              </div>
+              <button
+                type="button"
+                onClick={onToggleAudio}
+                className="landing-call-audio-button inline-flex shrink-0 items-center gap-2 rounded-full border border-[#72c8ff]/55 bg-[#0b376d] px-3 py-2 text-[0.72rem] font-black text-white shadow-[0_12px_26px_-18px_rgba(57,207,255,0.85)] transition hover:bg-[#124b8d]"
+                aria-label={audioPlaying ? "Pause recorded Tim's Electrical demo call" : "Play recorded Tim's Electrical demo call"}
+              >
+                <span className="grid h-6 w-6 place-items-center rounded-full bg-[#39cfff] text-[#032345]" aria-hidden="true">
+                  {audioPlaying ? "Ⅱ" : "▶"}
+                </span>
+                <span>{audioPlaying ? "Pause call" : "Hear call"}</span>
+              </button>
             </div>
 
-            <div className="landing-conversation-panel mt-4 rounded-[26px] border border-white/8 bg-black/18 px-5 py-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-              <p className="landing-conversation-opening-label text-[0.92rem] font-black uppercase tracking-[0.06em] text-white/38">AI Assistant</p>
-              <div className="landing-conversation-opening mt-2.5 max-w-[78%] rounded-[16px] bg-white/10 px-5 py-3 text-[1.12rem] font-bold leading-[1.26] text-white/92">
-                <span className="block">Hi, thanks for calling Tim&apos;s Electrical.</span>
-                <span className="mt-2 block">How can I help you today?</span>
+            <div className="landing-conversation-panel landing-call-transcript mt-4 rounded-[20px] border border-white/10 bg-[#07111f]/92 px-4 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+              <div className="landing-call-transcript-intro flex items-center justify-between gap-3 border-b border-white/10 pb-2">
+                <span className="landing-service-badge shrink-0 whitespace-nowrap rounded-full border border-[#78b7ff]/60 bg-[#082c5a] px-2.5 py-1 text-[0.62rem] font-black uppercase tracking-[0.06em] text-[#b9dcff]">New installation</span>
+                <span className="text-[0.62rem] font-bold text-white/48">Speaker-labelled call transcript</span>
               </div>
-              <p className="landing-conversation-opening-time landing-conversation-time mt-1 text-right text-[0.74rem] font-bold text-white/35">10:32 AM</p>
-
-              <p className="mt-3 text-[0.92rem] font-black uppercase tracking-[0.06em] text-[#78b7ff]">Caller</p>
-              <div className="landing-service-message ml-auto mt-2.5 flex max-w-[92%] items-center gap-2.5 rounded-[20px] bg-[#0b376d] px-3.5 py-2.5 text-[1.1rem] font-bold leading-[1.2] text-white/96 shadow-[0_18px_42px_-30px_rgba(37,99,235,0.95)]">
-                <span className="landing-service-badge shrink-0 whitespace-nowrap rounded-full border border-[#78b7ff]/75 bg-[#082c5a] px-2.5 py-1 text-[0.68rem] font-black uppercase tracking-[0.06em] text-[#b9dcff] shadow-[0_8px_22px_-14px_rgba(120,183,255,0.95)]">
-                  (New Installation)
-                </span>
-                <span className="min-w-0">I&apos;m putting in a hot tub and need it wired.</span>
+              <div className="landing-call-transcript-list divide-y divide-white/8">
+                {heroCallTranscript.map((turn) => (
+                  <article className={`landing-call-transcript-turn ${turn.role}`} key={`${turn.time}-${turn.speaker}-${turn.text}`}>
+                    <span className="landing-call-transcript-avatar" aria-hidden="true">{turn.initials}</span>
+                    <div className="min-w-0 flex-1">
+                      <div className="landing-call-transcript-meta">
+                        <strong>{turn.speaker}</strong>
+                        <time>{turn.time}</time>
+                      </div>
+                      <p>{turn.text}</p>
+                    </div>
+                  </article>
+                ))}
               </div>
-              <p className="landing-conversation-time mt-1 text-right text-[0.74rem] font-bold text-white/35">10:32 AM</p>
-
-              <p className="mt-3 text-[0.92rem] font-black uppercase tracking-[0.06em] text-white/38">AI Assistant</p>
-              <div className="landing-conversation-long-bubble mt-2.5 max-w-[84%] rounded-[16px] bg-white/10 px-5 py-3 text-[1.02rem] font-bold leading-[1.18] text-white/92">
-                <span className="block">Absolutely—I can collect that for the team. When are you hoping to have the work done?</span>
+              <div className="landing-call-audio-progress mt-1.5 flex items-center gap-2 border-t border-white/10 pt-2 text-[0.62rem] font-bold text-white/58">
+                <span>{formatClock(audioTime)}</span>
+                <span className="h-1 flex-1 overflow-hidden rounded-full bg-white/12"><i className="block h-full rounded-full bg-[#39cfff]" style={{ width: `${Math.max(0, Math.min(100, (audioTime / Math.max(audioDuration, 1)) * 100))}%` }} /></span>
+                <span>{formatClock(audioDuration)}</span>
               </div>
-              <p className="landing-conversation-time mt-1 text-right text-[0.74rem] font-bold text-white/35">10:32 AM</p>
-
-              <p className="mt-3 text-[0.92rem] font-black uppercase tracking-[0.06em] text-[#78b7ff]">Caller</p>
-              <div className="landing-conversation-caller-detail ml-auto mt-2.5 max-w-[78%] rounded-[20px] bg-[#0b376d] px-5 py-3 text-[1rem] font-bold leading-[1.18] text-white/96 shadow-[0_18px_42px_-30px_rgba(37,99,235,0.95)]">
-                Sometime next week. My name is Brian Smith, the address is 23 Robb Street in Hamilton, and after 5 PM is the best time to reach me at this number.
-              </div>
-              <p className="landing-conversation-time mt-1 text-right text-[0.74rem] font-bold text-white/35">10:33 AM</p>
             </div>
 
             <div className="landing-dashboard-bottom mt-3">
@@ -8376,6 +8401,105 @@ function LandingPage() {
               max-height: 38rem !important;
             }
           }
+          /* The hero is a phone-call transcript, not a messaging thread. These
+             rules intentionally override older generic bubble sizing rules. */
+          .landing-call-transcript {
+            min-height: 0 !important;
+            overflow: hidden !important;
+          }
+          .landing-call-transcript-intro {
+            min-height: 1.75rem;
+          }
+          .landing-call-transcript-list {
+            display: block !important;
+          }
+          .landing-call-transcript-turn {
+            display: grid !important;
+            grid-template-columns: 1.9rem minmax(0, 1fr) !important;
+            align-items: start !important;
+            gap: 0.65rem !important;
+            width: 100% !important;
+            max-width: none !important;
+            margin: 0 !important;
+            padding: 0.5rem 0 !important;
+            border-radius: 0 !important;
+            background: transparent !important;
+            box-shadow: none !important;
+            color: rgba(255,255,255,0.94) !important;
+          }
+          .landing-call-transcript-avatar {
+            display: grid;
+            width: 1.9rem;
+            height: 1.9rem;
+            place-items: center;
+            border-radius: 999px;
+            border: 1px solid rgba(255,255,255,0.18);
+            background: #15314f;
+            color: #d9ecff;
+            font-size: 0.58rem;
+            font-weight: 900;
+            letter-spacing: 0.04em;
+          }
+          .landing-call-transcript-turn.assistant .landing-call-transcript-avatar {
+            background: #075f3d;
+            color: #c6ffe1;
+          }
+          .landing-call-transcript-meta {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.75rem;
+            line-height: 1;
+          }
+          .landing-call-transcript-meta strong {
+            color: #91ccff;
+            font-size: 0.68rem;
+            font-weight: 900;
+            letter-spacing: 0.055em;
+            text-transform: uppercase;
+          }
+          .landing-call-transcript-turn.assistant .landing-call-transcript-meta strong {
+            color: #7df0ba;
+          }
+          .landing-call-transcript-meta time {
+            color: rgba(255,255,255,0.38);
+            font-size: 0.58rem;
+            font-weight: 800;
+          }
+          .landing-call-transcript-turn p {
+            margin-top: 0.28rem !important;
+            color: rgba(255,255,255,0.9) !important;
+            font-size: 0.78rem !important;
+            font-weight: 700 !important;
+            line-height: 1.26 !important;
+          }
+          @media (min-width: 1500px) {
+            .landing-call-transcript-turn {
+              padding-block: 0.62rem !important;
+            }
+            .landing-call-transcript-turn p {
+              font-size: 0.86rem !important;
+              line-height: 1.32 !important;
+            }
+          }
+          @media (min-width: 1200px) and (max-height: 760px) {
+            .landing-conversation-header > div > p {
+              display: none;
+            }
+            .landing-conversation-title {
+              margin-top: 0 !important;
+            }
+            .landing-call-transcript-turn {
+              padding-block: 0.32rem !important;
+            }
+            .landing-call-transcript-turn p {
+              font-size: 0.71rem !important;
+              line-height: 1.18 !important;
+            }
+            .landing-call-audio-button {
+              padding: 0.34rem 0.55rem !important;
+            }
+          }
         `}</style>
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_16%_18%,rgba(187,222,255,0.74),transparent_30%),radial-gradient(circle_at_78%_12%,rgba(213,235,255,0.70),transparent_32%),linear-gradient(180deg,#ffffff_0%,#f6fbff_28%,#e9f6ff_100%)]" />
         <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgba(37,99,235,0.06)_1px,transparent_1px),linear-gradient(rgba(37,99,235,0.045)_1px,transparent_1px)] bg-[size:76px_76px] opacity-[0.32]" />
@@ -8527,7 +8651,13 @@ function LandingPage() {
                 <p className="landing-hero-proof-heading mb-2 text-center text-[0.78rem] font-black uppercase tracking-[0.12em] text-[#294967]">
                   See a realistic missed-call example.
                 </p>
-                <HeroCallDashboard ownerCardRef={heroOwnerCardRef} />
+                <HeroCallDashboard
+                  ownerCardRef={heroOwnerCardRef}
+                  onToggleAudio={toggleAudio}
+                  audioPlaying={audioPlaying}
+                  audioTime={audioTime}
+                  audioDuration={audioDuration}
+                />
               </div>
             </div>
           </div>
@@ -8990,7 +9120,7 @@ function LandingPage() {
           <div className="hidden sm:block">
           <div className="contractor-proof-mobile-intro sm:hidden">
             <p className="text-[0.7rem] font-black uppercase tracking-[0.16em] text-[#176bff]">Proof before promises</p>
-            <h2 className="mt-2 text-[1.8rem] font-black leading-none tracking-[-0.045em] text-[#07142a]">Hear a real call become usable job details.</h2>
+            <h2 className="mt-2 text-[1.8rem] font-black leading-none tracking-[-0.045em] text-[#07142a]">Hear a recorded call become usable job details.</h2>
             <p className="mt-3 text-[0.98rem] font-medium leading-6 text-[#475569]">Listen to the assistant answer, ask the right questions, and prepare the follow-up text.</p>
           </div>
 
@@ -9033,10 +9163,10 @@ function LandingPage() {
               <div className="min-w-0">
                 <p className="text-[0.72rem] font-black uppercase tracking-[0.16em] text-[#64c9ff]">Proof in action</p>
                 <h3 className="mt-2 max-w-[610px] text-[clamp(1.55rem,2.8vw,2.45rem)] font-black leading-[1.02] tracking-[-0.045em] text-white">
-                  Hear a real example of the agent taking a service call.
+                  Hear a recorded example of the agent taking a service call.
                 </h3>
                 <p className="mt-3 max-w-[590px] text-[0.96rem] font-medium leading-7 text-[#cfe7ff]">
-                  Hear a real-life service call. The assistant answers common questions and gathers the problem, service address, preferred timing, and callback number.
+                  Hear a recorded service-call demonstration. The assistant answers common questions and gathers the problem, service address, preferred timing, and callback number.
                 </p>
 
                 <div className="mt-4 rounded-[8px] border border-[#21476f] bg-[#092646] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
@@ -9053,7 +9183,7 @@ function LandingPage() {
                         </svg>
                       </button>
                       <div className="min-w-0">
-                        <p className="text-[0.72rem] font-black uppercase tracking-[0.14em] text-[#7dd3fc]">Real call example</p>
+                        <p className="text-[0.72rem] font-black uppercase tracking-[0.14em] text-[#7dd3fc]">Recorded demo call</p>
                         <p className="mt-1 text-[1.05rem] font-black leading-tight text-white sm:text-[1.22rem]">Electrical setup lead</p>
                         <p className="mt-1 max-w-[440px] text-[0.86rem] font-medium leading-6 text-[#cfe7ff]">
                           My AI PA captures the problem, service address, urgency, preferred timing, and best callback number.
@@ -9107,7 +9237,7 @@ function LandingPage() {
                       <span className="grid h-7 w-7 place-items-center rounded-full bg-[#0d3764] text-[#8bdcff]">
                         <HeroIcon type="chat" className="h-4 w-4" />
                       </span>
-                      <p className="text-[0.72rem] font-black uppercase tracking-[0.14em] text-[#7dd3fc]">Live transcript</p>
+                      <p className="text-[0.72rem] font-black uppercase tracking-[0.14em] text-[#7dd3fc]">Synchronized transcript</p>
                     </div>
                     <span className="rounded-full border border-[#7dd3fc]/40 bg-[#0d3764] px-2.5 py-1 text-[0.66rem] font-black uppercase tracking-[0.1em] text-[#a9e8ff]">
                       {activeTranscript.speaker}
