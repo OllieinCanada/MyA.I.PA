@@ -77,7 +77,7 @@
     width: min(var(--landing-chapter-max, 90rem), calc(100% - (2 * var(--landing-desktop-gutter, 3rem))));
   }
   .tims-demo-landing .fcr-section {
-    padding: clamp(72px, 6vw, 96px) 0;
+    padding: 64px 0 68px;
   }
   .tims-demo-landing .fcr-section-heading {
     max-width: 920px;
@@ -100,6 +100,21 @@
   .tims-demo-landing .fcr-console {
     min-width: 0;
   }
+  .tims-demo-landing .fcr-progress { margin: 16px 0 12px; }
+  .tims-demo-landing .fcr-stage-row { margin-bottom: 14px; }
+  .tims-demo-landing .fcr-stage-row > div { min-height: 42px; padding: 7px; }
+  .tims-demo-landing .fcr-summary-card { padding: 18px; }
+  .tims-demo-landing .fcr-summary-grid { margin: 13px 0; }
+  .tims-demo-landing .fcr-summary-copy { min-height: 0; margin-bottom: 10px; }
+  .tims-demo-landing .fcr-detail-columns { gap: 10px; }
+  .tims-demo-landing .tims-message-grid { gap: 14px; margin-top: 14px; }
+  .tims-demo-landing .tims-message-preview { border-width: 4px; border-radius: 24px; }
+  .tims-demo-landing .tims-text-phone-top { min-height: 20px; padding-top: 3px; }
+  .tims-demo-landing .tims-text-phone-contact { padding-block: 6px; }
+  .tims-demo-landing .tims-text-phone-thread { min-height: 88px; padding-top: 10px; }
+  .tims-demo-landing .tims-text-phone-status { min-height: 26px; padding-bottom: 6px; }
+  .tims-demo-landing .fcr-summary-actions { margin-top: 11px; padding-top: 10px; }
+  .tims-demo-landing .tims-demo-cta { margin-top: 24px; padding-block: 20px; }
 }
 
 @media (min-width: 1600px) {
