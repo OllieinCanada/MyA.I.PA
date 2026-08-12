@@ -53,6 +53,17 @@ function Brand() {
 
 export function buildTranscriptTimeline(transcript = [], durationSeconds = 0) {
   if (!transcript.length || durationSeconds <= 0) return [];
+  const hasRecordedTiming = transcript.every((line) => Number.isFinite(line.startSeconds));
+  if (hasRecordedTiming) {
+    return transcript.map((line, index) => ({
+      index,
+      start: Math.max(0, line.startSeconds),
+      end: Math.max(
+        line.startSeconds,
+        transcript[index + 1]?.startSeconds ?? durationSeconds,
+      ),
+    }));
+  }
   const weights = transcript.map((line) => {
     const wordCount = String(line.text || "").trim().split(/\s+/).filter(Boolean).length;
     return Math.max(2.8, (wordCount / 2.7) + 1.2);

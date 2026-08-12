@@ -1,3 +1,5 @@
+import { timsElectricalRecordedTranscripts } from "./timsElectricalRecordedTranscripts";
+
 export const timsElectricalCompany = {
   name: "Tim's Electrical",
   privateNotice:
@@ -91,10 +93,10 @@ export const timsElectricalScenarios = [
       { speaker: "caller", text: "905-555-0123, after 5 p.m." },
       { speaker: "assistant", text: "Thanks. I'll prepare those details for the team. They will follow up to discuss the request and next steps. Have a great day!" },
     ],
-    collected: ["Brian Smith", "905-555-0123", "63 York Street · St. Catharines", "Hot tub wiring", "Preferred start · Next week", "Callback after 5 p.m."],
-    missing: ["Site-access notes"],
-    summary: "Brian wants a quote for wiring a hot tub at 63 York Street in St. Catharines, hopes to start next week, and prefers a callback after 5 p.m.",
-    ownerText: "NEW INSTALLATION · Brian Smith · 905-555-0123 · Hot tub wiring · 63 York Street, St. Catharines · Preferred start: next week · Callback after 5 p.m. · Pricing and scheduling require confirmation.",
+    collected: ["Brian Smith", "905-555-1234", "23 Robb Street · Hamilton", "New hot tub wiring", "Callback after 5 p.m."],
+    missing: ["Preferred start date", "Site-access notes"],
+    summary: "Brian needs a licensed electrician to wire a newly installed hot tub at 23 Robb Street in Hamilton and prefers a callback after 5 p.m.",
+    ownerText: "NEW INSTALLATION · Brian Smith · 905-555-1234 · New hot tub wiring · 23 Robb Street, Hamilton · Callback after 5 p.m. · Pricing and scheduling require confirmation.",
     customerText: "Thanks for calling Tim's Electrical. We received your hot tub wiring request. The team will follow up to discuss the details and next steps. Have a great day!",
   },
   {
@@ -116,10 +118,10 @@ export const timsElectricalScenarios = [
       { speaker: "caller", text: "905-555-0188." },
       { speaker: "assistant", text: "I'll prepare the repair request for the team. They will confirm whether the address and requested work can be served." },
     ],
-    collected: ["Maya Chen", "905-555-0188", "18 King Street · Grimsby", "Two kitchen outlets without power", "No smoke, sparks, heat, or burning smell"],
-    missing: ["Preferred callback time"],
-    summary: "Maya reports two kitchen outlets without power at 18 King Street in Grimsby. She reports no smoke, sparks, heat, or burning smell.",
-    ownerText: "REPAIR REQUEST · Maya Chen · 905-555-0188 · Two kitchen outlets have no power · 18 King Street, Grimsby · No immediate-danger indicators reported.",
+    collected: ["Maya Chen", "905-555-0168", "18 Lake Avenue · Grimsby", "Kitchen outlet stopped working", "No immediate-danger indicators reported", "Mornings preferred"],
+    missing: [],
+    summary: "Maya reports that a kitchen outlet stopped working yesterday at 18 Lake Avenue in Grimsby. She reports no smoke, sparks, heat, burning smell, or immediate danger and prefers mornings.",
+    ownerText: "REPAIR REQUEST · Maya Chen · 905-555-0168 · Kitchen outlet stopped working yesterday · 18 Lake Avenue, Grimsby · No immediate-danger indicators reported · Mornings preferred.",
     customerText: "Thanks for calling Tim's Electrical. We received your outlet repair request. The team will follow up after reviewing the service details.",
   },
   {
@@ -141,10 +143,10 @@ export const timsElectricalScenarios = [
       { speaker: "caller", text: "Weekday mornings." },
       { speaker: "assistant", text: "I'll prepare the inspection inquiry. The team will confirm the scope, availability, and pricing." },
     ],
-    collected: ["Jordan Lee", "905-555-0144", "72 Main Street · Hamilton", "Preventive panel inspection", "Weekday mornings"],
-    missing: ["Approximate panel age"],
-    summary: "Jordan is requesting a preventive electrical-panel inspection at 72 Main Street in Hamilton and prefers weekday-morning contact.",
-    ownerText: "MAINTENANCE · Jordan Lee · 905-555-0144 · Preventive panel inspection · 72 Main Street, Hamilton · Weekday mornings.",
+    collected: ["Daniel Ortiz", "905-555-0144", "44 Maple Drive · Stoney Creek", "Preventive electrical inspection", "Older home", "Weekday afternoons"],
+    missing: [],
+    summary: "Daniel is requesting a preventive electrical inspection for an older home at 44 Maple Drive in Stoney Creek and prefers weekday afternoons.",
+    ownerText: "MAINTENANCE · Daniel Ortiz · 905-555-0144 · Preventive electrical inspection for an older home · 44 Maple Drive, Stoney Creek · Weekday afternoons.",
     customerText: "Thanks for calling Tim's Electrical. We received your panel-inspection inquiry. The team will follow up to confirm the scope, availability, and pricing.",
   },
   {
@@ -166,10 +168,10 @@ export const timsElectricalScenarios = [
       { speaker: "caller", text: "Please call me with an update. Evenings are best." },
       { speaker: "assistant", text: "I'll prepare that callback request without promising an outcome or response time." },
     ],
-    collected: ["Priya Shah", "905-555-0177", "18 George Street", "Flickering hallway light", "Previously discussed", "Evening callback"],
-    missing: ["City"],
-    summary: "Priya requests an evening callback about a flickering hallway light she says was previously discussed. No immediate-danger indicators were reported.",
-    ownerText: "FOLLOW-UP REQUEST · Priya Shah · 905-555-0177 · 18 George Street · Flickering hallway light previously discussed · No immediate danger reported · Evenings preferred.",
+    collected: ["Ayesha Patel", "905-555-0171", "71 King Street · Hamilton", "Existing customer", "Unresolved concern", "Evening callback"],
+    missing: ["More information about the concern"],
+    summary: "Ayesha is an existing customer requesting an evening callback about an unresolved concern connected with 71 King Street in Hamilton. She was unsure of the concern details during the call.",
+    ownerText: "FOLLOW-UP REQUEST · Ayesha Patel · 905-555-0171 · 71 King Street, Hamilton · Existing customer with an unresolved concern · Details require clarification · Evenings preferred.",
     customerText: "Thanks for calling Tim's Electrical. We recorded your request for an update and your evening callback preference. The team will review the details and follow up.",
   },
   {
@@ -190,10 +192,10 @@ export const timsElectricalScenarios = [
       { speaker: "caller", text: "905-555-0160." },
       { speaker: "assistant", text: "I'll prepare the urgent request. I cannot guarantee dispatch or a response time, and the electrical team must confirm the next step." },
     ],
-    collected: ["Alex Martin", "905-555-0160", "91 Lake Street · Grimsby", "Complete home outage", "Neighbours still have power", "No immediate-danger indicators reported"],
-    missing: ["Preferred callback time"],
-    summary: "PRIORITY — Alex reports a complete home outage while neighbouring properties still have power. No smoke, fire, sparks, burning smell, panel heat, or immediate danger was reported.",
-    ownerText: "PRIORITY CALLBACK · Alex Martin · 905-555-0160 · Complete home outage · 91 Lake Street, Grimsby · No immediate-danger indicators reported.",
+    collected: ["Noah Wilson", "905-555-0109", "9 Orchard Lane · Grimsby", "Complete home outage", "Neighbours still have power", "No immediate-danger indicators reported", "Available now"],
+    missing: [],
+    summary: "PRIORITY — Noah reports a complete home outage at 9 Orchard Lane in Grimsby while neighbouring properties still have power. No immediate-danger indicators were reported, and he is available now.",
+    ownerText: "PRIORITY CALLBACK · Noah Wilson · 905-555-0109 · Complete home outage · 9 Orchard Lane, Grimsby · Neighbours still have power · No immediate-danger indicators reported · Available now.",
     customerText: "Thanks for calling Tim's Electrical. We recorded your urgent power-outage request. This is not a dispatch confirmation; the team must review the details and contact you.",
   },
   {
@@ -214,4 +216,7 @@ export const timsElectricalScenarios = [
     ownerText: "SAFETY EVENT · Caller reported sparks and smoke · Ordinary service intake stopped · Caller directed to leave danger and call 911.",
     customerText: "No routine confirmation text is prepared during an emergency redirect. The caller was directed to leave danger and call 911.",
   },
-];
+].map((scenario) => ({
+  ...scenario,
+  transcript: timsElectricalRecordedTranscripts[scenario.id] || scenario.transcript,
+}));

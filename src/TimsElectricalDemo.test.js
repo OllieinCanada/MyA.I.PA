@@ -33,7 +33,7 @@ describe("Tim's Electrical preloaded landing-page demo", () => {
     expect(container.textContent).toMatch(/Summary builds during the call/i);
     expect(container.textContent).not.toMatch(/NEW INSTALLATION · Brian Smith/i);
 
-    act(() => jest.advanceTimersByTime(4000));
+    act(() => jest.advanceTimersByTime(6500));
 
     expect(container.textContent).toMatch(/NEW INSTALLATION · Brian Smith/i);
     expect(container.textContent).toMatch(/Owner's cellphone/i);
@@ -52,7 +52,7 @@ describe("Tim's Electrical preloaded landing-page demo", () => {
     expect(container.textContent).not.toMatch(/NEW INSTALLATION · Brian Smith/i);
     expect(container.textContent).not.toMatch(/REPAIR REQUEST · Maya Chen/i);
 
-    act(() => jest.advanceTimersByTime(4000));
+    act(() => jest.advanceTimersByTime(6500));
 
     expect(container.textContent).toMatch(/REPAIR REQUEST · Maya Chen/i);
     expect(container.textContent).toMatch(/100%/i);
@@ -109,5 +109,44 @@ describe("Tim's Electrical preloaded landing-page demo", () => {
     expect(getActiveTranscriptIndex(timeline, 0)).toBe(0);
     expect(getActiveTranscriptIndex(timeline, timeline[1].start + 0.1)).toBe(1);
     expect(getActiveTranscriptIndex(timeline, 60)).toBe(2);
+  });
+
+  test("uses measured timestamps when a recorded transcript provides them", () => {
+    const transcript = [
+      { text: "Greeting", startSeconds: 0.75 },
+      { text: "Caller request", startSeconds: 11 },
+      { text: "Follow-up question", startSeconds: 17.55 },
+    ];
+    const timeline = buildTranscriptTimeline(transcript, 25);
+
+    expect(timeline).toEqual([
+      { index: 0, start: 0.75, end: 11 },
+      { index: 1, start: 11, end: 17.55 },
+      { index: 2, start: 17.55, end: 25 },
+    ]);
+    expect(getActiveTranscriptIndex(timeline, 12)).toBe(1);
+    expect(getActiveTranscriptIndex(timeline, 18)).toBe(2);
+  });
+
+  test("shows the words spoken in the selected Tim's recording", () => {
+    act(() => jest.advanceTimersByTime(5000));
+
+    expect(container.textContent).toMatch(/licensed electrician to wire a newly installed hot tub/i);
+    expect(container.textContent).toMatch(/23 Robb Street in Hamilton/i);
+    expect(container.textContent).toMatch(/905-555-1234/i);
+    expect(container.textContent).not.toMatch(/63 York Street/i);
+  });
+
+  test("moves the active caption at the recorded speaker-change time", () => {
+    const position = container.querySelector('input[aria-label="Recorded call position"]');
+    const setRangeValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
+    act(() => {
+      setRangeValue.call(position, "12");
+      position.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+
+    const activeTurn = container.querySelector('.tims-call-turn[data-active="true"]');
+    expect(activeTurn?.textContent).toMatch(/CALLER/i);
+    expect(activeTurn?.textContent).toMatch(/licensed electrician to wire a newly installed hot tub/i);
   });
 });

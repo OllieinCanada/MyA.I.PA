@@ -7821,7 +7821,7 @@ function LandingPage() {
               display: grid;
               width: fit-content;
               min-height: 3.1rem;
-              margin: 1.15rem auto 0;
+              margin: 0.65rem auto 0;
               padding-inline: 1.25rem;
               place-items: center;
               border: 1px solid #b7e1c4;
@@ -8160,7 +8160,7 @@ function LandingPage() {
             }
             .landing-tablet-coverage {
               width: fit-content;
-              margin: 1.35rem auto 0;
+              margin: 0.85rem auto 0;
               padding: 0.82rem 1.5rem;
               border: 1px solid #b7e1c4;
               border-radius: 999px;
@@ -8867,7 +8867,7 @@ function LandingPage() {
                 Meet My AI PA—the AI telephone answering assistant for trade businesses. It answers when you cannot, captures the job details, and prepares the follow-up before the caller moves on.
               </p>
 
-              <p className="landing-hero-coverage mt-4 inline-block border-l-4 border-[#17951f] bg-[#e1f8e5]/90 px-3 py-2 text-[1.05rem] font-black leading-tight text-[#147d1b]">
+              <p className="landing-hero-coverage mt-2 inline-block border-l-4 border-[#17951f] bg-[#e1f8e5]/90 px-3 py-2 text-[1.05rem] font-black leading-tight text-[#147d1b]">
                 Keep your existing business number.
               </p>
               <p className="landing-coffee-line mt-3 text-[0.98rem] font-bold leading-[1.35] text-[#334155]">
