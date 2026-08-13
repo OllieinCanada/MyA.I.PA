@@ -74,11 +74,13 @@ describe("responsive three-sided homepage proof", () => {
     expect(proof.getAttribute("aria-label")).toMatch(/Side 1 of 3/i);
   });
 
-  test("shows readable dual-phone details, animated hands and coffee marks", () => {
+  test("shows readable dual-phone details, complete gripping hands and coffee marks", () => {
     act(() => root.render(<MobileHeroCallProof />));
 
     expect(container.querySelectorAll(".landing-text-phone")).toHaveLength(2);
     expect(container.querySelectorAll(".landing-reading-hand")).toHaveLength(2);
+    expect(container.querySelectorAll(".landing-reading-hand-finger")).toHaveLength(8);
+    expect(container.querySelectorAll(".landing-reading-hand-thumb")).toHaveLength(2);
     expect(container.querySelectorAll(".landing-coffee-steam path")).toHaveLength(3);
     expect(container.querySelectorAll(".landing-coffee-underline path")).toHaveLength(2);
     expect(container.textContent).toMatch(/Owner's cellphone/i);
