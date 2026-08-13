@@ -1,0 +1,22 @@
+{
+  "src": "/audio/tims-electrical/hero-new-installation-tight.wav",
+  "durationSeconds": 18.08,
+  "turns": [
+    {
+      "start": 0.12,
+      "end": 2.7
+    },
+    {
+      "start": 3.12,
+      "end": 7.58
+    },
+    {
+      "start": 8,
+      "end": 13.48
+    },
+    {
+      "start": 13.9,
+      "end": 17.84
+    }
+  ]
+}

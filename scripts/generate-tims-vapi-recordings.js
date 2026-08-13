@@ -98,13 +98,64 @@ BEHAVIOUR
 - After the receptionist's goodbye, use endCall. Do not start the conversation again.`;
 }
 
-function assistantPayload({ name, prompt, voiceId, firstMessage, firstMessageMode, endCallToolId, waitSeconds = 0.45 }) {
+function exactDialoguePrompt(scenario, role) {
+  const lines = scenario.exactDialogue.map((turn, index) => `${index + 1}. ${turn.role.toUpperCase()}: ${turn.text}`).join("\n");
+  const ownedLines = scenario.exactDialogue
+    .map((turn, index) => ({ ...turn, index: index + 1 }))
+    .filter((turn) => turn.role === role)
+    .map((turn) => `- Line ${turn.index}: ${turn.text}`)
+    .join("\n");
+  const finalInstruction = role === "receptionist"
+    ? "After your final line has been fully spoken, remain silent. Do not use endCall; the short silence timeout will close the synthetic call cleanly."
+    : "After the receptionist's final line has fully ended, say nothing at all—not even okay, good, thanks, or goodbye. Remain silent while the receptionist ends the call.";
+
+  return `You are the ${role === "receptionist" ? "virtual receptionist" : "fictional caller"} in a private synthetic My AI PA homepage recording. This is a tightly directed voice performance between two Vapi agents. No real customer or business is contacted.
+
+COMPLETE SCRIPT
+${lines}
+
+YOUR LINES
+${ownedLines}
+
+PERFORMANCE RULES
+- Speak only your assigned lines, word for word. Do not add a greeting, filler, confirmation, question, goodbye, disclaimer, or explanation.
+- Use warm, natural Canadian telephone delivery. Keep contractions natural and avoid a robotic cadence.
+- Listen to the other speaker's full line. Begin your next assigned line promptly, with a short conversational beat rather than a long pause.
+- Never talk over the other speaker. Never repeat a line, paraphrase it, or restart the conversation.
+- ${finalInstruction}`;
+}
+
+function hasExactDialogue(scenario) {
+  return Array.isArray(scenario?.exactDialogue) && scenario.exactDialogue.length > 0;
+}
+
+function rolePrompt(scenario, role) {
+  if (hasExactDialogue(scenario)) return exactDialoguePrompt(scenario, role);
+  return role === "receptionist" ? receptionistPrompt() : scenarioCallerPrompt(scenario);
+}
+
+function firstMessageFor(scenario, role) {
+  if (hasExactDialogue(scenario)) {
+    if (role === "caller") return scenario.exactDialogue.find((turn) => turn.role === "caller")?.text || "";
+    return "";
+  }
+  return role === "receptionist"
+    ? "Thanks for calling the Tim's Electrical recorded demonstration. I'm the virtual receptionist. This synthetic call is being recorded. How can I help today?"
+    : "";
+}
+
+function firstMessageModeFor(scenario, role) {
+  if (hasExactDialogue(scenario)) return role === "caller" ? "assistant-speaks-first" : "assistant-waits-for-user";
+  return role === "receptionist" ? "assistant-speaks-first" : "assistant-waits-for-user";
+}
+
+function assistantPayload({ name, prompt, voiceId, firstMessage, firstMessageMode, endCallToolId, waitSeconds = 0.45, endpointing = 350, maxDurationSeconds = 180, silenceTimeoutSeconds = 20, smartWaitFunction = "" }) {
   return {
     name,
     firstMessage,
     firstMessageMode,
     firstMessageInterruptionsEnabled: false,
-    transcriber: { provider: "deepgram", model: "nova-3", language: "en", numerals: true, endpointing: 350 },
+    transcriber: { provider: "deepgram", model: "nova-3", language: "en", numerals: true, endpointing },
     model: {
       provider: "openai",
       model: "gpt-4o-mini",
@@ -115,11 +166,14 @@ function assistantPayload({ name, prompt, voiceId, firstMessage, firstMessageMod
     voice: { provider: "vapi", voiceId, version: 2 },
     backgroundSound: "off",
     voicemailDetection: "off",
-    maxDurationSeconds: 180,
-    silenceTimeoutSeconds: 20,
+    maxDurationSeconds,
+    silenceTimeoutSeconds,
     startSpeakingPlan: {
       waitSeconds,
-      smartEndpointingPlan: { provider: "livekit" },
+      smartEndpointingPlan: {
+        provider: "livekit",
+        ...(smartWaitFunction ? { waitFunction: smartWaitFunction } : {}),
+      },
     },
     stopSpeakingPlan: { numWords: 0, voiceSeconds: 0.2, backoffSeconds: 1 },
     artifactPlan: {
@@ -236,8 +290,9 @@ function durationSeconds(call) {
 
 function writeRunArtifact(scenario, call) {
   fs.mkdirSync(runDir, { recursive: true });
-  const messages = Array.isArray(call.messages)
-    ? call.messages.filter((message) => ["assistant", "user"].includes(message?.role)).map((message) => ({
+  const rawMessages = Array.isArray(call?.artifact?.messages) ? call.artifact.messages : call.messages;
+  const messages = Array.isArray(rawMessages)
+    ? rawMessages.filter((message) => ["assistant", "user"].includes(message?.role)).map((message) => ({
       role: message.role,
       message: message.message || message.content || "",
       secondsFromStart: message.secondsFromStart ?? null,
@@ -252,6 +307,7 @@ function writeRunArtifact(scenario, call) {
     endedAt: call.endedAt || null,
     transcript: call.transcript || null,
     messages,
+    performanceMetrics: call?.artifact?.performanceMetrics || null,
   }, null, 2)}\n`);
 }
 
@@ -286,22 +342,31 @@ async function main() {
   const phones = listFrom(phonesPayload, ["phoneNumbers", "phone_numbers"]);
   const endCallTool = await findEndCallTool();
 
-  const receiver = await upsertAssistant(assistants, receiverAssistantName, assistantPayload({
+  let receiver = await upsertAssistant(assistants, receiverAssistantName, assistantPayload({
     name: receiverAssistantName,
-    prompt: receptionistPrompt(),
+    prompt: rolePrompt(scenarios[0], "receptionist"),
     voiceId: "Jess",
-    firstMessage: "Thanks for calling the Tim's Electrical recorded demonstration. I'm the virtual receptionist. This synthetic call is being recorded. How can I help today?",
-    firstMessageMode: "assistant-speaks-first",
-    endCallToolId: endCallTool.id,
+    firstMessage: firstMessageFor(scenarios[0], "receptionist"),
+    firstMessageMode: firstMessageModeFor(scenarios[0], "receptionist"),
+    endCallToolId: hasExactDialogue(scenarios[0]) ? null : endCallTool.id,
+    waitSeconds: hasExactDialogue(scenarios[0]) ? 0.05 : 0.45,
+    endpointing: hasExactDialogue(scenarios[0]) ? 220 : 350,
+    maxDurationSeconds: hasExactDialogue(scenarios[0]) ? 50 : 180,
+    silenceTimeoutSeconds: hasExactDialogue(scenarios[0]) ? 5 : 20,
+    smartWaitFunction: hasExactDialogue(scenarios[0]) ? "2000 / (1 + exp(-10 * (x - 0.5)))" : "",
   }));
   let caller = await upsertAssistant(assistants, callerAssistantName, assistantPayload({
     name: callerAssistantName,
-    prompt: scenarioCallerPrompt(scenarios[0]),
+    prompt: rolePrompt(scenarios[0], "caller"),
     voiceId: "Elliot",
-    firstMessage: "",
-    firstMessageMode: "assistant-waits-for-user",
-    endCallToolId: endCallTool.id,
-    waitSeconds: 1,
+    firstMessage: firstMessageFor(scenarios[0], "caller"),
+    firstMessageMode: firstMessageModeFor(scenarios[0], "caller"),
+    endCallToolId: hasExactDialogue(scenarios[0]) ? null : endCallTool.id,
+    waitSeconds: hasExactDialogue(scenarios[0]) ? 0.05 : 1,
+    endpointing: hasExactDialogue(scenarios[0]) ? 220 : 350,
+    maxDurationSeconds: hasExactDialogue(scenarios[0]) ? 50 : 180,
+    silenceTimeoutSeconds: hasExactDialogue(scenarios[0]) ? 5 : 20,
+    smartWaitFunction: hasExactDialogue(scenarios[0]) ? "2000 / (1 + exp(-10 * (x - 0.5)))" : "",
   }));
 
   const receiverPhone = await waitForPhoneActive(await upsertPhone(phones, receiverPhoneName, receiver.id));
@@ -311,16 +376,36 @@ async function main() {
   const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
   const runSummary = [];
   for (const scenario of scenarios) {
+    receiver = await apiRequest(`/assistant/${encodeURIComponent(receiver.id)}`, {
+      method: "PATCH",
+      body: assistantPayload({
+        name: receiverAssistantName,
+        prompt: rolePrompt(scenario, "receptionist"),
+        voiceId: "Jess",
+        firstMessage: firstMessageFor(scenario, "receptionist"),
+        firstMessageMode: firstMessageModeFor(scenario, "receptionist"),
+        endCallToolId: hasExactDialogue(scenario) ? null : endCallTool.id,
+        waitSeconds: hasExactDialogue(scenario) ? 0.05 : 0.45,
+        endpointing: hasExactDialogue(scenario) ? 220 : 350,
+        maxDurationSeconds: hasExactDialogue(scenario) ? 50 : 180,
+        silenceTimeoutSeconds: hasExactDialogue(scenario) ? 5 : 20,
+        smartWaitFunction: hasExactDialogue(scenario) ? "2000 / (1 + exp(-10 * (x - 0.5)))" : "",
+      }),
+    });
     caller = await apiRequest(`/assistant/${encodeURIComponent(caller.id)}`, {
       method: "PATCH",
       body: assistantPayload({
         name: callerAssistantName,
-        prompt: scenarioCallerPrompt(scenario),
+        prompt: rolePrompt(scenario, "caller"),
         voiceId: "Elliot",
-        firstMessage: "",
-        firstMessageMode: "assistant-waits-for-user",
-        endCallToolId: endCallTool.id,
-        waitSeconds: 1,
+        firstMessage: firstMessageFor(scenario, "caller"),
+        firstMessageMode: firstMessageModeFor(scenario, "caller"),
+        endCallToolId: hasExactDialogue(scenario) ? null : endCallTool.id,
+        waitSeconds: hasExactDialogue(scenario) ? 0.05 : 1,
+        endpointing: hasExactDialogue(scenario) ? 220 : 350,
+        maxDurationSeconds: hasExactDialogue(scenario) ? 50 : 180,
+        silenceTimeoutSeconds: hasExactDialogue(scenario) ? 5 : 20,
+        smartWaitFunction: hasExactDialogue(scenario) ? "2000 / (1 + exp(-10 * (x - 0.5)))" : "",
       }),
     });
     console.log(`\nStarting scenario: ${scenario.id}`);
