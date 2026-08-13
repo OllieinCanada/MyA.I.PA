@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { tradePageOrder, tradePages } from "./tradePageData";
 import { propertyManagementAudience } from "./firstClassRentalsData";
 import { TimsElectricalLiveDemo } from "./TimsElectricalDemo";
+import heroTranscriptTimings from "./timsElectricalHeroTranscriptTimings.json";
 
 const proofFeatureCards = [
   {
@@ -20,6 +21,7 @@ const proofFeatureCards = [
 
 const heroCallTranscript = [
   {
+    ...heroTranscriptTimings.turns[0],
     time: "6:42 PM",
     speaker: "Caller",
     role: "caller",
@@ -27,6 +29,7 @@ const heroCallTranscript = [
     text: "Hi, I'm putting in a hot tub and need it wired.",
   },
   {
+    ...heroTranscriptTimings.turns[1],
     time: "6:42 PM",
     speaker: "My AI PA",
     role: "assistant",
@@ -34,6 +37,7 @@ const heroCallTranscript = [
     text: "Absolutely—I can collect that for the team. When are you hoping to have the work done?",
   },
   {
+    ...heroTranscriptTimings.turns[2],
     time: "6:43 PM",
     speaker: "Caller",
     role: "caller",
@@ -41,6 +45,7 @@ const heroCallTranscript = [
     text: "Next week. I'm Brian Smith at 23 Robb Street in Hamilton. After 5 PM is best.",
   },
   {
+    ...heroTranscriptTimings.turns[3],
     time: "6:43 PM",
     speaker: "My AI PA",
     role: "assistant",
@@ -49,7 +54,26 @@ const heroCallTranscript = [
   },
 ];
 
-const demoCallAudioSrc = `${process.env.PUBLIC_URL || ""}/tims-electrical-2.wav?v=20260614-trim`;
+const demoCallAudioSrc = `${process.env.PUBLIC_URL || ""}${heroTranscriptTimings.src}?v=20260813-synced`;
+
+export function getTypedHeroCallTurns(audioTime) {
+  const currentTime = Number(audioTime);
+  if (!Number.isFinite(currentTime) || currentTime <= 0) return [];
+
+  return heroCallTranscript.flatMap((turn) => {
+    if (currentTime < turn.start) return [];
+    const duration = Math.max(0.01, turn.end - turn.start);
+    const progress = Math.max(0, Math.min(1, (currentTime - turn.start) / duration));
+    const characterCount = progress >= 1
+      ? turn.text.length
+      : Math.max(1, Math.floor(turn.text.length * progress));
+    return [{
+      ...turn,
+      displayText: turn.text.slice(0, characterCount),
+      isTyping: progress < 1,
+    }];
+  });
+}
 
 const problemMoments = [
   {
@@ -114,20 +138,12 @@ const benefitCards = [
   },
 ];
 
-const transcriptMoments = [
-  { start: 0, end: 12, speaker: "Live caption", text: "AI: Hello, thank you for contacting Tim's Electrical. We handle residential and commercial work. How are you today? Caller: I'm okay. How about yourself?" },
-  { start: 12, end: 24, speaker: "Live caption", text: "AI: I'm doing well, thank you. Are you looking for a new installation, repairs, or maintenance today? Caller: I was just wondering about your hours of operation." },
-  { start: 24, end: 40, speaker: "Live caption", text: "AI: We are open from 8:00 a.m. to 5:00 p.m., Monday to Friday. What can we help you with? Caller: I'm looking for assistance for a new installation." },
-  { start: 40, end: 52, speaker: "Live caption", text: "AI: A new installation. Okay, what type of installation are you looking for? Caller: I need someone to wire up my hot tub on my back deck." },
-  { start: 52, end: 60, speaker: "Live caption", text: "AI: You need someone to wire your hot tub on your back deck. Got it. Can I get your first name? Caller: Brian." },
-  { start: 60, end: 72, speaker: "Live caption", text: "AI: Thanks, Brian. What's the address where the work needs to be completed? Caller: 63 York Street. AI: 63 York Street, and which city is this in?" },
-  { start: 72, end: 84, speaker: "Live caption", text: "Caller: St. Catharines. AI: What is the best phone number to reach you at? Caller: 905-123-4567." },
-  { start: 84, end: 96, speaker: "Live caption", text: "AI: Repeating that back, 905-123-4567. Is that correct? Caller: Yes." },
-  { start: 96, end: 108, speaker: "Live caption", text: "AI: Thank you. What's the best time to reach you in case we miss you on the callback? Caller: Around 7:00 p.m. AI: To confirm, that's 63 York Street." },
-  { start: 108, end: 120, speaker: "Live caption", text: "AI: Our service manager will get right back to you to go over the job details and our rates. Perfect, I have forwarded this call to him and sent you a text outlining the key points of this call." },
-  { start: 120, end: 132, speaker: "Live caption", text: "AI: Feel free to visit our website at timselectrical.com. Thanks for calling. Caller: Great, I got the text. You too." },
-  { start: 132, end: 133, speaker: "Live caption", text: "AI: Have a great day." },
-];
+const transcriptMoments = heroCallTranscript.map((turn) => ({
+  start: turn.start,
+  end: turn.end,
+  speaker: turn.speaker,
+  text: turn.text,
+}));
 
 const waveformBars = [
   0.12, 0.18, 0.24, 0.36, 0.22, 0.4, 0.52, 0.34, 0.21, 0.18, 0.28, 0.42,
@@ -978,6 +994,8 @@ function HeroSummaryStack() {
 }
 
 export function HeroCallDashboard({ ownerCardRef, onToggleAudio, audioPlaying, audioTime, audioDuration }) {
+  const visibleTranscriptTurns = getTypedHeroCallTurns(audioTime);
+
   return (
     <div className="landing-call-dashboard landing-call-dashboard-redesign relative mx-auto w-full max-w-[690px]">
       <div className="landing-call-dashboard-surface relative overflow-hidden rounded-[32px] border border-[#1d2a3c] bg-[#050913] text-white shadow-[0_22px_60px_-42px_rgba(0,0,0,0.76),inset_0_1px_0_rgba(255,255,255,0.045)]">
@@ -997,7 +1015,7 @@ export function HeroCallDashboard({ ownerCardRef, onToggleAudio, audioPlaying, a
                 <span className="landing-call-live-dot h-3.5 w-3.5 rounded-full bg-[#00d66f] shadow-[0_0_14px_rgba(0,214,111,0.68)]" />
                 Sample Call
               </span>
-              <span>02:37</span>
+              <span>{formatClock(audioDuration)}</span>
             </div>
 
             <div className="landing-caller-card landing-caller-card-redesign mt-8">
@@ -1079,16 +1097,24 @@ export function HeroCallDashboard({ ownerCardRef, onToggleAudio, audioPlaying, a
                 <span className="landing-service-badge shrink-0 whitespace-nowrap rounded-full border border-[#78b7ff]/60 bg-[#082c5a] px-2.5 py-1 text-[0.62rem] font-black uppercase tracking-[0.06em] text-[#b9dcff]">New installation</span>
                 <span className="text-[0.62rem] font-bold text-white/48">Speaker-labelled call transcript</span>
               </div>
-              <div className="landing-call-transcript-list divide-y divide-white/8">
-                {heroCallTranscript.map((turn) => (
-                  <article className={`landing-call-transcript-turn ${turn.role}`} key={`${turn.time}-${turn.speaker}-${turn.text}`}>
+              <div
+                className="landing-call-transcript-list divide-y divide-white/8"
+                aria-label="Call transcript appears as the recording plays"
+                aria-live="polite"
+                aria-busy={audioPlaying}
+              >
+                {visibleTranscriptTurns.map((turn) => (
+                  <article className={`landing-call-transcript-turn ${turn.role}`} key={`${turn.start}-${turn.speaker}`}>
                     <span className="landing-call-transcript-avatar" aria-hidden="true">{turn.initials}</span>
                     <div className="min-w-0 flex-1">
                       <div className="landing-call-transcript-meta">
                         <strong>{turn.speaker}</strong>
                         <time>{turn.time}</time>
                       </div>
-                      <p>{turn.text}</p>
+                      <p>
+                        {turn.displayText}
+                        {turn.isTyping ? <span className="landing-call-transcript-caret" aria-hidden="true" /> : null}
+                      </p>
                     </div>
                   </article>
                 ))}
@@ -3278,7 +3304,7 @@ function LandingPage() {
 
   const [audioPlaying, setAudioPlaying] = useState(false);
   const [audioTime, setAudioTime] = useState(0);
-  const [audioDuration, setAudioDuration] = useState(133);
+  const [audioDuration, setAudioDuration] = useState(heroTranscriptTimings.durationSeconds);
   const [audioError, setAudioError] = useState("");
   const [openFaq, setOpenFaq] = useState(-1);
   const [showHeader, setShowHeader] = useState(false);
@@ -3337,6 +3363,10 @@ function LandingPage() {
     if (audio.paused) {
       try {
         setAudioError("");
+        if (audio.ended || audio.currentTime >= Math.max(0, audio.duration - 0.05)) {
+          audio.currentTime = 0;
+          setAudioTime(0);
+        }
         await audio.play();
         setAudioPlaying(true);
       } catch (_err) {
@@ -3358,6 +3388,17 @@ function LandingPage() {
   };
 
   const playbackProgress = Math.max(0, Math.min(1, audioTime / Math.max(audioDuration, 1)));
+
+  useEffect(() => {
+    if (!audioPlaying) return undefined;
+    let animationFrame = 0;
+    const syncAudioTime = () => {
+      setAudioTime(audioRef.current?.currentTime || 0);
+      animationFrame = window.requestAnimationFrame(syncAudioTime);
+    };
+    animationFrame = window.requestAnimationFrame(syncAudioTime);
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [audioPlaying]);
 
   useEffect(() => {
     const onScroll = () => {
@@ -8757,6 +8798,7 @@ function LandingPage() {
           }
           .landing-call-transcript-list {
             display: block !important;
+            min-height: 12.75rem;
           }
           .landing-call-transcript-turn {
             display: grid !important;
@@ -8771,6 +8813,7 @@ function LandingPage() {
             background: transparent !important;
             box-shadow: none !important;
             color: rgba(255,255,255,0.94) !important;
+            animation: landingTranscriptTurnIn 220ms ease-out both;
           }
           .landing-call-transcript-avatar {
             display: grid;
@@ -8817,6 +8860,30 @@ function LandingPage() {
             font-size: 0.78rem !important;
             font-weight: 700 !important;
             line-height: 1.26 !important;
+          }
+          .landing-call-transcript-caret {
+            display: inline-block;
+            width: 0.12em;
+            height: 0.95em;
+            margin-left: 0.12em;
+            vertical-align: -0.08em;
+            border-radius: 999px;
+            background: #7dd3fc;
+            animation: landingTranscriptCaret 700ms steps(1, end) infinite;
+          }
+          @keyframes landingTranscriptTurnIn {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+          }
+          @keyframes landingTranscriptCaret {
+            0%, 45% { opacity: 1; }
+            46%, 100% { opacity: 0; }
+          }
+          @media (prefers-reduced-motion: reduce) {
+            .landing-call-transcript-turn,
+            .landing-call-transcript-caret {
+              animation: none !important;
+            }
           }
           @media (min-width: 1500px) {
             .landing-call-transcript-turn {
@@ -9856,13 +9923,13 @@ function LandingPage() {
                   onPause={() => setAudioPlaying(false)}
                   onEnded={() => {
                     setAudioPlaying(false);
-                    setAudioTime(0);
+                    setAudioTime(audioRef.current?.duration || heroTranscriptTimings.durationSeconds);
                   }}
                   onTimeUpdate={(event) => setAudioTime(event.currentTarget.currentTime || 0)}
                   onLoadedMetadata={(event) => {
                     setAudioError("");
-                    const duration = Number(event.currentTarget.duration || 135.14);
-                    setAudioDuration(Number.isFinite(duration) && duration > 0 ? duration : 135.14);
+                    const duration = Number(event.currentTarget.duration || heroTranscriptTimings.durationSeconds);
+                    setAudioDuration(Number.isFinite(duration) && duration > 0 ? duration : heroTranscriptTimings.durationSeconds);
                   }}
                   onError={() => setAudioError("The demo audio file could not be loaded.")}
                 />

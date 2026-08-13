@@ -46,5 +46,13 @@
     "source": "synthetic-vapi-agents",
     "recordedAt": "2026-08-12T15:17:39.528Z",
     "disclosure": "Synthetic demonstration call recorded between two Vapi agents; no real customer information."
+  },
+  "hero-new-installation": {
+    "status": "available",
+    "src": "/audio/tims-electrical/hero-new-installation.wav",
+    "durationSeconds": 29,
+    "source": "synthetic-vapi-agents",
+    "recordedAt": "2026-08-13T18:04:50.003Z",
+    "disclosure": "Synthetic demonstration call recorded between two Vapi agents; no real customer information."
   }
 }

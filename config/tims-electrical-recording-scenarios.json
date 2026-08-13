@@ -1,5 +1,32 @@
 [
   {
+    "id": "hero-new-installation",
+    "label": "Homepage new installation",
+    "callerName": "Brian Smith",
+    "exactDialogue": [
+      {
+        "role": "caller",
+        "text": "Hi, I'm putting in a hot tub and need it wired."
+      },
+      {
+        "role": "receptionist",
+        "text": "Absolutely—I can collect that for the team. When are you hoping to have the work done?"
+      },
+      {
+        "role": "caller",
+        "text": "Next week. I'm Brian Smith at 23 Robb Street in Hamilton. After 5 PM is best."
+      },
+      {
+        "role": "receptionist",
+        "text": "Thanks, Brian. I'll pass the installation details and callback preference to the team."
+      }
+    ],
+    "facts": [
+      "This is a locked four-line performance for the homepage demonstration.",
+      "The caller and receptionist must use the exact supplied wording without additions."
+    ]
+  },
+  {
     "id": "new-installation",
     "label": "New installation",
     "callerName": "Brian Smith",
