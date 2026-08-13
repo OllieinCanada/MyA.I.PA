@@ -24,6 +24,8 @@ describe("desktop missed-call example", () => {
         audioDuration={135}
         audioPlaying={false}
         audioTime={0}
+        demoRevealed
+        onRevealDemo={jest.fn()}
         onToggleAudio={jest.fn()}
       />,
     ));
@@ -43,6 +45,8 @@ describe("desktop missed-call example", () => {
           audioDuration={18.08}
           audioPlaying={audioPlaying}
           audioTime={audioTime}
+          demoRevealed
+          onRevealDemo={jest.fn()}
           onToggleAudio={jest.fn()}
         />,
       ));
@@ -66,5 +70,33 @@ describe("desktop missed-call example", () => {
     expect(container.querySelectorAll(".landing-call-transcript-turn")).toHaveLength(4);
     expect(container.textContent).toContain("Thanks, Brian. I'll pass the installation details and callback preference to the team.");
     expect(container.querySelector(".landing-call-transcript-caret")).toBeNull();
+  });
+
+  test("keeps the detailed call dormant behind a preview until requested", () => {
+    const onRevealDemo = jest.fn();
+    const onToggleAudio = jest.fn();
+
+    act(() => root.render(
+      <HeroCallDashboard
+        audioDuration={18.08}
+        audioPlaying={false}
+        audioTime={0}
+        demoRevealed={false}
+        onRevealDemo={onRevealDemo}
+        onToggleAudio={onToggleAudio}
+      />,
+    ));
+
+    expect(container.textContent).toMatch(/Sample call preview/i);
+    expect(container.textContent).toMatch(/The recording starts only when you press the button/i);
+    expect(container.querySelector(".landing-call-dashboard-layout").getAttribute("aria-hidden")).toBe("true");
+    expect(container.querySelectorAll(".landing-call-transcript-turn")).toHaveLength(0);
+
+    const revealButton = Array.from(container.querySelectorAll("button"))
+      .find((button) => /See & hear the full call/i.test(button.textContent));
+    act(() => revealButton.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+
+    expect(onRevealDemo).toHaveBeenCalledTimes(1);
+    expect(onToggleAudio).not.toHaveBeenCalled();
   });
 });

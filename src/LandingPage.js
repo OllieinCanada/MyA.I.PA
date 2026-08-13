@@ -993,7 +993,15 @@ function HeroSummaryStack() {
   );
 }
 
-export function HeroCallDashboard({ ownerCardRef, onToggleAudio, audioPlaying, audioTime, audioDuration }) {
+export function HeroCallDashboard({
+  ownerCardRef,
+  onRevealDemo,
+  onToggleAudio,
+  audioPlaying,
+  audioTime,
+  audioDuration,
+  demoRevealed = false,
+}) {
   const visibleTranscriptTurns = getTypedHeroCallTurns(audioTime);
 
   return (
@@ -1001,9 +1009,72 @@ export function HeroCallDashboard({ ownerCardRef, onToggleAudio, audioPlaying, a
       <div className="landing-call-dashboard-surface relative overflow-hidden rounded-[32px] border border-[#1d2a3c] bg-[#050913] text-white shadow-[0_22px_60px_-42px_rgba(0,0,0,0.76),inset_0_1px_0_rgba(255,255,255,0.045)]">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_12%_34%,rgba(36,99,235,0.17),transparent_28%),radial-gradient(circle_at_74%_82%,rgba(37,99,235,0.19),transparent_30%),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:auto,auto,1px_100%]" />
 
+        {!demoRevealed ? (
+          <section
+            className="landing-call-preview-cover absolute inset-0 z-30 flex flex-col overflow-hidden bg-[radial-gradient(circle_at_18%_22%,rgba(18,122,209,0.3),transparent_31%),linear-gradient(145deg,#123455_0%,#0b233f_56%,#07182d_100%)] px-8 py-7 text-white"
+            aria-label="Tim's Electrical sample call preview"
+          >
+            <div className="pointer-events-none absolute -right-20 -top-24 h-72 w-72 rounded-full border border-[#39cfff]/15 bg-[#39cfff]/5 blur-[1px]" />
+            <header className="relative flex items-center justify-between gap-4 text-[0.92rem] font-black">
+              <span className="inline-flex items-center gap-2.5 text-white/90">
+                <span className="h-3 w-3 rounded-full bg-[#18d17b] shadow-[0_0_14px_rgba(24,209,123,0.7)]" />
+                Sample call preview
+              </span>
+              <span className="rounded-full border border-white/12 bg-white/7 px-3 py-1.5 text-[0.75rem] tracking-[0.08em] text-white/72">00:18</span>
+            </header>
+
+            <div className="relative mt-7 flex items-center gap-5">
+              <div className="landing-call-preview-avatar grid h-28 w-28 shrink-0 place-items-center overflow-hidden rounded-full border-4 border-[#39cfff] bg-[#052a4a] shadow-[0_0_0_8px_rgba(57,207,255,0.1),0_20px_42px_-20px_rgba(57,207,255,0.75)]">
+                <img
+                  src={`${process.env.PUBLIC_URL || ""}/call-secretary-avatar-ai.png`}
+                  alt="My AI PA virtual receptionist wearing a headset"
+                  className="h-full w-full scale-[1.5] object-cover object-center"
+                />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[0.68rem] font-black uppercase tracking-[0.16em] text-[#70d8ff]">What a caller hears</p>
+                <h3 className="mt-1 text-[2rem] font-black tracking-[-0.04em]">My AI PA Agent</h3>
+                <p className="mt-1 text-[1rem] font-bold text-[#b7cee6]">Answering for <strong className="text-white">your business</strong></p>
+                <div className="landing-call-preview-wave mt-4 flex h-7 items-center gap-1" aria-hidden="true">
+                  {[12, 20, 28, 18, 30, 22, 15, 24, 13].map((height, index) => (
+                    <i key={`${height}-${index}`} className="w-1 rounded-full bg-[#39cfff]" style={{ height }} />
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="relative mt-7 grid gap-3">
+              <article className="rounded-[18px] border border-white/10 bg-white/10 px-5 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.07)]">
+                <strong className="block text-[0.66rem] font-black uppercase tracking-[0.12em] text-[#70d8ff]">My AI PA</strong>
+                <p className="mt-1.5 text-[1.05rem] font-black leading-[1.3]">“Thanks for calling Tim&apos;s Electrical. How can I help you today?”</p>
+              </article>
+              <article className="ml-4 rounded-[18px] border border-[#3ba5ff]/35 bg-[#1188f5] px-5 py-4 shadow-[0_16px_32px_-22px_rgba(17,136,245,0.9)]">
+                <strong className="block text-[0.66rem] font-black uppercase tracking-[0.12em] text-white/80">Caller</strong>
+                <p className="mt-1.5 text-[1.05rem] font-black leading-[1.3]">“I&apos;m putting in a hot tub and need it wired.”</p>
+              </article>
+            </div>
+
+            <div className="relative mt-auto flex items-end justify-between gap-5 border-t border-white/10 pt-5">
+              <div>
+                <strong className="block text-[0.9rem] font-black">Interested in what happens next?</strong>
+                <span className="mt-1 block text-[0.72rem] font-bold text-white/58">The recording starts only when you press the button.</span>
+              </div>
+              <button
+                type="button"
+                onClick={onRevealDemo}
+                className="landing-call-preview-cta inline-flex shrink-0 items-center gap-2.5 rounded-full bg-[#ff6a00] px-5 py-3 text-[0.82rem] font-black text-white shadow-[0_16px_32px_-18px_rgba(255,106,0,0.92)] transition hover:-translate-y-0.5 hover:bg-[#ff7c22] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#72dfff]"
+              >
+                <span className="grid h-7 w-7 place-items-center rounded-full bg-white text-[#0b6edc]" aria-hidden="true">▶</span>
+                See &amp; hear the full call
+              </button>
+            </div>
+          </section>
+        ) : null}
+
         <div
-          className="landing-call-dashboard-layout relative grid h-full"
+          className={`landing-call-dashboard-layout relative grid h-full ${demoRevealed ? "" : "pointer-events-none select-none"}`}
           style={{ gridTemplateColumns: "minmax(0, 1fr)", gridTemplateRows: "minmax(0, 1fr) auto" }}
+          aria-hidden={!demoRevealed}
         >
           <div
             className="landing-call-dashboard-main grid min-h-0"
@@ -3306,6 +3377,7 @@ function LandingPage() {
   const [audioTime, setAudioTime] = useState(0);
   const [audioDuration, setAudioDuration] = useState(heroTranscriptTimings.durationSeconds);
   const [audioError, setAudioError] = useState("");
+  const [heroDemoRevealed, setHeroDemoRevealed] = useState(false);
   const [openFaq, setOpenFaq] = useState(-1);
   const [showHeader, setShowHeader] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -3377,6 +3449,23 @@ function LandingPage() {
 
     audio.pause();
     setAudioPlaying(false);
+  };
+
+  const revealHeroDemo = async () => {
+    const audio = audioRef.current;
+    setHeroDemoRevealed(true);
+    setAudioError("");
+    if (!audio) return;
+
+    try {
+      audio.currentTime = 0;
+      setAudioTime(0);
+      await audio.play();
+      setAudioPlaying(true);
+    } catch (_err) {
+      setAudioPlaying(false);
+      setAudioError("The demo audio could not start. Please press Hear call to try again.");
+    }
   };
 
   const handleScrub = (event) => {
@@ -9320,10 +9409,12 @@ function LandingPage() {
                 </p>
                 <HeroCallDashboard
                   ownerCardRef={heroOwnerCardRef}
+                  onRevealDemo={revealHeroDemo}
                   onToggleAudio={toggleAudio}
                   audioPlaying={audioPlaying}
                   audioTime={audioTime}
                   audioDuration={audioDuration}
+                  demoRevealed={heroDemoRevealed}
                 />
               </div>
             </div>
