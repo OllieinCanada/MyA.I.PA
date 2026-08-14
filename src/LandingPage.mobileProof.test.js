@@ -1,6 +1,6 @@
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
-import { MobileHeroCallProof } from "./LandingPage";
+import { LandingStoryIntroduction, MobileHeroCallProof } from "./LandingPage";
 
 describe("responsive three-sided homepage proof", () => {
   let container;
@@ -38,21 +38,25 @@ describe("responsive three-sided homepage proof", () => {
     jest.useRealTimers();
   });
 
-  test("advances every side after 14 seconds without pause controls", () => {
+  test("switches every 7 seconds and Pause holds the screen for 14 seconds", () => {
     act(() => root.render(<MobileHeroCallProof />));
     const proof = container.querySelector('[role="region"]');
+    const pause = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Pause");
 
-    expect(proof.getAttribute("aria-label")).toMatch(/Side 1 of 3.*14 seconds/i);
-    expect(container.textContent).not.toMatch(/Auto-advances|Rotation paused|Pause/i);
+    expect(proof.getAttribute("aria-label")).toMatch(/Side 1 of 3.*7 seconds.*14 seconds/i);
+    expect(container.textContent).toMatch(/Switches every 7 seconds/i);
+    expect(container.textContent).toMatch(/Pause button holds screen for 14 seconds/i);
 
-    act(() => jest.advanceTimersByTime(13999));
+    act(() => jest.advanceTimersByTime(6999));
     expect(proof.getAttribute("aria-label")).toMatch(/Side 1 of 3/i);
     act(() => jest.advanceTimersByTime(1));
     expect(proof.getAttribute("aria-label")).toMatch(/Side 2 of 3/i);
 
-    act(() => jest.advanceTimersByTime(13999));
+    act(() => pause.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    expect(pause.textContent).toBe("Holding");
+    act(() => jest.advanceTimersByTime(14000));
     expect(proof.getAttribute("aria-label")).toMatch(/Side 2 of 3/i);
-    act(() => jest.advanceTimersByTime(1));
+    act(() => jest.advanceTimersByTime(7000));
     expect(proof.getAttribute("aria-label")).toMatch(/Side 3 of 3/i);
   });
 
@@ -97,7 +101,22 @@ describe("responsive three-sided homepage proof", () => {
     expect(container.querySelectorAll(".landing-reading-hand-front .landing-reading-hand-thumb")).toHaveLength(2);
     expect(container.querySelectorAll(".landing-coffee-steam path")).toHaveLength(3);
     expect(container.querySelectorAll(".landing-coffee-underline path")).toHaveLength(2);
-    expect(container.textContent).toMatch(/Owner's cellphone/i);
-    expect(container.textContent).toMatch(/Customer's cellphone/i);
+    expect(container.textContent).toMatch(/Owners cell phone/i);
+    expect(container.textContent).toMatch(/Customer's cell phone/i);
+  });
+
+  test("restores every handwritten how-it-works instruction responsively", () => {
+    act(() => root.render(<LandingStoryIntroduction />));
+
+    expect(container.textContent).toMatch(/Keep your same business number!/i);
+    expect(container.textContent).toMatch(/They are engaged in conversation and their FAQ's answered with custom answers supplied by you\./i);
+    expect(container.textContent).toMatch(/The reason for the call/i);
+    expect(container.textContent).toMatch(/Service amount/i);
+    expect(container.textContent).toMatch(/And call back # are all collected/i);
+    expect(container.textContent).toMatch(/Caller and owner both get a text to their cellphone summarizing the details of the call/i);
+    expect(container.textContent).toMatch(/Rates for service work can be added here followed by the question “Would you like to continue” eliminating time wasters\./i);
+    expect(container.textContent).toMatch(/Your installation request has been forwarded to team/i);
+    expect(container.textContent).toMatch(/Have a great day!/i);
+    expect(container.querySelectorAll(".landing-how-phone")).toHaveLength(2);
   });
 });
