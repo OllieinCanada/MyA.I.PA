@@ -1,6 +1,6 @@
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
-import { LandingStoryIntroduction, MobileHeroCallProof } from "./LandingPage";
+import { HeroLiveCallButton, LandingStoryIntroduction, MobileHeroCallProof } from "./LandingPage";
 
 describe("responsive three-sided homepage proof", () => {
   let container;
@@ -76,6 +76,23 @@ describe("responsive three-sided homepage proof", () => {
     expect(onSampleCall).toHaveBeenCalledTimes(1);
     expect(onStartTrial).toHaveBeenCalledTimes(1);
     expect(proof.getAttribute("aria-label")).toMatch(/Side 1 of 3/i);
+  });
+
+  test("gives phone and tablet layouts an accessible recorded-call control", () => {
+    const onClick = jest.fn();
+    act(() => root.render(<HeroLiveCallButton onClick={onClick} audioPlaying={false} />));
+
+    const button = container.querySelector("button");
+    expect(button.textContent).toMatch(/Hear Live Call/i);
+    expect(button.getAttribute("aria-label")).toMatch(/recorded Tim's Electrical live-call demonstration/i);
+    expect(button.getAttribute("aria-pressed")).toBe("false");
+
+    act(() => button.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    expect(onClick).toHaveBeenCalledTimes(1);
+
+    act(() => root.render(<HeroLiveCallButton onClick={onClick} audioPlaying />));
+    expect(container.querySelector("button").textContent).toMatch(/Pause Live Call/i);
+    expect(container.querySelector("button").getAttribute("aria-pressed")).toBe("true");
   });
 
   test("supports a real horizontal swipe between story faces", () => {

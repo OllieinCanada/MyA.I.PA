@@ -23,38 +23,110 @@ const heroCallTranscript = [
   {
     ...heroTranscriptTimings.turns[0],
     time: "6:42 PM",
-    speaker: "Caller",
-    role: "caller",
-    initials: "BR",
-    text: "Hi, I'm putting in a hot tub and need it wired.",
+    speaker: "My AI PA",
+    role: "assistant",
+    initials: "AI",
+    text: "Hello are you looking for a new installation, repair or maintenance today?",
   },
   {
     ...heroTranscriptTimings.turns[1],
     time: "6:42 PM",
-    speaker: "My AI PA",
-    role: "assistant",
-    initials: "AI",
-    text: "Absolutely—I can collect that for the team. When are you hoping to have the work done?",
+    speaker: "Caller",
+    role: "caller",
+    initials: "BR",
+    text: "I need someone to wire up my hot tub as a new installation.",
   },
   {
     ...heroTranscriptTimings.turns[2],
     time: "6:43 PM",
-    speaker: "Caller",
-    role: "caller",
-    initials: "BR",
-    text: "Next week. I'm Brian Smith at 23 Robb Street in Hamilton. After 5 PM is best.",
+    speaker: "My AI PA",
+    role: "assistant",
+    initials: "AI",
+    text: "Can I get your first name?",
   },
   {
     ...heroTranscriptTimings.turns[3],
     time: "6:43 PM",
+    speaker: "Caller",
+    role: "caller",
+    initials: "BR",
+    text: "Brian Smith.",
+  },
+  {
+    ...heroTranscriptTimings.turns[4],
+    time: "6:43 PM",
     speaker: "My AI PA",
     role: "assistant",
     initials: "AI",
-    text: "Thanks, Brian. I'll pass the installation details and callback preference to the team.",
+    text: "What's the address where the work needs to be completed?",
+  },
+  {
+    ...heroTranscriptTimings.turns[5],
+    time: "6:44 PM",
+    speaker: "Caller",
+    role: "caller",
+    initials: "BR",
+    text: "23 Robb Street in Hamilton.",
+  },
+  {
+    ...heroTranscriptTimings.turns[6],
+    time: "6:44 PM",
+    speaker: "My AI PA",
+    role: "assistant",
+    initials: "AI",
+    text: "What is the best phone number to reach you at?",
+  },
+  {
+    ...heroTranscriptTimings.turns[7],
+    time: "6:44 PM",
+    speaker: "Caller",
+    role: "caller",
+    initials: "BR",
+    text: "Nine oh five, five five five, one two three four.",
+  },
+  {
+    ...heroTranscriptTimings.turns[8],
+    time: "6:44 PM",
+    speaker: "My AI PA",
+    role: "assistant",
+    initials: "AI",
+    text: "Repeating that back, nine oh five, five five five, one two three four. Is that correct?",
+  },
+  {
+    ...heroTranscriptTimings.turns[9],
+    time: "6:45 PM",
+    speaker: "Caller",
+    role: "caller",
+    initials: "BR",
+    text: "Yes.",
+  },
+  {
+    ...heroTranscriptTimings.turns[10],
+    time: "6:45 PM",
+    speaker: "My AI PA",
+    role: "assistant",
+    initials: "AI",
+    text: "What's the best time to reach you in case we miss you on the callback?",
+  },
+  {
+    ...heroTranscriptTimings.turns[11],
+    time: "6:45 PM",
+    speaker: "Caller",
+    role: "caller",
+    initials: "BR",
+    text: "After five PM is best.",
+  },
+  {
+    ...heroTranscriptTimings.turns[12],
+    time: "6:45 PM",
+    speaker: "My AI PA",
+    role: "assistant",
+    initials: "AI",
+    text: "To confirm, that's 23 Robb Street in Hamilton for hot tub wiring, and after five PM is your best callback time. I have the details ready for the team. Thanks for calling.",
   },
 ];
 
-const demoCallAudioSrc = `${process.env.PUBLIC_URL || ""}${heroTranscriptTimings.src}?v=20260813-synced`;
+const demoCallAudioSrc = `${process.env.PUBLIC_URL || ""}${heroTranscriptTimings.src}?v=20260814-receptionist-first`;
 
 export function getTypedHeroCallTurns(audioTime) {
   const currentTime = Number(audioTime);
@@ -1020,7 +1092,7 @@ export function HeroCallDashboard({
                 <span className="h-3 w-3 rounded-full bg-[#18d17b] shadow-[0_0_14px_rgba(24,209,123,0.7)]" />
                 Sample call preview
               </span>
-              <span className="rounded-full border border-white/12 bg-white/7 px-3 py-1.5 text-[0.75rem] tracking-[0.08em] text-white/72">00:18</span>
+              <span className="rounded-full border border-white/12 bg-white/7 px-3 py-1.5 text-[0.75rem] tracking-[0.08em] text-white/72">{formatClock(audioDuration)}</span>
             </header>
 
             <div className="relative mt-7 flex items-center gap-5">
@@ -1046,7 +1118,7 @@ export function HeroCallDashboard({
             <div className="relative mt-7 grid gap-3">
               <article className="rounded-[18px] border border-white/10 bg-white/10 px-5 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.07)]">
                 <strong className="block text-[0.66rem] font-black uppercase tracking-[0.12em] text-[#70d8ff]">My AI PA</strong>
-                <p className="mt-1.5 text-[1.05rem] font-black leading-[1.3]">“Thanks for calling Tim&apos;s Electrical. How can I help you today?”</p>
+                <p className="mt-1.5 text-[1.05rem] font-black leading-[1.3]">“Hello are you looking for a new installation, repair or maintenance today?”</p>
               </article>
               <article className="ml-4 rounded-[18px] border border-[#3ba5ff]/35 bg-[#1188f5] px-5 py-4 shadow-[0_16px_32px_-22px_rgba(17,136,245,0.9)]">
                 <strong className="block text-[0.66rem] font-black uppercase tracking-[0.12em] text-white/80">Caller</strong>
@@ -1254,7 +1326,22 @@ export function HeroCallDashboard({
   );
 }
 
-function ResponsiveProofHero({ goToSignup, playDemo }) {
+export function HeroLiveCallButton({ audioPlaying = false, onClick, className = "" }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`landing-responsive-live-call-button inline-flex min-h-[3rem] items-center justify-center gap-2.5 rounded-full border border-[#4a9be0] bg-[#0c4e8e] px-5 text-[0.78rem] font-black text-white shadow-[0_14px_30px_-20px_rgba(12,78,142,0.95)] transition hover:-translate-y-0.5 hover:bg-[#0d5ca8] focus:outline-none focus-visible:ring-4 focus-visible:ring-[#68c8ff]/45 ${className}`}
+      aria-label={audioPlaying ? "Pause the recorded Tim's Electrical live-call demonstration" : "Hear the recorded Tim's Electrical live-call demonstration"}
+      aria-pressed={audioPlaying}
+    >
+      <span className="grid h-7 w-7 place-items-center rounded-full bg-[#2bbdf4] text-[0.68rem] text-white" aria-hidden="true">{audioPlaying ? "Ⅱ" : "▶"}</span>
+      {audioPlaying ? "Pause Live Call" : "Hear Live Call"}
+    </button>
+  );
+}
+
+function ResponsiveProofHero({ goToSignup, playDemo, onHearLiveCall, audioPlaying }) {
   return (
     <div className="landing-tablet-hero">
       <section className="landing-tablet-copy">
@@ -1272,6 +1359,9 @@ function ResponsiveProofHero({ goToSignup, playDemo }) {
       </section>
 
       <div className="landing-tablet-card-wrap">
+        <div className="mb-3 flex justify-center sm:justify-end">
+          <HeroLiveCallButton audioPlaying={audioPlaying} onClick={onHearLiveCall} />
+        </div>
         <MobileHeroCallProof
           className="landing-tablet-call-proof"
           onSampleCall={playDemo}
@@ -1507,7 +1597,7 @@ export function MobileHeroCallProof({ className = "", onSampleCall, onStartTrial
         >
           <div className="landing-timed-call-status flex items-center justify-between text-[0.68rem] font-extrabold text-[#d9e8f7]">
             <span className="inline-flex items-center gap-2"><i className="h-2.5 w-2.5 rounded-full bg-[#15d56b] shadow-[0_0_0_5px_rgba(21,213,107,0.1),0_0_18px_rgba(21,213,107,0.65)]" />Call in progress</span>
-            <span>00:18</span>
+            <span>Recorded demo</span>
           </div>
           <div className="landing-timed-call-agent-row mt-3 flex items-center gap-3">
             <div className="landing-timed-call-avatar-wrap grid h-[4.35rem] w-[4.35rem] shrink-0 place-items-center rounded-full border-2 border-[#27c2ff]/40 shadow-[0_0_0_6px_rgba(39,194,255,0.055),0_0_32px_rgba(39,194,255,0.22)]">
@@ -1531,24 +1621,24 @@ export function MobileHeroCallProof({ className = "", onSampleCall, onStartTrial
           <div className="landing-timed-conversation mt-2 space-y-1">
             <div className="landing-timed-conversation-turn landing-timed-conversation-ai mr-3 rounded-[1rem_1rem_1rem_0.35rem] border border-white/10 bg-white/[0.08] px-3 py-1.5">
               <span className="block text-[0.55rem] font-black uppercase tracking-[0.09em] text-[#63d9ff]">My AI PA</span>
-              <p className="mt-0.5 text-[0.78rem] font-extrabold leading-[1.22] text-white">“Thanks for calling Tim&apos;s Electrical. How can I help you today?”</p>
+              <p className="mt-0.5 text-[0.72rem] font-extrabold leading-[1.18] text-white">“Hello are you looking for a new installation, repair or maintenance today?”</p>
             </div>
             {dialogueStep >= 2 && (
               <div className="landing-dialogue-reveal landing-timed-conversation-turn landing-timed-conversation-caller ml-3 rounded-[1rem_1rem_0.35rem_1rem] bg-[#0a84ff] px-3 py-1.5">
                 <span className="block text-[0.55rem] font-black uppercase tracking-[0.09em] text-[#d9efff]">Caller</span>
-                <p className="mt-0.5 text-[0.78rem] font-extrabold leading-[1.22] text-white">“I&apos;m putting in a hot tub and need it wired.”</p>
+                <p className="mt-0.5 text-[0.76rem] font-extrabold leading-[1.2] text-white">“I need someone to wire up my hot tub as a new installation.”</p>
               </div>
             )}
             {dialogueStep >= 3 && (
               <div className="landing-dialogue-reveal landing-timed-conversation-turn landing-timed-conversation-ai mr-2 rounded-[1rem_1rem_1rem_0.35rem] border border-white/10 bg-white/[0.08] px-3 py-1.5">
                 <span className="block text-[0.55rem] font-black uppercase tracking-[0.09em] text-[#63d9ff]">My AI PA</span>
-                <p className="mt-0.5 text-[0.78rem] font-extrabold leading-[1.22] text-white">“Absolutely—I can collect that for the team. When are you hoping to have the work done?”</p>
+                <p className="mt-0.5 text-[0.76rem] font-extrabold leading-[1.2] text-white">“Can I get your first name?”</p>
               </div>
             )}
             {dialogueStep >= 4 && (
               <div className="landing-dialogue-reveal landing-timed-conversation-turn landing-timed-conversation-caller ml-3 rounded-[1rem_1rem_0.35rem_1rem] bg-[#0a84ff] px-3 py-1.5">
                 <span className="block text-[0.55rem] font-black uppercase tracking-[0.09em] text-[#d9efff]">Caller</span>
-                <p className="mt-0.5 text-[0.78rem] font-extrabold leading-[1.22] text-white">“Sometime next week.”</p>
+                <p className="mt-0.5 text-[0.76rem] font-extrabold leading-[1.2] text-white">“Brian Smith.”</p>
               </div>
             )}
             {textsCountdown !== null && (
@@ -9794,7 +9884,12 @@ function LandingPage() {
           </nav>
 
           <div className="landing-hero-grid relative grid flex-1 gap-10 py-5 lg:grid-cols-[minmax(380px,0.7fr)_minmax(620px,1.3fr)] lg:items-center xl:grid-cols-[minmax(430px,0.72fr)_minmax(680px,1.28fr)] xl:gap-16 2xl:gap-16 2xl:py-5">
-            <ResponsiveProofHero goToSignup={goToSignup} playDemo={playDemo} />
+            <ResponsiveProofHero
+              goToSignup={goToSignup}
+              playDemo={playDemo}
+              onHearLiveCall={toggleAudio}
+              audioPlaying={audioPlaying}
+            />
             <div className="landing-hero-copy-column relative z-10 min-w-0 max-w-[500px] xl:max-w-[520px] lg:-translate-y-1">
               <div className="landing-mobile-proof-first sm:hidden">
                 <p className="mb-3 text-center text-[0.66rem] font-black uppercase tracking-[0.14em] text-[#c92a20]">Stop losing jobs to missed calls</p>
@@ -9805,6 +9900,9 @@ function LandingPage() {
                 <p className="landing-mobile-proof-pain landing-chalk-pain font-black text-[#c92a20]">Missed Calls = Missed Jobs</p>
                 <p className="landing-mobile-proof-explainer">My AI PA answers when you cannot, captures the job details and prepares the text follow-up.</p>
                 <p className="landing-mobile-coverage-card">Keep your existing business number.</p>
+                <div className="mb-3 mt-4 flex justify-center">
+                  <HeroLiveCallButton audioPlaying={audioPlaying} onClick={toggleAudio} className="w-full max-w-[18rem]" />
+                </div>
                 <MobileHeroCallProof onSampleCall={playDemo} onStartTrial={goToSignup} />
 
                 <div className="landing-mobile-proof-trust" aria-label="Trial details">
