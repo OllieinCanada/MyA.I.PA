@@ -1296,40 +1296,33 @@ const HERO_DIALOGUE_TIMELINE_MS = Object.freeze({
 
 function PhoneReadingHand({ side }) {
   return (
-    <span className={`landing-reading-hand landing-reading-hand-${side}`} aria-hidden="true">
-      <svg viewBox="0 0 116 104" role="presentation">
-        <path className="landing-reading-hand-cuff" d="M20 80h39l7 25H17Z" />
-        <path
-          className="landing-reading-hand-finger landing-reading-hand-finger-pinky"
-          d="M35 58C27 56 16 51 12 44c-4-6-1-12 5-12 5 0 8 4 11 8l12 10Z"
-        />
-        <path
-          className="landing-reading-hand-finger landing-reading-hand-finger-ring"
-          d="M40 50c-6-10-10-22-6-28 3-5 10-4 13 1 4 7 3 16 4 24Z"
-        />
-        <path
-          className="landing-reading-hand-finger landing-reading-hand-finger-middle"
-          d="M49 47c-2-14-1-27 5-31 5-4 12 0 12 7 1 8-3 17-4 27Z"
-        />
-        <path
-          className="landing-reading-hand-finger landing-reading-hand-finger-index"
-          d="M59 50c2-14 7-23 14-23 7 1 9 8 5 15l-10 17Z"
-        />
-        <path
-          className="landing-reading-hand-palm"
-          d="M25 78c-4-8-4-19 1-27 4-7 12-11 21-10 12 1 21 10 24 22l5 17c2 8-4 16-13 18l-22 3c-8 1-14-4-16-12Z"
-        />
-        <path
-          className="landing-reading-hand-thumb"
-          d="M31 68c13-8 29-12 48-12 8 0 13 5 11 11-1 5-6 8-13 8H60c-9 1-16 6-22 14"
-        />
-        <path
-          className="landing-reading-hand-nails"
-          d="M14 40c2-2 5-2 8 0M36 25c2-2 6-1 8 2M55 20c3-1 6 1 7 4M70 31c3 0 5 2 6 5"
-        />
-        <path className="landing-reading-hand-detail" d="M35 64c6 2 10 6 13 11M48 52c5 2 9 6 12 11M41 88c7-5 14-7 22-7" />
-      </svg>
-    </span>
+    <>
+      <span className={`landing-reading-hand landing-reading-hand-back landing-reading-hand-${side}`} aria-hidden="true">
+        <svg viewBox="0 0 128 122" role="presentation">
+          <ellipse className="landing-reading-hand-grip-shadow" cx="51" cy="108" rx="38" ry="9" />
+
+          {/* These fingertips sit behind the phone and curl around its left
+              bezel. The phone layer hides their inner halves. */}
+          <path className="landing-reading-hand-finger" d="M35 29C25 25 16 29 14 36c-2 8 4 14 14 15l11 1 4-13Z" />
+          <path className="landing-reading-hand-finger" d="M34 44C23 40 13 45 12 52c-1 8 5 13 16 14l12-1 3-13Z" />
+          <path className="landing-reading-hand-finger" d="M34 59C22 56 12 62 12 70c1 8 8 12 19 10l12-4-1-12Z" />
+          <path className="landing-reading-hand-finger" d="M37 73c-11-1-20 5-20 13 1 8 9 12 20 7l11-9-4-10Z" />
+
+          <path className="landing-reading-hand-palm" d="M15 105c-6-13-3-28 8-37 9-8 22-10 34-5 12 5 19 15 24 28 5 14-1 25-14 30l-30 1c-10-2-18-7-22-17Z" />
+          <path className="landing-reading-hand-nails" d="M17 36c4-3 9-3 13-1M15 51c4-3 9-2 13 0M15 68c4-3 9-2 13 0M20 84c4-3 9-3 13-1" />
+          <path className="landing-reading-hand-detail" d="M25 76c8 2 14 7 18 14M38 67c8 2 14 8 17 15M42 105c10-6 20-8 30-6" />
+        </svg>
+      </span>
+      <span className={`landing-reading-hand landing-reading-hand-front landing-reading-hand-${side}`} aria-hidden="true">
+        <svg viewBox="0 0 128 122" role="presentation">
+          {/* The thumb starts in the supporting palm and overlaps the front
+              glass, completing the grip instead of floating below it. */}
+          <path className="landing-reading-hand-thumb" d="M34 108c3-13 7-26 14-36 7-11 16-17 27-20 9-3 17 1 18 9 1 8-6 14-15 15l-8 1c-8 1-13 7-16 16l-4 16Z" />
+          <path className="landing-reading-hand-thumb-nail" d="M76 56c7-2 12 1 13 6 0 5-4 8-11 9" />
+          <path className="landing-reading-hand-contact" d="M32 80c7 0 13 2 18 6" />
+        </svg>
+      </span>
+    </>
   );
 }
 
@@ -1354,6 +1347,8 @@ function CoffeePriceEmphasis() {
 
 export function MobileHeroCallProof({ className = "", onSampleCall, onStartTrial }) {
   const stageRef = useRef(null);
+  const swipeStartXRef = useRef(null);
+  const swipeHandledRef = useRef(false);
   const [activeFace, setActiveFace] = useState(0);
   const [dialogueStep, setDialogueStep] = useState(1);
   const [textsCountdown, setTextsCountdown] = useState(null);
@@ -1436,16 +1431,35 @@ export function MobileHeroCallProof({ className = "", onSampleCall, onStartTrial
     <section
       ref={stageRef}
       className={`landing-mobile-call-proof relative h-[26rem] overflow-visible ${className}`}
-      style={{ perspective: "1400px" }}
+      style={{ perspective: "1400px", touchAction: "pan-y" }}
       data-active-face={activeFace}
       data-dialogue-step={dialogueStep}
       aria-label={`Three-sided My AI PA demo card. Side ${activeFace + 1} of 3. It advances every 14 seconds. Tap the left side for the previous side or the right side for the next side.`}
       role="region"
       tabIndex={0}
       onClick={(event) => {
+        if (swipeHandledRef.current) {
+          swipeHandledRef.current = false;
+          return;
+        }
         const bounds = event.currentTarget.getBoundingClientRect();
         const tappedLeftSide = event.clientX < bounds.left + (bounds.width / 2);
         turnCard(tappedLeftSide ? -1 : 1);
+      }}
+      onPointerDown={(event) => {
+        if (event.target.closest("button")) return;
+        swipeStartXRef.current = event.clientX;
+      }}
+      onPointerUp={(event) => {
+        if (swipeStartXRef.current === null || event.target.closest("button")) return;
+        const distance = event.clientX - swipeStartXRef.current;
+        swipeStartXRef.current = null;
+        if (Math.abs(distance) < 48) return;
+        swipeHandledRef.current = true;
+        turnCard(distance > 0 ? -1 : 1);
+      }}
+      onPointerCancel={() => {
+        swipeStartXRef.current = null;
       }}
       onKeyDown={(event) => {
         if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
@@ -1541,24 +1555,28 @@ export function MobileHeroCallProof({ className = "", onSampleCall, onStartTrial
           <p className="landing-timed-call-back-intro mt-1 text-center text-[0.68rem] font-bold text-[#9dbbd6]">The job details are ready before you call back.</p>
 
           <div className="landing-text-phone-grid mt-2.5 grid grid-cols-2 gap-2">
-            <div className="landing-text-phone rounded-[1.5rem] border-[4px] border-[#101827] bg-white p-1.5 text-[#111827] shadow-[0_18px_36px_-24px_rgba(0,0,0,0.7)]">
-              <div className="flex items-center justify-between px-1 text-[0.43rem] font-black text-[#475569]"><span>9:41</span><span className="h-1.5 w-9 rounded-full bg-[#101827]" /><span>5G</span></div>
-              <div className="mt-1 flex items-center gap-1.5 border-b border-[#e5e7eb] px-1 pb-1.5">
-                <span className="grid h-6 w-6 place-items-center rounded-full bg-[#2587f5] text-[0.48rem] font-black text-white">PA</span>
-                <span className="min-w-0"><strong className="block text-[0.56rem] font-black leading-tight">Owner&apos;s cellphone</strong><small className="block text-[0.42rem] font-bold text-[#8e8e93]">My AI PA · now</small></span>
-              </div>
-              <div className="landing-text-bubble mt-1.5 rounded-[0.75rem_0.75rem_0.75rem_0.25rem] bg-[#e9e9eb] px-2 py-1.5 text-[0.53rem] font-bold leading-[1.22] text-[#111]">New installation · Brian Smith · Hot tub wiring · 23 Robb St., Hamilton · Start next week · Callback after 5 PM</div>
+            <div className="landing-text-phone-holder">
               <PhoneReadingHand side="left" />
+              <div className="landing-text-phone rounded-[1.5rem] border-[4px] border-[#101827] bg-white p-1.5 text-[#111827] shadow-[0_18px_36px_-24px_rgba(0,0,0,0.7)]">
+                <div className="flex items-center justify-between px-1 text-[0.43rem] font-black text-[#475569]"><span>9:41</span><span className="h-1.5 w-9 rounded-full bg-[#101827]" /><span>5G</span></div>
+                <div className="mt-1 flex items-center gap-1.5 border-b border-[#e5e7eb] px-1 pb-1.5">
+                  <span className="grid h-6 w-6 place-items-center rounded-full bg-[#2587f5] text-[0.48rem] font-black text-white">PA</span>
+                  <span className="min-w-0"><strong className="block text-[0.56rem] font-black leading-tight">Owner&apos;s cellphone</strong><small className="block text-[0.42rem] font-bold text-[#8e8e93]">My AI PA · now</small></span>
+                </div>
+                <div className="landing-text-bubble mt-1.5 rounded-[0.75rem_0.75rem_0.75rem_0.25rem] bg-[#e9e9eb] px-2 py-1.5 text-[0.53rem] font-bold leading-[1.22] text-[#111]">New installation · Brian Smith · Hot tub wiring · 23 Robb St., Hamilton · Start next week · Callback after 5 PM</div>
+              </div>
             </div>
 
-            <div className="landing-text-phone rounded-[1.5rem] border-[4px] border-[#101827] bg-white p-1.5 text-[#111827] shadow-[0_18px_36px_-24px_rgba(0,0,0,0.7)]">
-              <div className="flex items-center justify-between px-1 text-[0.43rem] font-black text-[#475569]"><span>9:41</span><span className="h-1.5 w-9 rounded-full bg-[#101827]" /><span>5G</span></div>
-              <div className="mt-1 flex items-center gap-1.5 border-b border-[#e5e7eb] px-1 pb-1.5">
-                <span className="grid h-6 w-6 place-items-center rounded-full bg-[#0a84ff] text-[0.48rem] font-black text-white">TE</span>
-                <span className="min-w-0"><strong className="block text-[0.56rem] font-black leading-tight">Customer&apos;s cellphone</strong><small className="block text-[0.42rem] font-bold text-[#8e8e93]">Tim&apos;s Electrical · now</small></span>
-              </div>
-              <div className="landing-text-bubble landing-text-bubble-customer ml-2 mt-1.5 rounded-[0.75rem_0.75rem_0.25rem_0.75rem] bg-[#0a84ff] px-2 py-1.5 text-[0.53rem] font-bold leading-[1.22] text-white">Thanks for calling Tim&apos;s Electrical. We received your hot tub wiring request. The team will follow up to discuss the details and next steps.</div>
+            <div className="landing-text-phone-holder">
               <PhoneReadingHand side="right" />
+              <div className="landing-text-phone rounded-[1.5rem] border-[4px] border-[#101827] bg-white p-1.5 text-[#111827] shadow-[0_18px_36px_-24px_rgba(0,0,0,0.7)]">
+                <div className="flex items-center justify-between px-1 text-[0.43rem] font-black text-[#475569]"><span>9:41</span><span className="h-1.5 w-9 rounded-full bg-[#101827]" /><span>5G</span></div>
+                <div className="mt-1 flex items-center gap-1.5 border-b border-[#e5e7eb] px-1 pb-1.5">
+                  <span className="grid h-6 w-6 place-items-center rounded-full bg-[#0a84ff] text-[0.48rem] font-black text-white">TE</span>
+                  <span className="min-w-0"><strong className="block text-[0.56rem] font-black leading-tight">Customer&apos;s cellphone</strong><small className="block text-[0.42rem] font-bold text-[#8e8e93]">Tim&apos;s Electrical · now</small></span>
+                </div>
+                <div className="landing-text-bubble landing-text-bubble-customer ml-2 mt-1.5 rounded-[0.75rem_0.75rem_0.25rem_0.75rem] bg-[#0a84ff] px-2 py-1.5 text-[0.53rem] font-bold leading-[1.22] text-white">Thanks for calling Tim&apos;s Electrical. We received your hot tub wiring request. The team will follow up to discuss the details and next steps.</div>
+              </div>
             </div>
           </div>
 
@@ -3378,6 +3396,7 @@ function LandingPage() {
   const [audioDuration, setAudioDuration] = useState(heroTranscriptTimings.durationSeconds);
   const [audioError, setAudioError] = useState("");
   const [heroDemoRevealed, setHeroDemoRevealed] = useState(false);
+  const [heroDemoHasTransitioned, setHeroDemoHasTransitioned] = useState(false);
   const [openFaq, setOpenFaq] = useState(-1);
   const [showHeader, setShowHeader] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -3453,6 +3472,7 @@ function LandingPage() {
 
   const revealHeroDemo = async () => {
     const audio = audioRef.current;
+    setHeroDemoHasTransitioned(true);
     setHeroDemoRevealed(true);
     setAudioError("");
     if (!audio) return;
@@ -3466,6 +3486,17 @@ function LandingPage() {
       setAudioPlaying(false);
       setAudioError("The demo audio could not start. Please press Hear call to try again.");
     }
+  };
+
+  const returnToHeroSlides = () => {
+    const audio = audioRef.current;
+    audio?.pause();
+    if (audio) audio.currentTime = 0;
+    setAudioPlaying(false);
+    setAudioTime(0);
+    setAudioError("");
+    setHeroDemoHasTransitioned(true);
+    setHeroDemoRevealed(false);
   };
 
   const handleScrub = (event) => {
@@ -3491,7 +3522,7 @@ function LandingPage() {
 
   useEffect(() => {
     const onScroll = () => {
-      setShowHeader(window.scrollY > 40);
+      setShowHeader(window.scrollY > 4);
     };
 
     onScroll();
@@ -6596,23 +6627,12 @@ function LandingPage() {
               transform: translateY(0);
             }
           }
-          @keyframes landing-reading-hand {
-            0%, 100% {
-              transform: translate3d(0, 0.35rem, 0) rotate(-2deg);
-            }
-            45% {
-              transform: translate3d(0, -0.08rem, 0) rotate(1.5deg);
-            }
-            62% {
-              transform: translate3d(0, -0.12rem, 0) rotate(-0.5deg);
-            }
-          }
           @keyframes landing-reading-thumb {
-            0%, 38%, 100% {
-              transform: translate(0, 0);
+            0%, 34%, 100% {
+              transform: rotate(0deg) translate(0, 0);
             }
-            50%, 62% {
-              transform: translate(2px, -2px);
+            46%, 58% {
+              transform: rotate(-2deg) translate(2px, -1px);
             }
           }
           @keyframes landing-coffee-steam {
@@ -6659,8 +6679,15 @@ function LandingPage() {
             min-height: 0;
             align-items: stretch;
           }
+          .landing-text-phone-holder {
+            position: relative;
+            min-width: 0;
+            min-height: 0;
+            isolation: isolate;
+          }
           .landing-text-phone {
             position: relative;
+            z-index: 2;
             height: 100%;
             min-height: 0;
             overflow: visible !important;
@@ -6700,26 +6727,24 @@ function LandingPage() {
           }
           .landing-reading-hand {
             position: absolute;
-            bottom: -1.02rem;
-            z-index: 4;
+            bottom: -1.55rem;
             display: block;
-            width: 5.9rem;
-            height: 5.3rem;
+            width: 5.8rem;
+            height: 5.5rem;
             pointer-events: none;
-            transform-origin: 34% 92%;
-            filter: drop-shadow(0 5px 5px rgba(15, 23, 42, 0.25));
-            animation: landing-reading-hand 2.6s ease-in-out infinite;
+            filter: drop-shadow(0 6px 5px rgba(15, 23, 42, 0.28));
+          }
+          .landing-reading-hand-back {
+            z-index: 1;
+          }
+          .landing-reading-hand-front {
+            z-index: 4;
           }
           .landing-reading-hand-left {
-            left: -1.18rem;
+            left: -0.72rem;
           }
           .landing-reading-hand-right {
-            right: -1.18rem;
-            transform-origin: 66% 92%;
-            animation-delay: -1.3s;
-          }
-          .landing-reading-hand-right svg {
-            transform: scaleX(-1);
+            left: -0.72rem;
           }
           .landing-reading-hand svg {
             display: block;
@@ -6732,15 +6757,13 @@ function LandingPage() {
           .landing-reading-hand-thumb {
             fill: #f2b58a;
             stroke: #8b4b32;
-            stroke-width: 2.2;
+            stroke-width: 2;
             stroke-linecap: round;
             stroke-linejoin: round;
           }
           .landing-reading-hand-thumb {
-            fill: none;
-            stroke-width: 11;
-            transform-origin: 38px 78px;
-            animation: landing-reading-thumb 2.6s ease-in-out infinite;
+            transform-origin: 42px 96px;
+            animation: landing-reading-thumb 3.2s ease-in-out infinite;
           }
           .landing-reading-hand-cuff {
             fill: #123c6e;
@@ -6753,11 +6776,134 @@ function LandingPage() {
             stroke-width: 1.8;
             stroke-linecap: round;
           }
-          .landing-reading-hand-nails {
+          .landing-reading-hand-contact {
+            fill: none;
+            stroke: rgba(94, 45, 29, 0.52);
+            stroke-width: 2.2;
+            stroke-linecap: round;
+          }
+          .landing-reading-hand-nails,
+          .landing-reading-hand-thumb-nail {
             fill: none;
             stroke: rgba(255, 231, 216, 0.88);
-            stroke-width: 2.3;
+            stroke-width: 2.1;
             stroke-linecap: round;
+          }
+          .landing-reading-hand-grip-shadow {
+            fill: rgba(3, 13, 29, 0.24);
+          }
+          .landing-desktop-call-proof {
+            height: 36rem !important;
+            margin-top: 0 !important;
+          }
+          .landing-desktop-call-proof .landing-mobile-call-prism {
+            height: calc(100% - 4.4rem) !important;
+          }
+          .landing-desktop-call-proof .landing-timed-call-face {
+            padding: 1.4rem !important;
+            border-radius: 2rem !important;
+          }
+          .landing-desktop-call-proof .landing-timed-call-status {
+            font-size: 0.82rem !important;
+          }
+          .landing-desktop-call-proof .landing-timed-call-agent-row {
+            gap: 1rem !important;
+            margin-top: 1rem !important;
+          }
+          .landing-desktop-call-proof .landing-timed-call-avatar-wrap {
+            width: 6.4rem !important;
+            height: 6.4rem !important;
+          }
+          .landing-desktop-call-proof .landing-timed-call-avatar {
+            width: 5.8rem !important;
+            height: 5.8rem !important;
+          }
+          .landing-desktop-call-proof .landing-timed-call-agent {
+            font-size: 1.8rem !important;
+          }
+          .landing-desktop-call-proof .landing-timed-call-subtitle {
+            font-size: 0.9rem !important;
+          }
+          .landing-desktop-call-proof .landing-timed-conversation {
+            margin-top: 1rem !important;
+          }
+          .landing-desktop-call-proof .landing-timed-conversation-turn {
+            padding: 0.72rem 0.9rem !important;
+          }
+          .landing-desktop-call-proof .landing-timed-conversation-turn > p {
+            font-size: 0.86rem !important;
+          }
+          .landing-desktop-call-proof .landing-timed-call-back-title {
+            margin-top: 0.9rem !important;
+            font-size: 1.75rem !important;
+          }
+          .landing-desktop-call-proof .landing-timed-call-back-intro {
+            font-size: 0.82rem !important;
+          }
+          .landing-desktop-call-proof .landing-text-phone-grid {
+            flex: 0 0 14.5rem !important;
+            height: 14.5rem !important;
+            gap: 0.9rem !important;
+            margin-top: 0.9rem !important;
+          }
+          .landing-desktop-call-proof .landing-text-phone {
+            padding: 0.65rem 0.65rem 4rem !important;
+            border-radius: 1.65rem !important;
+          }
+          .landing-desktop-call-proof .landing-text-phone strong {
+            font-size: 0.74rem !important;
+          }
+          .landing-desktop-call-proof .landing-text-phone small {
+            font-size: 0.56rem !important;
+          }
+          .landing-desktop-call-proof .landing-text-bubble {
+            padding: 0.65rem 0.7rem !important;
+            font-size: 0.72rem !important;
+            line-height: 1.28 !important;
+          }
+          .landing-desktop-call-proof .landing-reading-hand {
+            bottom: -1.85rem;
+            width: 6.7rem;
+            height: 6.35rem;
+          }
+          .landing-desktop-call-proof .landing-reading-hand-left,
+          .landing-desktop-call-proof .landing-reading-hand-right {
+            left: -0.95rem;
+            right: auto;
+          }
+          .landing-desktop-call-proof .landing-timed-call-benefits {
+            display: flex !important;
+            flex-direction: column;
+            justify-content: center;
+            padding: 2rem !important;
+          }
+          .landing-desktop-call-proof .landing-timed-benefits-title {
+            margin-top: 1rem !important;
+            font-size: 1.5rem !important;
+          }
+          .landing-desktop-call-proof .landing-timed-benefits-list {
+            margin-top: 1.2rem !important;
+          }
+          .landing-desktop-call-proof .landing-timed-benefits-row {
+            min-height: 3.7rem;
+            grid-template-columns: 3rem minmax(0, 1fr) !important;
+            padding: 0.72rem 0.9rem !important;
+          }
+          .landing-desktop-call-proof .landing-timed-benefits-icon {
+            width: 2.7rem !important;
+            height: 2.7rem !important;
+          }
+          .landing-desktop-call-proof .landing-timed-benefits-copy {
+            font-size: 0.86rem !important;
+          }
+          .landing-desktop-call-proof .landing-carousel-actions {
+            min-height: 3.5rem;
+            gap: 0.8rem;
+          }
+          .landing-desktop-call-proof .landing-carousel-primary,
+          .landing-desktop-call-proof .landing-carousel-secondary {
+            min-height: 3.5rem;
+            font-size: 0.9rem;
           }
           .landing-coffee-line {
             overflow: visible !important;
@@ -8539,15 +8685,16 @@ function LandingPage() {
               line-height: 1.3 !important;
             }
             .landing-tablet-call-proof .landing-reading-hand {
-              bottom: -1.22rem;
-              width: 7.1rem;
-              height: 6.35rem;
+              bottom: -1.9rem;
+              width: 6.85rem;
+              height: 6.5rem;
             }
             .landing-tablet-call-proof .landing-reading-hand-left {
-              left: -1.5rem;
+              left: -1rem;
             }
             .landing-tablet-call-proof .landing-reading-hand-right {
-              right: -1.5rem;
+              left: -1rem;
+              right: auto;
             }
             .landing-tablet-call-proof .landing-timed-call-message {
               margin-top: 1.1rem !important;
@@ -9273,6 +9420,262 @@ function LandingPage() {
               font-size: 0.48rem !important;
             }
           }
+          /* The carousel preview and the revealed recorded call occupy one
+             identical desktop stage so the hero never jumps or changes size. */
+          @media (min-width: 1024px) {
+            .landing-hero-demo-stage {
+              position: relative;
+              width: 100%;
+              height: 36rem;
+              perspective: 1700px;
+              perspective-origin: 50% 46%;
+            }
+            .landing-hero-demo-view {
+              width: 100%;
+              height: 100%;
+              transform-style: preserve-3d;
+              backface-visibility: hidden;
+              will-change: transform, opacity, filter;
+            }
+            .landing-hero-demo-view-animated.landing-hero-demo-view-call {
+              animation: landing-hero-demo-spin-from-slides 820ms cubic-bezier(.17,.79,.2,1) both;
+            }
+            .landing-hero-demo-view-animated.landing-hero-demo-view-slides {
+              animation: landing-hero-demo-spin-from-call 820ms cubic-bezier(.17,.79,.2,1) both;
+            }
+            .landing-hero-proof-wrap .landing-call-dashboard-redesign {
+              width: 100% !important;
+              max-width: none !important;
+              height: 36rem !important;
+            }
+            .landing-hero-proof-wrap .landing-call-dashboard-redesign > .landing-call-dashboard-surface {
+              width: 100% !important;
+              height: 36rem !important;
+              min-height: 36rem !important;
+              max-height: 36rem !important;
+            }
+          }
+          @media (min-width: 1280px) {
+            .landing-hero-visual {
+              transform: translateY(1.5rem) !important;
+            }
+          }
+          @keyframes landing-hero-demo-spin-from-slides {
+            0% {
+              opacity: 0;
+              transform: rotateY(-104deg) scale(0.9);
+              filter: brightness(0.62) blur(3px);
+            }
+            56% {
+              opacity: 1;
+              transform: rotateY(8deg) scale(1.015);
+              filter: brightness(1.08) blur(0);
+            }
+            78% {
+              transform: rotateY(-2.5deg) scale(0.998);
+            }
+            100% {
+              opacity: 1;
+              transform: rotateY(0deg) scale(1);
+              filter: none;
+            }
+          }
+          @keyframes landing-hero-demo-spin-from-call {
+            0% {
+              opacity: 0;
+              transform: rotateY(104deg) scale(0.9);
+              filter: brightness(0.62) blur(3px);
+            }
+            56% {
+              opacity: 1;
+              transform: rotateY(-8deg) scale(1.015);
+              filter: brightness(1.08) blur(0);
+            }
+            78% {
+              transform: rotateY(2.5deg) scale(0.998);
+            }
+            100% {
+              opacity: 1;
+              transform: rotateY(0deg) scale(1);
+              filter: none;
+            }
+          }
+          /* Desktop hero story: turn the existing copy into one guided
+             problem -> solution -> outcome sequence instead of loose blocks. */
+          @media (min-width: 640px) {
+            .landing-hero-story-stack {
+              position: relative;
+              width: 100%;
+              max-width: 34rem;
+            }
+            .landing-hero-story-eyebrow {
+              display: inline-flex;
+              align-items: center;
+              gap: 0.55rem;
+              margin: 0 0 0.8rem;
+              padding: 0.28rem 0.72rem 0.28rem 0.32rem;
+              border: 1px solid rgba(203, 46, 37, 0.2);
+              border-radius: 999px;
+              background: rgba(255, 255, 255, 0.72);
+              box-shadow: 0 10px 24px -21px rgba(129, 29, 23, 0.8);
+              color: #b42318;
+            }
+            .landing-hero-story-index {
+              display: grid;
+              width: 1.45rem;
+              height: 1.45rem;
+              flex: 0 0 auto;
+              place-items: center;
+              border-radius: 50%;
+              background: #d92d20;
+              color: #fff;
+              font-size: 0.55rem;
+              letter-spacing: 0;
+              box-shadow: 0 5px 12px -7px rgba(217, 45, 32, 0.9);
+            }
+            .landing-hero-story-stack .landing-hero-title {
+              margin: 0 !important;
+            }
+            .landing-hero-problem-bridge {
+              display: flex;
+              align-items: center;
+              gap: 0.45rem;
+              margin: 0.85rem 0 0.4rem;
+              padding-left: 0.75rem;
+            }
+            .landing-hero-problem-line {
+              position: relative;
+              z-index: 1;
+              margin: 0 !important;
+              font-size: clamp(1.35rem, 2.1vw, 1.9rem) !important;
+              line-height: 1 !important;
+              letter-spacing: -0.035em !important;
+              white-space: nowrap;
+            }
+            .landing-hero-problem-line::after {
+              content: "";
+              position: absolute;
+              z-index: -1;
+              right: -0.25rem;
+              bottom: -0.35rem;
+              left: -0.2rem;
+              height: 0.55rem;
+              border-top: 3px solid rgba(222, 43, 36, 0.9);
+              border-radius: 55% 45% 0 0;
+              transform: rotate(-1deg);
+            }
+            .landing-hero-story-arrow {
+              width: 3.15rem;
+              height: 2.6rem;
+              flex: 0 0 auto;
+              overflow: visible;
+              color: #e04439;
+              transform: translateY(0.45rem) rotate(2deg);
+            }
+            .landing-hero-solution-card {
+              position: relative;
+              margin-top: 0.1rem;
+              padding: 0.9rem 1rem 0.85rem 1.1rem;
+              border: 1px solid rgba(86, 157, 216, 0.38);
+              border-left: 4px solid #1685d1;
+              border-radius: 0.45rem 1.15rem 1.15rem 1.15rem;
+              background: linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(234, 247, 255, 0.9));
+              box-shadow: 0 18px 34px -31px rgba(11, 72, 128, 0.9);
+            }
+            .landing-hero-solution-label {
+              display: inline-flex;
+              align-items: center;
+              gap: 0.4rem;
+              margin: 0 0 0.35rem;
+              color: #0c5fc3;
+              font-size: 0.63rem;
+              font-weight: 950;
+              letter-spacing: 0.14em;
+              text-transform: uppercase;
+            }
+            .landing-hero-solution-label::before {
+              content: "";
+              width: 0.48rem;
+              height: 0.48rem;
+              border-radius: 50%;
+              background: #19c982;
+              box-shadow: 0 0 0 4px rgba(25, 201, 130, 0.13);
+            }
+            .landing-hero-explainer {
+              margin: 0;
+              max-width: 33rem;
+              color: #344d67;
+              font-size: 0.92rem;
+              font-weight: 750;
+              line-height: 1.43;
+            }
+            .landing-hero-service-flow {
+              display: grid;
+              grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr);
+              align-items: center;
+              gap: 0.35rem;
+              margin-top: 0.7rem;
+              padding: 0.48rem 0.58rem;
+              border: 1px solid rgba(58, 143, 209, 0.22);
+              border-radius: 0.85rem;
+              background: rgba(228, 244, 255, 0.78);
+              color: #103d69;
+            }
+            .landing-hero-service-flow > span {
+              display: inline-flex;
+              min-width: 0;
+              align-items: center;
+              justify-content: center;
+              gap: 0.32rem;
+              font-size: 0.7rem;
+              font-weight: 950;
+              white-space: nowrap;
+            }
+            .landing-hero-service-flow b {
+              display: grid;
+              width: 1.18rem;
+              height: 1.18rem;
+              flex: 0 0 auto;
+              place-items: center;
+              border-radius: 50%;
+              background: #147ac6;
+              color: #fff;
+              font-size: 0.55rem;
+            }
+            .landing-hero-service-flow > i {
+              color: #28a7df;
+              font-size: 0.95rem;
+              font-style: normal;
+              font-weight: 950;
+            }
+            .landing-hero-solution-card .landing-hero-coverage {
+              margin: 0.68rem 0 0 !important;
+              padding: 0.48rem 0.68rem !important;
+              border-left-width: 3px !important;
+              border-radius: 0 0.55rem 0.55rem 0;
+              font-size: 0.88rem !important;
+            }
+            .landing-hero-story-stack + .landing-hero-actions {
+              margin-top: 1rem !important;
+            }
+          }
+          @media (min-width: 1280px) {
+            .landing-hero-explainer {
+              font-size: 0.96rem;
+            }
+            .landing-hero-service-flow > span {
+              font-size: 0.74rem;
+            }
+          }
+          @media (prefers-reduced-motion: reduce) {
+            .landing-hero-demo-view-animated {
+              animation: landing-hero-demo-fade-in 180ms ease-out both !important;
+            }
+          }
+          @keyframes landing-hero-demo-fade-in {
+            from { opacity: 0; }
+            to { opacity: 1; }
+          }
         `}</style>
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_16%_18%,rgba(187,222,255,0.74),transparent_30%),radial-gradient(circle_at_78%_12%,rgba(213,235,255,0.70),transparent_32%),linear-gradient(180deg,#ffffff_0%,#f6fbff_28%,#e9f6ff_100%)]" />
         <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgba(37,99,235,0.06)_1px,transparent_1px),linear-gradient(rgba(37,99,235,0.045)_1px,transparent_1px)] bg-[size:76px_76px] opacity-[0.32]" />
@@ -9330,42 +9733,42 @@ function LandingPage() {
               </div>
 
               <div className="hidden sm:block">
-              <p className="mb-3 text-[0.72rem] font-black uppercase tracking-[0.15em] text-[#c92a20]">Stop losing jobs to missed calls</p>
-              <h1 className="landing-hero-title text-[clamp(3rem,11vw,4.25rem)] font-black leading-[0.98] tracking-[-0.055em] text-[#07142a] 2xl:text-[4.5rem]">
-                <span className="landing-stripe-headline block drop-shadow-[0_3px_0_rgba(148,190,255,0.45)]">Never miss a call again!</span>
-                <span className="landing-chalk-pain mt-4 block text-[0.58em] leading-none tracking-[-0.045em] text-[#d91d12] sm:mt-5">
-                  Missed Calls = Missed Jobs
-                </span>
-              </h1>
+              <div className="landing-hero-story-stack">
+                <p className="landing-hero-story-eyebrow text-[0.68rem] font-black uppercase tracking-[0.14em]">
+                  <span className="landing-hero-story-index" aria-hidden="true">01</span>
+                  <span>Stop losing jobs to missed calls</span>
+                </p>
+                <h1 className="landing-hero-title text-[clamp(3rem,11vw,4.25rem)] font-black leading-[0.98] tracking-[-0.055em] text-[#07142a] 2xl:text-[4.5rem]">
+                  <span className="landing-stripe-headline block drop-shadow-[0_3px_0_rgba(148,190,255,0.45)]">Never miss a call again!</span>
+                </h1>
 
-              <p className="mt-4 max-w-[34rem] text-[0.96rem] font-bold leading-[1.45] text-[#41556c]">
-                Meet My AI PA—the AI telephone answering assistant for trade businesses. It answers when you cannot, captures the job details, and prepares the follow-up before the caller moves on.
-              </p>
+                <div className="landing-hero-problem-bridge" aria-label="Missed calls become missed jobs, and My AI PA provides the solution">
+                  <p className="landing-hero-problem-line landing-chalk-pain font-black text-[#d91d12]">Missed Calls = Missed Jobs</p>
+                  <svg className="landing-hero-story-arrow" viewBox="0 0 64 48" aria-hidden="true">
+                    <path d="M4 7 C 28 5, 47 14, 51 34" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+                    <path d="M42 30 L 52 38 L 59 27" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </div>
 
-              <p className="landing-hero-coverage mt-2 inline-block border-l-4 border-[#17951f] bg-[#e1f8e5]/90 px-3 py-2 text-[1.05rem] font-black leading-tight text-[#147d1b]">
-                Keep your existing business number.
-              </p>
-              <p className="landing-coffee-line mt-3 text-[0.98rem] font-bold leading-[1.35] text-[#334155]">
-                For about the <CoffeePriceEmphasis /> you get:
-              </p>
-
-              <div className="landing-hero-points landing-hero-points-clean landing-hero-points-desktop mt-5 hidden space-y-3 sm:block">
-                {[
-                  "Every call answered professionally after 3 rings — no more hangups",
-                  "Connects with customers with a natural dialogue, answers FAQs and projects a professional image.",
-                  "Collects the job description, caller’s information for easy follow-up call.",
-                  "Texts you the call details and sends the customer a thank-you reminder.",
-                ].map((label) => (
-                  <div key={label} className="landing-hero-point landing-hero-point-clean grid grid-cols-[2rem_minmax(0,1fr)] items-center gap-3 text-[0.94rem] font-bold leading-[1.25] text-[#111827] 2xl:text-[1rem]">
-                    <span className="landing-hero-point-icon landing-hero-point-check grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#0c4da0] text-[0.88rem] font-black text-white shadow-[0_10px_28px_-16px_rgba(59,130,246,1)]" aria-hidden="true">
-                      ✓
-                    </span>
-                    <span>{label}</span>
+                <div className="landing-hero-solution-card">
+                  <p className="landing-hero-solution-label">Here is the fix</p>
+                  <p className="landing-hero-explainer">
+                    Meet My AI PA—the AI telephone answering assistant for trade businesses. It answers when you cannot, captures the job details, and prepares the follow-up before the caller moves on.
+                  </p>
+                  <div className="landing-hero-service-flow" aria-label="My AI PA answers, captures the job details, and follows up">
+                    <span><b aria-hidden="true">1</b>Answers</span>
+                    <i aria-hidden="true">→</i>
+                    <span><b aria-hidden="true">2</b>Captures</span>
+                    <i aria-hidden="true">→</i>
+                    <span><b aria-hidden="true">3</b>Follows up</span>
                   </div>
-                ))}
+                  <p className="landing-hero-coverage inline-block border-l-4 border-[#17951f] bg-[#e1f8e5]/90 px-3 py-2 text-[1.05rem] font-black leading-tight text-[#147d1b]">
+                    Keep your existing business number.
+                  </p>
+                </div>
               </div>
 
-              <div className="landing-hero-actions mt-5">
+              <div className="landing-hero-actions mt-6">
                 <div className="flex flex-col gap-2.5 sm:flex-row">
                   <button
                     type="button"
@@ -9404,18 +9807,43 @@ function LandingPage() {
 
             <div className="landing-hero-visual relative z-0 mt-8 hidden justify-end sm:flex lg:mt-2 lg:self-center">
               <div className="landing-hero-proof-wrap w-full">
-                <p className="landing-hero-proof-heading mb-2 text-center text-[0.78rem] font-black uppercase tracking-[0.12em] text-[#294967]">
-                  See a realistic missed-call example.
-                </p>
-                <HeroCallDashboard
-                  ownerCardRef={heroOwnerCardRef}
-                  onRevealDemo={revealHeroDemo}
-                  onToggleAudio={toggleAudio}
-                  audioPlaying={audioPlaying}
-                  audioTime={audioTime}
-                  audioDuration={audioDuration}
-                  demoRevealed={heroDemoRevealed}
-                />
+                <div className="landing-hero-proof-heading-row mb-2 flex min-h-[2.65rem] items-center gap-3">
+                  <p className="landing-hero-proof-heading min-w-0 flex-1 text-center text-[0.72rem] font-black uppercase tracking-[0.1em] text-[#294967]">
+                    {heroDemoRevealed ? "The complete recorded-call example." : "Swipe or click through all three parts of the missed-call story."}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={heroDemoRevealed ? returnToHeroSlides : revealHeroDemo}
+                    className="landing-hero-live-call-button inline-flex min-h-[2.65rem] shrink-0 items-center justify-center gap-2 rounded-full border border-[#4a9be0] bg-[#0c4e8e] px-4 text-[0.72rem] font-black text-white shadow-[0_12px_26px_-18px_rgba(12,78,142,0.95)] transition hover:-translate-y-0.5 hover:bg-[#0d5ca8] focus:outline-none focus-visible:ring-4 focus-visible:ring-[#68c8ff]/45"
+                    aria-label={heroDemoRevealed ? "Return to the three-slide missed-call demonstration" : "Hear the complete recorded live-call demonstration"}
+                  >
+                    <span className="grid h-6 w-6 place-items-center rounded-full bg-[#2bbdf4] text-[0.65rem] text-white" aria-hidden="true">{heroDemoRevealed ? "↶" : "▶"}</span>
+                    {heroDemoRevealed ? "Back to 3 Slides" : "Hear Live Call"}
+                  </button>
+                </div>
+                <div className="landing-hero-demo-stage">
+                  {heroDemoRevealed ? (
+                    <div className={`landing-hero-demo-view landing-hero-demo-view-call ${heroDemoHasTransitioned ? "landing-hero-demo-view-animated" : ""}`}>
+                      <HeroCallDashboard
+                        ownerCardRef={heroOwnerCardRef}
+                        onRevealDemo={revealHeroDemo}
+                        onToggleAudio={toggleAudio}
+                        audioPlaying={audioPlaying}
+                        audioTime={audioTime}
+                        audioDuration={audioDuration}
+                        demoRevealed
+                      />
+                    </div>
+                  ) : (
+                    <div className={`landing-hero-demo-view landing-hero-demo-view-slides ${heroDemoHasTransitioned ? "landing-hero-demo-view-animated" : ""}`}>
+                      <MobileHeroCallProof
+                        className="landing-desktop-call-proof"
+                        onSampleCall={revealHeroDemo}
+                        onStartTrial={goToSignup}
+                      />
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
