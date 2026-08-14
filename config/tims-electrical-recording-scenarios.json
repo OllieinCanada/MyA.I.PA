@@ -80,10 +80,62 @@
     "id": "repair-request",
     "label": "Repair request",
     "callerName": "Maya Chen",
+    "callerVoiceId": "Emma",
+    "callerPerformance": "Warm and conversational, with mild concern at the beginning. Sound relieved after the safety check, then answer clearly and appreciatively without sounding theatrical.",
     "opening": "My kitchen outlet stopped working yesterday and I need help with a repair.",
+    "exactDialogue": [
+      {
+        "role": "receptionist",
+        "text": "Hello, are you looking for a new installation, repair, or maintenance today?"
+      },
+      {
+        "role": "caller",
+        "text": "A repair, please. My kitchen outlet stopped working yesterday, and I'm a little worried."
+      },
+      {
+        "role": "receptionist",
+        "text": "I can collect that for the team. Have you noticed any smoke, sparks, heat, a burning smell, or immediate danger?"
+      },
+      {
+        "role": "caller",
+        "text": "No, nothing like that. The outlet just has no power."
+      },
+      {
+        "role": "receptionist",
+        "text": "Thank you. Can I get your name?"
+      },
+      {
+        "role": "caller",
+        "text": "Maya Chen."
+      },
+      {
+        "role": "receptionist",
+        "text": "What's the service address and city?"
+      },
+      {
+        "role": "caller",
+        "text": "18 Lake Avenue in Grimsby."
+      },
+      {
+        "role": "receptionist",
+        "text": "What is the best number to reach you at?"
+      },
+      {
+        "role": "caller",
+        "text": "Nine oh five, five five five, zero one six eight. Mornings are best."
+      },
+      {
+        "role": "receptionist",
+        "text": "To confirm, that's Maya Chen at 18 Lake Avenue in Grimsby, calling about a kitchen outlet with no power. You reported no danger indicators, your number is nine oh five, five five five, zero one six eight, and mornings are best. I'll prepare that repair summary for the team."
+      },
+      {
+        "role": "caller",
+        "text": "Perfect. Thanks for making that easy."
+      }
+    ],
     "facts": [
       "A kitchen outlet stopped working yesterday.",
-      "The property is 18 Lakeview Avenue in Grimsby.",
+      "The property is 18 Lake Avenue in Grimsby.",
       "You tried another appliance and the outlet still did not work.",
       "Your callback number is 905-555-0168 and mornings are best.",
       "There is no smoke, sparking, burning smell, heat, or immediate danger."
@@ -93,7 +145,59 @@
     "id": "maintenance",
     "label": "Maintenance",
     "callerName": "Daniel Ortiz",
+    "callerVoiceId": "Kai",
+    "callerPerformance": "Friendly, relaxed, and easygoing, like a practical new homeowner planning ahead. Give the last line a light, satisfied smile in the voice.",
     "opening": "I'm calling about a preventive electrical inspection for an older home.",
+    "exactDialogue": [
+      {
+        "role": "receptionist",
+        "text": "Hello, are you looking for a new installation, repair, or maintenance today?"
+      },
+      {
+        "role": "caller",
+        "text": "Maintenance. I bought an older home and would like a preventive electrical inspection before anything becomes a problem."
+      },
+      {
+        "role": "receptionist",
+        "text": "That makes sense. Is anything broken, or is there any urgent or dangerous condition right now?"
+      },
+      {
+        "role": "caller",
+        "text": "Nothing is broken. I'm just planning ahead."
+      },
+      {
+        "role": "receptionist",
+        "text": "Can I get your name?"
+      },
+      {
+        "role": "caller",
+        "text": "Daniel Ortiz."
+      },
+      {
+        "role": "receptionist",
+        "text": "What's the property address and city?"
+      },
+      {
+        "role": "caller",
+        "text": "44 Maple Drive in Stoney Creek."
+      },
+      {
+        "role": "receptionist",
+        "text": "What is the best callback number and time?"
+      },
+      {
+        "role": "caller",
+        "text": "Nine oh five, five five five, zero one four four. Weekday afternoons are ideal."
+      },
+      {
+        "role": "receptionist",
+        "text": "Thanks, Daniel. I have a preventive inspection request for 44 Maple Drive in Stoney Creek, with weekday afternoons preferred. Your callback number is nine oh five, five five five, zero one four four. I'll prepare that organized summary for the team."
+      },
+      {
+        "role": "caller",
+        "text": "That's exactly what I needed. Have a good one."
+      }
+    ],
     "facts": [
       "You want to ask about a preventive electrical inspection for an older home.",
       "The property is 44 Maple Drive in Stoney Creek.",
@@ -105,7 +209,59 @@
     "id": "unresolved-concern",
     "label": "Talk to the team",
     "callerName": "Aisha Patel",
+    "callerVoiceId": "Naina",
+    "callerPerformance": "Calm and collected but politely frustrated. Emphasize that you want a human callback without sounding angry. End with measured appreciation.",
     "opening": "I'm an existing customer and want to discuss an unresolved concern with the team.",
+    "exactDialogue": [
+      {
+        "role": "receptionist",
+        "text": "Hello, are you looking for a new installation, repair, or maintenance today?"
+      },
+      {
+        "role": "caller",
+        "text": "Actually, I'm an existing customer. I spoke with someone last week about a flickering hallway light, and I'm still waiting for an update."
+      },
+      {
+        "role": "receptionist",
+        "text": "I can document that and request a team callback. Is there smoke, sparking, a burning smell, heat, or immediate danger now?"
+      },
+      {
+        "role": "caller",
+        "text": "No. I just want to know the next step from a person on the team."
+      },
+      {
+        "role": "receptionist",
+        "text": "Understood. Can I get your name?"
+      },
+      {
+        "role": "caller",
+        "text": "Aisha Patel."
+      },
+      {
+        "role": "receptionist",
+        "text": "What's the service address and city?"
+      },
+      {
+        "role": "caller",
+        "text": "71 King Street in Hamilton."
+      },
+      {
+        "role": "receptionist",
+        "text": "What is the best callback number and time?"
+      },
+      {
+        "role": "caller",
+        "text": "Nine oh five, five five five, zero one seven one. Evenings are best."
+      },
+      {
+        "role": "receptionist",
+        "text": "Thanks, Aisha. I'll prepare a callback request about the unresolved flickering hallway light at 71 King Street in Hamilton. Your number is nine oh five, five five five, zero one seven one, and evenings are best. I won't promise an outcome or response time, but the team will receive the full summary."
+      },
+      {
+        "role": "caller",
+        "text": "Good. I appreciate you writing it down properly."
+      }
+    ],
     "facts": [
       "You are an existing customer following up on an unresolved concern discussed last week.",
       "You do not want the virtual receptionist to make a decision; you want a team member to call.",
@@ -118,7 +274,59 @@
     "id": "urgent-outage",
     "label": "Urgent issue",
     "callerName": "Noah Wilson",
+    "callerVoiceId": "Godfrey",
+    "callerPerformance": "Concerned and energetic, speaking a little faster than the other callers while staying understandable. Calm slightly after the receptionist confirms there is no immediate danger.",
     "opening": "My entire home has lost power, but the neighbouring homes still have power.",
+    "exactDialogue": [
+      {
+        "role": "receptionist",
+        "text": "Hello, are you looking for a new installation, repair, or maintenance today?"
+      },
+      {
+        "role": "caller",
+        "text": "It's urgent. My entire home has lost power, but the neighbouring homes still have power."
+      },
+      {
+        "role": "receptionist",
+        "text": "Before we continue, is there smoke, fire, sparking, a burning smell, heat at the panel, a shock, or any immediate danger?"
+      },
+      {
+        "role": "caller",
+        "text": "No, none of those. The power is just completely out."
+      },
+      {
+        "role": "receptionist",
+        "text": "I'll mark this for urgent review. Can I get your name?"
+      },
+      {
+        "role": "caller",
+        "text": "Noah Wilson."
+      },
+      {
+        "role": "receptionist",
+        "text": "What's the address and city?"
+      },
+      {
+        "role": "caller",
+        "text": "9 Orchard Lane in Grimsby."
+      },
+      {
+        "role": "receptionist",
+        "text": "What is the best callback number and time?"
+      },
+      {
+        "role": "caller",
+        "text": "Nine oh five, five five five, zero one zero nine. I'm available right now."
+      },
+      {
+        "role": "receptionist",
+        "text": "To recap, Noah Wilson reports a complete home outage at 9 Orchard Lane in Grimsby while neighbouring homes still have power. No immediate danger indicators were reported. Your number is nine oh five, five five five, zero one zero nine, and you're available now. I'll prepare a priority summary, but this is not a dispatch or arrival-time promise."
+      },
+      {
+        "role": "caller",
+        "text": "Understood. Thanks for taking it seriously."
+      }
+    ],
     "facts": [
       "Your entire home lost power but neighbouring homes still have power.",
       "The property is 9 Orchard Lane in Grimsby.",
@@ -131,7 +339,31 @@
     "id": "safety-redirect",
     "label": "Safety redirect",
     "callerName": "Jordan Lee",
+    "callerVoiceId": "Savannah",
+    "callerPerformance": "Sound startled and urgent, with a quick breath before the first line. After the emergency direction, answer decisively and leave immediately. Do not add humour or dramatize the danger.",
     "opening": "I can see sparks and smoke coming from a wall outlet.",
+    "exactDialogue": [
+      {
+        "role": "receptionist",
+        "text": "Hello, are you looking for a new installation, repair, or maintenance today?"
+      },
+      {
+        "role": "caller",
+        "text": "I can see sparks and smoke coming from a wall outlet."
+      },
+      {
+        "role": "receptionist",
+        "text": "Please leave the area immediately and call 911 from a safe location. Do not touch the outlet, electrical equipment, or wait for a service callback. This demonstration cannot provide emergency dispatch."
+      },
+      {
+        "role": "caller",
+        "text": "I'm leaving now and calling 911 from outside."
+      },
+      {
+        "role": "receptionist",
+        "text": "Good. Keep moving to safety and call 911 now."
+      }
+    ],
     "facts": [
       "You see sparks and smoke coming from a wall outlet.",
       "State the danger immediately and do not provide ordinary contact details.",

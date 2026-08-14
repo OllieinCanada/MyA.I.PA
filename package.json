@@ -134,6 +134,7 @@
     "usage:note": "node scripts/usage-note.js",
     "audio:update-tims": "node scripts/update-tims-audio.js",
     "audio:generate-tims-vapi": "node scripts/generate-tims-vapi-recordings.js",
+    "audio:prepare-tims-scenarios": "node scripts/prepare-tims-scenario-recordings.js",
     "audio:prepare-tims-hero": "node scripts/prepare-tims-hero-audio.js",
     "transcript:tim": "node scripts/transcript-tim.js",
     "codex:watch": "powershell -ExecutionPolicy Bypass -File scripts/codex-watch.ps1",

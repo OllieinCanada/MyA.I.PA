@@ -41,9 +41,9 @@ describe("Tim's Electrical interactive demo", () => {
   test("the immediate-danger scenario stops intake and directs the caller to 911", () => {
     const scenario = timsElectricalScenarios.find((item) => item.id === "safety-redirect");
     const assistantText = scenario.transcript.filter((line) => line.speaker === "assistant").map((line) => line.text).join(" ");
-    expect(assistantText).toMatch(/move to safety immediately/i);
+    expect(assistantText).toMatch(/(move to safety|leave the area) immediately/i);
     expect(assistantText).toMatch(/call 911/i);
-    expect(assistantText).toMatch(/cannot dispatch/i);
+    expect(assistantText).toMatch(/cannot (provide emergency )?dispatch/i);
     expect(scenario.route).toMatch(/^911/);
   });
 

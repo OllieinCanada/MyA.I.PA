@@ -10,42 +10,57 @@
   "repair-request": {
     "status": "available",
     "src": "/audio/tims-electrical/repair-request.wav",
-    "durationSeconds": 115,
+    "durationSeconds": 54.26,
     "source": "synthetic-vapi-agents",
-    "recordedAt": "2026-08-12T08:28:29.298Z",
-    "disclosure": "Synthetic demonstration call recorded between two Vapi agents; no real customer information."
+    "callerVoiceId": "Emma",
+    "callerPerformance": "Warm and conversational, with mild concern at the beginning. Sound relieved after the safety check, then answer clearly and appreciatively without sounding theatrical.",
+    "recordedAt": "2026-08-14T09:11:03.660Z",
+    "disclosure": "Synthetic demonstration call recorded between two Vapi agents; no real customer information.",
+    "preparedAt": "2026-08-14T09:21:26.666Z"
   },
   "maintenance": {
     "status": "available",
     "src": "/audio/tims-electrical/maintenance.wav",
-    "durationSeconds": 86,
+    "durationSeconds": 54.2,
     "source": "synthetic-vapi-agents",
-    "recordedAt": "2026-08-12T15:12:59.848Z",
-    "disclosure": "Synthetic demonstration call recorded between two Vapi agents; no real customer information."
+    "callerVoiceId": "Kai",
+    "callerPerformance": "Friendly, relaxed, and easygoing, like a practical new homeowner planning ahead. Give the last line a light, satisfied smile in the voice.",
+    "recordedAt": "2026-08-14T09:12:53.864Z",
+    "disclosure": "Synthetic demonstration call recorded between two Vapi agents; no real customer information.",
+    "preparedAt": "2026-08-14T09:21:26.698Z"
   },
   "unresolved-concern": {
     "status": "available",
     "src": "/audio/tims-electrical/unresolved-concern.wav",
-    "durationSeconds": 102,
+    "durationSeconds": 64.16,
     "source": "synthetic-vapi-agents",
-    "recordedAt": "2026-08-12T15:14:53.257Z",
-    "disclosure": "Synthetic demonstration call recorded between two Vapi agents; no real customer information."
+    "callerVoiceId": "Naina",
+    "callerPerformance": "Calm and collected but politely frustrated. Emphasize that you want a human callback without sounding angry. End with measured appreciation.",
+    "recordedAt": "2026-08-14T09:14:55.296Z",
+    "disclosure": "Synthetic demonstration call recorded between two Vapi agents; no real customer information.",
+    "preparedAt": "2026-08-14T09:21:26.734Z"
   },
   "urgent-outage": {
     "status": "available",
     "src": "/audio/tims-electrical/urgent-outage.wav",
-    "durationSeconds": 108,
+    "durationSeconds": 64.86,
     "source": "synthetic-vapi-agents",
-    "recordedAt": "2026-08-12T15:16:53.456Z",
-    "disclosure": "Synthetic demonstration call recorded between two Vapi agents; no real customer information."
+    "callerVoiceId": "Godfrey",
+    "callerPerformance": "Concerned and energetic, speaking a little faster than the other callers while staying understandable. Calm slightly after the receptionist confirms there is no immediate danger.",
+    "recordedAt": "2026-08-14T09:17:27.668Z",
+    "disclosure": "Synthetic demonstration call recorded between two Vapi agents; no real customer information.",
+    "preparedAt": "2026-08-14T09:21:26.781Z"
   },
   "safety-redirect": {
     "status": "available",
     "src": "/audio/tims-electrical/safety-redirect.wav",
-    "durationSeconds": 37,
+    "durationSeconds": 26.58,
     "source": "synthetic-vapi-agents",
-    "recordedAt": "2026-08-12T15:17:39.528Z",
-    "disclosure": "Synthetic demonstration call recorded between two Vapi agents; no real customer information."
+    "callerVoiceId": "Savannah",
+    "callerPerformance": "Sound startled and urgent, with a quick breath before the first line. After the emergency direction, answer decisively and leave immediately. Do not add humour or dramatize the danger.",
+    "recordedAt": "2026-08-14T09:18:34.558Z",
+    "disclosure": "Synthetic demonstration call recorded between two Vapi agents; no real customer information.",
+    "preparedAt": "2026-08-14T09:21:26.798Z"
   },
   "hero-new-installation": {
     "status": "available",
