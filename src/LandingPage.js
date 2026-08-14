@@ -1347,6 +1347,49 @@ const HERO_ACTION_STEPS = Object.freeze([
   { icon: "sms", label: "Sends text summary and", finalWord: "follow-up" },
 ]);
 
+const HERO_NOTE_BENEFITS = Object.freeze([
+  { icon: "phone", label: "All calls answered professionally after 3 rings." },
+  { icon: "chat", label: "Natural dialogue with customers to create a connection." },
+  { icon: "faq", label: "FAQ questions answered." },
+  { icon: "clipboard", label: "Job details and callback information texted to you." },
+  { icon: "user", label: "Complete customer information collected." },
+  { icon: "sms", label: "A thank-you text/reminder sent to the customer." },
+]);
+
+export function HeroIntroduction({ className = "" }) {
+  return (
+    <p className={`landing-hero-introduction ${className}`.trim()}>
+      <span className="landing-hero-introduction-kicker">Introducing</span>
+      <span className="landing-hero-introduction-brand">My AI PA:</span>
+      <span className="landing-hero-introduction-description">AI Telephone Answering Assistant</span>
+    </p>
+  );
+}
+
+export function HeroCoveragePromise({ className = "" }) {
+  return (
+    <div className={`landing-hero-note-coverage ${className}`.trim()}>
+      <strong>We&apos;ve got you covered 24/7.</strong>
+      <span>For about the <CoffeePriceEmphasis /> you get:</span>
+    </div>
+  );
+}
+
+export function HeroNoteBenefits({ className = "" }) {
+  return (
+    <ul className={`landing-hero-note-benefits ${className}`.trim()} aria-label="What My AI PA provides">
+      {HERO_NOTE_BENEFITS.map(({ icon, label }) => (
+        <li key={label} className="landing-hero-note-benefit">
+          <span className="landing-hero-note-benefit-icon" aria-hidden="true">
+            <HeroIcon type={icon} className="h-full w-full" />
+          </span>
+          <span>{label}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export function HeroActionFlow({ className = "" }) {
   return (
     <section className={`landing-action-flow ${className}`.trim()} aria-label="How My AI PA handles a missed call">
@@ -1388,10 +1431,11 @@ function ResponsiveProofHero({ goToSignup, playDemo, onHearLiveCall, audioPlayin
   return (
     <div className="landing-tablet-hero">
       <section className="landing-tablet-copy">
-        <p className="landing-tablet-eyebrow">Stop losing jobs to missed calls</p>
+        <HeroIntroduction className="landing-tablet-introduction" />
         <h1 className="landing-tablet-title landing-stripe-headline">Never miss a call again!</h1>
-        <p className="landing-tablet-pain landing-chalk-pain">Missed Calls = Missed Jobs</p>
-        <HeroActionFlow className="landing-action-flow-tablet" />
+        <p className="landing-tablet-pain landing-profit-line landing-chalk-pain">Missed Calls = Lost Jobs $$</p>
+        <HeroCoveragePromise className="landing-tablet-note-coverage" />
+        <HeroNoteBenefits className="landing-tablet-note-benefits" />
         <p className="landing-tablet-coverage">Keep your existing business number.</p>
 
         <div className="landing-tablet-trust" aria-label="Trial details">
@@ -1400,6 +1444,7 @@ function ResponsiveProofHero({ goToSignup, playDemo, onHearLiveCall, audioPlayin
       </section>
 
       <div className="landing-tablet-card-wrap">
+        <p className="landing-hear-it-now">Hear it now <span aria-hidden="true">↓</span></p>
         <div className="mb-3 flex justify-center sm:justify-end">
           <HeroLiveCallButton audioPlaying={audioPlaying} onClick={onHearLiveCall} />
         </div>
@@ -1734,12 +1779,7 @@ export function MobileHeroCallProof({ className = "", onSampleCall, onStartTrial
             For about the <CoffeePriceEmphasis /> you get:
           </h2>
           <div className="landing-timed-benefits-list mt-3 overflow-hidden rounded-[1.05rem] border border-[#c7daec] bg-white/90 shadow-[0_18px_38px_-32px_rgba(15,23,42,0.5)]">
-            {[
-              ["phone", "Every call answered professionally after 3 rings — no more hangups"],
-              ["faq", "Connects with customers with a natural dialogue, answers FAQs and projects a professional image."],
-              ["clipboard", "Collects the job description, caller’s information for easy follow-up call."],
-              ["sms", "Texts you the call details and sends the customer a thank-you reminder."],
-            ].map(([icon, label], index) => (
+            {HERO_NOTE_BENEFITS.map(({ icon, label }, index) => (
               <div key={label} className={`landing-timed-benefits-row grid grid-cols-[2.35rem_minmax(0,1fr)] items-center gap-2.5 px-3 py-2.5 ${index ? "border-t border-[#d8e5f1]" : ""}`}>
                 <span className="landing-timed-benefits-icon grid h-9 w-9 place-items-center rounded-xl bg-[#1687dc] text-white" aria-hidden="true">
                   <HeroIcon type={icon} className="h-[1.05rem] w-[1.05rem]" />
@@ -7219,6 +7259,231 @@ function LandingPage() {
             will-change: transform, box-shadow;
             animation: landing-customer-card-sequence 7.2s ease-in-out infinite;
           }
+          /* Handwritten hero revision: one shared message hierarchy across
+             desktop, tablet and mobile, with only the layout adapting. */
+          .landing-hero-introduction {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: center;
+            gap: 0.38rem 0.5rem;
+            margin: 0 0 0.8rem;
+            color: #173a5f;
+            font-size: 0.78rem;
+            font-weight: 900;
+            line-height: 1.15;
+            letter-spacing: 0.035em;
+            text-align: center;
+            text-transform: uppercase;
+          }
+          .landing-hero-introduction-kicker {
+            color: #0c5fc3;
+            font-family: "Segoe Print", "Bradley Hand", cursive;
+            font-size: 1.08em;
+            font-style: italic;
+            letter-spacing: 0.015em;
+            text-transform: none;
+          }
+          .landing-hero-introduction-brand {
+            padding: 0.34rem 0.55rem;
+            border-radius: 0.55rem;
+            background: #07142a;
+            color: #fff;
+            box-shadow: 0 8px 18px -13px rgba(7, 20, 42, 0.9);
+            letter-spacing: 0.045em;
+          }
+          .landing-hero-introduction-description {
+            color: #173a5f;
+          }
+          .landing-profit-line,
+          .landing-tablet-pain.landing-profit-line,
+          .landing-mobile-proof-pain.landing-profit-line,
+          .landing-hero-problem-line.landing-profit-line {
+            color: #14883d !important;
+            text-shadow: 0 1px 0 #fff, 0 8px 18px rgba(20, 136, 61, 0.14) !important;
+          }
+          .landing-profit-line.landing-chalk-pain::before {
+            color: #64c883 !important;
+          }
+          .landing-hero-note-coverage {
+            display: grid;
+            gap: 0.22rem;
+            margin-top: 0.75rem;
+            color: #18324f;
+            text-align: center;
+            line-height: 1.25;
+          }
+          .landing-hero-note-coverage > strong {
+            color: #0d3158;
+            font-size: clamp(1.02rem, 4.6vw, 1.2rem);
+            font-weight: 950;
+            letter-spacing: -0.025em;
+          }
+          .landing-hero-note-coverage > span {
+            font-size: clamp(0.86rem, 3.8vw, 1rem);
+            font-weight: 800;
+          }
+          .landing-hero-note-benefits {
+            display: grid;
+            overflow: hidden;
+            margin: 0.8rem 0 0;
+            padding: 0;
+            border: 1px solid #c9dfef;
+            border-radius: 1rem;
+            background: rgba(255, 255, 255, 0.9);
+            box-shadow: 0 18px 38px -33px rgba(12, 64, 111, 0.85);
+            list-style: none;
+          }
+          .landing-hero-note-benefit {
+            display: grid;
+            min-height: 3.1rem;
+            grid-template-columns: 2rem minmax(0, 1fr);
+            align-items: center;
+            gap: 0.68rem;
+            margin: 0 0.8rem;
+            padding: 0.54rem 0;
+            color: #172b43;
+            font-size: clamp(0.78rem, 3.45vw, 0.91rem);
+            font-weight: 850;
+            line-height: 1.22;
+            letter-spacing: -0.012em;
+          }
+          .landing-hero-note-benefit + .landing-hero-note-benefit {
+            border-top: 1px solid #dbe7f1;
+          }
+          .landing-hero-note-benefit-icon {
+            display: grid;
+            width: 2rem;
+            height: 2rem;
+            place-items: center;
+            padding: 0.43rem;
+            border-radius: 0.68rem;
+            background: linear-gradient(150deg, #1687dc, #0b64b4);
+            color: #fff;
+            box-shadow: 0 8px 16px -12px rgba(11, 100, 180, 0.95);
+          }
+          .landing-hear-it-now {
+            margin: 0 0 0.35rem;
+            color: #14883d;
+            text-align: right;
+            font-family: "Segoe Print", "Bradley Hand", cursive;
+            font-size: 0.9rem;
+            font-weight: 900;
+            letter-spacing: 0.025em;
+            text-transform: uppercase;
+          }
+          .landing-hear-it-now span {
+            display: inline-block;
+            margin-left: 0.22rem;
+            color: #0c5fc3;
+            font-size: 1.4em;
+            transform: rotate(-8deg);
+          }
+          .landing-hear-it-now-mobile {
+            margin-top: 1rem;
+            text-align: center;
+          }
+          @media (min-width: 640px) {
+            .landing-tablet-introduction {
+              margin-bottom: 0.7rem;
+              font-size: clamp(0.76rem, 1.7vw, 0.98rem);
+            }
+            .landing-tablet-title {
+              margin-top: 0.65rem !important;
+            }
+            .landing-tablet-note-coverage > strong {
+              font-size: clamp(1.16rem, 2.2vw, 1.45rem);
+            }
+            .landing-tablet-note-coverage > span {
+              font-size: clamp(0.94rem, 1.6vw, 1.06rem);
+            }
+            .landing-tablet-note-benefits {
+              grid-template-columns: repeat(2, minmax(0, 1fr));
+              margin-top: 0.9rem;
+            }
+            .landing-tablet-note-benefits .landing-hero-note-benefit {
+              min-height: 3.35rem;
+              margin-inline: 0.75rem;
+              font-size: clamp(0.78rem, 1.35vw, 0.9rem);
+            }
+            .landing-tablet-note-benefits .landing-hero-note-benefit:nth-child(2) {
+              border-top: 0;
+            }
+            .landing-tablet-note-benefits .landing-hero-note-benefit:nth-child(even) {
+              border-left: 1px solid #dbe7f1;
+              padding-left: 0.75rem;
+              margin-left: 0;
+            }
+          }
+          @media (min-width: 900px) and (min-aspect-ratio: 4/3),
+                 (min-width: 1025px) and (pointer: fine) {
+            .landing-tablet-introduction {
+              justify-content: flex-start;
+              margin-bottom: 0.45rem;
+              text-align: left;
+            }
+            .landing-tablet-title {
+              margin-top: 0.5rem !important;
+            }
+            .landing-tablet-note-coverage {
+              margin-top: 0.65rem;
+              text-align: left;
+            }
+            .landing-tablet-note-benefits {
+              display: grid;
+              grid-template-columns: 1fr;
+              margin-top: 0.7rem;
+              border-radius: 0.85rem;
+            }
+            .landing-tablet-note-benefits .landing-hero-note-benefit {
+              min-height: 2.34rem;
+              grid-template-columns: 1.62rem minmax(0, 1fr);
+              gap: 0.55rem;
+              margin-inline: 0.65rem;
+              padding: 0.3rem 0;
+              font-size: clamp(0.68rem, 0.85vw, 0.79rem);
+            }
+            .landing-tablet-note-benefits .landing-hero-note-benefit:nth-child(2),
+            .landing-tablet-note-benefits .landing-hero-note-benefit:nth-child(even) {
+              border-top: 1px solid #dbe7f1;
+              border-left: 0;
+              padding-left: 0;
+              margin-left: 0.65rem;
+            }
+            .landing-tablet-note-benefits .landing-hero-note-benefit-icon {
+              width: 1.62rem;
+              height: 1.62rem;
+              padding: 0.34rem;
+              border-radius: 0.52rem;
+            }
+            .landing-tablet-coverage {
+              margin-top: 0.65rem !important;
+              padding: 0.58rem 0.9rem !important;
+              font-size: 0.94rem !important;
+            }
+            .landing-tablet-trust {
+              margin-top: 0.55rem !important;
+              padding: 0.6rem 0.35rem !important;
+              font-size: 0.7rem !important;
+            }
+          }
+          @media (max-width: 639px) {
+            .landing-mobile-introduction {
+              margin-bottom: 0.75rem;
+            }
+            .landing-mobile-introduction .landing-hero-introduction-description {
+              width: 100%;
+            }
+            .landing-mobile-note-benefits {
+              margin-top: 0.75rem;
+            }
+            .landing-mobile-coverage-card {
+              margin-top: 0.8rem !important;
+            }
+            .landing-mobile-proof-title {
+              margin-top: 0 !important;
+            }
+          }
           @media (prefers-reduced-motion: reduce) {
             .landing-mobile-call-prism {
               transition: none !important;
@@ -9880,6 +10145,85 @@ function LandingPage() {
               margin-top: 1rem !important;
             }
           }
+          .landing-profit-line.landing-chalk-pain {
+            background: none !important;
+            background-clip: border-box !important;
+            -webkit-background-clip: border-box !important;
+            -webkit-text-fill-color: #14883d !important;
+            -webkit-text-stroke: 0 !important;
+            color: #14883d !important;
+            text-shadow: 0 1px 0 #fff, 0 8px 18px rgba(20, 136, 61, 0.14) !important;
+          }
+          .landing-hero-problem-line.landing-profit-line::after {
+            border-top-color: #55bb76 !important;
+          }
+          .landing-hero-problem-bridge .landing-hero-story-arrow {
+            color: #14883d !important;
+          }
+          @media (min-width: 1024px) and (max-width: 1100px) and (orientation: portrait) {
+            .landing-hero-grid > .landing-tablet-hero:first-child {
+              width: 100% !important;
+              max-width: none !important;
+            }
+            .landing-tablet-copy,
+            .landing-tablet-card-wrap {
+              width: min(100%, 44.375rem) !important;
+              max-width: none !important;
+              margin-inline: auto !important;
+            }
+          }
+          .landing-timed-call-benefits {
+            display: flex !important;
+            flex-direction: column !important;
+            padding: clamp(0.9rem, 1.7vw, 1.2rem) !important;
+          }
+          .landing-timed-call-benefits .landing-timed-benefits-title {
+            margin-top: 0.48rem !important;
+            font-size: clamp(0.98rem, 1.8vw, 1.2rem) !important;
+          }
+          .landing-timed-call-benefits .landing-timed-benefits-list {
+            margin-top: 0.68rem !important;
+          }
+          .landing-timed-call-benefits .landing-timed-benefits-row {
+            min-height: 0 !important;
+            grid-template-columns: 2.1rem minmax(0, 1fr) !important;
+            gap: 0.65rem !important;
+            padding: 0.42rem 0.7rem !important;
+          }
+          .landing-timed-call-benefits .landing-timed-benefits-icon {
+            width: 2.05rem !important;
+            height: 2.05rem !important;
+            border-radius: 0.7rem !important;
+          }
+          .landing-timed-call-benefits .landing-timed-benefits-copy {
+            font-size: clamp(0.63rem, 1.05vw, 0.75rem) !important;
+            line-height: 1.18 !important;
+          }
+          .landing-timed-call-benefits .landing-timed-benefits-footer {
+            margin-top: 0.45rem !important;
+            font-size: 0.56rem !important;
+          }
+          @media (max-width: 639px) {
+            .landing-timed-call-benefits {
+              padding: 0.78rem !important;
+            }
+            .landing-timed-call-benefits .landing-timed-benefits-title {
+              font-size: 0.92rem !important;
+            }
+            .landing-timed-call-benefits .landing-timed-benefits-row {
+              grid-template-columns: 1.8rem minmax(0, 1fr) !important;
+              gap: 0.52rem !important;
+              padding: 0.34rem 0.55rem !important;
+            }
+            .landing-timed-call-benefits .landing-timed-benefits-icon {
+              width: 1.75rem !important;
+              height: 1.75rem !important;
+              border-radius: 0.58rem !important;
+            }
+            .landing-timed-call-benefits .landing-timed-benefits-copy {
+              font-size: 0.61rem !important;
+            }
+          }
           @media (prefers-reduced-motion: reduce) {
             .landing-hero-demo-view-animated {
               animation: landing-hero-demo-fade-in 180ms ease-out both !important;
@@ -9932,14 +10276,16 @@ function LandingPage() {
             />
             <div className="landing-hero-copy-column relative z-10 min-w-0 max-w-[500px] xl:max-w-[520px] lg:-translate-y-1">
               <div className="landing-mobile-proof-first sm:hidden">
-                <p className="mb-3 text-center text-[0.66rem] font-black uppercase tracking-[0.14em] text-[#c92a20]">Stop losing jobs to missed calls</p>
+                <HeroIntroduction className="landing-mobile-introduction" />
                 <h1 className="landing-mobile-proof-title landing-stripe-headline font-black tracking-[-0.055em] text-[#07142a]">
                   <span className="block">Never miss a call</span>
                   <span className="block">again!</span>
                 </h1>
-                <p className="landing-mobile-proof-pain landing-chalk-pain font-black text-[#c92a20]">Missed Calls = Missed Jobs</p>
-                <HeroActionFlow className="landing-action-flow-mobile" />
+                <p className="landing-mobile-proof-pain landing-profit-line landing-chalk-pain font-black">Missed Calls = Lost Jobs $$</p>
+                <HeroCoveragePromise className="landing-mobile-note-coverage" />
+                <HeroNoteBenefits className="landing-mobile-note-benefits" />
                 <p className="landing-mobile-coverage-card">Keep your existing business number.</p>
+                <p className="landing-hear-it-now landing-hear-it-now-mobile">Hear it now <span aria-hidden="true">↓</span></p>
                 <div className="mb-3 mt-4 flex justify-center">
                   <HeroLiveCallButton audioPlaying={audioPlaying} onClick={toggleAudio} className="w-full max-w-[18rem]" />
                 </div>
@@ -9955,16 +10301,13 @@ function LandingPage() {
 
               <div className="hidden sm:block">
               <div className="landing-hero-story-stack">
-                <p className="landing-hero-story-eyebrow text-[0.68rem] font-black uppercase tracking-[0.14em]">
-                  <span className="landing-hero-story-index" aria-hidden="true">01</span>
-                  <span>Stop losing jobs to missed calls</span>
-                </p>
+                <HeroIntroduction className="landing-desktop-introduction" />
                 <h1 className="landing-hero-title text-[clamp(3rem,11vw,4.25rem)] font-black leading-[0.98] tracking-[-0.055em] text-[#07142a] 2xl:text-[4.5rem]">
                   <span className="landing-stripe-headline block drop-shadow-[0_3px_0_rgba(148,190,255,0.45)]">Never miss a call again!</span>
                 </h1>
 
                 <div className="landing-hero-problem-bridge" aria-label="Missed calls become missed jobs, and My AI PA provides the solution">
-                  <p className="landing-hero-problem-line landing-chalk-pain font-black text-[#d91d12]">Missed Calls = Missed Jobs</p>
+                  <p className="landing-hero-problem-line landing-profit-line landing-chalk-pain font-black">Missed Calls = Lost Jobs $$</p>
                   <svg className="landing-hero-story-arrow" viewBox="0 0 64 48" aria-hidden="true">
                     <path d="M4 7 C 28 5, 47 14, 51 34" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
                     <path d="M42 30 L 52 38 L 59 27" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
@@ -9972,7 +10315,8 @@ function LandingPage() {
                 </div>
 
                 <div className="landing-hero-solution-card">
-                  <HeroActionFlow className="landing-action-flow-desktop" />
+                  <HeroCoveragePromise className="landing-desktop-note-coverage" />
+                  <HeroNoteBenefits className="landing-desktop-note-benefits" />
                   <p className="landing-hero-coverage inline-block border-l-4 border-[#17951f] bg-[#e1f8e5]/90 px-3 py-2 text-[1.05rem] font-black leading-tight text-[#147d1b]">
                     Keep your existing business number.
                   </p>
