@@ -42,7 +42,7 @@ describe("desktop missed-call example", () => {
     const renderAt = (audioTime, audioPlaying = true) => {
       act(() => root.render(
         <HeroCallDashboard
-          audioDuration={18.08}
+          audioDuration={44.44}
           audioPlaying={audioPlaying}
           audioTime={audioTime}
           demoRevealed
@@ -57,18 +57,20 @@ describe("desktop missed-call example", () => {
 
     renderAt(1.4);
     expect(container.querySelectorAll(".landing-call-transcript-turn")).toHaveLength(1);
-    expect(container.textContent).toContain("Hi, I'm putting in");
-    expect(container.textContent).not.toContain("and need it wired.");
+    expect(container.textContent).toContain("Hello are you");
+    expect(container.textContent).not.toContain("maintenance today?");
     expect(container.querySelector(".landing-call-transcript-caret")).not.toBeNull();
 
-    renderAt(3.6);
+    renderAt(5.6);
     expect(container.querySelectorAll(".landing-call-transcript-turn")).toHaveLength(2);
-    expect(container.textContent).toContain("Hi, I'm putting in a hot tub and need it wired.");
-    expect(container.textContent).not.toContain("Next week.");
+    expect(container.textContent).toContain("Hello are you looking for a new installation, repair or maintenance today?");
+    expect(container.textContent).toContain("I need someone");
+    expect(container.textContent).not.toContain("Can I get your first name?");
 
-    renderAt(18.08, false);
-    expect(container.querySelectorAll(".landing-call-transcript-turn")).toHaveLength(4);
-    expect(container.textContent).toContain("Thanks, Brian. I'll pass the installation details and callback preference to the team.");
+    renderAt(44.44, false);
+    expect(container.querySelectorAll(".landing-call-transcript-turn")).toHaveLength(13);
+    expect(container.textContent).toContain("Repeating that back, nine oh five, five five five, one two three four. Is that correct?");
+    expect(container.textContent).toContain("I have the details ready for the team. Thanks for calling.");
     expect(container.querySelector(".landing-call-transcript-caret")).toBeNull();
   });
 
@@ -78,7 +80,7 @@ describe("desktop missed-call example", () => {
 
     act(() => root.render(
       <HeroCallDashboard
-        audioDuration={18.08}
+        audioDuration={44.44}
         audioPlaying={false}
         audioTime={0}
         demoRevealed={false}
@@ -88,6 +90,7 @@ describe("desktop missed-call example", () => {
     ));
 
     expect(container.textContent).toMatch(/Sample call preview/i);
+    expect(container.textContent).toMatch(/Hello are you looking for a new installation, repair or maintenance today/i);
     expect(container.textContent).toMatch(/The recording starts only when you press the button/i);
     expect(container.querySelector(".landing-call-dashboard-layout").getAttribute("aria-hidden")).toBe("true");
     expect(container.querySelectorAll(".landing-call-transcript-turn")).toHaveLength(0);

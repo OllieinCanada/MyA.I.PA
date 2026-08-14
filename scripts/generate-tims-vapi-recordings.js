@@ -129,6 +129,10 @@ function hasExactDialogue(scenario) {
   return Array.isArray(scenario?.exactDialogue) && scenario.exactDialogue.length > 0;
 }
 
+function exactDialogueMaxDurationSeconds(scenario) {
+  return Math.max(60, (scenario?.exactDialogue?.length || 0) * 12);
+}
+
 function rolePrompt(scenario, role) {
   if (hasExactDialogue(scenario)) return exactDialoguePrompt(scenario, role);
   return role === "receptionist" ? receptionistPrompt() : scenarioCallerPrompt(scenario);
@@ -136,8 +140,8 @@ function rolePrompt(scenario, role) {
 
 function firstMessageFor(scenario, role) {
   if (hasExactDialogue(scenario)) {
-    if (role === "caller") return scenario.exactDialogue.find((turn) => turn.role === "caller")?.text || "";
-    return "";
+    const firstTurn = scenario.exactDialogue[0];
+    return firstTurn?.role === role ? firstTurn.text : "";
   }
   return role === "receptionist"
     ? "Thanks for calling the Tim's Electrical recorded demonstration. I'm the virtual receptionist. This synthetic call is being recorded. How can I help today?"
@@ -145,11 +149,13 @@ function firstMessageFor(scenario, role) {
 }
 
 function firstMessageModeFor(scenario, role) {
-  if (hasExactDialogue(scenario)) return role === "caller" ? "assistant-speaks-first" : "assistant-waits-for-user";
+  if (hasExactDialogue(scenario)) {
+    return scenario.exactDialogue[0]?.role === role ? "assistant-speaks-first" : "assistant-waits-for-user";
+  }
   return role === "receptionist" ? "assistant-speaks-first" : "assistant-waits-for-user";
 }
 
-function assistantPayload({ name, prompt, voiceId, firstMessage, firstMessageMode, endCallToolId, waitSeconds = 0.45, endpointing = 350, maxDurationSeconds = 180, silenceTimeoutSeconds = 20, smartWaitFunction = "" }) {
+function assistantPayload({ name, prompt, voiceId, firstMessage, firstMessageMode, endCallToolId, waitSeconds = 0.45, endpointing = 350, maxDurationSeconds = 180, silenceTimeoutSeconds = 20, smartWaitFunction = "", modelName = "gpt-4o-mini", temperature = 0.2 }) {
   return {
     name,
     firstMessage,
@@ -158,8 +164,8 @@ function assistantPayload({ name, prompt, voiceId, firstMessage, firstMessageMod
     transcriber: { provider: "deepgram", model: "nova-3", language: "en", numerals: true, endpointing },
     model: {
       provider: "openai",
-      model: "gpt-4o-mini",
-      temperature: 0.2,
+      model: modelName,
+      temperature,
       messages: [{ role: "system", content: prompt }],
       toolIds: endCallToolId ? [endCallToolId] : [],
     },
@@ -175,7 +181,7 @@ function assistantPayload({ name, prompt, voiceId, firstMessage, firstMessageMod
         ...(smartWaitFunction ? { waitFunction: smartWaitFunction } : {}),
       },
     },
-    stopSpeakingPlan: { numWords: 0, voiceSeconds: 0.2, backoffSeconds: 1 },
+    stopSpeakingPlan: { numWords: 6, voiceSeconds: 0.5, backoffSeconds: 2 },
     artifactPlan: {
       recordingEnabled: true,
       loggingEnabled: true,
@@ -349,11 +355,13 @@ async function main() {
     firstMessage: firstMessageFor(scenarios[0], "receptionist"),
     firstMessageMode: firstMessageModeFor(scenarios[0], "receptionist"),
     endCallToolId: hasExactDialogue(scenarios[0]) ? null : endCallTool.id,
-    waitSeconds: hasExactDialogue(scenarios[0]) ? 0.05 : 0.45,
-    endpointing: hasExactDialogue(scenarios[0]) ? 220 : 350,
-    maxDurationSeconds: hasExactDialogue(scenarios[0]) ? 50 : 180,
+    waitSeconds: hasExactDialogue(scenarios[0]) ? 0.5 : 0.45,
+    endpointing: hasExactDialogue(scenarios[0]) ? 500 : 350,
+    maxDurationSeconds: hasExactDialogue(scenarios[0]) ? exactDialogueMaxDurationSeconds(scenarios[0]) : 180,
     silenceTimeoutSeconds: hasExactDialogue(scenarios[0]) ? 5 : 20,
-    smartWaitFunction: hasExactDialogue(scenarios[0]) ? "2000 / (1 + exp(-10 * (x - 0.5)))" : "",
+    smartWaitFunction: hasExactDialogue(scenarios[0]) ? "4500 / (1 + exp(-10 * (x - 0.5)))" : "",
+    modelName: hasExactDialogue(scenarios[0]) ? "gpt-4o" : "gpt-4o-mini",
+    temperature: hasExactDialogue(scenarios[0]) ? 0 : 0.2,
   }));
   let caller = await upsertAssistant(assistants, callerAssistantName, assistantPayload({
     name: callerAssistantName,
@@ -362,11 +370,13 @@ async function main() {
     firstMessage: firstMessageFor(scenarios[0], "caller"),
     firstMessageMode: firstMessageModeFor(scenarios[0], "caller"),
     endCallToolId: hasExactDialogue(scenarios[0]) ? null : endCallTool.id,
-    waitSeconds: hasExactDialogue(scenarios[0]) ? 0.05 : 1,
-    endpointing: hasExactDialogue(scenarios[0]) ? 220 : 350,
-    maxDurationSeconds: hasExactDialogue(scenarios[0]) ? 50 : 180,
+    waitSeconds: hasExactDialogue(scenarios[0]) ? 0.6 : 1,
+    endpointing: hasExactDialogue(scenarios[0]) ? 500 : 350,
+    maxDurationSeconds: hasExactDialogue(scenarios[0]) ? exactDialogueMaxDurationSeconds(scenarios[0]) : 180,
     silenceTimeoutSeconds: hasExactDialogue(scenarios[0]) ? 5 : 20,
-    smartWaitFunction: hasExactDialogue(scenarios[0]) ? "2000 / (1 + exp(-10 * (x - 0.5)))" : "",
+    smartWaitFunction: hasExactDialogue(scenarios[0]) ? "4500 / (1 + exp(-10 * (x - 0.5)))" : "",
+    modelName: hasExactDialogue(scenarios[0]) ? "gpt-4o" : "gpt-4o-mini",
+    temperature: hasExactDialogue(scenarios[0]) ? 0 : 0.2,
   }));
 
   const receiverPhone = await waitForPhoneActive(await upsertPhone(phones, receiverPhoneName, receiver.id));
@@ -385,11 +395,13 @@ async function main() {
         firstMessage: firstMessageFor(scenario, "receptionist"),
         firstMessageMode: firstMessageModeFor(scenario, "receptionist"),
         endCallToolId: hasExactDialogue(scenario) ? null : endCallTool.id,
-        waitSeconds: hasExactDialogue(scenario) ? 0.05 : 0.45,
-        endpointing: hasExactDialogue(scenario) ? 220 : 350,
-        maxDurationSeconds: hasExactDialogue(scenario) ? 50 : 180,
+        waitSeconds: hasExactDialogue(scenario) ? 0.5 : 0.45,
+        endpointing: hasExactDialogue(scenario) ? 500 : 350,
+        maxDurationSeconds: hasExactDialogue(scenario) ? exactDialogueMaxDurationSeconds(scenario) : 180,
         silenceTimeoutSeconds: hasExactDialogue(scenario) ? 5 : 20,
-        smartWaitFunction: hasExactDialogue(scenario) ? "2000 / (1 + exp(-10 * (x - 0.5)))" : "",
+        smartWaitFunction: hasExactDialogue(scenario) ? "4500 / (1 + exp(-10 * (x - 0.5)))" : "",
+        modelName: hasExactDialogue(scenario) ? "gpt-4o" : "gpt-4o-mini",
+        temperature: hasExactDialogue(scenario) ? 0 : 0.2,
       }),
     });
     caller = await apiRequest(`/assistant/${encodeURIComponent(caller.id)}`, {
@@ -401,11 +413,13 @@ async function main() {
         firstMessage: firstMessageFor(scenario, "caller"),
         firstMessageMode: firstMessageModeFor(scenario, "caller"),
         endCallToolId: hasExactDialogue(scenario) ? null : endCallTool.id,
-        waitSeconds: hasExactDialogue(scenario) ? 0.05 : 1,
-        endpointing: hasExactDialogue(scenario) ? 220 : 350,
-        maxDurationSeconds: hasExactDialogue(scenario) ? 50 : 180,
+        waitSeconds: hasExactDialogue(scenario) ? 0.6 : 1,
+        endpointing: hasExactDialogue(scenario) ? 500 : 350,
+        maxDurationSeconds: hasExactDialogue(scenario) ? exactDialogueMaxDurationSeconds(scenario) : 180,
         silenceTimeoutSeconds: hasExactDialogue(scenario) ? 5 : 20,
-        smartWaitFunction: hasExactDialogue(scenario) ? "2000 / (1 + exp(-10 * (x - 0.5)))" : "",
+        smartWaitFunction: hasExactDialogue(scenario) ? "4500 / (1 + exp(-10 * (x - 0.5)))" : "",
+        modelName: hasExactDialogue(scenario) ? "gpt-4o" : "gpt-4o-mini",
+        temperature: hasExactDialogue(scenario) ? 0 : 0.2,
       }),
     });
     console.log(`\nStarting scenario: ${scenario.id}`);

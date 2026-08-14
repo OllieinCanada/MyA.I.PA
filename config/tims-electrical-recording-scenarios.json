@@ -5,25 +5,62 @@
     "callerName": "Brian Smith",
     "exactDialogue": [
       {
-        "role": "caller",
-        "text": "Hi, I'm putting in a hot tub and need it wired."
-      },
-      {
         "role": "receptionist",
-        "text": "Absolutely—I can collect that for the team. When are you hoping to have the work done?"
+        "text": "Hello are you looking for a new installation, repair or maintenance today?"
       },
       {
         "role": "caller",
-        "text": "Next week. I'm Brian Smith at 23 Robb Street in Hamilton. After 5 PM is best."
+        "text": "I need someone to wire up my hot tub as a new installation."
       },
       {
         "role": "receptionist",
-        "text": "Thanks, Brian. I'll pass the installation details and callback preference to the team."
+        "text": "Can I get your first name?"
+      },
+      {
+        "role": "caller",
+        "text": "Brian Smith."
+      },
+      {
+        "role": "receptionist",
+        "text": "What's the address where the work needs to be completed?"
+      },
+      {
+        "role": "caller",
+        "text": "23 Robb Street in Hamilton."
+      },
+      {
+        "role": "receptionist",
+        "text": "What is the best phone number to reach you at?"
+      },
+      {
+        "role": "caller",
+        "text": "Nine oh five, five five five, one two three four."
+      },
+      {
+        "role": "receptionist",
+        "text": "Repeating that back, nine oh five, five five five, one two three four. Is that correct?"
+      },
+      {
+        "role": "caller",
+        "text": "Yes."
+      },
+      {
+        "role": "receptionist",
+        "text": "What's the best time to reach you in case we miss you on the callback?"
+      },
+      {
+        "role": "caller",
+        "text": "After five PM is best."
+      },
+      {
+        "role": "receptionist",
+        "text": "To confirm, that's 23 Robb Street in Hamilton for hot tub wiring, and after five PM is your best callback time. I have the details ready for the team. Thanks for calling."
       }
     ],
     "facts": [
-      "This is a locked four-line performance for the homepage demonstration.",
-      "The caller and receptionist must use the exact supplied wording without additions."
+      "This is a locked receptionist-first performance based on the Tim's Electrical Vapi intake playbook.",
+      "The caller and receptionist must use the exact supplied wording without additions.",
+      "The script demonstrates one-question-at-a-time intake, recognition of details already supplied, phone-number confirmation, and a concise recap."
     ]
   },
   {

@@ -50,9 +50,9 @@
   "hero-new-installation": {
     "status": "available",
     "src": "/audio/tims-electrical/hero-new-installation.wav",
-    "durationSeconds": 29,
+    "durationSeconds": 73,
     "source": "synthetic-vapi-agents",
-    "recordedAt": "2026-08-13T18:04:50.003Z",
+    "recordedAt": "2026-08-14T07:31:57.213Z",
     "disclosure": "Synthetic demonstration call recorded between two Vapi agents; no real customer information."
   }
 }
