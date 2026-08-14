@@ -1283,15 +1283,16 @@ function ResponsiveProofHero({ goToSignup, playDemo }) {
   );
 }
 
-const HERO_NON_DIALOGUE_FACE_DURATION_MS = 14000;
+const HERO_FACE_DURATION_MS = 7000;
+const HERO_PAUSE_HOLD_MS = 14000;
 const HERO_DIALOGUE_TIMELINE_MS = Object.freeze({
-  callerRequest: 2200,
-  assistantDetailRequest: 5000,
-  callerDetails: 7800,
-  countdownThree: 11500,
-  countdownTwo: 12500,
-  countdownOne: 13500,
-  faceAdvance: 14000,
+  callerRequest: 900,
+  assistantDetailRequest: 2200,
+  callerDetails: 3600,
+  countdownThree: 4400,
+  countdownTwo: 5200,
+  countdownOne: 6000,
+  faceAdvance: HERO_FACE_DURATION_MS,
 });
 
 function PhoneReadingHand({ side }) {
@@ -1349,12 +1350,23 @@ export function MobileHeroCallProof({ className = "", onSampleCall, onStartTrial
   const stageRef = useRef(null);
   const swipeStartXRef = useRef(null);
   const swipeHandledRef = useRef(false);
+  const pauseTimerRef = useRef(null);
   const [activeFace, setActiveFace] = useState(0);
   const [dialogueStep, setDialogueStep] = useState(1);
   const [textsCountdown, setTextsCountdown] = useState(null);
   const [stageIsVisible, setStageIsVisible] = useState(false);
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
   const [showTurnHint, setShowTurnHint] = useState(false);
+  const [rotationPaused, setRotationPaused] = useState(false);
+
+  const holdCurrentScreen = () => {
+    if (pauseTimerRef.current) window.clearTimeout(pauseTimerRef.current);
+    setRotationPaused(true);
+    pauseTimerRef.current = window.setTimeout(() => {
+      setRotationPaused(false);
+      pauseTimerRef.current = null;
+    }, HERO_PAUSE_HOLD_MS);
+  };
 
   const turnCard = (direction) => {
     setActiveFace((current) => (current + direction + 3) % 3);
@@ -1396,10 +1408,16 @@ export function MobileHeroCallProof({ className = "", onSampleCall, onStartTrial
   }, [stageIsVisible, prefersReducedMotion]);
 
   useEffect(() => {
+    return () => {
+      if (pauseTimerRef.current) window.clearTimeout(pauseTimerRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
     const timers = [];
     const schedule = (callback, delay) => timers.push(window.setTimeout(callback, delay));
 
-    if (!stageIsVisible) return undefined;
+    if (!stageIsVisible || rotationPaused) return undefined;
     if (prefersReducedMotion) {
       if (activeFace === 0) setDialogueStep(4);
       setTextsCountdown(null);
@@ -1421,20 +1439,20 @@ export function MobileHeroCallProof({ className = "", onSampleCall, onStartTrial
       }, HERO_DIALOGUE_TIMELINE_MS.faceAdvance);
     } else {
       setTextsCountdown(null);
-      schedule(() => setActiveFace((face) => (face + 1) % 3), HERO_NON_DIALOGUE_FACE_DURATION_MS);
+      schedule(() => setActiveFace((face) => (face + 1) % 3), HERO_FACE_DURATION_MS);
     }
 
     return () => timers.forEach((timer) => window.clearTimeout(timer));
-  }, [activeFace, prefersReducedMotion, stageIsVisible]);
+  }, [activeFace, prefersReducedMotion, rotationPaused, stageIsVisible]);
 
   return (
     <section
       ref={stageRef}
-      className={`landing-mobile-call-proof relative h-[26rem] overflow-visible ${className}`}
+      className={`landing-mobile-call-proof relative h-[29rem] overflow-visible ${className}`}
       style={{ perspective: "1400px", touchAction: "pan-y" }}
       data-active-face={activeFace}
       data-dialogue-step={dialogueStep}
-      aria-label={`Three-sided My AI PA demo card. Side ${activeFace + 1} of 3. It advances every 14 seconds. Tap the left side for the previous side or the right side for the next side.`}
+      aria-label={`Three-sided My AI PA demo card. Side ${activeFace + 1} of 3. It switches every 7 seconds. The Pause button holds the screen for 14 seconds. Tap the left side for the previous side or the right side for the next side.`}
       role="region"
       tabIndex={0}
       onClick={(event) => {
@@ -1561,9 +1579,9 @@ export function MobileHeroCallProof({ className = "", onSampleCall, onStartTrial
                 <div className="flex items-center justify-between px-1 text-[0.43rem] font-black text-[#475569]"><span>9:41</span><span className="h-1.5 w-9 rounded-full bg-[#101827]" /><span>5G</span></div>
                 <div className="mt-1 flex items-center gap-1.5 border-b border-[#e5e7eb] px-1 pb-1.5">
                   <span className="grid h-6 w-6 place-items-center rounded-full bg-[#2587f5] text-[0.48rem] font-black text-white">PA</span>
-                  <span className="min-w-0"><strong className="block text-[0.56rem] font-black leading-tight">Owner&apos;s cellphone</strong><small className="block text-[0.42rem] font-bold text-[#8e8e93]">My AI PA · now</small></span>
+                  <span className="min-w-0"><strong className="block text-[0.56rem] font-black leading-tight">Owners cell phone</strong><small className="block text-[0.42rem] font-bold text-[#8e8e93]">My AI PA · now</small></span>
                 </div>
-                <div className="landing-text-bubble mt-1.5 rounded-[0.75rem_0.75rem_0.75rem_0.25rem] bg-[#e9e9eb] px-2 py-1.5 text-[0.53rem] font-bold leading-[1.22] text-[#111]">New installation · Brian Smith · Hot tub wiring · 23 Robb St., Hamilton · Start next week · Callback after 5 PM</div>
+                <div className="landing-text-bubble mt-1.5 rounded-[0.75rem_0.75rem_0.75rem_0.25rem] bg-[#e9e9eb] px-2 py-1.5 text-[0.53rem] font-bold leading-[1.22] text-[#111]">New installation · Hot tub wiring · Brian Smith · 23 Robb St. · Hamilton · 905-555-1234 · Preferred start date: Next week · Call back: ASAP · Best call back time: After 7</div>
               </div>
             </div>
 
@@ -1573,9 +1591,9 @@ export function MobileHeroCallProof({ className = "", onSampleCall, onStartTrial
                 <div className="flex items-center justify-between px-1 text-[0.43rem] font-black text-[#475569]"><span>9:41</span><span className="h-1.5 w-9 rounded-full bg-[#101827]" /><span>5G</span></div>
                 <div className="mt-1 flex items-center gap-1.5 border-b border-[#e5e7eb] px-1 pb-1.5">
                   <span className="grid h-6 w-6 place-items-center rounded-full bg-[#0a84ff] text-[0.48rem] font-black text-white">TE</span>
-                  <span className="min-w-0"><strong className="block text-[0.56rem] font-black leading-tight">Customer&apos;s cellphone</strong><small className="block text-[0.42rem] font-bold text-[#8e8e93]">Tim&apos;s Electrical · now</small></span>
+                  <span className="min-w-0"><strong className="block text-[0.56rem] font-black leading-tight">Customer&apos;s cell phone</strong><small className="block text-[0.42rem] font-bold text-[#8e8e93]">Tim&apos;s Electrical · now</small></span>
                 </div>
-                <div className="landing-text-bubble landing-text-bubble-customer ml-2 mt-1.5 rounded-[0.75rem_0.75rem_0.25rem_0.75rem] bg-[#0a84ff] px-2 py-1.5 text-[0.53rem] font-bold leading-[1.22] text-white">Thanks for calling Tim&apos;s Electrical. We received your hot tub wiring request. The team will follow up to discuss the details and next steps.</div>
+                <div className="landing-text-bubble landing-text-bubble-customer ml-2 mt-1.5 rounded-[0.75rem_0.75rem_0.25rem_0.75rem] bg-[#0a84ff] px-2 py-1.5 text-[0.53rem] font-bold leading-[1.22] text-white">TIM&apos;S ELECTRICAL. Hi. Your installation request has been forwarded to team. We&apos;ll get back to you shortly to discuss job details and arrange a site visit. THANKS FOR CALLING TIM&apos;S ELECTRICAL. HAVE A GREAT DAY!</div>
               </div>
             </div>
           </div>
@@ -1616,30 +1634,47 @@ export function MobileHeroCallProof({ className = "", onSampleCall, onStartTrial
           <p className="landing-timed-benefits-footer mt-2 text-center text-[0.6rem] font-black uppercase tracking-[0.08em] text-[#4f6b87]">Tap to see the live call</p>
         </div>
       </div>
-      <span className={`landing-card-turn-hint ${showTurnHint ? "landing-card-turn-hint-visible" : ""} pointer-events-none absolute inset-x-0 bottom-16 z-20 mx-auto w-fit rounded-full border border-white/25 bg-[#061a31]/88 px-3 py-1.5 text-[0.66rem] font-black uppercase tracking-[0.08em] text-white shadow-lg backdrop-blur-sm`} aria-hidden="true">
+      <span className={`landing-card-turn-hint ${showTurnHint ? "landing-card-turn-hint-visible" : ""} pointer-events-none absolute inset-x-0 bottom-24 z-20 mx-auto w-fit rounded-full border border-white/25 bg-[#061a31]/88 px-3 py-1.5 text-[0.66rem] font-black uppercase tracking-[0.08em] text-white shadow-lg backdrop-blur-sm`} aria-hidden="true">
         Tap either side to turn
       </span>
-      <div className="landing-carousel-actions absolute inset-x-0 bottom-0 z-30 grid grid-cols-2 gap-2">
-        <button
-          type="button"
-          className="landing-carousel-secondary inline-flex items-center justify-center rounded-xl border border-[#5f9fd9] bg-white font-black text-[#0c5fc3] shadow-[0_10px_24px_-18px_rgba(12,95,195,0.8)]"
-          onClick={(event) => {
-            event.stopPropagation();
-            onSampleCall?.();
-          }}
-        >
-          See a Sample Call
-        </button>
-        <button
-          type="button"
-          className="landing-carousel-primary inline-flex items-center justify-center rounded-xl bg-[#ff6a00] font-black text-white shadow-[0_14px_28px_-20px_rgba(255,106,0,0.9)]"
-          onClick={(event) => {
-            event.stopPropagation();
-            onStartTrial?.();
-          }}
-        >
-          Start Your Free Trial
-        </button>
+      <div className="landing-carousel-controls absolute inset-x-0 bottom-0 z-30">
+        <div className="landing-carousel-timing mb-2 flex items-center justify-center gap-2 text-center text-[0.58rem] font-black uppercase tracking-[0.055em] text-[#31577a]">
+          <span>Switches every 7 seconds</span>
+          <button
+            type="button"
+            className="rounded-full border border-[#5f9fd9] bg-white px-3 py-1 text-[#0c5fc3] shadow-sm"
+            aria-pressed={rotationPaused}
+            onClick={(event) => {
+              event.stopPropagation();
+              holdCurrentScreen();
+            }}
+          >
+            {rotationPaused ? "Holding" : "Pause"}
+          </button>
+          <span>Pause button holds screen for 14 seconds</span>
+        </div>
+        <div className="landing-carousel-actions grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            className="landing-carousel-secondary inline-flex items-center justify-center rounded-xl border border-[#5f9fd9] bg-white font-black text-[#0c5fc3] shadow-[0_10px_24px_-18px_rgba(12,95,195,0.8)]"
+            onClick={(event) => {
+              event.stopPropagation();
+              onSampleCall?.();
+            }}
+          >
+            See a Sample Call
+          </button>
+          <button
+            type="button"
+            className="landing-carousel-primary inline-flex items-center justify-center rounded-xl bg-[#ff6a00] font-black text-white shadow-[0_14px_28px_-20px_rgba(255,106,0,0.9)]"
+            onClick={(event) => {
+              event.stopPropagation();
+              onStartTrial?.();
+            }}
+          >
+            Start Your Free Trial
+          </button>
+        </div>
       </div>
     </section>
   );
@@ -3098,25 +3133,25 @@ function MobileScrollCallStory({ onHearDemo, audioPlaying }) {
   );
 }
 
-function LandingStoryIntroduction() {
+export function LandingStoryIntroduction() {
   const howItWorks = [
     {
       icon: "phone",
-      title: "My AI PA answers naturally",
-      text: "Your caller hears your approved business greeting, reaches a real conversation, and can get answers to approved FAQs.",
-      details: ["Professional greeting", "Approved FAQ answers"],
+      title: "My AI PA answers",
+      text: "Your customer gets a professional greeting after three rings.",
+      details: ["They are engaged in conversation and their FAQ's answered with custom answers supplied by you."],
     },
     {
       icon: "chat",
       title: "The right details are collected",
-      text: "The assistant organizes the information your team needs for a useful callback.",
-      details: ["Reason for the call", "Job details", "Service address", "Caller name", "Urgency", "Callback number and time"],
+      text: "The right details are collected.",
+      details: ["The reason for the call", "Job details", "Service amount", "Customer name", "Call urgent", "And call back # are all collected"],
     },
     {
       icon: "sms",
       title: "Both sides receive a text",
-      text: "You receive an organized lead summary. The caller receives a concise confirmation and knows what happens next.",
-      details: ["Owner summary", "Caller confirmation"],
+      text: "Caller and owner both get a text to their cellphone summarizing the details of the call.",
+      details: ["Owners cell phone", "Customer's cell phone"],
     },
   ];
 
@@ -3158,10 +3193,10 @@ function LandingStoryIntroduction() {
         <div className="mx-auto w-full max-w-[1180px] px-4 py-10 sm:px-6 sm:py-14 lg:px-8 lg:py-20">
           <p className="text-center text-[0.68rem] font-black uppercase tracking-[0.17em] text-[#176bff] sm:text-[0.78rem]">02 · How it works</p>
           <h2 className="mx-auto mt-3 max-w-[355px] text-center text-[1.95rem] font-black leading-[1.02] tracking-[-0.045em] text-[#07142a] sm:max-w-[760px] sm:text-[2.8rem] lg:text-[3.4rem]">
-            Three simple steps. Keep the business number your customers already know.
+            Three simple steps.
           </h2>
-          <p className="mx-auto mt-4 flex w-fit items-center justify-center gap-2 rounded-full border border-[#9bc9ef] bg-white px-4 py-2 text-center text-[0.76rem] font-black text-[#0c5fc3] shadow-[0_12px_28px_-22px_rgba(12,95,195,0.65)] sm:text-[0.88rem]">
-            <HeroIcon type="phone" className="h-4 w-4" /> Your existing business number stays in place.
+          <p className="mx-auto mt-4 flex w-fit items-center justify-center gap-2 rounded-full border border-[#9bc9ef] bg-white px-4 py-2 text-center text-[0.76rem] font-black uppercase text-[#0c5fc3] shadow-[0_12px_28px_-22px_rgba(12,95,195,0.65)] sm:text-[0.88rem]">
+            <HeroIcon type="phone" className="h-4 w-4" /> Keep your same business number!
           </p>
           <div className="relative mx-auto mt-7 grid max-w-[1040px] gap-3 sm:mt-9 sm:grid-cols-3 sm:gap-5">
             {howItWorks.map((item, index) => (
@@ -3180,9 +3215,47 @@ function LandingStoryIntroduction() {
               </article>
             ))}
           </div>
+          <div className="mx-auto mt-7 max-w-[1040px] rounded-[22px] border border-[#9bc9ef] bg-[#0b2646] p-4 text-white shadow-[0_28px_68px_-46px_rgba(7,35,70,0.85)] sm:p-6">
+            <p className="mx-auto max-w-[800px] text-center text-[0.78rem] font-black uppercase leading-5 tracking-[0.07em] text-[#8edfff] sm:text-[0.96rem]">
+              Caller and owner both get a text to their cellphone summarizing the details of the call
+            </p>
+            <div className="mt-5 grid gap-5 sm:grid-cols-2 sm:gap-6">
+              <article className="landing-how-phone mx-auto w-full max-w-[420px] rounded-[2.2rem] border-[7px] border-[#07111f] bg-white p-4 text-[#111827] shadow-[0_20px_44px_-28px_rgba(0,0,0,0.85)] sm:p-5">
+                <div className="flex items-center justify-between text-[0.62rem] font-black text-[#475569]"><span>9:41</span><span className="h-2 w-16 rounded-full bg-[#101827]" /><span>5G</span></div>
+                <div className="mt-3 border-b border-[#d8dee7] pb-3">
+                  <strong className="block text-[1rem] font-black text-[#0b315a]">Owners cell phone</strong>
+                  <small className="font-bold text-[#718096]">My AI PA · now</small>
+                </div>
+                <div className="mt-4 rounded-[1rem_1rem_1rem_0.35rem] bg-[#e9e9eb] p-4 text-[0.82rem] font-bold leading-6 sm:text-[0.9rem]">
+                  <p className="font-black">New installation</p>
+                  <p>Hot tub wiring</p>
+                  <p>Brian Smith</p>
+                  <p>23 Robb St., Hamilton</p>
+                  <p>905-555-1234</p>
+                  <p><strong>Preferred start date:</strong> Next week</p>
+                  <p><strong>Call back:</strong> ASAP</p>
+                  <p><strong>Best call back time:</strong> After 7</p>
+                </div>
+              </article>
+
+              <article className="landing-how-phone mx-auto w-full max-w-[420px] rounded-[2.2rem] border-[7px] border-[#07111f] bg-white p-4 text-[#111827] shadow-[0_20px_44px_-28px_rgba(0,0,0,0.85)] sm:p-5">
+                <div className="flex items-center justify-between text-[0.62rem] font-black text-[#475569]"><span>9:41</span><span className="h-2 w-16 rounded-full bg-[#101827]" /><span>5G</span></div>
+                <div className="mt-3 border-b border-[#d8dee7] pb-3">
+                  <strong className="block text-[1rem] font-black text-[#0b315a]">Customer&apos;s cell phone</strong>
+                  <small className="font-bold text-[#718096]">Tim&apos;s Electrical · now</small>
+                </div>
+                <div className="ml-auto mt-4 rounded-[1rem_1rem_0.35rem_1rem] bg-[#0a84ff] p-4 text-[0.82rem] font-bold leading-6 text-white sm:text-[0.9rem]">
+                  <p className="font-black">TIM&apos;S ELECTRICAL</p>
+                  <p className="mt-2">Hi.</p>
+                  <p className="mt-2">Your installation request has been forwarded to team. We&apos;ll get back to you shortly to discuss job details and arrange a site visit.</p>
+                  <p className="mt-3 font-black">THANKS FOR CALLING TIM&apos;S ELECTRICAL. HAVE A GREAT DAY!</p>
+                </div>
+              </article>
+            </div>
+          </div>
           <div className="mx-auto mt-5 grid max-w-[1040px] gap-2 rounded-[16px] border border-[#f4c58d] bg-[#fff9f1] px-4 py-4 text-[#704116] shadow-[0_18px_38px_-34px_rgba(180,83,9,0.45)] sm:grid-cols-[auto_1fr] sm:items-center sm:gap-4 sm:px-5">
             <strong className="text-[0.72rem] font-black uppercase tracking-[0.1em] text-[#b35a08]">Optional qualification</strong>
-            <span className="text-[0.82rem] font-bold leading-5">An approved service-call fee can be shared before the request is submitted, followed by “Would you like the team to continue?” My AI PA never invents pricing.</span>
+            <span className="text-[0.82rem] font-bold leading-5">Rates for service work can be added here followed by the question “Would you like to continue” eliminating time wasters. <small className="block pt-1 font-semibold text-[#8a5a2b]">Configured rates only. My AI PA never invents pricing.</small></span>
           </div>
           <p className="mx-auto mt-5 max-w-[760px] rounded-[14px] border border-[#b8d9f6] bg-white/80 px-4 py-3 text-center text-[0.82rem] font-black leading-5 text-[#17466f]">
             Start with unanswered or after-hours calls. Your staff and existing phone workflow stay in place.
@@ -6666,6 +6739,12 @@ function LandingPage() {
           .landing-carousel-actions {
             min-height: 2.75rem;
           }
+          .landing-carousel-controls {
+            min-height: 5.8rem;
+          }
+          .landing-carousel-timing {
+            min-height: 1.65rem;
+          }
           .landing-carousel-primary,
           .landing-carousel-secondary {
             min-width: 0;
@@ -6793,11 +6872,11 @@ function LandingPage() {
             fill: rgba(3, 13, 29, 0.24);
           }
           .landing-desktop-call-proof {
-            height: 36rem !important;
+            height: 38rem !important;
             margin-top: 0 !important;
           }
           .landing-desktop-call-proof .landing-mobile-call-prism {
-            height: calc(100% - 4.4rem) !important;
+            height: calc(100% - 6.3rem) !important;
           }
           .landing-desktop-call-proof .landing-timed-call-face {
             padding: 1.4rem !important;
@@ -6899,6 +6978,10 @@ function LandingPage() {
           .landing-desktop-call-proof .landing-carousel-actions {
             min-height: 3.5rem;
             gap: 0.8rem;
+          }
+          .landing-desktop-call-proof .landing-carousel-timing {
+            font-size: 0.69rem;
+            letter-spacing: 0.06em;
           }
           .landing-desktop-call-proof .landing-carousel-primary,
           .landing-desktop-call-proof .landing-carousel-secondary {
@@ -8587,11 +8670,11 @@ function LandingPage() {
               margin-inline: auto;
             }
             .landing-tablet-call-proof {
-              height: 31.25rem !important;
+              height: 33.25rem !important;
               margin-top: 0 !important;
             }
             .landing-tablet-call-proof .landing-mobile-call-prism {
-              height: calc(100% - 4.35rem) !important;
+              height: calc(100% - 6.25rem) !important;
             }
             .landing-tablet-call-proof .landing-carousel-actions {
               min-height: 3.25rem;
