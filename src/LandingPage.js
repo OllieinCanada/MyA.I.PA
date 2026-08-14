@@ -1428,33 +1428,19 @@ const HERO_DIALOGUE_TIMELINE_MS = Object.freeze({
 
 function PhoneReadingHand({ side }) {
   return (
-    <>
-      <span className={`landing-reading-hand landing-reading-hand-back landing-reading-hand-${side}`} aria-hidden="true">
-        <svg viewBox="0 0 128 122" role="presentation">
-          <ellipse className="landing-reading-hand-grip-shadow" cx="51" cy="108" rx="38" ry="9" />
-
-          {/* These fingertips sit behind the phone and curl around its left
-              bezel. The phone layer hides their inner halves. */}
-          <path className="landing-reading-hand-finger" d="M35 29C25 25 16 29 14 36c-2 8 4 14 14 15l11 1 4-13Z" />
-          <path className="landing-reading-hand-finger" d="M34 44C23 40 13 45 12 52c-1 8 5 13 16 14l12-1 3-13Z" />
-          <path className="landing-reading-hand-finger" d="M34 59C22 56 12 62 12 70c1 8 8 12 19 10l12-4-1-12Z" />
-          <path className="landing-reading-hand-finger" d="M37 73c-11-1-20 5-20 13 1 8 9 12 20 7l11-9-4-10Z" />
-
-          <path className="landing-reading-hand-palm" d="M15 105c-6-13-3-28 8-37 9-8 22-10 34-5 12 5 19 15 24 28 5 14-1 25-14 30l-30 1c-10-2-18-7-22-17Z" />
-          <path className="landing-reading-hand-nails" d="M17 36c4-3 9-3 13-1M15 51c4-3 9-2 13 0M15 68c4-3 9-2 13 0M20 84c4-3 9-3 13-1" />
-          <path className="landing-reading-hand-detail" d="M25 76c8 2 14 7 18 14M38 67c8 2 14 8 17 15M42 105c10-6 20-8 30-6" />
-        </svg>
-      </span>
-      <span className={`landing-reading-hand landing-reading-hand-front landing-reading-hand-${side}`} aria-hidden="true">
-        <svg viewBox="0 0 128 122" role="presentation">
-          {/* The thumb starts in the supporting palm and overlaps the front
-              glass, completing the grip instead of floating below it. */}
-          <path className="landing-reading-hand-thumb" d="M34 108c3-13 7-26 14-36 7-11 16-17 27-20 9-3 17 1 18 9 1 8-6 14-15 15l-8 1c-8 1-13 7-16 16l-4 16Z" />
-          <path className="landing-reading-hand-thumb-nail" d="M76 56c7-2 12 1 13 6 0 5-4 8-11 9" />
-          <path className="landing-reading-hand-contact" d="M32 80c7 0 13 2 18 6" />
-        </svg>
-      </span>
-    </>
+    <span className={`landing-reading-hand landing-reading-hand-${side}`} aria-hidden="true">
+      <svg viewBox="0 0 132 132" role="presentation">
+        <ellipse className="landing-reading-hand-grip-shadow" cx="56" cy="120" rx="42" ry="8" />
+        {/* One continuous silhouette keeps the palm, curled fingers and thumb
+            physically connected while the hand supports the phone. */}
+        <path
+          className="landing-reading-hand-shape"
+          d="M23 126C13 117 9 104 14 91c3-8 9-14 17-17l-12-2C9 70 5 62 9 55c4-7 13-8 23-3l8 4-15-9c-10-6-12-15-6-21 6-7 15-5 25 2l10 8-11-11c-8-8-7-17 1-21 8-4 15 2 22 11l14 21c8 12 9 24 3 36 6-6 12-11 20-14 10-4 19 0 20 8 1 8-6 14-16 16l-8 1c-10 2-15 10-17 23l-2 15c-13 11-39 14-57 5Z"
+        />
+        <path className="landing-reading-hand-nails" d="M12 58c5-3 11-2 16 1M21 30c5-2 10 0 14 3M45 8c5 0 9 4 12 8M100 63c7-2 13 1 14 6 0 5-5 8-12 9" />
+        <path className="landing-reading-hand-detail" d="M29 78c10 3 17 10 20 20M48 66c9 3 15 10 18 18M42 116c12-7 24-9 36-7" />
+      </svg>
+    </span>
   );
 }
 
@@ -6831,14 +6817,6 @@ function LandingPage() {
               transform: translateY(0);
             }
           }
-          @keyframes landing-reading-thumb {
-            0%, 34%, 100% {
-              transform: rotate(0deg) translate(0, 0);
-            }
-            46%, 58% {
-              transform: rotate(-2deg) translate(2px, -1px);
-            }
-          }
           @keyframes landing-coffee-steam {
             0%, 100% {
               opacity: 0.45;
@@ -6937,24 +6915,19 @@ function LandingPage() {
           }
           .landing-reading-hand {
             position: absolute;
-            bottom: -1.55rem;
+            z-index: 4;
+            bottom: -1.72rem;
             display: block;
-            width: 5.8rem;
-            height: 5.5rem;
+            width: 6.15rem;
+            height: 6.15rem;
             pointer-events: none;
             filter: drop-shadow(0 6px 5px rgba(15, 23, 42, 0.28));
           }
-          .landing-reading-hand-back {
-            z-index: 1;
-          }
-          .landing-reading-hand-front {
-            z-index: 4;
-          }
           .landing-reading-hand-left {
-            left: -0.72rem;
+            left: -0.8rem;
           }
           .landing-reading-hand-right {
-            left: -0.72rem;
+            left: -0.8rem;
           }
           .landing-reading-hand svg {
             display: block;
@@ -6962,18 +6935,12 @@ function LandingPage() {
             height: 100%;
             overflow: visible;
           }
-          .landing-reading-hand-palm,
-          .landing-reading-hand-finger,
-          .landing-reading-hand-thumb {
+          .landing-reading-hand-shape {
             fill: #f2b58a;
             stroke: #8b4b32;
-            stroke-width: 2;
+            stroke-width: 2.2;
             stroke-linecap: round;
             stroke-linejoin: round;
-          }
-          .landing-reading-hand-thumb {
-            transform-origin: 42px 96px;
-            animation: landing-reading-thumb 3.2s ease-in-out infinite;
           }
           .landing-reading-hand-cuff {
             fill: #123c6e;
@@ -6986,14 +6953,7 @@ function LandingPage() {
             stroke-width: 1.8;
             stroke-linecap: round;
           }
-          .landing-reading-hand-contact {
-            fill: none;
-            stroke: rgba(94, 45, 29, 0.52);
-            stroke-width: 2.2;
-            stroke-linecap: round;
-          }
-          .landing-reading-hand-nails,
-          .landing-reading-hand-thumb-nail {
+          .landing-reading-hand-nails {
             fill: none;
             stroke: rgba(255, 231, 216, 0.88);
             stroke-width: 2.1;
@@ -7271,7 +7231,6 @@ function LandingPage() {
               animation: none !important;
             }
             .landing-reading-hand,
-            .landing-reading-hand-thumb,
             .landing-coffee-steam {
               animation: none !important;
             }

@@ -117,17 +117,15 @@ describe("responsive three-sided homepage proof", () => {
     expect(proof.getAttribute("aria-label")).toMatch(/Side 2 of 3/i);
   });
 
-  test("shows readable dual-phone details, complete gripping hands and coffee marks", () => {
+  test("shows readable dual-phone details, connected gripping hands and coffee marks", () => {
     act(() => root.render(<MobileHeroCallProof />));
 
     expect(container.querySelectorAll(".landing-text-phone")).toHaveLength(2);
     expect(container.querySelectorAll(".landing-text-phone-holder")).toHaveLength(2);
-    expect(container.querySelectorAll(".landing-reading-hand-back")).toHaveLength(2);
-    expect(container.querySelectorAll(".landing-reading-hand-front")).toHaveLength(2);
-    expect(container.querySelectorAll(".landing-reading-hand-finger")).toHaveLength(8);
-    expect(container.querySelectorAll(".landing-reading-hand-thumb")).toHaveLength(2);
-    expect(container.querySelectorAll(".landing-reading-hand-back .landing-reading-hand-thumb")).toHaveLength(0);
-    expect(container.querySelectorAll(".landing-reading-hand-front .landing-reading-hand-thumb")).toHaveLength(2);
+    expect(container.querySelectorAll(".landing-reading-hand")).toHaveLength(2);
+    expect(container.querySelectorAll(".landing-reading-hand-shape")).toHaveLength(2);
+    expect(container.querySelectorAll(".landing-reading-hand-back, .landing-reading-hand-front")).toHaveLength(0);
+    expect(container.querySelectorAll(".landing-reading-hand-thumb")).toHaveLength(0);
     expect(container.querySelectorAll(".landing-coffee-steam path")).toHaveLength(3);
     expect(container.querySelectorAll(".landing-coffee-underline path")).toHaveLength(2);
     expect(container.textContent).toMatch(/Owners cell phone/i);
