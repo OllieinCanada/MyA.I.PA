@@ -1341,6 +1341,49 @@ export function HeroLiveCallButton({ audioPlaying = false, onClick, className = 
   );
 }
 
+const HERO_ACTION_STEPS = Object.freeze([
+  { icon: "phone", label: "Answers after 3 rings" },
+  { icon: "clipboard", label: "Captures important call details" },
+  { icon: "sms", label: "Sends text summary and", finalWord: "follow-up" },
+]);
+
+export function HeroActionFlow({ className = "" }) {
+  return (
+    <section className={`landing-action-flow ${className}`.trim()} aria-label="How My AI PA handles a missed call">
+      <div className="landing-action-flow-heading">
+        <strong>MY AI PA:</strong>
+        <svg viewBox="0 0 38 34" aria-hidden="true">
+          <path d="M5 5c10 1 20 7 24 18" />
+          <path d="m22 20 8 6 3-10" />
+        </svg>
+      </div>
+      <ol className="landing-action-flow-steps">
+        {HERO_ACTION_STEPS.map((step, index) => (
+          <React.Fragment key={`${step.label}-${step.finalWord || ""}`}>
+            <li className="landing-action-flow-step">
+              <span className="landing-action-flow-icon" aria-hidden="true">
+                <HeroIcon type={step.icon} className="h-full w-full" />
+              </span>
+              <span>
+                {step.label}
+                {step.finalWord ? <> <span className="landing-action-flow-nowrap">{step.finalWord}</span></> : null}
+              </span>
+            </li>
+            {index < HERO_ACTION_STEPS.length - 1 ? (
+              <li className="landing-action-flow-arrow" aria-hidden="true">
+                <svg viewBox="0 0 58 24">
+                  <path d="M3 12h47" />
+                  <path d="m42 4 9 8-9 8" />
+                </svg>
+              </li>
+            ) : null}
+          </React.Fragment>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
 function ResponsiveProofHero({ goToSignup, playDemo, onHearLiveCall, audioPlaying }) {
   return (
     <div className="landing-tablet-hero">
@@ -1348,9 +1391,7 @@ function ResponsiveProofHero({ goToSignup, playDemo, onHearLiveCall, audioPlayin
         <p className="landing-tablet-eyebrow">Stop losing jobs to missed calls</p>
         <h1 className="landing-tablet-title landing-stripe-headline">Never miss a call again!</h1>
         <p className="landing-tablet-pain landing-chalk-pain">Missed Calls = Missed Jobs</p>
-        <p className="mx-auto mt-4 max-w-[40rem] text-center text-[0.98rem] font-bold leading-6 text-[#41556c] lg:mx-0 lg:text-left">
-          Meet My AI PA—the AI telephone answering assistant for trade businesses. It answers when you cannot, captures the job details, and prepares the follow-up.
-        </p>
+        <HeroActionFlow className="landing-action-flow-tablet" />
         <p className="landing-tablet-coverage">Keep your existing business number.</p>
 
         <div className="landing-tablet-trust" aria-label="Trial details">
@@ -7990,7 +8031,132 @@ function LandingPage() {
               line-height: 1.06 !important;
             }
           }
+          .landing-action-flow {
+            width: min(100%, 44rem);
+            margin: 1rem auto 0;
+          }
+          .landing-action-flow-heading {
+            display: flex;
+            min-height: 2.25rem;
+            align-items: center;
+            justify-content: center;
+            gap: 0.45rem;
+            color: #0c5fc3;
+          }
+          .landing-action-flow-heading strong {
+            font-size: 0.78rem;
+            font-weight: 950;
+            letter-spacing: 0.14em;
+          }
+          .landing-action-flow-heading svg {
+            width: 2.1rem;
+            height: 1.8rem;
+            overflow: visible;
+            color: #e04439;
+            transform: translateY(0.28rem) rotate(2deg);
+          }
+          .landing-action-flow-heading path,
+          .landing-action-flow-arrow path {
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 3;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+          }
+          .landing-action-flow-steps {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(1.7rem, 0.28fr) minmax(0, 1fr) minmax(1.7rem, 0.28fr) minmax(0, 1fr);
+            align-items: center;
+            gap: 0.3rem;
+            margin: 0;
+            padding: 0.72rem 0.8rem;
+            border: 1px solid rgba(58, 143, 209, 0.28);
+            border-radius: 1rem;
+            background: rgba(228, 244, 255, 0.82);
+            color: #103d69;
+            list-style: none;
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.82);
+          }
+          .landing-action-flow-step {
+            display: grid;
+            min-width: 0;
+            grid-template-columns: 2.15rem minmax(0, 1fr);
+            align-items: center;
+            gap: 0.48rem;
+            color: #092f58;
+            font-size: 0.76rem;
+            font-weight: 950;
+            line-height: 1.12;
+          }
+          .landing-action-flow-icon {
+            display: grid;
+            width: 2.15rem;
+            height: 2.15rem;
+            padding: 0.48rem;
+            place-items: center;
+            border-radius: 0.72rem;
+            background: linear-gradient(180deg, #1989dc, #0e68ba);
+            color: white;
+            box-shadow: 0 10px 18px -13px rgba(14, 104, 186, 0.95);
+          }
+          .landing-action-flow-nowrap {
+            white-space: nowrap;
+          }
+          .landing-action-flow-arrow {
+            color: #22a9e2;
+          }
+          .landing-action-flow-arrow svg {
+            display: block;
+            width: 100%;
+            min-width: 1.7rem;
+            height: 1.5rem;
+            overflow: visible;
+          }
+          .landing-action-flow-arrow path {
+            stroke-width: 3.5;
+          }
           @media (max-width: 639px) {
+            .landing-action-flow {
+              width: min(100%, 24rem);
+              margin-top: 0.72rem;
+            }
+            .landing-action-flow-heading {
+              min-height: 1.9rem;
+            }
+            .landing-action-flow-heading strong {
+              font-size: 0.7rem;
+            }
+            .landing-action-flow-heading svg {
+              width: 1.85rem;
+              height: 1.55rem;
+            }
+            .landing-action-flow-steps {
+              grid-template-columns: minmax(0, 1fr) 1.15rem minmax(0, 1fr) 1.15rem minmax(0, 1fr);
+              gap: 0.12rem;
+              padding: 0.58rem 0.46rem;
+              border-radius: 0.9rem;
+            }
+            .landing-action-flow-step {
+              grid-template-columns: 1fr;
+              justify-items: center;
+              gap: 0.34rem;
+              text-align: center;
+              font-size: clamp(0.62rem, 2.8vw, 0.7rem);
+              line-height: 1.14;
+            }
+            .landing-action-flow-icon {
+              width: 1.9rem;
+              height: 1.9rem;
+              padding: 0.42rem;
+              border-radius: 0.62rem;
+            }
+            .landing-action-flow-arrow svg {
+              min-width: 1.15rem;
+              height: 1.25rem;
+            }
+            .landing-action-flow-arrow path {
+              stroke-width: 4;
+            }
             .landing-hero-coverage {
               margin-top: 0.9rem !important;
               font-size: 0.92rem !important;
@@ -8295,17 +8461,6 @@ function LandingPage() {
               font-size: clamp(1.22rem, 6.2vw, 1.6rem);
               line-height: 1;
               white-space: nowrap;
-            }
-            .landing-mobile-proof-explainer {
-              width: min(100%, 22.5rem);
-              min-height: 3.75rem;
-              margin: 0.7rem auto 0;
-              color: #334b63;
-              text-align: center;
-              font-size: clamp(0.9rem, 4vw, 1rem);
-              font-weight: 760;
-              line-height: 1.28;
-              letter-spacing: -0.012em;
             }
             .landing-mobile-coverage-card {
               display: grid;
@@ -9755,72 +9910,6 @@ function LandingPage() {
               background: linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(234, 247, 255, 0.9));
               box-shadow: 0 18px 34px -31px rgba(11, 72, 128, 0.9);
             }
-            .landing-hero-solution-label {
-              display: inline-flex;
-              align-items: center;
-              gap: 0.4rem;
-              margin: 0 0 0.35rem;
-              color: #0c5fc3;
-              font-size: 0.63rem;
-              font-weight: 950;
-              letter-spacing: 0.14em;
-              text-transform: uppercase;
-            }
-            .landing-hero-solution-label::before {
-              content: "";
-              width: 0.48rem;
-              height: 0.48rem;
-              border-radius: 50%;
-              background: #19c982;
-              box-shadow: 0 0 0 4px rgba(25, 201, 130, 0.13);
-            }
-            .landing-hero-explainer {
-              margin: 0;
-              max-width: 33rem;
-              color: #344d67;
-              font-size: 0.92rem;
-              font-weight: 750;
-              line-height: 1.43;
-            }
-            .landing-hero-service-flow {
-              display: grid;
-              grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr);
-              align-items: center;
-              gap: 0.35rem;
-              margin-top: 0.7rem;
-              padding: 0.48rem 0.58rem;
-              border: 1px solid rgba(58, 143, 209, 0.22);
-              border-radius: 0.85rem;
-              background: rgba(228, 244, 255, 0.78);
-              color: #103d69;
-            }
-            .landing-hero-service-flow > span {
-              display: inline-flex;
-              min-width: 0;
-              align-items: center;
-              justify-content: center;
-              gap: 0.32rem;
-              font-size: 0.7rem;
-              font-weight: 950;
-              white-space: nowrap;
-            }
-            .landing-hero-service-flow b {
-              display: grid;
-              width: 1.18rem;
-              height: 1.18rem;
-              flex: 0 0 auto;
-              place-items: center;
-              border-radius: 50%;
-              background: #147ac6;
-              color: #fff;
-              font-size: 0.55rem;
-            }
-            .landing-hero-service-flow > i {
-              color: #28a7df;
-              font-size: 0.95rem;
-              font-style: normal;
-              font-weight: 950;
-            }
             .landing-hero-solution-card .landing-hero-coverage {
               margin: 0.68rem 0 0 !important;
               padding: 0.48rem 0.68rem !important;
@@ -9830,14 +9919,6 @@ function LandingPage() {
             }
             .landing-hero-story-stack + .landing-hero-actions {
               margin-top: 1rem !important;
-            }
-          }
-          @media (min-width: 1280px) {
-            .landing-hero-explainer {
-              font-size: 0.96rem;
-            }
-            .landing-hero-service-flow > span {
-              font-size: 0.74rem;
             }
           }
           @media (prefers-reduced-motion: reduce) {
@@ -9898,7 +9979,7 @@ function LandingPage() {
                   <span className="block">again!</span>
                 </h1>
                 <p className="landing-mobile-proof-pain landing-chalk-pain font-black text-[#c92a20]">Missed Calls = Missed Jobs</p>
-                <p className="landing-mobile-proof-explainer">My AI PA answers when you cannot, captures the job details and prepares the text follow-up.</p>
+                <HeroActionFlow className="landing-action-flow-mobile" />
                 <p className="landing-mobile-coverage-card">Keep your existing business number.</p>
                 <div className="mb-3 mt-4 flex justify-center">
                   <HeroLiveCallButton audioPlaying={audioPlaying} onClick={toggleAudio} className="w-full max-w-[18rem]" />
@@ -9932,17 +10013,7 @@ function LandingPage() {
                 </div>
 
                 <div className="landing-hero-solution-card">
-                  <p className="landing-hero-solution-label">Here is the fix</p>
-                  <p className="landing-hero-explainer">
-                    Meet My AI PA—the AI telephone answering assistant for trade businesses. It answers when you cannot, captures the job details, and prepares the follow-up before the caller moves on.
-                  </p>
-                  <div className="landing-hero-service-flow" aria-label="My AI PA answers, captures the job details, and follows up">
-                    <span><b aria-hidden="true">1</b>Answers</span>
-                    <i aria-hidden="true">→</i>
-                    <span><b aria-hidden="true">2</b>Captures</span>
-                    <i aria-hidden="true">→</i>
-                    <span><b aria-hidden="true">3</b>Follows up</span>
-                  </div>
+                  <HeroActionFlow className="landing-action-flow-desktop" />
                   <p className="landing-hero-coverage inline-block border-l-4 border-[#17951f] bg-[#e1f8e5]/90 px-3 py-2 text-[1.05rem] font-black leading-tight text-[#147d1b]">
                     Keep your existing business number.
                   </p>

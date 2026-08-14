@@ -1,6 +1,6 @@
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
-import { HeroLiveCallButton, LandingStoryIntroduction, MobileHeroCallProof } from "./LandingPage";
+import { HeroActionFlow, HeroLiveCallButton, LandingStoryIntroduction, MobileHeroCallProof } from "./LandingPage";
 
 describe("responsive three-sided homepage proof", () => {
   let container;
@@ -93,6 +93,18 @@ describe("responsive three-sided homepage proof", () => {
     act(() => root.render(<HeroLiveCallButton onClick={onClick} audioPlaying />));
     expect(container.querySelector("button").textContent).toMatch(/Pause Live Call/i);
     expect(container.querySelector("button").getAttribute("aria-pressed")).toBe("true");
+  });
+
+  test("explains the missed-call workflow with action icons instead of numbered steps", () => {
+    act(() => root.render(<HeroActionFlow />));
+
+    expect(container.textContent).toMatch(/MY AI PA:/i);
+    expect(container.textContent).toMatch(/Answers after 3 rings/i);
+    expect(container.textContent).toMatch(/Captures important call details/i);
+    expect(container.textContent).toMatch(/Sends text summary and follow-up/i);
+    expect(container.querySelectorAll(".landing-action-flow-icon")).toHaveLength(3);
+    expect(container.querySelectorAll(".landing-action-flow-arrow")).toHaveLength(2);
+    expect(container.querySelectorAll(".landing-action-flow-step b")).toHaveLength(0);
   });
 
   test("supports a real horizontal swipe between story faces", () => {
