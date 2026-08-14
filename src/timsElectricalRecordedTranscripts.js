@@ -1,6 +1,8 @@
-// These captions mirror the recorded WAV files in public/audio/tims-electrical.
-// startSeconds values are measured from the actual speech boundaries so the
-// conversation follows the recording instead of estimating timing by word count.
+import timsElectricalRecordedScenarioCaptions from "./timsElectricalRecordedScenarioCaptions.json";
+
+// These captions mirror the prepared WAV files in public/audio/tims-electrical.
+// Scenario captions are generated from the locked script and measured speech
+// boundaries so the conversation follows the recording instead of estimating.
 export const timsElectricalRecordedTranscripts = {
   "new-installation": [
     { speaker: "assistant", startSeconds: 0.75, text: "Thanks for calling the Tim's Electrical recorded demonstration. I'm the virtual receptionist. This synthetic call is being recorded. How can I help today?" },
@@ -16,78 +18,5 @@ export const timsElectricalRecordedTranscripts = {
     { speaker: "assistant", startSeconds: 64.4, text: "Thanks, Brian. To recap, you need wiring for a newly installed hot tub at 23 Robb Street in Hamilton. Your callback number is 905-555-1234, and after 5 p.m. is the best time to reach you. This demonstration would pass that organized summary to the team. Did I miss anything important?" },
     { speaker: "caller", startSeconds: 84, text: "Goodbye." },
   ],
-  "repair-request": [
-    { speaker: "assistant", startSeconds: 0.8, text: "Thanks for calling the Tim's Electrical recorded demonstration. I'm the virtual receptionist. This synthetic call is being recorded. How can I help today?" },
-    { speaker: "caller", startSeconds: 11.85, text: "My kitchen outlet stopped working yesterday, and I need help with a repair." },
-    { speaker: "assistant", startSeconds: 18.1, text: "I can help with that. May I have your name, please?" },
-    { speaker: "caller", startSeconds: 23.15, text: "My name is Maya Chen." },
-    { speaker: "assistant", startSeconds: 27.15, text: "Thank you, Maya. Can I get the best callback number for you?" },
-    { speaker: "caller", startSeconds: 32, text: "My callback number is 905-555-0168." },
-    { speaker: "assistant", startSeconds: 39.45, text: "Got it, Maya. Just to confirm, is your callback number 905-555-0168?" },
-    { speaker: "caller", startSeconds: 46.95, text: "Yes, that's correct." },
-    { speaker: "assistant", startSeconds: 50.75, text: "Thank you for confirming. Can you please provide the service address and city?" },
-    { speaker: "caller", startSeconds: 57.05, text: "The property is 18 Lake Avenue in Grimsby." },
-    { speaker: "assistant", startSeconds: 63.05, text: "Thanks, Maya. For the repair, have you noticed any sparks, smoke, fire, burning smells, shocks, or any immediate danger?" },
-    { speaker: "caller", startSeconds: 72.05, text: "No. There is no smoke, sparking, burning smell, heat, or immediate danger." },
-    { speaker: "assistant", startSeconds: 80.25, text: "Thanks for confirming, Maya. When would you prefer the repair work to be done?" },
-    { speaker: "caller", startSeconds: 86.1, text: "Mornings are best for me." },
-    { speaker: "assistant", startSeconds: 90.85, text: "Great. Just to recap, you need a repair for a kitchen outlet at 18 Lakeview Avenue in Grimsby, and you prefer morning appointments. This demonstration would pass that organized summary to the team. Is there anything important I missed?" },
-    { speaker: "caller", startSeconds: 105.8, text: "That covered everything. Goodbye." },
-    { speaker: "assistant", startSeconds: 110.4, text: "Thank you, Maya. Goodbye." },
-    { speaker: "caller", startSeconds: 114.9, text: "Goodbye." },
-  ],
-  maintenance: [
-    { speaker: "assistant", startSeconds: 0.6, text: "Thanks for calling the Tim's Electrical recorded demonstration. I'm the virtual receptionist. This synthetic call is being recorded. How can I help today?" },
-    { speaker: "caller", startSeconds: 11.4, text: "I'm calling about a preventive electrical inspection for an older home." },
-    { speaker: "assistant", startSeconds: 18.1, text: "I can help with that. May I have your full name, please?" },
-    { speaker: "caller", startSeconds: 23.25, text: "My name is Daniel Ortiz." },
-    { speaker: "assistant", startSeconds: 27.75, text: "Thank you, Daniel. Could you please provide the service address and city?" },
-    { speaker: "caller", startSeconds: 32.85, text: "The address is 44 Maple Drive in Stoney Creek." },
-    { speaker: "assistant", startSeconds: 38.65, text: "Got it. 44 Maple Drive, Stoney Creek. What is the best callback number for you?" },
-    { speaker: "caller", startSeconds: 45.65, text: "The best callback number is 905-555-0144." },
-    { speaker: "assistant", startSeconds: 53.8, text: "Thanks, Daniel. When would you prefer the inspection to be done?" },
-    { speaker: "caller", startSeconds: 58.9, text: "Weekday afternoons are best." },
-    { speaker: "assistant", startSeconds: 63.4, text: "Thanks for that. To recap, Daniel Ortiz at 44 Maple Drive in Stoney Creek prefers a preventive electrical inspection on weekday afternoons. The best callback number is 905-555-0144. This demonstration would pass that organized summary to the team. Did I miss anything important?" },
-    { speaker: "caller", startSeconds: 84.4, text: "Goodbye." },
-  ],
-  "unresolved-concern": [
-    { speaker: "assistant", startSeconds: 0.65, text: "Thanks for calling the Tim's Electrical recorded demonstration. I'm the virtual receptionist. This synthetic call is being recorded. How can I help today?" },
-    { speaker: "caller", startSeconds: 10.55, text: "I'm an existing customer and want to discuss an unresolved concern with the team." },
-    { speaker: "assistant", startSeconds: 17.1, text: "I can help with that. May I have your full name, please?" },
-    { speaker: "caller", startSeconds: 21.65, text: "My name is Ayesha Patel." },
-    { speaker: "assistant", startSeconds: 26.45, text: "Thank you, Ayesha. What is the best phone number to reach you back on?" },
-    { speaker: "caller", startSeconds: 31.95, text: "The best number to reach me is 905-555-0171. Evenings are best." },
-    { speaker: "assistant", startSeconds: 41.7, text: "Thanks for that, Ayesha. What is the address where the service was done or the concern is related to? Please include the city." },
-    { speaker: "caller", startSeconds: 51.1, text: "The address is 71 King Street in Hamilton." },
-    { speaker: "assistant", startSeconds: 57.05, text: "Thanks, Ayesha. Could you briefly describe the unresolved concern you want the team to review?" },
-    { speaker: "caller", startSeconds: 64.2, text: "I'm not sure." },
-    { speaker: "assistant", startSeconds: 67.75, text: "No problem, Ayesha. When would be a good time for the team to call you back in the evening?" },
-    { speaker: "caller", startSeconds: 73.95, text: "Anytime in the evening works well for me." },
-    { speaker: "assistant", startSeconds: 78.95, text: "To recap, Ayesha Patel can be reached at 905-555-0171 in the evening. The service address is 71 King Street in Hamilton, and you have an unresolved concern you want the team to review but are unsure of the details. This demonstration would pass that organized summary to the team. Did I miss anything important?" },
-    { speaker: "caller", startSeconds: 100.9, text: "Goodbye." },
-  ],
-  "urgent-outage": [
-    { speaker: "assistant", startSeconds: 0.1, text: "Recorded demonstration. I'm the virtual receptionist. This synthetic call is being recorded. How can I help today?" },
-    { speaker: "caller", startSeconds: 8.3, text: "My entire home has lost power, but the neighboring homes still have power." },
-    { speaker: "assistant", startSeconds: 15.55, text: "I understand your home has lost power while neighbors still have power. Can you please tell me your name?" },
-    { speaker: "caller", startSeconds: 23.75, text: "My name is Noah Wilson." },
-    { speaker: "assistant", startSeconds: 27.3, text: "Thanks, Noah. Can you please provide the address where the power outage is occurring?" },
-    { speaker: "caller", startSeconds: 32.85, text: "The address is 9 Orchard Lane in Grimsby." },
-    { speaker: "assistant", startSeconds: 39, text: "Thank you, Noah. Could you please provide a phone number where we can reach you back?" },
-    { speaker: "caller", startSeconds: 44.4, text: "Yes. My callback number is 905-555-0109." },
-    { speaker: "assistant", startSeconds: 52.25, text: "Thanks for that, Noah. Before we continue, are you or anyone at the address experiencing sparks, smoke, fire, burning smells, shock, or any immediate danger?" },
-    { speaker: "caller", startSeconds: 64.85, text: "No. There is no smoke, sparking, burning smell, gas smell, or medical emergency." },
-    { speaker: "assistant", startSeconds: 73.2, text: "Thanks, Noah. When would be the best time for a callback to discuss this power outage further?" },
-    { speaker: "caller", startSeconds: 79.75, text: "I am available now." },
-    { speaker: "assistant", startSeconds: 84.3, text: "To recap, Noah Wilson at 9 Orchard Lane in Grimsby has a whole-home power outage while neighbors still have power. Your callback number is 905-555-0109, and you are available now. This demonstration would pass that organized summary to the team. Did I miss anything important?" },
-    { speaker: "caller", startSeconds: 107.05, text: "Goodbye." },
-  ],
-  "safety-redirect": [
-    { speaker: "assistant", startSeconds: 0.85, text: "Thanks for calling the Tim's Electrical recorded demonstration. I'm the virtual receptionist. This synthetic call is being recorded. How can I help today?" },
-    { speaker: "caller", startSeconds: 10.75, text: "I can see sparks and smoke coming from a wall outlet." },
-    { speaker: "assistant", startSeconds: 15.7, text: "Please move to safety immediately and call 911. Avoid touching any electrical equipment. This demonstration cannot dispatch." },
-    { speaker: "caller", startSeconds: 28.45, text: "I'm leaving now. Thank you." },
-    { speaker: "assistant", startSeconds: 32, text: "You're welcome. Stay safe." },
-    { speaker: "caller", startSeconds: 36.8, text: "Goodbye." },
-  ],
+  ...timsElectricalRecordedScenarioCaptions,
 };

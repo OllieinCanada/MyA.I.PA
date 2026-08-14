@@ -8,6 +8,8 @@ const apiBase = String(env.VAPI_API_BASE_URL || "https://api.vapi.ai").replace(/
 const apply = process.argv.includes("--apply");
 const confirmation = process.argv.find((arg) => arg.startsWith("--confirm="))?.split("=").slice(1).join("=") || "";
 const onlyScenario = process.argv.find((arg) => arg.startsWith("--only="))?.split("=").slice(1).join("=") || "";
+const outboundPhoneId = process.argv.find((arg) => arg.startsWith("--outbound-phone-id="))?.split("=").slice(1).join("=")
+  || String(env.TIMS_RECORDING_OUTBOUND_PHONE_ID || "").trim();
 const confirmationPhrase = "CREATE-TIMS-DEMO-RECORDINGS";
 
 const scenariosPath = rootPath("config", "tims-electrical-recording-scenarios.json");
@@ -105,9 +107,13 @@ function exactDialoguePrompt(scenario, role) {
     .filter((turn) => turn.role === role)
     .map((turn) => `- Line ${turn.index}: ${turn.text}`)
     .join("\n");
-  const finalInstruction = role === "receptionist"
-    ? "After your final line has been fully spoken, remain silent. Do not use endCall; the short silence timeout will close the synthetic call cleanly."
-    : "After the receptionist's final line has fully ended, say nothing at all—not even okay, good, thanks, or goodbye. Remain silent while the receptionist ends the call.";
+  const ownsFinalLine = scenario.exactDialogue.at(-1)?.role === role;
+  const finalInstruction = ownsFinalLine
+    ? "After your final assigned line has been fully spoken, remain completely silent. Do not say goodbye unless the written final line says goodbye, and do not call any tool."
+    : "After the other speaker's final line has fully ended, say nothing at all—not even okay, good, thanks, or goodbye. Remain silent while they end the call.";
+  const performanceDirection = role === "caller"
+    ? scenario.callerPerformance || "Sound natural, conversational, and distinct from the receptionist."
+    : scenario.receptionistPerformance || "Sound calm, capable, concise, and consistently professional.";
 
   return `You are the ${role === "receptionist" ? "virtual receptionist" : "fictional caller"} in a private synthetic My AI PA homepage recording. This is a tightly directed voice performance between two Vapi agents. No real customer or business is contacted.
 
@@ -120,6 +126,7 @@ ${ownedLines}
 PERFORMANCE RULES
 - Speak only your assigned lines, word for word. Do not add a greeting, filler, confirmation, question, goodbye, disclaimer, or explanation.
 - Use warm, natural Canadian telephone delivery. Keep contractions natural and avoid a robotic cadence.
+- Voice direction: ${performanceDirection}
 - Listen to the other speaker's full line. Begin your next assigned line promptly, with a short conversational beat rather than a long pause.
 - Never talk over the other speaker. Never repeat a line, paraphrase it, or restart the conversation.
 - ${finalInstruction}`;
@@ -155,7 +162,7 @@ function firstMessageModeFor(scenario, role) {
   return role === "receptionist" ? "assistant-speaks-first" : "assistant-waits-for-user";
 }
 
-function assistantPayload({ name, prompt, voiceId, firstMessage, firstMessageMode, endCallToolId, waitSeconds = 0.45, endpointing = 350, maxDurationSeconds = 180, silenceTimeoutSeconds = 20, smartWaitFunction = "", modelName = "gpt-4o-mini", temperature = 0.2 }) {
+function assistantPayload({ name, prompt, voiceId, voiceVersion = 2, firstMessage, firstMessageMode, endCallToolId, waitSeconds = 0.45, endpointing = 350, maxDurationSeconds = 180, silenceTimeoutSeconds = 20, smartWaitFunction = "", modelName = "gpt-4o-mini", temperature = 0.2 }) {
   return {
     name,
     firstMessage,
@@ -169,7 +176,7 @@ function assistantPayload({ name, prompt, voiceId, firstMessage, firstMessageMod
       messages: [{ role: "system", content: prompt }],
       toolIds: endCallToolId ? [endCallToolId] : [],
     },
-    voice: { provider: "vapi", voiceId, version: 2 },
+    voice: { provider: "vapi", voiceId, version: voiceVersion },
     backgroundSound: "off",
     voicemailDetection: "off",
     maxDurationSeconds,
@@ -358,7 +365,7 @@ async function main() {
     waitSeconds: hasExactDialogue(scenarios[0]) ? 0.5 : 0.45,
     endpointing: hasExactDialogue(scenarios[0]) ? 500 : 350,
     maxDurationSeconds: hasExactDialogue(scenarios[0]) ? exactDialogueMaxDurationSeconds(scenarios[0]) : 180,
-    silenceTimeoutSeconds: hasExactDialogue(scenarios[0]) ? 5 : 20,
+    silenceTimeoutSeconds: 20,
     smartWaitFunction: hasExactDialogue(scenarios[0]) ? "4500 / (1 + exp(-10 * (x - 0.5)))" : "",
     modelName: hasExactDialogue(scenarios[0]) ? "gpt-4o" : "gpt-4o-mini",
     temperature: hasExactDialogue(scenarios[0]) ? 0 : 0.2,
@@ -366,14 +373,15 @@ async function main() {
   let caller = await upsertAssistant(assistants, callerAssistantName, assistantPayload({
     name: callerAssistantName,
     prompt: rolePrompt(scenarios[0], "caller"),
-    voiceId: "Elliot",
+    voiceId: scenarios[0].callerVoiceId || "Elliot",
+    voiceVersion: scenarios[0].callerVoiceVersion || 2,
     firstMessage: firstMessageFor(scenarios[0], "caller"),
     firstMessageMode: firstMessageModeFor(scenarios[0], "caller"),
     endCallToolId: hasExactDialogue(scenarios[0]) ? null : endCallTool.id,
     waitSeconds: hasExactDialogue(scenarios[0]) ? 0.6 : 1,
     endpointing: hasExactDialogue(scenarios[0]) ? 500 : 350,
     maxDurationSeconds: hasExactDialogue(scenarios[0]) ? exactDialogueMaxDurationSeconds(scenarios[0]) : 180,
-    silenceTimeoutSeconds: hasExactDialogue(scenarios[0]) ? 5 : 20,
+    silenceTimeoutSeconds: 20,
     smartWaitFunction: hasExactDialogue(scenarios[0]) ? "4500 / (1 + exp(-10 * (x - 0.5)))" : "",
     modelName: hasExactDialogue(scenarios[0]) ? "gpt-4o" : "gpt-4o-mini",
     temperature: hasExactDialogue(scenarios[0]) ? 0 : 0.2,
@@ -382,6 +390,14 @@ async function main() {
   const receiverPhone = await waitForPhoneActive(await upsertPhone(phones, receiverPhoneName, receiver.id));
   const callerPhone = await waitForPhoneActive(await upsertPhone(phones, callerPhoneName, caller.id));
   if (!receiverPhone?.number || !callerPhone?.id) throw new Error("Vapi did not return usable demo phone records.");
+  const outboundPhone = outboundPhoneId ? phones.find((phone) => phone?.id === outboundPhoneId) : callerPhone;
+  if (!outboundPhone?.id) throw new Error("The requested outbound recording phone was not found in Vapi.");
+  if (outboundPhoneId && outboundPhone.provider !== "twilio") {
+    throw new Error("The outbound recording override must be an imported Twilio phone number.");
+  }
+  if (outboundPhoneId) {
+    console.log(`Using an existing imported Twilio line ending ${String(outboundPhone.number || "").slice(-4)} for outbound synthetic calls only; its inbound assistant is unchanged.`);
+  }
 
   const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
   const runSummary = [];
@@ -398,7 +414,7 @@ async function main() {
         waitSeconds: hasExactDialogue(scenario) ? 0.5 : 0.45,
         endpointing: hasExactDialogue(scenario) ? 500 : 350,
         maxDurationSeconds: hasExactDialogue(scenario) ? exactDialogueMaxDurationSeconds(scenario) : 180,
-        silenceTimeoutSeconds: hasExactDialogue(scenario) ? 5 : 20,
+        silenceTimeoutSeconds: 20,
         smartWaitFunction: hasExactDialogue(scenario) ? "4500 / (1 + exp(-10 * (x - 0.5)))" : "",
         modelName: hasExactDialogue(scenario) ? "gpt-4o" : "gpt-4o-mini",
         temperature: hasExactDialogue(scenario) ? 0 : 0.2,
@@ -409,14 +425,15 @@ async function main() {
       body: assistantPayload({
         name: callerAssistantName,
         prompt: rolePrompt(scenario, "caller"),
-        voiceId: "Elliot",
+        voiceId: scenario.callerVoiceId || "Elliot",
+        voiceVersion: scenario.callerVoiceVersion || 2,
         firstMessage: firstMessageFor(scenario, "caller"),
         firstMessageMode: firstMessageModeFor(scenario, "caller"),
         endCallToolId: hasExactDialogue(scenario) ? null : endCallTool.id,
         waitSeconds: hasExactDialogue(scenario) ? 0.6 : 1,
         endpointing: hasExactDialogue(scenario) ? 500 : 350,
         maxDurationSeconds: hasExactDialogue(scenario) ? exactDialogueMaxDurationSeconds(scenario) : 180,
-        silenceTimeoutSeconds: hasExactDialogue(scenario) ? 5 : 20,
+        silenceTimeoutSeconds: 20,
         smartWaitFunction: hasExactDialogue(scenario) ? "4500 / (1 + exp(-10 * (x - 0.5)))" : "",
         modelName: hasExactDialogue(scenario) ? "gpt-4o" : "gpt-4o-mini",
         temperature: hasExactDialogue(scenario) ? 0 : 0.2,
@@ -430,7 +447,7 @@ async function main() {
         body: {
           name: `Tim's demo — ${scenario.id}`,
           assistantId: caller.id,
-          phoneNumberId: callerPhone.id,
+          phoneNumberId: outboundPhone.id,
           customer: { number: receiverPhone.number },
         },
         timeoutMs: 60000,
@@ -441,7 +458,7 @@ async function main() {
         await sleep(75000);
         call = await apiRequest("/call", {
           method: "POST",
-          body: { name: `Tim's demo — ${scenario.id}`, assistantId: caller.id, phoneNumberId: callerPhone.id, customer: { number: receiverPhone.number } },
+          body: { name: `Tim's demo — ${scenario.id}`, assistantId: caller.id, phoneNumberId: outboundPhone.id, customer: { number: receiverPhone.number } },
           timeoutMs: 60000,
         });
       } else {
@@ -457,12 +474,15 @@ async function main() {
       src: `/audio/tims-electrical/${recording.fileName}`,
       durationSeconds: duration,
       source: "synthetic-vapi-agents",
+      callerVoiceId: scenario.callerVoiceId || "Elliot",
+      callerPerformance: scenario.callerPerformance || "Natural synthetic demo caller.",
       recordedAt: completed.endedAt || new Date().toISOString(),
       disclosure: "Synthetic demonstration call recorded between two Vapi agents; no real customer information.",
     };
     fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
     runSummary.push({
       scenario: scenario.id,
+      callerVoiceId: scenario.callerVoiceId || "Elliot",
       status: completed.status,
       endedReason: completed.endedReason || null,
       durationSeconds: duration,
