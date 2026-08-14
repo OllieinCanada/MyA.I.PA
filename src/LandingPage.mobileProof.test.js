@@ -1,6 +1,14 @@
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
-import { HeroActionFlow, HeroLiveCallButton, LandingStoryIntroduction, MobileHeroCallProof } from "./LandingPage";
+import {
+  HeroActionFlow,
+  HeroCoveragePromise,
+  HeroIntroduction,
+  HeroLiveCallButton,
+  HeroNoteBenefits,
+  LandingStoryIntroduction,
+  MobileHeroCallProof,
+} from "./LandingPage";
 
 describe("responsive three-sided homepage proof", () => {
   let container;
@@ -105,6 +113,31 @@ describe("responsive three-sided homepage proof", () => {
     expect(container.querySelectorAll(".landing-action-flow-icon")).toHaveLength(3);
     expect(container.querySelectorAll(".landing-action-flow-arrow")).toHaveLength(2);
     expect(container.querySelectorAll(".landing-action-flow-step b")).toHaveLength(0);
+  });
+
+  test("restores the complete handwritten hero message as shared responsive content", () => {
+    act(() => root.render(
+      <>
+        <HeroIntroduction />
+        <p>Never miss a call again!</p>
+        <p>Missed Calls = Lost Jobs $$</p>
+        <HeroCoveragePromise />
+        <HeroNoteBenefits />
+      </>,
+    ));
+
+    expect(container.textContent).toMatch(/IntroducingMy AI PA:AI Telephone Answering Assistant/i);
+    expect(container.textContent).toMatch(/Never miss a call again!/i);
+    expect(container.textContent).toMatch(/Missed Calls = Lost Jobs \$\$/i);
+    expect(container.textContent).toMatch(/We've got you covered 24\/7/i);
+    expect(container.textContent).toMatch(/price of a cup of coffee per day/i);
+    expect(container.textContent).toMatch(/All calls answered professionally after 3 rings/i);
+    expect(container.textContent).toMatch(/Natural dialogue with customers to create a connection/i);
+    expect(container.textContent).toMatch(/FAQ questions answered/i);
+    expect(container.textContent).toMatch(/Job details and callback information texted to you/i);
+    expect(container.textContent).toMatch(/Complete customer information collected/i);
+    expect(container.textContent).toMatch(/thank-you text\/reminder sent to the customer/i);
+    expect(container.querySelectorAll(".landing-hero-note-benefit")).toHaveLength(6);
   });
 
   test("supports a real horizontal swipe between story faces", () => {
