@@ -1,6 +1,6 @@
 import React from "react";
-import LandingPage from "./LandingPage";
+import IntuitiveLandingPage from "./IntuitiveLandingPage";
 
 export default function App() {
-  return <LandingPage />;
+  return <IntuitiveLandingPage />;
 }
