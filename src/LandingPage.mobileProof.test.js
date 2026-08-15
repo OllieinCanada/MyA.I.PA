@@ -138,6 +138,12 @@ describe("responsive three-sided homepage proof", () => {
     expect(container.textContent).toMatch(/Complete customer information collected/i);
     expect(container.textContent).toMatch(/thank-you text\/reminder sent to the customer/i);
     expect(container.querySelectorAll(".landing-hero-note-benefit")).toHaveLength(6);
+
+    const introduction = container.querySelector(".landing-hero-introduction");
+    const identity = introduction.querySelector(".landing-hero-introduction-identity");
+    expect(introduction.children).toHaveLength(2);
+    expect(identity.querySelector(".landing-hero-introduction-brand").textContent).toBe("My AI PA:");
+    expect(identity.querySelector(".landing-hero-introduction-description").textContent).toBe("AI Telephone Answering Assistant");
   });
 
   test("supports a real horizontal swipe between story faces", () => {
