@@ -1360,8 +1360,10 @@ export function HeroIntroduction({ className = "" }) {
   return (
     <p className={`landing-hero-introduction ${className}`.trim()}>
       <span className="landing-hero-introduction-kicker">Introducing</span>
-      <span className="landing-hero-introduction-brand">My AI PA:</span>
-      <span className="landing-hero-introduction-description">AI Telephone Answering Assistant</span>
+      <span className="landing-hero-introduction-identity">
+        <span className="landing-hero-introduction-brand">My AI PA:</span>
+        <span className="landing-hero-introduction-description">AI Telephone Answering Assistant</span>
+      </span>
     </p>
   );
 }
@@ -7262,38 +7264,52 @@ function LandingPage() {
           /* Handwritten hero revision: one shared message hierarchy across
              desktop, tablet and mobile, with only the layout adapting. */
           .landing-hero-introduction {
-            display: flex;
-            flex-wrap: wrap;
-            align-items: center;
-            justify-content: center;
-            gap: 0.38rem 0.5rem;
-            margin: 0 0 0.8rem;
+            display: grid;
+            justify-items: center;
+            gap: 0.22rem;
+            margin: 0 0 0.72rem;
             color: #173a5f;
-            font-size: 0.78rem;
-            font-weight: 900;
+            font-family: inherit;
             line-height: 1.15;
-            letter-spacing: 0.035em;
             text-align: center;
-            text-transform: uppercase;
           }
           .landing-hero-introduction-kicker {
-            color: #0c5fc3;
-            font-family: "Segoe Print", "Bradley Hand", cursive;
-            font-size: 1.08em;
-            font-style: italic;
-            letter-spacing: 0.015em;
-            text-transform: none;
+            color: #4d6f92;
+            font-family: inherit;
+            font-size: 0.65rem;
+            font-style: normal;
+            font-weight: 900;
+            letter-spacing: 0.19em;
+            text-transform: uppercase;
+          }
+          .landing-hero-introduction-identity {
+            display: inline-flex;
+            flex-wrap: wrap;
+            align-items: baseline;
+            justify-content: center;
+            gap: 0.18rem 0.48rem;
+            min-width: 0;
           }
           .landing-hero-introduction-brand {
-            padding: 0.34rem 0.55rem;
-            border-radius: 0.55rem;
-            background: #07142a;
-            color: #fff;
-            box-shadow: 0 8px 18px -13px rgba(7, 20, 42, 0.9);
-            letter-spacing: 0.045em;
+            padding: 0;
+            border: 0;
+            border-radius: 0;
+            background: none;
+            color: #0c67c7;
+            box-shadow: none;
+            font-size: clamp(0.94rem, 1.3vw, 1.08rem);
+            font-weight: 950;
+            letter-spacing: -0.015em;
+            text-transform: none;
           }
           .landing-hero-introduction-description {
             color: #173a5f;
+            padding-left: 0.48rem;
+            border-left: 2px solid #ff7a00;
+            font-size: clamp(0.72rem, 1.05vw, 0.86rem);
+            font-weight: 850;
+            letter-spacing: 0.025em;
+            text-transform: none;
           }
           .landing-profit-line,
           .landing-tablet-pain.landing-profit-line,
@@ -7418,9 +7434,12 @@ function LandingPage() {
           @media (min-width: 900px) and (min-aspect-ratio: 4/3),
                  (min-width: 1025px) and (pointer: fine) {
             .landing-tablet-introduction {
-              justify-content: flex-start;
+              justify-items: start;
               margin-bottom: 0.45rem;
               text-align: left;
+            }
+            .landing-tablet-introduction .landing-hero-introduction-identity {
+              justify-content: flex-start;
             }
             .landing-tablet-title {
               margin-top: 0.5rem !important;
@@ -7471,8 +7490,8 @@ function LandingPage() {
             .landing-mobile-introduction {
               margin-bottom: 0.75rem;
             }
-            .landing-mobile-introduction .landing-hero-introduction-description {
-              width: 100%;
+            .landing-mobile-introduction .landing-hero-introduction-identity {
+              row-gap: 0.3rem;
             }
             .landing-mobile-note-benefits {
               margin-top: 0.75rem;
@@ -7483,6 +7502,13 @@ function LandingPage() {
             .landing-mobile-proof-title {
               margin-top: 0 !important;
             }
+          }
+          .landing-desktop-introduction {
+            justify-items: start;
+            text-align: left;
+          }
+          .landing-desktop-introduction .landing-hero-introduction-identity {
+            justify-content: flex-start;
           }
           @media (prefers-reduced-motion: reduce) {
             .landing-mobile-call-prism {
