@@ -253,10 +253,10 @@ function Icon({ name, className = "h-6 w-6" }) {
   );
 }
 
-function BrandLogo() {
+function BrandLogo({ onLight = false }) {
   return (
     <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
-      <span className="grid h-11 w-11 shrink-0 place-items-center text-white sm:h-[52px] sm:w-[52px] xl:h-14 xl:w-14">
+      <span className={`grid h-11 w-11 shrink-0 place-items-center sm:h-[52px] sm:w-[52px] xl:h-14 xl:w-14 ${onLight ? "text-[#071a33]" : "text-white"}`}>
         <svg viewBox="0 0 72 72" className="h-full w-full" fill="none" aria-hidden="true">
           <g transform="translate(2 0)">
             <path d="M14 40v-6C14 21.8 23.8 12 36 12s22 9.8 22 22v6" stroke="currentColor" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
@@ -274,7 +274,7 @@ function BrandLogo() {
           })}
         </svg>
       </span>
-      <span className="min-w-0 text-[1.75rem] font-black leading-none tracking-[-0.045em] text-white sm:text-[2.45rem] xl:text-[2.65rem]">
+      <span className={`min-w-0 text-[1.75rem] font-black leading-none tracking-[-0.045em] sm:text-[2.45rem] xl:text-[2.65rem] ${onLight ? "text-[#071a33]" : "text-white"}`}>
         My <span className="bg-[linear-gradient(90deg,#2563eb,#8fbfff)] bg-clip-text text-transparent">AI PA</span>
       </span>
     </div>
@@ -350,7 +350,7 @@ function MobileSignupProgress({ currentStep, businessSlide, tradeSetupPanel }) {
                 : "Setup summary";
 
   return (
-    <div className="signup-mobile-progress" aria-label={`Step ${stepNumber} of 8: ${title}`}>
+    <div className="signup-mobile-progress signup-visible-progress" aria-label={`Step ${stepNumber} of 8: ${title}`}>
       <div className="signup-mobile-progress-copy">
         <span>Step {stepNumber} of 8</span>
         <strong>{title}</strong>
@@ -2640,6 +2640,192 @@ export default function Signup() {
               border-radius: 16px;
             }
           }
+
+          /* One route, one progress indicator, one question at a time. */
+          .signup-mobile-flow {
+            max-width: 1180px !important;
+            padding-top: 0 !important;
+          }
+
+          .signup-home-row {
+            min-height: 68px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 18px;
+            border-bottom: 1px solid #e2e8f0;
+          }
+
+          .signup-home-row a {
+            display: inline-flex;
+            align-items: center;
+            text-decoration: none;
+          }
+
+          .signup-home-row img {
+            width: 174px;
+            height: 48px;
+            object-fit: contain;
+            object-position: left center;
+          }
+
+          .signup-home-row > span {
+            color: #475569;
+            font-size: .86rem;
+            font-weight: 800;
+          }
+
+          .signup-page-header {
+            padding: 22px 0 15px;
+          }
+
+          .signup-page-header h1 {
+            font-size: clamp(2rem, 4vw, 3.25rem) !important;
+          }
+
+          .signup-macro-stepper,
+          .signup-desktop-tabs,
+          .signup-task-explainer,
+          .signup-task-content-title {
+            display: none !important;
+          }
+
+          .signup-visible-progress {
+            width: min(100%, 880px);
+            display: block;
+            margin: 0 auto 15px;
+            border: 0;
+            border-radius: 14px;
+            background: #edf5ff;
+            padding: 12px 15px;
+          }
+
+          .signup-visible-progress .signup-mobile-progress-copy {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            font-size: .85rem;
+            line-height: 1.2;
+          }
+
+          .signup-visible-progress .signup-mobile-progress-copy span {
+            color: #2563eb;
+            font-weight: 900;
+          }
+
+          .signup-visible-progress .signup-mobile-progress-copy strong {
+            color: #0f172a;
+            font-weight: 900;
+          }
+
+          .signup-visible-progress .signup-mobile-progress-track {
+            height: 5px;
+            margin-top: 9px;
+            overflow: hidden;
+            border-radius: 999px;
+            background: #cfe1f7;
+          }
+
+          .signup-visible-progress .signup-mobile-progress-track span {
+            display: block;
+            height: 100%;
+            border-radius: inherit;
+            background: linear-gradient(90deg, #176bff, #0ea5e9);
+            transition: width 240ms ease;
+          }
+
+          .signup-task-section {
+            margin-top: 0 !important;
+          }
+
+          .signup-task-shell {
+            border-radius: 24px !important;
+            box-shadow: 0 30px 75px -60px rgba(15, 23, 42, .75) !important;
+          }
+
+          .signup-task-window {
+            min-height: 0;
+            padding: clamp(24px, 4vw, 48px) !important;
+          }
+
+          .signup-task-layout {
+            width: min(100%, 960px) !important;
+            grid-template-columns: minmax(0, 1fr) !important;
+            margin: 0 auto;
+          }
+
+          .signup-task-content {
+            width: 100%;
+          }
+
+          .signup-mobile-task-heading {
+            display: block !important;
+            max-width: 700px;
+            margin: 0 auto 24px;
+            text-align: center;
+          }
+
+          .signup-mobile-task-heading h2 {
+            margin: 0;
+            color: #0f172a;
+            font-size: clamp(2rem, 4.5vw, 3.4rem);
+            font-weight: 900;
+            letter-spacing: -.045em;
+            line-height: 1.05;
+          }
+
+          .signup-mobile-task-heading p {
+            margin: 9px 0 0;
+            color: #475569;
+            font-size: 1.05rem;
+            font-weight: 650;
+            line-height: 1.5;
+          }
+
+          @media (max-width: 639px) {
+            .signup-home-row {
+              min-height: 58px;
+            }
+
+            .signup-home-row img {
+              width: 140px;
+              height: 42px;
+            }
+
+            .signup-home-row > span {
+              display: none;
+            }
+
+            .signup-page-header {
+              padding-top: 14px;
+            }
+
+            .signup-visible-progress {
+              margin-bottom: 0;
+              border-top: 0;
+              border-radius: 12px;
+              padding: 10px 12px;
+            }
+
+            .signup-task-shell {
+              background: transparent;
+              box-shadow: none !important;
+            }
+
+            .signup-task-window {
+              padding: 17px 0 20px !important;
+            }
+
+            .signup-mobile-task-heading {
+              margin-bottom: 15px;
+              text-align: left;
+            }
+
+            .signup-mobile-task-heading h2 {
+              font-size: clamp(1.75rem, 8vw, 2rem);
+            }
+          }
         `}
       </style>
       <header className="hidden bg-[#020918] shadow-[0_24px_60px_-48px_rgba(15,23,42,0.85)]">
@@ -2649,6 +2835,10 @@ export default function Signup() {
       </header>
 
       <form onSubmit={submitSignup} className="signup-mobile-flow mx-auto flex min-h-screen w-full max-w-[1680px] flex-col px-3 pb-5 pt-1 sm:px-6 lg:px-8">
+        <div className="signup-home-row">
+          <a href="#/" aria-label="Return to My AI PA home"><BrandLogo onLight /></a>
+          <span>Free for 14 days · No credit card required · Cancel anytime</span>
+        </div>
         <section className="signup-page-header shrink-0 text-center">
           <h1 className="text-[clamp(1.65rem,3.8vw,2.55rem)] font-black leading-tight tracking-[-0.04em] text-slate-950">
             Create your AI phone assistant
@@ -2671,8 +2861,6 @@ export default function Signup() {
               <p className="mt-1 text-sm font-semibold leading-6 opacity-80">{paymentReturnNotice.body}</p>
             </div>
           ) : null}
-
-          <Stepper currentStep={currentStep} />
         </section>
 
         <MobileSignupProgress currentStep={currentStep} businessSlide={businessSlide} tradeSetupPanel={tradeSetupPanel} />
