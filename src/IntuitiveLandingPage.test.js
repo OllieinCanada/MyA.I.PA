@@ -38,10 +38,15 @@ describe("intuitive homepage journey", () => {
     expect(text).toMatch(/IntroducingMy AI PA: AI Telephone Answering Assistant/i);
     expect(text).toMatch(/Never miss a call again!/i);
     expect(text).toMatch(/Missed Calls = Lost Jobs \$\$/i);
+    expect(text).toMatch(/When you can't get to the phone, My AI PA:/i);
     expect(text).toMatch(/Keep your existing business number/i);
     expect(text).toMatch(/Three simple steps/i);
     expect(text).toMatch(/The caller needs help now—not after you finish the job/i);
-    expect(text).toMatch(/My AI PA catches the calls they miss/i);
+    expect(text).toMatch(/AnswersAfter 3 rings/i);
+    expect(text).toMatch(/CapturesJob and callback details/i);
+    expect(text).toMatch(/Follows upTexts you and the caller/i);
+    expect(container.querySelectorAll(".simple-hero-flow-icon")).toHaveLength(3);
+    expect(container.querySelector(".simple-control-strip")).toBeNull();
     expect(text).toMatch(/Trust it privately before a customer ever hears it/i);
     expect(text).toMatch(/No fake promises\. Hear it, test it, and decide from the calls/i);
     expect(text).toMatch(/Now watch a service call become a useful summary/i);
