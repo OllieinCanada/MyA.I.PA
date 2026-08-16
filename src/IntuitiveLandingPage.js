@@ -83,6 +83,32 @@ function SectionHeading({ number, eyebrow, title, body }) {
   );
 }
 
+function HeroActionFlow() {
+  const steps = [
+    { icon: "phone", label: "Answers", detail: "After 3 rings" },
+    { icon: "clipboard", label: "Captures", detail: "Job and callback details" },
+    { icon: "message", label: "Follows up", detail: "Texts you and the caller" },
+  ];
+
+  return (
+    <section className="simple-hero-flow" aria-label="How My AI PA handles a missed call">
+      <p>When you can't get to the phone, <strong>My AI PA:</strong></p>
+      <ol>
+        {steps.map((step, index) => (
+          <React.Fragment key={step.label}>
+            <li>
+              <span className="simple-hero-flow-icon" aria-hidden="true"><Icon name={step.icon} /></span>
+              <strong>{step.label}</strong>
+              <small>{step.detail}</small>
+            </li>
+            {index < steps.length - 1 ? <li className="simple-hero-flow-arrow" aria-hidden="true"><Icon name="arrow" /></li> : null}
+          </React.Fragment>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
 const heroAudioSource = `${process.env.PUBLIC_URL || ""}${heroTranscriptTimings.src}?v=20260814-receptionist-first`;
 
 function AnimatedHeroProof({ onSampleCall, onStartTrial }) {
@@ -279,7 +305,7 @@ export default function IntuitiveLandingPage() {
             <p className="simple-intro"><span>Introducing</span><strong>My AI PA:</strong> AI Telephone Answering Assistant</p>
             <h1>Never miss a call again!</h1>
             <p className="simple-loss">Missed Calls = Lost Jobs $$</p>
-            <p className="simple-hero-body">When you cannot get to the phone, the telephone assistant answers calls, talks with your customer, collects the job details, and texts both the business owner and caller for an easy follow-up.</p>
+            <HeroActionFlow />
             <p className="simple-number-promise">Keep your existing business number.</p>
             <div className="simple-hero-actions">
               <StartButton />
@@ -299,16 +325,6 @@ export default function IntuitiveLandingPage() {
           <a href="#pricing"><span>4</span>Pricing</a>
         </div>
       </nav>
-
-      <section className="simple-control-strip" aria-label="How My AI PA fits your current phone workflow">
-        <div className="simple-shell">
-          <div><span>1</span><strong>Your staff answers first</strong></div>
-          <Icon name="arrow" />
-          <div><span>2</span><strong>My AI PA catches the calls they miss</strong></div>
-          <Icon name="arrow" />
-          <div><span>3</span><strong>You receive a callback-ready text</strong></div>
-        </div>
-      </section>
 
       <section className="simple-section simple-problem" id="why-it-matters">
         <div className="simple-shell">
