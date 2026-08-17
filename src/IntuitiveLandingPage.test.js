@@ -35,9 +35,9 @@ describe("intuitive homepage journey", () => {
 
     const text = container.textContent;
     expect(text).toMatch(/AttentionContractors!/i);
-    expect(text).toMatch(/IntroducingMy AI PA: AI Telephone Answering Assistant/i);
+    expect(text).toMatch(/IntroducingMy AI PA:\s*AI Telephone Answering Assistant/i);
     expect(text).toMatch(/Never miss a call again!/i);
-    expect(text).toMatch(/Missed Calls = Lost Jobs \$\$/i);
+    expect(text).toMatch(/Missed Calls = Lost Revenue \$\$/i);
     expect(text).toMatch(/When you can't get to the phone, My AI PA:/i);
     expect(text).toMatch(/Keep your existing business number/i);
     expect(text).toMatch(/Three simple steps/i);
@@ -76,10 +76,11 @@ describe("intuitive homepage journey", () => {
     expect(carousel.getAttribute("aria-label")).toMatch(/Slide 1 of 3/i);
     expect(container.textContent).toMatch(/A real conversation—not voicemail/i);
     expect(container.textContent).toMatch(/Both sides get a clear text/i);
-    expect(container.textContent).toMatch(/Coverage for about a cup of coffee a day/i);
-    const coffeeIllustration = container.querySelector('.simple-coffee-cup img[alt*="Tim Hortons"]');
-    expect(coffeeIllustration).not.toBeNull();
-    expect(coffeeIllustration.getAttribute("src")).toMatch(/tim-hortons-canadian-cup/i);
+    expect(container.textContent).toMatch(/First question: Why not just stick to voice mail\?/i);
+    expect(container.textContent).toMatch(/The caller leaves a vague message—or hangs up/i);
+    expect(container.textContent).toMatch(/A live conversation becomes a callback-ready summary/i);
+    expect(container.querySelectorAll(".simple-message-phone")).toHaveLength(2);
+    expect(container.querySelector('audio[src*="tims-electrical-2.wav"]')).not.toBeNull();
     expect(window.HTMLMediaElement.prototype.play).not.toHaveBeenCalled();
 
     await act(async () => hearCall.dispatchEvent(new MouseEvent("click", { bubbles: true })));

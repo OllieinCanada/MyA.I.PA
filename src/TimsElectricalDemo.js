@@ -95,6 +95,7 @@ function formatAudioTime(seconds = 0) {
 function ScenarioRecording({ scenario, onTranscriptPosition }) {
   const recording = timsElectricalAudioManifest[scenario.id];
   const available = recording?.status === "available" && recording?.src;
+  const visualOnly = recording?.status === "visual-only";
   const audioRef = useRef(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -141,7 +142,7 @@ function ScenarioRecording({ scenario, onTranscriptPosition }) {
     <section className={`tims-scenario-recording tims-phone-recording ${available ? "is-available" : "is-planned"}`} aria-label={`${scenario.shortLabel} recorded call`}>
       <div className="tims-recording-copy">
         <span className="fcr-kicker">Recorded scenario call</span>
-        <strong>{available ? `Hear the ${scenario.shortLabel.toLowerCase()} conversation` : `${scenario.shortLabel} recording is being prepared`}</strong>
+        <strong>{available ? `Hear the ${scenario.shortLabel.toLowerCase()} conversation` : visualOnly ? "Safety examples stay clear and on-screen" : `${scenario.shortLabel} recording is being prepared`}</strong>
       </div>
       <div className={`tims-voice-visualizer ${isPlaying ? "is-speaking" : ""}`} aria-hidden="true">
         <span className="tims-voice-orbit orbit-one" />
@@ -185,7 +186,7 @@ function ScenarioRecording({ scenario, onTranscriptPosition }) {
             Your browser does not support audio playback.
           </audio>
         </>
-      ) : <span className="tims-recording-status">COMING SOON</span>}
+      ) : <span className="tims-recording-status">{visualOnly ? "ON-SCREEN EXAMPLE" : "COMING SOON"}</span>}
     </section>
   );
 }
