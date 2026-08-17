@@ -64,6 +64,10 @@ describe("intuitive homepage journey", () => {
     expect(Array.from(container.querySelectorAll("button")).filter((button) => /Start Your Free Trial/i.test(button.textContent)).length).toBeGreaterThanOrEqual(3);
     expect(container.querySelector('a[href="tel:+12495033301"]')).not.toBeNull();
     expect(container.querySelector('nav[aria-label="Quick page navigation"] a[href="#how-it-works"]')).not.toBeNull();
+    expect(container.querySelectorAll('nav[aria-label="Quick page navigation"] a')).toHaveLength(3);
+    expect(container.querySelector('nav[aria-label="Quick page navigation"] a[aria-current="step"]')?.textContent).toMatch(/01Why it matters/i);
+    expect(container.querySelector("#why-it-matters .simple-section-heading > span")).toBeNull();
+    expect(container.querySelectorAll(".simple-how-details li")).toHaveLength(6);
   });
 
   test("restores the three-part animated proof and starts audio only when pressed", async () => {

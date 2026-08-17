@@ -76,7 +76,7 @@ function StartButton({ children = "Start Your Free Trial", className = "" }) {
 function SectionHeading({ number, eyebrow, title, body }) {
   return (
     <div className="simple-section-heading">
-      <span>{number} · {eyebrow}</span>
+      {number || eyebrow ? <span>{number ? `${number} · ` : ""}{eyebrow}</span> : null}
       <h2>{title}</h2>
       {body ? <p>{body}</p> : null}
     </div>
@@ -106,6 +106,70 @@ function HeroActionFlow() {
         ))}
       </ol>
     </section>
+  );
+}
+
+const journeySteps = [
+  { number: "01", label: "Why it matters", href: "#why-it-matters" },
+  { number: "02", label: "How it works", href: "#how-it-works" },
+  { number: "03", label: "See it work", href: "#see-it-work" },
+];
+
+function ScrollJourneyNav() {
+  const [activeStep, setActiveStep] = useState(0);
+
+  useEffect(() => {
+    let animationFrame = 0;
+    const updateActiveStep = () => {
+      animationFrame = 0;
+      const activationLine = window.innerHeight * 0.34;
+      let nextStep = 0;
+      journeySteps.forEach((step, index) => {
+        const section = document.querySelector(step.href);
+        if (section && section.getBoundingClientRect().top <= activationLine) nextStep = index;
+      });
+      setActiveStep(nextStep);
+    };
+    const scheduleUpdate = () => {
+      if (animationFrame) return;
+      if (typeof window.requestAnimationFrame === "function") {
+        animationFrame = window.requestAnimationFrame(updateActiveStep);
+      } else {
+        updateActiveStep();
+      }
+    };
+
+    window.addEventListener("scroll", scheduleUpdate, { passive: true });
+    window.addEventListener("resize", scheduleUpdate);
+    return () => {
+      window.removeEventListener("scroll", scheduleUpdate);
+      window.removeEventListener("resize", scheduleUpdate);
+      if (animationFrame && typeof window.cancelAnimationFrame === "function") window.cancelAnimationFrame(animationFrame);
+    };
+  }, []);
+
+  return (
+    <nav className="simple-jump-nav" data-active-step={activeStep} aria-label="Quick page navigation">
+      <div className="simple-journey-landscape" aria-hidden="true">
+        <span className="simple-journey-sun" />
+        <span className="simple-journey-ridge ridge-back" />
+        <span className="simple-journey-ridge ridge-front" />
+      </div>
+      <div className="simple-shell">
+        <span className="simple-journey-slider" aria-hidden="true" />
+        {journeySteps.map((step, index) => (
+          <a
+            href={step.href}
+            key={step.number}
+            aria-current={index === activeStep ? "step" : undefined}
+            onClick={() => setActiveStep(index)}
+          >
+            <span>{step.number}</span>
+            <strong>{step.label}</strong>
+          </a>
+        ))}
+      </div>
+    </nav>
   );
 }
 
@@ -326,18 +390,11 @@ export default function IntuitiveLandingPage() {
         </div>
       </section>
 
-      <nav className="simple-jump-nav" aria-label="Quick page navigation">
-        <div className="simple-shell">
-          <a href="#why-it-matters"><span>1</span>Why it matters</a>
-          <a href="#how-it-works"><span>2</span>How it works</a>
-          <a href="#see-it-work"><span>3</span>See it work</a>
-          <a href="#pricing"><span>4</span>Pricing</a>
-        </div>
-      </nav>
+      <ScrollJourneyNav />
 
       <section className="simple-section simple-problem" id="why-it-matters">
         <div className="simple-shell">
-          <SectionHeading number="01" eyebrow="Why it matters" title="First question: Why not just stick to voice mail?" body="The caller needs help now—not after you finish the job. When a ready-to-hire customer reaches voice mail, the next contractor is only another call away. My AI PA answers while you keep working, so the opportunity does not disappear without a conversation." />
+          <SectionHeading title="First question: Why not just stick to voice mail?" body="The caller needs help now—not after you finish the job. When a ready-to-hire customer reaches voice mail, the next contractor is only another call away. My AI PA answers while you keep working, so the opportunity does not disappear without a conversation." />
           <div className="simple-compare">
             <article className="without"><span>Without help</span><h3>Phone rings unanswered</h3><p>Three rings. No answer. The caller has no reason to wait.</p><div className="simple-outcome">The next contractor gets a chance</div></article>
             <div className="simple-compare-arrow"><Icon name="arrow" /></div>
