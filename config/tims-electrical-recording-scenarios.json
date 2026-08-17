@@ -81,7 +81,8 @@
     "label": "Repair request",
     "callerName": "Maya Chen",
     "callerVoiceId": "Emma",
-    "callerPerformance": "Warm and conversational, with mild concern at the beginning. Sound relieved after the safety check, then answer clearly and appreciatively without sounding theatrical.",
+    "callerPerformance": "Warm and conversational, with a practical I-need-this-fixed tone. Give Maya an easy natural rhythm, a hint of humour on the appliance line, and a genuinely appreciative finish without sounding theatrical.",
+    "receptionistPerformance": "Sound attentive and pleasantly efficient. Use a reassuring smile in the voice, respond promptly, and keep each question light and conversational.",
     "opening": "My kitchen outlet stopped working yesterday and I need help with a repair.",
     "exactDialogue": [
       {
@@ -90,15 +91,15 @@
       },
       {
         "role": "caller",
-        "text": "A repair, please. My kitchen outlet stopped working yesterday, and I'm a little worried."
+        "text": "A repair, please. My kitchen outlet stopped working yesterday, right in the middle of making coffee."
       },
       {
         "role": "receptionist",
-        "text": "I can collect that for the team. Have you noticed any smoke, sparks, heat, a burning smell, or immediate danger?"
+        "text": "I can collect that for the team. Is the outlet simply not working, or is it behaving differently?"
       },
       {
         "role": "caller",
-        "text": "No, nothing like that. The outlet just has no power."
+        "text": "It simply has no power. I even tried another appliance, just to be sure."
       },
       {
         "role": "receptionist",
@@ -126,7 +127,7 @@
       },
       {
         "role": "receptionist",
-        "text": "To confirm, that's Maya Chen at 18 Lake Avenue in Grimsby, calling about a kitchen outlet with no power. You reported no danger indicators, your number is nine oh five, five five five, zero one six eight, and mornings are best. I'll prepare that repair summary for the team."
+        "text": "To confirm, that's Maya Chen at 18 Lake Avenue in Grimsby, calling about a kitchen outlet with no power. Your number is nine oh five, five five five, zero one six eight, and mornings are best. I'll prepare that repair summary for the team."
       },
       {
         "role": "caller",
@@ -146,7 +147,8 @@
     "label": "Maintenance",
     "callerName": "Daniel Ortiz",
     "callerVoiceId": "Kai",
-    "callerPerformance": "Friendly, relaxed, and easygoing, like a practical new homeowner planning ahead. Give the last line a light, satisfied smile in the voice.",
+    "callerPerformance": "Friendly, relaxed, and easygoing, like a practical new homeowner who enjoys planning ahead. Give the planning line a lightly proud tone and the last line a warm, satisfied smile.",
+    "receptionistPerformance": "Sound upbeat and curious, matching the caller's relaxed pace. Keep it crisp, but let the helpfulness feel personal rather than scripted.",
     "opening": "I'm calling about a preventive electrical inspection for an older home.",
     "exactDialogue": [
       {
@@ -159,11 +161,11 @@
       },
       {
         "role": "receptionist",
-        "text": "That makes sense. Is anything broken, or is there any urgent or dangerous condition right now?"
+        "text": "That makes sense. Is anything not working, or is this purely preventive?"
       },
       {
         "role": "caller",
-        "text": "Nothing is broken. I'm just planning ahead."
+        "text": "Nothing is broken. I'm just planning ahead for once."
       },
       {
         "role": "receptionist",
@@ -210,7 +212,8 @@
     "label": "Talk to the team",
     "callerName": "Aisha Patel",
     "callerVoiceId": "Naina",
-    "callerPerformance": "Calm and collected but politely frustrated. Emphasize that you want a human callback without sounding angry. End with measured appreciation.",
+    "callerPerformance": "Calm and collected but politely frustrated. Let the first line carry a little tired patience, then soften once the receptionist proves it is listening. End with measured appreciation.",
+    "receptionistPerformance": "Sound grounded, unhurried, and respectful. Acknowledge the frustration without becoming defensive, then make the callback handoff feel clear and dependable.",
     "opening": "I'm an existing customer and want to discuss an unresolved concern with the team.",
     "exactDialogue": [
       {
@@ -223,11 +226,11 @@
       },
       {
         "role": "receptionist",
-        "text": "I can document that and request a team callback. Is there smoke, sparking, a burning smell, heat, or immediate danger now?"
+        "text": "I can document that and request a team callback. What update were you expecting from the team?"
       },
       {
         "role": "caller",
-        "text": "No. I just want to know the next step from a person on the team."
+        "text": "I just want to know the next step from a person on the team."
       },
       {
         "role": "receptionist",

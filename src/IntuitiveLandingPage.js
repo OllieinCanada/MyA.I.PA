@@ -109,7 +109,8 @@ function HeroActionFlow() {
   );
 }
 
-const heroAudioSource = `${process.env.PUBLIC_URL || ""}${heroTranscriptTimings.src}?v=20260814-receptionist-first`;
+const heroAudioSource = `${process.env.PUBLIC_URL || ""}/tims-electrical-2.wav?v=20260817-original-tims`;
+const heroAudioDurationSeconds = 133;
 
 function AnimatedHeroProof({ onSampleCall, onStartTrial }) {
   const audioRef = useRef(null);
@@ -121,7 +122,7 @@ function AnimatedHeroProof({ onSampleCall, onStartTrial }) {
   useEffect(() => {
     const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
     if (reduceMotion) return undefined;
-    const timer = window.setTimeout(() => setActiveSlide((current) => (current + 1) % 3), 7000);
+    const timer = window.setTimeout(() => setActiveSlide((current) => (current + 1) % 3), 14000);
     return () => window.clearTimeout(timer);
   }, [activeSlide, manualChange]);
 
@@ -178,20 +179,20 @@ function AnimatedHeroProof({ onSampleCall, onStartTrial }) {
       ),
     },
     {
-      label: "What you get",
-      title: "Coverage for about a cup of coffee a day",
+      label: "The better next step",
+      title: "First question: Why not just stick to voice mail?",
+      className: "simple-voicemail-slide",
       content: (
-        <div className="simple-carousel-benefits">
-          <figure className="simple-coffee-cup">
-            <span className="simple-coffee-steam" aria-hidden="true"><i /><i /><i /></span>
-            <img src="/illustrations/tim-hortons-canadian-cup.png" alt="A hand-drawn Tim Hortons cup with Canadian nature-inspired artwork" />
-          </figure>
-          <ul>
-            <li><Icon name="phone" />Professional answers after three rings</li>
-            <li><Icon name="chat" />Natural conversation and FAQ answers</li>
-            <li><Icon name="clipboard" />Job and callback details collected</li>
-            <li><Icon name="message" />Owner and customer follow-up texts</li>
-          </ul>
+        <div className="simple-voicemail-evolution">
+          <article className="simple-evolution-card old-way">
+            <span className="simple-evolution-icon" aria-hidden="true"><Icon name="phone" /></span>
+            <div><small>Voicemail</small><strong>The caller leaves a vague message—or hangs up.</strong><p>You still have to chase the missing details.</p></div>
+          </article>
+          <div className="simple-evolution-bridge" aria-hidden="true"><span>Next evolution</span><Icon name="arrow" /></div>
+          <article className="simple-evolution-card new-way">
+            <span className="simple-evolution-icon" aria-hidden="true"><Icon name="message" /></span>
+            <div><small>My AI PA</small><strong>A live conversation becomes a callback-ready summary.</strong><p>Name, job, address, timing, and follow-up are captured.</p></div>
+          </article>
         </div>
       ),
     },
@@ -202,12 +203,14 @@ function AnimatedHeroProof({ onSampleCall, onStartTrial }) {
       <div className="simple-carousel-header">
         <div><span className="simple-live-dot" /><strong>See the missed call become a lead</strong></div>
         <button type="button" className={audioPlaying ? "playing" : ""} onClick={toggleAudio} aria-pressed={audioPlaying}>
-          <span aria-hidden="true">{audioPlaying ? "Ⅱ" : "▶"}</span>{audioPlaying ? "Pause Call" : "Hear Live Call"}
+          <span className="simple-audio-trigger-icon" aria-hidden="true">{audioPlaying ? "Ⅱ" : "▶"}</span>
+          <span className="simple-audio-trigger-label">{audioPlaying ? "Pause Call" : "Hear Live Call"}</span>
+          <span className="simple-audio-trigger-waves" aria-hidden="true"><i /><i /><i /><i /></span>
         </button>
       </div>
-      <div className={`simple-carousel-stage${activeSlide === 1 ? " showing-phones" : ""}${activeSlide === 2 ? " showing-coffee" : ""}`}>
+      <div className={`simple-carousel-stage${activeSlide === 1 ? " showing-phones" : ""}${activeSlide === 2 ? " showing-voicemail" : ""}`}>
         {slides.map((slide, index) => (
-          <section key={slide.label} className={index === activeSlide ? "active" : ""} aria-hidden={index !== activeSlide}>
+          <section key={slide.label} className={`${index === activeSlide ? "active" : ""}${slide.className ? ` ${slide.className}` : ""}`} aria-hidden={index !== activeSlide}>
             <p>{slide.label} · {index + 1} of 3</p>
             <h2>{slide.title}</h2>
             {slide.content}
@@ -236,7 +239,7 @@ function AnimatedHeroProof({ onSampleCall, onStartTrial }) {
         onPlay={() => setAudioPlaying(true)}
         onEnded={() => { setAudioPlaying(false); setAudioProgress(0); }}
         onTimeUpdate={(event) => {
-          const duration = Number(event.currentTarget.duration || heroTranscriptTimings.durationSeconds);
+          const duration = Number(event.currentTarget.duration || heroAudioDurationSeconds || heroTranscriptTimings.durationSeconds);
           const current = Number(event.currentTarget.currentTime || 0);
           setAudioProgress(duration > 0 ? Math.min(100, (current / duration) * 100) : 0);
         }}
@@ -302,9 +305,9 @@ export default function IntuitiveLandingPage() {
               <span>Attention</span>
               <strong>Contractors!</strong>
             </div>
-            <p className="simple-intro"><span>Introducing</span><strong>My AI PA:</strong> AI Telephone Answering Assistant</p>
             <h1>Never miss a call again!</h1>
-            <p className="simple-loss">Missed Calls = Lost Jobs $$</p>
+            <p className="simple-intro"><span>Introducing</span><strong>My AI PA:</strong><em>AI Telephone Answering Assistant</em></p>
+            <p className="simple-loss">Missed Calls = Lost Revenue $$<span className="simple-loss-arrow" aria-hidden="true">↘</span></p>
             <HeroActionFlow />
             <p className="simple-number-promise">Keep your existing business number.</p>
             <div className="simple-hero-actions">

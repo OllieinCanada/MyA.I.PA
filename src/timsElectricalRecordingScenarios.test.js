@@ -6,11 +6,9 @@ const rerecordedIds = [
   "repair-request",
   "maintenance",
   "unresolved-concern",
-  "urgent-outage",
-  "safety-redirect",
 ];
 
-const activeVapiV2Voices = new Set(["Emma", "Kai", "Naina", "Godfrey", "Savannah"]);
+const activeVapiV2Voices = new Set(["Emma", "Kai", "Naina"]);
 
 describe("Tim's Electrical recorded scenario scripts", () => {
   const scenarios = rerecordedIds.map((id) => recordingScenarios.find((scenario) => scenario.id === id));
@@ -45,6 +43,11 @@ describe("Tim's Electrical recorded scenario scripts", () => {
     expect(script).toMatch(/leave.*immediately/i);
     expect(script).toMatch(/call 911/i);
     expect(script).not.toMatch(/name|address|callback number/i);
+  });
+
+  test("keeps serious safety examples out of the personality-recording playlist", () => {
+    expect(audioManifest["urgent-outage"].status).toBe("visual-only");
+    expect(audioManifest["safety-redirect"].status).toBe("visual-only");
   });
 
   test.each(rerecordedIds)("%s ships a complete prepared recording and synchronized captions", (id) => {

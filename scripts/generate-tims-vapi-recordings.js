@@ -305,10 +305,13 @@ function writeRunArtifact(scenario, call) {
   fs.mkdirSync(runDir, { recursive: true });
   const rawMessages = Array.isArray(call?.artifact?.messages) ? call.artifact.messages : call.messages;
   const messages = Array.isArray(rawMessages)
-    ? rawMessages.filter((message) => ["assistant", "user"].includes(message?.role)).map((message) => ({
+    ? rawMessages.filter((message) => ["assistant", "bot", "user"].includes(message?.role)).map((message) => ({
       role: message.role,
       message: message.message || message.content || "",
       secondsFromStart: message.secondsFromStart ?? null,
+      speechDurationSeconds: Number.isFinite(Number(message.endTime) - Number(message.time))
+        ? Number(((Number(message.endTime) - Number(message.time)) / 1000).toFixed(3))
+        : null,
     }))
     : [];
   fs.writeFileSync(path.join(runDir, `${scenario.id}.json`), `${JSON.stringify({

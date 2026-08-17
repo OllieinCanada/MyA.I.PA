@@ -1,10 +1,14 @@
 const fs = require("fs");
 const path = require("path");
-const { rootPath } = require("./_helpers");
+const { loadProjectEnv, rootPath } = require("./_helpers");
 
 const defaultIds = ["repair-request", "maintenance", "unresolved-concern", "urgent-outage", "safety-redirect"];
 const only = process.argv.find((arg) => arg.startsWith("--only="))?.split("=").slice(1).join("=") || "";
 const selectedIds = only ? only.split(",").map((value) => value.trim()).filter(Boolean) : defaultIds;
+const useVapiTimings = process.argv.includes("--use-vapi-timings");
+const env = useVapiTimings ? loadProjectEnv() : {};
+const apiKey = String(env.VAPI_API_KEY || "").trim();
+const apiBase = String(env.VAPI_API_BASE_URL || "https://api.vapi.ai").replace(/\/+$/, "");
 const scenarios = JSON.parse(fs.readFileSync(rootPath("config", "tims-electrical-recording-scenarios.json"), "utf8"));
 const manifestPath = rootPath("src", "timsElectricalAudioManifest.json");
 const captionsPath = rootPath("src", "timsElectricalRecordedScenarioCaptions.json");
@@ -16,6 +20,40 @@ const bridgeSilenceSeconds = 0.72;
 const leadSeconds = 0.14;
 const betweenTurnSeconds = 0.48;
 const tailSeconds = 0.28;
+
+async function fetchPreparedTurns(id, expectedTurns) {
+  if (!useVapiTimings) return null;
+  if (!apiKey) throw new Error("VAPI_API_KEY is required with --use-vapi-timings.");
+  const artifactPath = rootPath("artifacts", "tims-electrical-vapi-recordings", `${id}.json`);
+  if (!fs.existsSync(artifactPath)) throw new Error(`${id}: the local recording artifact is missing.`);
+  const artifact = JSON.parse(fs.readFileSync(artifactPath, "utf8"));
+  if (!artifact.callId) throw new Error(`${id}: the recording artifact has no call ID.`);
+  const response = await fetch(`${apiBase}/call/${encodeURIComponent(artifact.callId)}`, {
+    headers: { Authorization: `Bearer ${apiKey}` },
+    signal: AbortSignal.timeout(45000),
+  });
+  if (!response.ok) throw new Error(`${id}: Vapi call timing lookup failed (${response.status}).`);
+  const call = await response.json();
+  const messages = (call?.artifact?.messages || call?.messages || [])
+    .filter((message) => ["user", "bot", "assistant"].includes(message?.role))
+    .slice(0, expectedTurns.length);
+  if (messages.length !== expectedTurns.length) {
+    throw new Error(`${id}: expected ${expectedTurns.length} timed turns but received ${messages.length}.`);
+  }
+  return messages.map((message, index) => {
+    const expectedRole = expectedTurns[index].role === "receptionist" ? "user" : "bot";
+    const normalizedRole = message.role === "assistant" ? "bot" : message.role;
+    if (normalizedRole !== expectedRole) {
+      throw new Error(`${id}: timed turn ${index + 1} did not alternate as expected.`);
+    }
+    const start = Number(message.secondsFromStart);
+    const spokenSeconds = (Number(message.endTime) - Number(message.time)) / 1000;
+    if (!Number.isFinite(start) || !Number.isFinite(spokenSeconds) || spokenSeconds <= 0) {
+      throw new Error(`${id}: timed turn ${index + 1} is missing a usable speech boundary.`);
+    }
+    return { start, end: start + spokenSeconds };
+  });
+}
 
 function readWave(filePath) {
   const buffer = fs.readFileSync(filePath);
@@ -119,51 +157,65 @@ function writeWave(filePath, format, pcm) {
   fs.writeFileSync(filePath, Buffer.concat([header, pcm]));
 }
 
-fs.mkdirSync(rawDir, { recursive: true });
-const results = [];
-for (const id of selectedIds) {
-  const scenario = scenarios.find((item) => item.id === id);
-  if (!scenario?.exactDialogue?.length) throw new Error(`${id} does not define an exact dialogue.`);
-  const filePath = rootPath("public", "audio", "tims-electrical", `${id}.wav`);
-  const rawPath = path.join(rawDir, `${id}.wav`);
-  fs.copyFileSync(filePath, rawPath);
-  const { format, data } = readWave(rawPath);
-  const detected = detectSpeechRegions(data, format.sampleRate);
-  if (detected.length < scenario.exactDialogue.length) {
-    throw new Error(`${id}: expected ${scenario.exactDialogue.length} spoken turns but detected ${detected.length}.`);
-  }
-  const selected = detected.slice(0, scenario.exactDialogue.length);
-  const chunks = [silenceBuffer(leadSeconds, format)];
-  let cursorSeconds = leadSeconds;
-  const captions = [];
-  selected.forEach((region, index) => {
-    const pcm = data.subarray(region.startSample * format.blockAlign, region.endSample * format.blockAlign);
-    const durationSeconds = pcm.length / format.byteRate;
-    const turn = scenario.exactDialogue[index];
-    captions.push({
-      speaker: turn.role === "receptionist" ? "assistant" : "caller",
-      startSeconds: Number(cursorSeconds.toFixed(2)),
-      text: turn.text,
-    });
-    chunks.push(pcm);
-    cursorSeconds += durationSeconds;
-    if (index < selected.length - 1) {
-      chunks.push(silenceBuffer(betweenTurnSeconds, format));
-      cursorSeconds += betweenTurnSeconds;
+async function main() {
+  fs.mkdirSync(rawDir, { recursive: true });
+  const results = [];
+  for (const id of selectedIds) {
+    const scenario = scenarios.find((item) => item.id === id);
+    if (!scenario?.exactDialogue?.length) throw new Error(`${id} does not define an exact dialogue.`);
+    const filePath = rootPath("public", "audio", "tims-electrical", `${id}.wav`);
+    const rawPath = path.join(rawDir, `${id}.wav`);
+    if (!fs.existsSync(rawPath)) fs.copyFileSync(filePath, rawPath);
+    const { format, data } = readWave(rawPath);
+    const timedTurns = await fetchPreparedTurns(id, scenario.exactDialogue);
+    const detected = timedTurns ? [] : detectSpeechRegions(data, format.sampleRate);
+    if (!timedTurns && detected.length < scenario.exactDialogue.length) {
+      throw new Error(`${id}: expected ${scenario.exactDialogue.length} spoken turns but detected ${detected.length}.`);
     }
-  });
-  chunks.push(silenceBuffer(tailSeconds, format));
-  cursorSeconds += tailSeconds;
-  writeWave(filePath, format, Buffer.concat(chunks));
-  existingCaptions[id] = captions;
-  manifest[id] = {
-    ...manifest[id],
-    durationSeconds: Number(cursorSeconds.toFixed(2)),
-    preparedAt: new Date().toISOString(),
-  };
-  results.push({ id, detectedTurns: detected.length, keptTurns: selected.length, durationSeconds: Number(cursorSeconds.toFixed(2)) });
+    const selected = timedTurns || detected.slice(0, scenario.exactDialogue.length).map((region) => ({
+      start: region.startSample / format.sampleRate,
+      end: region.endSample / format.sampleRate,
+    }));
+    const chunks = [silenceBuffer(leadSeconds, format)];
+    let cursorSeconds = leadSeconds;
+    const captions = [];
+    selected.forEach((region, index) => {
+      const startSample = Math.max(0, Math.floor((region.start - .03) * format.sampleRate));
+      const endSample = Math.min(Math.floor(data.length / format.blockAlign), Math.ceil((region.end + .08) * format.sampleRate));
+      const pcm = data.subarray(startSample * format.blockAlign, endSample * format.blockAlign);
+      const durationSeconds = pcm.length / format.byteRate;
+      const turn = scenario.exactDialogue[index];
+      captions.push({
+        speaker: turn.role === "receptionist" ? "assistant" : "caller",
+        startSeconds: Number(cursorSeconds.toFixed(2)),
+        text: turn.text,
+      });
+      chunks.push(pcm);
+      cursorSeconds += durationSeconds;
+      if (index < selected.length - 1) {
+        chunks.push(silenceBuffer(betweenTurnSeconds, format));
+        cursorSeconds += betweenTurnSeconds;
+      }
+    });
+    chunks.push(silenceBuffer(tailSeconds, format));
+    cursorSeconds += tailSeconds;
+    writeWave(filePath, format, Buffer.concat(chunks));
+    existingCaptions[id] = captions;
+    manifest[id] = {
+      ...manifest[id],
+      durationSeconds: Number(cursorSeconds.toFixed(2)),
+      preparedAt: new Date().toISOString(),
+      timingSource: timedTurns ? "vapi-message-boundaries" : "speech-region-detection",
+    };
+    results.push({ id, timingSource: manifest[id].timingSource, keptTurns: selected.length, durationSeconds: Number(cursorSeconds.toFixed(2)) });
+  }
+
+  fs.writeFileSync(captionsPath, `${JSON.stringify(existingCaptions, null, 2)}\n`);
+  fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+  console.log(JSON.stringify(results, null, 2));
 }
 
-fs.writeFileSync(captionsPath, `${JSON.stringify(existingCaptions, null, 2)}\n`);
-fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
-console.log(JSON.stringify(results, null, 2));
+main().catch((error) => {
+  console.error(error.stack || error.message);
+  process.exitCode = 1;
+});

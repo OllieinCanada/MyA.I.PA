@@ -24,6 +24,7 @@ async function main() {
   const scrollY = rawScrollY ? Number(rawScrollY) : NaN;
   const targetText = getArg("text", "");
   const targetSelector = getArg("selector", "");
+  const clickText = getArg("click", "");
   const crop = getArg("crop", targetSelector ? "element" : "viewport");
   const align = getArg("align", "start");
   const offset = Number(getArg("offset", "24"));
@@ -38,13 +39,13 @@ async function main() {
 
   let browser;
   try {
-    browser = await chromium.launch({ headless: true });
+    browser = await chromium.launch({ headless: true, args: ["--disable-gpu", "--disable-dev-shm-usage"] });
   } catch (error) {
     try {
-      browser = await chromium.launch({ headless: true, channel: "chrome" });
+      browser = await chromium.launch({ headless: true, channel: "chrome", args: ["--disable-gpu", "--disable-dev-shm-usage"] });
     } catch (_chromeError) {
       try {
-        browser = await chromium.launch({ headless: true, channel: "msedge" });
+        browser = await chromium.launch({ headless: true, channel: "msedge", args: ["--disable-gpu", "--disable-dev-shm-usage"] });
       } catch (_edgeError) {
         throw error;
       }
@@ -52,13 +53,21 @@ async function main() {
   }
 
   try {
-    const page = await browser.newPage({ viewport });
+    const context = await browser.newContext({ viewport, serviceWorkers: "block" });
+    await context.route(/\.(?:wav|mp3)(?:\?|$)/i, (route) =>
+      route.fulfill({ status: 204, contentType: "audio/wav", body: "" })
+    );
+    const page = await context.newPage();
     page.on("console", (message) => {
       if (message.type() === "error") console.log(`browser console error: ${message.text()}`);
     });
     console.log(`Opening ${url}`);
     await page.goto(url, { waitUntil: "domcontentloaded", timeout: 20000 });
     await page.waitForTimeout(waitMs);
+    if (clickText) {
+      await page.getByRole("button", { name: clickText, exact: true }).click();
+      await page.waitForTimeout(Math.min(1800, Math.max(700, waitMs)));
+    }
     if (targetSelector || targetText) {
       const target = await page.evaluate(
         ({ targetSelector, targetText, align, offset }) => {
@@ -114,12 +123,13 @@ async function main() {
       await page.waitForTimeout(waitMs);
     }
     if (crop === "element" && targetSelector) {
-      await page.locator(targetSelector).first().screenshot({ path: screenshotPath });
+      await page.locator(targetSelector).first().screenshot({ path: screenshotPath, animations: "disabled", timeout: 30000 });
     } else {
-      await page.screenshot({ path: screenshotPath, fullPage: false });
+      await page.screenshot({ path: screenshotPath, fullPage: false, animations: "disabled", timeout: 30000 });
     }
     fs.copyFileSync(screenshotPath, phoneSharePath);
     console.log(`Screenshot saved: ${screenshotPath}`);
+    await context.close();
   } finally {
     await browser?.close();
   }
