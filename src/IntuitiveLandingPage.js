@@ -86,7 +86,7 @@ function SectionHeading({ number, eyebrow, title, body }) {
 function HeroActionFlow() {
   const steps = [
     { icon: "phone", label: "Answers", detail: "After 3 rings" },
-    { icon: "clipboard", label: "Captures", detail: "Job and callback details" },
+    { icon: "chat", label: "Talks naturally", detail: "To get job details" },
     { icon: "message", label: "Follows up", detail: "Texts you and the caller" },
   ];
 
@@ -179,20 +179,20 @@ function AnimatedHeroProof({ onSampleCall, onStartTrial }) {
       ),
     },
     {
-      label: "The better next step",
-      title: "First question: Why not just stick to voice mail?",
-      className: "simple-voicemail-slide",
+      label: "What you get",
+      title: "Coverage for about a cup of coffee a day",
       content: (
-        <div className="simple-voicemail-evolution">
-          <article className="simple-evolution-card old-way">
-            <span className="simple-evolution-icon" aria-hidden="true"><Icon name="phone" /></span>
-            <div><small>Voicemail</small><strong>The caller leaves a vague message—or hangs up.</strong><p>You still have to chase the missing details.</p></div>
-          </article>
-          <div className="simple-evolution-bridge" aria-hidden="true"><span>Next evolution</span><Icon name="arrow" /></div>
-          <article className="simple-evolution-card new-way">
-            <span className="simple-evolution-icon" aria-hidden="true"><Icon name="message" /></span>
-            <div><small>My AI PA</small><strong>A live conversation becomes a callback-ready summary.</strong><p>Name, job, address, timing, and follow-up are captured.</p></div>
-          </article>
+        <div className="simple-carousel-benefits">
+          <figure className="simple-coffee-cup">
+            <span className="simple-coffee-steam" aria-hidden="true"><i /><i /><i /></span>
+            <img src="/illustrations/tim-hortons-canadian-cup.png" alt="A hand-drawn Tim Hortons cup with Canadian nature-inspired artwork" />
+          </figure>
+          <ul>
+            <li><Icon name="phone" />Professional answers after three rings</li>
+            <li><Icon name="chat" />Natural conversation and FAQ answers</li>
+            <li><Icon name="clipboard" />Job and callback details collected</li>
+            <li><Icon name="message" />Owner and customer follow-up texts</li>
+          </ul>
         </div>
       ),
     },
@@ -208,7 +208,7 @@ function AnimatedHeroProof({ onSampleCall, onStartTrial }) {
           <span className="simple-audio-trigger-waves" aria-hidden="true"><i /><i /><i /><i /></span>
         </button>
       </div>
-      <div className={`simple-carousel-stage${activeSlide === 1 ? " showing-phones" : ""}${activeSlide === 2 ? " showing-voicemail" : ""}`}>
+      <div className={`simple-carousel-stage${activeSlide === 1 ? " showing-phones" : ""}${activeSlide === 2 ? " showing-coffee" : ""}`}>
         {slides.map((slide, index) => (
           <section key={slide.label} className={`${index === activeSlide ? "active" : ""}${slide.className ? ` ${slide.className}` : ""}`} aria-hidden={index !== activeSlide}>
             <p>{slide.label} · {index + 1} of 3</p>
@@ -307,7 +307,13 @@ export default function IntuitiveLandingPage() {
             </div>
             <h1>Never miss a call again!</h1>
             <p className="simple-intro"><span>Introducing</span><strong>My AI PA:</strong><em>AI Telephone Answering Assistant</em></p>
-            <p className="simple-loss">Missed Calls = Lost Revenue $$<span className="simple-loss-arrow" aria-hidden="true">↘</span></p>
+            <p className="simple-loss">
+              <span>Missed Calls = Lost Revenue $$</span>
+              <svg className="simple-loss-arrow" viewBox="0 0 62 34" aria-hidden="true">
+                <path d="M4 5 19 13 32 8 56 29" />
+                <path d="M44 29h12V17" />
+              </svg>
+            </p>
             <HeroActionFlow />
             <p className="simple-number-promise">Keep your existing business number.</p>
             <div className="simple-hero-actions">
@@ -331,7 +337,7 @@ export default function IntuitiveLandingPage() {
 
       <section className="simple-section simple-problem" id="why-it-matters">
         <div className="simple-shell">
-          <SectionHeading number="01" eyebrow="Why it matters" title="The caller needs help now—not after you finish the job." body="When a ready-to-hire customer reaches voicemail, the next contractor is only another call away. My AI PA answers while you keep working, so the opportunity does not disappear without a conversation." />
+          <SectionHeading number="01" eyebrow="Why it matters" title="First question: Why not just stick to voice mail?" body="The caller needs help now—not after you finish the job. When a ready-to-hire customer reaches voice mail, the next contractor is only another call away. My AI PA answers while you keep working, so the opportunity does not disappear without a conversation." />
           <div className="simple-compare">
             <article className="without"><span>Without help</span><h3>Phone rings unanswered</h3><p>Three rings. No answer. The caller has no reason to wait.</p><div className="simple-outcome">The next contractor gets a chance</div></article>
             <div className="simple-compare-arrow"><Icon name="arrow" /></div>

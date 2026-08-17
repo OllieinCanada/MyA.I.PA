@@ -52,8 +52,9 @@
 .simple-intro span { grid-column: 1 / -1; color: var(--simple-blue); font-size: .82rem; letter-spacing: .2em; line-height: 1; text-transform: uppercase; }
 .simple-intro strong { color: var(--simple-blue); font-size: clamp(1.7rem,2.2vw,2.25rem); letter-spacing: -.035em; line-height: 1; }
 .simple-intro em { align-self: end; padding-bottom: 1px; color: #173d65; font-size: clamp(1rem,1.4vw,1.3rem); font-style: normal; line-height: 1.05; }
-.simple-loss { position: relative; width: fit-content; margin: 17px 0 0; color: var(--simple-green); font-size: clamp(1.35rem, 2vw, 2rem); font-weight: 950; letter-spacing: -.04em; animation: simple-reading-reveal .68s .78s cubic-bezier(.16,.75,.25,1) both; }
-.simple-loss-arrow { position: absolute; left: calc(100% + 10px); top: 55%; color: #18a7df; font-size: clamp(2rem,3vw,3.1rem); line-height: 1; filter: drop-shadow(0 5px 8px rgba(13,107,161,.2)); transform: translateY(-10%) rotate(4deg); animation: simple-loss-arrow-pulse 1.8s 1.1s ease-in-out infinite; }
+.simple-loss { width: fit-content; display: inline-flex; align-items: center; gap: 10px; margin: 17px 0 0; color: var(--simple-green); font-size: clamp(1.35rem, 2vw, 2rem); font-weight: 950; letter-spacing: -.04em; animation: simple-reading-reveal .68s .78s cubic-bezier(.16,.75,.25,1) both; }
+.simple-loss > span { white-space: nowrap; }
+.simple-loss-arrow { width: clamp(48px,4.2vw,66px); height: auto; flex: 0 0 auto; overflow: visible; fill: none; stroke: #e22d2d; stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 5px 8px rgba(189,22,22,.22)); animation: simple-loss-arrow-pulse 1.8s 1.1s ease-in-out infinite; }
 .simple-hero-flow { max-width: 630px; margin-top: 14px; animation: simple-reading-reveal .68s .94s cubic-bezier(.16,.75,.25,1) both; }
 .simple-hero-flow > p { margin: 0 0 10px; color: #284866; font-size: 1.08rem; font-weight: 800; line-height: 1.35; }
 .simple-hero-flow > p strong { color: var(--simple-blue); font-weight: 950; }
@@ -69,7 +70,7 @@
 .simple-hero-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 19px; }
 .simple-trust { display: flex; flex-wrap: wrap; gap: 10px 18px; margin-top: 15px; color: #146a36; font-size: .96rem; font-weight: 950; }
 @keyframes simple-reading-reveal { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: translateY(0); } }
-@keyframes simple-loss-arrow-pulse { 0%,100% { transform: translate(0,-10%) rotate(4deg); } 50% { transform: translate(8px,6px) rotate(4deg); } }
+@keyframes simple-loss-arrow-pulse { 0%,100% { transform: translate(0,-2px); } 50% { transform: translate(5px,4px); } }
 
 .simple-hero-proof { border: 1px solid rgba(71,131,183,.4); border-radius: 30px; background: linear-gradient(155deg, #071627, #0c2340); padding: 30px; color: #fff; box-shadow: 0 34px 70px -45px rgba(4,30,61,.85); }
 .simple-proof-topline { display: flex; align-items: center; gap: 9px; color: #8fd8ff; font-size: .72rem; font-weight: 900; letter-spacing: .16em; text-transform: uppercase; }
@@ -351,8 +352,8 @@
   .simple-intro span { font-size: .72rem; }
   .simple-intro strong { font-size: 1.48rem; }
   .simple-intro em { font-size: .85rem; text-align: left; }
-  .simple-loss { margin-top: 13px; font-size: 1.34rem; }
-  .simple-loss-arrow { left: calc(100% + 3px); font-size: 2rem; }
+  .simple-loss { gap: 6px; margin-top: 13px; font-size: clamp(1.08rem,5.25vw,1.34rem); }
+  .simple-loss-arrow { width: 42px; stroke-width: 5.5; }
   .simple-hero-flow { margin-top: 12px; text-align: center; }
   .simple-hero-flow > p { margin-bottom: 9px; font-size: .96rem; }
   .simple-hero-flow ol { grid-template-columns: minmax(0,1fr) 20px minmax(0,1fr) 20px minmax(0,1fr); gap: 3px; padding: 10px 7px; border-radius: 15px; }
@@ -375,7 +376,7 @@
   .simple-audio-trigger-waves { display: none; }
   .simple-carousel-stage { min-height: 390px; border-radius: 18px; }
   .simple-carousel-stage.showing-phones { min-height: 500px; }
-  .simple-carousel-stage.showing-voicemail { min-height: 555px; }
+  .simple-carousel-stage.showing-coffee { min-height: 555px; }
   .simple-carousel-stage > section { padding: 18px 14px; }
   .simple-carousel-stage > section:nth-child(2) { padding-inline: 8px; }
   .simple-carousel-stage > section > h2 { margin-bottom: 14px; font-size: 1.55rem; }

@@ -43,7 +43,7 @@ describe("intuitive homepage journey", () => {
     expect(text).toMatch(/Three simple steps/i);
     expect(text).toMatch(/The caller needs help now—not after you finish the job/i);
     expect(text).toMatch(/AnswersAfter 3 rings/i);
-    expect(text).toMatch(/CapturesJob and callback details/i);
+    expect(text).toMatch(/Talks naturallyTo get job details/i);
     expect(text).toMatch(/Follows upTexts you and the caller/i);
     expect(container.querySelectorAll(".simple-hero-flow-icon")).toHaveLength(3);
     expect(container.querySelector(".simple-control-strip")).toBeNull();
@@ -76,9 +76,9 @@ describe("intuitive homepage journey", () => {
     expect(carousel.getAttribute("aria-label")).toMatch(/Slide 1 of 3/i);
     expect(container.textContent).toMatch(/A real conversation—not voicemail/i);
     expect(container.textContent).toMatch(/Both sides get a clear text/i);
-    expect(container.textContent).toMatch(/First question: Why not just stick to voice mail\?/i);
-    expect(container.textContent).toMatch(/The caller leaves a vague message—or hangs up/i);
-    expect(container.textContent).toMatch(/A live conversation becomes a callback-ready summary/i);
+    expect(container.textContent).toMatch(/Coverage for about a cup of coffee a day/i);
+    expect(container.textContent).toMatch(/Natural conversation and FAQ answers/i);
+    expect(container.querySelector("#why-it-matters").textContent).toMatch(/First question: Why not just stick to voice mail\?/i);
     expect(container.querySelectorAll(".simple-message-phone")).toHaveLength(2);
     expect(container.querySelector('audio[src*="tims-electrical-2.wav"]')).not.toBeNull();
     expect(window.HTMLMediaElement.prototype.play).not.toHaveBeenCalled();
