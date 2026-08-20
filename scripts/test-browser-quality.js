@@ -145,7 +145,25 @@ async function auditPage({ browser, baseUrl, engineName, route, viewport }) {
   try {
     await page.goto(`${baseUrl}${route.hash}`, { waitUntil: "domcontentloaded" });
     console.log(`[browser-quality] loaded ${engineName}/${route.name}/${viewport.name}`);
-    await page.locator("h1").first().waitFor({ state: "visible" });
+    try {
+      await page.locator("h1").first().waitFor({ state: "visible" });
+    } catch (error) {
+      const diagnostics = await page.evaluate(() => {
+        const heading = document.querySelector("h1");
+        const headingStyle = heading ? window.getComputedStyle(heading) : null;
+        return {
+          readyState: document.readyState,
+          rootChildCount: document.getElementById("root")?.childElementCount || 0,
+          rootTextLength: document.getElementById("root")?.textContent?.length || 0,
+          h1Count: document.querySelectorAll("h1").length,
+          headingDisplay: headingStyle?.display || "",
+          headingVisibility: headingStyle?.visibility || "",
+          headingOpacity: headingStyle?.opacity || "",
+          scripts: Array.from(document.scripts).map((script) => script.src || "inline"),
+        };
+      }).catch((diagnosticError) => ({ diagnosticError: diagnosticError.message }));
+      throw new Error(`${error.message}; diagnostics=${JSON.stringify(diagnostics)}; runtimeErrors=${JSON.stringify(runtimeErrors.slice(0, 5))}`);
+    }
     const headingText = await page.evaluate(() => Array.from(document.querySelectorAll("h1"))
       .map((heading) => heading.textContent)
       .join(" ")
