@@ -55,6 +55,11 @@ function redactOperationalSignupIssues(payload) {
     "hasAssistant",
     "hasCheckout",
     "hasSubscription",
+    "retryPayloadAvailable",
+    "providerLookup",
+    "assignedPhoneKnownToTwilio",
+    "assignedPhoneKnownToVapi",
+    "vapiAssistantAssigned",
   ];
   return (Array.isArray(payload?.issues) ? payload.issues : [])
     .filter((issue) => issue?.targetType === "signup")

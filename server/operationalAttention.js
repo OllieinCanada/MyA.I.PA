@@ -1,7 +1,7 @@
 const crypto = require("crypto");
 
 const FAILED_SIGNUP = /(error|failed|rejected|blocked)/i;
-const IN_PROGRESS_SIGNUP = /^(signup_received|checkout_completed|setup_started|trial_reminder_scheduled|pending_email_verification)$/i;
+const IN_PROGRESS_SIGNUP = /^(signup_received|checkout_completed|setup_started|pending_email_verification|subscription_(trialing|active))$/i;
 const PROBLEM_HANDOFF_STATUSES = ["RETRY_DUE", "ESCALATION_DUE", "FAILED"];
 
 function hashTarget(value) {
@@ -80,7 +80,7 @@ function signupAttentionItems(signups = [], now = new Date(), stuckMinutes = 60)
         ageMinutes: age,
         targetType: "signup",
         targetId,
-        actions: ["reopen_signup"],
+        actions: ["recover_signup", "reopen_signup"],
         diagnostics: signupDiagnostics(signup, status),
       }));
     } else if (IN_PROGRESS_SIGNUP.test(status) && age != null && age >= stuckMinutes) {
@@ -93,7 +93,9 @@ function signupAttentionItems(signups = [], now = new Date(), stuckMinutes = 60)
         ageMinutes: age,
         targetType: "signup",
         targetId,
-        actions: status === "pending_email_verification" ? ["resend_signup_verification", "reopen_signup"] : ["reopen_signup"],
+        actions: status === "pending_email_verification"
+          ? ["resend_signup_verification", "reopen_signup"]
+          : ["recover_signup", "reopen_signup"],
         diagnostics: signupDiagnostics(signup, status),
       }));
     }

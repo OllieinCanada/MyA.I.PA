@@ -11,6 +11,7 @@ process.env.TWILIO_AUTH_TOKEN = "test-twilio-auth-token";
 process.env.SMS_SUPPRESSION_API_KEY = "test-suppression-api-key-42";
 process.env.ADMIN_PASSWORD = "test-admin-password-42";
 process.env.ADMIN_SESSION_SECRET = "test-admin-session-secret-42";
+process.env.MONITOR_API_KEY = "test-monitor-api-key-42";
 process.env.TRIAL_REMINDER_DISABLE = "true";
 process.env.VAPI_AUTO_SYNC_ENABLED = "false";
 process.env.VAPI_VOICE_SIGNUP_PHONE = "+12495033301";
@@ -70,6 +71,67 @@ test("health endpoint remains public and carries baseline security headers", asy
   assert.equal(response.headers.get("x-robots-tag"), "noindex, nofollow");
   const payload = await response.json();
   assert.equal(payload.ok, true);
+});
+
+test("signup recovery diagnostics reveal provider state without customer data", () => {
+  const diagnostics = __test.getSignupProviderRecoveryDiagnostics({
+    signup: { twilioPhoneNumber: "+1 (905) 555-0123", ownerEmail: "private@example.com" },
+    pendingSignup: ["secret-token-hash", { payload: { owner: { email: "private@example.com" } } }],
+    vapiNumbers: [{ number: "+19055550123", assistantId: "assistant-private-id" }],
+    twilioNumbers: [{ phone_number: "+19055550123", friendly_name: "Private customer" }],
+    providerLookup: "complete",
+  });
+
+  assert.deepEqual(diagnostics, {
+    retryPayloadAvailable: true,
+    providerLookup: "complete",
+    assignedPhoneKnownToTwilio: true,
+    assignedPhoneKnownToVapi: true,
+    vapiAssistantAssigned: true,
+  });
+  assert.equal(JSON.stringify(diagnostics).includes("private@example.com"), false);
+  assert.equal(JSON.stringify(diagnostics).includes("9055550123"), false);
+  assert.equal(JSON.stringify(diagnostics).includes("assistant-private-id"), false);
+});
+
+test("reading trial reminders preserves provisioning state and timestamps", () => {
+  const dashboard = {
+    "email:owner@example.com": {
+      ownerEmail: "owner@example.com",
+      subscriptionId: "sub_test",
+      status: "setup_error",
+      makeError: "private upstream detail",
+      updatedAt: "2026-08-01T12:00:00.000Z",
+    },
+  };
+  const merged = __test.mergeSignupDashboardWithTrialReminders(dashboard, {
+    sub_test: {
+      subscriptionId: "sub_test",
+      ownerEmail: "owner@example.com",
+      status: "scheduled",
+      dueAt: "2026-08-28T12:00:00.000Z",
+    },
+  });
+
+  assert.equal(merged["email:owner@example.com"].status, "setup_error");
+  assert.equal(merged["email:owner@example.com"].updatedAt, "2026-08-01T12:00:00.000Z");
+  assert.equal(dashboard["email:owner@example.com"].trialReminderStatus, undefined);
+});
+
+test("signup recovery requires the monitor key and explicit confirmation", async () => {
+  const unauthorized = await request("/api/internal/operations/recover-signup", {
+    method: "POST",
+    body: { targetId: "1234567890abcdef12345678", confirmation: "RECOVER_SIGNUP" },
+  });
+  assert.equal(unauthorized.status, 401);
+
+  const unconfirmed = await request("/api/internal/operations/recover-signup", {
+    method: "POST",
+    headers: { "x-monitor-api-key": process.env.MONITOR_API_KEY },
+    body: { targetId: "1234567890abcdef12345678" },
+  });
+  assert.equal(unconfirmed.status, 400);
+  assert.match((await unconfirmed.json()).error, /confirmation/i);
 });
 
 test("public call network stats expose aggregate counts without customer details", async () => {

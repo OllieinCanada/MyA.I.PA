@@ -15,6 +15,11 @@ test("production monitor keeps signup diagnostics actionable without customer da
         diagnostics: {
           status: "setup_error",
           makeError: true,
+          retryPayloadAvailable: true,
+          providerLookup: "complete",
+          assignedPhoneKnownToTwilio: true,
+          assignedPhoneKnownToVapi: true,
+          vapiAssistantAssigned: false,
           ownerEmail: "private@example.com",
           ownerPhone: "+19055550123",
         },
@@ -38,6 +43,11 @@ test("production monitor keeps signup diagnostics actionable without customer da
     diagnostics: {
       status: "setup_error",
       makeError: true,
+      retryPayloadAvailable: true,
+      providerLookup: "complete",
+      assignedPhoneKnownToTwilio: true,
+      assignedPhoneKnownToVapi: true,
+      vapiAssistantAssigned: false,
     },
   }]);
   assert.equal(JSON.stringify(issues).includes("private@example.com"), false);

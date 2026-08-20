@@ -4079,6 +4079,7 @@ function upsertSignupDashboardRecord(record) {
     createdAt: existing.createdAt || record.createdAt || signedUpAt,
     updatedAt: new Date().toISOString(),
   });
+  if (record.makeError === "") delete merged.makeError;
   if (record.smsRoutingStatus === "healthy") delete merged.smsRoutingError;
 
   store[existingKey] = merged;
@@ -4359,36 +4360,212 @@ async function getStripeTrialsDashboard() {
   };
 }
 
-function listSignupDashboardRecords() {
-  const reminderStore = readTrialReminderStore();
+function mergeSignupDashboardWithTrialReminders(dashboardStore = {}, reminderStore = {}) {
+  const combinedStore = { ...dashboardStore };
 
+  // Reading the dashboard must not mutate signup state. Previously this loop
+  // called upsertSignupDashboardRecord(), which rewrote updatedAt on every
+  // health check and replaced the real provisioning state with a reminder
+  // status. Merge reminder metadata in memory and preserve the signup status.
   for (const reminder of Object.values(reminderStore)) {
     if (!reminder?.subscriptionId) continue;
-    upsertSignupDashboardRecord({
+    const aliases = getSignupAliases(reminder);
+    const existingKey = aliases.find((alias) => combinedStore[alias]) || `sub:${String(reminder.subscriptionId).trim()}`;
+    const existing = combinedStore[existingKey] || {};
+    const legacyReminderStatus = String(existing.status || "") === "trial_reminder_scheduled";
+    const restoredStatus = legacyReminderStatus
+      ? existing.makeError
+        ? "setup_error"
+        : existing.vapiAssistantId && existing.twilioPhoneNumber
+          ? "setup_ready"
+          : existing.makeStatus
+            ? "setup_started"
+            : "subscription_trialing"
+      : existing.status || (reminder.status === "cancelled" ? "subscription_cancelled" : "subscription_trialing");
+    combinedStore[existingKey] = compactObject({
+      ...existing,
       subscriptionId: reminder.subscriptionId,
-      customerId: reminder.customerId || "",
-      ownerEmail: reminder.ownerEmail || "",
-      ownerName: reminder.ownerName || "",
-      businessName: reminder.businessName || "",
-      trialStartAt: reminder.trialStartAt || null,
-      trialEndAt: reminder.trialEndAt || null,
-      periodStartAt: reminder.trialStartAt || null,
-      periodEndAt: reminder.trialEndAt || null,
+      customerId: reminder.customerId || existing.customerId || "",
+      ownerEmail: reminder.ownerEmail || existing.ownerEmail || "",
+      ownerName: reminder.ownerName || existing.ownerName || "",
+      businessName: reminder.businessName || existing.businessName || "",
+      trialStartAt: reminder.trialStartAt || existing.trialStartAt || null,
+      trialEndAt: reminder.trialEndAt || existing.trialEndAt || null,
+      periodStartAt: reminder.trialStartAt || existing.periodStartAt || null,
+      periodEndAt: reminder.trialEndAt || existing.periodEndAt || null,
       trialReminderStatus: reminder.status || "",
       trialReminderDueAt: reminder.dueAt || null,
       trialReminderSentAt: reminder.sentAt || null,
-      status: reminder.status === "cancelled" ? "subscription_cancelled" : "trial_reminder_scheduled",
+      status: reminder.status === "cancelled" ? "subscription_cancelled" : restoredStatus,
+      updatedAt: existing.updatedAt || existing.signedUpAt || existing.createdAt || reminder.createdAt || reminder.dueAt,
     });
   }
 
-  const freshStore = readSignupDashboardStore();
-  return Object.values(freshStore)
+  return combinedStore;
+}
+
+function listSignupDashboardRecords() {
+  const combinedStore = mergeSignupDashboardWithTrialReminders(
+    readSignupDashboardStore(),
+    readTrialReminderStore()
+  );
+
+  return Object.values(combinedStore)
     .filter(Boolean)
     .map((record) => ({
       ...record,
       expiry: getSignupExpiryStatus(record),
     }))
     .sort((a, b) => Number(new Date(b.signedUpAt || b.createdAt || 0)) - Number(new Date(a.signedUpAt || a.createdAt || 0)));
+}
+
+function findPendingSignupForDashboardRecord(signup, pendingStore = prunePendingSignupStore(readPendingSignupStore())) {
+  const ownerEmail = String(signup?.ownerEmail || "").trim().toLowerCase();
+  const businessName = String(signup?.businessName || "").trim().toLowerCase();
+  return Object.entries(pendingStore).find(([, pending]) => {
+    const pendingEmail = String(pending?.ownerEmail || pending?.payload?.owner?.email || "").trim().toLowerCase();
+    const pendingBusiness = String(pending?.businessName || pending?.payload?.business?.name || "").trim().toLowerCase();
+    return Boolean((ownerEmail && ownerEmail === pendingEmail) || (businessName && businessName === pendingBusiness));
+  }) || null;
+}
+
+function findSignupByOperationalTarget(targetId, signups = listSignupDashboardRecords()) {
+  const expected = String(targetId || "").trim().toLowerCase();
+  if (!/^[a-f0-9]{24}$/.test(expected)) return null;
+  return signups.find((record) => {
+    const identity = String(record.subscriptionId || record.checkoutSessionId || record.ownerEmail || record.businessName || record.signedUpAt || "unknown");
+    return hashOperationalTarget(identity) === expected;
+  }) || null;
+}
+
+function getSignupProviderRecoveryDiagnostics({ signup = {}, pendingSignup = null, vapiNumbers = [], twilioNumbers = [], providerLookup = "not_needed" } = {}) {
+  const assignedPhone = normalizePhoneForMatch(signup.twilioPhoneNumber || "");
+  const vapiPhone = assignedPhone
+    ? vapiNumbers.find((record) => normalizePhoneForMatch(getVapiPhoneNumber(record)) === assignedPhone)
+    : null;
+  const twilioPhone = assignedPhone
+    ? twilioNumbers.find((record) => normalizePhoneForMatch(record?.phone_number || record?.phoneNumber) === assignedPhone)
+    : null;
+  return {
+    retryPayloadAvailable: Boolean(pendingSignup?.[1]?.payload),
+    providerLookup,
+    assignedPhoneKnownToTwilio: assignedPhone ? Boolean(twilioPhone) : false,
+    assignedPhoneKnownToVapi: assignedPhone ? Boolean(vapiPhone) : false,
+    vapiAssistantAssigned: Boolean(getVapiAssistantId(vapiPhone)),
+  };
+}
+
+async function inspectSignupRecoveryState(signup) {
+  const pendingSignup = findPendingSignupForDashboardRecord(signup);
+  if (!signup?.twilioPhoneNumber) {
+    return getSignupProviderRecoveryDiagnostics({ signup, pendingSignup });
+  }
+  const [vapiResult, twilioResult] = await Promise.allSettled([
+    fetchVapiCollection("phone-number", ["phoneNumbers", "phone_numbers"]),
+    fetchTwilioIncomingPhoneNumbers(),
+  ]);
+  const providerLookup = vapiResult.status === "fulfilled" && twilioResult.status === "fulfilled"
+    ? "complete"
+    : vapiResult.status === "fulfilled" || twilioResult.status === "fulfilled"
+      ? "partial"
+      : "unavailable";
+  return getSignupProviderRecoveryDiagnostics({
+    signup,
+    pendingSignup,
+    vapiNumbers: vapiResult.status === "fulfilled" ? vapiResult.value : [],
+    twilioNumbers: twilioResult.status === "fulfilled" ? twilioResult.value : [],
+    providerLookup,
+  });
+}
+
+async function recoverSignupByOperationalTarget(targetId) {
+  const signup = findSignupByOperationalTarget(targetId);
+  if (!signup) {
+    const error = new Error("The signup alert no longer matches an active signup record.");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const pendingStore = prunePendingSignupStore(readPendingSignupStore());
+  const pendingSignup = findPendingSignupForDashboardRecord(signup, pendingStore);
+  if (pendingSignup?.[1]?.payload) {
+    const [tokenHash, pending] = pendingSignup;
+    const makeResult = await sendMakeSignupCompleted(pending.payload);
+    const makeData = makeResult.data || {};
+    if (!getMakeSignupSuccess(makeData)) {
+      upsertSignupDashboardRecord({
+        ...signup,
+        status: "setup_error",
+        makeStatus: makeResult.status,
+        makeError: makeData?.error || "Make webhook did not complete the signup recovery.",
+      });
+      const error = new Error("The Make.com handoff still did not complete.");
+      error.statusCode = 502;
+      throw error;
+    }
+    delete pendingStore[tokenHash];
+    writePendingSignupStore(pendingStore);
+    const twilioPhoneNumber = getMakeTwilioPhoneNumber(makeData) || getMakeTwilioPhoneNumberFromText(makeResult.body);
+    const updated = upsertSignupDashboardFromPayload(pending.payload, {
+      ...signup,
+      status: "setup_started",
+      emailVerified: true,
+      makeStatus: makeResult.status,
+      makeError: "",
+      twilioPhoneNumber: twilioPhoneNumber || signup.twilioPhoneNumber || "",
+      provisioningRetriedAt: new Date().toISOString(),
+    });
+    await attachNoCardStripeTrialToSignup(pending.payload, {
+      makeStatus: makeResult.status,
+      twilioPhoneNumber: updated.twilioPhoneNumber || "",
+    });
+    return {
+      ok: true,
+      action: "make_handoff_retried",
+      makeStatus: makeResult.status,
+      assignedPhone: Boolean(updated.twilioPhoneNumber),
+      assistantAssigned: Boolean(updated.vapiAssistantId),
+    };
+  }
+
+  if (signup.twilioPhoneNumber) {
+    const vapiNumbers = await fetchVapiCollection("phone-number", ["phoneNumbers", "phone_numbers"]);
+    const aiNumber = normalizePhoneForMatch(signup.twilioPhoneNumber);
+    const vapiPhone = vapiNumbers.find((record) => normalizePhoneForMatch(getVapiPhoneNumber(record)) === aiNumber);
+    const assistantId = getVapiAssistantId(vapiPhone);
+    if (assistantId) {
+      const smsRouting = await safelyProvisionIsolatedSmsForSignup({
+        ownerEmail: signup.ownerEmail,
+        assistantId,
+        aiNumber,
+        ownerNumber: signup.ownerPhone || signup.businessPhone,
+      });
+      upsertSignupDashboardRecord({
+        ...signup,
+        status: "setup_ready",
+        makeError: "",
+        vapiPhoneNumberId: String(vapiPhone?.id || "").trim(),
+        vapiAssistantId: assistantId,
+        smsRoutingStatus: smsRouting.healthy ? "healthy" : smsRouting.skipped ? "waiting" : "failed",
+        smsRoutingToolId: smsRouting.toolId || "",
+        smsRoutingToolName: smsRouting.toolName || "",
+        smsRoutingVerifiedAt: smsRouting.healthy ? new Date().toISOString() : "",
+        smsRoutingError: smsRouting.skipped ? smsRouting.reason : smsRouting.healthy ? "" : smsRouting.error || "Vapi read-back did not verify isolated routing.",
+        provisioningReconciledAt: new Date().toISOString(),
+      });
+      return {
+        ok: true,
+        action: "provider_assignment_reconciled",
+        assignedPhone: true,
+        assistantAssigned: true,
+        smsRoutingStatus: smsRouting.healthy ? "healthy" : smsRouting.skipped ? "waiting" : "failed",
+      };
+    }
+  }
+
+  const error = new Error("No safe automatic recovery path is available for this signup.");
+  error.statusCode = 409;
+  throw error;
 }
 
 let publicNetworkStatsLoader = async () => {
@@ -7545,7 +7722,15 @@ app.get(
   "/api/internal/operations/health",
   requireMonitorKey,
   asyncRoute(async (_req, res) => {
-    const inbox = await getOperationalAttentionInbox({ prisma, signups: listSignupDashboardRecords() });
+    const signups = listSignupDashboardRecords();
+    const inbox = await getOperationalAttentionInbox({ prisma, signups });
+    const signupRecovery = new Map();
+    await Promise.all(inbox.items
+      .filter((item) => item.targetType === "signup")
+      .map(async (item) => {
+        const signup = findSignupByOperationalTarget(item.targetId, signups);
+        if (signup) signupRecovery.set(item.targetId, await inspectSignupRecoveryState(signup));
+      }));
     res.setHeader("Cache-Control", "no-store, max-age=0");
     res.json({
       ok: inbox.summary.bySeverity.critical === 0,
@@ -7563,9 +7748,32 @@ app.get(
         targetType: item.targetType,
         targetId: item.targetId,
         actions: item.actions,
-        ...(item.diagnostics ? { diagnostics: item.diagnostics } : {}),
+        ...(item.diagnostics ? {
+          diagnostics: {
+            ...item.diagnostics,
+            ...(signupRecovery.get(item.targetId) || {}),
+          },
+        } : {}),
       })),
     });
+  })
+);
+
+app.post(
+  "/api/internal/operations/recover-signup",
+  requireMonitorKey,
+  express.json({ limit: "4kb" }),
+  asyncRoute(async (req, res) => {
+    const targetId = String(req.body?.targetId || "").trim().toLowerCase();
+    if (!/^[a-f0-9]{24}$/.test(targetId)) {
+      return res.status(400).json({ error: "A valid redacted signup target ID is required." });
+    }
+    if (String(req.body?.confirmation || "") !== "RECOVER_SIGNUP") {
+      return res.status(400).json({ error: "Explicit recovery confirmation is required." });
+    }
+    const result = await recoverSignupByOperationalTarget(targetId);
+    res.setHeader("Cache-Control", "no-store, max-age=0");
+    res.json(result);
   })
 );
 
@@ -10542,5 +10750,8 @@ module.exports = {
     purchaseTwilioPhoneNumber,
     getVapiVoiceSignupExecutionBusinessId,
     getVapiVoiceSignupSmsEnvironment,
+    findSignupByOperationalTarget,
+    getSignupProviderRecoveryDiagnostics,
+    mergeSignupDashboardWithTrialReminders,
   },
 };
