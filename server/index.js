@@ -5,6 +5,7 @@ dotenv.config({ path: ".env.local", override: false });
 const crypto = require("crypto");
 const cors = require("cors");
 const express = require("express");
+const { rateLimit } = require("express-rate-limit");
 const fs = require("fs");
 const jwt = require("jsonwebtoken");
 const nodemailer = require("nodemailer");
@@ -144,6 +145,13 @@ const PUBLIC_ROUTE_WINDOW_MS = parsePositiveInt(process.env.PUBLIC_ROUTE_WINDOW_
 const BUSINESS_ENRICH_IP_MAX_REQUESTS = parsePositiveInt(process.env.BUSINESS_ENRICH_IP_MAX_REQUESTS, 10);
 const STRIPE_CHECKOUT_IP_MAX_REQUESTS = parsePositiveInt(process.env.STRIPE_CHECKOUT_IP_MAX_REQUESTS, 5);
 const ADMIN_LOGIN_IP_MAX_REQUESTS = parsePositiveInt(process.env.ADMIN_LOGIN_IP_MAX_REQUESTS, 10);
+const adminLoginProcessRateLimiter = rateLimit({
+  windowMs: PUBLIC_ROUTE_WINDOW_MS,
+  limit: ADMIN_LOGIN_IP_MAX_REQUESTS,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many login attempts. Wait a few minutes and try again." },
+});
 const JSON_BODY_LIMIT = String(process.env.JSON_BODY_LIMIT || "1mb").trim() || "1mb";
 const SIGNUP_IP_WINDOW_MS = parsePositiveInt(process.env.SIGNUP_IP_WINDOW_MS, 15 * 60 * 1000);
 const SIGNUP_IP_MAX_REQUESTS = parsePositiveInt(process.env.SIGNUP_IP_MAX_REQUESTS, 5);
@@ -6747,7 +6755,9 @@ function getAdminActorHash(req) {
 function hasValidMonitorKey(req) {
   if (!MONITOR_API_KEY) return false;
   const authorization = String(req.headers.authorization || "").trim();
-  const bearer = authorization.match(/^Bearer\s+(.+)$/i)?.[1] || "";
+  const bearer = authorization.slice(0, 7).toLowerCase() === "bearer "
+    ? authorization.slice(7).trim()
+    : "";
   const supplied = String(req.headers["x-monitor-api-key"] || bearer).trim();
   return safeEqualString(supplied, MONITOR_API_KEY);
 }
@@ -9522,6 +9532,7 @@ app.post("/api/customer/dashboard/logout", (req, res) => {
 
 app.post(
   "/api/admin/login",
+  adminLoginProcessRateLimiter,
   enforcePublicRouteRateLimit("admin-login", ADMIN_LOGIN_IP_MAX_REQUESTS),
   asyncRoute(async (req, res) => {
     const actorHash = getAdminActorHash(req);

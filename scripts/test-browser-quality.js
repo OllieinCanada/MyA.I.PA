@@ -5,7 +5,11 @@ const path = require("path");
 const { chromium, firefox, webkit } = require("playwright");
 const { rootPath } = require("./_helpers");
 
-const buildDir = rootPath("build");
+const defaultBuildDir = rootPath("build");
+const pagesBuildDir = rootPath("docs");
+const buildDir = fs.existsSync(path.join(defaultBuildDir, "index.html"))
+  ? defaultBuildDir
+  : pagesBuildDir;
 const axePath = require.resolve("axe-core/axe.min.js");
 const browserTypes = { chromium, firefox, webkit };
 const requestedEngines = String(process.env.BROWSER_ENGINES || "chromium")
@@ -23,7 +27,7 @@ const routes = [
 ];
 function assertBuildExists() {
   if (!fs.existsSync(path.join(buildDir, "index.html"))) {
-    throw new Error("Missing build/index.html. Run npm run build before npm run test:browser:quality.");
+    throw new Error("Missing build/index.html and docs/index.html. Build the app before running browser quality checks.");
   }
 }
 
@@ -56,7 +60,7 @@ async function createStaticServer() {
   const port = await reservePort();
   const child = spawn(process.execPath, [rootPath("scripts", "preview-build.js"), `--port=${port}`], {
     cwd: rootPath(),
-    env: { ...process.env, HOST: "127.0.0.1" },
+    env: { ...process.env, HOST: "127.0.0.1", BUILD_PREVIEW_DIR: buildDir },
     stdio: ["ignore", "pipe", "pipe"],
   });
   const ready = new Promise((resolve, reject) => {

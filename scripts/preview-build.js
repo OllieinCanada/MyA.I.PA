@@ -7,7 +7,8 @@ const portArg = process.argv.find((arg) => arg.startsWith("--port="));
 const port = Number(portArg ? portArg.split("=")[1] : process.env.PORT || "3000");
 const hostArg = process.argv.find((arg) => arg.startsWith("--host="));
 const host = hostArg ? hostArg.split("=").slice(1).join("=") : process.env.HOST || "127.0.0.1";
-const buildDir = rootPath("build");
+const configuredBuildDir = String(process.env.BUILD_PREVIEW_DIR || "").trim();
+const buildDir = configuredBuildDir ? path.resolve(configuredBuildDir) : rootPath("build");
 
 const contentTypes = {
   ".css": "text/css; charset=utf-8",
@@ -34,7 +35,7 @@ function resolveRequestPath(urlPath) {
 }
 
 if (!fs.existsSync(path.join(buildDir, "index.html"))) {
-  throw new Error("Missing build/index.html. Run npm run build before preview:build.");
+  throw new Error(`Missing ${path.join(buildDir, "index.html")}. Build the selected preview output first.`);
 }
 
 const server = http.createServer((req, res) => {
