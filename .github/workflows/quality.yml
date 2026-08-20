@@ -72,8 +72,8 @@ jobs:
       - name: Audit production dependencies
         run: npm audit --omit=dev
 
-      - name: Build GitHub Pages output
-        run: npm run build:pages
+      - name: Build production app for browser tests
+        run: npm run build
 
       - name: Install browser engines
         run: npx playwright install --with-deps chromium firefox webkit
@@ -82,6 +82,9 @@ jobs:
         env:
           BROWSER_ENGINES: chromium,firefox,webkit
         run: npm run test:browser:quality
+
+      - name: Build GitHub Pages output
+        run: npm run build:pages
 
       - name: Verify generated Pages output
         run: |
