@@ -29,3 +29,8 @@ test("cross-browser diagnostics remain available without blocking the required g
   assert.equal(packageJson.scripts["test:browser:quality"], "node scripts/test-browser-quality.js");
   assert.doesNotMatch(workflow, /npm run test:browser:quality/);
 });
+
+test("production monitor installs the legacy frontend dependency tree deterministically", () => {
+  const workflow = fs.readFileSync(path.join(root, ".github", "workflows", "production-monitor.yml"), "utf8");
+  assert.match(workflow, /npm ci --legacy-peer-deps --ignore-scripts --no-audit --no-fund/);
+});
