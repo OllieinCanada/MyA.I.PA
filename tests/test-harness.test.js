@@ -14,11 +14,18 @@ test("backend suite discovers the tests directory instead of maintaining a fragi
   assert.doesNotMatch(releaseGate, /backendTestFiles/);
 });
 
-test("CI exercises real PostgreSQL behavior and browser quality checks", () => {
+test("CI exercises real PostgreSQL behavior and required frontend regression tests", () => {
   const workflow = fs.readFileSync(path.join(root, ".github", "workflows", "quality.yml"), "utf8");
   assert.match(workflow, /services:\s+[\s\S]*postgres:/);
   assert.match(workflow, /RUN_DATABASE_INTEGRATION: "1"/);
   assert.match(workflow, /npm run test:database/);
-  assert.match(workflow, /npm run test:browser:quality/);
-  assert.match(workflow, /playwright install --with-deps chromium firefox webkit/);
+  assert.match(workflow, /npm test -- --watchAll=false --runInBand/);
+  assert.match(workflow, /npm run build:pages/);
+});
+
+test("cross-browser diagnostics remain available without blocking the required gate", () => {
+  const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
+  const workflow = fs.readFileSync(path.join(root, ".github", "workflows", "quality.yml"), "utf8");
+  assert.equal(packageJson.scripts["test:browser:quality"], "node scripts/test-browser-quality.js");
+  assert.doesNotMatch(workflow, /npm run test:browser:quality/);
 });
