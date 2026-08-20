@@ -61,6 +61,14 @@ services:
         sync: false
       - key: ADMIN_SESSION_SECRET
         generateValue: true
+      - key: ADMIN_TOTP_SECRET
+        sync: false
+      - key: ADMIN_AUDIT_RETENTION_DAYS
+        value: 365
+      - key: MONITOR_API_KEY
+        sync: false
+      - key: BACKUP_ENCRYPTION_KEY
+        sync: false
       - key: MAKE_SIGNUP_WEBHOOK_URL
         sync: false
       - key: MAKE_SIGNUP_WEBHOOK_API_KEY
