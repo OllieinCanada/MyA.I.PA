@@ -21,10 +21,15 @@ const viewports = [
   { name: "tablet", width: 1024, height: 768 },
   { name: "mobile", width: 390, height: 844 },
 ];
-const routes = [
+const routeCatalog = [
   { name: "home", hash: "#/", h1: /never miss a call again/i },
   { name: "signup", hash: "#/signup", h1: /create your ai phone assistant/i },
 ];
+const requestedRoutes = String(process.env.BROWSER_ROUTES || "home,signup")
+  .split(",")
+  .map((name) => name.trim().toLowerCase())
+  .filter(Boolean);
+const routes = routeCatalog.filter((route) => requestedRoutes.includes(route.name));
 function assertBuildExists() {
   if (!fs.existsSync(path.join(buildDir, "index.html"))) {
     throw new Error("Missing build/index.html and docs/index.html. Build the app before running browser quality checks.");
@@ -247,6 +252,8 @@ async function main() {
   }
   const invalidEngines = requestedEngines.filter((name) => !browserTypes[name]);
   if (invalidEngines.length) throw new Error(`Unsupported browser engines: ${invalidEngines.join(", ")}`);
+  const invalidRoutes = requestedRoutes.filter((name) => !routeCatalog.some((route) => route.name === name));
+  if (invalidRoutes.length) throw new Error(`Unsupported browser routes: ${invalidRoutes.join(", ")}`);
 
   const { server, baseUrl } = await createStaticServer();
   const results = [];

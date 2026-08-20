@@ -28,9 +28,9 @@ The strategy is based on:
 
 ## CI-specific checks
 
-The quality workflow starts a disposable PostgreSQL 16 service, pushes the Prisma schema, runs database integration tests, builds the production site, installs current Playwright browser engines, then runs the browser quality suite in Chromium, Firefox, and WebKit.
+The required quality workflow starts a disposable PostgreSQL 16 service, pushes the Prisma schema, runs the frontend and backend suites, exercises the real database integration tests, audits production dependencies, builds the production site, and verifies the generated Pages artifact.
 
-The local Windows Playwright launcher is skipped by default because it stalled inside the installed browser runtime during this audit. CI remains mandatory. Set `RUN_LOCAL_PLAYWRIGHT=1` only when diagnosing the local launcher; responsive checks can also be performed through the in-app browser.
+The standalone Playwright launcher is skipped by default on Windows because it stalled inside the installed browser runtime during this audit. The same probe currently stalls after navigation on GitHub's Linux runner before Playwright can inspect the DOM, even though the production build renders correctly in the in-app browser. Keep `npm run test:browser:quality` available as a diagnostic suite, but do not treat it as release evidence until the launcher issue is fixed. Set `RUN_LOCAL_PLAYWRIGHT=1` only when diagnosing that launcher; perform the mandatory responsive and interaction review through the in-app browser in the meantime.
 
 CodeQL also analyzes JavaScript and TypeScript changes on pull requests, pushes to `main`, and a weekly schedule. It complements example-based tests by checking for vulnerable data flows and security mistakes outside the cases the test suite executes.
 
@@ -53,6 +53,7 @@ Automated checks cannot certify the following. Record evidence for each release:
 - Live Vapi, Twilio, Make.com, email, and calendar delivery requires credentials and controlled external test calls; CI uses mocks and contract tests.
 - The production dependency audit is clean, but the legacy Create React App/Jest development toolchain currently reports 36 advisories. Replace that toolchain deliberately rather than using `npm audit fix --force`, which proposes breaking dependency changes.
 - Automated axe results are not WCAG conformance. A knowledgeable human and assistive-technology review are still required.
+- The Playwright cross-browser suite is temporarily outside the required pull-request gate because its runner stalls after navigation on both Windows and GitHub Linux. The frontend regression suite and manual in-app browser review remain required while this is repaired.
 - The browser suite stops before a real trial submission so it never creates a customer or sends a message.
 - Backup restore evidence cannot be produced without a disposable PostgreSQL target, `pg_dump`/`pg_restore`, and the backup encryption key.
 - A formal threat model, periodic penetration test, load test with production-like traffic, and disaster-recovery timing exercise remain release-readiness work.
