@@ -118,6 +118,37 @@ test("reading trial reminders preserves provisioning state and timestamps", () =
   assert.equal(dashboard["email:owner@example.com"].trialReminderStatus, undefined);
 });
 
+test("only old unverified signups absent from both providers can be archived", () => {
+  const now = new Date("2026-08-20T12:00:00.000Z");
+  const stale = {
+    status: "setup_started",
+    twilioPhoneNumber: "+19055550123",
+    updatedAt: "2026-08-01T12:00:00.000Z",
+  };
+  const absent = {
+    providerLookup: "complete",
+    assignedPhoneKnownToTwilio: false,
+    assignedPhoneKnownToVapi: false,
+  };
+
+  assert.equal(__test.isStaleSignupArchiveEligible({ signup: stale, diagnostics: absent, now }), true);
+  assert.equal(__test.isStaleSignupArchiveEligible({
+    signup: { ...stale, emailVerified: true },
+    diagnostics: absent,
+    now,
+  }), false);
+  assert.equal(__test.isStaleSignupArchiveEligible({
+    signup: stale,
+    diagnostics: { ...absent, assignedPhoneKnownToTwilio: true },
+    now,
+  }), false);
+  assert.equal(__test.isStaleSignupArchiveEligible({
+    signup: { ...stale, subscriptionId: "sub_private" },
+    diagnostics: absent,
+    now,
+  }), false);
+});
+
 test("signup recovery requires the monitor key and explicit confirmation", async () => {
   const unauthorized = await request("/api/internal/operations/recover-signup", {
     method: "POST",

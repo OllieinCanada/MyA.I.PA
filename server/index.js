@@ -4455,6 +4455,23 @@ function getSignupProviderRecoveryDiagnostics({ signup = {}, pendingSignup = nul
   };
 }
 
+function isStaleSignupArchiveEligible({ signup = {}, diagnostics = {}, now = new Date(), minimumAgeDays = 7 } = {}) {
+  const updatedAt = new Date(signup.updatedAt || signup.signedUpAt || signup.createdAt || 0).getTime();
+  const ageMs = Number.isFinite(updatedAt) && updatedAt > 0 ? now.getTime() - updatedAt : 0;
+  return Boolean(
+    diagnostics.providerLookup === "complete" &&
+    signup.twilioPhoneNumber &&
+    !diagnostics.assignedPhoneKnownToTwilio &&
+    !diagnostics.assignedPhoneKnownToVapi &&
+    !signup.vapiAssistantId &&
+    !signup.subscriptionId &&
+    !signup.checkoutSessionId &&
+    !signup.emailVerified &&
+    !signup.smsVerified &&
+    ageMs >= Math.max(1, Number(minimumAgeDays) || 7) * 24 * 60 * 60 * 1000
+  );
+}
+
 async function inspectSignupRecoveryState(signup) {
   const pendingSignup = findPendingSignupForDashboardRecord(signup);
   if (!signup?.twilioPhoneNumber) {
@@ -4469,13 +4486,17 @@ async function inspectSignupRecoveryState(signup) {
     : vapiResult.status === "fulfilled" || twilioResult.status === "fulfilled"
       ? "partial"
       : "unavailable";
-  return getSignupProviderRecoveryDiagnostics({
+  const diagnostics = getSignupProviderRecoveryDiagnostics({
     signup,
     pendingSignup,
     vapiNumbers: vapiResult.status === "fulfilled" ? vapiResult.value : [],
     twilioNumbers: twilioResult.status === "fulfilled" ? twilioResult.value : [],
     providerLookup,
   });
+  return {
+    ...diagnostics,
+    staleArchiveEligible: isStaleSignupArchiveEligible({ signup, diagnostics }),
+  };
 }
 
 async function recoverSignupByOperationalTarget(targetId) {
@@ -4529,7 +4550,10 @@ async function recoverSignupByOperationalTarget(targetId) {
   }
 
   if (signup.twilioPhoneNumber) {
-    const vapiNumbers = await fetchVapiCollection("phone-number", ["phoneNumbers", "phone_numbers"]);
+    const [vapiNumbers, twilioNumbers] = await Promise.all([
+      fetchVapiCollection("phone-number", ["phoneNumbers", "phone_numbers"]),
+      fetchTwilioIncomingPhoneNumbers(),
+    ]);
     const aiNumber = normalizePhoneForMatch(signup.twilioPhoneNumber);
     const vapiPhone = vapiNumbers.find((record) => normalizePhoneForMatch(getVapiPhoneNumber(record)) === aiNumber);
     const assistantId = getVapiAssistantId(vapiPhone);
@@ -4559,6 +4583,28 @@ async function recoverSignupByOperationalTarget(targetId) {
         assignedPhone: true,
         assistantAssigned: true,
         smsRoutingStatus: smsRouting.healthy ? "healthy" : smsRouting.skipped ? "waiting" : "failed",
+      };
+    }
+
+    const diagnostics = getSignupProviderRecoveryDiagnostics({
+      signup,
+      vapiNumbers,
+      twilioNumbers,
+      providerLookup: "complete",
+    });
+    if (isStaleSignupArchiveEligible({ signup, diagnostics })) {
+      upsertSignupDashboardRecord({
+        ...signup,
+        status: "abandoned_archived",
+        makeError: "",
+        archivedAt: new Date().toISOString(),
+        archivedReason: "provider_resource_absent_after_retention_window",
+      });
+      return {
+        ok: true,
+        action: "stale_setup_archived",
+        assignedPhone: false,
+        assistantAssigned: false,
       };
     }
   }
@@ -10752,6 +10798,7 @@ module.exports = {
     getVapiVoiceSignupSmsEnvironment,
     findSignupByOperationalTarget,
     getSignupProviderRecoveryDiagnostics,
+    isStaleSignupArchiveEligible,
     mergeSignupDashboardWithTrialReminders,
   },
 };

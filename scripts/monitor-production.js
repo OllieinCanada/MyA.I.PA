@@ -60,6 +60,7 @@ function redactOperationalSignupIssues(payload) {
     "assignedPhoneKnownToTwilio",
     "assignedPhoneKnownToVapi",
     "vapiAssistantAssigned",
+    "staleArchiveEligible",
   ];
   return (Array.isArray(payload?.issues) ? payload.issues : [])
     .filter((issue) => issue?.targetType === "signup")
