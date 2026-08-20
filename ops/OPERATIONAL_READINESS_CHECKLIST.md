@@ -16,7 +16,12 @@ This checklist separates controls implemented in the repository from facts and a
 - [x] Retention apply mode is locked behind the explicit `RETENTION_APPLY_CONFIRM` value.
 - [x] `npm run ops:monitor` checks the public site, API liveness, and database readiness.
 - [x] Failed production monitoring can send a Telegram alert only when explicitly invoked with `--telegram-on-failure`.
-- [x] `npm run ops:backup` creates a private PostgreSQL custom-format backup, verifies its archive structure, and writes a SHA-256 manifest.
+- [x] The scheduled GitHub production monitor rechecks failures before alerting and can include privacy-minimized operational issue counts.
+- [x] The admin Needs Attention inbox combines signup, payment, call handoff, text-delivery, routing, and high-priority support failures with guarded recovery actions.
+- [x] Admin recovery and login actions are written to a redacted PostgreSQL-backed audit trail with automatic retention.
+- [x] Optional TOTP multi-factor authentication disables password-header bypass when configured.
+- [x] `npm run ops:backup` creates an AES-256-GCM encrypted PostgreSQL custom-format backup, verifies its archive structure, and writes a SHA-256 manifest.
+- [x] `npm run ops:backup:restore-drill` verifies checksum, decryption, and archive readability and refuses production as a restore target.
 - [x] Backup output and operational diagnostics are excluded from Git.
 - [x] Runbooks exist for retention/deletion, backup/restore, monitoring, incidents, privacy requests, and counsel review.
 - [x] Central SMS suppression, signed inbound STOP/START handling, fail-closed send checks, and provider-neutral dashboard visibility are implemented and tested locally.
@@ -46,7 +51,7 @@ This checklist separates controls implemented in the repository from facts and a
 - [x] Apply the reviewed database external-access restriction and verify the API continues to use Render's internal database URL.
 - [ ] Create an encrypted logical database export and complete an isolated restore drill.
 - [ ] Select protected backup storage and approve access, encryption, residency, retention, and deletion.
-- [ ] Schedule monitoring outside the production API and test a real failure alert.
+- [ ] Add the three GitHub monitor secrets, enable the scheduled workflow, and test a real failure alert.
 - [ ] Verify provider-side deletion for Vapi, Twilio, OpenAI, Make, Render logs, Stripe, email, and any monitoring service.
 - [x] Activate the production messaging webhook and complete one authorized live `STOP`/`START` exercise using `ops/SMS_CONSENT_RUNBOOK.md` (controlled provider-path exercise completed July 24, 2026; all nine active routes read back successfully and the test number finished active).
 - [ ] Complete a privacy incident tabletop exercise and retain its signed report.

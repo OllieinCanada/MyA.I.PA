@@ -26,13 +26,13 @@ These targets are internal objectives, not customer service-level promises.
 2. Place the production `DATABASE_URL` only in the protected environment.
 3. Run `npm run ops:backup:check`.
 4. Run `npm run ops:backup`.
-5. Confirm the generated manifest reports `archiveListVerified: true`, a non-zero byte count, and a SHA-256 digest.
-6. Encrypt the archive using the approved backup-storage mechanism or approved file-encryption tool.
+5. Set `BACKUP_ENCRYPTION_KEY` from an approved secret manager. The backup command refuses to create an unencrypted archive.
+6. Confirm the generated manifest reports `archiveListVerified: true`, `encrypted: true`, a non-zero byte count, and a SHA-256 digest.
 7. Move the encrypted backup through an approved channel to restricted storage.
-8. Verify the encrypted copy can be decrypted in the isolated restore environment.
-9. Delete unencrypted local working copies after transfer verification under the approved schedule.
+8. Set `RESTORE_BACKUP_PATH` and run `npm run ops:backup:restore-drill` to verify checksum, decryption, and archive readability.
+9. For a full drill, set a disposable `RESTORE_DATABASE_URL`, set `RESTORE_DRILL_CONFIRM=RESTORE_TO_DISPOSABLE_DATABASE`, and run `npm run ops:backup:restore-drill -- --restore`.
 
-PostgreSQL custom format is compressed but is not encryption. The backup script never claims otherwise and never writes the database URL or password to its manifest. Backup files contain personal information and must never be committed, attached to GitHub, emailed without approved encryption, or placed in general cloud storage.
+PostgreSQL custom format is compressed but is not encryption. The backup script encrypts the verified archive with AES-256-GCM and deletes its temporary plaintext copy. It never writes the database URL, password, or encryption key to its manifest. Backup files contain personal information and must never be committed, attached to GitHub, emailed, or placed in general cloud storage.
 
 When running from an isolated worktree, set `OPERATIONS_ENV_FILE` to the protected `.env.local` path. Do not copy the environment file into the worktree or print its contents.
 

@@ -3,31 +3,9 @@ const { nodeCommand, rootPath, run } = require("./_helpers");
 
 const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
 const skipPages = process.argv.includes("--skip-pages");
-const backendTestFiles = [
-  "tests/backend-security.test.js",
-  "tests/persistent-security-state.test.js",
-  "tests/sms-suppression.test.js",
-  "tests/twilio-sms.test.js",
-  "tests/vapi-sms.test.js",
-  "tests/vapi-call-diagnostics.test.js",
-  "tests/vapi-isolated-sms-provisioning.test.js",
-  "tests/vapi-tool-calls.test.js",
-  "tests/vapi-tool-security.test.js",
-  "tests/vapi-webhook-auth.test.js",
-  "tests/composite-call-notifications.test.js",
-  "tests/lead-handoffs.test.js",
-  "tests/revenue-rescue.test.js",
-  "tests/jobber-integration.test.js",
-  "tests/trade-playbooks.test.js",
-  "tests/safe-website-fetch.test.js",
-  "tests/appointment-requests.test.js",
-  "tests/calendar-integrations.test.js",
-  "tests/trial-usage-policy.test.js",
-  "tests/voice-signup.test.js",
-];
 
 const steps = [
-  ["Backend security and provider unit tests", nodeCommand(), ["--test", ...backendTestFiles]],
+  ["Backend security and provider tests", npmCommand, ["run", "test:backend"]],
   ["Frontend security and signup regression tests", npmCommand, ["test", "--", "--watchAll=false"]],
   ["Legal draft package validation", nodeCommand(), [path.join("scripts", "validate-legal-drafts.js")]],
   ["Operational readiness validation", nodeCommand(), [path.join("scripts", "validate-operational-readiness.js")]],
@@ -48,7 +26,12 @@ const steps = [
   ],
   ["Production dependency audit", npmCommand, ["audit", "--omit=dev"]],
   ["Signup configuration diagnostic", nodeCommand(), [path.join("scripts", "diagnose-signup.js")]],
-  ...(!skipPages ? [["Production Pages build", nodeCommand(), [path.join("scripts", "build-pages.js")]]] : []),
+  ...(!skipPages
+    ? [
+        ["Production Pages build", nodeCommand(), [path.join("scripts", "build-pages.js")]],
+        ["Browser journeys, accessibility, and responsive layout checks", npmCommand, ["run", "test:browser:quality"]],
+      ]
+    : []),
 ];
 
 console.log("My AI PA local release gate");

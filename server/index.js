@@ -5,6 +5,7 @@ dotenv.config({ path: ".env.local", override: false });
 const crypto = require("crypto");
 const cors = require("cors");
 const express = require("express");
+const { rateLimit } = require("express-rate-limit");
 const fs = require("fs");
 const jwt = require("jsonwebtoken");
 const nodemailer = require("nodemailer");
@@ -57,6 +58,7 @@ const {
   acknowledgeLeadByToken,
   applyProviderEvent,
   createAndDispatchLeadHandoff,
+  dispatchLeadHandoff,
   getLeadHandoffDashboard,
   parseAcknowledgementToken,
   processDueLeadHandoffs,
@@ -113,6 +115,16 @@ const {
   storeDashboardLoginCode,
   verifyDashboardLoginCode,
 } = require("./persistentSecurityState");
+const {
+  AUDIT_PREFIX,
+  listAdminAuditEvents,
+  recordAdminAuditEvent,
+  verifyTotpCode,
+} = require("./adminSecurity");
+const {
+  getOperationalAttentionInbox,
+  hashTarget: hashOperationalTarget,
+} = require("./operationalAttention");
 
 loadPowerShellEnvAssignments(path.join(__dirname, "..", ".env.local"));
 
@@ -133,6 +145,13 @@ const PUBLIC_ROUTE_WINDOW_MS = parsePositiveInt(process.env.PUBLIC_ROUTE_WINDOW_
 const BUSINESS_ENRICH_IP_MAX_REQUESTS = parsePositiveInt(process.env.BUSINESS_ENRICH_IP_MAX_REQUESTS, 10);
 const STRIPE_CHECKOUT_IP_MAX_REQUESTS = parsePositiveInt(process.env.STRIPE_CHECKOUT_IP_MAX_REQUESTS, 5);
 const ADMIN_LOGIN_IP_MAX_REQUESTS = parsePositiveInt(process.env.ADMIN_LOGIN_IP_MAX_REQUESTS, 10);
+const adminLoginProcessRateLimiter = rateLimit({
+  windowMs: PUBLIC_ROUTE_WINDOW_MS,
+  limit: ADMIN_LOGIN_IP_MAX_REQUESTS,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many login attempts. Wait a few minutes and try again." },
+});
 const JSON_BODY_LIMIT = String(process.env.JSON_BODY_LIMIT || "1mb").trim() || "1mb";
 const SIGNUP_IP_WINDOW_MS = parsePositiveInt(process.env.SIGNUP_IP_WINDOW_MS, 15 * 60 * 1000);
 const SIGNUP_IP_MAX_REQUESTS = parsePositiveInt(process.env.SIGNUP_IP_MAX_REQUESTS, 5);
@@ -157,10 +176,12 @@ const WEBSITE_MAX_HTML_CHARS = 250000;
 const WEBSITE_MAX_EXTRA_PAGES = 3;
 const ADMIN_SESSION_COOKIE = "myaipa_admin_session";
 const ADMIN_SESSION_TTL_MS = 1000 * 60 * 60 * 12;
+const ADMIN_TOTP_SECRET = String(process.env.ADMIN_TOTP_SECRET || "").trim();
 const EXPOSE_CALL_TRANSCRIPTS_IN_ADMIN = /^(1|true|yes|on)$/i.test(String(process.env.EXPOSE_CALL_TRANSCRIPTS_IN_ADMIN || ""));
 const EXPOSE_RECORDING_URLS_IN_ADMIN = /^(1|true|yes|on)$/i.test(String(process.env.EXPOSE_RECORDING_URLS_IN_ADMIN || ""));
 const CALL_TRANSCRIPT_RETENTION_DAYS = Math.max(0, Number(process.env.CALL_TRANSCRIPT_RETENTION_DAYS || 0) || 0);
 const CALL_RECORDING_RETENTION_DAYS = Math.max(0, Number(process.env.CALL_RECORDING_RETENTION_DAYS || 0) || 0);
+const ADMIN_AUDIT_RETENTION_DAYS = Math.max(30, Number(process.env.ADMIN_AUDIT_RETENTION_DAYS || 365) || 365);
 const SENSITIVE_CALL_CLEANUP_INTERVAL_MS = 1000 * 60 * 60 * 6;
 const SIGNUP_VERIFICATION_TTL_MS = parsePositiveInt(process.env.SIGNUP_VERIFICATION_TTL_MS, 24 * 60 * 60 * 1000);
 const TRIAL_REMINDER_CHECK_INTERVAL_MS = parsePositiveInt(process.env.TRIAL_REMINDER_CHECK_INTERVAL_MS, 60 * 60 * 1000);
@@ -235,6 +256,7 @@ const SMS_SUPPRESSION_CHECK_URL = String(
   process.env.SMS_SUPPRESSION_CHECK_URL || "https://api.myaipa.ca/api/integrations/sms/suppression/check"
 ).trim();
 const INTEGRATION_API_KEY = String(process.env.INTEGRATION_API_KEY || process.env.MAKE_SIGNUP_WEBHOOK_API_KEY || "").trim();
+const MONITOR_API_KEY = String(process.env.MONITOR_API_KEY || "").trim();
 const VAPI_WEBHOOK_SECRET = String(process.env.VAPI_WEBHOOK_SECRET || "").trim();
 const FIXED_MONTHLY_COSTS_JSON = String(process.env.FIXED_MONTHLY_COSTS_JSON || "").trim();
 const FIXED_MONTHLY_COST_USD = numberOrNull(process.env.FIXED_MONTHLY_COST_USD) || 0;
@@ -6717,13 +6739,33 @@ async function sendMakeSignupCompleted(payload) {
 
 function requireAdmin(req, res, next) {
   try {
-    if (hasValidAdminSession(req) || hasValidAdminPassword(req)) {
+    if (hasValidAdminSession(req) || (!ADMIN_TOTP_SECRET && hasValidAdminPassword(req))) {
       return next();
     }
     return res.status(401).json({ error: "Invalid admin password." });
   } catch (err) {
     return res.status(err.statusCode || 500).json({ error: err.message || "Admin authentication failed." });
   }
+}
+
+function getAdminActorHash(req) {
+  return hashKey(`admin:${getClientIp(req)}`).slice(0, 32);
+}
+
+function hasValidMonitorKey(req) {
+  if (!MONITOR_API_KEY) return false;
+  const authorization = String(req.headers.authorization || "").trim();
+  const bearer = authorization.slice(0, 7).toLowerCase() === "bearer "
+    ? authorization.slice(7).trim()
+    : "";
+  const supplied = String(req.headers["x-monitor-api-key"] || bearer).trim();
+  return safeEqualString(supplied, MONITOR_API_KEY);
+}
+
+function requireMonitorKey(req, res, next) {
+  if (!MONITOR_API_KEY) return res.status(503).json({ error: "Production monitoring is not configured." });
+  if (!hasValidMonitorKey(req)) return res.status(401).json({ error: "Invalid monitor key." });
+  return next();
 }
 
 function requireIntegrationKey(req, res, next) {
@@ -6817,13 +6859,24 @@ async function cleanupSensitiveCallData() {
     );
   }
 
+  jobs.push(
+    prisma.runtimeStore.deleteMany({
+      where: {
+        key: { startsWith: AUDIT_PREFIX },
+        createdAt: { lt: new Date(now - ADMIN_AUDIT_RETENTION_DAYS * 24 * 60 * 60 * 1000) },
+      },
+    }).then((result) => ({ key: "adminAudit", count: result?.count || 0 }))
+  );
+
   if (!jobs.length) return;
   const results = await Promise.all(jobs);
   const transcriptResult = results.find((item) => item.key === "transcripts");
   const recordingResult = results.find((item) => item.key === "recordings");
+  const auditResult = results.find((item) => item.key === "adminAudit");
   console.log("[call-data-cleanup]", {
     transcriptsCleared: transcriptResult?.count || 0,
     recordingUrlsCleared: recordingResult?.count || 0,
+    adminAuditEventsCleared: auditResult?.count || 0,
   });
 }
 
@@ -7487,6 +7540,21 @@ app.get("/api/health/ready", async (_req, res) => {
     });
   }
 });
+
+app.get(
+  "/api/internal/operations/health",
+  requireMonitorKey,
+  asyncRoute(async (_req, res) => {
+    const inbox = await getOperationalAttentionInbox({ prisma, signups: listSignupDashboardRecords() });
+    res.setHeader("Cache-Control", "no-store, max-age=0");
+    res.json({
+      ok: inbox.summary.bySeverity.critical === 0,
+      service: "my-ai-pa-operations",
+      generatedAt: inbox.generatedAt,
+      attention: inbox.summary,
+    });
+  })
+);
 
 app.post(
   "/api/webhooks/sms",
@@ -9464,13 +9532,25 @@ app.post("/api/customer/dashboard/logout", (req, res) => {
 
 app.post(
   "/api/admin/login",
+  adminLoginProcessRateLimiter,
   enforcePublicRouteRateLimit("admin-login", ADMIN_LOGIN_IP_MAX_REQUESTS),
   asyncRoute(async (req, res) => {
+    const actorHash = getAdminActorHash(req);
     if (!hasValidAdminPassword(req, { allowBody: true })) {
+      await recordAdminAuditEvent({ prisma, action: "admin_login", outcome: "denied", actorHash, details: { reason: "invalid_password" } });
       return res.status(401).json({ error: "Invalid admin password." });
     }
+    if (ADMIN_TOTP_SECRET && !verifyTotpCode(ADMIN_TOTP_SECRET, req.body?.mfaCode)) {
+      await recordAdminAuditEvent({ prisma, action: "admin_login", outcome: "denied", actorHash, details: { reason: req.body?.mfaCode ? "invalid_mfa" : "mfa_required" } });
+      return res.status(401).json({
+        error: req.body?.mfaCode ? "Invalid authenticator code." : "Authenticator code required.",
+        code: "ADMIN_MFA_REQUIRED",
+        mfaRequired: true,
+      });
+    }
     setAdminSessionCookie(res, createAdminSessionToken());
-    res.json({ ok: true });
+    await recordAdminAuditEvent({ prisma, action: "admin_login", outcome: "success", actorHash, details: { mfaUsed: Boolean(ADMIN_TOTP_SECRET) } });
+    res.json({ ok: true, mfaEnabled: Boolean(ADMIN_TOTP_SECRET) });
   })
 );
 
@@ -9478,7 +9558,120 @@ app.get(
   "/api/admin/session",
   requireAdmin,
   asyncRoute(async (_req, res) => {
-    res.json({ ok: true });
+    res.json({ ok: true, mfaEnabled: Boolean(ADMIN_TOTP_SECRET) });
+  })
+);
+
+app.get(
+  "/api/admin/attention",
+  requireAdmin,
+  asyncRoute(async (_req, res) => {
+    const [inbox, auditEvents] = await Promise.all([
+      getOperationalAttentionInbox({ prisma, signups: listSignupDashboardRecords() }),
+      listAdminAuditEvents({ prisma, limit: 50 }),
+    ]);
+    res.json({ ok: true, ...inbox, auditEvents });
+  })
+);
+
+app.post(
+  "/api/admin/attention/actions",
+  requireAdmin,
+  asyncRoute(async (req, res) => {
+    const action = String(req.body?.action || "").trim();
+    const targetId = String(req.body?.targetId || "").trim();
+    const actorHash = getAdminActorHash(req);
+    let result;
+
+    try {
+      if (action === "retry_owner_text") {
+        const handoff = await prisma.leadHandoff.findUnique({ where: { id: targetId }, select: { id: true, status: true } });
+        if (!handoff) return res.status(404).json({ error: "Lead notification was not found." });
+        if (!["RETRY_DUE", "ESCALATION_DUE", "FAILED"].includes(handoff.status)) {
+          return res.status(409).json({ error: "This notification is no longer in a retryable state." });
+        }
+        result = await dispatchLeadHandoff(handoff.id, "OWNER");
+      } else if (action === "sync_calls") {
+        result = await syncVapiCalls({ limit: Math.min(100, VAPI_CALL_LIMIT) });
+      } else if (action === "reopen_signup") {
+        const signup = listSignupDashboardRecords().find((record) => {
+          const identity = String(record.subscriptionId || record.checkoutSessionId || record.ownerEmail || record.businessName || record.signedUpAt || "unknown");
+          return hashOperationalTarget(identity) === targetId;
+        });
+        if (!signup) return res.status(404).json({ error: "Signup record was not found." });
+        result = upsertSignupDashboardRecord({
+          ...signup,
+          previousStatus: signup.status || "unknown",
+          status: "manual_review_reopened",
+          reviewRequired: true,
+          reopenedAt: new Date().toISOString(),
+        });
+      } else if (action === "resend_signup_verification") {
+        const signup = listSignupDashboardRecords().find((record) => {
+          const identity = String(record.subscriptionId || record.checkoutSessionId || record.ownerEmail || record.businessName || record.signedUpAt || "unknown");
+          return hashOperationalTarget(identity) === targetId;
+        });
+        if (!signup) return res.status(404).json({ error: "Signup record was not found." });
+        const pendingStore = prunePendingSignupStore(readPendingSignupStore());
+        const pendingEntry = Object.entries(pendingStore).find(([, record]) => {
+          const sameEmail = signup.ownerEmail && String(record?.ownerEmail || "").toLowerCase() === String(signup.ownerEmail).toLowerCase();
+          const sameBusiness = signup.businessName && String(record?.businessName || "").toLowerCase() === String(signup.businessName).toLowerCase();
+          return sameEmail || sameBusiness;
+        });
+        if (!pendingEntry?.[1]?.payload) {
+          return res.status(409).json({ error: "The verification request expired. Reopen the signup and ask the customer to confirm the form again." });
+        }
+        delete pendingStore[pendingEntry[0]];
+        writePendingSignupStore(pendingStore);
+        const pending = pendingEntry[1];
+        const token = createPendingSignupVerification({
+          payload: pending.payload,
+          ownerEmail: pending.ownerEmail,
+          businessName: pending.businessName,
+          reviewReasons: pending.reviewReasons || [],
+          ipHash: pending.ipHash || hashKey(`admin-resend:${targetId}`),
+        });
+        const email = await sendSignupVerificationEmail({
+          req,
+          ownerEmail: pending.ownerEmail,
+          ownerName: pending.payload?.owner?.name,
+          businessName: pending.businessName,
+          token,
+        });
+        result = { sent: Boolean(email.sent), channel: "email" };
+        upsertSignupDashboardRecord({
+          ...signup,
+          status: "pending_email_verification",
+          emailVerificationSentAt: new Date().toISOString(),
+          verificationResentAt: new Date().toISOString(),
+        });
+      } else {
+        return res.status(400).json({ error: "Choose a supported recovery action." });
+      }
+
+      await recordAdminAuditEvent({
+        prisma,
+        action,
+        outcome: "success",
+        actorHash,
+        targetType: action === "retry_owner_text" ? "lead_handoff" : ["reopen_signup", "resend_signup_verification"].includes(action) ? "signup" : "calls",
+        targetId,
+        details: { initiatedFrom: "attention_inbox" },
+      });
+      const inbox = await getOperationalAttentionInbox({ prisma, signups: listSignupDashboardRecords() });
+      res.json({ ok: true, action, result, inbox });
+    } catch (error) {
+      await recordAdminAuditEvent({ prisma, action, outcome: "failed", actorHash, targetId, details: { code: error?.code || "action_failed" } });
+      throw error;
+    }
+  })
+);
+
+app.get(
+  "/api/admin/audit-events",
+  requireAdmin,
+  asyncRoute(async (req, res) => {
+    res.json({ ok: true, events: await listAdminAuditEvents({ prisma, limit: req.query.limit || 100 }) });
   })
 );
 

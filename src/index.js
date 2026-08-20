@@ -11,6 +11,7 @@ import TryDemo from "./TryDemo";
 import TradePages from "./TradePages";
 import FirstClassRentalsDemo from "./FirstClassRentalsDemo";
 import DeanAllisonDemo from "./DeanAllisonDemo";
+import "./tailwind.generated.css";
 import "./style.css";
 
 const getRoute = () => {
