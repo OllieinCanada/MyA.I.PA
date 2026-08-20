@@ -14,7 +14,23 @@ test("failed and stuck signups become redacted attention items", () => {
   assert.equal(items.length, 2);
   assert.deepEqual(items.map((item) => item.kind).sort(), ["signup_failed", "signup_stuck"]);
   assert.equal(JSON.stringify(items).includes("private@example.com"), false);
+  assert.equal(JSON.stringify(items).includes("upstream failed"), false);
   assert.ok(items.every((item) => item.targetId.length === 24));
+  assert.deepEqual(items[0].diagnostics, {
+    status: "setup_error",
+    paymentStatus: "",
+    makeStatus: null,
+    makeError: true,
+    smsRoutingStatus: "",
+    signupSource: "",
+    reviewRequired: false,
+    emailVerified: false,
+    smsVerified: false,
+    hasAssignedPhone: false,
+    hasAssistant: false,
+    hasCheckout: false,
+    hasSubscription: false,
+  });
 });
 
 test("attention summary groups critical and warning issues", () => {

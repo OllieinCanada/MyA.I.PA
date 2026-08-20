@@ -27,6 +27,33 @@ function attentionItem(input) {
     targetType: input.targetType || "",
     targetId: input.targetId || "",
     actions: input.actions || [],
+    ...(input.diagnostics ? { diagnostics: input.diagnostics } : {}),
+  };
+}
+
+function safeDiagnosticLabel(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_.:-]+/g, "_")
+    .slice(0, 80);
+}
+
+function signupDiagnostics(signup = {}, status = "unknown") {
+  return {
+    status: safeDiagnosticLabel(status) || "unknown",
+    paymentStatus: safeDiagnosticLabel(signup.paymentStatus),
+    makeStatus: Number.isFinite(Number(signup.makeStatus)) ? Number(signup.makeStatus) : null,
+    makeError: Boolean(signup.makeError),
+    smsRoutingStatus: safeDiagnosticLabel(signup.smsRoutingStatus),
+    signupSource: safeDiagnosticLabel(signup.signupSource),
+    reviewRequired: Boolean(signup.reviewRequired),
+    emailVerified: Boolean(signup.emailVerified),
+    smsVerified: Boolean(signup.smsVerified),
+    hasAssignedPhone: Boolean(signup.twilioPhoneNumber),
+    hasAssistant: Boolean(signup.vapiAssistantId),
+    hasCheckout: Boolean(signup.checkoutSessionId),
+    hasSubscription: Boolean(signup.subscriptionId),
   };
 }
 
@@ -54,6 +81,7 @@ function signupAttentionItems(signups = [], now = new Date(), stuckMinutes = 60)
         targetType: "signup",
         targetId,
         actions: ["reopen_signup"],
+        diagnostics: signupDiagnostics(signup, status),
       }));
     } else if (IN_PROGRESS_SIGNUP.test(status) && age != null && age >= stuckMinutes) {
       items.push(attentionItem({
@@ -66,6 +94,7 @@ function signupAttentionItems(signups = [], now = new Date(), stuckMinutes = 60)
         targetType: "signup",
         targetId,
         actions: status === "pending_email_verification" ? ["resend_signup_verification", "reopen_signup"] : ["reopen_signup"],
+        diagnostics: signupDiagnostics(signup, status),
       }));
     }
     const duplicateKey = String(signup.ownerEmail || signup.checkoutSessionId || "").trim().toLowerCase();

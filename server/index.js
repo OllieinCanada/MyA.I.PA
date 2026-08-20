@@ -7552,6 +7552,19 @@ app.get(
       service: "my-ai-pa-operations",
       generatedAt: inbox.generatedAt,
       attention: inbox.summary,
+      issues: inbox.items.map((item) => ({
+        id: item.id,
+        kind: item.kind,
+        severity: item.severity,
+        title: item.title,
+        summary: item.summary,
+        detectedAt: item.detectedAt,
+        ageMinutes: item.ageMinutes,
+        targetType: item.targetType,
+        targetId: item.targetId,
+        actions: item.actions,
+        ...(item.diagnostics ? { diagnostics: item.diagnostics } : {}),
+      })),
     });
   })
 );
