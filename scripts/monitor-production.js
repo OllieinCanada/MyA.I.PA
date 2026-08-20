@@ -32,6 +32,56 @@ function publicUrl(value) {
   }
 }
 
+function safeDiagnosticLabel(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_.:-]+/g, "_")
+    .slice(0, 80);
+}
+
+function redactOperationalSignupIssues(payload) {
+  const allowedDiagnosticKeys = [
+    "status",
+    "paymentStatus",
+    "makeStatus",
+    "makeError",
+    "smsRoutingStatus",
+    "signupSource",
+    "reviewRequired",
+    "emailVerified",
+    "smsVerified",
+    "hasAssignedPhone",
+    "hasAssistant",
+    "hasCheckout",
+    "hasSubscription",
+  ];
+  return (Array.isArray(payload?.issues) ? payload.issues : [])
+    .filter((issue) => issue?.targetType === "signup")
+    .slice(0, 100)
+    .map((issue) => ({
+      kind: safeDiagnosticLabel(issue.kind),
+      severity: safeDiagnosticLabel(issue.severity),
+      ageMinutes: Number.isFinite(Number(issue.ageMinutes)) ? Number(issue.ageMinutes) : null,
+      targetId: /^[a-f0-9]{24}$/.test(String(issue.targetId || "")) ? String(issue.targetId) : "",
+      actions: (Array.isArray(issue.actions) ? issue.actions : [])
+        .map(safeDiagnosticLabel)
+        .filter(Boolean)
+        .slice(0, 10),
+      diagnostics: Object.fromEntries(
+        allowedDiagnosticKeys
+          .filter((key) => Object.prototype.hasOwnProperty.call(issue.diagnostics || {}, key))
+          .map((key) => {
+            const value = issue.diagnostics[key];
+            if (typeof value === "boolean" || value == null || Number.isFinite(Number(value))) {
+              return [key, value];
+            }
+            return [key, safeDiagnosticLabel(value)];
+          })
+      ),
+    }));
+}
+
 async function probe(name, url, { expectJson = false, headers = {} } = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -65,6 +115,7 @@ async function probe(name, url, { expectJson = false, headers = {} } = {}) {
               : null,
             attentionTotal: Number.isFinite(Number(payload?.attention?.total)) ? Number(payload.attention.total) : null,
             attentionCritical: Number.isFinite(Number(payload?.attention?.bySeverity?.critical)) ? Number(payload.attention.bySeverity.critical) : null,
+            signupIssues: name === "operational_health" ? redactOperationalSignupIssues(payload) : [],
           }
         : {}),
     };
@@ -161,7 +212,14 @@ async function main() {
   if (!report.ok) process.exitCode = 1;
 }
 
-main().catch((error) => {
-  console.error(`Production monitor failed safely: ${String(error?.message || error).slice(0, 240)}`);
-  process.exitCode = 1;
-});
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(`Production monitor failed safely: ${String(error?.message || error).slice(0, 240)}`);
+    process.exitCode = 1;
+  });
+}
+
+module.exports = {
+  redactOperationalSignupIssues,
+  safeDiagnosticLabel,
+};
