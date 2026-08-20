@@ -20,6 +20,7 @@ test("production monitor keeps signup diagnostics actionable without customer da
           assignedPhoneKnownToTwilio: true,
           assignedPhoneKnownToVapi: true,
           vapiAssistantAssigned: false,
+          staleArchiveEligible: true,
           ownerEmail: "private@example.com",
           ownerPhone: "+19055550123",
         },
@@ -48,6 +49,7 @@ test("production monitor keeps signup diagnostics actionable without customer da
       assignedPhoneKnownToTwilio: true,
       assignedPhoneKnownToVapi: true,
       vapiAssistantAssigned: false,
+      staleArchiveEligible: true,
     },
   }]);
   assert.equal(JSON.stringify(issues).includes("private@example.com"), false);
