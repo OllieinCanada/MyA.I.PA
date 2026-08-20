@@ -54,3 +54,18 @@ test("pending verification exposes a guarded resend action after it becomes stuc
   assert.equal(items.length, 1);
   assert.deepEqual(items[0].actions, ["resend_signup_verification", "reopen_signup"]);
 });
+
+test("an active trial still alerts when provisioning never becomes ready", () => {
+  const now = new Date("2026-08-20T04:00:00.000Z");
+  const items = signupAttentionItems([{
+    ownerEmail: "owner@example.com",
+    status: "subscription_trialing",
+    makeStatus: 200,
+    subscriptionId: "sub_private",
+    updatedAt: "2026-08-20T02:30:00.000Z",
+  }], now, 60);
+
+  assert.equal(items.length, 1);
+  assert.equal(items[0].kind, "signup_stuck");
+  assert.deepEqual(items[0].actions, ["recover_signup", "reopen_signup"]);
+});

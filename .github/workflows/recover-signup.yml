@@ -1,0 +1,62 @@
+name: Recover signup alert
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_id:
+        description: Redacted 24-character signup target ID from the production monitor
+        required: true
+        type: string
+      confirmation:
+        description: Type RECOVER_SIGNUP to authorize the narrow recovery action
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: signup-recovery-${{ inputs.target_id }}
+  cancel-in-progress: false
+
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Validate recovery request
+        env:
+          TARGET_ID: ${{ inputs.target_id }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          [[ "$TARGET_ID" =~ ^[a-f0-9]{24}$ ]] || { echo "Invalid redacted target ID."; exit 1; }
+          [[ "$CONFIRMATION" == "RECOVER_SIGNUP" ]] || { echo "Explicit confirmation is required."; exit 1; }
+      - name: Run redacted signup recovery
+        env:
+          MONITOR_API_KEY: ${{ secrets.MONITOR_API_KEY }}
+          TARGET_ID: ${{ inputs.target_id }}
+        run: |
+          response_file="$(mktemp)"
+          status="$(curl --silent --show-error --output "$response_file" --write-out '%{http_code}' \
+            --request POST \
+            --header "Authorization: Bearer $MONITOR_API_KEY" \
+            --header "Content-Type: application/json" \
+            --data "{\"targetId\":\"$TARGET_ID\",\"confirmation\":\"RECOVER_SIGNUP\"}" \
+            https://api.myaipa.ca/api/internal/operations/recover-signup)"
+          node -e '
+            const fs = require("fs");
+            const raw = fs.readFileSync(process.argv[1], "utf8");
+            let payload = {};
+            try { payload = JSON.parse(raw); } catch {}
+            const safe = {
+              ok: payload.ok === true,
+              action: String(payload.action || "").replace(/[^a-z0-9_.:-]/gi, "_").slice(0, 80),
+              makeStatus: Number.isFinite(Number(payload.makeStatus)) ? Number(payload.makeStatus) : null,
+              assignedPhone: Boolean(payload.assignedPhone),
+              assistantAssigned: Boolean(payload.assistantAssigned),
+              smsRoutingStatus: String(payload.smsRoutingStatus || "").replace(/[^a-z0-9_.:-]/gi, "_").slice(0, 80),
+              error: String(payload.error || "").replace(/[^a-z0-9 ._:-]/gi, "_").slice(0, 160),
+            };
+            console.log(JSON.stringify(safe, null, 2));
+          ' "$response_file"
+          [[ "$status" -ge 200 && "$status" -lt 300 ]] || exit 1
