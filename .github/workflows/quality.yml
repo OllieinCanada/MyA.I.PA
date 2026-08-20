@@ -11,7 +11,21 @@ permissions:
 jobs:
   quality:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     env:
       CI: "true"
       DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/ci
@@ -33,6 +47,13 @@ jobs:
       - name: Backend security and provider tests
         run: npm run test:backend
 
+      - name: Exercise the real PostgreSQL schema and constraints
+        env:
+          RUN_DATABASE_INTEGRATION: "1"
+        run: |
+          npx prisma db push --skip-generate
+          npm run test:database
+
       - name: Validate private legal drafts when present
         run: npm run legal:validate
 
@@ -53,6 +74,14 @@ jobs:
 
       - name: Build GitHub Pages output
         run: npm run build:pages
+
+      - name: Install browser engines
+        run: npx playwright install --with-deps chromium firefox webkit
+
+      - name: Test critical browser journeys, accessibility, and responsive layouts
+        env:
+          BROWSER_ENGINES: chromium,firefox,webkit
+        run: npm run test:browser:quality
 
       - name: Verify generated Pages output
         run: |
