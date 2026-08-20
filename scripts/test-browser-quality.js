@@ -131,7 +131,6 @@ function describeViolation(violation) {
 async function auditPage({ browser, baseUrl, engineName, route, viewport }) {
   const context = await browser.newContext({
     viewport: { width: viewport.width, height: viewport.height },
-    reducedMotion: "reduce",
   });
   const page = await context.newPage();
   page.setDefaultTimeout(15_000);
@@ -217,7 +216,7 @@ async function auditPage({ browser, baseUrl, engineName, route, viewport }) {
 }
 
 async function testSignupJourney(browser, baseUrl) {
-  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: "reduce" });
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
   const page = await context.newPage();
   page.setDefaultTimeout(15_000);
   page.setDefaultNavigationTimeout(15_000);

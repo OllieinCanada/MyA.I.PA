@@ -2127,7 +2127,10 @@ function LegacyVoicemailLossesArtboard() {
         </div>
       </div>
 
-      <div className="mx-auto hidden w-[calc(100vw-1rem)] max-w-[min(1672px,calc(178.25svh-2rem))] lg:block">
+      <div
+        className="mx-auto hidden w-[calc(100vw-1rem)] lg:block"
+        style={{ maxWidth: "min(1672px, calc(178.25svh - 2rem))" }}
+      >
         <svg viewBox="0 0 1672 938" className="block h-auto w-full" role="img" aria-label="AI assistant comparison showing why voicemail loses and how AI converts callers into customers">
           <defs>
             <linearGradient id="vmBlueText" x1="0" x2="0" y1="105" y2="175" gradientUnits="userSpaceOnUse">
