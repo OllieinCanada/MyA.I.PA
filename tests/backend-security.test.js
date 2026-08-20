@@ -13,6 +13,10 @@ process.env.ADMIN_PASSWORD = "test-admin-password-42";
 process.env.ADMIN_SESSION_SECRET = "test-admin-session-secret-42";
 process.env.TRIAL_REMINDER_DISABLE = "true";
 process.env.VAPI_AUTO_SYNC_ENABLED = "false";
+process.env.VAPI_VOICE_SIGNUP_PHONE = "+12495033301";
+process.env.VAPI_VOICE_SIGNUP_SMS_FROM = "+12495033301";
+process.env.VAPI_VOICE_SIGNUP_PHONE_NUMBER_ID = "test-signup-phone-id";
+process.env.VAPI_VOICE_SIGNUP_ASSISTANT_ID = "test-signup-assistant-id";
 // Keep this suite deterministic even when a developer has added a real Vapi
 // credential to .env.local. The authentication tests below intentionally
 // verify the missing-credential failure path and must never reach Vapi.
@@ -334,6 +338,38 @@ test("Vapi webhook accepts its dedicated bearer credential", async () => {
     body: { eventType: "test.noop" },
   });
   assert.equal(response.status, 200);
+});
+
+test("voice signup bypasses customer mapping only for the dedicated signup route", () => {
+  assert.equal(
+    __test.getVapiVoiceSignupExecutionBusinessId({ phoneNumberId: "test-signup-phone-id" }),
+    1
+  );
+  assert.equal(
+    __test.getVapiVoiceSignupExecutionBusinessId({ assistantId: "test-signup-assistant-id" }),
+    1
+  );
+  assert.equal(
+    __test.getVapiVoiceSignupExecutionBusinessId({ phoneNumber: { number: "+1 (249) 503-3301" } }),
+    1
+  );
+  assert.throws(
+    () => __test.getVapiVoiceSignupExecutionBusinessId({
+      phoneNumberId: "different-phone-id",
+      assistantId: "different-assistant-id",
+      phoneNumber: { number: "+1 (249) 315-4508" },
+    }),
+    /dedicated My AI PA signup line/i
+  );
+});
+
+test("voice signup texts from the same public number the caller dialed", () => {
+  const smsEnv = __test.getVapiVoiceSignupSmsEnvironment({
+    TWILIO_FROM_NUMBER: "+12493154508",
+    TWILIO_ACCOUNT_SID: "ACtest",
+  });
+  assert.equal(smsEnv.TWILIO_FROM_NUMBER, "+12495033301");
+  assert.equal(smsEnv.TWILIO_ACCOUNT_SID, "ACtest");
 });
 
 test("integration credentials are not accepted from a request body", async () => {

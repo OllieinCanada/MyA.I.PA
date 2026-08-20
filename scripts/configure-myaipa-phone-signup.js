@@ -204,7 +204,7 @@ function withSignupPrompt(messages = []) {
 - Read every collected detail back in a short, organized summary. Ask exactly: "Is all of that correct, and do you want me to submit your My AI PA signup now?"
 - Call begin_myaipa_signup only after an explicit yes. Pass the caller's actual confirming words in confirmationText and set callerConfirmed true. The tool-call turn must contain the tool call only.
 - If validation fails, ask only for the missing or invalid item, read the corrected summary back, and obtain a new explicit yes before retrying.
-- On success, say which channel received the verification link and explain that setup begins after they open it. Do not mention Make.com, Vapi, Twilio, tools, or internal systems.
+- On success, when the tool confirms both channels, say: "We got your email. We're sending the verification link there and by text from the number you called. Once you verify it, we'll finish setup and send your assistant number." If the tool reports only one successful channel, accurately name only that channel. Do not mention Make.com, Vapi, Twilio, tools, or internal systems.
 - The existing draft_signup_sms and send_signup_sms tools are demo follow-up tools only. They never submit a signup and must not be described as completing one.`;
   let sawSystem = false;
   const updated = messages.map((message) => {

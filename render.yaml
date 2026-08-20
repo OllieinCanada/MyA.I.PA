@@ -219,6 +219,14 @@ services:
         value: true
       - key: VAPI_BUSINESS_MAP
         sync: false
+      - key: VAPI_VOICE_SIGNUP_PHONE
+        value: +12495033301
+      - key: VAPI_VOICE_SIGNUP_SMS_FROM
+        value: +12495033301
+      - key: VAPI_VOICE_SIGNUP_PHONE_NUMBER_ID
+        value: 236c7331-e3a4-4061-b304-8b551f1ca064
+      - key: VAPI_VOICE_SIGNUP_ASSISTANT_ID
+        value: 6f734a42-2d3a-47db-b883-e5d147dffb63
       - key: VAPI_AUTO_SYNC_ENABLED
         value: true
       - key: VAPI_AUTO_SYNC_INTERVAL_MS

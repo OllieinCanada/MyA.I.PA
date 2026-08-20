@@ -206,6 +206,18 @@ const VAPI_PREVIEW_MAX_DURATION_SECONDS = Math.max(
 );
 const VAPI_CALL_LIMIT = Math.max(1, Math.min(1000, Number(process.env.VAPI_CALL_LIMIT || 100) || 100));
 const VAPI_DEFAULT_BUSINESS_ID = parsePositiveInt(process.env.VAPI_DEFAULT_BUSINESS_ID, 1);
+const VAPI_VOICE_SIGNUP_PHONE = normalizePhoneForMatch(
+  process.env.VAPI_VOICE_SIGNUP_PHONE || "+12495033301"
+);
+const VAPI_VOICE_SIGNUP_SMS_FROM = normalizePhoneForMatch(
+  process.env.VAPI_VOICE_SIGNUP_SMS_FROM || VAPI_VOICE_SIGNUP_PHONE
+);
+const VAPI_VOICE_SIGNUP_PHONE_NUMBER_ID = String(
+  process.env.VAPI_VOICE_SIGNUP_PHONE_NUMBER_ID || "236c7331-e3a4-4061-b304-8b551f1ca064"
+).trim();
+const VAPI_VOICE_SIGNUP_ASSISTANT_ID = String(
+  process.env.VAPI_VOICE_SIGNUP_ASSISTANT_ID || "6f734a42-2d3a-47db-b883-e5d147dffb63"
+).trim();
 const VAPI_REQUIRE_BUSINESS_MAPPING = process.env.VAPI_REQUIRE_BUSINESS_MAPPING == null
   ? String(process.env.NODE_ENV || "").toLowerCase() === "production"
   : isEnabled(process.env.VAPI_REQUIRE_BUSINESS_MAPPING);
@@ -994,6 +1006,7 @@ async function beginVoiceSignupVerification({ req, parameters, call }) {
     smsResult = await sendSmsViaTwilio({
       to: owner.phone,
       message: `My AI PA signup for ${business.name}: verify your contact details to continue setup. ${verificationUrl} This link expires in 24 hours.`,
+      env: getVapiVoiceSignupSmsEnvironment(),
     });
   } catch (error) {
     smsError = error;
@@ -1028,12 +1041,17 @@ async function beginVoiceSignupVerification({ req, parameters, call }) {
     ...(emailSent ? ["email"] : []),
     ...(smsSent ? ["text message"] : []),
   ];
+  const deliveryMessage = emailSent && smsSent
+    ? "We got your email. The verification link is being sent there and by text from the number you called."
+    : emailSent
+      ? "We got your email, and the verification link is being sent there now."
+      : "We got your email. The verification link was sent by text from the number you called.";
   return {
     ok: true,
     businessName: business.name,
     verificationRequired: true,
     deliveryChannels,
-    message: `The signup details are saved. A verification link was sent by ${deliveryChannels.join(" and ")}. Setup begins only after the owner opens that link.`,
+    message: `${deliveryMessage} Once you verify it, we'll finish setup and send your assistant number.`,
   };
 }
 
@@ -1496,6 +1514,37 @@ async function resolveBusinessIdForVapiCall(call) {
     throw error;
   }
   return VAPI_DEFAULT_BUSINESS_ID;
+}
+
+function getVapiVoiceSignupExecutionBusinessId(call = {}) {
+  const calledNumber = normalizePhoneForMatch(
+    call.phoneNumber?.number ||
+      call.phoneNumber?.twilioPhoneNumber ||
+      call.destination?.number ||
+      call.to ||
+      ""
+  );
+  const phoneNumberId = String(call.phoneNumberId || call.phoneNumber?.id || "").trim();
+  const assistantId = String(call.assistantId || call.assistant?.id || "").trim();
+  const trusted = Boolean(
+    (VAPI_VOICE_SIGNUP_PHONE && calledNumber === VAPI_VOICE_SIGNUP_PHONE) ||
+      (VAPI_VOICE_SIGNUP_PHONE_NUMBER_ID && phoneNumberId === VAPI_VOICE_SIGNUP_PHONE_NUMBER_ID) ||
+      (VAPI_VOICE_SIGNUP_ASSISTANT_ID && assistantId === VAPI_VOICE_SIGNUP_ASSISTANT_ID)
+  );
+  if (!trusted) {
+    const error = new Error("Voice signup is allowed only on the dedicated My AI PA signup line.");
+    error.statusCode = 422;
+    error.code = "VAPI_VOICE_SIGNUP_ROUTE_REQUIRED";
+    throw error;
+  }
+  return VAPI_DEFAULT_BUSINESS_ID;
+}
+
+function getVapiVoiceSignupSmsEnvironment(env = process.env) {
+  return {
+    ...env,
+    TWILIO_FROM_NUMBER: VAPI_VOICE_SIGNUP_SMS_FROM,
+  };
 }
 
 function mapVapiStatus(value) {
@@ -7829,12 +7878,12 @@ app.post(
     if (vapiMessageType === "tool-calls") {
       const calls = Array.isArray(vapiMessage.toolCallList) ? vapiMessage.toolCallList : [];
       const results = [];
-      const routedBusinessId = await resolveBusinessIdForVapiCall(vapiMessage.call || vapiMessage);
       for (const rawToolCall of calls) {
         const toolCall = normalizeVapiToolCall(rawToolCall);
         const toolName = String(toolCall.name || "").toLowerCase();
         const parameters = toolCall.parameters;
         if (isVapiNotificationTool(toolName)) {
+          const routedBusinessId = await resolveBusinessIdForVapiCall(vapiMessage.call || vapiMessage);
           const claim = await claimVapiToolExecution({
             prisma,
             toolCall,
@@ -7870,6 +7919,7 @@ app.post(
             throw error;
           }
         } else if (isVapiVoiceSignupTool(toolName)) {
+          const routedBusinessId = getVapiVoiceSignupExecutionBusinessId(vapiMessage.call || vapiMessage);
           const claim = await claimVapiToolExecution({
             prisma,
             toolCall,
@@ -7906,6 +7956,7 @@ app.post(
             throw error;
           }
         } else if (["request_appointment", "create_appointment_request"].includes(toolName)) {
+          const routedBusinessId = await resolveBusinessIdForVapiCall(vapiMessage.call || vapiMessage);
           const claim = await claimVapiToolExecution({ prisma, toolCall, businessId: routedBusinessId, call: vapiMessage.call || vapiMessage });
           if (!claim.claimed) {
             results.push({
@@ -10283,5 +10334,7 @@ module.exports = {
     getPublicSignupNetworkStats,
     setPublicNetworkStatsLoaderForTests,
     purchaseTwilioPhoneNumber,
+    getVapiVoiceSignupExecutionBusinessId,
+    getVapiVoiceSignupSmsEnvironment,
   },
 };
