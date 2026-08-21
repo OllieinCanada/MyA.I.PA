@@ -94,6 +94,95 @@ test("signup recovery diagnostics reveal provider state without customer data", 
   assert.equal(JSON.stringify(diagnostics).includes("assistant-private-id"), false);
 });
 
+test("failed verified voice signup can be rebuilt only from its matching Vapi tool call", () => {
+  const signup = {
+    vapiCallId: "call_voice_recovery",
+    status: "setup_error",
+    emailVerified: true,
+    emailVerifiedAt: "2026-08-20T12:00:00.000Z",
+    signedUpAt: "2026-08-20T11:00:00.000Z",
+    ownerEmail: "owner@example.com",
+    ownerPhone: "+19055550123",
+    businessName: "Verified Voice Plumbing",
+  };
+  const parameters = {
+    ownerName: "Owner Example",
+    ownerEmail: "owner@example.com",
+    ownerPhone: "905-555-0123",
+    businessName: "Verified Voice Plumbing",
+    businessPhone: "905-555-0123",
+    streetAddress: "23 Robb Street",
+    city: "Hamilton",
+    province: "ON",
+    postalCode: "L8P 1A1",
+    businessType: "Plumbing",
+    serviceArea: "Hamilton",
+    services: "Residential plumbing service",
+    callerConfirmed: true,
+    confirmationText: "Yes, those details are correct.",
+  };
+  const call = {
+    artifact: {
+      messages: [{
+        toolCalls: [{ function: { name: "begin_myaipa_signup", arguments: JSON.stringify(parameters) } }],
+      }],
+    },
+  };
+
+  assert.deepEqual(__test.getVoiceSignupToolArguments(call), parameters);
+  const recovered = __test.buildRecoveredVoiceSignupPayload(signup, call);
+  assert.equal(recovered.verification.emailVerified, true);
+  assert.equal(recovered.security.emailVerificationCompleted, true);
+  assert.equal(recovered.source.callId, signup.vapiCallId);
+  assert.equal(recovered.business.name, signup.businessName);
+
+  assert.throws(
+    () => __test.buildRecoveredVoiceSignupPayload({ ...signup, ownerEmail: "different@example.com" }, call),
+    /does not match/i
+  );
+});
+
+test("assistant phone reconciliation requires one Vapi match also owned in Twilio", () => {
+  const match = { id: "phone_1", number: "+19055550123", assistantId: "assistant_1" };
+  assert.equal(__test.findUniqueVapiPhoneForAssistant(
+    [match],
+    "assistant_1",
+    [{ phone_number: "+1 (905) 555-0123" }]
+  ), match);
+  assert.equal(__test.findUniqueVapiPhoneForAssistant(
+    [match, { ...match, id: "phone_2" }],
+    "assistant_1",
+    [{ phone_number: "+19055550123" }]
+  ), null);
+  assert.equal(__test.findUniqueVapiPhoneForAssistant([match], "assistant_1", []), null);
+});
+
+test("only an unmistakable paused synthetic pricing signup can use the test archive path", () => {
+  const signup = {
+    businessName: "Codex Pricing Test 20260712005206",
+    ownerEmail: "codex-test@example.com",
+    subscriptionStatus: "paused",
+  };
+  const diagnostics = {
+    providerLookup: "complete",
+    assignedPhoneKnownToTwilio: false,
+    assignedPhoneKnownToVapi: false,
+  };
+  assert.equal(__test.isSyntheticPausedTestSignupArchiveEligible({ signup, diagnostics }), true);
+  assert.equal(__test.isSyntheticPausedTestSignupArchiveEligible({
+    signup: { ...signup, ownerEmail: "real-customer@example.org" },
+    diagnostics,
+  }), false);
+  assert.equal(__test.isSyntheticPausedTestSignupArchiveEligible({
+    signup: { ...signup, subscriptionStatus: "trialing" },
+    diagnostics,
+  }), false);
+  assert.equal(__test.isSyntheticPausedTestSignupArchiveEligible({
+    signup,
+    diagnostics: { ...diagnostics, assignedPhoneKnownToTwilio: true },
+  }), false);
+});
+
 test("reading trial reminders preserves provisioning state and timestamps", () => {
   const dashboard = {
     "email:owner@example.com": {

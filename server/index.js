@@ -4455,6 +4455,89 @@ function getSignupProviderRecoveryDiagnostics({ signup = {}, pendingSignup = nul
   };
 }
 
+function getVoiceSignupToolArguments(call = {}) {
+  const messages = Array.isArray(call?.artifact?.messages) && call.artifact.messages.length
+    ? call.artifact.messages
+    : Array.isArray(call?.messages)
+      ? call.messages
+      : [];
+  for (const message of messages) {
+    const toolCalls = Array.isArray(message?.toolCalls)
+      ? message.toolCalls
+      : Array.isArray(message?.tool_calls)
+        ? message.tool_calls
+        : [];
+    for (const toolCall of toolCalls) {
+      const name = String(toolCall?.function?.name || toolCall?.name || "").trim();
+      if (!isVapiVoiceSignupTool(name)) continue;
+      const rawArguments = toolCall?.function?.arguments ?? toolCall?.arguments;
+      if (rawArguments && typeof rawArguments === "object") return rawArguments;
+      const parsed = parseJsonObject(rawArguments);
+      if (parsed && Object.keys(parsed).length) return parsed;
+    }
+  }
+  return null;
+}
+
+function buildRecoveredVoiceSignupPayload(signup = {}, call = {}) {
+  if (!signup.vapiCallId || !signup.emailVerified || !/(error|failed)/i.test(String(signup.status || ""))) return null;
+  const parameters = getVoiceSignupToolArguments(call);
+  if (!parameters) return null;
+  const payload = buildVoiceSignupPayload(parameters, {
+    callId: signup.vapiCallId,
+    submittedAt: signup.signedUpAt || signup.createdAt || new Date().toISOString(),
+  });
+  const sameEmail = String(payload?.owner?.email || "").trim().toLowerCase()
+    === String(signup.ownerEmail || "").trim().toLowerCase();
+  const sameBusiness = String(payload?.business?.name || "").trim().toLowerCase()
+    === String(signup.businessName || "").trim().toLowerCase();
+  const sameOwnerPhone = normalizePhoneForMatch(payload?.owner?.phone)
+    === normalizePhoneForMatch(signup.ownerPhone || signup.businessPhone);
+  if (!sameEmail || !sameBusiness || !sameOwnerPhone) {
+    const error = new Error("The retained voice call does not match the signup record.");
+    error.statusCode = 409;
+    throw error;
+  }
+  return compactObject({
+    ...payload,
+    verifiedAt: signup.emailVerifiedAt || new Date().toISOString(),
+    verification: {
+      ...(payload.verification || {}),
+      emailVerified: true,
+      smsVerified: Boolean(signup.smsVerified),
+    },
+    security: {
+      ...(payload.security || {}),
+      emailVerificationCompleted: true,
+    },
+  });
+}
+
+function findUniqueVapiPhoneForAssistant(vapiNumbers = [], assistantId = "", twilioNumbers = []) {
+  const expectedAssistantId = String(assistantId || "").trim();
+  if (!expectedAssistantId) return null;
+  const matches = vapiNumbers.filter((record) => getVapiAssistantId(record) === expectedAssistantId);
+  if (matches.length !== 1) return null;
+  const aiNumber = normalizePhoneForMatch(getVapiPhoneNumber(matches[0]));
+  if (!aiNumber) return null;
+  const knownToTwilio = twilioNumbers.some(
+    (record) => normalizePhoneForMatch(record?.phone_number || record?.phoneNumber) === aiNumber
+  );
+  return knownToTwilio ? matches[0] : null;
+}
+
+function isSyntheticPausedTestSignupArchiveEligible({ signup = {}, diagnostics = {} } = {}) {
+  return Boolean(
+    /^Codex Pricing Test \d{14}$/i.test(String(signup.businessName || "").trim()) &&
+    /@example\.com$/i.test(String(signup.ownerEmail || "").trim()) &&
+    String(signup.subscriptionStatus || "").trim().toLowerCase() === "paused" &&
+    diagnostics.providerLookup === "complete" &&
+    !diagnostics.assignedPhoneKnownToTwilio &&
+    !diagnostics.assignedPhoneKnownToVapi &&
+    !signup.vapiAssistantId
+  );
+}
+
 function isStaleSignupArchiveEligible({ signup = {}, diagnostics = {}, now = new Date(), minimumAgeDays = 7 } = {}) {
   const updatedAt = new Date(signup.updatedAt || signup.signedUpAt || signup.createdAt || 0).getTime();
   const ageMs = Number.isFinite(updatedAt) && updatedAt > 0 ? now.getTime() - updatedAt : 0;
@@ -4549,6 +4632,81 @@ async function recoverSignupByOperationalTarget(targetId) {
     };
   }
 
+  if (signup.vapiCallId && signup.emailVerified && /(error|failed)/i.test(String(signup.status || ""))) {
+    const call = await fetchVapiCallDetail(signup.vapiCallId);
+    const recoveredPayload = buildRecoveredVoiceSignupPayload(signup, call);
+    if (recoveredPayload) {
+      const makeResult = await sendMakeSignupCompleted(recoveredPayload);
+      const makeData = makeResult.data || {};
+      if (!getMakeSignupSuccess(makeData)) {
+        upsertSignupDashboardRecord({
+          ...signup,
+          status: "setup_error",
+          makeStatus: makeResult.status,
+          makeError: makeData?.error || "Make webhook did not complete the recovered voice signup.",
+        });
+        const error = new Error("The recovered voice signup handoff still did not complete.");
+        error.statusCode = 502;
+        throw error;
+      }
+      const twilioPhoneNumber = getMakeTwilioPhoneNumber(makeData) || getMakeTwilioPhoneNumberFromText(makeResult.body);
+      const updated = upsertSignupDashboardFromPayload(recoveredPayload, {
+        ...signup,
+        status: "setup_started",
+        emailVerified: true,
+        makeStatus: makeResult.status,
+        makeError: "",
+        twilioPhoneNumber: twilioPhoneNumber || "",
+        provisioningRetriedAt: new Date().toISOString(),
+        recoveredFromVoiceCall: true,
+      });
+      return {
+        ok: true,
+        action: "voice_signup_replayed_from_provider_call",
+        makeStatus: makeResult.status,
+        assignedPhone: Boolean(updated.twilioPhoneNumber),
+        assistantAssigned: Boolean(updated.vapiAssistantId),
+      };
+    }
+  }
+
+  if (!signup.twilioPhoneNumber && signup.vapiAssistantId) {
+    const [vapiNumbers, twilioNumbers] = await Promise.all([
+      fetchVapiCollection("phone-number", ["phoneNumbers", "phone_numbers"]),
+      fetchTwilioIncomingPhoneNumbers(),
+    ]);
+    const vapiPhone = findUniqueVapiPhoneForAssistant(vapiNumbers, signup.vapiAssistantId, twilioNumbers);
+    if (vapiPhone) {
+      const aiNumber = normalizePhoneForMatch(getVapiPhoneNumber(vapiPhone));
+      const smsRouting = await safelyProvisionIsolatedSmsForSignup({
+        ownerEmail: signup.ownerEmail,
+        assistantId: signup.vapiAssistantId,
+        aiNumber,
+        ownerNumber: signup.ownerPhone || signup.businessPhone,
+      });
+      upsertSignupDashboardRecord({
+        ...signup,
+        status: "setup_ready",
+        makeError: "",
+        twilioPhoneNumber: aiNumber,
+        vapiPhoneNumberId: String(vapiPhone?.id || "").trim(),
+        smsRoutingStatus: smsRouting.healthy ? "healthy" : smsRouting.skipped ? "waiting" : "failed",
+        smsRoutingToolId: smsRouting.toolId || "",
+        smsRoutingToolName: smsRouting.toolName || "",
+        smsRoutingVerifiedAt: smsRouting.healthy ? new Date().toISOString() : "",
+        smsRoutingError: smsRouting.skipped ? smsRouting.reason : smsRouting.healthy ? "" : smsRouting.error || "Vapi read-back did not verify isolated routing.",
+        provisioningReconciledAt: new Date().toISOString(),
+      });
+      return {
+        ok: true,
+        action: "assistant_phone_reconciled",
+        assignedPhone: true,
+        assistantAssigned: true,
+        smsRoutingStatus: smsRouting.healthy ? "healthy" : smsRouting.skipped ? "waiting" : "failed",
+      };
+    }
+  }
+
   if (signup.twilioPhoneNumber) {
     const [vapiNumbers, twilioNumbers] = await Promise.all([
       fetchVapiCollection("phone-number", ["phoneNumbers", "phone_numbers"]),
@@ -4592,6 +4750,21 @@ async function recoverSignupByOperationalTarget(targetId) {
       twilioNumbers,
       providerLookup: "complete",
     });
+    if (isSyntheticPausedTestSignupArchiveEligible({ signup, diagnostics })) {
+      upsertSignupDashboardRecord({
+        ...signup,
+        status: "abandoned_archived",
+        makeError: "",
+        archivedAt: new Date().toISOString(),
+        archivedReason: "synthetic_paused_test_without_provider_resources",
+      });
+      return {
+        ok: true,
+        action: "synthetic_paused_test_archived",
+        assignedPhone: false,
+        assistantAssigned: false,
+      };
+    }
     if (isStaleSignupArchiveEligible({ signup, diagnostics })) {
       upsertSignupDashboardRecord({
         ...signup,
@@ -10800,6 +10973,10 @@ module.exports = {
     getVapiVoiceSignupSmsEnvironment,
     findSignupByOperationalTarget,
     getSignupProviderRecoveryDiagnostics,
+    getVoiceSignupToolArguments,
+    buildRecoveredVoiceSignupPayload,
+    findUniqueVapiPhoneForAssistant,
+    isSyntheticPausedTestSignupArchiveEligible,
     isStaleSignupArchiveEligible,
     mergeSignupDashboardWithTrialReminders,
   },
