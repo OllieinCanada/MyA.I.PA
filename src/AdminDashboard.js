@@ -1316,6 +1316,7 @@ function AttentionInbox({ inbox, busyAction, message, onRefresh, onAction }) {
   const actionLabels = {
     retry_owner_text: "Retry owner text",
     sync_calls: "Resync calls",
+    recover_signup: "Attempt safe recovery",
     reopen_signup: "Reopen signup",
     resend_signup_verification: "Resend verification",
   };

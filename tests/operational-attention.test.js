@@ -69,3 +69,20 @@ test("an active trial still alerts when provisioning never becomes ready", () =>
   assert.equal(items[0].kind, "signup_stuck");
   assert.deepEqual(items[0].actions, ["recover_signup", "reopen_signup"]);
 });
+
+test("a reopened signup stays in the queue until it is deliberately resolved", () => {
+  const now = new Date("2026-08-20T04:00:00.000Z");
+  const items = signupAttentionItems([{
+    ownerEmail: "owner@example.com",
+    status: "manual_review_reopened",
+    reviewRequired: true,
+    reopenedAt: "2026-08-20T03:55:00.000Z",
+    updatedAt: "2026-08-20T03:55:00.000Z",
+  }], now, 60);
+
+  assert.equal(items.length, 1);
+  assert.equal(items[0].kind, "signup_review_required");
+  assert.equal(items[0].severity, "warning");
+  assert.deepEqual(items[0].actions, ["recover_signup"]);
+  assert.equal(JSON.stringify(items).includes("owner@example.com"), false);
+});

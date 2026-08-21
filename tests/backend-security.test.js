@@ -324,6 +324,7 @@ test("customer support routes require a signed dashboard session", async () => {
 
 test("support repair actions require an admin session", async () => {
   const routes = [
+    ["/api/admin/attention/actions", "POST"],
     ["/api/admin/support-reports/example", "PATCH"],
     ["/api/admin/support-reports/example/github-issue", "POST"],
     ["/api/admin/support-reports/example/codex-task", "POST"],
