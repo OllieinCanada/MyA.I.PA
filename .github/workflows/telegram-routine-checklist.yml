@@ -1,0 +1,55 @@
+name: Telegram routine checklist
+
+on:
+  schedule:
+    # Run at both possible UTC offsets, then keep only 8 AM in Toronto.
+    - cron: "0 12 * * *"
+    - cron: "0 13 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: telegram-routine-checklist
+  cancel-in-progress: false
+
+jobs:
+  checklist:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check Toronto delivery window
+        id: delivery
+        shell: bash
+        run: |
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" || "$(TZ=America/Toronto date +%H)" == "08" ]]; then
+            echo "send=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "send=false" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.delivery.outputs.send == 'true'
+        uses: actions/checkout@v4
+      - if: steps.delivery.outputs.send == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - if: steps.delivery.outputs.send == 'true'
+        run: npm ci --legacy-peer-deps --ignore-scripts --no-audit --no-fund
+      - name: Send redacted routine checklist
+        if: steps.delivery.outputs.send == 'true'
+        env:
+          MONITOR_API_KEY: ${{ secrets.MONITOR_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          MONITOR_RECHECK_DELAY_MS: 15000
+        run: npm run ops:monitor -- --include-operational --confirm-failure --telegram-checklist --no-fail-exit
+      - name: Save redacted checklist report
+        if: always() && steps.delivery.outputs.send == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: telegram-routine-checklist-${{ github.run_id }}
+          path: diagnostics/operations/production-monitor.json
+          if-no-files-found: ignore
+          retention-days: 14
