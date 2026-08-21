@@ -9860,6 +9860,8 @@ app.post(
         result = await dispatchLeadHandoff(handoff.id, "OWNER");
       } else if (action === "sync_calls") {
         result = await syncVapiCalls({ limit: Math.min(100, VAPI_CALL_LIMIT) });
+      } else if (action === "recover_signup") {
+        result = await recoverSignupByOperationalTarget(targetId);
       } else if (action === "reopen_signup") {
         const signup = listSignupDashboardRecords().find((record) => {
           const identity = String(record.subscriptionId || record.checkoutSessionId || record.ownerEmail || record.businessName || record.signedUpAt || "unknown");
@@ -9921,7 +9923,7 @@ app.post(
         action,
         outcome: "success",
         actorHash,
-        targetType: action === "retry_owner_text" ? "lead_handoff" : ["reopen_signup", "resend_signup_verification"].includes(action) ? "signup" : "calls",
+        targetType: action === "retry_owner_text" ? "lead_handoff" : ["recover_signup", "reopen_signup", "resend_signup_verification"].includes(action) ? "signup" : "calls",
         targetId,
         details: { initiatedFrom: "attention_inbox" },
       });

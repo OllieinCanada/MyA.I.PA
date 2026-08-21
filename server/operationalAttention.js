@@ -98,6 +98,19 @@ function signupAttentionItems(signups = [], now = new Date(), stuckMinutes = 60)
           : ["recover_signup", "reopen_signup"],
         diagnostics: signupDiagnostics(signup, status),
       }));
+    } else if (signup.reviewRequired || status === "manual_review_reopened") {
+      items.push(attentionItem({
+        kind: "signup_review_required",
+        severity: "warning",
+        title: "Signup is waiting for manual recovery",
+        summary: "The signup was reopened and must remain visible until setup is completed or deliberately closed.",
+        detectedAt: signup.reopenedAt || updatedAt,
+        ageMinutes: ageMinutes(signup.reopenedAt || updatedAt, now),
+        targetType: "signup",
+        targetId,
+        actions: ["recover_signup"],
+        diagnostics: signupDiagnostics(signup, status),
+      }));
     }
     const duplicateKey = String(signup.ownerEmail || signup.checkoutSessionId || "").trim().toLowerCase();
     if (duplicateKey) seenIdentities.set(duplicateKey, (seenIdentities.get(duplicateKey) || 0) + 1);
