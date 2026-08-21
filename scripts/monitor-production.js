@@ -159,26 +159,95 @@ function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function sendTelegramFailure(report) {
-  if (!args.has("--telegram-on-failure") || report.ok) return { attempted: false };
-  const token = String(process.env.TELEGRAM_BOT_TOKEN || "").trim();
-  const chatId = String(process.env.TELEGRAM_CHAT_ID || "").trim();
-  if (!token || !chatId) return { attempted: false, reason: "telegram_not_configured" };
+function formatTorontoTime(value) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "unknown time";
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Toronto",
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(date);
+}
 
-  const failed = report.checks
-    .filter((check) => !check.healthy)
-    .map((check) => `${check.name}: ${check.status || check.error || "failed"}`)
-    .join("\n");
+function buildTelegramChecklist(report, { sha = process.env.GITHUB_SHA || "" } = {}) {
+  const checks = new Map((Array.isArray(report?.checks) ? report.checks : []).map((check) => [check.name, check]));
+  const publicSite = checks.get("public_site");
+  const liveness = checks.get("api_liveness");
+  const readiness = checks.get("api_readiness");
+  const operations = checks.get("operational_health");
+  const signupIssues = Array.isArray(operations?.signupIssues) ? operations.signupIssues : [];
+  const failedSignups = signupIssues.filter((issue) => issue.kind === "signup_failed").length;
+  const incompleteSignups = signupIssues.filter((issue) => issue.kind === "signup_stuck").length;
+  const critical = Number.isFinite(Number(operations?.attentionCritical))
+    ? Number(operations.attentionCritical)
+    : signupIssues.filter((issue) => issue.severity === "critical").length;
+  const total = Number.isFinite(Number(operations?.attentionTotal))
+    ? Number(operations.attentionTotal)
+    : signupIssues.length;
+  const warningCount = Math.max(0, total - critical);
+  const icon = (check) => check?.healthy ? "✅" : "🔴";
+  const status = (check) => check?.healthy ? "Online" : `Needs attention (${check?.status || check?.error || "failed"})`;
+  const databaseHealthy = readiness?.healthy && readiness?.database === "reachable";
+  const shortSha = /^[a-f0-9]{7,40}$/i.test(String(sha)) ? String(sha).slice(0, 7) : "unknown";
+
+  return [
+    "MY AI PA — ROUTINE STATUS CHECK",
+    report?.ok ? "Overall: ✅ All monitored systems healthy" : "Overall: 🟡 Service online; follow-up needed",
+    "",
+    `${icon(publicSite)} Website: ${status(publicSite)}`,
+    `${icon(liveness)} API: ${status(liveness)}`,
+    `${databaseHealthy ? "✅" : "🔴"} Database: ${databaseHealthy ? "Reachable" : "Needs attention"}`,
+    `${icon(operations)} Operations: ${critical} critical · ${warningCount} warning`,
+    "",
+    "SIGNUP CHECKLIST",
+    `${failedSignups === 0 ? "✅" : "🔴"} Failed signups: ${failedSignups}`,
+    `${incompleteSignups === 0 ? "✅" : "🟡"} Incomplete signups: ${incompleteSignups}`,
+    `${signupIssues.length === 0 ? "✅" : "🟡"} Signups requiring review: ${signupIssues.length}`,
+    "",
+    "✅ Automatic checks: every 5 minutes",
+    "✅ Immediate failure alerts: enabled",
+    `Checked: ${formatTorontoTime(report?.checkedAt)}`,
+    `Release: ${shortSha}`,
+    "",
+    "No customer contact details are included in this message.",
+  ].join("\n");
+}
+
+function telegramCredentials() {
+  return {
+    token: String(process.env.TELEGRAM_BOT_TOKEN || "").trim(),
+    chatId: String(process.env.TELEGRAM_CHAT_ID || "").trim(),
+  };
+}
+
+async function sendTelegramText(text) {
+  const { token, chatId } = telegramCredentials();
+  if (!token || !chatId) return { attempted: false, reason: "telegram_not_configured" };
   const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       chat_id: chatId,
-      text: `My AI PA production monitor alert\n${failed}\nChecked: ${report.checkedAt}`,
+      text,
       disable_web_page_preview: true,
     }),
   });
   return { attempted: true, accepted: response.ok, status: response.status };
+}
+
+async function sendTelegramFailure(report) {
+  if (!args.has("--telegram-on-failure") || report.ok) return { attempted: false };
+
+  const failed = report.checks
+    .filter((check) => !check.healthy)
+    .map((check) => `${check.name}: ${check.status || check.error || "failed"}`)
+    .join("\n");
+  return sendTelegramText(`My AI PA production monitor alert\n${failed}\nChecked: ${report.checkedAt}`);
+}
+
+async function sendTelegramChecklist(report) {
+  if (!args.has("--telegram-checklist")) return { attempted: false };
+  return sendTelegramText(buildTelegramChecklist(report));
 }
 
 async function main() {
@@ -210,12 +279,14 @@ async function main() {
     ].filter(Boolean),
   };
   report.alert = await sendTelegramFailure(report);
+  report.checklist = await sendTelegramChecklist(report);
 
   fs.mkdirSync(path.dirname(reportPath), { recursive: true });
   fs.writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
   console.log(JSON.stringify(report, null, 2));
   console.log(`Report saved: ${reportPath}`);
-  if (!report.ok) process.exitCode = 1;
+  const checklistFailed = args.has("--telegram-checklist") && report.checklist?.accepted !== true;
+  if (checklistFailed || (!report.ok && !args.has("--no-fail-exit"))) process.exitCode = 1;
 }
 
 if (require.main === module) {
@@ -226,6 +297,8 @@ if (require.main === module) {
 }
 
 module.exports = {
+  buildTelegramChecklist,
+  formatTorontoTime,
   redactOperationalSignupIssues,
   safeDiagnosticLabel,
 };
