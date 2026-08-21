@@ -128,6 +128,17 @@ const heroCallTranscript = [
 
 const demoCallAudioSrc = `${process.env.PUBLIC_URL || ""}${heroTranscriptTimings.src}?v=20260814-receptionist-first`;
 
+const landingScrollChapterIds = [
+  "mobile-problem",
+  "mobile-how-it-works",
+  "mobile-scroll-call-story",
+  "mobile-value",
+  "mobile-safeguards",
+  "mobile-pricing",
+  "mobile-setup-questions",
+  "mobile-final-decision",
+];
+
 export function getTypedHeroCallTurns(audioTime) {
   const currentTime = Number(audioTime);
   if (!Number.isFinite(currentTime) || currentTime <= 0) return [];
@@ -3638,6 +3649,38 @@ function LandingPage() {
 
   useEffect(() => {
     document.title = "My AI PA | AI Telephone Answering Assistant";
+  }, []);
+
+  useEffect(() => {
+    const chapters = landingScrollChapterIds
+      .map((id) => document.getElementById(id))
+      .filter(Boolean);
+    if (!chapters.length) return undefined;
+
+    const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+    if (reducedMotion || !("IntersectionObserver" in window)) {
+      chapters.forEach((chapter) => chapter.classList.add("landing-scroll-chapter", "is-visible"));
+      return undefined;
+    }
+
+    chapters.forEach((chapter) => {
+      chapter.classList.add("landing-scroll-chapter");
+      if (chapter.getBoundingClientRect().top < window.innerHeight * 0.94) chapter.classList.add("is-visible");
+    });
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting) return;
+          entry.target.classList.add("is-visible");
+          observer.unobserve(entry.target);
+        });
+      },
+      { rootMargin: "0px 0px -12%", threshold: 0.12 }
+    );
+    chapters.filter((chapter) => !chapter.classList.contains("is-visible")).forEach((chapter) => observer.observe(chapter));
+
+    return () => observer.disconnect();
   }, []);
 
   useEffect(() => {
@@ -9467,6 +9510,50 @@ function LandingPage() {
               font-size: 2.3rem !important;
             }
           }
+          /* Major chapters rise into place once as the visitor scrolls. This
+             changes no wording, sizing, spacing, or document flow. */
+          .landing-scroll-chapter {
+            opacity: 0;
+            transform: translate3d(0, clamp(2rem, 5vw, 4.5rem), 0) scale(0.985);
+            transform-origin: 50% 0;
+            clip-path: inset(4% 0 0 0 round clamp(1.25rem, 2.5vw, 2.5rem));
+            filter: saturate(0.9) contrast(0.98);
+            background-position: center 18%;
+            will-change: opacity, transform, clip-path;
+            transition:
+              opacity 680ms ease-out,
+              transform 920ms cubic-bezier(0.16, 1, 0.3, 1),
+              clip-path 920ms cubic-bezier(0.16, 1, 0.3, 1),
+              filter 760ms ease-out,
+              background-position 1100ms cubic-bezier(0.16, 1, 0.3, 1);
+          }
+          .landing-scroll-chapter > div {
+            transform: translate3d(0, 0.8rem, 0);
+            transition: transform 980ms cubic-bezier(0.16, 1, 0.3, 1);
+          }
+          .landing-scroll-chapter.is-visible {
+            opacity: 1;
+            transform: translate3d(0, 0, 0) scale(1);
+            clip-path: inset(0 round 0);
+            filter: none;
+            background-position: center center;
+          }
+          .landing-scroll-chapter.is-visible > div {
+            transform: translate3d(0, 0, 0);
+          }
+          @media (prefers-reduced-motion: reduce) {
+            .landing-scroll-chapter,
+            .landing-scroll-chapter > div,
+            .landing-scroll-chapter.is-visible,
+            .landing-scroll-chapter.is-visible > div {
+              opacity: 1 !important;
+              transform: none !important;
+              clip-path: none !important;
+              filter: none !important;
+              transition: none !important;
+            }
+          }
+
           /* Short desktop browser windows: keep the complete live-call card and
              hang-up control visible without changing the standard laptop layout. */
           @media (min-width: 1367px) and (max-height: 660px) and (pointer: fine) {
