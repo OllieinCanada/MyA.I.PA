@@ -80,12 +80,14 @@ function DemoPhone({ scenario, visibleLines, complete }) {
   );
 }
 
-function MessagePreview({ label, status, text, tone, defaultOpen = false }) {
+function MessagePreview({ label, status, text, tone }) {
   return (
-    <details className={`tims-message-preview ${tone}`} open={defaultOpen || undefined}>
-      <summary><span><Icon name={tone === "owner" ? "document" : "message"} size={15} />{label}</span><strong>{status}</strong></summary>
-      <p>{text}</p>
-    </details>
+    <article className={`tims-message-preview ${tone}`} aria-label={`${label} text message preview`}>
+      <div className="tims-text-phone-top"><span>9:41</span><i /><span>5G</span></div>
+      <div className="tims-text-phone-contact"><span><Icon name={tone === "owner" ? "document" : "message"} size={15} /></span><div><strong>{label}</strong><small>{tone === "owner" ? "My AI PA" : "Tim's Electrical"} · now</small></div></div>
+      <div className="tims-text-phone-thread"><p>{text}</p></div>
+      <div className="tims-text-phone-status"><span>{status}</span><small>Simulated text preview</small></div>
+    </article>
   );
 }
 
@@ -114,8 +116,8 @@ function CallSummary({ scenario, complete, onAction }) {
       </div>
       {complete ? (
         <div className="tims-message-grid">
-          <MessagePreview key={`${scenario.id}-owner`} label="Preview owner text" status="READY" text={scenario.ownerText} tone="owner" defaultOpen />
-          <MessagePreview key={`${scenario.id}-customer`} label="Preview customer text" status="READY" text={scenario.customerText} tone="customer" />
+          <MessagePreview key={`${scenario.id}-owner`} label="Owner's cellphone" status="READY" text={scenario.ownerText} tone="owner" />
+          <MessagePreview key={`${scenario.id}-customer`} label="Customer's cellphone" status="READY" text={scenario.customerText} tone="customer" />
         </div>
       ) : <p className="tims-message-waiting"><Icon name="message" size={16} />Text previews appear when the simulated call is complete.</p>}
       <div className="fcr-summary-actions">

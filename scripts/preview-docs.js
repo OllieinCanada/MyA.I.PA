@@ -29,6 +29,10 @@ function resolveRequestPath(urlPath) {
   const candidate = path.resolve(docsDir, relative);
   if (!candidate.startsWith(docsDir)) return null;
   if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) return candidate;
+  if (fs.existsSync(candidate) && fs.statSync(candidate).isDirectory()) {
+    const directoryIndex = path.join(candidate, "index.html");
+    if (fs.existsSync(directoryIndex)) return directoryIndex;
+  }
   return rootPath("docs", "index.html");
 }
 

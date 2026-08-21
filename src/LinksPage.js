@@ -99,6 +99,13 @@ export default function LinksPage() {
             title="Visit the My AI PA website"
             description="See how missed calls become job details ready for your callback."
           />
+          <LinkCard
+            href="/proof/"
+            icon="site"
+            eyebrow="For employers and collaborators"
+            title="See the engineering proof"
+            description="Review the customer workflow, recorded demonstration, troubleshooting approach and test evidence."
+          />
         </nav>
 
         <div className="links-contact">

@@ -28,6 +28,15 @@ describe("Tim's Electrical interactive demo", () => {
     expect(scenario.stages).toHaveLength(4);
   });
 
+  test("the installation scenario uses natural intake and captures preferred timing", () => {
+    const scenario = timsElectricalScenarios.find((item) => item.id === "new-installation");
+    const transcript = scenario.transcript.map((line) => line.text).join(" ");
+    expect(transcript).toMatch(/How can I help you today/i);
+    expect(transcript).toMatch(/When are you hoping to have the work done/i);
+    expect(scenario.collected).toContain("Preferred start · Next week");
+    expect(scenario.customerText).toMatch(/details and next steps/i);
+  });
+
   test("the immediate-danger scenario stops intake and directs the caller to 911", () => {
     const scenario = timsElectricalScenarios.find((item) => item.id === "safety-redirect");
     const assistantText = scenario.transcript.filter((line) => line.speaker === "assistant").map((line) => line.text).join(" ");

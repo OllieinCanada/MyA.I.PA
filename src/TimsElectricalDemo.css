@@ -28,17 +28,22 @@
 .tims-panel-bolt { position: absolute; right: 24px; top: 16px; color: #f59e0b; }
 .tims-electric-visual .fcr-callback-card { top: 96px; }
 
-.tims-message-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 18px; }
-.tims-message-preview { min-width: 0; overflow: hidden; border: 1px solid rgba(255,255,255,.13); border-radius: 12px; background: rgba(255,255,255,.06); }
-.tims-message-preview > summary { min-height: 42px; display: flex; align-items: center; gap: 8px; padding: 8px 10px; cursor: pointer; list-style: none; }
-.tims-message-preview > summary::-webkit-details-marker { display: none; }
-.tims-message-preview > summary::after { content: "+"; margin-left: 2px; color: #8ea7b3; font-size: .82rem; font-weight: 900; }
-.tims-message-preview[open] > summary { border-bottom: 1px solid rgba(255,255,255,.09); }
-.tims-message-preview[open] > summary::after { content: "−"; }
-.tims-message-preview > summary span { min-width: 0; flex: 1; display: inline-flex; align-items: center; gap: 6px; color: #edf8ff; font-size: .67rem; font-weight: 850; }
-.tims-message-preview > summary strong { color: #7dd3fc; font-size: .55rem; letter-spacing: .08em; }
-.tims-message-preview.customer > summary strong { color: #9aefc8; }
-.tims-message-preview p { min-height: 86px; margin: 0; padding: 10px; color: #c9dce8; font-size: .68rem; line-height: 1.5; }
+.tims-message-grid { display: grid; grid-template-columns: 1fr 1fr; align-items: start; gap: 18px; margin: 20px auto 0; }
+.tims-message-preview { min-width: 0; overflow: hidden; border: 6px solid #111827; border-radius: 30px; color: #111827; background: #fff; box-shadow: 0 24px 48px -32px rgba(0,0,0,.88); }
+.tims-text-phone-top { min-height: 24px; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 6px; padding: 5px 10px 2px; color: #475569; font-size: .48rem; font-weight: 950; }
+.tims-text-phone-top > span:last-child { text-align: right; }
+.tims-text-phone-top i { width: 42px; height: 8px; display: block; border-radius: 999px; background: #111827; }
+.tims-text-phone-contact { display: grid; grid-template-columns: 30px minmax(0,1fr); align-items: center; gap: 8px; padding: 7px 9px; border-top: 1px solid #e5e7eb; border-bottom: 1px solid #e5e7eb; background: #f8fafc; }
+.tims-text-phone-contact > span { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 999px; color: #fff; background: #2587f5; }
+.tims-message-preview.customer .tims-text-phone-contact > span { background: #0a84ff; }
+.tims-text-phone-contact strong { display: block; font-size: .66rem; font-weight: 950; line-height: 1.15; }
+.tims-text-phone-contact small { display: block; margin-top: 2px; color: #8e8e93; font-size: .48rem; font-weight: 800; }
+.tims-text-phone-thread { min-height: 116px; display: flex; align-items: flex-start; padding: 12px 9px 8px; background: #fff; }
+.tims-text-phone-thread p { max-width: 94%; min-height: 0; margin: 0; padding: 9px 10px; border-radius: 14px 14px 14px 5px; color: #111; background: #e9e9eb; font-size: .61rem; font-weight: 750; line-height: 1.42; }
+.tims-message-preview.customer .tims-text-phone-thread { justify-content: flex-end; }
+.tims-message-preview.customer .tims-text-phone-thread p { border-radius: 14px 14px 5px 14px; color: #fff; background: #0a84ff; }
+.tims-text-phone-status { min-height: 34px; display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 5px 10px 9px; color: #8e8e93; font-size: .48rem; font-weight: 850; }
+.tims-text-phone-status span { color: #168349; font-size: .52rem; font-weight: 950; letter-spacing: .08em; }
 .tims-demo .fcr-summary-actions button:disabled { opacity: .43; cursor: not-allowed; }
 
 .tims-detail-disclosures details { min-width: 0; overflow: hidden; border: 1px solid rgba(255,255,255,.11); border-radius: 10px; background: rgba(255,255,255,.035); }
@@ -66,6 +71,42 @@
 .tims-demo-landing .fcr-section { padding: 64px 0; }
 .tims-demo-landing .fcr-phone-shell { height: 540px; }
 .tims-demo-landing .fcr-phone-transcript { overflow-y: hidden; }
+
+@media (min-width: 1200px) {
+  .tims-demo-landing .fcr-shell {
+    width: min(var(--landing-chapter-max, 90rem), calc(100% - (2 * var(--landing-desktop-gutter, 3rem))));
+  }
+  .tims-demo-landing .fcr-section {
+    padding: clamp(72px, 6vw, 96px) 0;
+  }
+  .tims-demo-landing .fcr-section-heading {
+    max-width: 920px;
+    margin: 0 auto 36px;
+    text-align: center;
+  }
+  .tims-demo-landing .fcr-section-heading p {
+    max-width: 760px;
+    margin-inline: auto;
+  }
+  .tims-demo-landing .fcr-scenario-tabs {
+    justify-content: center;
+    flex-wrap: wrap;
+    overflow: visible;
+  }
+  .tims-demo-landing .fcr-live-grid {
+    grid-template-columns: minmax(350px, 4fr) minmax(0, 8fr);
+    gap: clamp(36px, 3.5vw, 56px);
+  }
+  .tims-demo-landing .fcr-console {
+    min-width: 0;
+  }
+}
+
+@media (min-width: 1600px) {
+  .tims-demo-landing .fcr-live-grid {
+    grid-template-columns: minmax(380px, 4fr) minmax(0, 8fr);
+  }
+}
 
 @media (max-width: 760px) {
   .tims-message-grid { grid-template-columns: 1fr; }

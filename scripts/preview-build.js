@@ -20,7 +20,7 @@ const contentTypes = {
 };
 
 function send(res, status, body, contentType = "text/plain; charset=utf-8") {
-  res.writeHead(status, { "Content-Type": contentType });
+  res.writeHead(status, { "Content-Type": contentType, "Cache-Control": "no-store" });
   res.end(body);
 }
 
@@ -44,7 +44,7 @@ const server = http.createServer((req, res) => {
   fs.readFile(filePath, (error, data) => {
     if (error) return send(res, 404, "Not found");
     const contentType = contentTypes[path.extname(filePath).toLowerCase()] || "application/octet-stream";
-    res.writeHead(200, { "Content-Type": contentType });
+    res.writeHead(200, { "Content-Type": contentType, "Cache-Control": "no-store" });
     res.end(data);
   });
 });
