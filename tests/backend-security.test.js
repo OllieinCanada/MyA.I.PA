@@ -183,6 +183,30 @@ test("only an unmistakable paused synthetic pricing signup can use the test arch
   }), false);
 });
 
+test("only an expired disposable-email sandbox review can use the sandbox archive path", () => {
+  const now = new Date("2026-08-21T12:00:00.000Z");
+  const signup = {
+    businessName: "My AI PA Sandbox Verification 1785262220141",
+    ownerEmail: "myaipa-sandbox@mailinator.com",
+    status: "review_required",
+    reviewReasons: ["disposable_email"],
+    updatedAt: "2026-07-28T12:00:00.000Z",
+  };
+  assert.equal(__test.isExpiredSyntheticSandboxReviewArchiveEligible({ signup, now }), true);
+  assert.equal(__test.isExpiredSyntheticSandboxReviewArchiveEligible({
+    signup: { ...signup, businessName: "Real Plumbing Company" },
+    now,
+  }), false);
+  assert.equal(__test.isExpiredSyntheticSandboxReviewArchiveEligible({
+    signup: { ...signup, subscriptionId: "sub_real" },
+    now,
+  }), false);
+  assert.equal(__test.isExpiredSyntheticSandboxReviewArchiveEligible({
+    signup: { ...signup, updatedAt: "2026-08-20T12:00:00.000Z" },
+    now,
+  }), false);
+});
+
 test("reading trial reminders preserves provisioning state and timestamps", () => {
   const dashboard = {
     "email:owner@example.com": {

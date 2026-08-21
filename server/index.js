@@ -4538,6 +4538,25 @@ function isSyntheticPausedTestSignupArchiveEligible({ signup = {}, diagnostics =
   );
 }
 
+function isExpiredSyntheticSandboxReviewArchiveEligible({ signup = {}, now = new Date(), minimumAgeDays = 7 } = {}) {
+  const updatedAt = new Date(signup.updatedAt || signup.signedUpAt || signup.createdAt || 0).getTime();
+  const ageMs = Number.isFinite(updatedAt) && updatedAt > 0 ? now.getTime() - updatedAt : 0;
+  const reviewReasons = Array.isArray(signup.reviewReasons) ? signup.reviewReasons.map((reason) => String(reason).trim().toLowerCase()) : [];
+  return Boolean(
+    /^My AI PA Sandbox Verification \d+$/i.test(String(signup.businessName || "").trim()) &&
+    /@mailinator\.com$/i.test(String(signup.ownerEmail || "").trim()) &&
+    String(signup.status || "").trim().toLowerCase() === "review_required" &&
+    reviewReasons.includes("disposable_email") &&
+    !signup.subscriptionId &&
+    !signup.checkoutSessionId &&
+    !signup.twilioPhoneNumber &&
+    !signup.vapiAssistantId &&
+    !signup.emailVerified &&
+    !signup.smsVerified &&
+    ageMs >= Math.max(1, Number(minimumAgeDays) || 7) * 24 * 60 * 60 * 1000
+  );
+}
+
 function isStaleSignupArchiveEligible({ signup = {}, diagnostics = {}, now = new Date(), minimumAgeDays = 7 } = {}) {
   const updatedAt = new Date(signup.updatedAt || signup.signedUpAt || signup.createdAt || 0).getTime();
   const ageMs = Number.isFinite(updatedAt) && updatedAt > 0 ? now.getTime() - updatedAt : 0;
@@ -4629,6 +4648,23 @@ async function recoverSignupByOperationalTarget(targetId) {
       makeStatus: makeResult.status,
       assignedPhone: Boolean(updated.twilioPhoneNumber),
       assistantAssigned: Boolean(updated.vapiAssistantId),
+    };
+  }
+
+  if (isExpiredSyntheticSandboxReviewArchiveEligible({ signup })) {
+    upsertSignupDashboardRecord({
+      ...signup,
+      status: "abandoned_archived",
+      makeError: "",
+      reviewRequired: false,
+      archivedAt: new Date().toISOString(),
+      archivedReason: "expired_synthetic_sandbox_review",
+    });
+    return {
+      ok: true,
+      action: "synthetic_sandbox_review_archived",
+      assignedPhone: false,
+      assistantAssigned: false,
     };
   }
 
@@ -10977,6 +11013,7 @@ module.exports = {
     buildRecoveredVoiceSignupPayload,
     findUniqueVapiPhoneForAssistant,
     isSyntheticPausedTestSignupArchiveEligible,
+    isExpiredSyntheticSandboxReviewArchiveEligible,
     isStaleSignupArchiveEligible,
     mergeSignupDashboardWithTrialReminders,
   },
