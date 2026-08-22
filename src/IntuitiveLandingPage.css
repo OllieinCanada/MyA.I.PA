@@ -133,6 +133,8 @@
 .simple-message-phone header small { margin-top: 4px; color: #78899a; font-size: .58rem; font-weight: 750; }
 .simple-message-phone > p { margin: 15px 0 0; border-radius: 16px 16px 16px 6px; background: #e9e9eb; padding: 14px; color: #111; font-size: .75rem; font-weight: 800; line-height: 1.4; }
 .simple-message-phone.customer > p { border-radius: 13px 13px 5px 13px; background: #0a84ff; color: #fff; }
+.simple-red-pen-message span { display: block; }
+.simple-red-pen-message span.closing { margin-top: 5px; }
 .simple-carousel-benefits { display: grid; grid-template-columns: 120px 1fr; gap: 22px; align-items: center; }
 .simple-coffee-cup { position: relative; display: grid; place-items: center; align-self: stretch; margin: 0; border: 1px solid rgba(142,206,250,.25); border-radius: 20px; background: radial-gradient(circle at 50% 56%, rgba(85,191,238,.16), rgba(255,255,255,.025) 66%); padding: 12px 7px 8px; }
 .simple-coffee-cup img { position: relative; z-index: 1; width: 112px; height: 156px; display: block; object-fit: contain; transform-origin: 50% 88%; filter: drop-shadow(0 15px 10px rgba(0,0,0,.42)); animation: simpleCupFloat 3.2s cubic-bezier(.45,.05,.55,.95) infinite; }

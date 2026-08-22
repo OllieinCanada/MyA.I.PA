@@ -80,7 +80,10 @@ describe("intuitive homepage journey", () => {
     expect(carousel.getAttribute("aria-label")).toMatch(/Slide 1 of 3/i);
     expect(container.textContent).toMatch(/A real conversation—not voicemail/i);
     expect(container.textContent).toMatch(/Both sides get a clear text/i);
-    expect(container.textContent).toMatch(/Coverage for about a cup of coffee a day/i);
+    expect(container.textContent).toMatch(/Worry-Free Coverage — For about the price of a cup of coffee a day/i);
+    expect(container.textContent).toMatch(/Hi, thanks for calling! Are you looking for a new installation, repair or maintenance today\?/i);
+    expect(container.textContent).toMatch(/PREFERRED START DATE - NEXT WEEK/i);
+    expect(container.textContent).toMatch(/WILL CALL TO DISCUSS JOB DETAILS AND PROVIDE QUOTE/i);
     expect(container.textContent).toMatch(/Natural conversation and FAQ answers/i);
     expect(container.querySelector("#why-it-matters").textContent).toMatch(/First question: Why not just stick to voice mail\?/i);
     expect(container.querySelectorAll(".simple-message-phone")).toHaveLength(2);

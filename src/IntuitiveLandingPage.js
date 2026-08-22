@@ -4,12 +4,22 @@ import heroTranscriptTimings from "./timsElectricalHeroTranscriptTimings.json";
 import "./IntuitiveLandingPage.css";
 
 const coreBenefits = [
-  ["phone", "All calls answered professionally after 3 rings."],
+  ["phone", "Picks up after three rings."],
   ["chat", "Natural dialogue with customers to create a connection."],
   ["question", "FAQ questions answered."],
   ["clipboard", "Job details and callback information texted to you."],
   ["person", "Complete customer information collected."],
-  ["message", "A thank-you text/reminder sent to the customer."],
+  ["message", "Both receive text summary for easy follow up."],
+];
+
+const redPenCustomerText = [
+  "TIM'S ELECTRICAL",
+  "- INSTALLATION REQUEST",
+  "- HOT TUB WIRING",
+  "- PREFERRED START DATE - NEXT WEEK",
+  "- WILL CALL TO DISCUSS JOB DETAILS AND PROVIDE QUOTE",
+  "THANK YOU FOR CALLING",
+  "TIM'S ELECTRICAL",
 ];
 
 const handoffCards = [
@@ -218,7 +228,7 @@ function AnimatedHeroProof({ onSampleCall, onStartTrial }) {
       title: "A real conversation—not voicemail",
       content: (
         <div className="simple-call-conversation">
-          <div className="assistant"><span>My AI PA</span><p>“Hello, are you looking for a new installation, repair or maintenance today?”</p></div>
+          <div className="assistant"><span>My AI PA</span><p>“Hi, thanks for calling! Are you looking for a new installation, repair or maintenance today?”</p></div>
           <div className="caller"><span>Caller</span><p>“I need someone to wire up my hot tub as a new installation.”</p></div>
           <div className="assistant"><span>My AI PA</span><p>“Absolutely. Can I get your name and the address where the work is needed?”</p></div>
         </div>
@@ -237,14 +247,16 @@ function AnimatedHeroProof({ onSampleCall, onStartTrial }) {
           <article className="simple-message-phone customer">
             <div className="simple-phone-status"><b>9:41</b><i /><b>5G</b></div>
             <header><span>TE</span><div><strong>Customer's cellphone</strong><small>Tim's Electrical · now</small></div></header>
-            <p>Thanks for calling Tim's Electrical. We received your hot tub wiring request. The team will follow up to discuss the details and next steps.</p>
+            <p className="simple-red-pen-message">
+              {redPenCustomerText.map((line, index) => <span className={index === 5 ? "closing" : ""} key={`${line}-${index}`}>{line}</span>)}
+            </p>
           </article>
         </div>
       ),
     },
     {
       label: "What you get",
-      title: "Coverage for about a cup of coffee a day",
+      title: "Worry-Free Coverage — For about the price of a cup of coffee a day.",
       content: (
         <div className="simple-carousel-benefits">
           <figure className="simple-coffee-cup">
@@ -252,10 +264,10 @@ function AnimatedHeroProof({ onSampleCall, onStartTrial }) {
             <img src="/illustrations/tim-hortons-canadian-cup.png" alt="A hand-drawn Tim Hortons cup with Canadian nature-inspired artwork" />
           </figure>
           <ul>
-            <li><Icon name="phone" />Professional answers after three rings</li>
+            <li><Icon name="phone" />Picks up after three rings</li>
             <li><Icon name="chat" />Natural conversation and FAQ answers</li>
             <li><Icon name="clipboard" />Job and callback details collected</li>
-            <li><Icon name="message" />Owner and customer follow-up texts</li>
+            <li><Icon name="message" />Both receive text summary for easy follow up.</li>
           </ul>
         </div>
       ),
