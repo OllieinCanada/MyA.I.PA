@@ -133,13 +133,14 @@
 .simple-message-phone header small { margin-top: 4px; color: #78899a; font-size: .58rem; font-weight: 750; }
 .simple-message-copy { margin: 15px 0 0; border-radius: 16px 16px 16px 6px; background: #e9e9eb; padding: 14px; color: #111; font-size: .75rem; font-weight: 800; line-height: 1.4; }
 .simple-message-phone.customer .simple-message-copy { border-radius: 13px 13px 5px 13px; background: #0a84ff; color: #fff; }
-.simple-message-bullets { margin: 0; padding: 0 0 0 1.05em; }
-.simple-message-bullets li { margin: 0; padding-left: .1em; }
-.simple-message-bullets li::marker { content: "- "; font-weight: 950; }
+.simple-message-bullets { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.simple-message-bullets li { min-width: 0; display: grid; grid-template-columns: 8px minmax(0,1fr); align-items: start; gap: 5px; margin: 0; line-height: 1.28; }
+.simple-message-bullets li::before { content: ""; width: 7px; height: 3px; margin-top: .48em; border-radius: 999px; background: #2587f5; box-shadow: 0 0 0 3px rgba(37,135,245,.1); }
+.simple-message-phone.customer .simple-message-bullets li::before { background: #fff; box-shadow: 0 0 0 3px rgba(255,255,255,.13); }
 .simple-red-pen-message span { display: block; }
-.simple-red-pen-message > strong { display: block; }
-.simple-red-pen-message .simple-message-bullets { margin: 4px 0; }
-.simple-red-pen-message span.closing { margin-top: 5px; }
+.simple-red-pen-message > strong { display: block; border-bottom: 1px solid rgba(255,255,255,.24); padding-bottom: 6px; letter-spacing: .025em; }
+.simple-red-pen-message .simple-message-bullets { margin: 7px 0; }
+.simple-red-pen-message span.closing { margin-top: 7px; border-top: 1px solid rgba(255,255,255,.24); padding-top: 6px; }
 .simple-carousel-benefits { display: grid; grid-template-columns: 120px 1fr; gap: 22px; align-items: center; }
 .simple-coffee-cup { position: relative; display: grid; place-items: center; align-self: stretch; margin: 0; border: 1px solid rgba(142,206,250,.25); border-radius: 20px; background: radial-gradient(circle at 50% 56%, rgba(85,191,238,.16), rgba(255,255,255,.025) 66%); padding: 12px 7px 8px; }
 .simple-coffee-cup img { position: relative; z-index: 1; width: 112px; height: 156px; display: block; object-fit: contain; transform-origin: 50% 88%; filter: drop-shadow(0 15px 10px rgba(0,0,0,.42)); animation: simpleCupFloat 3.2s cubic-bezier(.45,.05,.55,.95) infinite; }
@@ -427,6 +428,13 @@
   .simple-message-phone header strong { font-size: .59rem; }
   .simple-message-phone header small { font-size: .43rem; }
   .simple-message-copy { margin-top: 10px; padding: 9px; font-size: .57rem; line-height: 1.38; }
+  .simple-message-bullets { gap: 5px; }
+  .simple-message-bullets li { grid-template-columns: 7px minmax(0,1fr); gap: 4px; line-height: 1.28; }
+  .simple-message-bullets li::before { width: 6px; height: 2px; margin-top: .5em; box-shadow: 0 0 0 2px rgba(37,135,245,.1); }
+  .simple-message-phone.customer .simple-message-bullets li::before { box-shadow: 0 0 0 2px rgba(255,255,255,.13); }
+  .simple-red-pen-message > strong { padding-bottom: 5px; }
+  .simple-red-pen-message .simple-message-bullets { margin: 6px 0; }
+  .simple-red-pen-message span.closing { margin-top: 6px; padding-top: 5px; }
   .simple-voicemail-evolution { grid-template-columns: 1fr; gap: 8px; }
   .simple-evolution-card { min-height: 126px; grid-template-columns: 42px minmax(0,1fr); padding: 12px; }
   .simple-evolution-icon { width: 42px; height: 42px; }
