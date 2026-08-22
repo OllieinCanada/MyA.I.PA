@@ -131,9 +131,14 @@
 .simple-message-phone header strong, .simple-message-phone header small { display: block; }
 .simple-message-phone header strong { overflow-wrap: anywhere; font-size: .82rem; line-height: 1.05; }
 .simple-message-phone header small { margin-top: 4px; color: #78899a; font-size: .58rem; font-weight: 750; }
-.simple-message-phone > p { margin: 15px 0 0; border-radius: 16px 16px 16px 6px; background: #e9e9eb; padding: 14px; color: #111; font-size: .75rem; font-weight: 800; line-height: 1.4; }
-.simple-message-phone.customer > p { border-radius: 13px 13px 5px 13px; background: #0a84ff; color: #fff; }
+.simple-message-copy { margin: 15px 0 0; border-radius: 16px 16px 16px 6px; background: #e9e9eb; padding: 14px; color: #111; font-size: .75rem; font-weight: 800; line-height: 1.4; }
+.simple-message-phone.customer .simple-message-copy { border-radius: 13px 13px 5px 13px; background: #0a84ff; color: #fff; }
+.simple-message-bullets { margin: 0; padding: 0 0 0 1.05em; }
+.simple-message-bullets li { margin: 0; padding-left: .1em; }
+.simple-message-bullets li::marker { content: "- "; font-weight: 950; }
 .simple-red-pen-message span { display: block; }
+.simple-red-pen-message > strong { display: block; }
+.simple-red-pen-message .simple-message-bullets { margin: 4px 0; }
 .simple-red-pen-message span.closing { margin-top: 5px; }
 .simple-carousel-benefits { display: grid; grid-template-columns: 120px 1fr; gap: 22px; align-items: center; }
 .simple-coffee-cup { position: relative; display: grid; place-items: center; align-self: stretch; margin: 0; border: 1px solid rgba(142,206,250,.25); border-radius: 20px; background: radial-gradient(circle at 50% 56%, rgba(85,191,238,.16), rgba(255,255,255,.025) 66%); padding: 12px 7px 8px; }
@@ -421,7 +426,7 @@
   .simple-message-phone header > span { width: 27px; height: 27px; font-size: .48rem; }
   .simple-message-phone header strong { font-size: .59rem; }
   .simple-message-phone header small { font-size: .43rem; }
-  .simple-message-phone > p { margin-top: 10px; padding: 9px; font-size: .57rem; line-height: 1.38; }
+  .simple-message-copy { margin-top: 10px; padding: 9px; font-size: .57rem; line-height: 1.38; }
   .simple-voicemail-evolution { grid-template-columns: 1fr; gap: 8px; }
   .simple-evolution-card { min-height: 126px; grid-template-columns: 42px minmax(0,1fr); padding: 12px; }
   .simple-evolution-icon { width: 42px; height: 42px; }

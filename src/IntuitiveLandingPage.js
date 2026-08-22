@@ -9,17 +9,22 @@ const coreBenefits = [
   ["question", "FAQ questions answered."],
   ["clipboard", "Job details and callback information texted to you."],
   ["person", "Complete customer information collected."],
-  ["message", "Both receive text summary for easy follow up."],
+  ["message", "Owner and customer both receive text summary for easy follow up."],
 ];
 
-const redPenCustomerText = [
-  "TIM'S ELECTRICAL",
-  "- INSTALLATION REQUEST",
-  "- HOT TUB WIRING",
-  "- PREFERRED START DATE - NEXT WEEK",
-  "- WILL CALL TO DISCUSS JOB DETAILS AND PROVIDE QUOTE",
-  "THANK YOU FOR CALLING",
-  "TIM'S ELECTRICAL",
+const ownerTextPoints = [
+  "NEW INSTALLATION",
+  "HOT TUB WIRING",
+  "BRIAN SMITH",
+  "23 ROBB ST., HAMILTON",
+  "BEST CALLBACK - AFTER 5 PM",
+];
+
+const customerTextPoints = [
+  "INSTALLATION REQUEST",
+  "HOT TUB WIRING",
+  "PREFERRED START DATE - NEXT WEEK",
+  "WILL CALL TO DISCUSS JOB DETAILS AND PROVIDE QUOTE",
 ];
 
 const handoffCards = [
@@ -242,14 +247,23 @@ function AnimatedHeroProof({ onSampleCall, onStartTrial }) {
           <article className="simple-message-phone owner">
             <div className="simple-phone-status"><b>9:41</b><i /><b>5G</b></div>
             <header><span>PA</span><div><strong>Owner's cellphone</strong><small>My AI PA · now</small></div></header>
-            <p>New installation · Brian Smith · Hot tub wiring · 23 Robb St., Hamilton · Best callback: After 5 PM</p>
+            <div className="simple-message-copy">
+              <ul className="simple-message-bullets">
+                {ownerTextPoints.map((point) => <li key={point}>{point}</li>)}
+              </ul>
+            </div>
           </article>
           <article className="simple-message-phone customer">
             <div className="simple-phone-status"><b>9:41</b><i /><b>5G</b></div>
             <header><span>TE</span><div><strong>Customer's cellphone</strong><small>Tim's Electrical · now</small></div></header>
-            <p className="simple-red-pen-message">
-              {redPenCustomerText.map((line, index) => <span className={index === 5 ? "closing" : ""} key={`${line}-${index}`}>{line}</span>)}
-            </p>
+            <div className="simple-message-copy simple-red-pen-message">
+              <strong>TIM'S ELECTRICAL</strong>
+              <ul className="simple-message-bullets">
+                {customerTextPoints.map((point) => <li key={point}>{point}</li>)}
+              </ul>
+              <span className="closing">THANK YOU FOR CALLING</span>
+              <span>TIM'S ELECTRICAL</span>
+            </div>
           </article>
         </div>
       ),
@@ -267,7 +281,7 @@ function AnimatedHeroProof({ onSampleCall, onStartTrial }) {
             <li><Icon name="phone" />Picks up after three rings</li>
             <li><Icon name="chat" />Natural conversation and FAQ answers</li>
             <li><Icon name="clipboard" />Job and callback details collected</li>
-            <li><Icon name="message" />Both receive text summary for easy follow up.</li>
+            <li><Icon name="message" />Owner and customer both receive text summary for easy follow up.</li>
           </ul>
         </div>
       ),
