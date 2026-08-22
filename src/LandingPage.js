@@ -1076,8 +1076,8 @@ function HeroCallDashboard({ ownerCardRef }) {
             <div className="landing-conversation-panel mt-4 rounded-[26px] border border-white/8 bg-black/18 px-5 py-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
               <p className="landing-conversation-opening-label text-[0.92rem] font-black uppercase tracking-[0.06em] text-white/38">AI Assistant</p>
               <div className="landing-conversation-opening mt-2.5 max-w-[78%] rounded-[16px] bg-white/10 px-5 py-3 text-[1.12rem] font-bold leading-[1.26] text-white/92">
-                <span className="block">Hi, thanks for calling Tim&apos;s Electrical.</span>
-                <span className="mt-2 block">How can I help you today?</span>
+                <span className="block">Hi, thanks for calling!</span>
+                <span className="mt-2 block">Are you looking for a new installation, repair or maintenance today?</span>
               </div>
               <p className="landing-conversation-opening-time landing-conversation-time mt-1 text-right text-[0.74rem] font-bold text-white/35">10:32 AM</p>
 
@@ -1124,7 +1124,13 @@ function HeroCallDashboard({ ownerCardRef }) {
                       </span>
                     </div>
                     <div className="landing-imessage-bubble landing-imessage-bubble-sent ml-auto mt-2 rounded-[16px_16px_5px_16px] bg-[#0a84ff] px-3 py-2 font-bold leading-[1.18] text-white">
-                      Thanks for calling Tim&apos;s Electrical. We received your hot tub wiring request. The team will follow up to discuss the details and next steps. Have a great day!
+                      <span className="block">TIM&apos;S ELECTRICAL</span>
+                      <span className="block">- INSTALLATION REQUEST</span>
+                      <span className="block">- HOT TUB WIRING</span>
+                      <span className="block">- PREFERRED START DATE - NEXT WEEK</span>
+                      <span className="block">- WILL CALL TO DISCUSS JOB DETAILS AND PROVIDE QUOTE</span>
+                      <span className="mt-1 block">THANK YOU FOR CALLING</span>
+                      <span className="block">TIM&apos;S ELECTRICAL</span>
                     </div>
                     <span className="landing-imessage-delivered mt-1 block text-right text-[0.52rem] font-bold text-[#8e8e93]">Delivered</span>
                   </div>
@@ -1327,7 +1333,7 @@ function MobileHeroCallProof({ className = "" }) {
           <div className="landing-timed-conversation mt-2 space-y-1">
             <div className="landing-timed-conversation-turn landing-timed-conversation-ai mr-3 rounded-[1rem_1rem_1rem_0.35rem] border border-white/10 bg-white/[0.08] px-3 py-1.5">
               <span className="block text-[0.55rem] font-black uppercase tracking-[0.09em] text-[#63d9ff]">My AI PA</span>
-              <p className="mt-0.5 text-[0.78rem] font-extrabold leading-[1.22] text-white">“Thanks for calling Tim&apos;s Electrical. How can I help you today?”</p>
+              <p className="mt-0.5 text-[0.78rem] font-extrabold leading-[1.22] text-white">“Hi, thanks for calling! Are you looking for a new installation, repair or maintenance today?”</p>
             </div>
             {dialogueStep >= 2 && (
               <div className="landing-dialogue-reveal landing-timed-conversation-turn landing-timed-conversation-caller ml-3 rounded-[1rem_1rem_0.35rem_1rem] bg-[#0a84ff] px-3 py-1.5">
@@ -1384,7 +1390,15 @@ function MobileHeroCallProof({ className = "" }) {
                 <span className="grid h-6 w-6 place-items-center rounded-full bg-[#0a84ff] text-[0.48rem] font-black text-white">TE</span>
                 <span className="min-w-0"><strong className="block text-[0.56rem] font-black leading-tight">Customer&apos;s cellphone</strong><small className="block text-[0.42rem] font-bold text-[#8e8e93]">Tim&apos;s Electrical · now</small></span>
               </div>
-              <div className="ml-2 mt-1.5 rounded-[0.75rem_0.75rem_0.25rem_0.75rem] bg-[#0a84ff] px-2 py-1.5 text-[0.53rem] font-bold leading-[1.22] text-white">Thanks for calling Tim&apos;s Electrical. We received your hot tub wiring request. The team will follow up to discuss the details and next steps.</div>
+              <div className="ml-2 mt-1.5 rounded-[0.75rem_0.75rem_0.25rem_0.75rem] bg-[#0a84ff] px-2 py-1.5 text-[0.49rem] font-bold leading-[1.16] text-white">
+                <p>TIM&apos;S ELECTRICAL</p>
+                <p>- INSTALLATION REQUEST</p>
+                <p>- HOT TUB WIRING</p>
+                <p>- PREFERRED START DATE - NEXT WEEK</p>
+                <p>- WILL CALL TO DISCUSS JOB DETAILS AND PROVIDE QUOTE</p>
+                <p className="mt-0.5">THANK YOU FOR CALLING</p>
+                <p>TIM&apos;S ELECTRICAL</p>
+              </div>
             </div>
           </div>
 
@@ -1404,14 +1418,14 @@ function MobileHeroCallProof({ className = "" }) {
             <span>3 of 3</span>
           </div>
           <h2 className="landing-timed-benefits-title mt-3 text-center text-[1.12rem] font-black leading-[1.18] tracking-[-0.025em] text-[#18324f]">
-            For about the price of a cup of coffee per day you get:
+            Worry-Free Coverage — For about the price of a cup of coffee a day.
           </h2>
           <div className="landing-timed-benefits-list mt-3 overflow-hidden rounded-[1.05rem] border border-[#c7daec] bg-white/90 shadow-[0_18px_38px_-32px_rgba(15,23,42,0.5)]">
             {[
-              ["phone", "Every call answered professionally after 3 rings — no more hangups"],
+              ["phone", "Picks up after three rings"],
               ["faq", "Connects with customers with a natural dialogue, answers FAQs and projects a professional image."],
               ["clipboard", "Collects the job description, caller’s information for easy follow-up call."],
-              ["sms", "Texts you the call details and sends the customer a thank-you reminder."],
+              ["sms", "Both receive text summary for easy follow up."],
             ].map(([icon, label], index) => (
               <div key={label} className={`landing-timed-benefits-row grid grid-cols-[2.35rem_minmax(0,1fr)] items-center gap-2.5 px-3 py-2.5 ${index ? "border-t border-[#d8e5f1]" : ""}`}>
                 <span className="landing-timed-benefits-icon grid h-9 w-9 place-items-center rounded-xl bg-[#1687dc] text-white" aria-hidden="true">
@@ -8412,6 +8426,18 @@ function LandingPage() {
               min-height: 0 !important;
               max-height: 42rem !important;
             }
+            .landing-call-dashboard .landing-customer-text-card .landing-imessage-preview {
+              padding: 0.5rem 0.62rem !important;
+            }
+            .landing-call-dashboard .landing-customer-text-card .landing-imessage-bubble {
+              max-width: 100% !important;
+              padding: 0.42rem 0.5rem !important;
+            }
+            .landing-call-dashboard .landing-customer-text-card .landing-imessage-bubble,
+            .landing-call-dashboard .landing-customer-text-card .landing-imessage-bubble > span {
+              font-size: 0.62rem !important;
+              line-height: 1.1 !important;
+            }
             #mobile-problem > div,
             #mobile-how-it-works > div,
             #mobile-value > div,
@@ -8554,10 +8580,10 @@ function LandingPage() {
 
               <div className="landing-hero-points landing-hero-points-clean landing-hero-points-desktop mt-5 hidden space-y-3 sm:block">
                 {[
-                  "Every call answered professionally after 3 rings — no more hangups",
+                  "Picks up after three rings",
                   "Connects with customers with a natural dialogue, answers FAQs and projects a professional image.",
                   "Collects the job description, caller’s information for easy follow-up call.",
-                  "Texts you the call details and sends the customer a thank-you reminder.",
+                  "Both receive text summary for easy follow up.",
                 ].map((label) => (
                   <div key={label} className="landing-hero-point landing-hero-point-clean grid grid-cols-[2rem_minmax(0,1fr)] items-center gap-3 text-[0.94rem] font-bold leading-[1.25] text-[#111827] 2xl:text-[1rem]">
                     <span className="landing-hero-point-icon landing-hero-point-check grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#0c4da0] text-[0.88rem] font-black text-white shadow-[0_10px_28px_-16px_rgba(59,130,246,1)]" aria-hidden="true">
