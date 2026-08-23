@@ -45,12 +45,27 @@ function parseAcknowledgementToken(token, env = process.env) {
 }
 
 function getAcknowledgementBaseUrl(env = process.env) {
-  return String(
+  const value = String(
     env.LEAD_ACK_BASE_URL ||
     env.SIGNUP_VERIFICATION_BASE_URL ||
     env.PUBLIC_APP_URL ||
     `http://localhost:${env.PORT || 8787}`
   ).trim().replace(/\/+$/, "");
+  let parsed;
+  try {
+    parsed = new URL(value);
+  } catch (_error) {
+    const error = new Error("The lead acknowledgement base URL is invalid.");
+    error.statusCode = 503;
+    throw error;
+  }
+  if (String(env.NODE_ENV || "").toLowerCase() === "production"
+    && (parsed.protocol !== "https:" || /^(localhost|127\.0\.0\.1)$/i.test(parsed.hostname))) {
+    const error = new Error("Lead acknowledgement links require a public HTTPS base URL in production.");
+    error.statusCode = 503;
+    throw error;
+  }
+  return value;
 }
 
 function buildAcknowledgementUrl(key, env = process.env) {

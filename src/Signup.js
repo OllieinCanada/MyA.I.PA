@@ -672,6 +672,8 @@ export function VoiceDemoStep({ agent, businessName, trade, areas, standalone = 
   const previewSessionIdRef = useRef("");
   const callEndTimerRef = useRef(null);
   const callStartedAtRef = useRef(0);
+  const callRequestedAtRef = useRef(0);
+  const callCleanupPromiseRef = useRef(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [audioTime, setAudioTime] = useState(0);
   const [audioDuration, setAudioDuration] = useState(0);
@@ -781,21 +783,47 @@ export function VoiceDemoStep({ agent, businessName, trade, areas, standalone = 
     }).catch(() => {});
   };
 
-  const finishLiveCall = () => {
-    if (callEndTimerRef.current) {
-      window.clearTimeout(callEndTimerRef.current);
-      callEndTimerRef.current = null;
-    }
-    setAssistantSpeaking(false);
-    setLocalVolume(0);
-    setCallElapsed(0);
-    setCallState(previewConfig ? "ready" : "unavailable");
-    releasePreviewSession();
-    const vapi = vapiRef.current;
-    vapiRef.current = null;
-    if (vapi) {
-      vapi.removeAllListeners();
-      Promise.resolve(vapi.stop()).catch(() => {});
+  const logPreviewTiming = (event, detail = {}) => {
+    const requestedAt = callRequestedAtRef.current;
+    console.info("[voice-preview:lifecycle]", {
+      event,
+      elapsedMs: requestedAt ? Math.max(0, Math.round(performance.now() - requestedAt)) : null,
+      ...detail,
+    });
+  };
+
+  const finishLiveCall = async (reason = "cleanup") => {
+    if (callCleanupPromiseRef.current) return callCleanupPromiseRef.current;
+    callCleanupPromiseRef.current = (async () => {
+      logPreviewTiming("cleanup-start", { reason });
+      if (callEndTimerRef.current) {
+        window.clearTimeout(callEndTimerRef.current);
+        callEndTimerRef.current = null;
+      }
+      const vapi = vapiRef.current;
+      vapiRef.current = null;
+      if (vapi) {
+        vapi.removeAllListeners();
+        try {
+          await Promise.race([
+            Promise.resolve(vapi.stop()),
+            new Promise((resolve) => window.setTimeout(resolve, 2500)),
+          ]);
+        } catch (_error) {
+          // UI/session cleanup must complete even when the provider stop rejects.
+        }
+      }
+      releasePreviewSession();
+      setAssistantSpeaking(false);
+      setLocalVolume(0);
+      setCallElapsed(0);
+      setCallState(previewConfig ? "ready" : "unavailable");
+      logPreviewTiming("cleanup-complete", { reason });
+    })();
+    try {
+      await callCleanupPromiseRef.current;
+    } finally {
+      callCleanupPromiseRef.current = null;
     }
   };
 
@@ -806,6 +834,8 @@ export function VoiceDemoStep({ agent, businessName, trade, areas, standalone = 
     setAssistantSpeaking(false);
     setLocalVolume(0);
     setCallState("connecting");
+    callRequestedAtRef.current = performance.now();
+    logPreviewTiming("session-requested");
 
     try {
       const sessionResponse = await fetch(VAPI_PREVIEW_SESSION_URL, {
@@ -836,33 +866,39 @@ export function VoiceDemoStep({ agent, businessName, trade, areas, standalone = 
       const vapi = new Vapi(String(session.token));
       vapiRef.current = vapi;
       vapi.on("call-start", () => {
+        logPreviewTiming("call-start");
         callStartedAtRef.current = Date.now();
         setCallState("active");
         setCallElapsed(0);
         callEndTimerRef.current = window.setTimeout(() => {
           setCallState("ending");
+          logPreviewTiming("duration-limit-reached");
           vapi.end();
+          finishLiveCall("duration-limit");
         }, sessionMaxDurationSeconds * 1000);
       });
-      vapi.on("call-end", finishLiveCall);
-      vapi.on("speech-start", () => setAssistantSpeaking(true));
+      vapi.on("call-start-progress", (event) => logPreviewTiming("call-start-progress", { stage: event?.stage, status: event?.status, duration: event?.duration }));
+      vapi.on("call-start-success", () => logPreviewTiming("call-start-success"));
+      vapi.on("call-end", () => finishLiveCall("provider-call-end"));
+      vapi.on("speech-start", () => { logPreviewTiming("first-assistant-audio"); setAssistantSpeaking(true); });
       vapi.on("speech-end", () => setAssistantSpeaking(false));
+      vapi.on("network-quality", (event) => logPreviewTiming("network-quality", { quality: event?.quality || event?.state || "unknown" }));
       vapi.on("local-volume-level", (volume) => setLocalVolume(Math.max(0, Math.min(1, Number(volume) || 0))));
       vapi.on("error", (error) => {
         setCallError(getVoicePreviewErrorMessage(error));
         setShowRecording(true);
-        finishLiveCall();
+        finishLiveCall("provider-error");
       });
       vapi.on("call-start-failed", (event) => {
         setCallError(getVoicePreviewErrorMessage(event?.error || event));
         setShowRecording(true);
-        finishLiveCall();
+        finishLiveCall("call-start-failed");
       });
 
       const call = await vapi.start(String(session.assistantId), {
         firstMessage: greeting,
         firstMessageMode: "assistant-speaks-first",
-        firstMessageInterruptionsEnabled: true,
+        firstMessageInterruptionsEnabled: false,
         maxDurationSeconds: sessionMaxDurationSeconds,
         backgroundSound: "off",
         variableValues: {
@@ -878,18 +914,19 @@ export function VoiceDemoStep({ agent, businessName, trade, areas, standalone = 
     } catch (error) {
       setCallError(getVoicePreviewErrorMessage(error));
       setShowRecording(true);
-      finishLiveCall();
+      finishLiveCall("start-exception");
     }
   };
 
-  const stopLiveCall = () => {
+  const stopLiveCall = async () => {
     const vapi = vapiRef.current;
     if (!vapi || !callIsActive) return;
     setCallState("ending");
     try {
       vapi.end();
+      await finishLiveCall("user-ended-call");
     } catch (_error) {
-      finishLiveCall();
+      await finishLiveCall("user-ended-call-error");
     }
   };
 
@@ -1393,11 +1430,13 @@ async function postSignupPayload(url, formData) {
   }
 }
 
-function SignupSuccessPage({ result, onStartAnother }) {
+function SignupSuccessPage({ result, onStartAnother, onRetry }) {
   const businessName = result?.businessName || "your business";
-  const assignedNumber = result?.twilioPhoneNumber || "";
+  const provisioningStatus = String(result?.phoneProvisioning?.status || (result?.twilioPhoneNumber ? "ready" : "pending")).toLowerCase();
+  const assignedNumber = provisioningStatus === "ready" ? String(result?.twilioPhoneNumber || result?.phoneProvisioning?.e164 || "").trim() : "";
   const reviewRequired = Boolean(result?.reviewRequired);
   const verificationRequired = Boolean(result?.verificationRequired || result?.emailVerificationRequired);
+  const provisioningFailed = provisioningStatus === "failed";
   const numberMissing = !assignedNumber;
   const [progress, setProgress] = useState(12);
   const [showNumber, setShowNumber] = useState(false);
@@ -1439,7 +1478,7 @@ function SignupSuccessPage({ result, onStartAnother }) {
 
   const copyAssignedNumber = async () => {
     if (!assignedNumber || typeof navigator === "undefined" || !navigator.clipboard) return;
-    await navigator.clipboard.writeText(formatPhoneNumber(assignedNumber));
+    await navigator.clipboard.writeText(assignedNumber);
     setCopiedNumber(true);
     window.setTimeout(() => setCopiedNumber(false), 1800);
   };
@@ -1454,15 +1493,15 @@ function SignupSuccessPage({ result, onStartAnother }) {
     },
     {
       label: "AI number",
-      detail: assignedNumber && !reviewRequired ? formatPhoneNumber(assignedNumber) : "Pending assignment or review.",
+      detail: assignedNumber && !reviewRequired ? formatPhoneNumber(assignedNumber) : provisioningFailed ? "Provisioning needs a retry." : "Pending assignment or review.",
       done: Boolean(assignedNumber && !reviewRequired && !verificationRequired),
-      active: !assignedNumber || reviewRequired,
+      active: !assignedNumber || reviewRequired || provisioningFailed,
     },
     {
       label: "Free trial active",
       detail: "No credit card is needed to start the trial.",
-      done: !reviewRequired && !verificationRequired,
-      active: reviewRequired || verificationRequired,
+      done: Boolean(assignedNumber && !reviewRequired && !verificationRequired),
+      active: reviewRequired || verificationRequired || !assignedNumber,
     },
     { label: "Test call", detail: "Call the AI number before forwarding live calls.", done: false },
   ];
@@ -1494,7 +1533,9 @@ function SignupSuccessPage({ result, onStartAnother }) {
                 ? "Your signup was received, but it needs review before the workflow continues."
                 : assignedNumber
                   ? "Your AI phone assistant is ready for testing. Your forwarding number is below."
-                  : "Your AI phone assistant signup is in motion. We created your handoff and sent the setup details for review."}
+                  : provisioningFailed
+                    ? "Your signup was saved, but phone-number setup did not pass the Canadian call-readiness check. No number has been assigned."
+                    : "Your signup was saved. Phone-number assignment is still pending, so setup is not marked ready yet."}
             </p>
           </div>
 
@@ -1561,14 +1602,29 @@ function SignupSuccessPage({ result, onStartAnother }) {
                     </button>
                   </div>
                 </div>
+              ) : provisioningFailed ? (
+                <div className="mt-5">
+                  <p className="text-[1.28rem] font-black leading-tight tracking-[-0.03em] text-[#07142a]">
+                    Number setup needs a retry.
+                  </p>
+                  <p className="mt-3 text-sm font-semibold leading-6 text-slate-500">
+                    {result?.phoneProvisioning?.message || "The provider did not return a verified Canadian, voice-ready number. Nothing has been presented as ready."}
+                  </p>
+                  <button type="button" onClick={onRetry} className="mt-5 inline-flex min-h-[52px] items-center justify-center rounded-xl bg-[#07142a] px-5 text-base font-black text-white transition hover:bg-blue-800">
+                    Retry phone setup
+                  </button>
+                </div>
               ) : numberMissing ? (
                 <div className="mt-5">
                   <p className="text-[1.28rem] font-black leading-tight tracking-[-0.03em] text-[#07142a]">
-                    Setup complete. Number pending.
+                    Number assignment is pending.
                   </p>
                   <p className="mt-3 text-sm font-semibold leading-6 text-slate-500">
-                    The handoff finished, but the response did not include a readable forwarding number yet.
+                    Setup is not marked ready and Call/Copy stay disabled until one verified Canadian number is returned.
                   </p>
+                  <button type="button" onClick={onRetry} className="mt-5 inline-flex min-h-[52px] items-center justify-center rounded-xl border border-blue-200 bg-white px-5 text-base font-black text-blue-700 transition hover:border-blue-400 hover:bg-blue-50">
+                    Retry phone setup
+                  </button>
                 </div>
               ) : (
                 <div className="mt-5">
@@ -1918,6 +1974,15 @@ export default function Signup() {
     window.scrollTo?.({ top: 0, behavior: "smooth" });
   };
 
+  const retryPhoneSetup = () => {
+    setSignupResult(null);
+    setCurrentStep(3);
+    setStatus("");
+    setError("");
+    setBusy(false);
+    window.scrollTo?.({ top: 0, behavior: "smooth" });
+  };
+
   const submitSignup = async (event) => {
     event.preventDefault();
     if (busy) return;
@@ -2104,7 +2169,7 @@ export default function Signup() {
   };
 
   if (signupResult) {
-    return <SignupSuccessPage result={signupResult} onStartAnother={resetSignup} />;
+    return <SignupSuccessPage result={signupResult} onStartAnother={resetSignup} onRetry={retryPhoneSetup} />;
   }
 
   return (

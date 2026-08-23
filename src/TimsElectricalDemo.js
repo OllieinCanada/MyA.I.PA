@@ -12,6 +12,9 @@ import { getScenarioProgress } from "./firstClassRentalsLogic";
 import "./FirstClassRentalsDemo.css";
 import "./TimsElectricalDemo.css";
 
+const featuredInstallation = timsElectricalScenarios.find((scenario) => scenario.id === "new-installation");
+const featuredDetail = (label) => featuredInstallation.details.find((detail) => detail.label === label)?.value || "";
+
 function Icon({ name, size = 22 }) {
   const common = {
     width: size,
@@ -201,6 +204,8 @@ function DemoPhone({ scenario, visibleLines, complete }) {
   );
   const activeRecordingLine = recordingTime === null ? -1 : getActiveTranscriptIndex(transcriptTimeline, recordingTime);
   const displayedLineCount = recordingTime === null ? visibleLines : Math.max(1, activeRecordingLine + 1);
+  const customerDetail = scenario.details.find((detail) => detail.label === "Customer" && detail.capturedAt <= displayedLineCount);
+  const callbackDetail = scenario.details.find((detail) => detail.label === "Callback" && detail.capturedAt <= displayedLineCount);
 
   useEffect(() => {
     const transcript = transcriptRef.current;
@@ -217,8 +222,12 @@ function DemoPhone({ scenario, visibleLines, complete }) {
       <div className="fcr-phone-top"><span>9:41</span><span className="fcr-phone-notch" /><span>5G&nbsp; ▰</span></div>
       <div className="fcr-phone-call">
         <div className="fcr-avatar"><Icon name="bolt" size={24} /></div>
-        <div><strong>Tim&apos;s Electrical</strong><small>{complete ? "Call summary ready" : "Simulated call in progress"}</small></div>
+        <div><strong>Incoming customer call</strong><small>{complete ? "Call summary ready" : "Tim's Electrical · simulated call"}</small></div>
         <span className="fcr-live-dot is-live" />
+      </div>
+      <div className="tims-caller-context" aria-live="polite">
+        <span>{customerDetail?.value || "Caller details being gathered"}</span>
+        <strong>{callbackDetail?.value || "Phone context appears when confirmed"}</strong>
       </div>
       <ScenarioRecording scenario={scenario} onTranscriptPosition={setRecordingTime} />
       <div className={`fcr-phone-transcript ${recordingTime !== null ? "is-audio-following" : ""}`} ref={transcriptRef} aria-live="polite">
@@ -245,34 +254,38 @@ function DemoPhone({ scenario, visibleLines, complete }) {
   );
 }
 
-function MessagePreview({ label, status, text, tone }) {
+function MessagePreview({ label, status, lines, tone, businessName }) {
   return (
     <article className={`tims-message-preview ${tone}`} aria-label={`${label} text message preview`}>
       <div className="tims-text-phone-top"><span>9:41</span><i /><span>5G</span></div>
-      <div className="tims-text-phone-contact"><span><Icon name={tone === "owner" ? "document" : "message"} size={15} /></span><div><strong>{label}</strong><small>{tone === "owner" ? "My AI PA" : "Tim's Electrical"} · now</small></div></div>
-      <div className="tims-text-phone-thread"><p>{text}</p></div>
+      <div className="tims-text-phone-contact"><span><Icon name={tone === "owner" ? "document" : "message"} size={15} /></span><div><strong>{label}</strong><small>{tone === "owner" ? "My AI PA" : businessName} · now</small></div></div>
+      <div className="tims-text-phone-thread">
+        {tone === "owner" ? <strong className="tims-message-heading">{lines[0]}</strong> : null}
+        <ul>{(tone === "owner" ? lines.slice(1) : lines).map((line) => <li key={line}>{line}</li>)}</ul>
+      </div>
       <div className="tims-text-phone-status"><span>{status}</span><small>Simulated text preview</small></div>
     </article>
   );
 }
 
-function CallSummary({ scenario, complete, onAction }) {
+function CallSummary({ scenario, visibleLines, complete, onAction }) {
+  const capturedDetails = scenario.details.filter((detail) => detail.capturedAt <= visibleLines);
   return (
     <section className={`fcr-summary-card ${complete ? "is-ready" : ""}`} aria-live="polite">
       <div className="fcr-summary-heading">
         <div><span className="fcr-kicker">Instant structured handoff</span><h3>{complete ? "Job summary ready" : "Summary builds during the call"}</h3></div>
         <span className={`fcr-status-pill ${complete ? "ready" : ""}`}>{complete ? "READY" : "LISTENING"}</span>
       </div>
-      <div className="fcr-summary-grid">
-        <div><small>Intent</small><strong>{complete ? scenario.intent : "Listening…"}</strong></div>
-        <div><small>Priority</small><strong>{complete ? scenario.priority : "Checking…"}</strong></div>
-        <div><small>Route</small><strong>{complete ? scenario.route : "Preparing…"}</strong></div>
+      <div className="fcr-summary-grid tims-structured-grid">
+        {capturedDetails.length ? capturedDetails.map((detail) => (
+          <div key={detail.label}><small>{detail.label}</small><strong>{detail.value}</strong></div>
+        )) : <div className="tims-listening-field"><small>Incoming call</small><strong>Listening for the request…</strong></div>}
       </div>
       <p className="fcr-summary-copy">{complete ? scenario.summary : "The receptionist organizes only observable caller details—never hidden reasoning or an electrical diagnosis."}</p>
       <div className="fcr-detail-columns tims-detail-disclosures">
         <details>
-          <summary><span>Collected job details</span><strong>{complete ? scenario.collected.length : "—"}</strong></summary>
-          {complete ? <ul>{scenario.collected.map((item) => <li key={item}><Icon name="check" size={14} />{item}</li>)}</ul> : <p className="fcr-none">Details are being organized during the call.</p>}
+          <summary><span>Collected job details</span><strong>{capturedDetails.length}</strong></summary>
+          {capturedDetails.length ? <ul>{capturedDetails.map((item) => <li key={item.label}><Icon name="check" size={14} />{item.label}: {item.value}</li>)}</ul> : <p className="fcr-none">Details are being organized during the call.</p>}
         </details>
         <details>
           <summary><span>Additional details useful</span><strong>{complete ? scenario.missing.length : "—"}</strong></summary>
@@ -281,8 +294,8 @@ function CallSummary({ scenario, complete, onAction }) {
       </div>
       {complete ? (
         <div className="tims-message-grid">
-          <MessagePreview key={`${scenario.id}-owner`} label="Owner's cellphone" status="READY" text={scenario.ownerText} tone="owner" />
-          <MessagePreview key={`${scenario.id}-customer`} label="Customer's cellphone" status="READY" text={scenario.customerText} tone="customer" />
+          <MessagePreview key={`${scenario.id}-owner`} label="Owner's cellphone" status="READY" lines={scenario.ownerTextLines} tone="owner" businessName={scenario.businessName} />
+          <MessagePreview key={`${scenario.id}-customer`} label="Customer's cellphone" status="READY" lines={scenario.customerTextLines} tone="customer" businessName={scenario.businessName} />
         </div>
       ) : <p className="tims-message-waiting"><Icon name="message" size={16} />Text previews appear when the simulated call is complete.</p>}
       <div className="fcr-summary-actions">
@@ -303,6 +316,12 @@ export function TimsElectricalLiveDemo({ embedded = false, onSignup }) {
   );
   const progress = getScenarioProgress(scenario, visibleLines);
   const complete = visibleLines >= scenario.transcript.length;
+  const detailMilestones = [...new Set(scenario.details.map((detail) => detail.capturedAt))].sort((a, b) => a - b);
+  const stageThresholds = scenario.stages.map((_stage, index) => {
+    if (index === scenario.stages.length - 1) return scenario.transcript.length;
+    const position = Math.round((index / Math.max(1, scenario.stages.length - 2)) * Math.max(0, detailMilestones.length - 1));
+    return detailMilestones[position] || scenario.transcript.length;
+  });
 
   useEffect(() => {
     setVisibleLines(0);
@@ -377,8 +396,8 @@ export function TimsElectricalLiveDemo({ embedded = false, onSignup }) {
               <div><span className="fcr-kicker">Current situation</span><h3>{scenario.title}</h3></div>
             </div>
             <div className="fcr-progress"><div><span>Call progress</span><strong>{progress}%</strong></div><div className="fcr-progress-track"><span style={{ width: `${progress}%` }} /></div></div>
-            <div className="fcr-stage-row">{scenario.stages.map((stage, index) => { const done = progress >= ((index + 1) / scenario.stages.length) * 100; return <div className={done ? "done" : ""} key={stage}><span>{done ? <Icon name="check" size={14} /> : index + 1}</span>{stage}</div>; })}</div>
-            <CallSummary scenario={scenario} complete={complete} onAction={handleAction} />
+            <div className="fcr-stage-row">{scenario.stages.map((stage, index) => { const done = visibleLines >= stageThresholds[index]; return <div className={done ? "done" : ""} key={stage}><span>{done ? <Icon name="check" size={14} /> : index + 1}</span>{stage}</div>; })}</div>
+            <CallSummary scenario={scenario} visibleLines={visibleLines} complete={complete} onAction={handleAction} />
             {actionMessage && <p className="fcr-action-message" role="status">{actionMessage}</p>}
           </div>
         </div>
@@ -429,7 +448,7 @@ export default function TimsElectricalDemo() {
           </div>
           <div className="fcr-property-visual tims-electric-visual" aria-label="Illustration of an organized electrical service call">
             <div className="tims-panel"><span className="tims-panel-bolt"><Icon name="bolt" size={64} /></span><i /><i /><i /><i /><i /><i /></div>
-            <div className="fcr-inquiry-card"><span className="fcr-kicker">NEW INSTALLATION</span><strong>Hot tub wiring request</strong><p>St. Catharines · after 5 p.m.</p><div><Icon name="check" size={15} /> Ready for team review</div></div>
+            <div className="fcr-inquiry-card"><span className="fcr-kicker">{featuredInstallation.intent.toUpperCase()}</span><strong>{featuredDetail("Work requested")} request</strong><p>{featuredDetail("Job address")} · {featuredDetail("Preferred callback")}</p><div><Icon name="check" size={15} /> Ready for team review</div></div>
             <div className="fcr-callback-card"><Icon name="message" /><div><strong>Two clear text previews</strong><span>Owner summary + caller confirmation</span></div></div>
           </div>
         </div>

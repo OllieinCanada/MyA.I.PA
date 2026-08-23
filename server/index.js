@@ -13,6 +13,10 @@ const path = require("path");
 const { Readable } = require("stream");
 const Stripe = require("stripe");
 const { prisma } = require("./prisma");
+const {
+  inspectCanadianNumber,
+  validateProvisionedCanadianNumber,
+} = require("./canadianPhoneNumber");
 const { fetchPublicWebsite } = require("./safeWebsiteFetch");
 const { sendSmsViaTwilio } = require("./twilioSms");
 const {
@@ -780,11 +784,29 @@ function hasValidVapiWebhookKey(req) {
 
 function getPublicBaseUrl(req) {
   const configured = String(process.env.PUBLIC_APP_URL || process.env.APP_URL || "").trim().replace(/\/+$/, "");
-  if (configured) return configured;
+  if (configured) {
+    const parsed = new URL(configured);
+    if (String(process.env.NODE_ENV || "").toLowerCase() === "production"
+      && (parsed.protocol !== "https:" || /^(localhost|127\.0\.0\.1)$/i.test(parsed.hostname))) {
+      const error = new Error("PUBLIC_APP_URL must be a public HTTPS URL in production.");
+      error.statusCode = 503;
+      throw error;
+    }
+    return configured;
+  }
 
   const proto = String(req.headers["x-forwarded-proto"] || req.protocol || "http").split(",")[0].trim();
   const host = String(req.headers["x-forwarded-host"] || req.headers.host || "").split(",")[0].trim();
-  return host ? `${proto}://${host}` : "http://localhost:3000";
+  const inferred = host ? `${proto}://${host}` : "http://localhost:3000";
+  if (String(process.env.NODE_ENV || "").toLowerCase() === "production") {
+    const parsed = new URL(inferred);
+    if (parsed.protocol !== "https:" || /^(localhost|127\.0\.0\.1)$/i.test(parsed.hostname)) {
+      const error = new Error("A public HTTPS application URL is required in production.");
+      error.statusCode = 503;
+      throw error;
+    }
+  }
+  return inferred;
 }
 
 function getStripeReturnUrls(req) {
@@ -840,7 +862,9 @@ function readPendingSignupStore() {
 
 function writePendingSignupStore(store) {
   ensurePendingSignupStore();
-  fs.writeFileSync(pendingSignupPath, `${JSON.stringify(store, null, 2)}\n`);
+  const temporaryPath = `${pendingSignupPath}.${process.pid}.${crypto.randomBytes(6).toString("hex")}.tmp`;
+  fs.writeFileSync(temporaryPath, `${JSON.stringify(store, null, 2)}\n`, { flag: "wx" });
+  fs.renameSync(temporaryPath, pendingSignupPath);
 }
 
 function ensurePendingStripeSignupStore() {
@@ -2238,6 +2262,11 @@ async function upsertVapiCall(fullCall, store) {
   const toolResults = summarizeVapiToolResults(fullCall);
   const artifactMessages = getVapiCustomerSafeMessages(fullCall);
   const artifactBasis = endedAt || startedAt || Date.now();
+  const nextDurationSec = getVapiDurationSeconds(fullCall);
+  const nextStatus = mapVapiStatus(fullCall.status || fullCall.endedReason || "ended");
+  const usageChanged = !existingCall
+    || Number(existingCall.durationSec || 0) !== Number(nextDurationSec || 0)
+    || String(existingCall.status || "") !== String(nextStatus || "");
   const localCall = await logCall({
     callId: existingStore.localCallId || existingCall?.id,
     businessId,
@@ -2245,8 +2274,8 @@ async function upsertVapiCall(fullCall, store) {
     callerName,
     startedAt,
     endedAt,
-    durationSec: getVapiDurationSeconds(fullCall),
-    status: mapVapiStatus(fullCall.status || fullCall.endedReason || "ended"),
+    durationSec: nextDurationSec,
+    status: nextStatus,
     transcript: transcript || undefined,
     recordingUrl: recordingUrl || undefined,
     externalProvider: "vapi",
@@ -2296,6 +2325,7 @@ async function upsertVapiCall(fullCall, store) {
     durationSec: localCall.durationSec,
     transcriptAvailable: Boolean(transcript),
     recordingAvailable: Boolean(recordingUrl),
+    usageChanged,
   };
 }
 
@@ -2304,7 +2334,7 @@ async function ingestVapiEndOfCallReport(message) {
   const store = readVapiCallSyncStore();
   const result = await upsertVapiCall(fullCall, store);
   writeVapiCallSyncStore(store);
-  await reconcileTrialUsageAfterCall(result);
+  if (result.usageChanged) await reconcileTrialUsageAfterCall(result);
   return result;
 }
 
@@ -2340,7 +2370,7 @@ async function syncVapiCalls(options = {}) {
     try {
       const result = await upsertVapiCall(fullCall, store);
       results.push(result);
-      await reconcileTrialUsageAfterCall(result);
+      if (result.usageChanged) await reconcileTrialUsageAfterCall(result);
     } catch (error) {
       if (error?.code !== "VAPI_BUSINESS_ROUTE_REQUIRED") throw error;
       routingErrors.push({
@@ -2535,7 +2565,7 @@ function normalizeTwilioProvisioningVoiceUrl(value) {
   return url.toString();
 }
 
-async function purchaseTwilioPhoneNumber({ areaCode = "249", voiceUrl, voiceMethod = "POST" } = {}, { fetchImpl = fetch } = {}) {
+async function purchaseTwilioPhoneNumber({ areaCode = "249", region = "ON", voiceUrl, voiceMethod = "POST" } = {}, { fetchImpl = fetch } = {}) {
   if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN) {
     const err = new Error("Twilio credentials are not configured.");
     err.statusCode = 503;
@@ -2567,10 +2597,14 @@ async function purchaseTwilioPhoneNumber({ areaCode = "249", voiceUrl, voiceMeth
 
   const existingNumber = (ownedNumbersData?.incoming_phone_numbers || []).find((record) => {
     const recordVoiceUrl = String(record?.voice_url || "").trim();
-    return recordVoiceUrl && recordVoiceUrl === normalizedVoiceUrl;
+    return recordVoiceUrl
+      && recordVoiceUrl === normalizedVoiceUrl
+      && inspectCanadianNumber(record?.phone_number).valid
+      && record?.capabilities?.voice !== false
+      && record?.capabilities?.sms !== false;
   });
   if (existingNumber) {
-    const phoneNumber = normalizeVapiImportPhone(existingNumber.phone_number);
+    const phoneNumber = validateProvisionedCanadianNumber(existingNumber, { expectedVoiceUrl: normalizedVoiceUrl });
     return {
       sid: String(existingNumber.sid || "").trim(),
       phone_number: phoneNumber,
@@ -2583,28 +2617,46 @@ async function purchaseTwilioPhoneNumber({ areaCode = "249", voiceUrl, voiceMeth
     };
   }
 
-  const availableUrl = new URL(
-    `${TWILIO_API_BASE_URL}/2010-04-01/Accounts/${encodeURIComponent(TWILIO_ACCOUNT_SID)}/AvailablePhoneNumbers/CA/Local.json`
-  );
-  availableUrl.searchParams.set("AreaCode", normalizedAreaCode);
-  availableUrl.searchParams.set("SmsEnabled", "true");
-  availableUrl.searchParams.set("VoiceEnabled", "true");
-  availableUrl.searchParams.set("PageSize", "1");
-
-  const availableResponse = await fetchImpl(availableUrl, {
-    headers: { Authorization: getTwilioAuthHeader(), Accept: "application/json" },
-  });
-  const availableData = parseJsonObject(await availableResponse.text());
-  if (!availableResponse.ok) {
-    const err = new Error(availableData?.message || availableData?.error || `Twilio number search failed with HTTP ${availableResponse.status}.`);
-    err.statusCode = availableResponse.status;
-    throw err;
+  const normalizedRegion = /^[A-Z]{2}$/.test(String(region || "").trim().toUpperCase())
+    ? String(region).trim().toUpperCase()
+    : "ON";
+  const searchPlans = [
+    { label: `area code ${normalizedAreaCode}`, AreaCode: normalizedAreaCode },
+    { label: `${normalizedRegion} regional inventory`, InRegion: normalizedRegion },
+    { label: "Canada-wide local inventory" },
+  ];
+  let availableNumber = "";
+  let inventorySource = "";
+  for (const plan of searchPlans) {
+    const availableUrl = new URL(
+      `${TWILIO_API_BASE_URL}/2010-04-01/Accounts/${encodeURIComponent(TWILIO_ACCOUNT_SID)}/AvailablePhoneNumbers/CA/Local.json`
+    );
+    Object.entries(plan).forEach(([key, value]) => {
+      if (key !== "label") availableUrl.searchParams.set(key, value);
+    });
+    availableUrl.searchParams.set("SmsEnabled", "true");
+    availableUrl.searchParams.set("VoiceEnabled", "true");
+    availableUrl.searchParams.set("PageSize", "1");
+    const availableResponse = await fetchImpl(availableUrl, {
+      headers: { Authorization: getTwilioAuthHeader(), Accept: "application/json" },
+    });
+    const availableData = parseJsonObject(await availableResponse.text());
+    if (!availableResponse.ok) {
+      const err = new Error(availableData?.message || availableData?.error || `Twilio number search failed with HTTP ${availableResponse.status}.`);
+      err.statusCode = availableResponse.status;
+      throw err;
+    }
+    const candidate = availableData?.available_phone_numbers?.[0]?.phone_number;
+    if (inspectCanadianNumber(candidate).valid) {
+      availableNumber = inspectCanadianNumber(candidate).e164;
+      inventorySource = plan.label;
+      break;
+    }
   }
-
-  const availableNumber = normalizeVapiImportPhone(availableData?.available_phone_numbers?.[0]?.phone_number);
   if (!availableNumber) {
-    const err = new Error(`No SMS and voice-capable Canadian number is currently available in area code ${normalizedAreaCode}.`);
+    const err = new Error("No SMS and voice-capable Canadian number is currently available. Please retry later.");
     err.statusCode = 409;
+    err.code = "CANADIAN_NUMBER_INVENTORY_UNAVAILABLE";
     throw err;
   }
 
@@ -2632,16 +2684,18 @@ async function purchaseTwilioPhoneNumber({ areaCode = "249", voiceUrl, voiceMeth
     throw err;
   }
 
-  const phoneNumber = normalizeVapiImportPhone(purchaseData?.phone_number || availableNumber);
-  return {
+  const provisionedRecord = {
     sid: String(purchaseData?.sid || "").trim(),
-    phone_number: phoneNumber,
-    phoneNumber,
-    friendly_name: String(purchaseData?.friendly_name || phoneNumber).trim(),
+    phone_number: purchaseData?.phone_number || availableNumber,
+    phoneNumber: purchaseData?.phone_number || availableNumber,
+    friendly_name: String(purchaseData?.friendly_name || availableNumber).trim(),
     voice_url: String(purchaseData?.voice_url || normalizedVoiceUrl).trim(),
     voice_method: String(purchaseData?.voice_method || normalizedVoiceMethod).trim(),
     capabilities: purchaseData?.capabilities || { voice: true, sms: true },
+    inventorySource,
   };
+  const phoneNumber = validateProvisionedCanadianNumber(provisionedRecord, { expectedVoiceUrl: normalizedVoiceUrl });
+  return { ...provisionedRecord, phone_number: phoneNumber, phoneNumber };
 }
 
 async function fetchTwilioUsageRecords({ days = 30 } = {}) {
@@ -7087,6 +7141,42 @@ function getMakeTwilioPhoneNumberFromText(rawText) {
   return phoneMatch?.[0]?.trim() || "";
 }
 
+async function inspectSignupPhoneProvisioning(makeData, rawText, { fetchNumbers = fetchTwilioIncomingPhoneNumbers } = {}) {
+  const rawNumber = getMakeTwilioPhoneNumber(makeData) || getMakeTwilioPhoneNumberFromText(rawText);
+  if (!rawNumber) {
+    return { status: "pending", e164: "", code: "PHONE_NUMBER_PENDING", message: "A Canadian forwarding number has not been assigned yet." };
+  }
+  const parsed = inspectCanadianNumber(rawNumber);
+  if (!parsed.valid) {
+    console.warn("[signup:provisioning] rejected non-Canadian assigned number", {
+      areaCode: parsed.areaCode || "unreadable",
+      numberLast4: parsed.e164.slice(-4),
+    });
+    return { status: "failed", e164: "", code: "CANADIAN_PHONE_REQUIRED", message: "The provider returned a number outside Canada. No number was assigned; retry setup." };
+  }
+
+  if (String(process.env.NODE_ENV || "").toLowerCase() === "production") {
+    if (!TWILIO_REST_AUTH.configured) {
+      return { status: "failed", e164: "", code: "PHONE_VALIDATION_UNAVAILABLE", message: "The number could not be verified with the phone provider. Retry setup." };
+    }
+    try {
+      const owned = await fetchNumbers();
+      const record = owned.find((item) => inspectCanadianNumber(item?.phone_number).e164 === parsed.e164);
+      if (!record) {
+        return { status: "failed", e164: "", code: "PHONE_NOT_OWNED", message: "The assigned number was not found in the production phone account. Retry setup." };
+      }
+      validateProvisionedCanadianNumber(record);
+      if (!String(record?.voice_url || "").trim()) {
+        return { status: "failed", e164: "", code: "VOICE_ROUTING_MISSING", message: "The assigned number is not ready for calls yet. Retry setup." };
+      }
+    } catch (error) {
+      return { status: "failed", e164: "", code: String(error?.code || "PHONE_VALIDATION_FAILED"), message: "The assigned number could not be verified as call-ready. Retry setup." };
+    }
+  }
+
+  return { status: "ready", e164: parsed.e164, code: "", message: "Canadian voice and SMS number verified." };
+}
+
 function buildStripeSignupMakePayload(signupPayload, checkoutSession) {
   const body = signupPayload && typeof signupPayload === "object" ? signupPayload : {};
   const countryCode = String(body.country || "").trim().toLowerCase();
@@ -8419,6 +8509,23 @@ app.post(
         ...result,
       });
     }
+    if (vapiMessageType === "status-update" || vapiMessageType === "hang") {
+      const call = vapiMessage.call && typeof vapiMessage.call === "object" ? vapiMessage.call : {};
+      const lifecycleStatus = String(vapiMessage.status || call.status || vapiMessage.endedReason || "").toLowerCase();
+      const terminal = vapiMessageType === "hang" || /ended|complete|failed|hang|customer-ended|assistant-ended/.test(lifecycleStatus);
+      console.info("[vapi:lifecycle]", {
+        eventType: vapiMessageType,
+        callId: String(call.id || vapiMessage.callId || "").slice(0, 120),
+        status: lifecycleStatus.slice(0, 80),
+        terminal,
+        receivedAt: new Date().toISOString(),
+      });
+      if (terminal && (call.id || vapiMessage.callId)) {
+        const result = await ingestVapiEndOfCallReport(vapiMessage);
+        return res.status(result.duplicate ? 200 : 201).json({ ok: true, eventType: vapiMessageType, terminal: true, ...result });
+      }
+      return res.json({ ok: true, eventType: vapiMessageType, terminal: false });
+    }
     if (vapiMessageType === "tool-calls") {
       const calls = Array.isArray(vapiMessage.toolCallList) ? vapiMessage.toolCallList : [];
       const results = [];
@@ -9305,22 +9412,25 @@ app.post(
       return res.status(502).json({ error: makeData?.error || "Make webhook did not complete the signup." });
     }
 
-    const twilioPhoneNumber = getMakeTwilioPhoneNumber(makeData) || getMakeTwilioPhoneNumberFromText(makeResult.body);
+    const phoneProvisioning = await inspectSignupPhoneProvisioning(makeData, makeResult.body);
+    const twilioPhoneNumber = phoneProvisioning.status === "ready" ? phoneProvisioning.e164 : "";
     upsertSignupDashboardFromPayload(payload, {
-      status: "setup_started",
+      status: phoneProvisioning.status === "ready" ? "setup_ready" : `provisioning_${phoneProvisioning.status}`,
       makeStatus: makeResult.status,
       twilioPhoneNumber,
+      phoneProvisioningStatus: phoneProvisioning.status,
+      phoneProvisioningCode: phoneProvisioning.code,
     });
-    const stripeTrial = await attachNoCardStripeTrialToSignup(payload, {
-      makeStatus: makeResult.status,
-      twilioPhoneNumber,
-    });
+    const stripeTrial = phoneProvisioning.status === "ready"
+      ? await attachNoCardStripeTrialToSignup(payload, { makeStatus: makeResult.status, twilioPhoneNumber })
+      : { skipped: true, error: "Phone provisioning must be ready before trial activation." };
 
-    res.json({
+    res.status(phoneProvisioning.status === "ready" ? 200 : 202).json({
       success: true,
       ok: true,
       businessName,
       twilioPhoneNumber,
+      phoneProvisioning,
       makeStatus: makeResult.status,
       stripeCustomerId: stripeTrial.customer?.id || "",
       subscriptionId: stripeTrial.subscription?.id || "",
@@ -9362,7 +9472,7 @@ app.get(
               <span class="badge">${ok ? "Verified" : "Needs attention"}</span>
               <h1>${escapeHtml(title)}</h1>
               <p>${escapeHtml(body)}</p>
-              <a href="/#/signup">Return to My AI PA</a>
+              <a href="${escapeHtml(`${FRONTEND_APP_URL}/#/signup`)}">Return to My AI PA</a>
             </main>
           </body>
         </html>`);
@@ -9386,6 +9496,16 @@ app.get(
         body: "Please submit the signup form again to receive a fresh verification email.",
       });
     }
+
+    if (record.claimedAt) {
+      return renderVerificationPage({
+        ok: true,
+        title: "Verification is already processing",
+        body: "This link has already been opened. Setup is processing; return to My AI PA for the latest status.",
+      });
+    }
+    store[tokenHash] = { ...record, claimedAt: Date.now() };
+    writePendingSignupStore(store);
 
     const payload = compactObject({
       ...(record.payload || {}),
@@ -9422,9 +9542,24 @@ app.get(
       });
     }
 
-    const makeResult = await sendMakeSignupCompleted(payload);
+    let makeResult;
+    try {
+      makeResult = await sendMakeSignupCompleted(payload);
+    } catch (error) {
+      const retryStore = readPendingSignupStore();
+      if (retryStore[tokenHash]) {
+        delete retryStore[tokenHash].claimedAt;
+        writePendingSignupStore(retryStore);
+      }
+      throw error;
+    }
     const makeData = makeResult.data || {};
     if (!getMakeSignupSuccess(makeData)) {
+      const retryStore = readPendingSignupStore();
+      if (retryStore[tokenHash]) {
+        delete retryStore[tokenHash].claimedAt;
+        writePendingSignupStore(retryStore);
+      }
       upsertSignupDashboardFromPayload(payload, {
         status: "setup_error",
         emailVerified: true,
@@ -9446,22 +9581,24 @@ app.get(
 
     delete store[tokenHash];
     writePendingSignupStore(store);
-    const twilioPhoneNumber = getMakeTwilioPhoneNumber(makeData) || getMakeTwilioPhoneNumberFromText(makeResult.body);
+    const phoneProvisioning = await inspectSignupPhoneProvisioning(makeData, makeResult.body);
+    const twilioPhoneNumber = phoneProvisioning.status === "ready" ? phoneProvisioning.e164 : "";
     upsertSignupDashboardFromPayload(payload, {
-      status: "setup_started",
+      status: phoneProvisioning.status === "ready" ? "setup_ready" : `provisioning_${phoneProvisioning.status}`,
       emailVerified: true,
       emailVerifiedAt: new Date().toISOString(),
       makeStatus: makeResult.status,
       twilioPhoneNumber,
+      phoneProvisioningStatus: phoneProvisioning.status,
+      phoneProvisioningCode: phoneProvisioning.code,
     });
-    await attachNoCardStripeTrialToSignup(payload, {
-      makeStatus: makeResult.status,
-      twilioPhoneNumber,
-    });
+    if (phoneProvisioning.status === "ready") {
+      await attachNoCardStripeTrialToSignup(payload, { makeStatus: makeResult.status, twilioPhoneNumber });
+    }
     return renderVerificationPage({
-      ok: true,
-      title: "Email verified",
-      body: "Your email is verified and your My AI PA setup is now continuing.",
+      ok: phoneProvisioning.status !== "failed",
+      title: phoneProvisioning.status === "ready" ? "Email verified" : "Email verified, number setup needs attention",
+      body: phoneProvisioning.status === "ready" ? "Your email is verified and your My AI PA setup is now continuing." : phoneProvisioning.message,
     });
   })
 );
@@ -11005,6 +11142,7 @@ module.exports = {
     getPublicSignupNetworkStats,
     setPublicNetworkStatsLoaderForTests,
     purchaseTwilioPhoneNumber,
+    inspectSignupPhoneProvisioning,
     getVapiVoiceSignupExecutionBusinessId,
     getVapiVoiceSignupSmsEnvironment,
     findSignupByOperationalTarget,

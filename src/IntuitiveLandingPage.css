@@ -117,6 +117,7 @@
 .simple-call-conversation span { display: block; color: #77dfff; font-size: .58rem; font-weight: 950; letter-spacing: .11em; text-transform: uppercase; }
 .simple-call-conversation .caller span { color: #d9efff; }
 .simple-call-conversation p { margin: 5px 0 0; color: #fff; font-size: .84rem; font-weight: 750; line-height: 1.4; }
+.simple-lead-classification { justify-self: start; border: 1px solid rgba(113,239,176,.65); border-radius: 999px; background: rgba(19,169,91,.2); padding: 8px 12px; color: #7cf0b6; font-size: .72rem; font-weight: 950; letter-spacing: .13em; }
 .simple-phone-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: stretch; padding-inline: 5px; }
 .simple-message-phone { position: relative; isolation: isolate; min-width: 0; min-height: 350px; display: flex; flex-direction: column; border: 5px solid #101827; border-radius: 34px; background: #fff; padding: 12px; color: #111827; box-shadow: 0 20px 35px -25px rgba(0,0,0,.9); }
 .simple-message-phone::before, .simple-message-phone::after { content: ""; position: absolute; z-index: -1; width: 4px; border-radius: 4px; background: #0a1220; }
@@ -132,6 +133,7 @@
 .simple-message-phone header strong { overflow-wrap: anywhere; font-size: .82rem; line-height: 1.05; }
 .simple-message-phone header small { margin-top: 4px; color: #78899a; font-size: .58rem; font-weight: 750; }
 .simple-message-copy { margin: 15px 0 0; border-radius: 16px 16px 16px 6px; background: #e9e9eb; padding: 14px; color: #111; font-size: .75rem; font-weight: 800; line-height: 1.4; }
+.simple-message-heading { display: block; margin-bottom: 8px; border-bottom: 1px solid rgba(17,24,39,.15); padding-bottom: 7px; color: #075eaa; font-size: .78rem; letter-spacing: .07em; }
 .simple-message-phone.customer .simple-message-copy { border-radius: 13px 13px 5px 13px; background: #0a84ff; color: #fff; }
 .simple-message-bullets { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
 .simple-message-bullets li { min-width: 0; display: grid; grid-template-columns: 8px minmax(0,1fr); align-items: start; gap: 5px; margin: 0; line-height: 1.28; }
@@ -225,11 +227,11 @@
 .simple-problem { background: #fff; }
 .simple-compare { margin-top: 42px; display: grid; grid-template-columns: 1fr 66px 1fr; align-items: stretch; }
 .simple-compare article { min-height: 260px; border: 2px solid #d9e5ee; border-radius: 24px; padding: 30px; }
-.simple-compare article > span { display: inline-block; border-radius: 999px; padding: 6px 11px; background: #f3f5f7; color: #6b7785; font-size: .69rem; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; }
+.simple-compare article > span { display: inline-block; border: 1px solid #cbd7e0; border-radius: 999px; padding: 9px 14px; background: #f3f5f7; color: #4a5a69; font-size: .86rem; font-weight: 950; letter-spacing: .12em; text-transform: uppercase; box-shadow: 0 9px 18px -16px rgba(15,23,42,.6); }
 .simple-compare article h3 { margin: 20px 0 0; font-size: 1.65rem; }
 .simple-compare article p { margin: 9px 0 0; color: var(--simple-muted); font-weight: 650; line-height: 1.55; }
 .simple-compare .with { border-color: #7ed7a4; background: #f1fbf5; }
-.simple-compare .with > span { background: #d8f5e3; color: #087839; }
+.simple-compare .with > span { border-color: #8eddb0; background: #d8f5e3; color: #087839; }
 .simple-compare-arrow { display: grid; place-items: center; color: var(--simple-blue); }
 .simple-compare-arrow svg { width: 35px; }
 .simple-outcome { margin-top: 30px; border-top: 1px solid #dde5ec; padding-top: 18px; color: #a0332b; font-weight: 900; }
@@ -244,6 +246,10 @@
 .simple-how-grid article > span { display: block; margin-top: 20px; color: var(--simple-blue); font-size: .67rem; font-weight: 950; letter-spacing: .14em; text-transform: uppercase; }
 .simple-how-grid article h3 { margin: 6px 0 0; font-size: 1.35rem; }
 .simple-how-grid article p { margin: 9px 0 0; color: var(--simple-muted); font-weight: 600; line-height: 1.55; }
+.simple-three-rings { display: inline-flex; margin-top: 18px; border: 1px solid #8cc7ed; border-radius: 999px; background: #e9f6ff; padding: 9px 13px; color: #075eaa; font-size: .8rem; font-weight: 950; letter-spacing: .13em; }
+.simple-how-handoffs > div:not(.simple-how-number) { margin-top: 12px; border: 1px solid #dceaf3; border-radius: 12px; background: #f7fbfe; padding: 10px 12px; text-align: left; }
+.simple-how-handoffs > div:not(.simple-how-number) strong { color: #0b63a8; font-size: .82rem; text-transform: uppercase; letter-spacing: .07em; }
+.simple-how-handoffs > div:not(.simple-how-number) p { margin-top: 4px; font-size: .82rem; }
 .simple-how-grid article ul { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 18px 0 0; padding: 0; color: #294760; font-size: .82rem; font-weight: 750; line-height: 1.25; list-style: none; }
 .simple-how-grid article li { min-height: 44px; display: flex; align-items: center; gap: 8px; border: 1px solid #dceaf3; border-radius: 12px; background: #f7fbfe; padding: 8px 10px; text-align: left; }
 .simple-how-grid article li::before { content: "✓"; width: 21px; height: 21px; display: grid; place-items: center; flex: 0 0 auto; border-radius: 50%; background: #dcf7e7; color: #079344; font-size: .7rem; font-weight: 950; }
@@ -409,7 +415,7 @@
   .simple-audio-trigger-icon { width: 23px; height: 23px; }
   .simple-audio-trigger-waves { display: none; }
   .simple-carousel-stage { min-height: 390px; border-radius: 18px; }
-  .simple-carousel-stage.showing-phones { min-height: 500px; }
+  .simple-carousel-stage.showing-phones { min-height: 885px; }
   .simple-carousel-stage.showing-coffee { min-height: 555px; }
   .simple-carousel-stage > section { padding: 18px 14px; }
   .simple-carousel-stage > section:nth-child(2) { padding-inline: 8px; }
@@ -417,20 +423,20 @@
   .simple-call-conversation { gap: 8px; }
   .simple-call-conversation > div { padding: 10px 12px; }
   .simple-call-conversation p { font-size: .73rem; line-height: 1.32; }
-  .simple-phone-pair { gap: 10px; padding-inline: 4px; }
-  .simple-message-phone { min-height: 370px; border-width: 4px; border-radius: 25px; padding: 7px; }
+  .simple-phone-pair { grid-template-columns: 1fr; gap: 14px; padding-inline: 13px; }
+  .simple-message-phone { width: min(100%, 320px); min-height: 0; margin-inline: auto; border-width: 4px; border-radius: 27px; padding: 10px; }
   .simple-message-phone::before { left: -7px; top: 70px; height: 48px; box-shadow: 0 60px 0 #0a1220; }
   .simple-message-phone::after { right: -7px; top: 94px; height: 62px; }
-  .simple-phone-status { grid-template-columns: 1fr 32px 1fr; font-size: .43rem; }
-  .simple-phone-status i { height: 4px; }
-  .simple-message-phone header { gap: 6px; margin-top: 5px; padding-bottom: 7px; }
-  .simple-message-phone header > span { width: 27px; height: 27px; font-size: .48rem; }
-  .simple-message-phone header strong { font-size: .59rem; }
-  .simple-message-phone header small { font-size: .43rem; }
-  .simple-message-copy { margin-top: 10px; padding: 9px; font-size: .57rem; line-height: 1.38; }
-  .simple-message-bullets { gap: 5px; }
-  .simple-message-bullets li { grid-template-columns: 7px minmax(0,1fr); gap: 4px; line-height: 1.28; }
-  .simple-message-bullets li::before { width: 6px; height: 2px; margin-top: .5em; box-shadow: 0 0 0 2px rgba(37,135,245,.1); }
+  .simple-phone-status { grid-template-columns: 1fr 44px 1fr; font-size: .52rem; }
+  .simple-phone-status i { height: 5px; }
+  .simple-message-phone header { gap: 8px; margin-top: 6px; padding-bottom: 9px; }
+  .simple-message-phone header > span { width: 34px; height: 34px; font-size: .58rem; }
+  .simple-message-phone header strong { font-size: .75rem; }
+  .simple-message-phone header small { font-size: .53rem; }
+  .simple-message-copy { margin-top: 12px; padding: 13px; font-size: .78rem; line-height: 1.44; }
+  .simple-message-bullets { gap: 7px; }
+  .simple-message-bullets li { grid-template-columns: 8px minmax(0,1fr); gap: 6px; line-height: 1.34; }
+  .simple-message-bullets li::before { width: 7px; height: 3px; margin-top: .5em; box-shadow: 0 0 0 2px rgba(37,135,245,.1); }
   .simple-message-phone.customer .simple-message-bullets li::before { box-shadow: 0 0 0 2px rgba(255,255,255,.13); }
   .simple-red-pen-message > strong { padding-bottom: 5px; }
   .simple-red-pen-message .simple-message-bullets { margin: 6px 0; }

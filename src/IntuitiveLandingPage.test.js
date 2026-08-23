@@ -41,7 +41,7 @@ describe("intuitive homepage journey", () => {
     expect(text).toMatch(/When you can't get to the phone, My AI PA:/i);
     expect(text).toMatch(/Keep your existing business number/i);
     expect(text).toMatch(/Three simple steps/i);
-    expect(text).toMatch(/The caller needs help now—not after you finish the job/i);
+    expect(text).toMatch(/Your customer has a problem\. They want to talk to someone now/i);
     expect(text).toMatch(/AnswersAfter 3 rings/i);
     expect(text).toMatch(/Talks naturallyTo get job details/i);
     expect(text).toMatch(/Follows upTexts you and the caller/i);
@@ -81,15 +81,15 @@ describe("intuitive homepage journey", () => {
     expect(container.textContent).toMatch(/A real conversation—not voicemail/i);
     expect(container.textContent).toMatch(/Both sides get a clear text/i);
     expect(container.textContent).toMatch(/Worry-Free Coverage — For about the price of a cup of coffee a day/i);
-    expect(container.textContent).toMatch(/Hi, thanks for calling! Are you looking for a new installation, repair or maintenance today\?/i);
-    expect(container.textContent).toMatch(/PREFERRED START DATE - NEXT WEEK/i);
-    expect(container.textContent).toMatch(/WILL CALL TO DISCUSS JOB DETAILS AND PROVIDE QUOTE/i);
+    expect(container.textContent).toMatch(/Thanks for calling the Tim's Electrical recorded demonstration/i);
+    expect(container.textContent).toMatch(/Next action: quote follow-up/i);
+    expect(container.textContent).not.toMatch(/PREFERRED START DATE - NEXT WEEK/i);
     expect(container.textContent).toMatch(/Owner and customer both receive text summary for easy follow up/i);
     expect(container.textContent).toMatch(/Natural conversation and FAQ answers/i);
-    expect(container.querySelector("#why-it-matters").textContent).toMatch(/First question: Why not just stick to voice mail\?/i);
+    expect(container.querySelector("#why-it-matters").textContent).toMatch(/Your customer has a problem/i);
     expect(container.querySelectorAll(".simple-message-phone")).toHaveLength(2);
     expect(container.querySelectorAll(".simple-message-bullets")).toHaveLength(2);
-    expect(container.querySelectorAll(".simple-message-phone.owner .simple-message-bullets li")).toHaveLength(5);
+    expect(container.querySelectorAll(".simple-message-phone.owner .simple-message-bullets li")).toHaveLength(6);
     expect(container.querySelectorAll(".simple-message-phone.customer .simple-message-bullets li")).toHaveLength(4);
     expect(container.querySelector('audio[src*="tims-electrical-2.wav"]')).not.toBeNull();
     expect(window.HTMLMediaElement.prototype.play).not.toHaveBeenCalled();
@@ -97,5 +97,16 @@ describe("intuitive homepage journey", () => {
     await act(async () => hearCall.dispatchEvent(new MouseEvent("click", { bubbles: true })));
     expect(window.HTMLMediaElement.prototype.play).toHaveBeenCalledTimes(1);
     expect(hearCall.textContent).toMatch(/Pause Call/i);
+  });
+
+  test("holds each hero proof state for seventeen seconds", () => {
+    window.matchMedia = jest.fn().mockReturnValue({ matches: false, addEventListener: jest.fn(), removeEventListener: jest.fn() });
+    act(() => root.render(<IntuitiveLandingPage />));
+    const carousel = container.querySelector('[aria-label^="Three-part missed-call demonstration"]');
+    expect(carousel.getAttribute("aria-label")).toMatch(/Slide 1 of 3/i);
+    act(() => jest.advanceTimersByTime(16999));
+    expect(carousel.getAttribute("aria-label")).toMatch(/Slide 1 of 3/i);
+    act(() => jest.advanceTimersByTime(1));
+    expect(carousel.getAttribute("aria-label")).toMatch(/Slide 2 of 3/i);
   });
 });

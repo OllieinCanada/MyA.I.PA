@@ -31,11 +31,11 @@ describe("Tim's Electrical preloaded landing-page demo", () => {
     expect(container.textContent).not.toMatch(/Start voice demo/i);
     expect(container.textContent).toMatch(/Homeowner needs a hot tub wired/i);
     expect(container.textContent).toMatch(/Summary builds during the call/i);
-    expect(container.textContent).not.toMatch(/NEW INSTALLATION · Brian Smith/i);
+    expect(container.textContent).not.toMatch(/NEW INSTALLATIONBrian Smith/i);
 
     act(() => jest.advanceTimersByTime(6500));
 
-    expect(container.textContent).toMatch(/NEW INSTALLATION · Brian Smith/i);
+    expect(container.textContent).toMatch(/NEW INSTALLATIONBrian Smith/i);
     expect(container.textContent).toMatch(/Owner's cellphone/i);
     expect(container.textContent).toMatch(/100%/i);
   });
@@ -49,12 +49,12 @@ describe("Tim's Electrical preloaded landing-page demo", () => {
     act(() => repairButton.dispatchEvent(new MouseEvent("click", { bubbles: true })));
 
     expect(container.textContent).toMatch(/Homeowner reports an outlet stopped working/i);
-    expect(container.textContent).not.toMatch(/NEW INSTALLATION · Brian Smith/i);
-    expect(container.textContent).not.toMatch(/REPAIR REQUEST · Maya Chen/i);
+    expect(container.textContent).not.toMatch(/NEW INSTALLATIONBrian Smith/i);
+    expect(container.textContent).not.toMatch(/REPAIR REQUESTMaya Chen/i);
 
     act(() => jest.advanceTimersByTime(6500));
 
-    expect(container.textContent).toMatch(/REPAIR REQUEST · Maya Chen/i);
+    expect(container.textContent).toMatch(/REPAIR REQUESTMaya Chen/i);
     expect(container.textContent).toMatch(/100%/i);
   });
 
@@ -71,6 +71,17 @@ describe("Tim's Electrical preloaded landing-page demo", () => {
     expect(container.querySelectorAll(".tims-message-preview")).toHaveLength(2);
     expect(container.textContent).not.toMatch(/Create task/i);
     expect(container.textContent).not.toMatch(/^Email$/i);
+  });
+
+  test("shows captured fields as the transcript reaches them", () => {
+    expect(container.textContent).toMatch(/Listening for the request/i);
+    expect(container.textContent).not.toMatch(/Job address23 Robb Street/i);
+
+    act(() => jest.advanceTimersByTime(2100));
+
+    expect(container.textContent).toMatch(/IntentNew installation/i);
+    expect(container.textContent).toMatch(/CustomerBrian Smith/i);
+    expect(container.textContent).toMatch(/Job address23 Robb Street, Hamilton/i);
   });
 
   test("connects the selected scenario to a clearly disclosed recording", () => {

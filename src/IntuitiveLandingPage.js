@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { TimsElectricalLiveDemo } from "./TimsElectricalDemo";
+import { timsElectricalScenarios } from "./timsElectricalDemoData";
 import heroTranscriptTimings from "./timsElectricalHeroTranscriptTimings.json";
 import "./IntuitiveLandingPage.css";
 
@@ -12,20 +13,9 @@ const coreBenefits = [
   ["message", "Owner and customer both receive text summary for easy follow up."],
 ];
 
-const ownerTextPoints = [
-  "NEW INSTALLATION",
-  "HOT TUB WIRING",
-  "BRIAN SMITH",
-  "23 ROBB ST., HAMILTON",
-  "BEST CALLBACK - AFTER 5 PM",
-];
-
-const customerTextPoints = [
-  "INSTALLATION REQUEST",
-  "HOT TUB WIRING",
-  "PREFERRED START DATE - NEXT WEEK",
-  "WILL CALL TO DISCUSS JOB DETAILS AND PROVIDE QUOTE",
-];
+const heroScenario = timsElectricalScenarios.find((scenario) => scenario.id === "new-installation");
+const ownerTextPoints = heroScenario.ownerTextLines;
+const customerTextPoints = heroScenario.customerTextLines;
 
 const handoffCards = [
   ["Callback information", "Caller name, callback number, and the best time to reach them."],
@@ -201,7 +191,7 @@ function AnimatedHeroProof({ onSampleCall, onStartTrial }) {
   useEffect(() => {
     const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
     if (reduceMotion) return undefined;
-    const timer = window.setTimeout(() => setActiveSlide((current) => (current + 1) % 3), 14000);
+    const timer = window.setTimeout(() => setActiveSlide((current) => (current + 1) % 3), 17000);
     return () => window.clearTimeout(timer);
   }, [activeSlide, manualChange]);
 
@@ -233,9 +223,10 @@ function AnimatedHeroProof({ onSampleCall, onStartTrial }) {
       title: "A real conversation—not voicemail",
       content: (
         <div className="simple-call-conversation">
-          <div className="assistant"><span>My AI PA</span><p>“Hi, thanks for calling! Are you looking for a new installation, repair or maintenance today?”</p></div>
-          <div className="caller"><span>Caller</span><p>“I need someone to wire up my hot tub as a new installation.”</p></div>
-          <div className="assistant"><span>My AI PA</span><p>“Absolutely. Can I get your name and the address where the work is needed?”</p></div>
+          <div className="assistant"><span>My AI PA</span><p>“{heroScenario.transcript[0].text}”</p></div>
+          <div className="caller"><span>Caller · {heroScenario.callerName}</span><p>“{heroScenario.transcript[1].text}”</p></div>
+          <div className="assistant"><span>My AI PA</span><p>“{heroScenario.transcript[2].text}”</p></div>
+          <strong className="simple-lead-classification">NEW INSTALLATION</strong>
         </div>
       ),
     },
@@ -248,8 +239,9 @@ function AnimatedHeroProof({ onSampleCall, onStartTrial }) {
             <div className="simple-phone-status"><b>9:41</b><i /><b>5G</b></div>
             <header><span>PA</span><div><strong>Owner's cellphone</strong><small>My AI PA · now</small></div></header>
             <div className="simple-message-copy">
+              <strong className="simple-message-heading">{ownerTextPoints[0]}</strong>
               <ul className="simple-message-bullets">
-                {ownerTextPoints.map((point) => <li key={point}>{point}</li>)}
+                {ownerTextPoints.slice(1).map((point) => <li key={point}>{point}</li>)}
               </ul>
             </div>
           </article>
@@ -257,12 +249,9 @@ function AnimatedHeroProof({ onSampleCall, onStartTrial }) {
             <div className="simple-phone-status"><b>9:41</b><i /><b>5G</b></div>
             <header><span>TE</span><div><strong>Customer's cellphone</strong><small>Tim's Electrical · now</small></div></header>
             <div className="simple-message-copy simple-red-pen-message">
-              <strong>TIM'S ELECTRICAL</strong>
               <ul className="simple-message-bullets">
                 {customerTextPoints.map((point) => <li key={point}>{point}</li>)}
               </ul>
-              <span className="closing">THANK YOU FOR CALLING</span>
-              <span>TIM'S ELECTRICAL</span>
             </div>
           </article>
         </div>
@@ -420,11 +409,11 @@ export default function IntuitiveLandingPage() {
 
       <section className="simple-section simple-problem" id="why-it-matters">
         <div className="simple-shell">
-          <SectionHeading title="First question: Why not just stick to voice mail?" body="The caller needs help now—not after you finish the job. When a ready-to-hire customer reaches voice mail, the next contractor is only another call away. My AI PA answers while you keep working, so the opportunity does not disappear without a conversation." />
+          <SectionHeading title="Your customer has a problem. They want to talk to someone now." body="If you cannot answer, they can call the next contractor. My AI PA picks up after three rings, hears what they need, and keeps the opportunity connected to your business instead of sending it to voicemail." />
           <div className="simple-compare">
-            <article className="without"><span>Without help</span><h3>Phone rings unanswered</h3><p>Three rings. No answer. The caller has no reason to wait.</p><div className="simple-outcome">The next contractor gets a chance</div></article>
+            <article className="without"><span>Without help</span><h3>Phone rings unanswered</h3><p>Three rings. No answer. The caller still has a problem and no reason to wait.</p><div className="simple-outcome">The next contractor gets the opportunity</div></article>
             <div className="simple-compare-arrow"><Icon name="arrow" /></div>
-            <article className="with"><span>With My AI PA</span><h3>Assistant answers live</h3><p>The caller explains the job, gets common questions answered, and knows the team has the request.</p><div className="simple-outcome"><Icon name="check" /> You receive a callback-ready lead</div></article>
+            <article className="with"><span>With My AI PA</span><h3>Assistant answers live</h3><p>The caller gets an immediate response, explains what they need, and can get approved common questions answered. Their contact and job details reach your business, and they know your team will follow up.</p><div className="simple-outcome"><Icon name="check" /> You receive a callback-ready lead</div></article>
           </div>
         </div>
       </section>
@@ -433,9 +422,9 @@ export default function IntuitiveLandingPage() {
         <div className="simple-shell">
           <SectionHeading number="02" eyebrow="How it works" title="Three simple steps." body="Keep your same business number!" />
           <div className="simple-how-grid">
-            <article><div className="simple-how-number"><Icon name="phone" /></div><span>Step 1</span><h3>My AI PA answers</h3><p>Your customer gets a professional greeting after three rings.</p></article>
-            <article className="simple-how-details"><div className="simple-how-number"><Icon name="clipboard" /></div><span>Step 2</span><h3>The right details are collected</h3><ul><li>The reason for the call</li><li>Job details</li><li>Service amount</li><li>Customer name</li><li>Call urgent</li><li>And call back # are all collected</li></ul></article>
-            <article><div className="simple-how-number"><Icon name="message" /></div><span>Step 3</span><h3>Both sides receive a text</h3><p>Caller and owner both get a text to their cellphone summarizing the details of the call.</p></article>
+            <article><div className="simple-how-number"><Icon name="phone" /></div><span>Step 1</span><h3>My AI PA answers</h3><p>Your phone rings. When you do not answer, My AI PA takes over with a professional greeting.</p><strong className="simple-three-rings">AFTER 3 RINGS</strong></article>
+            <article className="simple-how-details"><div className="simple-how-number"><Icon name="clipboard" /></div><span>Step 2</span><h3>The right details are collected</h3><ul><li>Reason and service requested</li><li>Job details and address</li><li>Name and callback number</li><li>Preferred callback time</li><li>Desired timing or start date</li><li>Urgency, rate question and interest—when relevant</li></ul></article>
+            <article className="simple-how-handoffs"><div className="simple-how-number"><Icon name="message" /></div><span>Step 3</span><h3>Both sides receive useful follow-up</h3><div><strong>Business owner</strong><p>A compact, actionable, callback-ready lead summary.</p></div><div><strong>Customer</strong><p>Confirmation that the request was received and what happens next.</p></div></article>
           </div>
           <div className="simple-coffee">
             <div><strong>We've got you covered 24/7.</strong><p>For about the <u>price of a cup of coffee per day</u> you get:</p></div>
@@ -464,11 +453,11 @@ export default function IntuitiveLandingPage() {
 
       <section className="simple-section simple-trial-plan">
         <div className="simple-shell">
-          <SectionHeading number="06" eyebrow="A low-risk field test" title="Trust it privately before a customer ever hears it." body="The 14-day trial is not a blind switch. Set it up, test it, and forward real missed calls only when you are comfortable." />
+          <SectionHeading number="06" eyebrow="A low-risk field test" title="Trust it privately before a customer ever hears it." body="The 14-day trial is not a blind switch. Set it up, test it, and put it online only when you are comfortable." />
           <div className="simple-trial-grid">
             <article><span>1</span><div><p>First</p><h3>Build and test privately</h3><small>Add your services and common answers. Hear the receptionist and correct anything you do not like.</small></div></article>
             <article><span>2</span><div><p>When ready</p><h3>Choose the calls it covers</h3><small>Start with after-hours, busy, or unanswered calls. Your existing number and staff stay in place.</small></div></article>
-            <article><span>3</span><div><p>Before deciding</p><h3>Review the actual handoffs</h3><small>See what was collected, read the summaries, and decide whether the coverage earned its place.</small></div></article>
+            <article><span>3</span><div><p>Before deciding</p><h3>Review the actual handoffs</h3><small>See the caller, callback number, request, address, timing and next action that reached you—plus the confirmation the customer received.</small></div></article>
           </div>
           <div className="simple-honest-proof"><span><Icon name="check" /></span><div><strong>No fake promises. Hear it, test it, and decide from the calls.</strong><p>No credit card. No setup fee. Cancel anytime.</p></div><StartButton /></div>
         </div>

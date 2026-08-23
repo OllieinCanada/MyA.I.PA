@@ -42,9 +42,15 @@
 .tims-text-phone-contact strong { display: block; font-size: .66rem; font-weight: 950; line-height: 1.15; }
 .tims-text-phone-contact small { display: block; margin-top: 2px; color: #8e8e93; font-size: .48rem; font-weight: 800; }
 .tims-text-phone-thread { min-height: 116px; display: flex; flex: 1 1 auto; align-items: flex-start; padding: 12px 9px 8px; background: #fff; }
-.tims-text-phone-thread p { max-width: 94%; min-height: 0; margin: 0; padding: 9px 10px; border-radius: 14px 14px 14px 5px; color: #111; background: #e9e9eb; font-size: .61rem; font-weight: 750; line-height: 1.42; }
+.tims-text-phone-thread > ul, .tims-text-phone-thread > .tims-message-heading { position: relative; z-index: 1; }
+.tims-text-phone-thread { max-width: 100%; flex-direction: column; border-radius: 14px 14px 14px 5px; color: #111; background: #e9e9eb; font-size: .61rem; font-weight: 750; line-height: 1.42; }
+.tims-text-phone-thread ul { display: grid; gap: 6px; width: 100%; margin: 0; padding: 0; list-style: none; }
+.tims-text-phone-thread li { min-width: 0; display: grid; grid-template-columns: 7px minmax(0,1fr); gap: 5px; overflow-wrap: anywhere; }
+.tims-text-phone-thread li::before { content: ""; width: 6px; height: 3px; margin-top: .55em; border-radius: 999px; background: #2587f5; }
+.tims-message-heading { width: 100%; margin-bottom: 7px; border-bottom: 1px solid rgba(17,24,39,.14); padding-bottom: 6px; font-size: .68rem; letter-spacing: .04em; }
 .tims-message-preview.customer .tims-text-phone-thread { justify-content: flex-end; }
-.tims-message-preview.customer .tims-text-phone-thread p { border-radius: 14px 14px 5px 14px; color: #fff; background: #0a84ff; }
+.tims-message-preview.customer .tims-text-phone-thread { border-radius: 14px 14px 5px 14px; color: #fff; background: #0a84ff; }
+.tims-message-preview.customer .tims-text-phone-thread li::before { background: #fff; }
 .tims-text-phone-status { min-height: 34px; display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 5px 10px 9px; color: #8e8e93; font-size: .48rem; font-weight: 850; }
 .tims-text-phone-status span { color: #168349; font-size: .52rem; font-weight: 950; letter-spacing: .08em; }
 .tims-demo .fcr-summary-actions button:disabled { opacity: .43; cursor: not-allowed; }
@@ -123,6 +129,13 @@
 .tims-call-turn > div { min-width: 0; }
 .tims-call-turn small { display: block; margin-bottom: 3px; color: #597184; font-size: .53rem; font-weight: 950; letter-spacing: .07em; }
 .tims-call-turn p { margin: 0; color: #12283a; font-size: .69rem; font-weight: 720; line-height: 1.38; }
+.tims-caller-context { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 8px; border-bottom: 1px solid #dce7ec; background: #edf6fb; padding: 7px 14px; color: #37566b; font-size: .58rem; }
+.tims-caller-context span, .tims-caller-context strong { overflow-wrap: anywhere; }
+.tims-caller-context strong { color: #0b5f95; text-align: right; }
+.tims-structured-grid { grid-template-columns: repeat(3, minmax(0,1fr)); }
+.tims-structured-grid > div { animation: timsFieldIn .24s ease-out both; }
+.tims-structured-grid .tims-listening-field { grid-column: 1 / -1; }
+@keyframes timsFieldIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
 
 @media (min-width: 1200px) {
   .tims-demo-landing .fcr-shell {
@@ -231,7 +244,7 @@
   .tims-demo-landing .tims-text-phone-contact strong { font-size: .58rem; }
   .tims-demo-landing .tims-text-phone-contact small { font-size: .42rem; }
   .tims-demo-landing .tims-text-phone-thread { min-height: 150px; padding: 9px 8px 6px; }
-  .tims-demo-landing .tims-text-phone-thread p { max-width: 97%; padding: 6px 7px; font-size: .51rem; line-height: 1.3; }
+  .tims-demo-landing .tims-text-phone-thread { max-width: 97%; padding: 8px; font-size: .53rem; line-height: 1.34; }
   .tims-demo-landing .tims-text-phone-status { min-height: 20px; padding: 3px 8px 5px; font-size: .42rem; }
   .tims-demo-landing .tims-text-phone-status span { font-size: .45rem; }
   .tims-demo-landing .fcr-summary-actions { margin-top: 7px; padding-top: 7px; }
@@ -250,9 +263,29 @@
 }
 
 @media (max-width: 760px) {
-  .tims-message-grid { grid-template-columns: 1fr; }
-  .tims-message-preview { width: min(360px,100%); min-height: 390px; margin-inline: auto; }
+  .tims-message-grid { grid-template-columns: 1fr; gap: 18px; }
+  .tims-message-preview,
+  .tims-demo-landing .tims-message-preview { width: min(360px,100%); min-height: 0; margin-inline: auto; }
   .tims-message-preview p { min-height: 0; }
+  .tims-text-phone-contact,
+  .tims-demo-landing .tims-text-phone-contact { grid-template-columns: 32px minmax(0,1fr); gap: 8px; padding: 8px 10px; }
+  .tims-text-phone-contact > span,
+  .tims-demo-landing .tims-text-phone-contact > span { width: 32px; height: 32px; }
+  .tims-text-phone-contact strong,
+  .tims-demo-landing .tims-text-phone-contact strong { font-size: .78rem; }
+  .tims-text-phone-contact small,
+  .tims-demo-landing .tims-text-phone-contact small { font-size: .6rem; }
+  .tims-text-phone-thread,
+  .tims-demo-landing .tims-text-phone-thread { min-height: 0; flex: 0 0 auto; max-width: 100%; padding: 13px 12px; font-size: .78rem; line-height: 1.43; }
+  .tims-message-preview.customer .tims-text-phone-thread { justify-content: flex-start; }
+  .tims-text-phone-thread ul { gap: 7px; }
+  .tims-text-phone-thread li { grid-template-columns: 8px minmax(0,1fr); gap: 7px; }
+  .tims-text-phone-thread li::before { width: 7px; height: 4px; }
+  .tims-message-heading { font-size: .8rem; }
+  .tims-text-phone-status,
+  .tims-demo-landing .tims-text-phone-status { min-height: 32px; padding: 6px 10px 8px; font-size: .58rem; }
+  .tims-text-phone-status span,
+  .tims-demo-landing .tims-text-phone-status span { font-size: .62rem; }
   .tims-panel { width: min(330px, 88%); min-height: 360px; padding: 92px 38px 42px; }
   .tims-demo-landing .fcr-section { padding: 46px 0 52px; }
   .tims-live-section .fcr-section-heading { margin-bottom: 22px; }
@@ -274,7 +307,7 @@
   .tims-voice-visualizer { height: 66px; }
   .tims-recording-status { text-align: center; }
   .tims-demo-landing .fcr-summary-card { padding: 16px; }
-  .tims-demo-landing .fcr-summary-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 14px 0; }
+  .tims-demo-landing .fcr-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 14px 0; }
   .tims-demo-landing .fcr-summary-grid > div { padding: 8px 6px; }
   .tims-demo-landing .fcr-summary-grid strong { font-size: .66rem; }
   .tims-demo-landing .fcr-summary-copy { margin-bottom: 12px; }
@@ -286,6 +319,8 @@
 
 @media (max-width: 520px) {
   .tims-demo-landing .fcr-scenario-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .tims-caller-context { grid-template-columns: 1fr; }
+  .tims-caller-context strong { text-align: left; }
 }
 
 @media (prefers-reduced-motion: reduce) {

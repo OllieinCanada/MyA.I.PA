@@ -114,11 +114,13 @@ function buildCustomerBody(args) {
     return `Thanks for calling ${businessName}. Your ${label} has been received for review. Your preferred contact time was noted, but a response time is not guaranteed.`.slice(0, 1600);
   }
   if (requestType === "message") {
-    return `Thanks for calling ${businessName}. We received your message: "${cleanText(args.message || "No message provided", 500)}" Our team will call you back as soon as possible.`.slice(0, 1600);
+    return `Thanks for calling ${businessName}. We received your message: "${cleanText(args.message || "No message provided", 500)}" The team will review it and follow up.`.slice(0, 1600);
   }
   const job = cleanText(args.jobDetails || `${requestType} service`, 500);
   const location = [cleanText(args.streetAddress, 180), cleanText(args.city, 120)].filter(Boolean).join(", ");
-  return `Thanks for calling ${businessName}. We received your service request regarding ${job}${location ? ` at ${location}` : ""}. Our team will call you back as soon as possible.`.slice(0, 1600);
+  const preferredTiming = cleanText(args.bestCallbackTime || args.preferredStartDate, 160);
+  const timingNote = preferredTiming ? ` We noted your preferred timing: ${preferredTiming}.` : "";
+  return `Thanks for calling ${businessName}. We received your service request regarding ${job}${location ? ` at ${location}` : ""}.${timingNote} The team will follow up to discuss the details and next step.`.slice(0, 1600);
 }
 
 function postSendClosingPrompt() {

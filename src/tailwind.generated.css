@@ -9577,6 +9577,10 @@ video {
   scrollbar-width: thin;
 }
 
+.\[voice-preview\:lifecycle\] {
+  voice-preview: lifecycle;
+}
+
 .placeholder\:font-medium::placeholder {
   font-weight: 500;
 }

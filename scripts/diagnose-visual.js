@@ -30,7 +30,7 @@ const requiredText = {
     "Never miss a call again!",
     "Missed Calls = Lost Revenue $$",
     "AI Telephone Answering Assistant",
-    "Why not just stick to voice mail?",
+    "Your customer has a problem. They want to talk to someone now.",
     "See a Sample Call",
     "Start Your Free Trial",
   ],

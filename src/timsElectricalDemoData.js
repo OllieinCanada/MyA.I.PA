@@ -71,6 +71,115 @@ export const timsElectricalBoundaries = [
   "Describe message delivery truthfully and only after the delivery result is confirmed.",
 ];
 
+// Every visible representation of a scenario is derived from this capture model.
+// `capturedAt` is the first transcript-line count after which a value is known.
+const scenarioDetails = {
+  "new-installation": {
+    callerName: "Brian Smith",
+    callbackNumber: "905-555-1234",
+    details: [
+      { label: "Intent", value: "New installation", capturedAt: 2 },
+      { label: "Customer", value: "Brian Smith", capturedAt: 4 },
+      { label: "Callback", value: "905-555-1234", capturedAt: 8 },
+      { label: "Work requested", value: "Hot tub wiring", capturedAt: 2 },
+      { label: "Job address", value: "23 Robb Street, Hamilton", capturedAt: 6 },
+      { label: "Preferred callback", value: "After 5 p.m.", capturedAt: 8 },
+      { label: "Interest / next action", value: "Quote follow-up requested", capturedAt: 11 },
+      { label: "Priority", value: "Installation opportunity", capturedAt: 2 },
+      { label: "Route", value: "Electrical team — quote follow-up", capturedAt: 11 },
+    ],
+    missing: ["Preferred start date", "Site-access notes"],
+    ownerHeading: "NEW INSTALLATION",
+    ownerPoints: ["Brian Smith", "905-555-1234", "Hot tub wiring", "23 Robb Street, Hamilton", "Preferred callback: after 5 p.m.", "Next action: quote follow-up"],
+    customerPoints: ["Thanks for calling Tim's Electrical.", "Request received: hot tub wiring", "Location: 23 Robb Street, Hamilton", "Next step: the team will follow up to discuss the details and timing."],
+  },
+  "repair-request": {
+    callerName: "Maya Chen",
+    callbackNumber: "905-555-0168",
+    details: [
+      { label: "Intent", value: "Repair request", capturedAt: 2 },
+      { label: "Customer", value: "Maya Chen", capturedAt: 6 },
+      { label: "Callback", value: "905-555-0168", capturedAt: 10 },
+      { label: "Problem", value: "Kitchen outlet has no power", capturedAt: 4 },
+      { label: "Job address", value: "18 Lake Avenue, Grimsby", capturedAt: 8 },
+      { label: "Preferred callback", value: "Mornings", capturedAt: 10 },
+      { label: "Route", value: "Electrical team — repair review", capturedAt: 11 },
+    ],
+    missing: [],
+    ownerHeading: "REPAIR REQUEST",
+    ownerPoints: ["Maya Chen", "905-555-0168", "Kitchen outlet has no power", "18 Lake Avenue, Grimsby", "Preferred callback: mornings", "Next action: repair review"],
+    customerPoints: ["Thanks for calling Tim's Electrical.", "Repair request received: kitchen outlet with no power", "Location: 18 Lake Avenue, Grimsby", "Next step: the team will review the service details and follow up."],
+  },
+  maintenance: {
+    callerName: "Daniel Ortiz",
+    callbackNumber: "905-555-0144",
+    details: [
+      { label: "Intent", value: "Maintenance", capturedAt: 2 },
+      { label: "Customer", value: "Daniel Ortiz", capturedAt: 6 },
+      { label: "Callback", value: "905-555-0144", capturedAt: 10 },
+      { label: "Service requested", value: "Preventive electrical inspection", capturedAt: 2 },
+      { label: "Property", value: "Older home", capturedAt: 2 },
+      { label: "Job address", value: "44 Maple Drive, Stoney Creek", capturedAt: 8 },
+      { label: "Preferred callback", value: "Weekday afternoons", capturedAt: 10 },
+      { label: "Route", value: "Electrical team — maintenance review", capturedAt: 11 },
+    ],
+    missing: [],
+    ownerHeading: "MAINTENANCE",
+    ownerPoints: ["Daniel Ortiz", "905-555-0144", "Preventive electrical inspection", "44 Maple Drive, Stoney Creek", "Preferred callback: weekday afternoons", "Next action: maintenance review"],
+    customerPoints: ["Thanks for calling Tim's Electrical.", "Maintenance request received: preventive electrical inspection", "Location: 44 Maple Drive, Stoney Creek", "Next step: the team will confirm scope, availability and pricing."],
+  },
+  "unresolved-concern": {
+    callerName: "Aisha Patel",
+    callbackNumber: "905-555-0171",
+    details: [
+      { label: "Intent", value: "Talk to the team", capturedAt: 2 },
+      { label: "Customer type", value: "Existing customer", capturedAt: 2 },
+      { label: "Customer", value: "Aisha Patel", capturedAt: 6 },
+      { label: "Callback", value: "905-555-0171", capturedAt: 10 },
+      { label: "Reason", value: "Update on flickering hallway light", capturedAt: 4 },
+      { label: "Service address", value: "71 King Street, Hamilton", capturedAt: 8 },
+      { label: "Preferred callback", value: "Evenings", capturedAt: 10 },
+      { label: "Route", value: "Electrical team — private follow-up", capturedAt: 11 },
+    ],
+    missing: [],
+    ownerHeading: "FOLLOW-UP REQUEST",
+    ownerPoints: ["Aisha Patel", "905-555-0171", "Update on flickering hallway light", "71 King Street, Hamilton", "Preferred callback: evenings", "Next action: team callback"],
+    customerPoints: ["Thanks for calling Tim's Electrical.", "Your request for an update was received.", "Location: 71 King Street, Hamilton", "Next step: the team will review the details and follow up."],
+  },
+  "urgent-outage": {
+    callerName: "Noah Wilson",
+    callbackNumber: "905-555-0109",
+    details: [
+      { label: "Intent", value: "Urgent issue", capturedAt: 2 },
+      { label: "Customer", value: "Noah Wilson", capturedAt: 6 },
+      { label: "Callback", value: "905-555-0109", capturedAt: 10 },
+      { label: "Problem", value: "Complete home outage", capturedAt: 2 },
+      { label: "Safety check", value: "No immediate-danger indicators reported", capturedAt: 4 },
+      { label: "Location", value: "9 Orchard Lane, Grimsby", capturedAt: 8 },
+      { label: "Availability", value: "Available now", capturedAt: 10 },
+      { label: "Route", value: "Electrical team — urgent review", capturedAt: 11 },
+    ],
+    missing: [],
+    ownerHeading: "PRIORITY CALLBACK",
+    ownerPoints: ["Noah Wilson", "905-555-0109", "Complete home outage", "9 Orchard Lane, Grimsby", "No immediate-danger indicators reported", "Available now", "Next action: urgent review — not dispatch"],
+    customerPoints: ["Thanks for calling Tim's Electrical.", "Urgent outage request received.", "Location: 9 Orchard Lane, Grimsby", "Next step: the team must review the details; this is not a dispatch confirmation."],
+  },
+  "safety-redirect": {
+    callerName: "Simulated caller",
+    callbackNumber: "",
+    details: [
+      { label: "Intent", value: "Immediate-danger report", capturedAt: 2 },
+      { label: "Safety indicators", value: "Sparks and smoke", capturedAt: 2 },
+      { label: "Action", value: "Ordinary intake stopped; caller directed to 911", capturedAt: 3 },
+      { label: "Route", value: "911 — ordinary intake stopped", capturedAt: 3 },
+    ],
+    missing: [],
+    ownerHeading: "SAFETY EVENT",
+    ownerPoints: ["Sparks and smoke reported", "Ordinary service intake stopped", "Caller directed to leave danger and call 911"],
+    customerPoints: ["No routine confirmation text is prepared during an emergency redirect.", "The caller was directed to leave danger and call 911."],
+  },
+};
+
 export const timsElectricalScenarios = [
   {
     id: "new-installation",
@@ -218,7 +327,22 @@ export const timsElectricalScenarios = [
     ownerText: "SAFETY EVENT · Caller reported sparks and smoke · Ordinary service intake stopped · Caller directed to leave danger and call 911.",
     customerText: "No routine confirmation text is prepared during an emergency redirect. The caller was directed to leave danger and call 911.",
   },
-].map((scenario) => ({
-  ...scenario,
-  transcript: timsElectricalRecordedTranscripts[scenario.id] || scenario.transcript,
-}));
+].map((scenario) => {
+  const model = scenarioDetails[scenario.id];
+  const transcript = timsElectricalRecordedTranscripts[scenario.id] || scenario.transcript;
+  const ownerTextLines = [model.ownerHeading, ...model.ownerPoints];
+  return {
+    ...scenario,
+    businessName: timsElectricalCompany.name,
+    callerName: model.callerName,
+    callbackNumber: model.callbackNumber,
+    details: model.details,
+    transcript,
+    collected: model.details.map(({ value }) => value),
+    missing: model.missing,
+    ownerTextLines,
+    customerTextLines: model.customerPoints,
+    ownerText: ownerTextLines.join(" · "),
+    customerText: model.customerPoints.join(" "),
+  };
+});

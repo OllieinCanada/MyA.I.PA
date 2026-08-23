@@ -1004,6 +1004,16 @@ test("authenticated Vapi end-of-call reports require a call id before database w
   assert.match((await response.json()).error, /call id is required/i);
 });
 
+test("Vapi lifecycle status updates are handled explicitly before termination", async () => {
+  const response = await request("/api/webhooks/voice", {
+    method: "POST",
+    headers: { "x-vapi-secret": process.env.VAPI_WEBHOOK_SECRET },
+    body: { message: { type: "status-update", status: "in-progress", call: { id: "call-lifecycle-test" } } },
+  });
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { ok: true, eventType: "status-update", terminal: false });
+});
+
 test("CORS only reflects configured origins", async () => {
   const allowed = await request("/api/health", { headers: { origin: "https://www.myaipa.ca" } });
   assert.equal(allowed.headers.get("access-control-allow-origin"), "https://www.myaipa.ca");
