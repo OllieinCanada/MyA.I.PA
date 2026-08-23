@@ -181,6 +181,7 @@ async function generatePersonalizedContent(input, websiteContext, options = {}) 
             "Use plain, concrete language. Avoid empty praise and jargon such as commendable, specialize, streamline, optimize, enhance, leverage, or revolutionize.",
             "Never say My AI PA processes applications, confirms availability, or resolves support issues. It may answer from approved information, guide people to an existing page or contact path, and capture requests for follow-up.",
             "source_facts must be short facts supported by the source, not marketing inferences. Prefer the supplied description when it already provides enough detail.",
+            options.revisionNotes ? `A previous draft was rejected. Correct every issue in this list: ${clean(options.revisionNotes, 1000)}` : "",
           ].join("\n"),
         },
         { role: "user", content: JSON.stringify(buildSourceContext(input, websiteContext)) },
@@ -407,6 +408,24 @@ function countOccurrences(haystack, needle) {
   return source.split(target).length - 1;
 }
 
+function getGeneratedContentErrors(input, generated) {
+  const errors = [];
+  const wordCount = countWords(generated.audioScript);
+  if (wordCount < 50 || wordCount > 85) errors.push(`Audio script has ${wordCount} words; keep it near 20-35 seconds.`);
+  if (countOccurrences(generated.audioScript, input.businessName) !== 1) errors.push("Mention the exact business name once in the audio.");
+  const opening = generated.audioScript.slice(0, Math.max(100, input.businessName.length + 40));
+  if (!new RegExp(`^Hi[ ,]+${input.businessName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*[—–-]\\s*this is My AI PA\\b`, "i").test(opening)) {
+    errors.push("Open the audio as My AI PA speaking directly to the target business.");
+  }
+  if (!generated.emailSubject.toLowerCase().includes(input.businessName.toLowerCase())) errors.push("Include the exact business name in the email subject.");
+  if (!/(assistant|demo|mocked|answer|questions|24\/7)/i.test(generated.emailSubject)) errors.push("Make the subject an assistant or demo concept.");
+  const copy = `${generated.audioScript} ${generated.emailSubject} ${generated.emailHeadline} ${generated.emailIntro} ${generated.emailPainPoint} ${generated.emailValue}`;
+  if (countOccurrences(copy, "My AI PA") < 2) errors.push("Identify My AI PA clearly in both the audio and email.");
+  if (/\b(?:commendable|streamline|optimi[sz]e|enhance|leverage|revolutioni[sz]e)\b/i.test(copy)) errors.push("Remove generic sales jargon and use concrete language.");
+  if (/\b(?:process(?:ing)? applications?|confirm(?:ing)? availability)\b/i.test(copy)) errors.push("Do not overstate application or availability capabilities.");
+  return errors;
+}
+
 function validatePackage(outreachPackage) {
   const errors = [];
   const warnings = [];
@@ -444,7 +463,19 @@ function validatePackage(outreachPackage) {
 async function createBusinessOutreachPackage(rawInput, options = {}) {
   const input = normalizeInput(rawInput);
   const websiteContext = await getWebsiteContext(input, options);
-  const generated = normalizeGeneratedContent(await generatePersonalizedContent(input, websiteContext, options), input);
+  let generated;
+  let contentErrors = [];
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    generated = normalizeGeneratedContent(await generatePersonalizedContent(input, websiteContext, {
+      ...options,
+      revisionNotes: contentErrors.join(" "),
+    }), input);
+    contentErrors = getGeneratedContentErrors(input, generated);
+    if (!contentErrors.length) break;
+  }
+  if (contentErrors.length) {
+    throw statusError(422, `Outreach copy could not pass quality review: ${contentErrors.join(" ")}`, "OUTREACH_CONTENT_QUALITY_FAILED");
+  }
   const audioResult = await generatePersonalizedDemoAudio({ businessName: input.businessName, script: generated.audioScript }, options);
   const outreachPackage = {
     id: options.packageId || crypto.randomUUID(),

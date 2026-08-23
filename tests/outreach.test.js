@@ -67,6 +67,31 @@ test("website text extraction excludes executable and styled content", () => {
   assert.equal(text, "Rental listings Near transit");
 });
 
+test("copy quality failures are revised before TTS is generated", async (t) => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "myaipa-outreach-revision-"));
+  t.after(() => fs.rmSync(dataDir, { recursive: true, force: true }));
+  let contentAttempts = 0;
+  let ttsCalls = 0;
+  const outreachPackage = await createBusinessOutreachPackage(input, {
+    baseUrl: "https://api.myaipa.ca",
+    dataDir,
+    contentGenerator: async () => {
+      contentAttempts += 1;
+      return contentAttempts === 1
+        ? { ...generatedContent, email_value: "My AI PA can streamline routine questions for the team." }
+        : generatedContent;
+    },
+    ttsGenerator: async () => {
+      ttsCalls += 1;
+      return fakeMp3();
+    },
+  });
+
+  assert.equal(outreachPackage.quality.passed, true);
+  assert.equal(contentAttempts, 2);
+  assert.equal(ttsCalls, 1);
+});
+
 test("locally generated package can be revalidated and imported for public hosting", async (t) => {
   const localDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "myaipa-outreach-local-"));
   const productionDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "myaipa-outreach-import-"));
