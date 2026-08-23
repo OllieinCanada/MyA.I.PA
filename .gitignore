@@ -39,6 +39,7 @@ Thumbs.db
 .preview-*.log
 tmp/
 artifacts/
+/automation_logs/
 
 # Private job-search and networking state (the GitHub repository is public)
 /README.md
