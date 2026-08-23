@@ -110,7 +110,6 @@ try {
   $arguments = @(
     "exec",
     "--cd", $projectRoot,
-    "--sandbox", "workspace-write",
     "--approve-for-me",
     "--ephemeral",
     "--json",
