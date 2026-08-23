@@ -47,7 +47,15 @@ New-Item -ItemType Directory -Path $logRoot -Force | Out-Null
 function Write-History {
   param([string]$Phase, [int]$ExitCode)
   $line = "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz')] phase=$Phase run=$runId workstream=$Workstream exit=$ExitCode summary=$summaryPath"
-  Add-Content -LiteralPath $historyPath -Value $line -Encoding UTF8
+  for ($attempt = 1; $attempt -le 5; $attempt++) {
+    try {
+      Add-Content -LiteralPath $historyPath -Value $line -Encoding UTF8
+      return
+    } catch {
+      if ($attempt -eq 5) { throw }
+      Start-Sleep -Milliseconds 200
+    }
+  }
 }
 
 function Write-FallbackSummary {

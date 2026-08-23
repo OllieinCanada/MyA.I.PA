@@ -23,6 +23,7 @@ $definitions = @(
 if ($ValidateOnly) {
   $validationShell = Get-Command pwsh.exe -ErrorAction SilentlyContinue
   if (-not $validationShell) { $validationShell = Get-Command powershell.exe -ErrorAction Stop }
+  $failures = 0
   foreach ($definition in $definitions) {
     & $validationShell.Source `
       -NoProfile `
@@ -33,8 +34,9 @@ if ($ValidateOnly) {
       -HubRoot $HubRoot `
       -RunLabel "installer-validation" `
       -ValidateOnly
-    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    if ($LASTEXITCODE -ne 0) { $failures++ }
   }
+  if ($failures -gt 0) { exit 1 }
   exit 0
 }
 
