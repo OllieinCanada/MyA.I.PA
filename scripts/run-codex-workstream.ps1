@@ -40,7 +40,7 @@ $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $runId = "$timestamp-$($Workstream.ToLowerInvariant())-$RunLabel"
 $eventPath = Join-Path $logRoot "$runId.events.jsonl"
 $summaryPath = Join-Path $logRoot "$runId.summary.md"
-$historyPath = Join-Path $logRoot "run-history.log"
+$historyPath = Join-Path $logRoot "$($Workstream.ToLowerInvariant())-run-history.log"
 
 New-Item -ItemType Directory -Path $logRoot -Force | Out-Null
 
