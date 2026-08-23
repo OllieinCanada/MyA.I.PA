@@ -95,9 +95,37 @@ try {
     exit 2
   }
 
-  $codex = Get-Command codex.exe -ErrorAction SilentlyContinue
-  if (-not $codex) { $codex = Get-Command codex -ErrorAction SilentlyContinue }
-  if (-not $codex) { throw "Codex CLI was not found on PATH." }
+  # Prefer the self-contained standalone CLI because its adjacent Windows
+  # sandbox helpers are required for unattended workspace-write runs. The
+  # desktop app shim can be on PATH without those helpers beside it.
+  $standaloneRoot = Join-Path ([Environment]::GetFolderPath("UserProfile")) ".codex\packages\standalone\releases"
+  $standaloneCandidates = @()
+  if (Test-Path -LiteralPath $standaloneRoot -PathType Container) {
+    $standaloneCandidates = @(
+      Get-ChildItem -LiteralPath $standaloneRoot -Directory | ForEach-Object {
+        $versionText = ($_.Name -split "-")[0]
+        $candidatePath = Join-Path $_.FullName "bin\codex.exe"
+        $sandboxHelperPath = Join-Path $_.FullName "codex-resources\codex-windows-sandbox-setup.exe"
+        if (($versionText -as [version]) -and
+            (Test-Path -LiteralPath $candidatePath -PathType Leaf) -and
+            (Test-Path -LiteralPath $sandboxHelperPath -PathType Leaf)) {
+          [pscustomobject]@{
+            Version = [version]$versionText
+            Path = $candidatePath
+          }
+        }
+      } | Sort-Object Version -Descending
+    )
+  }
+
+  $codexPath = if ($standaloneCandidates.Count -gt 0) {
+    $standaloneCandidates[0].Path
+  } else {
+    $codexCommand = Get-Command codex.exe -ErrorAction SilentlyContinue
+    if (-not $codexCommand) { $codexCommand = Get-Command codex -ErrorAction SilentlyContinue }
+    if ($codexCommand) { $codexCommand.Source } else { $null }
+  }
+  if (-not $codexPath) { throw "Codex CLI was not found." }
 
   if ($ValidateOnly) {
     Write-FallbackSummary -Status "ready" -Detail "Project, prompt, Git state, and Codex CLI validation passed."
@@ -117,7 +145,7 @@ try {
     "-"
   )
 
-  $prompt | & $codex.Source @arguments 2>&1 | Tee-Object -FilePath $eventPath
+  $prompt | & $codexPath @arguments 2>&1 | Tee-Object -FilePath $eventPath
   $exitCode = $LASTEXITCODE
   if (-not (Test-Path -LiteralPath $summaryPath -PathType Leaf)) {
     Write-FallbackSummary -Status "failed" -Detail "Codex exited with code $exitCode before writing a final summary."
