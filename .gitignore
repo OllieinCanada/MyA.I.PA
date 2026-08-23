@@ -15,6 +15,7 @@ private-backups/
 .codex-*.log
 .codex-*.out.log
 .codex-*.err.log
+.chatgpt-desktop-watchdog.log
 dev-server*.log
 server-*.txt
 server-live.log
@@ -28,6 +29,67 @@ laptop-screen.png
 rustdesk-*.exe
 .DS_Store
 Thumbs.db
+
+# Local package caches, previews, and generated test/runtime files
+.pnpm-store/
+.pytest_cache/
+**/__pycache__/
+*.py[cod]
+.hero-preview.*.log
+.preview-*.log
+tmp/
+artifacts/
+
+# Private job-search and networking state (the GitHub repository is public)
+/README.md
+/application_tracker.csv
+/applications/
+/apply.py
+/config/candidate.yaml
+/config/jobs.yaml
+/linkedin-outreach-tracker/
+/requirements-job-application.txt
+/tests/job_application/
+/ops/
+
+# Local job-package generators and document delivery helpers
+/scripts/build-august*.py
+/scripts/build-elation*.py
+/scripts/build-july*.js
+/scripts/build-july*.py
+/scripts/build-job-applications.py
+/scripts/build-karan*.py
+/scripts/build-linkedin-application-batch-*.py
+/scripts/build-linkedin-applications.js
+/scripts/build-more-job-applications.py
+/scripts/build-new-job-applications.py
+/scripts/build-niagara-hamilton-applications.py
+/scripts/build-ontario-job-search-packages.ps1
+/scripts/build-pdf-contact-sheets.py
+/scripts/build-recent-application-ranking.py
+/scripts/build-rocketrez-application.py
+/scripts/build-supervised-job-packages.py
+/scripts/build-two-page-print-packet.py
+/scripts/linkedin-public-jobs.py
+/scripts/print-two-page-packet.ps1
+/scripts/render-pdf-pages.py
+/scripts/telegram-send-document.js
+
+# Disabled legacy desktop watchdog implementation
+/scripts/build-chatgpt-watchdog-native.ps1
+/scripts/chatgpt-desktop-watch-install.ps1
+/scripts/chatgpt-desktop-watch.ps1
+/scripts/chatgpt-watchdog-dummy.cs
+/scripts/chatgpt-watchdog-native.cs
+/scripts/run-chatgpt-watchdog-test-task.ps1
+/scripts/test-chatgpt-desktop-watch.ps1
+
+# Superseded high-volume LinkedIn prompt retained only for local history
+/automation/linkedin-daily-master-prompt.md
+
+# Standalone local experiments that should not be mixed into the public site
+/demos/bam-mechanical/
+/semantic-inversion-poc/
 
 # Local Codex/worktree state and downloaded toolchains
 .codex/
