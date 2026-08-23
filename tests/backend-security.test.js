@@ -443,6 +443,7 @@ test("support repair actions require an admin session", async () => {
     ["/api/admin/support-reports/example/codex-task", "POST"],
     ["/api/admin/outreach/generate", "POST"],
     ["/api/admin/outreach/send-test", "POST"],
+    ["/api/admin/outreach/import", "POST"],
   ];
   for (const [path, method] of routes) {
     const response = await request(path, { method, body: {} });

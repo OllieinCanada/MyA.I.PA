@@ -304,6 +304,19 @@ function atomicWriteFile(filePath, contents) {
   fs.renameSync(temporaryPath, filePath);
 }
 
+function storeImmutableAudio(filePath, mp3) {
+  if (fs.existsSync(filePath)) {
+    if (fs.readFileSync(filePath).equals(mp3)) return;
+    throw statusError(409, "A different audio file already uses this content address.", "OUTREACH_AUDIO_COLLISION");
+  }
+  atomicWriteFile(filePath, mp3);
+}
+
+function getAudioFilename(businessName, script, mp3) {
+  const digest = crypto.createHash("sha256").update(script).update(mp3).digest("hex").slice(0, 12);
+  return `${slugify(businessName)}-my-ai-pa-demo-${digest}.mp3`;
+}
+
 async function generatePersonalizedDemoAudio({ businessName, script }, options = {}) {
   const dataDir = path.resolve(options.dataDir || path.join(__dirname, "..", "data"));
   const baseUrl = clean(options.baseUrl, 500).replace(/\/+$/, "");
@@ -313,9 +326,8 @@ async function generatePersonalizedDemoAudio({ businessName, script }, options =
   }
   const mp3 = Buffer.from(await createSpeechBuffer(script, options));
   if (!isMp3(mp3)) throw statusError(502, "Voice provider did not return a valid MP3 file.", "OUTREACH_TTS_INVALID_AUDIO");
-  const digest = crypto.createHash("sha256").update(script).update(mp3).digest("hex").slice(0, 12);
-  const filename = `${slugify(businessName)}-my-ai-pa-demo-${digest}.mp3`;
-  atomicWriteFile(path.join(dataDir, AUDIO_DIRECTORY_NAME, filename), mp3);
+  const filename = getAudioFilename(businessName, script, mp3);
+  storeImmutableAudio(path.join(dataDir, AUDIO_DIRECTORY_NAME, filename), mp3);
   return {
     url: `${baseUrl}/api/outreach/audio/${encodeURIComponent(filename)}`,
     duration: estimateSpeechDurationSeconds(script),
@@ -423,6 +435,7 @@ function validatePackage(outreachPackage) {
   if (!email.html.includes(audio.url)) errors.push("Email audio player does not link to the generated MP3.");
   if (!email.html.includes("https://www.myaipa.ca/")) errors.push("Email CTA does not link to My AI PA.");
   if (/<(?:audio|embed|object|iframe)\b/i.test(email.html)) errors.push("Email contains Gmail-unsupported embedded media.");
+  if (/<(?:script|form|input|button|textarea|video)\b|<meta\b[^>]*http-equiv/i.test(email.html)) errors.push("Email contains unsafe or interactive HTML.");
   if (/{{[^}]+}}|\[placeholder\]|lorem ipsum/i.test(`${email.html}\n${email.plain_text}`)) errors.push("Email contains an unresolved placeholder.");
   if (!/^https?:\/\//.test(business.website || "")) warnings.push("No business website URL was supplied.");
   return { passed: errors.length === 0, errors, warnings };
@@ -464,6 +477,45 @@ async function createBusinessOutreachPackage(rawInput, options = {}) {
     throw statusError(422, `Outreach quality check failed: ${outreachPackage.quality.errors.join(" ")}`, "OUTREACH_QUALITY_FAILED");
   }
   return outreachPackage;
+}
+
+function importBusinessOutreachPackage(rawPackage, audioBase64, options = {}) {
+  if (!rawPackage || typeof rawPackage !== "object") throw statusError(400, "A generated outreach package is required.", "OUTREACH_IMPORT_PACKAGE_REQUIRED");
+  const mp3 = Buffer.from(clean(audioBase64, 2 * 1024 * 1024), "base64");
+  if (!isMp3(mp3)) throw statusError(400, "Imported outreach audio is not a valid MP3 file.", "OUTREACH_IMPORT_AUDIO_INVALID");
+  const businessName = clean(rawPackage.business?.name, 160);
+  const script = clean(rawPackage.audio?.script, 1200);
+  if (!businessName || !script) throw statusError(400, "Imported outreach package is missing its business name or audio script.", "OUTREACH_IMPORT_INCOMPLETE");
+  if (!rawPackage.analysis || !rawPackage.email || typeof rawPackage.email.html !== "string" || typeof rawPackage.email.plain_text !== "string") {
+    throw statusError(400, "Imported outreach package is missing its analysis or email content.", "OUTREACH_IMPORT_INCOMPLETE");
+  }
+  const dataDir = path.resolve(options.dataDir || path.join(__dirname, "..", "data"));
+  const baseUrl = clean(options.baseUrl, 500).replace(/\/+$/, "");
+  if (!baseUrl) throw statusError(500, "A public outreach audio base URL is required.", "OUTREACH_BASE_URL_REQUIRED");
+  if (String(options.nodeEnv || process.env.NODE_ENV).toLowerCase() === "production" && !baseUrl.startsWith("https://")) {
+    throw statusError(503, "Production outreach audio must use a public HTTPS URL.", "OUTREACH_HTTPS_REQUIRED");
+  }
+  const filename = getAudioFilename(businessName, script, mp3);
+  const audioUrl = `${baseUrl}/api/outreach/audio/${encodeURIComponent(filename)}`;
+  const imported = JSON.parse(JSON.stringify(rawPackage));
+  imported.id = crypto.randomUUID();
+  imported.created_at = new Date(options.now || Date.now()).toISOString();
+  imported.audio = {
+    ...imported.audio,
+    script,
+    url: audioUrl,
+    duration: estimateSpeechDurationSeconds(script),
+    filename,
+    bytes: mp3.length,
+  };
+  imported.delivery = { status: "not_sent", sent_at: null, sent_to: null };
+  imported.quality = validatePackage(imported);
+  if (!imported.quality.passed) {
+    throw statusError(422, `Imported outreach quality check failed: ${imported.quality.errors.join(" ")}`, "OUTREACH_IMPORT_QUALITY_FAILED");
+  }
+  storeImmutableAudio(path.join(dataDir, AUDIO_DIRECTORY_NAME, filename), mp3);
+  saveOutreachPackage(imported, { dataDir });
+  return imported;
 }
 
 function getPackagePath(dataDir, packageId) {
@@ -550,6 +602,7 @@ module.exports = {
   createBusinessOutreachPackage,
   generatePersonalizedDemoAudio,
   htmlToText,
+  importBusinessOutreachPackage,
   loadOutreachPackage,
   resolveAudioFile,
   saveOutreachPackage,

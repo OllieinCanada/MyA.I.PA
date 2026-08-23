@@ -21,6 +21,7 @@ const { fetchPublicWebsite } = require("./safeWebsiteFetch");
 const {
   SEND_CONFIRMATION: OUTREACH_SEND_CONFIRMATION,
   createBusinessOutreachPackage,
+  importBusinessOutreachPackage,
   resolveAudioFile,
   saveOutreachPackage,
   sendStoredOutreachPackage,
@@ -10307,6 +10308,46 @@ app.post(
         targetType: "outreach_package",
         targetId: packageId,
         details: { code: error?.code || "send_failed" },
+      });
+      throw error;
+    }
+  })
+);
+
+app.post(
+  "/api/admin/outreach/import",
+  adminOutreachProcessRateLimiter,
+  requireAdmin,
+  asyncRoute(async (req, res) => {
+    const actorHash = getAdminActorHash(req);
+    try {
+      const outreachPackage = importBusinessOutreachPackage(req.body?.package, req.body?.audioBase64, {
+        baseUrl: getPublicBaseUrl(req),
+        dataDir,
+        nodeEnv: process.env.NODE_ENV,
+      });
+      await recordAdminAuditEvent({
+        prisma,
+        action: "import_outreach_package",
+        outcome: "success",
+        actorHash,
+        targetType: "outreach_package",
+        targetId: outreachPackage.id,
+        details: {
+          businessHash: hashKey(outreachPackage.business.name).slice(0, 24),
+          audioBytes: outreachPackage.audio.bytes,
+          qualityPassed: outreachPackage.quality.passed,
+        },
+      });
+      return res.status(201).json({ ok: true, package: outreachPackage });
+    } catch (error) {
+      await recordAdminAuditEvent({
+        prisma,
+        action: "import_outreach_package",
+        outcome: "failed",
+        actorHash,
+        targetType: "outreach_package",
+        details: { code: error?.code || "import_failed" },
       });
       throw error;
     }

@@ -33,6 +33,12 @@ $env:ADMIN_PASSWORD="<existing admin password>"
 npm run outreach -- --input=config/outreach/first-class-rentals.json --api-base=https://api.myaipa.ca
 ```
 
+If the production service intentionally has no model credential, generate with the local server credential and upload the already-validated package and MP3 through the authenticated import route:
+
+```powershell
+npm run outreach -- --input=config/outreach/first-class-rentals.json --api-base=https://api.myaipa.ca --local-generate
+```
+
 Sending remains a separate, explicit operation. `--send-test` requires both a recipient and the exact confirmation value:
 
 ```powershell
@@ -45,6 +51,7 @@ If admin MFA is enabled, provide the current code in `ADMIN_MFA_CODE` for that i
 
 - `POST /api/admin/outreach/generate` analyzes, generates, validates and stores one package.
 - `POST /api/admin/outreach/send-test` sends an already-generated package after explicit confirmation.
+- `POST /api/admin/outreach/import` accepts a locally generated, revalidated package and real MP3 for persistent hosting.
 - `GET /api/outreach/audio/:filename` serves immutable MP3 files from the existing persistent data disk.
 
 The send route claims a stored package before SMTP delivery. Any package with a prior delivery attempt is rejected, preventing accidental duplicate sends from retries or double clicks.

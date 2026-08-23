@@ -7,6 +7,7 @@ const {
   SEND_CONFIRMATION,
   createBusinessOutreachPackage,
   htmlToText,
+  importBusinessOutreachPackage,
   loadOutreachPackage,
   resolveAudioFile,
   saveOutreachPackage,
@@ -64,6 +65,31 @@ test("outreach package creates a real MP3 path and Gmail-safe personalized email
 test("website text extraction excludes executable and styled content", () => {
   const text = htmlToText("<style>.secret{display:none}</style><script>steal()</script><h1>Rental listings</h1><p>Near transit</p>");
   assert.equal(text, "Rental listings Near transit");
+});
+
+test("locally generated package can be revalidated and imported for public hosting", async (t) => {
+  const localDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "myaipa-outreach-local-"));
+  const productionDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "myaipa-outreach-import-"));
+  t.after(() => fs.rmSync(localDataDir, { recursive: true, force: true }));
+  t.after(() => fs.rmSync(productionDataDir, { recursive: true, force: true }));
+  const localPackage = await createBusinessOutreachPackage(input, {
+    baseUrl: "https://api.myaipa.ca",
+    dataDir: localDataDir,
+    contentGenerator: async () => generatedContent,
+    ttsGenerator: async () => fakeMp3(),
+  });
+  const audioBase64 = fs.readFileSync(resolveAudioFile(localDataDir, localPackage.audio.filename)).toString("base64");
+  const imported = importBusinessOutreachPackage(localPackage, audioBase64, {
+    baseUrl: "https://api.myaipa.ca",
+    dataDir: productionDataDir,
+    nodeEnv: "production",
+  });
+
+  assert.notEqual(imported.id, localPackage.id);
+  assert.equal(imported.quality.passed, true);
+  assert.equal(imported.delivery.status, "not_sent");
+  assert.ok(resolveAudioFile(productionDataDir, imported.audio.filename));
+  assert.equal(loadOutreachPackage(imported.id, { dataDir: productionDataDir }).audio.url, imported.audio.url);
 });
 
 test("stored package sends once only after explicit confirmation", async (t) => {

@@ -74,11 +74,29 @@ async function remoteWorkflow(args, input) {
   const apiBase = String(args["api-base"] || "").replace(/\/+$/, "");
   if (!/^https:\/\//i.test(apiBase)) throw new Error("--api-base must be a public HTTPS URL in remote mode.");
   const { cookie } = await loginToApi(apiBase);
-  const generated = await readJsonResponse(await fetch(`${apiBase}/api/admin/outreach/generate`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Cookie: cookie },
-    body: JSON.stringify(input),
-  }));
+  let generated;
+  if (args["local-generate"]) {
+    const dataDir = path.resolve(rootDir, String(args["data-dir"] || "data"));
+    const localPackage = await createBusinessOutreachPackage(input, {
+      baseUrl: apiBase,
+      dataDir,
+      fetchWebsite: fetchPublicWebsite,
+      openAiApiKey: process.env.OPENAI_API_KEY,
+    });
+    saveOutreachPackage(localPackage, { dataDir });
+    const audioBase64 = fs.readFileSync(path.join(dataDir, "outreach-audio", localPackage.audio.filename)).toString("base64");
+    generated = await readJsonResponse(await fetch(`${apiBase}/api/admin/outreach/import`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({ package: localPackage, audioBase64 }),
+    }));
+  } else {
+    generated = await readJsonResponse(await fetch(`${apiBase}/api/admin/outreach/generate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify(input),
+    }));
+  }
   const outreachPackage = generated.package;
   const audioResponse = await fetch(outreachPackage.audio.url, { headers: { Range: "bytes=0-4095" } });
   const audioBytes = Buffer.from(await audioResponse.arrayBuffer());
