@@ -263,9 +263,16 @@
 }
 
 @media (max-width: 760px) {
-  .tims-message-grid { grid-template-columns: 1fr; gap: 18px; }
+  .tims-message-grid {
+    position: relative;
+    left: 50%;
+    width: min(360px, calc(100% + 36px));
+    grid-template-columns: 1fr;
+    gap: 18px;
+    transform: translateX(-50%);
+  }
   .tims-message-preview,
-  .tims-demo-landing .tims-message-preview { width: min(360px,100%); min-height: 0; margin-inline: auto; }
+  .tims-demo-landing .tims-message-preview { width: 100%; min-height: 0; margin-inline: auto; }
   .tims-message-preview p { min-height: 0; }
   .tims-text-phone-contact,
   .tims-demo-landing .tims-text-phone-contact { grid-template-columns: 32px minmax(0,1fr); gap: 8px; padding: 8px 10px; }

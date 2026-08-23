@@ -366,11 +366,15 @@
   .simple-jump-nav { top: 72px; }
   .simple-jump-nav a { min-height: 57px; font-size: .82rem; }
   .simple-how-grid { grid-template-columns: 1fr; }
-  .simple-how-grid article { display: grid; grid-template-columns: 55px 1fr; column-gap: 17px; text-align: left; }
+  .simple-how-grid article { display: grid; grid-template-columns: 55px minmax(0, 1fr); column-gap: 17px; text-align: left; }
   .simple-how-number { margin: 0; }
-  .simple-how-grid article > span, .simple-how-grid article h3, .simple-how-grid article p { grid-column: 2; }
+  .simple-how-grid article > span, .simple-how-grid article h3 { grid-column: 2; }
   .simple-how-grid article > span { margin-top: 0; }
-  .simple-how-grid article ul { grid-column: 1 / -1; }
+  .simple-how-grid article > p,
+  .simple-how-grid article ul,
+  .simple-how-handoffs > div:not(.simple-how-number) { grid-column: 1 / -1; width: 100%; }
+  .simple-how-grid article > p { margin-top: 18px; }
+  .simple-how-grid article > .simple-three-rings { grid-column: 1 / -1; justify-self: center; }
   .simple-pricing-layout { gap: 35px; }
   .simple-price-card { width: min(100%, 560px); margin-inline: auto; }
   .simple-trial-grid { grid-template-columns: 1fr; }
@@ -480,7 +484,10 @@
   .simple-compare-arrow { transform: rotate(90deg); }
   .simple-compare-arrow svg { width: 28px; }
   .simple-how-grid article { padding: 21px; }
+  .simple-how-grid article > p { text-align: center; }
+  .simple-how-grid article > .simple-three-rings { max-width: 100%; justify-content: center; white-space: nowrap; }
   .simple-how-grid article ul { grid-template-columns: 1fr; }
+  .simple-how-handoffs > div:not(.simple-how-number) { padding: 14px 15px; }
   .simple-coffee { padding: 20px 14px; }
   .simple-coffee strong { font-size: 1.2rem; }
   .simple-coffee p { font-size: .95rem; }
