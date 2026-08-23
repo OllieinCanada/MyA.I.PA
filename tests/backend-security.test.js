@@ -441,6 +441,8 @@ test("support repair actions require an admin session", async () => {
     ["/api/admin/support-reports/example", "PATCH"],
     ["/api/admin/support-reports/example/github-issue", "POST"],
     ["/api/admin/support-reports/example/codex-task", "POST"],
+    ["/api/admin/outreach/generate", "POST"],
+    ["/api/admin/outreach/send-test", "POST"],
   ];
   for (const [path, method] of routes) {
     const response = await request(path, { method, body: {} });

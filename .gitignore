@@ -40,6 +40,9 @@ tools_bin/
 
 # Generated previews, reports, and runtime state
 output/
+outreach-previews/
+data/outreach-audio/
+data/outreach-packages/
 .frontend.*.log
 .overnight-*.log
 .preview-build.*.log

@@ -18,6 +18,13 @@ const {
   validateProvisionedCanadianNumber,
 } = require("./canadianPhoneNumber");
 const { fetchPublicWebsite } = require("./safeWebsiteFetch");
+const {
+  SEND_CONFIRMATION: OUTREACH_SEND_CONFIRMATION,
+  createBusinessOutreachPackage,
+  resolveAudioFile,
+  saveOutreachPackage,
+  sendStoredOutreachPackage,
+} = require("./outreach");
 const { sendSmsViaTwilio } = require("./twilioSms");
 const {
   classifySmsPreference,
@@ -155,6 +162,13 @@ const adminLoginProcessRateLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Too many login attempts. Wait a few minutes and try again." },
+});
+const adminOutreachProcessRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: parsePositiveInt(process.env.ADMIN_OUTREACH_MAX_REQUESTS, 10),
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many outreach requests. Wait a few minutes and try again." },
 });
 const JSON_BODY_LIMIT = String(process.env.JSON_BODY_LIMIT || "1mb").trim() || "1mb";
 const SIGNUP_IP_WINDOW_MS = parsePositiveInt(process.env.SIGNUP_IP_WINDOW_MS, 15 * 60 * 1000);
@@ -420,6 +434,15 @@ app.post("/api/payments/stripe-webhook", express.raw({ type: "application/json" 
 }));
 
 app.use(express.json({ limit: JSON_BODY_LIMIT }));
+
+app.get("/api/outreach/audio/:filename", (req, res) => {
+  const filePath = resolveAudioFile(dataDir, req.params.filename);
+  if (!filePath) return res.status(404).json({ error: "Outreach audio was not found." });
+  res.setHeader("Content-Type", "audio/mpeg");
+  res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+  res.setHeader("Content-Disposition", `inline; filename="${path.basename(filePath)}"`);
+  return res.sendFile(filePath);
+});
 
 function asyncRoute(handler) {
   return (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
@@ -841,6 +864,28 @@ function getEmailTransportConfig() {
       auth: user || pass ? { user, pass } : undefined,
     },
   };
+}
+
+async function sendOutreachEmailMessage(message) {
+  const emailConfig = getEmailTransportConfig();
+  if (!emailConfig) {
+    const error = new Error("SMTP email delivery is not configured on the backend.");
+    error.statusCode = 503;
+    error.code = "OUTREACH_EMAIL_NOT_CONFIGURED";
+    throw error;
+  }
+  const transporter = nodemailer.createTransport(emailConfig.transport);
+  try {
+    return await transporter.sendMail({
+      from: emailConfig.from,
+      to: message.to,
+      subject: message.subject,
+      html: message.html,
+      text: message.text,
+    });
+  } finally {
+    transporter.close();
+  }
 }
 
 function ensurePendingSignupStore() {
@@ -10172,6 +10217,99 @@ app.get(
   requireAdmin,
   asyncRoute(async (_req, res) => {
     res.json({ ok: true, mfaEnabled: Boolean(ADMIN_TOTP_SECRET) });
+  })
+);
+
+app.post(
+  "/api/admin/outreach/generate",
+  adminOutreachProcessRateLimiter,
+  requireAdmin,
+  asyncRoute(async (req, res) => {
+    const actorHash = getAdminActorHash(req);
+    try {
+      const outreachPackage = await createBusinessOutreachPackage(req.body || {}, {
+        baseUrl: getPublicBaseUrl(req),
+        dataDir,
+        fetchWebsite: fetchPublicWebsite,
+        nodeEnv: process.env.NODE_ENV,
+        openAiApiKey: process.env.OPENAI_API_KEY,
+      });
+      saveOutreachPackage(outreachPackage, { dataDir });
+      await recordAdminAuditEvent({
+        prisma,
+        action: "generate_outreach_package",
+        outcome: "success",
+        actorHash,
+        targetType: "outreach_package",
+        targetId: outreachPackage.id,
+        details: {
+          businessHash: hashKey(outreachPackage.business.name).slice(0, 24),
+          websiteContextFetched: outreachPackage.analysis.website_context_fetched,
+          qualityPassed: outreachPackage.quality.passed,
+        },
+      });
+      return res.status(201).json({ ok: true, package: outreachPackage });
+    } catch (error) {
+      await recordAdminAuditEvent({
+        prisma,
+        action: "generate_outreach_package",
+        outcome: "failed",
+        actorHash,
+        targetType: "outreach_package",
+        details: { code: error?.code || "generation_failed" },
+      });
+      throw error;
+    }
+  })
+);
+
+app.post(
+  "/api/admin/outreach/send-test",
+  adminOutreachProcessRateLimiter,
+  requireAdmin,
+  asyncRoute(async (req, res) => {
+    const actorHash = getAdminActorHash(req);
+    const packageId = String(req.body?.packageId || "").trim();
+    try {
+      const sent = await sendStoredOutreachPackage({
+        packageId,
+        to: req.body?.to,
+        confirmation: req.body?.confirmation,
+      }, {
+        dataDir,
+        sendMail: sendOutreachEmailMessage,
+      });
+      await recordAdminAuditEvent({
+        prisma,
+        action: "send_test_outreach_email",
+        outcome: "success",
+        actorHash,
+        targetType: "outreach_package",
+        targetId: packageId,
+        details: {
+          recipientHash: hashKey(sent.package.delivery.sent_to).slice(0, 24),
+          confirmation: OUTREACH_SEND_CONFIRMATION,
+        },
+      });
+      return res.json({
+        ok: true,
+        packageId,
+        delivery: sent.package.delivery,
+        audio: sent.package.audio,
+        quality: sent.package.quality,
+      });
+    } catch (error) {
+      await recordAdminAuditEvent({
+        prisma,
+        action: "send_test_outreach_email",
+        outcome: "failed",
+        actorHash,
+        targetType: "outreach_package",
+        targetId: packageId,
+        details: { code: error?.code || "send_failed" },
+      });
+      throw error;
+    }
   })
 );
 

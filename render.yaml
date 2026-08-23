@@ -197,6 +197,12 @@ services:
         sync: false
       - key: OPENAI_ASSISTANT_MODEL
         value: gpt-4o-mini
+      - key: OPENAI_OUTREACH_MODEL
+        value: gpt-4o-mini
+      - key: OPENAI_TTS_MODEL
+        value: gpt-4o-mini-tts
+      - key: OPENAI_TTS_VOICE
+        value: marin
       - key: OPENAI_TRANSCRIBE_MODEL
         value: whisper-1
       - key: OPENAI_TRANSCRIBE_LANGUAGE
@@ -291,3 +297,5 @@ services:
         value: false
       - key: DAILY_DIGEST_ENABLED
         value: false
+      - key: ADMIN_OUTREACH_MAX_REQUESTS
+        value: 10
