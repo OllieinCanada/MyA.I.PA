@@ -28,8 +28,8 @@
 .tims-panel-bolt { position: absolute; right: 24px; top: 16px; color: #f59e0b; }
 .tims-electric-visual .fcr-callback-card { top: 96px; }
 
-.tims-message-grid { display: grid; grid-template-columns: 1fr 1fr; align-items: start; gap: 18px; margin: 20px auto 0; }
-.tims-message-preview { position: relative; isolation: isolate; min-width: 0; min-height: 340px; display: flex; flex-direction: column; overflow: visible; border: 6px solid #111827; border-radius: 34px; color: #111827; background: #fff; box-shadow: 0 24px 48px -32px rgba(0,0,0,.88); }
+.tims-message-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 360px)); justify-content: center; align-items: start; gap: 18px; margin: 20px auto 0; }
+.tims-message-preview { position: relative; isolation: isolate; width: 100%; min-width: 0; min-height: 500px; display: flex; flex-direction: column; overflow: visible; border: 6px solid #111827; border-radius: 38px; color: #111827; background: #fff; box-shadow: 0 24px 48px -32px rgba(0,0,0,.88); }
 .tims-message-preview::before, .tims-message-preview::after { content: ""; position: absolute; z-index: -1; width: 5px; border-radius: 5px; background: #0b1220; }
 .tims-message-preview::before { left: -10px; top: 72px; height: 58px; box-shadow: 0 72px 0 #0b1220; }
 .tims-message-preview::after { right: -10px; top: 103px; height: 78px; }
@@ -41,7 +41,7 @@
 .tims-message-preview.customer .tims-text-phone-contact > span { background: #0a84ff; }
 .tims-text-phone-contact strong { display: block; font-size: .66rem; font-weight: 950; line-height: 1.15; }
 .tims-text-phone-contact small { display: block; margin-top: 2px; color: #8e8e93; font-size: .48rem; font-weight: 800; }
-.tims-text-phone-thread { min-height: 116px; display: flex; flex: 1 1 auto; align-items: flex-start; padding: 12px 9px 8px; background: #fff; }
+.tims-text-phone-thread { min-height: 116px; display: flex; flex: 0 0 auto; align-items: flex-start; padding: 12px 9px 8px; background: #fff; }
 .tims-text-phone-thread > ul, .tims-text-phone-thread > .tims-message-heading { position: relative; z-index: 1; }
 .tims-text-phone-thread { max-width: 100%; flex-direction: column; border-radius: 14px 14px 14px 5px; color: #111; background: #e9e9eb; font-size: .61rem; font-weight: 750; line-height: 1.42; }
 .tims-text-phone-thread ul { display: grid; gap: 6px; width: 100%; margin: 0; padding: 0; list-style: none; }
@@ -51,7 +51,8 @@
 .tims-message-preview.customer .tims-text-phone-thread { justify-content: flex-end; }
 .tims-message-preview.customer .tims-text-phone-thread { border-radius: 14px 14px 5px 14px; color: #fff; background: #0a84ff; }
 .tims-message-preview.customer .tims-text-phone-thread li::before { background: #fff; }
-.tims-text-phone-status { min-height: 34px; display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 5px 10px 9px; color: #8e8e93; font-size: .48rem; font-weight: 850; }
+.tims-text-phone-status { position: relative; min-height: 44px; display: flex; align-items: flex-start; justify-content: space-between; gap: 6px; margin-top: auto; padding: 7px 10px 20px; color: #8e8e93; font-size: .48rem; font-weight: 850; }
+.tims-text-phone-status::after { content: ""; position: absolute; left: 50%; bottom: 7px; width: 76px; height: 4px; border-radius: 999px; background: #111827; transform: translateX(-50%); }
 .tims-text-phone-status span { color: #168349; font-size: .52rem; font-weight: 950; letter-spacing: .08em; }
 .tims-demo .fcr-summary-actions button:disabled { opacity: .43; cursor: not-allowed; }
 
@@ -233,8 +234,8 @@
   .tims-demo-landing .fcr-detail-columns { gap: 8px; }
   .tims-demo-landing .tims-detail-disclosures summary { min-height: 34px; padding: 6px 9px; font-size: .65rem; }
   .tims-demo-landing .tims-detail-disclosures summary strong { min-width: 21px; height: 21px; font-size: .57rem; }
-  .tims-demo-landing .tims-message-grid { gap: 10px; margin-top: 9px; }
-  .tims-demo-landing .tims-message-preview { min-height: 320px; border-width: 5px; border-radius: 26px; }
+  .tims-demo-landing .tims-message-grid { gap: 14px; margin-top: 12px; }
+  .tims-demo-landing .tims-message-preview { min-height: 500px; border-width: 5px; border-radius: 32px; }
   .tims-demo-landing .tims-message-preview::before { left: -8px; top: 60px; height: 46px; box-shadow: 0 58px 0 #0b1220; }
   .tims-demo-landing .tims-message-preview::after { right: -8px; top: 84px; height: 62px; }
   .tims-demo-landing .tims-text-phone-top { min-height: 14px; padding: 2px 8px 1px; }
@@ -272,7 +273,7 @@
     transform: translateX(-50%);
   }
   .tims-message-preview,
-  .tims-demo-landing .tims-message-preview { width: 100%; min-height: 0; margin-inline: auto; }
+  .tims-demo-landing .tims-message-preview { width: 100%; min-height: clamp(500px, 145vw, 560px); margin-inline: auto; border-width: 7px; border-radius: 42px; }
   .tims-message-preview p { min-height: 0; }
   .tims-text-phone-contact,
   .tims-demo-landing .tims-text-phone-contact { grid-template-columns: 32px minmax(0,1fr); gap: 8px; padding: 8px 10px; }
@@ -290,7 +291,7 @@
   .tims-text-phone-thread li::before { width: 7px; height: 4px; }
   .tims-message-heading { font-size: .8rem; }
   .tims-text-phone-status,
-  .tims-demo-landing .tims-text-phone-status { min-height: 32px; padding: 6px 10px 8px; font-size: .58rem; }
+  .tims-demo-landing .tims-text-phone-status { min-height: 48px; padding: 8px 10px 23px; font-size: .58rem; }
   .tims-text-phone-status span,
   .tims-demo-landing .tims-text-phone-status span { font-size: .62rem; }
   .tims-panel { width: min(330px, 88%); min-height: 360px; padding: 92px 38px 42px; }

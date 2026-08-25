@@ -394,7 +394,13 @@ export default function IntuitiveLandingPage() {
               </svg>
             </p>
             <HeroActionFlow />
-            <p className="simple-number-promise">Keep your existing business number.</p>
+            <div className="simple-canadian-proof" aria-label="Designed for Canadian contractors">
+              <span className="simple-canadian-proof-mark" aria-hidden="true">CA</span>
+              <div>
+                <strong>Designed for Canadian contractors</strong>
+                <p><span>Keep your existing business number.</span><span>Test privately before going live.</span></p>
+              </div>
+            </div>
             <div className="simple-hero-actions">
               <StartButton />
               <button type="button" className="simple-secondary" onClick={scrollToDemo}>See a Sample Call</button>

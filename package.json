@@ -106,6 +106,7 @@
     "evals:vapi:sync": "node scripts/setup-vapi-evals.js --sync",
     "evals:vapi:run": "node scripts/setup-vapi-evals.js --sync --run-safe",
     "diagnose:visual": "node scripts/diagnose-visual.js",
+    "compare:homepage:visual": "node scripts/compare-homepage-visuals.js",
     "find:todos": "node scripts/find-todos.js",
     "linkedin:automation:status": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install-linkedin-codex-automation.ps1 -Status",
     "linkedin:health": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/linkedin-automation-health.ps1",

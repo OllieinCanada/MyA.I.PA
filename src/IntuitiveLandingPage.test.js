@@ -39,7 +39,9 @@ describe("intuitive homepage journey", () => {
     expect(text).toMatch(/Never miss a call again!/i);
     expect(text).toMatch(/Missed Calls = Lost Revenue \$\$/i);
     expect(text).toMatch(/When you can't get to the phone, My AI PA:/i);
+    expect(text).toMatch(/Designed for Canadian contractors/i);
     expect(text).toMatch(/Keep your existing business number/i);
+    expect(text).toMatch(/Test privately before going live/i);
     expect(text).toMatch(/Three simple steps/i);
     expect(text).toMatch(/Your customer has a problem\. They want to talk to someone now/i);
     expect(text).toMatch(/AnswersAfter 3 rings/i);
