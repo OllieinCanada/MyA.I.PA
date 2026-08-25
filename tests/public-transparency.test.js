@@ -27,13 +27,35 @@ function startStaticServer() {
   });
 }
 
-test("the status page renders real health results and refreshes them", { timeout: 30000 }, async (t) => {
-  const server = await startStaticServer();
-  const browser = await chromium.launch({ headless: true });
+async function launchBrowser() {
+  const options = { headless: true, args: ["--disable-gpu", "--disable-dev-shm-usage"] };
+  try {
+    return await chromium.launch(options);
+  } catch (originalError) {
+    for (const channel of ["chrome", "msedge"]) {
+      try {
+        return await chromium.launch({ ...options, channel });
+      } catch (_channelError) {
+        // Try the next browser channel available on the host.
+      }
+    }
+    throw originalError;
+  }
+}
+
+function registerBrowserCleanup(t, server, getBrowser) {
   t.after(async () => {
-    await browser.close();
+    await getBrowser()?.close().catch(() => {});
+    server.closeAllConnections?.();
     await new Promise((resolve) => server.close(resolve));
   });
+}
+
+test("the status page renders real health results and refreshes them", { timeout: 30000 }, async (t) => {
+  const server = await startStaticServer();
+  let browser;
+  registerBrowserCleanup(t, server, () => browser);
+  browser = await launchBrowser();
 
   const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
   let healthCalls = 0;
@@ -62,11 +84,9 @@ test("the status page renders real health results and refreshes them", { timeout
 
 test("the storage notice fits a phone viewport and names every current category", { timeout: 30000 }, async (t) => {
   const server = await startStaticServer();
-  const browser = await chromium.launch({ headless: true });
-  t.after(async () => {
-    await browser.close();
-    await new Promise((resolve) => server.close(resolve));
-  });
+  let browser;
+  registerBrowserCleanup(t, server, () => browser);
+  browser = await launchBrowser();
 
   const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
   const address = server.address();
