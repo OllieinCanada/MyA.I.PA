@@ -24,7 +24,7 @@ requireMatch("public/cookies.html", /does not currently load third-party adverti
 requireMatch("public/cookies.html", /session cookies[\s\S]*session storage[\s\S]*local storage[\s\S]*service-worker cache/i, "must disclose every browser-storage category used by the current site");
 requireMatch("public/status.html", /\/api\/health[\s\S]*\/api\/health\/ready/i, "must use the real API and readiness endpoints");
 requireMatch("public/status.html", /do not represent historical uptime or a contractual service-level guarantee/i, "must not imply an uptime history or SLA");
-requireMatch("src/LandingPage.js", /<footer id="site-footer"[\s\S]*href="\/cookies\.html"[\s\S]*href="\/status\.html"/, "the visible site footer must link to both transparency pages");
+requireMatch("src/IntuitiveLandingPage.js", /<footer id="site-footer"[\s\S]*href="\/cookies\.html"[\s\S]*href="\/status\.html"/, "the active landing-page footer must link to both transparency pages");
 requireMatch("public/sitemap.xml", /cookies\.html[\s\S]*status\.html/, "sitemap must include both transparency pages");
 requireMatch("server/index.js", /app\.get\("\/api\/health"[\s\S]*app\.get\("\/api\/health\/ready"/, "backend health endpoints must still exist");
 

@@ -1,0 +1,58 @@
+{
+  "src": "/audio/tims-electrical/hero-new-installation-tight.wav",
+  "durationSeconds": 44.44,
+  "turns": [
+    {
+      "start": 0.12,
+      "end": 4.3
+    },
+    {
+      "start": 4.72,
+      "end": 8.02
+    },
+    {
+      "start": 8.44,
+      "end": 9.58
+    },
+    {
+      "start": 10,
+      "end": 10.68
+    },
+    {
+      "start": 11.1,
+      "end": 13.56
+    },
+    {
+      "start": 13.98,
+      "end": 15.92
+    },
+    {
+      "start": 16.34,
+      "end": 18.1
+    },
+    {
+      "start": 18.52,
+      "end": 22.44
+    },
+    {
+      "start": 22.86,
+      "end": 28.16
+    },
+    {
+      "start": 28.58,
+      "end": 28.96
+    },
+    {
+      "start": 29.38,
+      "end": 32.64
+    },
+    {
+      "start": 33.06,
+      "end": 34.46
+    },
+    {
+      "start": 34.88,
+      "end": 44.2
+    }
+  ]
+}

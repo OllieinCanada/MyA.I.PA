@@ -1,0 +1,40 @@
+name: Production monitor
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-monitor
+  cancel-in-progress: false
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci --legacy-peer-deps --ignore-scripts --no-audit --no-fund
+      - name: Check production twice before alerting
+        env:
+          MONITOR_API_KEY: ${{ secrets.MONITOR_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          MONITOR_RECHECK_DELAY_MS: 15000
+        run: npm run ops:monitor -- --include-operational --confirm-failure --telegram-on-failure
+      - name: Save redacted monitor report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-monitor-${{ github.run_id }}
+          path: diagnostics/operations/production-monitor.json
+          if-no-files-found: ignore
+          retention-days: 14

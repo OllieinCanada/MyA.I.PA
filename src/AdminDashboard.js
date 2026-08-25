@@ -27,7 +27,12 @@ async function api(path, { method = "GET", body, timeoutMs = ADMIN_API_TIMEOUT_M
     } catch (_e) {
       data = { error: text || `HTTP ${res.status}` };
     }
-    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    if (!res.ok) {
+      const error = new Error(data.error || `HTTP ${res.status}`);
+      error.code = data.code || "";
+      error.details = data;
+      throw error;
+    }
     return data;
   } catch (err) {
     if (err?.name === "AbortError") {
@@ -1305,10 +1310,68 @@ function SupportInbox({ reports, integrations, busyAction, message, onRefresh, o
   );
 }
 
+function AttentionInbox({ inbox, busyAction, message, onRefresh, onAction }) {
+  const summary = inbox?.summary || { total: 0, bySeverity: {} };
+  const items = inbox?.items || [];
+  const actionLabels = {
+    retry_owner_text: "Retry owner text",
+    sync_calls: "Resync calls",
+    recover_signup: "Attempt safe recovery",
+    reopen_signup: "Reopen signup",
+    resend_signup_verification: "Resend verification",
+  };
+  return (
+    <div className="admin-support-page">
+      <div className="admin-support-heading">
+        <div><span>Operations command center</span><h2>Needs Attention</h2><p>One queue for failed signups, missing call handoffs, text problems, routing gaps, and high-priority reports.</p></div>
+        <button type="button" onClick={onRefresh}>Refresh checks</button>
+      </div>
+      <div className="admin-support-metrics">
+        <div><span>Total</span><strong>{summary.total || 0}</strong></div>
+        <div><span>Critical</span><strong>{summary.bySeverity?.critical || 0}</strong></div>
+        <div><span>Warnings</span><strong>{summary.bySeverity?.warning || 0}</strong></div>
+        <div><span>Last checked</span><strong>{inbox?.generatedAt ? dt(inbox.generatedAt) : "—"}</strong></div>
+      </div>
+      {message ? <div className="admin-support-message" role="status">{message}</div> : null}
+      <div className="admin-support-list">
+        {items.length ? items.map((item) => (
+          <article key={item.id} className="rounded-2xl border border-white/15 bg-[#0b1b38] p-5 text-white shadow-xl">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className={"text-xs font-black uppercase tracking-[0.18em] " + (item.severity === "critical" ? "text-rose-300" : "text-amber-300")}>{item.severity} · {String(item.kind || "issue").replaceAll("_", " ")}</div>
+                <h3 className="mt-2 text-xl font-black">{item.title}</h3>
+                <p className="mt-2 max-w-3xl text-sm font-semibold leading-6 text-white/70">{item.summary}</p>
+                <div className="mt-3 text-xs font-bold text-white/45">Business #{item.businessId || "—"} · {item.ageMinutes == null ? "Just detected" : `${item.ageMinutes} minutes old`}</div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {(item.actions || []).map((action) => (
+                  <button key={action} type="button" disabled={busyAction === `${item.id}:${action}`} onClick={() => onAction(item, action)} className="rounded-full bg-emerald-600 px-4 py-2 text-xs font-black uppercase tracking-[0.12em] text-white disabled:opacity-50">
+                    {busyAction === `${item.id}:${action}` ? "Working…" : actionLabels[action] || action}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </article>
+        )) : <div className="admin-support-empty">Nothing needs attention right now.</div>}
+      </div>
+      <section className="mt-8 rounded-2xl border border-white/10 bg-white/5 p-5 text-white">
+        <div className="text-xs font-black uppercase tracking-[0.18em] text-sky-300">Admin audit trail</div>
+        <h3 className="mt-2 text-xl font-black">Recent protected actions</h3>
+        <div className="mt-4 space-y-2">
+          {(inbox?.auditEvents || []).slice(0, 12).map((event) => <div key={event.id} className="flex flex-wrap justify-between gap-2 border-t border-white/10 py-2 text-sm"><strong>{String(event.action || "action").replaceAll("_", " ")}</strong><span className="text-white/60">{event.outcome} · {dt(event.createdAt || event.storedAt)}</span></div>)}
+          {!inbox?.auditEvents?.length ? <p className="text-sm text-white/60">No admin actions have been recorded yet.</p> : null}
+        </div>
+      </section>
+    </div>
+  );
+}
+
 export default function AdminDashboard() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authChecked, setAuthChecked] = useState(false);
   const [candidate, setCandidate] = useState("");
+  const [mfaCode, setMfaCode] = useState("");
+  const [mfaRequired, setMfaRequired] = useState(false);
   const [activeTab, setActiveTab] = useState(getInitialAdminTab);
   const [selectedCustomerKey, setSelectedCustomerKey] = useState("");
   const [loading, setLoading] = useState(false);
@@ -1337,6 +1400,9 @@ export default function AdminDashboard() {
   const [supportIntegrations, setSupportIntegrations] = useState({ githubConfigured: false, githubRepo: "", telegramConfigured: false, codexMode: "prepare" });
   const [supportBusyAction, setSupportBusyAction] = useState("");
   const [supportMessage, setSupportMessage] = useState("");
+  const [attentionInbox, setAttentionInbox] = useState({ summary: { total: 0, bySeverity: {} }, items: [], auditEvents: [], generatedAt: "" });
+  const [attentionBusyAction, setAttentionBusyAction] = useState("");
+  const [attentionMessage, setAttentionMessage] = useState("");
 
   const [leadFilters, setLeadFilters] = useState({ status: "", intent: "", urgency: "" });
   const [callFilters, setCallFilters] = useState({ status: "", minDuration: "", outcome: "", search: "" });
@@ -2154,6 +2220,7 @@ export default function AdminDashboard() {
         items: [
           ["customers", "Businesses", "See every business and its next action"],
           ["calls", "Leads & Calls", "Review calls and move leads forward"],
+          ["attention", "Needs Attention", "Fix failed signups, texts, and call handoffs"],
           ["support", "Support inbox", "Resolve customer-reported problems"],
         ],
       },
@@ -2214,6 +2281,32 @@ export default function AdminDashboard() {
     const data = await api("/api/admin/support-reports", { timeoutMs: 15000 });
     setSupportReports(data.reports || []);
     setSupportIntegrations((current) => ({ ...current, ...(data.integrations || {}) }));
+  };
+
+  const loadAttentionInbox = async () => {
+    const data = await api("/api/admin/attention", { timeoutMs: 20000 });
+    setAttentionInbox({
+      summary: data.summary || { total: 0, bySeverity: {} },
+      items: data.items || [],
+      auditEvents: data.auditEvents || [],
+      generatedAt: data.generatedAt || "",
+    });
+  };
+
+  const runAttentionAction = async (item, action) => {
+    const busyKey = `${item.id}:${action}`;
+    setAttentionBusyAction(busyKey);
+    setAttentionMessage("");
+    try {
+      const data = await api("/api/admin/attention/actions", { method: "POST", body: { action, targetId: item.targetId }, timeoutMs: 30000 });
+      setAttentionMessage(`${action.replaceAll("_", " ")} completed.`);
+      if (data.inbox) setAttentionInbox((current) => ({ ...current, ...data.inbox, auditEvents: current.auditEvents }));
+      await loadAttentionInbox();
+    } catch (error) {
+      setAttentionMessage(cleanErrorMessage(error.message));
+    } finally {
+      setAttentionBusyAction("");
+    }
   };
 
   const saveSupportReport = async (id, body) => {
@@ -2440,6 +2533,7 @@ export default function AdminDashboard() {
         loadSettings(),
         loadLeadHandoffs(),
         loadSupportReports(),
+        loadAttentionInbox(),
       ]);
       setVapiSyncStatus("Dashboard refreshed.");
     } catch (e) {
@@ -2463,6 +2557,7 @@ export default function AdminDashboard() {
         await Promise.allSettled([loadOpsOverview(), loadCustomerSetup(), loadTrialHealth(), loadSignups(), loadCalls(), loadLeads(), loadCostAudit(), loadVapiMappings(), loadVapiInventory()]);
       }
       if (activeTab === "support") await loadSupportReports();
+      if (activeTab === "attention") await loadAttentionInbox();
       if (activeTab === "setup") await loadCustomerSetup();
       if (activeTab === "businesses") await loadOpsOverview();
       if (activeTab === "calls") await Promise.allSettled([loadCalls(), loadLeadHandoffs()]);
@@ -2520,10 +2615,13 @@ export default function AdminDashboard() {
     setGateBusy(true);
     setError("");
     try {
-      await api("/api/admin/login", { method: "POST", body: { password: candidate } });
+      await api("/api/admin/login", { method: "POST", body: { password: candidate, mfaCode } });
       setIsAuthenticated(true);
       setCandidate("");
+      setMfaCode("");
+      setMfaRequired(false);
     } catch (err) {
+      if (err.code === "ADMIN_MFA_REQUIRED") setMfaRequired(true);
       setError(cleanErrorMessage(err.message));
     } finally {
       setGateBusy(false);
@@ -2556,6 +2654,9 @@ export default function AdminDashboard() {
       setSupportReports([]);
       setSupportMessage("");
       setSupportBusyAction("");
+      setAttentionInbox({ summary: { total: 0, bySeverity: {} }, items: [], auditEvents: [], generatedAt: "" });
+      setAttentionBusyAction("");
+      setAttentionMessage("");
       setSelectedCustomerKey("");
     }
   };
@@ -2749,6 +2850,11 @@ export default function AdminDashboard() {
                 <Labeled label="Admin Password">
                   <Input type="password" value={candidate} onChange={(e) => setCandidate(e.target.value)} placeholder="Enter ADMIN_PASSWORD" />
                 </Labeled>
+                {mfaRequired ? (
+                  <Labeled label="Authenticator Code">
+                    <Input inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={mfaCode} onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="6-digit code" />
+                  </Labeled>
+                ) : null}
                 {error ? <p className="text-sm font-semibold text-rose-200">{error}</p> : null}
                 <button type="submit" disabled={gateBusy} className="rounded-full bg-gradient-to-r from-emerald-700 to-amber-500 px-6 py-3 text-sm font-black uppercase tracking-[0.14em] text-white disabled:opacity-60">
                   {gateBusy ? "Checking..." : "Unlock Admin"}
@@ -2813,6 +2919,16 @@ export default function AdminDashboard() {
             onGithub={createSupportGithubIssue}
             onCodex={prepareSupportCodexTask}
             onMessage={setSupportMessage}
+          />
+        ) : null}
+
+        {activeTab === "attention" ? (
+          <AttentionInbox
+            inbox={attentionInbox}
+            busyAction={attentionBusyAction}
+            message={attentionMessage}
+            onRefresh={loadAttentionInbox}
+            onAction={runAttentionAction}
           />
         ) : null}
 

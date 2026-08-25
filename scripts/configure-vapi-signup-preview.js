@@ -57,7 +57,9 @@ function buildPreviewPayload(sourceAssistant) {
     name: previewName,
     firstMessage: "Hi, thanks for calling {{businessName}}. Do you need an installation, repair, or maintenance today?",
     firstMessageMode: "assistant-speaks-first",
-    firstMessageInterruptionsEnabled: true,
+    // Keep the short greeting intact while the web media path finishes warming up.
+    // Barge-in remains available immediately after the greeting.
+    firstMessageInterruptionsEnabled: false,
     transcriber: sourceAssistant.transcriber,
     voice: sourceAssistant.voice,
     model: {

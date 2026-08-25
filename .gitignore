@@ -8,6 +8,7 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 diagnostics/
+artifacts/tims-electrical-vapi-recordings/
 private-backups/
 .codex-resume-prompt.txt
 .codex-wakeup.log
@@ -102,6 +103,9 @@ tools_bin/
 
 # Generated previews, reports, and runtime state
 output/
+outreach-previews/
+data/outreach-audio/
+data/outreach-packages/
 .frontend.*.log
 .overnight-*.log
 .preview-build.*.log

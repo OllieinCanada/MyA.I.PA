@@ -26,8 +26,15 @@ const viewports = [
 ];
 
 const requiredText = {
-  home: ["Answers the phone", "Start Free Trial", "Play Recorded Sample", "Owner Phone", "Both you and the customer"],
-  signup: ["Create your AI phone assistant", "Choose your trade"],
+  home: [
+    "Never miss a call again!",
+    "Missed Calls = Lost Revenue $$",
+    "AI Telephone Answering Assistant",
+    "Your customer has a problem. They want to talk to someone now.",
+    "See a Sample Call",
+    "Start Your Free Trial",
+  ],
+  signup: ["Create your AI phone assistant", "Step 1 of 8", "Choose your trade", "Continue to property types"],
   dashboard: ["Owner dashboard", "Signup email", "Welcome back"],
   admin: ["Admin Dashboard", "Admin Password", "Unlock Admin"],
 };
@@ -233,7 +240,7 @@ async function main() {
 
   let browser;
   try {
-    browser = await chromium.launch();
+    browser = await chromium.launch({ args: ["--disable-gpu", "--disable-dev-shm-usage"] });
   } catch (error) {
     console.error("Playwright is installed, but Chromium is not available yet.");
     console.error("Run: npx playwright install chromium");
@@ -253,10 +260,14 @@ async function main() {
   if (!selectedViewports.length) throw new Error(`Unknown viewport filter: ${viewportArg}`);
 
   for (const viewport of selectedViewports) {
-    const context = await browser.newContext({ viewport });
+    const context = await browser.newContext({ viewport, serviceWorkers: "block" });
+    await context.route(/\.(?:wav|mp3)(?:\?|$)/i, (route) =>
+      route.fulfill({ status: 204, contentType: "audio/wav", body: "" })
+    );
 
     for (const route of selectedRoutes) {
       const page = await context.newPage();
+      await page.emulateMedia({ reducedMotion: "reduce" });
       const url = `${baseUrl}${route.path}`;
       const screenshotName = `${route.name}-${viewport.name}.png`;
       const screenshotPath = path.join(outputDir, screenshotName);
@@ -265,7 +276,11 @@ async function main() {
       try {
         await page.goto(url, { waitUntil: "domcontentloaded", timeout: 12000 });
         await page.waitForTimeout(route.waitMs || 1200);
-        await withTimeout(page.screenshot({ path: screenshotPath, fullPage: false, timeout: 15000 }), 18000, "viewport screenshot");
+        await withTimeout(
+          page.screenshot({ path: screenshotPath, fullPage: false, animations: "disabled", timeout: 30000 }),
+          35000,
+          "viewport screenshot"
+        );
         const diagnostics = await withTimeout(collectPageDiagnostics(page, route.name), 15000, "page diagnostics");
         const warnings = [];
 

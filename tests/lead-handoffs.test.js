@@ -65,6 +65,17 @@ test("acknowledgement URL points to the public API and carries no lead details",
   assert.doesNotMatch(url, /Brian|905|quote/i);
 });
 
+test("production acknowledgement links reject localhost and insecure bases", () => {
+  assert.throws(
+    () => buildAcknowledgementUrl("public-key", { ...env, NODE_ENV: "production", LEAD_ACK_BASE_URL: "http://localhost:8787" }),
+    /public HTTPS/i,
+  );
+  assert.throws(
+    () => buildAcknowledgementUrl("public-key", { ...env, NODE_ENV: "production", LEAD_ACK_BASE_URL: "http://api.myaipa.ca" }),
+    /public HTTPS/i,
+  );
+});
+
 test("owner message includes the lead and an explicit acknowledgement action", () => {
   const message = buildOwnerLeadMessage({
     lead: { intent: "QUOTE", name: "Brian", callbackNumber: "905-555-1234", summary: "Hot tub installation" },

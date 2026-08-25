@@ -174,6 +174,30 @@ test("owner failure does not prevent the customer confirmation", async () => {
   assert.equal(result.requiresReconciliation, true);
 });
 
+test("an owner transport outage is isolated and the customer confirmation still runs", async () => {
+  let providerAttempt = 0;
+  const calls = [];
+  const fetchImpl = async (_url, options) => {
+    if (String(options.headers?.["Content-Type"] || "").includes("application/json")) {
+      return { ok: true, status: 200, json: async () => ({ allowed: true, suppressed: false }) };
+    }
+    const params = new URLSearchParams(String(options.body || ""));
+    calls.push(params.get("To"));
+    providerAttempt += 1;
+    if (providerAttempt === 1) throw Object.assign(new Error("socket reset"), { code: "ECONNRESET" });
+    return { ok: true, status: 201, json: async () => ({ sid: "SM_CUSTOMER", status: "queued" }) };
+  };
+
+  const result = await execute(fetchImpl);
+  assert.deepEqual(calls, [env.DEFAULT_OWNER_TO_NUMBER, args.rawPhoneNumber]);
+  assert.equal(result.owner.sent, false);
+  assert.equal(result.owner.status, "transport_error");
+  assert.equal(result.owner.errorCode, "ECONNRESET");
+  assert.equal(result.customer.sent, true);
+  assert.equal(result.partialSuccess, true);
+  assert.equal(result.requiresReconciliation, true);
+});
+
 test("owner SMS can be disabled while customer confirmation remains successful", async () => {
   const mock = makeFetch([
     { ok: true, status: 201, payload: { sid: "SM_CUSTOMER", status: "queued" } },
@@ -222,6 +246,22 @@ test("notification delivery fails closed when the consent service is unavailable
   assert.equal(result.owner.status, "suppression_check_unavailable");
   assert.equal(result.customer.status, "suppression_check_unavailable");
   assert.equal(result.complete, false);
+});
+
+test("notification delivery fails closed when the consent service cannot be reached", async () => {
+  let attempts = 0;
+  const result = await execute(async () => {
+    attempts += 1;
+    throw new Error("consent service timed out");
+  });
+  assert.equal(attempts, 2);
+  assert.equal(result.owner.attempted, false);
+  assert.equal(result.owner.status, "suppression_check_unavailable");
+  assert.equal(result.owner.errorCode, "suppression_check_unreachable");
+  assert.equal(result.customer.attempted, false);
+  assert.equal(result.customer.status, "suppression_check_unavailable");
+  assert.equal(result.complete, false);
+  assert.equal(result.requiresReconciliation, true);
 });
 
 test("protected environment numbers override any model-supplied routing", async () => {

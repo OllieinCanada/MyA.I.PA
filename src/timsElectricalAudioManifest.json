@@ -1,0 +1,76 @@
+{
+  "new-installation": {
+    "status": "available",
+    "src": "/audio/tims-electrical/new-installation.wav",
+    "durationSeconds": 85,
+    "source": "synthetic-vapi-agents",
+    "recordedAt": "2026-08-12T08:25:04.387Z",
+    "disclosure": "Synthetic demonstration call recorded between two Vapi agents; no real customer information."
+  },
+  "repair-request": {
+    "status": "available",
+    "src": "/audio/tims-electrical/repair-request.wav",
+    "durationSeconds": 53.66,
+    "source": "synthetic-vapi-agents",
+    "callerVoiceId": "Emma",
+    "callerPerformance": "Warm and conversational, with a practical I-need-this-fixed tone. Give Maya an easy natural rhythm, a hint of humour on the appliance line, and a genuinely appreciative finish without sounding theatrical.",
+    "recordedAt": "2026-08-17T07:02:23.760Z",
+    "disclosure": "Synthetic demonstration call recorded between two Vapi agents; no real customer information.",
+    "preparedAt": "2026-08-17T07:23:03.397Z",
+    "timingSource": "vapi-message-boundaries"
+  },
+  "maintenance": {
+    "status": "available",
+    "src": "/audio/tims-electrical/maintenance.wav",
+    "durationSeconds": 52.44,
+    "source": "synthetic-vapi-agents",
+    "callerVoiceId": "Kai",
+    "callerPerformance": "Friendly, relaxed, and easygoing, like a practical new homeowner who enjoys planning ahead. Give the planning line a lightly proud tone and the last line a warm, satisfied smile.",
+    "recordedAt": "2026-08-17T07:04:54.014Z",
+    "disclosure": "Synthetic demonstration call recorded between two Vapi agents; no real customer information.",
+    "preparedAt": "2026-08-17T07:23:04.000Z",
+    "timingSource": "vapi-message-boundaries"
+  },
+  "unresolved-concern": {
+    "status": "available",
+    "src": "/audio/tims-electrical/unresolved-concern.wav",
+    "durationSeconds": 62.22,
+    "source": "synthetic-vapi-agents",
+    "callerVoiceId": "Naina",
+    "callerPerformance": "Calm and collected but politely frustrated. Let the first line carry a little tired patience, then soften once the receptionist proves it is listening. End with measured appreciation.",
+    "recordedAt": "2026-08-17T07:07:21.313Z",
+    "disclosure": "Synthetic demonstration call recorded between two Vapi agents; no real customer information.",
+    "preparedAt": "2026-08-17T07:23:04.271Z",
+    "timingSource": "vapi-message-boundaries"
+  },
+  "urgent-outage": {
+    "status": "visual-only",
+    "src": "/audio/tims-electrical/urgent-outage.wav",
+    "durationSeconds": 64.86,
+    "source": "synthetic-vapi-agents",
+    "callerVoiceId": "Godfrey",
+    "callerPerformance": "Concerned and energetic, speaking a little faster than the other callers while staying understandable. Calm slightly after the receptionist confirms there is no immediate danger.",
+    "recordedAt": "2026-08-14T09:17:27.668Z",
+    "disclosure": "Synthetic demonstration call recorded between two Vapi agents; no real customer information.",
+    "preparedAt": "2026-08-14T09:21:26.781Z"
+  },
+  "safety-redirect": {
+    "status": "visual-only",
+    "src": "/audio/tims-electrical/safety-redirect.wav",
+    "durationSeconds": 26.58,
+    "source": "synthetic-vapi-agents",
+    "callerVoiceId": "Savannah",
+    "callerPerformance": "Sound startled and urgent, with a quick breath before the first line. After the emergency direction, answer decisively and leave immediately. Do not add humour or dramatize the danger.",
+    "recordedAt": "2026-08-14T09:18:34.558Z",
+    "disclosure": "Synthetic demonstration call recorded between two Vapi agents; no real customer information.",
+    "preparedAt": "2026-08-14T09:21:26.798Z"
+  },
+  "hero-new-installation": {
+    "status": "available",
+    "src": "/audio/tims-electrical/hero-new-installation.wav",
+    "durationSeconds": 73,
+    "source": "synthetic-vapi-agents",
+    "recordedAt": "2026-08-14T07:31:57.213Z",
+    "disclosure": "Synthetic demonstration call recorded between two Vapi agents; no real customer information."
+  }
+}

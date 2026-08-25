@@ -1,0 +1,502 @@
+import React, { useEffect, useRef, useState } from "react";
+import { TimsElectricalLiveDemo } from "./TimsElectricalDemo";
+import { timsElectricalScenarios } from "./timsElectricalDemoData";
+import heroTranscriptTimings from "./timsElectricalHeroTranscriptTimings.json";
+import "./IntuitiveLandingPage.css";
+
+const coreBenefits = [
+  ["phone", "Picks up after three rings."],
+  ["chat", "Natural dialogue with customers to create a connection."],
+  ["question", "FAQ questions answered."],
+  ["clipboard", "Job details and callback information texted to you."],
+  ["person", "Complete customer information collected."],
+  ["message", "Owner and customer both receive text summary for easy follow up."],
+];
+
+const heroScenario = timsElectricalScenarios.find((scenario) => scenario.id === "new-installation");
+const ownerTextPoints = heroScenario.ownerTextLines;
+const customerTextPoints = heroScenario.customerTextLines;
+
+const handoffCards = [
+  ["Callback information", "Caller name, callback number, and the best time to reach them."],
+  ["Job and location", "Reason for the call, requested work, service address, and city."],
+  ["Timing and urgency", "Preferred start date, availability, and any urgent non-emergency concern."],
+  ["Two clear handoffs", "An owner summary plus a concise confirmation for the caller."],
+];
+
+const workflowCards = [
+  ["Keep your business number", "Forward only the calls you want My AI PA to answer."],
+  ["Start with overflow", "Use it after hours or when your team cannot pick up."],
+  ["Control the answers", "Your services, service area and common answers shape the receptionist."],
+  ["Review what happened", "See the call details and follow-up texts, then improve the answers whenever needed."],
+];
+
+const faqs = [
+  ["Do I have to change my business number?", "No. Keep your current number and forward calls to your My AI PA number."],
+  ["What if someone calls after hours?", "Your AI assistant can answer after hours, collect the job details, and flag an urgent request for a fast callback. It does not diagnose the problem or promise an arrival time."],
+  ["Can I control what it says?", "Yes. You provide the greeting and answers about your hours, service area, estimates, emergency availability, warranties, and other common questions. You also choose the callback wording and timeframe callers hear."],
+  ["What if it does not know an answer?", "It should not guess. It collects the caller's details, explains that the team will follow up, and puts the unanswered question in your summary."],
+  ["Will this replace my staff?", "No. My AI PA is designed to cover missed, busy, overflow, or after-hours calls. Your team can remain the first choice whenever you want."],
+  ["Can I turn it off?", "Yes. You control call forwarding and can stop or change the coverage whenever you need."],
+  ["How do I know it will sound right?", "Test the receptionist privately, listen to the sample call, and review the words and call summary before forwarding a single customer call."],
+  ["How hard is setup?", "Add your business details and common answers, test the receptionist privately, then choose when unanswered calls should be forwarded."],
+];
+
+function Icon({ name }) {
+  const paths = {
+    phone: <path d="M6.6 3.8 9 3.2l2 4.7-1.7 1.4c1.1 2.3 2.9 4.1 5.2 5.2l1.4-1.7 4.7 2-.6 2.4c-.3 1.2-1.4 2-2.6 2C10.4 19.2 4.8 13.6 4.8 6.6c0-1.2.7-2.3 1.8-2.8Z" />,
+    chat: <><path d="M5 5.5h14v10H9l-4 3v-13Z" /><path d="M8 9h8M8 12h5" /></>,
+    question: <><circle cx="12" cy="12" r="8" /><path d="M9.8 9.3a2.3 2.3 0 1 1 3.3 2.1c-.8.4-1.1.9-1.1 1.6M12 16.3h.01" /></>,
+    clipboard: <><path d="M8 5h8v3H8z" /><path d="M7 6H5v14h14V6h-2M8 13l2.2 2.2L16 10" /></>,
+    person: <><circle cx="12" cy="8" r="3" /><path d="M6.5 19c.7-3.3 2.5-5 5.5-5s4.8 1.7 5.5 5" /></>,
+    message: <><path d="M4 5h16v11H9l-5 3V5Z" /><path d="M8 9h8M8 12h6" /></>,
+    arrow: <><path d="M5 12h14" /><path d="m14 7 5 5-5 5" /></>,
+    check: <path d="m5 12 4 4L19 6" />,
+  };
+  return <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{paths[name] || paths.check}</svg>;
+}
+
+function Brand() {
+  return (
+    <a className="simple-brand" href="#top" aria-label="My AI PA home">
+      <svg className="simple-brand-mark" viewBox="0 0 72 72" fill="none" aria-hidden="true">
+        <path d="M14 40v-6C14 21.8 23.8 12 36 12s22 9.8 22 22v6" stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
+        <path d="M14 37h7v18h-7a5 5 0 0 1-5-5v-8a5 5 0 0 1 5-5Zm44 0h-7v18h7a5 5 0 0 0 5-5v-8a5 5 0 0 0-5-5Z" fill="currentColor" />
+        <path d="M52 54c0 6.2-5.7 10-13.2 10M36 64h-5.5" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
+        {[21, 26, 31, 36, 41, 46, 51].map((x, index) => {
+          const heights = [15, 22, 28, 32, 28, 22, 15];
+          const height = heights[index];
+          return <rect key={x} x={x} y={36 - height / 2} width="3.6" height={height} rx="1.8" fill="#ff7a00" />;
+        })}
+      </svg>
+      <span>My <strong>AI PA</strong></span>
+    </a>
+  );
+}
+
+function StartButton({ children = "Start Your Free Trial", className = "" }) {
+  return <button type="button" className={`simple-primary ${className}`} onClick={() => { window.location.hash = "/signup"; }}>{children}</button>;
+}
+
+function SectionHeading({ number, eyebrow, title, body }) {
+  return (
+    <div className="simple-section-heading">
+      {number || eyebrow ? <span>{number ? `${number} · ` : ""}{eyebrow}</span> : null}
+      <h2>{title}</h2>
+      {body ? <p>{body}</p> : null}
+    </div>
+  );
+}
+
+function HeroActionFlow() {
+  const steps = [
+    { icon: "phone", label: "Answers", detail: "After 3 rings" },
+    { icon: "chat", label: "Talks naturally", detail: "To get job details" },
+    { icon: "message", label: "Follows up", detail: "Texts you and the caller" },
+  ];
+
+  return (
+    <section className="simple-hero-flow" aria-label="How My AI PA handles a missed call">
+      <p>When you can't get to the phone, <strong>My AI PA:</strong></p>
+      <ol>
+        {steps.map((step, index) => (
+          <React.Fragment key={step.label}>
+            <li>
+              <span className="simple-hero-flow-icon" aria-hidden="true"><Icon name={step.icon} /></span>
+              <strong>{step.label}</strong>
+              <small>{step.detail}</small>
+            </li>
+            {index < steps.length - 1 ? <li className="simple-hero-flow-arrow" aria-hidden="true"><Icon name="arrow" /></li> : null}
+          </React.Fragment>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
+const journeySteps = [
+  { number: "01", label: "Why it matters", href: "#why-it-matters" },
+  { number: "02", label: "How it works", href: "#how-it-works" },
+  { number: "03", label: "See it work", href: "#see-it-work" },
+];
+
+function ScrollJourneyNav() {
+  const [activeStep, setActiveStep] = useState(0);
+
+  useEffect(() => {
+    let animationFrame = 0;
+    const updateActiveStep = () => {
+      animationFrame = 0;
+      const activationLine = window.innerHeight * 0.34;
+      let nextStep = 0;
+      journeySteps.forEach((step, index) => {
+        const section = document.querySelector(step.href);
+        if (section && section.getBoundingClientRect().top <= activationLine) nextStep = index;
+      });
+      setActiveStep(nextStep);
+    };
+    const scheduleUpdate = () => {
+      if (animationFrame) return;
+      if (typeof window.requestAnimationFrame === "function") {
+        animationFrame = window.requestAnimationFrame(updateActiveStep);
+      } else {
+        updateActiveStep();
+      }
+    };
+
+    window.addEventListener("scroll", scheduleUpdate, { passive: true });
+    window.addEventListener("resize", scheduleUpdate);
+    return () => {
+      window.removeEventListener("scroll", scheduleUpdate);
+      window.removeEventListener("resize", scheduleUpdate);
+      if (animationFrame && typeof window.cancelAnimationFrame === "function") window.cancelAnimationFrame(animationFrame);
+    };
+  }, []);
+
+  return (
+    <nav className="simple-jump-nav" data-active-step={activeStep} aria-label="Quick page navigation">
+      <div className="simple-journey-landscape" aria-hidden="true">
+        <span className="simple-journey-sun" />
+        <span className="simple-journey-ridge ridge-back" />
+        <span className="simple-journey-ridge ridge-front" />
+      </div>
+      <div className="simple-shell">
+        <span className="simple-journey-slider" aria-hidden="true" />
+        {journeySteps.map((step, index) => (
+          <a
+            href={step.href}
+            key={step.number}
+            aria-current={index === activeStep ? "step" : undefined}
+            onClick={() => setActiveStep(index)}
+          >
+            <span>{step.number}</span>
+            <strong>{step.label}</strong>
+          </a>
+        ))}
+      </div>
+    </nav>
+  );
+}
+
+const heroAudioSource = `${process.env.PUBLIC_URL || ""}/tims-electrical-2.wav?v=20260817-original-tims`;
+const heroAudioDurationSeconds = 133;
+
+function AnimatedHeroProof({ onSampleCall, onStartTrial }) {
+  const audioRef = useRef(null);
+  const [activeSlide, setActiveSlide] = useState(0);
+  const [audioPlaying, setAudioPlaying] = useState(false);
+  const [audioProgress, setAudioProgress] = useState(0);
+  const [manualChange, setManualChange] = useState(0);
+
+  useEffect(() => {
+    const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+    if (reduceMotion) return undefined;
+    const timer = window.setTimeout(() => setActiveSlide((current) => (current + 1) % 3), 17000);
+    return () => window.clearTimeout(timer);
+  }, [activeSlide, manualChange]);
+
+  const chooseSlide = (next) => {
+    setActiveSlide((next + 3) % 3);
+    setManualChange((value) => value + 1);
+  };
+
+  const toggleAudio = async () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (!audio.paused) {
+      audio.pause();
+      setAudioPlaying(false);
+      return;
+    }
+    try {
+      await audio.play();
+      setAudioPlaying(true);
+      setActiveSlide(0);
+    } catch (_error) {
+      setAudioPlaying(false);
+    }
+  };
+
+  const slides = [
+    {
+      label: "The call",
+      title: "A real conversation—not voicemail",
+      content: (
+        <div className="simple-call-conversation">
+          <div className="assistant"><span>My AI PA</span><p>“{heroScenario.transcript[0].text}”</p></div>
+          <div className="caller"><span>Caller · {heroScenario.callerName}</span><p>“{heroScenario.transcript[1].text}”</p></div>
+          <div className="assistant"><span>My AI PA</span><p>“{heroScenario.transcript[2].text}”</p></div>
+          <strong className="simple-lead-classification">NEW INSTALLATION</strong>
+        </div>
+      ),
+    },
+    {
+      label: "The follow-up",
+      title: "Both sides get a clear text",
+      content: (
+        <div className="simple-phone-pair">
+          <article className="simple-message-phone owner">
+            <div className="simple-phone-status"><b>9:41</b><i /><b>5G</b></div>
+            <header><span>PA</span><div><strong>Owner's cellphone</strong><small>My AI PA · now</small></div></header>
+            <div className="simple-message-copy">
+              <strong className="simple-message-heading">{ownerTextPoints[0]}</strong>
+              <ul className="simple-message-bullets">
+                {ownerTextPoints.slice(1).map((point) => <li key={point}>{point}</li>)}
+              </ul>
+            </div>
+          </article>
+          <article className="simple-message-phone customer">
+            <div className="simple-phone-status"><b>9:41</b><i /><b>5G</b></div>
+            <header><span>TE</span><div><strong>Customer's cellphone</strong><small>Tim's Electrical · now</small></div></header>
+            <div className="simple-message-copy simple-red-pen-message">
+              <ul className="simple-message-bullets">
+                {customerTextPoints.map((point) => <li key={point}>{point}</li>)}
+              </ul>
+            </div>
+          </article>
+        </div>
+      ),
+    },
+    {
+      label: "What you get",
+      title: "Worry-Free Coverage — For about the price of a cup of coffee a day.",
+      content: (
+        <div className="simple-carousel-benefits">
+          <figure className="simple-coffee-cup">
+            <span className="simple-coffee-steam" aria-hidden="true"><i /><i /><i /></span>
+            <img src="/illustrations/tim-hortons-canadian-cup.png" alt="A hand-drawn Tim Hortons cup with Canadian nature-inspired artwork" />
+          </figure>
+          <ul>
+            <li><Icon name="phone" />Picks up after three rings</li>
+            <li><Icon name="chat" />Natural conversation and FAQ answers</li>
+            <li><Icon name="clipboard" />Job and callback details collected</li>
+            <li><Icon name="message" />Owner and customer both receive text summary for easy follow up.</li>
+          </ul>
+        </div>
+      ),
+    },
+  ];
+
+  return (
+    <aside className="simple-hero-proof simple-proof-carousel" aria-label={`Three-part missed-call demonstration. Slide ${activeSlide + 1} of 3.`}>
+      <div className="simple-carousel-header">
+        <div><span className="simple-live-dot" /><strong>See the missed call become a lead</strong></div>
+        <button type="button" className={audioPlaying ? "playing" : ""} onClick={toggleAudio} aria-pressed={audioPlaying}>
+          <span className="simple-audio-trigger-icon" aria-hidden="true">{audioPlaying ? "Ⅱ" : "▶"}</span>
+          <span className="simple-audio-trigger-label">{audioPlaying ? "Pause Call" : "Hear Live Call"}</span>
+          <span className="simple-audio-trigger-waves" aria-hidden="true"><i /><i /><i /><i /></span>
+        </button>
+      </div>
+      <div className={`simple-carousel-stage${activeSlide === 1 ? " showing-phones" : ""}${activeSlide === 2 ? " showing-coffee" : ""}`}>
+        {slides.map((slide, index) => (
+          <section key={slide.label} className={`${index === activeSlide ? "active" : ""}${slide.className ? ` ${slide.className}` : ""}`} aria-hidden={index !== activeSlide}>
+            <p>{slide.label} · {index + 1} of 3</p>
+            <h2>{slide.title}</h2>
+            {slide.content}
+          </section>
+        ))}
+      </div>
+      <div className="simple-carousel-audio-progress" aria-hidden={!audioPlaying}>
+        <span style={{ width: `${audioProgress}%` }} />
+      </div>
+      <div className="simple-carousel-controls">
+        <button type="button" onClick={() => chooseSlide(activeSlide - 1)} aria-label="Previous demonstration slide">←</button>
+        <div role="group" aria-label="Choose a demonstration slide">
+          {slides.map((slide, index) => <button type="button" key={slide.label} className={index === activeSlide ? "active" : ""} onClick={() => chooseSlide(index)} aria-label={`Show ${slide.label}`} aria-pressed={index === activeSlide} />)}
+        </div>
+        <button type="button" onClick={() => chooseSlide(activeSlide + 1)} aria-label="Next demonstration slide">→</button>
+      </div>
+      <div className="simple-carousel-actions">
+        <button type="button" className="simple-secondary" onClick={onSampleCall}>See the Full Demo</button>
+        <button type="button" className="simple-primary" onClick={onStartTrial}>Start Your Free Trial</button>
+      </div>
+      <audio
+        ref={audioRef}
+        src={heroAudioSource}
+        preload="metadata"
+        onPause={() => setAudioPlaying(false)}
+        onPlay={() => setAudioPlaying(true)}
+        onEnded={() => { setAudioPlaying(false); setAudioProgress(0); }}
+        onTimeUpdate={(event) => {
+          const duration = Number(event.currentTarget.duration || heroAudioDurationSeconds || heroTranscriptTimings.durationSeconds);
+          const current = Number(event.currentTarget.currentTime || 0);
+          setAudioProgress(duration > 0 ? Math.min(100, (current / duration) * 100) : 0);
+        }}
+      />
+    </aside>
+  );
+}
+
+function BenefitGrid() {
+  return (
+    <div className="simple-benefits" aria-label="What My AI PA provides">
+      {coreBenefits.map(([icon, text]) => <div key={text}><span><Icon name={icon} /></span><strong>{text}</strong></div>)}
+    </div>
+  );
+}
+
+function FAQList() {
+  const [open, setOpen] = useState(0);
+  return (
+    <div className="simple-faqs">
+      {faqs.map(([question, answer], index) => (
+        <article key={question} className={open === index ? "open" : ""}>
+          <button type="button" aria-expanded={open === index} onClick={() => setOpen(open === index ? -1 : index)}>
+            <span>{question}</span><span aria-hidden="true">{open === index ? "−" : "+"}</span>
+          </button>
+          {open === index ? <p>{answer}</p> : null}
+        </article>
+      ))}
+    </div>
+  );
+}
+
+export default function IntuitiveLandingPage() {
+  useEffect(() => {
+    document.title = "My AI PA | AI Phone Answering for Trades";
+    if (!window.location.hash || window.location.hash === "#/") window.scrollTo?.(0, 0);
+  }, []);
+
+  const scrollToDemo = () => document.getElementById("see-it-work")?.scrollIntoView({ behavior: "smooth", block: "start" });
+
+  return (
+    <main className="simple-site" id="top">
+      <header className="simple-header">
+        <div className="simple-shell simple-header-inner">
+          <Brand />
+          <nav aria-label="Page sections">
+            <a href="#why-it-matters">Why it matters</a>
+            <a href="#how-it-works">How it works</a>
+            <a href="#see-it-work">See it work</a>
+            <a href="#pricing">Pricing</a>
+          </nav>
+          <div className="simple-header-actions">
+            <a className="simple-call-link" href="tel:+12495033301"><span>Call the live demo</span><strong>(249) 503-3301</strong></a>
+            <StartButton />
+          </div>
+        </div>
+      </header>
+
+      <section className="simple-hero">
+        <div className="simple-shell simple-hero-grid">
+          <div className="simple-hero-copy">
+            <div className="simple-contractor-burst" aria-label="Attention contractors!">
+              <span>Attention</span>
+              <strong>Contractors!</strong>
+            </div>
+            <h1>Never miss a call again!</h1>
+            <p className="simple-intro"><span>Introducing</span><strong>My AI PA:</strong><em>AI Telephone Answering Assistant</em></p>
+            <p className="simple-loss">
+              <span>Missed Calls = Lost Revenue $$</span>
+              <svg className="simple-loss-arrow" viewBox="0 0 62 34" aria-hidden="true">
+                <path d="M4 5 19 13 32 8 56 29" />
+                <path d="M44 29h12V17" />
+              </svg>
+            </p>
+            <HeroActionFlow />
+            <p className="simple-number-promise">Keep your existing business number.</p>
+            <div className="simple-hero-actions">
+              <StartButton />
+              <button type="button" className="simple-secondary" onClick={scrollToDemo}>See a Sample Call</button>
+            </div>
+            <div className="simple-trust" aria-label="Trial details"><span>✓ 14-Day Free Trial</span><span>✓ No Credit Card</span><span>✓ Cancel Anytime</span></div>
+          </div>
+          <AnimatedHeroProof onSampleCall={scrollToDemo} onStartTrial={() => { window.location.hash = "/signup"; }} />
+        </div>
+      </section>
+
+      <ScrollJourneyNav />
+
+      <section className="simple-section simple-problem" id="why-it-matters">
+        <div className="simple-shell">
+          <SectionHeading title="Your customer has a problem. They want to talk to someone now." body="If you cannot answer, they can call the next contractor. My AI PA picks up after three rings, hears what they need, and keeps the opportunity connected to your business instead of sending it to voicemail." />
+          <div className="simple-compare">
+            <article className="without"><span>Without help</span><h3>Phone rings unanswered</h3><p>Three rings. No answer. The caller still has a problem and no reason to wait.</p><div className="simple-outcome">The next contractor gets the opportunity</div></article>
+            <div className="simple-compare-arrow"><Icon name="arrow" /></div>
+            <article className="with"><span>With My AI PA</span><h3>Assistant answers live</h3><p>The caller gets an immediate response, explains what they need, and can get approved common questions answered. Their contact and job details reach your business, and they know your team will follow up.</p><div className="simple-outcome"><Icon name="check" /> You receive a callback-ready lead</div></article>
+          </div>
+        </div>
+      </section>
+
+      <section className="simple-section simple-how" id="how-it-works">
+        <div className="simple-shell">
+          <SectionHeading number="02" eyebrow="How it works" title="Three simple steps." body="Keep your same business number!" />
+          <div className="simple-how-grid">
+            <article><div className="simple-how-number"><Icon name="phone" /></div><span>Step 1</span><h3>My AI PA answers</h3><p>Your phone rings. When you do not answer, My AI PA takes over with a professional greeting.</p><strong className="simple-three-rings">AFTER 3 RINGS</strong></article>
+            <article className="simple-how-details"><div className="simple-how-number"><Icon name="clipboard" /></div><span>Step 2</span><h3>The right details are collected</h3><ul><li>Reason and service requested</li><li>Job details and address</li><li>Name and callback number</li><li>Preferred callback time</li><li>Desired timing or start date</li><li>Urgency, rate question and interest—when relevant</li></ul></article>
+            <article className="simple-how-handoffs"><div className="simple-how-number"><Icon name="message" /></div><span>Step 3</span><h3>Both sides receive useful follow-up</h3><div><strong>Business owner</strong><p>A compact, actionable, callback-ready lead summary.</p></div><div><strong>Customer</strong><p>Confirmation that the request was received and what happens next.</p></div></article>
+          </div>
+          <div className="simple-coffee">
+            <div><strong>We've got you covered 24/7.</strong><p>For about the <u>price of a cup of coffee per day</u> you get:</p></div>
+            <BenefitGrid />
+          </div>
+        </div>
+      </section>
+
+      <div id="see-it-work" className="simple-demo-wrap">
+        <TimsElectricalLiveDemo embedded onSignup={() => { window.location.hash = "/signup"; }} />
+      </div>
+
+      <section className="simple-section simple-receive">
+        <div className="simple-shell">
+          <SectionHeading number="04" eyebrow="What you receive" title="The details your team needs—already organized." />
+          <div className="simple-card-grid">{handoffCards.map(([title, body]) => <article key={title}><span><Icon name="check" /></span><h3>{title}</h3><p>{body}</p></article>)}</div>
+        </div>
+      </section>
+
+      <section className="simple-section simple-workflow">
+        <div className="simple-shell simple-workflow-layout">
+          <SectionHeading number="05" eyebrow="You stay in control" title="Extra coverage without replacing the way you work." body="Choose when it answers, what it says, and which calls still go to your staff first." />
+          <div className="simple-workflow-list">{workflowCards.map(([title, body]) => <article key={title}><span><Icon name="check" /></span><div><h3>{title}</h3><p>{body}</p></div></article>)}</div>
+        </div>
+      </section>
+
+      <section className="simple-section simple-trial-plan">
+        <div className="simple-shell">
+          <SectionHeading number="06" eyebrow="A low-risk field test" title="Trust it privately before a customer ever hears it." body="The 14-day trial is not a blind switch. Set it up, test it, and put it online only when you are comfortable." />
+          <div className="simple-trial-grid">
+            <article><span>1</span><div><p>First</p><h3>Build and test privately</h3><small>Add your services and common answers. Hear the receptionist and correct anything you do not like.</small></div></article>
+            <article><span>2</span><div><p>When ready</p><h3>Choose the calls it covers</h3><small>Start with after-hours, busy, or unanswered calls. Your existing number and staff stay in place.</small></div></article>
+            <article><span>3</span><div><p>Before deciding</p><h3>Review the actual handoffs</h3><small>See the caller, callback number, request, address, timing and next action that reached you—plus the confirmation the customer received.</small></div></article>
+          </div>
+          <div className="simple-honest-proof"><span><Icon name="check" /></span><div><strong>No fake promises. Hear it, test it, and decide from the calls.</strong><p>No credit card. No setup fee. Cancel anytime.</p></div><StartButton /></div>
+        </div>
+      </section>
+
+      <section className="simple-section simple-pricing" id="pricing">
+        <div className="simple-shell simple-pricing-layout">
+          <SectionHeading number="07" eyebrow="Trial and pricing" title="One plan. Clear minutes. No long contract." body="Know the monthly price, included minutes, and overage cost before you start." />
+          <article className="simple-price-card">
+            <div><span>Essential</span><p>Simple monthly plan</p></div>
+            <p className="simple-price"><strong>$79</strong>/month</p>
+            <ul><li><Icon name="check" />60 AI call minutes included</li><li><Icon name="check" />$0.25 per minute after 60 minutes</li><li><Icon name="check" />+ applicable taxes</li></ul>
+            <p>14-day free trial · No setup fee · Cancel anytime</p>
+            <p className="simple-price-control">Forward real calls only when your private test sounds right.</p>
+            <StartButton />
+          </article>
+        </div>
+      </section>
+
+      <section className="simple-section simple-setup">
+        <div className="simple-shell">
+          <SectionHeading number="08" eyebrow="Setup and common questions" title="Straight answers before you trust it with a call." />
+          <div className="simple-setup-grid">
+            <div className="simple-setup-steps"><article><span>1</span><p>Add your business and common answers</p></article><article><span>2</span><p>Hear a test call in your browser</p></article><article><span>3</span><p>Forward unanswered calls when you are ready</p></article></div>
+            <div><p className="simple-quick">Quick answers</p><FAQList /></div>
+          </div>
+        </div>
+      </section>
+
+      <section className="simple-final">
+        <div className="simple-shell">
+          <span>09 · Your decision</span>
+          <h2>The next ready-to-hire caller should reach your business—not your voicemail.</h2>
+          <p>Test My AI PA privately for 14 days. No credit card. Keep your current business number.</p>
+          <div><StartButton /><button type="button" className="simple-secondary light" onClick={scrollToDemo}>See a Sample Call</button></div>
+        </div>
+      </section>
+
+      <footer id="site-footer" className="simple-footer"><div className="simple-shell"><Brand /><p>Built in Ontario for busy Canadian service businesses across Hamilton, Grimsby, and the surrounding area.</p><nav aria-label="Legal and service information"><a href="/privacy.html">Privacy</a><a href="/terms.html">Terms</a><a href="/cookies.html">Cookies &amp; storage</a><a href="/status.html">Service status</a><a href="/calendar-data.html">Calendar data</a><a href="mailto:hello@myaipa.com">Contact</a></nav></div></footer>
+    </main>
+  );
+}

@@ -1,0 +1,277 @@
+{
+  "repair-request": [
+    {
+      "speaker": "assistant",
+      "startSeconds": 0.14,
+      "text": "Hello, are you looking for a new installation, repair, or maintenance today?"
+    },
+    {
+      "speaker": "caller",
+      "startSeconds": 4.79,
+      "text": "A repair, please. My kitchen outlet stopped working yesterday, right in the middle of making coffee."
+    },
+    {
+      "speaker": "assistant",
+      "startSeconds": 9.26,
+      "text": "I can collect that for the team. Is the outlet simply not working, or is it behaving differently?"
+    },
+    {
+      "speaker": "caller",
+      "startSeconds": 15.11,
+      "text": "It simply has no power. I even tried another appliance, just to be sure."
+    },
+    {
+      "speaker": "assistant",
+      "startSeconds": 19.87,
+      "text": "Thank you. Can I get your name?"
+    },
+    {
+      "speaker": "caller",
+      "startSeconds": 22.22,
+      "text": "Maya Chen."
+    },
+    {
+      "speaker": "assistant",
+      "startSeconds": 23.61,
+      "text": "What's the service address and city?"
+    },
+    {
+      "speaker": "caller",
+      "startSeconds": 25.88,
+      "text": "18 Lake Avenue in Grimsby."
+    },
+    {
+      "speaker": "assistant",
+      "startSeconds": 28.71,
+      "text": "What is the best number to reach you at?"
+    },
+    {
+      "speaker": "caller",
+      "startSeconds": 31.14,
+      "text": "Nine oh five, five five five, zero one six eight. Mornings are best."
+    },
+    {
+      "speaker": "assistant",
+      "startSeconds": 36.45,
+      "text": "To confirm, that's Maya Chen at 18 Lake Avenue in Grimsby, calling about a kitchen outlet with no power. Your number is nine oh five, five five five, zero one six eight, and mornings are best. I'll prepare that repair summary for the team."
+    },
+    {
+      "speaker": "caller",
+      "startSeconds": 51.27,
+      "text": "Perfect. Thanks for making that easy."
+    }
+  ],
+  "maintenance": [
+    {
+      "speaker": "assistant",
+      "startSeconds": 0.14,
+      "text": "Hello, are you looking for a new installation, repair, or maintenance today?"
+    },
+    {
+      "speaker": "caller",
+      "startSeconds": 4.76,
+      "text": "Maintenance. I bought an older home and would like a preventive electrical inspection before anything becomes a problem."
+    },
+    {
+      "speaker": "assistant",
+      "startSeconds": 10.42,
+      "text": "That makes sense. Is anything not working, or is this purely preventive?"
+    },
+    {
+      "speaker": "caller",
+      "startSeconds": 15.16,
+      "text": "Nothing is broken. I'm just planning ahead for once."
+    },
+    {
+      "speaker": "assistant",
+      "startSeconds": 18.23,
+      "text": "Can I get your name?"
+    },
+    {
+      "speaker": "caller",
+      "startSeconds": 19.78,
+      "text": "Daniel Ortiz."
+    },
+    {
+      "speaker": "assistant",
+      "startSeconds": 21.57,
+      "text": "What's the property address and city?"
+    },
+    {
+      "speaker": "caller",
+      "startSeconds": 24,
+      "text": "44 Maple Drive in Stoney Creek."
+    },
+    {
+      "speaker": "assistant",
+      "startSeconds": 26.83,
+      "text": "What is the best callback number and time?"
+    },
+    {
+      "speaker": "caller",
+      "startSeconds": 29.5,
+      "text": "Nine oh five, five five five, zero one four four. Weekday afternoons are ideal."
+    },
+    {
+      "speaker": "assistant",
+      "startSeconds": 35.46,
+      "text": "Thanks, Daniel. I have a preventive inspection request for 44 Maple Drive in Stoney Creek, with weekday afternoons preferred. Your callback number is nine oh five, five five five, zero one four four. I'll prepare that organized summary for the team."
+    },
+    {
+      "speaker": "caller",
+      "startSeconds": 49.81,
+      "text": "That's exactly what I needed. Have a good one."
+    }
+  ],
+  "unresolved-concern": [
+    {
+      "speaker": "assistant",
+      "startSeconds": 0.14,
+      "text": "Hello, are you looking for a new installation, repair, or maintenance today?"
+    },
+    {
+      "speaker": "caller",
+      "startSeconds": 4.44,
+      "text": "Actually, I'm an existing customer. I spoke with someone last week about a flickering hallway light, and I'm still waiting for an update."
+    },
+    {
+      "speaker": "assistant",
+      "startSeconds": 12.55,
+      "text": "I can document that and request a team callback. What update were you expecting from the team?"
+    },
+    {
+      "speaker": "caller",
+      "startSeconds": 18.58,
+      "text": "I just want to know the next step from a person on the team."
+    },
+    {
+      "speaker": "assistant",
+      "startSeconds": 22.46,
+      "text": "Understood. Can I get your name?"
+    },
+    {
+      "speaker": "caller",
+      "startSeconds": 24.73,
+      "text": "Aisha Patel."
+    },
+    {
+      "speaker": "assistant",
+      "startSeconds": 26.2,
+      "text": "What's the service address and city?"
+    },
+    {
+      "speaker": "caller",
+      "startSeconds": 28.87,
+      "text": "71 King Street in Hamilton."
+    },
+    {
+      "speaker": "assistant",
+      "startSeconds": 31.22,
+      "text": "What is the best callback number and time?"
+    },
+    {
+      "speaker": "caller",
+      "startSeconds": 34.31,
+      "text": "Nine oh five, five five five, zero one seven one. Evenings are best."
+    },
+    {
+      "speaker": "assistant",
+      "startSeconds": 40.56,
+      "text": "Thanks, Aisha. I'll prepare a callback request about the unresolved flickering hallway light at 71 King Street in Hamilton. Your number is nine oh five, five five five, zero one seven one, and evenings are best. I won't promise an outcome or response time, but the team will receive the full summary."
+    },
+    {
+      "speaker": "caller",
+      "startSeconds": 58.87,
+      "text": "Good. I appreciate you writing it down properly."
+    }
+  ],
+  "urgent-outage": [
+    {
+      "speaker": "assistant",
+      "startSeconds": 0.14,
+      "text": "Hello, are you looking for a new installation, repair, or maintenance today?"
+    },
+    {
+      "speaker": "caller",
+      "startSeconds": 4.8,
+      "text": "It's urgent. My entire home has lost power, but the neighbouring homes still have power."
+    },
+    {
+      "speaker": "assistant",
+      "startSeconds": 9.92,
+      "text": "Before we continue, is there smoke, fire, sparking, a burning smell, heat at the panel, a shock, or any immediate danger?"
+    },
+    {
+      "speaker": "caller",
+      "startSeconds": 18.4,
+      "text": "No, none of those. The power is just completely out."
+    },
+    {
+      "speaker": "assistant",
+      "startSeconds": 22.1,
+      "text": "I'll mark this for urgent review. Can I get your name?"
+    },
+    {
+      "speaker": "caller",
+      "startSeconds": 25.6,
+      "text": "Noah Wilson."
+    },
+    {
+      "speaker": "assistant",
+      "startSeconds": 26.92,
+      "text": "What's the address and city?"
+    },
+    {
+      "speaker": "caller",
+      "startSeconds": 28.64,
+      "text": "9 Orchard Lane in Grimsby."
+    },
+    {
+      "speaker": "assistant",
+      "startSeconds": 31.06,
+      "text": "What is the best callback number and time?"
+    },
+    {
+      "speaker": "caller",
+      "startSeconds": 33.78,
+      "text": "Nine oh five, five five five, zero one zero nine. I'm available right now."
+    },
+    {
+      "speaker": "assistant",
+      "startSeconds": 39.7,
+      "text": "To recap, Noah Wilson reports a complete home outage at 9 Orchard Lane in Grimsby while neighbouring homes still have power. No immediate danger indicators were reported. Your number is nine oh five, five five five, zero one zero nine, and you're available now. I'll prepare a priority summary, but this is not a dispatch or arrival-time promise."
+    },
+    {
+      "speaker": "caller",
+      "startSeconds": 62.38,
+      "text": "Understood. Thanks for taking it seriously."
+    }
+  ],
+  "safety-redirect": [
+    {
+      "speaker": "assistant",
+      "startSeconds": 0.14,
+      "text": "Hello, are you looking for a new installation, repair, or maintenance today?"
+    },
+    {
+      "speaker": "caller",
+      "startSeconds": 4.62,
+      "text": "I can see sparks and smoke coming from a wall outlet."
+    },
+    {
+      "speaker": "assistant",
+      "startSeconds": 7.88,
+      "text": "Please leave the area immediately and call 911 from a safe location. Do not touch the outlet, electrical equipment, or wait for a service callback. This demonstration cannot provide emergency dispatch."
+    },
+    {
+      "speaker": "caller",
+      "startSeconds": 20.2,
+      "text": "I'm leaving now and calling 911 from outside."
+    },
+    {
+      "speaker": "assistant",
+      "startSeconds": 23.34,
+      "text": "Good. Keep moving to safety and call 911 now."
+    }
+  ]
+}
