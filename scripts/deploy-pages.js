@@ -25,6 +25,7 @@ const stagePaths = [
   "docs/favicon.ico",
   "docs/logo192.png",
   "docs/logo512.png",
+  "docs/proof",
   "docs/static",
 ];
 const existingStagePaths = stagePaths.filter((stagePath) => require("fs").existsSync(rootPath(stagePath)));
