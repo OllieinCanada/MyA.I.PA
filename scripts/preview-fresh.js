@@ -7,9 +7,12 @@ const portArg = process.argv.find((arg) => arg.startsWith("--port="));
 const startPort = Number(portArg ? portArg.split("=")[1] : process.env.PORT || "3000");
 const maxAttemptsArg = process.argv.find((arg) => arg.startsWith("--max-attempts="));
 const maxAttempts = Number(maxAttemptsArg ? maxAttemptsArg.split("=")[1] : "10");
+const timeoutSecondsArg = process.argv.find((arg) => arg.startsWith("--timeout-seconds="));
+const timeoutMs = Number(timeoutSecondsArg ? timeoutSecondsArg.split("=")[1] : "120") * 1000;
 const hostArg = process.argv.find((arg) => arg.startsWith("--host="));
 const host = hostArg ? hostArg.split("=").slice(1).join("=") : process.env.HOST || "127.0.0.1";
 const lanMode = process.argv.includes("--lan") || host === "0.0.0.0";
+const loopbackHost = host === "127.0.0.1" || host === "localhost" || host === "::1";
 
 function getLanAddresses() {
   return Object.values(os.networkInterfaces())
@@ -44,7 +47,7 @@ async function waitForServer(port) {
   const startedAt = Date.now();
   let lastError = "";
 
-  while (Date.now() - startedAt < 45000) {
+  while (Date.now() - startedAt < timeoutMs) {
     try {
       const response = await fetch(url);
       if (response.ok) return url;
@@ -55,7 +58,7 @@ async function waitForServer(port) {
     await new Promise((resolve) => setTimeout(resolve, 1200));
   }
 
-  throw new Error(`Preview did not respond at ${url} within 45 seconds. Last error: ${lastError}`);
+  throw new Error(`Preview did not respond at ${url} within ${Math.round(timeoutMs / 1000)} seconds. Last error: ${lastError}`);
 }
 
 async function main() {
@@ -71,6 +74,9 @@ async function main() {
       BROWSER: "none",
       HOST: host,
       PORT: String(port),
+      // CRA 5 creates an invalid empty allowedHosts entry when a proxy is
+      // configured and the dev server is bound only to loopback.
+      ...(loopbackHost ? { DANGEROUSLY_DISABLE_HOST_CHECK: "true" } : {}),
     },
     stdio: ["ignore", out, err],
   });

@@ -25,8 +25,20 @@ function getTwilioSmsConfig(env = process.env) {
   return {
     accountSid: String(env.TWILIO_ACCOUNT_SID || "").trim(),
     authToken: String(env.TWILIO_AUTH_TOKEN || "").trim(),
+    apiKeySid: String(env.TWILIO_API_KEY_SID || "").trim(),
+    apiKeySecret: String(env.TWILIO_API_KEY_SECRET || "").trim(),
     from: String(env.TWILIO_FROM_NUMBER || env.OWNER_SMS_FROM || "").trim(),
+    statusCallbackUrl: String(env.TWILIO_STATUS_CALLBACK_URL || "").trim(),
     apiBaseUrl: String(env.TWILIO_API_BASE_URL || "https://api.twilio.com").trim().replace(/\/+$/, ""),
+  };
+}
+
+function getTwilioRestCredentials(config) {
+  const hasApiKey = Boolean(config.apiKeySid && config.apiKeySecret);
+  return {
+    username: hasApiKey ? config.apiKeySid : config.accountSid,
+    password: hasApiKey ? config.apiKeySecret : config.authToken,
+    mode: hasApiKey ? "api_key" : "auth_token",
   };
 }
 
@@ -43,7 +55,8 @@ async function sendSmsViaTwilio({
 
   const normalizedTo = normalizeE164(to, "to");
   const config = getTwilioSmsConfig(env);
-  const configured = Boolean(config.accountSid && config.authToken && config.from);
+  const credentials = getTwilioRestCredentials(config);
+  const configured = Boolean(config.accountSid && credentials.username && credentials.password && config.from);
   if (!configured) {
     if (String(env.NODE_ENV || "").toLowerCase() === "production") {
       throw createHttpError("Twilio SMS is not configured.", 503);
@@ -75,12 +88,15 @@ async function sendSmsViaTwilio({
 
   const normalizedFrom = normalizeE164(config.from, "TWILIO_FROM_NUMBER");
   const body = new URLSearchParams({ To: normalizedTo, From: normalizedFrom, Body: text });
+  if (/^https:\/\//i.test(config.statusCallbackUrl)) {
+    body.set("StatusCallback", config.statusCallbackUrl);
+  }
   const response = await fetchImpl(
     `${config.apiBaseUrl}/2010-04-01/Accounts/${encodeURIComponent(config.accountSid)}/Messages.json`,
     {
       method: "POST",
       headers: {
-        authorization: `Basic ${Buffer.from(`${config.accountSid}:${config.authToken}`).toString("base64")}`,
+        authorization: `Basic ${Buffer.from(`${credentials.username}:${credentials.password}`).toString("base64")}`,
         "content-type": "application/x-www-form-urlencoded;charset=UTF-8",
       },
       body: body.toString(),
@@ -108,6 +124,7 @@ async function sendSmsViaTwilio({
 
 module.exports = {
   getTwilioSmsConfig,
+  getTwilioRestCredentials,
   normalizeE164,
   sendSmsViaTwilio,
 };

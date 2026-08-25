@@ -68,6 +68,60 @@ test("configured Twilio requests use Basic auth and form-encoded message fields"
   assert.equal(body.get("Body"), "New service request");
 });
 
+test("Twilio REST requests prefer API keys and include an HTTPS delivery callback", async () => {
+  let captured;
+  const fetchImpl = async (url, options) => {
+    captured = { url, options };
+    return {
+      ok: true,
+      status: 201,
+      json: async () => ({ sid: "SM_api_key", status: "queued" }),
+    };
+  };
+
+  await sendSmsViaTwilio({
+    to: "+12495033301",
+    message: "Delivery-aware message",
+    env: {
+      NODE_ENV: "production",
+      TWILIO_ACCOUNT_SID: "AC_test_123",
+      TWILIO_AUTH_TOKEN: "master-token-should-not-be-used",
+      TWILIO_API_KEY_SID: "SK_test_123",
+      TWILIO_API_KEY_SECRET: "api-key-secret",
+      TWILIO_FROM_NUMBER: "+19055550199",
+      TWILIO_STATUS_CALLBACK_URL: "https://api.example.test/api/twilio/message-status",
+    },
+    fetchImpl,
+    suppressionChecker: async () => false,
+  });
+
+  const expectedAuth = `Basic ${Buffer.from("SK_test_123:api-key-secret").toString("base64")}`;
+  assert.equal(captured.options.headers.authorization, expectedAuth);
+  const body = new URLSearchParams(captured.options.body);
+  assert.equal(body.get("StatusCallback"), "https://api.example.test/api/twilio/message-status");
+});
+
+test("non-HTTPS delivery callback URLs are not sent to Twilio", async () => {
+  let capturedBody = "";
+  await sendSmsViaTwilio({
+    to: "+12495033301",
+    message: "Safe callback test",
+    env: {
+      NODE_ENV: "production",
+      TWILIO_ACCOUNT_SID: "AC_test_123",
+      TWILIO_AUTH_TOKEN: "test-token",
+      TWILIO_FROM_NUMBER: "+19055550199",
+      TWILIO_STATUS_CALLBACK_URL: "http://localhost:3000/message-status",
+    },
+    fetchImpl: async (_url, options) => {
+      capturedBody = options.body;
+      return { ok: true, status: 201, json: async () => ({ sid: "SM_no_callback", status: "queued" }) };
+    },
+    suppressionChecker: async () => false,
+  });
+  assert.equal(new URLSearchParams(capturedBody).has("StatusCallback"), false);
+});
+
 test("provider failures return a safe gateway error", async () => {
   const fetchImpl = async () => ({
     ok: false,

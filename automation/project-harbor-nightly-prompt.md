@@ -12,4 +12,5 @@ Required workflow:
 6. Reuse existing tools. Do not install dependencies or alter the portable Godot/Blender toolchains.
 7. Run all six headless Godot suites listed in `AGENTS.md`. If any fail, fix the local regression or revert only your own run's edits.
 8. If all checks pass and changes are meaningful, update `CHANGELOG.md` concisely and create one local Git commit beginning `Codex automation:`. Never push.
-9. Report what changed, verification results, the next best task, and anything requiring Oliver's approval. A safe no-op is acceptable when no bounded improvement is justified.
+9. A safe no-op is acceptable when no bounded improvement is justified.
+10. End with exactly these headings: `## Outcome`, `## Changed`, `## Verification`, `## Approval needed`, `## Next task`, and `## External actions`. State `None` under approval or external actions when applicable.

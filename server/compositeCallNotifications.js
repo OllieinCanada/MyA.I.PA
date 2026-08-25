@@ -237,9 +237,14 @@ async function checkSmsPermission({ to, env, fetchImpl }) {
 async function sendTwilioMessage({ to, from, body, notificationKey, env, fetchImpl, btoaImpl, URLSearchParamsImpl }) {
   const accountSid = cleanText(env.TWILIO_ACCOUNT_SID, 80);
   const authToken = String(env.TWILIO_AUTH_TOKEN || "").trim();
+  const apiKeySid = cleanText(env.TWILIO_API_KEY_SID, 80);
+  const apiKeySecret = String(env.TWILIO_API_KEY_SECRET || "").trim();
+  const hasApiKey = Boolean(apiKeySid && apiKeySecret);
+  const restUsername = hasApiKey ? apiKeySid : accountSid;
+  const restPassword = hasApiKey ? apiKeySecret : authToken;
   const normalizedTo = normalizeE164(to);
   const normalizedFrom = normalizeE164(from);
-  if (!accountSid || !authToken) {
+  if (!accountSid || !restUsername || !restPassword) {
     return { attempted: false, sent: false, status: "not_configured", errorCode: "twilio_not_configured", notificationKey };
   }
   if (!normalizedTo || !normalizedFrom) {
@@ -266,7 +271,7 @@ async function sendTwilioMessage({ to, from, body, notificationKey, env, fetchIm
       {
         method: "POST",
         headers: {
-          Authorization: `Basic ${btoaImpl(`${accountSid}:${authToken}`)}`,
+          Authorization: `Basic ${btoaImpl(`${restUsername}:${restPassword}`)}`,
           "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
         },
         body: params.toString(),
@@ -448,6 +453,8 @@ function getVapiCompositeToolDefinition() {
     environmentVariableNames: [
       "TWILIO_ACCOUNT_SID",
       "TWILIO_AUTH_TOKEN",
+      "TWILIO_API_KEY_SID",
+      "TWILIO_API_KEY_SECRET",
       "DEFAULT_FROM_NUMBER",
       "DEFAULT_OWNER_TO_NUMBER",
       "OWNER_SMS_ENABLED",

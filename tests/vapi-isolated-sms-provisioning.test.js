@@ -67,6 +67,22 @@ test("isolated tool payload keeps all routing outside model parameters", () => {
   assert.deepEqual(payload.rejectionPlan, toolRejectionPlan());
 });
 
+test("isolated tool payload can use a scoped Twilio API key without a REST Auth Token", () => {
+  const payload = buildIsolatedToolPayload({
+    aiNumber,
+    ownerNumber,
+    twilioAccountSid: "AC_TEST",
+    twilioApiKeySid: "SK_TEST",
+    twilioApiKeySecret: "API_SECRET",
+    ...suppression,
+  });
+  const environment = Object.fromEntries(payload.environmentVariables.map((item) => [item.name, item.value]));
+  assert.equal(environment.TWILIO_AUTH_TOKEN, "");
+  assert.equal(environment.TWILIO_API_KEY_SID, "SK_TEST");
+  assert.equal(environment.TWILIO_API_KEY_SECRET, "API_SECRET");
+  assert.match(payload.code, /TWILIO_API_KEY_SID/);
+});
+
 test("tool confirmation accepts natural approval without accepting ambiguity", () => {
   const raw = toolRejectionPlan().conditions[0].conditions[0].regex;
   const acceptance = new RegExp(raw.replace(/^\(\?i\)/, ""), "i");

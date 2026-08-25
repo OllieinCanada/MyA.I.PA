@@ -1,0 +1,80 @@
+{
+  "version": 1,
+  "ownerLogin": "OllieinCanada",
+  "lookbackDays": 45,
+  "maxResultsPerSearch": 20,
+  "maxRepositoriesToQualify": 24,
+  "reportLimit": 3,
+  "minimumScore": 60,
+  "familiarRepositories": [
+    {
+      "name": "sashiko-dev/sashiko",
+      "familiarity": 30,
+      "reason": "Existing Issue 334 branch, regression fixtures, prompt work, and maintainer context"
+    },
+    {
+      "name": "Noveum/orbit",
+      "familiarity": 8,
+      "reason": "Strong TypeScript, React, testing, and agent-tooling fit"
+    }
+  ],
+  "skillSignals": [
+    "ai",
+    "llm",
+    "prompt",
+    "false positive",
+    "rust",
+    "typescript",
+    "javascript",
+    "react",
+    "next.js",
+    "node",
+    "test",
+    "testing"
+  ],
+  "searches": [
+    {
+      "id": "sashiko-focus",
+      "priority": 5,
+      "query": "repo:sashiko-dev/sashiko is:issue is:open no:assignee -linked:pr"
+    },
+    {
+      "id": "bounded-help-wanted",
+      "priority": 4,
+      "query": "is:issue is:open no:assignee -linked:pr label:\"good first issue\" label:\"help wanted\""
+    },
+    {
+      "id": "false-positive-regressions",
+      "priority": 4,
+      "query": "is:issue is:open no:assignee -linked:pr \"false positive\""
+    }
+  ],
+  "watchIssues": [
+    "https://github.com/sashiko-dev/sashiko/issues/446",
+    "https://github.com/Noveum/orbit/issues/347",
+    "https://github.com/sashiko-dev/sashiko/issues/439",
+    "https://github.com/sashiko-dev/sashiko/issues/448"
+  ],
+  "knownCollisions": [
+    {
+      "url": "https://github.com/sashiko-dev/sashiko/issues/446",
+      "reason": "Maintainer PR #451 is already open and reports five clean validation runs"
+    },
+    {
+      "url": "https://github.com/sashiko-dev/sashiko/issues/439",
+      "reason": "The stale ext4/HEAD root cause is already covered by Oliver's open PR #373; strengthen that PR instead of opening duplicate work"
+    }
+  ],
+  "approvalPolicy": {
+    "automatic": [
+      "Read public issue and repository metadata",
+      "Rank and write private local reports",
+      "Run a local feasibility audit after the candidate enters an available WIP lane"
+    ],
+    "requiresApproval": [
+      "Displace an active control-centre WIP item",
+      "Comment on or claim an issue",
+      "Fork, push, open a pull request, or publish contribution details"
+    ]
+  }
+}

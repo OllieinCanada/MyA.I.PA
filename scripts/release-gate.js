@@ -5,11 +5,16 @@ const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
 const skipPages = process.argv.includes("--skip-pages");
 const backendTestFiles = [
   "tests/backend-security.test.js",
+  "tests/make-2026-readiness.test.js",
+  "tests/make-scenario-inspection.test.js",
+  "tests/make-signup-webhook.test.js",
   "tests/persistent-security-state.test.js",
   "tests/sms-suppression.test.js",
   "tests/twilio-sms.test.js",
+  "tests/twilio-2026-readiness.test.js",
   "tests/vapi-sms.test.js",
   "tests/vapi-call-diagnostics.test.js",
+  "tests/vapi-2026-readiness.test.js",
   "tests/vapi-isolated-sms-provisioning.test.js",
   "tests/vapi-tool-calls.test.js",
   "tests/vapi-tool-security.test.js",
@@ -25,9 +30,14 @@ const backendTestFiles = [
   "tests/trial-usage-policy.test.js",
   "tests/voice-signup.test.js",
 ];
+const backendTestSteps = backendTestFiles.map((testFile) => [
+  `Backend test: ${path.basename(testFile)}`,
+  nodeCommand(),
+  ["--test", testFile],
+]);
 
 const steps = [
-  ["Backend security and provider unit tests", nodeCommand(), ["--test", ...backendTestFiles]],
+  ...backendTestSteps,
   ["Frontend security and signup regression tests", npmCommand, ["test", "--", "--watchAll=false"]],
   ["Legal draft package validation", nodeCommand(), [path.join("scripts", "validate-legal-drafts.js")]],
   ["Operational readiness validation", nodeCommand(), [path.join("scripts", "validate-operational-readiness.js")]],

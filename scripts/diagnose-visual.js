@@ -27,7 +27,7 @@ const viewports = [
 
 const requiredText = {
   home: ["Answers the phone", "Start Free Trial", "Play Recorded Sample", "Owner Phone", "Both you and the customer"],
-  signup: ["Business setup", "Choose your trade"],
+  signup: ["Create your AI phone assistant", "Choose your trade"],
   dashboard: ["Owner dashboard", "Signup email", "Welcome back"],
   admin: ["Admin Dashboard", "Admin Password", "Unlock Admin"],
 };

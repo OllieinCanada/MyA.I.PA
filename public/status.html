@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en-CA"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="Live point-in-time service checks for the My AI PA website, API, and database readiness."><link rel="canonical" href="https://www.myaipa.ca/status.html"><link rel="stylesheet" href="./legal.css"><title>Service Status | My AI PA</title></head>
+<body><header class="hero"><div class="wrap"><a class="brand" href="./">My AI PA</a><p class="eyebrow">Live service check</p><h1>Service status</h1><p class="updated" id="last-checked">Preparing live checks…</p><p class="lede" id="overall-message" aria-live="polite">Checking the systems that support My AI PA.</p></div></header>
+<main class="content wrap"><div class="grid">
+<section class="card"><div class="status-summary"><div><h2>Current checks</h2><p>These results are fetched directly from the production service. They do not represent historical uptime or a contractual service-level guarantee.</p></div><button class="button" id="refresh-status" type="button">Check again</button></div><div class="status-list">
+<div class="status-row"><div><p class="status-name">Public website</p><p class="status-detail">This status page loaded successfully.</p></div><span class="status-badge ok">Operational</span></div>
+<div class="status-row"><div><p class="status-name">Application API</p><p class="status-detail" id="api-detail">Waiting for the API response.</p></div><span class="status-badge checking" id="api-status">Checking</span></div>
+<div class="status-row"><div><p class="status-name">Database readiness</p><p class="status-detail" id="database-detail">Waiting for the readiness response.</p></div><span class="status-badge checking" id="database-status">Checking</span></div>
+</div></section>
+<section class="card"><h2>What this page means</h2><p>An operational result means the service responded to this browser’s point-in-time check. A degraded result means the check failed, timed out, or reported that a required dependency was unavailable. Call delivery and text delivery also depend on third-party telecommunications networks and are not fully measured by this page.</p><p>If a live check is degraded, retry after a minute. Do not rely on this page as the only way to detect or report an urgent issue.</p></section>
+</div></main>
+<footer class="wrap"><span>© My AI PA</span><nav><a href="./">Home</a><a href="./privacy.html">Privacy</a><a href="./terms.html">Terms</a><a href="./cookies.html">Cookies &amp; storage</a><a href="./status.html">Service status</a><a href="./calendar-data.html">Calendar data</a></nav></footer>
+<script>
+(function () {
+  "use strict";
+  var local = /^(localhost|127\.0\.0\.1|::1)$/.test(window.location.hostname);
+  var apiBase = local ? "http://" + (window.location.hostname === "::1" ? "[::1]" : window.location.hostname) + ":8787" : "https://api.myaipa.ca";
+  var refreshButton = document.getElementById("refresh-status");
+  var lastChecked = document.getElementById("last-checked");
+  var overallMessage = document.getElementById("overall-message");
+
+  function setStatus(prefix, state, detail) {
+    var badge = document.getElementById(prefix + "-status");
+    document.getElementById(prefix + "-detail").textContent = detail;
+    badge.className = "status-badge " + state;
+    badge.textContent = state === "ok" ? "Operational" : state === "error" ? "Degraded" : "Checking";
+  }
+
+  async function check(path) {
+    var controller = new AbortController();
+    var timer = window.setTimeout(function () { controller.abort(); }, 6000);
+    try {
+      var response = await fetch(apiBase + path, { cache: "no-store", credentials: "omit", signal: controller.signal });
+      var payload = await response.json().catch(function () { return {}; });
+      return { ok: response.ok && payload.ok === true, status: response.status, payload: payload };
+    } catch (error) {
+      return { ok: false, status: 0, payload: {}, error: error && error.name === "AbortError" ? "The check timed out." : "The service could not be reached." };
+    } finally {
+      window.clearTimeout(timer);
+    }
+  }
+
+  async function refresh() {
+    refreshButton.disabled = true;
+    setStatus("api", "checking", "Contacting the application API.");
+    setStatus("database", "checking", "Checking the database dependency.");
+    overallMessage.textContent = "Checking the systems that support My AI PA.";
+    var results = await Promise.all([check("/api/health"), check("/api/health/ready")]);
+    var api = results[0];
+    var ready = results[1];
+    var databaseOk = ready.ok && ready.payload && ready.payload.dependencies && ready.payload.dependencies.database === "reachable";
+    setStatus("api", api.ok ? "ok" : "error", api.ok ? "The production API responded normally." : (api.error || "The API returned status " + api.status + "."));
+    setStatus("database", databaseOk ? "ok" : "error", databaseOk ? "The production database passed its readiness check." : (ready.error || "The readiness check returned status " + ready.status + "."));
+    overallMessage.textContent = api.ok && databaseOk ? "All checked systems are operational." : "One or more checked systems are currently degraded.";
+    lastChecked.textContent = "Last checked " + new Date().toLocaleString("en-CA", { dateStyle: "medium", timeStyle: "medium" });
+    refreshButton.disabled = false;
+  }
+
+  refreshButton.addEventListener("click", refresh);
+  refresh();
+  window.setInterval(refresh, 60000);
+}());
+</script></body></html>

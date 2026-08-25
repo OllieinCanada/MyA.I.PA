@@ -15,6 +15,14 @@ const { prisma } = require("./prisma");
 const { fetchPublicWebsite } = require("./safeWebsiteFetch");
 const { sendSmsViaTwilio } = require("./twilioSms");
 const {
+  buildMakeSignupEventKey,
+  buildMakeSignupHeaders,
+  createTimeoutSignal,
+  getMakeRequestId,
+  parseMakeSignupTimeoutMs,
+  validateMakeWebhookUrl,
+} = require("./makeSignupWebhook");
+const {
   classifySmsPreference,
   forwardSmsToUpstream,
   getSmsSuppression,
@@ -1838,6 +1846,8 @@ async function provisionIsolatedSmsForAssistant({ assistantId, aiNumber, ownerNu
     ownerNumber,
     twilioAccountSid: TWILIO_ACCOUNT_SID,
     twilioAuthToken: TWILIO_AUTH_TOKEN,
+    twilioApiKeySid: TWILIO_API_KEY_SID,
+    twilioApiKeySecret: TWILIO_API_KEY_SECRET,
     statusCallbackUrl: TWILIO_STATUS_CALLBACK_URL,
     suppressionCheckUrl: SMS_SUPPRESSION_CHECK_URL,
     suppressionApiKey: SMS_SUPPRESSION_API_KEY,
@@ -6623,34 +6633,51 @@ async function sendMakeSignupCompleted(payload) {
     throw err;
   }
 
-  const headers = {
-    "Content-Type": "application/json",
-  };
-
-  if (apiKey) {
-    headers["x-make-apikey"] = apiKey;
+  let safeUrl;
+  try {
+    safeUrl = validateMakeWebhookUrl(url, process.env.MAKE_SIGNUP_WEBHOOK_ALLOWED_HOSTS);
+  } catch (error) {
+    const err = new Error(error?.message || "MAKE_SIGNUP_WEBHOOK_URL is invalid.");
+    err.statusCode = 500;
+    err.code = "MAKE_SIGNUP_INVALID_URL";
+    throw err;
   }
+
+  const eventKey = buildMakeSignupEventKey(payload);
+  const headers = buildMakeSignupHeaders({ apiKey, eventKey });
+  const timeoutMs = parseMakeSignupTimeoutMs(process.env.MAKE_SIGNUP_TIMEOUT_MS);
+  const startedAt = Date.now();
 
   let response;
   try {
-    response = await fetch(url, {
+    response = await fetch(safeUrl, {
       method: "POST",
       headers,
       body: JSON.stringify(payload),
+      signal: createTimeoutSignal(timeoutMs),
     });
   } catch (error) {
-    console.error("[make:signup] webhook request failed", { message: error?.message || String(error) });
+    console.error("[make:signup] webhook request failed", {
+      eventKey,
+      durationMs: Date.now() - startedAt,
+      reason: error?.name === "TimeoutError" || error?.name === "AbortError" ? "timeout" : "network_error",
+    });
     const err = new Error("Make webhook could not be reached.");
     err.statusCode = 502;
-    err.code = "MAKE_SIGNUP_UNREACHABLE";
+    err.code = error?.name === "TimeoutError" || error?.name === "AbortError"
+      ? "MAKE_SIGNUP_TIMEOUT"
+      : "MAKE_SIGNUP_UNREACHABLE";
     throw err;
   }
 
   const rawText = await response.text();
+  const requestId = getMakeRequestId(response);
   if (!response.ok) {
     console.error("[make:signup] webhook rejected request", {
       status: response.status,
-      body: rawText.slice(0, 500),
+      eventKey,
+      requestId,
+      durationMs: Date.now() - startedAt,
     });
     const err = new Error("Make webhook rejected the signup handoff.");
     err.statusCode = 502;
@@ -6663,6 +6690,9 @@ async function sendMakeSignupCompleted(payload) {
     status: response.status,
     body: rawText,
     data: parseJsonObject(rawText),
+    eventKey,
+    requestId,
+    durationMs: Date.now() - startedAt,
   };
 }
 

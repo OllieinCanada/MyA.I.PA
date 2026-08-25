@@ -157,6 +157,8 @@ function buildIsolatedToolPayload({
   ownerNumber,
   twilioAccountSid,
   twilioAuthToken,
+  twilioApiKeySid = "",
+  twilioApiKeySecret = "",
   statusCallbackUrl = "",
   suppressionCheckUrl,
   suppressionApiKey,
@@ -164,7 +166,9 @@ function buildIsolatedToolPayload({
   const aiPhone = normalizeE164(aiNumber);
   const ownerPhone = normalizeE164(ownerNumber);
   if (!aiPhone || !ownerPhone) throw new Error("Valid AI and owner phone numbers are required.");
-  if (!String(twilioAccountSid || "").trim() || !String(twilioAuthToken || "").trim()) {
+  const hasApiKey = Boolean(String(twilioApiKeySid || "").trim() && String(twilioApiKeySecret || "").trim());
+  const hasAuthToken = Boolean(String(twilioAuthToken || "").trim());
+  if (!String(twilioAccountSid || "").trim() || (!hasApiKey && !hasAuthToken)) {
     throw new Error("Twilio credentials are required for isolated SMS routing.");
   }
   if (!/^https:\/\//i.test(String(suppressionCheckUrl || "").trim()) || !String(suppressionApiKey || "").trim()) {
@@ -182,7 +186,9 @@ function buildIsolatedToolPayload({
     code: definition.code,
     environmentVariables: [
       { name: "TWILIO_ACCOUNT_SID", value: String(twilioAccountSid).trim() },
-      { name: "TWILIO_AUTH_TOKEN", value: String(twilioAuthToken).trim() },
+      { name: "TWILIO_AUTH_TOKEN", value: String(twilioAuthToken || "").trim() },
+      { name: "TWILIO_API_KEY_SID", value: String(twilioApiKeySid || "").trim() },
+      { name: "TWILIO_API_KEY_SECRET", value: String(twilioApiKeySecret || "").trim() },
       { name: "DEFAULT_FROM_NUMBER", value: aiPhone },
       { name: "DEFAULT_OWNER_TO_NUMBER", value: ownerPhone },
       { name: "CALLER_NUMBER", value: "{{ customer.number }}" },
@@ -276,6 +282,9 @@ function inspectIsolatedConfiguration({ assistant, tool, aiNumber, ownerNumber }
     ownerProtected: normalizeE164(env.DEFAULT_OWNER_TO_NUMBER) === ownerPhone,
     callerProtected: env.CALLER_NUMBER === "{{ customer.number }}",
     callIdProtected: env.CALL_ID === "{{ call.id }}",
+    restCredentialsProtected: Boolean(env.TWILIO_ACCOUNT_SID)
+      && Boolean(env.TWILIO_AUTH_TOKEN || (env.TWILIO_API_KEY_SID && env.TWILIO_API_KEY_SECRET))
+      && code.includes("TWILIO_API_KEY_SID"),
     suppressionCheckProtected: /^https:\/\//i.test(env.SMS_SUPPRESSION_CHECK_URL)
       && Boolean(env.SMS_SUPPRESSION_API_KEY)
       && code.includes("checkSmsPermission")
@@ -339,6 +348,8 @@ async function provisionIsolatedSmsRouting({
   ownerNumber,
   twilioAccountSid,
   twilioAuthToken,
+  twilioApiKeySid,
+  twilioApiKeySecret,
   statusCallbackUrl,
   suppressionCheckUrl,
   suppressionApiKey,
@@ -354,6 +365,8 @@ async function provisionIsolatedSmsRouting({
     ownerNumber,
     twilioAccountSid,
     twilioAuthToken,
+    twilioApiKeySid,
+    twilioApiKeySecret,
     statusCallbackUrl,
     suppressionCheckUrl,
     suppressionApiKey,

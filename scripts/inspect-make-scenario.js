@@ -1,8 +1,9 @@
+const crypto = require("crypto");
 const { loadProjectEnv } = require("./_helpers");
 
 const env = loadProjectEnv();
 const baseUrl = String(env.MAKE_API_BASE_URL || "https://us2.make.com/api/v2").replace(/\/+$/, "");
-const token = String(env.MAKE_API_TOKEN || env.MAKE_TOKEN || env.MAKE_API_KEY || "").trim();
+const token = String(env.MAKE_AUDIT_API_TOKEN || env.MAKE_API_TOKEN || env.MAKE_TOKEN || env.MAKE_API_KEY || "").trim();
 const scenarioId = String(process.argv[2] || "4482406").trim();
 
 async function getJson(path) {
@@ -25,18 +26,50 @@ async function getJson(path) {
   return body;
 }
 
+const SAFE_PATH_HOSTS = new Set([
+  "api.myaipa.ca",
+  "api.twilio.com",
+  "api.vapi.ai",
+  "timeapi.io",
+]);
+
+function fingerprint(value) {
+  return crypto.createHash("sha256").update(String(value || "")).digest("hex").slice(0, 12);
+}
+
+function isMakeWebhookHost(hostname) {
+  return /^hook(?:\.[a-z0-9-]+)*\.make\.com$/i.test(String(hostname || ""));
+}
+
+function safeUrl(value) {
+  try {
+    const url = new URL(String(value || ""));
+    const origin = `${url.protocol}//${url.host}`;
+    if (isMakeWebhookHost(url.hostname)) {
+      return `${origin}/[redacted-webhook-path]#${fingerprint(url.pathname)}`;
+    }
+    if (SAFE_PATH_HOSTS.has(url.hostname.toLowerCase())) {
+      return `${origin}${url.pathname}`;
+    }
+    if (!url.pathname || url.pathname === "/") return origin;
+    return `${origin}/[path:${fingerprint(url.pathname)}]`;
+  } catch {
+    return "(configured URL)";
+  }
+}
+
+function redactEmbeddedUrls(value) {
+  return String(value || "").replace(/https?:\/\/[^\s\"'<>]+/gi, (match) => safeUrl(match));
+}
+
 function safeString(value) {
   const text = String(value || "").trim();
   if (!text) return "";
   if (/^https?:\/\//i.test(text)) {
-    try {
-      const url = new URL(text);
-      return `${url.protocol}//${url.host}${url.pathname}`;
-    } catch {
-      return "(configured URL)";
-    }
+    return safeUrl(text);
   }
-  return text.length > 800 ? `${text.slice(0, 800)}…` : text;
+  const redacted = redactEmbeddedUrls(text);
+  return redacted.length > 800 ? `${redacted.slice(0, 800)}…` : redacted;
 }
 
 function safeObject(value, parentKey = "") {
@@ -76,7 +109,7 @@ function flattenModules(flow, route = "root", target = []) {
 }
 
 async function main() {
-  if (!token) throw new Error("MAKE_API_TOKEN is not configured.");
+  if (!token) throw new Error("MAKE_AUDIT_API_TOKEN or MAKE_API_TOKEN is not configured.");
   if (!scenarioId) throw new Error("A Make scenario ID is required.");
 
   const [scenarioResponse, blueprintResponse] = await Promise.all([
@@ -96,7 +129,17 @@ async function main() {
   }, null, 2));
 }
 
-main().catch((error) => {
-  console.error(error.message || error);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(error.message || error);
+    process.exit(1);
+  });
+}
+
+module.exports = {
+  flattenModules,
+  isMakeWebhookHost,
+  safeObject,
+  safeString,
+  safeUrl,
+};

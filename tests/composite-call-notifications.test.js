@@ -107,7 +107,13 @@ function makeFetch(outcomes, { suppressed = [] } = {}) {
       };
     }
     const params = new URLSearchParams(String(options.body || ""));
-    calls.push({ to: params.get("To"), from: params.get("From"), body: params.get("Body") });
+    calls.push({
+      to: params.get("To"),
+      from: params.get("From"),
+      body: params.get("Body"),
+      statusCallback: params.get("StatusCallback"),
+      authorization: options.headers?.Authorization,
+    });
     const outcome = outcomes[calls.length - 1] || { ok: true, status: 201, payload: { sid: `SM${calls.length}`, status: "queued" } };
     return { ok: outcome.ok, status: outcome.status, json: async () => outcome.payload };
   };
@@ -137,6 +143,21 @@ test("composite tool sends owner first and customer second", async () => {
   assert.equal(result.complete, true);
   assert.match(mock.calls[0].body, /Service request \(installation\)/);
   assert.match(mock.calls[1].body, /Thanks for calling Example Electrical/);
+});
+
+test("composite tool prefers API-key REST auth and requests delivery callbacks", async () => {
+  const mock = makeFetch([]);
+  await execute(mock.fetchImpl, {
+    env: {
+      TWILIO_API_KEY_SID: "SK_TEST",
+      TWILIO_API_KEY_SECRET: "API_SECRET",
+      TWILIO_STATUS_CALLBACK_URL: "https://api.example.test/api/twilio/message-status",
+    },
+  });
+  const expected = `Basic ${Buffer.from("SK_TEST:API_SECRET").toString("base64")}`;
+  assert.equal(mock.calls.length, 2);
+  assert.ok(mock.calls.every((call) => call.authorization === expected));
+  assert.ok(mock.calls.every((call) => call.statusCallback === "https://api.example.test/api/twilio/message-status"));
 });
 
 test("owner failure does not prevent the customer confirmation", async () => {
@@ -280,7 +301,10 @@ test("generated Vapi code tool is self-contained and uses one structured call", 
   assert.match(code, /DEFAULT_OWNER_TO_NUMBER/);
   assert.match(code, /checkSmsPermission/);
   assert.match(code, /suppression_check_unavailable/);
+  assert.match(code, /TWILIO_API_KEY_SID/);
   assert.match(code, /return await executeCompositeNotifications/);
+  assert.ok(definition.environmentVariableNames.includes("TWILIO_API_KEY_SID"));
+  assert.ok(definition.environmentVariableNames.includes("TWILIO_API_KEY_SECRET"));
 });
 
 test("generated code executes inside the Vapi code-tool runtime shape", async () => {

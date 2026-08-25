@@ -52,7 +52,8 @@ async function main() {
   }
 
   try {
-    const page = await browser.newPage({ viewport });
+    const context = await browser.newContext({ viewport, serviceWorkers: "block" });
+    const page = await context.newPage();
     page.on("console", (message) => {
       if (message.type() === "error") console.log(`browser console error: ${message.text()}`);
     });
@@ -120,6 +121,7 @@ async function main() {
     }
     fs.copyFileSync(screenshotPath, phoneSharePath);
     console.log(`Screenshot saved: ${screenshotPath}`);
+    await context.close();
   } finally {
     await browser?.close();
   }

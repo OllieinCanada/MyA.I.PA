@@ -1,0 +1,100 @@
+{
+  "version": 1,
+  "wip": {
+    "limit": 2,
+    "laneLimits": {
+      "build": 1,
+      "growth": 1
+    },
+    "active": [
+      {
+        "id": "toronto-atlas-nightly-proof",
+        "lane": "build",
+        "workstream": "Toronto Atlas",
+        "definitionOfDone": "The repaired nightly task completes one bounded run or writes a verified safe-skip handoff."
+      },
+      {
+        "id": "sashiko-pr-373-strengthening",
+        "lane": "growth",
+        "workstream": "Open Source / Personal Brand",
+        "definitionOfDone": "The shared #357/#439 stale-baseline mechanism is documented, an EXT4 regression and operator example are staged locally on PR #373's branch, and the focused Rust test completes before any approved push."
+      }
+    ],
+    "queued": [
+      {
+        "id": "project-harbor-nightly",
+        "lane": "build",
+        "workstream": "Project Harbor",
+        "blockedBy": "The repository contains existing user changes; automation must preserve them and safe-skip until the worktree is clean."
+      },
+      {
+        "id": "x-job-finder",
+        "lane": "growth",
+        "workstream": "X Job Finder",
+        "blockedBy": "X_BEARER_TOKEN is not configured in the local environment."
+      },
+      {
+        "id": "personal-brand-approval-cycle",
+        "lane": "growth",
+        "workstream": "Personal Brand",
+        "blockedBy": "The private drafts remain available for Oliver's approval while the PR #373 strengthening pass uses the active growth lane; publishing remains approval-gated."
+      }
+    ]
+  },
+  "scheduledTasks": [
+    {
+      "id": "project-harbor",
+      "name": "Codex Project Harbor Nightly",
+      "workstream": "Project Harbor",
+      "lane": "build",
+      "projectRoot": "D:\\ProjectHarbor\\workspace",
+      "history": "automation_logs/codex-workstreams/projectharbor-run-history.log"
+    },
+    {
+      "id": "toronto-atlas",
+      "name": "Codex Toronto Atlas Nightly",
+      "workstream": "Toronto Atlas",
+      "lane": "build",
+      "projectRoot": "${DESKTOP_ROOT}/toronto-startup-atlas",
+      "history": "automation_logs/codex-workstreams/torontoatlas-run-history.log"
+    },
+    {
+      "id": "personal-brand",
+      "name": "Codex Personal Brand Daily",
+      "workstream": "Personal Brand",
+      "lane": "growth",
+      "projectRoot": "${HUB_ROOT}",
+      "history": "automation_logs/codex-workstreams/personalbrand-run-history.log"
+    },
+    {
+      "id": "linkedin",
+      "name": "MyAIPA LinkedIn Daily Blocks",
+      "workstream": "LinkedIn",
+      "lane": "monitor",
+      "projectRoot": "${HUB_ROOT}",
+      "history": "linkedin-outreach-tracker/automation-runs.jsonl"
+    }
+  ],
+  "automaticActions": [
+    "Read-only audits and diagnostics",
+    "Bounded local code or content-draft changes",
+    "Local tests, builds, screenshots, and evidence collection",
+    "Private prioritization, queue maintenance, and reports",
+    "Safe skips when a worktree, credential, or evidence gate is unresolved"
+  ],
+  "approvalRequiredActions": [
+    "Public posts, replies, reactions, messages, and outreach",
+    "Job applications or other submissions made as Oliver",
+    "Live deployments, pushes, production configuration changes, or releases",
+    "Purchases, subscriptions, account or permission changes",
+    "Credential entry, destructive changes, or disclosure of private project or client details"
+  ],
+  "handoffHeadings": [
+    "Outcome",
+    "Changed",
+    "Verification",
+    "Approval needed",
+    "Next task",
+    "External actions"
+  ]
+}

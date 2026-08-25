@@ -9941,6 +9941,12 @@ function LandingPage() {
               <a href="/terms.html" className="transition hover:text-[#2563eb]">
                 Terms
               </a>
+              <a href="/cookies.html" className="transition hover:text-[#2563eb]">
+                Cookies &amp; storage
+              </a>
+              <a href="/status.html" className="transition hover:text-[#2563eb]">
+                Service status
+              </a>
               <a href="/calendar-data.html" className="transition hover:text-[#2563eb]">
                 Calendar data
               </a>
@@ -9948,6 +9954,26 @@ function LandingPage() {
           </footer>
         </div>
       </section>
+
+      <footer id="site-footer" className="border-t border-[#d7e7fb] bg-white text-[#334155]">
+        <div className="mx-auto grid w-full max-w-[1320px] gap-6 px-4 py-8 sm:px-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end lg:px-8">
+          <div>
+            <a href="#/" className="text-lg font-black uppercase tracking-[0.14em] text-[#07142a] transition hover:text-[#2563eb]">My AI PA</a>
+            <p className="mt-3 max-w-2xl text-[1rem] font-semibold leading-7">Built in Ontario for busy trades across Hamilton, Grimsby, and the surrounding area. Made and loved in Canada.</p>
+            <p className="mt-1 max-w-2xl text-sm font-medium leading-6 text-[#64748b]">Optional Google and Microsoft calendar access is used only to check availability and manage appointments authorized by the business owner or staff member.</p>
+          </div>
+          <nav aria-label="Legal and service information" className="flex flex-wrap items-center gap-x-4 gap-y-3 text-sm font-black">
+            <a href="#/trades" className="transition hover:text-[#2563eb]">Trade pages</a>
+            <a href="/proof/" className="transition hover:text-[#2563eb]">Engineering proof</a>
+            <a href="mailto:hello@myaipa.com" className="transition hover:text-[#2563eb]">Contact</a>
+            <a href="/privacy.html" className="transition hover:text-[#2563eb]">Privacy</a>
+            <a href="/terms.html" className="transition hover:text-[#2563eb]">Terms</a>
+            <a href="/cookies.html" className="transition hover:text-[#2563eb]">Cookies &amp; storage</a>
+            <a href="/status.html" className="transition hover:text-[#2563eb]">Service status</a>
+            <a href="/calendar-data.html" className="transition hover:text-[#2563eb]">Calendar data</a>
+          </nav>
+        </div>
+      </footer>
     </main>
   );
 }

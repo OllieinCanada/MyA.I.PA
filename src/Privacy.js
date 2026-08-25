@@ -17,6 +17,13 @@ const sections = [
     ],
   },
   {
+    title: "Cookies and Browser Storage",
+    body: [
+      "The current website uses limited session cookies, browser storage, and cached files for sign-in, dashboard continuity, signup abuse protection, optional preferences, and reliable site delivery. The current public website code does not intentionally load third-party advertising pixels or marketing analytics.",
+      "The categories, typical durations, and browser controls are described in the Cookie & Browser Storage Notice at www.myaipa.ca/cookies.html.",
+    ],
+  },
+  {
     title: "3. How We Use Information",
     body: [
       "We use information to provide and improve the service, configure AI phone agents, answer and summarize calls, send owner alerts and caller confirmations, support accounts, process payments, prevent abuse, troubleshoot issues, and communicate with customers about their service.",

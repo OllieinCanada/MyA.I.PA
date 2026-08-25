@@ -63,11 +63,31 @@ function Write-FallbackSummary {
   $content = @"
 # $Workstream automation summary
 
+## Outcome
+
 - Run: $runId
 - Status: $Status
 - Project: $projectRoot
-- External actions: none
+
+## Changed
+
+- No project change was recorded by the runner.
+
+## Verification
+
 - Detail: $Detail
+
+## Approval needed
+
+- None created by this runner outcome.
+
+## Next task
+
+- Re-run only after the reported preflight or runtime condition is resolved.
+
+## External actions
+
+- None. No push, deployment, publication, message, or account action was performed.
 "@
   Set-Content -LiteralPath $summaryPath -Value $content -Encoding UTF8
 }
@@ -89,10 +109,11 @@ try {
   if ($LASTEXITCODE -ne 0) {
     throw "Unable to inspect Git state: $gitStatus"
   }
-  if ($gitStatus) {
+  if ($gitStatus -and $Workstream -ne "PersonalBrand") {
     Write-FallbackSummary -Status "skipped" -Detail "The working tree was not clean at start; no Codex run was launched."
-    Write-History -Phase "end" -ExitCode 2
-    exit 2
+    Write-History -Phase "end" -ExitCode 0
+    Write-Host "$Workstream automation skipped safely because the working tree is not clean."
+    exit 0
   }
 
   # Prefer the self-contained standalone CLI because its adjacent Windows
@@ -118,17 +139,21 @@ try {
     )
   }
 
-  $codexPath = if ($standaloneCandidates.Count -gt 0) {
-    $standaloneCandidates[0].Path
-  } else {
-    $codexCommand = Get-Command codex.exe -ErrorAction SilentlyContinue
-    if (-not $codexCommand) { $codexCommand = Get-Command codex -ErrorAction SilentlyContinue }
-    if ($codexCommand) { $codexCommand.Source } else { $null }
+  $codexCandidates = @($standaloneCandidates)
+  $codexCommand = Get-Command codex.exe -ErrorAction SilentlyContinue
+  if (-not $codexCommand) { $codexCommand = Get-Command codex -ErrorAction SilentlyContinue }
+  if ($codexCommand -and -not ($codexCandidates.Path -contains $codexCommand.Source)) {
+    $codexCandidates += [pscustomobject]@{
+      Version = [version]"0.0.0"
+      Path = $codexCommand.Source
+    }
   }
-  if (-not $codexPath) { throw "Codex CLI was not found." }
+  if ($codexCandidates.Count -eq 0) { throw "Codex CLI was not found." }
 
   if ($ValidateOnly) {
-    Write-FallbackSummary -Status "ready" -Detail "Project, prompt, Git state, and Codex CLI validation passed."
+    $versionOutput = (& $codexCandidates[0].Path --version 2>&1 | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0) { throw "Codex CLI smoke check failed: $versionOutput" }
+    Write-FallbackSummary -Status "ready" -Detail "Project, prompt, Git state, and Codex CLI validation passed with $versionOutput."
     Write-History -Phase "end" -ExitCode 0
     Write-Host "$Workstream automation validation passed."
     exit 0
@@ -145,14 +170,41 @@ try {
     "-"
   )
 
-  $prompt | & $codexPath @arguments 2>&1 | Tee-Object -FilePath $eventPath
-  $exitCode = $LASTEXITCODE
+  $maxAttempts = [Math]::Min(2, $codexCandidates.Count)
+  $exitCode = 1
+  $lastRuntimeDetail = "Codex did not start."
+
+  for ($attempt = 0; $attempt -lt $maxAttempts; $attempt++) {
+    $candidate = $codexCandidates[$attempt]
+    Write-History -Phase "attempt-$($attempt + 1)-start" -ExitCode 0
+
+    try {
+      $prompt | & $candidate.Path @arguments 2>&1 | Tee-Object -FilePath $eventPath -Append
+      $exitCode = $LASTEXITCODE
+      $lastRuntimeDetail = "Codex $($candidate.Version) exited with code $exitCode."
+    } catch {
+      $exitCode = 1
+      $lastRuntimeDetail = "Codex $($candidate.Version) stream failed: $($_.Exception.Message)"
+    }
+
+    Write-History -Phase "attempt-$($attempt + 1)-end" -ExitCode $exitCode
+    if ($exitCode -eq 0) { break }
+
+    $isNativeCrash = ([int64]$exitCode -eq -1073741819) -or ([int64]$exitCode -eq 3221225477)
+    $isStreamFailure = $lastRuntimeDetail -match "stream failed|Stream was not readable"
+    $canRetry = ($attempt + 1 -lt $maxAttempts) -and ($isNativeCrash -or $isStreamFailure)
+    if (-not $canRetry) { break }
+
+    Write-Warning "$lastRuntimeDetail Retrying once with the previous installed Codex release."
+  }
+
   if (-not (Test-Path -LiteralPath $summaryPath -PathType Leaf)) {
-    Write-FallbackSummary -Status "failed" -Detail "Codex exited with code $exitCode before writing a final summary."
+    Write-FallbackSummary -Status "failed" -Detail "$lastRuntimeDetail No final summary was written."
   }
 
   Write-History -Phase "end" -ExitCode $exitCode
-  exit $exitCode
+  if ($exitCode -eq 0) { exit 0 }
+  exit 1
 } catch {
   Write-FallbackSummary -Status "failed" -Detail $_.Exception.Message
   Write-History -Phase "end" -ExitCode 1

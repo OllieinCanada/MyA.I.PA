@@ -3,7 +3,7 @@ const { loadProjectEnv } = require("./_helpers");
 
 const env = loadProjectEnv();
 const baseUrl = String(env.MAKE_API_BASE_URL || "https://us2.make.com/api/v2").replace(/\/+$/, "");
-const token = String(env.MAKE_API_TOKEN || env.MAKE_TOKEN || env.MAKE_API_KEY || "").trim();
+const token = String(env.MAKE_AUDIT_API_TOKEN || env.MAKE_API_TOKEN || env.MAKE_TOKEN || env.MAKE_API_KEY || "").trim();
 const seedScenarioId = String(env.MAKE_SCENARIO_ID || "3530157").trim();
 const inactiveCandidates = new Set([
   "12492021724", "12492092994", "12492942573", "12492947547", "12494020467", "12494023117", "12494024844",
@@ -77,7 +77,7 @@ function matchingPaths(value, predicate) {
 }
 
 async function main() {
-  if (!token) throw new Error("MAKE_API_TOKEN is not configured.");
+  if (!token) throw new Error("MAKE_AUDIT_API_TOKEN or MAKE_API_TOKEN is not configured.");
   const seed = await getJson(`/scenarios/${encodeURIComponent(seedScenarioId)}`);
   const scenario = seed?.scenario || seed;
   const teamId = String(scenario?.teamId || scenario?.team?.id || "").trim();
