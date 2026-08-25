@@ -429,10 +429,9 @@
   .simple-carousel-header > button { min-height: 42px; padding: 0 12px; font-size: .68rem; }
   .simple-audio-trigger-icon { width: 23px; height: 23px; }
   .simple-audio-trigger-waves { display: none; }
-  .simple-carousel-stage { min-height: 390px; border-radius: 18px; }
-  .simple-carousel-stage.showing-phones { min-height: 885px; }
-  .simple-carousel-stage.showing-coffee { min-height: 555px; }
-  .simple-carousel-stage > section { padding: 18px 14px; }
+  .simple-carousel-stage { min-height: 885px; border-radius: 18px; }
+  .simple-carousel-stage > section { grid-template-rows: auto auto minmax(0, 1fr); align-content: stretch; padding: 18px 14px; }
+  .simple-carousel-stage > section > :last-child { align-self: center; }
   .simple-carousel-stage > section:nth-child(2) { padding-inline: 8px; }
   .simple-carousel-stage > section > h2 { margin-bottom: 14px; font-size: 1.55rem; }
   .simple-call-conversation { gap: 8px; }

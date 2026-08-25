@@ -287,7 +287,7 @@ function AnimatedHeroProof({ onSampleCall, onStartTrial }) {
           <span className="simple-audio-trigger-waves" aria-hidden="true"><i /><i /><i /><i /></span>
         </button>
       </div>
-      <div className={`simple-carousel-stage${activeSlide === 1 ? " showing-phones" : ""}${activeSlide === 2 ? " showing-coffee" : ""}`}>
+      <div className="simple-carousel-stage">
         {slides.map((slide, index) => (
           <section key={slide.label} className={`${index === activeSlide ? "active" : ""}${slide.className ? ` ${slide.className}` : ""}`} aria-hidden={index !== activeSlide}>
             <p>{slide.label} · {index + 1} of 3</p>
