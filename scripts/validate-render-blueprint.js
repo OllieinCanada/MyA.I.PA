@@ -86,7 +86,8 @@ if (!service) {
   expectEnvValue(service, "TRIAL_REMINDER_DISABLE", true);
   expectEnvValue(service, "TWILIO_INBOUND_WEBHOOK_URL", "https://api.myaipa.ca/api/webhooks/sms");
   expectEnvValue(service, "SMS_SUPPRESSION_CHECK_URL", "https://api.myaipa.ca/api/integrations/sms/suppression/check");
-  expectEnvValue(service, "SIGNUP_REQUIRE_MANUAL_APPROVAL", false);
+  expectEnvValue(service, "SIGNUP_REQUIRE_MANUAL_APPROVAL", true);
+  expectEnvValue(service, "TWILIO_DEFAULT_CANADIAN_REGION", "ON");
   expectEnvValue(service, "SIGNUP_REQUIRE_VERIFICATION", false);
   expectEnvValue(service, "SIGNUP_IP_WINDOW_MS", 900000);
   expectEnvValue(service, "SIGNUP_IP_MAX_REQUESTS", 5);
@@ -130,6 +131,7 @@ if (!service) {
   for (const key of [
     "MAKE_SIGNUP_WEBHOOK_URL",
     "MAKE_SIGNUP_WEBHOOK_API_KEY",
+    "PROVISIONING_SIGNING_SECRET",
     "OPENAI_API_KEY",
     "VAPI_API_KEY",
     "VAPI_WEBHOOK_SECRET",

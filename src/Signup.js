@@ -10,7 +10,6 @@ import {
   CAPTCHA_PROVIDER,
   DEFAULT_DETAILS,
   DEFAULT_PRICING,
-  MAKE_SIGNUP_WEBHOOK_API_KEY,
   OPENING_DIALOGUE_OPTIONS,
   SETUP_STEPS,
   SIGNUP_SUBMIT_URL,
@@ -1370,73 +1369,29 @@ function HumanVerificationCheck() {
   return null;
 }
 
-function isMakeWebhookUrl(url) {
-  return /^https:\/\/hook\.[^/]+\.make\.com\//.test(String(url || ""));
-}
-
 async function postSignupPayload(url, formData) {
   const jsonBody = JSON.stringify(formData);
-  const makeFormBody = new FormData();
-  Object.entries(formData).forEach(([key, value]) => {
-    makeFormBody.append(key, typeof value === "string" ? value : JSON.stringify(value));
+  return fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: jsonBody,
   });
-  makeFormBody.append("payload", jsonBody);
-
-  const optimisticMakeResponse = {
-    ok: true,
-    status: 202,
-    text: async () => JSON.stringify({ ok: true, reviewRequired: true }),
-  };
-  const postMakeFallback = async () => {
-    try {
-      await fetch(url, {
-        method: "POST",
-        mode: "no-cors",
-        body: makeFormBody,
-      });
-
-      return optimisticMakeResponse;
-    } catch {
-      if (typeof navigator !== "undefined" && typeof navigator.sendBeacon === "function") {
-        const sent = navigator.sendBeacon(
-          url,
-          new Blob([jsonBody], { type: "application/json" })
-        );
-        if (sent) return optimisticMakeResponse;
-      }
-
-      throw new Error("Make.com rejected the signup handoff. Check that the webhook is enabled and not requiring an API key.");
-    }
-  };
-
-  try {
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(MAKE_SIGNUP_WEBHOOK_API_KEY ? { "x-make-apikey": MAKE_SIGNUP_WEBHOOK_API_KEY } : {}),
-      },
-      body: jsonBody,
-    });
-
-    if (isMakeWebhookUrl(url) && (response.status === 401 || response.status === 403)) {
-      return postMakeFallback();
-    }
-
-    return response;
-  } catch (error) {
-    if (!isMakeWebhookUrl(url)) throw error;
-    return postMakeFallback();
-  }
 }
 
-function SignupSuccessPage({ result, onStartAnother, onRetry }) {
+export function SignupSuccessPage({ result, onStartAnother, onRetry }) {
   const businessName = result?.businessName || "your business";
   const provisioningStatus = String(result?.phoneProvisioning?.status || (result?.twilioPhoneNumber ? "ready" : "pending")).toLowerCase();
   const assignedNumber = provisioningStatus === "ready" ? String(result?.twilioPhoneNumber || result?.phoneProvisioning?.e164 || "").trim() : "";
   const reviewRequired = Boolean(result?.reviewRequired);
   const verificationRequired = Boolean(result?.verificationRequired || result?.emailVerificationRequired);
   const provisioningFailed = provisioningStatus === "failed";
+  const subscriptionId = String(result?.subscriptionId || "").trim();
+  const subscriptionStatus = String(result?.subscriptionStatus || "").trim().toLowerCase();
+  const stripeTrialRejected = Boolean(result?.stripeTrialSkipped || result?.stripeTrialError);
+  const trialActive = Boolean(subscriptionId && subscriptionStatus === "trialing" && !stripeTrialRejected);
+  const subscriptionActive = Boolean(subscriptionId && subscriptionStatus === "active" && !stripeTrialRejected);
+  const billingConfirmed = trialActive || subscriptionActive;
+  const trialNeedsAttention = Boolean(assignedNumber && !reviewRequired && !verificationRequired && !billingConfirmed);
   const numberMissing = !assignedNumber;
   const [progress, setProgress] = useState(12);
   const [showNumber, setShowNumber] = useState(false);
@@ -1498,10 +1453,16 @@ function SignupSuccessPage({ result, onStartAnother, onRetry }) {
       active: !assignedNumber || reviewRequired || provisioningFailed,
     },
     {
-      label: "Free trial active",
-      detail: "No credit card is needed to start the trial.",
-      done: Boolean(assignedNumber && !reviewRequired && !verificationRequired),
-      active: reviewRequired || verificationRequired || !assignedNumber,
+      label: trialActive ? "Free trial active" : subscriptionActive ? "Subscription active" : "Free trial",
+      detail: trialActive
+        ? "Stripe confirmed the 14-day trial without a credit card."
+        : subscriptionActive
+          ? "Stripe confirmed an active subscription."
+          : trialNeedsAttention
+            ? "Stripe did not confirm trial activation. Do not start live calls yet."
+            : "Activation follows phone setup and Stripe confirmation.",
+      done: billingConfirmed,
+      active: trialNeedsAttention,
     },
     { label: "Test call", detail: "Call the AI number before forwarding live calls.", done: false },
   ];
@@ -1530,7 +1491,7 @@ function SignupSuccessPage({ result, onStartAnother, onRetry }) {
               {verificationRequired
                 ? "We sent a verification email. Click the link before your AI phone assistant setup continues."
                 : reviewRequired
-                ? "Your signup was received, but it needs review before the workflow continues."
+                ? "Your signup was received and our team was notified. We will review it and contact you before your assistant goes live."
                 : assignedNumber
                   ? "Your AI phone assistant is ready for testing. Your forwarding number is below."
                   : provisioningFailed
@@ -1572,7 +1533,7 @@ function SignupSuccessPage({ result, onStartAnother, onRetry }) {
                     Signup received for review.
                   </p>
                   <p className="mt-3 text-sm font-semibold leading-6 text-slate-500">
-                    The workflow has not been called yet because this submission was flagged for review.
+                    No number has been assigned yet. Our team has the request and will confirm the next step with you directly.
                   </p>
                 </div>
               ) : showNumber && assignedNumber ? (
@@ -1689,10 +1650,18 @@ function SignupSuccessPage({ result, onStartAnother, onRetry }) {
               </div>
 
               {!reviewRequired && !verificationRequired ? (
-                <div className="mt-5 rounded-3xl border border-blue-100 bg-[linear-gradient(180deg,#f7fbff,#eef6ff)] p-4">
-                  <p className="text-sm font-black uppercase tracking-[0.16em] text-blue-600">Free trial</p>
+                <div className={"mt-5 rounded-3xl border p-4 " + (trialNeedsAttention ? "border-amber-200 bg-amber-50" : "border-blue-100 bg-[linear-gradient(180deg,#f7fbff,#eef6ff)]")}>
+                  <p className={"text-sm font-black uppercase tracking-[0.16em] " + (trialNeedsAttention ? "text-amber-700" : "text-blue-600")}>
+                    {trialActive ? "Free trial active" : subscriptionActive ? "Subscription active" : trialNeedsAttention ? "Trial activation needs attention" : "Free trial pending"}
+                  </p>
                   <p className="mt-2 text-base font-semibold leading-7 text-slate-700">
-                    Your 14-day trial has started without collecting a credit card. It includes up to 60 AI call minutes, with friendly usage updates along the way. New AI calls pause near the limit so the final five minutes are protected for a call already in progress. Later calls use your fallback routing. Billing can be set up after the trial is approved and ready.
+                    {trialActive
+                      ? "Your 14-day trial has started without collecting a credit card. It includes up to 60 AI call minutes, with friendly usage updates along the way. New AI calls pause near the limit so the final five minutes are protected for a call already in progress. Later calls use your fallback routing. Billing can be set up after the trial is approved and ready."
+                      : subscriptionActive
+                        ? "Stripe confirmed that billing is active. Your assigned number is ready for the test-call step."
+                        : trialNeedsAttention
+                          ? "Your number was assigned, but Stripe did not confirm a trial. Do not start live calls until trial activation is retried and confirmed."
+                          : "Your trial has not started yet. It will be shown as active only after phone setup is ready and Stripe confirms activation."}
                   </p>
                 </div>
               ) : null}

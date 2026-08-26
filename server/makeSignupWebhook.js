@@ -80,6 +80,73 @@ function getMakeRequestId(response) {
   ).trim().slice(0, 160);
 }
 
+function firstString(data, paths) {
+  for (const path of paths) {
+    const value = path.reduce((current, key) => current?.[key], data);
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return "";
+}
+
+function classifyMakeSignupResponse(rawText, parsedData) {
+  const text = String(rawText || "").trim();
+  const data = parsedData && typeof parsedData === "object" && !Array.isArray(parsedData)
+    ? parsedData
+    : {};
+  const explicitFailure = data.success === false || data.ok === false;
+  if (explicitFailure) {
+    return {
+      complete: false,
+      kind: "rejected",
+      code: "MAKE_SIGNUP_REJECTED",
+    };
+  }
+
+  if (!text || !Object.keys(data).length) {
+    return {
+      complete: false,
+      kind: text ? "unrecognized" : "empty",
+      code: "MAKE_SIGNUP_RESPONSE_INCOMPLETE",
+    };
+  }
+
+  const acknowledged = data.success === true || data.ok === true;
+  const twilioPhoneNumber = firstString(data, [
+    ["twilioPhoneNumber"],
+    ["twilio_phone_number"],
+    ["phoneNumber"],
+    ["data", "twilioPhoneNumber"],
+    ["data", "phoneNumber"],
+  ]);
+  const vapiPhoneNumberId = firstString(data, [
+    ["vapiPhoneNumberId"],
+    ["phoneNumberId"],
+    ["data", "vapiPhoneNumberId"],
+    ["data", "phoneNumberId"],
+  ]);
+  const vapiAssistantId = firstString(data, [
+    ["vapiAssistantId"],
+    ["assistantId"],
+    ["data", "vapiAssistantId"],
+    ["data", "assistantId"],
+  ]);
+  const complete = Boolean(
+    acknowledged
+      && twilioPhoneNumber
+      && vapiPhoneNumberId
+      && vapiAssistantId
+  );
+
+  return {
+    complete,
+    kind: complete ? "completed" : acknowledged ? "acknowledged_incomplete" : "unrecognized",
+    code: complete ? "" : "MAKE_SIGNUP_RESPONSE_INCOMPLETE",
+    twilioPhoneNumber,
+    vapiPhoneNumberId,
+    vapiAssistantId,
+  };
+}
+
 function parseMakeSignupTimeoutMs(value) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed < 1_000 || parsed > 190_000) {
@@ -100,6 +167,7 @@ module.exports = {
   DEFAULT_MAKE_SIGNUP_TIMEOUT_MS,
   buildMakeSignupEventKey,
   buildMakeSignupHeaders,
+  classifyMakeSignupResponse,
   createTimeoutSignal,
   getMakeRequestId,
   isStandardMakeWebhookHost,

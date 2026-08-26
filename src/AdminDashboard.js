@@ -44,13 +44,67 @@ async function api(path, { method = "GET", body, timeoutMs = ADMIN_API_TIMEOUT_M
   }
 }
 
-function getInitialAdminTab() {
+export function parseAdminIncidentLink(hashValue = "") {
   try {
-    const query = String(window.location.hash || "").split("?")[1] || "";
-    return new URLSearchParams(query).get("tab") || "overview";
+    const query = String(hashValue || "").split("?")[1] || "";
+    const params = new URLSearchParams(query);
+    const requestedIncident = String(params.get("incident") || "").trim().toLowerCase();
+    const incidentId = /^[a-f0-9]{24}$/.test(requestedIncident) ? requestedIncident : "";
+    return {
+      tab: incidentId ? "attention" : params.get("tab") || "overview",
+      incidentId,
+    };
   } catch (_error) {
-    return "overview";
+    return { tab: "overview", incidentId: "" };
   }
+}
+
+function getInitialAdminTab() {
+  return parseAdminIncidentLink(window.location.hash).tab;
+}
+
+function getInitialAdminIncidentId() {
+  return parseAdminIncidentLink(window.location.hash).incidentId;
+}
+
+function incidentReference(incidentId) {
+  return incidentId ? `INC-${String(incidentId).slice(0, 8).toUpperCase()}` : "Incident";
+}
+
+function incidentSnapshotText(value) {
+  if (Array.isArray(value)) return value.map(incidentSnapshotText).filter(Boolean).join(" · ");
+  if (value && typeof value === "object") {
+    if (Array.isArray(value.items)) return incidentSnapshotText(value.items);
+    return incidentSnapshotText(
+      value.summary
+      || value.plainText
+      || value.explanation
+      || value.description
+      || value.label
+      || value.completed
+      || value.observed
+      || ""
+    );
+  }
+  return String(value || "").trim();
+}
+
+export function getIncidentSnapshotRows(item = {}) {
+  const incident = item.incidentSnapshot || item.incident || {};
+  const detailSnapshot = item.snapshot && typeof item.snapshot === "object" && !Array.isArray(item.snapshot)
+    ? item.snapshot
+    : {};
+  const primaryRows = [
+    ["Reason", incidentSnapshotText(incident.reason ?? item.reason)],
+    ["Impact", incidentSnapshotText(incident.impact ?? item.impact)],
+    ["Last checkpoint", incidentSnapshotText(incident.lastCheckpoint ?? item.lastCheckpoint)],
+    ["Next action", incidentSnapshotText(incident.nextAction ?? item.nextAction)],
+  ].filter(([, value]) => value);
+  const detailRows = Object.entries(detailSnapshot)
+    .slice(0, 12)
+    .map(([label, value]) => [String(label || "Detail").slice(0, 60), incidentSnapshotText(value)])
+    .filter(([, value]) => value);
+  return [...primaryRows, ...detailRows];
 }
 
 function dt(value) {
@@ -1310,16 +1364,36 @@ function SupportInbox({ reports, integrations, busyAction, message, onRefresh, o
   );
 }
 
-function AttentionInbox({ inbox, busyAction, message, onRefresh, onAction }) {
+function AttentionInbox({ inbox, busyAction, message, incidentId, onRefresh, onAction }) {
   const summary = inbox?.summary || { total: 0, bySeverity: {} };
   const items = inbox?.items || [];
+  const requestedIncidentFound = Boolean(incidentId && items.some((item) => item.id === incidentId));
   const actionLabels = {
     retry_owner_text: "Retry owner text",
     sync_calls: "Resync calls",
     recover_signup: "Attempt safe recovery",
     reopen_signup: "Reopen signup",
     resend_signup_verification: "Resend verification",
+    acknowledge_runtime_incident: "Acknowledge incident",
   };
+
+  useEffect(() => {
+    if (!incidentId || !requestedIncidentFound) return undefined;
+    const focusIncident = () => {
+      const element = document.getElementById(`admin-incident-${incidentId}`);
+      if (!element) return;
+      element.scrollIntoView?.({ behavior: "smooth", block: "center" });
+      element.focus?.({ preventScroll: true });
+    };
+    const frame = typeof window.requestAnimationFrame === "function"
+      ? window.requestAnimationFrame(focusIncident)
+      : window.setTimeout(focusIncident, 0);
+    return () => {
+      if (typeof window.cancelAnimationFrame === "function") window.cancelAnimationFrame(frame);
+      else window.clearTimeout(frame);
+    };
+  }, [incidentId, requestedIncidentFound]);
+
   return (
     <div className="admin-support-page">
       <div className="admin-support-heading">
@@ -1333,15 +1407,40 @@ function AttentionInbox({ inbox, busyAction, message, onRefresh, onAction }) {
         <div><span>Last checked</span><strong>{inbox?.generatedAt ? dt(inbox.generatedAt) : "—"}</strong></div>
       </div>
       {message ? <div className="admin-support-message" role="status">{message}</div> : null}
+      {incidentId && inbox?.generatedAt && !requestedIncidentFound ? (
+        <div className="admin-support-message" role="status">
+          {incidentReference(incidentId)} is no longer in the active queue. It may already be resolved; check the audit trail below.
+        </div>
+      ) : null}
       <div className="admin-support-list">
-        {items.length ? items.map((item) => (
-          <article key={item.id} className="rounded-2xl border border-white/15 bg-[#0b1b38] p-5 text-white shadow-xl">
+        {items.length ? items.map((item) => {
+          const isRequestedIncident = item.id === incidentId;
+          const snapshotRows = getIncidentSnapshotRows(item);
+          return (
+          <article
+            key={item.id}
+            id={`admin-incident-${item.id}`}
+            data-incident-id={item.id}
+            aria-current={isRequestedIncident ? "true" : undefined}
+            tabIndex={isRequestedIncident ? -1 : undefined}
+            className={`rounded-2xl border bg-[#0b1b38] p-5 text-white shadow-xl outline-none ${isRequestedIncident ? "border-sky-300 ring-4 ring-sky-300/40" : "border-white/15"}`}
+          >
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <div className={"text-xs font-black uppercase tracking-[0.18em] " + (item.severity === "critical" ? "text-rose-300" : "text-amber-300")}>{item.severity} · {String(item.kind || "issue").replaceAll("_", " ")}</div>
                 <h3 className="mt-2 text-xl font-black">{item.title}</h3>
                 <p className="mt-2 max-w-3xl text-sm font-semibold leading-6 text-white/70">{item.summary}</p>
-                <div className="mt-3 text-xs font-bold text-white/45">Business #{item.businessId || "—"} · {item.ageMinutes == null ? "Just detected" : `${item.ageMinutes} minutes old`}</div>
+                <div className="mt-3 text-xs font-bold text-white/45">{incidentReference(item.id)} · {item.businessName || `Business #${item.businessId || "—"}`} · {item.ageMinutes == null ? "Just detected" : `${item.ageMinutes} minutes old`}</div>
+                {snapshotRows.length ? (
+                  <dl className="mt-4 grid gap-3 sm:grid-cols-2">
+                    {snapshotRows.map(([label, value]) => (
+                      <div key={label} className="rounded-xl border border-white/10 bg-white/5 p-3">
+                        <dt className="text-[0.68rem] font-black uppercase tracking-[0.16em] text-sky-300">{label}</dt>
+                        <dd className="mt-1 text-sm font-semibold leading-5 text-white/80">{value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                ) : null}
               </div>
               <div className="flex flex-wrap gap-2">
                 {(item.actions || []).map((action) => (
@@ -1352,7 +1451,8 @@ function AttentionInbox({ inbox, busyAction, message, onRefresh, onAction }) {
               </div>
             </div>
           </article>
-        )) : <div className="admin-support-empty">Nothing needs attention right now.</div>}
+          );
+        }) : <div className="admin-support-empty">Nothing needs attention right now.</div>}
       </div>
       <section className="mt-8 rounded-2xl border border-white/10 bg-white/5 p-5 text-white">
         <div className="text-xs font-black uppercase tracking-[0.18em] text-sky-300">Admin audit trail</div>
@@ -1373,6 +1473,7 @@ export default function AdminDashboard() {
   const [mfaCode, setMfaCode] = useState("");
   const [mfaRequired, setMfaRequired] = useState(false);
   const [activeTab, setActiveTab] = useState(getInitialAdminTab);
+  const [selectedIncidentId, setSelectedIncidentId] = useState(getInitialAdminIncidentId);
   const [selectedCustomerKey, setSelectedCustomerKey] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -2600,6 +2701,16 @@ export default function AdminDashboard() {
   }, []);
 
   useEffect(() => {
+    const syncIncidentLink = () => {
+      const link = parseAdminIncidentLink(window.location.hash);
+      setSelectedIncidentId(link.incidentId);
+      if (link.incidentId) setActiveTab("attention");
+    };
+    window.addEventListener("hashchange", syncIncidentLink);
+    return () => window.removeEventListener("hashchange", syncIncidentLink);
+  }, []);
+
+  useEffect(() => {
     refresh();
   }, [isAuthenticated, activeTab, leadFilters.status, leadFilters.intent, leadFilters.urgency, callFilters.status, callFilters.minDuration, callFilters.outcome, costDays]);
 
@@ -2846,6 +2957,14 @@ export default function AdminDashboard() {
             <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
               <div className="text-xs font-bold uppercase tracking-[0.28em] text-white/60">Secure Sign In</div>
               <p className="mt-3 text-sm font-semibold text-white/75">Enter the admin password once. The dashboard then uses a secure session cookie.</p>
+              {selectedIncidentId ? (
+                <div className="mt-4 rounded-xl border border-sky-300/30 bg-sky-300/10 p-4">
+                  <div className="text-xs font-black uppercase tracking-[0.16em] text-sky-200">Incident link ready</div>
+                  <p className="mt-2 text-sm font-semibold leading-5 text-white/80">
+                    After sign-in, Needs Attention will open and highlight {incidentReference(selectedIncidentId)}.
+                  </p>
+                </div>
+              ) : null}
               <form className="mt-4 space-y-4" onSubmit={unlock}>
                 <Labeled label="Admin Password">
                   <Input type="password" value={candidate} onChange={(e) => setCandidate(e.target.value)} placeholder="Enter ADMIN_PASSWORD" />
@@ -2927,6 +3046,7 @@ export default function AdminDashboard() {
             inbox={attentionInbox}
             busyAction={attentionBusyAction}
             message={attentionMessage}
+            incidentId={selectedIncidentId}
             onRefresh={loadAttentionInbox}
             onAction={runAttentionAction}
           />

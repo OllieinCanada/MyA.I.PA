@@ -73,6 +73,10 @@ services:
         sync: false
       - key: MAKE_SIGNUP_WEBHOOK_API_KEY
         sync: false
+      - key: PROVISIONING_SIGNING_SECRET
+        sync: false
+      - key: TWILIO_DEFAULT_CANADIAN_REGION
+        value: ON
       - key: INTEGRATION_API_KEY
         sync: false
       - key: VAPI_WEBHOOK_SECRET
@@ -134,7 +138,9 @@ services:
       - key: TURNSTILE_SECRET_KEY
         sync: false
       - key: SIGNUP_REQUIRE_MANUAL_APPROVAL
-        value: false
+        # Keep signups recoverable while automated provisioning is offline.
+        # Set false only after a duplicate-safe end-to-end canary passes.
+        value: true
       - key: SIGNUP_REQUIRE_VERIFICATION
         value: false
       - key: SIGNUP_IP_WINDOW_MS
@@ -211,6 +217,14 @@ services:
         sync: false
       - key: TELEGRAM_CHAT_ID
         sync: false
+      - key: RUNTIME_TELEGRAM_ALERTS_ENABLED
+        value: "true"
+      - key: CLIENT_ERROR_MAX_REQUESTS
+        value: "12"
+      - key: CLIENT_ERROR_GLOBAL_MAX_REQUESTS
+        value: "30"
+      - key: CLIENT_RESOURCE_ERROR_ALERT_THRESHOLD
+        value: "3"
       - key: GITHUB_SUPPORT_TOKEN
         sync: false
       - key: GITHUB_SUPPORT_REPO

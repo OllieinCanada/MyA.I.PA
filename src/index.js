@@ -11,6 +11,7 @@ import TryDemo from "./TryDemo";
 import TradePages from "./TradePages";
 import FirstClassRentalsDemo from "./FirstClassRentalsDemo";
 import DeanAllisonDemo from "./DeanAllisonDemo";
+import { installClientErrorReporting } from "./clientErrorReporter";
 import "./tailwind.generated.css";
 import "./style.css";
 
@@ -53,6 +54,7 @@ function RouterRoot() {
   return page;
 }
 
+installClientErrorReporting();
 createRoot(document.getElementById("root")).render(<RouterRoot />);
 
 if ("serviceWorker" in navigator) {

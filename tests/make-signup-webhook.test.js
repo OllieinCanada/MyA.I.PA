@@ -4,6 +4,7 @@ const test = require("node:test");
 const {
   buildMakeSignupEventKey,
   buildMakeSignupHeaders,
+  classifyMakeSignupResponse,
   parseMakeSignupTimeoutMs,
   validateMakeWebhookUrl,
 } = require("../server/makeSignupWebhook");
@@ -58,4 +59,34 @@ test("bounds webhook timeouts to Make's webhook response window", () => {
   assert.equal(parseMakeSignupTimeoutMs("60000"), 60_000);
   assert.equal(parseMakeSignupTimeoutMs("999999"), 185_000);
   assert.equal(parseMakeSignupTimeoutMs("invalid"), 185_000);
+});
+
+test("does not treat an empty or queued Make response as completed provisioning", () => {
+  assert.deepEqual(classifyMakeSignupResponse("", {}), {
+    complete: false,
+    kind: "empty",
+    code: "MAKE_SIGNUP_RESPONSE_INCOMPLETE",
+  });
+  assert.deepEqual(classifyMakeSignupResponse("Accepted", {}), {
+    complete: false,
+    kind: "unrecognized",
+    code: "MAKE_SIGNUP_RESPONSE_INCOMPLETE",
+  });
+});
+
+test("requires an explicit success and all provider identifiers", () => {
+  const incomplete = classifyMakeSignupResponse('{"success":true}', { success: true });
+  assert.equal(incomplete.complete, false);
+  assert.equal(incomplete.kind, "acknowledged_incomplete");
+
+  const completePayload = {
+    success: true,
+    twilioPhoneNumber: "+12495550123",
+    vapiPhoneNumberId: "phone-id",
+    vapiAssistantId: "assistant-id",
+  };
+  const complete = classifyMakeSignupResponse(JSON.stringify(completePayload), completePayload);
+  assert.equal(complete.complete, true);
+  assert.equal(complete.kind, "completed");
+  assert.equal(complete.twilioPhoneNumber, "+12495550123");
 });

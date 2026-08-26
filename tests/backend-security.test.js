@@ -94,7 +94,7 @@ test("signup recovery diagnostics reveal provider state without customer data", 
   assert.equal(JSON.stringify(diagnostics).includes("assistant-private-id"), false);
 });
 
-test("failed verified voice signup can be rebuilt only from its matching Vapi tool call", () => {
+test("recoverable verified voice signup can be rebuilt only from its matching Vapi tool call", () => {
   const signup = {
     vapiCallId: "call_voice_recovery",
     status: "setup_error",
@@ -135,6 +135,13 @@ test("failed verified voice signup can be rebuilt only from its matching Vapi to
   assert.equal(recovered.security.emailVerificationCompleted, true);
   assert.equal(recovered.source.callId, signup.vapiCallId);
   assert.equal(recovered.business.name, signup.businessName);
+
+  for (const status of ["setup_error", "provisioning_failed", "provisioning_pending", "provisioning_unknown", "manual_review_reopened"]) {
+    assert.equal(__test.isRecoverableVoiceSignupStatus(status), true);
+    assert.ok(__test.buildRecoveredVoiceSignupPayload({ ...signup, status }, call));
+  }
+  assert.equal(__test.isRecoverableVoiceSignupStatus("setup_ready"), false);
+  assert.equal(__test.buildRecoveredVoiceSignupPayload({ ...signup, status: "setup_ready" }, call), null);
 
   assert.throws(
     () => __test.buildRecoveredVoiceSignupPayload({ ...signup, ownerEmail: "different@example.com" }, call),
@@ -273,6 +280,38 @@ test("signup recovery requires the monitor key and explicit confirmation", async
     method: "POST",
     headers: { "x-monitor-api-key": process.env.MONITOR_API_KEY },
     body: { targetId: "1234567890abcdef12345678" },
+  });
+  assert.equal(unconfirmed.status, 400);
+  assert.match((await unconfirmed.json()).error, /confirmation/i);
+});
+
+test("production Telegram test requires the monitor key and explicit confirmation", async () => {
+  const unauthorized = await request("/api/internal/operations/telegram-test", {
+    method: "POST",
+    body: { confirmation: "SEND_TELEGRAM_TEST" },
+  });
+  assert.equal(unauthorized.status, 401);
+
+  const unconfirmed = await request("/api/internal/operations/telegram-test", {
+    method: "POST",
+    headers: { "x-monitor-api-key": process.env.MONITOR_API_KEY },
+    body: {},
+  });
+  assert.equal(unconfirmed.status, 400);
+  assert.match((await unconfirmed.json()).error, /confirmation/i);
+});
+
+test("production provisioning canary requires the monitor key and explicit confirmation", async () => {
+  const unauthorized = await request("/api/internal/operations/provisioning-canary", {
+    method: "POST",
+    body: { confirmation: "RUN_PROVISIONING_CANARY" },
+  });
+  assert.equal(unauthorized.status, 401);
+
+  const unconfirmed = await request("/api/internal/operations/provisioning-canary", {
+    method: "POST",
+    headers: { "x-monitor-api-key": process.env.MONITOR_API_KEY },
+    body: {},
   });
   assert.equal(unconfirmed.status, 400);
   assert.match((await unconfirmed.json()).error, /confirmation/i);
@@ -582,6 +621,76 @@ test("voice signup texts from the same public number the caller dialed", () => {
   assert.equal(smsEnv.TWILIO_ACCOUNT_SID, "ACtest");
 });
 
+test("browser crash reports are accepted without echoing sensitive diagnostics", async () => {
+  const response = await request("/api/client-errors", {
+    method: "POST",
+    body: {
+      type: "uncaught_error",
+      route: "/signup?email=private@example.com",
+      message: "Failed for private@example.com +1 905-555-0123 token=private-secret",
+      stack: "must never be forwarded",
+    },
+  });
+  assert.equal(response.status, 202);
+  const body = await response.json();
+  assert.deepEqual(body, { ok: true, accepted: true });
+  assert.doesNotMatch(JSON.stringify(body), /private@example\.com|905-555-0123|private-secret|must never/);
+});
+
+test("browser error intake collapses untrusted routes and types to safe alert groups", () => {
+  assert.equal(__test.normalizeClientErrorType("attacker-controlled-type"), "browser_error");
+  assert.equal(__test.normalizeClientErrorType("resource_error"), "resource_error");
+  assert.equal(__test.normalizeClientErrorRoute("/signup/private-id?token=secret"), "/signup");
+  assert.equal(__test.normalizeClientErrorRoute("/attacker/can/vary/this"), "/");
+});
+
+test("voice signup preserves the production manual-approval hold", () => {
+  assert.deepEqual(
+    __test.getVoiceSignupReviewReasons({ SIGNUP_REQUIRE_MANUAL_APPROVAL: "true" }),
+    ["manual_approval_enabled"]
+  );
+  assert.deepEqual(
+    __test.getVoiceSignupReviewReasons({ SIGNUP_REQUIRE_MANUAL_APPROVAL: "false" }),
+    []
+  );
+});
+
+test("signup recovery selects the exact attempt and never matches email to a different business", () => {
+  const exactPayload = {
+    submittedAt: "2026-08-25T21:03:13.616Z",
+    owner: { email: "owner@example.com" },
+    business: { name: "Current Electrical" },
+  };
+  const exactAttemptId = require("../server/makeSignupWebhook").buildMakeSignupEventKey(exactPayload);
+  const exactEntry = {
+    ownerEmail: "owner@example.com",
+    businessName: "Current Electrical",
+    payload: exactPayload,
+    createdAt: 200,
+  };
+  const wrongBusinessEntry = {
+    ownerEmail: "owner@example.com",
+    businessName: "Old Electrical",
+    payload: {
+      owner: { email: "owner@example.com" },
+      business: { name: "Old Electrical" },
+    },
+    createdAt: 300,
+  };
+
+  const exact = __test.findPendingSignupForDashboardRecord(
+    { ownerEmail: "owner@example.com", businessName: "Current Electrical", signupAttemptId: exactAttemptId },
+    { wrong: wrongBusinessEntry, exact: exactEntry }
+  );
+  assert.equal(exact?.[0], "exact");
+
+  const mismatch = __test.findPendingSignupForDashboardRecord(
+    { ownerEmail: "owner@example.com", businessName: "Different Electrical" },
+    { wrong: wrongBusinessEntry }
+  );
+  assert.equal(mismatch, null);
+});
+
 test("integration credentials are not accepted from a request body", async () => {
   const response = await request("/api/leads/create", {
     method: "POST",
@@ -817,30 +926,72 @@ test("customer-submitted support analysis cannot escalate its own severity", () 
   assert.equal(analysis.severity, "LOW");
 });
 
-test("Make signup authentication is accepted by provisioning routes", async () => {
+test("legacy owner SMS results reject missing tenant routing even with integration authentication", async () => {
+  const response = await request("/api/integrations/vapi/owner-sms-results", {
+    method: "POST",
+    headers: { authorization: `Bearer ${process.env.INTEGRATION_API_KEY}` },
+    body: {
+      eventId: "owner-sms-missing-route",
+      name: "Synthetic caller",
+      callbackNumber: "+19055550123",
+      summary: "Synthetic routing test",
+    },
+  });
+  assert.equal(response.status, 422);
+  assert.match((await response.json()).error, /trusted businessId or mapped Vapi call context is required/i);
+});
+
+test("legacy owner SMS results reject a cross-tenant business and stored-call conflict", async () => {
+  const originalFindFirst = prisma.call.findFirst;
+  prisma.call.findFirst = async ({ where }) => {
+    const matchesSyntheticCall = where?.OR?.some((candidate) => candidate.externalId === "call-owned-by-business-one");
+    return matchesSyntheticCall ? { businessId: 1 } : null;
+  };
+  try {
+    const response = await request("/api/integrations/vapi/owner-sms-results", {
+      method: "POST",
+      headers: { authorization: `Bearer ${process.env.INTEGRATION_API_KEY}` },
+      body: {
+        eventId: "owner-sms-cross-tenant-route",
+        businessId: 2,
+        callId: "call-owned-by-business-one",
+        name: "Synthetic caller",
+        callbackNumber: "+19055550123",
+        summary: "Synthetic routing test",
+      },
+    });
+    assert.equal(response.status, 409);
+    assert.match((await response.json()).error, /resolve to different businesses/i);
+  } finally {
+    prisma.call.findFirst = originalFindFirst;
+  }
+});
+
+test("Make signup authentication alone cannot trigger a paid provisioning route", async () => {
   const response = await request("/api/integrations/vapi/import-twilio-number", {
     method: "POST",
     headers: { "x-make-apikey": process.env.MAKE_SIGNUP_WEBHOOK_API_KEY },
     body: {},
   });
-  assert.notEqual(response.status, 401);
-  assert.match((await response.json()).error, /VAPI_API_KEY is not configured/i);
+  assert.equal(response.status, 401);
+  assert.match((await response.json()).error, /signed provisioning request/i);
 });
 
-test("Make webhook token authentication is accepted by provisioning routes", async () => {
+test("a leaked Make webhook token cannot trigger a paid provisioning route", async () => {
   const response = await request("/api/integrations/vapi/import-twilio-number", {
     method: "POST",
     headers: { "x-make-webhook-token": "test-private-webhook-token-42" },
     body: {},
   });
-  assert.notEqual(response.status, 401);
-  assert.match((await response.json()).error, /VAPI_API_KEY is not configured/i);
+  assert.equal(response.status, 401);
+  assert.match((await response.json()).error, /signed provisioning request/i);
 });
 
-test("Twilio provisioning reuses a number already assigned to the Make voice webhook", async () => {
+test("Twilio provisioning reuses only the exact deterministic signup resource", async () => {
   const calls = [];
+  const friendlyName = `myaipa-twilio-number-${"a".repeat(20)}`;
   const result = await __test.purchaseTwilioPhoneNumber(
-    { areaCode: "249", voiceUrl: "https://hook.us2.make.com/existing-voice-hook" },
+    { areaCode: "249", voiceUrl: "https://hook.us2.make.com/existing-voice-hook", friendlyName },
     {
       fetchImpl: async (url, options = {}) => {
         calls.push({ url: String(url), method: options.method || "GET" });
@@ -848,6 +999,7 @@ test("Twilio provisioning reuses a number already assigned to the Make voice web
           incoming_phone_numbers: [{
             sid: "PNexisting",
             phone_number: "+12495550123",
+            friendly_name: friendlyName,
             voice_url: "https://hook.us2.make.com/existing-voice-hook",
             voice_method: "POST",
             capabilities: { voice: true, sms: true },
@@ -861,6 +1013,50 @@ test("Twilio provisioning reuses a number already assigned to the Make voice web
   assert.equal(result.reused, true);
   assert.equal(calls.length, 1);
   assert.equal(calls[0].method, "GET");
+});
+
+test("Twilio provisioning never cross-assigns another signup sharing the same voice webhook", async () => {
+  const calls = [];
+  const friendlyName = `myaipa-twilio-number-${"b".repeat(20)}`;
+  const result = await __test.purchaseTwilioPhoneNumber(
+    { areaCode: "905", region: "ON", voiceUrl: "https://hook.us2.make.com/shared-voice-hook", friendlyName },
+    {
+      fetchImpl: async (url, options = {}) => {
+        const method = options.method || "GET";
+        calls.push({ url: String(url), method, body: String(options.body || "") });
+        if (method === "POST") {
+          return new Response(JSON.stringify({
+            sid: "PNnew",
+            phone_number: "+19055550124",
+            friendly_name: friendlyName,
+            voice_url: "https://hook.us2.make.com/shared-voice-hook",
+            voice_method: "POST",
+            capabilities: { voice: true, sms: true },
+          }), { status: 201, headers: { "content-type": "application/json" } });
+        }
+        if (String(url).includes("AvailablePhoneNumbers")) {
+          return new Response(JSON.stringify({
+            available_phone_numbers: [{ phone_number: "+19055550124" }],
+          }), { status: 200, headers: { "content-type": "application/json" } });
+        }
+        return new Response(JSON.stringify({
+          incoming_phone_numbers: [{
+            sid: "PNother",
+            phone_number: "+12495550123",
+            friendly_name: `myaipa-twilio-number-${"c".repeat(20)}`,
+            voice_url: "https://hook.us2.make.com/shared-voice-hook",
+            voice_method: "POST",
+            capabilities: { voice: true, sms: true },
+          }],
+        }), { status: 200, headers: { "content-type": "application/json" } });
+      },
+    }
+  );
+
+  assert.equal(result.twilioPhoneNumber, "+19055550124");
+  assert.equal(result.reused, undefined);
+  assert.equal(calls.filter((call) => call.method === "POST").length, 1);
+  assert.match(calls.find((call) => call.method === "POST").body, new RegExp(`FriendlyName=${friendlyName}`));
 });
 
 test("Vapi end-of-call reports normalize duration, status, cost, and artifacts", () => {
@@ -1200,11 +1396,26 @@ test("rate limits rely on Express's trusted-proxy client address", () => {
 });
 
 test("admin login attempts are rate limited", async () => {
-  for (let index = 0; index < 9; index += 1) {
-    const response = await request("/api/admin/login", { method: "POST", body: { password: `wrong-${index}` } });
-    assert.equal(response.status, 401);
-  }
+  const originalAuditCreate = prisma.runtimeStore.create;
+  prisma.runtimeStore.create = async ({ data }) => data;
+  const headers = { "x-forwarded-for": "198.51.100.77" };
+  try {
+    for (let index = 0; index < 10; index += 1) {
+      const response = await request("/api/admin/login", {
+        method: "POST",
+        headers,
+        body: { password: `wrong-${index}` },
+      });
+      assert.equal(response.status, 401);
+    }
 
-  const blocked = await request("/api/admin/login", { method: "POST", body: { password: "still-wrong" } });
-  assert.equal(blocked.status, 429);
+    const blocked = await request("/api/admin/login", {
+      method: "POST",
+      headers,
+      body: { password: "still-wrong" },
+    });
+    assert.equal(blocked.status, 429);
+  } finally {
+    prisma.runtimeStore.create = originalAuditCreate;
+  }
 });

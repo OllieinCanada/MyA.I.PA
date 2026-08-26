@@ -39,6 +39,10 @@ test("builds the canonical Make signup payload from a confirmed phone signup", (
   assert.equal(payload.business.name, "Example Electric");
   assert.equal(payload.business.phone, "+19055550199");
   assert.equal(payload.business.address, "23 Robb Street, Hamilton, ON L8L 1A1");
+  assert.equal(payload.business.streetAddress, "23 Robb Street");
+  assert.equal(payload.business.city, "Hamilton");
+  assert.equal(payload.business.province, "ON");
+  assert.equal(payload.business.postalCode, "L8L 1A1");
   assert.equal(payload.owner.email, "ron@example.ca");
   assert.equal(payload.owner.phone, "+19055550199");
   assert.equal(payload.verification.emailVerified, false);

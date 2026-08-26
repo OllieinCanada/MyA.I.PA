@@ -106,7 +106,7 @@ const externalActions = [
   "Verify production provider contracts, locations, retention, and deletion controls.",
   "Verify Render paid-database PITR and create a logical export.",
   "Complete an isolated restore drill and record recovery time and data-loss window.",
-  "Schedule the production monitor outside the production service and test an alert.",
+  "Test one controlled production-monitor failure and retain the Telegram delivery evidence.",
   "Run an incident tabletop exercise and retain the signed exercise record.",
 ];
 

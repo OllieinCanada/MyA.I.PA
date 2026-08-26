@@ -9,15 +9,13 @@ export const SIGNUP_API_PATH = "/api/integrations/signup-complete";
 export const CHECKOUT_API_PATH = "/api/payments/create-checkout-session";
 export const IS_MAKE_WEBHOOK = isMakeWebhookUrl(RAW_API_BASE);
 
-export const API_BASE = normalizeApiBase(RAW_API_BASE);
+export const API_BASE = normalizeApiBase(IS_MAKE_WEBHOOK ? getDefaultApiBaseUrl() : RAW_API_BASE);
 
-export const SIGNUP_SUBMIT_URL = MAKE_SIGNUP_WEBHOOK_URL
-  ? normalizeApiBase(MAKE_SIGNUP_WEBHOOK_URL)
-  : IS_MAKE_WEBHOOK
-    ? normalizeApiBase(RAW_API_BASE)
-    : `${API_BASE}${SIGNUP_API_PATH}`;
+// Signups must pass through the backend so an opaque Make acceptance can never
+// be presented to the customer as completed provisioning.
+export const SIGNUP_SUBMIT_URL = `${API_BASE}${SIGNUP_API_PATH}`;
 
-export const CHECKOUT_API_BASE = normalizeApiBase(RAW_CHECKOUT_API_BASE || (IS_MAKE_WEBHOOK ? getDefaultApiBaseUrl() : API_BASE));
+export const CHECKOUT_API_BASE = normalizeApiBase(RAW_CHECKOUT_API_BASE || API_BASE);
 export const CHECKOUT_SESSION_URL = `${CHECKOUT_API_BASE}${CHECKOUT_API_PATH}`;
 export const VAPI_PREVIEW_CONFIG_URL = `${API_BASE}/api/public/vapi-preview-config`;
 export const VAPI_PREVIEW_SESSION_URL = `${API_BASE}/api/public/vapi-preview-session`;
