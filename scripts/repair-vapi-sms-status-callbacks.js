@@ -5,8 +5,22 @@ const { isManagedIsolatedTool } = require("../server/vapiIsolatedSmsProvisioning
 const CALLBACK_ENV_NAME = "TWILIO_STATUS_CALLBACK_URL";
 const CALLBACK_URL = "https://api.myaipa.ca/api/webhooks/twilio/message-status";
 const CONFIRMATION_PHRASE = "SET_VAPI_SMS_STATUS_CALLBACKS_V1";
+const CANARY_CONFIRMATION_PHRASE = "SET_ONE_VAPI_SMS_STATUS_CALLBACK_V1";
 const TOOL_LIST_LIMIT = 1000;
 const REQUEST_TIMEOUT_MS = 15_000;
+const CLIENT_CONTROLLED_FIELDS = [
+  "type",
+  "async",
+  "server",
+  "code",
+  "environmentVariables",
+  "messages",
+  "timeoutSeconds",
+  "credentialId",
+  "variableExtractionPlan",
+  "rejectionPlan",
+  "function",
+];
 
 function listFrom(value, keys = []) {
   if (Array.isArray(value)) return value;
@@ -54,13 +68,37 @@ function looksMasked(value) {
     || /^x{6,}$/i.test(text);
 }
 
-function withoutVolatileFields(tool) {
+function semanticEnvironment(environmentVariables) {
+  if (!Array.isArray(environmentVariables)) return [];
+  return environmentVariables
+    .map((entry) => stableValue(entry))
+    .sort((left, right) => {
+      const nameOrder = String(left?.name || "").localeCompare(String(right?.name || ""));
+      return nameOrder || stableJson(left).localeCompare(stableJson(right));
+    });
+}
+
+function clientControlledProjection(tool, { includeEnvironment = true } = {}) {
   const output = {};
-  for (const [key, value] of Object.entries(tool || {})) {
-    if (key === "environmentVariables" || key === "updatedAt") continue;
-    output[key] = value;
+  for (const key of CLIENT_CONTROLLED_FIELDS) {
+    if (!Object.prototype.hasOwnProperty.call(tool || {}, key)) continue;
+    if (key === "environmentVariables") {
+      if (includeEnvironment) output[key] = semanticEnvironment(tool[key]);
+      continue;
+    }
+    output[key] = tool[key];
   }
   return output;
+}
+
+function withoutVolatileFields(tool) {
+  return clientControlledProjection(tool, { includeEnvironment: false });
+}
+
+function callbackState(environmentVariables) {
+  const entries = semanticEnvironment(environmentVariables)
+    .filter((entry) => String(entry?.name || "").trim() === CALLBACK_ENV_NAME);
+  return entries.map((entry) => stableValue(entry));
 }
 
 function replaceStatusCallback(environmentVariables, callbackUrl = CALLBACK_URL) {
@@ -97,8 +135,34 @@ function inspectReadback(before, after, desiredEnvironmentVariables, callbackUrl
     sameTool: String(before?.id || "") === String(after?.id || "") && Boolean(String(after?.id || "")),
     stillManaged: isManagedSummaryTool(after),
     callbackExact: callbackEntries.length === 1 && String(callbackEntries[0]?.value || "") === callbackUrl,
-    environmentExact: stableJson(afterEnvironment) === stableJson(desiredEnvironmentVariables),
+    environmentExact: stableJson(semanticEnvironment(afterEnvironment)) === stableJson(semanticEnvironment(desiredEnvironmentVariables)),
     otherConfigurationExact: stableJson(withoutVolatileFields(after)) === stableJson(withoutVolatileFields(before)),
+  };
+  return { ok: Object.values(checks).every(Boolean), checks };
+}
+
+function inspectRollbackReadback(original, after) {
+  const checks = {
+    sameTool: String(original?.id || "") === String(after?.id || "") && Boolean(String(after?.id || "")),
+    stillManaged: isManagedSummaryTool(after),
+    originalCallbackExact: stableJson(callbackState(after?.environmentVariables))
+      === stableJson(callbackState(original?.environmentVariables)),
+    environmentExact: stableJson(semanticEnvironment(after?.environmentVariables))
+      === stableJson(semanticEnvironment(original?.environmentVariables)),
+    otherConfigurationExact: stableJson(withoutVolatileFields(after))
+      === stableJson(withoutVolatileFields(original)),
+  };
+  return { ok: Object.values(checks).every(Boolean), checks };
+}
+
+function inspectConcurrency(original, current) {
+  const checks = {
+    sameTool: String(original?.id || "") === String(current?.id || "") && Boolean(String(current?.id || "")),
+    stillManaged: isManagedSummaryTool(current),
+    latestVersionUnchanged: String(original?.latestVersion || "") === String(current?.latestVersion || ""),
+    updatedAtUnchanged: String(original?.updatedAt || "") === String(current?.updatedAt || ""),
+    clientConfigurationUnchanged: stableJson(clientControlledProjection(original))
+      === stableJson(clientControlledProjection(current)),
   };
   return { ok: Object.values(checks).every(Boolean), checks };
 }
@@ -116,20 +180,37 @@ function buildToolPlan(tool, callbackUrl = CALLBACK_URL) {
     originalEnvironmentVariables: tool.environmentVariables.map((entry) => ({ ...entry })),
     desiredEnvironmentVariables,
     needsChange,
-    beforeConfigurationHash: configurationHash(tool),
-    desiredConfigurationHash: configurationHash(desiredTool),
+    beforeConfigurationHash: configurationHash(clientControlledProjection(tool)),
+    desiredConfigurationHash: configurationHash(clientControlledProjection(desiredTool)),
+    concurrencyHash: configurationHash({
+      latestVersion: String(tool.latestVersion || ""),
+      updatedAt: String(tool.updatedAt || ""),
+      configuration: clientControlledProjection(tool),
+    }),
   };
 }
 
-function safeReport({ mode, listedCount, plans, applied = [], verified = [], rolledBack = [], failed = [] }) {
-  const changes = plans.filter((plan) => plan.needsChange);
+function safeReport({
+  mode,
+  listedCount,
+  plans,
+  selectedPlans = plans,
+  applied = [],
+  verified = [],
+  rolledBack = [],
+  failed = [],
+}) {
+  const changes = selectedPlans.filter((plan) => plan.needsChange);
   return {
     mode,
+    publicationRequired: true,
+    liveImpactConfirmed: false,
     callbackUrlHash: shortHash(CALLBACK_URL),
     counts: {
       listed: listedCount,
       managed: plans.length,
-      alreadyCorrect: plans.length - changes.length,
+      selected: selectedPlans.length,
+      alreadyCorrect: selectedPlans.length - changes.length,
       planned: changes.length,
       applied: applied.length,
       verified: verified.length,
@@ -137,6 +218,7 @@ function safeReport({ mode, listedCount, plans, applied = [], verified = [], rol
       failed: failed.length,
     },
     managedToolHashes: plans.map((plan) => plan.toolHash).sort(),
+    selectedToolHashes: selectedPlans.map((plan) => plan.toolHash).sort(),
     plannedToolHashes: changes.map((plan) => plan.toolHash).sort(),
     appliedToolHashes: [...applied].sort(),
     verifiedToolHashes: [...verified].sort(),
@@ -144,6 +226,7 @@ function safeReport({ mode, listedCount, plans, applied = [], verified = [], rol
     failedToolHashes: [...failed].sort(),
     beforeConfigurationHashes: plans.map((plan) => plan.beforeConfigurationHash).sort(),
     desiredConfigurationHashes: plans.map((plan) => plan.desiredConfigurationHash).sort(),
+    concurrencyHashes: plans.map((plan) => plan.concurrencyHash).sort(),
   };
 }
 
@@ -191,15 +274,8 @@ async function rollbackChangedTools(client, changedPlans) {
     try {
       await client.patchToolEnvironment(plan.id, plan.originalEnvironmentVariables);
       const readback = await client.getTool(plan.id);
-      const check = inspectReadback(
-        { ...readback, environmentVariables: plan.originalEnvironmentVariables },
-        readback,
-        plan.originalEnvironmentVariables,
-        plan.originalEnvironmentVariables.find((entry) => String(entry?.name || "").trim() === CALLBACK_ENV_NAME)?.value || ""
-      );
-      const rootExact = stableJson(withoutVolatileFields(readback)) === stableJson(withoutVolatileFields(plan.originalTool));
-      const environmentExact = stableJson(readback.environmentVariables) === stableJson(plan.originalEnvironmentVariables);
-      if (!rootExact || !environmentExact || !check.checks.sameTool || !check.checks.stillManaged) {
+      const check = inspectRollbackReadback(plan.originalTool, readback);
+      if (!check.ok) {
         throw new Error("Rollback readback did not match the original tool.");
       }
       rolledBack.push(plan.toolHash);
@@ -214,14 +290,22 @@ async function repairStatusCallbacks({
   client,
   apply = false,
   confirmation = "",
+  canaryToolHash = "",
   callbackUrl = CALLBACK_URL,
 } = {}) {
   if (!client || typeof client.listTools !== "function" || typeof client.getTool !== "function" || typeof client.patchToolEnvironment !== "function") {
     throw new Error("A complete Vapi repair client is required.");
   }
   if (callbackUrl !== CALLBACK_URL) throw new Error("The production callback URL is fixed and cannot be overridden.");
-  if (apply && confirmation !== CONFIRMATION_PHRASE) {
-    throw new Error(`Apply mode requires --confirm=${CONFIRMATION_PHRASE}.`);
+  const normalizedCanaryHash = String(canaryToolHash || "").trim().toLowerCase();
+  if (normalizedCanaryHash && !/^[a-f0-9]{12}$/.test(normalizedCanaryHash)) {
+    throw new Error("Canary mode requires one 12-character tool hash from the dry-run report.");
+  }
+  if (apply && !normalizedCanaryHash) {
+    throw new Error("Batch apply is disabled until Vapi publication and assistant-version pinning are separately audited.");
+  }
+  if (apply && confirmation !== CANARY_CONFIRMATION_PHRASE) {
+    throw new Error(`Canary draft staging requires --confirm=${CANARY_CONFIRMATION_PHRASE}.`);
   }
 
   const inventoryPayload = await client.listTools();
@@ -250,15 +334,44 @@ async function repairStatusCallbacks({
   if (new Set(plans.map((plan) => plan.id)).size !== plans.length) {
     throw new Error("Vapi managed-tool readback is duplicated; no updates were attempted.");
   }
-  if (!apply) return safeReport({ mode: "dry-run", listedCount: summaries.length, plans });
+  const selectedPlans = normalizedCanaryHash
+    ? plans.filter((plan) => plan.toolHash === normalizedCanaryHash)
+    : plans;
+  if (normalizedCanaryHash && selectedPlans.length !== 1) {
+    throw new Error("The canary tool hash did not identify exactly one managed tool; no updates were attempted.");
+  }
+  if (!apply) {
+    return safeReport({
+      mode: normalizedCanaryHash ? "dry-run-canary" : "dry-run",
+      listedCount: summaries.length,
+      plans,
+      selectedPlans,
+    });
+  }
 
   const applied = [];
   const verified = [];
   const changedPlans = [];
   let failedPlan = null;
   try {
-    for (const plan of plans.filter((item) => item.needsChange)) {
+    for (const plan of selectedPlans) {
       failedPlan = plan;
+      const justInTime = await client.getTool(plan.id);
+      const concurrency = inspectConcurrency(plan.originalTool, justInTime);
+      if (!concurrency.ok) {
+        throw new Error("A managed Vapi tool changed after preflight; no stale update was attempted.");
+      }
+      if (!plan.needsChange) {
+        const currentCheck = inspectReadback(
+          plan.originalTool,
+          justInTime,
+          plan.desiredEnvironmentVariables,
+          callbackUrl
+        );
+        if (!currentCheck.ok) throw new Error("An already-correct Vapi tool did not pass exact readback.");
+        failedPlan = null;
+        continue;
+      }
       changedPlans.push(plan);
       await client.patchToolEnvironment(plan.id, plan.desiredEnvironmentVariables);
       applied.push(plan.toolHash);
@@ -271,36 +384,46 @@ async function repairStatusCallbacks({
   } catch (_error) {
     const rollback = await rollbackChangedTools(client, changedPlans);
     const report = safeReport({
-      mode: "apply-failed",
+      mode: "stage-canary-draft-failed",
       listedCount: summaries.length,
       plans,
+      selectedPlans,
       applied,
       verified,
       rolledBack: rollback.rolledBack,
       failed: [...new Set([...(failedPlan ? [failedPlan.toolHash] : []), ...rollback.failed])],
     });
     const error = new Error(rollback.failed.length
-      ? "Vapi callback repair failed and one or more rollback readbacks also failed."
-      : "Vapi callback repair failed; verified updates were rolled back.");
+      ? "Vapi callback draft staging failed and one or more rollback readbacks also failed."
+      : "Vapi callback draft staging failed; attempted updates were rolled back.");
     error.safeReport = report;
     throw error;
   }
 
   return safeReport({
-    mode: "apply",
+    mode: "stage-canary-draft",
     listedCount: summaries.length,
     plans,
+    selectedPlans,
     applied,
     verified,
   });
 }
 
 function parseArgs(args) {
-  const allowed = args.every((arg) => arg === "--apply" || arg.startsWith("--confirm="));
+  const allowed = args.every((arg) => arg === "--apply"
+    || arg.startsWith("--confirm=")
+    || arg.startsWith("--canary-tool-hash="));
   if (!allowed) throw new Error("Unsupported command-line argument.");
+  const confirmations = args.filter((arg) => arg.startsWith("--confirm="));
+  const canaryHashes = args.filter((arg) => arg.startsWith("--canary-tool-hash="));
+  if (confirmations.length > 1 || canaryHashes.length > 1 || args.filter((arg) => arg === "--apply").length > 1) {
+    throw new Error("Duplicate command-line arguments are not allowed.");
+  }
   return {
     apply: args.includes("--apply"),
-    confirmation: args.find((arg) => arg.startsWith("--confirm="))?.slice("--confirm=".length) || "",
+    confirmation: confirmations[0]?.slice("--confirm=".length) || "",
+    canaryToolHash: canaryHashes[0]?.slice("--canary-tool-hash=".length) || "",
   };
 }
 
@@ -318,7 +441,7 @@ async function main() {
 if (require.main === module) {
   main().catch((error) => {
     if (error?.safeReport) console.error(JSON.stringify(error.safeReport, null, 2));
-    console.error(String(error?.message || "Vapi callback repair failed."));
+    console.error(String(error?.message || "Vapi callback draft staging failed."));
     process.exitCode = 1;
   });
 }
@@ -326,15 +449,22 @@ if (require.main === module) {
 module.exports = {
   CALLBACK_ENV_NAME,
   CALLBACK_URL,
+  CANARY_CONFIRMATION_PHRASE,
+  CLIENT_CONTROLLED_FIELDS,
   CONFIRMATION_PHRASE,
   buildToolPlan,
+  callbackState,
+  clientControlledProjection,
   configurationHash,
   createVapiClient,
+  inspectConcurrency,
   inspectReadback,
+  inspectRollbackReadback,
   isManagedSummaryTool,
   parseArgs,
   repairStatusCallbacks,
   replaceStatusCallback,
+  semanticEnvironment,
   shortHash,
   stableJson,
   withoutVolatileFields,
