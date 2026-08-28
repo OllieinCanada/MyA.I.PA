@@ -8,6 +8,7 @@ const {
 
 function createFakePrisma() {
   const rows = new Map();
+  const rawQueries = [];
   const runtimeStore = {
     async findUnique({ where }) {
       return rows.has(where.key) ? { key: where.key, data: rows.get(where.key) } : null;
@@ -21,10 +22,16 @@ function createFakePrisma() {
   const prisma = {
     runtimeStore,
     async $transaction(callback) {
-      return callback({ runtimeStore });
+      return callback({
+        runtimeStore,
+        async $queryRaw(strings) {
+          rawQueries.push(strings.join("?"));
+          return [{ lock_result: "" }];
+        },
+      });
     },
   };
-  return { prisma, rows };
+  return { prisma, rawQueries, rows };
 }
 
 test("provisioning state keys contain no raw signup identity", () => {
@@ -34,7 +41,7 @@ test("provisioning state keys contain no raw signup identity", () => {
 });
 
 test("an exact replay returns the durable result without another provider call", async () => {
-  const { prisma } = createFakePrisma();
+  const { prisma, rawQueries } = createFakePrisma();
   let executions = 0;
   const input = {
     prisma,
@@ -54,6 +61,8 @@ test("an exact replay returns the durable result without another provider call",
   assert.equal(second.twilioSid, "PN1");
   assert.equal(second.reused, true);
   assert.equal(executions, 1);
+  assert.ok(rawQueries.length >= 2);
+  assert.ok(rawQueries.every((query) => /pg_advisory_xact_lock[\s\S]*::text AS lock_result/i.test(query)));
 });
 
 test("provider reconciliation closes the post-create crash window", async () => {

@@ -37,8 +37,12 @@ function classifySmsPreference(body) {
   return { action: "NONE", keyword: "" };
 }
 
-function getTwilioWebhookUrl(req, env = process.env) {
-  const configured = String(env.TWILIO_INBOUND_WEBHOOK_URL || "").trim();
+function getTwilioWebhookUrl(req, env = process.env, options = {}) {
+  const configured = String(
+    Object.prototype.hasOwnProperty.call(options, "configuredUrl")
+      ? options.configuredUrl
+      : env.TWILIO_INBOUND_WEBHOOK_URL
+  ).trim();
   if (configured) return configured;
   const protocol = String(req.headers["x-forwarded-proto"] || req.protocol || "https").split(",")[0].trim();
   const host = String(req.headers["x-forwarded-host"] || req.headers.host || "").split(",")[0].trim();
@@ -63,10 +67,10 @@ function safeEqual(leftValue, rightValue) {
   return left.length === right.length && left.length > 0 && crypto.timingSafeEqual(left, right);
 }
 
-function verifyTwilioWebhookRequest(req, env = process.env) {
+function verifyTwilioWebhookRequest(req, env = process.env, options = {}) {
   const authToken = String(env.TWILIO_AUTH_TOKEN || "").trim();
   const supplied = String(req.headers["x-twilio-signature"] || "").trim();
-  const url = getTwilioWebhookUrl(req, env);
+  const url = getTwilioWebhookUrl(req, env, options);
   if (!authToken || !supplied || !url) return false;
   return safeEqual(supplied, getTwilioSignature(url, req.body || {}, authToken));
 }

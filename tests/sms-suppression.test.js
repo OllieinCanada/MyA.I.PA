@@ -4,9 +4,11 @@ const {
   classifySmsPreference,
   forwardSmsToUpstream,
   getTwilioSignature,
+  getTwilioWebhookUrl,
   normalizeSmsPhone,
   normalizeSmsUpstreamUrl,
   recordSmsPreference,
+  verifyTwilioWebhookRequest,
 } = require("../server/smsSuppression");
 
 test("standard STOP and START family keywords are classified without matching ordinary messages", () => {
@@ -37,6 +39,36 @@ test("signed webhook input uses the documented URL plus sorted form fields", () 
     { From: "+19055550123", Body: "STOP", To: "+12495550100" },
     "auth-token"
   ));
+});
+
+test("delivery callbacks verify against their exact configured URL instead of the inbound SMS URL", () => {
+  const callbackUrl = "https://api.example.test/api/webhooks/twilio/message-status";
+  const body = { MessageSid: "SM_STATUS", MessageStatus: "undelivered", ErrorCode: "30003" };
+  const request = {
+    protocol: "https",
+    originalUrl: "/api/webhooks/twilio/message-status",
+    body,
+    headers: {
+      host: "api.example.test",
+      "x-twilio-signature": getTwilioSignature(callbackUrl, body, "auth-token"),
+    },
+  };
+  const env = {
+    TWILIO_AUTH_TOKEN: "auth-token",
+    TWILIO_INBOUND_WEBHOOK_URL: "https://api.example.test/api/webhooks/sms",
+  };
+  assert.equal(
+    getTwilioWebhookUrl(request, env),
+    "https://api.example.test/api/webhooks/sms"
+  );
+  assert.equal(
+    getTwilioWebhookUrl(request, env, {
+      configuredUrl: callbackUrl,
+    }),
+    callbackUrl
+  );
+  assert.equal(verifyTwilioWebhookRequest(request, env), false);
+  assert.equal(verifyTwilioWebhookRequest(request, env, { configuredUrl: callbackUrl }), true);
 });
 
 test("ordinary inbound SMS forwarding only permits the Vapi HTTPS upstream", () => {

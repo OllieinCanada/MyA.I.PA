@@ -23,6 +23,8 @@ test("failed and stuck signups become redacted attention items", () => {
   assert.deepEqual(items[0].diagnostics, {
     status: "setup_error",
     paymentStatus: "",
+    subscriptionStatus: "",
+    stripeTrialFailed: false,
     makeStatus: null,
     makeError: true,
     smsRoutingStatus: "",
@@ -76,6 +78,93 @@ test("an active trial still alerts when provisioning never becomes ready", () =>
   assert.equal(items.length, 1);
   assert.equal(items[0].kind, "signup_stuck");
   assert.deepEqual(items[0].actions, ["recover_signup", "reopen_signup"]);
+});
+
+test("Stripe trial creation failures are explicit without exposing the raw error or claiming platform funding", () => {
+  const now = new Date("2026-08-28T12:00:00.000Z");
+  const rawError = "Request failed for private@example.com token=sk_should_not_appear";
+  const items = signupAttentionItems([{
+    ownerEmail: "private@example.com",
+    businessName: "Example Electrical",
+    status: "setup_ready",
+    subscriptionStatus: "private@example.com",
+    stripeTrialError: rawError,
+    updatedAt: "2026-08-28T11:58:00.000Z",
+  }], now, 10);
+
+  assert.equal(items.length, 1);
+  assert.equal(items[0].kind, "stripe_trial_creation_failed");
+  assert.equal(items[0].title, "Stripe trial creation failed");
+  assert.equal(items[0].incident.reasonCode, "STRIPE_TRIAL_CREATION_FAILED");
+  assert.equal(items[0].incident.confidence, "high");
+  assert.equal(items[0].diagnostics.stripeTrialFailed, true);
+  assert.equal(items[0].diagnostics.subscriptionStatus, "other");
+  const serialized = JSON.stringify(items);
+  assert.equal(serialized.includes(rawError), false);
+  assert.equal(serialized.includes("private@example.com"), false);
+  assert.doesNotMatch(serialized, /platform (?:funding|balance)|add money|top up/i);
+});
+
+test("a recovered active Stripe subscription suppresses a stale trial-creation error", () => {
+  const now = new Date("2026-08-28T12:00:00.000Z");
+  const items = signupAttentionItems([{
+    ownerEmail: "private@example.com",
+    status: "subscription_active",
+    subscriptionId: "sub_redacted",
+    subscriptionStatus: "active",
+    stripeTrialError: "old failure",
+    updatedAt: "2026-08-28T11:58:00.000Z",
+  }], now, 60);
+
+  assert.equal(items.length, 0);
+});
+
+test("customer subscription billing statuses produce distinct safe attention items", () => {
+  const now = new Date("2026-08-28T12:00:00.000Z");
+  const statuses = [
+    ["past_due", "subscription_past_due", "SUBSCRIPTION_PAST_DUE"],
+    ["unpaid", "subscription_unpaid", "SUBSCRIPTION_UNPAID"],
+    ["paused", "subscription_paused", "SUBSCRIPTION_PAUSED"],
+  ];
+
+  for (const [subscriptionStatus, kind, reasonCode] of statuses) {
+    const items = signupAttentionItems([{
+      ownerEmail: `${subscriptionStatus}@example.com`,
+      status: `subscription_${subscriptionStatus}`,
+      subscriptionStatus,
+      updatedAt: "2026-08-28T11:58:00.000Z",
+    }], now, 60);
+
+    assert.equal(items.length, 1);
+    assert.equal(items[0].kind, kind);
+    assert.equal(items[0].severity, "critical");
+    assert.equal(items[0].incident.reasonCode, reasonCode);
+    assert.equal(items[0].incident.confidence, "high");
+    assert.match(items[0].incident.lastCheckpoint, new RegExp(subscriptionStatus.replace("_", " "), "i"));
+    assert.equal(items[0].diagnostics.subscriptionStatus, subscriptionStatus);
+    const serialized = JSON.stringify(items);
+    assert.equal(serialized.includes(`${subscriptionStatus}@example.com`), false);
+    assert.doesNotMatch(serialized, /platform (?:funding|balance)|add money|top up/i);
+  }
+});
+
+test("existing payment_failed handling remains customer-specific and case-insensitive", () => {
+  const now = new Date("2026-08-28T12:00:00.000Z");
+  const items = signupAttentionItems([{
+    ownerEmail: "private@example.com",
+    status: "payment_failed",
+    paymentStatus: "PAYMENT_FAILED",
+    lastPaymentFailedAt: "2026-08-28T11:59:00.000Z",
+    updatedAt: "2026-08-28T11:58:00.000Z",
+  }], now, 60);
+
+  assert.equal(items.length, 1);
+  assert.equal(items[0].kind, "payment_failed");
+  assert.equal(items[0].title, "Customer payment failed");
+  assert.equal(items[0].incident.reasonCode, "PAYMENT_FAILED");
+  assert.match(items[0].incident.reason, /customer's payment/i);
+  assert.equal(items[0].detectedAt, "2026-08-28T11:59:00.000Z");
+  assert.doesNotMatch(JSON.stringify(items), /platform (?:funding|balance)|add money|top up/i);
 });
 
 test("pending phone provisioning becomes a critical signup incident", () => {

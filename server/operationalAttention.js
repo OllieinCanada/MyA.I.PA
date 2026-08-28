@@ -4,6 +4,19 @@ const FAILED_SIGNUP = /(error|failed|rejected|blocked)/i;
 const BLOCKED_PROVISIONING = /^provisioning_(pending|unknown)$/i;
 const IN_PROGRESS_SIGNUP = /^(signup_received|checkout_completed|setup_started|pending_email_verification|provisioning_(pending|unknown)|subscription_(trialing|active))$/i;
 const PROBLEM_HANDOFF_STATUSES = ["RETRY_DUE", "ESCALATION_DUE", "FAILED"];
+const CUSTOMER_BILLING_STATUSES = new Set(["payment_failed", "past_due", "unpaid", "paused"]);
+const SAFE_BILLING_DIAGNOSTIC_STATUSES = new Set([
+  ...CUSTOMER_BILLING_STATUSES,
+  "active",
+  "trialing",
+  "paid",
+  "canceled",
+  "cancelled",
+  "incomplete",
+  "incomplete_expired",
+  "expired",
+  "failed",
+]);
 const SAFE_PROVIDER_REASONS = Object.freeze({
   "20003": "Twilio rejected the configured credentials.",
   "20404": "Twilio could not find the requested messaging resource.",
@@ -91,6 +104,92 @@ function safeDiagnosticLabel(value) {
     .slice(0, 80);
 }
 
+function safeBillingStatus(value) {
+  const status = safeDiagnosticLabel(value);
+  if (!status) return "";
+  return SAFE_BILLING_DIAGNOSTIC_STATUSES.has(status) ? status : "other";
+}
+
+function getSignupBillingStatus(signup = {}, workflowStatus = "") {
+  const candidates = [
+    signup.paymentStatus,
+    signup.subscriptionStatus,
+    String(workflowStatus || "").replace(/^subscription_/i, ""),
+  ];
+  return candidates
+    .map(safeBillingStatus)
+    .find((status) => CUSTOMER_BILLING_STATUSES.has(status)) || "";
+}
+
+function signupBillingAttention(signup = {}, workflowStatus = "unknown") {
+  const billingStatus = getSignupBillingStatus(signup, workflowStatus);
+  if (billingStatus === "payment_failed") {
+    return {
+      kind: "payment_failed",
+      title: "Customer payment failed",
+      reason: "Stripe marked the customer's payment attempt as failed.",
+      reasonCode: "PAYMENT_FAILED",
+      impact: "The customer cannot start or continue paid service until the payment issue is resolved.",
+      lastCheckpoint: "Stripe reported an invoice payment failure",
+      nextAction: "Open the customer subscription and latest invoice in Stripe, resolve the payment method or invoice, then confirm the subscription is active before reopening setup.",
+      confidence: "high",
+    };
+  }
+  if (billingStatus === "past_due") {
+    return {
+      kind: "subscription_past_due",
+      title: "Customer subscription is past due",
+      reason: "Stripe reports that the customer's subscription is past due.",
+      reasonCode: "SUBSCRIPTION_PAST_DUE",
+      impact: "A customer invoice remains unresolved and service may be interrupted.",
+      lastCheckpoint: "Stripe reported the subscription as past due",
+      nextAction: "Open the customer subscription and latest invoice in Stripe, help the customer update payment or complete the invoice, then confirm the subscription is active.",
+      confidence: "high",
+    };
+  }
+  if (billingStatus === "unpaid") {
+    return {
+      kind: "subscription_unpaid",
+      title: "Customer subscription is unpaid",
+      reason: "Stripe reports that the customer's subscription is unpaid.",
+      reasonCode: "SUBSCRIPTION_UNPAID",
+      impact: "Paid service should remain unavailable until the customer subscription is restored.",
+      lastCheckpoint: "Stripe reported the subscription as unpaid",
+      nextAction: "Open the customer subscription and invoices in Stripe, resolve payment with the customer, then confirm the subscription is active before restoring service.",
+      confidence: "high",
+    };
+  }
+  if (billingStatus === "paused") {
+    return {
+      kind: "subscription_paused",
+      title: "Customer subscription is paused",
+      reason: "Stripe reports that the customer's subscription is paused.",
+      reasonCode: "SUBSCRIPTION_PAUSED",
+      impact: "The customer cannot continue paid service while the subscription remains paused.",
+      lastCheckpoint: "Stripe reported the subscription as paused",
+      nextAction: "Open the customer subscription in Stripe, confirm why it paused and whether a payment method is required, then resume it only when the billing state is valid.",
+      confidence: "high",
+    };
+  }
+
+  const stripeTrialFailed = Boolean(String(signup.stripeTrialError || "").trim());
+  const subscriptionStatus = safeBillingStatus(signup.subscriptionStatus);
+  const trialRecovered = Boolean(signup.subscriptionId) && ["trialing", "active"].includes(subscriptionStatus);
+  if (stripeTrialFailed && !trialRecovered) {
+    return {
+      kind: "stripe_trial_creation_failed",
+      title: "Stripe trial creation failed",
+      reason: "The backend recorded a failure while asking Stripe to create the no-card trial subscription.",
+      reasonCode: "STRIPE_TRIAL_CREATION_FAILED",
+      impact: "The customer may have a provisioned assistant but does not have a confirmed trial subscription.",
+      lastCheckpoint: "Assistant provisioning completed; Stripe trial creation did not",
+      nextAction: "Open Stripe API logs and the My AI PA incident using the recorded time, verify the account and price configuration, confirm no subscription was created, then retry once.",
+      confidence: "high",
+    };
+  }
+  return null;
+}
+
 function signupLastCheckpoint(status) {
   if (status === "pending_email_verification") return "Verification message sent";
   if (/^provisioning_/i.test(status)) return "Provisioning handoff returned";
@@ -104,9 +203,6 @@ function signupLastCheckpoint(status) {
 function signupFailureReason(signup = {}, status = "unknown") {
   const phoneCode = safeReasonCode(signup.phoneProvisioningCode);
   const makeKind = safeDiagnosticLabel(signup.makeResponseKind);
-  if (signup.paymentStatus === "payment_failed") {
-    return { reason: "The payment attempt was marked as failed.", reasonCode: "PAYMENT_FAILED", confidence: "high" };
-  }
   if (phoneCode === "PHONE_NUMBER_PENDING") {
     return { reason: "Provisioning returned without a verified phone number.", reasonCode: phoneCode, confidence: "high" };
   }
@@ -137,7 +233,9 @@ function signupFailureReason(signup = {}, status = "unknown") {
 function signupDiagnostics(signup = {}, status = "unknown") {
   return {
     status: safeDiagnosticLabel(status) || "unknown",
-    paymentStatus: safeDiagnosticLabel(signup.paymentStatus),
+    paymentStatus: safeBillingStatus(signup.paymentStatus),
+    subscriptionStatus: safeBillingStatus(signup.subscriptionStatus),
+    stripeTrialFailed: Boolean(String(signup.stripeTrialError || "").trim()),
     makeStatus: Number.isFinite(Number(signup.makeStatus)) ? Number(signup.makeStatus) : null,
     makeError: Boolean(signup.makeError),
     smsRoutingStatus: safeDiagnosticLabel(signup.smsRoutingStatus),
@@ -169,22 +267,33 @@ function signupAttentionItems(signups = [], now = new Date(), stuckMinutes = 60)
     const status = String(signup.status || "unknown");
     const updatedAt = signup.updatedAt || signup.signedUpAt || signup.createdAt;
     const age = ageMinutes(updatedAt, now);
-    if (FAILED_SIGNUP.test(status) || signup.makeError || signup.smsRoutingStatus === "failed") {
+    const billingAttention = signupBillingAttention(signup, status);
+    if (billingAttention) {
+      items.push(attentionItem({
+        ...billingAttention,
+        severity: "critical",
+        summary: "A Stripe billing state needs review before the customer can finish or continue service.",
+        businessName: signup.businessName,
+        lastCheckpoint: billingAttention.lastCheckpoint || signupLastCheckpoint(status),
+        detectedAt: signup.lastPaymentFailedAt || updatedAt,
+        ageMinutes: ageMinutes(signup.lastPaymentFailedAt || updatedAt, now),
+        targetType: "signup",
+        targetId,
+        actions: [],
+        diagnostics: signupDiagnostics(signup, status),
+      }));
+    } else if (FAILED_SIGNUP.test(status) || signup.makeError || signup.smsRoutingStatus === "failed") {
       const failure = signupFailureReason(signup, status);
       items.push(attentionItem({
-        kind: signup.paymentStatus === "payment_failed" ? "payment_failed" : "signup_failed",
+        kind: "signup_failed",
         severity: "critical",
-        title: signup.paymentStatus === "payment_failed" ? "Customer payment failed" : "Signup setup failed",
+        title: "Signup setup failed",
         summary: "A signup needs review before the customer can finish setup.",
         businessName: signup.businessName,
         ...failure,
-        impact: signup.paymentStatus === "payment_failed"
-          ? "The customer cannot start or continue the paid setup flow."
-          : "The customer does not yet have a verified, usable My AI PA setup.",
+        impact: "The customer does not yet have a verified, usable My AI PA setup.",
         lastCheckpoint: signupLastCheckpoint(status),
-        nextAction: signup.paymentStatus === "payment_failed"
-          ? "Review the billing state, then reopen the signup only after payment is resolved."
-          : "Inspect the safe diagnostics, correct the failed checkpoint, then run guarded signup recovery.",
+        nextAction: "Inspect the safe diagnostics, correct the failed checkpoint, then run guarded signup recovery.",
         detectedAt: updatedAt,
         ageMinutes: age,
         targetType: "signup",

@@ -65,7 +65,7 @@ async function claimProvisioningStep({
 
   return prisma.$transaction(async (tx) => {
     if (typeof tx.$queryRaw === "function") {
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))`;
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))::text AS lock_result`;
     }
     const row = await tx.runtimeStore.findUnique({ where: { key } });
     const data = normalizeStoredData(row);
@@ -108,7 +108,7 @@ async function completeProvisioningStep({ prisma, key, claimToken, result, now =
   }
   return prisma.$transaction(async (tx) => {
     if (typeof tx.$queryRaw === "function") {
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))`;
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))::text AS lock_result`;
     }
     const row = await tx.runtimeStore.findUnique({ where: { key } });
     const data = normalizeStoredData(row);
@@ -138,7 +138,7 @@ async function failProvisioningStep({ prisma, key, claimToken, error, now = Date
   if (!prisma?.runtimeStore || typeof prisma.$transaction !== "function") return false;
   return prisma.$transaction(async (tx) => {
     if (typeof tx.$queryRaw === "function") {
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))`;
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))::text AS lock_result`;
     }
     const row = await tx.runtimeStore.findUnique({ where: { key } });
     const data = normalizeStoredData(row);

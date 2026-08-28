@@ -8,6 +8,7 @@ process.env.MAKE_SIGNUP_WEBHOOK_API_KEY = "test-make-signup-key-42";
 process.env.MAKE_SIGNUP_WEBHOOK_URL = "https://hook.us2.make.com/test-private-webhook-token-42";
 process.env.TWILIO_ACCOUNT_SID = "ACtestaccountsid";
 process.env.TWILIO_AUTH_TOKEN = "test-twilio-auth-token";
+process.env.TWILIO_STATUS_CALLBACK_URL = "https://api.myaipa.ca/api/webhooks/twilio/message-status";
 process.env.SMS_SUPPRESSION_API_KEY = "test-suppression-api-key-42";
 process.env.ADMIN_PASSWORD = "test-admin-password-42";
 process.env.ADMIN_SESSION_SECRET = "test-admin-session-secret-42";
@@ -285,6 +286,135 @@ test("signup recovery requires the monitor key and explicit confirmation", async
   assert.match((await unconfirmed.json()).error, /confirmation/i);
 });
 
+test("duplicate signup supersession requires the monitor key and explicit confirmation", async () => {
+  const unauthorized = await request("/api/internal/operations/supersede-signup", {
+    method: "POST",
+    body: {
+      targetId: "1234567890abcdef12345678",
+      canonicalTargetId: "abcdef1234567890abcdef12",
+      confirmation: "SUPERSEDE_DUPLICATE_SIGNUP",
+    },
+  });
+  assert.equal(unauthorized.status, 401);
+
+  const unconfirmed = await request("/api/internal/operations/supersede-signup", {
+    method: "POST",
+    headers: { "x-monitor-api-key": process.env.MONITOR_API_KEY },
+    body: {
+      targetId: "1234567890abcdef12345678",
+      canonicalTargetId: "abcdef1234567890abcdef12",
+    },
+  });
+  assert.equal(unconfirmed.status, 400);
+  assert.match((await unconfirmed.json()).error, /confirmation/i);
+});
+
+test("duplicate signup supersession is resource-free, auditable, and redacted", () => {
+  const duplicateSignup = {
+    status: "setup_error",
+    ownerEmail: "wrong-address@example.com",
+    ownerPhone: "+1 (905) 555-0123",
+    businessName: "Example Electrical",
+    signupAttemptId: "attempt_duplicate",
+    makeError: "private upstream failure",
+  };
+  const canonicalSignup = {
+    status: "setup_error",
+    ownerEmail: "correct-address@example.com",
+    ownerPhone: "+19055550123",
+    businessName: "  Example   Electrical ",
+  };
+  assert.deepEqual(
+    __test.validateSignupSupersession({ duplicateSignup, canonicalSignup }),
+    { sharedPhone: true, sameBusiness: true }
+  );
+
+  const pendingStore = {
+    duplicateTokenHash: {
+      ownerEmail: duplicateSignup.ownerEmail,
+      businessName: duplicateSignup.businessName,
+      payload: {
+        submittedAt: "2026-08-25T21:03:13.616Z",
+        owner: { email: duplicateSignup.ownerEmail },
+        business: { name: duplicateSignup.businessName },
+      },
+    },
+    canonicalTokenHash: {
+      ownerEmail: canonicalSignup.ownerEmail,
+      businessName: canonicalSignup.businessName,
+      payload: {
+        owner: { email: canonicalSignup.ownerEmail },
+        business: { name: canonicalSignup.businessName },
+      },
+    },
+  };
+  duplicateSignup.signupAttemptId = require("../server/makeSignupWebhook")
+    .buildMakeSignupEventKey(pendingStore.duplicateTokenHash.payload);
+  const disabled = __test.disablePendingSignupAttemptsForRecord(duplicateSignup, pendingStore);
+  assert.equal(disabled.disabled, 1);
+  assert.equal(disabled.store.duplicateTokenHash, undefined);
+  assert.ok(disabled.store.canonicalTokenHash);
+
+  const canonicalTargetId = "abcdef1234567890abcdef12";
+  const record = __test.buildSupersededSignupRecord({
+    signup: duplicateSignup,
+    canonicalTargetId,
+    pendingAttemptsDisabled: disabled.disabled,
+    now: new Date("2026-08-28T12:00:00.000Z"),
+  });
+  assert.equal(record.status, "superseded_duplicate");
+  assert.equal(record.supersededByTargetId, canonicalTargetId);
+  assert.equal(record.supersessionAudit.resourcesProvisioned, false);
+  assert.equal(record.supersessionAudit.pendingAttemptsDisabled, 1);
+
+  const safeResult = __test.buildSafeSignupSupersessionResult({
+    targetId: "1234567890abcdef12345678",
+    canonicalTargetId,
+    pendingAttemptsDisabled: 1,
+  });
+  const serialized = JSON.stringify(safeResult);
+  assert.equal(safeResult.resourcesProvisioned, false);
+  assert.equal(serialized.includes("wrong-address@example.com"), false);
+  assert.equal(serialized.includes("9055550123"), false);
+  assert.equal(serialized.includes("private upstream failure"), false);
+});
+
+test("duplicate signup supersession fails closed for mismatches, resources, and in-flight attempts", () => {
+  const base = {
+    status: "setup_error",
+    ownerPhone: "+19055550123",
+    businessName: "Example Electrical",
+  };
+  assert.throws(
+    () => __test.validateSignupSupersession({
+      duplicateSignup: base,
+      canonicalSignup: { ...base, ownerPhone: "+12895550123" },
+    }),
+    (error) => error.code === "SIGNUP_DUPLICATE_IDENTITY_MISMATCH" && error.statusCode === 409
+  );
+  assert.throws(
+    () => __test.validateSignupSupersession({
+      duplicateSignup: { ...base, twilioPhoneNumber: "+19055550199" },
+      canonicalSignup: base,
+    }),
+    (error) => error.code === "SIGNUP_RESOURCES_REQUIRE_REVIEW" && error.statusCode === 409
+  );
+  assert.throws(
+    () => __test.disablePendingSignupAttemptsForRecord(
+      { ...base, ownerEmail: "owner@example.com" },
+      {
+        pending: {
+          ownerEmail: "owner@example.com",
+          businessName: base.businessName,
+          claimedAt: Date.now(),
+          payload: { owner: { email: "owner@example.com" }, business: { name: base.businessName } },
+        },
+      }
+    ),
+    (error) => error.code === "SIGNUP_ATTEMPT_BUSY" && error.statusCode === 409
+  );
+});
+
 test("production Telegram test requires the monitor key and explicit confirmation", async () => {
   const unauthorized = await request("/api/internal/operations/telegram-test", {
     method: "POST",
@@ -365,6 +495,27 @@ test("inbound messaging preferences require a valid provider signature", async (
     }).toString(),
   });
   assert.equal(response.status, 401);
+});
+
+test("Twilio delivery callbacks verify against the exact configured status URL", async () => {
+  const form = {
+    MessageSid: "SM_DELIVERED_TEST",
+    MessageStatus: "delivered",
+  };
+  const response = await request("/api/webhooks/twilio/message-status", {
+    method: "POST",
+    headers: {
+      "content-type": "application/x-www-form-urlencoded",
+      "x-twilio-signature": getTwilioSignature(
+        process.env.TWILIO_STATUS_CALLBACK_URL,
+        form,
+        process.env.TWILIO_AUTH_TOKEN
+      ),
+    },
+    body: new URLSearchParams(form).toString(),
+  });
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("content-type") || "", /xml/i);
 });
 
 test("a signed STOP webhook records one central suppression preference", async () => {
@@ -1057,6 +1208,44 @@ test("Twilio provisioning never cross-assigns another signup sharing the same vo
   assert.equal(result.reused, undefined);
   assert.equal(calls.filter((call) => call.method === "POST").length, 1);
   assert.match(calls.find((call) => call.method === "POST").body, new RegExp(`FriendlyName=${friendlyName}`));
+});
+
+test("Twilio provisioning preserves safe provider billing evidence without retaining raw provider text", async () => {
+  const friendlyName = `myaipa-twilio-number-${"d".repeat(20)}`;
+  await assert.rejects(
+    () => __test.purchaseTwilioPhoneNumber(
+      { voiceUrl: "https://hook.us2.make.com/voice-hook", friendlyName },
+      {
+        fetchImpl: async () => new Response(JSON.stringify({
+          code: "PAYMENT_REQUIRED",
+          message: "private customer data must not escape",
+        }), { status: 402, headers: { "content-type": "application/json" } }),
+      }
+    ),
+    (error) => {
+      assert.equal(error.provider, "twilio");
+      assert.equal(error.providerCode, "PAYMENT_REQUIRED");
+      assert.equal(error.providerStatus, 402);
+      assert.equal(error.upstreamStatus, 402);
+      assert.doesNotMatch(error.message, /private customer/i);
+      return true;
+    }
+  );
+});
+
+test("SMTP failures retain only a stable category, provider status, and safe message", () => {
+  const auth = __test.createSmtpDeliveryError({
+    code: "EAUTH",
+    responseCode: 535,
+    message: "Authentication failed for private@example.com using secret-value",
+  }, "signup verification delivery");
+  assert.equal(auth.provider, "smtp");
+  assert.equal(auth.providerCode, "SMTP_AUTH_FAILED");
+  assert.equal(auth.providerStatus, 535);
+  assert.doesNotMatch(auth.message, /private@example|secret-value/i);
+
+  const timeout = __test.createSmtpDeliveryError({ code: "ETIMEDOUT" }, "trial reminder delivery");
+  assert.equal(timeout.providerCode, "SMTP_TIMEOUT");
 });
 
 test("Vapi end-of-call reports normalize duration, status, cost, and artifacts", () => {

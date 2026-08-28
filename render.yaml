@@ -129,6 +129,8 @@ services:
         sync: false
       - key: TWILIO_INBOUND_WEBHOOK_URL
         value: https://api.myaipa.ca/api/webhooks/sms
+      - key: TWILIO_STATUS_CALLBACK_URL
+        value: https://api.myaipa.ca/api/webhooks/twilio/message-status
       - key: SMS_SUPPRESSION_CHECK_URL
         value: https://api.myaipa.ca/api/integrations/sms/suppression/check
       - key: SMS_SUPPRESSION_API_KEY

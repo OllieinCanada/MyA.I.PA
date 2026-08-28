@@ -90,3 +90,76 @@ test("requires an explicit success and all provider identifiers", () => {
   assert.equal(complete.kind, "completed");
   assert.equal(complete.twilioPhoneNumber, "+12495550123");
 });
+
+test("preserves only the allowlisted provider failure envelope", () => {
+  const failurePayload = {
+    success: false,
+    failedStage: "twilio_number_purchase",
+    provider: "twilio",
+    providerStatus: "402",
+    providerCode: "INSUFFICIENT_BALANCE",
+    retryable: false,
+    message: "Private provider body for owner@example.ca at +19055550123",
+    responseBody: { token: "do-not-retain" },
+  };
+
+  assert.deepEqual(classifyMakeSignupResponse(JSON.stringify(failurePayload), failurePayload), {
+    complete: false,
+    kind: "rejected",
+    code: "MAKE_SIGNUP_REJECTED",
+    failedStage: "TWILIO_NUMBER_PURCHASE",
+    provider: "TWILIO",
+    providerStatus: 402,
+    providerCode: "INSUFFICIENT_BALANCE",
+    retryable: false,
+  });
+});
+
+test("drops untrusted provider failure values instead of turning PII into diagnostics", () => {
+  const failurePayload = {
+    success: false,
+    failure: {
+      failedStage: "purchase for owner@example.ca",
+      provider: "Twilio for +19055550123",
+      providerStatus: "999",
+      providerCode: "9055550123",
+      retryable: "false",
+      rawBody: "Bearer secret-value",
+    },
+  };
+  const result = classifyMakeSignupResponse(JSON.stringify(failurePayload), failurePayload);
+
+  assert.deepEqual(result, {
+    complete: false,
+    kind: "rejected",
+    code: "MAKE_SIGNUP_REJECTED",
+  });
+  assert.doesNotMatch(JSON.stringify(result), /owner|example|9055550123|secret-value/i);
+});
+
+test("combines safe nested failure fields without retaining the nested response", () => {
+  const failurePayload = {
+    success: false,
+    retryable: true,
+    failure: {
+      failedStage: "vapi_number_import",
+      provider: "vapi",
+      providerStatus: 503,
+      providerCode: "SERVICE_UNAVAILABLE",
+      rawBody: { email: "private@example.ca", authorization: "Bearer secret" },
+    },
+  };
+  const result = classifyMakeSignupResponse(JSON.stringify(failurePayload), failurePayload);
+
+  assert.deepEqual(result, {
+    complete: false,
+    kind: "rejected",
+    code: "MAKE_SIGNUP_REJECTED",
+    retryable: true,
+    failedStage: "VAPI_NUMBER_IMPORT",
+    provider: "VAPI",
+    providerStatus: 503,
+    providerCode: "SERVICE_UNAVAILABLE",
+  });
+  assert.doesNotMatch(JSON.stringify(result), /private|authorization|secret/i);
+});

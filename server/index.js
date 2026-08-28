@@ -59,6 +59,7 @@ const {
   createTimeoutSignal,
   getMakeRequestId,
   parseMakeSignupTimeoutMs,
+  sanitizeMakeFailureEnvelope,
   validateMakeWebhookUrl,
 } = require("./makeSignupWebhook");
 const {
@@ -74,6 +75,7 @@ const {
   isTrustedSignupProvisioningCanary,
 } = require("./signupProvisioningCanary");
 const { readProvisioningStep, runProvisioningStep } = require("./provisioningState");
+const { reconcileSignupSupersessionResources } = require("./signupSupersessionReconciliation");
 const {
   completeSignupProvisioningContext,
   loadSignupProvisioningContext,
@@ -89,6 +91,7 @@ const {
   recordSmsPreference,
   verifyTwilioWebhookRequest,
 } = require("./smsSuppression");
+const { buildTwilioMessageStatusIncident } = require("./twilioMessageStatus");
 const {
   formatAppointmentDate,
   createStaffMember,
@@ -425,10 +428,10 @@ app.post("/api/payments/stripe-webhook", express.raw({ type: "application/json" 
     ) {
       console.log("[stripe:webhook] received", {
         type: event.type,
-        id: object.id,
-        customer: object.customer || object.customer_email || null,
+        objectRefHash: hashKey(String(object.id || "")).slice(0, 16),
+        customerRefHash: hashKey(String(object.customer?.id || object.customer || object.customer_email || "")).slice(0, 16),
         status: object.status || object.payment_status || null,
-        metadata: object.metadata || {},
+        metadataKeyCount: Object.keys(object.metadata || {}).length,
       });
     }
 
@@ -460,8 +463,9 @@ app.post("/api/payments/stripe-webhook", express.raw({ type: "application/json" 
               ...(pendingSignup.summary || {}),
               status: "setup_error",
               makeStatus: makeResult.status,
-              makeError: makeData?.error || makeAssessment.code || "Make webhook did not complete after Stripe checkout.",
+              makeError: makeAssessment.providerCode || makeAssessment.code || "MAKE_SIGNUP_INCOMPLETE",
               makeResponseKind: makeAssessment.kind,
+              ...makeFailureRecordFields(makeAssessment),
               makeEventKey: makeResult.eventKey,
               makeRequestId: makeResult.requestId,
               makeDurationMs: makeResult.durationMs,
@@ -470,6 +474,7 @@ app.post("/api/payments/stripe-webhook", express.raw({ type: "application/json" 
               state: "provisioning_failed",
               detail: `Checkout provisioning response was ${makeAssessment.kind}`,
               record: incompleteRecord,
+              makeAssessment,
             });
           } else {
             const phoneProvisioning = await inspectSignupPhoneProvisioning(makeData, makeResult.body);
@@ -491,6 +496,7 @@ app.post("/api/payments/stripe-webhook", express.raw({ type: "application/json" 
               makeStatus: makeResult.status,
               makeError: phoneProvisioning.status === "ready" ? "" : phoneProvisioning.code,
               makeResponseKind: makeAssessment.kind,
+              ...makeFailureRecordFields({}),
               makeEventKey: makeResult.eventKey,
               makeRequestId: makeResult.requestId,
               makeDurationMs: makeResult.durationMs,
@@ -507,9 +513,12 @@ app.post("/api/payments/stripe-webhook", express.raw({ type: "application/json" 
             });
           }
         } catch (error) {
+          const providerFailure = makeFailureFromError(error, "MAKE_WEBHOOK");
           console.error("[stripe:webhook] Make handoff after checkout failed", {
-            checkoutSessionId: object.id,
-            message: error?.message || String(error),
+            checkoutRefHash: hashKey(String(object.id || "")).slice(0, 16),
+            provider: providerFailure.provider || "make",
+            providerCode: providerFailure.providerCode || "MAKE_SIGNUP_FAILED",
+            providerStatus: providerFailure.providerStatus || null,
           });
           createPendingSignupVerification({
             payload: makePayload,
@@ -524,12 +533,14 @@ app.post("/api/payments/stripe-webhook", express.raw({ type: "application/json" 
             ...checkoutRecord,
             ...(pendingSignup.summary || {}),
             status: "setup_error",
-            makeError: error?.message || "Make handoff failed after Stripe checkout.",
+            makeError: providerFailure.providerCode || "MAKE_SIGNUP_FAILED",
+            ...makeFailureRecordFields(providerFailure),
           });
           await safelyNotifySignupOperations(makePayload, {
             state: "provisioning_failed",
             detail: "Checkout provisioning webhook failed",
             record: failedRecord,
+            providerFailure,
           });
         }
       }
@@ -553,6 +564,23 @@ app.post("/api/payments/stripe-webhook", express.raw({ type: "application/json" 
         paymentStatus: "payment_failed",
         lastPaymentFailedAt: new Date().toISOString(),
         status: "payment_failed",
+      });
+      const paymentFailure = Object.assign(new Error("Stripe reported that a customer invoice payment failed."), {
+        code: "INVOICE.PAYMENT_FAILED",
+        provider: "stripe",
+        providerCode: "INVOICE.PAYMENT_FAILED",
+      });
+      safelyNotifyRuntimeFailure(paymentFailure, {
+        area: "billing and trial workflow",
+        provider: "stripe",
+        operation: "customer invoice payment",
+        snapshot: {
+          "Invoice reference": hashKey(String(object.id || event.id || "")).slice(0, 16),
+          "Payment status": "payment_failed",
+          "Subscription linked": Boolean(object.subscription) ? "Yes" : "No",
+        },
+        dedupeFingerprint: `stripe-invoice-payment-failed:${hashKey(String(object.id || event.id || "unknown"))}`,
+        lastCheckpoint: "Stripe authenticated the webhook and My AI PA recorded the failed payment state.",
       });
     }
 
@@ -1078,12 +1106,41 @@ function getEmailTransportConfig() {
   };
 }
 
+function createSmtpDeliveryError(error, operation = "email delivery") {
+  const sourceCode = String(error?.code || "").trim().toUpperCase();
+  const responseCode = Number(error?.responseCode || 0);
+  const sourceText = `${sourceCode} ${String(error?.command || "")} ${String(error?.message || "")}`.toUpperCase();
+  let providerCode = "SMTP_DELIVERY_FAILED";
+  if (sourceCode === "EAUTH" || responseCode === 535 || /AUTHENTICAT|CREDENTIAL/.test(sourceText)) {
+    providerCode = "SMTP_AUTH_FAILED";
+  } else if (["ETIMEDOUT", "ETIMEOUT"].includes(sourceCode) || /TIMED? OUT/.test(sourceText)) {
+    providerCode = "SMTP_TIMEOUT";
+  } else if (sourceCode === "EENVELOPE" || /RECIPIENT|MAILBOX|REJECTED/.test(sourceText)) {
+    providerCode = "SMTP_RECIPIENT_REJECTED";
+  } else if ([421, 450, 451, 452].includes(responseCode) || /RATE|QUOTA|TOO MANY/.test(sourceText)) {
+    providerCode = "SMTP_RATE_LIMITED";
+  } else if (["ESOCKET", "ECONNECTION", "ECONNRESET", "ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN"].includes(sourceCode)) {
+    providerCode = "SMTP_CONNECTION_FAILED";
+  }
+  const wrapped = new Error(`Email provider ${operation} failed.`);
+  wrapped.code = providerCode;
+  wrapped.provider = "smtp";
+  wrapped.providerCode = providerCode;
+  wrapped.statusCode = 502;
+  if (Number.isInteger(responseCode) && responseCode >= 100 && responseCode <= 599) {
+    wrapped.providerStatus = responseCode;
+  }
+  return wrapped;
+}
+
 async function sendOutreachEmailMessage(message) {
   const emailConfig = getEmailTransportConfig();
   if (!emailConfig) {
     const error = new Error("SMTP email delivery is not configured on the backend.");
     error.statusCode = 503;
     error.code = "OUTREACH_EMAIL_NOT_CONFIGURED";
+    error.provider = "smtp";
+    error.providerCode = error.code;
     throw error;
   }
   const transporter = nodemailer.createTransport(emailConfig.transport);
@@ -1095,6 +1152,8 @@ async function sendOutreachEmailMessage(message) {
       html: message.html,
       text: message.text,
     });
+  } catch (error) {
+    throw createSmtpDeliveryError(error, "outreach email delivery");
   } finally {
     transporter.close();
   }
@@ -1288,17 +1347,26 @@ async function sendSignupVerificationEmail({ req, ownerEmail, ownerName, busines
     }
     const err = new Error("Email verification is enabled, but SMTP is not configured.");
     err.statusCode = 500;
+    err.code = "SMTP_NOT_CONFIGURED";
+    err.provider = "smtp";
+    err.providerCode = err.code;
     throw err;
   }
 
   const transporter = nodemailer.createTransport(emailConfig.transport);
-  await transporter.sendMail({
-    from: emailConfig.from,
-    to: ownerEmail,
-    subject,
-    text,
-    html,
-  });
+  try {
+    await transporter.sendMail({
+      from: emailConfig.from,
+      to: ownerEmail,
+      subject,
+      text,
+      html,
+    });
+  } catch (error) {
+    throw createSmtpDeliveryError(error, "signup verification delivery");
+  } finally {
+    transporter.close();
+  }
 
   return { sent: true };
 }
@@ -1361,16 +1429,65 @@ async function beginVoiceSignupVerification({ req, parameters, call }) {
 
   const emailSent = emailResult?.sent === true;
   const smsSent = Boolean(smsResult && smsResult.mocked !== true);
+  const emailFailureCode = String(emailError?.providerCode || emailError?.code || "SMTP_DELIVERY_NOT_SENT")
+    .toUpperCase().replace(/[^A-Z0-9_.:-]+/g, "_").slice(0, 80);
+  const smsFailureCode = String(smsError?.providerCode || smsError?.code || "SMS_DELIVERY_NOT_SENT")
+    .toUpperCase().replace(/[^A-Z0-9_.:-]+/g, "_").slice(0, 80);
   if (!emailSent && !smsSent) {
     removePendingSignupVerification(token);
     const error = new Error("The signup details were valid, but the verification link could not be delivered.");
     error.statusCode = 503;
     error.code = "VOICE_SIGNUP_VERIFICATION_DELIVERY_FAILED";
     error.deliveryErrors = {
-      email: emailError?.code || emailError?.message || "not_sent",
-      sms: smsError?.code || smsError?.message || "not_sent",
+      email: emailFailureCode,
+      sms: smsFailureCode,
     };
+    safelyNotifyRuntimeFailure(error, {
+      area: "voice signup verification delivery",
+      reasonCode: error.code,
+      reason: "Both the verification email and verification text failed, so the customer has no working verification link.",
+      whatFailed: "Both voice-signup verification delivery channels failed",
+      impact: "The signup is not verified or provisioned, and the customer cannot continue until a fresh link is delivered.",
+      businessName: business.name,
+      snapshot: {
+        "Email delivery code": emailFailureCode,
+        "Text delivery code": smsFailureCode,
+        "Pending verification removed": "Yes",
+      },
+      lastCheckpoint: "The signup details were validated, but neither delivery provider confirmed a sent verification link.",
+      nextAction: "Open the configured email-provider activity and Twilio messaging logs, resolve each stated code, then resend one fresh verification link.",
+      signInDestination: "Email provider activity; then Twilio Console → Monitor → Messaging logs",
+      dedupeFingerprint: `voice-signup-verification-both:${hashKey(payload.source?.callId || owner.email || owner.phone)}`,
+    });
+    error.telegramIncidentHandled = true;
     throw error;
+  }
+
+  if (!emailSent && emailError) {
+    safelyNotifyRuntimeFailure(emailError, {
+      area: "voice signup verification delivery",
+      provider: "smtp",
+      operation: "signup verification email",
+      businessName: business.name,
+      whatFailed: "The verification email failed while the verification text succeeded",
+      impact: "The customer can continue using the texted link, but the email copy was not delivered.",
+      snapshot: { "Email sent": "No", "Text sent": "Yes", "Provider code": emailFailureCode },
+      lastCheckpoint: "Twilio confirmed the verification text request, but the email provider did not confirm email delivery.",
+      dedupeFingerprint: `voice-signup-verification-email:${hashKey(payload.source?.callId || owner.email || owner.phone)}:${emailFailureCode}`,
+    });
+  }
+  if (!smsSent && smsError) {
+    safelyNotifyRuntimeFailure(smsError, {
+      area: "voice signup verification delivery",
+      provider: smsError?.provider || "twilio",
+      operation: "signup verification text",
+      businessName: business.name,
+      whatFailed: "The verification text failed while the verification email succeeded",
+      impact: "The customer can continue using the emailed link, but the text copy was not delivered.",
+      snapshot: { "Email sent": "Yes", "Text sent": "No", "Provider code": smsFailureCode },
+      lastCheckpoint: "The email provider confirmed the verification email request, but the SMS provider did not confirm the text request.",
+      dedupeFingerprint: `voice-signup-verification-sms:${hashKey(payload.source?.callId || owner.email || owner.phone)}:${smsFailureCode}`,
+    });
   }
 
   const signupRecord = upsertSignupDashboardFromPayload(payload, {
@@ -2086,9 +2203,7 @@ async function fetchVapiCalls({ limit = VAPI_CALL_LIMIT, createdAtGt } = {}) {
   const data = parseJsonObject(rawText);
 
   if (!response.ok) {
-    const err = new Error(data?.message || data?.error || `Vapi call fetch failed with HTTP ${response.status}.`);
-    err.statusCode = response.status;
-    throw err;
+    throw createProviderHttpError({ provider: "Vapi", operation: "call list", status: response.status, data, fallbackCode: "VAPI_CALL_LIST_FAILED" });
   }
 
   if (Array.isArray(data)) return data;
@@ -2121,9 +2236,7 @@ async function fetchVapiCallDetail(callId) {
   const data = parseJsonObject(rawText);
 
   if (!response.ok) {
-    const err = new Error(data?.message || data?.error || `Vapi call detail fetch failed with HTTP ${response.status}.`);
-    err.statusCode = response.status;
-    throw err;
+    throw createProviderHttpError({ provider: "Vapi", operation: "call detail", status: response.status, data, fallbackCode: "VAPI_CALL_DETAIL_FAILED" });
   }
 
   return data && typeof data === "object" ? data : null;
@@ -2154,9 +2267,7 @@ async function patchVapiAssistant(assistantId, patch) {
   const rawText = await response.text();
   const data = parseJsonObject(rawText);
   if (!response.ok) {
-    const err = new Error(data?.message || data?.error || `Vapi assistant update failed with HTTP ${response.status}.`);
-    err.statusCode = response.status;
-    throw err;
+    throw createProviderHttpError({ provider: "Vapi", operation: "assistant update", status: response.status, data, fallbackCode: "VAPI_ASSISTANT_UPDATE_FAILED" });
   }
   return data && typeof data === "object" ? data : null;
 }
@@ -2181,9 +2292,7 @@ async function fetchVapiCollection(resourcePath, collectionKeys = []) {
   const data = parseJsonObject(rawText);
 
   if (!response.ok) {
-    const err = new Error(data?.message || data?.error || `Vapi ${resourcePath} fetch failed with HTTP ${response.status}.`);
-    err.statusCode = response.status;
-    throw err;
+    throw createProviderHttpError({ provider: "Vapi", operation: `${resourcePath} collection`, status: response.status, data, fallbackCode: "VAPI_COLLECTION_FAILED" });
   }
 
   if (Array.isArray(data)) return data;
@@ -2211,9 +2320,7 @@ async function requestVapiResource(resourcePath, { method = "GET", body } = {}) 
   const rawText = await response.text();
   const data = parseJsonObject(rawText);
   if (!response.ok) {
-    const err = new Error(data?.message || data?.error || `Vapi ${method} request failed with HTTP ${response.status}.`);
-    err.statusCode = response.status;
-    throw err;
+    throw createProviderHttpError({ provider: "Vapi", operation: `${method} ${resourcePath}`, status: response.status, data, fallbackCode: "VAPI_REQUEST_FAILED" });
   }
   return data && typeof data === "object" ? data : {};
 }
@@ -2483,9 +2590,7 @@ async function importTwilioPhoneNumberToVapi({ twilioPhoneNumber, assistantId, n
   const data = parseJsonObject(rawText);
 
   if (!response.ok) {
-    const err = new Error(data?.message || data?.error || `Vapi Twilio import failed with HTTP ${response.status}.`);
-    err.statusCode = response.status;
-    throw err;
+    throw createProviderHttpError({ provider: "Vapi", operation: "Twilio number import", status: response.status, data, fallbackCode: "VAPI_TWILIO_IMPORT_FAILED" });
   }
 
   const summarized = summarizeVapiPhoneNumberImport(data, phoneNumber);
@@ -2842,9 +2947,7 @@ async function fetchTwilioCalls({ days = 30, limit = 1000 } = {}) {
   const data = parseJsonObject(rawText);
 
   if (!response.ok) {
-    const err = new Error(data?.message || data?.error || `Twilio call fetch failed with HTTP ${response.status}.`);
-    err.statusCode = response.status;
-    throw err;
+    throw createProviderHttpError({ provider: "Twilio", operation: "call list", status: response.status, data, fallbackCode: "TWILIO_CALL_LIST_FAILED" });
   }
 
   return Array.isArray(data?.calls) ? data.calls : [];
@@ -2936,9 +3039,7 @@ async function fetchTwilioIncomingPhoneNumbers() {
     const data = parseJsonObject(rawText);
 
     if (!response.ok) {
-      const err = new Error(data?.message || data?.error || `Twilio phone number fetch failed with HTTP ${response.status}.`);
-      err.statusCode = response.status;
-      throw err;
+      throw createProviderHttpError({ provider: "Twilio", operation: "owned phone-number list", status: response.status, data, fallbackCode: "TWILIO_NUMBER_LIST_FAILED" });
     }
 
     records.push(...(Array.isArray(data?.incoming_phone_numbers) ? data.incoming_phone_numbers : []));
@@ -3011,9 +3112,7 @@ async function purchaseTwilioPhoneNumber({ areaCode = "", region = "ON", voiceUr
   });
   const ownedNumbersData = parseJsonObject(await ownedNumbersResponse.text());
   if (!ownedNumbersResponse.ok) {
-    const err = new Error(ownedNumbersData?.message || ownedNumbersData?.error || `Twilio phone number lookup failed with HTTP ${ownedNumbersResponse.status}.`);
-    err.statusCode = ownedNumbersResponse.status;
-    throw err;
+    throw createProviderHttpError({ provider: "Twilio", operation: "owned phone-number lookup", status: ownedNumbersResponse.status, data: ownedNumbersData, fallbackCode: "TWILIO_NUMBER_LOOKUP_FAILED" });
   }
 
   const existingNumber = (ownedNumbersData?.incoming_phone_numbers || []).find((record) => {
@@ -3069,9 +3168,7 @@ async function purchaseTwilioPhoneNumber({ areaCode = "", region = "ON", voiceUr
     });
     const availableData = parseJsonObject(await availableResponse.text());
     if (!availableResponse.ok) {
-      const err = new Error(availableData?.message || availableData?.error || `Twilio number search failed with HTTP ${availableResponse.status}.`);
-      err.statusCode = availableResponse.status;
-      throw err;
+      throw createProviderHttpError({ provider: "Twilio", operation: "Canadian number inventory search", status: availableResponse.status, data: availableData, fallbackCode: "TWILIO_NUMBER_SEARCH_FAILED" });
     }
     const candidate = availableData?.available_phone_numbers?.[0]?.phone_number;
     if (inspectCanadianNumber(candidate).valid) {
@@ -3107,9 +3204,7 @@ async function purchaseTwilioPhoneNumber({ areaCode = "", region = "ON", voiceUr
   });
   const purchaseData = parseJsonObject(await purchaseResponse.text());
   if (!purchaseResponse.ok) {
-    const err = new Error(purchaseData?.message || purchaseData?.error || `Twilio number purchase failed with HTTP ${purchaseResponse.status}.`);
-    err.statusCode = purchaseResponse.status;
-    throw err;
+    throw createProviderHttpError({ provider: "Twilio", operation: "Canadian number purchase", status: purchaseResponse.status, data: purchaseData, fallbackCode: "TWILIO_NUMBER_PURCHASE_FAILED" });
   }
 
   const provisionedRecord = {
@@ -3156,9 +3251,7 @@ async function fetchTwilioUsageRecords({ days = 30 } = {}) {
   const data = parseJsonObject(rawText);
 
   if (!response.ok) {
-    const err = new Error(data?.message || data?.error || `Twilio usage fetch failed with HTTP ${response.status}.`);
-    err.statusCode = response.status;
-    throw err;
+    throw createProviderHttpError({ provider: "Twilio", operation: "usage records", status: response.status, data, fallbackCode: "TWILIO_USAGE_FETCH_FAILED" });
   }
 
   return Array.isArray(data?.usage_records) ? data.usage_records : [];
@@ -3188,9 +3281,7 @@ async function fetchTwilioMessages({ days = 30, limit = 3000 } = {}) {
     const data = parseJsonObject(rawText);
 
     if (!response.ok) {
-      const err = new Error(data?.message || data?.error || `Twilio message fetch failed with HTTP ${response.status}.`);
-      err.statusCode = response.status;
-      throw err;
+      throw createProviderHttpError({ provider: "Twilio", operation: "message list", status: response.status, data, fallbackCode: "TWILIO_MESSAGE_LIST_FAILED" });
     }
 
     records.push(...(Array.isArray(data?.messages) ? data.messages : []));
@@ -4618,7 +4709,33 @@ async function queueTelegramAlertSafely({ text, adminUrl = "", buttonText = "", 
   }
 }
 
-async function safelyNotifySignupOperations(payload, { state, detail = "", record = null } = {}) {
+function makeFailureRecordFields(value) {
+  const failure = sanitizeMakeFailureEnvelope(value);
+  return {
+    makeFailedStage: failure.failedStage || "",
+    makeFailureProvider: failure.provider || "",
+    makeProviderStatus: failure.providerStatus || 0,
+    makeProviderCode: failure.providerCode || "",
+    makeFailureRetryable: typeof failure.retryable === "boolean" ? failure.retryable : null,
+  };
+}
+
+function makeFailureFromError(error, failedStage = "MAKE_WEBHOOK") {
+  return sanitizeMakeFailureEnvelope({
+    failedStage,
+    provider: error?.provider || "make",
+    providerStatus: Number(error?.upstreamStatus || error?.providerStatus || error?.statusCode || 0),
+    providerCode: error?.providerCode || error?.code || "MAKE_SIGNUP_FAILED",
+  });
+}
+
+async function safelyNotifySignupOperations(payload, {
+  state,
+  detail = "",
+  record = null,
+  makeAssessment = null,
+  providerFailure = null,
+} = {}) {
   const eventKey = buildMakeSignupEventKey(payload);
   const alertKey = crypto
     .createHash("sha256")
@@ -4649,6 +4766,7 @@ async function safelyNotifySignupOperations(payload, { state, detail = "", recor
     eventKey,
     detail,
     reasonCode: current?.phoneProvisioningCode || current?.makeError || "",
+    makeFailure: providerFailure || makeAssessment || null,
     payload,
     record: current,
     incidentId,
@@ -5104,6 +5222,255 @@ function findSignupByOperationalTarget(targetId, signups = listSignupDashboardRe
   }) || null;
 }
 
+const SUPERSEDED_SIGNUP_STATUS = "superseded_duplicate";
+const SUPERSEDED_SIGNUP_REASON = "DUPLICATE_SIGNUP_ATTEMPT";
+
+function isSupersededSignupDuplicate(signup = {}) {
+  return String(signup.status || "").trim().toLowerCase() === SUPERSEDED_SIGNUP_STATUS;
+}
+
+function isSignupSupersessionCandidate(signup = {}) {
+  const status = String(signup.status || "").trim().toLowerCase();
+  return /(error|failed|review_required|manual_review_reopened|provisioning_(pending|unknown))/i.test(status);
+}
+
+function getSignupIdentityPhones(signup = {}) {
+  return new Set([
+    normalizePhoneForMatch(signup.ownerPhone),
+    normalizePhoneForMatch(signup.businessPhone),
+  ].filter(Boolean));
+}
+
+function signupHasProvisioningOrBillingResources(signup = {}) {
+  const billingState = String(
+    signup.subscriptionStatus || signup.paymentStatus || signup.checkoutStatus || ""
+  ).trim().toLowerCase();
+  return Boolean(
+    signup.twilioPhoneNumber
+      || signup.vapiAssistantId
+      || signup.vapiPhoneNumberId
+      || signup.subscriptionId
+      || signup.stripeSubscriptionId
+      || signup.customerId
+      || signup.stripeCustomerId
+      || signup.checkoutSessionId
+      || ["active", "trialing", "paid", "complete", "completed"].includes(billingState)
+  );
+}
+
+function validateSignupSupersession({ duplicateSignup = {}, canonicalSignup = {} } = {}) {
+  if (isSupersededSignupDuplicate(canonicalSignup)) {
+    const error = new Error("The canonical signup cannot itself be a superseded duplicate.");
+    error.statusCode = 409;
+    error.code = "CANONICAL_SIGNUP_SUPERSEDED";
+    throw error;
+  }
+  if (!isSignupSupersessionCandidate(duplicateSignup)) {
+    const error = new Error("Only a failed or review-held signup can be superseded.");
+    error.statusCode = 409;
+    error.code = "SIGNUP_NOT_SUPERSEDABLE";
+    throw error;
+  }
+  if (signupHasProvisioningOrBillingResources(duplicateSignup)) {
+    const error = new Error("This signup already has a provisioning or billing resource and cannot be superseded automatically.");
+    error.statusCode = 409;
+    error.code = "SIGNUP_RESOURCES_REQUIRE_REVIEW";
+    throw error;
+  }
+
+  const duplicatePhones = getSignupIdentityPhones(duplicateSignup);
+  const canonicalPhones = getSignupIdentityPhones(canonicalSignup);
+  const sharedPhone = [...duplicatePhones].some((phone) => canonicalPhones.has(phone));
+  const duplicateBusiness = normalizeForKey(duplicateSignup.businessName);
+  const canonicalBusiness = normalizeForKey(canonicalSignup.businessName);
+  if (!sharedPhone || !duplicateBusiness || duplicateBusiness !== canonicalBusiness) {
+    const error = new Error("The two signup records do not share the same verified phone and business identity.");
+    error.statusCode = 409;
+    error.code = "SIGNUP_DUPLICATE_IDENTITY_MISMATCH";
+    throw error;
+  }
+  return { sharedPhone: true, sameBusiness: true };
+}
+
+function disablePendingSignupAttemptsForRecord(signup = {}, pendingStore = {}) {
+  const store = pendingStore && typeof pendingStore === "object" ? pendingStore : {};
+  const attemptId = String(signup.signupAttemptId || "").trim();
+  const ownerEmail = String(signup.ownerEmail || "").trim().toLowerCase();
+  const businessName = normalizeForKey(signup.businessName);
+  const matches = Object.entries(store).filter(([, pending]) => {
+    if (!pending?.payload) return false;
+    if (attemptId && buildMakeSignupEventKey(pending.payload) === attemptId) return true;
+    if (attemptId) return false;
+    const pendingEmail = String(pending.ownerEmail || pending.payload?.owner?.email || "").trim().toLowerCase();
+    const pendingBusiness = normalizeForKey(pending.businessName || pending.payload?.business?.name);
+    return Boolean(ownerEmail && businessName && pendingEmail === ownerEmail && pendingBusiness === businessName);
+  });
+  if (matches.some(([, pending]) => pending.claimedAt)) {
+    const error = new Error("This signup attempt is currently processing and cannot be superseded yet.");
+    error.statusCode = 409;
+    error.code = "SIGNUP_ATTEMPT_BUSY";
+    throw error;
+  }
+  for (const [tokenHash] of matches) delete store[tokenHash];
+  return { store, disabled: matches.length };
+}
+
+function buildSupersededSignupRecord({
+  signup = {},
+  canonicalTargetId,
+  pendingAttemptsDisabled = 0,
+  reconciliation = null,
+  now = new Date(),
+} = {}) {
+  const supersededAt = new Date(now).toISOString();
+  return {
+    ...signup,
+    previousStatus: signup.status || "unknown",
+    status: SUPERSEDED_SIGNUP_STATUS,
+    reviewRequired: false,
+    makeError: "",
+    smsRoutingStatus: "not_applicable",
+    smsRoutingError: "",
+    phoneProvisioningStatus: "superseded",
+    phoneProvisioningCode: "DUPLICATE_SIGNUP_SUPERSEDED",
+    supersededAt,
+    supersededByTargetId: canonicalTargetId,
+    supersededReasonCode: SUPERSEDED_SIGNUP_REASON,
+    supersessionAudit: {
+      action: "duplicate_signup_superseded",
+      actor: "monitor_api",
+      at: supersededAt,
+      canonicalTargetId,
+      reasonCode: SUPERSEDED_SIGNUP_REASON,
+      pendingAttemptsDisabled: Math.max(0, Number(pendingAttemptsDisabled) || 0),
+      resourcesProvisioned: false,
+      resourcesReconciled: reconciliation?.complete === true,
+      reconciliation: reconciliation?.complete === true ? {
+        durableProvisioning: reconciliation.durableProvisioning,
+        twilioResources: reconciliation.twilioResources,
+        vapiResources: reconciliation.vapiResources,
+        stripeResources: reconciliation.stripeResources,
+      } : undefined,
+    },
+  };
+}
+
+function buildSafeSignupSupersessionResult({
+  targetId,
+  canonicalTargetId,
+  pendingAttemptsDisabled = 0,
+  duplicate = false,
+  resourcesReconciled = false,
+} = {}) {
+  return {
+    ok: true,
+    action: "duplicate_signup_superseded",
+    duplicate: Boolean(duplicate),
+    targetId,
+    canonicalTargetId,
+    status: SUPERSEDED_SIGNUP_STATUS,
+    pendingAttemptsDisabled: Math.max(0, Number(pendingAttemptsDisabled) || 0),
+    resourcesProvisioned: false,
+    resourcesReconciled: Boolean(resourcesReconciled),
+  };
+}
+
+async function loadStripeSignupResourcesForSupersession({ ownerEmail } = {}) {
+  if (!stripe) {
+    const error = new Error("Stripe billing-resource reconciliation is unavailable.");
+    error.statusCode = 503;
+    error.code = "STRIPE_NOT_CONFIGURED";
+    error.provider = "stripe";
+    throw error;
+  }
+  const expectedEmail = String(ownerEmail || "").trim().toLowerCase();
+  if (!expectedEmail || !isValidEmailAddress(expectedEmail)) {
+    const error = new Error("A valid signup email is required for Stripe reconciliation.");
+    error.statusCode = 409;
+    error.code = "SIGNUP_SUPERSESSION_IDENTITY_INCOMPLETE";
+    throw error;
+  }
+
+  let customerCount = 0;
+  for await (const customer of stripe.customers.list({ email: expectedEmail, limit: 100 })) {
+    if (String(customer?.email || "").trim().toLowerCase() === expectedEmail) customerCount += 1;
+  }
+  const pendingStripeStore = prunePendingStripeSignupStore(readPendingStripeSignupStore());
+  const checkoutSessionCount = Object.values(pendingStripeStore).filter((entry) => {
+    const email = String(
+      entry?.summary?.ownerEmail
+        || entry?.payload?.owner?.email
+        || entry?.payload?.setupDetails?.ownerEmail
+        || ""
+    ).trim().toLowerCase();
+    return email === expectedEmail;
+  }).length;
+  return {
+    hasResources: customerCount > 0 || checkoutSessionCount > 0,
+    customerCount,
+    checkoutSessionCount,
+  };
+}
+
+async function supersedeSignupByOperationalTargets(targetId, canonicalTargetId) {
+  const signups = listSignupDashboardRecords();
+  const duplicateSignup = findSignupByOperationalTarget(targetId, signups);
+  const canonicalSignup = findSignupByOperationalTarget(canonicalTargetId, signups);
+  if (!duplicateSignup || !canonicalSignup) {
+    const error = new Error("One or both signup records were not found.");
+    error.statusCode = 404;
+    error.code = "SIGNUP_SUPERSESSION_TARGET_NOT_FOUND";
+    throw error;
+  }
+  if (targetId === canonicalTargetId) {
+    const error = new Error("The duplicate and canonical signup must be different records.");
+    error.statusCode = 400;
+    error.code = "SIGNUP_SUPERSESSION_SAME_TARGET";
+    throw error;
+  }
+  if (isSupersededSignupDuplicate(duplicateSignup)) {
+    if (duplicateSignup.supersededByTargetId !== canonicalTargetId) {
+      const error = new Error("This signup was already superseded by a different canonical record.");
+      error.statusCode = 409;
+      error.code = "SIGNUP_ALREADY_SUPERSEDED";
+      throw error;
+    }
+    return buildSafeSignupSupersessionResult({
+      targetId,
+      canonicalTargetId,
+      pendingAttemptsDisabled: duplicateSignup.supersessionAudit?.pendingAttemptsDisabled,
+      duplicate: true,
+      resourcesReconciled: duplicateSignup.supersessionAudit?.resourcesReconciled === true,
+    });
+  }
+
+  validateSignupSupersession({ duplicateSignup, canonicalSignup });
+  const reconciliation = await reconcileSignupSupersessionResources({
+    signup: duplicateSignup,
+    loadDurableStep: ({ kind, idempotencyKey }) => readProvisioningStep({ prisma, kind, idempotencyKey }),
+    loadTwilioNumbers: fetchTwilioIncomingPhoneNumbers,
+    loadVapiAssistants: () => fetchVapiCollection("assistant", ["assistants", "agents"]),
+    loadVapiPhoneNumbers: () => fetchVapiCollection("phone-number", ["phoneNumbers", "phone_numbers"]),
+    loadStripeResources: loadStripeSignupResourcesForSupersession,
+  });
+  const pendingStore = prunePendingSignupStore(readPendingSignupStore());
+  const disabled = disablePendingSignupAttemptsForRecord(duplicateSignup, pendingStore);
+  if (disabled.disabled) writePendingSignupStore(disabled.store);
+  const updated = buildSupersededSignupRecord({
+    signup: duplicateSignup,
+    canonicalTargetId,
+    pendingAttemptsDisabled: disabled.disabled,
+    reconciliation,
+  });
+  upsertSignupDashboardRecord(updated);
+  return buildSafeSignupSupersessionResult({
+    targetId,
+    canonicalTargetId,
+    pendingAttemptsDisabled: disabled.disabled,
+    resourcesReconciled: reconciliation.complete,
+  });
+}
+
 function getSignupProviderRecoveryDiagnostics({ signup = {}, pendingSignup = null, vapiNumbers = [], twilioNumbers = [], providerLookup = "not_needed" } = {}) {
   const assignedPhone = normalizePhoneForMatch(signup.twilioPhoneNumber || "");
   const vapiPhone = assignedPhone
@@ -5278,6 +5645,12 @@ async function recoverSignupByOperationalTarget(targetId) {
     error.statusCode = 404;
     throw error;
   }
+  if (isSupersededSignupDuplicate(signup)) {
+    const error = new Error("This signup was deliberately superseded and cannot be provisioned or recovered.");
+    error.statusCode = 409;
+    error.code = "SIGNUP_SUPERSEDED_DUPLICATE";
+    throw error;
+  }
   if (String(signup.status || "").trim().toLowerCase() === "setup_ready") {
     const error = new Error("This signup is already setup-ready and cannot be replayed.");
     error.statusCode = 409;
@@ -5297,8 +5670,9 @@ async function recoverSignupByOperationalTarget(targetId) {
         ...signup,
         status: "setup_error",
         makeStatus: makeResult.status,
-        makeError: makeData?.error || makeAssessment.code || "Make webhook did not complete the signup recovery.",
+        makeError: makeAssessment.providerCode || makeAssessment.code || "MAKE_SIGNUP_INCOMPLETE",
         makeResponseKind: makeAssessment.kind,
+        ...makeFailureRecordFields(makeAssessment),
         makeEventKey: makeResult.eventKey,
         makeRequestId: makeResult.requestId,
         makeDurationMs: makeResult.durationMs,
@@ -5315,6 +5689,7 @@ async function recoverSignupByOperationalTarget(targetId) {
         makeStatus: makeResult.status,
         makeError: phoneProvisioning.code || "PHONE_PROVISIONING_NOT_READY",
         makeResponseKind: makeAssessment.kind,
+        ...makeFailureRecordFields({}),
         makeEventKey: makeResult.eventKey,
         makeRequestId: makeResult.requestId,
         makeDurationMs: makeResult.durationMs,
@@ -5333,6 +5708,7 @@ async function recoverSignupByOperationalTarget(targetId) {
       makeStatus: makeResult.status,
       makeError: "",
       makeResponseKind: makeAssessment.kind,
+      ...makeFailureRecordFields({}),
       makeEventKey: makeResult.eventKey,
       makeRequestId: makeResult.requestId,
       makeDurationMs: makeResult.durationMs,
@@ -5389,8 +5765,9 @@ async function recoverSignupByOperationalTarget(targetId) {
           ...signup,
           status: "setup_error",
           makeStatus: makeResult.status,
-          makeError: makeData?.error || makeAssessment.code || "Make webhook did not complete the recovered voice signup.",
+          makeError: makeAssessment.providerCode || makeAssessment.code || "MAKE_SIGNUP_INCOMPLETE",
           makeResponseKind: makeAssessment.kind,
+          ...makeFailureRecordFields(makeAssessment),
           makeEventKey: makeResult.eventKey,
           makeRequestId: makeResult.requestId,
           makeDurationMs: makeResult.durationMs,
@@ -5407,6 +5784,7 @@ async function recoverSignupByOperationalTarget(targetId) {
           makeStatus: makeResult.status,
           makeError: phoneProvisioning.code || "PHONE_PROVISIONING_NOT_READY",
           makeResponseKind: makeAssessment.kind,
+          ...makeFailureRecordFields({}),
           makeEventKey: makeResult.eventKey,
           makeRequestId: makeResult.requestId,
           makeDurationMs: makeResult.durationMs,
@@ -5425,6 +5803,7 @@ async function recoverSignupByOperationalTarget(targetId) {
         makeStatus: makeResult.status,
         makeError: "",
         makeResponseKind: makeAssessment.kind,
+        ...makeFailureRecordFields({}),
         makeEventKey: makeResult.eventKey,
         makeRequestId: makeResult.requestId,
         makeDurationMs: makeResult.durationMs,
@@ -5931,7 +6310,7 @@ async function claimTrialUsageMilestone(signup, milestone, usage) {
   };
   const [field, claimField] = fields[milestone] || fields.warning;
   return prisma.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))`;
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))::text AS lock_result`;
     const row = await tx.runtimeStore.findUnique({ where: { key } });
     const data = row?.data && typeof row.data === "object" ? row.data : {};
     if (data[field]) return { claimed: false, reason: "already-sent" };
@@ -6128,7 +6507,7 @@ async function reserveTrialCall({ signup, config, callId }) {
   const key = getTrialReservationKey(signup, businessId);
   const callIndexKey = getTrialCallIndexKey(callId);
   return prisma.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))`;
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))::text AS lock_result`;
     const [reservationRow, usedSeconds] = await Promise.all([
       tx.runtimeStore.findUnique({ where: { key } }),
       getTrialUsedSeconds(signup, businessId, tx),
@@ -6196,7 +6575,7 @@ async function releaseTrialCallReservation(callId) {
   const reservationKey = String(index?.data?.reservationKey || "");
   if (!reservationKey) return;
   await prisma.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${reservationKey}))`;
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${reservationKey}))::text AS lock_result`;
     const row = await tx.runtimeStore.findUnique({ where: { key: reservationKey } });
     const data = row?.data && typeof row.data === "object" ? row.data : {};
     const reservations = { ...(data.reservations || {}) };
@@ -7782,18 +8161,46 @@ async function attachNoCardStripeTrialToSignup(payload, extra = {}) {
     return trialResult;
   } catch (error) {
     const identity = getSignupBillingIdentity(payload, extra);
+    const providerCode = String(error?.code || error?.decline_code || error?.type || "STRIPE_TRIAL_CREATION_FAILED")
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9_.:-]+/g, "_")
+      .slice(0, 80);
+    const providerStatus = Number(error?.statusCode || error?.status || error?.raw?.statusCode || 0);
+    const alertError = Object.assign(new Error("Stripe could not create the no-card trial subscription."), {
+      code: providerCode,
+      provider: "stripe",
+      providerCode,
+      ...(Number.isInteger(providerStatus) && providerStatus >= 400 && providerStatus <= 599
+        ? { providerStatus, upstreamStatus: providerStatus }
+        : {}),
+    });
     console.error("[stripe:no-card-trial] could not create trial subscription", {
       emailHash: hashKey(identity.ownerEmail),
-      businessName: identity.businessName,
-      error: error?.message || String(error),
+      providerCode,
+      providerStatus: providerStatus || null,
     });
     upsertSignupDashboardFromPayload(payload, {
       ...identity,
       makeStatus: extra.makeStatus,
       twilioPhoneNumber: extra.twilioPhoneNumber,
-      stripeTrialError: error?.message || "Stripe trial subscription could not be created.",
+      stripeTrialError: providerCode,
     });
-    return { ok: false, error: error?.message || "Stripe trial subscription could not be created." };
+    safelyNotifyRuntimeFailure(alertError, {
+      area: "billing and trial workflow",
+      provider: "stripe",
+      operation: "create no-card trial subscription",
+      businessName: identity.businessName,
+      snapshot: {
+        "Trial created": "No",
+        "Phone provisioning completed": Boolean(extra.twilioPhoneNumber) ? "Yes" : "No",
+        "Provider code": providerCode,
+        ...(providerStatus ? { "Provider status": String(providerStatus) } : {}),
+      },
+      dedupeFingerprint: `stripe-no-card-trial:${hashKey(identity.ownerEmail || identity.businessName || "unknown")}:${providerCode}`,
+      lastCheckpoint: "Phone setup may have completed, but no Stripe trial subscription was recorded as active.",
+    });
+    return { ok: false, error: "Stripe trial subscription could not be created.", code: providerCode };
   }
 }
 
@@ -7804,6 +8211,33 @@ function parseJsonObject(rawText) {
   } catch (_err) {
     return {};
   }
+}
+
+function createProviderHttpError({ provider, operation, status, data, fallbackCode }) {
+  const normalizedProvider = String(provider || "provider").trim().toLowerCase();
+  const providerCode = String(
+    data?.code
+      || data?.error?.code
+      || data?.error_code
+      || data?.type
+      || fallbackCode
+      || `${normalizedProvider}_request_failed`
+  )
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9_.:-]+/g, "_")
+    .slice(0, 80);
+  const providerStatus = Number(status || 0);
+  const error = new Error(`${String(provider || "Provider")} ${String(operation || "request")} failed.`);
+  error.code = providerCode;
+  error.provider = normalizedProvider;
+  error.providerCode = providerCode;
+  if (Number.isInteger(providerStatus) && providerStatus >= 400 && providerStatus <= 599) {
+    error.statusCode = providerStatus;
+    error.providerStatus = providerStatus;
+    error.upstreamStatus = providerStatus;
+  }
+  return error;
 }
 
 function getMakeTwilioPhoneNumber(data) {
@@ -9076,6 +9510,68 @@ app.post(
 );
 
 app.post(
+  "/api/internal/operations/supersede-signup",
+  requireMonitorKey,
+  express.json({ limit: "4kb" }),
+  asyncRoute(async (req, res) => {
+    const targetId = String(req.body?.targetId || "").trim().toLowerCase();
+    const canonicalTargetId = String(req.body?.canonicalTargetId || "").trim().toLowerCase();
+    if (!/^[a-f0-9]{24}$/.test(targetId) || !/^[a-f0-9]{24}$/.test(canonicalTargetId)) {
+      return res.status(400).json({ error: "Valid redacted duplicate and canonical signup target IDs are required." });
+    }
+    if (String(req.body?.confirmation || "") !== "SUPERSEDE_DUPLICATE_SIGNUP") {
+      return res.status(400).json({ error: "Explicit duplicate-signup supersession confirmation is required." });
+    }
+    try {
+      const result = await supersedeSignupByOperationalTargets(targetId, canonicalTargetId);
+      await recordAdminAuditEvent({
+        prisma,
+        action: "supersede_duplicate_signup",
+        outcome: result.duplicate ? "already_completed" : "success",
+        actorHash: hashKey("monitor-api"),
+        targetType: "signup",
+        targetId,
+        details: {
+          canonicalTargetId,
+          reasonCode: SUPERSEDED_SIGNUP_REASON,
+          pendingAttemptsDisabled: result.pendingAttemptsDisabled,
+          resourcesProvisioned: result.resourcesProvisioned,
+          resourcesReconciled: result.resourcesReconciled,
+        },
+      });
+      res.setHeader("Cache-Control", "no-store, max-age=0");
+      res.json(result);
+    } catch (error) {
+      await recordAdminAuditEvent({
+        prisma,
+        action: "supersede_duplicate_signup",
+        outcome: "failed",
+        actorHash: hashKey("monitor-api"),
+        targetType: "signup",
+        targetId,
+        details: { canonicalTargetId, code: error?.code || "SIGNUP_SUPERSESSION_FAILED" },
+      });
+      throw error;
+    }
+  })
+);
+
+app.post(
+  "/api/webhooks/twilio/message-status",
+  express.urlencoded({ extended: false, limit: "8kb" }),
+  asyncRoute(async (req, res) => {
+    if (!verifyTwilioWebhookRequest(req, process.env, { configuredUrl: TWILIO_STATUS_CALLBACK_URL })) {
+      return res.status(401).json({ error: "Invalid messaging webhook signature." });
+    }
+    const preparedIncident = buildTwilioMessageStatusIncident(req.body || {});
+    if (preparedIncident) {
+      safelyNotifyRuntimeFailure(preparedIncident.error, preparedIncident.context);
+    }
+    return res.type("application/xml").send("<Response></Response>");
+  })
+);
+
+app.post(
   "/api/webhooks/sms",
   express.urlencoded({ extended: false, limit: "8kb" }),
   asyncRoute(async (req, res) => {
@@ -9700,9 +10196,7 @@ app.post(
       });
       const data = parseJsonObject(await response.text());
       if (!response.ok) {
-        const err = new Error(data?.message || data?.error || `Twilio message audit failed with HTTP ${response.status}.`);
-        err.statusCode = response.status;
-        throw err;
+        throw createProviderHttpError({ provider: "Twilio", operation: "message audit", status: response.status, data, fallbackCode: "TWILIO_MESSAGE_AUDIT_FAILED" });
       }
       const aiNumber = normalizePhoneForMatch(signup.twilioPhoneNumber);
       const ownerNumber = normalizePhoneForMatch(signup.ownerPhone || signup.businessPhone);
@@ -10478,15 +10972,18 @@ app.post(
     try {
       makeResult = await sendMakeSignupCompleted(makePayload);
     } catch (error) {
+      const providerFailure = makeFailureFromError(error);
       const failedRecord = upsertSignupDashboardFromPayload(payload, {
         status: "setup_error",
         makeStatus: Number(error?.upstreamStatus) || 0,
         makeError: error?.code || "MAKE_SIGNUP_FAILED",
+        ...makeFailureRecordFields(providerFailure),
       });
       const telegramAlert = await safelyNotifySignupOperations(payload, {
         state: "provisioning_failed",
         detail: "Provisioning webhook could not be reached",
         record: failedRecord,
+        providerFailure,
       });
       if (telegramAlert?.sent || telegramAlert?.queued || telegramAlert?.duplicate || telegramAlert?.reason === "already_alerted") {
         error.telegramIncidentHandled = true;
@@ -10499,8 +10996,9 @@ app.post(
       const incompleteRecord = upsertSignupDashboardFromPayload(payload, {
         status: "setup_error",
         makeStatus: makeResult.status,
-        makeError: makeData?.error || makeAssessment.code || "Make webhook did not complete the signup.",
+        makeError: makeAssessment.providerCode || makeAssessment.code || "MAKE_SIGNUP_INCOMPLETE",
         makeResponseKind: makeAssessment.kind,
+        ...makeFailureRecordFields(makeAssessment),
         makeEventKey: makeResult.eventKey,
         makeRequestId: makeResult.requestId,
         makeDurationMs: makeResult.durationMs,
@@ -10509,8 +11007,9 @@ app.post(
         state: "provisioning_failed",
         detail: `Provisioning response was ${makeAssessment.kind}`,
         record: incompleteRecord,
+        makeAssessment,
       });
-      return res.status(502).json({ error: makeData?.error || "Make webhook did not complete the signup." });
+      return res.status(502).json({ error: "Provisioning did not complete. My AI PA has recorded the exact safe provider diagnostics for review." });
     }
 
     const phoneProvisioning = await inspectSignupPhoneProvisioning(makeData, makeResult.body);
@@ -10519,6 +11018,7 @@ app.post(
       status: phoneProvisioning.status === "ready" ? "setup_ready" : `provisioning_${phoneProvisioning.status}`,
       makeStatus: makeResult.status,
       makeResponseKind: makeAssessment.kind,
+      ...makeFailureRecordFields({}),
       makeEventKey: makeResult.eventKey,
       makeRequestId: makeResult.requestId,
       makeDurationMs: makeResult.durationMs,
@@ -10662,6 +11162,7 @@ app.get(
     try {
       makeResult = await sendMakeSignupCompleted(payload);
     } catch (error) {
+      const providerFailure = makeFailureFromError(error);
       const retryStore = readPendingSignupStore();
       if (retryStore[tokenHash]) {
         retainPendingSignupRecoveryPayload({
@@ -10678,11 +11179,13 @@ app.get(
         emailVerifiedAt: new Date().toISOString(),
         makeStatus: Number(error?.upstreamStatus) || 0,
         makeError: error?.code || "MAKE_SIGNUP_FAILED",
+        ...makeFailureRecordFields(providerFailure),
       });
       const telegramAlert = await safelyNotifySignupOperations(payload, {
         state: "provisioning_failed",
         detail: "Verified signup could not reach provisioning",
         record: failedRecord,
+        providerFailure,
       });
       if (telegramAlert?.sent || telegramAlert?.queued || telegramAlert?.duplicate || telegramAlert?.reason === "already_alerted") {
         error.telegramIncidentHandled = true;
@@ -10707,8 +11210,9 @@ app.get(
         emailVerified: true,
         emailVerifiedAt: new Date().toISOString(),
         makeStatus: makeResult.status,
-        makeError: makeData?.error || makeAssessment.code || "Make webhook did not complete after email verification.",
+        makeError: makeAssessment.providerCode || makeAssessment.code || "MAKE_SIGNUP_INCOMPLETE",
         makeResponseKind: makeAssessment.kind,
+        ...makeFailureRecordFields(makeAssessment),
         makeEventKey: makeResult.eventKey,
         makeRequestId: makeResult.requestId,
         makeDurationMs: makeResult.durationMs,
@@ -10717,10 +11221,11 @@ app.get(
         state: "provisioning_failed",
         detail: `Verified signup response was ${makeAssessment.kind}`,
         record: incompleteRecord,
+        makeAssessment,
       });
       console.error("[signup:verification] Make webhook did not complete after email verification", {
         status: makeResult.status,
-        error: makeData?.error || null,
+        providerCode: makeAssessment.providerCode || makeAssessment.code || "MAKE_SIGNUP_INCOMPLETE",
         emailHash: hashKey(record.ownerEmail),
       });
       return renderVerificationPage({
@@ -10750,6 +11255,7 @@ app.get(
       emailVerifiedAt: new Date().toISOString(),
       makeStatus: makeResult.status,
       makeResponseKind: makeAssessment.kind,
+      ...makeFailureRecordFields({}),
       makeEventKey: makeResult.eventKey,
       makeRequestId: makeResult.requestId,
       makeDurationMs: makeResult.durationMs,
@@ -12342,10 +12848,15 @@ function runtimeAreaForRoute(route = "") {
 function safelyNotifyRuntimeFailure(error, context = {}) {
   const preparedIncident = buildRuntimeIncident(error, context);
   const exactAdminUrl = `${FRONTEND_APP_URL}/#/admin?tab=attention&incident=${preparedIncident.incidentId}`;
+  const needsAttentionDestination = `Needs Attention → INC-${preparedIncident.incidentId.slice(0, 8).toUpperCase()}`;
+  const providerDestination = String(preparedIncident.signInDestination || "").trim();
+  const signInDestination = providerDestination && !/^needs attention\b/i.test(providerDestination)
+    ? `${needsAttentionDestination}; then ${providerDestination}`
+    : needsAttentionDestination;
   const incidentForDelivery = {
     ...preparedIncident,
     adminUrl: exactAdminUrl,
-    signInDestination: `Needs Attention → INC-${preparedIncident.incidentId.slice(0, 8).toUpperCase()}`,
+    signInDestination,
   };
   const recorded = recordRuntimeIncident(runtimeIncidentPath, incidentForDelivery);
   if (!recorded.recorded) {
@@ -12686,6 +13197,8 @@ module.exports = {
     getPublicSignupNetworkStats,
     setPublicNetworkStatsLoaderForTests,
     purchaseTwilioPhoneNumber,
+    createProviderHttpError,
+    createSmtpDeliveryError,
     inspectSignupPhoneProvisioning,
     getVapiVoiceSignupExecutionBusinessId,
     getVapiVoiceSignupSmsEnvironment,
@@ -12694,6 +13207,13 @@ module.exports = {
     normalizeClientErrorRoute,
     findSignupByOperationalTarget,
     findPendingSignupForDashboardRecord,
+    isSupersededSignupDuplicate,
+    isSignupSupersessionCandidate,
+    signupHasProvisioningOrBillingResources,
+    validateSignupSupersession,
+    disablePendingSignupAttemptsForRecord,
+    buildSupersededSignupRecord,
+    buildSafeSignupSupersessionResult,
     getSignupProviderRecoveryDiagnostics,
     getVoiceSignupToolArguments,
     isRecoverableVoiceSignupStatus,

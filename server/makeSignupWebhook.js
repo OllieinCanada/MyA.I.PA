@@ -2,6 +2,23 @@ const crypto = require("crypto");
 
 const DEFAULT_MAKE_SIGNUP_TIMEOUT_MS = 185_000;
 
+const MAKE_SIGNUP_FAILURE_PROVIDERS = new Set([
+  "DATABASE",
+  "MAKE",
+  "STRIPE",
+  "TWILIO",
+  "VAPI",
+]);
+
+const MAKE_SIGNUP_FAILURE_STAGES = new Set([
+  "BACKEND_REQUEST",
+  "DATABASE_IDEMPOTENCY",
+  "MAKE_WEBHOOK",
+  "TWILIO_NUMBER_PURCHASE",
+  "VAPI_ASSISTANT_CREATE",
+  "VAPI_NUMBER_IMPORT",
+]);
+
 function normalizeHostList(value) {
   return String(value || "")
     .split(",")
@@ -88,6 +105,47 @@ function firstString(data, paths) {
   return "";
 }
 
+function safeFailureToken(value, { maxLength = 100, numericMaxLength = 6 } = {}) {
+  if (typeof value !== "string" && typeof value !== "number") return "";
+  const token = String(value).trim().toUpperCase();
+  if (!token || token.length > maxLength || !/^[A-Z0-9][A-Z0-9_.:-]*$/.test(token)) return "";
+  if (/^\d+$/.test(token) && token.length > numericMaxLength) return "";
+  if (/^[0-9A-F]{8}-[0-9A-F]{4}-[1-5][0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/.test(token)) return "";
+  return token;
+}
+
+function sanitizeMakeFailureEnvelope(value) {
+  const input = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  const providerToken = safeFailureToken(input.provider, { maxLength: 24 });
+  const stageToken = safeFailureToken(input.failedStage, { maxLength: 48 });
+  const statusNumber = Number(input.providerStatus);
+  const providerStatus = Number.isInteger(statusNumber) && statusNumber >= 100 && statusNumber <= 599
+    ? statusNumber
+    : 0;
+  const providerCode = safeFailureToken(input.providerCode, { maxLength: 80 });
+
+  return {
+    ...(MAKE_SIGNUP_FAILURE_STAGES.has(stageToken) ? { failedStage: stageToken } : {}),
+    ...(MAKE_SIGNUP_FAILURE_PROVIDERS.has(providerToken) ? { provider: providerToken } : {}),
+    ...(providerStatus ? { providerStatus } : {}),
+    ...(providerCode ? { providerCode } : {}),
+    ...(typeof input.retryable === "boolean" ? { retryable: input.retryable } : {}),
+  };
+}
+
+function extractMakeFailureEnvelope(data) {
+  const root = data && typeof data === "object" && !Array.isArray(data) ? data : {};
+  const candidates = [root, root.failure, root.error, root.data?.failure];
+  const combined = {};
+  for (const candidate of candidates) {
+    const envelope = sanitizeMakeFailureEnvelope(candidate);
+    for (const [key, value] of Object.entries(envelope)) {
+      if (!(key in combined)) combined[key] = value;
+    }
+  }
+  return combined;
+}
+
 function classifyMakeSignupResponse(rawText, parsedData) {
   const text = String(rawText || "").trim();
   const data = parsedData && typeof parsedData === "object" && !Array.isArray(parsedData)
@@ -99,6 +157,7 @@ function classifyMakeSignupResponse(rawText, parsedData) {
       complete: false,
       kind: "rejected",
       code: "MAKE_SIGNUP_REJECTED",
+      ...extractMakeFailureEnvelope(data),
     };
   }
 
@@ -172,5 +231,6 @@ module.exports = {
   getMakeRequestId,
   isStandardMakeWebhookHost,
   parseMakeSignupTimeoutMs,
+  sanitizeMakeFailureEnvelope,
   validateMakeWebhookUrl,
 };

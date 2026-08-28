@@ -9,6 +9,7 @@ const {
 
 function fakePrisma() {
   const rows = new Map();
+  const rawQueries = [];
   const runtimeStore = {
     async findUnique({ where }) { return rows.has(where.key) ? { key: where.key, data: rows.get(where.key) } : null; },
     async upsert({ where, update, create }) {
@@ -17,7 +18,19 @@ function fakePrisma() {
       return { key: where.key, data };
     },
   };
-  return { runtimeStore, async $transaction(callback) { return callback({ runtimeStore }); } };
+  return {
+    rawQueries,
+    runtimeStore,
+    async $transaction(callback) {
+      return callback({
+        runtimeStore,
+        async $queryRaw(strings) {
+          rawQueries.push(strings.join("?"));
+          return [{ lock_result: "" }];
+        },
+      });
+    },
+  };
 }
 
 function payload(fill, hash) {
@@ -37,6 +50,8 @@ test("the newest retry can replace an unlocked signup context", async () => {
     idempotencyKey: "a".repeat(64),
     contextHash: "2".repeat(64),
   })).business.name, "latest");
+  assert.ok(prisma.rawQueries.length >= 3);
+  assert.ok(prisma.rawQueries.every((query) => /pg_advisory_xact_lock[\s\S]*::text AS lock_result/i.test(query)));
 });
 
 test("a paid-stage lock forces later retries to reuse the canonical context", async () => {

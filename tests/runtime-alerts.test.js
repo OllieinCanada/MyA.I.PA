@@ -21,7 +21,7 @@ test("runtime incident snapshot omits query strings and redacts unsafe error det
   const serialized = JSON.stringify(incident);
   assert.equal(safeRuntimePath("/api/calls/12345?token=abc"), "/api/calls/:id");
   assert.doesNotMatch(serialized, /private@example\.com|905-555-0123|secret-value/);
-  assert.match(incident.reason, /root cause is not yet independently confirmed/i);
+  assert.match(incident.reason, /do not establish a specific cause/i);
 });
 
 test("runtime alerts deduplicate the same failure without hiding a different route", async () => {

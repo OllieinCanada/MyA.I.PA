@@ -3,6 +3,8 @@ const {
   redactIncidentText,
   sendIncidentTelegramAlert,
 } = require("./incidentAlerts");
+const { sanitizeMakeFailureEnvelope } = require("./makeSignupWebhook");
+const { classifyOperationalError } = require("./operationalErrorClassifier");
 
 function safeLabel(value, fallback = "unknown", maxLength = 160) {
   const text = redactIncidentText(String(value || ""), { maxLength })
@@ -14,6 +16,35 @@ function safeLabel(value, fallback = "unknown", maxLength = 160) {
 
 function yesNo(value) {
   return value ? "yes" : "no";
+}
+
+function makeFailureContext(input = {}, record = {}) {
+  const explicit = input.makeFailure
+    || input.providerFailure
+    || input.makeAssessment
+    || record.makeFailure
+    || {
+      failedStage: record.makeFailedStage,
+      provider: record.makeFailureProvider,
+      providerStatus: record.makeProviderStatus,
+      providerCode: record.makeProviderCode,
+      retryable: record.makeFailureRetryable,
+    };
+  return sanitizeMakeFailureEnvelope(explicit);
+}
+
+function classifySignupProviderFailure(failure = {}) {
+  if (!failure.provider && !failure.providerStatus && !failure.providerCode && !failure.failedStage) return null;
+  return classifyOperationalError({
+    provider: failure.provider,
+    providerStatus: failure.providerStatus,
+    providerCode: failure.providerCode,
+  }, {
+    provider: failure.provider,
+    providerStatus: failure.providerStatus,
+    providerCode: failure.providerCode,
+    operation: failure.failedStage || "signup provisioning",
+  });
 }
 
 function signupContext(input = {}) {
@@ -29,6 +60,7 @@ function signupContext(input = {}) {
     ? [...new Set(specializations)].slice(0, 5).join(", ")
     : business.services || record.serviceSummary || "Not supplied";
   const verification = payload.verification || {};
+  const makeFailure = makeFailureContext(input, record);
   return {
     businessName: input.businessName || business.name || business.businessName || record.businessName || "Name unavailable",
     businessType: assistant.businessType || payload.businessType || record.businessType || "Not supplied",
@@ -52,12 +84,14 @@ function signupContext(input = {}) {
       : null,
     makeResponseKind: String(record.makeResponseKind || "").trim().toLowerCase(),
     phoneProvisioningCode: String(record.phoneProvisioningCode || "").trim().toUpperCase(),
+    makeFailure,
+    providerClassification: classifySignupProviderFailure(makeFailure),
   };
 }
 
 function buildSignupSnapshot(input = {}) {
   const context = signupContext(input);
-  return {
+  const snapshot = {
     Business: context.businessName,
     Request: "14-day trial and AI phone-assistant setup",
     "Business type": context.businessType,
@@ -71,6 +105,14 @@ function buildSignupSnapshot(input = {}) {
     "Trial/billing started": yesNo(context.trialStarted),
     Stage: context.status,
   };
+  if (context.makeFailure.failedStage) snapshot["Failed stage"] = context.makeFailure.failedStage;
+  if (context.makeFailure.provider) snapshot.Provider = context.makeFailure.provider;
+  if (context.makeFailure.providerStatus) snapshot["Provider HTTP status"] = context.makeFailure.providerStatus;
+  if (context.makeFailure.providerCode) snapshot["Provider code"] = context.makeFailure.providerCode;
+  if (typeof context.makeFailure.retryable === "boolean") {
+    snapshot["Provider marked retryable"] = yesNo(context.makeFailure.retryable);
+  }
+  return snapshot;
 }
 
 function signupReasonCode(input, context) {
@@ -104,6 +146,7 @@ function signupNextAction(state) {
 
 function buildSignupIncidentInput(input = {}) {
   const context = signupContext(input);
+  const providerFailure = context.providerClassification;
   const eventKey = /^signup_[a-f0-9]{32}$/i.test(String(input.eventKey || ""))
     ? String(input.eventKey).slice(-10)
     : "unknown";
@@ -113,18 +156,20 @@ function buildSignupIncidentInput(input = {}) {
     title: review ? "Signup is waiting for manual review" : "Signup provisioning did not finish",
     whatFailed: review
       ? "The 14-day trial and AI phone-assistant setup was paused before provisioning."
-      : "The 14-day trial signup did not produce a verified callable number and assigned assistant.",
-    reasonCode: signupReasonCode(input, context),
-    reason: input.detail || "The signup workflow stopped without verified completion proof.",
-    impact: review
+      : providerFailure?.whatFailed
+        || "The 14-day trial signup did not produce a verified callable number and assigned assistant.",
+    reasonCode: providerFailure?.reasonCode || signupReasonCode(input, context),
+    reason: providerFailure?.reason || input.detail || "The signup workflow stopped without verified completion proof.",
+    impact: providerFailure?.impact || (review
       ? "The customer setup is not live. No phone, assistant, or billing action should be assumed while review is pending."
-      : "The customer setup is not live. They may be waiting, and no phone, assistant, or trial/billing success should be assumed.",
+      : "The customer setup is not live. They may be waiting, and no phone, assistant, or trial/billing success should be assumed."),
     snapshot: {
       ...buildSignupSnapshot(input),
       "Attempt reference": eventKey,
     },
     lastCheckpoint: signupLastCheckpoint(context),
-    nextAction: signupNextAction(input.state),
+    nextAction: providerFailure?.nextAction || signupNextAction(input.state),
+    signInDestination: providerFailure?.signInDestination,
     incidentId: input.incidentId || eventKey,
     detectedAt: input.record?.updatedAt || input.record?.lastAttemptAt || new Date().toISOString(),
     adminUrl: input.adminUrl,

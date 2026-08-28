@@ -87,6 +87,8 @@ expectIncludes("render.yaml", "GITHUB_SUPPORT_TOKEN");
 expectIncludes("render.yaml", "GITHUB_SUPPORT_REPO");
 expectIncludes("render.yaml", "TELEGRAM_BOT_TOKEN");
 expectIncludes("render.yaml", "TELEGRAM_CHAT_ID");
+expectIncludes("render.yaml", "TWILIO_STATUS_CALLBACK_URL");
+expectIncludes("render.yaml", "https://api.myaipa.ca/api/webhooks/twilio/message-status");
 expectIncludes("config/backend.env.example", "ALLOWED_ORIGINS=");
 expectIncludes("config/backend.env.example", "DATABASE_URL=");
 expectIncludes("config/backend.env.example", "ADMIN_PASSWORD=");

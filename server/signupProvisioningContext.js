@@ -30,7 +30,10 @@ async function withContextLock(prisma, key, callback) {
   }
   return prisma.$transaction(async (tx) => {
     if (typeof tx.$queryRaw === "function") {
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))`;
+      // PostgreSQL returns `void` from pg_advisory_xact_lock. Prisma cannot
+      // deserialize that unsupported result type, so project the lock result
+      // as text while retaining the same transaction-scoped lock semantics.
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))::text AS lock_result`;
     }
     return callback(tx);
   });

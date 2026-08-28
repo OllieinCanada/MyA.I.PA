@@ -87,3 +87,49 @@ test("failed signup Telegram delivery includes an exact incident button and hone
     "https://www.myaipa.ca/#/admin?tab=attention&incident=abcdef1234567890abcdef12"
   );
 });
+
+test("signup failure alert distinguishes a Twilio account funding problem and gives the exact action", () => {
+  const text = buildSignupTelegramAlert({
+    businessName: "Example Electrical",
+    state: "provisioning_failed",
+    eventKey: "signup_1234567890abcdef1234567890abcdef",
+    makeAssessment: {
+      failedStage: "TWILIO_NUMBER_PURCHASE",
+      provider: "TWILIO",
+      providerStatus: 402,
+      providerCode: "INSUFFICIENT_BALANCE",
+      retryable: false,
+    },
+    record: { makeResponseKind: "rejected" },
+  });
+
+  assert.match(text, /Twilio stopped the operation because the platform account needs funds/);
+  assert.match(text, /My AI PA's Twilio account does not have enough funds or credits/);
+  assert.match(text, /Failed stage: TWILIO_NUMBER_PURCHASE/);
+  assert.match(text, /Provider HTTP status: 402/);
+  assert.match(text, /Provider code: INSUFFICIENT_BALANCE/);
+  assert.match(text, /Add funds or credits in Twilio Billing/);
+  assert.match(text, /Twilio Console.*Billing/);
+  assert.doesNotMatch(text, /Cause not confirmed yet/);
+});
+
+test("signup failure alert never labels an unconfirmed Make rejection as billing", () => {
+  const text = buildSignupTelegramAlert({
+    businessName: "Example Electrical",
+    state: "provisioning_failed",
+    eventKey: "signup_1234567890abcdef1234567890abcdef",
+    detail: "Provider returned unfamiliar state for private@example.ca at +19055550123",
+    makeAssessment: {
+      failedStage: "VAPI_NUMBER_IMPORT",
+      provider: "VAPI",
+      retryable: false,
+      rawBody: "secret provider response",
+    },
+    record: { makeResponseKind: "rejected" },
+  });
+
+  assert.match(text, /available safe diagnostics do not establish a specific cause/i);
+  assert.match(text, /VAPI_NUMBER_IMPORT/);
+  assert.match(text, /Vapi Dashboard.*Billing.*Logs.*phone numbers/);
+  assert.doesNotMatch(text, /needs funds|Add funds or credits|private@example\.ca|9055550123|secret provider response/i);
+});

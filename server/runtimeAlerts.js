@@ -4,6 +4,7 @@ const {
   redactIncidentText,
   sendIncidentTelegramAlert,
 } = require("./incidentAlerts");
+const { classifyOperationalError } = require("./operationalErrorClassifier");
 
 const DEFAULT_DEDUPE_MS = 10 * 60 * 1000;
 const sentIncidents = new Map();
@@ -46,38 +47,52 @@ function safeSnapshot(input) {
 }
 
 function buildRuntimeIncident(error, context = {}) {
+  const classification = classifyOperationalError(error, context);
   const area = String(context.area || context.workflow || "application request").trim().slice(0, 100);
   const route = safeRuntimePath(context.route || context.path);
   const method = safeRuntimeCode(context.method);
-  const reasonCode = safeRuntimeCode(context.reasonCode || error?.code || (context.status ? `HTTP_${context.status}` : "RUNTIME_FAILURE"));
+  const reasonCode = safeRuntimeCode(
+    context.reasonCode
+      || classification.reasonCode
+      || error?.code
+      || (context.status ? `HTTP_${context.status}` : "RUNTIME_FAILURE")
+  );
   const release = safeRuntimeCode(context.release);
   const fingerprintSource = context.dedupeFingerprint
     || [redactIncidentText(context.reason || error?.message || "unknown", { maxLength: 320 }), release, context.upstreamStatus || ""].join(":");
   const fingerprint = crypto.createHash("sha256").update(String(fingerprintSource)).digest("hex").slice(0, 16);
   const key = [area, method, route, reasonCode, fingerprint].join(":");
   return {
-    severity: context.severity || "critical",
-    whatFailed: context.whatFailed || `${area} failed`,
+    severity: context.severity || (classification.known ? "critical" : "warning"),
+    whatFailed: context.whatFailed || classification.whatFailed || `${area} failed`,
     reasonCode,
-    reason: context.reason || safeRuntimeMessage(error),
-    impact: context.impact || "The affected My AI PA operation did not finish and may need a safe retry.",
+    reason: classification.known
+      ? classification.reason
+      : context.reason || classification.reason || safeRuntimeMessage(error),
+    impact: context.impact || classification.impact || "The affected My AI PA operation did not finish and may need a safe retry.",
     snapshot: {
       ...safeSnapshot(context.snapshot),
       Workflow: area,
+      "Failure category": classification.category,
+      ...(classification.providerLabel && classification.provider ? { Provider: classification.providerLabel } : {}),
+      ...(classification.providerStatus ? { "Provider status": String(classification.providerStatus) } : {}),
+      ...(classification.providerCode ? { "Provider code": classification.providerCode } : {}),
+      Retryable: classification.retryable ? "Yes, after the stated safety checks" : "Not until the stated cause is resolved",
       ...(method ? { Method: method } : {}),
       ...(route ? { Route: route } : {}),
       ...(context.phase ? { Phase: String(context.phase).slice(0, 80) } : {}),
       ...(context.status ? { Status: String(context.status).slice(0, 40) } : {}),
-      ...(context.upstreamStatus ? { "Provider status": String(context.upstreamStatus).slice(0, 40) } : {}),
       ...(release ? { Release: release } : {}),
       ...(context.businessName ? { Business: String(context.businessName).slice(0, 120) } : {}),
     },
     lastCheckpoint: context.lastCheckpoint || "The operation reached the application but did not complete normally.",
-    nextAction: context.nextAction || "Open the admin dashboard and server logs, verify the affected provider state, then retry only if no duplicate action can be created.",
+    nextAction: classification.known
+      ? classification.nextAction
+      : context.nextAction || classification.nextAction || "Open the admin dashboard and server logs, verify the affected provider state, then retry only if no duplicate action can be created.",
     incidentId: runtimeIncidentId(key),
     detectedAt: context.detectedAt || new Date().toISOString(),
     adminUrl: context.adminUrl || "",
-    signInDestination: context.signInDestination || "My AI PA admin → Needs Attention and server logs",
+    signInDestination: context.signInDestination || classification.signInDestination || "My AI PA admin → Needs Attention and server logs",
     dedupeKey: key,
   };
 }
