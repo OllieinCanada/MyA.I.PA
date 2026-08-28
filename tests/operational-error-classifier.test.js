@@ -53,6 +53,20 @@ test("rate limits never claim that adding money is the fix", () => {
   assert.doesNotMatch(`${classified.reason} ${classified.nextAction}`, /add funds/i);
 });
 
+test("OpenAI insufficient-quota codes are billing/credit failures, not ordinary rate limits", () => {
+  const classified = classifyOperationalError(
+    Object.assign(new Error("AI responses are temporarily unavailable."), {
+      provider: "openai",
+      providerCode: "insufficient_quota",
+      providerStatus: 429,
+    }),
+    { operation: "assistant response" }
+  );
+  assert.equal(classified.category, "platform_funding");
+  assert.equal(classified.reasonCode, "PROVIDER_ACCOUNT_FUNDING_REQUIRED");
+  assert.match(classified.nextAction, /OpenAI.*Billing/i);
+});
+
 test("missing provider configuration is not mislabeled as an outage", () => {
   const classified = classifyOperationalError(
     Object.assign(new Error("VAPI_API_KEY is not configured."), { statusCode: 503 }),

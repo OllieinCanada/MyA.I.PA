@@ -1248,6 +1248,47 @@ test("SMTP failures retain only a stable category, provider status, and safe mes
   assert.equal(timeout.providerCode, "SMTP_TIMEOUT");
 });
 
+test("OpenAI response errors preserve safe provider evidence for the Telegram classifier", () => {
+  const error = __test.createOpenAiResponseError({
+    operation: "assistant response",
+    response: { status: 429 },
+    data: { error: { code: "insufficient_quota", message: "private@example.com exceeded quota" } },
+    userMessage: "AI responses are temporarily unavailable right now.",
+  });
+  assert.equal(error.statusCode, 502);
+  assert.equal(error.provider, "openai");
+  assert.equal(error.providerStatus, 429);
+  assert.equal(error.upstreamStatus, 429);
+  assert.equal(error.providerCode, "INSUFFICIENT_QUOTA");
+  assert.doesNotMatch(error.message, /private@example/i);
+});
+
+test("isolated signup SMS-routing failures notify immediately without changing the safe failure return", async () => {
+  let alert = null;
+  const providerError = Object.assign(new Error("Vapi routing failed for private@example.com"), {
+    provider: "vapi",
+    providerCode: "INSUFFICIENT_BALANCE",
+    providerStatus: 402,
+  });
+  const result = await __test.safelyProvisionIsolatedSmsForSignup({
+    ownerEmail: "private@example.com",
+    assistantId: "private-assistant-id",
+    aiNumber: "+19055550123",
+    ownerNumber: "+19055550124",
+  }, {
+    provision: async () => { throw providerError; },
+    notify: (error, context) => { alert = { error, context }; },
+  });
+
+  assert.equal(result.failed, true);
+  assert.equal(result.reason, "isolated_sms_provisioning_failed");
+  assert.equal(alert.error, providerError);
+  assert.equal(alert.context.area, "signup SMS routing");
+  assert.equal(alert.context.snapshot["AI number supplied"], "Yes");
+  assert.equal(alert.context.snapshot["Owner number supplied"], "Yes");
+  assert.doesNotMatch(JSON.stringify(alert.context), /private@example|private-assistant-id|9055550123|9055550124/i);
+});
+
 test("Vapi end-of-call reports normalize duration, status, cost, and artifacts", () => {
   const report = __test.mergeVapiEndOfCallReport({
     type: "end-of-call-report",

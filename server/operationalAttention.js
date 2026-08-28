@@ -21,12 +21,18 @@ const SAFE_PROVIDER_REASONS = Object.freeze({
   "20003": "Twilio rejected the configured credentials.",
   "20404": "Twilio could not find the requested messaging resource.",
   "21211": "Twilio rejected the destination telephone number as invalid.",
+  "21265": "Twilio rejected the destination because it is a short code rather than a full recipient phone number.",
+  "21266": "Twilio rejected the message because its sender and recipient numbers are the same.",
+  "21268": "Twilio does not allow messages to this premium-rate or information-service destination.",
+  "21608": "Twilio blocked the message because the recipient or required compliance profile is not verified.",
   "21610": "Twilio blocked the text because the recipient previously opted out.",
   "30003": "Twilio could not reach the destination handset.",
   "30005": "Twilio reported an unknown destination handset.",
   "30006": "Twilio reported a landline or unreachable destination.",
   "30007": "Twilio or the carrier filtered the text message.",
   "30008": "Twilio could not confirm a more specific delivery failure.",
+  "30034": "Twilio blocked the US-bound message because its 10DLC sender is not attached to an approved campaign.",
+  "63038": "Twilio stopped outbound messages because the account reached its rolling daily message limit.",
 });
 
 function hashTarget(value) {
@@ -623,6 +629,7 @@ module.exports = {
   ageMinutes,
   getOperationalAttentionInbox,
   hashTarget,
+  knownProviderReason,
   signupAttentionItems,
   summarizeAttention,
 };

@@ -2404,10 +2404,37 @@ async function provisionIsolatedSmsForSignup({ ownerEmail, assistantId, aiNumber
   };
 }
 
-async function safelyProvisionIsolatedSmsForSignup(input) {
+function buildSignupSmsRoutingFailureContext(input = {}) {
+  const assistantReference = hashKey(String(input.assistantId || "unknown")).slice(0, 16);
+  return {
+    area: "signup SMS routing",
+    operation: "provision protected per-business SMS routing",
+    whatFailed: "Protected per-business SMS routing failed during signup setup",
+    impact: "The phone and assistant may exist, but owner and customer text routing must not be treated as verified.",
+    snapshot: {
+      "Assistant reference": assistantReference,
+      "AI number supplied": normalizeVapiImportPhone(input.aiNumber) ? "Yes" : "No",
+      "Owner number supplied": normalizeVapiImportPhone(input.ownerNumber) ? "Yes" : "No",
+      "Routing verified": "No",
+    },
+    lastCheckpoint: "The signup reached protected SMS-routing setup, but its provider read-back did not complete successfully.",
+    dedupeFingerprint: `signup-sms-routing:${assistantReference}`,
+  };
+}
+
+async function safelyProvisionIsolatedSmsForSignup(input, dependencies = {}) {
+  const provision = dependencies.provision || provisionIsolatedSmsForSignup;
+  const notify = dependencies.notify || safelyNotifyRuntimeFailure;
   try {
-    return await provisionIsolatedSmsForSignup(input);
+    return await provision(input);
   } catch (error) {
+    try {
+      notify(error, buildSignupSmsRoutingFailureContext(input));
+    } catch (notificationError) {
+      console.error("[signup:sms-routing] failure alert could not be prepared", {
+        code: String(notificationError?.code || "SMS_ROUTING_ALERT_FAILED").slice(0, 80),
+      });
+    }
     return {
       skipped: false,
       failed: true,
@@ -8240,6 +8267,21 @@ function createProviderHttpError({ provider, operation, status, data, fallbackCo
   return error;
 }
 
+function createOpenAiResponseError({ operation, response, data, userMessage }) {
+  const error = createProviderHttpError({
+    provider: "OpenAI",
+    operation,
+    status: response?.status,
+    data,
+    fallbackCode: "OPENAI_REQUEST_FAILED",
+  });
+  error.message = String(userMessage || "The OpenAI request failed.");
+  // Keep the public route response generic while retaining the real upstream
+  // status separately for the operational classifier and Telegram incident.
+  error.statusCode = 502;
+  return error;
+}
+
 function getMakeTwilioPhoneNumber(data) {
   return String(
     data?.twilioPhoneNumber ||
@@ -9058,9 +9100,7 @@ async function getOpenAiAssistantReply(message) {
     const msg = isQuotaIssue
       ? "AI responses are temporarily unavailable right now. Please try again shortly."
       : `AI request failed (${response.status}).`;
-    const err = new Error(msg);
-    err.statusCode = 502;
-    throw err;
+    throw createOpenAiResponseError({ operation: "assistant response", response, data, userMessage: msg });
   }
 
   const reply = data?.choices?.[0]?.message?.content;
@@ -9132,9 +9172,7 @@ async function getOpenAiTranscription({ audioBase64, mimeType, detailed = false 
     const msg = isQuotaIssue
       ? "Voice input is temporarily unavailable right now. Please type your answer instead."
       : `Voice transcription failed (${response.status}).`;
-    const err = new Error(msg);
-    err.statusCode = 502;
-    throw err;
+    throw createOpenAiResponseError({ operation: "voice transcription", response, data, userMessage: msg });
   }
 
   const text = typeof data?.text === "string"
@@ -13198,7 +13236,10 @@ module.exports = {
     setPublicNetworkStatsLoaderForTests,
     purchaseTwilioPhoneNumber,
     createProviderHttpError,
+    createOpenAiResponseError,
     createSmtpDeliveryError,
+    buildSignupSmsRoutingFailureContext,
+    safelyProvisionIsolatedSmsForSignup,
     inspectSignupPhoneProvisioning,
     getVapiVoiceSignupExecutionBusinessId,
     getVapiVoiceSignupSmsEnvironment,

@@ -2,9 +2,19 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
   getOperationalAttentionInbox,
+  knownProviderReason,
   signupAttentionItems,
   summarizeAttention,
 } = require("../server/operationalAttention");
+
+test("persisted Twilio failures retain the expanded exact safe reason set", () => {
+  for (const code of ["21265", "21266", "21268", "21608", "30034", "63038"]) {
+    const result = knownProviderReason(code);
+    assert.equal(result.reasonCode, code);
+    assert.ok(result.reason.length > 20);
+  }
+  assert.equal(knownProviderReason("raw-provider-secret"), null);
+});
 
 test("failed and stuck signups become redacted attention items", () => {
   const now = new Date("2026-08-20T12:00:00.000Z");
