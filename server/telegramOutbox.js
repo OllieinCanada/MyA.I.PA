@@ -90,8 +90,14 @@ function normalizeDeliveryReceipt(receipt) {
     ? String(receipt.dedupeHash).toLowerCase()
     : "";
   const deliveredAt = Number(receipt?.deliveredAt);
+  const providerMessageId = Number(receipt?.providerMessageId);
   return id && Number.isFinite(deliveredAt)
-    ? { id, deliveredAt, ...(dedupeHash ? { dedupeHash } : {}) }
+    ? {
+        id,
+        deliveredAt,
+        ...(dedupeHash ? { dedupeHash } : {}),
+        ...(Number.isSafeInteger(providerMessageId) && providerMessageId > 0 ? { providerMessageId } : {}),
+      }
     : null;
 }
 
@@ -302,7 +308,21 @@ async function postTelegramItem(item, { token, chatId, fetchImpl }) {
     return { success: false, ...failureKind({ error }) };
   }
   if (response.ok && data?.ok === true) {
-    return { success: true, status: Number(response.status) || 200 };
+    const providerMessageId = Number(data?.result?.message_id);
+    if (Number.isSafeInteger(providerMessageId) && providerMessageId > 0) {
+      return {
+        success: true,
+        status: Number(response.status) || 200,
+        providerMessageId,
+      };
+    }
+    return {
+      success: false,
+      retry: true,
+      code: "telegram_message_id_missing",
+      status: Number(response.status) || 200,
+      retryAfter: 0,
+    };
   }
   return { success: false, ...failureKind({ response, body: data }) };
 }
@@ -318,7 +338,7 @@ async function mutateItem(filePath, itemId, mutation) {
   });
 }
 
-async function markItemDelivered(filePath, itemId, deliveredAt) {
+async function markItemDelivered(filePath, itemId, deliveredAt, providerMessageId) {
   return withFileLock(filePath, async () => {
     const outbox = readOutbox(filePath);
     const index = outbox.items.findIndex((item) => item.id === itemId);
@@ -326,7 +346,14 @@ async function markItemDelivered(filePath, itemId, deliveredAt) {
     const [deliveredItem] = outbox.items.splice(index, 1);
     outbox.deliveryReceipts = [
       ...(Array.isArray(outbox.deliveryReceipts) ? outbox.deliveryReceipts : []),
-      { id: itemId, dedupeHash: deliveredItem.dedupeHash, deliveredAt },
+      {
+        id: itemId,
+        dedupeHash: deliveredItem.dedupeHash,
+        deliveredAt,
+        ...(Number.isSafeInteger(Number(providerMessageId)) && Number(providerMessageId) > 0
+          ? { providerMessageId: Number(providerMessageId) }
+          : {}),
+      },
     ].slice(-MAX_DELIVERY_RECEIPTS);
     writeOutboxAtomic(filePath, outbox);
     return { found: true, remaining: outbox.items.length };
@@ -334,12 +361,17 @@ async function markItemDelivered(filePath, itemId, deliveredAt) {
 }
 
 function hasTelegramDeliveryReceipt(filePath, itemId) {
+  return Boolean(getTelegramDeliveryReceipt(filePath, itemId));
+}
+
+function getTelegramDeliveryReceipt(filePath, itemId) {
   const id = /^[a-f0-9]{24}$/i.test(String(itemId || "")) ? String(itemId).toLowerCase() : "";
-  if (!id) return false;
+  if (!id) return null;
   try {
-    return readOutbox(resolveFilePath(filePath)).deliveryReceipts.some((receipt) => receipt.id === id);
+    const receipt = readOutbox(resolveFilePath(filePath)).deliveryReceipts.find((item) => item.id === id);
+    return receipt ? { ...receipt } : null;
   } catch (_error) {
-    return false;
+    return null;
   }
 }
 
@@ -390,7 +422,7 @@ async function processTelegramOutbox({
       const attemptedAt = now == null || now === "" ? Date.now() : timestamp;
       result.processed += 1;
       if (delivery.success) {
-        await markItemDelivered(resolvedPath, item.id, attemptedAt);
+        await markItemDelivered(resolvedPath, item.id, attemptedAt, delivery.providerMessageId);
         result.sent += 1;
         result.sentItemIds.push(item.id);
         continue;
@@ -428,6 +460,7 @@ function resetTelegramOutboxLocksForTests() {
 module.exports = {
   MAX_OUTBOX_ITEMS,
   enqueueTelegramMessage,
+  getTelegramDeliveryReceipt,
   hasTelegramDeliveryReceipt,
   processTelegramOutbox,
   resetTelegramOutboxLocksForTests,

@@ -313,9 +313,34 @@ test("operational incidents include a safe reason and snapshot metadata across i
     targetId: "abcdef1234567890abcdef12",
     actions: ["acknowledge_runtime_incident"],
   };
-  const inbox = await getOperationalAttentionInbox({ prisma, signups: [], runtimeIncidents: [runtimeIncident], now });
+  const controlledCanary = {
+    ...runtimeIncident,
+    id: "111111111111111111111111",
+    targetId: "111111111111111111111111",
+    incident: {
+      ...runtimeIncident.incident,
+      reasonCode: "CONTROLLED_READINESS_REMEDIATION_TEST",
+    },
+  };
+  const similarlyNamedRealIncident = {
+    ...runtimeIncident,
+    id: "222222222222222222222222",
+    targetId: "222222222222222222222222",
+    incident: {
+      ...runtimeIncident.incident,
+      reasonCode: "CONTROLLED_READINESS_REMEDIATION_TEST_FAILED",
+    },
+  };
+  const inbox = await getOperationalAttentionInbox({
+    prisma,
+    signups: [],
+    runtimeIncidents: [runtimeIncident, controlledCanary, similarlyNamedRealIncident],
+    now,
+  });
   assert.ok(inbox.items.length >= 8);
   assert.deepEqual(inbox.items.find((item) => item.id === runtimeIncident.id), runtimeIncident);
+  assert.equal(inbox.items.some((item) => item.id === controlledCanary.id), false);
+  assert.equal(inbox.items.some((item) => item.id === similarlyNamedRealIncident.id), true);
   assert.ok(inbox.items.every((item) => item.incident.reason && item.incident.impact && item.incident.lastCheckpoint && item.incident.nextAction));
   assert.ok(inbox.items.every((item) => ["high", "medium", "low"].includes(item.incident.confidence)));
   assert.equal(inbox.items.find((item) => item.businessId === 1).businessName, "Acme Electrical");

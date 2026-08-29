@@ -485,6 +485,145 @@ test("incident remediation canary requires the monitor key and explicit confirma
     body: {},
   });
   assert.equal(unconfirmed.status, 400);
+
+  const unauthorizedStatus = await request("/api/internal/operations/incident-remediation-canary/status", {
+    method: "POST",
+    body: {
+      confirmation: "CHECK_INCIDENT_REMEDIATION_CANARY",
+      incidentId: "abcdef1234567890abcdef12",
+    },
+  });
+  assert.equal(unauthorizedStatus.status, 401);
+
+  const unconfirmedStatus = await request("/api/internal/operations/incident-remediation-canary/status", {
+    method: "POST",
+    headers: { "x-monitor-api-key": process.env.MONITOR_API_KEY },
+    body: { incidentId: "abcdef1234567890abcdef12" },
+  });
+  assert.equal(unconfirmedStatus.status, 400);
+});
+
+test("incident remediation canary status exposes only receipt-backed lifecycle proof", () => {
+  const incidentId = "abcdef1234567890abcdef12";
+  const initialOutboxId = "111111111111111111111111";
+  const completionOutboxId = "222222222222222222222222";
+  const receipts = new Map([
+    [initialOutboxId, { id: initialOutboxId, deliveredAt: 1000, providerMessageId: 91 }],
+    [completionOutboxId, { id: completionOutboxId, deliveredAt: 1001, providerMessageId: 92 }],
+  ]);
+  const status = __test.getIncidentRemediationCanaryStatus(incidentId, [{
+    id: incidentId,
+    incident: { reasonCode: "CONTROLLED_READINESS_REMEDIATION_TEST" },
+    snapshot: { "Controlled canary": "Yes", Business: "must not be returned" },
+    remediation: {
+      action: "readiness_probe",
+      status: "recovered",
+      initialReportDelivery: "sent",
+      completionReportDelivery: "sent",
+      initialReportOutboxId: initialOutboxId,
+      completionReportOutboxId: completionOutboxId,
+      actionTaken: "private detail",
+    },
+  }], (outboxId) => receipts.get(outboxId) || null);
+  assert.deepEqual(status, {
+    ok: true,
+    controlledCanary: true,
+    lifecycleComplete: true,
+    initialReportDelivered: true,
+    completionReportDelivered: true,
+    deliveryReceiptsConfirmed: true,
+    deliveryReceiptCount: 2,
+    deliverySequenceConfirmed: true,
+    remediationTerminal: true,
+    remediationStatus: "recovered",
+    readOnlyReadinessVerified: true,
+    customerDataIncluded: false,
+    providerResourcesChanged: false,
+    originalCustomerOperationReplayed: false,
+  });
+  const serializedStatus = JSON.stringify(status);
+  assert.equal(serializedStatus.includes("must not be returned"), false);
+  assert.equal(serializedStatus.includes(incidentId), false);
+  assert.doesNotMatch(serializedStatus, /incidentId|outbox|messageId|deliveredAt|snapshot|business/i);
+
+  const pending = __test.getIncidentRemediationCanaryStatus(incidentId, [{
+    id: incidentId,
+    incident: { reasonCode: "CONTROLLED_READINESS_REMEDIATION_TEST" },
+    snapshot: { "Controlled canary": "Yes" },
+    remediation: {
+      action: "readiness_probe",
+      status: "verifying",
+      initialReportDelivery: "sent",
+      completionReportDelivery: "queued",
+      initialReportOutboxId: initialOutboxId,
+      completionReportOutboxId: completionOutboxId,
+    },
+  }], (outboxId) => receipts.get(outboxId) || null);
+  assert.equal(pending.lifecycleComplete, false);
+  assert.equal(pending.deliveryReceiptsConfirmed, false);
+  assert.equal(pending.deliveryReceiptCount, 2);
+  assert.equal(pending.readOnlyReadinessVerified, false);
+
+  const forgedState = __test.getIncidentRemediationCanaryStatus(incidentId, [{
+    id: incidentId,
+    incident: { reasonCode: "CONTROLLED_READINESS_REMEDIATION_TEST" },
+    snapshot: { "Controlled canary": "Yes" },
+    remediation: {
+      action: "readiness_probe",
+      status: "recovered",
+      initialReportDelivery: "sent",
+      completionReportDelivery: "sent",
+      initialReportOutboxId: initialOutboxId,
+      completionReportOutboxId: completionOutboxId,
+    },
+  }], () => null);
+  assert.equal(forgedState.lifecycleComplete, false);
+  assert.equal(forgedState.deliveryReceiptsConfirmed, false);
+  assert.equal(forgedState.deliveryReceiptCount, 0);
+
+  const reversedReceipts = new Map([
+    [initialOutboxId, { deliveredAt: 1002, providerMessageId: 91 }],
+    [completionOutboxId, { deliveredAt: 1001, providerMessageId: 92 }],
+  ]);
+  const reversed = __test.getIncidentRemediationCanaryStatus(incidentId, [{
+    id: incidentId,
+    incident: { reasonCode: "CONTROLLED_READINESS_REMEDIATION_TEST" },
+    snapshot: { "Controlled canary": "Yes" },
+    remediation: {
+      action: "readiness_probe",
+      status: "recovered",
+      initialReportDelivery: "sent",
+      completionReportDelivery: "sent",
+      initialReportOutboxId: initialOutboxId,
+      completionReportOutboxId: completionOutboxId,
+    },
+  }], (outboxId) => reversedReceipts.get(outboxId) || null);
+  assert.equal(reversed.deliverySequenceConfirmed, false);
+  assert.equal(reversed.lifecycleComplete, false);
+
+  const duplicateOutboxMessage = __test.getIncidentRemediationCanaryStatus(incidentId, [{
+    id: incidentId,
+    incident: { reasonCode: "CONTROLLED_READINESS_REMEDIATION_TEST" },
+    snapshot: { "Controlled canary": "Yes" },
+    remediation: {
+      action: "readiness_probe",
+      status: "recovered",
+      initialReportDelivery: "sent",
+      completionReportDelivery: "sent",
+      initialReportOutboxId: initialOutboxId,
+      completionReportOutboxId: initialOutboxId,
+    },
+  }], (outboxId) => receipts.get(outboxId) || null);
+  assert.equal(duplicateOutboxMessage.deliveryReceiptCount, 0);
+  assert.equal(duplicateOutboxMessage.lifecycleComplete, false);
+
+  const unrelated = __test.getIncidentRemediationCanaryStatus(incidentId, [{
+    id: incidentId,
+    incident: { reasonCode: "PROVIDER_ACCOUNT_FUNDING_REQUIRED" },
+    snapshot: { "Controlled canary": "Yes" },
+    remediation: { action: "readiness_probe", status: "recovered" },
+  }]);
+  assert.equal(unrelated, null);
 });
 
 test("production provisioning canary requires the monitor key and explicit confirmation", async () => {

@@ -32,6 +32,16 @@ test("production incident canary requires the exact confirmation before any requ
 test("production incident canary validates but never prints its private incident reference", () => {
   const source = require("node:fs").readFileSync(script, "utf8");
   assert.match(source, /!data\?\.incidentId/);
+  assert.match(source, /incident-remediation-canary\/status/);
+  assert.match(source, /deliveryReceiptsConfirmed\s*!==\s*true/);
+  assert.match(source, /deliveryReceiptCount\s*!==\s*2/);
+  assert.match(source, /deliverySequenceConfirmed\s*!==\s*true/);
+  assert.match(source, /initialReportDelivered\s*!==\s*true/);
+  assert.match(source, /completionReportDelivered\s*!==\s*true/);
+  assert.match(source, /remediationStatus\s*!==\s*"recovered"/);
+  assert.match(source, /telegramApiAcceptedMessages:\s*2/);
+  assert.match(source, /telegramApiAcceptanceSequenceConfirmed:\s*true/);
   assert.match(source, /incidentReferenceExposed:\s*false/);
   assert.doesNotMatch(source, /incidentId:\s*String\(data\.incidentId\)/);
+  assert.doesNotMatch(source, /console\.(?:log|error)\([^\n]*incidentId/);
 });

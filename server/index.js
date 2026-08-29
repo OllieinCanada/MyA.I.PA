@@ -58,6 +58,7 @@ const {
 } = require("./runtimeIncidentStore");
 const {
   enqueueTelegramMessage,
+  getTelegramDeliveryReceipt,
   hasTelegramDeliveryReceipt,
   processTelegramOutbox,
 } = require("./telegramOutbox");
@@ -9619,6 +9620,88 @@ app.post(
   }
 );
 
+function getIncidentRemediationCanaryStatus(
+  incidentId,
+  incidents = listRuntimeIncidents(runtimeIncidentPath),
+  receiptLookup = (outboxId) => getTelegramDeliveryReceipt(telegramOutboxPath, outboxId)
+) {
+  const safeIncidentId = /^[a-f0-9]{24}$/i.test(String(incidentId || ""))
+    ? String(incidentId).toLowerCase()
+    : "";
+  if (!safeIncidentId) return null;
+  const incident = (Array.isArray(incidents) ? incidents : [])
+    .find((item) => item.id === safeIncidentId);
+  if (
+    !incident
+    || incident.incident?.reasonCode !== "CONTROLLED_READINESS_REMEDIATION_TEST"
+    || incident.remediation?.action !== "readiness_probe"
+    || incident.snapshot?.["Controlled canary"] !== "Yes"
+  ) {
+    return null;
+  }
+  const status = String(incident.remediation?.status || "queued");
+  const initialReportOutboxId = String(incident.remediation?.initialReportOutboxId || "").toLowerCase();
+  const completionReportOutboxId = String(incident.remediation?.completionReportOutboxId || "").toLowerCase();
+  const distinctOutboxMessages = /^[a-f0-9]{24}$/.test(initialReportOutboxId)
+    && /^[a-f0-9]{24}$/.test(completionReportOutboxId)
+    && initialReportOutboxId !== completionReportOutboxId;
+  const initialReceipt = distinctOutboxMessages ? receiptLookup(initialReportOutboxId) : null;
+  const completionReceipt = distinctOutboxMessages ? receiptLookup(completionReportOutboxId) : null;
+  const initialReceiptConfirmed = Number.isSafeInteger(Number(initialReceipt?.providerMessageId))
+    && Number(initialReceipt.providerMessageId) > 0
+    && Number.isFinite(Number(initialReceipt?.deliveredAt));
+  const completionReceiptConfirmed = Number.isSafeInteger(Number(completionReceipt?.providerMessageId))
+    && Number(completionReceipt.providerMessageId) > 0
+    && Number.isFinite(Number(completionReceipt?.deliveredAt));
+  const deliverySequenceConfirmed = initialReceiptConfirmed
+    && completionReceiptConfirmed
+    && Number(initialReceipt.deliveredAt) <= Number(completionReceipt.deliveredAt);
+  const initialReportDelivered = incident.remediation?.initialReportDelivery === "sent"
+    && initialReceiptConfirmed;
+  const completionReportDelivered = incident.remediation?.completionReportDelivery === "sent"
+    && completionReceiptConfirmed;
+  const remediationTerminal = ["recovered", "needs_user", "failed"].includes(status);
+  return {
+    ok: true,
+    controlledCanary: true,
+    lifecycleComplete: initialReportDelivered
+      && completionReportDelivered
+      && deliverySequenceConfirmed
+      && remediationTerminal,
+    initialReportDelivered,
+    completionReportDelivered,
+    deliveryReceiptsConfirmed: initialReportDelivered && completionReportDelivered && deliverySequenceConfirmed,
+    deliveryReceiptCount: [initialReceiptConfirmed, completionReceiptConfirmed].filter(Boolean).length,
+    deliverySequenceConfirmed,
+    remediationTerminal,
+    remediationStatus: status,
+    readOnlyReadinessVerified: status === "recovered",
+    customerDataIncluded: false,
+    providerResourcesChanged: false,
+    originalCustomerOperationReplayed: false,
+  };
+}
+
+app.post(
+  "/api/internal/operations/incident-remediation-canary/status",
+  requireMonitorKey,
+  express.json({ limit: "1kb" }),
+  asyncRoute(async (req, res) => {
+    if (String(req.body?.confirmation || "") !== "CHECK_INCIDENT_REMEDIATION_CANARY") {
+      return res.status(400).json({ error: "Explicit incident-remediation canary status confirmation is required." });
+    }
+    const incidentId = String(req.body?.incidentId || "").trim().toLowerCase();
+    if (!/^[a-f0-9]{24}$/.test(incidentId)) {
+      return res.status(400).json({ error: "A valid private canary reference is required." });
+    }
+    await drainTelegramOutbox("incident-remediation-canary-status");
+    const status = getIncidentRemediationCanaryStatus(incidentId);
+    if (!status) return res.status(404).json({ error: "The controlled canary was not found." });
+    res.setHeader("Cache-Control", "no-store, max-age=0");
+    return res.json(status);
+  })
+);
+
 app.post(
   "/api/internal/operations/provisioning-canary",
   requireMonitorKey,
@@ -13856,6 +13939,7 @@ module.exports = {
     normalizeTwilioProvisioningAreaCode,
     normalizeTwilioProvisioningVoiceUrl,
     getPublicSignupNetworkStats,
+    getIncidentRemediationCanaryStatus,
     setPublicNetworkStatsLoaderForTests,
     purchaseTwilioPhoneNumber,
     createProviderHttpError,

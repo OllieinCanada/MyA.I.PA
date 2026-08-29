@@ -460,6 +460,7 @@ async function getOperationalAttentionInbox({ prisma, signups = [], runtimeIncid
   );
   const businessNameFor = (businessId) => businessNames.get(Number(businessId)) || "";
   const activeRuntimeIncidents = (Array.isArray(runtimeIncidents) ? runtimeIncidents : [])
+    .filter((item) => item?.incident?.reasonCode !== "CONTROLLED_READINESS_REMEDIATION_TEST")
     .filter((item) => !["resolved", "recovered", "not_required"].includes(String(item?.remediation?.status || "")));
   const items = [
     ...signupAttentionItems(signups, now, 10),

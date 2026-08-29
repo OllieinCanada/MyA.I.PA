@@ -8,6 +8,7 @@ const test = require("node:test");
 const {
   MAX_OUTBOX_ITEMS,
   enqueueTelegramMessage,
+  getTelegramDeliveryReceipt,
   hasTelegramDeliveryReceipt,
   processTelegramOutbox,
   resetTelegramOutboxLocksForTests,
@@ -136,6 +137,7 @@ test("a confirmed delivery persists an exact receipt and deduplicates after rest
   assert.equal(persisted.version, 2);
   assert.deepEqual(persisted.items, []);
   assert.deepEqual(persisted.deliveryReceipts.map((receipt) => receipt.id), [queued.id]);
+  assert.equal(getTelegramDeliveryReceipt(filePath, queued.id).providerMessageId, 42);
   assert.doesNotMatch(JSON.stringify(persisted), /bot-secret|12345/);
 
   const duplicateAfterRestart = await enqueueTelegramMessage({
@@ -221,7 +223,7 @@ test("completion reporting survives crashes without a premature terminal state o
     token: "bot-secret",
     chatId: "12345",
     now: 3_000,
-    fetchImpl: async () => ({ ok: true, status: 200, json: async () => ({ ok: true }) }),
+    fetchImpl: async () => ({ ok: true, status: 200, json: async () => ({ ok: true, result: { message_id: 77 } }) }),
   });
   assert.equal(hasTelegramDeliveryReceipt(outboxPath, preserved.id), true);
   const afterDeliveryCrash = await enqueueTelegramMessage({
@@ -280,6 +282,8 @@ test("processor exponentially retries timeouts, 429, 5xx, and non-ok Telegram bo
     { name: "rate limit", response: async () => ({ ok: false, status: 429, json: async () => ({ ok: false, parameters: { retry_after: 180 } }) }) },
     { name: "server error", response: async () => ({ ok: false, status: 503, json: async () => ({ ok: false }) }) },
     { name: "invalid success body", response: async () => ({ ok: true, status: 200, json: async () => ({ ok: "true" }) }) },
+    { name: "missing provider message id", response: async () => ({ ok: true, status: 200, json: async () => ({ ok: true, result: {} }) }) },
+    { name: "invalid provider message id", response: async () => ({ ok: true, status: 200, json: async () => ({ ok: true, result: { message_id: "invalid" } }) }) },
   ];
   for (const [index, entry] of cases.entries()) {
     const filePath = path.join(path.dirname(createOutboxPath(t)), `${index}.json`);
@@ -295,6 +299,7 @@ test("processor exponentially retries timeouts, 429, 5xx, and non-ok Telegram bo
     const afterFirst = readOutbox(filePath).items[0];
     assert.equal(afterFirst.attempts, 1, entry.name);
     assert.ok(afterFirst.nextAttemptAt >= 70_000, entry.name);
+    assert.equal(readOutbox(filePath).deliveryReceipts.length, 0, entry.name);
 
     const secondNow = afterFirst.nextAttemptAt;
     await processTelegramOutbox({
@@ -361,7 +366,7 @@ test("processor enforces maxBatch and serializes concurrent processors", async (
     maxBatch: 1,
     fetchImpl: async () => {
       await gate;
-      return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      return { ok: true, status: 200, json: async () => ({ ok: true, result: { message_id: 101 } }) };
     },
   });
   await new Promise((resolve) => setImmediate(resolve));
@@ -370,7 +375,7 @@ test("processor enforces maxBatch and serializes concurrent processors", async (
     token: "token",
     chatId: "chat",
     now: 1,
-    fetchImpl: async () => ({ ok: true, status: 200, json: async () => ({ ok: true }) }),
+    fetchImpl: async () => ({ ok: true, status: 200, json: async () => ({ ok: true, result: { message_id: 102 } }) }),
   });
   assert.equal(concurrent.busy, true);
   release();

@@ -105,7 +105,7 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 20
-      - name: Start one controlled two-message lifecycle test
+      - name: Prove one controlled receipt-backed two-message lifecycle
         env:
           MONITOR_API_KEY: ${{ secrets.MONITOR_API_KEY }}
         run: node scripts/test-production-incident-remediation.js --apply --confirm=RUN_INCIDENT_REMEDIATION_CANARY
