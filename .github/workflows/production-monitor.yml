@@ -4,6 +4,12 @@ on:
   schedule:
     - cron: "*/5 * * * *"
   workflow_dispatch:
+    inputs:
+      run_incident_remediation_canary:
+        description: Run one controlled, read-only remediation lifecycle canary
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -81,3 +87,25 @@ jobs:
       - name: Preserve the production monitor result
         if: needs.monitor.outputs.probe_outcome != 'success'
         run: exit 1
+
+  incident_canary:
+    name: Run the confirmed incident-remediation canary
+    if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.run_incident_remediation_canary == true }}
+    needs: persist_state
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 20
+      - name: Start one controlled two-message lifecycle test
+        env:
+          MONITOR_API_KEY: ${{ secrets.MONITOR_API_KEY }}
+        run: node scripts/test-production-incident-remediation.js --apply --confirm=RUN_INCIDENT_REMEDIATION_CANARY

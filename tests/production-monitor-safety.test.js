@@ -58,7 +58,8 @@ test("production monitor separates secret-bearing probes from least-privilege st
   const source = fs.readFileSync(path.join(root, ".github", "workflows", "production-monitor.yml"), "utf8");
   const workflow = YAML.parse(source);
   const actionRefs = [...source.matchAll(/\buses:\s*([^\s#]+)/g)].map((match) => match[1]);
-  const persistSection = source.split(/^  persist_state:/m)[1];
+  const persistSection = source.split(/^  persist_state:/m)[1].split(/^  incident_canary:/m)[0];
+  const canarySection = source.split(/^  incident_canary:/m)[1];
 
   assert.equal(workflow.permissions.contents, "read");
   assert.equal(workflow.jobs.persist_state.permissions.contents, "write");
@@ -72,6 +73,12 @@ test("production monitor separates secret-bearing probes from least-privilege st
   }
   assert.doesNotMatch(persistSection, /secrets\.|TELEGRAM_|MONITOR_API_KEY/);
   assert.match(persistSection, /contents:\s*write/);
+  assert.match(source, /run_incident_remediation_canary:/);
+  assert.match(canarySection, /github\.event_name == 'workflow_dispatch'/);
+  assert.match(canarySection, /inputs\.run_incident_remediation_canary == true/);
+  assert.match(canarySection, /--apply --confirm=RUN_INCIDENT_REMEDIATION_CANARY/);
+  assert.match(canarySection, /MONITOR_API_KEY:\s*\$\{\{ secrets\.MONITOR_API_KEY \}\}/);
+  assert.doesNotMatch(canarySection, /TELEGRAM_|contents:\s*write/);
 });
 
 test("durable monitor state accepts only bounded schema-v2 lifecycle records", () => {

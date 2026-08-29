@@ -28,3 +28,10 @@ test("production incident canary requires the exact confirmation before any requ
   assert.match(result.stderr, /Refusing to start the canary/);
   assert.match(result.stderr, /RUN_INCIDENT_REMEDIATION_CANARY/);
 });
+
+test("production incident canary validates but never prints its private incident reference", () => {
+  const source = require("node:fs").readFileSync(script, "utf8");
+  assert.match(source, /!data\?\.incidentId/);
+  assert.match(source, /incidentReferenceExposed:\s*false/);
+  assert.doesNotMatch(source, /incidentId:\s*String\(data\.incidentId\)/);
+});

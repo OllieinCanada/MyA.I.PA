@@ -50,7 +50,7 @@ async function main() {
   console.log(JSON.stringify({
     ok: true,
     productionApiAcceptedDurableIncident: true,
-    incidentId: String(data.incidentId).slice(0, 64),
+    incidentReferenceExposed: false,
     expectedTelegramSequence: [
       "initial incident report",
       "SERVICE HEALTHY AGAIN or NEEDS YOU",
