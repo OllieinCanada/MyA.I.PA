@@ -16,25 +16,68 @@ jobs:
   monitor:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    outputs:
+      probe_outcome: ${{ steps.probe.outcome }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 20
           cache: npm
+      - name: Restore durable incident lifecycle state
+        id: restore_state
+        run: node scripts/sync-production-monitor-state.js restore
       - run: npm ci --legacy-peer-deps --ignore-scripts --no-audit --no-fund
       - name: Check production twice before alerting
+        id: probe
+        continue-on-error: true
         env:
           MONITOR_API_KEY: ${{ secrets.MONITOR_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           MONITOR_RECHECK_DELAY_MS: 15000
-        run: npm run ops:monitor -- --include-operational --confirm-failure --telegram-on-failure
+          MONITOR_STATE_SYNC_WARNING: ${{ steps.restore_state.outputs.warning }}
+        run: npm run ops:monitor -- --include-operational --confirm-failure --telegram-lifecycle
+      - name: Carry sanitized lifecycle state to the persistence job
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: production-monitor-state-${{ github.run_id }}-${{ github.run_attempt }}
+          path: diagnostics/operations/production-monitor-state.json
+          if-no-files-found: error
+          retention-days: 1
       - name: Save redacted monitor report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: production-monitor-${{ github.run_id }}
+          name: production-monitor-${{ github.run_id }}-${{ github.run_attempt }}
           path: diagnostics/operations/production-monitor.json
           if-no-files-found: ignore
           retention-days: 14
+
+  persist_state:
+    name: Persist sanitized lifecycle state
+    if: always()
+    needs: monitor
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+      - name: Download sanitized state only
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: production-monitor-state-${{ github.run_id }}-${{ github.run_attempt }}
+          path: diagnostics/operations
+      - name: Persist state on the dedicated non-code branch
+        run: node scripts/sync-production-monitor-state.js persist
+      - name: Preserve the production monitor result
+        if: needs.monitor.outputs.probe_outcome != 'success'
+        run: exit 1

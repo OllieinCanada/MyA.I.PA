@@ -459,9 +459,11 @@ async function getOperationalAttentionInbox({ prisma, signups = [], runtimeIncid
     businesses.map((business) => [Number(business.id), safeIncidentText(business.name, "", 120)])
   );
   const businessNameFor = (businessId) => businessNames.get(Number(businessId)) || "";
+  const activeRuntimeIncidents = (Array.isArray(runtimeIncidents) ? runtimeIncidents : [])
+    .filter((item) => !["resolved", "recovered", "not_required"].includes(String(item?.remediation?.status || "")));
   const items = [
     ...signupAttentionItems(signups, now, 10),
-    ...(Array.isArray(runtimeIncidents) ? runtimeIncidents : []),
+    ...activeRuntimeIncidents,
   ];
   for (const handoff of handoffs) {
     const failed = handoff.status === "FAILED";

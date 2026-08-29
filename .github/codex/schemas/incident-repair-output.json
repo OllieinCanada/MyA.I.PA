@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "diagnosis",
+    "confidence",
+    "changed_files",
+    "tests_run",
+    "residual_risk",
+    "requires_human"
+  ],
+  "properties": {
+    "diagnosis": { "type": "string", "maxLength": 1200 },
+    "confidence": { "type": "string", "enum": ["high", "medium", "low"] },
+    "changed_files": {
+      "type": "array",
+      "maxItems": 24,
+      "items": { "type": "string", "maxLength": 240 }
+    },
+    "tests_run": {
+      "type": "array",
+      "maxItems": 30,
+      "items": { "type": "string", "maxLength": 300 }
+    },
+    "residual_risk": { "type": "string", "maxLength": 1200 },
+    "requires_human": { "type": "boolean" }
+  }
+}

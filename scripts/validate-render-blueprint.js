@@ -28,6 +28,29 @@ function expectEnvValue(service, key, expected) {
   }
 }
 
+function expectUniqueEnvValue(service, key, expected) {
+  const items = (service.envVars || []).filter((envVar) => envVar.key === key);
+  if (items.length !== 1) {
+    fail(`${key} should be declared exactly once`);
+    return;
+  }
+  if (items[0].value !== expected) {
+    fail(`${key} should be ${JSON.stringify(expected)}`);
+  }
+}
+
+function expectNonSyncedSecret(service, key) {
+  const items = (service.envVars || []).filter((envVar) => envVar.key === key);
+  if (items.length !== 1) {
+    fail(`${key} should be declared exactly once`);
+    return;
+  }
+  const item = items[0];
+  if (item.sync !== false || Object.prototype.hasOwnProperty.call(item, "value") || item.generateValue === true) {
+    fail(`${key} should be a non-synced Render secret with no blueprint value`);
+  }
+}
+
 if (!blueprint || typeof blueprint !== "object") {
   fail("render.yaml must parse to an object");
 }
@@ -113,6 +136,15 @@ if (!service) {
   expectEnvValue(service, "TRIAL_USAGE_COMPLETION_RESERVE_SECONDS", 300);
   expectEnvValue(service, "LEAD_ACK_TIMEOUT_MINUTES", 2);
   expectEnvValue(service, "JOBBER_GRAPHQL_VERSION", "2025-04-16");
+  expectUniqueEnvValue(service, "RUNTIME_TELEGRAM_ALERTS_ENABLED", "true");
+  expectUniqueEnvValue(service, "INCIDENT_SAFE_AUTO_REPAIR_ENABLED", "true");
+  expectUniqueEnvValue(service, "INCIDENT_CODE_REPAIR_ENABLED", "false");
+  expectUniqueEnvValue(service, "INCIDENT_CODE_REPAIR_MAX_DAILY", "3");
+  expectUniqueEnvValue(service, "INCIDENT_CODE_REPAIR_COOLDOWN_MS", "3600000");
+  expectUniqueEnvValue(service, "INCIDENT_READINESS_TIMEOUT_MS", "5000");
+  expectUniqueEnvValue(service, "GITHUB_INCIDENT_REPAIR_REPO", "OllieinCanada/MyA.I.PA");
+  expectNonSyncedSecret(service, "GITHUB_INCIDENT_REPAIR_TOKEN");
+  expectNonSyncedSecret(service, "INCIDENT_REPAIR_DISPATCH_SECRET");
   if (!hasEnv(service, "DATABASE_URL", (item) => item.fromDatabase && item.fromDatabase.name === "myaipa-postgres")) {
     fail("DATABASE_URL should come from myaipa-postgres");
   }

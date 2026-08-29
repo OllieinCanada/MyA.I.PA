@@ -4,11 +4,17 @@ const fs = require("node:fs");
 const path = require("node:path");
 const {
   buildProductionIncidentAlert,
+  buildMonitorRecoveryUpdate,
   buildTelegramChecklist,
   incidentAdminUrl,
+  monitorIncidentIdentities,
+  monitorIncidentIdentity,
+  publicMonitorReport,
+  readMonitorState,
   redactOperationalIssues,
   redactOperationalSignupIssues,
   selectOperationalIssue,
+  writeMonitorState,
 } = require("../scripts/monitor-production");
 
 test("production monitor keeps signup diagnostics actionable without customer data", () => {
@@ -90,6 +96,68 @@ test("production monitor keeps every operational issue while stripping unsafe de
   assert.doesNotMatch(JSON.stringify(issues), /private@example\.com|905-555-0123|private-secret/);
 });
 
+test("public GitHub report is aggregate-only while private Telegram data stays actionable", () => {
+  const privateReport = {
+    schemaVersion: 2,
+    checkedAt: "2026-08-28T12:00:00.000Z",
+    ok: false,
+    checks: [{
+      name: "operational_health",
+      url: "https://api.myaipa.ca/api/internal/operations/health?token=private",
+      healthy: false,
+      status: 200,
+      durationMs: 42,
+      operationalIssues: [{
+        id: "abcdef1234567890abcdef12",
+        kind: "signup_failed",
+        severity: "critical",
+        businessName: "Private Customer Electrical",
+        targetType: "signup",
+        targetId: "1234567890abcdef12345678",
+        diagnostics: {
+          ownerEmail: "owner@example.com",
+          ownerPhone: "+1 905-555-0123",
+          paymentStatus: "past_due",
+        },
+        snapshot: { Contact: "owner@example.com" },
+      }],
+    }],
+    confirmation: {
+      delayMs: 15_000,
+      firstFailed: ["operational_health"],
+      secondFailed: ["operational_health"],
+      recovered: [],
+    },
+    warnings: [],
+    alert: {
+      attempted: true,
+      accepted: true,
+      deliveries: [{
+        incidentId: "abcdef1234567890abcdef12",
+        lifecycle: "detected",
+        accepted: true,
+        status: 200,
+      }],
+    },
+    checklist: { attempted: false },
+  };
+  const publicReport = publicMonitorReport(privateReport);
+  const serialized = JSON.stringify(publicReport);
+
+  assert.equal(publicReport.checks[0].issueCounts.active, 1);
+  assert.equal(publicReport.checks[0].issueCounts.critical, 1);
+  assert.equal(publicReport.alert.transitionCount, 1);
+  assert.equal(publicReport.alert.deliveryCounts.detected, 1);
+  assert.doesNotMatch(serialized, /Private Customer Electrical|owner@example\.com|905-555-0123/);
+  assert.doesNotMatch(serialized, /abcdef1234567890abcdef12|1234567890abcdef12345678/);
+  assert.doesNotMatch(serialized, /businessName|targetId|incidentId|diagnostics|snapshot|operationalIssues|signupIssues/);
+  assert.equal("url" in publicReport.checks[0], false);
+
+  const privateAlert = buildProductionIncidentAlert(privateReport);
+  assert.match(privateAlert, /Private Customer Electrical/);
+  assert.match(privateAlert, /Open the exact incident|Incident: abcdef1234567890abcdef12/);
+});
+
 test("production monitor builds a useful redacted Telegram checklist", () => {
   const checklist = buildTelegramChecklist({
     checkedAt: "2026-08-21T12:00:00.000Z",
@@ -163,6 +231,8 @@ test("production failure alert explains the reason, snapshot, next action, and e
   assert.match(alert, /AI number assigned: no/);
   assert.match(alert, /Email verification completed/);
   assert.match(alert, /Verify provider state before recovery/);
+  assert.match(alert, /WORKING HYPOTHESIS/);
+  assert.match(alert, /MY AI PA RESPONSE/);
   assert.equal(incidentAdminUrl({ id: incidentId }), `https://www.myaipa.ca/#/admin?tab=attention&incident=${incidentId}`);
 });
 
@@ -189,6 +259,166 @@ test("an infrastructure outage takes priority over an older operational warning"
   assert.match(alert, /public site health check/i);
   assert.match(alert, /did not answer before the health check timed out/i);
   assert.doesNotMatch(alert, /Old routing warning/);
+  assert.match(alert, /monitor will keep checking automatically/i);
+});
+
+test("monitor lifecycle uses a stable incident identity and honest recovered wording", () => {
+  const failedReport = {
+    checkedAt: "2026-08-28T12:00:00.000Z",
+    ok: false,
+    checks: [
+      { name: "public_site", healthy: true, status: 200 },
+      { name: "api_readiness", healthy: false, status: 503, error: "database_unavailable" },
+    ],
+  };
+  const first = monitorIncidentIdentity(failedReport);
+  const second = monitorIncidentIdentity({ ...failedReport, checkedAt: "2026-08-28T12:05:00.000Z" });
+  assert.equal(first.incidentId, second.incidentId);
+  assert.equal(first.fingerprint, second.fingerprint);
+  assert.equal(first.active, true);
+
+  const recovery = buildMonitorRecoveryUpdate({
+    checkedAt: "2026-08-28T12:10:00.000Z",
+    ok: true,
+    checks: [
+      { name: "public_site", healthy: true },
+      { name: "api_liveness", healthy: true },
+      { name: "api_readiness", healthy: true },
+      { name: "operational_health", healthy: true },
+    ],
+  }, first);
+  assert.match(recovery, /SERVICE HEALTHY AGAIN/);
+  assert.doesNotMatch(recovery, /VERIFIED FIXED/);
+  assert.match(recovery, /did not replay customer work/i);
+  assert.match(recovery, /api readiness is responding normally again/i);
+  assert.match(recovery, /not the original request outcome or underlying root cause/i);
+});
+
+test("monitor v2 lifecycle state is durable, bounded, and contains no unsafe details", (t) => {
+  const directory = fs.mkdtempSync(path.join(require("node:os").tmpdir(), "myaipa-monitor-state-"));
+  const filePath = path.join(directory, "state.json");
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const incidents = Object.fromEntries(Array.from({ length: 160 }, (_, index) => {
+    const fingerprint = index === 0
+      ? "issue:abcdef:private_example.com_token_secret_value"
+      : index % 2
+        ? `check:service_${index}:http_500`
+        : `issue:signup_${index}:phone_number_pending`;
+    return [fingerprint, {
+      incidentId: index.toString(16).padStart(24, "0").slice(-24),
+      type: index % 2 ? "check" : "operational",
+      checkName: index % 2 ? `service_${index}` : "operational_health",
+      firstDetectedAt: "2026-08-28T12:00:00.000Z",
+    }];
+  }));
+  writeMonitorState(filePath, {
+    schemaVersion: 2,
+    incidents,
+  });
+  const state = readMonitorState(filePath);
+  assert.equal(state.schemaVersion, 2);
+  assert.equal(Object.keys(state.incidents).length, 150);
+  assert.ok(Object.keys(state.incidents).every((fingerprint) => /:public_[a-f0-9]{32}$/.test(fingerprint)));
+  assert.ok(Object.values(state.incidents).every((incident) => /^public_[a-f0-9]{24}$/.test(incident.lifecycleId)));
+  assert.ok(Object.values(state.incidents).every((incident) => !("incidentId" in incident)));
+  assert.doesNotMatch(
+    JSON.stringify(state),
+    /issue:abcdef:private_example\.com_token_secret_value|private_example\.com|secret_value/
+  );
+});
+
+test("monitor v2 tracks simultaneous failed checks and operational warnings independently", () => {
+  const report = {
+    checkedAt: "2026-08-28T12:00:00.000Z",
+    ok: false,
+    checks: [
+      { name: "public_site", healthy: false, status: 503, error: "http_503" },
+      { name: "api_readiness", healthy: false, status: 503, error: "database_unavailable" },
+      {
+        name: "operational_health",
+        healthy: true,
+        status: 200,
+        operationalIssues: [{
+          id: "abcdef1234567890abcdef12",
+          kind: "business_mapping_incomplete",
+          severity: "warning",
+          incident: { reasonCode: "routing_incomplete" },
+        }],
+      },
+    ],
+  };
+  const identities = monitorIncidentIdentities(report);
+  assert.equal(identities.length, 3);
+  assert.deepEqual(new Set(identities.map((identity) => identity.type)), new Set(["check", "operational"]));
+  assert.deepEqual(
+    identities.filter((identity) => identity.type === "check").map((identity) => identity.checkName).sort(),
+    ["api_readiness", "public_site"]
+  );
+  assert.equal(identities.find((identity) => identity.type === "operational").incidentId,
+    "abcdef1234567890abcdef12");
+  assert.equal(new Set(identities.map((identity) => identity.fingerprint)).size, 3);
+});
+
+test("an operational warning remains active even when its endpoint reports HTTP 200 and ok true", () => {
+  const identities = monitorIncidentIdentities({
+    ok: true,
+    checks: [{
+      name: "operational_health",
+      healthy: true,
+      status: 200,
+      operationalIssues: [{
+        id: "bbbbbbbbbbbbbbbbbbbbbbbb",
+        kind: "signup_stuck",
+        severity: "warning",
+        incident: { reasonCode: "phone_number_pending" },
+      }],
+    }],
+  });
+  assert.equal(identities.length, 1);
+  assert.equal(identities[0].type, "operational");
+  assert.equal(identities[0].incidentId, "bbbbbbbbbbbbbbbbbbbbbbbb");
+});
+
+test("legacy single-incident monitor state migrates to the v2 incident map", (t) => {
+  const directory = fs.mkdtempSync(path.join(require("node:os").tmpdir(), "myaipa-monitor-state-v1-"));
+  const filePath = path.join(directory, "state.json");
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  fs.writeFileSync(filePath, JSON.stringify({
+    active: true,
+    fingerprint: "check:api_readiness:database_unavailable",
+    incidentId: "cccccccccccccccccccccccc",
+    firstDetectedAt: "2026-08-28T12:00:00.000Z",
+  }));
+  const state = readMonitorState(filePath);
+  assert.equal(state.schemaVersion, 2);
+  const [[fingerprint, record]] = Object.entries(state.incidents);
+  assert.match(fingerprint, /^check:api_readiness:public_[a-f0-9]{32}$/);
+  assert.deepEqual(record, {
+    lifecycleId: record.lifecycleId,
+    type: "check",
+    checkName: "api_readiness",
+    firstDetectedAt: "2026-08-28T12:00:00.000Z",
+  });
+  assert.match(record.lifecycleId, /^public_[a-f0-9]{24}$/);
+  assert.doesNotMatch(JSON.stringify(state), /cccccccccccccccccccccccc|database_unavailable/);
+});
+
+test("legacy operational state migrates without retaining its raw incident ID", (t) => {
+  const directory = fs.mkdtempSync(path.join(require("node:os").tmpdir(), "myaipa-monitor-state-v1-ops-"));
+  const filePath = path.join(directory, "state.json");
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  fs.writeFileSync(filePath, JSON.stringify({
+    active: true,
+    fingerprint: "issue:dddddddddddddddddddddddd:phone_number_pending",
+    incidentId: "dddddddddddddddddddddddd",
+    firstDetectedAt: "2026-08-28T12:00:00.000Z",
+  }));
+  const state = readMonitorState(filePath);
+  const [[fingerprint, record]] = Object.entries(state.incidents);
+  assert.match(fingerprint, /^issue:operational_health:public_[a-f0-9]{32}$/);
+  assert.equal(record.checkName, "operational_health");
+  assert.match(record.lifecycleId, /^public_[a-f0-9]{24}$/);
+  assert.doesNotMatch(JSON.stringify(state), /dddddddddddddddddddddddd|phone_number_pending/);
 });
 
 test("HTTP 200 without a healthy JSON response is not mislabeled as a successful HTTP check", () => {

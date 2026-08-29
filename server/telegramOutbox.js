@@ -4,13 +4,14 @@ const path = require("path");
 
 const { redactIncidentText } = require("./incidentAlerts");
 
-const OUTBOX_VERSION = 1;
+const OUTBOX_VERSION = 2;
 const MAX_OUTBOX_ITEMS = 500;
 const MAX_BATCH_SIZE = 100;
 const DEFAULT_BATCH_SIZE = 10;
 const REQUEST_TIMEOUT_MS = 7_000;
 const BASE_RETRY_MS = 60_000;
 const MAX_RETRY_MS = 6 * 60 * 60 * 1000;
+const MAX_DELIVERY_RECEIPTS = 500;
 const ALLOWED_ADMIN_QUERY_KEYS = new Set(["tab", "incident"]);
 const fileLocks = new Map();
 const processingFiles = new Set();
@@ -78,7 +79,20 @@ function validateAdminUrl(value) {
 }
 
 function emptyOutbox() {
-  return { version: OUTBOX_VERSION, items: [] };
+  return { version: OUTBOX_VERSION, items: [], deliveryReceipts: [] };
+}
+
+function normalizeDeliveryReceipt(receipt) {
+  const id = /^[a-f0-9]{24}$/i.test(String(receipt?.id || ""))
+    ? String(receipt.id).toLowerCase()
+    : "";
+  const dedupeHash = /^[a-f0-9]{64}$/i.test(String(receipt?.dedupeHash || ""))
+    ? String(receipt.dedupeHash).toLowerCase()
+    : "";
+  const deliveredAt = Number(receipt?.deliveredAt);
+  return id && Number.isFinite(deliveredAt)
+    ? { id, deliveredAt, ...(dedupeHash ? { dedupeHash } : {}) }
+    : null;
 }
 
 function normalizeStoredItem(item) {
@@ -121,7 +135,11 @@ function readOutbox(filePath) {
     .map(normalizeStoredItem)
     .filter(Boolean)
     .slice(-MAX_OUTBOX_ITEMS);
-  return { version: OUTBOX_VERSION, items };
+  const deliveryReceipts = (Array.isArray(parsed?.deliveryReceipts) ? parsed.deliveryReceipts : [])
+    .map(normalizeDeliveryReceipt)
+    .filter(Boolean)
+    .slice(-MAX_DELIVERY_RECEIPTS);
+  return { version: OUTBOX_VERSION, items, deliveryReceipts };
 }
 
 function writeOutboxAtomic(filePath, outbox) {
@@ -133,6 +151,10 @@ function writeOutboxAtomic(filePath, outbox) {
       .map(normalizeStoredItem)
       .filter(Boolean)
       .slice(-MAX_OUTBOX_ITEMS),
+    deliveryReceipts: (Array.isArray(outbox?.deliveryReceipts) ? outbox.deliveryReceipts : [])
+      .map(normalizeDeliveryReceipt)
+      .filter(Boolean)
+      .slice(-MAX_DELIVERY_RECEIPTS),
   };
   const tempPath = `${filePath}.${process.pid}.${crypto.randomBytes(6).toString("hex")}.tmp`;
   try {
@@ -186,6 +208,16 @@ async function enqueueTelegramMessage({
         queued: false,
         duplicate: true,
         id: duplicate.id,
+        pending: outbox.items.length,
+      };
+    }
+    const deliveredDuplicate = outbox.deliveryReceipts.find((receipt) => receipt.dedupeHash === dedupeHash);
+    if (deliveredDuplicate) {
+      return {
+        queued: false,
+        duplicate: true,
+        delivered: true,
+        id: deliveredDuplicate.id,
         pending: outbox.items.length,
       };
     }
@@ -286,6 +318,31 @@ async function mutateItem(filePath, itemId, mutation) {
   });
 }
 
+async function markItemDelivered(filePath, itemId, deliveredAt) {
+  return withFileLock(filePath, async () => {
+    const outbox = readOutbox(filePath);
+    const index = outbox.items.findIndex((item) => item.id === itemId);
+    if (index < 0) return { found: false, remaining: outbox.items.length };
+    const [deliveredItem] = outbox.items.splice(index, 1);
+    outbox.deliveryReceipts = [
+      ...(Array.isArray(outbox.deliveryReceipts) ? outbox.deliveryReceipts : []),
+      { id: itemId, dedupeHash: deliveredItem.dedupeHash, deliveredAt },
+    ].slice(-MAX_DELIVERY_RECEIPTS);
+    writeOutboxAtomic(filePath, outbox);
+    return { found: true, remaining: outbox.items.length };
+  });
+}
+
+function hasTelegramDeliveryReceipt(filePath, itemId) {
+  const id = /^[a-f0-9]{24}$/i.test(String(itemId || "")) ? String(itemId).toLowerCase() : "";
+  if (!id) return false;
+  try {
+    return readOutbox(resolveFilePath(filePath)).deliveryReceipts.some((receipt) => receipt.id === id);
+  } catch (_error) {
+    return false;
+  }
+}
+
 async function processTelegramOutbox({
   filePath,
   token,
@@ -315,7 +372,14 @@ async function processTelegramOutbox({
   processingFiles.add(guardKey);
   const timestamp = nowMs(now);
   const batchSize = Math.max(1, Math.min(MAX_BATCH_SIZE, Number(maxBatch) || DEFAULT_BATCH_SIZE));
-  const result = { processed: 0, sent: 0, retried: 0, permanentFailures: 0, busy: false };
+  const result = {
+    processed: 0,
+    sent: 0,
+    sentItemIds: [],
+    retried: 0,
+    permanentFailures: 0,
+    busy: false,
+  };
   try {
     const dueItems = await withFileLock(resolvedPath, async () => readOutbox(resolvedPath).items
       .filter((item) => item.nextAttemptAt <= timestamp)
@@ -326,8 +390,9 @@ async function processTelegramOutbox({
       const attemptedAt = now == null || now === "" ? Date.now() : timestamp;
       result.processed += 1;
       if (delivery.success) {
-        await mutateItem(resolvedPath, item.id, (items, index) => items.splice(index, 1));
+        await markItemDelivered(resolvedPath, item.id, attemptedAt);
         result.sent += 1;
+        result.sentItemIds.push(item.id);
         continue;
       }
       if (!delivery.retry) {
@@ -363,6 +428,7 @@ function resetTelegramOutboxLocksForTests() {
 module.exports = {
   MAX_OUTBOX_ITEMS,
   enqueueTelegramMessage,
+  hasTelegramDeliveryReceipt,
   processTelegramOutbox,
   resetTelegramOutboxLocksForTests,
   validateAdminUrl,

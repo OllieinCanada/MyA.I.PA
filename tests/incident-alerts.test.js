@@ -4,9 +4,11 @@ const test = require("node:test");
 const {
   MAX_TELEGRAM_TEXT_LENGTH,
   buildIncidentTelegramAlert,
+  buildIncidentRemediationUpdate,
   humanizeIncidentReason,
   redactIncidentText,
   sendIncidentTelegramAlert,
+  sendIncidentRemediationUpdate,
   validAdminUrl,
 } = require("../server/incidentAlerts");
 
@@ -117,11 +119,17 @@ test("incident alert includes every operational section and a redacted snapshot"
     },
     lastCheckpoint: "Signup record saved before provisioning.",
     nextAction: "Review the held signup before retrying Make.",
+    remediation: {
+      confidence: "high",
+      hypothesis: "The automation returned an incomplete success envelope.",
+      proposedSolution: "Reconcile Twilio and Vapi before any guarded retry.",
+      safetyBoundary: "Do not purchase or create a second provider resource.",
+    },
     incidentId: "incident-42",
     detectedAt: "2026-08-25T21:03:13.616Z",
   });
 
-  for (const heading of ["WHAT FAILED", "REASON", "IMPACT", "SNAPSHOT", "LAST GOOD CHECKPOINT", "DO THIS NEXT", "YOU ARE SIGNING IN TO"]) {
+  for (const heading of ["WHAT FAILED", "REASON", "IMPACT", "SNAPSHOT", "LAST GOOD CHECKPOINT", "WORKING HYPOTHESIS", "MY AI PA RESPONSE", "SAFETY LIMIT", "DO THIS NEXT", "YOU ARE SIGNING IN TO"]) {
     assert.match(text, new RegExp(`(?:^|\\n)${heading}(?:\\n|$)`));
   }
   assert.match(text, /MAKE_SIGNUP_RESPONSE_INCOMPLETE|responded without all verified phone and assistant identifiers/i);
@@ -146,9 +154,57 @@ test("incident alert remains under the Telegram limit without dropping required 
   });
 
   assert.ok(text.length <= MAX_TELEGRAM_TEXT_LENGTH);
-  for (const heading of ["WHAT FAILED", "REASON", "IMPACT", "SNAPSHOT", "LAST GOOD CHECKPOINT", "DO THIS NEXT", "YOU ARE SIGNING IN TO"]) {
+  for (const heading of ["WHAT FAILED", "REASON", "IMPACT", "SNAPSHOT", "LAST GOOD CHECKPOINT", "WORKING HYPOTHESIS", "MY AI PA RESPONSE", "SAFETY LIMIT", "DO THIS NEXT", "YOU ARE SIGNING IN TO"]) {
     assert.ok(text.includes(heading));
   }
+});
+
+test("remediation update clearly distinguishes verified recovery from a user action", () => {
+  const resolved = buildIncidentRemediationUpdate({
+    status: "resolved",
+    incidentId: "abcdef1234567890abcdef12",
+    actionTaken: "Ran a read-only readiness check.",
+    verification: "API and database are healthy.",
+    nextAction: "No action is required.",
+  });
+  assert.match(resolved, /MY AI PA — VERIFIED FIXED/);
+  assert.match(resolved, /WHAT MY AI PA DID/);
+  assert.match(resolved, /VERIFICATION/);
+  assert.match(resolved, /WHAT HAPPENS NEXT/);
+
+  const blocked = buildIncidentRemediationUpdate({
+    status: "needs_user",
+    incidentId: "abcdef1234567890abcdef12",
+    actionTaken: "Stopped before changing billing.",
+    verification: "No charge was attempted.",
+    nextAction: "Add provider funds, then rerun health.",
+  });
+  assert.match(blocked, /MY AI PA — NEEDS YOU/);
+  assert.match(blocked, /WHAT YOU NEED TO DO NEXT/);
+  assert.ok(blocked.length <= MAX_TELEGRAM_TEXT_LENGTH);
+});
+
+test("sendIncidentRemediationUpdate posts the terminal lifecycle message", async () => {
+  const requests = [];
+  const result = await sendIncidentRemediationUpdate({
+    status: "resolved",
+    incidentId: "abcdef1234567890abcdef12",
+    actionTaken: "Retried saved Telegram alerts.",
+    verification: "Telegram accepted the queue and zero messages remain.",
+    nextAction: "No action is required.",
+    adminUrl: "https://www.myaipa.ca/#/admin?tab=attention&incident=abcdef1234567890abcdef12",
+  }, {
+    token: "bot-token",
+    chatId: "chat-42",
+    fetchImpl: async (_url, options) => {
+      requests.push(JSON.parse(options.body));
+      return { ok: true, status: 200, json: async () => ({ ok: true, result: { message_id: 91 } }) };
+    },
+  });
+  assert.equal(result.sent, true);
+  assert.equal(requests.length, 1);
+  assert.match(requests[0].text, /VERIFIED FIXED/);
+  assert.doesNotMatch(requests[0].text, /WHAT FAILED/);
 });
 
 test("sendIncidentTelegramAlert posts the brief with an exact-admin button", async () => {

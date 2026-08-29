@@ -431,6 +431,62 @@ test("production Telegram test requires the monitor key and explicit confirmatio
   assert.match((await unconfirmed.json()).error, /confirmation/i);
 });
 
+test("incident repair results require authentication, exact job outcomes, and an active generation", async () => {
+  const base = {
+    confirmation: "REPORT_INCIDENT_REPAIR_RESULT",
+    incident_id: "abcdef1234567890abcdef12",
+    generation: 1,
+    status: "repair_ready",
+    draft_result: "success",
+    verify_result: "success",
+    publish_result: "success",
+    base_sha: "a".repeat(40),
+    pr_url: "https://github.com/OllieinCanada/MyA.I.PA/pull/123",
+    run_url: "https://github.com/OllieinCanada/MyA.I.PA/actions/runs/456",
+  };
+  const unauthorized = await request("/api/internal/operations/incident-repair-result", {
+    method: "POST",
+    body: base,
+  });
+  assert.equal(unauthorized.status, 401);
+
+  const mismatchedSuccess = await request("/api/internal/operations/incident-repair-result", {
+    method: "POST",
+    headers: { "x-monitor-api-key": process.env.MONITOR_API_KEY },
+    body: { ...base, verify_result: "failure" },
+  });
+  assert.equal(mismatchedSuccess.status, 400);
+
+  const inventedPullOnFailure = await request("/api/internal/operations/incident-repair-result", {
+    method: "POST",
+    headers: { "x-monitor-api-key": process.env.MONITOR_API_KEY },
+    body: { ...base, status: "needs_user", verify_result: "failure" },
+  });
+  assert.equal(inventedPullOnFailure.status, 400);
+
+  const missingIncident = await request("/api/internal/operations/incident-repair-result", {
+    method: "POST",
+    headers: { "x-monitor-api-key": process.env.MONITOR_API_KEY },
+    body: base,
+  });
+  assert.equal(missingIncident.status, 409);
+});
+
+test("incident remediation canary requires the monitor key and explicit confirmation", async () => {
+  const unauthorized = await request("/api/internal/operations/incident-remediation-canary", {
+    method: "POST",
+    body: { confirmation: "RUN_INCIDENT_REMEDIATION_CANARY" },
+  });
+  assert.equal(unauthorized.status, 401);
+
+  const unconfirmed = await request("/api/internal/operations/incident-remediation-canary", {
+    method: "POST",
+    headers: { "x-monitor-api-key": process.env.MONITOR_API_KEY },
+    body: {},
+  });
+  assert.equal(unconfirmed.status, 400);
+});
+
 test("production provisioning canary requires the monitor key and explicit confirmation", async () => {
   const unauthorized = await request("/api/internal/operations/provisioning-canary", {
     method: "POST",

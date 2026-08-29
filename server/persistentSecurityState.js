@@ -46,33 +46,49 @@ async function consumeRateLimit({
     };
   }
 
-  let existing = await client.securityRateLimit.findUnique({ where: { key: normalizedKey } });
-  let record;
-  if (existing && existing.expiresAt > currentTime) {
-    record = await client.securityRateLimit.update({
-      where: { key: normalizedKey },
-      data: { count: { increment: 1 } },
-    });
-  } else {
-    record = await client.securityRateLimit.upsert({
-      where: { key: normalizedKey },
-      create: {
-        key: normalizedKey,
-        count: 1,
-        windowStartedAt: currentTime,
-        expiresAt,
-      },
-      update: {
-        count: 1,
-        windowStartedAt: currentTime,
-        expiresAt,
-      },
-    });
+  if (typeof client.$queryRaw !== "function") {
+    const error = new Error("The atomic persistent rate-limit operation is unavailable.");
+    error.code = "ATOMIC_RATE_LIMIT_UNAVAILABLE";
+    throw error;
+  }
+  // One PostgreSQL UPSERT owns both the window reset and increment. A
+  // read-then-update sequence can undercount simultaneous first requests and
+  // must not protect provider spend or security-sensitive dispatches.
+  const records = await client.$queryRaw`
+    INSERT INTO "SecurityRateLimit" (
+      "key", "count", "windowStartedAt", "expiresAt", "createdAt", "updatedAt"
+    ) VALUES (
+      ${normalizedKey}, 1, ${currentTime}, ${expiresAt}, ${currentTime}, ${currentTime}
+    )
+    ON CONFLICT ("key") DO UPDATE SET
+      "count" = CASE
+        WHEN "SecurityRateLimit"."expiresAt" > ${currentTime}
+          THEN "SecurityRateLimit"."count" + 1
+        ELSE 1
+      END,
+      "windowStartedAt" = CASE
+        WHEN "SecurityRateLimit"."expiresAt" > ${currentTime}
+          THEN "SecurityRateLimit"."windowStartedAt"
+        ELSE ${currentTime}
+      END,
+      "expiresAt" = CASE
+        WHEN "SecurityRateLimit"."expiresAt" > ${currentTime}
+          THEN "SecurityRateLimit"."expiresAt"
+        ELSE ${expiresAt}
+      END,
+      "updatedAt" = ${currentTime}
+    RETURNING "count", "expiresAt"
+  `;
+  const record = Array.isArray(records) ? records[0] : null;
+  if (!record || !Number.isInteger(Number(record.count)) || !(record.expiresAt instanceof Date)) {
+    const error = new Error("The atomic persistent rate-limit operation returned an invalid record.");
+    error.code = "ATOMIC_RATE_LIMIT_INVALID_RESULT";
+    throw error;
   }
 
   if (
     currentTime.getTime() - lastRateLimitCleanupAt >= 10 * 60 * 1000 &&
-    typeof client.securityRateLimit.deleteMany === "function"
+    typeof client.securityRateLimit?.deleteMany === "function"
   ) {
     lastRateLimitCleanupAt = currentTime.getTime();
     await client.securityRateLimit.deleteMany({

@@ -1,0 +1,900 @@
+name: Guarded Codex incident repair
+
+run-name: Incident ${{ inputs.incident_id }} generation ${{ inputs.generation }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      incident_id:
+        description: Redacted 24-character runtime incident ID
+        required: true
+        type: string
+      generation:
+        description: Incident occurrence generation (1-999)
+        required: true
+        type: string
+      reason_code:
+        description: Allowlisted code-defect reason code
+        required: true
+        type: string
+      route:
+        description: Redacted application route without query parameters
+        required: true
+        type: string
+      method:
+        description: HTTP method, when known
+        required: false
+        default: ""
+        type: string
+      workflow:
+        description: Allowlisted product workflow label
+        required: true
+        type: string
+      release:
+        description: Redacted release identifier, when known
+        required: false
+        default: ""
+        type: string
+      authorization:
+        description: One-use backend HMAC authorization for this exact repair envelope
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: myaipa-guarded-incident-code-repair
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    name: Authenticate the one-use repair envelope
+    if: ${{ github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      actions: read
+    outputs:
+      authorized: ${{ steps.complete.outputs.authorized }}
+    steps:
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 20
+
+      - name: Verify the backend-signed repair envelope
+        env:
+          INCIDENT_REPAIR_DISPATCH_SECRET: ${{ secrets.INCIDENT_REPAIR_DISPATCH_SECRET }}
+          REPAIR_INCIDENT_ID: ${{ inputs.incident_id }}
+          REPAIR_GENERATION: ${{ inputs.generation }}
+          REPAIR_REASON_CODE: ${{ inputs.reason_code }}
+          REPAIR_ROUTE: ${{ inputs.route }}
+          REPAIR_METHOD: ${{ inputs.method }}
+          REPAIR_WORKFLOW: ${{ inputs.workflow }}
+          REPAIR_RELEASE: ${{ inputs.release }}
+          REPAIR_AUTHORIZATION: ${{ inputs.authorization }}
+        run: |
+          node <<'NODE'
+          const crypto = require("node:crypto");
+
+          const value = (name) => String(process.env[name] || "");
+          const incidentId = value("REPAIR_INCIDENT_ID");
+          const generation = value("REPAIR_GENERATION");
+          const reasonCode = value("REPAIR_REASON_CODE");
+          const route = value("REPAIR_ROUTE");
+          const method = value("REPAIR_METHOD");
+          const workflow = value("REPAIR_WORKFLOW");
+          const release = value("REPAIR_RELEASE");
+          const authorization = value("REPAIR_AUTHORIZATION");
+          const secret = value("INCIDENT_REPAIR_DISPATCH_SECRET");
+          const methods = new Set(["", "DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]);
+          const workflows = new Set([
+            "ai call processing",
+            "admin workflow",
+            "application request",
+            "billing and trial workflow",
+            "customer dashboard",
+            "customer signup",
+            "text-message handoff",
+          ]);
+          if (
+            secret.length < 32
+            || !/^[a-f0-9]{24}$/.test(incidentId)
+            || !/^[1-9][0-9]{0,2}$/.test(generation)
+            || reasonCode !== "DATABASE_QUERY_IMPLEMENTATION_FAILED"
+            || !route
+            || route.length > 160
+            || !/^\/[A-Za-z0-9_./:-]*$/.test(route)
+            || !methods.has(method)
+            || !workflows.has(workflow)
+            || (release && (release.length > 100 || !/^[A-Z0-9_.:-]+$/.test(release)))
+            || !/^[a-f0-9]{64}$/.test(authorization)
+          ) {
+            throw new Error("The signed incident-repair envelope is invalid.");
+          }
+          const envelope = {
+            incident_id: incidentId,
+            generation,
+            reason_code: reasonCode,
+            route,
+            method,
+            workflow,
+            release,
+          };
+          const expected = crypto
+            .createHmac("sha256", secret)
+            .update(JSON.stringify(envelope))
+            .digest();
+          const supplied = Buffer.from(authorization, "hex");
+          if (supplied.length !== expected.length || !crypto.timingSafeEqual(supplied, expected)) {
+            throw new Error("The backend signature did not authenticate this repair envelope.");
+          }
+          console.log("The backend-signed incident-repair envelope is authentic.");
+          NODE
+
+      - name: Reject reruns and previously used incident generations
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INCIDENT_ID: ${{ inputs.incident_id }}
+          GENERATION: ${{ inputs.generation }}
+          CURRENT_RUN_ID: ${{ github.run_id }}
+          CURRENT_RUN_ATTEMPT: ${{ github.run_attempt }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          node <<'NODE'
+          const title = `Incident ${process.env.INCIDENT_ID} generation ${process.env.GENERATION}`;
+          if (String(process.env.CURRENT_RUN_ATTEMPT) !== "1") {
+            throw new Error("Incident-repair workflow reruns are not authorized; dispatch a new generation.");
+          }
+          if (!process.env.GH_TOKEN || !/^[a-f0-9]{24}$/.test(process.env.INCIDENT_ID || "")) {
+            throw new Error("The replay guard is not configured.");
+          }
+          const endpoint = `https://api.github.com/repos/${process.env.REPOSITORY}/actions/workflows/codex-incident-repair.yml/runs`;
+          (async () => {
+            for (let page = 1; page <= 50; page += 1) {
+              const url = new URL(endpoint);
+              url.searchParams.set("event", "workflow_dispatch");
+              url.searchParams.set("per_page", "100");
+              url.searchParams.set("page", String(page));
+              const response = await fetch(url, {
+                headers: {
+                  Accept: "application/vnd.github+json",
+                  Authorization: `Bearer ${process.env.GH_TOKEN}`,
+                  "User-Agent": "my-ai-pa-incident-replay-guard",
+                  "X-GitHub-Api-Version": "2022-11-28",
+                },
+                signal: AbortSignal.timeout(10_000),
+              });
+              if (!response.ok) throw new Error(`The replay guard could not read workflow history (${response.status}).`);
+              const payload = await response.json();
+              const runs = Array.isArray(payload.workflow_runs) ? payload.workflow_runs : [];
+              const replay = runs.some((run) => (
+                String(run.id) !== String(process.env.CURRENT_RUN_ID)
+                && run.event === "workflow_dispatch"
+                && run.display_title === title
+              ));
+              if (replay) throw new Error("This exact incident generation was already dispatched.");
+              if (runs.length < 100) {
+                console.log("No prior run used this exact incident generation.");
+                return;
+              }
+            }
+            throw new Error("Workflow history exceeded the bounded replay audit; refusing the repair closed.");
+          })().catch((error) => {
+            console.error(String(error?.message || error).slice(0, 200));
+            process.exitCode = 1;
+          });
+          NODE
+
+      - name: Complete the guarded authorization
+        id: complete
+        run: echo "authorized=true" >> "$GITHUB_OUTPUT"
+
+  draft:
+    name: Draft a sandboxed repair
+    if: ${{ github.ref == 'refs/heads/main' && needs.gate.outputs.authorized == 'true' }}
+    needs: gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    outputs:
+      base_sha: ${{ steps.base.outputs.base_sha }}
+    steps:
+      - name: Check out the sealed main commit
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Seal the base commit
+        id: base
+        shell: bash
+        run: |
+          set -euo pipefail
+          base_sha="$(git rev-parse HEAD)"
+          [[ "$base_sha" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$base_sha" == "$GITHUB_SHA" ]]
+          echo "base_sha=$base_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare the strict redacted repair request
+        env:
+          INCIDENT_REPAIR_BASE_SHA: ${{ steps.base.outputs.base_sha }}
+          REPAIR_INCIDENT_ID: ${{ inputs.incident_id }}
+          REPAIR_GENERATION: ${{ inputs.generation }}
+          REPAIR_REASON_CODE: ${{ inputs.reason_code }}
+          REPAIR_ROUTE: ${{ inputs.route }}
+          REPAIR_METHOD: ${{ inputs.method }}
+          REPAIR_WORKFLOW: ${{ inputs.workflow }}
+          REPAIR_RELEASE: ${{ inputs.release }}
+        run: |
+          INCIDENT_REPAIR_INPUTS_JSON="$(node -e 'process.stdout.write(JSON.stringify({incident_id:process.env.REPAIR_INCIDENT_ID,generation:process.env.REPAIR_GENERATION,reason_code:process.env.REPAIR_REASON_CODE,route:process.env.REPAIR_ROUTE,method:process.env.REPAIR_METHOD,workflow:process.env.REPAIR_WORKFLOW,release:process.env.REPAIR_RELEASE}))')"
+          export INCIDENT_REPAIR_INPUTS_JSON
+          node scripts/prepare-incident-repair-request.js diagnostics/incident-repair/request.json
+
+      - name: Copy trusted validators outside the agent workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          install -d -m 0700 "$RUNNER_TEMP/incident-tools"
+          install -m 0600 scripts/validate-incident-repair-patch.js "$RUNNER_TEMP/incident-tools/validate-incident-repair-patch.js"
+          install -m 0600 scripts/validate-incident-repair-output.js "$RUNNER_TEMP/incident-tools/validate-incident-repair-output.js"
+          install -m 0600 scripts/validate-incident-repair-worktree.js "$RUNNER_TEMP/incident-tools/validate-incident-repair-worktree.js"
+
+      - name: Install the sealed repository dependencies
+        run: npm ci --legacy-peer-deps --ignore-scripts --no-audit --no-fund
+
+      - name: Run Codex in workspace-only sandbox
+        uses: openai/codex-action@86365089eb2b84e0a8fb0717b304f8bdcb13b20e # v1 peeled commit
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          prompt-file: .github/codex/prompts/incident-repair.md
+          output-file: diagnostics/incident-repair/codex-output.json
+          output-schema-file: .github/codex/schemas/incident-repair-output.json
+          permission-profile: ":workspace"
+          safety-strategy: drop-sudo
+          codex-version: "0.150.1"
+          codex-args: '["--ephemeral"]'
+
+      - name: Reject agent changes outside the source and test allowlist
+        env:
+          BASE_SHA: ${{ steps.base.outputs.base_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$BASE_SHA"
+          node <<'NODE'
+          const { execFileSync } = require("node:child_process");
+
+          const allowed = (file) => (
+            file.startsWith("server/")
+            || file.startsWith("src/")
+            || file.startsWith("tests/")
+            || file === "diagnostics/incident-repair/request.json"
+            || file === "diagnostics/incident-repair/codex-output.json"
+          );
+          const list = (args) => execFileSync("git", args, { encoding: "buffer" })
+            .toString("utf8")
+            .split("\0")
+            .filter(Boolean);
+          const paths = new Set([
+            ...list(["diff", "--name-only", "-z", "--no-ext-diff", "--no-textconv"]),
+            ...list(["diff", "--cached", "--name-only", "-z", "--no-renames"]),
+            ...list(["ls-files", "--others", "--exclude-standard", "-z"]),
+          ]);
+          if ([...paths].some((file) => !allowed(file))) {
+            throw new Error("Codex changed a path outside the incident-repair allowlist.");
+          }
+          NODE
+
+      - name: Capture patch without executing modified code
+        shell: bash
+        run: |
+          set -euo pipefail
+          install -d -m 0700 "$RUNNER_TEMP/incident-draft"
+          git -c core.hooksPath=/dev/null add -N -- server src tests
+          git -c core.hooksPath=/dev/null --no-pager diff --binary --no-ext-diff --no-textconv HEAD -- server src tests \
+            > "$RUNNER_TEMP/incident-draft/incident.patch"
+          node <<'NODE'
+          const fs = require("node:fs");
+          const source = "diagnostics/incident-repair/codex-output.json";
+          const stat = fs.lstatSync(source);
+          if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 128 * 1024) {
+            throw new Error("Codex output is not a bounded regular file.");
+          }
+          fs.copyFileSync(source, `${process.env.RUNNER_TEMP}/incident-draft/codex-output.json`);
+          NODE
+
+      - name: Validate patch path, size, and type allowlist before applying
+        shell: bash
+        run: |
+          set -euo pipefail
+          node "$RUNNER_TEMP/incident-tools/validate-incident-repair-patch.js" "$RUNNER_TEMP/incident-draft/incident.patch"
+          node "$RUNNER_TEMP/incident-tools/validate-incident-repair-output.js" \
+            "$RUNNER_TEMP/incident-draft/codex-output.json" \
+            "$RUNNER_TEMP/incident-draft/incident.patch"
+
+      - name: Upload only the validated draft
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: incident-repair-draft-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/incident-draft
+          if-no-files-found: error
+          retention-days: 1
+
+  verify:
+    name: Independently verify the repair
+    if: ${{ github.ref == 'refs/heads/main' }}
+    needs: draft
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    outputs:
+      patch_sha256: ${{ steps.artifact_identity.outputs.patch_sha256 }}
+      output_sha256: ${{ steps.artifact_identity.outputs.output_sha256 }}
+      request_sha256: ${{ steps.artifact_identity.outputs.request_sha256 }}
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      CI: "true"
+      DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/ci
+      REACT_APP_API_BASE_URL: https://api.myaipa.ca
+    steps:
+      - name: Check out the independently sealed base
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ needs.draft.outputs.base_sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Download the validated draft
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: incident-repair-draft-${{ github.run_id }}-${{ github.run_attempt }}
+          path: diagnostics/incident-repair/draft
+
+      - name: Recreate the trusted request from the original inputs
+        env:
+          INCIDENT_REPAIR_BASE_SHA: ${{ needs.draft.outputs.base_sha }}
+          REPAIR_INCIDENT_ID: ${{ inputs.incident_id }}
+          REPAIR_GENERATION: ${{ inputs.generation }}
+          REPAIR_REASON_CODE: ${{ inputs.reason_code }}
+          REPAIR_ROUTE: ${{ inputs.route }}
+          REPAIR_METHOD: ${{ inputs.method }}
+          REPAIR_WORKFLOW: ${{ inputs.workflow }}
+          REPAIR_RELEASE: ${{ inputs.release }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$INCIDENT_REPAIR_BASE_SHA"
+          INCIDENT_REPAIR_INPUTS_JSON="$(node -e 'process.stdout.write(JSON.stringify({incident_id:process.env.REPAIR_INCIDENT_ID,generation:process.env.REPAIR_GENERATION,reason_code:process.env.REPAIR_REASON_CODE,route:process.env.REPAIR_ROUTE,method:process.env.REPAIR_METHOD,workflow:process.env.REPAIR_WORKFLOW,release:process.env.REPAIR_RELEASE}))')"
+          export INCIDENT_REPAIR_INPUTS_JSON
+          node scripts/prepare-incident-repair-request.js diagnostics/incident-repair/request.json
+
+      - name: Revalidate the downloaded result before application
+        run: |
+          node scripts/validate-incident-repair-patch.js diagnostics/incident-repair/draft/incident.patch
+          node scripts/validate-incident-repair-output.js \
+            diagnostics/incident-repair/draft/codex-output.json \
+            diagnostics/incident-repair/draft/incident.patch
+
+      - name: Record the immutable draft hashes before executing patched code
+        id: artifact_identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          patch_sha256="$(sha256sum diagnostics/incident-repair/draft/incident.patch | cut -d ' ' -f 1)"
+          output_sha256="$(sha256sum diagnostics/incident-repair/draft/codex-output.json | cut -d ' ' -f 1)"
+          request_sha256="$(sha256sum diagnostics/incident-repair/request.json | cut -d ' ' -f 1)"
+          [[ "$patch_sha256" =~ ^[a-f0-9]{64}$ ]]
+          [[ "$output_sha256" =~ ^[a-f0-9]{64}$ ]]
+          [[ "$request_sha256" =~ ^[a-f0-9]{64}$ ]]
+          echo "patch_sha256=$patch_sha256" >> "$GITHUB_OUTPUT"
+          echo "output_sha256=$output_sha256" >> "$GITHUB_OUTPUT"
+          echo "request_sha256=$request_sha256" >> "$GITHUB_OUTPUT"
+
+      - name: Apply the validated patch to the index and worktree
+        shell: bash
+        run: |
+          set -euo pipefail
+          git -c core.hooksPath=/dev/null apply --check --index diagnostics/incident-repair/draft/incident.patch
+          git -c core.hooksPath=/dev/null apply --index diagnostics/incident-repair/draft/incident.patch
+          node scripts/validate-incident-repair-worktree.js diagnostics/incident-repair/draft/incident.patch
+
+      - name: Scan the applied files before dependency installation
+        run: node scripts/scan-secrets.js --include-untracked
+
+      - name: Install dependencies from the sealed lockfile
+        run: npm ci --legacy-peer-deps --no-audit --no-fund
+
+      - name: Prepare the database client
+        run: npm run backend:prepare
+
+      - name: Run focused incident-remediation checks
+        run: npm run test:incident-remediation
+
+      - name: Run the complete backend test suite
+        run: npm run test:backend
+
+      - name: Run frontend regression tests
+        run: npm test -- --watchAll=false --runInBand
+
+      - name: Exercise the PostgreSQL schema and constraints
+        env:
+          RUN_DATABASE_INTEGRATION: "1"
+        run: |
+          npx prisma db push --skip-generate
+          npm run test:database
+
+      - name: Run policy, operations, and deployment checks
+        run: |
+          npm run transparency:validate
+          npm run legal:validate
+          npm run ops:validate
+          npm run render:validate
+          npm run backend:check
+          npx prisma validate
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev
+
+      - name: Build the production Pages output
+        run: npm run build:pages
+
+  seal:
+    name: Seal the original draft in a fresh non-executing job
+    if: ${{ github.ref == 'refs/heads/main' }}
+    needs: [draft, verify]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the verified base without publication credentials
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ needs.draft.outputs.base_sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 20
+
+      - name: Download the original immutable draft artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: incident-repair-draft-${{ github.run_id }}-${{ github.run_attempt }}
+          path: diagnostics/incident-repair/draft
+
+      - name: Recreate the trusted request without executing patched code
+        env:
+          INCIDENT_REPAIR_BASE_SHA: ${{ needs.draft.outputs.base_sha }}
+          REPAIR_INCIDENT_ID: ${{ inputs.incident_id }}
+          REPAIR_GENERATION: ${{ inputs.generation }}
+          REPAIR_REASON_CODE: ${{ inputs.reason_code }}
+          REPAIR_ROUTE: ${{ inputs.route }}
+          REPAIR_METHOD: ${{ inputs.method }}
+          REPAIR_WORKFLOW: ${{ inputs.workflow }}
+          REPAIR_RELEASE: ${{ inputs.release }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$INCIDENT_REPAIR_BASE_SHA"
+          INCIDENT_REPAIR_INPUTS_JSON="$(node -e 'process.stdout.write(JSON.stringify({incident_id:process.env.REPAIR_INCIDENT_ID,generation:process.env.REPAIR_GENERATION,reason_code:process.env.REPAIR_REASON_CODE,route:process.env.REPAIR_ROUTE,method:process.env.REPAIR_METHOD,workflow:process.env.REPAIR_WORKFLOW,release:process.env.REPAIR_RELEASE}))')"
+          export INCIDENT_REPAIR_INPUTS_JSON
+          node scripts/prepare-incident-repair-request.js diagnostics/incident-repair/request.json
+
+      - name: Match the exact artifact hashes tested by the isolated job
+        env:
+          BASE_SHA: ${{ needs.draft.outputs.base_sha }}
+          EXPECTED_PATCH_SHA256: ${{ needs.verify.outputs.patch_sha256 }}
+          EXPECTED_OUTPUT_SHA256: ${{ needs.verify.outputs.output_sha256 }}
+          EXPECTED_REQUEST_SHA256: ${{ needs.verify.outputs.request_sha256 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$BASE_SHA" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$EXPECTED_PATCH_SHA256" =~ ^[a-f0-9]{64}$ ]]
+          [[ "$EXPECTED_OUTPUT_SHA256" =~ ^[a-f0-9]{64}$ ]]
+          [[ "$EXPECTED_REQUEST_SHA256" =~ ^[a-f0-9]{64}$ ]]
+          test "$(sha256sum diagnostics/incident-repair/draft/incident.patch | cut -d ' ' -f 1)" = "$EXPECTED_PATCH_SHA256"
+          test "$(sha256sum diagnostics/incident-repair/draft/codex-output.json | cut -d ' ' -f 1)" = "$EXPECTED_OUTPUT_SHA256"
+          test "$(sha256sum diagnostics/incident-repair/request.json | cut -d ' ' -f 1)" = "$EXPECTED_REQUEST_SHA256"
+
+      - name: Revalidate and apply without executing patched code
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/validate-incident-repair-patch.js diagnostics/incident-repair/draft/incident.patch
+          node scripts/validate-incident-repair-output.js \
+            diagnostics/incident-repair/draft/codex-output.json \
+            diagnostics/incident-repair/draft/incident.patch
+          git -c core.hooksPath=/dev/null apply --check --index diagnostics/incident-repair/draft/incident.patch
+          git -c core.hooksPath=/dev/null apply --index diagnostics/incident-repair/draft/incident.patch
+          node scripts/validate-incident-repair-worktree.js diagnostics/incident-repair/draft/incident.patch
+          node scripts/scan-secrets.js --include-untracked
+
+      - name: Seal the exact independently tested draft
+        env:
+          BASE_SHA: ${{ needs.draft.outputs.base_sha }}
+          PATCH_SHA256: ${{ needs.verify.outputs.patch_sha256 }}
+          OUTPUT_SHA256: ${{ needs.verify.outputs.output_sha256 }}
+          REQUEST_SHA256: ${{ needs.verify.outputs.request_sha256 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          verified="diagnostics/incident-repair/verified"
+          install -d -m 0700 "$verified"
+          install -m 0600 diagnostics/incident-repair/draft/incident.patch "$verified/incident.patch"
+          install -m 0600 diagnostics/incident-repair/draft/codex-output.json "$verified/codex-output.json"
+          install -m 0600 diagnostics/incident-repair/request.json "$verified/request.json"
+          printf '%s\n' "$BASE_SHA" > "$verified/base-sha.txt"
+          chmod 0600 "$verified/base-sha.txt"
+          node <<'NODE'
+          const fs = require("node:fs");
+          const provenance = {
+            schema_version: 1,
+            source_artifact: `incident-repair-draft-${process.env.GITHUB_RUN_ID}-${process.env.GITHUB_RUN_ATTEMPT}`,
+            test_job_result: "success",
+            base_sha: process.env.BASE_SHA,
+            patch_sha256: process.env.PATCH_SHA256,
+            output_sha256: process.env.OUTPUT_SHA256,
+            request_sha256: process.env.REQUEST_SHA256,
+          };
+          fs.writeFileSync(
+            "diagnostics/incident-repair/verified/verification.json",
+            `${JSON.stringify(provenance, null, 2)}\n`,
+            { mode: 0o600 }
+          );
+          NODE
+          (
+            cd "$verified"
+            sha256sum base-sha.txt codex-output.json incident.patch request.json verification.json > manifest.sha256
+          )
+
+      - name: Upload the sealed verified artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: incident-repair-verified-${{ github.run_id }}-${{ github.run_attempt }}
+          path: diagnostics/incident-repair/verified
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    name: Publish a review-only draft pull request
+    if: ${{ github.ref == 'refs/heads/main' }}
+    needs: [draft, verify, seal]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+      statuses: write
+    outputs:
+      pr_url: ${{ steps.pull_request.outputs.pr_url }}
+    steps:
+      - name: Check out the verified base with publication credentials
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ needs.draft.outputs.base_sha }}
+          fetch-depth: 1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 20
+
+      - name: Abort if main moved after verification began
+        env:
+          BASE_SHA: ${{ needs.draft.outputs.base_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$BASE_SHA" =~ ^[a-f0-9]{40}$ ]]
+          git fetch --no-tags --prune origin +refs/heads/main:refs/remotes/origin/main
+          test "$(git rev-parse refs/remotes/origin/main)" = "$BASE_SHA"
+          test "$(git rev-parse HEAD)" = "$BASE_SHA"
+
+      - name: Download the sealed verified artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: incident-repair-verified-${{ github.run_id }}-${{ github.run_attempt }}
+          path: diagnostics/incident-repair/verified
+
+      - name: Verify the artifact seal and trusted request
+        env:
+          BASE_SHA: ${{ needs.draft.outputs.base_sha }}
+          EXPECTED_PATCH_SHA256: ${{ needs.verify.outputs.patch_sha256 }}
+          EXPECTED_OUTPUT_SHA256: ${{ needs.verify.outputs.output_sha256 }}
+          EXPECTED_REQUEST_SHA256: ${{ needs.verify.outputs.request_sha256 }}
+          INCIDENT_REPAIR_BASE_SHA: ${{ needs.draft.outputs.base_sha }}
+          REPAIR_INCIDENT_ID: ${{ inputs.incident_id }}
+          REPAIR_GENERATION: ${{ inputs.generation }}
+          REPAIR_REASON_CODE: ${{ inputs.reason_code }}
+          REPAIR_ROUTE: ${{ inputs.route }}
+          REPAIR_METHOD: ${{ inputs.method }}
+          REPAIR_WORKFLOW: ${{ inputs.workflow }}
+          REPAIR_RELEASE: ${{ inputs.release }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          (
+            cd diagnostics/incident-repair/verified
+            sha256sum --check manifest.sha256
+          )
+          test "$(tr -d '\r\n' < diagnostics/incident-repair/verified/base-sha.txt)" = "$BASE_SHA"
+          node <<'NODE'
+          const crypto = require("node:crypto");
+          const fs = require("node:fs");
+          const root = "diagnostics/incident-repair/verified";
+          const provenance = JSON.parse(fs.readFileSync(`${root}/verification.json`, "utf8"));
+          const expectedKeys = [
+            "base_sha",
+            "output_sha256",
+            "patch_sha256",
+            "request_sha256",
+            "schema_version",
+            "source_artifact",
+            "test_job_result",
+          ];
+          if (JSON.stringify(Object.keys(provenance).sort()) !== JSON.stringify(expectedKeys)) {
+            throw new Error("The verification provenance has unexpected fields.");
+          }
+          const digest = (file) => crypto.createHash("sha256").update(fs.readFileSync(`${root}/${file}`)).digest("hex");
+          const expectedArtifact = `incident-repair-draft-${process.env.GITHUB_RUN_ID}-${process.env.GITHUB_RUN_ATTEMPT}`;
+          if (
+            provenance.schema_version !== 1
+            || provenance.test_job_result !== "success"
+            || provenance.source_artifact !== expectedArtifact
+            || provenance.base_sha !== process.env.BASE_SHA
+            || provenance.patch_sha256 !== process.env.EXPECTED_PATCH_SHA256
+            || provenance.output_sha256 !== process.env.EXPECTED_OUTPUT_SHA256
+            || provenance.request_sha256 !== process.env.EXPECTED_REQUEST_SHA256
+            || digest("incident.patch") !== provenance.patch_sha256
+            || digest("codex-output.json") !== provenance.output_sha256
+            || digest("request.json") !== provenance.request_sha256
+          ) {
+            throw new Error("The publish artifact does not match the exact immutable draft tested in isolation.");
+          }
+          NODE
+          INCIDENT_REPAIR_INPUTS_JSON="$(node -e 'process.stdout.write(JSON.stringify({incident_id:process.env.REPAIR_INCIDENT_ID,generation:process.env.REPAIR_GENERATION,reason_code:process.env.REPAIR_REASON_CODE,route:process.env.REPAIR_ROUTE,method:process.env.REPAIR_METHOD,workflow:process.env.REPAIR_WORKFLOW,release:process.env.REPAIR_RELEASE}))')"
+          export INCIDENT_REPAIR_INPUTS_JSON
+          node scripts/prepare-incident-repair-request.js "$RUNNER_TEMP/publish-request.json"
+          cmp --silent "$RUNNER_TEMP/publish-request.json" diagnostics/incident-repair/verified/request.json
+          node scripts/validate-incident-repair-patch.js diagnostics/incident-repair/verified/incident.patch
+          node scripts/validate-incident-repair-output.js \
+            diagnostics/incident-repair/verified/codex-output.json \
+            diagnostics/incident-repair/verified/incident.patch
+
+      - name: Apply the exact verified patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git -c core.hooksPath=/dev/null apply --check --index diagnostics/incident-repair/verified/incident.patch
+          git -c core.hooksPath=/dev/null apply --index diagnostics/incident-repair/verified/incident.patch
+          node scripts/validate-incident-repair-worktree.js diagnostics/incident-repair/verified/incident.patch
+          node scripts/scan-secrets.js --include-untracked
+
+      - name: Prepare the review branch and sanitized pull-request body
+        id: review
+        env:
+          BASE_SHA: ${{ needs.draft.outputs.base_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require("node:fs");
+          const request = JSON.parse(fs.readFileSync("diagnostics/incident-repair/verified/request.json", "utf8"));
+          const output = JSON.parse(fs.readFileSync("diagnostics/incident-repair/verified/codex-output.json", "utf8"));
+          if (!/^[a-f0-9]{24}$/.test(request.incident_id) || !Number.isInteger(request.generation)) {
+            throw new Error("The sealed incident identity is invalid.");
+          }
+          const branch = `codex/incident-${request.incident_id}-g${request.generation}-${process.env.GITHUB_RUN_ID}-${process.env.GITHUB_RUN_ATTEMPT}`;
+          if (!/^codex\/[a-z0-9/-]{1,180}$/.test(branch)) throw new Error("The review branch name is invalid.");
+          const markdown = (value) => String(value || "")
+            .replace(/\s+/g, " ")
+            .trim()
+            .replace(/([\\`*_{}\[\]()<>#+\-.!|@])/g, "\\$1");
+          const tests = output.tests_run.map((value) => `- ${markdown(value)}`).join("\n");
+          const body = [
+            "## Guarded incident repair draft",
+            "",
+            "This is a review-only draft. It has not been merged or deployed.",
+            "Human review and protected-main checks are still required before any merge.",
+            "",
+            `- Incident: \`${request.incident_id}\``,
+            `- Generation: \`${request.generation}\``,
+            `- Sealed base: \`${request.base_sha}\``,
+            "",
+            "## Validated diagnosis",
+            "",
+            markdown(output.diagnosis),
+            "",
+            "## Reported focused tests",
+            "",
+            tests,
+            "",
+            "## Residual risk",
+            "",
+            markdown(output.residual_risk),
+            "",
+            "A separate clean runner revalidated the patch, applied it to the Git index, scanned it for secrets, and completed the configured backend, frontend, database, operations, deployment, dependency, and production-build checks before this draft was opened.",
+            "",
+          ].join("\n");
+          fs.writeFileSync(process.env.GITHUB_OUTPUT, `branch_name=${branch}\n`, { flag: "a" });
+          fs.writeFileSync(`${process.env.RUNNER_TEMP}/incident-branch.txt`, `${branch}\n`, { mode: 0o600 });
+          fs.writeFileSync(`${process.env.RUNNER_TEMP}/incident-pr-body.md`, body, { mode: 0o600 });
+          NODE
+          branch_name="$(tr -d '\r\n' < "$RUNNER_TEMP/incident-branch.txt")"
+          [[ "$branch_name" =~ ^codex/[a-z0-9/-]{1,180}$ ]]
+          git checkout -b "$branch_name"
+
+      - name: Commit the verified repair to the review branch
+        env:
+          REPAIR_BRANCH: ${{ steps.review.outputs.branch_name }}
+          BASE_SHA: ${{ needs.draft.outputs.base_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$REPAIR_BRANCH" =~ ^codex/[a-z0-9/-]{1,180}$ ]]
+          git fetch --no-tags --prune origin +refs/heads/main:refs/remotes/origin/main
+          test "$(git rev-parse refs/remotes/origin/main)" = "$BASE_SHA"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -c core.hooksPath=/dev/null commit -m "Draft guarded incident repair"
+          git push origin "HEAD:refs/heads/$REPAIR_BRANCH"
+
+      - name: Record the independent verification on the repair commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          repair_sha="$(git rev-parse HEAD)"
+          [[ "$repair_sha" =~ ^[a-f0-9]{40}$ ]]
+          gh api \
+            --method POST \
+            "repos/$GITHUB_REPOSITORY/statuses/$repair_sha" \
+            --field state=success \
+            --field context=incident-repair/verified \
+            --field description='Independent guarded verification passed' \
+            --field target_url="$RUN_URL" \
+            > /dev/null
+
+      - name: Open draft pull request
+        id: pull_request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPAIR_BRANCH: ${{ steps.review.outputs.branch_name }}
+          INCIDENT_ID: ${{ inputs.incident_id }}
+          GENERATION: ${{ inputs.generation }}
+          BASE_SHA: ${{ needs.draft.outputs.base_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$INCIDENT_ID" =~ ^[a-f0-9]{24}$ ]]
+          [[ "$GENERATION" =~ ^[1-9][0-9]{0,2}$ ]]
+          git fetch --no-tags --prune origin +refs/heads/main:refs/remotes/origin/main
+          test "$(git rev-parse refs/remotes/origin/main)" = "$BASE_SHA"
+          pr_url="$(gh pr create \
+            --draft \
+            --base main \
+            --head "$REPAIR_BRANCH" \
+            --title "Draft incident repair $INCIDENT_ID (generation $GENERATION)" \
+            --body-file "$RUNNER_TEMP/incident-pr-body.md")"
+          export PR_URL="$pr_url"
+          node <<'NODE'
+          const fs = require("node:fs");
+          const expected = `/${process.env.GITHUB_REPOSITORY}/pull/`.toLowerCase();
+          const value = String(process.env.PR_URL || "").trim();
+          const url = new URL(value);
+          if (url.protocol !== "https:" || url.hostname !== "github.com" || !url.pathname.toLowerCase().startsWith(expected) || !/\/pull\/[1-9][0-9]*$/.test(url.pathname)) {
+            throw new Error("GitHub returned an unexpected pull-request URL.");
+          }
+          fs.writeFileSync(process.env.GITHUB_OUTPUT, `pr_url=${url.toString()}\n`, { flag: "a" });
+          NODE
+
+  notify:
+    name: Report the guarded workflow result
+    if: ${{ always() && github.ref == 'refs/heads/main' && needs.gate.outputs.authorized == 'true' }}
+    needs: [gate, draft, verify, seal, publish]
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions: {}
+    steps:
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 20
+
+      - name: Send the strict result to the My AI PA incident outbox
+        env:
+          MONITOR_API_KEY: ${{ secrets.MONITOR_API_KEY }}
+          INCIDENT_ID: ${{ inputs.incident_id }}
+          GENERATION: ${{ inputs.generation }}
+          BASE_SHA: ${{ needs.draft.outputs.base_sha || github.sha }}
+          DRAFT_RESULT: ${{ needs.draft.result }}
+          VERIFY_RESULT: ${{ needs.verify.result }}
+          PUBLISH_RESULT: ${{ needs.publish.result }}
+          PR_URL: ${{ needs.publish.outputs.pr_url }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          node <<'NODE'
+          const allowedResults = new Set(["success", "failure", "cancelled", "skipped"]);
+          const result = (value) => allowedResults.has(String(value || "").toLowerCase())
+            ? String(value).toLowerCase()
+            : "failure";
+          const draftResult = result(process.env.DRAFT_RESULT);
+          const verifyResult = result(process.env.VERIFY_RESULT);
+          const publishResult = result(process.env.PUBLISH_RESULT);
+          const allSucceeded = [draftResult, verifyResult, publishResult].every((value) => value === "success");
+          const payload = {
+            confirmation: "REPORT_INCIDENT_REPAIR_RESULT",
+            incident_id: String(process.env.INCIDENT_ID || "").trim().toLowerCase(),
+            generation: Number(process.env.GENERATION),
+            status: allSucceeded ? "repair_ready" : "needs_user",
+            draft_result: draftResult,
+            verify_result: verifyResult,
+            publish_result: publishResult,
+            base_sha: String(process.env.BASE_SHA || "").trim().toLowerCase(),
+            pr_url: allSucceeded ? String(process.env.PR_URL || "").trim() : "",
+            run_url: String(process.env.RUN_URL || "").trim(),
+          };
+          if (!process.env.MONITOR_API_KEY) throw new Error("MONITOR_API_KEY is not configured for the incident callback.");
+          const delays = [0, 1_500, 4_000, 8_000];
+          const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+          (async () => {
+            for (let attempt = 0; attempt < delays.length; attempt += 1) {
+              if (delays[attempt]) await wait(delays[attempt]);
+              try {
+                const response = await fetch("https://api.myaipa.ca/api/internal/operations/incident-repair-result", {
+                  method: "POST",
+                  headers: {
+                    Authorization: `Bearer ${process.env.MONITOR_API_KEY}`,
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify(payload),
+                  signal: AbortSignal.timeout(10_000),
+                });
+                if (response.ok) {
+                  console.log(`Incident result accepted with HTTP ${response.status}.`);
+                  return;
+                }
+                console.error(`Incident callback attempt ${attempt + 1} returned HTTP ${response.status}.`);
+              } catch (error) {
+                console.error(`Incident callback attempt ${attempt + 1} failed (${String(error?.name || "network error").slice(0, 40)}).`);
+              }
+            }
+            throw new Error("The incident result could not be preserved by the production callback after bounded retries.");
+          })().catch((error) => {
+            console.error(String(error?.message || error).slice(0, 200));
+            process.exitCode = 1;
+          });
+          NODE

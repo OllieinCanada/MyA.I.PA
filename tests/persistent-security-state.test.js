@@ -12,44 +12,61 @@ const {
   verifyDashboardLoginCode,
 } = require("../server/persistentSecurityState");
 
-test("persistent rate limits create a window and atomically increment its count", async () => {
-  const calls = [];
+test("persistent rate limits use one atomic SQL upsert under concurrent first requests", async () => {
   let record = null;
+  let turn = Promise.resolve();
+  const queries = [];
   const client = {
-    securityRateLimit: {
-      findUnique: async () => record,
-      upsert: async ({ create }) => {
-        calls.push("upsert");
-        record = create;
-        return record;
-      },
-      update: async ({ data }) => {
-        calls.push("update");
-        record = { ...record, count: record.count + data.count.increment };
-        return record;
-      },
+    async $queryRaw(strings, ...values) {
+      assert.ok(Array.isArray(strings.raw), "Prisma must receive a tagged SQL template");
+      const sql = strings.join("?");
+      assert.match(sql, /INSERT INTO "SecurityRateLimit"/);
+      assert.match(sql, /ON CONFLICT \("key"\) DO UPDATE/);
+      assert.match(sql, /RETURNING "count", "expiresAt"/);
+      queries.push(sql);
+      const [, currentTime, expiresAt] = values;
+      let release;
+      const previous = turn;
+      turn = new Promise((resolve) => { release = resolve; });
+      await previous;
+      try {
+        record = !record || record.expiresAt <= currentTime
+          ? { count: 1, expiresAt }
+          : { count: record.count + 1, expiresAt: record.expiresAt };
+        return [{ ...record }];
+      } finally {
+        release();
+      }
     },
   };
 
-  const first = await consumeRateLimit({
+  const results = await Promise.all(Array.from({ length: 20 }, () => consumeRateLimit({
     key: "security-rate:test:key",
-    maxRequests: 1,
+    maxRequests: 5,
     windowMs: 60_000,
     now: 1_000,
     client,
-  });
-  const second = await consumeRateLimit({
-    key: "security-rate:test:key",
-    maxRequests: 1,
-    windowMs: 60_000,
-    now: 1_001,
-    client,
-  });
+  })));
 
-  assert.equal(first.allowed, true);
-  assert.equal(second.allowed, false);
-  assert.equal(second.count, 2);
-  assert.deepEqual(calls, ["upsert", "update"]);
+  assert.equal(queries.length, 20);
+  assert.deepEqual(results.map((result) => result.count).sort((left, right) => left - right),
+    Array.from({ length: 20 }, (_, index) => index + 1));
+  assert.equal(results.filter((result) => result.allowed).length, 5);
+  assert.equal(results.at(-1).count, 20);
+  assert.equal(results.at(-1).remaining, 0);
+});
+
+test("persistent rate limiting fails closed when the atomic query primitive is unavailable", async () => {
+  await assert.rejects(
+    consumeRateLimit({
+      key: "security-rate:test:key",
+      maxRequests: 1,
+      windowMs: 60_000,
+      now: 1_000,
+      client: { securityRateLimit: {} },
+    }),
+    (error) => error?.code === "ATOMIC_RATE_LIMIT_UNAVAILABLE"
+  );
 });
 
 test("dashboard codes are stored hashed and a matching code is consumed once", async () => {

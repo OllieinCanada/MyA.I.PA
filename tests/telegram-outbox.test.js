@@ -8,10 +8,16 @@ const test = require("node:test");
 const {
   MAX_OUTBOX_ITEMS,
   enqueueTelegramMessage,
+  hasTelegramDeliveryReceipt,
   processTelegramOutbox,
   resetTelegramOutboxLocksForTests,
   validateAdminUrl,
 } = require("../server/telegramOutbox");
+const {
+  listRuntimeIncidents,
+  recordRuntimeIncident,
+  updateRuntimeIncidentRemediation,
+} = require("../server/runtimeIncidentStore");
 
 function createOutboxPath(t) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "myaipa-telegram-outbox-"));
@@ -99,6 +105,173 @@ test("processor removes only messages Telegram confirms with exact ok true", asy
   assert.match(requests[0].url, /botbot-secret\/sendMessage$/);
   assert.equal(fs.readFileSync(filePath, "utf8").includes("bot-secret"), false);
   assert.equal(fs.readFileSync(filePath, "utf8").includes("12345"), false);
+});
+
+test("a confirmed delivery persists an exact receipt and deduplicates after restart", async (t) => {
+  const filePath = createOutboxPath(t);
+  const queued = await enqueueTelegramMessage({
+    filePath,
+    text: "durable completion report",
+    dedupeKey: "incident:completion:g2",
+    now: 1_000,
+  });
+  assert.match(queued.id, /^[a-f0-9]{24}$/);
+  assert.equal(hasTelegramDeliveryReceipt(filePath, queued.id), false);
+
+  const delivered = await processTelegramOutbox({
+    filePath,
+    token: "bot-secret",
+    chatId: "12345",
+    now: 1_000,
+    fetchImpl: async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true, result: { message_id: 42 } }),
+    }),
+  });
+  assert.deepEqual(delivered.sentItemIds, [queued.id]);
+  assert.equal(hasTelegramDeliveryReceipt(filePath, queued.id), true);
+
+  const persisted = readOutbox(filePath);
+  assert.equal(persisted.version, 2);
+  assert.deepEqual(persisted.items, []);
+  assert.deepEqual(persisted.deliveryReceipts.map((receipt) => receipt.id), [queued.id]);
+  assert.doesNotMatch(JSON.stringify(persisted), /bot-secret|12345/);
+
+  const duplicateAfterRestart = await enqueueTelegramMessage({
+    filePath,
+    text: "durable completion report",
+    dedupeKey: "incident:completion:g2",
+    now: 5_000,
+  });
+  assert.deepEqual({
+    duplicate: duplicateAfterRestart.duplicate,
+    delivered: duplicateAfterRestart.delivered,
+    id: duplicateAfterRestart.id,
+  }, {
+    duplicate: true,
+    delivered: true,
+    id: queued.id,
+  });
+  assert.equal(readOutbox(filePath).items.length, 0);
+});
+
+test("completion reporting survives crashes without a premature terminal state or duplicate Telegram", async (t) => {
+  const outboxPath = createOutboxPath(t);
+  const runtimePath = path.join(path.dirname(outboxPath), "runtime-incidents.json");
+  const incidentId = "dddddddddddddddddddddddd";
+  recordRuntimeIncident(runtimePath, {
+    incidentId,
+    reasonCode: "DATABASE_UNAVAILABLE",
+    whatFailed: "Database readiness failed",
+    impact: "The request stopped",
+    detectedAt: "2026-08-28T12:00:00.000Z",
+    remediation: {
+      version: 1,
+      generation: 1,
+      status: "queued",
+      action: "readiness_probe",
+      automatic: true,
+      requiresUser: false,
+    },
+  });
+
+  const dedupeKey = `remediation:${incidentId}:g1:recovered`;
+  const preserved = await enqueueTelegramMessage({
+    filePath: outboxPath,
+    text: "MY AI PA — SERVICE HEALTHY AGAIN",
+    dedupeKey,
+    now: 1_000,
+  });
+  assert.equal(preserved.queued, true);
+  assert.match(preserved.id, /^[a-f0-9]{24}$/);
+
+  // Simulated process crash: the durable message exists, but terminal state was
+  // intentionally not written until its exact queue ID could be preserved.
+  const afterCrash = listRuntimeIncidents(runtimePath, { now: new Date("2026-08-28T12:00:01.000Z") })[0];
+  assert.equal(afterCrash.remediation.status, "queued");
+  assert.equal(afterCrash.remediation.terminalAt, undefined);
+  assert.equal(readOutbox(outboxPath).items[0].id, preserved.id);
+  const resumedPreservation = await enqueueTelegramMessage({
+    filePath: outboxPath,
+    text: "MY AI PA — SERVICE HEALTHY AGAIN",
+    dedupeKey,
+    now: 2_000,
+  });
+  assert.equal(resumedPreservation.duplicate, true);
+  assert.equal(resumedPreservation.id, preserved.id);
+  assert.equal(readOutbox(outboxPath).items.length, 1);
+
+  const terminal = updateRuntimeIncidentRemediation(runtimePath, incidentId, {
+    status: "recovered",
+    updatedAt: "2026-08-28T12:00:02.000Z",
+    actionTaken: "Readiness recovered.",
+    verification: "The exact readiness probe is healthy.",
+    completionReportPreservedAt: "2026-08-28T12:00:02.000Z",
+    completionReportDelivery: "queued",
+    completionReportOutboxId: preserved.id,
+  });
+  assert.equal(terminal.updated, true);
+  assert.equal(terminal.item.remediation.status, "recovered");
+  assert.equal(terminal.item.remediation.completionReportOutboxId, preserved.id);
+  const terminalAt = terminal.item.remediation.terminalAt;
+
+  await processTelegramOutbox({
+    filePath: outboxPath,
+    token: "bot-secret",
+    chatId: "12345",
+    now: 3_000,
+    fetchImpl: async () => ({ ok: true, status: 200, json: async () => ({ ok: true }) }),
+  });
+  assert.equal(hasTelegramDeliveryReceipt(outboxPath, preserved.id), true);
+  const afterDeliveryCrash = await enqueueTelegramMessage({
+    filePath: outboxPath,
+    text: "MY AI PA — SERVICE HEALTHY AGAIN",
+    dedupeKey,
+    now: 4_000,
+  });
+  assert.equal(afterDeliveryCrash.duplicate, true);
+  assert.equal(afterDeliveryCrash.delivered, true);
+  assert.equal(afterDeliveryCrash.id, preserved.id);
+
+  const reconciled = updateRuntimeIncidentRemediation(runtimePath, incidentId, {
+    status: "recovered",
+    updatedAt: "2026-08-28T12:00:04.000Z",
+    completionReportDelivery: "sent",
+  });
+  assert.equal(reconciled.updated, true);
+  assert.equal(reconciled.item.remediation.completionReportDelivery, "sent");
+  assert.equal(reconciled.item.remediation.terminalAt, terminalAt);
+  assert.equal(readOutbox(outboxPath).items.length, 0);
+  assert.equal(readOutbox(outboxPath).deliveryReceipts.length, 1);
+});
+
+test("initial report dedupe is stable within one generation and distinct across generations", async (t) => {
+  const filePath = createOutboxPath(t);
+  const incidentId = "eeeeeeeeeeeeeeeeeeeeeeee";
+  const first = await enqueueTelegramMessage({
+    filePath,
+    text: "Initial incident report",
+    dedupeKey: `incident:${incidentId}:g1:initial`,
+    now: 1,
+  });
+  const duplicate = await enqueueTelegramMessage({
+    filePath,
+    text: "Initial incident report",
+    dedupeKey: `incident:${incidentId}:g1:initial`,
+    now: 2,
+  });
+  const nextGeneration = await enqueueTelegramMessage({
+    filePath,
+    text: "Initial incident report",
+    dedupeKey: `incident:${incidentId}:g2:initial`,
+    now: 3,
+  });
+  assert.equal(duplicate.duplicate, true);
+  assert.equal(duplicate.id, first.id);
+  assert.equal(nextGeneration.queued, true);
+  assert.notEqual(nextGeneration.id, first.id);
+  assert.equal(readOutbox(filePath).items.length, 2);
 });
 
 test("processor exponentially retries timeouts, 429, 5xx, and non-ok Telegram bodies", async (t) => {

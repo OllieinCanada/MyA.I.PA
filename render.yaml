@@ -221,6 +221,31 @@ services:
         sync: false
       - key: RUNTIME_TELEGRAM_ALERTS_ENABLED
         value: "true"
+      - key: INCIDENT_SAFE_AUTO_REPAIR_ENABLED
+        # Enables only read-only readiness verification and the durable
+        # Telegram retry playbook. Paid/provider mutations remain denied.
+        value: "true"
+      - key: INCIDENT_CODE_REPAIR_ENABLED
+        # Keep disabled until the dedicated Render dispatch token and GitHub
+        # OPENAI_API_KEY secret are configured and a manual workflow test passes.
+        value: "false"
+      - key: INCIDENT_CODE_REPAIR_MAX_DAILY
+        # Hard circuit breaker for the still-disabled code-draft path.
+        value: "3"
+      - key: INCIDENT_CODE_REPAIR_COOLDOWN_MS
+        # A repeated incident signature cannot dispatch more than once per hour.
+        value: "3600000"
+      - key: INCIDENT_READINESS_TIMEOUT_MS
+        # Read-only recovery probes fail closed instead of occupying a worker.
+        value: "5000"
+      - key: GITHUB_INCIDENT_REPAIR_TOKEN
+        sync: false
+      - key: INCIDENT_REPAIR_DISPATCH_SECRET
+        # Configure the exact same 32+ character value in GitHub Actions so
+        # only the sealed incident-repair workflow can report its result.
+        sync: false
+      - key: GITHUB_INCIDENT_REPAIR_REPO
+        value: OllieinCanada/MyA.I.PA
       - key: CLIENT_ERROR_MAX_REQUESTS
         value: "12"
       - key: CLIENT_ERROR_GLOBAL_MAX_REQUESTS

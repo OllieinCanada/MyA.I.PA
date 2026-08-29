@@ -94,6 +94,7 @@ function buildRuntimeIncident(error, context = {}) {
     adminUrl: context.adminUrl || "",
     signInDestination: context.signInDestination || classification.signInDestination || "My AI PA admin → Needs Attention and server logs",
     dedupeKey: key,
+    ...(context.remediation && typeof context.remediation === "object" ? { remediation: context.remediation } : {}),
   };
 }
 
