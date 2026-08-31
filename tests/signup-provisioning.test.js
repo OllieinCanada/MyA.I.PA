@@ -6,6 +6,7 @@ const {
   buildProvisioningResourceMarker,
   buildProvisioningResourceName,
   inferPreferredCanadianAreaCode,
+  inferOntarioLocalAreaCode,
   normalizeProvisioningRegion,
   normalizeSignupProvisioningPayload,
   verifyProvisioningContextToken,
@@ -66,7 +67,7 @@ test("normalizes a canonical phone signup and adds the complete legacy Make alia
   assert.equal(payload.setupDetails.serviceArea, "Hamilton and Burlington");
   assert.equal(payload.setupDetails.pricing.repairVisitFee, "125");
   assert.equal(payload.setupDetails.freeEstimateAnswer, "yes we do");
-  assert.equal(payload.provisioning.preferredAreaCode, "905");
+  assert.equal(payload.provisioning.preferredAreaCode, "289");
   assert.equal(payload.provisioning.preferredRegion, "ON");
   assert.match(payload.provisioning.idempotencyKey, /^[a-f0-9]{64}$/);
   assert.doesNotMatch(payload.provisioning.idempotencyKey, /jamie|example|905/i);
@@ -199,10 +200,47 @@ test("infers only Canadian area codes and applies a configurable Canadian region
     business: {
       ...canonicalPhoneSignup().business,
       phone: "212-555-0199",
+      address: "10 King Street, Toronto, ON M5H 1A1",
+      city: "Toronto",
+      postalCode: "M5H 1A1",
+    },
+    aiAssistant: {
+      ...canonicalPhoneSignup().aiAssistant,
+      serviceArea: "Toronto",
     },
   }), { signingSecret: SIGNING_SECRET, defaultRegion: "QC" });
   assert.equal(payload.provisioning.preferredAreaCode, "");
   assert.equal(payload.provisioning.preferredRegion, "QC");
+});
+
+test("prefers a local 289 number for Niagara and Hamilton businesses over the owner's phone area code", () => {
+  assert.equal(inferOntarioLocalAreaCode({ city: "Grimsby", postalCode: "L3M 1P1" }), "289");
+  assert.equal(inferOntarioLocalAreaCode({ serviceArea: "Hamilton, Burlington and Niagara" }), "289");
+  assert.equal(inferOntarioLocalAreaCode({ city: "Ottawa", postalCode: "K1A 0A9" }), "");
+
+  const payload = normalizeSignupProvisioningPayload(canonicalPhoneSignup({
+    business: {
+      ...canonicalPhoneSignup().business,
+      phone: "+1 (343) 555-0199",
+      address: "15 Main Street, Grimsby, ON L3M 1P1",
+      city: "Grimsby",
+      province: "ON",
+      postalCode: "L3M 1P1",
+    },
+    owner: {
+      name: "Jamie Example",
+      email: "jamie@example.ca",
+      phone: "+1 (343) 555-0198",
+    },
+    aiAssistant: {
+      ...canonicalPhoneSignup().aiAssistant,
+      serviceArea: "Niagara and Hamilton",
+    },
+  }), { signingSecret: SIGNING_SECRET });
+
+  assert.equal(payload.provisioning.preferredAreaCode, "289");
+  assert.equal(payload.provisioning.preferredRegion, "ON");
+  assert.equal(verifySignupProvisioningAuthorization(payload, SIGNING_SECRET), true);
 });
 
 test("derives the account key from normalized owner identity only", () => {

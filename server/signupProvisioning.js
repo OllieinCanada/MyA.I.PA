@@ -7,6 +7,7 @@ const {
 
 const AUTHORIZATION_VERSION = "v1";
 const DEFAULT_CANADIAN_REGION = "ON";
+const NIAGARA_HAMILTON_AREA_CODE = "289";
 const CANADIAN_REGIONS = new Set([
   "AB", "BC", "MB", "NB", "NL", "NS", "NT", "NU", "ON", "PE", "QC", "SK", "YT",
 ]);
@@ -83,6 +84,21 @@ function inferPreferredCanadianAreaCode(...phoneValues) {
   for (const value of phoneValues.flat()) {
     const inspected = inspectCanadianNumber(value);
     if (inspected.valid) return inspected.areaCode;
+  }
+  return "";
+}
+
+function inferOntarioLocalAreaCode({ city = "", businessAddress = "", serviceArea = "", postalCode = "" } = {}) {
+  const locationText = [city, businessAddress, serviceArea]
+    .map((value) => cleanString(value, 600).toLowerCase())
+    .filter(Boolean)
+    .join(" | ");
+  const niagaraHamiltonLocality = /\b(?:hamilton|burlington|grimsby|st\.?\s*catharines|niagara(?:[-\s]on[-\s]the[-\s]lake| falls| region)?|welland|fort erie|port colborne|thorold|beamsville|vineland|lincoln|pelham|wainfleet|west lincoln)\b/i;
+  const compactPostalCode = cleanString(postalCode, 16).replace(/\s+/g, "").toUpperCase();
+  const niagaraHamiltonPostalCode = /^(?:L0R|L2[A-W]|L3[BCKMVYZ]|L7[L-TR]|L8[A-Z]|L9[ACGHK])/;
+
+  if (niagaraHamiltonLocality.test(locationText) || niagaraHamiltonPostalCode.test(compactPostalCode)) {
+    return NIAGARA_HAMILTON_AREA_CODE;
   }
   return "";
 }
@@ -284,7 +300,8 @@ function normalizeSignupProvisioningPayload(input, options = {}) {
   const signingSecret = requireSigningSecret(options.signingSecret);
   const values = selectSignupValues(input);
   const accountKey = buildProvisioningAccountKey(values.ownerEmail, values.ownerPhone);
-  const preferredAreaCode = inferPreferredCanadianAreaCode(values.ownerPhone, values.businessPhone);
+  const preferredAreaCode = inferOntarioLocalAreaCode(values)
+    || inferPreferredCanadianAreaCode(values.ownerPhone, values.businessPhone);
   const preferredRegion = normalizeProvisioningRegion(values.province, options.defaultRegion);
   const resourceMarker = buildProvisioningResourceMarker(accountKey);
   const canonicalBusiness = {
@@ -426,6 +443,7 @@ module.exports = {
   buildProvisioningResourceMarker,
   buildProvisioningResourceName,
   inferPreferredCanadianAreaCode,
+  inferOntarioLocalAreaCode,
   normalizeProvisioningRegion,
   normalizeSignupProvisioningPayload,
   verifyProvisioningContextToken,

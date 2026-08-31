@@ -236,6 +236,23 @@ test("a coded provisioning failure appears immediately so its Telegram deep link
   assert.equal(items[0].incident.reasonCode, "PHONE_NUMBER_PENDING");
 });
 
+test("a local area-code mismatch explains why automatic replacement stopped", () => {
+  const now = new Date("2026-08-31T22:00:00.000Z");
+  const items = signupAttentionItems([{
+    ownerEmail: "owner@example.com",
+    businessName: "Niagara Electrical",
+    status: "provisioning_failed",
+    phoneProvisioningStatus: "failed",
+    phoneProvisioningCode: "PROVISIONED_NUMBER_AREA_CODE_MISMATCH",
+    updatedAt: "2026-08-31T21:59:30.000Z",
+  }], now, 10);
+
+  assert.equal(items.length, 1);
+  assert.equal(items[0].incident.reasonCode, "PROVISIONED_NUMBER_AREA_CODE_MISMATCH");
+  assert.match(items[0].incident.reason, /outside the business's required local area code/i);
+  assert.match(items[0].incident.reason, /duplicate charges/i);
+});
+
 test("a reopened signup stays in the queue until it is deliberately resolved", () => {
   const now = new Date("2026-08-20T04:00:00.000Z");
   const items = signupAttentionItems([{
