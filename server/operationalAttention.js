@@ -218,6 +218,12 @@ function signupFailureReason(signup = {}, status = "unknown") {
   if (["PHONE_VALIDATION_UNAVAILABLE", "PHONE_NOT_OWNED", "VOICE_ROUTING_MISSING", "PHONE_VALIDATION_FAILED", "PROVISIONED_NUMBER_NOT_READY"].includes(phoneCode)) {
     return { reason: "The assigned number could not be verified as owned and ready for calls.", reasonCode: phoneCode, confidence: "high" };
   }
+  if (phoneCode === "LOCAL_CANADIAN_NUMBER_INVENTORY_UNAVAILABLE") {
+    return { reason: "Twilio had no voice and SMS-capable number in the business's required local area code.", reasonCode: phoneCode, confidence: "high" };
+  }
+  if (phoneCode === "PROVISIONED_NUMBER_AREA_CODE_MISMATCH") {
+    return { reason: "The existing assigned number is outside the business's required local area code, and automatic replacement was stopped to prevent duplicate charges.", reasonCode: phoneCode, confidence: "high" };
+  }
   if (makeKind === "empty") {
     return { reason: "The provisioning automation returned an empty response.", reasonCode: "MAKE_SIGNUP_RESPONSE_EMPTY", confidence: "high" };
   }

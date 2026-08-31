@@ -3215,6 +3215,13 @@ async function purchaseTwilioPhoneNumber({ areaCode = "", region = "ON", voiceUr
   });
   if (existingNumber) {
     const phoneNumber = validateProvisionedCanadianNumber(existingNumber);
+    const existingAreaCode = inspectCanadianNumber(phoneNumber).areaCode;
+    if (normalizedAreaCode && existingAreaCode !== normalizedAreaCode) {
+      const err = new Error(`The previously provisioned number is not in the requested ${normalizedAreaCode} area code and requires an approved replacement.`);
+      err.statusCode = 409;
+      err.code = "PROVISIONED_NUMBER_AREA_CODE_MISMATCH";
+      throw err;
+    }
     if (!String(existingNumber?.voice_url || "").trim()) {
       const err = new Error("The previously provisioned number is missing voice routing.");
       err.statusCode = 502;
@@ -3238,11 +3245,12 @@ async function purchaseTwilioPhoneNumber({ areaCode = "", region = "ON", voiceUr
   const normalizedRegion = /^[A-Z]{2}$/.test(String(region || "").trim().toUpperCase())
     ? String(region).trim().toUpperCase()
     : "ON";
-  const searchPlans = [
-    ...(normalizedAreaCode ? [{ label: `area code ${normalizedAreaCode}`, AreaCode: normalizedAreaCode }] : []),
-    { label: `${normalizedRegion} regional inventory`, InRegion: normalizedRegion },
-    { label: "Canada-wide local inventory" },
-  ];
+  const searchPlans = normalizedAreaCode
+    ? [{ label: `area code ${normalizedAreaCode}`, AreaCode: normalizedAreaCode }]
+    : [
+      { label: `${normalizedRegion} regional inventory`, InRegion: normalizedRegion },
+      { label: "Canada-wide local inventory" },
+    ];
   let availableNumber = "";
   let inventorySource = "";
   for (const plan of searchPlans) {
@@ -3270,9 +3278,13 @@ async function purchaseTwilioPhoneNumber({ areaCode = "", region = "ON", voiceUr
     }
   }
   if (!availableNumber) {
-    const err = new Error("No SMS and voice-capable Canadian number is currently available. Please retry later.");
+    const err = new Error(normalizedAreaCode
+      ? `No SMS and voice-capable Canadian number is currently available in area code ${normalizedAreaCode}. Please retry later.`
+      : "No SMS and voice-capable Canadian number is currently available. Please retry later.");
     err.statusCode = 409;
-    err.code = "CANADIAN_NUMBER_INVENTORY_UNAVAILABLE";
+    err.code = normalizedAreaCode
+      ? "LOCAL_CANADIAN_NUMBER_INVENTORY_UNAVAILABLE"
+      : "CANADIAN_NUMBER_INVENTORY_UNAVAILABLE";
     throw err;
   }
 

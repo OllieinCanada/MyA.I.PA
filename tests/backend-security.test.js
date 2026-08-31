@@ -1405,6 +1405,52 @@ test("Twilio provisioning never cross-assigns another signup sharing the same vo
   assert.match(calls.find((call) => call.method === "POST").body, new RegExp(`FriendlyName=${friendlyName}`));
 });
 
+test("Twilio provisioning does not silently fall back outside a requested local area code", async () => {
+  const searches = [];
+  const friendlyName = `myaipa-twilio-number-${"e".repeat(20)}`;
+  await assert.rejects(
+    () => __test.purchaseTwilioPhoneNumber(
+      { areaCode: "289", region: "ON", voiceUrl: "https://hook.us2.make.com/local-voice-hook", friendlyName },
+      {
+        fetchImpl: async (url) => {
+          const text = String(url);
+          if (text.includes("AvailablePhoneNumbers")) searches.push(text);
+          return new Response(JSON.stringify(text.includes("IncomingPhoneNumbers")
+            ? { incoming_phone_numbers: [] }
+            : { available_phone_numbers: [] }), { status: 200, headers: { "content-type": "application/json" } });
+        },
+      }
+    ),
+    (error) => error.code === "LOCAL_CANADIAN_NUMBER_INVENTORY_UNAVAILABLE"
+  );
+
+  assert.equal(searches.length, 1);
+  assert.match(searches[0], /AreaCode=289/);
+  assert.doesNotMatch(searches[0], /InRegion=ON/);
+});
+
+test("Twilio provisioning flags an existing deterministic number in the wrong area code", async () => {
+  const friendlyName = `myaipa-twilio-number-${"f".repeat(20)}`;
+  await assert.rejects(
+    () => __test.purchaseTwilioPhoneNumber(
+      { areaCode: "289", voiceUrl: "https://hook.us2.make.com/existing-voice-hook", friendlyName },
+      {
+        fetchImpl: async () => new Response(JSON.stringify({
+          incoming_phone_numbers: [{
+            sid: "PNwrongarea",
+            phone_number: "+13435550123",
+            friendly_name: friendlyName,
+            voice_url: "https://hook.us2.make.com/existing-voice-hook",
+            voice_method: "POST",
+            capabilities: { voice: true, sms: true },
+          }],
+        }), { status: 200, headers: { "content-type": "application/json" } }),
+      }
+    ),
+    (error) => error.code === "PROVISIONED_NUMBER_AREA_CODE_MISMATCH"
+  );
+});
+
 test("Twilio provisioning preserves safe provider billing evidence without retaining raw provider text", async () => {
   const friendlyName = `myaipa-twilio-number-${"d".repeat(20)}`;
   await assert.rejects(

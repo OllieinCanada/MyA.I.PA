@@ -47,6 +47,8 @@ const INCIDENT_REASON_CATALOG = Object.freeze({
   CUSTOMER_PAYMENT_FAILED: "The customer's Stripe payment failed. This is not a Twilio or Vapi account-funding issue.",
   PROVIDER_AUTHENTICATION_FAILED: "The affected provider rejected My AI PA's configured credential.",
   PROVIDER_INVENTORY_UNAVAILABLE: "The affected provider could not supply a valid resource from the required inventory.",
+  LOCAL_CANADIAN_NUMBER_INVENTORY_UNAVAILABLE: "Twilio could not supply a voice and SMS-capable Canadian number in the business's required local area code.",
+  PROVISIONED_NUMBER_AREA_CODE_MISMATCH: "The existing provisioned number does not match the business's required local area code, so My AI PA stopped before creating another paid number.",
   PROVIDER_CONNECTION_FAILED: "My AI PA could not establish or keep a network connection to the affected provider.",
   DUPLICATE_OR_STATE_CONFLICT: "My AI PA stopped because durable state indicates a duplicate, concurrent operation, or conflicting provisioning context.",
   PROVIDER_PERMISSION_OR_COMPLIANCE_BLOCK: "The affected provider blocked the operation because of a permission, consent, or compliance rule.",
