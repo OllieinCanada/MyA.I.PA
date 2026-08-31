@@ -90,6 +90,18 @@
       "type": "operational",
       "checkName": "operational_health",
       "firstDetectedAt": "2026-08-30T17:26:27.745Z"
+    },
+    "issue:operational_health:public_2236866f9884f275b235326b0375e35e": {
+      "lifecycleId": "public_246ab36f76222b5e9ec345dd",
+      "type": "operational",
+      "checkName": "operational_health",
+      "firstDetectedAt": "2026-08-31T20:23:55.177Z"
+    },
+    "issue:operational_health:public_47e2f95630e23dfbcbc5b30de16f8460": {
+      "lifecycleId": "public_4ca995aac38f70ff5d7008d1",
+      "type": "operational",
+      "checkName": "operational_health",
+      "firstDetectedAt": "2026-08-31T20:23:55.177Z"
     }
   }
 }
