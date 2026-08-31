@@ -28,6 +28,10 @@ const {
 } = require("./outreach");
 const { sendSmsViaTwilio } = require("./twilioSms");
 const {
+  deliverSignupCompletion,
+  formatAssignedPhone,
+} = require("./signupCompletion");
+const {
   persistSignupBusinessId,
   resolveBusinessForSignup,
 } = require("./signupBusinessResolution");
@@ -1397,6 +1401,39 @@ async function sendSignupVerificationEmail({ req, ownerEmail, ownerName, busines
   }
 
   return { sent: true };
+}
+
+async function sendSignupCompletionEmail({ to, subject, text, content }) {
+  const emailConfig = getEmailTransportConfig();
+  if (!emailConfig) {
+    const error = new Error("Setup-complete email delivery is not configured.");
+    error.code = "SMTP_NOT_CONFIGURED";
+    error.provider = "smtp";
+    error.providerCode = error.code;
+    throw error;
+  }
+  const transporter = nodemailer.createTransport(emailConfig.transport);
+  try {
+    await transporter.sendMail({
+      from: emailConfig.from,
+      to,
+      subject,
+      text,
+      html: `
+        <div style="font-family:Arial,sans-serif;line-height:1.55;color:#0f172a;max-width:640px">
+          <h1 style="font-size:28px;line-height:1.1;margin:0 0 16px">Your My AI PA number is ready</h1>
+          <p>Your assigned AI phone number is:</p>
+          <p style="font-size:24px;font-weight:800"><a href="tel:${escapeHtml(content.phone)}" style="color:#07142a">${escapeHtml(content.displayPhone)}</a></p>
+          <p>Call it now to test the assistant before sharing it with customers.</p>
+          <p><a href="${escapeHtml(`${FRONTEND_APP_URL}/#/dashboard`)}" style="display:inline-block;background:#07142a;color:#fff;text-decoration:none;font-weight:700;padding:14px 18px;border-radius:10px">Open your dashboard</a></p>
+        </div>
+      `,
+    });
+  } catch (error) {
+    throw createSmtpDeliveryError(error, "setup-complete delivery");
+  } finally {
+    transporter.close();
+  }
 }
 
 function removePendingSignupVerification(token) {
@@ -4790,6 +4827,7 @@ async function safelyNotifySignupOperations(payload, {
   record = null,
   makeAssessment = null,
   providerFailure = null,
+  reasonCode = "",
 } = {}) {
   const eventKey = buildMakeSignupEventKey(payload);
   const alertKey = crypto
@@ -4805,7 +4843,7 @@ async function safelyNotifySignupOperations(payload, {
   const signupTargetId = current
     ? hashOperationalTarget(current.subscriptionId || current.checkoutSessionId || current.ownerEmail || current.businessName || current.signedUpAt || "unknown")
     : "";
-  const attentionKind = state === "provisioning_failed"
+  const attentionKind = ["provisioning_failed", "customer_followup_failed", "customer_followup_partial"].includes(state)
     ? "signup_failed"
     : state === "review_required" ? "signup_review_required" : "";
   const incidentId = signupTargetId && attentionKind
@@ -4820,7 +4858,7 @@ async function safelyNotifySignupOperations(payload, {
     source: payload?.source?.app || payload?.source?.channel || current?.signupSource || "website",
     eventKey,
     detail,
-    reasonCode: current?.phoneProvisioningCode || current?.makeError || "",
+    reasonCode: reasonCode || current?.phoneProvisioningCode || current?.makeError || "",
     makeFailure: providerFailure || makeAssessment || null,
     payload,
     record: current,
@@ -11356,7 +11394,10 @@ app.get(
     const store = prunePendingSignupStore(readPendingSignupStore());
     const record = store[tokenHash];
 
-    function renderVerificationPage({ title, body, ok }) {
+    function renderVerificationPage({ title, body, ok, assignedPhone = "" }) {
+      const canonicalPhone = normalizePhoneForMatch(assignedPhone);
+      const displayPhone = formatAssignedPhone(canonicalPhone);
+      const setupReady = ok && Boolean(canonicalPhone && displayPhone);
       res.status(ok ? 200 : 400).send(`<!doctype html>
         <html lang="en">
           <head>
@@ -11365,11 +11406,18 @@ app.get(
             <title>${escapeHtml(title)} | My AI PA</title>
             <style>
               body{margin:0;font-family:Arial,sans-serif;background:linear-gradient(135deg,#eef6ff,#fff);color:#07142a;display:grid;min-height:100vh;place-items:center;padding:24px}
-              main{max-width:680px;border:1px solid #d7e7fb;background:rgba(255,255,255,.94);border-radius:28px;padding:34px;box-shadow:0 34px 100px -70px rgba(15,23,42,.86)}
+              main{width:min(680px,100%);box-sizing:border-box;border:1px solid #d7e7fb;background:rgba(255,255,255,.94);border-radius:28px;padding:34px;box-shadow:0 34px 100px -70px rgba(15,23,42,.86)}
               .badge{display:inline-flex;border-radius:999px;background:${ok ? "#dcfce7" : "#fee2e2"};color:${ok ? "#166534" : "#991b1b"};padding:8px 12px;font-size:12px;font-weight:900;letter-spacing:.14em;text-transform:uppercase}
               h1{font-size:clamp(32px,7vw,54px);line-height:1.02;margin:18px 0 12px;letter-spacing:-.05em}
               p{font-size:18px;line-height:1.6;color:#334155}
-              a{display:inline-flex;margin-top:12px;border-radius:14px;background:#07142a;color:white;text-decoration:none;font-weight:900;padding:14px 18px}
+              .number{margin:24px 0;padding:22px;border:1px solid #bfdbfe;background:#eff6ff;border-radius:20px}
+              .number-label{margin:0 0 6px;font-size:13px;font-weight:900;letter-spacing:.12em;text-transform:uppercase;color:#0369a1}
+              .number-value{margin:0;font-size:clamp(25px,7vw,38px);font-weight:900;line-height:1.2;color:#07142a;letter-spacing:-.03em}
+              .actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px}
+              a,.action{display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:14px;background:#07142a;color:white;text-decoration:none;font:inherit;font-weight:900;padding:14px 18px;cursor:pointer}
+              .action.secondary{background:#e0f2fe;color:#075985}
+              .return{background:transparent;color:#075985;padding-left:0;padding-right:0}
+              @media(max-width:520px){body{padding:14px}main{padding:24px}.actions>*{flex:1 1 140px}.return{flex-basis:100%}}
             </style>
           </head>
           <body>
@@ -11377,8 +11425,34 @@ app.get(
               <span class="badge">${ok ? "Verified" : "Needs attention"}</span>
               <h1>${escapeHtml(title)}</h1>
               <p>${escapeHtml(body)}</p>
-              <a href="${escapeHtml(`${FRONTEND_APP_URL}/#/signup`)}">Return to My AI PA</a>
+              ${setupReady ? `
+                <section class="number" aria-label="Assigned My AI PA number">
+                  <p class="number-label">Your My AI PA number</p>
+                  <p class="number-value">${escapeHtml(displayPhone)}</p>
+                  <div class="actions">
+                    <a href="tel:${escapeHtml(canonicalPhone)}">Call the number</a>
+                    <button class="action secondary" id="copy-number" type="button" data-phone="${escapeHtml(canonicalPhone)}">Copy number</button>
+                  </div>
+                </section>
+              ` : ""}
+              <div class="actions"><a class="return" href="${escapeHtml(`${FRONTEND_APP_URL}/#/${setupReady ? "dashboard" : "signup"}`)}">${setupReady ? "Open your dashboard" : "Return to My AI PA"}</a></div>
             </main>
+            ${setupReady ? `<script>
+              document.getElementById("copy-number").addEventListener("click", async function () {
+                const phone = this.dataset.phone;
+                try {
+                  await navigator.clipboard.writeText(phone);
+                } catch (_) {
+                  const input = document.createElement("input");
+                  input.value = phone;
+                  document.body.appendChild(input);
+                  input.select();
+                  document.execCommand("copy");
+                  input.remove();
+                }
+                this.textContent = "Copied";
+              });
+            </script>` : ""}
           </body>
         </html>`);
     }
@@ -11566,10 +11640,50 @@ app.get(
     if (phoneProvisioning.status === "ready") {
       await attachNoCardStripeTrialToSignup(payload, { makeStatus: makeResult.status, twilioPhoneNumber });
     }
+    let completionDelivery = null;
+    if (phoneProvisioning.status === "ready") {
+      completionDelivery = await deliverSignupCompletion({
+        ownerPhone: provisionedRecord.ownerPhone || payload?.owner?.phone,
+        ownerEmail: provisionedRecord.ownerEmail || payload?.owner?.email,
+        ownerName: provisionedRecord.ownerName || payload?.owner?.name,
+        businessName: provisionedRecord.businessName || payload?.business?.name,
+        assignedPhone: twilioPhoneNumber,
+        dashboardUrl: `${FRONTEND_APP_URL}/#/dashboard`,
+        priorStatus: provisionedRecord.setupFollowupStatus,
+        sendSms: ({ to, message }) => sendSmsViaTwilio({
+          to,
+          message,
+          env: getVapiVoiceSignupSmsEnvironment(),
+        }),
+        sendEmail: sendSignupCompletionEmail,
+      });
+      const deliveryRecord = upsertSignupDashboardRecord({
+        ...provisionedRecord,
+        setupFollowupStatus: completionDelivery.status,
+        setupFollowupChannels: completionDelivery.channels,
+        setupFollowupErrors: completionDelivery.errors,
+        setupFollowupAttemptedAt: new Date().toISOString(),
+        setupFollowupSentAt: completionDelivery.channels.length ? new Date().toISOString() : "",
+      });
+      if (["failed", "partial"].includes(completionDelivery.status)) {
+        const errorCodes = completionDelivery.errors.map((item) => item.code).filter(Boolean);
+        await safelyNotifySignupOperations(payload, {
+          state: completionDelivery.status === "failed" ? "customer_followup_failed" : "customer_followup_partial",
+          detail: completionDelivery.status === "failed"
+            ? "Setup completed, but the assigned-number follow-up could not be delivered"
+            : `Setup completed, but follow-up delivery was partial (${completionDelivery.channels.join(", ") || "no successful channel"})`,
+          reasonCode: errorCodes[0] || "SIGNUP_COMPLETION_DELIVERY_FAILED",
+          record: deliveryRecord,
+        });
+      }
+    }
     return renderVerificationPage({
       ok: phoneProvisioning.status === "ready",
-      title: phoneProvisioning.status === "ready" ? "Email verified" : "Email verified, number setup needs attention",
-      body: phoneProvisioning.status === "ready" ? "Your email is verified and your My AI PA setup is now continuing." : phoneProvisioning.message,
+      title: phoneProvisioning.status === "ready" ? "Your setup is ready" : "Email verified, number setup needs attention",
+      body: phoneProvisioning.status === "ready"
+        ? `Your email is verified. Your assigned number is ready to test${completionDelivery?.status === "failed" ? ", but we could not deliver the separate follow-up message" : ""}.`
+        : phoneProvisioning.message,
+      assignedPhone: twilioPhoneNumber,
     });
   })
 );

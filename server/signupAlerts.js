@@ -116,14 +116,22 @@ function buildSignupSnapshot(input = {}) {
 }
 
 function signupReasonCode(input, context) {
+  const explicit = String(input.reasonCode || "").trim();
+  if (
+    ["customer_followup_failed", "customer_followup_partial"].includes(input.state)
+    && /^[A-Z0-9_.:-]{3,100}$/i.test(explicit)
+    && !/^(TRUE|FALSE)$/i.test(explicit)
+  ) return explicit;
   if (context.phoneProvisioningCode) return context.phoneProvisioningCode;
   if (context.makeResponseKind === "empty") return "MAKE_SIGNUP_RESPONSE_EMPTY";
   if (context.makeResponseKind === "acknowledged_incomplete") return "MAKE_SIGNUP_RESPONSE_INCOMPLETE";
   if (context.makeResponseKind === "rejected") return "MAKE_SIGNUP_REJECTED";
-  const explicit = String(input.reasonCode || "").trim();
   if (/^[A-Z0-9_.:-]{3,100}$/i.test(explicit) && !/^(TRUE|FALSE)$/i.test(explicit)) return explicit;
   if (input.state === "review_required") return "SIGNUP_REVIEW_REQUIRED";
   if (input.state === "provisioning_failed") return "SIGNUP_PROVISIONING_FAILED";
+  if (["customer_followup_failed", "customer_followup_partial"].includes(input.state)) {
+    return "SIGNUP_COMPLETION_DELIVERY_FAILED";
+  }
   return "";
 }
 
@@ -141,6 +149,9 @@ function signupNextAction(state) {
   if (state === "review_required") {
     return "Open this exact signup, review the saved request and safety flags, and approve recovery only when no duplicate resources can be created.";
   }
+  if (["customer_followup_failed", "customer_followup_partial"].includes(state)) {
+    return "Do not provision another number. Open the signup, verify the existing assigned number, repair the failed SMS or email channel, then resend only the setup-complete follow-up.";
+  }
   return "Open this exact incident, verify Make, Twilio, and Vapi state, then run guarded recovery only after duplicate phone, assistant, and billing actions are ruled out.";
 }
 
@@ -151,17 +162,24 @@ function buildSignupIncidentInput(input = {}) {
     ? String(input.eventKey).slice(-10)
     : "unknown";
   const review = input.state === "review_required";
+  const deliveryFailure = ["customer_followup_failed", "customer_followup_partial"].includes(input.state);
   return {
     severity: input.state === "provisioning_failed" ? "critical" : "warning",
-    title: review ? "Signup is waiting for manual review" : "Signup provisioning did not finish",
+    title: review
+      ? "Signup is waiting for manual review"
+      : deliveryFailure ? "Signup completed but customer follow-up needs attention" : "Signup provisioning did not finish",
     whatFailed: review
       ? "The 14-day trial and AI phone-assistant setup was paused before provisioning."
+      : deliveryFailure
+        ? "The assigned number was created, but the setup-complete SMS or email did not fully reach the customer."
       : providerFailure?.whatFailed
         || "The 14-day trial signup did not produce a verified callable number and assigned assistant.",
     reasonCode: providerFailure?.reasonCode || signupReasonCode(input, context),
     reason: providerFailure?.reason || input.detail || "The signup workflow stopped without verified completion proof.",
     impact: providerFailure?.impact || (review
       ? "The customer setup is not live. No phone, assistant, or billing action should be assumed while review is pending."
+      : deliveryFailure
+        ? "The setup remains live and the assigned number must be preserved, but the customer may not know which number to test or what to do next."
       : "The customer setup is not live. They may be waiting, and no phone, assistant, or trial/billing success should be assumed."),
     snapshot: {
       ...buildSignupSnapshot(input),
@@ -210,14 +228,14 @@ function buildSignupUpdateAlert(input = {}) {
 }
 
 function buildSignupTelegramAlert(input = {}) {
-  if (["provisioning_failed", "review_required"].includes(input.state)) {
+  if (["provisioning_failed", "review_required", "customer_followup_failed", "customer_followup_partial"].includes(input.state)) {
     return buildIncidentTelegramAlert(buildSignupIncidentInput(input));
   }
   return buildSignupUpdateAlert(input);
 }
 
 async function sendSignupTelegramAlert(input, { token, chatId, fetchImpl = fetch } = {}) {
-  if (["provisioning_failed", "review_required"].includes(input?.state)) {
+  if (["provisioning_failed", "review_required", "customer_followup_failed", "customer_followup_partial"].includes(input?.state)) {
     return sendIncidentTelegramAlert(buildSignupIncidentInput(input), { token, chatId, fetchImpl });
   }
   if (!String(token || "").trim() || !String(chatId || "").trim()) {
