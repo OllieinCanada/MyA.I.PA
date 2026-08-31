@@ -111,6 +111,9 @@ function mutateBlueprint(current) {
   assistant.module = "http:ActionSendData";
   assistant.version = 3;
   assistant.parameters = clone(purchase.parameters || {});
+  const assistantDesigner = clone(assistant.metadata?.designer || {});
+  assistant.metadata = clone(purchase.metadata || {});
+  assistant.metadata.designer = assistantDesigner;
   assistant.mapper = httpMapperFrom(purchase, {
     url: "https://api.myaipa.ca/api/integrations/vapi/create-signup-assistant",
     query: [
@@ -170,6 +173,8 @@ function verifyBlueprint(blueprint) {
     assistantBackendOwned: assistant.module === "http:ActionSendData"
       && assistant.mapper?.url === "https://api.myaipa.ca/api/integrations/vapi/create-signup-assistant"
       && assistantQuery.assignedPhone === "{{9.data.twilioPhoneNumber}}"
+      && (assistant.metadata?.expect || []).some((item) => item.name === "url")
+      && !(assistant.metadata?.expect || []).some((item) => item.name === "relativeURL")
       && hasToken(assistant),
     importIdempotent: importQuery.idempotencyKey === "{{21.provisioning.idempotencyKey}}"
       && importQuery.assistantId === "{{25.data.assistantId}}"
