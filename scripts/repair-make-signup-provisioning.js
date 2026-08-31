@@ -145,10 +145,13 @@ function mutateBlueprint(current) {
     vapiAssistantId: "{{25.data.assistantId}}",
   }, null, 2);
   response.mapper.status = "200";
-  response.mapper.headers = [{ key: "Content-Type:", value: "application/json" }];
+  response.mapper.headers = [{ key: "Content-Type", value: "application/json" }];
 
   if (blueprint.metadata?.scenario && typeof blueprint.metadata.scenario === "object") {
-    blueprint.metadata.scenario.sequential = true;
+    // The backend owns per-signup idempotency and concurrency. Queuing an instant
+    // webhook makes Make return its generic "Accepted" acknowledgement before the
+    // final Webhook Response module can return the verified provisioning receipt.
+    blueprint.metadata.scenario.sequential = false;
     blueprint.metadata.scenario.confidential = true;
   }
   return blueprint;
@@ -163,6 +166,7 @@ function verifyBlueprint(blueprint) {
   const assistantQuery = Object.fromEntries((assistant.mapper?.qs || []).map((item) => [item.name, item.value]));
   const importQuery = Object.fromEntries((imported.mapper?.qs || []).map((item) => [item.name, item.value]));
   const responseText = String(response.mapper?.body || "");
+  const responseHeaders = Array.isArray(response.mapper?.headers) ? response.mapper.headers : [];
   const hasToken = (module) => (module.mapper?.headers || []).some(
     (item) => String(item.name || item.key || "").toLowerCase() === "x-provisioning-token"
       && String(item.value || "").includes("provisioning.authorizationToken")
@@ -181,7 +185,12 @@ function verifyBlueprint(blueprint) {
       && hasToken(imported),
     responseCorrect: responseText.includes("{{28.data.twilioPhoneNumber}}")
       && responseText.includes("{{28.data.phoneNumberId}}")
-      && responseText.includes("{{25.data.assistantId}}"),
+      && responseText.includes("{{25.data.assistantId}}")
+      && responseHeaders.some((item) => (
+        String(item.key || item.name || "").trim().toLowerCase() === "content-type"
+          && String(item.value || "").trim().toLowerCase() === "application/json"
+      )),
+    instantResponseEnabled: blueprint.metadata?.scenario?.sequential === false,
     noFixed249: purchaseQuery.areaCode !== "249",
   };
 }
