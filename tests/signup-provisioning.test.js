@@ -139,6 +139,18 @@ test("keeps account provisioning identity and resource names stable across call 
   );
 });
 
+test("keeps deterministic Vapi resource names within the provider's 40-character limit", () => {
+  const accountKey = "a".repeat(64);
+  const assistantName = buildProvisioningResourceName("vapi-assistant", accountKey);
+  const phoneName = buildProvisioningResourceName("vapi-phone", accountKey);
+  const twilioName = buildProvisioningResourceName("twilio-number", accountKey);
+
+  assert.ok(assistantName.length <= 40);
+  assert.ok(phoneName.length <= 40);
+  assert.equal(twilioName, `myaipa-twilio-number-${"a".repeat(20)}`);
+  assert.equal(assistantName, buildProvisioningResourceName("vapi-assistant", accountKey));
+});
+
 test("rejects provisioning payload tampering and the wrong signing secret", () => {
   const payload = normalizeSignupProvisioningPayload(canonicalPhoneSignup(), {
     signingSecret: SIGNING_SECRET,

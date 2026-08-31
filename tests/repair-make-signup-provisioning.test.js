@@ -35,8 +35,22 @@ function fixture() {
           ],
         },
         parameters: { handleErrors: "false" },
+        metadata: {
+          expect: [{ name: "url" }, { name: "method" }],
+          designer: { x: 100, y: 200 },
+        },
       },
-      { id: 25, module: "vapi:makeApiCall2", version: 2, mapper: { body: "{}" }, parameters: {} },
+      {
+        id: 25,
+        module: "vapi:makeApiCall2",
+        version: 2,
+        mapper: { body: "{}" },
+        parameters: {},
+        metadata: {
+          expect: [{ name: "relativeURL" }, { name: "body" }],
+          designer: { x: 300, y: 400 },
+        },
+      },
       { id: 28, module: "http:ActionSendData", version: 3, mapper: httpMapper, parameters: {} },
       { id: 30, module: "gateway:WebhookRespond", mapper: { body: "{}", status: "200" }, parameters: {} },
     ],
@@ -49,6 +63,11 @@ test("rewrites the three paid provisioning stages and fail-closed response mappi
   assert.ok(Object.values(verifyBlueprint(repaired)).every(Boolean));
   assert.equal(current.flow.find((item) => item.id === 9).mapper.qs[0].value, "249");
   assert.equal(repaired.flow.find((item) => item.id === 25).module, "http:ActionSendData");
+  assert.deepEqual(repaired.flow.find((item) => item.id === 25).metadata.expect, [
+    { name: "url" },
+    { name: "method" },
+  ]);
+  assert.deepEqual(repaired.flow.find((item) => item.id === 25).metadata.designer, { x: 300, y: 400 });
   assert.equal(repaired.metadata.scenario.sequential, true);
   assert.equal(repaired.metadata.scenario.confidential, true);
 });

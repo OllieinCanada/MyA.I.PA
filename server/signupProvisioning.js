@@ -114,7 +114,10 @@ function buildProvisioningResourceName(resourceType, accountKey) {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "") || "resource";
-  return `myaipa-${type}-${requireAccountKey(accountKey).slice(0, 20)}`;
+  const prefix = `myaipa-${type}-`;
+  const providerLimit = type.startsWith("vapi-") ? 40 : 64;
+  const suffixLength = Math.min(20, Math.max(12, providerLimit - prefix.length));
+  return `${prefix}${requireAccountKey(accountKey).slice(0, suffixLength)}`;
 }
 
 function selectSignupValues(input) {
