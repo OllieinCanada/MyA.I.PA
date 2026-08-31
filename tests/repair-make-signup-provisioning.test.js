@@ -68,7 +68,10 @@ test("rewrites the three paid provisioning stages and fail-closed response mappi
     { name: "method" },
   ]);
   assert.deepEqual(repaired.flow.find((item) => item.id === 25).metadata.designer, { x: 300, y: 400 });
-  assert.equal(repaired.metadata.scenario.sequential, true);
+  assert.deepEqual(repaired.flow.find((item) => item.id === 30).mapper.headers, [
+    { key: "Content-Type", value: "application/json" },
+  ]);
+  assert.equal(repaired.metadata.scenario.sequential, false);
   assert.equal(repaired.metadata.scenario.confidential, true);
 });
 
