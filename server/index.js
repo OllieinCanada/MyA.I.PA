@@ -923,6 +923,13 @@ function getCustomerDashboardSessionSecret() {
 
 function getCustomerDashboardLookupHash(email, phone) {
   const normalizedEmail = String(email || "").trim().toLowerCase();
+  const normalizedPhone = normalizeCustomerDashboardPhone(phone);
+  if (!normalizedEmail || !normalizedPhone) return "";
+  return hashKey(`${normalizedEmail}|${normalizedPhone}`);
+}
+
+function getLegacyCustomerDashboardLookupHash(email, phone) {
+  const normalizedEmail = String(email || "").trim().toLowerCase();
   const normalizedPhone = normalizePhoneForMatch(phone);
   if (!normalizedEmail || !normalizedPhone) return "";
   return hashKey(`${normalizedEmail}|${normalizedPhone}`);
@@ -1802,6 +1809,103 @@ function parseVapiBusinessMap() {
 
 function normalizePhoneForMatch(value) {
   return String(value || "").replace(/[^\d+]/g, "").replace(/^00/, "+").toLowerCase();
+}
+
+function normalizeCustomerDashboardPhone(value) {
+  const raw = String(value || "").trim();
+  const digits = raw.replace(/\D/g, "");
+  if (!digits) return "";
+  if (digits.length === 10) return `+1${digits}`;
+  if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
+  if (raw.startsWith("+") && digits.length >= 8 && digits.length <= 15) return `+${digits}`;
+  return digits;
+}
+
+function customerDashboardPhonesMatch(left, right) {
+  const normalizedLeft = normalizeCustomerDashboardPhone(left);
+  const normalizedRight = normalizeCustomerDashboardPhone(right);
+  return Boolean(normalizedLeft && normalizedRight && normalizedLeft === normalizedRight);
+}
+
+function getCustomerDashboardEmails(record = {}) {
+  return [...new Set([
+    record.dashboardLoginEmail,
+    record.ownerEmail,
+  ]
+    .map((value) => String(value || "").trim().toLowerCase())
+    .filter((value) => value && isValidEmailAddress(value)))];
+}
+
+function getCustomerDashboardAccessPriority(record = {}) {
+  const status = String(record.status || "").trim().toLowerCase();
+  if (status === "setup_ready" && record.twilioPhoneNumber) return 400;
+  if (status === "setup_ready") return 300;
+  if (record.twilioPhoneNumber) return 200;
+  if (["provisioning_pending", "setup_started", "subscription_trialing"].includes(status)) return 100;
+  return 0;
+}
+
+function sortCustomerDashboardLoginRecords(records = []) {
+  return [...records].sort((left, right) => (
+    getCustomerDashboardAccessPriority(right) - getCustomerDashboardAccessPriority(left)
+      || Number(new Date(right.updatedAt || right.signedUpAt || right.createdAt || 0))
+        - Number(new Date(left.updatedAt || left.signedUpAt || left.createdAt || 0))
+  ));
+}
+
+function planCustomerDashboardLoginEmailRepair(signupStore, {
+  subscriptionId,
+  currentEmail,
+  newEmail,
+  phone,
+  now = new Date().toISOString(),
+} = {}) {
+  const targetSubscriptionId = String(subscriptionId || "").trim();
+  const expectedEmail = String(currentEmail || "").trim().toLowerCase();
+  const correctedEmail = String(newEmail || "").trim().toLowerCase();
+  const expectedPhone = normalizeCustomerDashboardPhone(phone);
+  if (!targetSubscriptionId || targetSubscriptionId.length > 120) {
+    const error = new Error("A valid subscription is required for the dashboard identity repair.");
+    error.statusCode = 400;
+    throw error;
+  }
+  if (!isValidEmailAddress(expectedEmail) || !isValidEmailAddress(correctedEmail) || !expectedPhone) {
+    const error = new Error("The current email, corrected email, and signup phone are required.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const store = signupStore && typeof signupStore === "object" ? signupStore : {};
+  const subscriptionEntries = Object.entries(store).filter(([, record]) => (
+    String(record?.subscriptionId || "").trim() === targetSubscriptionId
+  ));
+  const alreadyRepaired = subscriptionEntries.find(([, record]) => (
+    String(record?.dashboardLoginEmail || "").trim().toLowerCase() === correctedEmail
+      && [record?.ownerPhone, record?.businessPhone].some((candidate) => customerDashboardPhonesMatch(candidate, expectedPhone))
+  ));
+  if (alreadyRepaired) {
+    return { store, record: alreadyRepaired[1], unchanged: true };
+  }
+  const targetEntry = subscriptionEntries.find(([, record]) => (
+    String(record?.ownerEmail || "").trim().toLowerCase() === expectedEmail
+      && [record?.ownerPhone, record?.businessPhone].some((candidate) => customerDashboardPhonesMatch(candidate, expectedPhone))
+  ));
+
+  if (!targetEntry) {
+    const error = new Error("The exact signup record was not found; no dashboard identity was changed.");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const nextStore = { ...store };
+  const repairedRecord = {
+    ...targetEntry[1],
+    dashboardLoginEmail: correctedEmail,
+    dashboardLoginEmailUpdatedAt: now,
+    updatedAt: now,
+  };
+  nextStore[targetEntry[0]] = repairedRecord;
+  return { store: nextStore, record: repairedRecord, unchanged: false };
 }
 
 function getVapiNestedString(value, paths) {
@@ -6801,26 +6905,29 @@ async function reconcileTrialUsageAfterCall(result) {
 
 function findCustomerDashboardSignup({ email, phone }) {
   const ownerEmail = String(email || "").trim().toLowerCase();
-  const phoneMatch = normalizePhoneForMatch(phone);
+  const phoneMatch = normalizeCustomerDashboardPhone(phone);
   if (!ownerEmail || !isValidEmailAddress(ownerEmail) || !phoneMatch) return null;
-  return listSignupDashboardRecords().find((record) => {
-    const recordEmail = String(record.ownerEmail || "").trim().toLowerCase();
-    if (recordEmail !== ownerEmail) return false;
-    const phones = [record.ownerPhone, record.businessPhone].map(normalizePhoneForMatch).filter(Boolean);
-    return phones.includes(phoneMatch);
+  return sortCustomerDashboardLoginRecords(listSignupDashboardRecords()).find((record) => {
+    if (!getCustomerDashboardEmails(record).includes(ownerEmail)) return false;
+    return [record.ownerPhone, record.businessPhone]
+      .filter(Boolean)
+      .some((candidate) => customerDashboardPhonesMatch(candidate, phoneMatch));
   }) || null;
 }
 
 function findCustomerDashboardSignupByLookupHash(lookupHash) {
   const normalizedLookupHash = String(lookupHash || "").trim().toLowerCase();
   if (!/^[a-f0-9]{32}$/.test(normalizedLookupHash)) return null;
-  for (const record of listSignupDashboardRecords()) {
-    const email = String(record.ownerEmail || "").trim().toLowerCase();
-    if (!email) continue;
-    const matchingPhone = [record.ownerPhone, record.businessPhone]
-      .filter(Boolean)
-      .find((phone) => getCustomerDashboardLookupHash(email, phone) === normalizedLookupHash);
-    if (matchingPhone) return { signup: record, matchingPhone };
+  for (const record of sortCustomerDashboardLoginRecords(listSignupDashboardRecords())) {
+    for (const email of getCustomerDashboardEmails(record)) {
+      const matchingPhone = [record.ownerPhone, record.businessPhone]
+        .filter(Boolean)
+        .find((phone) => [
+          getCustomerDashboardLookupHash(email, phone),
+          getLegacyCustomerDashboardLookupHash(email, phone),
+        ].includes(normalizedLookupHash));
+      if (matchingPhone) return { signup: record, matchingPhone, matchingEmail: email };
+    }
   }
   return null;
 }
@@ -7059,7 +7166,7 @@ async function getCustomerDashboard({ email, phone }) {
     signup: {
       businessName: signup.businessName || business?.name || "Your business",
       ownerName: signup.ownerName || "",
-      ownerEmail: signup.ownerEmail || "",
+      ownerEmail: signup.dashboardLoginEmail || signup.ownerEmail || "",
       ownerPhone: signup.ownerPhone || business?.settings?.ownerPhone || "",
       businessPhone: signup.businessPhone || business?.phone || "",
       businessAddress: signup.businessAddress || "",
@@ -7165,7 +7272,7 @@ async function getCustomerDashboard({ email, phone }) {
 async function getCustomerDashboardByLookupHash(lookupHash) {
   const match = findCustomerDashboardSignupByLookupHash(lookupHash);
   if (!match) return null;
-  return getCustomerDashboard({ email: match.signup.ownerEmail, phone: match.matchingPhone });
+  return getCustomerDashboard({ email: match.matchingEmail, phone: match.matchingPhone });
 }
 
 function sanitizeSupportDescription(value) {
@@ -8003,7 +8110,7 @@ async function getCustomerDashboardRateLimitDecision(req, { email, phone }) {
   );
   if (!ipLimit.allowed) limits.push(ipLimit);
 
-  const lookupKeySource = [email, normalizePhoneForMatch(phone)].map(normalizeForKey).join("|");
+  const lookupKeySource = [email, normalizeCustomerDashboardPhone(phone)].map(normalizeForKey).join("|");
   if (lookupKeySource.trim() !== "|") {
     const lookupLimit = await consumeNamedRateLimit(
       "customer-dashboard-lookup",
@@ -13221,6 +13328,59 @@ app.get(
   })
 );
 
+app.post(
+  "/api/admin/signups/repair-dashboard-login",
+  requireAdmin,
+  asyncRoute(async (req, res) => {
+    const body = req.body || {};
+    const subscriptionId = String(body.subscriptionId || "").trim();
+    const targetId = hashKey(subscriptionId || "missing-subscription");
+    const actorHash = getAdminActorHash(req);
+    if (String(body.confirmation || "") !== "REPAIR_CUSTOMER_DASHBOARD_LOGIN") {
+      return res.status(400).json({ error: "Explicit dashboard-login repair confirmation is required." });
+    }
+
+    try {
+      const result = planCustomerDashboardLoginEmailRepair(readSignupDashboardStore(), {
+        subscriptionId,
+        currentEmail: body.currentEmail,
+        newEmail: body.newEmail,
+        phone: body.phone,
+      });
+      if (!result.unchanged) writeSignupDashboardStore(result.store);
+      await recordAdminAuditEvent({
+        prisma,
+        action: "repair_customer_dashboard_login",
+        outcome: result.unchanged ? "already_completed" : "success",
+        actorHash,
+        targetType: "signup",
+        targetId,
+        details: {
+          correctedEmailHash: hashKey(result.record.dashboardLoginEmail),
+          phoneLast4: normalizeCustomerDashboardPhone(body.phone).slice(-4),
+        },
+      });
+      res.json({
+        ok: true,
+        unchanged: result.unchanged,
+        targetId,
+        phoneLast4: normalizeCustomerDashboardPhone(body.phone).slice(-4),
+      });
+    } catch (error) {
+      await recordAdminAuditEvent({
+        prisma,
+        action: "repair_customer_dashboard_login",
+        outcome: "failed",
+        actorHash,
+        targetType: "signup",
+        targetId,
+        details: { code: error?.code || "DASHBOARD_LOGIN_REPAIR_FAILED" },
+      });
+      throw error;
+    }
+  })
+);
+
 app.get(
   "/api/admin/faqs",
   requireAdmin,
@@ -14140,6 +14300,12 @@ module.exports = {
     createCustomerDashboardSessionToken,
     getCustomerDashboardSessionLookupHash,
     getCustomerDashboardLookupHash,
+    normalizeCustomerDashboardPhone,
+    customerDashboardPhonesMatch,
+    getCustomerDashboardEmails,
+    getCustomerDashboardAccessPriority,
+    sortCustomerDashboardLoginRecords,
+    planCustomerDashboardLoginEmailRepair,
     sanitizeCustomerStructuredData,
     sanitizeCustomerCall,
     sanitizeSupportDescription,

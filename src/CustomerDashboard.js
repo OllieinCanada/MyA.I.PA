@@ -369,7 +369,7 @@ function LookupForm({ credentials, setCredentials, onSubmit, busy, error, step, 
                     aria-invalid={error ? "true" : undefined}
                     aria-describedby={`customer-dashboard-phone-help${error ? " customer-dashboard-error" : ""}`}
                   />
-                  <p id="customer-dashboard-phone-help" className="customer-login-helper">We will text a code to the registered owner phone.</p>
+                  <p id="customer-dashboard-phone-help" className="customer-login-helper">Use the number from signup in any format—Canada's +1 country code is optional. We will text the code to the registered owner phone.</p>
                 </>
               )}
               {error ? (
