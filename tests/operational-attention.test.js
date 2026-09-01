@@ -93,11 +93,15 @@ test("attention summary groups critical and warning issues", () => {
 
 test("pending verification exposes a guarded resend action after it becomes stuck", () => {
   const now = new Date("2026-08-20T04:00:00.000Z");
-  const items = signupAttentionItems([
-    { ownerEmail: "owner@example.com", businessName: "Example Co", status: "pending_email_verification", updatedAt: "2026-08-20T02:30:00.000Z" },
-  ], now, 60);
-  assert.equal(items.length, 1);
-  assert.deepEqual(items[0].actions, ["resend_signup_verification", "reopen_signup"]);
+  for (const status of ["pending_email_verification", "pending_verification"]) {
+    const items = signupAttentionItems([
+      { ownerEmail: "owner@example.com", businessName: "Example Co", status, updatedAt: "2026-08-20T02:30:00.000Z" },
+    ], now, 60);
+    assert.equal(items.length, 1);
+    assert.deepEqual(items[0].actions, ["resend_signup_verification", "reopen_signup"]);
+    assert.equal(items[0].incident.reasonCode, "CONTACT_VERIFICATION_PENDING");
+    assert.match(items[0].incident.reason, /text or email/i);
+  }
 });
 
 test("an active trial still alerts when provisioning never becomes ready", () => {

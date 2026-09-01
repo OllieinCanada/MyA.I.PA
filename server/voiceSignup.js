@@ -108,6 +108,7 @@ function buildVoiceSignupPayload(parameters = {}, context = {}) {
       reviewRequired: false,
     },
     verification: {
+      identityVerified: false,
       emailVerified: false,
       smsVerified: false,
     },

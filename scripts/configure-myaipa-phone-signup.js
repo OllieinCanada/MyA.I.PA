@@ -21,6 +21,8 @@ const makeSeedScenarioId = String(env.MAKE_SCENARIO_ID || "3530157").trim();
 const webhookUrl = String(env.VAPI_WEBHOOK_URL || "https://api.myaipa.ca/api/webhooks/voice").trim();
 const webhookSecret = String(env.VAPI_WEBHOOK_SECRET || "").trim() || deriveVapiWebhookSecret(vapiApiKey);
 const toolName = "begin_myaipa_signup";
+const demoToolName = "send_myaipa_demo_followup";
+const endCallToolId = "1bf11961-f731-43b7-9f97-d765acdb51cd";
 const promptMarker = "## MY AI PA PHONE SIGNUP: begin_myaipa_signup";
 
 function listFrom(value, keys = []) {
@@ -195,6 +197,26 @@ function toolPayload() {
   };
 }
 
+function demoFollowupToolPayload() {
+  return {
+    type: "function",
+    function: {
+      name: demoToolName,
+      description: "Send the My AI PA demo follow-up only when the caller explicitly asks for a text. Never use this during or after signup.",
+      parameters: {
+        type: "object",
+        properties: {
+          rawPhoneNumber: { type: "string", description: "The explicit ten-digit mobile number supplied by the caller." },
+          name: { type: "string", description: "Optional caller name." },
+          callerRequest: { type: "string", description: "The caller's exact most recent words explicitly asking for a text." },
+        },
+        required: ["rawPhoneNumber", "callerRequest"],
+      },
+    },
+    server: { url: webhookUrl, secret: webhookSecret },
+  };
+}
+
 function withSignupPrompt(messages = []) {
   const override = `${promptMarker}
 - If a caller asks to sign up, set up an account, or start the trial, this path takes priority over the demo.
@@ -202,15 +224,22 @@ function withSignupPrompt(messages = []) {
 - Never collect card or banking information. Never claim the account, agent, phone number, or trial is active before the tool reports success and the owner verifies the link.
 - Collect one item at a time: owner full name; owner email; owner mobile number; business name; business phone; street address; city; province; postal code; trade; service area; and main services. Ask for website and hours only if the caller wants to provide them. Do not guess missing details.
 - Read every collected detail back in a short, organized summary. Ask exactly: "Is all of that correct, and do you want me to submit your My AI PA signup now?"
+- Use this read-back order exactly once: owner name; email; owner mobile; business name; business phone; street address, city, province, and postal code; business type; service area; main services. Never duplicate a field or merge labels.
+- Say email addresses in short chunks using "at" and "dot". Say phone numbers digit by digit. Say postal codes one character at a time with a pause after the first three; for example L3M 4E7 is "L, three, M — four, E, seven". Never interpret M as metres, meters, or millimetres.
+- If a short yes or no is not captured, pause briefly and ask once: "Sorry, I may have missed that — was that yes or no?"
 - Call begin_myaipa_signup only after an explicit yes. Pass the caller's actual confirming words in confirmationText and set callerConfirmed true. The tool-call turn must contain the tool call only.
 - If validation fails, ask only for the missing or invalid item, read the corrected summary back, and obtain a new explicit yes before retrying.
-- On success, when the tool confirms both channels, say: "We got your email. We're sending the verification link there and by text from the number you called. Once you verify it, we'll finish setup and send your assistant number." If the tool reports only one successful channel, accurately name only that channel. Do not mention Make.com, Vapi, Twilio, tools, or internal systems.
-- The existing draft_signup_sms and send_signup_sms tools are demo follow-up tools only. They never submit a signup and must not be described as completing one.`;
+- On success, repeat the tool's channel-accurate message without adding a delivery channel. Do not mention Make.com, Vapi, Twilio, tools, or internal systems.
+- Once signup intent is identified, remain in signup mode for the rest of the call. Never call a demo follow-up tool in signup mode.
+- send_myaipa_demo_followup is only for a non-signup demo caller who explicitly asks for a text. Pass the caller's exact request in callerRequest. A general yes is not permission to text.
+- After a successful signup response, ask once whether the caller needs anything else. If they say no, thanks, goodbye, or equivalent, say "Thanks for calling My A I P A. Take care." Let it finish, then call endCall. Do not ask an unrelated question.`;
   let sawSystem = false;
   const updated = messages.map((message) => {
     if (message?.role !== "system") return message;
     sawSystem = true;
-    const content = String(message.content || "");
+    const content = String(message.content || "")
+      .replace(/^.*never (?:output|use|say) digits.*$/gmi, "")
+      .replace(/^.*spell out every number.*$/gmi, "");
     const markerIndex = content.indexOf(promptMarker);
     return {
       ...message,
@@ -219,27 +248,6 @@ function withSignupPrompt(messages = []) {
   });
   if (!sawSystem) updated.unshift({ role: "system", content: override });
   return updated;
-}
-
-function repairedDemoTool(tool) {
-  const name = functionName(tool).toLowerCase();
-  if (!["draft_signup_sms", "send_signup_sms"].includes(name)) return null;
-  const next = {
-    type: tool.type,
-    function: {
-      ...tool.function,
-      description: String(tool.function?.description || "")
-        .replace(/Arscott Plumbing and Heating Inc\.?/gi, "My AI PA")
-        .replace(/Arcsoft message-taking/gi, "My AI PA demo follow-up"),
-    },
-    code: String(tool.code || "")
-      .replace(/Arscott Plumbing and Heating Inc\.?/gi, "My AI PA")
-      .replace(/arscott plumbing and heating inc/gi, "my ai pa"),
-    ...(Array.isArray(tool.environmentVariables)
-      ? { environmentVariables: tool.environmentVariables }
-      : {}),
-  };
-  return next;
 }
 
 async function main() {
@@ -272,6 +280,9 @@ async function main() {
     throw new Error(`Refusing to continue: ${matchingSignupTools.length} ${toolName} tools exist.`);
   }
   const signupTool = matchingSignupTools[0] || null;
+  const matchingDemoTools = tools.filter((tool) => functionName(tool).toLowerCase() === demoToolName);
+  if (matchingDemoTools.length > 1) throw new Error(`Refusing to continue: ${matchingDemoTools.length} ${demoToolName} tools exist.`);
+  const guardedDemoTool = matchingDemoTools[0] || null;
   const attachedTools = tools.filter((tool) => originalToolIds.includes(String(tool.id || "")));
   const legacyDemoTools = attachedTools.filter((tool) =>
     ["draft_signup_sms", "send_signup_sms"].includes(functionName(tool).toLowerCase())
@@ -289,7 +300,6 @@ async function main() {
   ]));
   const promptReady = systemPrompt(assistant).includes(promptMarker);
   const toolAttached = Boolean(signupTool?.id && originalToolIds.includes(String(signupTool.id)));
-  const demoTemplateNeedsRepair = legacyDemoTools.some((tool) => /arscott|arcsoft/i.test(JSON.stringify(tool)));
 
   console.log(JSON.stringify({
     mode: apply ? "apply" : "dry-run",
@@ -304,7 +314,6 @@ async function main() {
     signupToolExists: Boolean(signupTool),
     signupToolAttached: toolAttached,
     signupPromptConfigured: promptReady,
-    demoTemplateNeedsRepair,
     legacyDemoToolUsageCounts: Object.fromEntries(
       legacyDemoTools.map((tool) => [functionName(tool), toolUsage[String(tool.id)] || 0])
     ),
@@ -318,9 +327,10 @@ async function main() {
     ),
     plannedActions: [
       ...(!signupTool ? ["create guarded phone-signup tool"] : []),
+      ...(!guardedDemoTool ? ["create server-gated demo follow-up tool"] : []),
       ...(!toolAttached ? ["attach phone-signup tool to Riley"] : []),
       ...(!promptReady ? ["install confirmed phone-signup conversation flow"] : []),
-      ...(demoTemplateNeedsRepair ? ["replace the unrelated plumbing-company demo SMS template without changing shared assistants"] : []),
+      ...(legacyDemoTools.length ? ["detach obsolete draft/send demo SMS tools from Riley"] : []),
     ],
   }, null, 2));
 
@@ -347,29 +357,29 @@ async function main() {
     if (!signupTool) createdSignupTool = savedSignupTool;
     const signupToolId = String(savedSignupTool?.id || signupTool?.id || "").trim();
     if (!signupToolId) throw new Error("Vapi did not return the phone-signup tool ID.");
+    const savedDemoTool = guardedDemoTool
+      ? await requestVapi(`/tool/${encodeURIComponent(guardedDemoTool.id)}`, { method: "PATCH", body: demoFollowupToolPayload() })
+      : await requestVapi("/tool", { method: "POST", body: demoFollowupToolPayload() });
+    if (!guardedDemoTool) createdDemoTools.push(savedDemoTool);
+    const guardedDemoToolId = String(savedDemoTool?.id || guardedDemoTool?.id || "").trim();
+    if (!guardedDemoToolId) throw new Error("Vapi did not return the guarded demo follow-up tool ID.");
 
-    const replacements = new Map();
-    for (const tool of legacyDemoTools) {
-      const desired = repairedDemoTool(tool);
-      if (!desired || !/arscott|arcsoft/i.test(JSON.stringify(tool))) continue;
-      const usageCount = toolUsage[String(tool.id)] || 0;
-      if (usageCount <= 1) {
-        await requestVapi(`/tool/${encodeURIComponent(tool.id)}`, { method: "PATCH", body: desired });
-      } else {
-        const cloned = await requestVapi("/tool", { method: "POST", body: desired });
-        createdDemoTools.push(cloned);
-        replacements.set(String(tool.id), String(cloned.id));
-      }
-    }
-
+    const legacyDemoToolIds = new Set(legacyDemoTools.map((tool) => String(tool.id)));
     const nextToolIds = originalToolIds
-      .map((id) => replacements.get(id) || id)
+      .filter((id) => !legacyDemoToolIds.has(id))
       .filter(Boolean);
-    nextToolIds.push(signupToolId);
+    nextToolIds.push(signupToolId, guardedDemoToolId, endCallToolId);
     const { tools: _expandedTools, ...modelWithoutExpandedTools } = model;
     await requestVapi(`/assistant/${encodeURIComponent(assistant.id)}`, {
       method: "PATCH",
       body: {
+        transcriber: {
+          ...(assistant.transcriber || {}),
+          provider: assistant.transcriber?.provider || "deepgram",
+          model: assistant.transcriber?.model || "nova-3",
+          language: assistant.transcriber?.language || "en",
+          endpointing: Math.min(350, Number(assistant.transcriber?.endpointing) || 350),
+        },
         model: {
           ...modelWithoutExpandedTools,
           toolIds: [...new Set(nextToolIds)],
@@ -387,13 +397,13 @@ async function main() {
     );
     const checks = {
       signupToolAttached: verifiedToolIds.includes(signupToolId),
+      guardedDemoToolAttached: verifiedToolIds.includes(guardedDemoToolId),
+      endCallAttached: verifiedToolIds.includes(endCallToolId),
       signupPromptConfigured: systemPrompt(verifiedAssistant).includes(promptMarker),
       unrelatedToolsPreserved: originalToolIds
-        .filter((id) => !replacements.has(id))
+        .filter((id) => !legacyDemoToolIds.has(id))
         .every((id) => verifiedToolIds.includes(id)),
-      badDemoTemplateRemoved: !verifiedTools
-        .filter((tool) => ["draft_signup_sms", "send_signup_sms"].includes(functionName(tool).toLowerCase()))
-        .some((tool) => /arscott|arcsoft/i.test(JSON.stringify(tool))),
+      legacyDemoToolsDetached: !verifiedTools.some((tool) => ["draft_signup_sms", "send_signup_sms"].includes(functionName(tool).toLowerCase())),
       toolServerConfigured: Boolean(
         verifiedTools.find((tool) => String(tool.id) === signupToolId)?.server?.url === webhookUrl
       ),
@@ -412,7 +422,7 @@ async function main() {
   } catch (error) {
     await requestVapi(`/assistant/${encodeURIComponent(assistant.id)}`, {
       method: "PATCH",
-      body: { model },
+      body: { model, transcriber: assistant.transcriber },
     }).catch(() => {});
     if (createdSignupTool?.id) {
       await requestVapi(`/tool/${encodeURIComponent(createdSignupTool.id)}`, { method: "DELETE" }).catch(() => {});
