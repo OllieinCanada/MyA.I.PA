@@ -189,6 +189,17 @@ const {
   isVapiVoiceSignupTool,
 } = require("./voiceSignup");
 const {
+  buildVerificationState,
+  createVerificationChannelProof,
+  isContactVerified,
+  normalizeVerificationChannel,
+  verifyVerificationChannelProof,
+} = require("./signupVerificationChannel");
+const {
+  executeVapiDemoFollowup,
+  isVapiDemoFollowupTool,
+} = require("./vapiDemoFollowup");
+const {
   claimWebhookReplay,
   completeWebhookReplay,
   consumeRateLimit,
@@ -232,6 +243,13 @@ const adminLoginProcessRateLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Too many login attempts. Wait a few minutes and try again." },
+});
+const signupVerificationProcessRateLimiter = rateLimit({
+  windowMs: PUBLIC_ROUTE_WINDOW_MS,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many verification attempts. Wait a few minutes and try again." },
 });
 const adminOutreachProcessRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -1112,10 +1130,12 @@ function getStripeReturnUrls(req) {
   };
 }
 
-function getSignupVerificationUrl(req, token) {
+function getSignupVerificationUrl(req, token, channel = "email") {
   const configured = String(process.env.SIGNUP_VERIFICATION_BASE_URL || "").trim().replace(/\/+$/, "");
   const baseUrl = configured || getPublicBaseUrl(req);
-  return `${baseUrl}/api/integrations/verify-signup-email?token=${encodeURIComponent(token)}`;
+  const normalizedChannel = normalizeVerificationChannel(channel);
+  const channelProof = createVerificationChannelProof(token, normalizedChannel, getAdminSessionSecret());
+  return `${baseUrl}/api/integrations/verify-signup-email?token=${encodeURIComponent(token)}&channel=${encodeURIComponent(normalizedChannel)}&channelProof=${encodeURIComponent(channelProof)}`;
 }
 
 function getEmailTransportConfig() {
@@ -1344,7 +1364,7 @@ function retainPendingSignupRecoveryPayload({ store, tokenHash, record, payload,
 }
 
 async function sendSignupVerificationEmail({ req, ownerEmail, ownerName, businessName, token }) {
-  const verificationUrl = getSignupVerificationUrl(req, token);
+  const verificationUrl = getSignupVerificationUrl(req, token, "email");
   const emailConfig = getEmailTransportConfig();
   const subject = `Verify your email for ${businessName || "My AI PA"}`;
   const safeOwnerName = ownerName || "there";
@@ -1444,6 +1464,17 @@ function removePendingSignupVerification(token) {
   writePendingSignupStore(store);
 }
 
+function recordPendingSignupDeliveryChannels(token, channels) {
+  const tokenHash = hashSignupVerificationToken(token);
+  const store = prunePendingSignupStore(readPendingSignupStore());
+  if (!store[tokenHash]) return;
+  store[tokenHash] = {
+    ...store[tokenHash],
+    deliveryChannels: [...new Set((channels || []).map(normalizeVerificationChannel))],
+  };
+  writePendingSignupStore(store);
+}
+
 function getVoiceSignupReviewReasons(env = process.env) {
   return isEnabled(env.SIGNUP_REQUIRE_MANUAL_APPROVAL)
     ? ["manual_approval_enabled"]
@@ -1464,7 +1495,7 @@ async function beginVoiceSignupVerification({ req, parameters, call }) {
     reviewReasons,
     ipHash: hashKey(`voice:${payload.source?.callId || owner.phone || owner.email}`),
   });
-  const verificationUrl = getSignupVerificationUrl(req, token);
+  const smsVerificationUrl = getSignupVerificationUrl(req, token, "sms");
   let emailResult = null;
   let emailError = null;
   let smsResult = null;
@@ -1485,7 +1516,7 @@ async function beginVoiceSignupVerification({ req, parameters, call }) {
   try {
     smsResult = await sendSmsViaTwilio({
       to: owner.phone,
-      message: `My AI PA signup for ${business.name}: verify your contact details to continue setup. ${verificationUrl} This link expires in 24 hours.`,
+      message: `My AI PA signup for ${business.name}: verify your contact details to continue setup. ${smsVerificationUrl} This link expires in 24 hours.`,
       env: getVapiVoiceSignupSmsEnvironment(),
     });
   } catch (error) {
@@ -1494,6 +1525,10 @@ async function beginVoiceSignupVerification({ req, parameters, call }) {
 
   const emailSent = emailResult?.sent === true;
   const smsSent = Boolean(smsResult && smsResult.mocked !== true);
+  recordPendingSignupDeliveryChannels(token, [
+    ...(emailSent ? ["email"] : []),
+    ...(smsSent ? ["sms"] : []),
+  ]);
   const emailFailureCode = String(emailError?.providerCode || emailError?.code || "SMTP_DELIVERY_NOT_SENT")
     .toUpperCase().replace(/[^A-Z0-9_.:-]+/g, "_").slice(0, 80);
   const smsFailureCode = String(smsError?.providerCode || smsError?.code || "SMS_DELIVERY_NOT_SENT")
@@ -1556,8 +1591,13 @@ async function beginVoiceSignupVerification({ req, parameters, call }) {
   }
 
   const signupRecord = upsertSignupDashboardFromPayload(payload, {
-    status: "pending_email_verification",
+    status: "pending_verification",
     emailVerificationRequired: true,
+    verificationDeliveryPolicy: "sms_primary_email_optional",
+    verificationDeliveryChannels: [
+      ...(emailSent ? ["email"] : []),
+      ...(smsSent ? ["sms"] : []),
+    ],
     emailVerificationSentAt: emailSent ? new Date().toISOString() : undefined,
     smsVerificationSentAt: smsSent ? new Date().toISOString() : undefined,
     signupSource: "voice",
@@ -1576,10 +1616,10 @@ async function beginVoiceSignupVerification({ req, parameters, call }) {
     ...(smsSent ? ["text message"] : []),
   ];
   const deliveryMessage = emailSent && smsSent
-    ? "We got your email. The verification link is being sent there and by text from the number you called."
+    ? "The verification link was sent by email and text."
     : emailSent
-      ? "We got your email, and the verification link is being sent there now."
-      : "We got your email. The verification link was sent by text from the number you called.";
+      ? "The verification link was sent by email."
+      : "The verification link was sent by text.";
   return {
     ok: true,
     businessName: business.name,
@@ -4221,7 +4261,7 @@ async function searchCallTranscripts({ q = "", businessId, limit = 100 } = {}) {
 function getBillingReadinessForSignup(signup) {
   return [
     { key: "signup", label: "Signup submitted", done: Boolean(signup.signedUpAt || signup.createdAt) },
-    { key: "email", label: "Email verified", done: Boolean(signup.emailVerified || !signup.emailVerificationRequired) },
+    { key: "email", label: "Contact verified", done: Boolean(isContactVerified(signup) || !signup.emailVerificationRequired) },
     { key: "setup", label: "Agent setup started", done: ["setup_started", "checkout_started", "checkout_completed", "subscription_trialing", "subscription_active"].includes(String(signup.status || "")) },
     { key: "checkout", label: "Stripe checkout started", done: Boolean(signup.checkoutSessionId || signup.subscriptionId) },
     { key: "subscription", label: "Subscription/trial active", done: Boolean(signup.subscriptionId || signup.subscriptionStatus === "trialing" || signup.subscriptionStatus === "active") },
@@ -4256,7 +4296,7 @@ async function getTrialHealthDashboard() {
 
 const CUSTOMER_SETUP_STEPS = [
   { key: "signup", label: "Signup received", nextAction: "Confirm the signup record exists with owner and business details." },
-  { key: "email", label: "Email verified", nextAction: "Ask the owner to open the verification email, or manually review the signup if email verification is disabled." },
+  { key: "email", label: "Contact verified", nextAction: "Ask the owner to open the verification link sent by text or email, or manually review the signup if verification is disabled." },
   { key: "stripe", label: "Stripe trial active", nextAction: "Send the customer through checkout or check the Stripe webhook configuration." },
   { key: "make", label: "Make handoff completed", nextAction: "Check the Make scenario run history, then rerun the setup handoff if needed." },
   { key: "vapi", label: "Vapi assistant mapped", nextAction: "Create or confirm the Vapi assistant/phone mapping for this business." },
@@ -4318,7 +4358,7 @@ function deriveCustomerSetupStep(stepKey, { signup, business, calls, envStatus }
   }
 
   if (stepKey === "email") {
-    if (signup.emailVerified || !signup.emailVerificationRequired) return setupStep("done", "Email verification is complete or not required.");
+    if (isContactVerified(signup) || !signup.emailVerificationRequired) return setupStep("done", "Contact verification is complete or not required.");
     return setupStep("waiting", "Owner email verification is still pending.");
   }
 
@@ -5622,7 +5662,7 @@ function isRecoverableVoiceSignupStatus(status) {
 }
 
 function buildRecoveredVoiceSignupPayload(signup = {}, call = {}) {
-  if (!signup.vapiCallId || !signup.emailVerified || !isRecoverableVoiceSignupStatus(signup.status)) return null;
+  if (!signup.vapiCallId || !isContactVerified(signup) || !isRecoverableVoiceSignupStatus(signup.status)) return null;
   const parameters = getVoiceSignupToolArguments(call);
   if (!parameters) return null;
   const payload = buildVoiceSignupPayload(parameters, {
@@ -5642,15 +5682,18 @@ function buildRecoveredVoiceSignupPayload(signup = {}, call = {}) {
   }
   return compactObject({
     ...payload,
-    verifiedAt: signup.emailVerifiedAt || new Date().toISOString(),
+    verifiedAt: signup.identityVerifiedAt || signup.emailVerifiedAt || signup.smsVerifiedAt || new Date().toISOString(),
     verification: {
       ...(payload.verification || {}),
-      emailVerified: true,
+      identityVerified: true,
+      verificationChannel: signup.verificationChannel || (signup.smsVerified ? "sms" : "email"),
+      emailVerified: Boolean(signup.emailVerified),
       smsVerified: Boolean(signup.smsVerified),
     },
     security: {
       ...(payload.security || {}),
-      emailVerificationCompleted: true,
+      contactVerificationCompleted: true,
+      ...(signup.emailVerified ? { emailVerificationCompleted: true } : {}),
     },
   });
 }
@@ -5693,8 +5736,7 @@ function isExpiredSyntheticSandboxReviewArchiveEligible({ signup = {}, now = new
     !signup.checkoutSessionId &&
     !signup.twilioPhoneNumber &&
     !signup.vapiAssistantId &&
-    !signup.emailVerified &&
-    !signup.smsVerified &&
+    !isContactVerified(signup) &&
     ageMs >= Math.max(1, Number(minimumAgeDays) || 7) * 24 * 60 * 60 * 1000
   );
 }
@@ -5710,8 +5752,7 @@ function isStaleSignupArchiveEligible({ signup = {}, diagnostics = {}, now = new
     !signup.vapiAssistantId &&
     !signup.subscriptionId &&
     !signup.checkoutSessionId &&
-    !signup.emailVerified &&
-    !signup.smsVerified &&
+    !isContactVerified(signup) &&
     ageMs >= Math.max(1, Number(minimumAgeDays) || 7) * 24 * 60 * 60 * 1000
   );
 }
@@ -5856,7 +5897,7 @@ async function recoverSignupByOperationalTarget(targetId) {
     };
   }
 
-  const verifiedVoiceSignup = Boolean(signup.emailVerified || signup.emailVerifiedAt);
+  const verifiedVoiceSignup = isContactVerified(signup);
   const recoverableVoiceStatus = isRecoverableVoiceSignupStatus(signup.status);
   if (signup.vapiCallId && verifiedVoiceSignup && recoverableVoiceStatus) {
     const call = await fetchVapiCallDetail(signup.vapiCallId);
@@ -10373,6 +10414,31 @@ app.post(
             await failVapiToolExecution({ prisma, id: claim.execution.id, error }).catch(() => {});
             throw error;
           }
+        } else if (isVapiDemoFollowupTool(toolName)) {
+          const routedBusinessId = getVapiVoiceSignupExecutionBusinessId(vapiMessage.call || vapiMessage);
+          const claim = await claimVapiToolExecution({ prisma, toolCall, businessId: routedBusinessId, call: vapiMessage.call || vapiMessage });
+          if (!claim.claimed) {
+            results.push({
+              name: toolCall.name,
+              toolCallId: toolCall.id,
+              result: JSON.stringify({ ok: claim.execution.status === "COMPLETED", duplicate: true, status: claim.execution.status, ...(claim.execution.result || {}) }),
+            });
+            continue;
+          }
+          try {
+            const executionResult = await executeVapiDemoFollowup({
+              parameters,
+              callExternalId: claim.identity.callExternalId,
+              prisma,
+              sendSms: sendSmsViaTwilio,
+              env: getVapiVoiceSignupSmsEnvironment(),
+            });
+            await completeVapiToolExecution({ prisma, id: claim.execution.id, result: executionResult });
+            results.push({ name: toolCall.name, toolCallId: toolCall.id, result: JSON.stringify(executionResult) });
+          } catch (error) {
+            await failVapiToolExecution({ prisma, id: claim.execution.id, error }).catch(() => {});
+            throw error;
+          }
         } else if (isVapiVoiceSignupTool(toolName)) {
           const routedBusinessId = getVapiVoiceSignupExecutionBusinessId(vapiMessage.call || vapiMessage);
           const claim = await claimVapiToolExecution({
@@ -11400,8 +11466,12 @@ app.post(
 
 app.get(
   "/api/integrations/verify-signup-email",
+  signupVerificationProcessRateLimiter,
+  enforcePublicRouteRateLimit("signup-verification", 20),
   asyncRoute(async (req, res) => {
     const token = String(req.query.token || "").trim();
+    const verificationChannel = normalizeVerificationChannel(req.query.channel);
+    const channelProof = String(req.query.channelProof || "").trim();
     const tokenHash = hashSignupVerificationToken(token);
     const store = prunePendingSignupStore(readPendingSignupStore());
     const record = store[tokenHash];
@@ -11469,12 +11539,21 @@ app.get(
         </html>`);
     }
 
+    const hasChannelClaim = Boolean(req.query.channel || channelProof);
+    if (hasChannelClaim && !verifyVerificationChannelProof(token, verificationChannel, channelProof, getAdminSessionSecret())) {
+      return renderVerificationPage({
+        ok: false,
+        title: "Verification link is invalid or expired",
+        body: "Please use the complete verification link that My AI PA sent you.",
+      });
+    }
+
     if (!token || !record) {
       writePendingSignupStore(store);
       return renderVerificationPage({
         ok: false,
         title: "Verification link is invalid or expired",
-        body: "Please submit the signup form again to receive a fresh verification email.",
+        body: "Please submit the signup again to receive a fresh verification link.",
       });
     }
 
@@ -11484,7 +11563,7 @@ app.get(
       return renderVerificationPage({
         ok: false,
         title: "Verification link expired",
-        body: "Please submit the signup form again to receive a fresh verification email.",
+        body: "Please submit the signup again to receive a fresh verification link.",
       });
     }
 
@@ -11498,17 +11577,21 @@ app.get(
     store[tokenHash] = { ...record, claimedAt: Date.now() };
     writePendingSignupStore(store);
 
+    const verifiedAt = new Date().toISOString();
+    const verificationState = buildVerificationState(
+      verificationChannel,
+      (record.payload || {}).verification || {},
+      verifiedAt
+    );
     const payload = compactObject({
       ...(record.payload || {}),
-      verifiedAt: new Date().toISOString(),
-      verification: {
-        ...((record.payload || {}).verification || {}),
-        emailVerified: true,
-        smsVerified: Boolean((record.payload || {}).verification?.smsVerified),
-      },
+      verifiedAt,
+      verification: verificationState,
       security: {
         ...((record.payload || {}).security || {}),
-        emailVerificationCompleted: true,
+        contactVerificationCompleted: true,
+        verificationChannel,
+        ...(verificationChannel === "email" ? { emailVerificationCompleted: true } : {}),
       },
     });
 
@@ -11516,8 +11599,13 @@ app.get(
       retainPendingSignupRecoveryPayload({ store, tokenHash, record, payload });
       const reviewRecord = upsertSignupDashboardFromPayload(payload, {
         status: "review_required",
-        emailVerified: true,
-        emailVerifiedAt: new Date().toISOString(),
+        identityVerified: true,
+        identityVerifiedAt: verifiedAt,
+        verificationChannel,
+        emailVerified: verificationState.emailVerified,
+        emailVerifiedAt: verificationState.emailVerified ? verifiedAt : "",
+        smsVerified: verificationState.smsVerified,
+        smsVerifiedAt: verificationState.smsVerified ? verifiedAt : "",
         reviewRequired: true,
         reviewReasons: record.reviewReasons,
       });
@@ -11526,14 +11614,14 @@ app.get(
         detail: "Verified signup held before provisioning",
         record: reviewRecord,
       });
-      console.warn("[signup:security] email verified but signup held for review", {
+      console.warn("[signup:security] contact verified but signup held for review", {
         reviewReasons: record.reviewReasons,
         emailHash: hashKey(record.ownerEmail),
       });
       return renderVerificationPage({
         ok: true,
-        title: "Email verified",
-        body: "Your email is verified. Your signup needs a quick manual review before the agent setup continues.",
+        title: "Contact verified",
+        body: "Your contact details are verified. Your signup needs a quick manual review before the agent setup continues.",
       });
     }
 
@@ -11554,8 +11642,13 @@ app.get(
       }
       const failedRecord = upsertSignupDashboardFromPayload(payload, {
         status: "setup_error",
-        emailVerified: true,
-        emailVerifiedAt: new Date().toISOString(),
+        identityVerified: true,
+        identityVerifiedAt: verifiedAt,
+        verificationChannel,
+        emailVerified: verificationState.emailVerified,
+        emailVerifiedAt: verificationState.emailVerified ? verifiedAt : "",
+        smsVerified: verificationState.smsVerified,
+        smsVerifiedAt: verificationState.smsVerified ? verifiedAt : "",
         makeStatus: Number(error?.upstreamStatus) || 0,
         makeError: error?.code || "MAKE_SIGNUP_FAILED",
         ...makeFailureRecordFields(providerFailure),
@@ -11586,8 +11679,13 @@ app.get(
       }
       const incompleteRecord = upsertSignupDashboardFromPayload(payload, {
         status: "setup_error",
-        emailVerified: true,
-        emailVerifiedAt: new Date().toISOString(),
+        identityVerified: true,
+        identityVerifiedAt: verifiedAt,
+        verificationChannel,
+        emailVerified: verificationState.emailVerified,
+        emailVerifiedAt: verificationState.emailVerified ? verifiedAt : "",
+        smsVerified: verificationState.smsVerified,
+        smsVerifiedAt: verificationState.smsVerified ? verifiedAt : "",
         makeStatus: makeResult.status,
         makeError: makeAssessment.providerCode || makeAssessment.code || "MAKE_SIGNUP_INCOMPLETE",
         makeResponseKind: makeAssessment.kind,
@@ -11602,15 +11700,15 @@ app.get(
         record: incompleteRecord,
         makeAssessment,
       });
-      console.error("[signup:verification] Make webhook did not complete after email verification", {
+      console.error("[signup:verification] Make webhook did not complete after contact verification", {
         status: makeResult.status,
         providerCode: makeAssessment.providerCode || makeAssessment.code || "MAKE_SIGNUP_INCOMPLETE",
         emailHash: hashKey(record.ownerEmail),
       });
       return renderVerificationPage({
         ok: false,
-        title: "Email verified, setup needs attention",
-        body: "Your email was verified, but the automated setup handoff did not finish. Please contact My AI PA support.",
+        title: "Contact verified, setup needs attention",
+        body: "Your contact details were verified, but the automated setup handoff did not finish. Please contact My AI PA support.",
       });
     }
 
@@ -11630,8 +11728,13 @@ app.get(
     }
     const provisionedRecord = upsertSignupDashboardFromPayload(payload, {
       status: phoneProvisioning.status === "ready" ? "setup_ready" : `provisioning_${phoneProvisioning.status}`,
-      emailVerified: true,
-      emailVerifiedAt: new Date().toISOString(),
+      identityVerified: true,
+      identityVerifiedAt: verifiedAt,
+      verificationChannel,
+      emailVerified: verificationState.emailVerified,
+      emailVerifiedAt: verificationState.emailVerified ? verifiedAt : "",
+      smsVerified: verificationState.smsVerified,
+      smsVerifiedAt: verificationState.smsVerified ? verifiedAt : "",
       makeStatus: makeResult.status,
       makeResponseKind: makeAssessment.kind,
       ...makeFailureRecordFields({}),
@@ -11691,9 +11794,9 @@ app.get(
     }
     return renderVerificationPage({
       ok: phoneProvisioning.status === "ready",
-      title: phoneProvisioning.status === "ready" ? "Your setup is ready" : "Email verified, number setup needs attention",
+      title: phoneProvisioning.status === "ready" ? "Your setup is ready" : "Contact verified, number setup needs attention",
       body: phoneProvisioning.status === "ready"
-        ? `Your email is verified. Your assigned number is ready to test${completionDelivery?.status === "failed" ? ", but we could not deliver the separate follow-up message" : ""}.`
+        ? `Your contact details are verified. Your assigned number is ready to test${completionDelivery?.status === "failed" ? ", but we could not deliver the separate follow-up message" : ""}.`
         : phoneProvisioning.message,
       assignedPhone: twilioPhoneNumber,
     });

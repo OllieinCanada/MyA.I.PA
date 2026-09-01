@@ -3,6 +3,7 @@ const SIGNUP_ASSISTANT_TOOL_IDS = Object.freeze([
   "a2b67aee-f59e-4056-bff5-bf60dbc97ab0",
   "1bf11961-f731-43b7-9f97-d765acdb51cd",
 ]);
+const { classifySignupAssistantPlaybook } = require("./signupVoiceQuality");
 
 function templateError(message, field, code = "SIGNUP_ASSISTANT_CONFIG_INVALID") {
   const error = new Error(message);
@@ -71,6 +72,14 @@ function resolveTemplateValues(normalizedPayload, options) {
       300,
       { required: true }
     ),
+    services: cleanInline(
+      firstPresent(businessProfile.services, setupDetails.services, normalizedPayload.services),
+      "services",
+      1200
+    ),
+    specializations: Array.isArray(normalizedPayload.specializations)
+      ? normalizedPayload.specializations.map((value) => cleanInline(value, "specializations", 120)).filter(Boolean)
+      : [],
     assignedPhone: requiredPhone(
       firstPresent(options.assignedPhone, normalizedPayload.provisioning?.assignedPhone),
       "assignedPhone"
@@ -112,6 +121,50 @@ function resolveTemplateValues(normalizedPayload, options) {
   };
 }
 
+function buildSpeechAndClosingOverride(values) {
+  return `
+
+## FINAL OVERRIDE: accurate speech, recovery, and call ending
+- Say the brand as "My A I P A". Never say "My AIPA", "myAPA", or "MyA AI PA".
+- Read phone numbers one digit at a time. Read email addresses in short chunks, saying "at" and "dot" explicitly.
+- Read Canadian postal codes one character at a time with a pause after the first three characters. Example: L3M 4E7 is "L, three, M — four, E, seven". Never expand M as metres, meters, or millimetres.
+- Ask one complete question at a time. Never leave a sentence unfinished.
+- If a short yes/no answer is not captured, pause briefly and ask once: "Sorry, I may have missed that — was that yes or no?"
+- Never say "hold on", "one moment", "one sec", or narrate tool work.
+- Before any final submission, use this exact read-back order once: owner name; email; owner mobile; business name; business phone; street address, city, province, and postal code; business type; service area; main services. Do not duplicate a field or merge labels.
+- Ask exactly: "Is all of that correct, and do you want me to submit it now?" Submit only after an explicit yes.
+- After completing the caller's request, ask once: "Is there anything else I can help you with?" If the caller says no, thanks, goodbye, or equivalent, say: "Thanks for calling. Take care." Let the sentence finish, then call endCall. Do not introduce a new topic.
+- If the caller hangs up, do not run any further tools.`;
+}
+
+function buildGeneralBusinessPrompt(values) {
+  return `You are the phone assistant for ${values.businessName}.
+
+MYAIPA_AGENT_VERSION: 2026-08-31-industry-safe-v2
+
+## Business context
+- Business name: ${values.businessName}
+- Business type: ${values.businessType}
+- Service area: ${values.serviceArea}
+${values.services ? `- Services: ${values.services}` : ""}
+
+## Conversation
+- Be brief, natural, calm, and truthful. Ask one question at a time.
+- Start by asking how you can help. Do not assume the caller needs installation, repair, maintenance, a quote, or a contractor.
+- Answer only from the supplied business context. If information is unavailable, say the team can confirm it.
+- Collect only what is relevant: caller name, explicit callback number, reason for calling, useful details, and preferred callback time. Ask for a location only when the request requires one.
+- Never diagnose, invent prices, promise an appointment, or claim an integration or action succeeded unless a tool confirms it.
+- For a useful handoff, call send_customer_sms_dynamic and send_owner_sms_dynamic silently with the collected structured fields. The assigned sender is ${values.assignedPhone}; the owner notification number is ${values.ownerPhone}.
+- Never pass blank pricing fields and never describe this business as an electrical or home-service contractor.
+${buildSpeechAndClosingOverride(values)}`;
+}
+
+function buildIndustryAwarePrompt(values) {
+  const playbook = classifySignupAssistantPlaybook(values);
+  if (playbook === "general") return buildGeneralBusinessPrompt(values);
+  return `${buildSystemPrompt(values)}${buildSpeechAndClosingOverride(values)}`;
+}
+
 function buildSystemPrompt(values) {
   return `You are the voice agent for ${values.businessName}.
 
@@ -121,12 +174,12 @@ MYAIPA_AGENT_VERSION: 2026-07-12-deterministic-sms-v1
 - Business name: ${values.businessName}
 - Business type: ${values.businessType}
 - Service area: ${values.serviceArea}
-- Signup installation estimate answer: ${values.signupFreeEstimateAnswer}
-- Signup repair visit fee: ${values.signupRepairVisitFee} dollars
-- Signup repair hourly rate: ${values.signupRepairHourlyRate} dollars per hour
-- Legacy fallback installation estimate answer: ${values.legacyFreeEstimateAnswer}
-- Legacy fallback repair visit fee: ${values.legacyRepairVisitFee} dollars
-- Legacy fallback repair hourly rate: ${values.legacyRepairHourlyRate} dollars per hour
+${values.signupFreeEstimateAnswer ? `- Signup installation estimate answer: ${values.signupFreeEstimateAnswer}` : ""}
+${values.signupRepairVisitFee ? `- Signup repair visit fee: ${values.signupRepairVisitFee} dollars` : ""}
+${values.signupRepairHourlyRate ? `- Signup repair hourly rate: ${values.signupRepairHourlyRate} dollars per hour` : ""}
+${values.legacyFreeEstimateAnswer ? `- Legacy fallback installation estimate answer: ${values.legacyFreeEstimateAnswer}` : ""}
+${values.legacyRepairVisitFee ? `- Legacy fallback repair visit fee: ${values.legacyRepairVisitFee} dollars` : ""}
+${values.legacyRepairHourlyRate ? `- Legacy fallback repair hourly rate: ${values.legacyRepairHourlyRate} dollars per hour` : ""}
 
 ## Voice and flow
 - Be brief, natural, and calm.
@@ -288,7 +341,7 @@ function buildSignupAssistantConfig(normalizedPayload, options) {
       messages: [
         {
           role: "system",
-          content: buildSystemPrompt(values),
+          content: buildIndustryAwarePrompt(values),
         },
       ],
     },

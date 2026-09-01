@@ -656,6 +656,22 @@ test("public call network stats expose aggregate counts without customer details
   assert.equal(JSON.stringify(payload).includes("businessName"), false);
 });
 
+test("signup verification rejects forged channel claims and has an independent public rate limit", async () => {
+  const forgedPath = "/api/integrations/verify-signup-email?token=missing&channel=sms&channelProof=forged";
+  for (let index = 0; index < 20; index += 1) {
+    const response = await request(forgedPath);
+    assert.equal(response.status, 400);
+    assert.match(await response.text(), /invalid or expired/i);
+  }
+
+  const blocked = await request(forgedPath);
+  assert.equal(blocked.status, 429);
+  assert.ok(Number(blocked.headers.get("retry-after")) >= 1);
+
+  const unrelatedPublicRoute = await request("/api/public/signup-network-stats");
+  assert.equal(unrelatedPublicRoute.status, 200);
+});
+
 test("call network stats return live business outcomes with a stable timestamp", async () => {
   const stats = await __test.getPublicSignupNetworkStats(
     new Date("2026-08-20T12:00:00.000Z"),

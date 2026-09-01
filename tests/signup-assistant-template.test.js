@@ -92,7 +92,23 @@ test("accepts the canonical business, owner, and aiAssistant payload shape", () 
 
   assert.match(config.firstMessage, /Canonical Electric/);
   assert.match(config.model.messages[0].content, /Owner notification number: \+14165550144/);
+  assert.doesNotMatch(config.model.messages[0].content, /:\s+dollars/);
   assert.doesNotMatch(JSON.stringify(config), /\{\{[^}]*\}\}/);
+});
+
+test("uses a general intake playbook for non-contractor businesses", () => {
+  const config = buildSignupAssistantConfig({
+    business: { name: "Personal Chatbots", services: "Personal chatbot setup and support" },
+    owner: { phone: "+19057885488" },
+    aiAssistant: { businessType: "Personal chatbots", serviceArea: "Niagara and Hamilton" },
+  }, { assignedPhone: "+12892780752" });
+  const prompt = config.model.messages[0].content;
+
+  assert.match(prompt, /how you can help/i);
+  assert.match(prompt, /Personal chatbot setup and support/);
+  assert.doesNotMatch(prompt, /new installation, a repair, maintenance/i);
+  assert.doesNotMatch(prompt, /repair visit fee|dollars per hour/i);
+  assert.match(prompt, /call endCall/i);
 });
 
 test("rejects missing required runtime values", () => {

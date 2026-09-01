@@ -2,7 +2,7 @@ const crypto = require("crypto");
 
 const FAILED_SIGNUP = /(error|failed|rejected|blocked)/i;
 const BLOCKED_PROVISIONING = /^provisioning_(pending|unknown)$/i;
-const IN_PROGRESS_SIGNUP = /^(signup_received|checkout_completed|setup_started|pending_email_verification|provisioning_(pending|unknown)|subscription_(trialing|active))$/i;
+const IN_PROGRESS_SIGNUP = /^(signup_received|checkout_completed|setup_started|pending_(?:email_)?verification|provisioning_(pending|unknown)|subscription_(trialing|active))$/i;
 const PROBLEM_HANDOFF_STATUSES = ["RETRY_DUE", "ESCALATION_DUE", "FAILED"];
 const CUSTOMER_BILLING_STATUSES = new Set(["payment_failed", "past_due", "unpaid", "paused"]);
 const SAFE_BILLING_DIAGNOSTIC_STATUSES = new Set([
@@ -197,7 +197,7 @@ function signupBillingAttention(signup = {}, workflowStatus = "unknown") {
 }
 
 function signupLastCheckpoint(status) {
-  if (status === "pending_email_verification") return "Verification message sent";
+  if (/^pending_(?:email_)?verification$/i.test(status)) return "Verification message sent";
   if (/^provisioning_/i.test(status)) return "Provisioning handoff returned";
   if (/^subscription_/i.test(status)) return "Trial or subscription recorded";
   if (status === "setup_started") return "Automated setup started";
@@ -365,7 +365,7 @@ function signupAttentionItems(signups = [], now = new Date(), stuckMinutes = 60)
         diagnostics: signupDiagnostics(signup, status),
       }));
     } else if (IN_PROGRESS_SIGNUP.test(status) && age != null && age >= stuckMinutes) {
-      const waitingForVerification = status === "pending_email_verification";
+      const waitingForVerification = /^pending_(?:email_)?verification$/i.test(status);
       items.push(attentionItem({
         kind: "signup_stuck",
         severity: "warning",
@@ -373,7 +373,7 @@ function signupAttentionItems(signups = [], now = new Date(), stuckMinutes = 60)
         summary: `Setup has not advanced for at least ${stuckMinutes} minutes.`,
         businessName: signup.businessName,
         reason: waitingForVerification
-          ? "The signup is still waiting for the customer to verify their email."
+          ? "The signup is still waiting for the customer to open the verification link sent by text or email."
           : "The signup has remained at the same safe checkpoint longer than expected.",
         impact: waitingForVerification
           ? "Provisioning cannot begin until verification is complete."
@@ -382,13 +382,13 @@ function signupAttentionItems(signups = [], now = new Date(), stuckMinutes = 60)
         nextAction: waitingForVerification
           ? "Resend the verification message or reopen the signup if the original request expired."
           : "Inspect the safe diagnostics, then recover or reopen the signup without creating duplicate resources.",
-        reasonCode: waitingForVerification ? "EMAIL_VERIFICATION_PENDING" : "SIGNUP_CHECKPOINT_STALE",
+        reasonCode: waitingForVerification ? "CONTACT_VERIFICATION_PENDING" : "SIGNUP_CHECKPOINT_STALE",
         confidence: "high",
         detectedAt: updatedAt,
         ageMinutes: age,
         targetType: "signup",
         targetId,
-        actions: status === "pending_email_verification"
+        actions: waitingForVerification
           ? ["resend_signup_verification", "reopen_signup"]
           : ["recover_signup", "reopen_signup"],
         diagnostics: signupDiagnostics(signup, status),
