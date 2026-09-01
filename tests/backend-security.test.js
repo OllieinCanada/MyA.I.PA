@@ -1791,6 +1791,13 @@ test("customer dashboard login-email repairs are exact, idempotent, and prefer t
   });
   assert.equal(repeated.unchanged, true);
 
+  assert.throws(() => __test.planCustomerDashboardLoginEmailRepair(inputStore, {
+    subscriptionId: "sub_ready",
+    currentEmail,
+    newEmail: `${"a".repeat(255)}@example.com`,
+    phone: "905-964-7422",
+  }), /current email, corrected email, and signup phone are required/i);
+
   const duplicateRepair = __test.planCustomerDashboardLoginEmailRepair({
     ...inputStore,
     "sub:sub_other": {

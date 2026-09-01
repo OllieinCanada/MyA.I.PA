@@ -8051,7 +8051,12 @@ function sendAppointmentManagePage(res, { appointment, state = "manage", statusC
 
 function isValidEmailAddress(value) {
   const email = String(value || "").trim();
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  if (!email || email.length > 254 || [...email].some((character) => character.trim() === "")) return false;
+  const atIndex = email.indexOf("@");
+  if (atIndex <= 0 || atIndex !== email.lastIndexOf("@")) return false;
+  const domain = email.slice(atIndex + 1);
+  const dotIndex = domain.indexOf(".");
+  return dotIndex > 0 && dotIndex < domain.length - 1;
 }
 
 function isEnabled(value) {
