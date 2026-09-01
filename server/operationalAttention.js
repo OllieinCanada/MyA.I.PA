@@ -18,7 +18,7 @@ const SAFE_BILLING_DIAGNOSTIC_STATUSES = new Set([
   "failed",
 ]);
 const SAFE_PROVIDER_REASONS = Object.freeze({
-  "20003": "Twilio rejected the configured credentials.",
+  "20003": "Twilio denied account access. Check Billing and Account status first; this response can also result from invalid credentials.",
   "20404": "Twilio could not find the requested messaging resource.",
   "21211": "Twilio rejected the destination telephone number as invalid.",
   "21265": "Twilio rejected the destination because it is a short code rather than a full recipient phone number.",

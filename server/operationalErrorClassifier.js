@@ -23,7 +23,9 @@ const PROVIDER_DESTINATIONS = Object.freeze({
 });
 
 const TWILIO_CODE_CATEGORIES = Object.freeze({
-  "20003": "authentication",
+  "10001": "account_access",
+  "20003": "account_access",
+  "20005": "account_access",
   "20404": "configuration",
   "21211": "configuration",
   "21265": "configuration",
@@ -37,6 +39,7 @@ const TWILIO_CODE_CATEGORIES = Object.freeze({
   "30006": "delivery",
   "30007": "compliance",
   "30008": "delivery",
+  "30002": "account_access",
   "30034": "compliance",
   "63038": "rate_limit",
 });
@@ -143,12 +146,14 @@ function providerDetails(error = {}, context = {}) {
     error.status,
     error?.response?.status
   );
+  const signal = normalizeToken(context.providerSignal || error.providerSignal);
   const source = [
     context.provider,
     context.operation,
     context.area,
     context.workflow,
     code,
+    signal,
     error.name,
     error.message,
   ].filter(Boolean).join(" ");
@@ -156,7 +161,7 @@ function providerDetails(error = {}, context = {}) {
   const provider = PROVIDER_LABELS[explicitProvider]
     ? explicitProvider
     : providerFromSource(source, code);
-  return { code, provider, source, status };
+  return { code, provider, signal, source, status };
 }
 
 function providerName(provider) {
@@ -186,6 +191,7 @@ function result(details, category, overrides = {}) {
     providerLabel: label,
     providerStatus: details.status || 0,
     providerCode: details.code || "",
+    providerSignal: details.signal || "",
     signInDestination: providerDestination(provider),
     ...overrides,
   };
@@ -264,7 +270,7 @@ function classifyOperationalError(error = {}, context = {}) {
     && (
       status === 402
       || /^(?:INSUFFICIENT_FUNDS|INSUFFICIENT_BALANCE|INSUFFICIENT_QUOTA|BALANCE_INSUFFICIENT|BILLING_HARD_LIMIT_REACHED|BILLING_LIMIT_REACHED|CREDITS_EXHAUSTED|PAYMENT_REQUIRED)$/i.test(code)
-      || /INSUFFICIENT (?:FUNDS|BALANCE|CREDITS)|ACCOUNT BALANCE|ADD FUNDS|BILLING QUOTA|PAYMENT REQUIRED|OUT OF CREDITS/i.test(source)
+      || /TWILIO_BILLING_RESTRICTED|INSUFFICIENT (?:FUNDS|BALANCE|CREDITS)|ACCOUNT BALANCE|ADD FUNDS|BILLING QUOTA|PAYMENT REQUIRED|OUT OF CREDITS/i.test(source)
     )
   ) {
     return result(details, "platform_funding", {
@@ -275,6 +281,26 @@ function classifyOperationalError(error = {}, context = {}) {
       impact: "The provider action did not complete, so setup or service remains safely incomplete.",
       nextAction: `Add funds or credits in ${label} Billing, confirm the account is active, then retry the operation once.`,
       signInDestination: fundingDestination(provider),
+    });
+  }
+
+  if (
+    provider === "TWILIO"
+    && (
+      status === 401
+      || code === "20003"
+      || TWILIO_CODE_CATEGORIES[code] === "account_access"
+      || /TWILIO_ACCOUNT_(?:ACCESS_AMBIGUOUS|INACTIVE_OR_SUSPENDED)/i.test(source)
+    )
+  ) {
+    return result(details, "account_access", {
+      reasonCode: "TWILIO_ACCOUNT_ACCESS_REJECTED",
+      reason: "Twilio denied access to the account. This response can mean the account is suspended or closed, including for billing, and does not by itself prove that the credentials are wrong.",
+      retryable: false,
+      whatFailed: "Twilio account access was rejected",
+      impact: "Twilio calls, messages, number management, or reporting may remain unavailable until the account restriction is resolved.",
+      nextAction: "First open Twilio Billing and confirm the balance and payment state, then confirm Account status is active. If billing is healthy but the account remains suspended, follow Twilio Support's reactivation guidance. Only when billing is healthy and Account status is active should you verify or rotate the Twilio credential in Render, redeploy, and retry once.",
+      signInDestination: "Twilio Console → Billing overview and Account status; then Render → Environment only if Billing is healthy",
     });
   }
 

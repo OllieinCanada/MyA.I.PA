@@ -1,6 +1,6 @@
 const assert = require("node:assert/strict");
 const { test } = require("node:test");
-const { normalizeE164, sendSmsViaTwilio } = require("../server/twilioSms");
+const { getTwilioFailureSignal, normalizeE164, sendSmsViaTwilio } = require("../server/twilioSms");
 
 test("phone numbers are normalized to E.164", () => {
   assert.equal(normalizeE164("(249) 503-3301", "to"), "+12495033301");
@@ -143,6 +143,34 @@ test("provider failures return a safe gateway error", async () => {
       suppressionChecker: async () => false,
     }),
     (error) => error.statusCode === 502 && error.providerCode === 21211 && !error.message.includes("provider detail")
+  );
+});
+
+test("Twilio failure signals preserve billing and ambiguous account-access evidence without exposing provider text", async () => {
+  assert.equal(getTwilioFailureSignal({ code: 20003, message: "Authentication Error - invalid username" }), "TWILIO_ACCOUNT_ACCESS_AMBIGUOUS");
+  assert.equal(getTwilioFailureSignal({ code: 10001, message: "Account suspended because the balance is below zero" }), "TWILIO_BILLING_RESTRICTED");
+
+  await assert.rejects(
+    sendSmsViaTwilio({
+      to: "+12495033301",
+      message: "Test message",
+      env: {
+        NODE_ENV: "production",
+        TWILIO_ACCOUNT_SID: "AC_test_123",
+        TWILIO_AUTH_TOKEN: "test-token",
+        TWILIO_FROM_NUMBER: "+19055550199",
+      },
+      fetchImpl: async () => ({
+        ok: false,
+        status: 401,
+        json: async () => ({ code: 20003, message: "Authentication Error - invalid username" }),
+      }),
+      suppressionChecker: async () => false,
+    }),
+    (error) => error.statusCode === 502
+      && error.providerCode === 20003
+      && error.providerSignal === "TWILIO_ACCOUNT_ACCESS_AMBIGUOUS"
+      && !error.message.includes("invalid username")
   );
 });
 
