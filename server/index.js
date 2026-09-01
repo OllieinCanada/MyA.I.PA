@@ -244,6 +244,13 @@ const adminLoginProcessRateLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: "Too many login attempts. Wait a few minutes and try again." },
 });
+const signupVerificationProcessRateLimiter = rateLimit({
+  windowMs: PUBLIC_ROUTE_WINDOW_MS,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many verification attempts. Wait a few minutes and try again." },
+});
 const adminOutreachProcessRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: parsePositiveInt(process.env.ADMIN_OUTREACH_MAX_REQUESTS, 10),
@@ -11459,6 +11466,7 @@ app.post(
 
 app.get(
   "/api/integrations/verify-signup-email",
+  signupVerificationProcessRateLimiter,
   enforcePublicRouteRateLimit("signup-verification", 20),
   asyncRoute(async (req, res) => {
     const token = String(req.query.token || "").trim();
