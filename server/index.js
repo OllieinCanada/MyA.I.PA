@@ -186,7 +186,9 @@ const {
 const { resolveVapiWebhookSecret } = require("./vapiWebhookAuth");
 const {
   buildVoiceSignupPayload,
+  createVoiceSignupReview,
   isVapiVoiceSignupTool,
+  verifyVoiceSignupReview,
 } = require("./voiceSignup");
 const {
   buildVerificationState,
@@ -1482,8 +1484,27 @@ function getVoiceSignupReviewReasons(env = process.env) {
 }
 
 async function beginVoiceSignupVerification({ req, parameters, call }) {
+  const callId = call?.id || call?.callId || call?.externalId || "";
+  if (String(parameters?.action || "").trim().toLowerCase() !== "submit") {
+    const review = createVoiceSignupReview(parameters, {
+      callId,
+      secret: getVapiWebhookSecret(),
+    });
+    return {
+      ok: true,
+      readyForConfirmation: true,
+      readback: review.readback,
+      confirmationQuestion: "Is every detail correct, and do you want me to submit your My A I P A signup now?",
+      reviewToken: review.reviewToken,
+      instruction: "Read the readback and confirmationQuestion exactly. Do not paraphrase, add fields, or submit until the caller's next answer explicitly confirms both accuracy and submission.",
+    };
+  }
   const payload = buildVoiceSignupPayload(parameters, {
-    callId: call?.id || call?.callId || call?.externalId || "",
+    callId,
+  });
+  verifyVoiceSignupReview(parameters, payload, {
+    callId,
+    secret: getVapiWebhookSecret(),
   });
   const owner = payload.owner || {};
   const business = payload.business || {};

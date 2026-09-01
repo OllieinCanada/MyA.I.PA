@@ -1,3 +1,6 @@
+const crypto = require("crypto");
+const { buildSignupConfirmationSummary } = require("./signupVoiceQuality");
+
 const CANADIAN_PROVINCES = new Set([
   "AB", "BC", "MB", "NB", "NL", "NS", "NT", "NU", "ON", "PE", "QC", "SK", "YT",
 ]);
@@ -61,6 +64,98 @@ function normalizeConfirmation(parameters) {
     );
   }
   return confirmationText;
+}
+
+function getVoiceSignupReviewIdentity(payload = {}) {
+  return {
+    owner: {
+      name: payload.owner?.name || "",
+      email: payload.owner?.email || "",
+      phone: payload.owner?.phone || "",
+    },
+    business: {
+      name: payload.business?.name || "",
+      phone: payload.business?.phone || "",
+      streetAddress: payload.business?.streetAddress || "",
+      city: payload.business?.city || "",
+      province: payload.business?.province || "",
+      postalCode: payload.business?.postalCode || "",
+      services: payload.business?.services || "",
+    },
+    assistant: {
+      businessType: payload.aiAssistant?.businessType || "",
+      serviceArea: payload.aiAssistant?.serviceArea || "",
+    },
+  };
+}
+
+function encodeReviewToken(payload) {
+  return Buffer.from(JSON.stringify(payload)).toString("base64url");
+}
+
+function signReviewToken(encoded, secret) {
+  return crypto.createHmac("sha256", secret).update(encoded).digest("base64url");
+}
+
+function createVoiceSignupReview(parameters = {}, context = {}) {
+  const secret = clean(context.secret, 500);
+  if (!secret) throw voiceSignupError("Voice signup review signing is unavailable.", "reviewToken", "VOICE_SIGNUP_REVIEW_UNAVAILABLE");
+  const payload = buildVoiceSignupPayload({
+    ...parameters,
+    callerConfirmed: true,
+    confirmationText: "review prepared",
+  }, context);
+  const identity = getVoiceSignupReviewIdentity(payload);
+  const issuedAt = Number(context.now || Date.now());
+  const tokenPayload = {
+    v: 1,
+    callId: clean(context.callId, 180),
+    digest: crypto.createHash("sha256").update(JSON.stringify(identity)).digest("base64url"),
+    expiresAt: issuedAt + 10 * 60 * 1000,
+  };
+  const encoded = encodeReviewToken(tokenPayload);
+  const reviewToken = `${encoded}.${signReviewToken(encoded, secret)}`;
+  return {
+    reviewToken,
+    readback: buildSignupConfirmationSummary({
+      ownerName: payload.owner.name,
+      ownerEmail: payload.owner.email,
+      ownerPhone: payload.owner.phone,
+      businessName: payload.business.name,
+      businessPhone: payload.business.phone,
+      streetAddress: payload.business.streetAddress,
+      city: payload.business.city,
+      province: payload.business.province,
+      postalCode: payload.business.postalCode,
+      businessType: payload.aiAssistant.businessType,
+      serviceArea: payload.aiAssistant.serviceArea,
+      services: payload.business.services,
+    }),
+  };
+}
+
+function verifyVoiceSignupReview(parameters = {}, payload = {}, context = {}) {
+  const secret = clean(context.secret, 500);
+  const token = clean(parameters.reviewToken, 2000);
+  const [encoded, signature, ...extra] = token.split(".");
+  if (!secret || !encoded || !signature || extra.length) {
+    throw voiceSignupError("Prepare and read the verified summary before submitting.", "reviewToken", "VOICE_SIGNUP_REVIEW_REQUIRED");
+  }
+  const expected = signReviewToken(encoded, secret);
+  const signatureBuffer = Buffer.from(signature);
+  const expectedBuffer = Buffer.from(expected);
+  if (signatureBuffer.length !== expectedBuffer.length || !crypto.timingSafeEqual(signatureBuffer, expectedBuffer)) {
+    throw voiceSignupError("The signup review token is invalid. Prepare the summary again.", "reviewToken", "VOICE_SIGNUP_REVIEW_INVALID");
+  }
+  let tokenPayload = {};
+  try { tokenPayload = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8")); } catch {}
+  const now = Number(context.now || Date.now());
+  const callId = clean(context.callId, 180);
+  const digest = crypto.createHash("sha256").update(JSON.stringify(getVoiceSignupReviewIdentity(payload))).digest("base64url");
+  if (tokenPayload.v !== 1 || tokenPayload.callId !== callId || tokenPayload.digest !== digest || Number(tokenPayload.expiresAt || 0) < now) {
+    throw voiceSignupError("The reviewed details changed or expired. Prepare and read the summary again.", "reviewToken", "VOICE_SIGNUP_REVIEW_MISMATCH");
+  }
+  return true;
 }
 
 function isVapiVoiceSignupTool(name) {
@@ -151,7 +246,9 @@ function buildVoiceSignupPayload(parameters = {}, context = {}) {
 
 module.exports = {
   buildVoiceSignupPayload,
+  createVoiceSignupReview,
   isVapiVoiceSignupTool,
   normalizeNanpPhone,
   normalizePostalCode,
+  verifyVoiceSignupReview,
 };

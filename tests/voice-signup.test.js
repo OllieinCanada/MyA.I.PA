@@ -3,9 +3,11 @@ const assert = require("node:assert/strict");
 
 const {
   buildVoiceSignupPayload,
+  createVoiceSignupReview,
   isVapiVoiceSignupTool,
   normalizeNanpPhone,
   normalizePostalCode,
+  verifyVoiceSignupReview,
 } = require("../server/voiceSignup");
 
 const validSignup = {
@@ -58,6 +60,33 @@ test("refuses to begin a phone signup without explicit caller confirmation", () 
   assert.throws(
     () => buildVoiceSignupPayload({ ...validSignup, confirmationText: "" }),
     (error) => error.code === "VOICE_SIGNUP_CONFIRMATION_REQUIRED"
+  );
+});
+
+test("binds a deterministic spoken review to the call and exact normalized details", () => {
+  const context = { callId: "call-review-1", secret: "test-review-secret", now: 1_000_000 };
+  const review = createVoiceSignupReview({ ...validSignup, callerConfirmed: false, confirmationText: "" }, context);
+  assert.match(review.readback, /^Owner: Ron Cournoyer\./);
+  assert.match(review.readback, /Email: r, o, n, at example dot ca\./);
+  assert.match(review.readback, /Address: 23 Robb Street, Hamilton, ON, letter L, number eight, letter L/);
+
+  const payload = buildVoiceSignupPayload({ ...validSignup, reviewToken: review.reviewToken }, context);
+  assert.equal(verifyVoiceSignupReview({ ...validSignup, reviewToken: review.reviewToken }, payload, context), true);
+  assert.throws(
+    () => verifyVoiceSignupReview(
+      { ...validSignup, reviewToken: review.reviewToken },
+      buildVoiceSignupPayload({ ...validSignup, city: "Toronto" }, context),
+      context
+    ),
+    (error) => error.code === "VOICE_SIGNUP_REVIEW_MISMATCH"
+  );
+  assert.throws(
+    () => verifyVoiceSignupReview(
+      { ...validSignup, reviewToken: review.reviewToken },
+      payload,
+      { ...context, callId: "different-call" }
+    ),
+    (error) => error.code === "VOICE_SIGNUP_REVIEW_MISMATCH"
   );
 });
 
