@@ -2,8 +2,9 @@ export const tradePageOrder = [
   "electricians",
   "plumbers",
   "hvac",
-  "roofers",
   "general-contractors",
+  "roofers",
+  "painters",
 ];
 
 export const tradePages = {
@@ -225,6 +226,61 @@ export const tradePages = {
       "Does not determine the cause, insurance coverage, or repair price from a phone description.",
       "Uses only owner-approved materials, warranties, financing, and inspection policies.",
       "Does not promise emergency tarping, arrival, or insurance approval before confirmation.",
+    ],
+  },
+  painters: {
+    singular: "painter",
+    plural: "painting companies",
+    label: "Painting",
+    icon: "roller",
+    accent: "#7c3aed",
+    accentSoft: "#f2ebff",
+    accentDark: "#5521a6",
+    eyebrow: "AI telephone answering for painting companies",
+    headline: "Keep painting. Every quote request still gets answered.",
+    intro:
+      "My AI PA answers when you cannot, helps the caller explain the painting project, and texts you the scope, location, timing, and callback details.",
+    ownerValue:
+      "Know whether the caller wants interior, exterior, cabinet, touch-up, or commercial painting before returning the call.",
+    callerNeeds: [
+      ["Interior painting", "Rooms, ceilings, trim, doors, feature walls, whole-home work, and occupied-space projects."],
+      ["Exterior painting", "Siding, trim, doors, decks, fences, preparation needs, and weather-sensitive work."],
+      ["Cabinet painting", "Kitchen and bathroom cabinets, finish questions, colour changes, and estimate requests."],
+      ["Commercial and touch-ups", "Offices, rentals, turnovers, retail spaces, repairs, and smaller refresh projects."],
+    ],
+    intake: [
+      ["Name and callback number", "So the painting team knows who called and how to reach them."],
+      ["Project address and city", "For service-area and travel planning."],
+      ["Interior, exterior, or cabinets", "The main painting service the caller wants."],
+      ["Rooms, surfaces, and scope", "The areas involved and the work described by the caller."],
+      ["Desired timing", "The target start or completion window without promising availability."],
+      ["Preferred callback time", "So the return call fits the caller's schedule."],
+    ],
+    priorities: [
+      ["Routine", "Estimate requests, planned repaints, colour changes, cabinet work, and touch-ups."],
+      ["Priority callback", "Time-sensitive turnovers, commercial reopening dates, or weather-dependent exterior work."],
+      ["Safety redirect", "Fire, structural damage, hazardous exposure, or another immediate danger requiring emergency help first."],
+    ],
+    scenario: {
+      caller: "We need our kitchen cabinets painted and would like a quote this month.",
+      assistant:
+        "I can collect the project details for the painting team. What city is the property in, and what is the best number and time for a callback?",
+      owner:
+        "CABINET PAINTING LEAD — Kitchen cabinet repaint; quote requested this month. Caller: Taylor. Address: 16 Oak Ave, Burlington. Callback: 289-•••-7310. Best time: weekdays after 4 p.m.",
+    },
+    questions: [
+      "Do you paint interiors, exteriors, and cabinets?",
+      "Which areas do you service?",
+      "Do you provide painting estimates?",
+      "Do you handle preparation and repairs?",
+      "Do you work in occupied homes or commercial spaces?",
+      "When will someone follow up?",
+    ],
+    boundaries: [
+      "Does not quote a project or confirm the number of coats from a short phone description.",
+      "Does not promise colours, finishes, product availability, warranties, or a start date unless approved.",
+      "Uses only the painter's approved services, service area, estimate process, and minimum job size.",
+      "Does not claim a site visit or crew is scheduled until the business confirms it.",
     ],
   },
   "general-contractors": {

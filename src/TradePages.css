@@ -319,8 +319,11 @@
   border: 1px solid #d6e5f3;
   border-radius: 16px;
   overflow-x: auto;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
   background: rgba(255,255,255,0.88);
 }
+.trade-switcher::-webkit-scrollbar { display: none; }
 .trade-switcher a {
   min-width: max-content;
   display: flex;
@@ -580,5 +583,200 @@
 
 @media (prefers-reduced-motion: reduce) {
   .trade-site * { scroll-behavior: auto !important; transition: none !important; }
+}
+
+/* Flyer-first trade pages: the same component is the printable flyer and live page. */
+.trade-flyer-site { background: #edf7ff; }
+.trade-flyer-page {
+  padding: 22px 0 72px;
+  background:
+    linear-gradient(90deg, rgba(37,99,235,.045) 1px, transparent 1px),
+    linear-gradient(rgba(37,99,235,.04) 1px, transparent 1px),
+    radial-gradient(circle at 12% 18%, rgba(172,220,255,.72), transparent 30%),
+    linear-gradient(180deg, #f9fcff, #eaf6ff);
+  background-size: 72px 72px, 72px 72px, auto, auto;
+}
+.trade-flyer {
+  margin-top: 18px;
+  overflow: hidden;
+  border: 1px solid #c4d9ec;
+  border-radius: 34px;
+  background: white;
+  box-shadow: 0 38px 90px -52px rgba(8,35,65,.72);
+}
+.trade-flyer-brand-row {
+  display: flex;
+  min-height: 78px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 22px;
+  padding: 16px 30px;
+  border-bottom: 1px solid #d8e7f5;
+  background: rgba(255,255,255,.96);
+}
+.trade-flyer-audience {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 13px;
+  border-radius: 999px;
+  background: var(--trade-soft);
+  color: var(--trade-dark);
+  font-size: .78rem;
+  font-weight: 950;
+}
+.trade-flyer-audience svg { width: 19px; height: 19px; }
+.trade-flyer-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.04fr) minmax(390px, .96fr);
+  gap: 42px;
+  align-items: center;
+  padding: 44px;
+  background:
+    radial-gradient(circle at 100% 0%, var(--trade-soft), transparent 35%),
+    linear-gradient(145deg, #fff 0%, #f7fbff 100%);
+}
+.trade-flyer-copy h1 {
+  max-width: 690px;
+  margin: 13px 0 0;
+  color: #071a31;
+  font-size: clamp(2.85rem, 5.15vw, 4.75rem);
+  font-weight: 950;
+  line-height: .97;
+  letter-spacing: -.06em;
+}
+.trade-flyer-pain {
+  margin: 17px 0 0;
+  color: #c72a20;
+  font-size: clamp(1.25rem, 2.2vw, 1.7rem);
+  font-weight: 950;
+  line-height: 1.1;
+  letter-spacing: -.03em;
+}
+.trade-flyer-lead {
+  max-width: 650px;
+  margin: 14px 0 0;
+  color: #36536f;
+  font-size: 1.02rem;
+  font-weight: 650;
+  line-height: 1.62;
+}
+.trade-flyer-benefits { display: grid; gap: 9px; margin-top: 24px; }
+.trade-flyer-benefits p {
+  display: grid;
+  grid-template-columns: 36px 1fr;
+  gap: 1px 12px;
+  align-items: center;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid #d7e6f3;
+  border-radius: 13px;
+  background: rgba(255,255,255,.86);
+}
+.trade-flyer-benefits p > span {
+  grid-row: span 2;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--trade-accent);
+  color: white;
+  font-size: .76rem;
+  font-weight: 950;
+}
+.trade-flyer-benefits strong { color: #0c2947; font-size: .94rem; }
+.trade-flyer-benefits small { color: #5e758b; font-size: .76rem; font-weight: 700; }
+.trade-flyer-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 23px; }
+.trade-flyer-actions .trade-primary-button,
+.trade-flyer-actions .trade-secondary-button { min-height: 50px; padding: 0 19px; }
+
+.trade-flyer-proof { display: grid; gap: 13px; min-width: 0; }
+.trade-flyer-call-types {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0,1fr));
+  gap: 8px;
+  padding: 18px;
+  border: 1px solid #cee1f2;
+  border-radius: 20px;
+  background: rgba(255,255,255,.9);
+}
+.trade-flyer-call-types .trade-kicker { grid-column: 1 / -1; margin-bottom: 3px; }
+.trade-flyer-call-types > span {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  color: #294966;
+  font-size: .78rem;
+  font-weight: 850;
+  line-height: 1.25;
+}
+.trade-flyer-call-types b { color: #159b5d; }
+.trade-flyer .trade-hero-visual { padding: 17px; border-radius: 23px; box-shadow: 0 30px 62px -44px rgba(7,20,42,.9); }
+.trade-flyer .trade-call-bubble { padding: 12px 14px; }
+.trade-flyer .trade-call-bubble p { font-size: .82rem; line-height: 1.42; }
+.trade-flyer .trade-owner-text { margin-top: 13px; padding: 13px; }
+.trade-flyer .trade-owner-text p { margin-top: 9px; font-size: .75rem; line-height: 1.45; }
+
+.trade-flyer-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 28px;
+  padding: 20px 30px;
+  background: linear-gradient(135deg, #0d315d, #07182f);
+  color: white;
+}
+.trade-flyer-bottom p { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; margin: 0; font-size: .82rem; }
+.trade-flyer-bottom p span { color: #6fcfff; font-weight: 950; }
+.trade-flyer-bottom small { max-width: 390px; color: #bcd2e7; font-size: .68rem; font-weight: 750; line-height: 1.45; text-align: right; }
+
+@media (max-width: 940px) {
+  .trade-flyer-grid { grid-template-columns: 1fr; }
+  .trade-flyer-proof { max-width: 720px; }
+}
+
+@media (max-width: 760px) {
+  .trade-flyer-page { padding-top: 12px; }
+  .trade-flyer { border-radius: 23px; }
+  .trade-flyer-brand-row { min-height: 65px; padding: 13px 16px; }
+  .trade-flyer-brand-row .trade-brand small { display: none; }
+  .trade-flyer-audience { padding: 8px 10px; font-size: .66rem; }
+  .trade-flyer-audience svg { width: 16px; height: 16px; }
+  .trade-flyer-grid { gap: 28px; padding: 28px 18px; }
+  .trade-flyer-copy h1 { font-size: clamp(2.35rem, 12.2vw, 3.6rem); }
+  .trade-flyer-lead { font-size: .94rem; }
+  .trade-flyer-actions { display: grid; }
+  .trade-flyer-call-types { grid-template-columns: 1fr; padding: 15px; }
+  .trade-flyer-call-types .trade-kicker { grid-column: auto; }
+  .trade-flyer-bottom { align-items: flex-start; flex-direction: column; gap: 11px; padding: 18px; }
+  .trade-flyer-bottom small { text-align: left; }
+}
+
+@media print {
+  @page { size: Letter portrait; margin: .3in; }
+  body { background: white !important; }
+  .trade-flyer-site .trade-header,
+  .trade-flyer-site .trade-footer,
+  .trade-flyer-site .trade-switcher { display: none !important; }
+  .trade-flyer-page { padding: 0; background: white; }
+  .trade-flyer-page .trade-shell { width: 100%; max-width: none; }
+  .trade-flyer {
+    margin-top: 0;
+    min-height: 10.35in;
+    border-color: #adc7de;
+    border-radius: 24px;
+    box-shadow: none;
+    break-inside: avoid;
+  }
+  .trade-flyer-grid { grid-template-columns: minmax(0, 1.04fr) minmax(330px, .96fr); gap: 26px; padding: 34px; }
+  .trade-flyer-call-types { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .trade-flyer-actions { display: flex; }
+  .trade-flyer-bottom { align-items: center; flex-direction: row; }
+  .trade-flyer-copy h1 { font-size: 3.35rem; }
+  .trade-flyer-lead { font-size: .9rem; }
+  .trade-flyer-benefits { margin-top: 18px; }
+  .trade-flyer-actions { margin-top: 18px; }
 }
 

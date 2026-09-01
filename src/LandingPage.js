@@ -754,6 +754,14 @@ function HeroIcon({ type, className = "h-6 w-6" }) {
       </svg>
     );
   }
+  if (type === "brush" || type === "roller") {
+    return (
+      <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2.1" aria-hidden="true">
+        <path d="M4 5h11a2 2 0 0 1 2 2v2H4V5Z" strokeLinejoin="round" />
+        <path d="M17 7h2v5h-7v3M10 15h4v7h-4z" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
+  }
   if (type === "pin") {
     return (
       <svg viewBox="0 0 24 24" className={className} fill="currentColor" aria-hidden="true">
@@ -2906,6 +2914,7 @@ function MobileSideMenu({ open, onClose, onSignup }) {
     ["Heating & cooling", "#/trades/hvac", "fan"],
     ["Roofing", "#/trades/roofers", "home"],
     ["General contractors", "#/trades/general-contractors", "briefcase"],
+    ["Painting", "#/trades/painters", "brush"],
     ["Property managers & landlords", "#/demo/first-class-rentals", "property"],
   ];
 

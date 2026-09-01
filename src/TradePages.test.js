@@ -1,12 +1,14 @@
 import { sharedCallFlow, tradePageOrder, tradePages } from "./tradePageData";
+import { TRADE_OPTIONS } from "./features/signup/signupConfig";
 
 test("every public trade page has complete audience-specific content", () => {
   expect(tradePageOrder).toEqual([
     "electricians",
     "plumbers",
     "hvac",
-    "roofers",
     "general-contractors",
+    "roofers",
+    "painters",
   ]);
 
   tradePageOrder.forEach((slug) => {
@@ -20,6 +22,20 @@ test("every public trade page has complete audience-specific content", () => {
     expect(trade.boundaries).toHaveLength(4);
     expect(trade.scenario.owner).toMatch(/callback|address|requested|target/i);
   });
+});
+
+test("every trade in signup has one matching public flyer landing page", () => {
+  const signupToPageSlug = {
+    electrician: "electricians",
+    plumber: "plumbers",
+    hvac: "hvac",
+    contractor: "general-contractors",
+    roofer: "roofers",
+    painter: "painters",
+  };
+
+  expect(TRADE_OPTIONS.map((trade) => signupToPageSlug[trade.id])).toEqual(tradePageOrder);
+  expect(tradePageOrder.every((slug) => Boolean(tradePages[slug]))).toBe(true);
 });
 
 test("trade pages preserve conservative safety and truth boundaries", () => {
