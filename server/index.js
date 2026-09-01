@@ -258,6 +258,13 @@ const adminOutreachProcessRateLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: "Too many outreach requests. Wait a few minutes and try again." },
 });
+const adminSignupRepairProcessRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: parsePositiveInt(process.env.ADMIN_SIGNUP_REPAIR_MAX_REQUESTS, 10),
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many signup repair requests. Wait a few minutes and try again." },
+});
 const clientErrorProcessRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: parsePositiveInt(process.env.CLIENT_ERROR_MAX_REQUESTS, 12),
@@ -13330,6 +13337,7 @@ app.get(
 
 app.post(
   "/api/admin/signups/repair-dashboard-login",
+  adminSignupRepairProcessRateLimiter,
   requireAdmin,
   asyncRoute(async (req, res) => {
     const body = req.body || {};
