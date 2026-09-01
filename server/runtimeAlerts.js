@@ -77,6 +77,7 @@ function buildRuntimeIncident(error, context = {}) {
       ...(classification.providerLabel && classification.provider ? { Provider: classification.providerLabel } : {}),
       ...(classification.providerStatus ? { "Provider status": String(classification.providerStatus) } : {}),
       ...(classification.providerCode ? { "Provider code": classification.providerCode } : {}),
+      ...(classification.providerSignal ? { "Provider signal": classification.providerSignal } : {}),
       Retryable: classification.retryable ? "Yes, after the stated safety checks" : "Not until the stated cause is resolved",
       ...(method ? { Method: method } : {}),
       ...(route ? { Route: route } : {}),

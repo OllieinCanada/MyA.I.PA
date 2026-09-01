@@ -42,6 +42,28 @@ function getTwilioRestCredentials(config) {
   };
 }
 
+function getTwilioFailureSignal(payload = {}) {
+  const code = String(payload?.code || "").trim();
+  const message = String(payload?.message || "").trim().toUpperCase();
+
+  if (/\b(?:BALANCE|BILLING|UNPAID|PAST[ _-]?DUE|PAYMENT|ADD FUNDS?)\b/.test(message)) {
+    return "TWILIO_BILLING_RESTRICTED";
+  }
+  if (
+    ["10001", "20005", "30002"].includes(code)
+    || /\b(?:ACCOUNT (?:IS )?NOT ACTIVE|ACCOUNT INACTIVE|ACCOUNT (?:IS )?SUSPENDED|SUSPENDED ACCOUNT|ACCOUNT (?:IS )?CLOSED)\b/.test(message)
+  ) {
+    return "TWILIO_ACCOUNT_INACTIVE_OR_SUSPENDED";
+  }
+  // Twilio documents 20003 as both an authentication-shaped failure and a
+  // possible suspended/closed account. Do not collapse it to "bad token."
+  if (code === "20003") return "TWILIO_ACCOUNT_ACCESS_AMBIGUOUS";
+  if (/\b(?:INVALID USERNAME|INVALID CREDENTIALS?|AUTHENTICATION (?:ERROR|FAILED)|PERMISSION DENIED)\b/.test(message)) {
+    return "TWILIO_AUTHENTICATION_REJECTED";
+  }
+  return "";
+}
+
 async function sendSmsViaTwilio({
   to,
   message,
@@ -108,6 +130,7 @@ async function sendSmsViaTwilio({
     const error = createHttpError("Twilio could not deliver the SMS request.", 502);
     error.providerStatus = response.status;
     error.providerCode = payload?.code || null;
+    error.providerSignal = getTwilioFailureSignal(payload);
     throw error;
   }
 
@@ -124,6 +147,7 @@ async function sendSmsViaTwilio({
 
 module.exports = {
   getTwilioSmsConfig,
+  getTwilioFailureSignal,
   getTwilioRestCredentials,
   normalizeE164,
   sendSmsViaTwilio,

@@ -14,7 +14,7 @@ const {
 
 test("known incident reason codes produce plain-language explanations", () => {
   assert.match(humanizeIncidentReason("MAKE_SIGNUP_TIMEOUT"), /signup automation did not answer/i);
-  assert.match(humanizeIncidentReason("20003"), /Twilio rejected the configured credentials/i);
+  assert.match(humanizeIncidentReason("20003"), /Check Billing and Account status first/i);
   assert.match(humanizeIncidentReason("PHONE_NUMBER_PENDING"), /Canadian forwarding number has not been verified/i);
   assert.match(humanizeIncidentReason("VAPI_BUSINESS_ROUTE_CONFLICT"), /blocked the cross-business handoff/i);
 });

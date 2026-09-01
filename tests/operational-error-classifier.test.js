@@ -15,6 +15,58 @@ test("explicit Twilio balance errors become platform-funding instructions", () =
   assert.equal(classified.retryable, false);
 });
 
+test("Twilio 401 and 20003 incidents require a billing-first account check before credential changes", () => {
+  const classified = classifyOperationalError(
+    Object.assign(new Error("Twilio could not deliver the SMS request."), {
+      providerStatus: 401,
+      providerCode: 20003,
+      providerSignal: "TWILIO_ACCOUNT_ACCESS_AMBIGUOUS",
+    }),
+    { provider: "twilio", operation: "send dashboard login code" }
+  );
+  assert.equal(classified.category, "account_access");
+  assert.equal(classified.reasonCode, "TWILIO_ACCOUNT_ACCESS_REJECTED");
+  assert.match(classified.nextAction, /First open Twilio Billing/i);
+  assert.match(classified.nextAction, /Only when billing is healthy.*Account status is active.*credential/i);
+  assert.match(classified.reason, /does not by itself prove.*credentials/i);
+  assert.doesNotMatch(classified.reason, /rejected.*configured credential/i);
+
+  const incident = buildRuntimeIncident(
+    Object.assign(new Error("Twilio could not deliver the SMS request."), {
+      providerStatus: 401,
+      providerCode: 20003,
+      providerSignal: "TWILIO_ACCOUNT_ACCESS_AMBIGUOUS",
+    }),
+    { provider: "twilio", operation: "send dashboard login code" }
+  );
+  assert.equal(incident.reasonCode, "TWILIO_ACCOUNT_ACCESS_REJECTED");
+  assert.equal(incident.snapshot["Provider signal"], "TWILIO_ACCOUNT_ACCESS_AMBIGUOUS");
+  assert.match(incident.signInDestination, /Billing overview.*Account status/i);
+});
+
+test("an explicit Twilio billing signal wins before ambiguous 401 authentication handling", () => {
+  const classified = classifyOperationalError(
+    Object.assign(new Error("Twilio could not deliver the SMS request."), {
+      providerStatus: 401,
+      providerCode: 20003,
+      providerSignal: "TWILIO_BILLING_RESTRICTED",
+    }),
+    { provider: "twilio", operation: "send dashboard login code" }
+  );
+  assert.equal(classified.category, "platform_funding");
+  assert.equal(classified.reasonCode, "PROVIDER_ACCOUNT_FUNDING_REQUIRED");
+  assert.match(classified.nextAction, /Add funds.*Twilio Billing/i);
+});
+
+test("non-Twilio 401 failures remain credential incidents", () => {
+  const classified = classifyOperationalError(
+    Object.assign(new Error("Unauthorized"), { providerStatus: 401 }),
+    { provider: "vapi", operation: "create assistant" }
+  );
+  assert.equal(classified.category, "authentication");
+  assert.equal(classified.reasonCode, "PROVIDER_AUTHENTICATION_FAILED");
+});
+
 test("Stripe card declines are customer-payment failures, not platform funding", () => {
   const classified = classifyOperationalError(
     Object.assign(new Error("card declined"), { code: "card_declined", statusCode: 402 }),
