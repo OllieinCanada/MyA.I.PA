@@ -11459,6 +11459,7 @@ app.post(
 
 app.get(
   "/api/integrations/verify-signup-email",
+  enforcePublicRouteRateLimit("signup-verification", 20),
   asyncRoute(async (req, res) => {
     const token = String(req.query.token || "").trim();
     const verificationChannel = normalizeVerificationChannel(req.query.channel);
