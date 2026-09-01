@@ -18,6 +18,7 @@ function TradeIcon({ name, className = "" }) {
   if (name === "drop") return <svg {...common}><path d="M12 2.7S5.8 9.1 5.8 14.2a6.2 6.2 0 0 0 12.4 0C18.2 9.1 12 2.7 12 2.7Z" /><path d="M9 15.2a3.2 3.2 0 0 0 3.2 2.7" /></svg>;
   if (name === "air") return <svg {...common}><path d="M3 8h10.5a2.5 2.5 0 1 0-2.2-3.7" /><path d="M3 12h15a2 2 0 1 1-1.7 3" /><path d="M3 16h7.5a2.5 2.5 0 1 1-2.2 3.7" /></svg>;
   if (name === "roof") return <svg {...common}><path d="m3 11 9-7 9 7" /><path d="M5.5 10v10h13V10" /><path d="M9 20v-6h6v6" /></svg>;
+  if (name === "roller") return <svg {...common}><path d="M4 5h11a2 2 0 0 1 2 2v2H4V5Z" /><path d="M17 7h2v5h-7v3" /><path d="M10 15h4v7h-4z" /></svg>;
   return <svg {...common}><path d="m14.2 5.1 4.7 4.7" /><path d="m12.8 6.5 3.3-3.3 4.7 4.7-3.3 3.3" /><path d="m14.7 8.6-9.8 9.8a1.8 1.8 0 0 0 2.6 2.6l9.8-9.8" /></svg>;
 }
 
@@ -289,6 +290,53 @@ function TradeHub() {
   );
 }
 
+function TradeFlyer({ trade }) {
+  const callTypes = trade.callerNeeds.slice(0, 4);
+
+  return (
+    <article className="trade-flyer" aria-label={`${trade.label} My AI PA flyer`}>
+      <div className="trade-flyer-brand-row">
+        <Brand />
+        <span className="trade-flyer-audience"><TradeIcon name={trade.icon} /> Built for {trade.plural}</span>
+      </div>
+
+      <div className="trade-flyer-grid">
+        <div className="trade-flyer-copy">
+          <p className="trade-kicker">{trade.eyebrow}</p>
+          <h1>{trade.headline}</h1>
+          <p className="trade-flyer-pain">Missed calls = missed jobs.</p>
+          <p className="trade-flyer-lead">{trade.intro}</p>
+
+          <div className="trade-flyer-benefits" aria-label="What My AI PA does">
+            <p><span>1</span><strong>Answers after three rings</strong><small>when you cannot get to the phone</small></p>
+            <p><span>2</span><strong>Collects the job details</strong><small>with questions built for {trade.plural}</small></p>
+            <p><span>3</span><strong>Texts you a clear lead</strong><small>so you can call back prepared</small></p>
+          </div>
+
+          <div className="trade-flyer-actions">
+            <a className="trade-primary-button" href="#/signup">Start Your Free Trial</a>
+            <a className="trade-secondary-button" href="tel:+12495033301">Call (249) 503-3301</a>
+          </div>
+          <div className="trade-trial-proof" aria-label="Trial details"><span>✓ 14-Day Free Trial</span><span>✓ No Credit Card</span><span>✓ Cancel Anytime</span></div>
+        </div>
+
+        <div className="trade-flyer-proof">
+          <div className="trade-flyer-call-types">
+            <p className="trade-kicker">Calls it can handle</p>
+            {callTypes.map(([title]) => <span key={title}><b>✓</b>{title}</span>)}
+          </div>
+          <HeroVisual trade={trade} />
+        </div>
+      </div>
+
+      <div className="trade-flyer-bottom">
+        <p><strong>Caller talks</strong><span>→</span><strong>My AI PA collects</strong><span>→</span><strong>You get the text</strong><span>→</span><strong>You call back</strong></p>
+        <small>Helpful intake. Owner-approved answers. No unconfirmed dispatch promises.</small>
+      </div>
+    </article>
+  );
+}
+
 function TradeDetail({ slug, trade }) {
   useEffect(() => {
     document.title = `AI Answering for ${trade.plural} | My AI PA`;
@@ -302,143 +350,12 @@ function TradeDetail({ slug, trade }) {
   };
 
   return (
-    <main className="trade-site" style={pageStyle}>
+    <main className="trade-site trade-flyer-site" style={pageStyle}>
       <TradeHeader />
-      <section className="trade-detail-hero">
+      <section className="trade-flyer-page">
         <div className="trade-shell">
           <TradeSwitcher active={slug} />
-          <div className="trade-detail-hero-grid">
-            <div className="trade-detail-copy">
-              <p className="trade-kicker">{trade.eyebrow}</p>
-              <h1>{trade.headline}</h1>
-              <p className="trade-hero-pain">Missed calls = missed jobs.</p>
-              <p className="trade-detail-lead">{trade.intro}</p>
-              <div className="trade-hero-actions">
-                <a className="trade-primary-button" href="#/signup">Start Your Free Trial</a>
-                <a className="trade-secondary-button" href="tel:+12495033301">Hear the Live Demo</a>
-              </div>
-              <ul className="trade-hero-trust">
-                <li><span>✓</span> Keep your current business number</li>
-                <li><span>✓</span> Owner-approved answers only</li>
-                <li><span>✓</span> No dispatch promises without confirmation</li>
-              </ul>
-              <div className="trade-trial-proof" aria-label="Trial details"><span>✓ 14-Day Free Trial</span><span>✓ No Credit Card</span><span>✓ Cancel Anytime</span></div>
-            </div>
-            <HeroVisual trade={trade} />
-          </div>
-        </div>
-      </section>
-
-      <section className="trade-flow-section trade-flow-section-first">
-        <div className="trade-shell">
-          <SectionHeading
-            eyebrow="What happens when you cannot answer"
-            title="The caller talks. My AI PA collects. You get the text."
-            body="No phone menu and no vague voicemail. The assistant speaks naturally, gathers the useful details, and prepares both sides for the callback."
-          />
-          <CallFlow />
-        </div>
-      </section>
-
-      <section className="trade-use-cases">
-        <div className="trade-shell">
-          <SectionHeading
-            eyebrow={`Calls your ${trade.singular} business receives`}
-            title="It knows the difference between the jobs you handle."
-            body={trade.ownerValue}
-          />
-          <div className="trade-use-grid">
-            {trade.callerNeeds.map(([title, body], index) => (
-              <article className="trade-use-card" key={title}>
-                <span>0{index + 1}</span>
-                <h3>{title}</h3>
-                <p>{body}</p>
-              </article>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="trade-intake-section">
-        <div className="trade-shell trade-intake-grid">
-          <div>
-            <SectionHeading
-              eyebrow="Useful intake, not an interrogation"
-              title="The details you need—before you call back."
-              body="The assistant asks one clear question at a time, then organizes the answers into a useful job summary."
-            />
-            <div className="trade-intake-list">
-              {trade.intake.map(([title, body], index) => (
-                <article key={title}>
-                  <span>{index + 1}</span>
-                  <div><h3>{title}</h3><p>{body}</p></div>
-                </article>
-              ))}
-            </div>
-          </div>
-          <div className="trade-intake-aside">
-            <p className="trade-kicker">What the owner sees</p>
-            <h3>A useful text—not a mystery voicemail.</h3>
-            <p>{trade.scenario.owner}</p>
-            <div className="trade-summary-tags">
-              <span>Request type</span><span>Location</span><span>Urgency</span>
-              <span>Contact</span><span>Timing</span><span>Safety flags</span>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="trade-priority-section">
-        <div className="trade-shell">
-          <SectionHeading
-            eyebrow="A safer call path"
-            title="Routine calls and real danger are not treated the same."
-            body="My AI PA flags urgent language, stays inside your approved rules, and sends genuine emergencies to the appropriate emergency service."
-          />
-          <div className="trade-priority-grid">
-            {trade.priorities.map(([title, body], index) => (
-              <article className={`trade-priority-card is-${index}`} key={title}>
-                <span>{index === 0 ? "NORMAL" : index === 1 ? "CALL BACK" : "SAFETY FIRST"}</span>
-                <h3>{title}</h3>
-                <p>{body}</p>
-              </article>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="trade-knowledge-section">
-        <div className="trade-shell trade-knowledge-grid">
-          <div>
-            <SectionHeading
-              eyebrow="Business knowledge"
-              title="It answers the common questions you approve."
-            />
-            <div className="trade-question-list">
-              {trade.questions.map((question) => <p key={question}><span>?</span>{question}</p>)}
-            </div>
-          </div>
-          <div className="trade-boundary-card">
-            <p className="trade-kicker">Clear boundaries</p>
-            <h2>Helpful without pretending to be you.</h2>
-            <ul>
-              {trade.boundaries.map((boundary) => <li key={boundary}><span>✓</span>{boundary}</li>)}
-            </ul>
-          </div>
-        </div>
-      </section>
-
-      <section className="trade-final-cta">
-        <div className="trade-shell trade-final-card">
-          <div>
-            <p className="trade-kicker">Make the next missed call useful</p>
-            <h2>Stop losing {trade.label.toLowerCase()} jobs when you cannot reach the phone.</h2>
-            <p>We set up the greeting, service area, hours, FAQs, job questions, callback wording, and safety rules around your actual business.</p>
-          </div>
-          <div className="trade-final-actions">
-            <a className="trade-primary-button" href="#/signup">Start Your Free Trial</a>
-            <a className="trade-secondary-button" href="tel:+12495033301">Call the Live Demo</a>
-          </div>
+          <TradeFlyer trade={trade} />
         </div>
       </section>
       <TradeFooter />
