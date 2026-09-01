@@ -1743,6 +1743,97 @@ test("customer dashboard live refresh requires an untampered signed session", as
   assert.match((await unauthenticated.json()).error, /session has expired/i);
 });
 
+test("customer dashboard treats Canadian local and E.164 phone formats as the same identity", () => {
+  const email = "owner@example.com";
+  const localPhone = "905-964-7422";
+  const internationalPhone = "+1 (905) 964-7422";
+
+  assert.equal(__test.normalizeCustomerDashboardPhone(localPhone), "+19059647422");
+  assert.equal(__test.normalizeCustomerDashboardPhone(internationalPhone), "+19059647422");
+  assert.equal(__test.customerDashboardPhonesMatch(localPhone, internationalPhone), true);
+  assert.equal(
+    __test.getCustomerDashboardLookupHash(email, localPhone),
+    __test.getCustomerDashboardLookupHash(email.toUpperCase(), internationalPhone)
+  );
+  assert.equal(__test.customerDashboardPhonesMatch(localPhone, "+1 905-964-7423"), false);
+});
+
+test("customer dashboard login-email repairs are exact, idempotent, and prefer the ready account", () => {
+  const currentEmail = "firstclassrental99@gmail.com";
+  const correctedEmail = "firstclassrentals99@gmail.com";
+  const inputStore = {
+    "sub:sub_ready": {
+      subscriptionId: "sub_ready",
+      ownerEmail: currentEmail,
+      ownerPhone: "+1 (905) 964-7422",
+      status: "setup_ready",
+      twilioPhoneNumber: "+12895550123",
+    },
+  };
+
+  const repaired = __test.planCustomerDashboardLoginEmailRepair(inputStore, {
+    subscriptionId: "sub_ready",
+    currentEmail,
+    newEmail: correctedEmail,
+    phone: "905-964-7422",
+    now: "2026-09-01T12:00:00.000Z",
+  });
+  assert.equal(repaired.unchanged, false);
+  assert.equal(inputStore["sub:sub_ready"].dashboardLoginEmail, undefined);
+  assert.equal(repaired.record.dashboardLoginEmail, correctedEmail);
+  assert.deepEqual(__test.getCustomerDashboardEmails(repaired.record), [correctedEmail, currentEmail]);
+
+  const repeated = __test.planCustomerDashboardLoginEmailRepair(repaired.store, {
+    subscriptionId: "sub_ready",
+    currentEmail,
+    newEmail: correctedEmail,
+    phone: "+1 905 964 7422",
+  });
+  assert.equal(repeated.unchanged, true);
+
+  assert.throws(() => __test.planCustomerDashboardLoginEmailRepair(inputStore, {
+    subscriptionId: "sub_ready",
+    currentEmail,
+    newEmail: `${"a".repeat(255)}@example.com`,
+    phone: "905-964-7422",
+  }), /current email, corrected email, and signup phone are required/i);
+
+  const duplicateRepair = __test.planCustomerDashboardLoginEmailRepair({
+    ...inputStore,
+    "sub:sub_other": {
+      subscriptionId: "sub_other",
+      ownerEmail: correctedEmail,
+      ownerPhone: "+19059647422",
+      status: "review_required",
+      updatedAt: "2026-09-02T12:00:00.000Z",
+    },
+  }, {
+    subscriptionId: "sub_ready",
+    currentEmail,
+    newEmail: correctedEmail,
+    phone: "9059647422",
+  });
+  assert.equal(duplicateRepair.unchanged, false);
+  assert.equal(
+    __test.sortCustomerDashboardLoginRecords(Object.values(duplicateRepair.store))[0].subscriptionId,
+    "sub_ready"
+  );
+});
+
+test("customer dashboard login repair requires admin authentication", async () => {
+  const response = await request("/api/admin/signups/repair-dashboard-login", {
+    method: "POST",
+    body: {
+      confirmation: "REPAIR_CUSTOMER_DASHBOARD_LOGIN",
+      subscriptionId: "sub_ready",
+      currentEmail: "old@example.com",
+      newEmail: "new@example.com",
+      phone: "9055550123",
+    },
+  });
+  assert.equal(response.status, 401);
+});
+
 test("customer dashboard logout clears its HttpOnly session cookie", async () => {
   const previousNodeEnv = process.env.NODE_ENV;
   process.env.NODE_ENV = "production";
