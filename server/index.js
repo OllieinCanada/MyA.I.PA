@@ -45,6 +45,11 @@ const {
 } = require("./incidentAlerts");
 const { buildRuntimeIncident } = require("./runtimeAlerts");
 const {
+  buildFailureContext: buildCustomerDashboardLoginFailureContext,
+  classifyLoginIdentity: classifyCustomerDashboardLoginIdentity,
+  getLoginAttemptSource: getCustomerDashboardLoginAttemptSource,
+} = require("./customerDashboardLoginDiagnostics");
+const {
   createIncidentRemediationPlan,
   dispatchCodexIncidentRepair,
   findCodexIncidentRepairRun,
@@ -288,6 +293,25 @@ const CUSTOMER_DASHBOARD_IP_WINDOW_MS = parsePositiveInt(process.env.CUSTOMER_DA
 const CUSTOMER_DASHBOARD_IP_MAX_REQUESTS = parsePositiveInt(process.env.CUSTOMER_DASHBOARD_IP_MAX_REQUESTS, 30);
 const CUSTOMER_DASHBOARD_LOOKUP_WINDOW_MS = parsePositiveInt(process.env.CUSTOMER_DASHBOARD_LOOKUP_WINDOW_MS, 60 * 60 * 1000);
 const CUSTOMER_DASHBOARD_LOOKUP_MAX_REQUESTS = parsePositiveInt(process.env.CUSTOMER_DASHBOARD_LOOKUP_MAX_REQUESTS, 8);
+const customerDashboardLoginProcessRateLimiter = rateLimit({
+  windowMs: CUSTOMER_DASHBOARD_IP_WINDOW_MS,
+  limit: CUSTOMER_DASHBOARD_IP_MAX_REQUESTS,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: async (req, res, next) => {
+    try {
+      const body = req.body || {};
+      const email = String(body.email || body.ownerEmail || "").trim();
+      const phone = String(body.phone || body.ownerPhone || body.businessPhone || "").trim();
+      const diagnosis = diagnoseCustomerDashboardLogin({ email, phone });
+      await recordCustomerDashboardLoginAttempt(req, { email, phone, diagnosis, outcome: "rate_limited" });
+      notifyCustomerDashboardLoginFailure(req, { diagnosis, kind: "rate_limited" });
+      return res.status(429).json({ error: "Too many dashboard lookup attempts. Wait a few minutes and try again." });
+    } catch (error) {
+      return next(error);
+    }
+  },
+});
 const CUSTOMER_DASHBOARD_SESSION_COOKIE = "myaipa_customer_dashboard_session";
 const CUSTOMER_DASHBOARD_SESSION_TTL_MS = parsePositiveInt(process.env.CUSTOMER_DASHBOARD_SESSION_TTL_MS, 12 * 60 * 60 * 1000);
 const CUSTOMER_DASHBOARD_CODE_TTL_MS = parsePositiveInt(process.env.CUSTOMER_DASHBOARD_CODE_TTL_MS, 10 * 60 * 1000);
@@ -8139,6 +8163,61 @@ async function getCustomerDashboardRateLimitDecision(req, { email, phone }) {
   };
 }
 
+function diagnoseCustomerDashboardLogin({ email, phone }) {
+  return classifyCustomerDashboardLoginIdentity({
+    email,
+    phone,
+    records: listSignupDashboardRecords(),
+    isValidEmail: isValidEmailAddress,
+    normalizePhone: normalizeCustomerDashboardPhone,
+    emailsForRecord: getCustomerDashboardEmails,
+    phonesMatch: customerDashboardPhonesMatch,
+    sortRecords: sortCustomerDashboardLoginRecords,
+  });
+}
+
+async function recordCustomerDashboardLoginAttempt(req, {
+  email,
+  phone,
+  diagnosis,
+  outcome,
+  stage = "request_code",
+  providerError,
+} = {}) {
+  const source = getCustomerDashboardLoginAttemptSource(req);
+  const normalizedPhone = normalizeCustomerDashboardPhone(phone);
+  const identityHash = getCustomerDashboardLookupHash(email, phone)
+    || hashKey(`${String(email || "").trim().toLowerCase()}|${normalizedPhone}`);
+  await recordAdminAuditEvent({
+    prisma,
+    action: "customer_dashboard_login",
+    outcome,
+    actorHash: source.sourceFingerprint,
+    targetType: "customer_dashboard",
+    targetId: identityHash,
+    details: {
+      stage,
+      reason: diagnosis?.reason || outcome,
+      sourceFingerprint: source.sourceFingerprint,
+      device: source.device,
+      browser: source.browser,
+      contactEnding: normalizedPhone.slice(-4) || "none",
+      providerStatus: providerError?.providerStatus || null,
+      providerCode: providerError?.providerCode || null,
+    },
+  });
+}
+
+function notifyCustomerDashboardLoginFailure(req, { diagnosis, kind, providerError } = {}) {
+  const error = providerError || Object.assign(
+    new Error("Customer dashboard sign-in stopped before a code was sent."),
+    { code: diagnosis?.reasonCode || "CUSTOMER_DASHBOARD_IDENTITY_NOT_FOUND" }
+  );
+  const context = buildCustomerDashboardLoginFailureContext({ req, diagnosis, kind, providerError });
+  safelyNotifyRuntimeFailure(error, context);
+  if (providerError) providerError.telegramIncidentHandled = true;
+}
+
 function rememberDuplicateSignup(key) {
   const now = Date.now();
   const previous = signupDuplicateSubmissions.get(key);
@@ -12319,33 +12398,55 @@ app.post(
 
 app.post(
   "/api/customer/dashboard/request-code",
+  customerDashboardLoginProcessRateLimiter,
   asyncRoute(async (req, res) => {
     const body = req.body || {};
     const email = String(body.email || body.ownerEmail || "").trim();
     const phone = String(body.phone || body.ownerPhone || body.businessPhone || "").trim();
     const rateLimit = await getCustomerDashboardRateLimitDecision(req, { email, phone });
+    const diagnosis = diagnoseCustomerDashboardLogin({ email, phone });
 
     if (rateLimit.blocked) {
+      await recordCustomerDashboardLoginAttempt(req, { email, phone, diagnosis, outcome: "rate_limited" });
+      notifyCustomerDashboardLoginFailure(req, { diagnosis, kind: "rate_limited" });
       setRetryAfterHeader(res, rateLimit.retryAfterMs);
       return res.status(429).json({ error: "Too many dashboard lookup attempts. Wait a few minutes and try again." });
     }
 
     if (!email || !isValidEmailAddress(email) || !phone) {
+      await recordCustomerDashboardLoginAttempt(req, { email, phone, diagnosis, outcome: "denied" });
+      notifyCustomerDashboardLoginFailure(req, { diagnosis, kind: "invalid_input" });
       return res.status(400).json({ error: "Enter the signup email and phone number for this business." });
     }
 
     const signup = findCustomerDashboardSignup({ email, phone });
     if (!signup) {
+      await recordCustomerDashboardLoginAttempt(req, { email, phone, diagnosis, outcome: "denied" });
+      notifyCustomerDashboardLoginFailure(req, { diagnosis });
       return res.status(404).json({ error: "We could not send a code. Check the signup email and phone number." });
     }
 
     const lookupHash = getCustomerDashboardLookupHash(email, phone);
     const code = await createCustomerDashboardLoginCode(lookupHash);
     const destination = signup.ownerPhone || signup.businessPhone;
-    const sms = await sendSmsViaTwilio({
-      to: destination,
-      message: `Your My AI PA dashboard code is ${code}. It expires in 10 minutes. Do not share this code.`,
-    });
+    let sms;
+    try {
+      sms = await sendSmsViaTwilio({
+        to: destination,
+        message: `Your My AI PA dashboard code is ${code}. It expires in 10 minutes. Do not share this code.`,
+      });
+    } catch (error) {
+      await recordCustomerDashboardLoginAttempt(req, {
+        email,
+        phone,
+        diagnosis,
+        outcome: "sms_failed",
+        providerError: error,
+      });
+      notifyCustomerDashboardLoginFailure(req, { diagnosis, kind: "sms_failed", providerError: error });
+      throw error;
+    }
+    await recordCustomerDashboardLoginAttempt(req, { email, phone, diagnosis, outcome: "code_sent" });
     res.status(202).json({
       ok: true,
       codeSent: true,
