@@ -293,6 +293,25 @@ const CUSTOMER_DASHBOARD_IP_WINDOW_MS = parsePositiveInt(process.env.CUSTOMER_DA
 const CUSTOMER_DASHBOARD_IP_MAX_REQUESTS = parsePositiveInt(process.env.CUSTOMER_DASHBOARD_IP_MAX_REQUESTS, 30);
 const CUSTOMER_DASHBOARD_LOOKUP_WINDOW_MS = parsePositiveInt(process.env.CUSTOMER_DASHBOARD_LOOKUP_WINDOW_MS, 60 * 60 * 1000);
 const CUSTOMER_DASHBOARD_LOOKUP_MAX_REQUESTS = parsePositiveInt(process.env.CUSTOMER_DASHBOARD_LOOKUP_MAX_REQUESTS, 8);
+const customerDashboardLoginProcessRateLimiter = rateLimit({
+  windowMs: CUSTOMER_DASHBOARD_IP_WINDOW_MS,
+  limit: CUSTOMER_DASHBOARD_IP_MAX_REQUESTS,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: async (req, res, next) => {
+    try {
+      const body = req.body || {};
+      const email = String(body.email || body.ownerEmail || "").trim();
+      const phone = String(body.phone || body.ownerPhone || body.businessPhone || "").trim();
+      const diagnosis = diagnoseCustomerDashboardLogin({ email, phone });
+      await recordCustomerDashboardLoginAttempt(req, { email, phone, diagnosis, outcome: "rate_limited" });
+      notifyCustomerDashboardLoginFailure(req, { diagnosis, kind: "rate_limited" });
+      return res.status(429).json({ error: "Too many dashboard lookup attempts. Wait a few minutes and try again." });
+    } catch (error) {
+      return next(error);
+    }
+  },
+});
 const CUSTOMER_DASHBOARD_SESSION_COOKIE = "myaipa_customer_dashboard_session";
 const CUSTOMER_DASHBOARD_SESSION_TTL_MS = parsePositiveInt(process.env.CUSTOMER_DASHBOARD_SESSION_TTL_MS, 12 * 60 * 60 * 1000);
 const CUSTOMER_DASHBOARD_CODE_TTL_MS = parsePositiveInt(process.env.CUSTOMER_DASHBOARD_CODE_TTL_MS, 10 * 60 * 1000);
@@ -12379,6 +12398,7 @@ app.post(
 
 app.post(
   "/api/customer/dashboard/request-code",
+  customerDashboardLoginProcessRateLimiter,
   asyncRoute(async (req, res) => {
     const body = req.body || {};
     const email = String(body.email || body.ownerEmail || "").trim();
