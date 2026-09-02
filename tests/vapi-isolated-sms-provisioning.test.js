@@ -84,13 +84,15 @@ test("isolated tool payload can use a scoped Twilio API key without a REST Auth 
 });
 
 test("tool confirmation accepts natural approval without accepting ambiguity", () => {
-  const raw = toolRejectionPlan().conditions[0].conditions[0].regex;
-  const acceptance = new RegExp(raw.replace(/^\(\?i\)/, ""), "i");
-  for (const phrase of ["Yes.", "Perfect.", "Sure", "Absolutely!", "Okay", "Sounds good.", "Go ahead.", "Uh, yes.", "Um yes please.", "Alright, yep."]) {
-    assert.match(phrase, acceptance);
+  const conditions = toolRejectionPlan().conditions[0].conditions;
+  const acceptance = new RegExp(conditions[0].regex.replace(/^\(\?i\)/, ""), "i");
+  const cancellation = new RegExp(conditions[1].regex.replace(/^\(\?i\)/, ""), "i");
+  const wouldReject = (phrase) => !acceptance.test(phrase) || cancellation.test(phrase);
+  for (const phrase of ["Yes.", "Yes, please.", "Perfect.", "Sure", "Absolutely!", "Okay", "Sounds good.", "Go ahead.", "Uh, yes.", "Um yes please.", "Alright, yep."]) {
+    assert.equal(wouldReject(phrase), false, `expected approval: ${phrase}`);
   }
-  for (const phrase of ["I'm not sure.", "Maybe.", "Let me think.", "Not yet."]) {
-    assert.doesNotMatch(phrase, acceptance);
+  for (const phrase of ["I'm not sure.", "Maybe.", "Let me think.", "Not yet.", "Yes, don't send it."]) {
+    assert.equal(wouldReject(phrase), true, `expected rejection: ${phrase}`);
   }
 });
 

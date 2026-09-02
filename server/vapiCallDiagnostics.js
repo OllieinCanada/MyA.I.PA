@@ -84,18 +84,22 @@ function safeToolArguments(value) {
 
 function safeToolResult(value) {
   const parsed = parseObject(value);
+  const rawText = typeof value === "string" ? value.trim() : "";
+  const rejectedByPlan = /rejected based on configured rejection plan/i.test(rawText);
   const error = parsed.error;
   const errorMessage =
     typeof error === "string"
       ? error
       : String(error?.message || parsed.errorMessage || parsed.message || "").trim();
   return {
-    ok: typeof parsed.ok === "boolean" ? parsed.ok : null,
-    sent: typeof parsed.sent === "boolean" ? parsed.sent : null,
+    ok: typeof parsed.ok === "boolean" ? parsed.ok : (rejectedByPlan ? false : null),
+    sent: typeof parsed.sent === "boolean" ? parsed.sent : (rejectedByPlan ? false : null),
     skipped: typeof parsed.skipped === "boolean" ? parsed.skipped : null,
     status: String(parsed.status || "").trim().slice(0, 80),
-    errorCode: String(parsed.errorCode || parsed.code || error?.code || "").trim().slice(0, 80),
-    error: errorMessage.slice(0, 240),
+    errorCode: String(parsed.errorCode || parsed.code || error?.code || (rejectedByPlan ? "TOOL_CALL_REJECTED" : "")).trim().slice(0, 80),
+    error: (rejectedByPlan
+      ? "Vapi rejected the SMS tool before execution because the caller's confirmation did not match the configured approval rule."
+      : errorMessage).slice(0, 240),
     messageIdSet: Boolean(parsed.sid || parsed.messageSid || parsed.messageId || parsed.requestId),
     fromLast4: String(parsed.fromLast4 || "").replace(/\D/g, "").slice(-4) || last4(parsed.from || parsed.fromNumber),
     toLast4: String(parsed.toLast4 || "").replace(/\D/g, "").slice(-4) || last4(parsed.to || parsed.toNumber),
@@ -105,13 +109,16 @@ function safeToolResult(value) {
 
 function safeCompositeResult(value) {
   const parsed = parseObject(value);
+  const directFailure = safeToolResult(value);
+  const rejectedByPlan = directFailure.errorCode === "TOOL_CALL_REJECTED";
   return {
-    ok: typeof parsed.ok === "boolean" ? parsed.ok : null,
-    complete: typeof parsed.complete === "boolean" ? parsed.complete : null,
+    ok: typeof parsed.ok === "boolean" ? parsed.ok : (rejectedByPlan ? false : null),
+    complete: typeof parsed.complete === "boolean" ? parsed.complete : (rejectedByPlan ? false : null),
     partialSuccess: typeof parsed.partialSuccess === "boolean" ? parsed.partialSuccess : null,
     requiresReconciliation: typeof parsed.requiresReconciliation === "boolean" ? parsed.requiresReconciliation : null,
-    owner: safeToolResult(parsed.owner),
-    customer: safeToolResult(parsed.customer),
+    toolRejected: rejectedByPlan,
+    owner: rejectedByPlan ? directFailure : safeToolResult(parsed.owner),
+    customer: rejectedByPlan ? directFailure : safeToolResult(parsed.customer),
   };
 }
 
@@ -155,11 +162,11 @@ function collectSmsToolEvidence(call) {
     if (toolCallId || /tool[-_ ]?(call[-_ ]?)?result/.test(eventType)) {
       const rawResult = value.result ?? value.output ?? value.content ?? value.message;
       const parsedResult = parseObject(rawResult);
-      if (Object.keys(parsedResult).length) {
+      if (Object.keys(parsedResult).length || (typeof rawResult === "string" && rawResult.trim())) {
         results.push({
           toolCallId,
           name: getToolName(value),
-          rawResult: parsedResult,
+          rawResult: Object.keys(parsedResult).length ? parsedResult : rawResult,
         });
       }
     }
@@ -218,6 +225,7 @@ function summarizeComposite(evidence) {
     complete: results.some((result) => result.complete === true),
     partialSuccess: results.some((result) => result.partialSuccess === true),
     requiresReconciliation: results.some((result) => result.requiresReconciliation === true),
+    toolRejected: results.some((result) => result.toolRejected === true),
     toolNames: [...new Set(invocations.map((item) => item.name))],
   };
 }
@@ -316,7 +324,14 @@ function analyzeVapiSmsCall(call, options = {}) {
     ownerSenderMismatch: Boolean(expectedAiLast4 && ownerSenders.some((value) => value !== expectedAiLast4)),
   };
   let finding = determineFinding(customer, owner);
-  if (routing.customerDestinationMismatch) {
+  if (composite.toolRejected) {
+    finding = {
+      code: "SMS_CONFIRMATION_REJECTED",
+      severity: "critical",
+      summary: "Vapi blocked the SMS tool before Twilio was called because the caller's confirmation did not match the approval rule.",
+      nextAction: "Update and retest the confirmation rule with natural phrases such as 'Yes, please.'",
+    };
+  } else if (routing.customerDestinationMismatch) {
     finding = {
       code: "CUSTOMER_DESTINATION_MISMATCH",
       severity: "critical",
