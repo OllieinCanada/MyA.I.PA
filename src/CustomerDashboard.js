@@ -398,67 +398,6 @@ function LookupForm({ credentials, setCredentials, onSubmit, busy, error, step, 
   );
 }
 
-function StatCard({ label, value, sub }) {
-  return (
-    <div className="customer-stat-card">
-      <span>{label}</span>
-      <strong>{value}</strong>
-      <em>{sub}</em>
-    </div>
-  );
-}
-
-function TrialUsageCard({ usage = {}, trialText = "", trialEndAt = "" }) {
-  const used = Math.max(0, Number(usage.usedMinutes || 0));
-  const limit = Math.max(1, Number(usage.limitMinutes || 60));
-  const remaining = Math.max(0, Number(usage.remainingMinutes ?? limit));
-  const percent = Math.max(0, Math.min(100, Number(usage.percentUsed ?? Math.round((used / limit) * 100))));
-  const estimatedCallsRemaining = Math.max(0, Number(usage.estimatedCallsRemaining || 0));
-  const newCallsPaused = Boolean(usage.newCallsPaused || usage.limitReached);
-  const fallbackCopy = usage.fallbackRoutingReady
-    ? "New calls now connect to your fallback number."
-    : "AI answering is paused. Contact us to confirm your fallback number.";
-  const statusCopy = newCallsPaused
-    ? fallbackCopy
-    : estimatedCallsRemaining
-      ? `About ${estimatedCallsRemaining} typical ${estimatedCallsRemaining === 1 ? "call" : "calls"} remain before fallback routing.`
-      : `${remaining} AI answering minutes remain.`;
-
-  return (
-    <section className={`customer-trial-meter${newCallsPaused ? " is-paused" : ""}`} aria-labelledby="trial-usage-title">
-      <div className="customer-trial-meter-head">
-        <div>
-          <p className="customer-eyebrow">14-day free trial</p>
-          <h2 id="trial-usage-title">{used} of {limit} AI minutes used</h2>
-          <p>{statusCopy}</p>
-        </div>
-        <div className="customer-trial-meter-balance">
-          <strong>{remaining}</strong>
-          <span>{newCallsPaused && remaining ? "minutes protected" : "minutes remaining"}</span>
-        </div>
-      </div>
-      <div
-        className="customer-trial-progress"
-        role="progressbar"
-        aria-label="Trial AI minutes used"
-        aria-valuemin="0"
-        aria-valuemax={limit}
-        aria-valuenow={Math.min(limit, used)}
-      >
-        <span style={{ width: `${percent}%` }} />
-      </div>
-      <div className="customer-trial-meter-foot">
-        <p>
-          <strong>{trialText}</strong>
-          {trialEndAt ? ` · Ends ${fmtDate(trialEndAt)}` : ""}
-          {!newCallsPaused ? ` · The final ${usage.completionReserveMinutes || 5} minutes are protected for a call already in progress.` : ""}
-        </p>
-        <a href="mailto:hello@myaipa.com?subject=Activate%20My%20AI%20PA%20service">Activate service</a>
-      </div>
-    </section>
-  );
-}
-
 function AppointmentRequestCard({ appointment, staffMembers = [], onUpdated }) {
   const [start, setStart] = useState(toDateTimeInput(appointment.confirmedStart || appointment.requestedStart));
   const [staffMemberId, setStaffMemberId] = useState(staffMembers.some((staff) => staff.id === appointment.staffMember?.id) ? appointment.staffMember.id : "");
@@ -1002,6 +941,27 @@ function JobberIntegrationPanel({ jobber = {}, onUpdated }) {
   );
 }
 
+function SimpleTrialBar({ usage = {}, trialText = "", trialEndAt = "" }) {
+  const remaining = Math.max(0, Math.round(Number(usage.remainingMinutes || 0)));
+  const limit = Math.max(1, Number(usage.limitMinutes || 60));
+  const used = Math.max(0, Number(usage.usedMinutes || 0));
+  const percent = Math.max(0, Math.min(100, Math.round((used / limit) * 100)));
+  const paused = Boolean(usage.newCallsPaused || usage.limitReached);
+  return (
+    <section className={`customer-simple-trial${paused ? " is-paused" : ""}`} aria-label="Free trial usage">
+      <div>
+        <span>Free trial</span>
+        <strong>{paused ? "New AI calls are paused" : `${remaining} minutes left`}</strong>
+        <small>{trialText}{trialEndAt ? ` · Ends ${fmtDate(trialEndAt)}` : ""}</small>
+      </div>
+      <div className="customer-simple-trial-progress" role="progressbar" aria-label="Trial minutes used" aria-valuemin="0" aria-valuemax={limit} aria-valuenow={Math.min(limit, used)}>
+        <i style={{ width: `${percent}%` }} />
+      </div>
+      <a href="mailto:hello@myaipa.com?subject=Activate%20My%20AI%20PA%20service">Activate</a>
+    </section>
+  );
+}
+
 function CustomerDashboardView({ dashboard, onSignOut, onRefresh, refreshing, refreshError, refreshedAt }) {
   const signup = dashboard.signup || {};
   const stats = dashboard.stats || {};
@@ -1024,6 +984,12 @@ function CustomerDashboardView({ dashboard, onSignOut, onRefresh, refreshing, re
   const automaticCalendarBooking = dashboard.scheduling?.calendarBookingMode === "AUTO_BOOK_CONNECTED";
   const revenueRescue = dashboard.revenueRescue || {};
   const jobber = dashboard.integrations?.jobber || {};
+  const aiNumber = assistant.aiNumber || signup.twilioPhoneNumber || "";
+  const followUpCalls = calls.filter((call) => call.followUpNeeded);
+  const followUpCount = Math.max(Number(stats.followUps || 0), followUpCalls.length);
+  const pendingAppointments = appointments.filter((appointment) => ["PENDING", "CHANGE_REQUESTED"].includes(appointment.status));
+  const [copyState, setCopyState] = useState("");
+  const moreSettingsRef = useRef(null);
 
   const trialText = useMemo(() => {
     if (!signup.trialEndAt) return "Trial date pending";
@@ -1034,139 +1000,121 @@ function CustomerDashboardView({ dashboard, onSignOut, onRefresh, refreshing, re
     return `${days} days left`;
   }, [signup.trialEndAt]);
 
-  return (
-    <main className="customer-dashboard">
-      <aside className="customer-sidebar">
-        <Brand />
-        <nav>
-          <a href="#overview">Overview</a>
-          <a href="#revenue">Revenue</a>
-          <a href="#appointments">Appointments</a>
-          <a href="#calls">Calls</a>
-          <a href="#support">Support</a>
-          <a href="#setup">Setup</a>
-          <a href="#faqs">FAQs</a>
-          <a href="#integrations">Integrations</a>
-        </nav>
-        <button type="button" onClick={onSignOut}>Switch account</button>
-      </aside>
+  const primaryAction = useMemo(() => {
+    if (!aiNumber) return {
+      title: "Your phone number is being prepared",
+      detail: "You do not need to do anything yet. Refresh this page in a few minutes.",
+      label: "Check again",
+      target: "refresh",
+    };
+    if (actionRequiredAppointments) return {
+      title: `${actionRequiredAppointments} appointment${actionRequiredAppointments === 1 ? "" : "s"} ${actionRequiredAppointments === 1 ? "needs" : "need"} your answer`,
+      detail: "Choose a time, then confirm it or suggest another one.",
+      label: "Answer now",
+      target: "#appointments",
+    };
+    if (followUpCount) return {
+      title: `Call back ${followUpCount} ${followUpCount === 1 ? "customer" : "customers"}`,
+      detail: "Their names, phone numbers, and reasons for calling are ready below.",
+      label: "See calls",
+      target: "#calls",
+    };
+    if (nextStep) return {
+      title: nextStep.label,
+      detail: "Open setup details and finish this one item.",
+      label: "Open setup",
+      target: "settings",
+    };
+    return {
+      title: "You are all caught up",
+      detail: "Nothing needs your attention right now.",
+      label: "See recent calls",
+      target: "#calls",
+    };
+  }, [actionRequiredAppointments, aiNumber, followUpCount, nextStep]);
 
-      <section className="customer-main">
-        <header className="customer-topbar">
+  const copyNumber = async () => {
+    if (!aiNumber) return;
+    try {
+      await navigator.clipboard.writeText(aiNumber);
+      setCopyState("Copied");
+    } catch (_error) {
+      setCopyState("Press and hold the number to copy it");
+    }
+    window.setTimeout(() => setCopyState(""), 2400);
+  };
+
+  const openMoreSettings = () => {
+    if (!moreSettingsRef.current) return;
+    moreSettingsRef.current.open = true;
+    moreSettingsRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  return (
+    <main className="customer-dashboard customer-dashboard-simple">
+      <section className="customer-simple-shell">
+        <header className="customer-simple-header">
+          <Brand />
           <div>
-            <p className="customer-eyebrow">Owner dashboard</p>
-            <h1>{signup.businessName || "Your business"}</h1>
-            <span>{statusLabel(signup.status)} · {signup.ownerEmail || "Email pending"}</span>
+            <strong>{signup.businessName || "Your business"}</strong>
+            <span>{refreshError || (refreshing ? "Checking for updates…" : `Updated ${fmtRefreshTime(refreshedAt)}`)}</span>
           </div>
-          <a href="#/signup">Add another business</a>
+          <button type="button" onClick={onSignOut}>Sign out</button>
         </header>
 
-        <section id="overview" className="customer-hero-card">
-          <div>
-            <span className="customer-pill">AI phone assistant</span>
-            <h2>{assistant.aiNumber ? "Your AI number is ready to test." : "Your AI number is being prepared."}</h2>
-            <p>Forward missed calls here once setup feels right. Keep your current business number for customers.</p>
-            <div className="customer-number">{fmtPhone(assistant.aiNumber || signup.twilioPhoneNumber)}</div>
-            <div className={`customer-message-state is-${String(messaging.status || "not-configured").toLowerCase().replace("_", "-")}`}>
-              <span aria-hidden="true">{messaging.serviceTextsActive ? "✓" : messaging.status === "PAUSED" ? "!" : "·"}</span>
-              <div>
-                <strong>Service texts {messaging.status === "PAUSED" ? "paused" : messaging.serviceTextsActive ? "active" : "not configured"}</strong>
-                <p>{messaging.guidance || "Add an owner phone number to receive service text updates."}</p>
-              </div>
+        <section id="overview" className={`customer-simple-hero${aiNumber ? " is-ready" : " is-waiting"}`}>
+          <div className="customer-simple-hero-copy">
+            <span className="customer-simple-status"><i />{aiNumber ? "Ready for calls" : "Finishing setup"}</span>
+            <h1>{aiNumber ? "Your assistant is ready." : "We are setting up your assistant."}</h1>
+            <p>{aiNumber ? "Call the number to hear it. When you are happy, forward missed calls to it." : "Your number will appear here as soon as it is ready."}</p>
+            <div className="customer-simple-service-state">
+              <span>{messaging.serviceTextsActive ? "✓" : "!"}</span>
+              <p><strong>Text updates: {messaging.serviceTextsActive ? "On" : messaging.status === "PAUSED" ? "Paused" : "Not ready"}</strong>{messaging.guidance ? ` · ${messaging.guidance}` : ""}</p>
             </div>
           </div>
-          <div className="customer-readiness" style={{ "--ready": `${readiness}%` }}>
-            <strong>{readiness}%</strong>
-            <span>Setup ready</span>
+          <div className="customer-simple-number-card">
+            <span>Your My AI PA number</span>
+            <strong>{fmtPhone(aiNumber)}</strong>
+            {aiNumber ? <div><a href={`tel:${aiNumber}`}>Call it now</a><button type="button" onClick={copyNumber}>Copy number</button></div> : <button type="button" onClick={onRefresh} disabled={refreshing}>{refreshing ? "Checking…" : "Check again"}</button>}
+            {copyState ? <small role="status">{copyState}</small> : null}
           </div>
         </section>
 
-        {trialUsage.lifecycle === "trial" ? (
-          <TrialUsageCard
-            usage={trialUsage}
-            trialText={trialText}
-            trialEndAt={signup.trialEndAt}
-          />
+        <section className="customer-simple-next" aria-labelledby="customer-next-title">
+          <span>DO THIS NEXT</span>
+          <div>
+            <h2 id="customer-next-title">{primaryAction.title}</h2>
+            <p>{primaryAction.detail}</p>
+          </div>
+          {primaryAction.target === "refresh" ? <button type="button" onClick={onRefresh} disabled={refreshing}>{refreshing ? "Checking…" : primaryAction.label}</button> : primaryAction.target === "settings" ? <button type="button" onClick={openMoreSettings}>{primaryAction.label}</button> : <a href={primaryAction.target}>{primaryAction.label}</a>}
+        </section>
+
+        {trialUsage.lifecycle === "trial" ? <SimpleTrialBar usage={trialUsage} trialText={trialText} trialEndAt={signup.trialEndAt} /> : null}
+
+        <section className="customer-simple-stats" aria-label="Your important numbers">
+          <article><span>Calls answered</span><strong>{stats.totalCalls || 0}</strong><small>by My AI PA</small></article>
+          <article className={followUpCount ? "needs-action" : ""}><span>Call back</span><strong>{followUpCount}</strong><small>{followUpCount ? "customers waiting" : "none waiting"}</small></article>
+          <article className={actionRequiredAppointments ? "needs-action" : ""}><span>Appointments</span><strong>{actionRequiredAppointments}</strong><small>{actionRequiredAppointments ? "need your answer" : `${confirmedAppointments} confirmed`}</small></article>
+        </section>
+
+        {pendingAppointments.length ? (
+          <section id="appointments" className="customer-simple-section customer-simple-appointments">
+            <div className="customer-simple-section-head"><div><span>NEEDS YOUR ANSWER</span><h2>Appointment requests</h2></div><strong>{pendingAppointments.length}</strong></div>
+            <div className="customer-appointment-list">
+              {pendingAppointments.map((appointment) => <AppointmentRequestCard key={appointment.id} appointment={appointment} staffMembers={staffMembers} onUpdated={onRefresh} />)}
+            </div>
+          </section>
         ) : null}
 
-        <section className={`customer-stats${trialUsage.lifecycle === "trial" ? " is-trial" : ""}`}>
-          <StatCard label="Calls handled" value={stats.totalCalls || 0} sub="updates automatically" />
-          {trialUsage.lifecycle !== "trial" ? (
-            <StatCard label="Minutes used" value={stats.totalMinutes || 0} sub="voice time shown to you" />
-          ) : null}
-          <StatCard label="Missed calls" value={stats.missedCalls || 0} sub="needs attention" />
-          <StatCard label="Follow-ups" value={stats.followUps || 0} sub="quotes or callbacks" />
-          <StatCard label="Appointments" value={confirmedAppointments} sub={`${actionRequiredAppointments} need your reply`} />
-          {trialUsage.lifecycle !== "trial" ? (
-            <StatCard
-              label="Service status"
-              value={trialText}
-              sub={statusLabel(signup.subscriptionStatus)}
-            />
-          ) : null}
-        </section>
-
-        <RevenueRescuePanel revenueRescue={revenueRescue} jobber={jobber} onUpdated={onRefresh} />
-
-        <section id="appointments" className="customer-panel customer-appointments-panel">
-          <div className="customer-panel-head">
-            <div>
-              <p className="customer-eyebrow">{automaticCalendarBooking ? "Automatic when your calendar is clear" : "Owner approval required"}</p>
-              <h2>Appointment requests</h2>
-            </div>
-            <span>{actionRequiredAppointments ? `${actionRequiredAppointments} need your reply` : "Up to date"}</span>
-          </div>
-          <p className="customer-appointments-intro">{automaticCalendarBooking ? "The AI confirms clear times automatically. Calendar conflicts or connection problems stay here for your approval, so no request gets lost." : "The AI collects the requested time. Approve that time here, or propose a change for the customer to accept before calendar invitations are sent."}</p>
-          <AppointmentCalendar appointments={appointments} />
-          <div className="customer-appointment-list">
-            {appointments.length ? appointments.map((appointment) => (
-              <AppointmentRequestCard key={appointment.id} appointment={appointment} staffMembers={staffMembers} onUpdated={onRefresh} />
-            )) : <p className="customer-empty">No appointment requests yet. New requests from callers will appear here automatically.</p>}
-          </div>
-          <SchedulingControls scheduling={dashboard.scheduling} staffMembers={staffMembers} calendarConnections={dashboard.calendarConnections || []} calendarProviders={dashboard.calendarProviders || {}} onUpdated={onRefresh} />
-        </section>
-
-        <section className="customer-grid">
-          <div id="setup" className="customer-panel">
-            <div className="customer-panel-head">
-              <h2>Setup checklist</h2>
-              {nextStep ? <span>Next: {nextStep.label}</span> : <span>Ready</span>}
-            </div>
-            <div className="customer-checklist">
-              {checklist.map((item) => (
-                <div key={item.key} className={item.done ? "done" : ""}>
-                  <span>{item.done ? "✓" : "!"}</span>
-                  <p>{item.label}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="customer-panel">
-            <div className="customer-panel-head">
-              <h2>Assistant settings</h2>
-              <span>{assistant.afterHoursMode || "AI_ALWAYS_ON"}</span>
-            </div>
-            <div className="customer-settings-list">
-              <div><span>Answer after</span><strong>{assistant.answerAfterRings ?? 3} rings</strong></div>
-              <div><span>Business phone</span><strong>{fmtPhone(signup.businessPhone)}</strong></div>
-              <div><span>Owner phone</span><strong>{fmtPhone(signup.ownerPhone)}</strong></div>
-              <div><span>Service texts</span><strong>{messaging.status === "PAUSED" ? "Paused" : messaging.serviceTextsActive ? "Active" : "Not configured"}</strong></div>
-              <div><span>Booking link</span><strong>{assistant.bookingLink || "Not added"}</strong></div>
-              <div><span>Appointment booking</span><strong>{automaticCalendarBooking ? "Automatic when clear" : dashboard.scheduling?.calendarBookingMode === "EMAIL_INVITES_ONLY" ? "Email and text only" : "Owner confirms first"}</strong></div>
-            </div>
-          </div>
-        </section>
-
-        <section id="calls" className="customer-panel">
+        <section id="calls" className="customer-simple-section customer-simple-calls">
           <div className="customer-panel-head customer-call-panel-head">
-            <h2>Recent calls</h2>
+            <div><span className="customer-simple-kicker">WHAT HAPPENED</span><h2>Recent calls</h2></div>
             <div className="customer-live-refresh">
               <span className={refreshError ? "has-error" : ""} role="status" aria-live="polite">
-                {refreshError || (refreshing ? "Checking for new calls…" : `Live · checked at ${fmtRefreshTime(refreshedAt)}`)}
+                {refreshError || (refreshing ? "Checking…" : "Up to date")}
               </span>
               <button type="button" onClick={onRefresh} disabled={refreshing}>
-                {refreshing ? "Refreshing…" : "Refresh now"}
+                {refreshing ? "Checking…" : "Refresh"}
               </button>
             </div>
           </div>
@@ -1189,54 +1137,65 @@ function CustomerDashboardView({ dashboard, onSignOut, onRefresh, refreshing, re
                 </button>
                 {openCallId === call.id ? <CallDetails call={call} onReport={openSupport} /> : null}
               </article>
-            )) : <p className="customer-empty">No calls are showing yet. New calls will appear here automatically after they finish.</p>}
+            )) : <p className="customer-empty">No calls yet. Your first completed call will appear here.</p>}
           </div>
         </section>
 
-        <section id="support" className="customer-panel customer-support-history">
-          <div className="customer-panel-head">
-            <div>
-              <p className="customer-eyebrow">Help and updates</p>
-              <h2>Your support reports</h2>
-            </div>
-            <button type="button" onClick={() => openSupport(null)}>Report a problem</button>
-          </div>
-          <div className="customer-support-history-list">
-            {supportReports.length ? supportReports.map((report) => (
-              <article key={report.id} className={`is-${String(report.status || "new").toLowerCase()}`}>
-                <div>
-                  <strong>{report.ticketNumber}</strong>
-                  <span>{fmtTime(report.createdAt)}{report.callId ? ` · Call #${report.callId}` : ""}</span>
-                </div>
-                <em>{statusLabel(report.status)}</em>
-                <p>{report.description}</p>
-                {report.customerMessage ? <blockquote><strong>Support update</strong>{report.customerMessage}</blockquote> : null}
-                {report.resolvedAt ? <small>Resolved {fmtTime(report.resolvedAt)}</small> : <small>Last updated {fmtTime(report.updatedAt)}</small>}
-              </article>
-            )) : <p className="customer-empty">No reports yet. If something is not working, describe it once and the diagnostic details will be attached automatically.</p>}
-          </div>
-        </section>
-
-        <JobberIntegrationPanel jobber={jobber} onUpdated={onRefresh} />
-
-        <section id="faqs" className="customer-panel">
-          <div className="customer-panel-head">
-            <h2>FAQs your assistant can use</h2>
-            <span>{dashboard.faqs?.length || 0} saved</span>
-          </div>
-          <div className="customer-faq-grid">
-            {dashboard.faqs?.length ? dashboard.faqs.map((faq) => (
-              <div key={faq.id}>
-                <strong>{faq.question}</strong>
-                <p>{faq.answer}</p>
+        <details id="more-settings" className="customer-more-tools" ref={moreSettingsRef}>
+          <summary><span><strong>More settings</strong><small>Phone setup, calendars, team, leads, FAQs, and support history</small></span><i aria-hidden="true">+</i></summary>
+          <div className="customer-more-tools-body">
+            <section className="customer-grid">
+              <div id="setup" className="customer-panel">
+                <div className="customer-panel-head"><h2>Setup</h2>{nextStep ? <span>Next: {nextStep.label}</span> : <span>Ready</span>}</div>
+                <div className="customer-checklist">{checklist.map((item) => <div key={item.key} className={item.done ? "done" : ""}><span>{item.done ? "✓" : "!"}</span><p>{item.label}</p></div>)}</div>
               </div>
-            )) : <p className="customer-empty">No FAQs added yet. Add starter answers from the admin side until customer editing is enabled.</p>}
+              <div className="customer-panel">
+                <div className="customer-panel-head"><h2>Phone settings</h2><span>{readiness}% ready</span></div>
+                <div className="customer-settings-list">
+                  <div><span>Answers after</span><strong>{assistant.answerAfterRings ?? 3} rings</strong></div>
+                  <div><span>Business phone</span><strong>{fmtPhone(signup.businessPhone)}</strong></div>
+                  <div><span>Owner phone</span><strong>{fmtPhone(signup.ownerPhone)}</strong></div>
+                  <div><span>Text updates</span><strong>{messaging.status === "PAUSED" ? "Paused" : messaging.serviceTextsActive ? "On" : "Not ready"}</strong></div>
+                  <div><span>Appointment booking</span><strong>{automaticCalendarBooking ? "Automatic when clear" : dashboard.scheduling?.calendarBookingMode === "EMAIL_INVITES_ONLY" ? "Email and text only" : "You confirm first"}</strong></div>
+                </div>
+              </div>
+            </section>
+
+            <section className="customer-panel customer-appointments-panel">
+              <div className="customer-panel-head"><div><p className="customer-eyebrow">Calendar</p><h2>Appointments and availability</h2></div><span>{confirmedAppointments} confirmed</span></div>
+              <AppointmentCalendar appointments={appointments} />
+              <SchedulingControls scheduling={dashboard.scheduling} staffMembers={staffMembers} calendarConnections={dashboard.calendarConnections || []} calendarProviders={dashboard.calendarProviders || {}} onUpdated={onRefresh} />
+            </section>
+
+            <RevenueRescuePanel revenueRescue={revenueRescue} jobber={jobber} onUpdated={onRefresh} />
+            <JobberIntegrationPanel jobber={jobber} onUpdated={onRefresh} />
+
+            <section id="faqs" className="customer-panel">
+              <div className="customer-panel-head"><h2>Answers your assistant uses</h2><span>{dashboard.faqs?.length || 0} saved</span></div>
+              <div className="customer-faq-grid">{dashboard.faqs?.length ? dashboard.faqs.map((faq) => <div key={faq.id}><strong>{faq.question}</strong><p>{faq.answer}</p></div>) : <p className="customer-empty">No answers added yet.</p>}</div>
+            </section>
+
+            <section id="support" className="customer-panel customer-support-history">
+              <div className="customer-panel-head"><div><p className="customer-eyebrow">Help</p><h2>Your support reports</h2></div><button type="button" onClick={() => openSupport(null)}>Report a problem</button></div>
+              <div className="customer-support-history-list">
+                {supportReports.length ? supportReports.map((report) => <article key={report.id} className={`is-${String(report.status || "new").toLowerCase()}`}><div><strong>{report.ticketNumber}</strong><span>{fmtTime(report.createdAt)}{report.callId ? ` · Call #${report.callId}` : ""}</span></div><em>{statusLabel(report.status)}</em><p>{report.description}</p>{report.customerMessage ? <blockquote><strong>Support update</strong>{report.customerMessage}</blockquote> : null}{report.resolvedAt ? <small>Resolved {fmtTime(report.resolvedAt)}</small> : <small>Last updated {fmtTime(report.updatedAt)}</small>}</article>) : <p className="customer-empty">No support reports.</p>}
+              </div>
+            </section>
           </div>
-        </section>
+        </details>
+
+        <footer className="customer-simple-footer">
+          <button type="button" onClick={() => openSupport(null)}>
+            <span aria-hidden="true">?</span>
+            <strong>Something not working?</strong>
+            <small>Tell us once. We attach the useful details.</small>
+          </button>
+          <a href="#/signup">Add another business</a>
+        </footer>
       </section>
       <button type="button" className="customer-support-launcher" onClick={() => openSupport(null)}>
         <span aria-hidden="true">?</span>
-        Something not working?
+        Get help
       </button>
       <SupportReportModal open={supportState.open} call={supportState.call} onClose={closeSupport} onSubmitted={onRefresh} />
     </main>

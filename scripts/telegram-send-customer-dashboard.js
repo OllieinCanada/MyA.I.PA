@@ -236,7 +236,7 @@ const contentTypes = {
   ".woff2": "font/woff2",
 };
 
-function startBuildServer() {
+function startBuildServer(port = 0) {
   const buildDir = rootPath("build");
   const indexPath = path.join(buildDir, "index.html");
   if (!fs.existsSync(indexPath)) throw new Error("Missing build/index.html after the production build.");
@@ -245,6 +245,16 @@ function startBuildServer() {
     let filePath;
     try {
       const requested = decodeURIComponent(String(req.url || "/").split("?")[0]);
+      if (requested === "/api/customer/dashboard" && req.method === "GET") {
+        res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+        res.end(JSON.stringify({ ok: true, dashboard, refreshedAt: new Date().toISOString() }));
+        return;
+      }
+      if (requested === "/api/customer/dashboard/logout" && req.method === "POST") {
+        res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+        res.end(JSON.stringify({ ok: true }));
+        return;
+      }
       const relative = requested === "/" ? "index.html" : requested.replace(/^\/+/, "");
       const candidate = path.resolve(buildDir, relative);
       if (!candidate.startsWith(buildDir)) {
@@ -268,9 +278,9 @@ function startBuildServer() {
 
   return new Promise((resolve, reject) => {
     server.once("error", reject);
-    server.listen(0, "127.0.0.1", () => {
+    server.listen(port, "127.0.0.1", () => {
       const address = server.address();
-      resolve({ server, url: `http://127.0.0.1:${address.port}/#/dashboard` });
+      resolve({ server, url: `http://localhost:${address.port}/#/dashboard` });
     });
   });
 }
@@ -294,6 +304,18 @@ async function launchBrowser() {
 async function main() {
   if (!hasFlag("skip-build")) run(npmCommand(), ["run", "build"]);
 
+  if (hasFlag("serve")) {
+    const port = Math.max(1, Number(getArg("port", "8787")) || 8787);
+    const { server, url } = await startBuildServer(port);
+    console.log(`Customer dashboard sample preview: ${url}`);
+    console.log("Sample data only. Press Ctrl+C to stop.");
+    const close = () => server.close(() => process.exit(0));
+    process.once("SIGINT", close);
+    process.once("SIGTERM", close);
+    await new Promise(() => {});
+    return;
+  }
+
   const screenshotName = getArg("name", "telegram-customer-dashboard-sample.png");
   const screenshotPath = rootPath("diagnostics", "browser-drive", screenshotName);
   const phoneSharePath = rootPath("phone-share", screenshotName);
@@ -308,16 +330,20 @@ async function main() {
     const height = Math.max(480, Number(getArg("height", "1050")) || 1050);
     const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: 1 });
     await page.route("**/api/customer/dashboard", async (route) => {
+      const origin = route.request().headers().origin || "http://localhost";
       await route.fulfill({
         status: 200,
         contentType: "application/json",
+        headers: { "Access-Control-Allow-Origin": origin, "Access-Control-Allow-Credentials": "true" },
         body: JSON.stringify({ ok: true, dashboard, refreshedAt: now.toISOString() }),
       });
     });
     await page.route("**/api/customer/dashboard/support/suggest", async (route) => {
+      const origin = route.request().headers().origin || "http://localhost";
       await route.fulfill({
         status: 200,
         contentType: "application/json",
+        headers: { "Access-Control-Allow-Origin": origin, "Access-Control-Allow-Credentials": "true" },
         body: JSON.stringify({
           ok: true,
           callLinked: true,
@@ -336,8 +362,13 @@ async function main() {
       });
     });
     await page.goto(url, { waitUntil: "networkidle", timeout: 30000 });
-    await page.locator(".customer-main").waitFor({ state: "visible", timeout: 15000 });
-    await page.locator(".customer-call-summary").first().click();
+    try {
+      await page.locator(".customer-simple-shell, .customer-main").waitFor({ state: "visible", timeout: 15000 });
+    } catch (error) {
+      const visibleText = await page.locator("body").innerText().catch(() => "Page text unavailable");
+      throw new Error(`Dashboard preview did not load. Visible page: ${visibleText.slice(0, 500)}\n${error.message}`);
+    }
+    if (!hasFlag("overview")) await page.locator(".customer-call-summary").first().click();
     if (hasFlag("support")) {
       await page.locator(".customer-call-report-row button").first().click();
       await page.locator(".customer-support-description textarea").fill("The owner text did not arrive after this call.");
