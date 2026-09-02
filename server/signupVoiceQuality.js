@@ -7,21 +7,34 @@ function clean(value, maxLength = 500) {
 function formatCanadianPostalCodeForSpeech(value) {
   const compact = clean(value, 12).toUpperCase().replace(/[^A-Z0-9]/g, "");
   if (!/^[A-Z]\d[A-Z]\d[A-Z]\d$/.test(compact)) return clean(value, 12);
-  return `${compact.slice(0, 3).split("").join(", ")} — ${compact.slice(3).split("").join(", ")}`;
+  const speakCharacter = (character) => /\d/.test(character)
+    ? `number ${["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"][Number(character)]}`
+    : `letter ${character}`;
+  return `${compact.slice(0, 3).split("").map(speakCharacter).join(", ")} — ${compact.slice(3).split("").map(speakCharacter).join(", ")}`;
 }
 
 function formatPhoneForSpeech(value) {
   const digits = String(value || "").replace(/\D/g, "").replace(/^1(?=\d{10}$)/, "");
-  return digits.length === 10 ? digits.split("").join(", ") : clean(value, 40);
+  const names = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"];
+  return digits.length === 10 ? digits.split("").map((digit) => names[Number(digit)]).join(", ") : clean(value, 40);
 }
 
 function formatEmailForSpeech(value) {
-  return clean(value, 254)
-    .replace(/\s*@\s*/g, " at ")
-    .replace(/\s*\.\s*/g, " dot ")
-    .replace(/([._+-])/g, " $1 ")
-    .replace(/\s+/g, " ")
-    .trim();
+  const email = clean(value, 254).toLowerCase();
+  const [localPart, domain = ""] = email.split("@");
+  if (!localPart || !domain) return email;
+  const digitNames = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"];
+  const speakCharacter = (character) => {
+    if (/\d/.test(character)) return digitNames[Number(character)];
+    if (character === ".") return "dot";
+    if (character === "_") return "underscore";
+    if (character === "-") return "dash";
+    if (character === "+") return "plus";
+    return character;
+  };
+  const spokenLocal = [...localPart].map(speakCharacter).join(", ");
+  const spokenDomain = domain.split(".").filter(Boolean).join(" dot ");
+  return `${spokenLocal}, at ${spokenDomain}`;
 }
 
 function buildSignupConfirmationSummary(input = {}) {

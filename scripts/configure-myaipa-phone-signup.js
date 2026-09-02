@@ -23,7 +23,8 @@ const webhookSecret = String(env.VAPI_WEBHOOK_SECRET || "").trim() || deriveVapi
 const toolName = "begin_myaipa_signup";
 const demoToolName = "send_myaipa_demo_followup";
 const endCallToolId = "1bf11961-f731-43b7-9f97-d765acdb51cd";
-const promptMarker = "## MY AI PA PHONE SIGNUP: begin_myaipa_signup";
+const legacyPromptMarker = "## MY AI PA PHONE SIGNUP: begin_myaipa_signup";
+const promptMarker = "## MY AI PA PHONE SIGNUP: deterministic-review-v2";
 
 function listFrom(value, keys = []) {
   if (Array.isArray(value)) return value;
@@ -140,7 +141,7 @@ function toolPayload() {
     type: "function",
     function: {
       name: toolName,
-      description: "Begin a My AI PA trial signup only after the caller has heard a complete read-back and explicitly confirmed it. The backend sends a verification link; the existing Make.com setup workflow starts only after verification.",
+      description: "Prepare a deterministic My AI PA signup readback, then submit those exact reviewed details only after explicit caller confirmation. Always call action review before action submit.",
       parameters: {
         type: "object",
         properties: {
@@ -163,6 +164,15 @@ function toolPayload() {
           },
           website: { type: "string", description: "Optional company website." },
           hours: { type: "string", description: "Optional business hours. Do not guess them." },
+          action: {
+            type: "string",
+            enum: ["review", "submit"],
+            description: "Use review after collecting the fields. Use submit only after speaking the returned readback exactly and receiving the caller's explicit confirmation.",
+          },
+          reviewToken: {
+            type: "string",
+            description: "For submit, copy the opaque reviewToken returned by the immediately preceding review call. Never speak or alter it.",
+          },
           callerConfirmed: {
             type: "boolean",
             description: "Set true only after reading every collected detail back and the caller explicitly says it is correct and should be submitted.",
@@ -185,8 +195,7 @@ function toolPayload() {
           "businessType",
           "serviceArea",
           "services",
-          "callerConfirmed",
-          "confirmationText",
+          "action",
         ],
       },
     },
@@ -223,11 +232,12 @@ function withSignupPrompt(messages = []) {
 - Explain before collecting details: the trial is fourteen days, includes up to sixty AI-handled minutes, requires no credit card, and setup does not begin until the owner verifies the link sent after this call.
 - Never collect card or banking information. Never claim the account, agent, phone number, or trial is active before the tool reports success and the owner verifies the link.
 - Collect one item at a time: owner full name; owner email; owner mobile number; business name; business phone; street address; city; province; postal code; trade; service area; and main services. Ask for website and hours only if the caller wants to provide them. Do not guess missing details.
-- Read every collected detail back in a short, organized summary. Ask exactly: "Is all of that correct, and do you want me to submit your My AI PA signup now?"
-- Use this read-back order exactly once: owner name; email; owner mobile; business name; business phone; street address, city, province, and postal code; business type; service area; main services. Never duplicate a field or merge labels.
-- Say email addresses in short chunks using "at" and "dot". Say phone numbers digit by digit. Say postal codes one character at a time with a pause after the first three; for example L3M 4E7 is "L, three, M — four, E, seven". Never interpret M as metres, meters, or millimetres.
+- After collecting every required field, call begin_myaipa_signup with action review and callerConfirmed false. Do not perform your own summary first.
+- When the review result returns, say its readback exactly as written, then say its confirmationQuestion exactly. Do not paraphrase, merge labels, add punctuation words, repeat a field, or invent text. Never speak the reviewToken or instruction.
+- The backend formats email, phone, and Canadian postal-code characters for unambiguous speech. Do not reformat them.
+- Stop after the confirmationQuestion and wait for the caller's next answer. Do not ask "are you still there" unless there has been genuine silence after the complete question.
 - If a short yes or no is not captured, pause briefly and ask once: "Sorry, I may have missed that — was that yes or no?"
-- Call begin_myaipa_signup only after an explicit yes. Pass the caller's actual confirming words in confirmationText and set callerConfirmed true. The tool-call turn must contain the tool call only.
+- Only if the caller's immediately following answer explicitly confirms both that the details are correct and that they want submission, call begin_myaipa_signup again with action submit, the unchanged fields, the exact reviewToken, callerConfirmed true, and their exact words in confirmationText. Never invent or paraphrase confirmationText. A yes to any other question is not authorization. The tool-call turn must contain the tool call only.
 - If validation fails, ask only for the missing or invalid item, read the corrected summary back, and obtain a new explicit yes before retrying.
 - On success, repeat the tool's channel-accurate message without adding a delivery channel. Do not mention Make.com, Vapi, Twilio, tools, or internal systems.
 - Once signup intent is identified, remain in signup mode for the rest of the call. Never call a demo follow-up tool in signup mode.
@@ -240,7 +250,8 @@ function withSignupPrompt(messages = []) {
     const content = String(message.content || "")
       .replace(/^.*never (?:output|use|say) digits.*$/gmi, "")
       .replace(/^.*spell out every number.*$/gmi, "");
-    const markerIndex = content.indexOf(promptMarker);
+    const markerIndexes = [content.indexOf(promptMarker), content.indexOf(legacyPromptMarker)].filter((index) => index >= 0);
+    const markerIndex = markerIndexes.length ? Math.min(...markerIndexes) : -1;
     return {
       ...message,
       content: `${markerIndex >= 0 ? content.slice(0, markerIndex).trimEnd() : content.trimEnd()}\n\n${override}`,
@@ -300,6 +311,11 @@ async function main() {
   ]));
   const promptReady = systemPrompt(assistant).includes(promptMarker);
   const toolAttached = Boolean(signupTool?.id && originalToolIds.includes(String(signupTool.id)));
+  const signupToolSchemaReady = Boolean(
+    signupTool?.function?.parameters?.properties?.action
+      && signupTool?.function?.parameters?.properties?.reviewToken
+      && signupTool?.function?.parameters?.required?.includes("action")
+  );
 
   console.log(JSON.stringify({
     mode: apply ? "apply" : "dry-run",
@@ -313,6 +329,7 @@ async function main() {
     },
     signupToolExists: Boolean(signupTool),
     signupToolAttached: toolAttached,
+    signupToolReviewSchemaConfigured: signupToolSchemaReady,
     signupPromptConfigured: promptReady,
     legacyDemoToolUsageCounts: Object.fromEntries(
       legacyDemoTools.map((tool) => [functionName(tool), toolUsage[String(tool.id)] || 0])
@@ -327,6 +344,7 @@ async function main() {
     ),
     plannedActions: [
       ...(!signupTool ? ["create guarded phone-signup tool"] : []),
+      ...(signupTool && !signupToolSchemaReady ? ["upgrade phone-signup tool to deterministic review and signed submission"] : []),
       ...(!guardedDemoTool ? ["create server-gated demo follow-up tool"] : []),
       ...(!toolAttached ? ["attach phone-signup tool to Riley"] : []),
       ...(!promptReady ? ["install confirmed phone-signup conversation flow"] : []),
@@ -406,6 +424,10 @@ async function main() {
       legacyDemoToolsDetached: !verifiedTools.some((tool) => ["draft_signup_sms", "send_signup_sms"].includes(functionName(tool).toLowerCase())),
       toolServerConfigured: Boolean(
         verifiedTools.find((tool) => String(tool.id) === signupToolId)?.server?.url === webhookUrl
+      ),
+      reviewWorkflowToolSchema: Boolean(
+        verifiedTools.find((tool) => String(tool.id) === signupToolId)?.function?.parameters?.properties?.action
+          && verifiedTools.find((tool) => String(tool.id) === signupToolId)?.function?.parameters?.properties?.reviewToken
       ),
     };
     if (!Object.values(checks).every(Boolean)) {

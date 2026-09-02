@@ -11,13 +11,13 @@ const {
 
 test("verbalizes Canadian postal codes without unit-word ambiguity", () => {
   const spoken = formatCanadianPostalCodeForSpeech("L3M 4E7");
-  assert.equal(spoken, "L, 3, M — 4, E, 7");
+  assert.equal(spoken, "letter L, number three, letter M — number four, letter E, number seven");
   assert.doesNotMatch(spoken, /meter|metre|millimeter/i);
 });
 
 test("verbalizes email and phone fields deterministically", () => {
-  assert.equal(formatEmailForSpeech("ollie.test+pilot@example.ca"), "ollie dot test + pilot at example dot ca");
-  assert.equal(formatPhoneForSpeech("+1 (905) 788-5488"), "9, 0, 5, 7, 8, 8, 5, 4, 8, 8");
+  assert.equal(formatEmailForSpeech("ollie.test+pilot@example.ca"), "o, l, l, i, e, dot, t, e, s, t, plus, p, i, l, o, t, at example dot ca");
+  assert.equal(formatPhoneForSpeech("+1 (905) 788-5488"), "nine, zero, five, seven, eight, eight, five, four, eight, eight");
 });
 
 test("creates a fixed-order signup read-back with no duplicated labels", () => {
@@ -30,7 +30,26 @@ test("creates a fixed-order signup read-back with no duplicated labels", () => {
   for (const label of ["Owner:", "Email:", "Owner mobile:", "Business:", "Business phone:", "Address:", "Business type:", "Service area:", "Main services:"]) {
     assert.equal(summary.split(label).length - 1, 1);
   }
-  assert.match(summary, /L, 3, M — 4, E, 7/);
+  assert.match(summary, /letter L, number three, letter M — number four, letter E, number seven/);
+});
+
+test("recreates the latest failure shape with synthetic fields and no invented or duplicated text", () => {
+  const summary = buildSignupConfirmationSummary({
+    ownerName: "Example Dave",
+    ownerEmail: "exampledave99@example.com",
+    ownerPhone: "9055557422",
+    businessName: "Example Dave's Electrical",
+    businessPhone: "9055557422",
+    streetAddress: "42 Example Street",
+    city: "Mississauga",
+    province: "ON",
+    postalCode: "L2S3P5",
+    businessType: "Electrical",
+    serviceArea: "Mississauga",
+    services: "new installations, upgrades, troubleshooting",
+  });
+  assert.equal(summary, "Owner: Example Dave. Email: e, x, a, m, p, l, e, d, a, v, e, nine, nine, at example dot com. Owner mobile: nine, zero, five, five, five, five, seven, four, two, two. Business: Example Dave's Electrical. Business phone: nine, zero, five, five, five, five, seven, four, two, two. Address: 42 Example Street, Mississauga, ON, letter L, number two, letter S — number three, letter P, number five. Business type: Electrical. Service area: Mississauga. Main services: new installations, upgrades, troubleshooting.");
+  assert.doesNotMatch(summary, /Lutchley|Indemir|metre|meter|millimetre|millimeter/i);
 });
 
 test("requires an explicit affirmative demo text request", () => {
