@@ -18,3 +18,17 @@ test("support report privacy remains opt-in for transcripts and caller details",
   expect(source).toMatch(/Include transcript and caller details in the support report/);
   expect(source).toMatch(/These private details are attached only if you send the report/);
 });
+
+test("the owner dashboard keeps the first view short and action focused", () => {
+  const source = fs.readFileSync(path.join(__dirname, "CustomerDashboard.js"), "utf8");
+
+  expect(source).toMatch(/DO THIS NEXT/);
+  expect(source).toMatch(/Ready for calls/);
+  expect(source).toMatch(/Calls answered/);
+  expect(source).toMatch(/Call back/);
+  expect(source).toMatch(/Recent calls/);
+  expect(source).toMatch(/<details id="more-settings"/);
+  expect(source).toMatch(/More settings/);
+  expect(source).toMatch(/Something not working\?/);
+  expect(source).not.toMatch(/<aside className="customer-sidebar"/);
+});
