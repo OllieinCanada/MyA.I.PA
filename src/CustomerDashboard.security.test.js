@@ -22,13 +22,17 @@ test("support report privacy remains opt-in for transcripts and caller details",
 test("the owner dashboard keeps the first view short and action focused", () => {
   const source = fs.readFileSync(path.join(__dirname, "CustomerDashboard.js"), "utf8");
 
-  expect(source).toMatch(/DO THIS NEXT/);
-  expect(source).toMatch(/Ready for calls/);
-  expect(source).toMatch(/Calls answered/);
+  expect(source).toMatch(/YOUR NEXT STEP/);
+  expect(source).toMatch(/My AI PA is working/);
+  expect(source).toMatch(/Calls handled/);
+  expect(source).toMatch(/People who called/);
   expect(source).toMatch(/Call back/);
-  expect(source).toMatch(/Recent calls/);
+  expect(source).toMatch(/calls\.length \? followUpCalls\.length/);
   expect(source).toMatch(/<details id="more-settings"/);
-  expect(source).toMatch(/More settings/);
-  expect(source).toMatch(/Something not working\?/);
+  expect(source).toMatch(/Need to change something\?/);
+  expect(source).toMatch(/Most days, you can ignore this/);
+  expect(source).toMatch(/We’ll figure out the technical part/);
+  expect(source).not.toMatch(/customer-simple-stats/);
+  expect(source).not.toMatch(/customer-simple-trial/);
   expect(source).not.toMatch(/<aside className="customer-sidebar"/);
 });
