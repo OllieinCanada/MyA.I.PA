@@ -3352,7 +3352,339 @@
   display: none;
 }
 
+/* Calm daily view: one task, three basics, then the people who called. */
+.customer-dashboard.customer-dashboard-simple {
+  background:
+    radial-gradient(circle at 8% 0%, rgba(39, 174, 112, 0.08), transparent 28rem),
+    #f3f7f5;
+}
+
+.customer-simple-header {
+  border-color: #dce9e2;
+  box-shadow: 0 8px 24px rgba(31, 72, 53, 0.05);
+}
+
+.customer-calm-focus {
+  display: grid;
+  grid-template-columns: minmax(16rem, 0.8fr) minmax(0, 1.2fr);
+  gap: 1rem;
+  margin-top: 1rem;
+  border: 1px solid #cfe3d8;
+  border-radius: 1.15rem;
+  background: linear-gradient(145deg, #ffffff, #f5fbf8);
+  padding: 1rem;
+  box-shadow: 0 18px 42px rgba(31, 72, 53, 0.08);
+}
+
+.customer-calm-status {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  padding: clamp(0.65rem, 2vw, 1.15rem);
+}
+
+.customer-calm-check {
+  display: grid;
+  width: 3rem;
+  height: 3rem;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 50%;
+  background: #e3f7ec;
+  color: #08764b;
+  font-size: 1.4rem;
+  font-weight: 950;
+  box-shadow: inset 0 0 0 1px #c1ead3;
+}
+
+.customer-calm-focus.is-waiting .customer-calm-check {
+  background: #fff4da;
+  color: #9a5a00;
+  box-shadow: inset 0 0 0 1px #f0d89c;
+}
+
+.customer-calm-status strong {
+  display: block;
+  margin: 0;
+  color: #0b2438;
+  font-size: clamp(1.15rem, 2.4vw, 1.5rem);
+  line-height: 1.15;
+  font-weight: 950;
+  letter-spacing: -0.025em;
+}
+
+.customer-calm-status p {
+  max-width: 34rem;
+  margin: 0.38rem 0 0;
+  color: #4d685b;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  font-weight: 700;
+}
+
+.customer-calm-action {
+  align-self: stretch;
+  border: 1px solid #bed6ef;
+  border-radius: 0.9rem;
+  background: #eef6ff;
+  padding: clamp(1rem, 2.5vw, 1.45rem);
+}
+
+.customer-calm-action > span {
+  display: inline-flex;
+  border-radius: 999px;
+  background: #dbeaff;
+  color: #0757bb;
+  padding: 0.4rem 0.65rem;
+  font-size: 0.68rem;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+}
+
+.customer-calm-action h2 {
+  margin: 0.8rem 0 0;
+  color: #0b2438;
+  font-size: clamp(1.3rem, 2.7vw, 1.7rem);
+  line-height: 1.12;
+  font-weight: 950;
+}
+
+.customer-calm-action p {
+  margin: 0.5rem 0 0;
+  color: #4e6982;
+  font-size: 0.86rem;
+  line-height: 1.5;
+  font-weight: 700;
+}
+
+.customer-calm-action a,
+.customer-calm-action button {
+  display: inline-flex;
+  min-height: 2.9rem;
+  align-items: center;
+  justify-content: center;
+  margin-top: 1rem;
+  border: 0;
+  border-radius: 0.7rem;
+  background: #126dff;
+  color: #fff;
+  padding: 0 1rem;
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 950;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.customer-calm-basics {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(18rem, 0.85fr);
+  gap: 1rem;
+  margin-top: 0.8rem;
+  border: 1px solid #d9e6df;
+  border-radius: 0.9rem;
+  background: #fff;
+  padding: 1rem;
+  box-shadow: 0 7px 22px rgba(31, 72, 53, 0.04);
+}
+
+.customer-calm-basics span,
+.customer-calm-basics strong,
+.customer-calm-basics small {
+  display: block;
+}
+
+.customer-calm-basics span {
+  color: #61796d;
+  font-size: 0.76rem;
+  font-weight: 900;
+}
+
+.customer-calm-number > strong {
+  margin-top: 0.38rem;
+  overflow-wrap: anywhere;
+  color: #0b2438;
+  font-size: clamp(1.45rem, 3.4vw, 2.15rem);
+  line-height: 1.05;
+  font-weight: 950;
+  letter-spacing: -0.035em;
+  white-space: nowrap;
+}
+
+.customer-calm-number > div {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.8rem;
+}
+
+.customer-calm-number a,
+.customer-calm-number button,
+.customer-calm-number > button {
+  display: inline-flex;
+  min-height: 2.3rem;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #bed2c7;
+  border-radius: 0.6rem;
+  background: #f4faf7;
+  color: #12613f;
+  padding: 0 0.75rem;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 950;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.customer-calm-number a {
+  border-color: #126dff;
+  background: #126dff;
+  color: #fff;
+}
+
+.customer-calm-number > em {
+  display: block;
+  margin-top: 0.55rem;
+  color: #08764b;
+  font-size: 0.73rem;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.customer-calm-service {
+  display: grid;
+  gap: 0;
+  min-width: 0;
+  border-left: 1px solid #e0ebe5;
+  padding-left: 1rem;
+}
+
+.customer-calm-service > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.2rem 0.75rem;
+  align-items: center;
+  padding: 0.55rem 0;
+}
+
+.customer-calm-service > div + div {
+  border-top: 1px solid #edf2ef;
+}
+
+.customer-calm-service p {
+  display: flex;
+  gap: 0.55rem;
+  align-items: baseline;
+  justify-content: flex-end;
+  margin: 0;
+  text-align: right;
+}
+
+.customer-calm-service strong {
+  color: #0b2438;
+  font-size: 0.9rem;
+  font-weight: 950;
+}
+
+.customer-calm-service small {
+  color: #698076;
+  font-size: 0.7rem;
+  font-weight: 750;
+}
+
+.customer-calm-service a {
+  grid-column: 1 / -1;
+  justify-self: end;
+  color: #0757bb;
+  font-size: 0.73rem;
+  font-weight: 950;
+  text-decoration: none;
+}
+
+.customer-calm-service .needs-action {
+  color: #8b5707;
+}
+
+.customer-simple-section {
+  border-color: #d9e6df;
+  box-shadow: 0 9px 26px rgba(31, 72, 53, 0.05);
+}
+
+.customer-simple-section-head p,
+.customer-simple-calls .customer-call-panel-head > div > p {
+  max-width: 38rem;
+  margin: 0.35rem 0 0;
+  color: #687f74;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  font-weight: 700;
+}
+
+.customer-simple-calls .customer-simple-kicker {
+  color: #08764b;
+}
+
+.customer-simple-calls .customer-call-list > article {
+  border-color: #dce8e2;
+  background: #fbfdfc;
+}
+
+.customer-simple-calls .customer-call-list .customer-call-status.needs-followup {
+  background: #e7f1ff;
+  color: #0757bb;
+}
+
+.customer-more-tools {
+  border-color: #d9e6df;
+  box-shadow: none;
+}
+
+.customer-more-tools > summary {
+  color: #395447;
+}
+
+.customer-more-tools > summary i {
+  background: #edf6f1;
+  color: #08764b;
+}
+
+/* iPad: keep the main choice side-by-side, but avoid dense two-card forms. */
+@media (min-width: 681px) and (max-width: 1024px) {
+  .customer-dashboard.customer-dashboard-simple {
+    padding: 1rem;
+  }
+
+  .customer-appointment-list {
+    grid-template-columns: 1fr;
+  }
+
+  .customer-calm-action a,
+  .customer-calm-action button,
+  .customer-calm-number a,
+  .customer-calm-number button,
+  .customer-simple-header > button {
+    min-height: 2.9rem;
+  }
+
+  .customer-more-tools > summary {
+    min-height: 5rem;
+  }
+}
+
 @media (max-width: 800px) {
+  .customer-calm-focus {
+    grid-template-columns: minmax(14rem, 0.75fr) minmax(0, 1.25fr);
+  }
+
+  .customer-calm-status {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .customer-calm-basics {
+    grid-template-columns: minmax(0, 1fr) minmax(16rem, 0.85fr);
+  }
+
   .customer-simple-hero {
     grid-template-columns: 1fr;
   }
@@ -3372,7 +3704,7 @@
   }
 }
 
-@media (max-width: 620px) {
+@media (max-width: 680px) {
   .customer-dashboard.customer-dashboard-simple {
     padding: 0.65rem;
   }
@@ -3387,6 +3719,83 @@
     border-top: 1px solid #e3edf6;
     border-left: 0;
     padding: 0.65rem 0 0;
+  }
+
+  .customer-calm-focus {
+    grid-template-columns: 1fr;
+    padding: 0.65rem;
+  }
+
+  .customer-calm-status {
+    align-items: center;
+    flex-direction: row;
+    gap: 0.75rem;
+    padding: 0.65rem;
+  }
+
+  .customer-calm-check {
+    width: 2.45rem;
+    height: 2.45rem;
+    font-size: 1.1rem;
+  }
+
+  .customer-calm-status p {
+    font-size: 0.9rem;
+  }
+
+  .customer-calm-action a,
+  .customer-calm-action button {
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .customer-calm-basics {
+    grid-template-columns: 1fr;
+    gap: 0.85rem;
+  }
+
+  .customer-calm-service {
+    grid-template-columns: 1fr 1fr;
+    border-top: 1px solid #e0ebe5;
+    border-left: 0;
+    padding-top: 0.35rem;
+    padding-left: 0;
+  }
+
+  .customer-calm-service > div {
+    display: block;
+    padding: 0.55rem;
+  }
+
+  .customer-calm-service > div + div {
+    border-top: 0;
+    border-left: 1px solid #edf2ef;
+  }
+
+  .customer-calm-service p {
+    display: block;
+    margin-top: 0.25rem;
+    text-align: left;
+  }
+
+  .customer-calm-service a {
+    display: inline-block;
+    margin-top: 0.4rem;
+  }
+
+  .customer-calm-number > strong {
+    font-size: clamp(1.35rem, 7.2vw, 1.85rem);
+  }
+
+  .customer-calm-number > div {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .customer-calm-number a,
+  .customer-calm-number button,
+  .customer-appointment-actions button {
+    min-height: 2.8rem;
   }
 
   .customer-simple-hero {
@@ -3450,6 +3859,20 @@
 
   .customer-simple-section .customer-live-refresh span {
     display: none;
+  }
+
+  .customer-simple-calls .customer-call-summary {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .customer-simple-calls .customer-call-copy {
+    grid-column: 1 / -1;
+  }
+
+  .customer-simple-calls .customer-call-status {
+    grid-column: 2;
+    grid-row: 1;
+    margin-right: 1.75rem;
   }
 
   .customer-more-tools > summary small {

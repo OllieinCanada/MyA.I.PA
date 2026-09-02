@@ -941,27 +941,6 @@ function JobberIntegrationPanel({ jobber = {}, onUpdated }) {
   );
 }
 
-function SimpleTrialBar({ usage = {}, trialText = "", trialEndAt = "" }) {
-  const remaining = Math.max(0, Math.round(Number(usage.remainingMinutes || 0)));
-  const limit = Math.max(1, Number(usage.limitMinutes || 60));
-  const used = Math.max(0, Number(usage.usedMinutes || 0));
-  const percent = Math.max(0, Math.min(100, Math.round((used / limit) * 100)));
-  const paused = Boolean(usage.newCallsPaused || usage.limitReached);
-  return (
-    <section className={`customer-simple-trial${paused ? " is-paused" : ""}`} aria-label="Free trial usage">
-      <div>
-        <span>Free trial</span>
-        <strong>{paused ? "New AI calls are paused" : `${remaining} minutes left`}</strong>
-        <small>{trialText}{trialEndAt ? ` · Ends ${fmtDate(trialEndAt)}` : ""}</small>
-      </div>
-      <div className="customer-simple-trial-progress" role="progressbar" aria-label="Trial minutes used" aria-valuemin="0" aria-valuemax={limit} aria-valuenow={Math.min(limit, used)}>
-        <i style={{ width: `${percent}%` }} />
-      </div>
-      <a href="mailto:hello@myaipa.com?subject=Activate%20My%20AI%20PA%20service">Activate</a>
-    </section>
-  );
-}
-
 function CustomerDashboardView({ dashboard, onSignOut, onRefresh, refreshing, refreshError, refreshedAt }) {
   const signup = dashboard.signup || {};
   const stats = dashboard.stats || {};
@@ -986,10 +965,14 @@ function CustomerDashboardView({ dashboard, onSignOut, onRefresh, refreshing, re
   const jobber = dashboard.integrations?.jobber || {};
   const aiNumber = assistant.aiNumber || signup.twilioPhoneNumber || "";
   const followUpCalls = calls.filter((call) => call.followUpNeeded);
-  const followUpCount = Math.max(Number(stats.followUps || 0), followUpCalls.length);
+  const followUpCount = calls.length ? followUpCalls.length : Number(stats.followUps || 0);
   const pendingAppointments = appointments.filter((appointment) => ["PENDING", "CHANGE_REQUESTED"].includes(appointment.status));
+  const firstPendingAppointment = pendingAppointments[0];
+  const firstFollowUpCall = followUpCalls[0];
   const [copyState, setCopyState] = useState("");
   const moreSettingsRef = useRef(null);
+  const trialMinutesLeft = Math.max(0, Math.round(Number(trialUsage.remainingMinutes || 0)));
+  const trialPaused = Boolean(trialUsage.newCallsPaused || trialUsage.limitReached);
 
   const trialText = useMemo(() => {
     if (!signup.trialEndAt) return "Trial date pending";
@@ -1002,21 +985,27 @@ function CustomerDashboardView({ dashboard, onSignOut, onRefresh, refreshing, re
 
   const primaryAction = useMemo(() => {
     if (!aiNumber) return {
-      title: "Your phone number is being prepared",
-      detail: "You do not need to do anything yet. Refresh this page in a few minutes.",
+      title: "Wait for your phone number",
+      detail: "We are setting it up. Check again in a few minutes.",
       label: "Check again",
       target: "refresh",
     };
     if (actionRequiredAppointments) return {
-      title: `${actionRequiredAppointments} appointment${actionRequiredAppointments === 1 ? "" : "s"} ${actionRequiredAppointments === 1 ? "needs" : "need"} your answer`,
-      detail: "Choose a time, then confirm it or suggest another one.",
-      label: "Answer now",
+      title: actionRequiredAppointments === 1
+        ? `Answer ${firstPendingAppointment?.customerName || "this customer"}’s appointment request`
+        : `Answer ${actionRequiredAppointments} appointment requests`,
+      detail: "Choose a time. We’ll message the customer for you.",
+      label: "Choose a time",
       target: "#appointments",
     };
     if (followUpCount) return {
-      title: `Call back ${followUpCount} ${followUpCount === 1 ? "customer" : "customers"}`,
-      detail: "Their names, phone numbers, and reasons for calling are ready below.",
-      label: "See calls",
+      title: followUpCount === 1
+        ? `Call ${firstFollowUpCall?.caller?.name || "this customer"} back`
+        : `Call back ${followUpCount} customers`,
+      detail: followUpCount === 1 && firstFollowUpCall
+        ? firstFollowUpCall.details?.service || firstFollowUpCall.lead?.summary || "Their phone number and call details are below."
+        : "Their phone numbers and call details are below.",
+      label: "See who called",
       target: "#calls",
     };
     if (nextStep) return {
@@ -1026,12 +1015,12 @@ function CustomerDashboardView({ dashboard, onSignOut, onRefresh, refreshing, re
       target: "settings",
     };
     return {
-      title: "You are all caught up",
-      detail: "Nothing needs your attention right now.",
-      label: "See recent calls",
-      target: "#calls",
+      title: "Nothing needs you right now",
+      detail: "You can close this page. We’ll let you know when that changes.",
+      label: "",
+      target: "",
     };
-  }, [actionRequiredAppointments, aiNumber, followUpCount, nextStep]);
+  }, [actionRequiredAppointments, aiNumber, firstFollowUpCall, firstPendingAppointment, followUpCount, nextStep]);
 
   const copyNumber = async () => {
     if (!aiNumber) return;
@@ -1057,49 +1046,58 @@ function CustomerDashboardView({ dashboard, onSignOut, onRefresh, refreshing, re
           <Brand />
           <div>
             <strong>{signup.businessName || "Your business"}</strong>
-            <span>{refreshError || (refreshing ? "Checking for updates…" : `Updated ${fmtRefreshTime(refreshedAt)}`)}</span>
+            <span title={refreshedAt ? `Last checked ${fmtRefreshTime(refreshedAt)}` : undefined}>{refreshError || (refreshing ? "Checking now…" : "Everything is up to date")}</span>
           </div>
           <button type="button" onClick={onSignOut}>Sign out</button>
         </header>
 
-        <section id="overview" className={`customer-simple-hero${aiNumber ? " is-ready" : " is-waiting"}`}>
-          <div className="customer-simple-hero-copy">
-            <span className="customer-simple-status"><i />{aiNumber ? "Ready for calls" : "Finishing setup"}</span>
-            <h1>{aiNumber ? "Your assistant is ready." : "We are setting up your assistant."}</h1>
-            <p>{aiNumber ? "Call the number to hear it. When you are happy, forward missed calls to it." : "Your number will appear here as soon as it is ready."}</p>
-            <div className="customer-simple-service-state">
-              <span>{messaging.serviceTextsActive ? "✓" : "!"}</span>
-              <p><strong>Text updates: {messaging.serviceTextsActive ? "On" : messaging.status === "PAUSED" ? "Paused" : "Not ready"}</strong>{messaging.guidance ? ` · ${messaging.guidance}` : ""}</p>
+        <section id="overview" className={`customer-calm-focus${aiNumber ? " is-ready" : " is-waiting"}`}>
+          <div className="customer-calm-status">
+            <span className="customer-calm-check" aria-hidden="true">{aiNumber ? "✓" : "…"}</span>
+            <div>
+              <strong>{aiNumber ? "My AI PA is working" : "We’re setting up My AI PA"}</strong>
+              <p>{aiNumber ? `It answers missed calls after ${assistant.answerAfterRings ?? 3} rings.${messaging.serviceTextsActive ? " We’ll text you when someone needs you." : ""}` : "You do not need to fix anything."}</p>
             </div>
           </div>
-          <div className="customer-simple-number-card">
-            <span>Your My AI PA number</span>
-            <strong>{fmtPhone(aiNumber)}</strong>
-            {aiNumber ? <div><a href={`tel:${aiNumber}`}>Call it now</a><button type="button" onClick={copyNumber}>Copy number</button></div> : <button type="button" onClick={onRefresh} disabled={refreshing}>{refreshing ? "Checking…" : "Check again"}</button>}
-            {copyState ? <small role="status">{copyState}</small> : null}
-          </div>
-        </section>
 
-        <section className="customer-simple-next" aria-labelledby="customer-next-title">
-          <span>DO THIS NEXT</span>
-          <div>
+          <div className="customer-calm-action" aria-labelledby="customer-next-title">
+            <span>YOUR NEXT STEP</span>
             <h2 id="customer-next-title">{primaryAction.title}</h2>
             <p>{primaryAction.detail}</p>
+            {primaryAction.target === "refresh" ? <button type="button" onClick={onRefresh} disabled={refreshing}>{refreshing ? "Checking…" : primaryAction.label}</button> : primaryAction.target === "settings" ? <button type="button" onClick={openMoreSettings}>{primaryAction.label}</button> : primaryAction.target ? <a href={primaryAction.target}>{primaryAction.label}</a> : null}
           </div>
-          {primaryAction.target === "refresh" ? <button type="button" onClick={onRefresh} disabled={refreshing}>{refreshing ? "Checking…" : primaryAction.label}</button> : primaryAction.target === "settings" ? <button type="button" onClick={openMoreSettings}>{primaryAction.label}</button> : <a href={primaryAction.target}>{primaryAction.label}</a>}
         </section>
 
-        {trialUsage.lifecycle === "trial" ? <SimpleTrialBar usage={trialUsage} trialText={trialText} trialEndAt={signup.trialEndAt} /> : null}
-
-        <section className="customer-simple-stats" aria-label="Your important numbers">
-          <article><span>Calls answered</span><strong>{stats.totalCalls || 0}</strong><small>by My AI PA</small></article>
-          <article className={followUpCount ? "needs-action" : ""}><span>Call back</span><strong>{followUpCount}</strong><small>{followUpCount ? "customers waiting" : "none waiting"}</small></article>
-          <article className={actionRequiredAppointments ? "needs-action" : ""}><span>Appointments</span><strong>{actionRequiredAppointments}</strong><small>{actionRequiredAppointments ? "need your answer" : `${confirmedAppointments} confirmed`}</small></article>
+        <section className="customer-calm-basics" aria-label="Your phone number and service">
+          <div className="customer-calm-number">
+            <span>Your assistant’s number</span>
+            <strong>{fmtPhone(aiNumber)}</strong>
+            {aiNumber ? <div><a href={`tel:${aiNumber}`}>Call to test</a><button type="button" onClick={copyNumber}>Copy</button></div> : <button type="button" onClick={onRefresh} disabled={refreshing}>{refreshing ? "Checking…" : "Check again"}</button>}
+            {copyState ? <em role="status">{copyState}</em> : null}
+          </div>
+          <div className="customer-calm-service">
+          {trialUsage.lifecycle === "trial" ? (
+            <div className={trialPaused ? "needs-action" : ""}>
+              <span>Free trial</span>
+              <p><strong>{trialPaused ? "Paused" : trialText}</strong><small>{trialPaused ? "New calls are paused." : `${trialMinutesLeft} minutes left`}</small></p>
+              <a href="mailto:hello@myaipa.com?subject=Activate%20My%20AI%20PA%20service">Activate</a>
+            </div>
+          ) : (
+            <div>
+              <span>Text updates</span>
+              <p><strong>{messaging.serviceTextsActive ? "On" : messaging.status === "PAUSED" ? "Paused" : "Not ready"}</strong><small>{messaging.serviceTextsActive ? "Alerts go to your phone" : "We’ll let you know when ready"}</small></p>
+            </div>
+          )}
+            <div>
+              <span>Calls handled</span>
+              <p><strong>{stats.totalCalls || 0}</strong><small>by My AI PA</small></p>
+            </div>
+          </div>
         </section>
 
         {pendingAppointments.length ? (
           <section id="appointments" className="customer-simple-section customer-simple-appointments">
-            <div className="customer-simple-section-head"><div><span>NEEDS YOUR ANSWER</span><h2>Appointment requests</h2></div><strong>{pendingAppointments.length}</strong></div>
+            <div className="customer-simple-section-head"><div><span>NEEDS YOUR ANSWER</span><h2>Appointments waiting for you</h2><p>Pick a time. We’ll handle the messages and calendar updates.</p></div><strong>{pendingAppointments.length}</strong></div>
             <div className="customer-appointment-list">
               {pendingAppointments.map((appointment) => <AppointmentRequestCard key={appointment.id} appointment={appointment} staffMembers={staffMembers} onUpdated={onRefresh} />)}
             </div>
@@ -1108,7 +1106,7 @@ function CustomerDashboardView({ dashboard, onSignOut, onRefresh, refreshing, re
 
         <section id="calls" className="customer-simple-section customer-simple-calls">
           <div className="customer-panel-head customer-call-panel-head">
-            <div><span className="customer-simple-kicker">WHAT HAPPENED</span><h2>Recent calls</h2></div>
+            <div><span className="customer-simple-kicker">YOUR CALLS</span><h2>People who called</h2><p>Start with anyone marked “Call back.” Tap a name only if you need more details.</p></div>
             <div className="customer-live-refresh">
               <span className={refreshError ? "has-error" : ""} role="status" aria-live="polite">
                 {refreshError || (refreshing ? "Checking…" : "Up to date")}
@@ -1129,10 +1127,10 @@ function CustomerDashboardView({ dashboard, onSignOut, onRefresh, refreshing, re
                 >
                   <span className="customer-call-identity">
                     <strong>{call.caller?.name || fmtPhone(call.caller?.phone)}</strong>
-                    <small>{fmtTime(call.startedAt)} · {fmtDuration(call.durationSec)}</small>
+                    <small>{fmtPhone(call.caller?.phone)} · {fmtTime(call.startedAt)}</small>
                   </span>
-                  <span className="customer-call-copy">{call.aiSummary || "Summary pending."}</span>
-                  <span className={`customer-call-status${call.followUpNeeded ? " needs-followup" : ""}`}>{call.followUpNeeded ? "Follow up" : statusLabel(call.outcome || call.status)}</span>
+                  <span className="customer-call-copy">{call.details?.service || call.lead?.summary || call.aiSummary || "Call details are being prepared."}</span>
+                  <span className={`customer-call-status${call.followUpNeeded ? " needs-followup" : ""}`}>{call.followUpNeeded ? "Call back" : "Handled"}</span>
                   <span className="customer-call-chevron" aria-hidden="true">⌄</span>
                 </button>
                 {openCallId === call.id ? <CallDetails call={call} onReport={openSupport} /> : null}
@@ -1142,7 +1140,7 @@ function CustomerDashboardView({ dashboard, onSignOut, onRefresh, refreshing, re
         </section>
 
         <details id="more-settings" className="customer-more-tools" ref={moreSettingsRef}>
-          <summary><span><strong>More settings</strong><small>Phone setup, calendars, team, leads, FAQs, and support history</small></span><i aria-hidden="true">+</i></summary>
+          <summary><span><strong>Need to change something?</strong><small>Most days, you can ignore this.</small></span><i aria-hidden="true">+</i></summary>
           <div className="customer-more-tools-body">
             <section className="customer-grid">
               <div id="setup" className="customer-panel">
@@ -1187,8 +1185,8 @@ function CustomerDashboardView({ dashboard, onSignOut, onRefresh, refreshing, re
         <footer className="customer-simple-footer">
           <button type="button" onClick={() => openSupport(null)}>
             <span aria-hidden="true">?</span>
-            <strong>Something not working?</strong>
-            <small>Tell us once. We attach the useful details.</small>
+            <strong>Need help? Tell us what you see.</strong>
+            <small>We’ll figure out the technical part.</small>
           </button>
           <a href="#/signup">Add another business</a>
         </footer>
