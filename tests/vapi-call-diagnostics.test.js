@@ -165,3 +165,36 @@ test("diagnostic recognizes the isolated composite tool and verifies both routes
   assert.equal(report.finding.severity, "healthy");
   assert.doesNotMatch(JSON.stringify(report), /SM_OWNER_SECRET|SM_CUSTOMER_SECRET/);
 });
+
+test("diagnostic explains a Vapi confirmation-gate rejection before Twilio is called", () => {
+  const call = {
+    id: "call-confirmation-rejected",
+    artifact: {
+      messages: [
+        {
+          role: "assistant",
+          toolCallList: [{
+            id: "composite-rejected-1",
+            name: "send_call_summaries_7487_test_v2",
+            parameters: { businessName: "Private test", requestType: "constituent_demo", name: "Test Caller" },
+          }],
+        },
+        {
+          role: "tool",
+          toolCallId: "composite-rejected-1",
+          name: "send_call_summaries_7487_test_v2",
+          result: "Tool call rejected based on configured rejection plan",
+        },
+      ],
+    },
+  };
+
+  const report = analyzeVapiSmsCall(call, { aiPhone: "+12892057487", ownerLast4: "5488", customerPhone: "+19055555488" });
+  assert.equal(report.composite.invoked, true);
+  assert.equal(report.composite.toolRejected, true);
+  assert.equal(report.owner.failed, true);
+  assert.equal(report.customer.failed, true);
+  assert.equal(report.finding.code, "SMS_CONFIRMATION_REJECTED");
+  assert.match(report.finding.summary, /before Twilio was called/i);
+  assert.doesNotMatch(JSON.stringify(report), /call-confirmation-rejected|Test Caller/);
+});
