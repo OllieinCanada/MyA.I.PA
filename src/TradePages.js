@@ -362,6 +362,9 @@ const tradeFlyerCopy = {
 function FlyerIcon({ name }) {
   const paths = {
     phone: <><path d="M6 3h4l2 5-3 2c1.8 3.8 4.2 6.2 8 8l2-3 5 2v4c0 1.1-.9 2-2 2C11.5 23 3 14.5 3 4a2 2 0 0 1 2-2Z" /></>,
+    back: <><path d="m15 5-7 7 7 7" /><path d="M8 12h12" /></>,
+    check: <><path d="m5 12 4 4L19 6" /></>,
+    bolt: <><path d="M13.5 2 5 13h6l-.5 9L19 10h-6l.5-8Z" /></>,
     clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v6l4 2" /></>,
     pin: <><path d="M20 10c0 5-8 12-8 12S4 15 4 10a8 8 0 1 1 16 0Z" /><circle cx="12" cy="10" r="2" /></>,
     shield: <><path d="m12 3 8 3v6c0 5-3.4 8.4-8 10-4.6-1.6-8-5-8-10V6l8-3Z" /><path d="m8 12 2.5 2.5L16 9" /></>,
@@ -381,7 +384,7 @@ function TradeFlyer({ slug, trade }) {
   const copy = tradeFlyerCopy[slug];
   const howItWorks = [["Customer calls", "Your normal business number rings."], ["My AI PA answers", "It picks up after three rings."], ["You get the lead", "Job details arrive by text."]];
   const signup = ["Go to MYAIPA.CA", "Start the 14-day free trial", "Add your services, service area and business details", "Make private test calls", "Forward missed or after-hours calls when ready"];
-  const leadIcons = ["note", "user", "pin", "clock", "note"];
+  const leadIcons = ["bolt", "user", "pin", "clock", "note"];
 
   return (
     <article className="flyer-one-to-one" aria-label={`${copy.name} My AI PA landing page`}>
@@ -392,10 +395,19 @@ function TradeFlyer({ slug, trade }) {
         <p className="flyer-intro">{copy.intro}</p>
         <div className="flyer-missed"><FlyerIcon name="phone" /><strong>{copy.missed}</strong></div>
         <div className="flyer-top-actions"><a href="#/signup">START 14-DAY TRIAL</a><a href="tel:+12495033301">CALL LIVE DEMO</a></div>
-        <div className="flyer-proof"><span>✓ No credit card</span><span>✓ Keep your number</span><span>✓ Cancel anytime</span></div>
+        <div className="flyer-proof"><span><FlyerIcon name="check" />No credit card</span><span><FlyerIcon name="check" />Keep your number</span><span><FlyerIcon name="check" />Cancel anytime</span></div>
       </section>
 
-      <section className={`flyer-photo flyer-photo-${slug}`} style={{ backgroundImage: `url(/trade-heroes/${slug}.png)` }}>
+      <section className={`flyer-photo flyer-photo-${slug}`}>
+        <img
+          className="flyer-photo-image"
+          src={`/trade-heroes/${slug}-864.jpg`}
+          srcSet={`/trade-heroes/${slug}-480.jpg 480w, /trade-heroes/${slug}-864.jpg 864w`}
+          sizes="(max-width: 620px) 100vw, 1120px"
+          loading="lazy"
+          decoding="async"
+          alt=""
+        />
         <div className="flyer-burst">14-DAY<br />FREE<br />TRIAL</div>
         <div className="flyer-phone">
           <div className="flyer-phone-status"><span>9:41</span><i /><span>5G</span></div>
@@ -403,7 +415,7 @@ function TradeFlyer({ slug, trade }) {
           <div className="flyer-phone-lead">
             {copy.lead.map(([label, value], index) => <div key={label}><FlyerIcon name={leadIcons[index]} /><span><small>{label}</small><strong>{value}</strong></span></div>)}
           </div>
-          <div className="flyer-ready">✓ <strong>Ready to call back</strong></div>
+          <div className="flyer-ready"><FlyerIcon name="check" /><strong>Ready to call back</strong></div>
         </div>
       </section>
 
@@ -416,7 +428,7 @@ function TradeFlyer({ slug, trade }) {
         <FlyerPanel title="HOW TO SIGN UP">{signup.map((step, index) => <div className="flyer-number-row" key={step}><span>{index + 1}</span><p><strong>{step}</strong></p></div>)}</FlyerPanel>
         <FlyerPanel title={`WHY ${copy.name.toUpperCase()} USE IT`}>{copy.why.map((reason, index) => <div className="flyer-icon-row" key={reason}><FlyerIcon name={["clock", "phone", "note", "shield"][index]} /><strong>{reason}</strong></div>)}</FlyerPanel>
 
-        <section className="flyer-price"><h2>SIMPLE PRICING</h2><div><p>14-DAY<br />FREE TRIAL</p><strong><b>$79</b>/mo</strong><small>Plus applicable taxes</small><ul><li>60 AI call minutes included</li><li>$0.25/min after 60 minutes</li><li>No setup fee</li></ul></div></section>
+        <section className="flyer-price"><h2>SIMPLE PRICING</h2><div><p>14-DAY<br />FREE TRIAL</p><strong><b>$79</b>/mo</strong><small>Plus applicable taxes</small><ul><li><FlyerIcon name="check" />60 AI call minutes included</li><li><FlyerIcon name="check" />$0.25/min after 60 minutes</li><li><FlyerIcon name="check" />No setup fee</li></ul></div></section>
 
         <div className="flyer-final-actions"><a className="is-orange" href="#/signup"><span><FlyerIcon name="globe" /></span><p><small>Start your free trial at</small><strong>MYAIPA.CA</strong></p></a><a className="is-black" href="tel:+12495033301"><span><FlyerIcon name="phone" /></span><p><small>Call the live demo</small><strong>(249) 503-3301</strong></p></a></div>
         <p className="flyer-private"><FlyerIcon name="shield" /> Test it privately before forwarding real customer calls.</p>
@@ -439,7 +451,7 @@ function TradeDetail({ slug, trade }) {
 
   return (
     <main className="trade-site trade-flyer-site" style={pageStyle}>
-      <header className="flyer-mobile-header"><a href="#/trades" aria-label="Back to all trades">←</a><span>My AI PA for {tradeFlyerCopy[slug].name}</span></header>
+      <header className="flyer-mobile-header"><a href="#/trades" aria-label="Back to all trades"><FlyerIcon name="back" /></a><span>My AI PA for {tradeFlyerCopy[slug].name}</span></header>
       <TradeFlyer slug={slug} trade={trade} />
     </main>
   );
