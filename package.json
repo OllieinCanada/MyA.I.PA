@@ -144,6 +144,7 @@
     "configure:vapi-grimsby": "node scripts/configure-grimsby-vapi.js",
     "configure:vapi-first-class-rentals": "node scripts/configure-first-class-rentals-vapi.js",
     "provision:vapi-dean-private-demo": "node scripts/provision-dean-allison-private-demo.js",
+    "upgrade:vapi-dean-complaint-quality": "node scripts/upgrade-dean-allison-complaint-quality.js",
     "configure:vapi-signup-preview": "node scripts/configure-vapi-signup-preview.js",
     "configure:myaipa-phone-signup": "node scripts/configure-myaipa-phone-signup.js",
     "upgrade:vapi-grimsby": "node scripts/upgrade-grimsby-vapi.js",

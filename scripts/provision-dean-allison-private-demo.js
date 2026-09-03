@@ -218,12 +218,33 @@ EXAMPLES
 - Caller makes an unverified allegation after their name is known. Assistant: "You are reporting that this happened, and you would like the concern recorded accurately. What outcome are you asking for?"`;
 }
 
-function assistantPayload(endCallToolId, summaryToolId, summaryToolName) {
+function assistantPayload(endCallToolId, summaryToolId, summaryToolName, currentAssistant = {}) {
+  const currentArtifactPlan = currentAssistant?.artifactPlan && typeof currentAssistant.artifactPlan === "object"
+    ? currentAssistant.artifactPlan
+    : {};
   return {
     name: assistantName,
     firstMessage,
     firstMessageMode: "assistant-speaks-first",
-    transcriber: { provider: "deepgram", model: "nova-3", language: "en", numerals: true, endpointing: 450 },
+    transcriber: {
+      provider: "deepgram",
+      model: "nova-3",
+      language: "en",
+      smartFormat: true,
+      numerals: true,
+      endpointing: 450,
+      keyterm: [
+        "Dean Allison",
+        "Niagara West",
+        "Grimsby",
+        "constituency office",
+        "Canada Pension Plan",
+        "Canada Revenue Agency",
+        "Employment Insurance",
+        "Service Canada",
+        "Temporary Foreign Worker Program",
+      ],
+    },
     model: {
       provider: "openai",
       model: "gpt-4o",
@@ -235,10 +256,16 @@ function assistantPayload(endCallToolId, summaryToolId, summaryToolName) {
     maxDurationSeconds: 300,
     silenceTimeoutSeconds: 30,
     artifactPlan: {
+      ...currentArtifactPlan,
       recordingEnabled: true,
       loggingEnabled: true,
       pcapEnabled: false,
-      transcriptPlan: { enabled: true },
+      transcriptPlan: {
+        ...(currentArtifactPlan.transcriptPlan && typeof currentArtifactPlan.transcriptPlan === "object"
+          ? currentArtifactPlan.transcriptPlan
+          : {}),
+        enabled: true,
+      },
     },
     compliancePlan: {
       securityFilterPlan: {
@@ -256,6 +283,10 @@ function assistantPayload(endCallToolId, summaryToolId, summaryToolName) {
     },
     server: { url: webhookUrl },
     serverMessages: ["end-of-call-report", "tool-calls"],
+    backgroundSpeechDenoisingPlan: {
+      ...(currentAssistant?.backgroundSpeechDenoisingPlan || {}),
+      smartDenoisingPlan: { enabled: true },
+    },
     ...assistantTimingPatch(),
   };
 }
@@ -392,7 +423,7 @@ async function main() {
   const currentAssistant = await vapiRequest(`/assistant/${encodeURIComponent(assistant.id)}`);
   const patchedAssistant = await vapiRequest(`/assistant/${encodeURIComponent(assistant.id)}`, {
     method: "PATCH",
-    body: assistantPayload(endCallTool.id, summaryTool.id, toolName(summaryTool)),
+    body: assistantPayload(endCallTool.id, summaryTool.id, toolName(summaryTool), currentAssistant),
   });
   if (assistantIdForPhone(importedPhone) !== assistant.id) {
     importedPhone = await vapiRequest(`/phone-number/${encodeURIComponent(importedPhone.id)}`, {
