@@ -372,6 +372,28 @@ function FlyerIcon({ name }) {
     note: <><rect x="4" y="5" width="16" height="14" rx="2" /><path d="M8 9h8M8 13h6" /></>,
     cup: <><path d="M4 8h13v7a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5V8Z" /><path d="M17 10h2a3 3 0 0 1 0 6h-2M7 4v2m4-2v2" /></>,
     globe: <><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18" /></>,
+    interior: <><path d="M4 20V7l8-4 8 4v13" /><path d="M8 20v-7h8v7M3 20h18" /></>,
+    exterior: <><path d="m3 11 9-7 9 7" /><path d="M5 10v10h14V10M9 20v-6h6v6" /><path d="M18 5h2v5" /></>,
+    cabinet: <><rect x="4" y="3" width="16" height="18" rx="1" /><path d="M12 3v18M4 12h16" /><circle cx="9" cy="8" r=".7" /><circle cx="15" cy="8" r=".7" /><circle cx="9" cy="16" r=".7" /><circle cx="15" cy="16" r=".7" /></>,
+    building: <><path d="M4 21V5h10v16M14 9h6v12M2 21h20" /><path d="M7 8h2m2 0h1M7 12h2m2 0h1M7 16h2m2 0h1M17 12h1m-1 4h1" /></>,
+    leak: <><path d="M4 7h16l-2-3H6L4 7Z" /><path d="M6 7v4m12-4v4" /><path d="M12 10s-4 4.4-4 7a4 4 0 0 0 8 0c0-2.6-4-7-4-7Z" /></>,
+    storm: <><path d="M6 17h11a4 4 0 0 0 .5-8A6 6 0 0 0 6.3 7.3 4.8 4.8 0 0 0 6 17Z" /><path d="m10 15-2 4h3l-1 3 5-6h-3l1-3" /></>,
+    reroof: <><path d="m3 12 9-8 9 8M6 10v10h12V10" /><path d="M8 13h8M8 16h8" /></>,
+    inspect: <><circle cx="10" cy="10" r="6" /><path d="m15 15 6 6M7 10l2 2 4-5" /></>,
+    outlet: <><rect x="5" y="3" width="14" height="18" rx="3" /><path d="M9 8v3m6-3v3M9 16h6" /></>,
+    charger: <><rect x="5" y="3" width="11" height="18" rx="2" /><path d="M8 7h5M16 8h2a2 2 0 0 1 2 2v6a2 2 0 0 0 2 2" /><path d="m9 17 3-5h-2l3-5" /></>,
+    wiring: <><path d="M5 4v6a4 4 0 0 0 4 4h6a4 4 0 0 1 4 4v2" /><circle cx="5" cy="3" r="2" /><circle cx="19" cy="21" r="2" /><path d="M9 10h6" /></>,
+    panel: <><rect x="4" y="3" width="16" height="18" rx="2" /><path d="M8 7h8M8 11h3m2 0h3M8 15h3m2 0h3" /></>,
+    drain: <><path d="M3 7h18M6 7v4a6 6 0 0 0 12 0V7" /><path d="M9 11h6M10 15h4M12 18v3" /></>,
+    water: <><path d="M12 3s-6 7-6 12a6 6 0 1 0 12 0c0-5-6-12-6-12Z" /><path d="M9 16a3 3 0 0 0 3 2" /></>,
+    wrench: <><path d="M14 6a5 5 0 0 0-6.5 6.5L3 17l4 4 4.5-4.5A5 5 0 0 0 18 10l-3 2-3-3 2-3Z" /></>,
+    flame: <><path d="M13 2c1 5-3 6-3 10 0 2 1 3 2 4-3 0-5-2-5-5-3 3-2 11 5 11 5 0 8-3 8-8 0-5-4-8-7-12Z" /></>,
+    snow: <><path d="M12 2v20M4 6l16 12M20 6 4 18M8 4l4 3 4-3M8 20l4-3 4 3M3 10l4 2-4 2M21 10l-4 2 4 2" /></>,
+    maintenance: <><circle cx="12" cy="12" r="8" /><path d="M12 7v5l3 2M12 2v3M12 19v3M2 12h3m14 0h3" /></>,
+    replace: <><path d="M7 7h11l-3-3m3 3-3 3M17 17H6l3 3m-3-3 3-3" /></>,
+    renovation: <><path d="m3 20 7-7M7 17l-3-3 8-8 3 3-8 8Z" /><path d="m13 5 2-2 6 6-2 2" /></>,
+    addition: <><path d="M4 21V9l7-5 7 5v12M2 21h20" /><path d="M17 4v6M14 7h6M8 21v-6h6v6" /></>,
+    restoration: <><path d="M4 12a8 8 0 1 0 3-6" /><path d="M4 4v8h8" /><path d="M9 16l6-8" /></>,
   };
   return <svg viewBox="0 0 24 24" aria-hidden="true">{paths[name] || paths.note}</svg>;
 }
@@ -380,11 +402,21 @@ function FlyerPanel({ title, children, className = "" }) {
   return <section className={`flyer-panel ${className}`}><h2>{title}</h2><div>{children}</div></section>;
 }
 
+export const tradeCallIcons = {
+  electricians: ["outlet", "charger", "wiring", "panel"],
+  plumbers: ["leak", "drain", "water", "wrench"],
+  hvac: ["flame", "snow", "maintenance", "replace"],
+  "general-contractors": ["renovation", "addition", "restoration", "building"],
+  roofers: ["leak", "storm", "reroof", "inspect"],
+  painters: ["interior", "exterior", "cabinet", "building"],
+};
+
 function TradeFlyer({ slug, trade }) {
   const copy = tradeFlyerCopy[slug];
   const howItWorks = [["Customer calls", "Your normal business number rings."], ["My AI PA answers", "It picks up after three rings."], ["You get the lead", "Job details arrive by text."]];
   const signup = ["Go to MYAIPA.CA", "Start the 14-day free trial", "Add your services, service area and business details", "Make private test calls", "Forward missed or after-hours calls when ready"];
   const leadIcons = ["bolt", "user", "pin", "clock", "note"];
+  const callIcons = tradeCallIcons[slug];
 
   return (
     <article className="flyer-one-to-one" aria-label={`${copy.name} My AI PA landing page`}>
@@ -421,7 +453,7 @@ function TradeFlyer({ slug, trade }) {
 
       <section className="flyer-coffee"><div className="flyer-coffee-copy"><span><FlyerIcon name="cup" /></span><p><strong>ABOUT THE PRICE OF A CUP OF COFFEE A DAY.</strong><small>$79 per month works out to roughly $2.60 per day before tax.</small></p></div><div className="flyer-daily"><strong>$2.60</strong>/day</div></section>
 
-      <section className="flyer-calls"><h2><small>COMMON CALLS</small> MY AI PA CAN CAPTURE</h2><div>{copy.calls.map((call) => <article key={call}>{call}</article>)}</div></section>
+      <section className="flyer-calls"><h2><small>COMMON CALLS</small> MY AI PA CAN CAPTURE</h2><div>{copy.calls.map((call, index) => <article key={call}><span className="flyer-call-icon"><FlyerIcon name={callIcons[index]} /></span><strong>{call}</strong></article>)}</div></section>
 
       <div className="flyer-panels">
         <FlyerPanel title="HOW IT WORKS">{howItWorks.map(([title, body], index) => <div className="flyer-number-row" key={title}><span>{index + 1}</span><p><strong>{title}</strong><small>{body}</small></p></div>)}</FlyerPanel>
