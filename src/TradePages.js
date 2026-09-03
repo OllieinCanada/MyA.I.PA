@@ -290,48 +290,136 @@ function TradeHub() {
   );
 }
 
-function TradeFlyer({ trade }) {
-  const callTypes = trade.callerNeeds.slice(0, 4);
+const tradeFlyerCopy = {
+  electricians: {
+    name: "Electricians",
+    eyebrow: "AI phone answering for Canadian electricians",
+    headlineTop: "YOU'RE ON THE JOB.",
+    headlineBottom: "WE'LL GET THE PHONE.",
+    intro: "You should not stop electrical work for every ring. My AI PA catches electrical inquiries, gathers the job details and sends you a callback-ready lead.",
+    missed: "MISSED ELECTRICAL CALLS = LOST JOBS",
+    lead: [["SERVICE", "Partial power + breaker trips"], ["CALLER", "Jordan Lee"], ["LOCATION", "Hamilton, ON"], ["CALLBACK", "Priority callback"], ["INTENT", "Repair request"]],
+    calls: ["POWER PROBLEMS", "EV CHARGERS", "NEW WIRING", "SERVICE UPGRADES"],
+    why: ["Answers while you're on the tools or moving between jobs", "Collects the job, location, timing and callback details", "Keep your same business number", "Test privately and cancel anytime"],
+  },
+  plumbers: {
+    name: "Plumbers",
+    eyebrow: "AI phone answering for Canadian plumbers",
+    headlineTop: "YOU'RE UNDER THE SINK.",
+    headlineBottom: "WE'LL GET THE PHONE.",
+    intro: "You should not stop a plumbing job for every ring. My AI PA catches plumbing inquiries, gathers the problem details and sends you a callback-ready lead.",
+    missed: "MISSED PLUMBING CALLS = LOST JOBS",
+    lead: [["SERVICE", "Active ceiling leak"], ["CALLER", "Alex Morgan"], ["LOCATION", "Grimsby, ON"], ["CALLBACK", "Priority callback"], ["INTENT", "Repair request"]],
+    calls: ["ACTIVE LEAKS", "DRAIN BACKUPS", "NO HOT WATER", "INSTALLATIONS"],
+    why: ["Answers while you're under a sink or on another call", "Collects the issue, location, urgency and callback details", "Keep your same business number", "Test privately and cancel anytime"],
+  },
+  hvac: {
+    name: "HVAC Pros",
+    eyebrow: "AI phone answering for Canadian HVAC companies",
+    headlineTop: "YOU'RE ON A SERVICE CALL.",
+    headlineBottom: "WE'LL GET THE PHONE.",
+    intro: "You should not leave equipment mid-service for every ring. My AI PA catches heating and cooling inquiries, gathers the details and sends you a callback-ready lead.",
+    missed: "MISSED HVAC CALLS = LOST JOBS",
+    lead: [["SERVICE", "No heat"], ["CALLER", "Taylor Smith"], ["LOCATION", "St. Catharines, ON"], ["CALLBACK", "Priority callback"], ["INTENT", "Repair request"]],
+    calls: ["NO HEAT", "NO COOLING", "MAINTENANCE", "REPLACEMENTS"],
+    why: ["Answers while you're servicing equipment or driving", "Collects the system, issue, location and callback details", "Keep your same business number", "Test privately and cancel anytime"],
+  },
+  "general-contractors": {
+    name: "Contractors",
+    eyebrow: "AI phone answering for Canadian contractors",
+    headlineTop: "YOU'RE RUNNING THE JOB.",
+    headlineBottom: "WE'LL GET THE PHONE.",
+    intro: "You should not stop a project for every ring. My AI PA catches construction inquiries, gathers the project details and sends you a callback-ready lead.",
+    missed: "MISSED PROJECT CALLS = LOST JOBS",
+    lead: [["SERVICE", "Basement renovation"], ["CALLER", "Morgan Taylor"], ["LOCATION", "Hamilton, ON"], ["CALLBACK", "After 5 p.m."], ["INTENT", "Estimate request"]],
+    calls: ["RENOVATIONS", "ADDITIONS", "RESTORATION", "COMMERCIAL WORK"],
+    why: ["Answers while you're managing crews or materials", "Collects the scope, location, timing and callback details", "Keep your same business number", "Test privately and cancel anytime"],
+  },
+  roofers: {
+    name: "Roofers",
+    eyebrow: "AI phone answering for Canadian roofers",
+    headlineTop: "YOU'RE ON THE ROOF.",
+    headlineBottom: "WE'LL GET THE PHONE.",
+    intro: "You should not climb down for every ring. My AI PA catches roofing inquiries, gathers the property details and sends you a callback-ready lead.",
+    missed: "MISSED ROOFING CALLS = LOST JOBS",
+    lead: [["SERVICE", "Wind damage + active leak"], ["CALLER", "Emily Carter"], ["LOCATION", "Grimsby, ON"], ["CALLBACK", "Urgent callback"], ["INTENT", "Repair request"]],
+    calls: ["ROOF LEAKS", "STORM DAMAGE", "RE-ROOFS", "INSPECTIONS"],
+    why: ["Answers while you're on the roof or moving materials", "Collects the job, location, timing and callback details", "Keep your same business number", "Test privately and cancel anytime"],
+  },
+  painters: {
+    name: "Painters",
+    eyebrow: "AI phone answering for Canadian painters",
+    headlineTop: "YOU'RE ON THE LADDER.",
+    headlineBottom: "WE'LL GET THE PHONE.",
+    intro: "You should not stop painting for every ring. My AI PA catches quote requests, gathers the project details and sends you a callback-ready lead.",
+    missed: "MISSED PAINTING CALLS = LOST JOBS",
+    lead: [["SERVICE", "Kitchen cabinet painting"], ["CALLER", "Jamie Wilson"], ["LOCATION", "Burlington, ON"], ["CALLBACK", "After 4 p.m."], ["INTENT", "Quote request"]],
+    calls: ["INTERIORS", "EXTERIORS", "CABINETS", "COMMERCIAL WORK"],
+    why: ["Answers while you're painting or preparing surfaces", "Collects the scope, location, timing and callback details", "Keep your same business number", "Test privately and cancel anytime"],
+  },
+};
+
+function FlyerIcon({ name }) {
+  const paths = {
+    phone: <><path d="M6 3h4l2 5-3 2c1.8 3.8 4.2 6.2 8 8l2-3 5 2v4c0 1.1-.9 2-2 2C11.5 23 3 14.5 3 4a2 2 0 0 1 2-2Z" /></>,
+    clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v6l4 2" /></>,
+    pin: <><path d="M20 10c0 5-8 12-8 12S4 15 4 10a8 8 0 1 1 16 0Z" /><circle cx="12" cy="10" r="2" /></>,
+    shield: <><path d="m12 3 8 3v6c0 5-3.4 8.4-8 10-4.6-1.6-8-5-8-10V6l8-3Z" /><path d="m8 12 2.5 2.5L16 9" /></>,
+    user: <><circle cx="12" cy="8" r="3" /><path d="M6 21c0-4 2.7-7 6-7s6 3 6 7" /></>,
+    note: <><rect x="4" y="5" width="16" height="14" rx="2" /><path d="M8 9h8M8 13h6" /></>,
+    cup: <><path d="M4 8h13v7a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5V8Z" /><path d="M17 10h2a3 3 0 0 1 0 6h-2M7 4v2m4-2v2" /></>,
+    globe: <><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18" /></>,
+  };
+  return <svg viewBox="0 0 24 24" aria-hidden="true">{paths[name] || paths.note}</svg>;
+}
+
+function FlyerPanel({ title, children, className = "" }) {
+  return <section className={`flyer-panel ${className}`}><h2>{title}</h2><div>{children}</div></section>;
+}
+
+function TradeFlyer({ slug, trade }) {
+  const copy = tradeFlyerCopy[slug];
+  const howItWorks = [["Customer calls", "Your normal business number rings."], ["My AI PA answers", "It picks up after three rings."], ["You get the lead", "Job details arrive by text."]];
+  const signup = ["Go to MYAIPA.CA", "Start the 14-day free trial", "Add your services, service area and business details", "Make private test calls", "Forward missed or after-hours calls when ready"];
+  const leadIcons = ["note", "user", "pin", "clock", "note"];
 
   return (
-    <article className="trade-flyer" aria-label={`${trade.label} My AI PA flyer`}>
-      <div className="trade-flyer-brand-row">
+    <article className="flyer-one-to-one" aria-label={`${copy.name} My AI PA landing page`}>
+      <section className="flyer-hero-copy">
         <Brand />
-        <span className="trade-flyer-audience"><TradeIcon name={trade.icon} /> Built for {trade.plural}</span>
-      </div>
+        <p className="flyer-eyebrow">{copy.eyebrow}</p>
+        <h1><span>{copy.headlineTop}</span><strong>{copy.headlineBottom}</strong></h1>
+        <p className="flyer-intro">{copy.intro}</p>
+        <div className="flyer-missed"><FlyerIcon name="phone" /><strong>{copy.missed}</strong></div>
+        <div className="flyer-top-actions"><a href="#/signup">START 14-DAY TRIAL</a><a href="tel:+12495033301">CALL LIVE DEMO</a></div>
+        <div className="flyer-proof"><span>✓ No credit card</span><span>✓ Keep your number</span><span>✓ Cancel anytime</span></div>
+      </section>
 
-      <div className="trade-flyer-grid">
-        <div className="trade-flyer-copy">
-          <p className="trade-kicker">{trade.eyebrow}</p>
-          <h1>{trade.headline}</h1>
-          <p className="trade-flyer-pain">Missed calls = missed jobs.</p>
-          <p className="trade-flyer-lead">{trade.intro}</p>
-
-          <div className="trade-flyer-benefits" aria-label="What My AI PA does">
-            <p><span>1</span><strong>Answers after three rings</strong><small>when you cannot get to the phone</small></p>
-            <p><span>2</span><strong>Collects the job details</strong><small>with questions built for {trade.plural}</small></p>
-            <p><span>3</span><strong>Texts you a clear lead</strong><small>so you can call back prepared</small></p>
+      <section className={`flyer-photo flyer-photo-${slug}`} style={{ backgroundImage: `url(/trade-heroes/${slug}.png)` }}>
+        <div className="flyer-burst">14-DAY<br />FREE<br />TRIAL</div>
+        <div className="flyer-phone">
+          <div className="flyer-phone-status"><span>9:41</span><i /><span>5G</span></div>
+          <p>MY AI PA</p><h2>New Lead Summary</h2>
+          <div className="flyer-phone-lead">
+            {copy.lead.map(([label, value], index) => <div key={label}><FlyerIcon name={leadIcons[index]} /><span><small>{label}</small><strong>{value}</strong></span></div>)}
           </div>
-
-          <div className="trade-flyer-actions">
-            <a className="trade-primary-button" href="#/signup">Start Your Free Trial</a>
-            <a className="trade-secondary-button" href="tel:+12495033301">Call (249) 503-3301</a>
-          </div>
-          <div className="trade-trial-proof" aria-label="Trial details"><span>✓ 14-Day Free Trial</span><span>✓ No Credit Card</span><span>✓ Cancel Anytime</span></div>
+          <div className="flyer-ready">✓ <strong>Ready to call back</strong></div>
         </div>
+      </section>
 
-        <div className="trade-flyer-proof">
-          <div className="trade-flyer-call-types">
-            <p className="trade-kicker">Calls it can handle</p>
-            {callTypes.map(([title]) => <span key={title}><b>✓</b>{title}</span>)}
-          </div>
-          <HeroVisual trade={trade} />
-        </div>
-      </div>
+      <section className="flyer-coffee"><div className="flyer-coffee-copy"><span><FlyerIcon name="cup" /></span><p><strong>ABOUT THE PRICE OF A CUP OF COFFEE A DAY.</strong><small>$79 per month works out to roughly $2.60 per day before tax.</small></p></div><div className="flyer-daily"><strong>$2.60</strong>/day</div></section>
 
-      <div className="trade-flyer-bottom">
-        <p><strong>Caller talks</strong><span>→</span><strong>My AI PA collects</strong><span>→</span><strong>You get the text</strong><span>→</span><strong>You call back</strong></p>
-        <small>Helpful intake. Owner-approved answers. No unconfirmed dispatch promises.</small>
+      <section className="flyer-calls"><h2><small>COMMON CALLS</small> MY AI PA CAN CAPTURE</h2><div>{copy.calls.map((call) => <article key={call}>{call}</article>)}</div></section>
+
+      <div className="flyer-panels">
+        <FlyerPanel title="HOW IT WORKS">{howItWorks.map(([title, body], index) => <div className="flyer-number-row" key={title}><span>{index + 1}</span><p><strong>{title}</strong><small>{body}</small></p></div>)}</FlyerPanel>
+        <FlyerPanel title="HOW TO SIGN UP">{signup.map((step, index) => <div className="flyer-number-row" key={step}><span>{index + 1}</span><p><strong>{step}</strong></p></div>)}</FlyerPanel>
+        <FlyerPanel title={`WHY ${copy.name.toUpperCase()} USE IT`}>{copy.why.map((reason, index) => <div className="flyer-icon-row" key={reason}><FlyerIcon name={["clock", "phone", "note", "shield"][index]} /><strong>{reason}</strong></div>)}</FlyerPanel>
+
+        <section className="flyer-price"><h2>SIMPLE PRICING</h2><div><p>14-DAY<br />FREE TRIAL</p><strong><b>$79</b>/mo</strong><small>Plus applicable taxes</small><ul><li>60 AI call minutes included</li><li>$0.25/min after 60 minutes</li><li>No setup fee</li></ul></div></section>
+
+        <div className="flyer-final-actions"><a className="is-orange" href="#/signup"><span><FlyerIcon name="globe" /></span><p><small>Start your free trial at</small><strong>MYAIPA.CA</strong></p></a><a className="is-black" href="tel:+12495033301"><span><FlyerIcon name="phone" /></span><p><small>Call the live demo</small><strong>(249) 503-3301</strong></p></a></div>
+        <p className="flyer-private"><FlyerIcon name="shield" /> Test it privately before forwarding real customer calls.</p>
       </div>
     </article>
   );
@@ -351,14 +439,8 @@ function TradeDetail({ slug, trade }) {
 
   return (
     <main className="trade-site trade-flyer-site" style={pageStyle}>
-      <TradeHeader />
-      <section className="trade-flyer-page">
-        <div className="trade-shell">
-          <TradeSwitcher active={slug} />
-          <TradeFlyer trade={trade} />
-        </div>
-      </section>
-      <TradeFooter />
+      <header className="flyer-mobile-header"><a href="#/trades" aria-label="Back to all trades">←</a><span>My AI PA for {tradeFlyerCopy[slug].name}</span></header>
+      <TradeFlyer slug={slug} trade={trade} />
     </main>
   );
 }

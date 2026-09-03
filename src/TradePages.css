@@ -780,3 +780,232 @@
   .trade-flyer-actions { margin-top: 18px; }
 }
 
+/* Flyer-faithful trade landing pages */
+.trade-flyer-site {
+  --flyer-orange: #ff5a00;
+  --flyer-red: #ce2a2c;
+  --flyer-black: #111111;
+  --flyer-cream: #f5f4f0;
+  min-height: 100vh;
+  overflow-x: hidden;
+  background: #fff;
+  color: var(--flyer-black);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.flyer-mobile-header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  width: 100%;
+  min-height: 72px;
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  padding: 0 max(20px, calc((100vw - 1120px) / 2));
+  background: #211815;
+  color: #fff;
+  font-size: 1.43rem;
+  font-weight: 700;
+}
+.flyer-mobile-header a { padding: 8px 0; color: #fff; font-size: 2rem; font-weight: 400; line-height: 1; }
+.flyer-one-to-one { width: min(1120px, 100%); margin: 0 auto; background: #fff; }
+.flyer-one-to-one svg { width: 1.5em; height: 1.5em; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+.flyer-hero-copy { padding: 34px 34px 28px; }
+.flyer-hero-copy .trade-brand { gap: 14px; }
+.flyer-hero-copy .trade-brand-mark { width: 48px; height: 48px; border-color: var(--flyer-orange); border-bottom-color: transparent; }
+.flyer-hero-copy .trade-brand-mark::before,
+.flyer-hero-copy .trade-brand-mark::after { background: var(--flyer-black); }
+.flyer-hero-copy .trade-brand-mark > span {
+  top: 12px;
+  bottom: auto;
+  left: 6px;
+  width: 28px;
+  height: 19px;
+  border-radius: 7px;
+  background: var(--flyer-black);
+}
+.flyer-hero-copy .trade-brand-mark > span::before {
+  content: "";
+  position: absolute;
+  top: 7px;
+  left: 7px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 10px 0 0 #fff;
+}
+.flyer-hero-copy .trade-brand-mark > i,
+.flyer-hero-copy .trade-brand-mark > b { display: none; }
+.flyer-hero-copy .trade-brand strong { color: var(--flyer-black); font-size: 2.15rem; font-weight: 950; letter-spacing: -.055em; }
+.flyer-hero-copy .trade-brand strong em { color: var(--flyer-orange); }
+.flyer-hero-copy .trade-brand small { display: none; }
+.flyer-eyebrow {
+  display: inline-block;
+  margin: 30px 0 13px;
+  padding: 8px 13px 7px;
+  border-radius: 6px;
+  background: var(--flyer-red);
+  color: #101010;
+  font-size: .79rem;
+  font-weight: 950;
+  letter-spacing: .045em;
+  text-transform: uppercase;
+}
+.flyer-hero-copy h1 { max-width: 720px; margin: 0; font-size: clamp(4rem, 7.2vw, 6.4rem); font-weight: 1000; line-height: .84; letter-spacing: -.072em; text-transform: uppercase; }
+.flyer-hero-copy h1 span,
+.flyer-hero-copy h1 strong { display: block; }
+.flyer-hero-copy h1 strong { color: var(--flyer-orange); font-weight: 1000; }
+.flyer-intro { max-width: 810px; margin: 28px 0 0; font-size: 1.21rem; font-weight: 800; line-height: 1.45; }
+.flyer-missed { min-height: 72px; display: flex; align-items: center; gap: 14px; margin-top: 27px; padding: 15px 22px; border-radius: 13px; background: linear-gradient(100deg, #ff5a00, #ff7417); color: #fff; font-size: 1.22rem; }
+.flyer-missed svg { width: 36px; height: 36px; flex: 0 0 auto; }
+.flyer-top-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 13px; margin-top: 22px; }
+.flyer-top-actions a { min-height: 62px; display: grid; place-items: center; border: 2px solid #111; border-radius: 10px; background: white; font-size: .84rem; font-weight: 950; text-align: center; }
+.flyer-top-actions a:first-child { border-color: var(--flyer-orange); background: var(--flyer-orange); color: #fff; }
+.flyer-proof { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 9px 16px; margin-top: 18px; color: #4b4b4b; font-size: .75rem; font-weight: 800; }
+.flyer-proof span::first-letter { color: var(--flyer-orange); }
+
+.flyer-photo { position: relative; min-height: 650px; overflow: hidden; border-top: 7px solid var(--flyer-red); background-position: center; background-size: cover; }
+.flyer-photo-roofers { background-position: 45% 52%; }
+.flyer-burst {
+  position: absolute;
+  top: 22px;
+  right: 18px;
+  z-index: 2;
+  width: 132px;
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  padding: 22px;
+  background: var(--flyer-orange);
+  color: #fff;
+  clip-path: polygon(50% 0%,61% 10%,75% 5%,82% 19%,96% 23%,92% 38%,100% 50%,90% 61%,95% 76%,80% 82%,76% 96%,61% 91%,50% 100%,39% 91%,24% 96%,20% 82%,5% 76%,10% 61%,0 50%,8% 38%,4% 23%,18% 19%,25% 5%,39% 10%);
+  font-size: 1.3rem;
+  font-weight: 1000;
+  line-height: .88;
+  text-align: center;
+}
+.flyer-phone { position: absolute; right: 28px; bottom: 26px; width: min(47%, 390px); min-width: 270px; padding: 17px 16px 16px; border: 9px solid #111; border-radius: 42px; background: #fff; box-shadow: 0 12px 32px rgba(0,0,0,.28); }
+.flyer-phone-status { display: flex; align-items: center; justify-content: space-between; font-size: .71rem; font-weight: 900; }
+.flyer-phone-status i { width: 43%; height: 21px; border-radius: 0 0 15px 15px; background: #111; transform: translateY(-17px); }
+.flyer-phone > p { margin: 10px 0 5px; color: var(--flyer-orange); font-size: .72rem; font-weight: 950; letter-spacing: .08em; }
+.flyer-phone > h2 { margin: 0 0 12px; padding-bottom: 12px; border-bottom: 1px solid #bbb; font-size: 1.44rem; letter-spacing: -.05em; }
+.flyer-phone-lead > div { display: grid; grid-template-columns: 30px 1fr; align-items: center; gap: 8px; min-height: 60px; border-bottom: 1px solid #cfcfcf; }
+.flyer-phone-lead svg { width: 22px; height: 22px; color: #111; }
+.flyer-phone-lead > div:first-child svg { color: var(--flyer-orange); }
+.flyer-phone-lead span { display: grid; gap: 2px; }
+.flyer-phone-lead small { color: #777; font-size: .62rem; font-weight: 900; }
+.flyer-phone-lead strong { font-size: .9rem; line-height: 1.18; }
+.flyer-ready { margin-top: 13px; padding: 12px; border-radius: 10px; background: #e5f6ea; color: #269c50; font-size: .79rem; }
+
+.flyer-coffee { padding: 25px 28px 22px; border-bottom: 6px solid var(--flyer-orange); background: #111; color: #fff; }
+.flyer-coffee-copy { display: flex; align-items: center; gap: 16px; }
+.flyer-coffee-copy > span { width: 55px; height: 55px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 50%; background: var(--flyer-orange); }
+.flyer-coffee-copy svg { width: 33px; height: 33px; }
+.flyer-coffee-copy p { display: grid; gap: 4px; margin: 0; }
+.flyer-coffee-copy strong { font-size: 1.2rem; }
+.flyer-coffee-copy small { font-size: .8rem; font-weight: 700; }
+.flyer-daily { margin-top: 20px; padding: 13px; border-radius: 9px; background: #fff; color: #111; font-size: 1.35rem; text-align: center; }
+.flyer-daily strong { color: var(--flyer-orange); }
+
+.flyer-calls { padding: 28px 20px 19px; background: var(--flyer-cream); }
+.flyer-calls h2 { margin: 0 0 14px; font-size: 1.35rem; letter-spacing: -.03em; }
+.flyer-calls h2 small { margin-right: 7px; color: var(--flyer-orange); font-size: .7rem; }
+.flyer-calls > div { display: grid; grid-template-columns: 1fr 1fr; gap: 11px; }
+.flyer-calls article { min-height: 104px; display: flex; align-items: flex-end; padding: 17px 14px; border: 1px solid #c7c7c7; border-top: 8px solid var(--flyer-red); border-radius: 11px; background: #fff; font-size: .83rem; font-weight: 950; }
+
+.flyer-panels { display: grid; gap: 16px; padding: 20px; background: #fff; }
+.flyer-panel { overflow: hidden; border: 1px solid #c8c8c8; border-radius: 19px; background: #fff; }
+.flyer-panel > h2 { margin: 0; padding: 14px 19px 13px; background: #111; color: #fff; font-size: 1rem; letter-spacing: .025em; }
+.flyer-panel > div { padding: 8px 20px 12px; }
+.flyer-number-row,
+.flyer-icon-row { min-height: 74px; display: flex; align-items: center; gap: 18px; padding: 12px 0; border-bottom: 1px dotted #bbb; }
+.flyer-number-row:last-child,
+.flyer-icon-row:last-child { border-bottom: 0; }
+.flyer-number-row > span { width: 40px; height: 40px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 50%; background: var(--flyer-orange); color: #fff; font-weight: 950; }
+.flyer-number-row p { display: grid; gap: 2px; margin: 0; }
+.flyer-number-row strong,
+.flyer-icon-row strong { font-size: 1rem; line-height: 1.22; }
+.flyer-number-row small { display: block; font-size: .88rem; font-weight: 800; }
+.flyer-icon-row svg { width: 30px; height: 30px; flex: 0 0 auto; }
+
+.flyer-price { overflow: hidden; border: 5px solid var(--flyer-orange); border-radius: 22px; }
+.flyer-price > h2 { margin: 0; padding: 13px 18px; background: var(--flyer-orange); color: #fff; font-size: 1rem; }
+.flyer-price > div { display: grid; justify-items: center; padding: 20px; }
+.flyer-price p { margin: 0; font-size: 1.65rem; line-height: .94; text-align: center; }
+.flyer-price > div > strong { margin-top: 5px; font-size: 1.5rem; font-weight: 400; }
+.flyer-price > div > strong b { color: var(--flyer-orange); font-size: 4rem; font-weight: 400; letter-spacing: -.08em; }
+.flyer-price > div > small { color: #777; font-size: .74rem; font-weight: 800; }
+.flyer-price ul { width: 100%; margin: 15px 0 0; padding: 0; list-style: none; }
+.flyer-price li { position: relative; padding: 14px 10px 14px 40px; border-top: 1px solid #d2d2d2; font-size: .82rem; font-weight: 800; }
+.flyer-price li::before { content: "✓"; position: absolute; left: 4px; top: 11px; width: 26px; height: 26px; display: grid; place-items: center; border-radius: 50%; background: var(--flyer-orange); color: #fff; }
+
+.flyer-final-actions { display: grid; gap: 13px; }
+.flyer-final-actions a { min-height: 110px; display: flex; align-items: center; gap: 20px; padding: 18px; border-radius: 20px; color: #fff; }
+.flyer-final-actions .is-orange { background: linear-gradient(100deg, #ff5a00, #ff7015); }
+.flyer-final-actions .is-black { background: #111; }
+.flyer-final-actions a > span { width: 62px; height: 62px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 13px; background: #fff; color: var(--flyer-orange); }
+.flyer-final-actions svg { width: 36px; height: 36px; }
+.flyer-final-actions p { display: grid; gap: 2px; margin: 0; }
+.flyer-final-actions small { font-size: .86rem; font-weight: 800; }
+.flyer-final-actions strong { font-size: 2rem; line-height: .95; letter-spacing: -.045em; }
+.flyer-private { display: flex; align-items: center; justify-content: center; gap: 11px; margin: 0; padding: 5px 4px 12px; font-size: .88rem; font-weight: 850; text-align: center; }
+.flyer-private svg { width: 28px; height: 28px; color: var(--flyer-orange); }
+
+@media (min-width: 760px) {
+  .flyer-one-to-one { border-right: 1px solid #ddd; border-left: 1px solid #ddd; box-shadow: 0 0 60px rgba(0,0,0,.08); }
+  .flyer-hero-copy { padding: 54px 70px 38px; }
+  .flyer-photo { min-height: 760px; }
+  .flyer-coffee { padding: 29px 54px; }
+  .flyer-coffee-copy strong { font-size: 1.45rem; }
+  .flyer-calls,
+  .flyer-panels { padding-right: 54px; padding-left: 54px; }
+  .flyer-calls article { min-height: 130px; }
+}
+
+@media (max-width: 620px) {
+  .flyer-mobile-header { min-height: 70px; padding: 0 20px; font-size: 1.2rem; }
+  .flyer-mobile-header a { font-size: 1.8rem; }
+  .flyer-hero-copy { padding: 31px 20px 25px; }
+  .flyer-hero-copy .trade-brand strong { font-size: 1.86rem; }
+  .flyer-hero-copy .trade-brand-mark { width: 43px; height: 43px; }
+  .flyer-eyebrow { margin-top: 27px; font-size: clamp(.62rem, 2.7vw, .78rem); }
+  .flyer-hero-copy h1 { font-size: clamp(3rem, 11.9vw, 4.25rem); }
+  .flyer-intro { margin-top: 25px; font-size: 1rem; }
+  .flyer-missed { min-height: 72px; padding: 14px 18px; font-size: .99rem; }
+  .flyer-top-actions a { min-height: 61px; padding: 8px; font-size: .71rem; }
+  .flyer-proof { justify-content: flex-start; font-size: .65rem; }
+  .flyer-photo { min-height: 700px; }
+  .flyer-burst { width: 122px; font-size: 1.16rem; }
+  .flyer-phone { right: 14px; bottom: 25px; width: 47%; min-width: 252px; padding: 15px 13px 13px; border-width: 8px; border-radius: 37px; }
+  .flyer-phone > h2 { font-size: 1.25rem; }
+  .flyer-phone-lead > div { min-height: 57px; }
+  .flyer-phone-lead strong { font-size: .82rem; }
+  .flyer-coffee { padding: 23px 18px 19px; }
+  .flyer-coffee-copy { gap: 12px; }
+  .flyer-coffee-copy > span { width: 51px; height: 51px; }
+  .flyer-coffee-copy strong { font-size: .96rem; }
+  .flyer-coffee-copy small { font-size: .67rem; }
+  .flyer-daily { font-size: 1.16rem; }
+  .flyer-calls { padding: 27px 18px 18px; }
+  .flyer-calls h2 { font-size: 1.12rem; }
+  .flyer-calls article { min-height: 99px; }
+  .flyer-panels { padding: 18px; }
+  .flyer-panel > div { padding-right: 18px; padding-left: 18px; }
+  .flyer-final-actions strong { font-size: 1.72rem; }
+}
+
+@media (max-width: 390px) {
+  .flyer-hero-copy h1 { font-size: 2.75rem; }
+  .flyer-proof { gap: 7px 10px; }
+  .flyer-photo { min-height: 625px; }
+  .flyer-burst { width: 105px; font-size: 1rem; }
+  .flyer-phone { min-width: 235px; }
+  .flyer-phone-lead > div { min-height: 52px; }
+  .flyer-final-actions a { gap: 12px; padding: 14px; }
+  .flyer-final-actions a > span { width: 53px; height: 53px; }
+  .flyer-final-actions strong { font-size: 1.45rem; }
+}
+
