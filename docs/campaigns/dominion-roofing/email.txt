@@ -1,0 +1,22 @@
+Subject: A quick thought about Dominion’s overflow calls
+
+Hi Dominion Roofing team,
+
+I noticed Dominion promotes 24/7 support and fast emergency response across Toronto and the GTA, while serving both residential and commercial customers—from inspections and repairs to replacements, shingles, flat roofing, and maintenance.
+
+That made me wonder: when the team is already on another call, what happens to an active-leak caller nobody can grab?
+
+I mocked up a private Dominion version of My AI PA. It sits behind the existing team as overflow coverage, answers after three rings, and collects the property address, residential or commercial context, roof type, active-leak status, urgency, and best callback time. Dominion gets a compact text handoff; the caller gets a careful confirmation without being promised an appointment or diagnosis.
+
+See the private Dominion version:
+https://www.myaipa.ca/campaigns/dominion-roofing/?utm_source=gmail&utm_medium=outreach&utm_campaign=dominion-roofing&utm_content=text_link
+
+Or call the live demo: (249) 503-3301
+https://www.myaipa.ca/campaigns/dominion-roofing/?utm_source=gmail&utm_medium=outreach&utm_campaign=dominion-roofing&utm_content=live_demo
+
+$79/month works out to about $2.60/day before tax. The private trial is 14 days, includes 60 AI minutes, and needs no credit card or setup fee.
+
+My AI PA
+Built in Ontario for busy service teams.
+
+This independently prepared concept does not claim an existing integration or partnership with Dominion Roofing.
