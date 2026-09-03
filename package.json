@@ -185,6 +185,7 @@
     "outreach": "node scripts/outreach.js",
     "outreach:test:first-class": "node scripts/outreach.js --input=config/outreach/first-class-rentals.json",
     "outreach:preview": "node scripts/preview-outreach.js",
+    "campaign:validate": "node scripts/validate-outreach-campaign.js",
     "transcript:tim": "node scripts/transcript-tim.js",
     "codex:watch": "powershell -ExecutionPolicy Bypass -File scripts/codex-watch.ps1",
     "codex:wakeup": "powershell -ExecutionPolicy Bypass -File scripts/codex-wakeup.ps1",
