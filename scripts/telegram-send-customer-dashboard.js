@@ -118,6 +118,18 @@ const dashboard = {
     estimatedCallsRemaining: 9,
     fallbackRoutingReady: true,
   },
+  billing: {
+    status: "trialing",
+    paymentReady: false,
+    paymentFailed: false,
+    paused: false,
+    canAddPaymentMethod: true,
+    cancelAtPeriodEnd: false,
+    planDisplay: "$79/month plus applicable tax",
+    trialEndAt: daysFromNow(9),
+    disclosure: "Your card will be charged $79/month plus applicable tax when the trial ends. Cancel before then to avoid being charged.",
+  },
+  support: { phone: "+12495033301", displayPhone: "(249) 503-3301" },
   revenueRescue: {
     qualifiedLeads: 6,
     activeLeads: 3,

@@ -278,11 +278,11 @@ function assistantChecks(assistant, isolatedToolIds = new Set()) {
       ? ok("explicitly bans filler while tools run")
       : fail("explicitly bans filler while tools run", "Missing explicit filler ban"),
     prompt.includes(POST_SEND_CLOSING_MARKER)
-      && /Is there anything else I can help you with today\?/i.test(prompt)
+      && /I've sent your information to the team\. Someone will contact you to discuss the request and arrange the next step\./i.test(prompt)
       && /Let the entire final sentence finish before calling endCall/i.test(prompt)
       && !/Then call endCall immediately/i.test(prompt)
       ? ok("has natural post-send closing")
-      : fail("has natural post-send closing", "Missing the wait-for-caller closing or a retired immediate-end instruction remains"),
+      : fail("has natural post-send closing", "Missing the approved team-handoff closing or a retired immediate-end instruction remains"),
     hasIsolatedSmsTool || toolIds.includes(CUSTOMER_TOOL_ID) || json.includes(CUSTOMER_TOOL_ID)
       ? ok("has customer SMS tool")
       : fail("has customer SMS tool", "Missing customer SMS tool ID"),

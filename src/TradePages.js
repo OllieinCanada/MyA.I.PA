@@ -295,13 +295,16 @@ function TradeHub() {
   );
 }
 
+const tradeLandingPromise = (jobType) =>
+  `You can't answer the phone all the time. You shouldn't miss out on ${jobType} jobs because you're busy. My AI PA answers when you can't. Turn voicemail hang-ups into job opportunities—24/7.`;
+
 const tradeFlyerCopy = {
   electricians: {
     name: "Electricians",
     eyebrow: "AI phone answering for Canadian electricians",
     headlineTop: "YOU'RE ON THE JOB.",
     headlineBottom: "WE'LL GET THE PHONE.",
-    intro: "You should not stop electrical work for every ring. My AI PA catches electrical inquiries, gathers the job details and sends you a callback-ready lead.",
+    intro: tradeLandingPromise("electrical"),
     missed: "MISSED ELECTRICAL CALLS = LOST JOBS",
     lead: [["SERVICE", "Partial power + breaker trips"], ["CALLER", "Jordan Lee"], ["LOCATION", "Hamilton, ON"], ["CALLBACK", "Priority callback"], ["INTENT", "Repair request"]],
     calls: ["POWER PROBLEMS", "EV CHARGERS", "NEW WIRING", "SERVICE UPGRADES"],
@@ -312,7 +315,7 @@ const tradeFlyerCopy = {
     eyebrow: "AI phone answering for Canadian plumbers",
     headlineTop: "YOU'RE UNDER THE SINK.",
     headlineBottom: "WE'LL GET THE PHONE.",
-    intro: "You should not stop a plumbing job for every ring. My AI PA catches plumbing inquiries, gathers the problem details and sends you a callback-ready lead.",
+    intro: tradeLandingPromise("plumbing"),
     missed: "MISSED PLUMBING CALLS = LOST JOBS",
     lead: [["SERVICE", "Active ceiling leak"], ["CALLER", "Alex Morgan"], ["LOCATION", "Grimsby, ON"], ["CALLBACK", "Priority callback"], ["INTENT", "Repair request"]],
     calls: ["ACTIVE LEAKS", "DRAIN BACKUPS", "NO HOT WATER", "INSTALLATIONS"],
@@ -323,7 +326,7 @@ const tradeFlyerCopy = {
     eyebrow: "AI phone answering for Canadian HVAC companies",
     headlineTop: "YOU'RE ON A SERVICE CALL.",
     headlineBottom: "WE'LL GET THE PHONE.",
-    intro: "You should not leave equipment mid-service for every ring. My AI PA catches heating and cooling inquiries, gathers the details and sends you a callback-ready lead.",
+    intro: tradeLandingPromise("heating and cooling"),
     missed: "MISSED HVAC CALLS = LOST JOBS",
     lead: [["SERVICE", "No heat"], ["CALLER", "Taylor Smith"], ["LOCATION", "St. Catharines, ON"], ["CALLBACK", "Priority callback"], ["INTENT", "Repair request"]],
     calls: ["NO HEAT", "NO COOLING", "MAINTENANCE", "REPLACEMENTS"],
@@ -334,7 +337,7 @@ const tradeFlyerCopy = {
     eyebrow: "AI phone answering for Canadian contractors",
     headlineTop: "YOU'RE RUNNING THE JOB.",
     headlineBottom: "WE'LL GET THE PHONE.",
-    intro: "You should not stop a project for every ring. My AI PA catches construction inquiries, gathers the project details and sends you a callback-ready lead.",
+    intro: tradeLandingPromise("contracting"),
     missed: "MISSED PROJECT CALLS = LOST JOBS",
     lead: [["SERVICE", "Basement renovation"], ["CALLER", "Morgan Taylor"], ["LOCATION", "Hamilton, ON"], ["CALLBACK", "After 5 p.m."], ["INTENT", "Estimate request"]],
     calls: ["RENOVATIONS", "ADDITIONS", "RESTORATION", "COMMERCIAL WORK"],
@@ -345,7 +348,7 @@ const tradeFlyerCopy = {
     eyebrow: "AI phone answering for Canadian roofers",
     headlineTop: "YOU'RE ON THE ROOF.",
     headlineBottom: "WE'LL GET THE PHONE.",
-    intro: "You should not climb down for every ring. My AI PA catches roofing inquiries, gathers the property details and sends you a callback-ready lead.",
+    intro: tradeLandingPromise("roofing"),
     missed: "MISSED ROOFING CALLS = LOST JOBS",
     lead: [["SERVICE", "Wind damage + active leak"], ["CALLER", "Emily Carter"], ["LOCATION", "Grimsby, ON"], ["CALLBACK", "Urgent callback"], ["INTENT", "Repair request"]],
     calls: ["ROOF LEAKS", "STORM DAMAGE", "RE-ROOFS", "INSPECTIONS"],
@@ -356,7 +359,7 @@ const tradeFlyerCopy = {
     eyebrow: "AI phone answering for Canadian painters",
     headlineTop: "YOU'RE ON THE LADDER.",
     headlineBottom: "WE'LL GET THE PHONE.",
-    intro: "You should not stop painting for every ring. My AI PA catches quote requests, gathers the project details and sends you a callback-ready lead.",
+    intro: tradeLandingPromise("painting"),
     missed: "MISSED PAINTING CALLS = LOST JOBS",
     lead: [["SERVICE", "Kitchen cabinet painting"], ["CALLER", "Jamie Wilson"], ["LOCATION", "Burlington, ON"], ["CALLBACK", "After 4 p.m."], ["INTENT", "Quote request"]],
     calls: ["INTERIORS", "EXTERIORS", "CABINETS", "COMMERCIAL WORK"],

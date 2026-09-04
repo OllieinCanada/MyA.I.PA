@@ -3128,6 +3128,31 @@
   background: #fffaf0;
 }
 
+.customer-trial-billing {
+  display: grid;
+  justify-items: end;
+  gap: 0.3rem;
+}
+
+.customer-trial-billing button {
+  min-height: 42px;
+  border: 0;
+  border-radius: 0.65rem;
+  background: #0b5fd3;
+  color: #fff;
+  padding: 0.65rem 0.9rem;
+  font-weight: 950;
+  cursor: pointer;
+}
+
+.customer-trial-billing button:disabled { opacity: 0.55; cursor: wait; }
+.customer-trial-billing button.is-link { min-height: auto; background: transparent; color: #64748b; padding: 0.2rem; font-size: 0.72rem; text-decoration: underline; }
+.customer-trial-billing .is-ready { color: #087443; font-size: 0.86rem; }
+.customer-simple-trial .customer-trial-disclosure { grid-column: 1 / -1; margin: 0; color: #475569; font-size: 0.75rem; font-weight: 700; line-height: 1.45; }
+.customer-simple-trial .customer-trial-message { grid-column: 1 / -1; margin: 0; border-radius: 0.55rem; background: #eff6ff; color: #1d4ed8; padding: 0.55rem 0.7rem; font-size: 0.78rem; font-weight: 800; }
+.customer-dashboard-simple .customer-help-actions,
+.customer-dashboard-simple .forwarding-guide { margin-top: 0.8rem; }
+
 .customer-simple-stats {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -3370,6 +3395,9 @@
     grid-column: 1 / -1;
     grid-row: 2;
   }
+
+  .customer-trial-billing { justify-items: stretch; }
+  .customer-trial-billing button { width: 100%; }
 }
 
 @media (max-width: 620px) {

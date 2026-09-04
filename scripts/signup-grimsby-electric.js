@@ -54,7 +54,7 @@ const intakeQuestions = [
   "Is this residential, commercial, or industrial work?",
   "Please describe the electrical work or problem.",
   "Is there sparking, smoke, fire, a downed wire, exposed live wiring, or another immediate safety concern?",
-  "When would you prefer the work to begin?",
+  "When would you ideally like the work to begin?",
   "What is the best time for the team to call you back?",
 ].join("\n");
 

@@ -106,6 +106,19 @@ const {
   verifyTwilioWebhookRequest,
 } = require("./smsSuppression");
 const { buildTwilioMessageStatusIncident } = require("./twilioMessageStatus");
+const { buildForwardingInstructions } = require("./forwardingInstructions");
+const {
+  buildTrialReminderSchedule,
+  buildTrialPaymentCheckoutParams,
+  completeTrialPaymentSetup,
+  getTrialPaymentState,
+  hasPaymentMethod,
+  isTrialPaymentSetupSession,
+} = require("./stripeTrialBilling");
+const {
+  hasCompletedSignupForCall,
+  signupOnlyMessageResult,
+} = require("./vapiSignupMessagingGuard");
 const {
   formatAppointmentDate,
   createStaffMember,
@@ -310,7 +323,6 @@ const ADMIN_AUDIT_RETENTION_DAYS = Math.max(30, Number(process.env.ADMIN_AUDIT_R
 const SENSITIVE_CALL_CLEANUP_INTERVAL_MS = 1000 * 60 * 60 * 6;
 const SIGNUP_VERIFICATION_TTL_MS = parsePositiveInt(process.env.SIGNUP_VERIFICATION_TTL_MS, 24 * 60 * 60 * 1000);
 const TRIAL_REMINDER_CHECK_INTERVAL_MS = parsePositiveInt(process.env.TRIAL_REMINDER_CHECK_INTERVAL_MS, 60 * 60 * 1000);
-const TRIAL_HALFWAY_REMINDER_DAYS = parsePositiveInt(process.env.TRIAL_HALFWAY_REMINDER_DAYS, 7);
 const TRIAL_USAGE_LIMIT_ENABLED = isEnabled(process.env.TRIAL_USAGE_LIMIT_ENABLED);
 const TRIAL_USAGE_WARNING_SECONDS = parsePositiveInt(process.env.TRIAL_USAGE_WARNING_SECONDS, 20 * 60);
 const TRIAL_USAGE_LIMIT_SECONDS = Math.max(
@@ -332,6 +344,7 @@ const STRIPE_SECRET_KEY = String(process.env.STRIPE_SECRET_KEY || "").trim();
 const STRIPE_PRICE_ID = String(process.env.STRIPE_PRICE_ID || "").trim();
 const STRIPE_WEBHOOK_SECRET = String(process.env.STRIPE_WEBHOOK_SECRET || "").trim();
 const STRIPE_TRIAL_DAYS = Math.max(0, Number(process.env.STRIPE_TRIAL_DAYS || 14) || 0);
+const STRIPE_PLAN_DISPLAY = String(process.env.STRIPE_PLAN_DISPLAY || "$79/month plus applicable tax").trim();
 const STRIPE_ADMIN_SUBSCRIPTION_LIMIT = Math.max(1, Math.min(500, Number(process.env.STRIPE_ADMIN_SUBSCRIPTION_LIMIT || 100) || 100));
 const WEBHOOK_REPLAY_RETENTION_MS = Math.min(
   30 * 24 * 60 * 60 * 1000,
@@ -388,6 +401,7 @@ const FIXED_MONTHLY_COST_USD = numberOrNull(process.env.FIXED_MONTHLY_COST_USD) 
 const MISSED_CALL_ALERT_ENABLED = isEnabled(process.env.MISSED_CALL_ALERT_ENABLED);
 const DAILY_DIGEST_ENABLED = isEnabled(process.env.DAILY_DIGEST_ENABLED);
 const FRONTEND_APP_URL = String(process.env.FRONTEND_APP_URL || "https://www.myaipa.ca").trim().replace(/\/+$/, "");
+const CUSTOMER_SUPPORT_PHONE = normalizePhoneForMatch(process.env.CUSTOMER_SUPPORT_PHONE || "+12495033301") || "+12495033301";
 const TELEGRAM_BOT_TOKEN = String(process.env.TELEGRAM_BOT_TOKEN || "").trim();
 const TELEGRAM_CHAT_ID = String(process.env.TELEGRAM_CHAT_ID || "").trim();
 const RUNTIME_TELEGRAM_ALERTS_ENABLED = process.env.RUNTIME_TELEGRAM_ALERTS_ENABLED == null
@@ -481,6 +495,8 @@ app.post("/api/payments/stripe-webhook", express.raw({ type: "application/json" 
       event.type === "customer.subscription.created" ||
       event.type === "customer.subscription.updated" ||
       event.type === "customer.subscription.deleted" ||
+      event.type === "customer.subscription.trial_will_end" ||
+      event.type === "invoice.paid" ||
       event.type === "invoice.payment_failed"
     ) {
       console.log("[stripe:webhook] received", {
@@ -493,6 +509,30 @@ app.post("/api/payments/stripe-webhook", express.raw({ type: "application/json" 
     }
 
     if (event.type === "checkout.session.completed") {
+      if (isTrialPaymentSetupSession(object)) {
+        try {
+          const paymentSetup = await completeTrialPaymentSetup({ stripe, session: object });
+          upsertSignupDashboardFromSubscription(paymentSetup.subscription, {
+            paymentMethodReady: true,
+            paymentMethodAddedAt: new Date().toISOString(),
+            paymentStatus: "payment_method_ready",
+          });
+        } catch (error) {
+          safelyNotifyRuntimeFailure(error, {
+            area: "billing and trial workflow",
+            provider: "stripe",
+            operation: "save trial payment method",
+            snapshot: {
+              "Checkout reference": hashKey(String(object.id || event.id || "")).slice(0, 16),
+              "Customer linked": Boolean(object.customer) ? "Yes" : "No",
+              "Subscription linked": Boolean(object.metadata?.subscriptionId) ? "Yes" : "No",
+            },
+            dedupeFingerprint: `stripe-trial-payment-setup:${hashKey(String(object.id || event.id || "unknown"))}`,
+            lastCheckpoint: "Stripe authenticated the Checkout completion, but My AI PA could not attach it to the existing trial.",
+          });
+          throw error;
+        }
+      } else {
       await scheduleTrialReminderFromCheckoutSession(object);
       const pendingSignup = takePendingStripeSignup(object.id);
       const checkoutRecord = upsertSignupDashboardFromCheckoutSession(object, {
@@ -601,9 +641,10 @@ app.post("/api/payments/stripe-webhook", express.raw({ type: "application/json" 
           });
         }
       }
+      }
     }
 
-    if (event.type === "customer.subscription.created" || event.type === "customer.subscription.updated") {
+    if (["customer.subscription.created", "customer.subscription.updated", "customer.subscription.trial_will_end"].includes(event.type)) {
       scheduleTrialReminderFromSubscription(object);
       upsertSignupDashboardFromSubscription(object);
     }
@@ -619,6 +660,7 @@ app.post("/api/payments/stripe-webhook", express.raw({ type: "application/json" 
         customerId: typeof object.customer === "string" ? object.customer : object.customer?.id || "",
         ownerEmail: String(object.customer_email || "").trim(),
         paymentStatus: "payment_failed",
+        paymentMethodReady: false,
         lastPaymentFailedAt: new Date().toISOString(),
         status: "payment_failed",
       });
@@ -638,6 +680,17 @@ app.post("/api/payments/stripe-webhook", express.raw({ type: "application/json" 
         },
         dedupeFingerprint: `stripe-invoice-payment-failed:${hashKey(String(object.id || event.id || "unknown"))}`,
         lastCheckpoint: "Stripe authenticated the webhook and My AI PA recorded the failed payment state.",
+      });
+    }
+
+    if (event.type === "invoice.paid") {
+      upsertSignupDashboardRecord({
+        subscriptionId: typeof object.subscription === "string" ? object.subscription : object.subscription?.id || "",
+        customerId: typeof object.customer === "string" ? object.customer : object.customer?.id || "",
+        ownerEmail: String(object.customer_email || "").trim(),
+        paymentStatus: "paid",
+        lastPaymentSucceededAt: new Date().toISOString(),
+        status: "subscription_active",
       });
     }
 
@@ -4374,7 +4427,7 @@ function getBillingReadinessForSignup(signup) {
     { key: "signup", label: "Signup submitted", done: Boolean(signup.signedUpAt || signup.createdAt) },
     { key: "email", label: "Contact verified", done: Boolean(isContactVerified(signup) || !signup.emailVerificationRequired) },
     { key: "setup", label: "Agent setup started", done: ["setup_started", "checkout_started", "checkout_completed", "subscription_trialing", "subscription_active"].includes(String(signup.status || "")) },
-    { key: "checkout", label: "Stripe checkout started", done: Boolean(signup.checkoutSessionId || signup.subscriptionId) },
+    { key: "checkout", label: "Free trial started", done: Boolean(signup.subscriptionId) },
     { key: "subscription", label: "Subscription/trial active", done: Boolean(signup.subscriptionId || signup.subscriptionStatus === "trialing" || signup.subscriptionStatus === "active") },
   ];
 }
@@ -5153,6 +5206,8 @@ function upsertSignupDashboardFromSubscription(subscription, extra = {}) {
     ownerPhone: String(extra.ownerPhone || metadata.ownerPhone || "").trim(),
     businessName: String(extra.businessName || metadata.businessName || "").trim(),
     subscriptionStatus: subscription?.status || "",
+    paymentMethodReady: hasPaymentMethod(subscription),
+    ...(extra.paymentMethodAddedAt ? { paymentMethodAddedAt: extra.paymentMethodAddedAt } : {}),
     trialStartAt: getUnixMs(subscription?.trial_start),
     trialEndAt: getUnixMs(subscription?.trial_end),
     currentPeriodStartAt: getUnixMs(subscription?.current_period_start),
@@ -5161,6 +5216,7 @@ function upsertSignupDashboardFromSubscription(subscription, extra = {}) {
     periodEndAt: periodEndMs,
     cancelAt: getUnixMs(subscription?.cancel_at),
     canceledAt: getUnixMs(subscription?.canceled_at),
+    cancelAtPeriodEnd: Boolean(subscription?.cancel_at_period_end),
     status: extra.status || (subscription?.status ? `subscription_${subscription.status}` : "subscription_updated"),
     ...extra,
   });
@@ -7167,6 +7223,11 @@ async function getCustomerDashboard({ email, phone }) {
     { key: "faq", label: "Starter FAQs added", done: Boolean(business?.faqs?.length) },
   ];
   const trialUsage = await getTrialUsageSnapshot(signup, business?.id || null);
+  const storedSubscriptionState = {
+    status: signup.subscriptionStatus || "",
+    default_payment_method: signup.paymentMethodReady ? "stored" : "",
+  };
+  const billingState = getTrialPaymentState(storedSubscriptionState);
 
   return {
     businessId: business?.id || null,
@@ -7208,6 +7269,22 @@ async function getCustomerDashboard({ email, phone }) {
           ? "Reply START in the business text thread to resume service text updates."
           : "Service text updates are active for the owner phone.",
     },
+    billing: {
+      status: billingState.status || signup.paymentStatus || "not_ready",
+      paymentReady: Boolean(signup.paymentMethodReady && signup.paymentStatus !== "payment_failed"),
+      paymentFailed: Boolean(billingState.paymentFailed || signup.paymentStatus === "payment_failed"),
+      paused: billingState.paused,
+      canAddPaymentMethod: Boolean(signup.subscriptionId && signup.customerId && !signup.cancelAtPeriodEnd),
+      cancelAtPeriodEnd: Boolean(signup.cancelAtPeriodEnd),
+      planDisplay: STRIPE_PLAN_DISPLAY,
+      trialEndAt: signup.trialEndAt || null,
+      disclosure: `Your card will be charged ${STRIPE_PLAN_DISPLAY} when the trial ends. Cancel before then to avoid being charged.`,
+    },
+    support: {
+      phone: CUSTOMER_SUPPORT_PHONE,
+      displayPhone: formatAssignedPhone(CUSTOMER_SUPPORT_PHONE),
+    },
+    forwardingInstructions: buildForwardingInstructions(signup.twilioPhoneNumber),
     trialUsage,
     stats: {
       totalCalls: calls.length,
@@ -7741,27 +7818,21 @@ async function getAppointmentOwnerContact(businessId) {
   };
 }
 
-function getTrialReminderDueAt(subscription) {
-  const trialStartMs = Number(subscription?.trial_start || 0) * 1000;
-  const trialEndMs = Number(subscription?.trial_end || 0) * 1000;
-  if (!trialEndMs) return 0;
-
-  const dueAt = trialStartMs
-    ? trialStartMs + TRIAL_HALFWAY_REMINDER_DAYS * 24 * 60 * 60 * 1000
-    : Date.now() + TRIAL_HALFWAY_REMINDER_DAYS * 24 * 60 * 60 * 1000;
-
-  return Math.min(dueAt, trialEndMs);
-}
-
 function upsertTrialReminder(record) {
-  if (!record?.subscriptionId || !record?.ownerEmail || !record?.dueAt) return;
+  if (!record?.subscriptionId || !record?.ownerEmail || !record?.trialEndAt) return;
   const store = readTrialReminderStore();
   const existing = store[record.subscriptionId] || {};
+  const reminders = buildTrialReminderSchedule(record.trialEndAt, existing.reminders);
 
   store[record.subscriptionId] = {
     ...existing,
     ...record,
-    status: existing.sentAt ? "sent" : record.status || "scheduled",
+    reminders,
+    status: existing.status === "cancelled"
+      ? "cancelled"
+      : record.paymentMethodReady
+        ? "payment_ready"
+        : "scheduled",
     updatedAt: new Date().toISOString(),
   };
 
@@ -7796,7 +7867,6 @@ function scheduleTrialReminderFromSubscription(subscription, fallback = {}) {
   if (!subscription?.id || !subscription?.trial_end) return;
   if (subscription.status && !["trialing", "active"].includes(String(subscription.status))) return;
 
-  const dueAt = getTrialReminderDueAt(subscription);
   const trialEndAt = Number(subscription.trial_end || 0) * 1000;
   const metadata = subscription.metadata || {};
   const ownerEmail = String(
@@ -7821,7 +7891,7 @@ function scheduleTrialReminderFromSubscription(subscription, fallback = {}) {
     ownerEmail,
     ownerName: String(fallback.ownerName || metadata.ownerName || "").trim(),
     businessName: String(fallback.businessName || metadata.businessName || "").trim(),
-    dueAt,
+    paymentMethodReady: hasPaymentMethod(subscription),
     trialEndAt,
     trialStartAt: Number(subscription.trial_start || 0) * 1000 || null,
     status: "scheduled",
@@ -7842,10 +7912,11 @@ function markTrialReminderCancelled(subscriptionId) {
   writeTrialReminderStore(store);
 }
 
-async function sendTrialHalfwayReminder(record) {
+async function sendTrialPaymentReminder(record, reminder) {
   const emailConfig = getEmailTransportConfig();
   const businessName = record.businessName || "your My AI PA account";
   const ownerName = record.ownerName || "there";
+  const daysBefore = Math.max(1, Number(reminder?.daysBefore || 1));
   const trialEndDate = record.trialEndAt
     ? new Date(record.trialEndAt).toLocaleDateString("en-CA", {
         year: "numeric",
@@ -7853,14 +7924,20 @@ async function sendTrialHalfwayReminder(record) {
         day: "numeric",
       })
     : "soon";
-  const subject = `Your My AI PA free trial is halfway done`;
+  const subject = daysBefore === 1
+    ? "Your My AI PA trial ends tomorrow"
+    : `Your My AI PA trial ends in ${daysBefore} days`;
   const text = [
     `Hi ${ownerName},`,
     "",
-    `Your 14-day My AI PA free trial for ${businessName} is halfway done.`,
+    `Your 14-day My AI PA free trial for ${businessName} ends in ${daysBefore} day${daysBefore === 1 ? "" : "s"}.`,
     `Your trial is scheduled to end on ${trialEndDate}.`,
     "",
-    "This is a good time to test your assistant, place a sample call, and make sure your missed-call forwarding is ready.",
+    "If you want service to continue, sign in to your dashboard and add a card securely through Stripe Checkout.",
+    `Your card will be charged ${STRIPE_PLAN_DISPLAY} when the trial ends. Cancel before then to avoid being charged.`,
+    "If no card is added, new AI calls pause automatically when the trial ends.",
+    "",
+    `Dashboard: ${FRONTEND_APP_URL}/#/dashboard`,
     "",
     "Thanks,",
     "My AI PA",
@@ -7868,12 +7945,13 @@ async function sendTrialHalfwayReminder(record) {
   const html = `
     <div style="font-family:Arial,sans-serif;line-height:1.55;color:#0f172a;max-width:640px">
       <p style="font-size:13px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#2563eb">Trial reminder</p>
-      <h1 style="font-size:30px;line-height:1.1;margin:0 0 16px">Your free trial is halfway done</h1>
+      <h1 style="font-size:30px;line-height:1.1;margin:0 0 16px">Your free trial ends in ${daysBefore} day${daysBefore === 1 ? "" : "s"}</h1>
       <p>Hi ${escapeHtml(ownerName)},</p>
-      <p>Your 14-day My AI PA free trial for <strong>${escapeHtml(businessName)}</strong> is halfway done.</p>
+      <p>Your 14-day My AI PA free trial for <strong>${escapeHtml(businessName)}</strong> is almost complete.</p>
       <p>Your trial is scheduled to end on <strong>${escapeHtml(trialEndDate)}</strong>.</p>
-      <p>This is a good time to test your assistant, place a sample call, and make sure your missed-call forwarding is ready.</p>
-      <p style="font-size:14px;color:#475569">Card details and billing are handled securely by Stripe.</p>
+      <p>If you want service to continue, add a card securely through Stripe Checkout.</p>
+      <p><a href="${escapeHtml(`${FRONTEND_APP_URL}/#/dashboard`)}" style="display:inline-block;background:#0f172a;color:#fff;text-decoration:none;font-weight:800;padding:13px 18px;border-radius:10px">Open your secure dashboard</a></p>
+      <p style="font-size:14px;color:#475569">Your card will be charged ${escapeHtml(STRIPE_PLAN_DISPLAY)} when the trial ends. Cancel before then to avoid being charged. If no card is added, new AI calls pause automatically.</p>
     </div>
   `;
 
@@ -7911,8 +7989,7 @@ async function processTrialReminders() {
   let changed = false;
 
   for (const [subscriptionId, record] of Object.entries(store)) {
-    if (!record || record.status === "sent" || record.status === "cancelled") continue;
-    if (Number(record.dueAt || 0) > now) continue;
+    if (!record || ["cancelled", "payment_ready"].includes(record.status) || record.paymentMethodReady) continue;
     if (record.trialEndAt && Number(record.trialEndAt) <= now) {
       store[subscriptionId] = {
         ...record,
@@ -7923,29 +8000,36 @@ async function processTrialReminders() {
       continue;
     }
 
-    try {
-      await sendTrialHalfwayReminder(record);
-      store[subscriptionId] = {
-        ...record,
-        status: "sent",
-        sentAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-      changed = true;
-    } catch (error) {
-      store[subscriptionId] = {
-        ...record,
-        status: "error",
-        lastError: error?.message || String(error),
-        lastAttemptAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-      changed = true;
-      console.error("[stripe:trial-reminder] reminder send failed", {
-        subscriptionId,
-        message: error?.message || String(error),
-      });
+    const reminders = Object.keys(record.reminders || {}).length
+      ? record.reminders
+      : buildTrialReminderSchedule(record.trialEndAt);
+    for (const [key, reminder] of Object.entries(reminders)) {
+      if (!reminder || reminder.status === "sent" || Number(reminder.dueAt || 0) > now) continue;
+      try {
+        await sendTrialPaymentReminder(record, reminder);
+        reminders[key] = {
+          ...reminder,
+          status: "sent",
+          sentAt: new Date().toISOString(),
+          lastError: "",
+        };
+        changed = true;
+      } catch (error) {
+        reminders[key] = {
+          ...reminder,
+          status: "error",
+          lastError: error?.message || String(error),
+          lastAttemptAt: new Date().toISOString(),
+        };
+        changed = true;
+        console.error("[stripe:trial-reminder] reminder send failed", {
+          subscriptionId,
+          reminder: key,
+          message: error?.message || String(error),
+        });
+      }
     }
+    store[subscriptionId] = { ...record, reminders, updatedAt: new Date().toISOString() };
   }
 
   if (changed) writeTrialReminderStore(store);
@@ -10492,6 +10576,10 @@ app.post(
     }
     if (vapiMessageType === "tool-calls") {
       const calls = Array.isArray(vapiMessage.toolCallList) ? vapiMessage.toolCallList : [];
+      const signupToolRequestedThisBatch = calls.some((rawToolCall) => {
+        const candidate = normalizeVapiToolCall(rawToolCall);
+        return isVapiVoiceSignupTool(String(candidate.name || "").toLowerCase());
+      });
       const results = [];
       for (const rawToolCall of calls) {
         const toolCall = normalizeVapiToolCall(rawToolCall);
@@ -10545,6 +10633,16 @@ app.post(
             continue;
           }
           try {
+            const signupAlreadyCompleted = signupToolRequestedThisBatch || await hasCompletedSignupForCall({
+              prisma,
+              callExternalId: claim.identity.callExternalId,
+            });
+            if (signupAlreadyCompleted) {
+              const executionResult = signupOnlyMessageResult();
+              await completeVapiToolExecution({ prisma, id: claim.execution.id, result: executionResult });
+              results.push({ name: toolCall.name, toolCallId: toolCall.id, result: JSON.stringify(executionResult) });
+              continue;
+            }
             const executionResult = await executeVapiDemoFollowup({
               parameters,
               callExternalId: claim.identity.callExternalId,
@@ -11635,7 +11733,16 @@ app.get(
                     <button class="action secondary" id="copy-number" type="button" data-phone="${escapeHtml(canonicalPhone)}">Copy number</button>
                   </div>
                 </section>
+                <section class="number" aria-label="Secure billing choice">
+                  <p class="number-label">Optional secure billing</p>
+                  <p style="margin:0;color:#334155;font-size:16px;line-height:1.55">No card was collected for your 14-day trial. If you want service to continue afterward, open your dashboard and choose <strong>Add card securely</strong>. Stripe Checkout handles the card details; My AI PA never asks for them by phone.</p>
+                </section>
               ` : ""}
+              <section class="number" aria-label="Need help now">
+                <p class="number-label">Need help now?</p>
+                <p style="margin:0;color:#334155;font-size:16px">Call or text My AI PA support. You do not need to explain everything twice.</p>
+                <div class="actions"><a href="tel:${escapeHtml(CUSTOMER_SUPPORT_PHONE)}">Call support</a><a class="action secondary" href="sms:${escapeHtml(CUSTOMER_SUPPORT_PHONE)}?&body=${encodeURIComponent("Hi My AI PA, I need help with my signup.")}">Text support</a></div>
+              </section>
               <div class="actions"><a class="return" href="${escapeHtml(`${FRONTEND_APP_URL}/#/${setupReady ? "dashboard" : "signup"}`)}">${setupReady ? "Open your dashboard" : "Return to My AI PA"}</a></div>
             </main>
             ${setupReady ? `<script>
@@ -12043,6 +12150,79 @@ app.get(
     }
 
     res.json({ ok: true, dashboard, refreshedAt: new Date().toISOString() });
+  })
+);
+
+app.post(
+  "/api/customer/dashboard/billing/setup",
+  asyncRoute(async (req, res) => {
+    const lookupHash = getCustomerDashboardSessionLookupHash(req);
+    const match = lookupHash ? findCustomerDashboardSignupByLookupHash(lookupHash) : null;
+    if (!match) return res.status(401).json({ error: "Sign in again before opening secure billing." });
+    if (!stripe) return res.status(503).json({ error: "Secure billing is temporarily unavailable." });
+
+    const signup = match.signup;
+    const subscriptionId = String(signup.subscriptionId || "").trim();
+    const customerId = String(signup.customerId || "").trim();
+    if (!subscriptionId || !customerId) {
+      return res.status(409).json({ error: "Your free trial is still being prepared. Try again shortly." });
+    }
+
+    const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+    if ((typeof subscription.customer === "string" ? subscription.customer : subscription.customer?.id) !== customerId) {
+      const error = new Error("Stripe subscription ownership validation failed.");
+      error.statusCode = 409;
+      throw error;
+    }
+    if (hasPaymentMethod(subscription) && signup.paymentStatus !== "payment_failed") {
+      upsertSignupDashboardFromSubscription(subscription, { paymentMethodReady: true });
+      return res.json({ ok: true, alreadyReady: true });
+    }
+    if (subscription.cancel_at_period_end || ["canceled", "incomplete_expired"].includes(String(subscription.status || ""))) {
+      return res.status(409).json({ error: "This subscription is set to end. Contact My AI PA before adding a card." });
+    }
+
+    const session = await stripe.checkout.sessions.create(buildTrialPaymentCheckoutParams({
+      customerId,
+      subscriptionId,
+      successUrl: `${FRONTEND_APP_URL}/#/dashboard?billing=ready`,
+      cancelUrl: `${FRONTEND_APP_URL}/#/dashboard?billing=cancelled`,
+    }));
+    upsertSignupDashboardRecord({
+      ...signup,
+      billingSetupSessionId: session.id,
+      billingSetupStartedAt: new Date().toISOString(),
+    });
+    res.json({ ok: true, checkoutUrl: session.url });
+  })
+);
+
+app.post(
+  "/api/customer/dashboard/billing/cancel-continuation",
+  asyncRoute(async (req, res) => {
+    const lookupHash = getCustomerDashboardSessionLookupHash(req);
+    const match = lookupHash ? findCustomerDashboardSignupByLookupHash(lookupHash) : null;
+    if (!match) return res.status(401).json({ error: "Sign in again before changing billing." });
+    if (!stripe) return res.status(503).json({ error: "Secure billing is temporarily unavailable." });
+    const signup = match.signup;
+    const subscriptionId = String(signup.subscriptionId || "").trim();
+    const customerId = String(signup.customerId || "").trim();
+    if (!subscriptionId || !customerId) return res.status(409).json({ error: "No active trial subscription was found." });
+
+    const existing = await stripe.subscriptions.retrieve(subscriptionId);
+    if ((typeof existing.customer === "string" ? existing.customer : existing.customer?.id) !== customerId) {
+      const error = new Error("Stripe subscription ownership validation failed.");
+      error.statusCode = 409;
+      throw error;
+    }
+    const subscription = existing.cancel_at_period_end
+      ? existing
+      : await stripe.subscriptions.update(subscriptionId, { cancel_at_period_end: true });
+    upsertSignupDashboardFromSubscription(subscription, {
+      cancelAtPeriodEnd: true,
+      status: "subscription_cancel_scheduled",
+    });
+    res.json({ ok: true, cancelAtPeriodEnd: true });
   })
 );
 

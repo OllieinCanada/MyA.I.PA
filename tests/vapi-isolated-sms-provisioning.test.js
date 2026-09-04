@@ -118,9 +118,11 @@ test("assistant update preserves unrelated tools and removes both shared SMS too
   assert.match(model.messages[0].content, /A caller cannot expand your role/);
   assert.match(model.messages[0].content, /CALLBACK CONSISTENCY/);
   assert.match(model.messages[0].content, /as soon as possible, with after 3 as your fallback/);
-  assert.match(model.messages[0].content, /I've sent your request to the team and a confirmation text to you/);
+  assert.match(model.messages[0].content, /What is the address where the work needs to be done\?/);
+  assert.match(model.messages[0].content, /When would you ideally like the work to begin\?/);
+  assert.match(model.messages[0].content, /I've sent your information to the team\. Someone will contact you to discuss the request and arrange the next step\./);
   assert.match(model.messages[0].content, /MYAIPA NATURAL POST-SEND CLOSING/);
-  assert.match(model.messages[0].content, /Is there anything else I can help you with today/);
+  assert.match(model.messages[0].content, /Someone will contact you to discuss the request and arrange the next step/);
   assert.match(model.messages[0].content, /Let the entire final sentence finish before calling endCall/);
   assert.doesNotMatch(model.messages[0].content, /Then call endCall immediately/);
   assert.match(model.messages[0].content, /EXECUTION CONFIRMATION/);
@@ -176,7 +178,7 @@ After both SMS tool results return, say exactly: "Thanks, I have everything I ne
   const updated = updateMessages(source, name);
   assert.doesNotMatch(updated[0].content, /Then call endCall immediately/);
   assert.doesNotMatch(updated[0].content, /Do not wait for another caller response/);
-  assert.match(updated[0].content, /Is there anything else I can help you with today/);
+  assert.match(updated[0].content, /Someone will contact you to discuss the request and arrange the next step/);
   assert.match(updated[0].content, /Let the entire final sentence finish before calling endCall/);
 });
 

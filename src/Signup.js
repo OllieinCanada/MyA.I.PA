@@ -1,5 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import Vapi from "@vapi-ai/web";
+import CustomerHelpActions from "./components/CustomerHelpActions";
+import ForwardingSetupGuide from "./components/ForwardingSetupGuide";
+import "./components/CustomerSetupActions.css";
 
 import {
   AREA_GROUPS,
@@ -1665,6 +1668,12 @@ export function SignupSuccessPage({ result, onStartAnother, onRetry }) {
                   </p>
                 </div>
               ) : null}
+            </div>
+            <div className="grid gap-5 lg:col-span-2 lg:grid-cols-[1fr_1fr]">
+              {assignedNumber && !reviewRequired && !verificationRequired ? (
+                <ForwardingSetupGuide assignedNumber={assignedNumber} compact />
+              ) : null}
+              <CustomerHelpActions compact />
             </div>
           </div>
 
