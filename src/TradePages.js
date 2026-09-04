@@ -461,7 +461,7 @@ function TradeFlyer({ slug, trade }) {
   return (
     <article className="contractor-flyer" aria-label={`${copy.name} My AI PA landing page`}>
       <section className="contractor-hero">
-        <img className="contractor-hero-image" src={`/trade-heroes/${slug}-864.jpg`} srcSet={`/trade-heroes/${slug}-480.jpg 480w, /trade-heroes/${slug}-864.jpg 864w`} sizes="(max-width: 720px) 100vw, 520px" decoding="async" fetchpriority="high" alt={`${copy.name} professional at work`} />
+        <img className="contractor-hero-image" src="/trade-heroes/reference-contractor-hero-864.jpg" srcSet="/trade-heroes/reference-contractor-hero-480.jpg 480w, /trade-heroes/reference-contractor-hero-864.jpg 864w" sizes="(max-width: 720px) 100vw, 520px" decoding="async" fetchpriority="high" alt={`${copy.name} contractor working on site`} />
         <div className="contractor-hero-shade" />
         <div className="contractor-hero-main">
           <div className="contractor-wordmark"><span>My</span><b>AI</b><span>PA</span><small>AI PHONE ASSISTANT</small></div>
@@ -487,7 +487,7 @@ function TradeFlyer({ slug, trade }) {
         <h2 className="contractor-rule-heading"><span>HOW MY AI PA WORKS</span></h2>
         <div className="contractor-workflow">{howItWorks.map(([icon, title, body], index) => <article key={title}><b>{index + 1}</b><FlyerIcon name={icon} />{index < howItWorks.length - 1 ? <i>→</i> : null}<h3>{title}</h3><p>{body}</p></article>)}</div>
         <div className="contractor-middle-grid">
-          <div className="contractor-outcomes-photo"><img src={`/trade-heroes/${slug}-480.jpg`} alt="" loading="eager" decoding="async" /></div>
+          <div className="contractor-outcomes-photo"><img src="/trade-heroes/reference-contractor-portrait-864.jpg" srcSet="/trade-heroes/reference-contractor-portrait-480.jpg 480w, /trade-heroes/reference-contractor-portrait-864.jpg 864w" sizes="(max-width: 560px) calc(100vw - 34px), 340px" alt="Smiling contractor ready for the next job" loading="lazy" decoding="async" /></div>
           <div className="contractor-outcomes"><h2>MORE ANSWERS.<br />MORE JOBS.<br /><em>MORE CONTROL.</em></h2>{contractorOutcomes.map(([title, body]) => <p key={title}><FlyerIcon name="check" /><span><strong>{title}</strong> {body}</span></p>)}</div>
           <div className="contractor-side-stack"><div className="contractor-built"><h3>BUILT FOR CONTRACTORS</h3>{tradePageOrder.map((item) => <span key={item}><FlyerIcon name="check" />{tradeFlyerCopy[item]?.name || tradePages[item].label}</span>)}<strong>ANY TRADE. ANY SIZE.<br /><em>ANYWHERE.</em></strong></div><div className="contractor-missed-value"><h3>WHAT IS ONE MISSED JOB WORTH?</h3>{copy.calls.map((call) => <span key={call}><FlyerIcon name="bolt" /><strong>{call}</strong><small>A callback opportunity</small></span>)}<p>Do not let it go to your competitor.<br />Make sure someone answers.</p></div></div>
         </div>
