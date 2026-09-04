@@ -926,7 +926,10 @@
 .flyer-calls h2 { margin: 0 0 14px; font-size: 1.35rem; letter-spacing: -.03em; }
 .flyer-calls h2 small { margin-right: 7px; color: var(--flyer-orange); font-size: .7rem; }
 .flyer-calls > div { display: grid; grid-template-columns: 1fr 1fr; gap: 11px; }
-.flyer-calls article { min-height: 104px; display: flex; align-items: flex-end; padding: 17px 14px; border: 1px solid #c7c7c7; border-top: 8px solid var(--flyer-red); border-radius: 11px; background: #fff; font-size: .83rem; font-weight: 950; }
+.flyer-calls article { min-height: 150px; display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between; gap: 14px; padding: 18px 16px 17px; border: 1px solid #c7c7c7; border-top: 8px solid var(--flyer-red); border-radius: 11px; background: #fff; font-size: .83rem; font-weight: 950; }
+.flyer-call-icon { width: 68px; height: 68px; display: grid; place-items: center; align-self: center; border-radius: 50%; background: #fff0e7; color: var(--flyer-orange); }
+.flyer-call-icon svg { width: 42px; height: 42px; stroke-width: 1.8; }
+.flyer-calls article strong { font: inherit; }
 
 .flyer-panels { display: grid; gap: 16px; padding: 20px; background: #fff; }
 .flyer-panel { overflow: hidden; border: 1px solid #c8c8c8; border-radius: 19px; background: #fff; }
@@ -974,7 +977,9 @@
   .flyer-coffee-copy strong { font-size: 1.45rem; }
   .flyer-calls,
   .flyer-panels { padding-right: 54px; padding-left: 54px; }
-  .flyer-calls article { min-height: 130px; }
+  .flyer-calls article { min-height: 176px; }
+  .flyer-call-icon { width: 82px; height: 82px; }
+  .flyer-call-icon svg { width: 50px; height: 50px; }
 }
 
 @media (max-width: 620px) {
@@ -1003,7 +1008,9 @@
   .flyer-daily { font-size: 1.16rem; }
   .flyer-calls { padding: 27px 18px 18px; }
   .flyer-calls h2 { font-size: 1.12rem; }
-  .flyer-calls article { min-height: 99px; }
+  .flyer-calls article { min-height: 142px; }
+  .flyer-call-icon { width: 60px; height: 60px; }
+  .flyer-call-icon svg { width: 37px; height: 37px; }
   .flyer-panels { padding: 18px; }
   .flyer-panel > div { padding-right: 18px; padding-left: 18px; }
   .flyer-final-actions strong { font-size: 1.72rem; }

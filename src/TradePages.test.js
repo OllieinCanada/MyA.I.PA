@@ -1,5 +1,6 @@
 import { sharedCallFlow, tradePageOrder, tradePages } from "./tradePageData";
 import { TRADE_OPTIONS } from "./features/signup/signupConfig";
+import { tradeCallIcons } from "./TradePages";
 
 test("every public trade page has complete audience-specific content", () => {
   expect(tradePageOrder).toEqual([
@@ -52,5 +53,12 @@ test("trade pages preserve conservative safety and truth boundaries", () => {
 test("the visual call flow explains an end-to-end handoff", () => {
   expect(sharedCallFlow).toHaveLength(4);
   expect(sharedCallFlow.map((step) => step[1]).join(" ")).toMatch(/Caller explains|Trade-specific|Safety|clarity/);
+});
+
+test("every trade call card has a purposeful visual symbol", () => {
+  tradePageOrder.forEach((slug) => {
+    expect(tradeCallIcons[slug]).toHaveLength(tradePages[slug].callerNeeds.length);
+    expect(tradeCallIcons[slug].every(Boolean)).toBe(true);
+  });
 });
 
