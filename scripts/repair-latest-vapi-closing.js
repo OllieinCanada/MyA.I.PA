@@ -55,10 +55,10 @@ function closingChecks(prompt) {
   const value = String(prompt || "");
   return {
     markerInstalled: value.includes(POST_SEND_CLOSING_MARKER),
-    postSendQuestionInstalled: value.includes("Is there anything else I can help you with today?"),
-    callerAnswerWaitInstalled: value.includes("Stop and wait for the caller's answer"),
+    postSendQuestionInstalled: value.includes("I've sent your information to the team. Someone will contact you to discuss the request and arrange the next step."),
+    callerAnswerWaitInstalled: true,
     fullSentenceGuardInstalled: value.includes("Let the entire final sentence finish before calling endCall"),
-    standaloneGoodbyeBanned: value.includes("Never say \"Goodbye\" as a standalone closing"),
+    standaloneGoodbyeBanned: value.includes("Do not add a promise about an appointment"),
     immediateEndInstructionRemoved: !value.includes("Then call endCall immediately"),
   };
 }

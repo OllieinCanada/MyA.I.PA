@@ -11047,6 +11047,10 @@ video {
     grid-template-columns: 1fr 1.15fr;
   }
 
+  .lg\:grid-cols-\[1fr_1fr\] {
+    grid-template-columns: 1fr 1fr;
+  }
+
   .lg\:grid-cols-\[360px_minmax\(0\2c 1fr\)\] {
     grid-template-columns: 360px minmax(0,1fr);
   }

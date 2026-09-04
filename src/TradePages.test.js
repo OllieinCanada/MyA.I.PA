@@ -73,6 +73,10 @@ test("every trade flyer renders the reference campaign structure without fabrica
     expect(html).toMatch(/MY AI PA HANDLES THE CALL/);
     expect(html).toMatch(/FREQUENTLY ASKED QUESTIONS/);
     expect(html).toMatch(/START MY 14-DAY FREE TRIAL/);
+    expect(html).toMatch(/You can&#x27;t answer the phone all the time/);
+    expect(html).toMatch(/You shouldn&#x27;t miss out on .* jobs because you&#x27;re busy/);
+    expect(html).toMatch(/My AI PA answers when you can&#x27;t/);
+    expect(html).toMatch(/Turn voicemail hang-ups into job opportunities—24\/7/);
     expect(html).not.toMatch(/MIKE T\.|JASON R\.|ANDREW L\./i);
   });
 });

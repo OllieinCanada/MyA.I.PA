@@ -36,6 +36,7 @@
     "legal:validate": "node scripts/validate-legal-drafts.js",
     "transparency:validate": "node scripts/validate-public-transparency.js",
     "test:transparency": "node --test tests/public-transparency.test.js",
+    "test:stripe-trial": "node scripts/test-stripe-trial-lifecycle.js",
     "ops:validate": "node scripts/validate-operational-readiness.js",
     "ops:monitor": "node scripts/monitor-production.js",
     "test:production-monitor-safety": "node --test tests/production-monitor-safety.test.js",

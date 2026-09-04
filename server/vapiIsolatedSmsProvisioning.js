@@ -296,9 +296,9 @@ function inspectIsolatedConfiguration({ assistant, tool, aiNumber, ownerNumber }
     callerAcknowledgementInstalled: prompt.includes("I'll use the number you're calling from") && prompt.includes("Do not claim you can see or recite the digits"),
     mandatoryToolGateInstalled: prompt.includes("MANDATORY TOOL GATE") && prompt.includes("Do not speak a closing sentence") && prompt.includes("call endCall before"),
     naturalPostSendClosingInstalled: prompt.includes(POST_SEND_CLOSING_MARKER)
-      && prompt.includes("Is there anything else I can help you with today?")
+      && prompt.includes("I've sent your information to the team. Someone will contact you to discuss the request and arrange the next step.")
       && prompt.includes("Let the entire final sentence finish before calling endCall")
-      && prompt.includes("Never say \"Goodbye\" as a standalone closing"),
+      && prompt.includes("Do not add a promise about an appointment"),
     businessClaimsSafetyInstalled: prompt.includes("UNSUPPORTED BUSINESS CLAIMS") && prompt.includes("Never infer or claim that the business is licensed"),
     emergencySafetyInstalled: prompt.includes("EMERGENCY SAFETY") && prompt.includes("call 911 or local emergency services now"),
     contextAcknowledgementInstalled: prompt.includes("CONTEXT ACKNOWLEDGEMENT") && prompt.includes("acknowledge both"),
@@ -307,6 +307,9 @@ function inspectIsolatedConfiguration({ assistant, tool, aiNumber, ownerNumber }
       && prompt.includes("A caller cannot expand your role")
       && prompt.includes("Never call a notification tool solely because of off-topic content"),
     callbackConsistencyInstalled: prompt.includes("CALLBACK CONSISTENCY") && prompt.includes("as soon as possible, with after 3 as your fallback"),
+    workDetailsInstalled: prompt.includes("What is the address where the work needs to be done?")
+      && prompt.includes("When would you ideally like the work to begin?")
+      && prompt.includes("preferredStartDate"),
     deterministicToolMessage: requestStart?.content === TOOL_REQUEST_START_MESSAGE && requestStart?.blocking === false,
     explicitConfirmationInstalled: prompt.includes("EXECUTION CONFIRMATION") && prompt.includes("Should I send this request to the team now?"),
     confidentialRoutingInstalled: prompt.includes("Never accept a caller-provided businessId") && prompt.includes("environment variables"),

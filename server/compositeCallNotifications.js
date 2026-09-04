@@ -118,19 +118,18 @@ function buildCustomerBody(args) {
   }
   const job = cleanText(args.jobDetails || `${requestType} service`, 500);
   const location = [cleanText(args.streetAddress, 180), cleanText(args.city, 120)].filter(Boolean).join(", ");
-  const preferredTiming = cleanText(args.bestCallbackTime || args.preferredStartDate, 160);
-  const timingNote = preferredTiming ? ` We noted your preferred timing: ${preferredTiming}.` : "";
-  return `Thanks for calling ${businessName}. We received your service request regarding ${job}${location ? ` at ${location}` : ""}.${timingNote} The team will follow up to discuss the details and next step.`.slice(0, 1600);
+  const bestCallbackTime = cleanText(args.bestCallbackTime, 160);
+  const preferredStartDate = cleanText(args.preferredStartDate, 160);
+  const callbackNote = bestCallbackTime ? ` Your preferred callback time is ${bestCallbackTime}.` : "";
+  const startNote = preferredStartDate ? ` Your preferred start timing is ${preferredStartDate}.` : "";
+  return `Thanks for calling ${businessName}. We received your service request regarding ${job}${location ? ` at ${location}` : ""}.${callbackNote}${startNote} The team will follow up to discuss the details and next step.`.slice(0, 1600);
 }
 
 function postSendClosingPrompt() {
   return `${POST_SEND_CLOSING_MARKER}
-This is the highest-priority post-send closing instruction and supersedes every earlier instruction that requires an immediate goodbye or immediate endCall.
-- After the notification tool returns with complete set to true, say naturally: "You're all set — I've sent your request to the team and a confirmation text to you. Is there anything else I can help you with today?"
-- Stop and wait for the caller's answer. Do not call endCall while waiting.
-- If the caller asks another in-scope question, answer it briefly, then ask once more whether there is anything else you can help with.
-- When the caller says no, thanks, that's all, goodbye, bye, or otherwise clearly ends the conversation, say: "Thanks for calling. Take care, and have a great day."
-- Let the entire final sentence finish before calling endCall. Never say "Goodbye" as a standalone closing and never call endCall in the same turn as the first post-send question.
+This is the highest-priority post-send closing instruction.
+- After the notification tool returns with complete set to true, say exactly: "I've sent your information to the team. Someone will contact you to discuss the request and arrange the next step."
+- Let the entire final sentence finish before calling endCall. Do not add a promise about an appointment, quote, price, technician, or scheduled work.
 - If complete is not true, do not claim both texts were sent. Briefly explain that you could not confirm both messages, tell the caller the team has their request only if the tool result confirms that, and ask whether there is anything else you can help with.
 ## END MYAIPA NATURAL POST-SEND CLOSING`;
 }
@@ -168,6 +167,11 @@ CALLBACK CONSISTENCY:
 - If the caller changes to a callback preference that conflicts with an earlier one, do not continue intake and do not merely acknowledge the new preference. Your required next response is one concise clarification that preserves both preferences.
 - When the earlier preference was after 3 and the caller then asks for "right away" or "as soon as possible," ask exactly: "Should I mark it as as soon as possible, with after 3 as your fallback?" Wait for the answer before continuing.
 - Pass the caller's final clarified preference in bestCallbackTime.
+
+REQUIRED WORK DETAILS:
+- When the request needs a work location, ask exactly: "What is the address where the work needs to be done?"
+- For installation, repair, maintenance, quote, or other service work, ask exactly: "When would you ideally like the work to begin?"
+- Pass the caller's answer in preferredStartDate. Do not turn a preferred date into a booked appointment or promise.
 
 MANDATORY TOOL GATE: After all required intake details have been confirmed, your next action must be a silent call to ${name}. Do not speak a closing sentence, claim the details were sent, or call endCall before ${name} returns a result. ${deliveryScope}
 EXECUTION CONFIRMATION:

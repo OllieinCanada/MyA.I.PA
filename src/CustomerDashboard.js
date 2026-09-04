@@ -1,5 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getApiBaseUrl, normalizeApiBase } from "./config/apiBase";
+import CustomerHelpActions from "./components/CustomerHelpActions";
+import ForwardingSetupGuide from "./components/ForwardingSetupGuide";
+import "./components/CustomerSetupActions.css";
 import "./CustomerDashboard.css";
 
 const API_BASE = normalizeApiBase(getApiBaseUrl(process.env.REACT_APP_API_BASE_URL));
@@ -138,6 +141,28 @@ async function endDashboardSession() {
     method: "POST",
     credentials: "include",
   });
+}
+
+async function startSecureBillingSetup() {
+  const response = await fetch(`${API_BASE}/api/customer/dashboard/billing/setup`, {
+    method: "POST",
+    credentials: "include",
+    headers: { Accept: "application/json" },
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data?.error || "Secure billing could not be opened.");
+  return data;
+}
+
+async function cancelPaidContinuation() {
+  const response = await fetch(`${API_BASE}/api/customer/dashboard/billing/cancel-continuation`, {
+    method: "POST",
+    credentials: "include",
+    headers: { Accept: "application/json" },
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data?.error || "The billing change could not be saved.");
+  return data;
 }
 
 async function respondToAppointmentRequest(appointmentId, payload) {
@@ -941,12 +966,44 @@ function JobberIntegrationPanel({ jobber = {}, onUpdated }) {
   );
 }
 
-function SimpleTrialBar({ usage = {}, trialText = "", trialEndAt = "" }) {
+function SimpleTrialBar({ usage = {}, trialText = "", trialEndAt = "", billing = {}, onRefresh }) {
   const remaining = Math.max(0, Math.round(Number(usage.remainingMinutes || 0)));
   const limit = Math.max(1, Number(usage.limitMinutes || 60));
   const used = Math.max(0, Number(usage.usedMinutes || 0));
   const percent = Math.max(0, Math.min(100, Math.round((used / limit) * 100)));
   const paused = Boolean(usage.newCallsPaused || usage.limitReached);
+  const [busy, setBusy] = useState("");
+  const [message, setMessage] = useState("");
+  const openBilling = async () => {
+    setBusy("setup");
+    setMessage("");
+    try {
+      const result = await startSecureBillingSetup();
+      if (result.checkoutUrl) window.location.assign(result.checkoutUrl);
+      else {
+        setMessage("Payment is ready.");
+        await onRefresh?.();
+      }
+    } catch (error) {
+      setMessage(error?.message || "Secure billing could not be opened.");
+    } finally {
+      setBusy("");
+    }
+  };
+  const cancelContinuation = async () => {
+    if (!window.confirm("Keep the free trial, but stop paid service from starting when it ends?")) return;
+    setBusy("cancel");
+    setMessage("");
+    try {
+      await cancelPaidContinuation();
+      setMessage("Paid continuation is cancelled. Your trial remains available until it ends.");
+      await onRefresh?.();
+    } catch (error) {
+      setMessage(error?.message || "The billing change could not be saved.");
+    } finally {
+      setBusy("");
+    }
+  };
   return (
     <section className={`customer-simple-trial${paused ? " is-paused" : ""}`} aria-label="Free trial usage">
       <div>
@@ -957,7 +1014,21 @@ function SimpleTrialBar({ usage = {}, trialText = "", trialEndAt = "" }) {
       <div className="customer-simple-trial-progress" role="progressbar" aria-label="Trial minutes used" aria-valuemin="0" aria-valuemax={limit} aria-valuenow={Math.min(limit, used)}>
         <i style={{ width: `${percent}%` }} />
       </div>
-      <a href="mailto:hello@myaipa.com?subject=Activate%20My%20AI%20PA%20service">Activate</a>
+      <div className="customer-trial-billing">
+        {billing.paymentReady ? <strong className="is-ready">✓ Payment ready</strong> : (
+          <button type="button" onClick={openBilling} disabled={Boolean(busy) || !billing.canAddPaymentMethod}>
+            {busy === "setup" ? "Opening Stripe…" : billing.paymentFailed ? "Replace card securely" : "Add card securely"}
+          </button>
+        )}
+        {billing.paymentReady && !billing.cancelAtPeriodEnd ? (
+          <button type="button" className="is-link" onClick={cancelContinuation} disabled={Boolean(busy)}>
+            {busy === "cancel" ? "Saving…" : "Cancel paid continuation"}
+          </button>
+        ) : null}
+        {billing.cancelAtPeriodEnd ? <small>Paid continuation cancelled</small> : null}
+      </div>
+      <p className="customer-trial-disclosure">{billing.paymentFailed ? "The last payment did not go through, so new AI calls are paused. Use Stripe Checkout to replace the card." : billing.paymentReady ? billing.disclosure : "No card is required for your trial. Add one only if you want service to continue afterward."}</p>
+      {message ? <p className="customer-trial-message" role="status">{message}</p> : null}
     </section>
   );
 }
@@ -967,6 +1038,8 @@ function CustomerDashboardView({ dashboard, onSignOut, onRefresh, refreshing, re
   const stats = dashboard.stats || {};
   const assistant = dashboard.assistant || {};
   const messaging = dashboard.messaging || {};
+  const billing = dashboard.billing || {};
+  const support = dashboard.support || {};
   const trialUsage = dashboard.trialUsage || {};
   const checklist = dashboard.setup?.checklist || [];
   const readiness = dashboard.setup?.readinessPercent || 0;
@@ -1089,7 +1162,11 @@ function CustomerDashboardView({ dashboard, onSignOut, onRefresh, refreshing, re
           {primaryAction.target === "refresh" ? <button type="button" onClick={onRefresh} disabled={refreshing}>{refreshing ? "Checking…" : primaryAction.label}</button> : primaryAction.target === "settings" ? <button type="button" onClick={openMoreSettings}>{primaryAction.label}</button> : <a href={primaryAction.target}>{primaryAction.label}</a>}
         </section>
 
-        {trialUsage.lifecycle === "trial" ? <SimpleTrialBar usage={trialUsage} trialText={trialText} trialEndAt={signup.trialEndAt} /> : null}
+        {trialUsage.lifecycle === "trial" || billing.paymentFailed || billing.paused ? <SimpleTrialBar usage={trialUsage} trialText={trialText} trialEndAt={signup.trialEndAt} billing={billing} onRefresh={onRefresh} /> : null}
+
+        <CustomerHelpActions phone={support.phone} />
+
+        {aiNumber ? <ForwardingSetupGuide assignedNumber={aiNumber} compact /> : null}
 
         <section className="customer-simple-stats" aria-label="Your important numbers">
           <article><span>Calls answered</span><strong>{stats.totalCalls || 0}</strong><small>by My AI PA</small></article>

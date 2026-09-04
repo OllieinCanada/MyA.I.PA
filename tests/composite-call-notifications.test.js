@@ -142,7 +142,10 @@ test("composite tool sends owner first and customer second", async () => {
   assert.equal(result.customer.sent, true);
   assert.equal(result.complete, true);
   assert.match(mock.calls[0].body, /Service request \(installation\)/);
+  assert.match(mock.calls[0].body, /Preferred Start: right away/);
   assert.match(mock.calls[1].body, /Thanks for calling Example Electrical/);
+  assert.match(mock.calls[1].body, /preferred callback time is afternoons or after 5 PM/i);
+  assert.match(mock.calls[1].body, /preferred start timing is right away/i);
 });
 
 test("composite tool prefers API-key REST auth and requests delivery callbacks", async () => {
@@ -310,10 +313,10 @@ test("caller-number prompt acknowledges the calling number without exposing digi
   assert.match(prompt, /call endCall before send_call_summaries_test returns/);
   assert.match(prompt, /earlier SMS tool names are retired and unavailable/);
   assert.match(prompt, /MYAIPA NATURAL POST-SEND CLOSING/);
-  assert.match(prompt, /Is there anything else I can help you with today/);
-  assert.match(prompt, /Stop and wait for the caller's answer/);
+  assert.match(prompt, /I've sent your information to the team\. Someone will contact you to discuss the request and arrange the next step\./);
+  assert.match(prompt, /Do not add a promise about an appointment/);
   assert.match(prompt, /Let the entire final sentence finish before calling endCall/);
-  assert.match(prompt, /Never say "Goodbye" as a standalone closing/);
+  assert.match(prompt, /before calling endCall/);
   assert.doesNotMatch(prompt, /Then call endCall immediately/);
 });
 

@@ -80,7 +80,7 @@ function verifyBlueprint(data) {
     senderNumberMapped: prompt.includes("Assigned AI/Twilio sender number: {{9.data.phone_number}}"),
     ownerNumberMapped: prompt.includes("Owner notification number: {{21.setupDetails.ownerPhone}}"),
     naturalPostSendClosingMapped: prompt.includes(POST_SEND_CLOSING_MARKER)
-      && prompt.includes("Is there anything else I can help you with today?")
+      && prompt.includes("I've sent your information to the team. Someone will contact you to discuss the request and arrange the next step.")
       && prompt.includes("Let the entire final sentence finish before calling endCall"),
   };
 }

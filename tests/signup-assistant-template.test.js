@@ -62,6 +62,11 @@ test("builds the current production Vapi assistant with resolved signup values",
   assert.match(prompt, /send_customer_sms_dynamic/);
   assert.match(prompt, /send_owner_sms_dynamic/);
   assert.match(prompt, /endCall/);
+  assert.match(prompt, /What is the address where the work needs to be done\?/);
+  assert.match(prompt, /When would you ideally like the work to begin\?/);
+  assert.match(prompt, /preferredStartDate/);
+  assert.match(prompt, /I've sent your information to the team\. Someone will contact you to discuss the request and arrange the next step\./);
+  assert.doesNotMatch(prompt, /collect card|card number|banking information/i);
   assert.doesNotMatch(JSON.stringify(config), /\{\{[^}]*\}\}/);
 });
 
