@@ -25,11 +25,16 @@ function TradeIcon({ name, className = "" }) {
 function Brand() {
   return (
     <a className="trade-brand" href="#/" aria-label="My AI PA home">
-      <span className="trade-brand-mark" aria-hidden="true">
-        <span />
-        <i />
-        <b />
-      </span>
+      <svg className="trade-home-brand-mark" viewBox="0 0 72 72" fill="none" aria-hidden="true">
+        <path d="M14 40v-6C14 21.8 23.8 12 36 12s22 9.8 22 22v6" stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
+        <path d="M14 37h7v18h-7a5 5 0 0 1-5-5v-8a5 5 0 0 1 5-5Zm44 0h-7v18h7a5 5 0 0 0 5-5v-8a5 5 0 0 0-5-5Z" fill="currentColor" />
+        <path d="M52 54c0 6.2-5.7 10-13.2 10M36 64h-5.5" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
+        {[21, 26, 31, 36, 41, 46, 51].map((x, index) => {
+          const heights = [15, 22, 28, 32, 28, 22, 15];
+          const height = heights[index];
+          return <rect key={x} x={x} y={36 - height / 2} width="3.6" height={height} rx="1.8" fill="#ff7a00" />;
+        })}
+      </svg>
       <span>
         <strong>My <em>AI PA</em></strong>
         <small>AI telephone answering assistant</small>
@@ -398,10 +403,6 @@ function FlyerIcon({ name }) {
   return <svg viewBox="0 0 24 24" aria-hidden="true">{paths[name] || paths.note}</svg>;
 }
 
-function FlyerPanel({ title, children, className = "" }) {
-  return <section className={`flyer-panel ${className}`}><h2>{title}</h2><div>{children}</div></section>;
-}
-
 export const tradeCallIcons = {
   electricians: ["outlet", "charger", "wiring", "panel"],
   plumbers: ["leak", "drain", "water", "wrench"],
@@ -413,58 +414,98 @@ export const tradeCallIcons = {
 
 function TradeFlyer({ slug, trade }) {
   const copy = tradeFlyerCopy[slug];
-  const howItWorks = [["Customer calls", "Your normal business number rings."], ["My AI PA answers", "It picks up after three rings."], ["You get the lead", "Job details arrive by text."]];
-  const signup = ["Go to MYAIPA.CA", "Start the 14-day free trial", "Add your services, service area and business details", "Make private test calls", "Forward missed or after-hours calls when ready"];
-  const leadIcons = ["bolt", "user", "pin", "clock", "note"];
-  const callIcons = tradeCallIcons[slug];
-
+  const howItWorks = [
+    ["phone", "CUSTOMER CALLS", "Your phone rings normally. If you do not answer, My AI PA picks up."],
+    ["note", "MY AI PA TALKS", "It asks the right questions, engages the caller and collects job details."],
+    ["note", "YOU GET THE DETAILS", "You receive a clear text summary on your cellphone."],
+    ["phone", "YOU CALL BACK", "You know who called, what they need and when to respond."],
+  ];
+  const coreBenefits = [
+    ["phone", "NO MORE VOICEMAIL HANG-UPS"],
+    ["user", "ENGAGES CALLERS & COLLECTS JOB DETAILS"],
+    ["note", "SENDS YOU A TEXT SUMMARY"],
+    ["clock", "AVAILABLE 24/7"],
+  ];
+  const trustItems = [
+    ["shield", "BUILT FOR BUSY CONTRACTORS"],
+    ["check", "TRADE-SPECIFIC QUESTIONS"],
+    ["check", "EASY SETUP. NO TECH SKILLS."],
+    ["shield", "YOUR BUSINESS. YOUR NUMBER."],
+  ];
+  const capabilityItems = [
+    ["phone", "ANSWERS YOUR CALLS", "Professional greeting every time."],
+    ["note", "COLLECTS JOB DETAILS", "Name, number, job type and location."],
+    ["clock", "FLAGS URGENT CALLS", "Urgency is captured, not diagnosed."],
+    ["note", "SENDS A SUMMARY", "A concise text arrives on your phone."],
+    ["user", "USES YOUR QUESTIONS", "The call can fit your business."],
+    ["clock", "AVAILABLE 24/7", "After hours, weekends and holidays."],
+  ];
+  const contractorOutcomes = [
+    ["MORE ANSWERS.", "Callers reach a helpful next step instead of voicemail."],
+    ["MORE USEFUL LEADS.", `The ${copy.name.toLowerCase()} details you need arrive together.`],
+    ["MORE CONTROL.", "Test privately, then forward calls only when you are ready."],
+  ];
+  const faqs = [
+    ["Will I keep my current phone number?", "Yes. Your normal business number stays in place; unanswered or after-hours calls can forward to My AI PA."],
+    ["Will customers know they are talking to AI?", "Yes. The assistant uses a clear, professional AI disclosure."],
+    ["What information does My AI PA collect?", `It can collect the caller's name, callback number, location, ${copy.calls.map((item) => item.toLowerCase()).join(", ")} and preferred timing.`],
+    ["How will I receive the call details?", "A compact lead summary is sent by text so you can call back prepared."],
+    ["Can I customize the questions?", "Yes. Your business details, services and call questions can be configured during setup."],
+    ["Is there a long-term contract?", "No. The current plan can be cancelled anytime."],
+    ["How does the 14-day trial work?", "Set it up, make private test calls, and put it online only when you are comfortable."],
+    ["Does it book or promise work?", "Only when that capability is intentionally configured. By default it captures the request and sets an honest callback expectation."],
+  ];
   return (
-    <article className="flyer-one-to-one" aria-label={`${copy.name} My AI PA landing page`}>
-      <section className="flyer-hero-copy">
-        <Brand />
-        <p className="flyer-eyebrow">{copy.eyebrow}</p>
-        <h1><span>{copy.headlineTop}</span><strong>{copy.headlineBottom}</strong></h1>
-        <p className="flyer-intro">{copy.intro}</p>
-        <div className="flyer-missed"><FlyerIcon name="phone" /><strong>{copy.missed}</strong></div>
-        <div className="flyer-top-actions"><a href="#/signup">START 14-DAY TRIAL</a><a href="tel:+12495033301">CALL LIVE DEMO</a></div>
-        <div className="flyer-proof"><span><FlyerIcon name="check" />No credit card</span><span><FlyerIcon name="check" />Keep your number</span><span><FlyerIcon name="check" />Cancel anytime</span></div>
-      </section>
-
-      <section className={`flyer-photo flyer-photo-${slug}`}>
-        <img
-          className="flyer-photo-image"
-          src={`/trade-heroes/${slug}-864.jpg`}
-          srcSet={`/trade-heroes/${slug}-480.jpg 480w, /trade-heroes/${slug}-864.jpg 864w`}
-          sizes="(max-width: 620px) 100vw, 1120px"
-          loading="lazy"
-          decoding="async"
-          alt=""
-        />
-        <div className="flyer-burst">14-DAY<br />FREE<br />TRIAL</div>
-        <div className="flyer-phone">
-          <div className="flyer-phone-status"><span>9:41</span><i /><span>5G</span></div>
-          <p>MY AI PA</p><h2>New Lead Summary</h2>
-          <div className="flyer-phone-lead">
-            {copy.lead.map(([label, value], index) => <div key={label}><FlyerIcon name={leadIcons[index]} /><span><small>{label}</small><strong>{value}</strong></span></div>)}
-          </div>
-          <div className="flyer-ready"><FlyerIcon name="check" /><strong>Ready to call back</strong></div>
+    <article className="contractor-flyer" aria-label={`${copy.name} My AI PA landing page`}>
+      <section className="contractor-hero">
+        <img className="contractor-hero-image" src={`/trade-heroes/${slug}-864.jpg`} srcSet={`/trade-heroes/${slug}-480.jpg 480w, /trade-heroes/${slug}-864.jpg 864w`} sizes="(max-width: 720px) 100vw, 520px" decoding="async" fetchpriority="high" alt={`${copy.name} professional at work`} />
+        <div className="contractor-hero-shade" />
+        <div className="contractor-hero-main">
+          <div className="contractor-wordmark"><span>My</span><b>AI</b><span>PA</span><small>AI PHONE ASSISTANT</small></div>
+          <h1>STOP LOSING JOBS<br /><em>BECAUSE YOU<br />MISSED THE CALL</em></h1>
+          <p>{copy.intro}</p>
+          <div className="contractor-benefits">{coreBenefits.map(([icon, label]) => <div key={label}><FlyerIcon name={icon} /><strong>{label}</strong></div>)}</div>
+          <div className="contractor-actions"><a href="#/signup"><FlyerIcon name="back" />START MY 14-DAY FREE TRIAL</a><a href="tel:+12495033301"><FlyerIcon name="phone" />HEAR DEMO</a></div>
+          <div className="contractor-mini-proof"><span>● NO CREDIT CARD REQUIRED</span><span>● CANCEL ANYTIME</span></div>
+        </div>
+        <div className="contractor-never-miss"><FlyerIcon name="phone" /><strong>NEVER MISS<br />A CALL AGAIN</strong></div>
+        <div className="contractor-live-phone">
+          <div className="contractor-live-phone-status">Incoming Call</div>
+          <h2>New Lead</h2><strong>(555) 667-5309</strong>
+          <div className="contractor-wave">▮ ▮▮ ▮▮▮ ▮▮ ▮</div>
+          <p>My AI PA is answering<br />and gathering details...</p>
+          <span><FlyerIcon name="phone" /></span>
         </div>
       </section>
 
-      <section className="flyer-coffee"><div className="flyer-coffee-copy"><span><FlyerIcon name="cup" /></span><p><strong>ABOUT THE PRICE OF A CUP OF COFFEE A DAY.</strong><small>$79 per month works out to roughly $2.60 per day before tax.</small></p></div><div className="flyer-daily"><strong>$2.60</strong>/day</div></section>
+      <section className="contractor-trust-strip">{trustItems.map(([icon, label]) => <div key={label}><FlyerIcon name={icon} /><strong>{label}</strong></div>)}</section>
 
-      <section className="flyer-calls"><h2><small>COMMON CALLS</small> MY AI PA CAN CAPTURE</h2><div>{copy.calls.map((call, index) => <article key={call}><span className="flyer-call-icon"><FlyerIcon name={callIcons[index]} /></span><strong>{call}</strong></article>)}</div></section>
+      <section className="contractor-white-section contractor-workflow-section">
+        <h2 className="contractor-rule-heading"><span>HOW MY AI PA WORKS</span></h2>
+        <div className="contractor-workflow">{howItWorks.map(([icon, title, body], index) => <article key={title}><b>{index + 1}</b><FlyerIcon name={icon} />{index < howItWorks.length - 1 ? <i>→</i> : null}<h3>{title}</h3><p>{body}</p></article>)}</div>
+        <div className="contractor-middle-grid">
+          <div className="contractor-outcomes-photo"><img src={`/trade-heroes/${slug}-480.jpg`} alt="" loading="eager" decoding="async" /></div>
+          <div className="contractor-outcomes"><h2>MORE ANSWERS.<br />MORE JOBS.<br /><em>MORE CONTROL.</em></h2>{contractorOutcomes.map(([title, body]) => <p key={title}><FlyerIcon name="check" /><span><strong>{title}</strong> {body}</span></p>)}</div>
+          <div className="contractor-side-stack"><div className="contractor-built"><h3>BUILT FOR CONTRACTORS</h3>{tradePageOrder.map((item) => <span key={item}><FlyerIcon name="check" />{tradeFlyerCopy[item]?.name || tradePages[item].label}</span>)}<strong>ANY TRADE. ANY SIZE.<br /><em>ANYWHERE.</em></strong></div><div className="contractor-missed-value"><h3>WHAT IS ONE MISSED JOB WORTH?</h3>{copy.calls.map((call) => <span key={call}><FlyerIcon name="bolt" /><strong>{call}</strong><small>A callback opportunity</small></span>)}<p>Do not let it go to your competitor.<br />Make sure someone answers.</p></div></div>
+        </div>
+      </section>
 
-      <div className="flyer-panels">
-        <FlyerPanel title="HOW IT WORKS">{howItWorks.map(([title, body], index) => <div className="flyer-number-row" key={title}><span>{index + 1}</span><p><strong>{title}</strong><small>{body}</small></p></div>)}</FlyerPanel>
-        <FlyerPanel title="HOW TO SIGN UP">{signup.map((step, index) => <div className="flyer-number-row" key={step}><span>{index + 1}</span><p><strong>{step}</strong></p></div>)}</FlyerPanel>
-        <FlyerPanel title={`WHY ${copy.name.toUpperCase()} USE IT`}>{copy.why.map((reason, index) => <div className="flyer-icon-row" key={reason}><FlyerIcon name={["clock", "phone", "note", "shield"][index]} /><strong>{reason}</strong></div>)}</FlyerPanel>
+      <section className="contractor-capabilities">
+        <h2>MY AI PA HANDLES THE CALL. YOU HANDLE THE JOB.</h2>
+        <div>{capabilityItems.map(([icon, title, body]) => <article key={title}><FlyerIcon name={icon} /><strong>{title}</strong><p>{body}</p></article>)}</div>
+      </section>
 
-        <section className="flyer-price"><h2>SIMPLE PRICING</h2><div><p>14-DAY<br />FREE TRIAL</p><strong><b>$79</b>/mo</strong><small>Plus applicable taxes</small><ul><li><FlyerIcon name="check" />60 AI call minutes included</li><li><FlyerIcon name="check" />$0.25/min after 60 minutes</li><li><FlyerIcon name="check" />No setup fee</li></ul></div></section>
+      <section className="contractor-proof-section">
+        <h2 className="contractor-rule-heading"><span>BUILT AROUND REAL CONTRACTOR PRESSURE</span></h2>
+        <div className="contractor-proof-grid">{contractorOutcomes.map(([title, body], index) => <article key={title}><div className="contractor-stars">★★★★★</div><p>“{body}”</p><span>{["ON THE TOOLS", "WITH A CUSTOMER", "RUNNING THE JOB"][index]}</span></article>)}</div>
+      </section>
 
-        <div className="flyer-final-actions"><a className="is-orange" href="#/signup"><span><FlyerIcon name="globe" /></span><p><small>Start your free trial at</small><strong>MYAIPA.CA</strong></p></a><a className="is-black" href="tel:+12495033301"><span><FlyerIcon name="phone" /></span><p><small>Call the live demo</small><strong>(249) 503-3301</strong></p></a></div>
-        <p className="flyer-private"><FlyerIcon name="shield" /> Test it privately before forwarding real customer calls.</p>
-      </div>
+      <section className="contractor-faq-section">
+        <h2 className="contractor-rule-heading"><span>FREQUENTLY ASKED QUESTIONS</span></h2>
+        <div className="contractor-faq-grid">{faqs.map(([question, answer]) => <details key={question}><summary><b>?</b>{question}<span>⌄</span></summary><p>{answer}</p></details>)}</div>
+      </section>
+
+      <section className="contractor-bottom-cta"><p>STOP LOSING JOBS.<br />START CAPTURING <em>EVERY OPPORTUNITY.</em></p><a href="#/signup"><FlyerIcon name="back" />START MY 14-DAY FREE TRIAL</a><div><span>⚡ QUICK SETUP</span><span>♢ 14 DAYS RISK-FREE</span><span>⊗ CANCEL ANYTIME</span></div></section>
     </article>
   );
 }

@@ -1,6 +1,8 @@
+import React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { sharedCallFlow, tradePageOrder, tradePages } from "./tradePageData";
 import { TRADE_OPTIONS } from "./features/signup/signupConfig";
-import { tradeCallIcons } from "./TradePages";
+import TradePages, { tradeCallIcons } from "./TradePages";
 
 test("every public trade page has complete audience-specific content", () => {
   expect(tradePageOrder).toEqual([
@@ -59,6 +61,19 @@ test("every trade call card has a purposeful visual symbol", () => {
   tradePageOrder.forEach((slug) => {
     expect(tradeCallIcons[slug]).toHaveLength(tradePages[slug].callerNeeds.length);
     expect(tradeCallIcons[slug].every(Boolean)).toBe(true);
+  });
+});
+
+test("every trade flyer renders the reference campaign structure without fabricated testimonials", () => {
+  tradePageOrder.forEach((slug) => {
+    const html = renderToStaticMarkup(<TradePages slug={slug} />);
+    expect(html).toMatch(/STOP LOSING JOBS/);
+    expect(html).toMatch(/NEVER MISS/);
+    expect(html).toMatch(/HOW MY AI PA WORKS/);
+    expect(html).toMatch(/MY AI PA HANDLES THE CALL/);
+    expect(html).toMatch(/FREQUENTLY ASKED QUESTIONS/);
+    expect(html).toMatch(/START MY 14-DAY FREE TRIAL/);
+    expect(html).not.toMatch(/MIKE T\.|JASON R\.|ANDREW L\./i);
   });
 });
 
