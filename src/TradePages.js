@@ -467,10 +467,20 @@ function TradeFlyer({ slug, trade }) {
     ["burst", "HVAC JOB", "$1,500 - $5,000"],
     ["burst", "RENOVATION PROJECT", "$5,000 - $20,000+"],
   ];
+  const leadExample = Object.fromEntries(copy.lead || []);
+  const jobDetailRows = [
+    ["user", "CALLER", leadExample.CALLER || "Jordan Lee"],
+    ["phone", "PHONE", "(905) 555-0123"],
+    ["note", "WORK REQUESTED", leadExample.SERVICE || copy.calls[0]],
+    ["building", "ADDRESS", leadExample.LOCATION || "Hamilton, ON"],
+    ["clock", "PREFERRED START", "Next week — preference only"],
+    ["clock", "BEST CALLBACK", leadExample.CALLBACK || "Weekday afternoon"],
+    ["bolt", "URGENCY", leadExample.INTENT || "Routine follow-up"],
+  ];
   const faqs = [
     ["Will I keep my current phone number?", "Yes. Your normal business number stays in place; unanswered or after-hours calls can forward to My AI PA."],
     ["Will customers know they are talking to AI?", "Yes. The assistant uses a clear, professional AI disclosure."],
-    ["What information does My AI PA collect?", `It can collect the caller's name, callback number, location, ${copy.calls.map((item) => item.toLowerCase()).join(", ")} and preferred timing.`],
+    ["What information does My AI PA collect?", "It collects the caller, callback number, work requested, job address, preferred start, best callback time, and urgency. Preferred timing is a request—not a booked appointment."],
     ["How will I receive the call details?", "A compact lead summary is sent by text so you can call back prepared."],
     ["Can I customize the questions?", "Yes. Your business details, services and call questions can be configured during setup."],
     ["Is there a long-term contract?", "No. The current plan can be cancelled anytime."],
@@ -506,9 +516,18 @@ function TradeFlyer({ slug, trade }) {
 
       <section className="contractor-trust-strip">{trustItems.map(([icon, label]) => <div key={label}><FlyerIcon name={icon} /><strong>{label}</strong></div>)}</section>
 
+      <section className="contractor-number-promise">
+        <FlyerIcon name="phone" />
+        <div><span>KEEP YOUR EXISTING BUSINESS NUMBER</span><strong>Customers keep calling the number they already know.</strong><p>You forward only unanswered or after-hours calls to My AI PA when you are ready.</p></div>
+      </section>
+
       <section className="contractor-white-section contractor-workflow-section">
         <h2 className="contractor-rule-heading"><span>HOW MY AI PA WORKS</span></h2>
         <div className="contractor-workflow">{howItWorks.map(([icon, title, body], index) => <article key={title}><b>{index + 1}</b><FlyerIcon name={icon} />{index < howItWorks.length - 1 ? <i>→</i> : null}<h3>{title}</h3><p>{body}</p></article>)}</div>
+        <section className="contractor-job-details">
+          <div><span>THE JOB DETAILS YOU NEED</span><h2>One clear lead. No guessing.</h2><p>The assistant reuses what the caller already said, asks only for missing information, then reads the details back once.</p></div>
+          <dl>{jobDetailRows.map(([icon, label, value]) => <div key={label}><FlyerIcon name={icon} /><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
+        </section>
         <div className="contractor-middle-grid">
           <div className="contractor-outcomes-photo"><img src="/trade-heroes/reference-contractor-portrait-864.jpg" srcSet="/trade-heroes/reference-contractor-portrait-480.jpg 480w, /trade-heroes/reference-contractor-portrait-864.jpg 864w" sizes="(max-width: 560px) calc(100vw - 34px), 340px" alt="Smiling contractor ready for the next job" loading="lazy" decoding="async" /></div>
           <div className="contractor-outcomes"><h2>MORE ANSWERS.<br />MORE JOBS.<br /><em>MORE CONTROL.</em></h2>{contractorOutcomes.map(([title, body]) => <p key={title}><FlyerIcon name="check" /><span><strong>{title}</strong> {body}</span></p>)}</div>

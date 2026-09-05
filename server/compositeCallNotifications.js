@@ -80,20 +80,19 @@ function buildOwnerBody(args) {
       `- Message: ${cleanText(args.message || "No message provided", 500)}`,
     ].join("\n").slice(0, 1600);
   }
-  const lines = [
-    `Service request (${requestType || "service"}):`,
-    `- Name: ${name}`,
-    `- Phone: ${phone || "Not provided"}`,
-    `- Job Details: ${cleanText(args.jobDetails || "Not provided", 500)}`,
-  ];
   const street = cleanText(args.streetAddress, 180);
   const city = cleanText(args.city, 120);
-  if (street) lines.push(`- Address: ${street}`);
-  if (city) lines.push(`- City: ${city}`);
-  const preferredStartDate = cleanText(args.preferredStartDate, 120);
-  if (preferredStartDate) lines.push(`- Preferred Start: ${preferredStartDate}`);
-  const bestCallbackTime = cleanText(args.bestCallbackTime, 160);
-  if (bestCallbackTime) lines.push(`- Best Callback Time: ${bestCallbackTime}`);
+  const address = [street, city].filter(Boolean).join(", ") || "Not provided";
+  const lines = [
+    "NEW LEAD",
+    `- Caller: ${name}`,
+    `- Phone: ${phone || "Not provided"}`,
+    `- Work requested: ${cleanText(args.jobDetails || requestType || "Not provided", 500)}`,
+    `- Address: ${address}`,
+    `- Preferred start: ${cleanText(args.preferredStartDate || "Not provided", 120)}`,
+    `- Best callback: ${cleanText(args.bestCallbackTime || "Not provided", 160)}`,
+    `- Urgency: ${cleanText(args.urgency || "Not provided", 120)}`,
+  ];
   return lines.join("\n").slice(0, 1600);
 }
 
@@ -425,6 +424,7 @@ function compositeToolParameters() {
       city: { type: "string", description: "City for the requested work." },
       preferredStartDate: { type: "string", description: "When the caller wants the work to start." },
       bestCallbackTime: { type: "string", description: "Best time to call the customer back." },
+      urgency: { type: "string", description: "Caller-stated urgency. Capture it without diagnosing or promising dispatch." },
       message: { type: "string", description: "Message content when requestType is message." },
     },
     required: ["businessName", "requestType", "name"],

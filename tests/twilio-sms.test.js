@@ -68,6 +68,27 @@ test("configured Twilio requests use Basic auth and form-encoded message fields"
   assert.equal(body.get("Body"), "New service request");
 });
 
+test("a trusted per-agent sender overrides the global sender", async () => {
+  let capturedBody = "";
+  await sendSmsViaTwilio({
+    to: "+12495033301",
+    from: "+12895550123",
+    message: "Agent test",
+    env: {
+      NODE_ENV: "production",
+      TWILIO_ACCOUNT_SID: "AC_test_123",
+      TWILIO_AUTH_TOKEN: "test-token",
+      TWILIO_FROM_NUMBER: "+19055550199",
+    },
+    fetchImpl: async (_url, options) => {
+      capturedBody = options.body;
+      return { ok: true, status: 201, json: async () => ({ sid: "SM_agent_test", status: "queued" }) };
+    },
+    suppressionChecker: async () => false,
+  });
+  assert.equal(new URLSearchParams(capturedBody).get("From"), "+12895550123");
+});
+
 test("Twilio REST requests prefer API keys and include an HTTPS delivery callback", async () => {
   let captured;
   const fetchImpl = async (url, options) => {

@@ -17,7 +17,8 @@ test("setup-complete content uses one canonical number in every representation",
   assert.equal(content.phone, "+13433216155");
   assert.equal(content.displayPhone, "+1 (343) 321-6155");
   assert.match(content.sms, /\+1 \(343\) 321-6155/);
-  assert.match(content.text, /Call it now to test the assistant/);
+  assert.match(content.text, /passed its protected routing and sample-text checks/i);
+  assert.match(content.text, /private testing station/i);
   assert.match(content.text, /https:\/\/www\.myaipa\.ca\/#\/dashboard/);
   assert.equal(formatAssignedPhone("343-321-6155"), "+1 (343) 321-6155");
 });

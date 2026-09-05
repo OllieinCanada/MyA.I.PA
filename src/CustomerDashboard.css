@@ -3067,6 +3067,36 @@
   background: #07142a;
 }
 
+.customer-agent-test {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(16rem, 0.38fr);
+  gap: 1.25rem;
+  margin-top: 1rem;
+  border: 2px solid #f59e0b;
+  border-radius: 1rem;
+  background: #fff;
+  padding: 1.25rem;
+  box-shadow: 0 12px 35px rgba(20, 59, 101, 0.08);
+}
+
+.customer-agent-test.is-passed { border-color: #22a66a; }
+.customer-agent-test.is-failed { border-color: #d33d4f; }
+.customer-agent-test h2 { margin: 0.25rem 0 0; color: #07142a; font-size: 1.45rem; font-weight: 950; }
+.customer-agent-test-copy > p { margin: 0.5rem 0 0; color: #4e657a; font-size: 0.92rem; font-weight: 650; line-height: 1.55; }
+.customer-agent-test ul { display: grid; grid-template-columns: 1fr 1fr; gap: 0.55rem 1rem; margin: 1rem 0 0; padding: 0; list-style: none; }
+.customer-agent-test li { display: flex; align-items: center; gap: 0.55rem; color: #687c8f; font-size: 0.86rem; font-weight: 800; }
+.customer-agent-test li i { display: grid; width: 1.35rem; height: 1.35rem; flex: 0 0 auto; place-items: center; border-radius: 50%; background: #edf2f7; font-style: normal; }
+.customer-agent-test li.done { color: #0c6844; }
+.customer-agent-test li.done i { background: #dff7eb; }
+.customer-agent-test-action { display: grid; align-content: center; gap: 0.7rem; border-radius: 0.85rem; background: #f7fafc; padding: 1rem; text-align: center; }
+.customer-agent-test-action > strong { color: #9a5a00; font-size: 0.8rem; letter-spacing: 0.08em; }
+.customer-agent-test.is-passed .customer-agent-test-action > strong { color: #087449; }
+.customer-agent-test.is-failed .customer-agent-test-action > strong { color: #b42336; }
+.customer-agent-test-action button { min-height: 3.25rem; border: 0; border-radius: 0.72rem; background: #126dff; color: #fff; padding: 0.65rem 1rem; font: inherit; font-size: 0.9rem; font-weight: 950; cursor: pointer; }
+.customer-agent-test-action button:disabled { cursor: wait; opacity: 0.7; }
+.customer-agent-test-action small { color: #617588; font-size: 0.73rem; font-weight: 750; line-height: 1.4; }
+.customer-agent-test-message { grid-column: 1 / -1; margin: 0; border-radius: 0.65rem; background: #edf6ff; color: #0b5bb8; padding: 0.75rem 0.9rem; font-size: 0.86rem; font-weight: 800; line-height: 1.45; }
+
 .customer-simple-trial {
   display: grid;
   grid-template-columns: minmax(12rem, auto) minmax(10rem, 1fr) auto;
@@ -3396,6 +3426,8 @@
     grid-row: 2;
   }
 
+  .customer-agent-test { grid-template-columns: 1fr; }
+
   .customer-trial-billing { justify-items: stretch; }
   .customer-trial-billing button { width: 100%; }
 }
@@ -3442,6 +3474,10 @@
     width: 100%;
     box-sizing: border-box;
   }
+
+  .customer-agent-test { padding: 1rem; }
+  .customer-agent-test ul { grid-template-columns: 1fr; }
+  .customer-agent-test-action button { width: 100%; }
 
   .customer-simple-trial {
     grid-template-columns: 1fr;

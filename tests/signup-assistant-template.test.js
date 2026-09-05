@@ -65,6 +65,12 @@ test("builds the current production Vapi assistant with resolved signup values",
   assert.match(prompt, /What is the address where the work needs to be done\?/);
   assert.match(prompt, /When would you ideally like the work to begin\?/);
   assert.match(prompt, /preferredStartDate/);
+  assert.match(prompt, /caller-stated urgency/i);
+  assert.match(prompt, /Reuse information the caller already supplied/i);
+  assert.match(prompt, /ask only for missing details/i);
+  assert.match(prompt, /NEW LEAD/);
+  assert.match(prompt, /- Work requested:/);
+  assert.match(prompt, /- Best callback:/);
   assert.match(prompt, /I've sent your information to the team\. Someone will contact you to discuss the request and arrange the next step\./);
   assert.doesNotMatch(prompt, /collect card|card number|banking information/i);
   assert.doesNotMatch(JSON.stringify(config), /\{\{[^}]*\}\}/);
