@@ -63,6 +63,37 @@ test("saved card attaches to the existing subscription and resumes a paused tria
   assert.deepEqual(calls[1][2], { default_payment_method: "pm_1" });
 });
 
+test("resumption invoice is paid before a paused subscription is considered active", async () => {
+  const calls = [];
+  let paid = false;
+  const stripe = {
+    setupIntents: { retrieve: async () => ({ id: "seti_1", status: "succeeded", customer: "cus_1", payment_method: "pm_1" }) },
+    customers: { update: async (...args) => { calls.push(["customer", ...args]); } },
+    invoices: {
+      pay: async (...args) => {
+        calls.push(["invoice", ...args]);
+        paid = true;
+        return { id: "in_resume", status: "paid" };
+      },
+    },
+    subscriptions: {
+      retrieve: async () => ({ id: "sub_1", customer: "cus_1", status: paid ? "active" : "paused" }),
+      update: async (...args) => { calls.push(["subscription", ...args]); return { id: "sub_1", customer: "cus_1", status: "paused" }; },
+      resume: async (...args) => {
+        calls.push(["resume", ...args]);
+        return { id: "sub_1", customer: "cus_1", status: "paused", latest_invoice: "in_resume" };
+      },
+    },
+  };
+  const result = await completeTrialPaymentSetup({
+    stripe,
+    session: { mode: "setup", customer: "cus_1", setup_intent: "seti_1", metadata: { purpose: "trial-payment-method", subscriptionId: "sub_1" } },
+  });
+  assert.equal(result.resumed, true);
+  assert.equal(result.subscription.status, "active");
+  assert.deepEqual(calls.map(([kind]) => kind), ["customer", "subscription", "resume", "invoice"]);
+});
+
 test("trial payment states cover no card, declined payment, and paused service", () => {
   const trialEnd = Date.UTC(2026, 8, 20) / 1000;
   assert.deepEqual(getTrialPaymentState({ status: "trialing", trial_end: trialEnd }, { now: Date.UTC(2026, 8, 19) }), {
