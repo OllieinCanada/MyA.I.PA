@@ -84,6 +84,12 @@ const {
 } = require("./signupProvisioning");
 const { buildSignupAssistantConfig } = require("./signupAssistantTemplate");
 const {
+  buildAgentReadiness,
+  enforceAgentTestReadyStatus,
+  getAgentTestDeliveryUpdate,
+  runAgentTextTest,
+} = require("./signupAgentTesting");
+const {
   assessRepeatedMakeCanaryResults,
   buildSignupProvisioningCanaryPayload,
   isTrustedSignupProvisioningCanary,
@@ -1511,7 +1517,7 @@ async function sendSignupCompletionEmail({ to, subject, text, content }) {
           <h1 style="font-size:28px;line-height:1.1;margin:0 0 16px">Your My AI PA number is ready</h1>
           <p>Your assigned AI phone number is:</p>
           <p style="font-size:24px;font-weight:800"><a href="tel:${escapeHtml(content.phone)}" style="color:#07142a">${escapeHtml(content.displayPhone)}</a></p>
-          <p>Call it now to test the assistant before sharing it with customers.</p>
+          <p>Your protected routing and sample-text checks passed. Open the private testing station and make one test call before forwarding customer calls.</p>
           <p><a href="${escapeHtml(`${FRONTEND_APP_URL}/#/dashboard`)}" style="display:inline-block;background:#07142a;color:#fff;text-decoration:none;font-weight:700;padding:14px 18px;border-radius:10px">Open your dashboard</a></p>
         </div>
       `,
@@ -4461,11 +4467,12 @@ async function getTrialHealthDashboard() {
 const CUSTOMER_SETUP_STEPS = [
   { key: "signup", label: "Signup received", nextAction: "Confirm the signup record exists with owner and business details." },
   { key: "email", label: "Contact verified", nextAction: "Ask the owner to open the verification link sent by text or email, or manually review the signup if verification is disabled." },
-  { key: "stripe", label: "Stripe trial active", nextAction: "Send the customer through checkout or check the Stripe webhook configuration." },
   { key: "make", label: "Make handoff completed", nextAction: "Check the Make scenario run history, then rerun the setup handoff if needed." },
   { key: "vapi", label: "Vapi assistant mapped", nextAction: "Create or confirm the Vapi assistant/phone mapping for this business." },
   { key: "twilio", label: "Twilio number connected", nextAction: "Add the Twilio/Vapi phone number and confirm it maps to the right business." },
   { key: "sms_routing", label: "Owner and caller texts protected", nextAction: "Run the isolated SMS routing repair and verify the protected owner and caller destinations." },
+  { key: "agent_test", label: "New agent passed delivery testing", nextAction: "Run the testing station and confirm both the owner-copy and customer-copy sample texts arrive." },
+  { key: "stripe", label: "Stripe trial active", nextAction: "Create the no-card trial only after the agent passes its delivery checks." },
   { key: "first_call", label: "First call received", nextAction: "Place a test call after the number is connected." },
   { key: "dashboard", label: "Customer dashboard ready", nextAction: "Make sure the customer has signup email plus owner or business phone for dashboard access." },
 ];
@@ -4543,14 +4550,24 @@ function deriveCustomerSetupStep(stepKey, { signup, business, calls, envStatus }
   }
 
   if (stepKey === "vapi") {
-    if (vapiMappings.length) return setupStep("done", "Vapi mapping exists for this business.");
+    const assistantId = String(signup.vapiAssistantId || "").trim().toLowerCase();
+    const assistantMapped = assistantId && vapiMappings.some((mapping) => (
+      String(mapping.matchType || "").trim().toLowerCase() === "assistantid"
+      && String(mapping.matchValue || "").trim().toLowerCase() === assistantId
+    ));
+    if (assistantMapped) return setupStep("done", "The exact Vapi assistant is mapped to this business.");
     if (!envStatus.vapiApiKeyConfigured) return setupStep("manual", "Vapi API key is not configured.");
-    return setupStep("waiting", "No Vapi mapping found for this business.");
+    return setupStep("waiting", "The exact Vapi assistant is not mapped to this business yet.");
   }
 
   if (stepKey === "twilio") {
-    if (signup.twilioPhoneNumber || phoneMappings.length) return setupStep("done", "AI phone number is mapped.");
-    return setupStep("waiting", "No AI/Twilio phone number is recorded yet.");
+    const aiNumber = normalizePhoneForMatch(signup.twilioPhoneNumber || "");
+    const numberMapped = aiNumber && phoneMappings.some((mapping) => (
+      String(mapping.matchType || "").trim().toLowerCase() === "phonenumber"
+      && normalizePhoneForMatch(mapping.matchValue) === aiNumber
+    ));
+    if (numberMapped) return setupStep("done", "The exact AI/Twilio number is mapped to this business.");
+    return setupStep("waiting", "The exact AI/Twilio number is not mapped to this business yet.");
   }
 
   if (stepKey === "sms_routing") {
@@ -4558,6 +4575,13 @@ function deriveCustomerSetupStep(stepKey, { signup, business, calls, envStatus }
     if (signup.smsRoutingStatus === "failed") return setupStep("failed", signup.smsRoutingError || "SMS routing verification failed.");
     if (!envStatus.vapiApiKeyConfigured || !envStatus.twilioConfigured) return setupStep("manual", "Vapi and Twilio credentials are required to isolate SMS routing.");
     return setupStep("waiting", "Protected per-business SMS routing has not been verified yet.");
+  }
+
+  if (stepKey === "agent_test") {
+    const readiness = buildAgentReadiness({ signup, business });
+    if (readiness.passed) return setupStep("done", "The assistant, number, all three business mappings, protected routing, and both sample texts passed.");
+    if (readiness.status === "failed") return setupStep("failed", readiness.errorCode || "The pre-delivery text test failed.");
+    return setupStep("waiting", "The mandatory pre-delivery testing station has not passed yet.");
   }
 
   if (stepKey === "first_call") {
@@ -4960,13 +4984,13 @@ function upsertSignupDashboardRecord(record) {
   const existingKey = aliases.find((alias) => store[alias]) || getSignupDashboardKey(record);
   const existing = store[existingKey] || {};
   const signedUpAt = existing.signedUpAt || record.signedUpAt || record.createdAt || new Date().toISOString();
-  const merged = compactObject({
+  const merged = enforceAgentTestReadyStatus(compactObject({
     ...existing,
     ...record,
     signedUpAt,
     createdAt: existing.createdAt || record.createdAt || signedUpAt,
     updatedAt: new Date().toISOString(),
-  });
+  }));
   if (record.makeError === "") delete merged.makeError;
   if (record.smsRoutingStatus === "healthy") delete merged.smsRoutingError;
 
@@ -5470,7 +5494,7 @@ function listSignupDashboardRecords() {
   return Object.values(combinedStore)
     .filter(Boolean)
     .map((record) => ({
-      ...record,
+      ...enforceAgentTestReadyStatus(record),
       expiry: getSignupExpiryStatus(record),
     }))
     .sort((a, b) => Number(new Date(b.lastAttemptAt || b.updatedAt || b.signedUpAt || b.createdAt || 0)) - Number(new Date(a.lastAttemptAt || a.updatedAt || a.signedUpAt || a.createdAt || 0)));
@@ -6389,21 +6413,28 @@ async function ensureTrialBusinessAndMappings(signup, vapiPhone) {
     { matchType: "phoneNumberId", matchValue: String(vapiPhone?.id || "").trim().toLowerCase() },
     { matchType: "assistantId", matchValue: getVapiAssistantId(vapiPhone).toLowerCase() },
   ].filter((mapping) => mapping.matchValue);
-  for (const mapping of mappings) {
-    await prisma.vapiBusinessMapping.upsert({
-      where: { matchValue: mapping.matchValue },
-      update: {
-        businessId: business.id,
-        matchType: mapping.matchType,
-        label: String(signup.businessName || business.name).slice(0, 120),
-      },
-      create: {
-        businessId: business.id,
-        ...mapping,
-        label: String(signup.businessName || business.name).slice(0, 120),
-      },
-    });
+  const existingMappings = await prisma.vapiBusinessMapping.findMany({
+    where: { matchValue: { in: mappings.map((mapping) => mapping.matchValue) } },
+  });
+  const ownershipConflict = existingMappings.find((mapping) => mapping.businessId !== business.id);
+  if (ownershipConflict) {
+    const error = new Error("A provider resource is already assigned to a different business.");
+    error.statusCode = 409;
+    error.code = "AGENT_MAPPING_OWNERSHIP_CONFLICT";
+    throw error;
   }
+  const existingValues = new Set(existingMappings.map((mapping) => mapping.matchValue));
+  const label = String(signup.businessName || business.name).slice(0, 120);
+  await prisma.$transaction(mappings.map((mapping) => (
+    existingValues.has(mapping.matchValue)
+      ? prisma.vapiBusinessMapping.update({
+          where: { matchValue: mapping.matchValue },
+          data: { matchType: mapping.matchType, label },
+        })
+      : prisma.vapiBusinessMapping.create({
+          data: { businessId: business.id, ...mapping, label },
+        })
+  )));
   persistSignupBusinessId({
     signup,
     businessId: business.id,
@@ -6414,6 +6445,86 @@ async function ensureTrialBusinessAndMappings(signup, vapiPhone) {
     where: { id: business.id },
     include: { settings: true, vapiMappings: true },
   });
+}
+
+async function testSignupAgentBeforeDelivery({ signup, vapiPhone, smsRouting = null, force = false } = {}) {
+  if (!signup?.ownerEmail) {
+    const error = new Error("A stored signup is required before the agent delivery test can run.");
+    error.statusCode = 409;
+    error.code = "AGENT_TEST_SIGNUP_MISSING";
+    throw error;
+  }
+
+  const aiNumber = normalizePhoneForMatch(getVapiPhoneNumber(vapiPhone) || signup.twilioPhoneNumber || "");
+  const assistantId = getVapiAssistantId(vapiPhone) || String(signup.vapiAssistantId || "").trim();
+  const currentRouting = smsRouting || await safelyProvisionIsolatedSmsForSignup({
+    ownerEmail: signup.ownerEmail,
+    assistantId,
+    aiNumber,
+    ownerNumber: signup.ownerPhone || signup.businessPhone,
+  });
+  const routingFields = {
+    smsRoutingStatus: currentRouting.healthy ? "healthy" : currentRouting.skipped ? "waiting" : "failed",
+    smsRoutingToolId: currentRouting.toolId || "",
+    smsRoutingToolName: currentRouting.toolName || "",
+    smsRoutingVerifiedAt: currentRouting.healthy ? new Date().toISOString() : "",
+    smsRoutingError: currentRouting.skipped ? currentRouting.reason : currentRouting.healthy ? "" : currentRouting.error || "Vapi read-back did not verify isolated routing.",
+  };
+  let storedSignup = upsertSignupDashboardRecord({
+    ...signup,
+    twilioPhoneNumber: aiNumber,
+    vapiPhoneNumberId: String(vapiPhone?.id || signup.vapiPhoneNumberId || "").trim(),
+    vapiAssistantId: assistantId,
+    ...routingFields,
+  });
+  if (!currentRouting.healthy) {
+    const error = new Error("The agent was built, but protected owner and customer text routing did not pass.");
+    error.statusCode = 502;
+    error.code = "AGENT_TEST_ROUTING_NOT_READY";
+    throw error;
+  }
+
+  const business = await ensureTrialBusinessAndMappings(storedSignup, {
+    ...(vapiPhone || {}),
+    id: String(vapiPhone?.id || storedSignup.vapiPhoneNumberId || "").trim(),
+    number: aiNumber,
+    assistantId,
+  });
+  storedSignup = listSignupDashboardRecords().find((record) => (
+    String(record.ownerEmail || "").trim().toLowerCase() === String(signup.ownerEmail || "").trim().toLowerCase()
+  )) || storedSignup;
+
+  const persist = (fields) => {
+    storedSignup = upsertSignupDashboardRecord({ ownerEmail: storedSignup.ownerEmail, ...fields });
+    return storedSignup;
+  };
+  const result = await runAgentTextTest({
+    signup: storedSignup,
+    force,
+    sendSms: ({ to, from, message }) => sendSmsViaTwilio({ to, from, message }),
+    persist,
+  });
+  const finalSignup = listSignupDashboardRecords().find((record) => (
+    String(record.ownerEmail || "").trim().toLowerCase() === String(signup.ownerEmail || "").trim().toLowerCase()
+  )) || storedSignup;
+  const readiness = buildAgentReadiness({
+    signup: finalSignup,
+    business: await prisma.business.findUnique({ where: { id: business.id }, include: { settings: true, vapiMappings: true } }),
+  });
+  if (!readiness.passed) {
+    const error = new Error("The agent did not pass every pre-delivery readiness check.");
+    error.statusCode = 502;
+    error.code = "AGENT_TEST_READINESS_INCOMPLETE";
+    throw error;
+  }
+  const readyAt = new Date().toISOString();
+  upsertSignupDashboardRecord({
+    ownerEmail: finalSignup.ownerEmail,
+    status: "setup_ready",
+    agentTestPassedAt: readyAt,
+    setupReadyAt: finalSignup.setupReadyAt || readyAt,
+  });
+  return { ...result, readiness, businessId: business.id };
 }
 
 async function getTrialCallUsage(signup, businessId, db = prisma) {
@@ -7220,6 +7331,7 @@ async function getCustomerDashboard({ email, phone }) {
     ...billingChecklist,
     { key: "owner-phone", label: "Owner phone added", done: Boolean(business?.settings?.ownerPhone || signup.ownerPhone) },
     { key: "ai-number", label: "AI number mapped", done: Boolean(signup.twilioPhoneNumber || business?.vapiMappings?.length) },
+    { key: "agent-test", label: "Owner and customer sample texts passed", done: buildAgentReadiness({ signup, business }).passed },
     { key: "faq", label: "Starter FAQs added", done: Boolean(business?.faqs?.length) },
   ];
   const trialUsage = await getTrialUsageSnapshot(signup, business?.id || null);
@@ -7290,6 +7402,7 @@ async function getCustomerDashboard({ email, phone }) {
       displayPhone: formatAssignedPhone(CUSTOMER_SUPPORT_PHONE),
     },
     forwardingInstructions: buildForwardingInstructions(signup.twilioPhoneNumber),
+    agentTesting: buildAgentReadiness({ signup, business }),
     trialUsage,
     stats: {
       totalCalls: calls.length,
@@ -10160,6 +10273,20 @@ app.post(
       return res.status(401).json({ error: "Invalid messaging webhook signature." });
     }
     const preparedIncident = buildTwilioMessageStatusIncident(req.body || {});
+    const messageSid = req.body?.MessageSid || req.body?.SmsSid;
+    const messageStatus = req.body?.MessageStatus || req.body?.SmsStatus;
+    const matchingSignup = listSignupDashboardRecords().find((signup) => (
+      messageSid && [signup.agentTestOwnerMessageSid, signup.agentTestCustomerMessageSid].includes(String(messageSid).trim())
+    ));
+    if (matchingSignup?.ownerEmail) {
+      const update = getAgentTestDeliveryUpdate({
+        signup: matchingSignup,
+        messageSid,
+        status: messageStatus,
+        errorCode: req.body?.ErrorCode,
+      });
+      if (update) upsertSignupDashboardRecord({ ownerEmail: matchingSignup.ownerEmail, ...update });
+    }
     if (preparedIncident) {
       safelyNotifyRuntimeFailure(preparedIncident.error, preparedIncident.context);
     }
@@ -11169,6 +11296,7 @@ app.post(
     if (ownerEmail && isValidEmailAddress(ownerEmail)) {
       upsertSignupDashboardRecord({
         ownerEmail,
+        ownerPhone: body.ownerPhone || "",
         twilioPhoneNumber: result.number || phoneNumber,
         vapiPhoneNumberId: result.id,
         vapiAssistantId: result.assistantId,
@@ -11194,6 +11322,22 @@ app.post(
       });
     }
 
+    let agentDeliveryTest = { skipped: true, reason: "signup_identity_missing" };
+    if (ownerEmail && isValidEmailAddress(ownerEmail)) {
+      const signup = listSignupDashboardRecords().find((record) => (
+        String(record.ownerEmail || "").trim().toLowerCase() === ownerEmail.toLowerCase()
+      ));
+      agentDeliveryTest = await testSignupAgentBeforeDelivery({
+        signup,
+        vapiPhone: {
+          id: result.id,
+          number: result.number || phoneNumber,
+          assistantId: result.assistantId,
+        },
+        smsRouting,
+      });
+    }
+
     res.status(reused ? 200 : 201).json({
       success: true,
       ok: true,
@@ -11202,6 +11346,8 @@ app.post(
       phoneNumberId: result.id,
       assistantId: result.assistantId,
       smsRouting,
+      agentDeliveryTest,
+      deliveryReady: Boolean(agentDeliveryTest?.readiness?.passed),
     });
   })
 );
@@ -11342,6 +11488,40 @@ app.post(
       });
     }
 
+    let agentDeliveryTest = { skipped: true, reason: syntheticCanary ? "synthetic_canary" : "signup_identity_missing" };
+    if (!syntheticCanary && ownerEmail && isValidEmailAddress(ownerEmail)) {
+      const signup = listSignupDashboardRecords().find((record) => (
+        String(record.ownerEmail || "").trim().toLowerCase() === ownerEmail.toLowerCase()
+      ));
+      try {
+        agentDeliveryTest = await testSignupAgentBeforeDelivery({
+          signup,
+          vapiPhone: {
+            id: result.id,
+            number: result.number,
+            assistantId: result.assistantId || assistantId,
+          },
+          smsRouting,
+        });
+      } catch (error) {
+        safelyNotifyRuntimeFailure(error, {
+          area: "new agent delivery test",
+          operation: "verify business mapping and send owner/customer sample texts",
+          whatFailed: "A newly built signup agent did not pass its mandatory text test",
+          impact: "The number and assistant may exist, but the agent was not marked ready for customer calls.",
+          snapshot: {
+            "AI number ending": String(result.number || "").slice(-4),
+            "Protected routing": smsRouting.healthy ? "Passed" : "Failed",
+            "Failure code": String(error?.providerSignal || error?.providerCode || error?.code || "AGENT_TEST_FAILED").slice(0, 120),
+          },
+          lastCheckpoint: "The build stopped at the pre-delivery test station before setup completion.",
+          nextAction: "Correct the mapping, Twilio billing, sender, or recipient problem shown by the failure code, then rerun the same signup test.",
+          dedupeFingerprint: `agent-delivery-test:${String(result.assistantId || assistantId).slice(0, 80)}`,
+        });
+        throw error;
+      }
+    }
+
     await completeSignupProvisioningContext({
       prisma,
       idempotencyKey: authorization.idempotencyKey,
@@ -11361,6 +11541,8 @@ app.post(
       assistantId: result.assistantId || assistantId,
       reused: Boolean(result.reused),
       smsRouting,
+      agentDeliveryTest,
+      deliveryReady: agentDeliveryTest.readiness?.passed === true || syntheticCanary,
       result,
     });
   })
@@ -12064,6 +12246,55 @@ app.get(
     }
 
     res.json({ ok: true, dashboard, refreshedAt: new Date().toISOString() });
+  })
+);
+
+app.post(
+  "/api/customer/dashboard/agent-test",
+  asyncRoute(async (req, res) => {
+    const lookupHash = getCustomerDashboardSessionLookupHash(req);
+    const match = lookupHash ? findCustomerDashboardSignupByLookupHash(lookupHash) : null;
+    if (!match) return res.status(401).json({ error: "Sign in again before running the agent test." });
+    const signup = match.signup;
+    const lastAttemptAt = Date.parse(signup.agentTestLastAttemptAt || 0);
+    if (Number.isFinite(lastAttemptAt) && Date.now() - lastAttemptAt < 60_000) {
+      return res.status(429).json({ error: "The test just ran. Wait one minute before sending the two samples again." });
+    }
+    upsertSignupDashboardRecord({ ownerEmail: signup.ownerEmail, agentTestLastAttemptAt: new Date().toISOString() });
+    const aiNumber = normalizePhoneForMatch(signup.twilioPhoneNumber || "");
+    const vapiNumbers = await fetchVapiCollection("phone-number", ["phoneNumbers", "phone_numbers"]);
+    const vapiPhone = vapiNumbers.find((record) => normalizePhoneForMatch(getVapiPhoneNumber(record)) === aiNumber);
+    if (!vapiPhone?.id || !getVapiAssistantId(vapiPhone)) {
+      return res.status(409).json({
+        error: "The testing station cannot find the assistant attached to this AI number yet.",
+        code: "AGENT_TEST_PHONE_BINDING_MISSING",
+      });
+    }
+    try {
+      const result = await testSignupAgentBeforeDelivery({ signup, vapiPhone, force: true });
+      const dashboard = await getCustomerDashboardByLookupHash(lookupHash);
+      return res.json({ ok: true, passed: true, agentTesting: result.readiness, dashboard });
+    } catch (error) {
+      const code = String(error?.providerSignal || error?.providerCode || error?.code || "AGENT_TEXT_TEST_FAILED").slice(0, 120);
+      safelyNotifyRuntimeFailure(error, {
+        area: "customer agent testing station",
+        operation: "rerun protected owner and customer sample texts",
+        whatFailed: "The customer's agent did not pass its dashboard text test",
+        impact: "The assistant remains in testing and should not receive forwarded customer calls.",
+        snapshot: { "AI number ending": aiNumber.slice(-4), "Failure code": code },
+        lastCheckpoint: "The test station checked the assigned number, assistant binding, business mapping, and protected SMS route.",
+        nextAction: code === "TWILIO_BILLING_RESTRICTED"
+          ? "Restore the Twilio balance or billing status, then rerun the test station."
+          : "Repair the failed provider or routing check, then rerun the test station.",
+        dedupeFingerprint: `dashboard-agent-test:${String(signup.vapiAssistantId || "unknown").slice(0, 80)}:${code}`,
+      });
+      return res.status(Number(error?.statusCode || 502)).json({
+        error: code === "TWILIO_BILLING_RESTRICTED"
+          ? "Twilio billing blocked the sample texts. Restore the Twilio balance, then run this test again."
+          : "The agent did not pass the text test, so it is still safely held in testing.",
+        code,
+      });
+    }
   })
 );
 

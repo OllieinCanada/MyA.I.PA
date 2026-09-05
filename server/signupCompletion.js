@@ -32,7 +32,8 @@ function buildSignupCompletionContent({ ownerName, businessName, assignedPhone, 
     "",
     `Your My AI PA setup for ${business} is ready.`,
     `Your assigned AI phone number is ${displayPhone}.`,
-    "Call it now to test the assistant before sharing it with customers.",
+    "Your agent passed its protected routing and sample-text checks.",
+    "Call it once in the private testing station before forwarding customer calls.",
     dashboard ? `Open your dashboard for setup details and next steps: ${dashboard}` : "",
   ].filter((line, index, values) => line || (index > 0 && values[index - 1] !== ""));
   const text = lines.join("\n");
@@ -40,7 +41,7 @@ function buildSignupCompletionContent({ ownerName, businessName, assignedPhone, 
     phone,
     displayPhone,
     subject: `Your My AI PA number for ${business} is ready`,
-    sms: `My AI PA setup for ${business} is ready. Your AI number is ${displayPhone}. Call it now to test it.${dashboard ? ` Dashboard: ${dashboard}` : ""}`,
+    sms: `My AI PA setup for ${business} passed its routing and sample-text checks. Your AI number is ${displayPhone}. Open the private testing station, then call it once before forwarding customer calls.${dashboard ? ` Dashboard: ${dashboard}` : ""}`,
     text,
   };
 }

@@ -141,8 +141,10 @@ test("composite tool sends owner first and customer second", async () => {
   assert.equal(result.owner.sent, true);
   assert.equal(result.customer.sent, true);
   assert.equal(result.complete, true);
-  assert.match(mock.calls[0].body, /Service request \(installation\)/);
-  assert.match(mock.calls[0].body, /Preferred Start: right away/);
+  assert.match(mock.calls[0].body, /^NEW LEAD/m);
+  assert.match(mock.calls[0].body, /Preferred start: right away/);
+  assert.match(mock.calls[0].body, /Best callback: afternoons or after 5 PM/);
+  assert.match(mock.calls[0].body, /Urgency: Not provided/);
   assert.match(mock.calls[1].body, /Thanks for calling Example Electrical/);
   assert.match(mock.calls[1].body, /preferred callback time is afternoons or after 5 PM/i);
   assert.match(mock.calls[1].body, /preferred start timing is right away/i);

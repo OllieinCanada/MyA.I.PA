@@ -66,6 +66,7 @@ function getTwilioFailureSignal(payload = {}) {
 
 async function sendSmsViaTwilio({
   to,
+  from,
   message,
   env = process.env,
   fetchImpl = global.fetch,
@@ -76,7 +77,7 @@ async function sendSmsViaTwilio({
   if (text.length > 1600) throw createHttpError("message must be 1600 characters or fewer", 400);
 
   const normalizedTo = normalizeE164(to, "to");
-  const config = getTwilioSmsConfig(env);
+  const config = { ...getTwilioSmsConfig(env), ...(from ? { from: String(from).trim() } : {}) };
   const credentials = getTwilioRestCredentials(config);
   const configured = Boolean(config.accountSid && credentials.username && credentials.password && config.from);
   if (!configured) {

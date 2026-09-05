@@ -99,6 +99,20 @@ function readableValue(value) {
   return String(value);
 }
 
+function findCapturedValue(value, aliases, depth = 0) {
+  if (!value || typeof value !== "object" || depth > 3) return "";
+  const normalizedAliases = aliases.map((alias) => String(alias).replace(/[^a-z0-9]/gi, "").toLowerCase());
+  for (const [key, item] of Object.entries(value)) {
+    const normalizedKey = String(key).replace(/[^a-z0-9]/gi, "").toLowerCase();
+    if (normalizedAliases.includes(normalizedKey) && item != null && typeof item !== "object" && String(item).trim()) return String(item).trim();
+  }
+  for (const item of Object.values(value)) {
+    const found = findCapturedValue(item, aliases, depth + 1);
+    if (found) return found;
+  }
+  return "";
+}
+
 async function requestDashboardCode(credentials) {
   const response = await fetch(`${API_BASE}/api/customer/dashboard/request-code`, {
     method: "POST",
@@ -141,6 +155,17 @@ async function endDashboardSession() {
     method: "POST",
     credentials: "include",
   });
+}
+
+async function runAgentTestingStation() {
+  const response = await fetch(`${API_BASE}/api/customer/dashboard/agent-test`, {
+    method: "POST",
+    credentials: "include",
+    headers: { Accept: "application/json" },
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || !data?.passed) throw new Error(data?.error || "The agent test could not be completed.");
+  return data;
 }
 
 async function startSecureBillingSetup() {
@@ -775,6 +800,19 @@ function SupportReportModal({ open, call, onClose, onSubmitted }) {
 function CallDetails({ call, onReport }) {
   const detailEntries = Object.entries(call.details || {});
   const metricEntries = Object.entries(call.quality?.metrics || {});
+  const capturedAddress = [
+    findCapturedValue(call.details, ["streetAddress", "jobAddress", "workAddress", "address"]),
+    findCapturedValue(call.details, ["city", "municipality"]),
+  ].filter(Boolean).join(", ");
+  const standardDetails = [
+    ["Caller", call.lead?.name || call.caller?.name],
+    ["Phone", call.lead?.callbackNumber || call.caller?.phone],
+    ["Work requested", findCapturedValue(call.details, ["jobDetails", "workRequested", "service", "requestType"]) || call.lead?.summary || call.lead?.intent],
+    ["Address", capturedAddress],
+    ["Preferred start", findCapturedValue(call.details, ["preferredStartDate", "preferredStart", "desiredStart", "startTiming"])],
+    ["Best callback", findCapturedValue(call.details, ["bestCallbackTime", "callbackTime", "preferredCallbackTime"])],
+    ["Urgency", findCapturedValue(call.details, ["urgency", "priority"]) || call.lead?.urgency],
+  ];
   return (
     <div className="customer-call-details">
       <div className="customer-call-detail-grid">
@@ -796,16 +834,15 @@ function CallDetails({ call, onReport }) {
         </section>
       </div>
 
-      {detailEntries.length ? (
-        <section className="customer-call-section">
-          <h3>Details captured</h3>
-          <dl className="customer-captured-details">
-            {detailEntries.map(([key, value]) => (
-              <div key={key}><dt>{readableKey(key)}</dt><dd>{readableValue(value)}</dd></div>
-            ))}
-          </dl>
-        </section>
-      ) : null}
+      <section className="customer-call-section">
+        <h3>The job details you need</h3>
+        <dl className="customer-captured-details customer-standard-lead-details">
+          {standardDetails.map(([label, value]) => (
+            <div key={label}><dt>{label}</dt><dd>{label === "Phone" && value ? fmtPhone(value) : readableValue(value)}</dd></div>
+          ))}
+        </dl>
+        {detailEntries.length ? <details className="customer-quality-details"><summary>See every captured field</summary><dl>{detailEntries.map(([key, value]) => <div key={key}><dt>{readableKey(key)}</dt><dd>{readableValue(value)}</dd></div>)}</dl></details> : null}
+      </section>
 
       <section className="customer-call-section">
         <div className="customer-call-section-head">
@@ -1033,11 +1070,53 @@ function SimpleTrialBar({ usage = {}, trialText = "", trialEndAt = "", billing =
   );
 }
 
+function AgentTestingStation({ testing = {}, ownerPhone, onUpdated }) {
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const runTest = async () => {
+    setBusy(true);
+    setMessage("");
+    try {
+      await runAgentTestingStation();
+      setMessage("Passed. Twilio accepted both labelled sample texts. You can now make one private test call.");
+      await onUpdated();
+    } catch (error) {
+      setMessage(error?.message || "The test did not pass. Customer calls are still safely held back.");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <section id="agent-test" className={`customer-agent-test${testing.passed ? " is-passed" : testing.status === "failed" ? " is-failed" : ""}`}>
+      <div className="customer-agent-test-copy">
+        <span className="customer-simple-kicker">PRIVATE TESTING STATION</span>
+        <h2>{testing.passed ? "Your text setup passed." : "Test texts before real customers call."}</h2>
+        <p>We send two clearly labelled samples to {fmtPhone(ownerPhone)}: the lead text you receive and the confirmation your customer receives.</p>
+        <ul>
+          {(testing.checks || []).map((check) => (
+            <li key={check.key} className={check.done ? "done" : ""}>
+              <i>{check.done ? "✓" : "·"}</i>
+              <span>{check.label}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+      <div className="customer-agent-test-action">
+        <strong>{testing.passed ? "PASSED" : testing.status === "failed" ? "NEEDS ATTENTION" : "TEST REQUIRED"}</strong>
+        <button type="button" onClick={runTest} disabled={busy}>{busy ? "Sending two samples…" : testing.passed ? "Send the two tests again" : "Send my two test texts"}</button>
+        <small>No real customer is contacted. No callback is needed.</small>
+      </div>
+      {message ? <p className="customer-agent-test-message" role="status">{message}</p> : null}
+    </section>
+  );
+}
+
 function CustomerDashboardView({ dashboard, onSignOut, onRefresh, refreshing, refreshError, refreshedAt }) {
   const signup = dashboard.signup || {};
   const stats = dashboard.stats || {};
   const assistant = dashboard.assistant || {};
   const messaging = dashboard.messaging || {};
+  const agentTesting = dashboard.agentTesting || {};
   const billing = dashboard.billing || {};
   const support = dashboard.support || {};
   const trialUsage = dashboard.trialUsage || {};
@@ -1080,6 +1159,12 @@ function CustomerDashboardView({ dashboard, onSignOut, onRefresh, refreshing, re
       label: "Check again",
       target: "refresh",
     };
+    if (!agentTesting.passed) return {
+      title: "Run your 2-text safety test",
+      detail: "You will receive the owner copy and customer copy on your own phone. Real customer calls stay held back until both pass.",
+      label: "Run test",
+      target: "#agent-test",
+    };
     if (actionRequiredAppointments) return {
       title: `${actionRequiredAppointments} appointment${actionRequiredAppointments === 1 ? "" : "s"} ${actionRequiredAppointments === 1 ? "needs" : "need"} your answer`,
       detail: "Choose a time, then confirm it or suggest another one.",
@@ -1104,7 +1189,7 @@ function CustomerDashboardView({ dashboard, onSignOut, onRefresh, refreshing, re
       label: "See recent calls",
       target: "#calls",
     };
-  }, [actionRequiredAppointments, aiNumber, followUpCount, nextStep]);
+  }, [actionRequiredAppointments, agentTesting.passed, aiNumber, followUpCount, nextStep]);
 
   const copyNumber = async () => {
     if (!aiNumber) return;
@@ -1135,11 +1220,11 @@ function CustomerDashboardView({ dashboard, onSignOut, onRefresh, refreshing, re
           <button type="button" onClick={onSignOut}>Sign out</button>
         </header>
 
-        <section id="overview" className={`customer-simple-hero${aiNumber ? " is-ready" : " is-waiting"}`}>
+        <section id="overview" className={`customer-simple-hero${aiNumber && agentTesting.passed ? " is-ready" : " is-waiting"}`}>
           <div className="customer-simple-hero-copy">
-            <span className="customer-simple-status"><i />{aiNumber ? "Ready for calls" : "Finishing setup"}</span>
-            <h1>{aiNumber ? "Your assistant is ready." : "We are setting up your assistant."}</h1>
-            <p>{aiNumber ? "Call the number to hear it. When you are happy, forward missed calls to it." : "Your number will appear here as soon as it is ready."}</p>
+            <span className="customer-simple-status"><i />{aiNumber ? agentTesting.passed ? "Ready for calls" : "Testing required" : "Finishing setup"}</span>
+            <h1>{aiNumber ? agentTesting.passed ? "Your assistant passed." : "Your assistant needs one safe test." : "We are setting up your assistant."}</h1>
+            <p>{aiNumber ? agentTesting.passed ? "Call the number once. When you are happy, forward missed calls to it." : "Send both sample texts to yourself below. Do not forward customer calls yet." : "Your number will appear here as soon as it is ready."}</p>
             <div className="customer-simple-service-state">
               <span>{messaging.serviceTextsActive ? "✓" : "!"}</span>
               <p><strong>Text updates: {messaging.serviceTextsActive ? "On" : messaging.status === "PAUSED" ? "Paused" : "Not ready"}</strong>{messaging.guidance ? ` · ${messaging.guidance}` : ""}</p>
@@ -1166,7 +1251,9 @@ function CustomerDashboardView({ dashboard, onSignOut, onRefresh, refreshing, re
 
         <CustomerHelpActions phone={support.phone} />
 
-        {aiNumber ? <ForwardingSetupGuide assignedNumber={aiNumber} compact /> : null}
+        {aiNumber ? <AgentTestingStation testing={agentTesting} ownerPhone={signup.ownerPhone || signup.businessPhone} onUpdated={onRefresh} /> : null}
+
+        {aiNumber && agentTesting.passed ? <ForwardingSetupGuide assignedNumber={aiNumber} compact /> : null}
 
         <section className="customer-simple-stats" aria-label="Your important numbers">
           <article><span>Calls answered</span><strong>{stats.totalCalls || 0}</strong><small>by My AI PA</small></article>

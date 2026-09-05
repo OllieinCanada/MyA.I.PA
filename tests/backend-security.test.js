@@ -854,6 +854,7 @@ test("support repair actions require an admin session", async () => {
 
 test("customer scheduling and staff changes require a signed dashboard session", async () => {
   const requests = [
+    ["/api/customer/dashboard/agent-test", "POST"],
     ["/api/customer/dashboard/scheduling", "PUT"],
     ["/api/customer/dashboard/staff", "POST"],
     ["/api/customer/dashboard/staff/staff-1", "DELETE"],
