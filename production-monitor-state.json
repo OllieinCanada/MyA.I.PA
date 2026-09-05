@@ -150,6 +150,12 @@
       "type": "operational",
       "checkName": "operational_health",
       "firstDetectedAt": "2026-09-05T04:53:31.832Z"
+    },
+    "issue:operational_health:public_b75c393463bab318451f3043baaf8da4": {
+      "lifecycleId": "public_3d097b994ab49509871d9504",
+      "type": "operational",
+      "checkName": "operational_health",
+      "firstDetectedAt": "2026-09-05T12:21:41.907Z"
     }
   }
 }
