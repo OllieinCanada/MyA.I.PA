@@ -79,6 +79,12 @@ test("every trade flyer renders the reference campaign structure without fabrica
     expect(html.match(/contractor-phone-wave/g)).toHaveLength(2);
     expect(html).toMatch(/MyAIPA is answering/);
     expect(html).toMatch(/contractor-phone-answer/);
+    expect(html).toMatch(/BUILT FOR CONTRACTORS/);
+    expect(html).toMatch(/HVAC Contractors/);
+    expect(html).toMatch(/Property Maintenance/);
+    expect(html).toMatch(/WHAT IS ONE MISSED JOB WORTH/);
+    expect(html).toMatch(/\$200 - \$500/);
+    expect(html).toMatch(/\$5,000 - \$20,000\+/);
     expect(html).toMatch(/You can&#x27;t answer the phone all the time/);
     expect(html).toMatch(/You shouldn&#x27;t miss out on .* jobs because you&#x27;re busy/);
     expect(html).toMatch(/My AI PA answers when you can&#x27;t/);

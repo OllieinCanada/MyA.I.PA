@@ -32,3 +32,11 @@ test("the owner dashboard keeps the first view short and action focused", () => 
   expect(source).toMatch(/Something not working\?/);
   expect(source).not.toMatch(/<aside className="customer-sidebar"/);
 });
+
+test("Stripe Checkout stays hidden until the card-free trial is complete", () => {
+  const source = fs.readFileSync(path.join(__dirname, "CustomerDashboard.js"), "utf8");
+
+  expect(source).toMatch(/billing\.checkoutAvailable/);
+  expect(source).toMatch(/Checkout opens after your trial/);
+  expect(source).toMatch(/No card is required during your 14-day free trial/);
+});

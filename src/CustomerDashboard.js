@@ -1015,11 +1015,11 @@ function SimpleTrialBar({ usage = {}, trialText = "", trialEndAt = "", billing =
         <i style={{ width: `${percent}%` }} />
       </div>
       <div className="customer-trial-billing">
-        {billing.paymentReady ? <strong className="is-ready">✓ Payment ready</strong> : (
+        {billing.paymentReady ? <strong className="is-ready">✓ Payment ready</strong> : billing.checkoutAvailable ? (
           <button type="button" onClick={openBilling} disabled={Boolean(busy) || !billing.canAddPaymentMethod}>
             {busy === "setup" ? "Opening Stripe…" : billing.paymentFailed ? "Replace card securely" : "Add card securely"}
           </button>
-        )}
+        ) : <strong>Checkout opens after your trial</strong>}
         {billing.paymentReady && !billing.cancelAtPeriodEnd ? (
           <button type="button" className="is-link" onClick={cancelContinuation} disabled={Boolean(busy)}>
             {busy === "cancel" ? "Saving…" : "Cancel paid continuation"}
@@ -1027,7 +1027,7 @@ function SimpleTrialBar({ usage = {}, trialText = "", trialEndAt = "", billing =
         ) : null}
         {billing.cancelAtPeriodEnd ? <small>Paid continuation cancelled</small> : null}
       </div>
-      <p className="customer-trial-disclosure">{billing.paymentFailed ? "The last payment did not go through, so new AI calls are paused. Use Stripe Checkout to replace the card." : billing.paymentReady ? billing.disclosure : "No card is required for your trial. Add one only if you want service to continue afterward."}</p>
+      <p className="customer-trial-disclosure">{billing.paymentFailed ? "The last payment did not go through, so new AI calls are paused. Use Stripe Checkout to replace the card." : billing.disclosure || "No card is required during your 14-day free trial. Stripe Checkout opens after it ends."}</p>
       {message ? <p className="customer-trial-message" role="status">{message}</p> : null}
     </section>
   );
