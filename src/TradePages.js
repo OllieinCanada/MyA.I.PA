@@ -402,6 +402,7 @@ function FlyerIcon({ name }) {
     renovation: <><path d="m3 20 7-7M7 17l-3-3 8-8 3 3-8 8Z" /><path d="m13 5 2-2 6 6-2 2" /></>,
     addition: <><path d="M4 21V9l7-5 7 5v12M2 21h20" /><path d="M17 4v6M14 7h6M8 21v-6h6v6" /></>,
     restoration: <><path d="M4 12a8 8 0 1 0 3-6" /><path d="M4 4v8h8" /><path d="M9 16l6-8" /></>,
+    burst: <><circle cx="12" cy="12" r="4" /><path d="M12 1v4M12 19v4M1 12h4M19 12h4M4.2 4.2 7 7M17 17l2.8 2.8M19.8 4.2 17 7M7 17l-2.8 2.8" /></>,
   };
   return <svg viewBox="0 0 24 24" aria-hidden="true">{paths[name] || paths.note}</svg>;
 }
@@ -448,6 +449,24 @@ function TradeFlyer({ slug, trade }) {
     ["MORE USEFUL LEADS.", `The ${copy.name.toLowerCase()} details you need arrive together.`],
     ["MORE CONTROL.", "Test privately, then forward calls only when you are ready."],
   ];
+  const contractorTradeList = [
+    "Electricians",
+    "Painters",
+    "Plumbers",
+    "Landscapers",
+    "HVAC Contractors",
+    "Handyman",
+    "Renovators",
+    "Property Maintenance",
+    "Roofers",
+    "& More",
+  ];
+  const missedJobValues = [
+    ["phone", "SERVICE CALL", "$200 - $500"],
+    ["bolt", "ELECTRICAL JOB", "$1,000 - $2,000"],
+    ["burst", "HVAC JOB", "$1,500 - $5,000"],
+    ["burst", "RENOVATION PROJECT", "$5,000 - $20,000+"],
+  ];
   const faqs = [
     ["Will I keep my current phone number?", "Yes. Your normal business number stays in place; unanswered or after-hours calls can forward to My AI PA."],
     ["Will customers know they are talking to AI?", "Yes. The assistant uses a clear, professional AI disclosure."],
@@ -493,7 +512,18 @@ function TradeFlyer({ slug, trade }) {
         <div className="contractor-middle-grid">
           <div className="contractor-outcomes-photo"><img src="/trade-heroes/reference-contractor-portrait-864.jpg" srcSet="/trade-heroes/reference-contractor-portrait-480.jpg 480w, /trade-heroes/reference-contractor-portrait-864.jpg 864w" sizes="(max-width: 560px) calc(100vw - 34px), 340px" alt="Smiling contractor ready for the next job" loading="lazy" decoding="async" /></div>
           <div className="contractor-outcomes"><h2>MORE ANSWERS.<br />MORE JOBS.<br /><em>MORE CONTROL.</em></h2>{contractorOutcomes.map(([title, body]) => <p key={title}><FlyerIcon name="check" /><span><strong>{title}</strong> {body}</span></p>)}</div>
-          <div className="contractor-side-stack"><div className="contractor-built"><h3>BUILT FOR CONTRACTORS</h3>{tradePageOrder.map((item) => <span key={item}><FlyerIcon name="check" />{tradeFlyerCopy[item]?.name || tradePages[item].label}</span>)}<strong>ANY TRADE. ANY SIZE.<br /><em>ANYWHERE.</em></strong></div><div className="contractor-missed-value"><h3>WHAT IS ONE MISSED JOB WORTH?</h3>{copy.calls.map((call) => <span key={call}><FlyerIcon name="bolt" /><strong>{call}</strong><small>A callback opportunity</small></span>)}<p>Do not let it go to your competitor.<br />Make sure someone answers.</p></div></div>
+          <div className="contractor-side-stack">
+            <div className="contractor-built">
+              <h3>BUILT FOR CONTRACTORS</h3>
+              {contractorTradeList.map((item) => <span key={item}><FlyerIcon name="check" />{item}</span>)}
+              <strong>ANY TRADE. ANY SIZE.<br /><em>ANYWHERE.</em></strong>
+            </div>
+            <div className="contractor-missed-value">
+              <h3>WHAT IS ONE MISSED JOB WORTH?</h3>
+              {missedJobValues.map(([icon, label, value]) => <span key={label}><FlyerIcon name={icon} /><strong>{label}</strong><small>{value}</small></span>)}
+              <p>Don't let it go to your competitor.<br />Make sure someone answers.</p>
+            </div>
+          </div>
         </div>
       </section>
 
