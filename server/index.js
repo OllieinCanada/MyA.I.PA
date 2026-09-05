@@ -84,7 +84,9 @@ const {
 } = require("./signupProvisioning");
 const { buildSignupAssistantConfig } = require("./signupAssistantTemplate");
 const {
+  assessAgentRouteBinding,
   buildAgentReadiness,
+  buildAgentRouteFingerprint,
   enforceAgentTestReadyStatus,
   getAgentTestDeliveryUpdate,
   runAgentTextTest,
@@ -4470,6 +4472,7 @@ const CUSTOMER_SETUP_STEPS = [
   { key: "make", label: "Make handoff completed", nextAction: "Check the Make scenario run history, then rerun the setup handoff if needed." },
   { key: "vapi", label: "Vapi assistant mapped", nextAction: "Create or confirm the Vapi assistant/phone mapping for this business." },
   { key: "twilio", label: "Twilio number connected", nextAction: "Add the Twilio/Vapi phone number and confirm it maps to the right business." },
+  { key: "agent_route", label: "Phone routes to the correct assistant", nextAction: "Verify the exact direct Vapi attachment or the protected trial-gate route; repair only an empty, unclaimed direct route." },
   { key: "sms_routing", label: "Owner and caller texts protected", nextAction: "Run the isolated SMS routing repair and verify the protected owner and caller destinations." },
   { key: "agent_test", label: "New agent passed delivery testing", nextAction: "Run the testing station and confirm both the owner-copy and customer-copy sample texts arrive." },
   { key: "stripe", label: "Stripe trial active", nextAction: "Create the no-card trial only after the agent passes its delivery checks." },
@@ -4570,6 +4573,18 @@ function deriveCustomerSetupStep(stepKey, { signup, business, calls, envStatus }
     return setupStep("waiting", "The exact AI/Twilio number is not mapped to this business yet.");
   }
 
+  if (stepKey === "agent_route") {
+    if (signup.agentRouteBindingStatus === "verified" && ["direct", "trial-gate"].includes(String(signup.agentRouteBindingMode || "").toLowerCase())) {
+      return setupStep("done", signup.agentRouteBindingMode === "trial-gate"
+        ? "The protected trial gate routes this phone to the exact assistant."
+        : "Vapi directly attaches this phone to the exact assistant.");
+    }
+    if (signup.agentRouteBindingStatus === "failed") {
+      return setupStep("failed", signup.agentRouteBindingErrorCode || "The phone-to-assistant route did not verify.");
+    }
+    return setupStep("waiting", "The exact phone-to-assistant route has not been verified yet.");
+  }
+
   if (stepKey === "sms_routing") {
     if (signup.smsRoutingStatus === "healthy") return setupStep("done", "Protected per-business owner and caller routing is verified.");
     if (signup.smsRoutingStatus === "failed") return setupStep("failed", signup.smsRoutingError || "SMS routing verification failed.");
@@ -4579,7 +4594,7 @@ function deriveCustomerSetupStep(stepKey, { signup, business, calls, envStatus }
 
   if (stepKey === "agent_test") {
     const readiness = buildAgentReadiness({ signup, business });
-    if (readiness.passed) return setupStep("done", "The assistant, number, all three business mappings, protected routing, and both sample texts passed.");
+    if (readiness.passed) return setupStep("done", "The assistant, number, exact route, all three business mappings, protected routing, and both sample texts passed.");
     if (readiness.status === "failed") return setupStep("failed", readiness.errorCode || "The pre-delivery text test failed.");
     return setupStep("waiting", "The mandatory pre-delivery testing station has not passed yet.");
   }
@@ -6447,6 +6462,82 @@ async function ensureTrialBusinessAndMappings(signup, vapiPhone) {
   });
 }
 
+function createAgentRouteError(assessment, fallbackMessage) {
+  const error = new Error(fallbackMessage || "The AI number could not be verified against its assistant route.");
+  error.statusCode = assessment?.status === "conflict" ? 409 : 502;
+  error.code = assessment?.code || "AGENT_ROUTE_VERIFICATION_FAILED";
+  return error;
+}
+
+async function ensureSignupAgentRoute({ signup, vapiPhone, business } = {}, dependencies = {}) {
+  const requestResource = dependencies.requestResource || requestVapiResource;
+  const readGate = dependencies.readGate || readTrialGateConfiguration;
+  const expectedAssistantId = String(getVapiAssistantId(vapiPhone) || signup?.vapiAssistantId || "").trim();
+  const expectedPhoneNumberId = String(vapiPhone?.id || signup?.vapiPhoneNumberId || "").trim();
+  const expectedPhoneNumber = normalizePhoneForMatch(getVapiPhoneNumber(vapiPhone) || signup?.twilioPhoneNumber || "");
+  if (!business?.id || !expectedAssistantId || !expectedPhoneNumberId || !expectedPhoneNumber) {
+    throw createAgentRouteError(
+      { code: "AGENT_ROUTE_EXPECTATION_INCOMPLETE" },
+      "The business, assistant, and AI phone must be known before the route can be verified."
+    );
+  }
+
+  await requestResource(`assistant/${encodeURIComponent(expectedAssistantId)}`);
+  let livePhone = await requestResource(`phone-number/${encodeURIComponent(expectedPhoneNumberId)}`);
+  const trialGate = await readGate({
+    phoneNumberId: expectedPhoneNumberId,
+    phoneNumber: { id: expectedPhoneNumberId, number: expectedPhoneNumber },
+  });
+  const assess = (record) => assessAgentRouteBinding({
+    expectedBusinessId: business.id,
+    expectedPhoneNumberId,
+    expectedPhoneNumber,
+    expectedAssistantId,
+    livePhoneNumberId: record?.id,
+    livePhoneNumber: getVapiPhoneNumber(record),
+    liveAssistantId: getVapiAssistantId(record),
+    liveServerUrl: getVapiNestedString(record, ["server.url", "serverUrl"]),
+    trialGateWebhookUrl: TRIAL_USAGE_GATE_WEBHOOK_URL,
+    trialGate,
+  });
+
+  let assessment = assess(livePhone);
+  let repaired = false;
+  if (assessment.action === "attach") {
+    await requestResource(`phone-number/${encodeURIComponent(expectedPhoneNumberId)}`, {
+      method: "PATCH",
+      body: { assistantId: expectedAssistantId },
+    });
+    repaired = true;
+    livePhone = await requestResource(`phone-number/${encodeURIComponent(expectedPhoneNumberId)}`);
+    assessment = assess(livePhone);
+  }
+  if (assessment.status !== "verified") {
+    throw createAgentRouteError(
+      assessment,
+      assessment.code === "AGENT_PHONE_ASSISTANT_CONFLICT"
+        ? "This AI number is attached to a different assistant. It was not changed automatically."
+        : "The AI number still could not be verified against its assistant route."
+    );
+  }
+
+  const verifiedAt = new Date().toISOString();
+  const fields = {
+    agentRouteBindingStatus: "verified",
+    agentRouteBindingMode: assessment.mode,
+    agentRouteBindingFingerprint: assessment.fingerprint,
+    agentRouteBindingVerifiedAt: verifiedAt,
+    agentRouteBindingRepairedAt: repaired ? verifiedAt : signup?.agentRouteBindingRepairedAt || "",
+    agentRouteBindingErrorCode: "",
+  };
+  return {
+    assessment,
+    fields,
+    repaired,
+    vapiPhone: { ...livePhone, assistantId: expectedAssistantId },
+  };
+}
+
 async function testSignupAgentBeforeDelivery({ signup, vapiPhone, smsRouting = null, force = false } = {}) {
   if (!signup?.ownerEmail) {
     const error = new Error("A stored signup is required before the agent delivery test can run.");
@@ -6457,6 +6548,32 @@ async function testSignupAgentBeforeDelivery({ signup, vapiPhone, smsRouting = n
 
   const aiNumber = normalizePhoneForMatch(getVapiPhoneNumber(vapiPhone) || signup.twilioPhoneNumber || "");
   const assistantId = getVapiAssistantId(vapiPhone) || String(signup.vapiAssistantId || "").trim();
+  let storedSignup = upsertSignupDashboardRecord({
+    ...signup,
+    twilioPhoneNumber: aiNumber,
+    vapiPhoneNumberId: String(vapiPhone?.id || signup.vapiPhoneNumberId || "").trim(),
+    vapiAssistantId: assistantId,
+  });
+  const business = await ensureTrialBusinessAndMappings(storedSignup, {
+    ...(vapiPhone || {}),
+    id: String(vapiPhone?.id || storedSignup.vapiPhoneNumberId || "").trim(),
+    number: aiNumber,
+    assistantId,
+  });
+  let route;
+  try {
+    route = await ensureSignupAgentRoute({ signup: storedSignup, vapiPhone, business });
+    storedSignup = upsertSignupDashboardRecord({ ownerEmail: storedSignup.ownerEmail, ...route.fields });
+  } catch (error) {
+    upsertSignupDashboardRecord({
+      ownerEmail: storedSignup.ownerEmail,
+      agentRouteBindingStatus: "failed",
+      agentRouteBindingVerifiedAt: "",
+      agentRouteBindingErrorCode: String(error?.code || "AGENT_ROUTE_VERIFICATION_FAILED").slice(0, 120),
+    });
+    throw error;
+  }
+
   const currentRouting = smsRouting || await safelyProvisionIsolatedSmsForSignup({
     ownerEmail: signup.ownerEmail,
     assistantId,
@@ -6470,13 +6587,7 @@ async function testSignupAgentBeforeDelivery({ signup, vapiPhone, smsRouting = n
     smsRoutingVerifiedAt: currentRouting.healthy ? new Date().toISOString() : "",
     smsRoutingError: currentRouting.skipped ? currentRouting.reason : currentRouting.healthy ? "" : currentRouting.error || "Vapi read-back did not verify isolated routing.",
   };
-  let storedSignup = upsertSignupDashboardRecord({
-    ...signup,
-    twilioPhoneNumber: aiNumber,
-    vapiPhoneNumberId: String(vapiPhone?.id || signup.vapiPhoneNumberId || "").trim(),
-    vapiAssistantId: assistantId,
-    ...routingFields,
-  });
+  storedSignup = upsertSignupDashboardRecord({ ownerEmail: storedSignup.ownerEmail, ...routingFields });
   if (!currentRouting.healthy) {
     const error = new Error("The agent was built, but protected owner and customer text routing did not pass.");
     error.statusCode = 502;
@@ -6484,12 +6595,6 @@ async function testSignupAgentBeforeDelivery({ signup, vapiPhone, smsRouting = n
     throw error;
   }
 
-  const business = await ensureTrialBusinessAndMappings(storedSignup, {
-    ...(vapiPhone || {}),
-    id: String(vapiPhone?.id || storedSignup.vapiPhoneNumberId || "").trim(),
-    number: aiNumber,
-    assistantId,
-  });
   storedSignup = listSignupDashboardRecords().find((record) => (
     String(record.ownerEmail || "").trim().toLowerCase() === String(signup.ownerEmail || "").trim().toLowerCase()
   )) || storedSignup;
@@ -6524,7 +6629,13 @@ async function testSignupAgentBeforeDelivery({ signup, vapiPhone, smsRouting = n
     agentTestPassedAt: readyAt,
     setupReadyAt: finalSignup.setupReadyAt || readyAt,
   });
-  return { ...result, readiness, businessId: business.id };
+  return {
+    ...result,
+    readiness,
+    businessId: business.id,
+    routeMode: route.assessment.mode,
+    routeRepaired: route.repaired,
+  };
 }
 
 async function getTrialCallUsage(signup, businessId, db = prisma) {
@@ -6662,6 +6773,21 @@ async function configureTrialGateForSignup(signup, phoneInventory = null) {
       verifiedAt: new Date().toISOString(),
     };
     await writeTrialGateConfiguration(current);
+    const routeVerifiedAt = new Date().toISOString();
+    upsertSignupDashboardRecord({
+      ownerEmail: signup.ownerEmail || "",
+      agentRouteBindingStatus: "verified",
+      agentRouteBindingMode: "trial-gate",
+      agentRouteBindingFingerprint: buildAgentRouteFingerprint({
+        mode: "trial-gate",
+        businessId: business.id,
+        phoneNumberId: phone.id,
+        aiNumber,
+        assistantId: existingConfig.assistantId,
+      }),
+      agentRouteBindingVerifiedAt: routeVerifiedAt,
+      agentRouteBindingErrorCode: "",
+    });
     return { configured: true, reused: true, businessId: business.id, phoneNumberId: phone.id };
   }
   if (!currentAssistantId) {
@@ -6717,6 +6843,17 @@ async function configureTrialGateForSignup(signup, phoneInventory = null) {
     ownerEmail: signup.ownerEmail || "",
     trialUsageGateStatus: "active",
     trialUsageGateActivatedAt: activated.activatedAt,
+    agentRouteBindingStatus: "verified",
+    agentRouteBindingMode: "trial-gate",
+    agentRouteBindingFingerprint: buildAgentRouteFingerprint({
+      mode: "trial-gate",
+      businessId: business.id,
+      phoneNumberId: phone.id,
+      aiNumber,
+      assistantId: currentAssistantId,
+    }),
+    agentRouteBindingVerifiedAt: activated.activatedAt,
+    agentRouteBindingErrorCode: "",
     trialUsageLimitMinutes: Number((TRIAL_USAGE_LIMIT_SECONDS / 60).toFixed(1)),
     trialUsageWarningMinutes: Number((TRIAL_USAGE_WARNING_SECONDS / 60).toFixed(1)),
     trialUsageCompletionReserveMinutes: Number((TRIAL_USAGE_COMPLETION_RESERVE_SECONDS / 60).toFixed(1)),
@@ -11293,13 +11430,17 @@ app.post(
       result = await importTwilioPhoneNumberToVapi({ twilioPhoneNumber: phoneNumber, assistantId, name: `${assistantName} Number` });
     }
 
+    const storedSignupForAgent = ownerEmail && isValidEmailAddress(ownerEmail)
+      ? listSignupDashboardRecords().find((record) => String(record.ownerEmail || "").trim().toLowerCase() === ownerEmail.toLowerCase())
+      : null;
+    const deliveryAssistantId = result.assistantId || String(storedSignupForAgent?.vapiAssistantId || "").trim();
     if (ownerEmail && isValidEmailAddress(ownerEmail)) {
       upsertSignupDashboardRecord({
         ownerEmail,
         ownerPhone: body.ownerPhone || "",
         twilioPhoneNumber: result.number || phoneNumber,
         vapiPhoneNumberId: result.id,
-        vapiAssistantId: result.assistantId,
+        vapiAssistantId: deliveryAssistantId,
         makeStatus: 200,
         status: "setup_started",
       });
@@ -11307,7 +11448,7 @@ app.post(
 
     const smsRouting = await safelyProvisionIsolatedSmsForSignup({
       ownerEmail,
-      assistantId: result.assistantId,
+      assistantId: deliveryAssistantId,
       aiNumber: result.number || phoneNumber,
       ownerNumber: body.ownerPhone,
     });
@@ -11327,15 +11468,32 @@ app.post(
       const signup = listSignupDashboardRecords().find((record) => (
         String(record.ownerEmail || "").trim().toLowerCase() === ownerEmail.toLowerCase()
       ));
-      agentDeliveryTest = await testSignupAgentBeforeDelivery({
-        signup,
-        vapiPhone: {
-          id: result.id,
-          number: result.number || phoneNumber,
-          assistantId: result.assistantId,
-        },
-        smsRouting,
-      });
+      try {
+        agentDeliveryTest = await testSignupAgentBeforeDelivery({
+          signup,
+          vapiPhone: {
+            id: result.id,
+            number: result.number || phoneNumber,
+            assistantId: deliveryAssistantId,
+          },
+          smsRouting,
+        });
+      } catch (error) {
+        safelyNotifyRuntimeFailure(error, {
+          area: "legacy new agent delivery test",
+          operation: "verify exact agent route and send owner/customer sample texts",
+          whatFailed: "A newly built signup agent did not pass its mandatory automatic delivery test",
+          impact: "The agent remains in testing and must not receive forwarded customer calls.",
+          snapshot: {
+            "AI number ending": String(result.number || phoneNumber || "").slice(-4),
+            "Failure code": String(error?.code || "AGENT_TEST_FAILED").slice(0, 120),
+          },
+          lastCheckpoint: "The automatic delivery gate stopped before setup completion.",
+          nextAction: "Verify the exact business, phone, assistant, dynamic trial route, and text delivery result before retrying.",
+          dedupeFingerprint: `legacy-agent-delivery-test:${String(deliveryAssistantId || "unknown").slice(0, 80)}`,
+        });
+        throw error;
+      }
     }
 
     res.status(reused ? 200 : 201).json({
@@ -11344,7 +11502,7 @@ app.post(
       reused,
       twilioPhoneNumber: result.number || phoneNumber,
       phoneNumberId: result.id,
-      assistantId: result.assistantId,
+      assistantId: deliveryAssistantId,
       smsRouting,
       agentDeliveryTest,
       deliveryReady: Boolean(agentDeliveryTest?.readiness?.passed),
@@ -12264,10 +12422,10 @@ app.post(
     const aiNumber = normalizePhoneForMatch(signup.twilioPhoneNumber || "");
     const vapiNumbers = await fetchVapiCollection("phone-number", ["phoneNumbers", "phone_numbers"]);
     const vapiPhone = vapiNumbers.find((record) => normalizePhoneForMatch(getVapiPhoneNumber(record)) === aiNumber);
-    if (!vapiPhone?.id || !getVapiAssistantId(vapiPhone)) {
+    if (!vapiPhone?.id) {
       return res.status(409).json({
-        error: "The testing station cannot find the assistant attached to this AI number yet.",
-        code: "AGENT_TEST_PHONE_BINDING_MISSING",
+        error: "The testing station cannot find this AI number in Vapi yet.",
+        code: "AGENT_TEST_PHONE_RECORD_MISSING",
       });
     }
     try {
@@ -13675,6 +13833,74 @@ app.get(
 );
 
 app.post(
+  "/api/admin/signups/run-agent-delivery-test",
+  adminSignupRepairProcessRateLimiter,
+  requireAdmin,
+  asyncRoute(async (req, res) => {
+    if (String(req.body?.confirmation || "") !== "RUN_EXACT_AGENT_DELIVERY_TEST") {
+      return res.status(400).json({ error: "Exact agent-delivery test confirmation is required." });
+    }
+    const phoneNumberId = String(req.body?.vapiPhoneNumberId || "").trim();
+    if (!phoneNumberId || phoneNumberId.length > 160) {
+      return res.status(400).json({ error: "A valid Vapi phone-number id is required." });
+    }
+    const matches = listSignupDashboardRecords().filter((record) => String(record.vapiPhoneNumberId || "").trim() === phoneNumberId);
+    if (matches.length !== 1) {
+      return res.status(409).json({ error: "The exact signup could not be selected safely." });
+    }
+    const signup = matches[0];
+    const aiNumber = normalizePhoneForMatch(signup.twilioPhoneNumber || "");
+    const vapiNumbers = await fetchVapiCollection("phone-number", ["phoneNumbers", "phone_numbers"]);
+    const phoneMatches = vapiNumbers.filter((record) => (
+      String(record?.id || "").trim() === phoneNumberId
+      && normalizePhoneForMatch(getVapiPhoneNumber(record)) === aiNumber
+    ));
+    if (phoneMatches.length !== 1) {
+      return res.status(409).json({ error: "The stored and live Vapi phone identities do not agree." });
+    }
+    let result;
+    try {
+      result = await testSignupAgentBeforeDelivery({ signup, vapiPhone: phoneMatches[0], force: true });
+    } catch (error) {
+      const code = String(error?.providerSignal || error?.providerCode || error?.code || "AGENT_TEST_FAILED").slice(0, 120);
+      safelyNotifyRuntimeFailure(error, {
+        area: "admin agent delivery recovery",
+        operation: "verify the exact agent route and rerun both sample texts",
+        whatFailed: "The exact agent delivery recovery did not pass",
+        impact: "The agent remains held in testing and must not receive forwarded customer calls.",
+        snapshot: { "AI number ending": aiNumber.slice(-4), "Failure code": code },
+        lastCheckpoint: "The recovery selected one exact stored and live Vapi phone before running the delivery gate.",
+        nextAction: code.includes("CONFLICT")
+          ? "Open the exact incident and resolve the conflicting phone, assistant, or protected trial route. Nothing was overwritten automatically."
+          : "Open the exact incident, correct the failed provider or routing check, then rerun this same recovery.",
+        dedupeFingerprint: `admin-agent-delivery-test:${hashKey(phoneNumberId).slice(0, 24)}:${code}`,
+      });
+      error.telegramIncidentHandled = true;
+      throw error;
+    }
+    await recordAdminAuditEvent({
+      prisma,
+      action: "run_exact_agent_delivery_test",
+      outcome: "success",
+      actorHash: getAdminActorHash(req),
+      targetType: "vapi_phone",
+      targetId: hashKey(phoneNumberId).slice(0, 24),
+      details: {
+        routeMode: String(result?.routeMode || signup.agentRouteBindingMode || "verified").slice(0, 40),
+        passed: result?.readiness?.passed === true,
+      },
+    });
+    res.json({
+      ok: true,
+      passed: result?.readiness?.passed === true,
+      aiNumberLast4: aiNumber.slice(-4),
+      routeMode: result?.routeMode || listSignupDashboardRecords().find((record) => String(record.vapiPhoneNumberId || "").trim() === phoneNumberId)?.agentRouteBindingMode || "",
+      readiness: result.readiness,
+    });
+  })
+);
+
+app.post(
   "/api/admin/signups/repair-dashboard-login",
   adminSignupRepairProcessRateLimiter,
   requireAdmin,
@@ -14689,6 +14915,7 @@ module.exports = {
     createSmtpDeliveryError,
     buildSignupSmsRoutingFailureContext,
     safelyProvisionIsolatedSmsForSignup,
+    ensureSignupAgentRoute,
     inspectSignupPhoneProvisioning,
     getVapiVoiceSignupExecutionBusinessId,
     getVapiVoiceSignupSmsEnvironment,

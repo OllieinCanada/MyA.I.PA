@@ -1,6 +1,6 @@
 const { buildCustomerBody, buildOwnerBody } = require("./compositeCallNotifications");
 
-const AGENT_TEST_VERSION = "2026-09-05-v1";
+const AGENT_TEST_VERSION = "2026-09-05-v2";
 
 function clean(value, max = 240) {
   return String(value || "").replace(/\s+/g, " ").trim().slice(0, max);
@@ -15,6 +15,110 @@ function normalizePhone(value) {
 
 function buildAgentTestFingerprint({ assistantId, aiNumber, ownerPhone } = {}) {
   return [clean(assistantId, 160), normalizePhone(aiNumber), normalizePhone(ownerPhone)].join("|");
+}
+
+function buildAgentRouteFingerprint({ mode, businessId, phoneNumberId, aiNumber, assistantId } = {}) {
+  return [
+    clean(mode, 40).toLowerCase(),
+    clean(businessId, 80).toLowerCase(),
+    clean(phoneNumberId, 160).toLowerCase(),
+    normalizePhone(aiNumber),
+    clean(assistantId, 160).toLowerCase(),
+  ].join("|");
+}
+
+function assessAgentRouteBinding({
+  expectedBusinessId,
+  expectedPhoneNumberId,
+  expectedPhoneNumber,
+  expectedAssistantId,
+  livePhoneNumberId,
+  livePhoneNumber,
+  liveAssistantId,
+  liveServerUrl,
+  trialGateWebhookUrl,
+  trialGate,
+} = {}) {
+  const expected = {
+    businessId: clean(expectedBusinessId, 80).toLowerCase(),
+    phoneNumberId: clean(expectedPhoneNumberId, 160).toLowerCase(),
+    phoneNumber: normalizePhone(expectedPhoneNumber),
+    assistantId: clean(expectedAssistantId, 160).toLowerCase(),
+  };
+  const live = {
+    phoneNumberId: clean(livePhoneNumberId, 160).toLowerCase(),
+    phoneNumber: normalizePhone(livePhoneNumber),
+    assistantId: clean(liveAssistantId, 160).toLowerCase(),
+    serverUrl: clean(liveServerUrl, 500),
+  };
+  const gate = {
+    status: clean(trialGate?.status, 40).toLowerCase(),
+    businessId: clean(trialGate?.businessId, 80).toLowerCase(),
+    phoneNumberId: clean(trialGate?.phoneNumberId, 160).toLowerCase(),
+    phoneNumber: normalizePhone(trialGate?.phoneNumber),
+    assistantId: clean(trialGate?.assistantId, 160).toLowerCase(),
+  };
+  const expectedGateUrl = clean(trialGateWebhookUrl, 500);
+  const stop = (status, code) => ({ status, action: "stop", code, expected, live, gate });
+  if (!expected.businessId || !expected.phoneNumberId || !expected.phoneNumber || !expected.assistantId) {
+    return stop("invalid", "AGENT_ROUTE_EXPECTATION_INCOMPLETE");
+  }
+  if (!live.phoneNumberId || !live.phoneNumber) return stop("missing", "AGENT_PHONE_RECORD_MISSING");
+  if (live.phoneNumberId !== expected.phoneNumberId || live.phoneNumber !== expected.phoneNumber) {
+    return stop("conflict", "AGENT_PHONE_IDENTITY_CONFLICT");
+  }
+  if (live.assistantId && live.assistantId !== expected.assistantId) {
+    return stop("conflict", "AGENT_PHONE_ASSISTANT_CONFLICT");
+  }
+  if (live.assistantId === expected.assistantId) {
+    const mode = "direct";
+    return {
+      status: "verified",
+      action: "none",
+      code: "",
+      mode,
+      expected,
+      live,
+      gate,
+      fingerprint: buildAgentRouteFingerprint({
+        mode,
+        businessId: expected.businessId,
+        phoneNumberId: expected.phoneNumberId,
+        aiNumber: expected.phoneNumber,
+        assistantId: expected.assistantId,
+      }),
+    };
+  }
+  const dynamicGateMatches = Boolean(
+    expectedGateUrl
+    && live.serverUrl === expectedGateUrl
+    && gate.status === "active"
+    && gate.businessId === expected.businessId
+    && gate.phoneNumberId === expected.phoneNumberId
+    && gate.phoneNumber === expected.phoneNumber
+    && gate.assistantId === expected.assistantId
+  );
+  if (dynamicGateMatches) {
+    const mode = "trial-gate";
+    return {
+      status: "verified",
+      action: "none",
+      code: "",
+      mode,
+      expected,
+      live,
+      gate,
+      fingerprint: buildAgentRouteFingerprint({
+        mode,
+        businessId: expected.businessId,
+        phoneNumberId: expected.phoneNumberId,
+        aiNumber: expected.phoneNumber,
+        assistantId: expected.assistantId,
+      }),
+    };
+  }
+  if (live.serverUrl) return stop("conflict", "AGENT_PHONE_DYNAMIC_ROUTE_CONFLICT");
+  return { status: "missing", action: "attach", code: "AGENT_PHONE_ASSISTANT_MISSING", expected, live, gate };
 }
 
 function buildAgentTestMessages({ businessName, ownerName } = {}) {
@@ -53,6 +157,26 @@ function buildAgentReadiness({ signup = {}, business = null } = {}) {
   const numberMappingReady = Boolean(business?.id && aiNumber && hasMapping("phonenumber", aiNumber));
   const phoneIdMappingReady = Boolean(business?.id && phoneNumberId && hasMapping("phonenumberid", phoneNumberId));
   const assistantMappingReady = Boolean(business?.id && assistantId && hasMapping("assistantid", assistantId));
+  const routeMode = clean(signup.agentRouteBindingMode, 40).toLowerCase();
+  const routeFingerprint = buildAgentRouteFingerprint({
+    mode: routeMode,
+    businessId: business?.id || signup.businessId,
+    phoneNumberId,
+    aiNumber,
+    assistantId,
+  });
+  const currentRouteBindingReady = Boolean(
+    ["direct", "trial-gate"].includes(routeMode)
+    && signup.agentRouteBindingStatus === "verified"
+    && signup.agentRouteBindingVerifiedAt
+    && signup.agentRouteBindingFingerprint === routeFingerprint
+  );
+  const legacyPassedBeforeRouteProof = Boolean(
+    signup.agentTestStatus === "passed"
+    && signup.agentTestVersion
+    && signup.agentTestVersion !== AGENT_TEST_VERSION
+  );
+  const routeBindingReady = currentRouteBindingReady || legacyPassedBeforeRouteProof;
   const fingerprint = buildAgentTestFingerprint({ assistantId, aiNumber, ownerPhone });
   const testMatches = Boolean(fingerprint && signup.agentTestFingerprint === fingerprint);
   const ownerProviderStatus = clean(signup.agentTestOwnerProviderStatus, 40).toLowerCase();
@@ -61,6 +185,7 @@ function buildAgentReadiness({ signup = {}, business = null } = {}) {
   const checks = [
     { key: "assistant", label: "Assistant built", done: Boolean(assistantId) },
     { key: "number", label: "AI number connected", done: Boolean(aiNumber) },
+    { key: "agent-route", label: "Phone routes to the correct assistant", done: routeBindingReady },
     { key: "business", label: "Business record created", done: Boolean(business?.id) },
     { key: "number-mapping", label: "AI number linked to this business", done: numberMappingReady },
     { key: "phone-id-mapping", label: "Vapi phone record linked to this business", done: phoneIdMappingReady },
@@ -89,12 +214,26 @@ function enforceAgentTestReadyStatus(record = {}) {
   });
   const terminalFailure = [record.agentTestOwnerProviderStatus, record.agentTestCustomerProviderStatus]
     .some((status) => ["canceled", "failed", "undelivered"].includes(String(status || "").trim().toLowerCase()));
+  const expectedRouteFingerprint = buildAgentRouteFingerprint({
+    mode: record.agentRouteBindingMode,
+    businessId: record.businessId,
+    phoneNumberId: record.vapiPhoneNumberId,
+    aiNumber: record.twilioPhoneNumber,
+    assistantId: record.vapiAssistantId,
+  });
+  const currentVersionRequiresRouteProof = record.agentTestVersion === AGENT_TEST_VERSION;
+  const routeProofReady = Boolean(
+    record.agentRouteBindingStatus === "verified"
+    && record.agentRouteBindingVerifiedAt
+    && record.agentRouteBindingFingerprint === expectedRouteFingerprint
+  );
   if (
     record.agentTestStatus === "passed"
     && expectedFingerprint
     && record.agentTestFingerprint === expectedFingerprint
     && record.agentTestOwnerAcceptedAt
     && record.agentTestCustomerAcceptedAt
+    && (!currentVersionRequiresRouteProof || routeProofReady)
     && !terminalFailure
   ) {
     return record;
@@ -202,8 +341,10 @@ async function runAgentTextTest({ signup = {}, sendSms, persist = () => {}, forc
 
 module.exports = {
   AGENT_TEST_VERSION,
+  assessAgentRouteBinding,
   buildAgentReadiness,
   enforceAgentTestReadyStatus,
+  buildAgentRouteFingerprint,
   getAgentTestDeliveryUpdate,
   buildAgentTestFingerprint,
   buildAgentTestMessages,

@@ -1,7 +1,12 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
 const {
+  AGENT_TEST_VERSION,
+  assessAgentRouteBinding,
   buildAgentReadiness,
+  buildAgentRouteFingerprint,
   buildAgentTestFingerprint,
   buildAgentTestMessages,
   enforceAgentTestReadyStatus,
@@ -17,7 +22,73 @@ const signup = {
   vapiAssistantId: "assistant-123",
   vapiPhoneNumberId: "phone-123",
   smsRoutingStatus: "healthy",
+  businessId: 7,
 };
+signup.agentRouteBindingStatus = "verified";
+signup.agentRouteBindingMode = "direct";
+signup.agentRouteBindingVerifiedAt = "2026-09-05T11:59:00.000Z";
+signup.agentRouteBindingFingerprint = buildAgentRouteFingerprint({
+  mode: signup.agentRouteBindingMode,
+  businessId: signup.businessId,
+  phoneNumberId: signup.vapiPhoneNumberId,
+  aiNumber: signup.twilioPhoneNumber,
+  assistantId: signup.vapiAssistantId,
+});
+
+test("agent routing accepts direct and protected trial-gate bindings", () => {
+  const common = {
+    expectedBusinessId: signup.businessId,
+    expectedPhoneNumberId: signup.vapiPhoneNumberId,
+    expectedPhoneNumber: signup.twilioPhoneNumber,
+    expectedAssistantId: signup.vapiAssistantId,
+    livePhoneNumberId: signup.vapiPhoneNumberId,
+    livePhoneNumber: signup.twilioPhoneNumber,
+    trialGateWebhookUrl: "https://api.myaipa.ca/api/webhooks/voice",
+  };
+  const direct = assessAgentRouteBinding({ ...common, liveAssistantId: signup.vapiAssistantId });
+  assert.equal(direct.status, "verified");
+  assert.equal(direct.mode, "direct");
+
+  const dynamic = assessAgentRouteBinding({
+    ...common,
+    liveServerUrl: "https://api.myaipa.ca/api/webhooks/voice",
+    trialGate: {
+      status: "active",
+      businessId: signup.businessId,
+      phoneNumberId: signup.vapiPhoneNumberId,
+      phoneNumber: signup.twilioPhoneNumber,
+      assistantId: signup.vapiAssistantId,
+    },
+  });
+  assert.equal(dynamic.status, "verified");
+  assert.equal(dynamic.mode, "trial-gate");
+});
+
+test("agent routing repairs only an empty unclaimed phone and stops on conflicts", () => {
+  const common = {
+    expectedBusinessId: signup.businessId,
+    expectedPhoneNumberId: signup.vapiPhoneNumberId,
+    expectedPhoneNumber: signup.twilioPhoneNumber,
+    expectedAssistantId: signup.vapiAssistantId,
+    livePhoneNumberId: signup.vapiPhoneNumberId,
+    livePhoneNumber: signup.twilioPhoneNumber,
+    trialGateWebhookUrl: "https://api.myaipa.ca/api/webhooks/voice",
+  };
+  assert.equal(assessAgentRouteBinding(common).action, "attach");
+  assert.equal(assessAgentRouteBinding({ ...common, liveAssistantId: "another-assistant" }).code, "AGENT_PHONE_ASSISTANT_CONFLICT");
+  assert.equal(assessAgentRouteBinding({ ...common, liveServerUrl: "https://other.example/webhook" }).code, "AGENT_PHONE_DYNAMIC_ROUTE_CONFLICT");
+});
+
+test("both new-agent provisioning paths run the delivery test automatically", () => {
+  const source = fs.readFileSync(path.join(__dirname, "..", "server", "index.js"), "utf8");
+  const legacyStart = source.indexOf('"/api/integrations/provisioning/complete-existing"');
+  const modernStart = source.indexOf('"/api/integrations/vapi/import-twilio-number"');
+  const modernEnd = source.indexOf("app.post(", modernStart + 1);
+  assert.ok(legacyStart > 0 && modernStart > legacyStart && modernEnd > modernStart);
+  assert.match(source.slice(legacyStart, modernStart), /testSignupAgentBeforeDelivery\(/);
+  assert.match(source.slice(modernStart, modernEnd), /testSignupAgentBeforeDelivery\(/);
+  assert.match(source.slice(modernStart, modernEnd), /deliveryReady:/);
+});
 
 test("test messages visibly separate the owner and customer formats", () => {
   const messages = buildAgentTestMessages(signup);
@@ -74,8 +145,32 @@ test("setup-ready is globally held until the mandatory agent test passes", () =>
     }),
     agentTestOwnerAcceptedAt: "2026-09-05T12:00:00.000Z",
     agentTestCustomerAcceptedAt: "2026-09-05T12:00:01.000Z",
+    businessId: signup.businessId,
+    agentRouteBindingStatus: signup.agentRouteBindingStatus,
+    agentRouteBindingMode: signup.agentRouteBindingMode,
+    agentRouteBindingVerifiedAt: signup.agentRouteBindingVerifiedAt,
+    agentRouteBindingFingerprint: signup.agentRouteBindingFingerprint,
   });
   assert.equal(ready.status, "setup_ready");
+
+  const currentWithoutRouteProof = enforceAgentTestReadyStatus({
+    status: "setup_ready",
+    agentTestStatus: "passed",
+    agentTestVersion: AGENT_TEST_VERSION,
+    businessId: signup.businessId,
+    vapiPhoneNumberId: signup.vapiPhoneNumberId,
+    vapiAssistantId: signup.vapiAssistantId,
+    twilioPhoneNumber: signup.twilioPhoneNumber,
+    ownerPhone: signup.ownerPhone,
+    agentTestFingerprint: buildAgentTestFingerprint({
+      assistantId: signup.vapiAssistantId,
+      aiNumber: signup.twilioPhoneNumber,
+      ownerPhone: signup.ownerPhone,
+    }),
+    agentTestOwnerAcceptedAt: "2026-09-05T12:00:00.000Z",
+    agentTestCustomerAcceptedAt: "2026-09-05T12:00:01.000Z",
+  });
+  assert.equal(currentWithoutRouteProof.status, "agent_testing");
 });
 
 test("text test sends both samples from the assigned AI number and is replay safe", async () => {

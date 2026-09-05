@@ -74,6 +74,88 @@ test("health endpoint remains public and carries baseline security headers", asy
   assert.equal(payload.ok, true);
 });
 
+test("agent route verification preserves the protected trial gate instead of attaching directly", async () => {
+  const signup = {
+    ownerEmail: "owner@example.com",
+    businessId: 7,
+    twilioPhoneNumber: "+12895550123",
+    vapiPhoneNumberId: "phone-123",
+    vapiAssistantId: "assistant-123",
+  };
+  const requests = [];
+  const result = await __test.ensureSignupAgentRoute({
+    signup,
+    business: { id: 7 },
+    vapiPhone: { id: "phone-123", number: "+12895550123" },
+  }, {
+    requestResource: async (resource, options = {}) => {
+      requests.push({ resource, method: options.method || "GET" });
+      if (resource.startsWith("assistant/")) return { id: "assistant-123" };
+      return {
+        id: "phone-123",
+        number: "+12895550123",
+        server: { url: "https://api.myaipa.ca/api/webhooks/voice" },
+      };
+    },
+    readGate: async () => ({
+      status: "active",
+      businessId: 7,
+      phoneNumberId: "phone-123",
+      phoneNumber: "+12895550123",
+      assistantId: "assistant-123",
+    }),
+  });
+  assert.equal(result.assessment.mode, "trial-gate");
+  assert.equal(result.repaired, false);
+  assert.equal(requests.some((item) => item.method === "PATCH"), false);
+});
+
+test("agent route verification attaches only an empty phone and proves the read-back", async () => {
+  let attached = false;
+  const result = await __test.ensureSignupAgentRoute({
+    signup: {
+      ownerEmail: "owner@example.com",
+      businessId: 7,
+      twilioPhoneNumber: "+12895550123",
+      vapiPhoneNumberId: "phone-123",
+      vapiAssistantId: "assistant-123",
+    },
+    business: { id: 7 },
+    vapiPhone: { id: "phone-123", number: "+12895550123" },
+  }, {
+    requestResource: async (resource, options = {}) => {
+      if (resource.startsWith("assistant/")) return { id: "assistant-123" };
+      if (options.method === "PATCH") {
+        assert.deepEqual(options.body, { assistantId: "assistant-123" });
+        attached = true;
+      }
+      return { id: "phone-123", number: "+12895550123", ...(attached ? { assistantId: "assistant-123" } : {}) };
+    },
+    readGate: async () => null,
+  });
+  assert.equal(result.assessment.mode, "direct");
+  assert.equal(result.repaired, true);
+});
+
+test("agent route verification refuses to overwrite another assistant", async () => {
+  await assert.rejects(() => __test.ensureSignupAgentRoute({
+    signup: {
+      ownerEmail: "owner@example.com",
+      businessId: 7,
+      twilioPhoneNumber: "+12895550123",
+      vapiPhoneNumberId: "phone-123",
+      vapiAssistantId: "assistant-123",
+    },
+    business: { id: 7 },
+    vapiPhone: { id: "phone-123", number: "+12895550123" },
+  }, {
+    requestResource: async (resource) => resource.startsWith("assistant/")
+      ? { id: "assistant-123" }
+      : { id: "phone-123", number: "+12895550123", assistantId: "another-assistant" },
+    readGate: async () => null,
+  }), (error) => error.code === "AGENT_PHONE_ASSISTANT_CONFLICT" && error.statusCode === 409);
+});
+
 test("signup recovery diagnostics reveal provider state without customer data", () => {
   const diagnostics = __test.getSignupProviderRecoveryDiagnostics({
     signup: { twilioPhoneNumber: "+1 (905) 555-0123", ownerEmail: "private@example.com" },
@@ -845,6 +927,7 @@ test("support repair actions require an admin session", async () => {
     ["/api/admin/outreach/generate", "POST"],
     ["/api/admin/outreach/send-test", "POST"],
     ["/api/admin/outreach/import", "POST"],
+    ["/api/admin/signups/run-agent-delivery-test", "POST"],
   ];
   for (const [path, method] of routes) {
     const response = await request(path, { method, body: {} });
