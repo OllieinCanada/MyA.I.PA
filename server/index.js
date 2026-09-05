@@ -7226,6 +7226,7 @@ async function getCustomerDashboard({ email, phone }) {
   const storedSubscriptionState = {
     status: signup.subscriptionStatus || "",
     default_payment_method: signup.paymentMethodReady ? "stored" : "",
+    trial_end: signup.trialEndAt ? Math.floor(Number(signup.trialEndAt) / 1000) : 0,
   };
   const billingState = getTrialPaymentState(storedSubscriptionState);
 
@@ -7274,11 +7275,15 @@ async function getCustomerDashboard({ email, phone }) {
       paymentReady: Boolean(signup.paymentMethodReady && signup.paymentStatus !== "payment_failed"),
       paymentFailed: Boolean(billingState.paymentFailed || signup.paymentStatus === "payment_failed"),
       paused: billingState.paused,
-      canAddPaymentMethod: Boolean(signup.subscriptionId && signup.customerId && !signup.cancelAtPeriodEnd),
+      trialEnded: billingState.trialEnded,
+      checkoutAvailable: Boolean(billingState.checkoutAvailable && signup.subscriptionId && signup.customerId && !signup.cancelAtPeriodEnd),
+      canAddPaymentMethod: Boolean(billingState.canAddPaymentMethod && signup.subscriptionId && signup.customerId && !signup.cancelAtPeriodEnd),
       cancelAtPeriodEnd: Boolean(signup.cancelAtPeriodEnd),
       planDisplay: STRIPE_PLAN_DISPLAY,
       trialEndAt: signup.trialEndAt || null,
-      disclosure: `Your card will be charged ${STRIPE_PLAN_DISPLAY} when the trial ends. Cancel before then to avoid being charged.`,
+      disclosure: billingState.trialEnded
+        ? `Your free trial is complete. Continue securely through Stripe for ${STRIPE_PLAN_DISPLAY}.`
+        : `No card is required during your 14-day trial. Stripe Checkout becomes available after the trial ends.`,
     },
     support: {
       phone: CUSTOMER_SUPPORT_PHONE,
@@ -7916,7 +7921,8 @@ async function sendTrialPaymentReminder(record, reminder) {
   const emailConfig = getEmailTransportConfig();
   const businessName = record.businessName || "your My AI PA account";
   const ownerName = record.ownerName || "there";
-  const daysBefore = Math.max(1, Number(reminder?.daysBefore || 1));
+  const daysBefore = Math.max(0, Number(reminder?.daysBefore || 0));
+  const paymentDue = daysBefore === 0;
   const trialEndDate = record.trialEndAt
     ? new Date(record.trialEndAt).toLocaleDateString("en-CA", {
         year: "numeric",
@@ -7924,18 +7930,25 @@ async function sendTrialPaymentReminder(record, reminder) {
         day: "numeric",
       })
     : "soon";
-  const subject = daysBefore === 1
+  const subject = paymentDue
+    ? "Your My AI PA free trial is complete"
+    : daysBefore === 1
     ? "Your My AI PA trial ends tomorrow"
     : `Your My AI PA trial ends in ${daysBefore} days`;
   const text = [
     `Hi ${ownerName},`,
     "",
-    `Your 14-day My AI PA free trial for ${businessName} ends in ${daysBefore} day${daysBefore === 1 ? "" : "s"}.`,
+    paymentDue
+      ? `Your 14-day My AI PA free trial for ${businessName} is complete.`
+      : `Your 14-day My AI PA free trial for ${businessName} ends in ${daysBefore} day${daysBefore === 1 ? "" : "s"}.`,
     `Your trial is scheduled to end on ${trialEndDate}.`,
     "",
-    "If you want service to continue, sign in to your dashboard and add a card securely through Stripe Checkout.",
-    `Your card will be charged ${STRIPE_PLAN_DISPLAY} when the trial ends. Cancel before then to avoid being charged.`,
-    "If no card is added, new AI calls pause automatically when the trial ends.",
+    paymentDue
+      ? "If you want service to continue, sign in to your dashboard and complete secure Stripe Checkout."
+      : "No card is required during the free trial. Stripe Checkout becomes available in your dashboard after the trial ends.",
+    paymentDue
+      ? `Paid service is ${STRIPE_PLAN_DISPLAY}. No charge was made during your free trial.`
+      : "If Checkout is not completed afterward, new AI calls pause automatically when the trial ends.",
     "",
     `Dashboard: ${FRONTEND_APP_URL}/#/dashboard`,
     "",
@@ -7945,13 +7958,13 @@ async function sendTrialPaymentReminder(record, reminder) {
   const html = `
     <div style="font-family:Arial,sans-serif;line-height:1.55;color:#0f172a;max-width:640px">
       <p style="font-size:13px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#2563eb">Trial reminder</p>
-      <h1 style="font-size:30px;line-height:1.1;margin:0 0 16px">Your free trial ends in ${daysBefore} day${daysBefore === 1 ? "" : "s"}</h1>
+      <h1 style="font-size:30px;line-height:1.1;margin:0 0 16px">${paymentDue ? "Your free trial is complete" : `Your free trial ends in ${daysBefore} day${daysBefore === 1 ? "" : "s"}`}</h1>
       <p>Hi ${escapeHtml(ownerName)},</p>
       <p>Your 14-day My AI PA free trial for <strong>${escapeHtml(businessName)}</strong> is almost complete.</p>
       <p>Your trial is scheduled to end on <strong>${escapeHtml(trialEndDate)}</strong>.</p>
-      <p>If you want service to continue, add a card securely through Stripe Checkout.</p>
+      <p>${paymentDue ? "If you want service to continue, complete secure Stripe Checkout from your dashboard." : "No card is required during your free trial. Stripe Checkout becomes available after the trial ends."}</p>
       <p><a href="${escapeHtml(`${FRONTEND_APP_URL}/#/dashboard`)}" style="display:inline-block;background:#0f172a;color:#fff;text-decoration:none;font-weight:800;padding:13px 18px;border-radius:10px">Open your secure dashboard</a></p>
-      <p style="font-size:14px;color:#475569">Your card will be charged ${escapeHtml(STRIPE_PLAN_DISPLAY)} when the trial ends. Cancel before then to avoid being charged. If no card is added, new AI calls pause automatically.</p>
+      <p style="font-size:14px;color:#475569">${paymentDue ? `Paid service is ${escapeHtml(STRIPE_PLAN_DISPLAY)}. No charge was made during your free trial.` : "If Checkout is not completed afterward, new AI calls pause automatically when the trial ends."}</p>
     </div>
   `;
 
@@ -7990,19 +8003,9 @@ async function processTrialReminders() {
 
   for (const [subscriptionId, record] of Object.entries(store)) {
     if (!record || ["cancelled", "payment_ready"].includes(record.status) || record.paymentMethodReady) continue;
-    if (record.trialEndAt && Number(record.trialEndAt) <= now) {
-      store[subscriptionId] = {
-        ...record,
-        status: "expired",
-        updatedAt: new Date().toISOString(),
-      };
-      changed = true;
-      continue;
-    }
-
-    const reminders = Object.keys(record.reminders || {}).length
-      ? record.reminders
-      : buildTrialReminderSchedule(record.trialEndAt);
+    // Rebuild from the canonical schedule so older trials gain the post-trial
+    // payment-due reminder without losing previously sent reminder state.
+    const reminders = buildTrialReminderSchedule(record.trialEndAt, record.reminders);
     for (const [key, reminder] of Object.entries(reminders)) {
       if (!reminder || reminder.status === "sent" || Number(reminder.dueAt || 0) > now) continue;
       try {
@@ -8029,7 +8032,13 @@ async function processTrialReminders() {
         });
       }
     }
-    store[subscriptionId] = { ...record, reminders, updatedAt: new Date().toISOString() };
+    const expired = record.trialEndAt && Number(record.trialEndAt) <= now;
+    store[subscriptionId] = {
+      ...record,
+      reminders,
+      ...(expired ? { status: "expired" } : {}),
+      updatedAt: new Date().toISOString(),
+    };
   }
 
   if (changed) writeTrialReminderStore(store);
@@ -12033,104 +12042,9 @@ app.post(
   "/api/payments/create-checkout-session",
   enforcePublicRouteRateLimit("stripe-checkout", STRIPE_CHECKOUT_IP_MAX_REQUESTS),
   asyncRoute(async (req, res) => {
-    if (!stripe || !STRIPE_PRICE_ID) {
-      return res.status(503).json({
-        error: "Stripe checkout is not configured yet. Set STRIPE_SECRET_KEY and STRIPE_PRICE_ID on the server.",
-      });
-    }
-
-    const body = req.body || {};
-    const signupPayload = body.signupPayload && typeof body.signupPayload === "object" ? body.signupPayload : body;
-    const setupDetails = signupPayload.setupDetails || {};
-    const businessProfile = signupPayload.businessProfile || {};
-    const ownerEmail = String(body.ownerEmail || signupPayload.ownerEmail || signupPayload.email || setupDetails.ownerEmail || "").trim();
-    const businessName = String(body.businessName || signupPayload.businessName || businessProfile.businessName || "").trim();
-    const ownerName = String(body.ownerName || signupPayload.ownerName || setupDetails.ownerName || "").trim();
-    const ownerPhone = String(body.ownerPhone || signupPayload.ownerPhone || signupPayload.phone || setupDetails.ownerPhone || "").trim();
-    const businessPhone = String(signupPayload.businessPhone || signupPayload.phone || businessProfile.phone || "").trim();
-    const businessAddress = String(signupPayload.businessAddress || businessProfile.address || "").trim();
-
-    if (!ownerEmail || !isValidEmailAddress(ownerEmail)) {
-      return res.status(400).json({ error: "A valid owner email is required to start checkout." });
-    }
-
-    const { successUrl, cancelUrl } = getStripeReturnUrls(req);
-    const subscriptionData = {
-      metadata: compactObject({
-        businessName,
-        ownerName,
-        ownerEmail,
-        ownerPhone,
-        source: "my-ai-pa-signup",
-      }),
-    };
-
-    if (STRIPE_TRIAL_DAYS > 0) {
-      subscriptionData.trial_period_days = STRIPE_TRIAL_DAYS;
-    }
-
-    const customer = await stripe.customers.create({
-      email: ownerEmail,
-      name: ownerName || businessName || undefined,
-      phone: ownerPhone || businessPhone || undefined,
-      metadata: compactObject({
-        businessName,
-        ownerName,
-        ownerEmail,
-        ownerPhone,
-        source: "my-ai-pa-signup",
-      }),
-    });
-
-    const session = await stripe.checkout.sessions.create({
-      mode: "subscription",
-      customer: customer.id,
-      payment_method_types: ["card"],
-      line_items: [
-        {
-          price: STRIPE_PRICE_ID,
-          quantity: 1,
-        },
-      ],
-      allow_promotion_codes: isEnabled(process.env.STRIPE_ALLOW_PROMOTION_CODES),
-      success_url: successUrl,
-      cancel_url: cancelUrl,
-      client_reference_id: ownerEmail,
-      metadata: compactObject({
-        businessName,
-        ownerName,
-        ownerEmail,
-        ownerPhone,
-        source: "my-ai-pa-signup",
-      }),
-      subscription_data: subscriptionData,
-    });
-
-    upsertSignupDashboardFromCheckoutSession(session, {
-      status: "checkout_started",
-      businessName,
-      businessPhone,
-      businessAddress,
-      ownerName,
-      ownerEmail,
-      ownerPhone,
-    });
-    savePendingStripeSignup(session, {
-      payload: signupPayload,
-      summary: compactObject({
-        businessName,
-        businessPhone,
-        businessAddress,
-        ownerName,
-        ownerEmail,
-        ownerPhone,
-      }),
-    });
-
-    res.json({
-      ok: true,
-      checkoutUrl: session.url,
-      sessionId: session.id,
+    return res.status(409).json({
+      error: "Start the 14-day free trial first. Secure Stripe Checkout becomes available from the customer dashboard after the trial ends.",
+      code: "TRIAL_FIRST_CHECKOUT_AFTER_EXPIRY",
     });
   })
 );
@@ -12177,6 +12091,15 @@ app.post(
     if (hasPaymentMethod(subscription) && signup.paymentStatus !== "payment_failed") {
       upsertSignupDashboardFromSubscription(subscription, { paymentMethodReady: true });
       return res.json({ ok: true, alreadyReady: true });
+    }
+    const billingState = getTrialPaymentState(subscription);
+    if (!billingState.checkoutAvailable) {
+      const trialEndAt = Number(subscription.trial_end || 0) * 1000;
+      return res.status(409).json({
+        error: "No card is needed yet. Stripe Checkout becomes available after your 14-day free trial ends.",
+        code: "TRIAL_STILL_ACTIVE",
+        trialEndAt: trialEndAt ? new Date(trialEndAt).toISOString() : null,
+      });
     }
     if (subscription.cancel_at_period_end || ["canceled", "incomplete_expired"].includes(String(subscription.status || ""))) {
       return res.status(409).json({ error: "This subscription is set to end. Contact My AI PA before adding a card." });

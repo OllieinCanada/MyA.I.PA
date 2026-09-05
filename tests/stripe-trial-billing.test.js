@@ -8,11 +8,23 @@ const {
   isTrialPaymentSetupSession,
 } = require("../server/stripeTrialBilling");
 
-test("trial reminders are scheduled exactly 7, 3, and 1 days before the end", () => {
+test("trial reminders explain the free period and open payment only when it ends", () => {
   const end = Date.UTC(2026, 8, 20);
   const reminders = buildTrialReminderSchedule(end);
-  assert.deepEqual(Object.values(reminders).map((item) => item.daysBefore), [7, 3, 1]);
+  assert.deepEqual(Object.values(reminders).map((item) => item.daysBefore), [7, 3, 1, 0]);
   assert.equal(reminders["1-days"].dueAt, end - 86400000);
+  assert.equal(reminders["payment-due"].dueAt, end);
+});
+
+test("existing reminder records gain the payment-due step without resending old notices", () => {
+  const end = Date.UTC(2026, 8, 20);
+  const reminders = buildTrialReminderSchedule(end, {
+    "7-days": { daysBefore: 7, sentAt: "2026-09-13T00:00:00.000Z" },
+  });
+  assert.equal(reminders["7-days"].status, "sent");
+  assert.equal(reminders["7-days"].sentAt, "2026-09-13T00:00:00.000Z");
+  assert.equal(reminders["payment-due"].status, "scheduled");
+  assert.equal(reminders["payment-due"].dueAt, end);
 });
 
 test("Stripe handoff uses hosted setup mode for the existing trial", () => {
@@ -52,9 +64,11 @@ test("saved card attaches to the existing subscription and resumes a paused tria
 });
 
 test("trial payment states cover no card, declined payment, and paused service", () => {
-  assert.deepEqual(getTrialPaymentState({ status: "trialing" }), {
-    status: "trialing", paymentReady: false, paused: false, paymentFailed: false, canAddPaymentMethod: true,
+  const trialEnd = Date.UTC(2026, 8, 20) / 1000;
+  assert.deepEqual(getTrialPaymentState({ status: "trialing", trial_end: trialEnd }, { now: Date.UTC(2026, 8, 19) }), {
+    status: "trialing", paymentReady: false, trialEnded: false, checkoutAvailable: false, paused: false, paymentFailed: false, canAddPaymentMethod: false,
   });
+  assert.equal(getTrialPaymentState({ status: "paused", trial_end: trialEnd }, { now: Date.UTC(2026, 8, 20) }).checkoutAvailable, true);
   assert.equal(getTrialPaymentState({ status: "past_due", default_payment_method: "pm_declined" }).paymentFailed, true);
   assert.equal(getTrialPaymentState({ status: "paused" }).paused, true);
   assert.equal(getTrialPaymentState({ status: "active", default_payment_method: "pm_valid" }).paymentReady, true);

@@ -9,23 +9,28 @@ function hasPaymentMethod(subscription) {
   return Boolean(idOf(subscription?.default_payment_method) || idOf(subscription?.default_source));
 }
 
-function getTrialPaymentState(subscription) {
+function getTrialPaymentState(subscription, { now = Date.now() } = {}) {
   const status = String(subscription?.status || "").toLowerCase();
   const paymentReady = hasPaymentMethod(subscription);
+  const trialEndAt = Number(subscription?.trial_end || 0) * 1000;
+  const trialEnded = Boolean(trialEndAt && trialEndAt <= Number(now));
+  const requiresPayment = ["paused", "past_due", "unpaid", "incomplete"].includes(status);
   return {
     status,
     paymentReady,
+    trialEnded,
+    checkoutAvailable: !paymentReady && (trialEnded || requiresPayment),
     paused: status === "paused",
     paymentFailed: ["past_due", "unpaid", "incomplete", "incomplete_expired"].includes(status),
-    canAddPaymentMethod: ["trialing", "active", "paused", "past_due", "unpaid", "incomplete"].includes(status),
+    canAddPaymentMethod: !paymentReady && (trialEnded || requiresPayment),
   };
 }
 
 function buildTrialReminderSchedule(trialEndAt, existing = {}) {
   const end = Number(trialEndAt || 0);
   if (!Number.isFinite(end) || end <= 0) return {};
-  return Object.fromEntries([7, 3, 1].map((daysBefore) => {
-    const key = `${daysBefore}-days`;
+  return Object.fromEntries([7, 3, 1, 0].map((daysBefore) => {
+    const key = daysBefore === 0 ? "payment-due" : `${daysBefore}-days`;
     const current = existing?.[key] || {};
     return [key, {
       daysBefore,
