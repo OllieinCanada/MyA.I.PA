@@ -475,9 +475,13 @@ function TradeFlyer({ slug, trade }) {
         <div className="contractor-live-phone">
           <div className="contractor-live-phone-status">Incoming Call</div>
           <h2>New Lead</h2><strong>(555) 667-5309</strong>
-          <div className="contractor-wave">▮ ▮▮ ▮▮▮ ▮▮ ▮</div>
-          <p>My AI PA is answering<br />and gathering details...</p>
-          <span><FlyerIcon name="phone" /></span>
+          <div className="contractor-caller-visual" aria-hidden="true">
+            <span className="contractor-phone-wave">{[0, 1, 2, 3, 4].map((bar) => <i key={`left-${bar}`} />)}</span>
+            <span className="contractor-caller-avatar" />
+            <span className="contractor-phone-wave">{[0, 1, 2, 3, 4].map((bar) => <i key={`right-${bar}`} />)}</span>
+          </div>
+          <p><strong>MyAIPA is answering</strong><br /><span>and gathering details...</span></p>
+          <span className="contractor-phone-answer"><FlyerIcon name="phone" /></span>
         </div>
       </section>
 
