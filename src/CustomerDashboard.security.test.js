@@ -40,3 +40,12 @@ test("Stripe Checkout stays hidden until the card-free trial is complete", () =>
   expect(source).toMatch(/Checkout opens after your trial/);
   expect(source).toMatch(/No card is required during your 14-day free trial/);
 });
+
+test("customers are told agent tests run automatically and the button is recovery-only", () => {
+  const source = fs.readFileSync(path.join(__dirname, "CustomerDashboard.js"), "utf8");
+
+  expect(source).toMatch(/Every new agent runs this automatically before delivery/);
+  expect(source).toMatch(/Retry the automatic test/);
+  expect(source).toMatch(/Use the retry below only if support asks/);
+  expect(source).not.toMatch(/Run your 2-text safety test/);
+});

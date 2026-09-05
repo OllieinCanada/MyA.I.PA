@@ -1089,9 +1089,9 @@ function AgentTestingStation({ testing = {}, ownerPhone, onUpdated }) {
   return (
     <section id="agent-test" className={`customer-agent-test${testing.passed ? " is-passed" : testing.status === "failed" ? " is-failed" : ""}`}>
       <div className="customer-agent-test-copy">
-        <span className="customer-simple-kicker">PRIVATE TESTING STATION</span>
-        <h2>{testing.passed ? "Your text setup passed." : "Test texts before real customers call."}</h2>
-        <p>We send two clearly labelled samples to {fmtPhone(ownerPhone)}: the lead text you receive and the confirmation your customer receives.</p>
+        <span className="customer-simple-kicker">AUTOMATIC SAFETY CHECK</span>
+        <h2>{testing.passed ? "Your automatic setup test passed." : "The automatic setup test needs one safe retry."}</h2>
+        <p>Every new agent runs this automatically before delivery. If support asks you to retry it, we send two clearly labelled samples to {fmtPhone(ownerPhone)}: your lead copy and the caller confirmation.</p>
         <ul>
           {(testing.checks || []).map((check) => (
             <li key={check.key} className={check.done ? "done" : ""}>
@@ -1103,7 +1103,7 @@ function AgentTestingStation({ testing = {}, ownerPhone, onUpdated }) {
       </div>
       <div className="customer-agent-test-action">
         <strong>{testing.passed ? "PASSED" : testing.status === "failed" ? "NEEDS ATTENTION" : "TEST REQUIRED"}</strong>
-        <button type="button" onClick={runTest} disabled={busy}>{busy ? "Sending two samples…" : testing.passed ? "Send the two tests again" : "Send my two test texts"}</button>
+        <button type="button" onClick={runTest} disabled={busy}>{busy ? "Sending two samples…" : testing.passed ? "Run the automatic test again" : "Retry the automatic test"}</button>
         <small>No real customer is contacted. No callback is needed.</small>
       </div>
       {message ? <p className="customer-agent-test-message" role="status">{message}</p> : null}
@@ -1160,9 +1160,9 @@ function CustomerDashboardView({ dashboard, onSignOut, onRefresh, refreshing, re
       target: "refresh",
     };
     if (!agentTesting.passed) return {
-      title: "Run your 2-text safety test",
-      detail: "You will receive the owner copy and customer copy on your own phone. Real customer calls stay held back until both pass.",
-      label: "Run test",
+      title: "Automatic safety test needs attention",
+      detail: "Setup normally runs this for you. Retry it here only if support asks; real customer calls stay held back until it passes.",
+      label: "Retry test",
       target: "#agent-test",
     };
     if (actionRequiredAppointments) return {
@@ -1223,8 +1223,8 @@ function CustomerDashboardView({ dashboard, onSignOut, onRefresh, refreshing, re
         <section id="overview" className={`customer-simple-hero${aiNumber && agentTesting.passed ? " is-ready" : " is-waiting"}`}>
           <div className="customer-simple-hero-copy">
             <span className="customer-simple-status"><i />{aiNumber ? agentTesting.passed ? "Ready for calls" : "Testing required" : "Finishing setup"}</span>
-            <h1>{aiNumber ? agentTesting.passed ? "Your assistant passed." : "Your assistant needs one safe test." : "We are setting up your assistant."}</h1>
-            <p>{aiNumber ? agentTesting.passed ? "Call the number once. When you are happy, forward missed calls to it." : "Send both sample texts to yourself below. Do not forward customer calls yet." : "Your number will appear here as soon as it is ready."}</p>
+            <h1>{aiNumber ? agentTesting.passed ? "Your assistant passed." : "The automatic setup test needs attention." : "We are setting up your assistant."}</h1>
+            <p>{aiNumber ? agentTesting.passed ? "Call the number once. When you are happy, forward missed calls to it." : "Setup normally tests this for you. Use the retry below only if support asks. Do not forward customer calls yet." : "Your number will appear here as soon as it is ready."}</p>
             <div className="customer-simple-service-state">
               <span>{messaging.serviceTextsActive ? "✓" : "!"}</span>
               <p><strong>Text updates: {messaging.serviceTextsActive ? "On" : messaging.status === "PAUSED" ? "Paused" : "Not ready"}</strong>{messaging.guidance ? ` · ${messaging.guidance}` : ""}</p>
