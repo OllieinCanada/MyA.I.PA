@@ -87,7 +87,11 @@ async function main() {
     await stripe.paymentMethods.attach("pm_card_visa", { customer: noCard.customer.id });
     await stripe.customers.update(noCard.customer.id, { invoice_settings: { default_payment_method: "pm_card_visa" } });
     await stripe.subscriptions.update(noCard.subscription.id, { default_payment_method: "pm_card_visa" });
-    const resumed = await stripe.subscriptions.resume(noCard.subscription.id, { billing_cycle_anchor: "now" });
+    let resumed = await stripe.subscriptions.resume(noCard.subscription.id, { billing_cycle_anchor: "now" });
+    if (resumed.status === "paused" && resumed.latest_invoice) {
+      await stripe.invoices.pay(typeof resumed.latest_invoice === "string" ? resumed.latest_invoice : resumed.latest_invoice.id);
+      resumed = await stripe.subscriptions.retrieve(noCard.subscription.id);
+    }
     results.afterPause = resumed.status;
     check(resumed.status === "active", `Expected after-pause card setup to resume; received ${resumed.status}.`);
 
