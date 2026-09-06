@@ -12511,7 +12511,6 @@ app.get(
                 }
                 this.textContent = "Copied";
               });
-              ${forwardingSetupUrl ? `window.setTimeout(function(){ window.location.href = ${JSON.stringify(forwardingSetupUrl)}; }, 1400);` : ""}
             </script>` : ""}
           </body>
         </html>`);
@@ -12775,6 +12774,9 @@ app.get(
         });
       }
     }
+    if (phoneProvisioning.status === "ready" && forwardingSetup?.setupUrl) {
+      return res.redirect(303, forwardingSetup.setupUrl);
+    }
     return renderVerificationPage({
       ok: phoneProvisioning.status === "ready",
       title: phoneProvisioning.status === "ready" ? "Your setup is ready" : "Contact verified, number setup needs attention",
@@ -12892,6 +12894,7 @@ app.post(
 
 app.post(
   "/api/webhooks/twilio/forwarding-verification-status",
+  enforcePublicRouteRateLimit("forwarding-verification-callback", 120),
   express.urlencoded({ extended: false, limit: "8kb" }),
   asyncRoute(async (req, res) => {
     if (!verifyTwilioWebhookRequest(req, process.env, { configuredUrl: FORWARDING_VERIFICATION_STATUS_CALLBACK_URL })) {
@@ -12904,6 +12907,7 @@ app.post(
 
 app.post(
   "/api/customer/dashboard/forwarding/setup-link",
+  enforcePublicRouteRateLimit("forwarding-dashboard-link", 30),
   asyncRoute(async (req, res) => {
     const lookupHash = getCustomerDashboardSessionLookupHash(req);
     const match = lookupHash ? findCustomerDashboardSignupByLookupHash(lookupHash) : null;

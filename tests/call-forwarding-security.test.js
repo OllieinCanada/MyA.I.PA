@@ -41,4 +41,8 @@ test("the API accepts the signed token only in the authorization header", () => 
   const helper = source.match(/function getForwardingBearerToken[\s\S]*?\n}/)?.[0] || "";
   assert.match(helper, /req\.headers\.authorization/);
   assert.doesNotMatch(helper, /req\.query|req\.body/);
+  assert.match(source, /forwarding-verification-status",\s*enforcePublicRouteRateLimit\("forwarding-verification-callback"/);
+  assert.match(source, /forwarding\/setup-link",\s*enforcePublicRouteRateLimit\("forwarding-dashboard-link"/);
+  assert.doesNotMatch(source, /window\.location\.href\s*=\s*\$\{JSON\.stringify\(forwardingSetupUrl\)/);
+  assert.match(source, /res\.redirect\(303, forwardingSetup\.setupUrl\)/);
 });
