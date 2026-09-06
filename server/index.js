@@ -13,6 +13,7 @@ const path = require("path");
 const { Readable } = require("stream");
 const Stripe = require("stripe");
 const { prisma } = require("./prisma");
+const { buildBackendRootPage } = require("./backendRootPage");
 const {
   inspectCanadianNumber,
   validateProvisionedCanadianNumber,
@@ -9783,6 +9784,11 @@ async function getOpenAiTranscription({ audioBase64, mimeType, detailed = false 
   }
   return text;
 }
+
+app.get("/", (_req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  res.status(200).type("html").send(buildBackendRootPage());
+});
 
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true, service: "my-ai-pa-api", time: new Date().toISOString() });
