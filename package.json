@@ -70,6 +70,7 @@
     "inspect:header-signup-agent": "node scripts/inspect-header-signup-agent.js",
     "inspect:make-scenario": "node scripts/inspect-make-scenario.js",
     "repair:make-signup-provisioning": "node scripts/repair-make-signup-provisioning.js",
+    "harden:make:privacy": "node scripts/harden-make-scenario-privacy.js",
     "test:signup-provisioning-canary": "node scripts/run-signup-provisioning-canary.js",
     "test:telegram-production": "node scripts/test-production-telegram.js",
     "incident:repair:prepare": "node scripts/prepare-incident-repair-request.js",
