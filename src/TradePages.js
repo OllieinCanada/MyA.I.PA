@@ -434,7 +434,7 @@ function TradeFlyer({ slug, trade }) {
     ["shield", "BUILT FOR BUSY CONTRACTORS"],
     ["check", "TRADE-SPECIFIC QUESTIONS"],
     ["check", "EASY SETUP. NO TECH SKILLS."],
-    ["shield", "YOUR BUSINESS. YOUR NUMBER."],
+    ["shield", "KEEP YOUR EXISTING BUSINESS NUMBER"],
   ];
   const capabilityItems = [
     ["phone", "ANSWERS YOUR CALLS", "Professional greeting every time."],

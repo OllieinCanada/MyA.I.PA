@@ -4,6 +4,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const source = fs.readFileSync(path.join(__dirname, "..", "src", "TradePages.js"), "utf8");
+const styles = fs.readFileSync(path.join(__dirname, "..", "src", "TradePages.css"), "utf8");
 
 test("every generated trade flyer uses the standard useful-lead contract", () => {
   for (const phrase of [
@@ -23,4 +24,8 @@ test("every generated trade flyer uses the standard useful-lead contract", () =>
   assert.match(source, /asks only for missing information/i);
   assert.match(source, /reads the details back once/i);
   assert.match(source, /not a booked appointment/i);
+  assert.match(source, /KEEP YOUR EXISTING BUSINESS NUMBER/);
+  assert.doesNotMatch(source, /YOUR BUSINESS\. YOUR NUMBER\./);
+  assert.match(styles, /object-position:\s*right center/);
+  assert.match(styles, /brightness\(1\.34\)/);
 });
