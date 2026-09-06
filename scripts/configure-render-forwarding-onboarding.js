@@ -11,7 +11,7 @@ const apply = args.includes("--apply");
 const deploy = args.includes("--deploy");
 const confirmation = args.find((arg) => arg.startsWith("--confirm="))?.slice("--confirm=".length) || "";
 const confirmationPhrase = "CONFIGURE_FORWARDING_ONBOARDING";
-const serviceId = String(
+let serviceId = String(
   args.find((arg) => arg.startsWith("--service-id="))?.slice("--service-id=".length)
   || env.RENDER_SERVICE_ID
   || ""
@@ -69,6 +69,19 @@ async function writeRenderEnv(credentials, key, value) {
   );
 }
 
+async function discoverServiceId(credentials) {
+  const payload = await requestJson(`${credentials.host}/services?limit=100`, { headers: renderHeaders(credentials) });
+  const services = (Array.isArray(payload) ? payload : payload?.services || []).map((item) => item?.service || item);
+  const matches = services.filter((service) => {
+    const name = String(service?.name || "").trim().toLowerCase();
+    const url = String(service?.serviceDetails?.url || service?.url || "").trim().toLowerCase().replace(/\/+$/, "");
+    return name === "myaipa-api" || url === "https://api.myaipa.ca";
+  });
+  const ids = [...new Set(matches.map((service) => String(service?.id || "").trim()).filter((id) => /^srv-[a-z0-9]+$/i.test(id)))];
+  if (ids.length !== 1) throw new Error("Could not uniquely identify the myaipa-api Render service.");
+  return ids[0];
+}
+
 async function verifyTwilioOwnership(renderEnv, candidate) {
   const accountSid = renderEnv.TWILIO_ACCOUNT_SID;
   const username = renderEnv.TWILIO_API_KEY_SID || accountSid;
@@ -86,11 +99,11 @@ async function verifyTwilioOwnership(renderEnv, candidate) {
 }
 
 async function main() {
-  if (!/^srv-[a-z0-9]+$/i.test(serviceId)) throw new Error("A valid RENDER_SERVICE_ID is required.");
   if (apply && confirmation !== confirmationPhrase) {
     throw new Error(`Apply mode requires --confirm=${confirmationPhrase}.`);
   }
   const credentials = readRenderCredentials();
+  if (!/^srv-[a-z0-9]+$/i.test(serviceId)) serviceId = await discoverServiceId(credentials);
   const keys = [
     "TWILIO_ACCOUNT_SID", "TWILIO_API_KEY_SID", "TWILIO_API_KEY_SECRET", "TWILIO_AUTH_TOKEN",
     "TWILIO_FROM_NUMBER", "FORWARDING_VERIFICATION_CALLER_ID", "FORWARDING_SETUP_SECRET",
