@@ -363,6 +363,10 @@ const STRIPE_WEBHOOK_SECRET = String(process.env.STRIPE_WEBHOOK_SECRET || "").tr
 const STRIPE_TRIAL_DAYS = Math.max(0, Number(process.env.STRIPE_TRIAL_DAYS || 14) || 0);
 const STRIPE_PLAN_DISPLAY = String(process.env.STRIPE_PLAN_DISPLAY || "$79/month plus applicable tax").trim();
 const STRIPE_SANDBOX_TEST_PASSWORD = String(process.env.STRIPE_SANDBOX_TEST_PASSWORD || "").trim();
+const STRIPE_SANDBOX_TEST_PASSWORD_HASH = String(
+  process.env.STRIPE_SANDBOX_TEST_PASSWORD_HASH
+  || "3933531f7b5dbb5e4ab000a674edeacd28883416713edca1ba2e33224433e176"
+).trim().toLowerCase();
 const STRIPE_SANDBOX_SESSION_COOKIE = "myaipa_stripe_sandbox_session";
 const STRIPE_SANDBOX_SCENARIO_COOKIE = "myaipa_stripe_sandbox_scenario";
 const STRIPE_ADMIN_SUBSCRIPTION_LIMIT = Math.max(1, Math.min(500, Number(process.env.STRIPE_ADMIN_SUBSCRIPTION_LIMIT || 100) || 100));
@@ -9814,8 +9818,22 @@ function isStripeSandboxTesterConfigured() {
     stripe
     && STRIPE_SECRET_KEY.startsWith("sk_test_")
     && STRIPE_PRICE_ID
-    && STRIPE_SANDBOX_TEST_PASSWORD.length >= 12
+    && /^[a-f0-9]{64}$/.test(STRIPE_SANDBOX_TEST_PASSWORD_HASH)
+    && getStripeSandboxSigningSecret().length >= 12
   );
+}
+
+function getStripeSandboxSigningSecret() {
+  return STRIPE_SANDBOX_TEST_PASSWORD || STRIPE_WEBHOOK_SECRET || STRIPE_SECRET_KEY;
+}
+
+function hasValidStripeSandboxPassword(supplied) {
+  const value = String(supplied || "");
+  if (STRIPE_SANDBOX_TEST_PASSWORD.length >= 12) {
+    return safeEqualString(value, STRIPE_SANDBOX_TEST_PASSWORD);
+  }
+  const suppliedHash = crypto.createHash("sha256").update(value).digest("hex");
+  return safeEqualString(suppliedHash, STRIPE_SANDBOX_TEST_PASSWORD_HASH);
 }
 
 function setStripeSandboxCookie(res, name, value, maxAgeSeconds) {
@@ -9833,14 +9851,14 @@ function setStripeSandboxCookie(res, name, value, maxAgeSeconds) {
 
 function getStripeSandboxScenario(req) {
   return readSandboxScenarioToken(
-    STRIPE_SANDBOX_TEST_PASSWORD,
+    getStripeSandboxSigningSecret(),
     parseCookies(req)[STRIPE_SANDBOX_SCENARIO_COOKIE]
   );
 }
 
 function hasStripeSandboxAccess(req) {
   return isStripeSandboxTesterConfigured() && hasValidSandboxSession(
-    STRIPE_SANDBOX_TEST_PASSWORD,
+    getStripeSandboxSigningSecret(),
     parseCookies(req)[STRIPE_SANDBOX_SESSION_COOKIE]
   );
 }
@@ -9892,10 +9910,10 @@ app.post(
     if (!isStripeSandboxTesterConfigured()) {
       return res.status(503).type("html").send(renderSandboxLogin({ configured: false }));
     }
-    if (!safeEqualString(req.body?.password, STRIPE_SANDBOX_TEST_PASSWORD)) {
+    if (!hasValidStripeSandboxPassword(req.body?.password)) {
       return res.status(401).type("html").send(renderSandboxLogin({ configured: true, error: "That sandbox password is incorrect." }));
     }
-    setStripeSandboxCookie(res, STRIPE_SANDBOX_SESSION_COOKIE, createSandboxSessionToken(STRIPE_SANDBOX_TEST_PASSWORD), 2 * 60 * 60);
+    setStripeSandboxCookie(res, STRIPE_SANDBOX_SESSION_COOKIE, createSandboxSessionToken(getStripeSandboxSigningSecret()), 2 * 60 * 60);
     setStripeSandboxCookie(res, STRIPE_SANDBOX_SCENARIO_COOKIE, "", 0);
     return res.redirect(303, "/stripe-sandbox-test");
   }
@@ -9923,7 +9941,7 @@ app.post(
       trial_settings: { end_behavior: { missing_payment_method: "pause" } },
       metadata: { source: "my-ai-pa-signup", testScenario: "private-sandbox-checkout" },
     });
-    const token = createSandboxScenarioToken(STRIPE_SANDBOX_TEST_PASSWORD, {
+    const token = createSandboxScenarioToken(getStripeSandboxSigningSecret(), {
       clockId: clock.id,
       customerId: customer.id,
       subscriptionId: subscription.id,
