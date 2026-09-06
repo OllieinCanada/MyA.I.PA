@@ -14,6 +14,7 @@ function buildBackendRootPage({
   trialDays = 14,
   planDisplay = "$79/month plus applicable tax",
   sandbox = false,
+  testerConfigured = false,
 } = {}) {
   const configured = stripeConfigured && webhookConfigured && priceConfigured;
   const status = configured ? "READY" : "NEEDS SETUP";
@@ -93,6 +94,7 @@ function buildBackendRootPage({
         </div>
         <p class="note"><strong>Why there is no checkout button here:</strong> Checkout is created only for a verified, signed-in customer after that customer’s trial ends. This status page never creates random billing records for visitors.</p>
         <div class="actions">
+          ${testerConfigured ? '<a class="button" href="/stripe-sandbox-test">Open private trial tester</a>' : ""}
           <a class="button" href="https://www.myaipa.ca/">Open the customer website</a>
           <a class="button secondary" href="/api/health">Check backend health</a>
         </div>

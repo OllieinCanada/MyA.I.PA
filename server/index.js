@@ -15,6 +15,14 @@ const Stripe = require("stripe");
 const { prisma } = require("./prisma");
 const { buildBackendRootPage } = require("./backendRootPage");
 const {
+  createSandboxScenarioToken,
+  createSandboxSessionToken,
+  hasValidSandboxSession,
+  readSandboxScenarioToken,
+  renderSandboxLogin,
+  renderSandboxTestPage,
+} = require("./stripeSandboxTester");
+const {
   inspectCanadianNumber,
   validateProvisionedCanadianNumber,
 } = require("./canadianPhoneNumber");
@@ -354,6 +362,9 @@ const STRIPE_PRICE_ID = String(process.env.STRIPE_PRICE_ID || "").trim();
 const STRIPE_WEBHOOK_SECRET = String(process.env.STRIPE_WEBHOOK_SECRET || "").trim();
 const STRIPE_TRIAL_DAYS = Math.max(0, Number(process.env.STRIPE_TRIAL_DAYS || 14) || 0);
 const STRIPE_PLAN_DISPLAY = String(process.env.STRIPE_PLAN_DISPLAY || "$79/month plus applicable tax").trim();
+const STRIPE_SANDBOX_TEST_PASSWORD = String(process.env.STRIPE_SANDBOX_TEST_PASSWORD || "").trim();
+const STRIPE_SANDBOX_SESSION_COOKIE = "myaipa_stripe_sandbox_session";
+const STRIPE_SANDBOX_SCENARIO_COOKIE = "myaipa_stripe_sandbox_scenario";
 const STRIPE_ADMIN_SUBSCRIPTION_LIMIT = Math.max(1, Math.min(500, Number(process.env.STRIPE_ADMIN_SUBSCRIPTION_LIMIT || 100) || 100));
 const WEBHOOK_REPLAY_RETENTION_MS = Math.min(
   30 * 24 * 60 * 60 * 1000,
@@ -9794,8 +9805,178 @@ app.get("/", (_req, res) => {
     trialDays: STRIPE_TRIAL_DAYS,
     planDisplay: STRIPE_PLAN_DISPLAY,
     sandbox: STRIPE_SECRET_KEY.startsWith("sk_test_"),
+    testerConfigured: isStripeSandboxTesterConfigured(),
   }));
 });
+
+function isStripeSandboxTesterConfigured() {
+  return Boolean(
+    stripe
+    && STRIPE_SECRET_KEY.startsWith("sk_test_")
+    && STRIPE_PRICE_ID
+    && STRIPE_SANDBOX_TEST_PASSWORD.length >= 12
+  );
+}
+
+function setStripeSandboxCookie(res, name, value, maxAgeSeconds) {
+  const parts = [
+    `${name}=${encodeURIComponent(value)}`,
+    "Path=/stripe-sandbox-test",
+    "HttpOnly",
+    "SameSite=Strict",
+    `Max-Age=${Math.max(0, Math.floor(maxAgeSeconds))}`,
+  ];
+  if (process.env.NODE_ENV === "production") parts.push("Secure");
+  const current = res.getHeader("Set-Cookie");
+  res.setHeader("Set-Cookie", [...(Array.isArray(current) ? current : current ? [current] : []), parts.join("; ")]);
+}
+
+function getStripeSandboxScenario(req) {
+  return readSandboxScenarioToken(
+    STRIPE_SANDBOX_TEST_PASSWORD,
+    parseCookies(req)[STRIPE_SANDBOX_SCENARIO_COOKIE]
+  );
+}
+
+function hasStripeSandboxAccess(req) {
+  return isStripeSandboxTesterConfigured() && hasValidSandboxSession(
+    STRIPE_SANDBOX_TEST_PASSWORD,
+    parseCookies(req)[STRIPE_SANDBOX_SESSION_COOKIE]
+  );
+}
+
+async function waitForStripeTestClock(clockId, timeoutMs = 45_000) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    const clock = await stripe.testHelpers.testClocks.retrieve(clockId);
+    if (clock.status === "ready") return clock;
+    await new Promise((resolve) => setTimeout(resolve, 900));
+  }
+  const error = new Error("Stripe did not finish advancing the test clock in time. Try again.");
+  error.statusCode = 504;
+  throw error;
+}
+
+app.get("/stripe-sandbox-test", asyncRoute(async (req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  if (!hasStripeSandboxAccess(req)) {
+    return res.status(isStripeSandboxTesterConfigured() ? 200 : 503).type("html").send(renderSandboxLogin({
+      configured: isStripeSandboxTesterConfigured(),
+    }));
+  }
+  const scenario = getStripeSandboxScenario(req);
+  let subscription = null;
+  let error = "";
+  if (scenario) {
+    try {
+      subscription = await stripe.subscriptions.retrieve(scenario.subscriptionId);
+    } catch (providerError) {
+      error = "The previous test could not be loaded. Start a fresh simulated trial.";
+      console.error("[stripe:sandbox] scenario lookup failed", { code: String(providerError?.code || "STRIPE_SCENARIO_LOOKUP_FAILED").slice(0, 80) });
+    }
+  }
+  return res.status(200).type("html").send(renderSandboxTestPage({
+    scenario,
+    subscription,
+    checkoutReturned: String(req.query?.checkout || "") === "complete",
+    error,
+  }));
+}));
+
+app.post(
+  "/stripe-sandbox-test/login",
+  enforcePublicRouteRateLimit("stripe-sandbox-login", 10),
+  express.urlencoded({ extended: false, limit: "2kb" }),
+  (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    if (!isStripeSandboxTesterConfigured()) {
+      return res.status(503).type("html").send(renderSandboxLogin({ configured: false }));
+    }
+    if (!safeEqualString(req.body?.password, STRIPE_SANDBOX_TEST_PASSWORD)) {
+      return res.status(401).type("html").send(renderSandboxLogin({ configured: true, error: "That sandbox password is incorrect." }));
+    }
+    setStripeSandboxCookie(res, STRIPE_SANDBOX_SESSION_COOKIE, createSandboxSessionToken(STRIPE_SANDBOX_TEST_PASSWORD), 2 * 60 * 60);
+    setStripeSandboxCookie(res, STRIPE_SANDBOX_SCENARIO_COOKIE, "", 0);
+    return res.redirect(303, "/stripe-sandbox-test");
+  }
+);
+
+app.post(
+  "/stripe-sandbox-test/start",
+  enforcePublicRouteRateLimit("stripe-sandbox-start", 8),
+  asyncRoute(async (req, res) => {
+    if (!hasStripeSandboxAccess(req)) return res.redirect(303, "/stripe-sandbox-test");
+    const frozenTime = Math.floor(Date.now() / 1000);
+    const clock = await stripe.testHelpers.testClocks.create({
+      frozen_time: frozenTime,
+      name: `My AI PA private checkout test ${new Date().toISOString().slice(0, 16)}`,
+    });
+    const customer = await stripe.customers.create({
+      email: `private-sandbox-${crypto.randomUUID()}@myaipa.invalid`,
+      test_clock: clock.id,
+      metadata: { source: "my-ai-pa-private-sandbox-tester" },
+    });
+    const subscription = await stripe.subscriptions.create({
+      customer: customer.id,
+      items: [{ price: STRIPE_PRICE_ID }],
+      trial_end: frozenTime + STRIPE_TRIAL_DAYS * 86400,
+      trial_settings: { end_behavior: { missing_payment_method: "pause" } },
+      metadata: { source: "my-ai-pa-signup", testScenario: "private-sandbox-checkout" },
+    });
+    const token = createSandboxScenarioToken(STRIPE_SANDBOX_TEST_PASSWORD, {
+      clockId: clock.id,
+      customerId: customer.id,
+      subscriptionId: subscription.id,
+      frozenTime,
+    });
+    setStripeSandboxCookie(res, STRIPE_SANDBOX_SCENARIO_COOKIE, token, 4 * 60 * 60);
+    return res.redirect(303, "/stripe-sandbox-test");
+  })
+);
+
+app.post(
+  "/stripe-sandbox-test/advance",
+  enforcePublicRouteRateLimit("stripe-sandbox-advance", 8),
+  asyncRoute(async (req, res) => {
+    if (!hasStripeSandboxAccess(req)) return res.redirect(303, "/stripe-sandbox-test");
+    const scenario = getStripeSandboxScenario(req);
+    if (!scenario) return res.redirect(303, "/stripe-sandbox-test");
+    const subscription = await stripe.subscriptions.retrieve(scenario.subscriptionId);
+    if (subscription.status === "trialing") {
+      await stripe.testHelpers.testClocks.advance(scenario.clockId, {
+        frozen_time: Number(scenario.frozenTime) + STRIPE_TRIAL_DAYS * 86400 + 120,
+      });
+      await waitForStripeTestClock(scenario.clockId);
+    }
+    return res.redirect(303, "/stripe-sandbox-test");
+  })
+);
+
+app.post(
+  "/stripe-sandbox-test/checkout",
+  enforcePublicRouteRateLimit("stripe-sandbox-checkout", 8),
+  asyncRoute(async (req, res) => {
+    if (!hasStripeSandboxAccess(req)) return res.redirect(303, "/stripe-sandbox-test");
+    const scenario = getStripeSandboxScenario(req);
+    if (!scenario) return res.redirect(303, "/stripe-sandbox-test");
+    const subscription = await stripe.subscriptions.retrieve(scenario.subscriptionId);
+    if (subscription.status !== "paused") {
+      return res.status(409).type("html").send(renderSandboxTestPage({
+        scenario,
+        subscription,
+        error: "Checkout opens only after the simulated trial reaches day 14 and pauses.",
+      }));
+    }
+    const baseUrl = getPublicBaseUrl(req);
+    const session = await stripe.checkout.sessions.create(buildTrialPaymentCheckoutParams({
+      customerId: scenario.customerId,
+      subscriptionId: scenario.subscriptionId,
+      successUrl: `${baseUrl}/stripe-sandbox-test?checkout=complete`,
+      cancelUrl: `${baseUrl}/stripe-sandbox-test?checkout=cancelled`,
+    }));
+    return res.redirect(303, session.url);
+  })
+);
 
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true, service: "my-ai-pa-api", time: new Date().toISOString() });
