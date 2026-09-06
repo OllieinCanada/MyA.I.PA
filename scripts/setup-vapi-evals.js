@@ -17,6 +17,9 @@ function parseArgs(argv) {
     suiteFile: "",
     keys: [],
     pruneLegacy: false,
+    repeat: 1,
+    minimumPassRate: 1,
+    outputPath: "",
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -37,6 +40,12 @@ function parseArgs(argv) {
     else if (arg === "--keys") options.keys = String(argv[++index] || "").split(",").map((value) => value.trim()).filter(Boolean);
     else if (arg.startsWith("--keys=")) options.keys = arg.slice("--keys=".length).split(",").map((value) => value.trim()).filter(Boolean);
     else if (arg === "--prune-legacy") options.pruneLegacy = true;
+    else if (arg === "--repeat") options.repeat = Number(argv[++index] || "");
+    else if (arg.startsWith("--repeat=")) options.repeat = Number(arg.slice("--repeat=".length));
+    else if (arg === "--minimum-pass-rate") options.minimumPassRate = Number(argv[++index] || "");
+    else if (arg.startsWith("--minimum-pass-rate=")) options.minimumPassRate = Number(arg.slice("--minimum-pass-rate=".length));
+    else if (arg === "--out") options.outputPath = argv[++index] || "";
+    else if (arg.startsWith("--out=")) options.outputPath = arg.slice("--out=".length);
     else if (arg === "--help" || arg === "-h") options.help = true;
     else throw new Error(`Unknown argument: ${arg}`);
   }
@@ -44,6 +53,12 @@ function parseArgs(argv) {
   if (!options.sync && (options.runSafe || options.runAll)) options.sync = true;
   if (!options.sync && !options.dryRun && !options.list && !options.help) options.list = true;
   if (options.runAll) options.includeToolEvals = true;
+  if (!Number.isInteger(options.repeat) || options.repeat < 1 || options.repeat > 10) {
+    throw new Error("--repeat must be an integer from 1 to 10.");
+  }
+  if (!Number.isFinite(options.minimumPassRate) || options.minimumPassRate < 0 || options.minimumPassRate > 1) {
+    throw new Error("--minimum-pass-rate must be a number from 0 to 1.");
+  }
 
   return options;
 }
@@ -65,6 +80,9 @@ function usage() {
     "  --suite <path>            Override the suite JSON file",
     "  --keys <key,key>          Limit sync/run to selected local eval keys",
     "  --prune-legacy            Delete duplicate evals with listed legacy names after sync",
+    "  --repeat <1-10>            Repeat each selected eval for consistency evidence",
+    "  --minimum-pass-rate <0-1> Required aggregate pass rate (default: 1)",
+    "  --out <path>               Write a privacy-minimized JSON run report",
   ].join("\n");
 }
 
@@ -254,6 +272,10 @@ async function findRecentRun(api, evalId, startedAtMs) {
   throw new Error(`Could not find recent eval run for ${evalId}.`);
 }
 
+function evalRunIdFromCreateResponse(created) {
+  return created?.evalRunId || created?.runId || created?.id || created?.run?.id || created?.data?.id || "";
+}
+
 async function runEval(api, evalRecord, payload, targetAssistantId) {
   const startedAtMs = Date.now();
   const created = await api(
@@ -271,7 +293,7 @@ async function runEval(api, evalRecord, payload, targetAssistantId) {
     },
     `Run ${payload.name}`
   );
-  const runId = created?.id || created?.run?.id || created?.data?.id;
+  const runId = evalRunIdFromCreateResponse(created);
   const createdRun = runId ? created : await findRecentRun(api, evalRecord.id, startedAtMs);
   const run = createdRun.status === "ended" ? createdRun : await pollRun(api, runId || createdRun.id);
   const resultStatuses = (run.results || []).map((result) => result.status);
@@ -291,6 +313,7 @@ function printLocalSummary(suite, selectedSync, selectedRun, options, targetAssi
   console.log(`Target assistant: ${targetAssistantId}`);
   console.log(`Default sync evals: ${selectedSync.length}/${suite.evals.length}`);
   if (options.runSafe || options.runAll) console.log(`Run evals: ${selectedRun.length}/${suite.evals.length}`);
+  if ((options.runSafe || options.runAll) && options.repeat > 1) console.log(`Repetitions: ${options.repeat}`);
   console.log("");
   for (const item of suite.evals) {
     const flags = [
@@ -404,26 +427,61 @@ async function main() {
     console.log("");
     console.log("Running evals");
     const results = [];
-    for (const item of runItems) {
-      let evalRecord = syncedByKey.get(item.key) || existingByName.get(item.name);
-      if (!evalRecord) {
-        const payloadForSync = toVapiEval(item, suite);
-        const result = await upsertEval(api, item, payloadForSync, existingByName);
-        evalRecord = result.eval;
-        existingByName.set(payloadForSync.name, result.eval);
-        console.log(`- ${result.action}: ${payloadForSync.name} (${result.eval.id})`);
-      }
+    for (let repetition = 1; repetition <= options.repeat; repetition += 1) {
+      if (options.repeat > 1) console.log(`\nRepetition ${repetition}/${options.repeat}`);
+      for (const item of runItems) {
+        let evalRecord = syncedByKey.get(item.key) || existingByName.get(item.name);
+        if (!evalRecord) {
+          const payloadForSync = toVapiEval(item, suite);
+          const result = await upsertEval(api, item, payloadForSync, existingByName);
+          evalRecord = result.eval;
+          existingByName.set(payloadForSync.name, result.eval);
+          console.log(`- ${result.action}: ${payloadForSync.name} (${result.eval.id})`);
+        }
 
-      const payload = toVapiEval(item, suite);
-      const result = await runEval(api, evalRecord, payload, targetAssistantId);
-      results.push({ item, ...result });
-      const cost = typeof result.run.cost === "number" ? `, $${result.run.cost.toFixed(4)}` : "";
-      console.log(
-        `- ${result.passed ? "pass" : "fail"}: ${item.name} (${result.run.endedReason || result.run.status}${cost})`
-      );
+        const payload = toVapiEval(item, suite);
+        const result = await runEval(api, evalRecord, payload, targetAssistantId);
+        results.push({ item, repetition, ...result });
+        const cost = typeof result.run.cost === "number" ? `, $${result.run.cost.toFixed(4)}` : "";
+        console.log(
+          `- ${result.passed ? "pass" : "fail"}: ${item.name} (${result.run.endedReason || result.run.status}${cost})`
+        );
+      }
     }
 
     const failures = results.filter((result) => !result.passed);
+    const passed = results.length - failures.length;
+    const passRate = results.length ? passed / results.length : 0;
+    const report = {
+      checkedAt: new Date().toISOString(),
+      suite: suite.suiteName,
+      suiteVersion: suite.version,
+      mode: "vapi-safe-mock-conversation",
+      selectedEvalCount: runItems.length,
+      repetitions: options.repeat,
+      totalRuns: results.length,
+      passed,
+      failed: failures.length,
+      passRate,
+      minimumPassRate: options.minimumPassRate,
+      ready: results.length > 0 && passRate >= options.minimumPassRate,
+      failures: failures.map((failure) => ({
+        key: failure.item.key,
+        repetition: failure.repetition,
+        reasons: summarizeRunFailure(failure.run).slice(0, 3),
+      })),
+      limitations: [
+        "These are Vapi mock-conversation evaluations, not carrier audio calls.",
+        "Tool-calling and live SMS are excluded from safe runs.",
+      ],
+    };
+    if (options.outputPath) {
+      const reportPath = rootPath(options.outputPath);
+      fs.mkdirSync(require("path").dirname(reportPath), { recursive: true });
+      fs.writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
+      console.log(`\nEval report written to ${reportPath}`);
+    }
+    console.log(`\nAggregate: ${passed}/${results.length} passed (${(passRate * 100).toFixed(1)}%; required ${(options.minimumPassRate * 100).toFixed(1)}%).`);
     if (failures.length) {
       console.log("");
       console.log("Failures");
@@ -433,12 +491,16 @@ async function main() {
           console.log(`  ${line}`);
         }
       }
-      process.exit(1);
     }
+    if (!report.ready) process.exit(1);
   }
 }
 
-main().catch((error) => {
-  console.error(error.stack || error.message || error);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(error.stack || error.message || error);
+    process.exit(1);
+  });
+}
+
+module.exports = { evalRunIdFromCreateResponse, parseArgs, toVapiEval };

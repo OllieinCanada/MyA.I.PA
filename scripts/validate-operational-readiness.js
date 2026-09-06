@@ -12,6 +12,7 @@ const requiredOpsFiles = [
   "ops/INCIDENT_RESPONSE_RUNBOOK.md",
   "ops/PRIVACY_REQUEST_RUNBOOK.md",
   "ops/SMS_CONSENT_RUNBOOK.md",
+  "ops/CUSTOMER_SUPPORT_PLAYBOOK.md",
   "ops/COUNSEL_REVIEW_HANDOFF.md",
 ];
 const requiredOperationalScripts = [
@@ -20,6 +21,9 @@ const requiredOperationalScripts = [
   "scripts/retention-audit.js",
   "scripts/privacy-request-drill.js",
   "scripts/activate-sms-consent-production.js",
+  "scripts/report-shipping-readiness.js",
+  "scripts/run-message-routing-gate.js",
+  "scripts/run-signup-review-gate.js",
   "scripts/validate-operational-readiness.js",
 ];
 const failures = [];
@@ -47,6 +51,11 @@ for (const script of [
   "activate:sms-consent:test",
   "ops:backup",
   "ops:backup:check",
+  "test:shipping:messages",
+  "test:shipping:signups",
+  "test:shipping:calls",
+  "report:shipping-readiness",
+  "test:shipping:gate",
 ]) {
   if (!packageJson.scripts?.[script]) failures.push(`package script ${script} is missing`);
 }

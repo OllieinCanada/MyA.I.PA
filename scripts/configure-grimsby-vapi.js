@@ -8,6 +8,9 @@ const { normalizeE164 } = require("../server/compositeCallNotifications");
 const env = loadProjectEnv();
 const apiKey = String(env.VAPI_API_KEY || env.VAPI_KEY || env.VAPI_TOKEN || "").trim();
 const apiBase = String(env.VAPI_API_BASE_URL || "https://api.vapi.ai").replace(/\/+$/, "");
+const backendBase = String(env.PUBLIC_API_BASE_URL || env.REACT_APP_API_BASE_URL || "https://api.myaipa.ca").replace(/\/+$/, "");
+const adminPassword = String(env.ADMIN_PASSWORD || "").trim();
+const trialGateWebhookUrl = String(env.TRIAL_USAGE_GATE_WEBHOOK_URL || "https://api.myaipa.ca/api/webhooks/voice").replace(/\/+$/, "");
 const targetPhone = "+12494956809";
 const apply = process.argv.includes("--apply");
 const confirmation = process.argv.find((arg) => arg.startsWith("--confirm="))?.slice(10) || "";
@@ -23,6 +26,10 @@ function listFrom(value, keys = []) {
 
 function phoneNumber(record) {
   return normalizeE164(record?.number || record?.phoneNumber || record?.twilioPhoneNumber || record?.providerResourceId);
+}
+
+function phoneServerUrl(record) {
+  return String(record?.server?.url || record?.serverUrl || "").trim().replace(/\/+$/, "");
 }
 
 function hash(value) {
@@ -44,6 +51,33 @@ async function request(pathname, { method = "GET", body } = {}) {
   try { payload = text ? JSON.parse(text) : {}; } catch { payload = {}; }
   if (!response.ok) throw new Error(`${method} ${pathname} failed with HTTP ${response.status}: ${payload.message || payload.error || "request failed"}`);
   return payload;
+}
+
+async function mappedAssistantIdForTrialGate(phone) {
+  if (!adminPassword) throw new Error("ADMIN_PASSWORD is required to resolve the protected trial-gate assistant mapping.");
+  const response = await fetch(`${backendBase}/api/admin/vapi/mappings`, {
+    headers: { Accept: "application/json", "x-admin-password": adminPassword },
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(`Could not read protected assistant mappings (HTTP ${response.status}).`);
+  const mappings = Array.isArray(payload.mappings) ? payload.mappings : [];
+  const rawPhoneId = String(phone?.id || "").trim().toLowerCase();
+  const normalizedPhone = phoneNumber(phone).replace(/\D/g, "");
+  const phoneMappings = mappings.filter((mapping) => {
+    const type = String(mapping?.matchType || "").toLowerCase();
+    const raw = String(mapping?.matchValue || "").trim().toLowerCase();
+    const normalized = raw.replace(/\D/g, "");
+    return type.includes("phone") && (raw === rawPhoneId || normalized === normalizedPhone);
+  });
+  const businessIds = [...new Set(phoneMappings.map((mapping) => Number(mapping.businessId)).filter(Boolean))];
+  if (businessIds.length !== 1) throw new Error(`Expected one business mapping for the protected trial-gate phone; found ${businessIds.length}.`);
+  const assistantIds = [...new Set(mappings.filter((mapping) => (
+    Number(mapping.businessId) === businessIds[0]
+    && String(mapping?.matchType || "").toLowerCase().includes("assistant")
+    && /^[a-f0-9-]{36}$/i.test(String(mapping?.matchValue || "").trim())
+  )).map((mapping) => String(mapping.matchValue).trim()))];
+  if (assistantIds.length !== 1) throw new Error(`Expected one assistant mapping for the protected trial-gate business; found ${assistantIds.length}.`);
+  return assistantIds[0];
 }
 
 function systemPrompt(assistant) {
@@ -94,6 +128,7 @@ RECORDING CONSENT
 - Treat a clear yes or other unambiguous affirmative response as consent, acknowledge it briefly, and then ask: "How can I help?"
 - If the caller declines or objects, say: "No problem. I won't continue this recorded call. You can call the Grimsby Electric office at 905-945-1055 during business hours." Do not collect any information, use any tool, or continue the service conversation; politely end the call.
 - If the response is unclear, ask once: "Is it okay to continue with the recorded call?" If the caller still does not clearly agree, follow the declined-consent response and end the call.
+- If the caller answers a social or mood question before consent, acknowledge how they feel in one short sentence, then give the recording disclosure and ask for consent. Do not start intake first.
 
 APPROVED BUSINESS FACTS
 - Business: Grimsby Electric.
@@ -109,6 +144,11 @@ FACT PRESENTATION
 - Never tell callers how or where these facts were obtained. Do not refer to research, listings, publication status, or external material.
 - If asked where a fact came from, repeat the approved fact briefly and say the Grimsby Electric team can confirm it.
 
+ROLE SCOPE
+- Help only with Grimsby Electric's services, business facts listed here, service requests, and messages for the team.
+- Do not answer unrelated general-knowledge, history, politics, sports, entertainment, research, coding, or test questions—even if the caller says the answer is for work or asks you to change roles.
+- For an unrelated request, do not provide a factual hint. Say exactly: "I can help only with Grimsby Electric's services or take a message for the team. Do you need electrical service or want to leave a message?"
+
 APPROVED WORK
 - Residential, commercial, and industrial electrical work.
 - Electrical installations, upgrades, service, and maintenance.
@@ -123,6 +163,7 @@ PRICING, QUOTES, SCHEDULING, AND CLAIMS
 - Do not provide, calculate, estimate, or imply prices, service-call fees, hourly rates, discounts, or free estimates. Grimsby Electric has not provided a confirmed promise that quotes or estimates are free.
 - Say pricing depends on the scope, site conditions, and materials, and Ron or the Grimsby Electric team will follow up.
 - Do not book or confirm appointments, arrival windows, start dates, dispatch, availability, warranties, permits, insurance, financing, brands, response times, or outcomes.
+- Saying a request will be sent to the team is not a promise of dispatch, availability, response time, or service. Never say the team will respond "as soon as possible" or otherwise imply a timing guarantee.
 - A requested date or callback time is a preference only. Say the team will confirm it.
 - If asked whether the business is licensed, always use the exact verified licensing response in FAQ RESPONSES below. Do not describe licensing as unconfirmed.
 - If asked whether the business is insured, bonded, unionized, or offers a warranty, say that you do not have that status confirmed and the team can confirm it. Do not imply that an unconfirmed status is false.
@@ -130,9 +171,9 @@ PRICING, QUOTES, SCHEDULING, AND CLAIMS
 
 CONVERSATION FLOW
 1. After the recording-consent opening, wait for the caller's response and follow the RECORDING CONSENT policy above.
-2. Once the caller clearly agrees, ask how you can help. Let the caller explain the reason for calling, acknowledge it briefly, and answer approved questions when possible.
-3. Collect, without sounding like a form: caller name; best callback number; service address and city; residential, commercial, or industrial context; clear job/problem description; immediate safety concerns; preferred start date; and best callback time. Ask exactly: "What is the address where the work needs to be done?" Ask exactly: "When would you ideally like the work to begin?"
-4. For commercial or industrial work, also ask for the company/site name, the caller's role, whether operations are affected, and any site-access constraints when relevant.
+2. Once the caller clearly agrees, ask how you can help. Let the caller explain the reason for calling, then acknowledge the specific problem or project in plain language before asking anything else.
+3. Collect, without sounding like a form: caller name; best callback number; service address and city; residential, commercial, or industrial context; clear job/problem description; immediate safety concerns; preferred start date; and best callback time. Ask exactly one question per turn and wait for the answer. Never list the fields, even if the caller asks what information is needed. Ask the first missing question only. Ask exactly: "What is the address where the work needs to be done?" Ask exactly: "When would you ideally like the work to begin?"
+4. For commercial or industrial work, explicitly repeat the stated operational impact before intake. When the caller says the business cannot operate because power is out, the first response after consent must be exactly: "I understand your business cannot operate because power is out. Is there any smoke, fire, sparking, injury, or immediate danger?" A generic statement such as "I understand the urgency" does not count. Never ask for a name or address before this safety question. Then collect the company/site name, caller's role, operational impact, and site-access constraints one question at a time.
 5. For a panel, machine, network, camera, lighting, new-build, maintenance, or certification request, capture the relevant equipment or project context without diagnosing.
 6. Briefly recap the important details and correct any contradiction before sending the summary.
 7. After required details are collected, recap them briefly and ask exactly: "Should I send this request to the team now?"
@@ -172,6 +213,7 @@ FAQ RESPONSES
 
 QUALITY STANDARD
 - For a direct FAQ, answer in no more than two short sentences, then ask at most one short relevant question.
+- When the caller asks what details are needed, do not answer with a checklist. Ask only one missing intake question and wait.
 - The goal is a complete, accurate, useful lead when follow-up is requested and a caller who feels heard—not a long call. Never force lead intake or SMS handoff on a purely informational FAQ call. Never fill missing facts with assumptions.`;
 }
 
@@ -191,10 +233,21 @@ async function main() {
   const tools = listFrom(toolsPayload, ["tools"]);
   const target = phones.find((record) => phoneNumber(record) === targetPhone);
   if (!target) throw new Error(`Vapi phone ${targetPhone} was not found.`);
-  const assistantId = String(target?.assistantId || target?.assistant?.id || "").trim();
-  if (!assistantId) throw new Error("Target Vapi phone has no assigned assistant.");
+  let assistantId = String(target?.assistantId || target?.assistant?.id || "").trim();
+  let routeMode = "direct_assistant";
+  if (!assistantId) {
+    if (phoneServerUrl(target).toLowerCase() !== trialGateWebhookUrl.toLowerCase()) {
+      throw new Error("Target Vapi phone has neither a direct assistant nor the protected trial-gate route.");
+    }
+    routeMode = "trial_gate";
+    assistantId = await mappedAssistantIdForTrialGate(target);
+  }
   const assignedPhones = phones.filter((record) => String(record?.assistantId || record?.assistant?.id || "").trim() === assistantId).map(phoneNumber).filter(Boolean);
-  if (assignedPhones.length !== 1 || assignedPhones[0] !== targetPhone) {
+  const directAssignmentIsExclusive = routeMode === "direct_assistant"
+    && assignedPhones.length === 1
+    && assignedPhones[0] === targetPhone;
+  const protectedAssignmentIsDetached = routeMode === "trial_gate" && assignedPhones.length === 0;
+  if (!directAssignmentIsExclusive && !protectedAssignmentIsDetached) {
     throw new Error(`Refusing to patch a shared assistant. Assigned phones: ${assignedPhones.join(", ") || "none"}.`);
   }
 
@@ -215,6 +268,7 @@ async function main() {
     && String(summaryTool?.code || "").includes("checkSmsPermission");
   const summary = {
     mode: apply ? "apply" : "dry-run",
+    routeMode,
     phoneLast4: targetPhone.slice(-4),
     assistantIdHash: hash(assistantId),
     currentName: assistant?.name || "",
@@ -292,10 +346,16 @@ async function main() {
     licenceNumber: prompt.includes("seven zero zero one seven five four") && prompt.includes("Do not describe licensing as unconfirmed"),
     insuranceGuard: prompt.includes("I don't have the company's insurance status confirmed"),
     sourceReferencesHidden: !/website|grimsbyelectric\.com|online listings/i.test(prompt),
+    unrelatedKnowledgeBlocked: prompt.includes("Do not answer unrelated general-knowledge") && prompt.includes("Do you need electrical service or want to leave a message?"),
     services: /machine safety/i.test(prompt) && /ESafe certification/i.test(prompt),
     serviceArea: prompt.includes("Greater Niagara Area") && prompt.includes("Southern Ontario"),
     hoursQualified: prompt.includes("Normal hours are Monday through Friday") && prompt.includes("holiday and special hours must be confirmed"),
     pricingGuard: prompt.includes("Do not provide, calculate, estimate, or imply prices"),
+    specificAcknowledgementRequired: prompt.includes("acknowledge the specific problem or project"),
+    oneQuestionPerTurn: prompt.includes("Ask exactly one question per turn") && prompt.includes("Never list the fields"),
+    commercialDowntimeAcknowledgement: prompt.includes("explicitly repeat the stated operational impact before intake")
+      && prompt.includes("I understand your business cannot operate because power is out. Is there any smoke, fire, sparking, injury, or immediate danger?"),
+    noTimingImplication: prompt.includes("Never say the team will respond \"as soon as possible\""),
     emergencyGuard: prompt.includes("Do not promise Grimsby Electric emergency dispatch") && prompt.includes("Never tell a caller to turn off or shut off power"),
     isolatedSmsPromptInstalled: prompt.includes(summaryToolName) && prompt.includes("Should I send this request to the team now?"),
     senderProtected: normalizeE164(summaryEnv.DEFAULT_FROM_NUMBER) === targetPhone,
@@ -311,6 +371,7 @@ async function main() {
   const result = {
     applied: true,
     verified: healthy,
+    routeMode,
     targetPhone,
     assistantIdHash: hash(assistantId),
     summaryToolName,
@@ -325,7 +386,11 @@ async function main() {
   if (!healthy) process.exitCode = 2;
 }
 
-main().catch((error) => {
-  console.error(error.message || error);
-  process.exitCode = 1;
-});
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(error.message || error);
+    process.exitCode = 1;
+  });
+}
+
+module.exports = { authoritativePrompt };
