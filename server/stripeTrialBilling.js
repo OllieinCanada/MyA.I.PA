@@ -95,6 +95,19 @@ async function completeTrialPaymentSetup({ stripe, session }) {
 
   if (String(subscription.status || "").toLowerCase() === "paused") {
     subscription = await stripe.subscriptions.resume(subscriptionId, { billing_cycle_anchor: "now" });
+
+    // Stripe can create a resumption invoice without attempting payment in the
+    // resume request. Pay it explicitly so a successfully saved card actually
+    // moves the subscription out of `paused`.
+    if (String(subscription.status || "").toLowerCase() === "paused") {
+      const invoiceId = idOf(subscription.latest_invoice);
+      if (!invoiceId) throw new Error("Stripe did not create the resumption invoice.");
+      const invoice = await stripe.invoices.pay(invoiceId);
+      if (String(invoice?.status || "").toLowerCase() !== "paid") {
+        throw new Error("Stripe could not confirm payment of the resumption invoice.");
+      }
+      subscription = await stripe.subscriptions.retrieve(subscriptionId);
+    }
   }
 
   return {
@@ -102,7 +115,7 @@ async function completeTrialPaymentSetup({ stripe, session }) {
     subscriptionId,
     paymentMethodId,
     paymentReady: true,
-    resumed: String(subscription.status || "").toLowerCase() !== "paused",
+    resumed: ["active", "trialing"].includes(String(subscription.status || "").toLowerCase()),
     subscription,
   };
 }
