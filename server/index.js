@@ -17,6 +17,7 @@ const { buildBackendRootPage } = require("./backendRootPage");
 const {
   createSandboxScenarioToken,
   createSandboxSessionToken,
+  deriveSandboxPasswordVerifier,
   hasValidSandboxSession,
   readSandboxScenarioToken,
   renderSandboxLogin,
@@ -274,6 +275,20 @@ const adminLoginProcessRateLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: "Too many login attempts. Wait a few minutes and try again." },
 });
+const stripeSandboxLoginRateLimiter = rateLimit({
+  windowMs: PUBLIC_ROUTE_WINDOW_MS,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: "Too many sandbox login attempts. Wait a few minutes and try again.",
+});
+const stripeSandboxActionRateLimiter = rateLimit({
+  windowMs: PUBLIC_ROUTE_WINDOW_MS,
+  limit: 24,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: "Too many sandbox actions. Wait a few minutes and try again.",
+});
 const signupVerificationProcessRateLimiter = rateLimit({
   windowMs: PUBLIC_ROUTE_WINDOW_MS,
   limit: 20,
@@ -363,13 +378,12 @@ const STRIPE_WEBHOOK_SECRET = String(process.env.STRIPE_WEBHOOK_SECRET || "").tr
 const STRIPE_TRIAL_DAYS = Math.max(0, Number(process.env.STRIPE_TRIAL_DAYS || 14) || 0);
 const STRIPE_PLAN_DISPLAY = String(process.env.STRIPE_PLAN_DISPLAY || "$79/month plus applicable tax").trim();
 const STRIPE_SANDBOX_TEST_PASSWORD = String(process.env.STRIPE_SANDBOX_TEST_PASSWORD || "").trim();
-const STRIPE_SANDBOX_TEST_PASSWORD_HASH = String(
-  process.env.STRIPE_SANDBOX_TEST_PASSWORD_HASH
-  || "3933531f7b5dbb5e4ab000a674edeacd28883416713edca1ba2e33224433e176"
+const STRIPE_SANDBOX_TEST_PASSWORD_SCRYPT = String(
+  process.env.STRIPE_SANDBOX_TEST_PASSWORD_SCRYPT
+  || "3ee648c2a91b198dd5e3ca8bf18d4fba38f3b2bea4dd2fffe2f089d87e94a274"
 ).trim().toLowerCase();
 const STRIPE_SANDBOX_SESSION_COOKIE = "myaipa_stripe_sandbox_session";
 const STRIPE_SANDBOX_SCENARIO_COOKIE = "myaipa_stripe_sandbox_scenario";
-const stripeSandboxRateLimits = new Map();
 const STRIPE_ADMIN_SUBSCRIPTION_LIMIT = Math.max(1, Math.min(500, Number(process.env.STRIPE_ADMIN_SUBSCRIPTION_LIMIT || 100) || 100));
 const WEBHOOK_REPLAY_RETENTION_MS = Math.min(
   30 * 24 * 60 * 60 * 1000,
@@ -9819,13 +9833,13 @@ function isStripeSandboxTesterConfigured() {
     stripe
     && STRIPE_SECRET_KEY.startsWith("sk_test_")
     && STRIPE_PRICE_ID
-    && /^[a-f0-9]{64}$/.test(STRIPE_SANDBOX_TEST_PASSWORD_HASH)
+    && /^[a-f0-9]{64}$/.test(STRIPE_SANDBOX_TEST_PASSWORD_SCRYPT)
     && getStripeSandboxSigningSecret().length >= 12
   );
 }
 
 function getStripeSandboxSigningSecret() {
-  return STRIPE_SANDBOX_TEST_PASSWORD || STRIPE_WEBHOOK_SECRET || STRIPE_SECRET_KEY;
+  return STRIPE_WEBHOOK_SECRET || STRIPE_SECRET_KEY;
 }
 
 function hasValidStripeSandboxPassword(supplied) {
@@ -9833,32 +9847,8 @@ function hasValidStripeSandboxPassword(supplied) {
   if (STRIPE_SANDBOX_TEST_PASSWORD.length >= 12) {
     return safeEqualString(value, STRIPE_SANDBOX_TEST_PASSWORD);
   }
-  const suppliedHash = crypto.createHash("sha256").update(value).digest("hex");
-  return safeEqualString(suppliedHash, STRIPE_SANDBOX_TEST_PASSWORD_HASH);
-}
-
-function enforceStripeSandboxRateLimit(routeKey, maxRequests) {
-  return (req, res, next) => {
-    const now = Date.now();
-    for (const [key, record] of stripeSandboxRateLimits) {
-      if (record.resetAt <= now) stripeSandboxRateLimits.delete(key);
-    }
-    const key = `${routeKey}:${getClientIp(req)}`;
-    const current = stripeSandboxRateLimits.get(key);
-    const record = !current || current.resetAt <= now
-      ? { count: 0, resetAt: now + PUBLIC_ROUTE_WINDOW_MS }
-      : current;
-    record.count += 1;
-    stripeSandboxRateLimits.set(key, record);
-    if (record.count > maxRequests) {
-      setRetryAfterHeader(res, Math.max(0, record.resetAt - now));
-      return res.status(429).type("html").send(renderSandboxLogin({
-        configured: true,
-        error: "Too many attempts. Wait a few minutes and try again.",
-      }));
-    }
-    return next();
-  };
+  const suppliedHash = deriveSandboxPasswordVerifier(value);
+  return safeEqualString(suppliedHash, STRIPE_SANDBOX_TEST_PASSWORD_SCRYPT);
 }
 
 function setStripeSandboxCookie(res, name, value, maxAgeSeconds) {
@@ -9928,7 +9918,7 @@ app.get("/stripe-sandbox-test", asyncRoute(async (req, res) => {
 
 app.post(
   "/stripe-sandbox-test/login",
-  enforceStripeSandboxRateLimit("login", 10),
+  stripeSandboxLoginRateLimiter,
   express.urlencoded({ extended: false, limit: "2kb" }),
   (req, res) => {
     res.setHeader("Cache-Control", "no-store");
@@ -9946,7 +9936,7 @@ app.post(
 
 app.post(
   "/stripe-sandbox-test/start",
-  enforceStripeSandboxRateLimit("start", 8),
+  stripeSandboxActionRateLimiter,
   asyncRoute(async (req, res) => {
     if (!hasStripeSandboxAccess(req)) return res.redirect(303, "/stripe-sandbox-test");
     const frozenTime = Math.floor(Date.now() / 1000);
@@ -9979,7 +9969,7 @@ app.post(
 
 app.post(
   "/stripe-sandbox-test/advance",
-  enforceStripeSandboxRateLimit("advance", 8),
+  stripeSandboxActionRateLimiter,
   asyncRoute(async (req, res) => {
     if (!hasStripeSandboxAccess(req)) return res.redirect(303, "/stripe-sandbox-test");
     const scenario = getStripeSandboxScenario(req);
@@ -9997,7 +9987,7 @@ app.post(
 
 app.post(
   "/stripe-sandbox-test/checkout",
-  enforceStripeSandboxRateLimit("checkout", 8),
+  stripeSandboxActionRateLimiter,
   asyncRoute(async (req, res) => {
     if (!hasStripeSandboxAccess(req)) return res.redirect(303, "/stripe-sandbox-test");
     const scenario = getStripeSandboxScenario(req);

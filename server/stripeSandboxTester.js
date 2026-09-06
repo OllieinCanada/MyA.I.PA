@@ -2,6 +2,11 @@ const crypto = require("crypto");
 
 const SESSION_TTL_MS = 2 * 60 * 60 * 1000;
 const SCENARIO_TTL_MS = 4 * 60 * 60 * 1000;
+const PASSWORD_VERIFIER_SALT = "myaipa-stripe-sandbox-v1";
+
+function deriveSandboxPasswordVerifier(password) {
+  return crypto.scryptSync(String(password || ""), PASSWORD_VERIFIER_SALT, 32).toString("hex");
+}
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -146,6 +151,7 @@ function renderSandboxTestPage({ scenario, subscription, checkoutReturned = fals
 module.exports = {
   createSandboxScenarioToken,
   createSandboxSessionToken,
+  deriveSandboxPasswordVerifier,
   hasValidSandboxSession,
   readSandboxScenarioToken,
   renderSandboxLogin,
