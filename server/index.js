@@ -9890,7 +9890,7 @@ async function waitForStripeTestClock(clockId, timeoutMs = 45_000) {
   throw error;
 }
 
-app.get("/stripe-sandbox-test", asyncRoute(async (req, res) => {
+app.get("/stripe-sandbox-test", stripeSandboxActionRateLimiter, asyncRoute(async (req, res) => {
   res.setHeader("Cache-Control", "no-store");
   if (!hasStripeSandboxAccess(req)) {
     return res.status(isStripeSandboxTesterConfigured() ? 200 : 503).type("html").send(renderSandboxLogin({
