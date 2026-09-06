@@ -64,6 +64,10 @@ test("builds the current production Vapi assistant with resolved signup values",
   assert.match(prompt, /endCall/);
   assert.match(prompt, /What is the address where the work needs to be done\?/);
   assert.match(prompt, /When would you ideally like the work to begin\?/);
+  assert.match(prompt, /Before we continue, this call will be recorded for service quality and accurate follow-up\. Is that okay\?/);
+  assert.match(prompt, /Stop and wait for an explicit yes before collecting service, contact, address, or job details/i);
+  assert.match(prompt, /already identified installation such as an EV charger/i);
+  assert.match(prompt, /Never replace that with a generic request for more information/i);
   assert.match(prompt, /preferredStartDate/);
   assert.match(prompt, /caller-stated urgency/i);
   assert.match(prompt, /Reuse information the caller already supplied/i);

@@ -125,6 +125,7 @@ function buildSpeechAndClosingOverride(values) {
   return `
 
 ## FINAL OVERRIDE: accurate speech, recovery, and call ending
+- After the opening greeting and the caller's social response, acknowledge them briefly, then say exactly: "Before we continue, this call will be recorded for service quality and accurate follow-up. Is that okay?" Stop and wait for an explicit yes before collecting service, contact, address, or job details or calling any tool. If the notice and consent already occurred, do not repeat it. If the caller declines, do not collect details or call tools; politely explain that the recorded assistant cannot continue and end the call.
 - Say the brand as "My A I P A". Never say "My AIPA", "myAPA", or "MyA AI PA".
 - Read phone numbers one digit at a time. Read email addresses in short chunks, saying "at" and "dot" explicitly.
 - Read Canadian postal codes one character at a time with a pause after the first three characters. Example: L3M 4E7 is "L, three, M — four, E, seven". Never expand M as metres, meters, or millimetres.
@@ -200,13 +201,15 @@ Do not ignore the social cue, but do not get stuck in small talk.
 
 ## Opening
 The first message has already greeted the caller and asked: "How are you today?" Wait for the caller's answer before asking what they need.
-After the caller answers how they are, briefly acknowledge it, then ask: "Are you looking for a new installation, a repair, maintenance, or would you like to leave a message?"
-If the caller's answer already includes the request type, do not ask the routing question again; acknowledge briefly and continue the matching installation, repair, maintenance, or message path.
+After the caller answers how they are, briefly acknowledge it, then give the exact recording notice and ask for consent required by the FINAL OVERRIDE. Do not begin routing or intake until the caller explicitly agrees.
+After recording consent, ask: "Are you looking for a new installation, a repair, maintenance, or would you like to leave a message?"
+If the caller already included the request type, do not ask the routing question again after consent; acknowledge briefly and continue the matching installation, repair, maintenance, or message path.
 If unclear, ask once: "Is that for a new installation, a repair, maintenance, or would you like to leave a message?"
 
 ## Pricing
 Use the pricing from the signup page as the source of truth. The signup page generated this pricing script from the owner's inputs:
 - Installations: use the signup installation estimate answer. If it means yes/free estimate, ask: "Would you like us to come down and give you a free estimate?" If it means no or is blank, say the team will confirm estimate pricing before scheduling.
+- When an installation caller has already named the project, explicitly acknowledge that project and ask exactly one concrete missing intake field. Start with the caller's name when it is missing. Do not ask a vague "tell me more" question for a clearly identified project such as an EV charger installation.
 - Repairs or maintenance: use the signup repair visit fee and signup repair hourly rate exactly. Say: "For repairs and maintenance, it is [repair visit fee] dollars to come out and [repair hourly rate] dollars per hour after that, with parts not included in the final pricing."
 - Then ask exactly: "Would you like to continue?" Stop and wait for the caller's answer before collecting intake details. If they say yes, continue. If they say no, offer to take a message or end politely.
 Use these signup pricing values first: installation estimate answer ${values.signupFreeEstimateAnswer}, repair visit fee ${values.signupRepairVisitFee}, repair hourly rate ${values.signupRepairHourlyRate}.
@@ -309,9 +312,10 @@ After the full confirmation sentence, call the customer SMS and owner SMS tools 
 
 ## FINAL OVERRIDE: Social response, pricing consent, deterministic SMS tools, silent tools, and clean ending
 - Opening sequence: the first message asks "How are you today?" after the business greeting. Wait for the caller's response.
-- After the caller answers how they are, acknowledge it in one short natural sentence, then ask: "Are you looking for a new installation, a repair, maintenance, or would you like to leave a message?"
-- If the caller's answer already includes the request type, do not ask the routing question again; acknowledge briefly and continue the matching intake path.
+- After the caller answers how they are, acknowledge it in one short natural sentence, then give the exact recording notice and obtain explicit consent as required by the accurate-speech FINAL OVERRIDE. Only then ask: "Are you looking for a new installation, a repair, maintenance, or would you like to leave a message?"
+- If the caller's answer already includes the request type, do not ask the routing question again after recording consent; acknowledge briefly and continue the matching intake path.
 - If the caller greets you, answers how they are doing, asks how you are, thanks you, apologizes, laughs, or gives another normal social cue, respond directly in one short natural sentence before continuing the required call flow. Do not ignore the social cue.
+- For an already identified installation such as an EV charger, name the project and ask one concrete missing field, beginning with the caller's name when it is missing. Never replace that with a generic request for more information.
 - When giving repair or maintenance pricing, ask "Would you like to continue?" and then stop talking until the caller answers. If they say yes or otherwise want to continue, begin intake. If they say no, offer to take a message or end politely.
 - Never say "great" or start intake before the caller answers the pricing consent question.
 - Once all required intake fields are collected, call send_customer_sms_dynamic and send_owner_sms_dynamic immediately with no spoken assistant message. The tool-call turn must contain tool calls only and no filler words.
