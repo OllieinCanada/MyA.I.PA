@@ -369,6 +369,7 @@ const STRIPE_SANDBOX_TEST_PASSWORD_HASH = String(
 ).trim().toLowerCase();
 const STRIPE_SANDBOX_SESSION_COOKIE = "myaipa_stripe_sandbox_session";
 const STRIPE_SANDBOX_SCENARIO_COOKIE = "myaipa_stripe_sandbox_scenario";
+const stripeSandboxRateLimits = new Map();
 const STRIPE_ADMIN_SUBSCRIPTION_LIMIT = Math.max(1, Math.min(500, Number(process.env.STRIPE_ADMIN_SUBSCRIPTION_LIMIT || 100) || 100));
 const WEBHOOK_REPLAY_RETENTION_MS = Math.min(
   30 * 24 * 60 * 60 * 1000,
@@ -9836,6 +9837,30 @@ function hasValidStripeSandboxPassword(supplied) {
   return safeEqualString(suppliedHash, STRIPE_SANDBOX_TEST_PASSWORD_HASH);
 }
 
+function enforceStripeSandboxRateLimit(routeKey, maxRequests) {
+  return (req, res, next) => {
+    const now = Date.now();
+    for (const [key, record] of stripeSandboxRateLimits) {
+      if (record.resetAt <= now) stripeSandboxRateLimits.delete(key);
+    }
+    const key = `${routeKey}:${getClientIp(req)}`;
+    const current = stripeSandboxRateLimits.get(key);
+    const record = !current || current.resetAt <= now
+      ? { count: 0, resetAt: now + PUBLIC_ROUTE_WINDOW_MS }
+      : current;
+    record.count += 1;
+    stripeSandboxRateLimits.set(key, record);
+    if (record.count > maxRequests) {
+      setRetryAfterHeader(res, Math.max(0, record.resetAt - now));
+      return res.status(429).type("html").send(renderSandboxLogin({
+        configured: true,
+        error: "Too many attempts. Wait a few minutes and try again.",
+      }));
+    }
+    return next();
+  };
+}
+
 function setStripeSandboxCookie(res, name, value, maxAgeSeconds) {
   const parts = [
     `${name}=${encodeURIComponent(value)}`,
@@ -9903,7 +9928,7 @@ app.get("/stripe-sandbox-test", asyncRoute(async (req, res) => {
 
 app.post(
   "/stripe-sandbox-test/login",
-  enforcePublicRouteRateLimit("stripe-sandbox-login", 10),
+  enforceStripeSandboxRateLimit("login", 10),
   express.urlencoded({ extended: false, limit: "2kb" }),
   (req, res) => {
     res.setHeader("Cache-Control", "no-store");
@@ -9921,7 +9946,7 @@ app.post(
 
 app.post(
   "/stripe-sandbox-test/start",
-  enforcePublicRouteRateLimit("stripe-sandbox-start", 8),
+  enforceStripeSandboxRateLimit("start", 8),
   asyncRoute(async (req, res) => {
     if (!hasStripeSandboxAccess(req)) return res.redirect(303, "/stripe-sandbox-test");
     const frozenTime = Math.floor(Date.now() / 1000);
@@ -9954,7 +9979,7 @@ app.post(
 
 app.post(
   "/stripe-sandbox-test/advance",
-  enforcePublicRouteRateLimit("stripe-sandbox-advance", 8),
+  enforceStripeSandboxRateLimit("advance", 8),
   asyncRoute(async (req, res) => {
     if (!hasStripeSandboxAccess(req)) return res.redirect(303, "/stripe-sandbox-test");
     const scenario = getStripeSandboxScenario(req);
@@ -9972,7 +9997,7 @@ app.post(
 
 app.post(
   "/stripe-sandbox-test/checkout",
-  enforcePublicRouteRateLimit("stripe-sandbox-checkout", 8),
+  enforceStripeSandboxRateLimit("checkout", 8),
   asyncRoute(async (req, res) => {
     if (!hasStripeSandboxAccess(req)) return res.redirect(303, "/stripe-sandbox-test");
     const scenario = getStripeSandboxScenario(req);
