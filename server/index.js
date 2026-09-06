@@ -310,6 +310,13 @@ const signupVerificationProcessRateLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: "Too many verification attempts. Wait a few minutes and try again." },
 });
+const forwardingVerificationCallbackProcessRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many forwarding verification callbacks." },
+});
 const adminOutreachProcessRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: parsePositiveInt(process.env.ADMIN_OUTREACH_MAX_REQUESTS, 10),
@@ -12894,6 +12901,7 @@ app.post(
 
 app.post(
   "/api/webhooks/twilio/forwarding-verification-status",
+  forwardingVerificationCallbackProcessRateLimiter,
   enforcePublicRouteRateLimit("forwarding-verification-callback", 120),
   express.urlencoded({ extended: false, limit: "8kb" }),
   asyncRoute(async (req, res) => {
