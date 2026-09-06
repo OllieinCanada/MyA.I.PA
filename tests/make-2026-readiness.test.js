@@ -45,6 +45,33 @@ test("does not mistake descriptive prompt text for durable idempotency", () => {
   assert.ok(report.issues.some((issue) => issue.key === "provisioning-idempotency"));
 });
 
+test("recognizes the hardened backend-owned provisioning guard", () => {
+  const report = evaluateScenario({
+    scenario: { id: "scenario-backend", name: "Backend guarded", isActive: true, sequential: false },
+    blueprint: {
+      flow: [
+        {
+          id: 1,
+          module: "http:ActionSendData",
+          version: 3,
+          mapper: {
+            url: "https://api.myaipa.ca/api/integrations/twilio/purchase-number",
+            qs: [
+              { name: "idempotencyKey", value: "{{21.provisioning.idempotencyKey}}" },
+              { name: "contextHash", value: "{{21.provisioning.contextHash}}" },
+            ],
+          },
+        },
+        webhookResponse(),
+      ],
+    },
+  });
+  assert.equal(report.workflow.hasVisibleIdempotencyStorage, true);
+  assert.equal(report.workflow.hasBackendIdempotencyGuard, true);
+  assert.equal(report.issues.some((issue) => issue.key === "provisioning-idempotency"), false);
+  assert.equal(report.issues.some((issue) => issue.key === "parallel-provisioning"), false);
+});
+
 test("flags unauthenticated HTTP v4 requests carrying contact data", () => {
   const report = evaluateScenario({
     scenario: { id: "scenario-2", name: "Lookup", isActive: true },

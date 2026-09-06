@@ -11,6 +11,7 @@ import TryDemo from "./TryDemo";
 import TradePages from "./TradePages";
 import FirstClassRentalsDemo from "./FirstClassRentalsDemo";
 import DeanAllisonDemo from "./DeanAllisonDemo";
+import ForwardingSetup from "./ForwardingSetup";
 import { installClientErrorReporting } from "./clientErrorReporter";
 import "./tailwind.generated.css";
 import "./style.css";
@@ -46,6 +47,7 @@ function RouterRoot() {
   else if (route === "terms") page = <Terms />;
   else if (route === "links") page = <LinksPage />;
   else if (route === "try-demo") page = <TryDemo />;
+  else if (route === "forwarding-setup") page = <ForwardingSetup />;
   else if (route === "demo/first-class-rentals") page = <FirstClassRentalsDemo />;
   else if (route === "demo/dean-allison") page = <DeanAllisonDemo />;
   else if (route === "trades") page = <TradePages />;

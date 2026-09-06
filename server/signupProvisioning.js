@@ -240,6 +240,7 @@ function provisioningAuthorizationProjection(payload) {
     aiAssistant: payload?.aiAssistant,
     businessProfile: payload?.businessProfile,
     setupDetails: payload?.setupDetails,
+    callForwarding: payload?.callForwarding,
     pricing: payload?.pricing,
   };
 }

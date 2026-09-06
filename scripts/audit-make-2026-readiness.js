@@ -91,6 +91,24 @@ function hasKeyMatching(value, pattern, seen = new Set()) {
   );
 }
 
+function hasNamedMapping(value, pattern, seen = new Set()) {
+  if (!value || typeof value !== "object" || seen.has(value)) return false;
+  seen.add(value);
+  if (pattern.test(String(value.name || ""))) return true;
+  return Object.values(value).some((item) => item && typeof item === "object" && hasNamedMapping(item, pattern, seen));
+}
+
+function isBackendOwnedIdempotentProvisioning(module) {
+  if (!isHttpModule(module)) return false;
+  const host = urlHostFromModule(module);
+  const url = String(module?.mapper?.url || module?.parameters?.url || "");
+  if (host !== "api.myaipa.ca" || !/\/api\/integrations\/(?:twilio\/purchase-number|vapi\/(?:create-signup-assistant|import-twilio-number))/i.test(url)) {
+    return false;
+  }
+  const mapped = { mapper: module?.mapper, parameters: module?.parameters };
+  return hasNamedMapping(mapped, /^idempotencyKey$/i) && hasNamedMapping(mapped, /^contextHash$/i);
+}
+
 function collectSettingSignals(value, target = {}, seen = new Set()) {
   if (!value || typeof value !== "object" || seen.has(value)) return target;
   seen.add(value);
@@ -117,9 +135,11 @@ function evaluateScenario({ scenario = {}, blueprint = {}, logs = [], hooks = []
     && responseModules.every((module) => module.__index === module.__routeLength - 1);
   const provisionsPhone = /purchase-number|IncomingPhoneNumbers|AvailablePhoneNumbers/i.test(text);
   const createsVapiAssistant = /api\.vapi\.ai\/(?:assistant|phone-number)|makeApiCall2/i.test(text);
-  const hasIdempotencyStorage = modules.some((module) =>
+  const hasBackendIdempotencyGuard = modules.some(isBackendOwnedIdempotentProvisioning);
+  const hasIdempotencyStorage = hasBackendIdempotencyGuard || modules.some((module) =>
     /data.?store/i.test(String(module?.module || ""))
       || hasKeyMatching({ mapper: module?.mapper, parameters: module?.parameters }, /idempot|dedup|replay|event.?key/i)
+      || hasNamedMapping({ mapper: module?.mapper, parameters: module?.parameters }, /idempot|dedup|replay|event.?key/i)
   );
   const hasHardcodedAreaCode = /["']?areaCode["']?[^\r\n]{0,100}["']?\d{3}["']?/i.test(text);
   const handlesPii = modules.some(hasPiiMapping) || /(?:caller|owner|customer|contact).{0,18}(?:phone|email|address)|\bCaller\b|\bFrom\b/i.test(text);
@@ -140,7 +160,7 @@ function evaluateScenario({ scenario = {}, blueprint = {}, logs = [], hooks = []
   if (provisionsPhone && hasHardcodedAreaCode) {
     issues.push({ level: "high", key: "hardcoded-area-code", message: "Provisioning appears to use a fixed area code instead of signup location data." });
   }
-  if (provisionsPhone && settingsSignals.sequential === false) {
+  if (provisionsPhone && settingsSignals.sequential === false && !hasBackendIdempotencyGuard) {
     issues.push({ level: "high", key: "parallel-provisioning", message: "Provisioning can run webhook executions in parallel." });
   }
   if (handlesPii && settingsSignals.confidential === false) {
@@ -186,6 +206,7 @@ function evaluateScenario({ scenario = {}, blueprint = {}, logs = [], hooks = []
       provisionsPhone,
       createsVapiAssistant,
       hasVisibleIdempotencyStorage: hasIdempotencyStorage,
+      hasBackendIdempotencyGuard,
       hasHardcodedAreaCode,
       handlesPii,
     },
@@ -351,7 +372,9 @@ module.exports = {
   collectSettingSignals,
   evaluateScenario,
   flattenModules,
+  hasNamedMapping,
   hasPiiMapping,
+  isBackendOwnedIdempotentProvisioning,
   isLegacyHttpModule,
   prioritizedRecommendations,
   summarize,

@@ -1,6 +1,7 @@
 const crypto = require("crypto");
 const { loadProjectEnv } = require("./_helpers");
 const { isManagedIsolatedTool } = require("../server/vapiIsolatedSmsProvisioning");
+const { auditToolPinning } = require("./audit-vapi-sms-tool-pinning");
 
 const CALLBACK_ENV_NAME = "TWILIO_STATUS_CALLBACK_URL";
 const CALLBACK_URL = "https://api.myaipa.ca/api/webhooks/twilio/message-status";
@@ -199,12 +200,14 @@ function safeReport({
   verified = [],
   rolledBack = [],
   failed = [],
+  publicationAudit = null,
 }) {
   const changes = selectedPlans.filter((plan) => plan.needsChange);
   return {
     mode,
-    publicationRequired: true,
-    liveImpactConfirmed: false,
+    publicationRequired: !publicationAudit?.safeToPublishWithoutAssistantVersionChanges,
+    liveImpactConfirmed: Boolean(publicationAudit?.safeToPublishWithoutAssistantVersionChanges && applied.length),
+    publicationAuditSafe: Boolean(publicationAudit?.safeToPublishWithoutAssistantVersionChanges),
     callbackUrlHash: shortHash(CALLBACK_URL),
     counts: {
       listed: listedCount,
@@ -258,6 +261,7 @@ function createVapiClient({ apiKey, apiBaseUrl, fetchImpl = globalThis.fetch }) 
   }
   return {
     listTools: () => request(`/tool?limit=${TOOL_LIST_LIMIT}`, { label: "Vapi tool inventory" }),
+    listAssistants: () => request(`/assistant?limit=${TOOL_LIST_LIMIT}`, { label: "Vapi assistant inventory" }),
     getTool: (id) => request(`/tool/${encodeURIComponent(id)}`, { label: "Vapi tool readback" }),
     patchToolEnvironment: (id, environmentVariables) => request(`/tool/${encodeURIComponent(id)}`, {
       method: "PATCH",
@@ -301,11 +305,9 @@ async function repairStatusCallbacks({
   if (normalizedCanaryHash && !/^[a-f0-9]{12}$/.test(normalizedCanaryHash)) {
     throw new Error("Canary mode requires one 12-character tool hash from the dry-run report.");
   }
-  if (apply && !normalizedCanaryHash) {
-    throw new Error("Batch apply is disabled until Vapi publication and assistant-version pinning are separately audited.");
-  }
-  if (apply && confirmation !== CANARY_CONFIRMATION_PHRASE) {
-    throw new Error(`Canary draft staging requires --confirm=${CANARY_CONFIRMATION_PHRASE}.`);
+  const expectedConfirmation = normalizedCanaryHash ? CANARY_CONFIRMATION_PHRASE : CONFIRMATION_PHRASE;
+  if (apply && confirmation !== expectedConfirmation) {
+    throw new Error(`${normalizedCanaryHash ? "Canary draft staging" : "Batch callback publication"} requires --confirm=${expectedConfirmation}.`);
   }
 
   const inventoryPayload = await client.listTools();
@@ -340,12 +342,28 @@ async function repairStatusCallbacks({
   if (normalizedCanaryHash && selectedPlans.length !== 1) {
     throw new Error("The canary tool hash did not identify exactly one managed tool; no updates were attempted.");
   }
+  let publicationAudit = null;
+  if (apply && !normalizedCanaryHash) {
+    if (typeof client.listAssistants !== "function") {
+      throw new Error("Batch callback publication requires a current Vapi assistant inventory.");
+    }
+    publicationAudit = auditToolPinning({
+      toolPayload: inventoryPayload,
+      assistantPayload: await client.listAssistants(),
+    });
+    if (!publicationAudit.safeToPublishWithoutAssistantVersionChanges
+      || publicationAudit.counts.referencedManagedTools !== publicationAudit.counts.managedTools
+      || publicationAudit.counts.unreferencedManagedTools !== 0) {
+      throw new Error("Batch callback publication failed the current assistant-version pinning audit; no updates were attempted.");
+    }
+  }
   if (!apply) {
     return safeReport({
       mode: normalizedCanaryHash ? "dry-run-canary" : "dry-run",
       listedCount: summaries.length,
       plans,
       selectedPlans,
+      publicationAudit,
     });
   }
 
@@ -392,6 +410,7 @@ async function repairStatusCallbacks({
       verified,
       rolledBack: rollback.rolledBack,
       failed: [...new Set([...(failedPlan ? [failedPlan.toolHash] : []), ...rollback.failed])],
+      publicationAudit,
     });
     const error = new Error(rollback.failed.length
       ? "Vapi callback draft staging failed and one or more rollback readbacks also failed."
@@ -401,12 +420,13 @@ async function repairStatusCallbacks({
   }
 
   return safeReport({
-    mode: "stage-canary-draft",
+    mode: normalizedCanaryHash ? "stage-canary-draft" : "publish-batch",
     listedCount: summaries.length,
     plans,
     selectedPlans,
     applied,
     verified,
+    publicationAudit,
   });
 }
 

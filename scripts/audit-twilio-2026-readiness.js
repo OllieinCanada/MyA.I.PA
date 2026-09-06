@@ -83,6 +83,9 @@ function assessTwilioReadiness({
   const outgoing = messages.filter((message) => String(message?.direction || "").toLowerCase().startsWith("outbound"));
   const delivered = outgoing.filter((message) => ["delivered", "read"].includes(String(message?.status || "").toLowerCase()));
   const failed = outgoing.filter((message) => ["failed", "undelivered"].includes(String(message?.status || "").toLowerCase()));
+  const invalidDestinationCodes = new Set(["21211", "21265", "21266", "21268"]);
+  const rejectedBeforeDelivery = failed.filter((message) => invalidDestinationCodes.has(String(message?.error_code || message?.errorCode || "")));
+  const deliveryEligible = outgoing.filter((message) => !rejectedBeforeDelivery.includes(message));
   const messageErrorCodes = countBy(
     failed.filter((message) => message?.error_code != null),
     (message) => message.error_code
@@ -165,6 +168,9 @@ function assessTwilioReadiness({
       deliveredOrRead: delivered.length,
       failedOrUndelivered: failed.length,
       observedDeliveryRatePercent: outgoing.length ? Number(((delivered.length / outgoing.length) * 100).toFixed(1)) : null,
+      deliveryEligible: deliveryEligible.length,
+      rejectedBeforeDelivery: rejectedBeforeDelivery.length,
+      eligibleDeliveryRatePercent: deliveryEligible.length ? Number(((delivered.length / deliveryEligible.length) * 100).toFixed(1)) : null,
       errorCodes: messageErrorCodes,
       segments: sum(messages, (message) => message?.num_segments),
       statusCallbackTools: callbackTools.length,

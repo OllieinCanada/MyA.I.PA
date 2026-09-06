@@ -35,10 +35,26 @@ test("Twilio readiness report contains only redacted number identifiers and aggr
   const serialized = JSON.stringify(report);
   assert.equal(report.phoneNumbers.numbers[0].last4, "1234");
   assert.equal(report.messaging.observedDeliveryRatePercent, 100);
+  assert.equal(report.messaging.eligibleDeliveryRatePercent, 100);
   assert.equal(report.voice.minutes, 1);
   assert.equal(report.trust.approvedProfilePresent, true);
   assert.doesNotMatch(serialized, /\+19055551234|\+19055559876|Private customer message/);
   assert.doesNotMatch(serialized, /Private company name|BU_PRIVATE/);
+});
+
+test("delivery eligibility separates invalid-destination test attempts from carrier delivery", () => {
+  const report = assessTwilioReadiness({
+    account: { sid: "AC1", status: "active" },
+    messages: [
+      { direction: "outbound-api", status: "delivered" },
+      { direction: "outbound-api", status: "failed", error_code: 21211 },
+      { direction: "outbound-api", status: "undelivered", error_code: 30006 },
+    ],
+  });
+  assert.equal(report.messaging.observedDeliveryRatePercent, 33.3);
+  assert.equal(report.messaging.rejectedBeforeDelivery, 1);
+  assert.equal(report.messaging.deliveryEligible, 2);
+  assert.equal(report.messaging.eligibleDeliveryRatePercent, 50);
 });
 
 test("readiness recommendations identify master-token, callback, consent and delivery gaps", () => {

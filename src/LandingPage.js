@@ -289,32 +289,30 @@ const faqs = [
 
 const forwardingProviderDetails = {
   BELL: {
-    title: "BELL MOBILITY",
-    subtitle: "FORWARD CALLS YOU DON'T ANSWER",
+    title: "BELL",
+    subtitle: "MATCH THE EXACT BELL PHONE PRODUCT",
     steps: [
-      "Open Call Settings.",
-      "Select Call Forwarding.",
-      "Choose calls you don't answer.",
-      "Enter your My AI PA number and activate.",
+      "Choose Bell during secure setup.",
+      "Tell us whether it is mobile, landline, or cloud phone.",
+      "Use the verified method shown for that exact product.",
+      "Let My AI PA run a private forwarding test.",
     ],
-    offText: "Turn off in Call Settings.",
-    sourceText: "Based on Bell Support instructions",
+    offText: "Unknown Bell products fall back to safe guided help.",
+    sourceText: "Commands are checked against current official guidance",
   },
   ROGERS: {
-    title: "ROGERS MOBILE",
-    subtitle: "FORWARD CALLS YOU DON'T ANSWER",
-    code: "*61*2895550148#",
-    steps: ["Open the Phone app.", "Dial the ready-to-use code.", "Tap Call/Send.", "Wait for the confirmation message."],
-    offText: "Turn off anytime: dial ##61#",
-    sourceText: "Based on Rogers Support instructions",
+    title: "ROGERS",
+    subtitle: "MOBILE AND HOME PHONE USE DIFFERENT METHODS",
+    steps: ["Choose Rogers during secure setup.", "Select mobile, landline, or cloud phone.", "Tap the verified action for that exact line type.", "Let My AI PA run a private forwarding test."],
+    offText: "Your secure page also shows the correct disable method.",
+    sourceText: "Commands are checked against current official guidance",
   },
   TELUS: {
-    title: "TELUS MOBILE",
-    subtitle: "FORWARD CALLS YOU DON'T ANSWER",
-    code: "*61*2895550148#",
-    steps: ["Open the Phone app.", "Dial the ready-to-use code.", "Tap Call/Send.", "Wait for the confirmation message."],
-    offText: "Turn off anytime: dial #61#",
-    sourceText: "Based on TELUS Support instructions",
+    title: "TELUS",
+    subtitle: "SAFE GUIDANCE FOR YOUR EXACT PHONE PRODUCT",
+    steps: ["Choose TELUS during secure setup.", "Select mobile, landline, or cloud phone.", "Follow the guided provider instructions.", "Let My AI PA run a private forwarding test."],
+    offText: "We do not guess a service code when the product is uncertain.",
+    sourceText: "Unsupported combinations use guided setup",
   },
   OTHER: {
     title: "OTHER PROVIDER",
@@ -2707,7 +2705,6 @@ function VoicemailLossesArtboard({ onStart, onPlayDemo }) {
 function ForwardingSetupWizard() {
   const [provider, setProvider] = useState("ROGERS");
   const [copiedField, setCopiedField] = useState("");
-  const [testComplete, setTestComplete] = useState(false);
   const providerDetails = forwardingProviderDetails[provider];
   const displayNumber = "(289) 555-0148";
   const copyNumber = "2895550148";
@@ -2760,7 +2757,6 @@ function ForwardingSetupWizard() {
                 onClick={() => {
                   setProvider(providerName);
                   setCopiedField("");
-                  setTestComplete(false);
                 }}
                 className={
                   "min-h-[46px] border-[#cfe1f6] px-3 py-3 text-[0.8rem] font-black uppercase tracking-[0.12em] transition first:border-l-0 sm:border-l " +
@@ -2795,7 +2791,7 @@ function ForwardingSetupWizard() {
               {copiedField === "number" ? "Copied" : "Copy number"}
             </button>
             <p className="mt-4 text-[0.78rem] font-medium leading-5 text-[#475569]">
-              We insert this number into your forwarding code automatically.
+              After signup, secure setup inserts your assigned number whenever a verified one-tap method is available.
             </p>
           </section>
 
@@ -2859,20 +2855,17 @@ function ForwardingSetupWizard() {
               <HeroIcon type="check" className="h-6 w-6" />
             </span>
             <p className="mt-4 flex-1 text-[0.84rem] font-medium leading-5 text-[#172033]">
-              Call your business number and let it ring unanswered. My AI PA should answer.
+              Once your number is assigned, My AI PA places a private test call. Let the business phone ring unanswered so forwarding can be verified automatically.
             </p>
             <p className="mt-3 text-center text-[0.78rem] font-black leading-5 text-[#176bff]">
               Problems? Call our customer support at <a href="tel:+12495033301" className="whitespace-nowrap underline decoration-2 underline-offset-2">(249) 503-3301</a>
             </p>
             <button
               type="button"
-              onClick={() => setTestComplete((complete) => !complete)}
-              className={
-                "mt-4 inline-flex min-h-[46px] w-full items-center justify-center rounded-[8px] px-3 text-[0.72rem] font-black uppercase tracking-[0.08em] text-white shadow-[0_16px_34px_-24px_rgba(255,106,0,0.92)] transition hover:-translate-y-0.5 " +
-                (testComplete ? "bg-[#15803d]" : "bg-[linear-gradient(180deg,#ff8b1f,#ff6b00)]")
-              }
+              onClick={() => { window.location.hash = "#/signup"; }}
+              className="mt-4 inline-flex min-h-[46px] w-full items-center justify-center rounded-[8px] bg-[linear-gradient(180deg,#ff8b1f,#ff6b00)] px-3 text-[0.72rem] font-black uppercase tracking-[0.08em] text-white shadow-[0_16px_34px_-24px_rgba(255,106,0,0.92)] transition hover:-translate-y-0.5"
             >
-              {testComplete ? "Test completed" : "I completed the test"}
+              Start secure setup
             </button>
           </section>
         </div>

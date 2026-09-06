@@ -64,6 +64,14 @@ function mockClient(initialTools, { readbackTransform, failPatchAt = 0 } = {}) {
         ],
       };
     },
+    async listAssistants() {
+      return {
+        data: initialTools.map((tool, index) => ({
+          id: `assistant-${index + 1}`,
+          model: { toolIds: [tool.id] },
+        })),
+      };
+    },
     async getTool(id) {
       getCount += 1;
       const value = clone(states.get(id));
@@ -140,13 +148,14 @@ test("dry-run inventories hashes without patching or leaking tool data", async (
     "mode",
     "plannedToolHashes",
     "publicationRequired",
+    "publicationAuditSafe",
     "rolledBackToolHashes",
     "selectedToolHashes",
     "verifiedToolHashes",
   ].sort());
 });
 
-test("batch apply is disabled before making a network call", async () => {
+test("batch apply requires its dedicated confirmation before making a network call", async () => {
   let listed = false;
   const client = {
     async listTools() { listed = true; return []; },
@@ -154,8 +163,8 @@ test("batch apply is disabled before making a network call", async () => {
     async patchToolEnvironment() {},
   };
   await assert.rejects(
-    repairStatusCallbacks({ client, apply: true, confirmation: CONFIRMATION_PHRASE }),
-    /Batch apply is disabled/i
+    repairStatusCallbacks({ client, apply: true, confirmation: CANARY_CONFIRMATION_PHRASE }),
+    new RegExp(CONFIRMATION_PHRASE)
   );
   assert.equal(listed, false);
 });
@@ -284,14 +293,30 @@ test("unexpected readback mutation fails and restores the original environment",
   assert.doesNotMatch(JSON.stringify(caught.safeReport), /tool-readback|private-auth-token|9055551234/);
 });
 
-test("batch apply remains refused with multiple managed tools and performs no writes", async () => {
+test("batch apply publishes all managed tools only after the current pinning audit passes", async () => {
   const first = managedTool("tool-first");
   const second = managedTool("tool-second");
   second.function.name = "send_call_summaries_5678_cafebabe_v2";
   const client = mockClient([first, second]);
+  const report = await repairStatusCallbacks({ client, apply: true, confirmation: CONFIRMATION_PHRASE });
+  assert.equal(report.mode, "publish-batch");
+  assert.equal(report.publicationAuditSafe, true);
+  assert.equal(report.publicationRequired, false);
+  assert.equal(report.liveImpactConfirmed, true);
+  assert.equal(report.counts.applied, 2);
+  assert.equal(report.counts.verified, 2);
+  assert.equal(client.patchCalls.length, 2);
+});
+
+test("batch apply refuses pinned assistant references before any write", async () => {
+  const tool = managedTool("tool-pinned");
+  const client = mockClient([tool]);
+  client.listAssistants = async () => ({
+    data: [{ id: "assistant-pinned", model: { toolRefs: [{ toolId: tool.id, version: "v1" }] } }],
+  });
   await assert.rejects(
     repairStatusCallbacks({ client, apply: true, confirmation: CONFIRMATION_PHRASE }),
-    /Batch apply is disabled/i
+    /pinning audit/i
   );
   assert.equal(client.patchCalls.length, 0);
 });
