@@ -9787,7 +9787,14 @@ async function getOpenAiTranscription({ audioBase64, mimeType, detailed = false 
 
 app.get("/", (_req, res) => {
   res.setHeader("Cache-Control", "no-store");
-  res.status(200).type("html").send(buildBackendRootPage());
+  res.status(200).type("html").send(buildBackendRootPage({
+    stripeConfigured: Boolean(stripe && STRIPE_PRICE_ID),
+    webhookConfigured: Boolean(STRIPE_WEBHOOK_SECRET),
+    priceConfigured: Boolean(STRIPE_PRICE_ID),
+    trialDays: STRIPE_TRIAL_DAYS,
+    planDisplay: STRIPE_PLAN_DISPLAY,
+    sandbox: STRIPE_SECRET_KEY.startsWith("sk_test_"),
+  }));
 });
 
 app.get("/api/health", (_req, res) => {
