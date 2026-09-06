@@ -26,6 +26,157 @@ function safePhone(value) {
   return phone ? `•••${phone.slice(-4)}` : "";
 }
 
+const NON_CUSTOMER_PATTERNS = [
+  /\bcanary\b/i,
+  /\bsynthetic\b/i,
+  /\bscenario caller\b/i,
+  /\brecorded demo\b/i,
+  /\bprivate demo\b/i,
+  /\bpricing test\b/i,
+  /\bsandbox\b/i,
+  /\btest only\b/i,
+  /\bcontrolled qa\b/i,
+  /(?:^|\n)my ai pa(?:\n|$)/i,
+];
+
+function classifyInventoryPurpose(...values) {
+  const evidence = values.map((value) => String(value || "").trim()).filter(Boolean).join("\n");
+  return NON_CUSTOMER_PATTERNS.some((pattern) => pattern.test(evidence))
+    ? "non_customer"
+    : "customer_or_unknown";
+}
+
+function buildMappingReadinessReport({ phones = [], assistants = [], mappings = [], businesses = [], customerAccounts = [], warnings = [] }) {
+  const mappedValues = mappingValueSet(mappings);
+  const assistantsById = new Map(assistants.map((assistant) => [String(assistant.id || ""), assistant]));
+  const businessesByPhone = new Map(
+    businesses
+      .map((business) => [normalizePhone(business?.phone), business])
+      .filter(([phone]) => phone)
+  );
+  const accountStateByBusinessName = new Map();
+  for (const account of customerAccounts) {
+    const name = String(account?.businessName || account?.name || "").trim().toLowerCase();
+    if (!name) continue;
+    const payment = String(account?.paymentStatus || account?.subscriptionStatus || account?.trial?.status || "").trim().toLowerCase();
+    const setup = String(account?.setupStatus || account?.status || "").trim().toLowerCase();
+    const current = accountStateByBusinessName.get(name) || [];
+    current.push({ payment, setup });
+    accountStateByBusinessName.set(name, current);
+  }
+
+  const phoneCoverage = phones.map((phone) => {
+    const id = String(phone.id || "").trim();
+    const number = normalizePhone(phone.number);
+    const assistantId = String(phone.assistantId || "").trim();
+    const assistant = assistantsById.get(assistantId);
+    const directPhoneMapping = Boolean(
+      phone.mappedBusiness ||
+      mappedValues.has(id.toLowerCase()) ||
+      (number && mappedValues.has(number.toLowerCase()))
+    );
+    const assistantMapping = Boolean(
+      assistant?.mappedBusiness ||
+      (assistantId && mappedValues.has(assistantId.toLowerCase()))
+    );
+    const businessPhoneMatch = businessesByPhone.get(number);
+    const mappedBusiness = phone.mappedBusiness || assistant?.mappedBusiness || businessPhoneMatch || null;
+    const businessName = String(mappedBusiness?.name || mappedBusiness?.businessName || "").trim();
+    const accountStates = accountStateByBusinessName.get(businessName.toLowerCase()) || [];
+    const expectedActive = accountStates.some((state) => ["active", "trialing"].includes(state.payment));
+    const explicitlyPaused = accountStates.length > 0 && !expectedActive && accountStates.every((state) => (
+      /paused|unpaid|canceled|cancelled|incomplete_expired/.test(state.payment)
+      || /subscription_paused|abandoned_archived/.test(state.setup)
+    ));
+    const serviceState = expectedActive ? "expected_active" : explicitlyPaused ? "paused" : "unknown";
+    const purpose = classifyInventoryPurpose(
+      phone.name,
+      phone.assistantName,
+      assistant?.name,
+      assistant?.firstMessage,
+      businessName,
+    );
+    return {
+      phoneId: safeId(id),
+      phone: safePhone(number),
+      assistantId: safeId(assistantId),
+      assistantName: String(phone.assistantName || assistant?.name || "").slice(0, 120),
+      business: businessName,
+      purpose,
+      serviceState,
+      routeMode: String(phone.routeMode || "unknown"),
+      directPhoneMapping,
+      assistantMapping,
+      businessPhoneFallback: Boolean(businessPhoneMatch),
+      effectivelyMapped: directPhoneMapping || assistantMapping || Boolean(businessPhoneMatch),
+    };
+  });
+
+  const activeAssistantIds = new Set(
+    phones.map((phone) => String(phone.assistantId || "").trim()).filter(Boolean)
+  );
+  const attachedAssistants = assistants
+    .filter((assistant) => activeAssistantIds.has(String(assistant.id || "").trim()))
+    .map((assistant) => ({
+      assistantId: safeId(assistant.id),
+      name: String(assistant.name || "").slice(0, 120),
+      phoneCount: Array.isArray(assistant.phoneNumbers) ? assistant.phoneNumbers.length : 0,
+      purpose: classifyInventoryPurpose(assistant.name, assistant.firstMessage),
+      mapped: Boolean(
+        assistant.mappedBusiness ||
+        mappedValues.has(String(assistant.id || "").trim().toLowerCase())
+      ),
+      business: assistant.mappedBusiness?.name || "",
+    }));
+
+  const customerPhones = phoneCoverage.filter((phone) => phone.purpose === "customer_or_unknown");
+  const nonCustomerPhones = phoneCoverage.filter((phone) => phone.purpose === "non_customer");
+  const unmappedPhones = customerPhones.filter((phone) => !phone.effectivelyMapped);
+  const customerPhonesWithoutAssistants = customerPhones.filter((phone) => (
+    !phone.assistantId && phone.routeMode !== "trial_gate" && phone.serviceState !== "paused"
+  ));
+  const pausedCustomerPhonesWithoutAssistants = customerPhones.filter((phone) => (
+    !phone.assistantId && phone.routeMode !== "trial_gate" && phone.serviceState === "paused"
+  ));
+  const trialGatedCustomerPhones = customerPhones.filter((phone) => phone.routeMode === "trial_gate");
+  const unmappedAttachedAssistants = attachedAssistants.filter((assistant) => (
+    assistant.purpose === "customer_or_unknown" && !assistant.mapped
+  ));
+  const nonCustomerUnmappedPhones = nonCustomerPhones.filter((phone) => !phone.effectivelyMapped);
+
+  return {
+    checkedAt: new Date().toISOString(),
+    policy: "Customer calls must match a trusted phone, assistant, metadata, or business-number mapping. Demos and canaries are reported separately and never treated as customer-ready.",
+    summary: {
+      phoneNumbers: phones.length,
+      customerOrUnknownPhoneNumbers: customerPhones.length,
+      nonCustomerPhoneNumbers: nonCustomerPhones.length,
+      assignedPhoneNumbers: phoneCoverage.filter((phone) => phone.assistantId).length,
+      effectivelyMappedCustomerPhones: customerPhones.filter((phone) => phone.effectivelyMapped).length,
+      unmappedCustomerPhones: unmappedPhones.length,
+      customerPhonesWithoutAssistants: customerPhonesWithoutAssistants.length,
+      pausedCustomerPhonesWithoutAssistants: pausedCustomerPhonesWithoutAssistants.length,
+      trialGatedCustomerPhones: trialGatedCustomerPhones.length,
+      unmappedNonCustomerPhones: nonCustomerUnmappedPhones.length,
+      attachedAssistants: attachedAssistants.length,
+      unmappedCustomerAssistants: unmappedAttachedAssistants.length,
+      databaseMappings: mappings.length,
+      providerWarnings: warnings.length,
+    },
+    ready: unmappedPhones.length === 0
+      && unmappedAttachedAssistants.length === 0
+      && customerPhonesWithoutAssistants.length === 0,
+    unmappedPhones,
+    customerPhonesWithoutAssistants,
+    pausedCustomerPhonesWithoutAssistants,
+    trialGatedCustomerPhones,
+    unmappedAttachedAssistants,
+    nonCustomerUnmappedPhones,
+    phoneCoverage,
+    providerWarnings: warnings,
+  };
+}
+
 async function getJson(route) {
   const response = await fetch(`${apiBaseUrl}${route}`, {
     headers: {
@@ -57,92 +208,26 @@ function mappingValueSet(mappings) {
 async function main() {
   if (!adminPassword) throw new Error("ADMIN_PASSWORD is not configured locally.");
 
-  const [inventoryPayload, mappingPayload] = await Promise.all([
+  const [inventoryPayload, mappingPayload, customerSetupPayload] = await Promise.all([
     getJson("/api/admin/vapi/inventory"),
     getJson("/api/admin/vapi/mappings"),
+    getJson("/api/admin/customer-setup"),
   ]);
   const inventory = inventoryPayload.inventory || {};
   const phones = Array.isArray(inventory.phoneNumbers) ? inventory.phoneNumbers : [];
   const assistants = Array.isArray(inventory.assistants) ? inventory.assistants : [];
   const mappings = Array.isArray(mappingPayload.mappings) ? mappingPayload.mappings : [];
   const businesses = Array.isArray(mappingPayload.businesses) ? mappingPayload.businesses : [];
-  const mappedValues = mappingValueSet(mappings);
-  const assistantsById = new Map(assistants.map((assistant) => [String(assistant.id || ""), assistant]));
-  const businessesByPhone = new Map(
-    businesses
-      .map((business) => [normalizePhone(business?.phone), business])
-      .filter(([phone]) => phone)
-  );
-
-  const phoneCoverage = phones.map((phone) => {
-    const id = String(phone.id || "").trim();
-    const number = normalizePhone(phone.number);
-    const assistantId = String(phone.assistantId || "").trim();
-    const assistant = assistantsById.get(assistantId);
-    const directPhoneMapping = Boolean(
-      phone.mappedBusiness ||
-      mappedValues.has(id.toLowerCase()) ||
-      (number && mappedValues.has(number.toLowerCase()))
-    );
-    const assistantMapping = Boolean(
-      assistant?.mappedBusiness ||
-      (assistantId && mappedValues.has(assistantId.toLowerCase()))
-    );
-    const businessPhoneMatch = businessesByPhone.get(number);
-    return {
-      phoneId: safeId(id),
-      phone: safePhone(number),
-      assistantId: safeId(assistantId),
-      assistantName: String(phone.assistantName || assistant?.name || "").slice(0, 120),
-      business:
-        phone.mappedBusiness?.name ||
-        assistant?.mappedBusiness?.name ||
-        businessPhoneMatch?.name ||
-        "",
-      directPhoneMapping,
-      assistantMapping,
-      businessPhoneFallback: Boolean(businessPhoneMatch),
-      effectivelyMapped: directPhoneMapping || assistantMapping || Boolean(businessPhoneMatch),
-    };
-  });
-
-  const activeAssistantIds = new Set(
-    phones.map((phone) => String(phone.assistantId || "").trim()).filter(Boolean)
-  );
-  const attachedAssistants = assistants
-    .filter((assistant) => activeAssistantIds.has(String(assistant.id || "").trim()))
-    .map((assistant) => ({
-      assistantId: safeId(assistant.id),
-      name: String(assistant.name || "").slice(0, 120),
-      phoneCount: Array.isArray(assistant.phoneNumbers) ? assistant.phoneNumbers.length : 0,
-      mapped: Boolean(
-        assistant.mappedBusiness ||
-        mappedValues.has(String(assistant.id || "").trim().toLowerCase())
-      ),
-      business: assistant.mappedBusiness?.name || "",
-    }));
-
-  const unmappedPhones = phoneCoverage.filter((phone) => !phone.effectivelyMapped);
-  const unmappedAttachedAssistants = attachedAssistants.filter((assistant) => !assistant.mapped);
   const report = {
-    checkedAt: new Date().toISOString(),
     apiBaseUrl,
-    policy: "Calls must match a trusted phone, assistant, metadata, or business-number mapping. No default tenant guessing.",
-    summary: {
-      phoneNumbers: phones.length,
-      assignedPhoneNumbers: phoneCoverage.filter((phone) => phone.assistantId).length,
-      effectivelyMappedPhoneNumbers: phoneCoverage.filter((phone) => phone.effectivelyMapped).length,
-      unmappedPhoneNumbers: unmappedPhones.length,
-      attachedAssistants: attachedAssistants.length,
-      unmappedAttachedAssistants: unmappedAttachedAssistants.length,
-      databaseMappings: mappings.length,
-      providerWarnings: Array.isArray(inventory.warnings) ? inventory.warnings.length : 0,
-    },
-    ready: unmappedPhones.length === 0 && unmappedAttachedAssistants.length === 0,
-    unmappedPhones,
-    unmappedAttachedAssistants,
-    phoneCoverage,
-    providerWarnings: Array.isArray(inventory.warnings) ? inventory.warnings : [],
+    ...buildMappingReadinessReport({
+      phones,
+      assistants,
+      mappings,
+      businesses,
+      customerAccounts: Array.isArray(customerSetupPayload.customers) ? customerSetupPayload.customers : [],
+      warnings: Array.isArray(inventory.warnings) ? inventory.warnings : [],
+    }),
   };
 
   const json = `${JSON.stringify(report, null, 2)}\n`;
@@ -156,7 +241,15 @@ async function main() {
   if (!report.ready) process.exitCode = 2;
 }
 
-main().catch((error) => {
-  console.error(error.message || error);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(error.message || error);
+    process.exit(1);
+  });
+}
+
+module.exports = {
+  buildMappingReadinessReport,
+  classifyInventoryPurpose,
+  normalizePhone,
+};

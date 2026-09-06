@@ -2929,6 +2929,10 @@ function getVapiAssistantId(record) {
   return getVapiNestedString(record, ["assistantId", "assistant.id"]) || "";
 }
 
+function normalizeVapiServerUrl(value) {
+  return String(value || "").trim().replace(/\/+$/, "").toLowerCase();
+}
+
 function findVapiInventoryMapping(record, mappings, type) {
   const rawCandidates = [
     record?.id,
@@ -2977,6 +2981,14 @@ async function getVapiAccountInventory() {
     const assistantId = getVapiAssistantId(phone);
     const assistant = assistantId ? assistantsById.get(assistantId) : null;
     const mapping = findVapiInventoryMapping(phone, mappings, "phone");
+    const serverUrl = getVapiNestedString(phone, ["server.url", "serverUrl"]);
+    const routeMode = normalizeVapiServerUrl(serverUrl) === normalizeVapiServerUrl(TRIAL_USAGE_GATE_WEBHOOK_URL)
+      ? "trial_gate"
+      : assistantId
+        ? "direct_assistant"
+        : serverUrl
+          ? "external_server"
+          : "unconfigured";
     return {
       id: phone.id || phone.phoneNumberId || "",
       name: phone.name || phone.label || "",
@@ -2985,6 +2997,7 @@ async function getVapiAccountInventory() {
       status: phone.status || phone.state || "",
       assistantId,
       assistantName: getVapiAssistantName(assistant || phone),
+      routeMode,
       createdAt: phone.createdAt || phone.created_at || "",
       updatedAt: phone.updatedAt || phone.updated_at || "",
       mappedBusiness: mapping?.business ? { id: mapping.business.id, name: mapping.business.name } : null,

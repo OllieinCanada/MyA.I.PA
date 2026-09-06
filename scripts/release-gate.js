@@ -1,8 +1,10 @@
+const fs = require("fs");
 const path = require("path");
 const { nodeCommand, rootPath, run } = require("./_helpers");
 
 const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
 const skipPages = process.argv.includes("--skip-pages");
+const reportPath = rootPath("diagnostics", "shipping-readiness", "release-gate.json");
 
 const steps = [
   ["Backend security and provider tests", npmCommand, ["run", "test:backend"]],
@@ -37,11 +39,31 @@ const steps = [
 
 console.log("My AI PA local release gate");
 console.log("===========================");
+const report = {
+  checkedAt: new Date().toISOString(),
+  skipPages,
+  ready: false,
+  completedSteps: [],
+  failedStep: "",
+};
 for (const [label, command, args, options = {}] of steps) {
   console.log(`\n[release-gate] ${label}`);
-  run(command, args, { cwd: rootPath(), ...options });
+  try {
+    run(command, args, { cwd: rootPath(), ...options });
+    report.completedSteps.push(label);
+  } catch (error) {
+    report.failedStep = label;
+    fs.mkdirSync(path.dirname(reportPath), { recursive: true });
+    fs.writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
+    throw error;
+  }
 }
 
+report.ready = true;
+report.checkedAt = new Date().toISOString();
+fs.mkdirSync(path.dirname(reportPath), { recursive: true });
+fs.writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
 console.log("\nRelease gate passed.");
+console.log(`Release report written to ${reportPath}`);
 if (skipPages) console.log("Production Pages build was intentionally skipped for this run; execute it separately or through the combined release before publishing.");
 console.log("Live API, provider credentials, real calls/messages, completed legal documents, counsel approval, and external deployment still require separate verification.");

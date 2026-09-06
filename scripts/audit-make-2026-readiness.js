@@ -1,5 +1,7 @@
 const crypto = require("crypto");
-const { loadProjectEnv } = require("./_helpers");
+const fs = require("fs");
+const path = require("path");
+const { loadProjectEnv, rootPath } = require("./_helpers");
 
 function listFrom(value, keys = []) {
   if (Array.isArray(value)) return value;
@@ -328,6 +330,12 @@ async function runAudit({ env = loadProjectEnv(), fetchImpl = fetch } = {}) {
 
 async function main() {
   const report = await runAudit();
+  const output = process.argv.find((arg) => arg.startsWith("--out="))?.slice(6) || "";
+  if (output) {
+    const outputPath = path.isAbsolute(output) ? output : rootPath(output);
+    fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+    fs.writeFileSync(outputPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
+  }
   console.log(JSON.stringify(report, null, 2));
   if (process.argv.includes("--strict") && report.summary.highRiskGaps > 0) process.exitCode = 2;
 }

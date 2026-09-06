@@ -10,6 +10,7 @@ const { spawnSync } = require("child_process");
 const root = path.resolve(__dirname, "..");
 const args = new Set(process.argv.slice(2));
 const checkOnly = args.has("--check");
+const readinessOutput = process.argv.find((arg) => arg.startsWith("--out="))?.slice(6) || "";
 const encryptionSecret = String(process.env.BACKUP_ENCRYPTION_KEY || "").trim();
 const outputDir = path.resolve(
   root,
@@ -98,6 +99,11 @@ function main() {
   };
 
   if (checkOnly) {
+    if (readinessOutput) {
+      const readinessPath = path.isAbsolute(readinessOutput) ? readinessOutput : path.resolve(root, readinessOutput);
+      fs.mkdirSync(path.dirname(readinessPath), { recursive: true });
+      fs.writeFileSync(readinessPath, `${JSON.stringify(readiness, null, 2)}\n`, "utf8");
+    }
     console.log(JSON.stringify(readiness, null, 2));
     if (!readiness.ready) process.exitCode = 2;
     return;

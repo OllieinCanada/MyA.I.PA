@@ -1,5 +1,7 @@
 const crypto = require("crypto");
-const { loadProjectEnv } = require("./_helpers");
+const fs = require("fs");
+const path = require("path");
+const { loadProjectEnv, rootPath } = require("./_helpers");
 
 function listFrom(value, keys = []) {
   if (Array.isArray(value)) return value;
@@ -328,6 +330,12 @@ async function runAudit({ env = loadProjectEnv(), days = 30 } = {}) {
 async function main() {
   const days = Number(process.argv.find((arg) => arg.startsWith("--days="))?.split("=")[1] || 30);
   const report = await runAudit({ days });
+  const output = process.argv.find((arg) => arg.startsWith("--out="))?.slice(6) || "";
+  if (output) {
+    const outputPath = path.isAbsolute(output) ? output : rootPath(output);
+    fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+    fs.writeFileSync(outputPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
+  }
   console.log(JSON.stringify(report, null, 2));
   if (process.argv.includes("--strict") && report.recommendations.some((item) => item.priority === "critical")) {
     process.exitCode = 2;
