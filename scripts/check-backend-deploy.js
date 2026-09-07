@@ -76,6 +76,7 @@ expectIncludes("prisma/schema.prisma", "model RuntimeStore");
 expectIncludes("prisma/schema.prisma", "model SupportReport");
 expectIncludes("prisma/schema.prisma", "model CallForwardingSetup");
 expectIncludes("prisma/schema.prisma", "model ForwardingVerificationAttempt");
+expectIncludes("prisma/schema.prisma", "model PendingSignupVerification");
 expectIncludes("prisma/schema.prisma", "githubIssueUrl");
 expectIncludes("prisma/schema.prisma", "codexTaskPrompt");
 expectIncludes("Procfile", "npm run server:prod");

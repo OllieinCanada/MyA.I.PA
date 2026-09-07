@@ -1450,6 +1450,10 @@ video {
   min-height: 58px;
 }
 
+.min-h-\[65px\] {
+  min-height: 65px;
+}
+
 .min-h-\[72px\] {
   min-height: 72px;
 }
@@ -3464,6 +3468,11 @@ video {
 .border-amber-200 {
   --tw-border-opacity: 1;
   border-color: rgb(253 230 138 / var(--tw-border-opacity, 1));
+}
+
+.border-amber-300 {
+  --tw-border-opacity: 1;
+  border-color: rgb(252 211 77 / var(--tw-border-opacity, 1));
 }
 
 .border-amber-300\/25 {

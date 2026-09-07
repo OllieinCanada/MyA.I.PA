@@ -71,6 +71,20 @@ const groups = [
     keys: ["INTEGRATION_API_KEY"],
   },
   {
+    id: "admin-mfa",
+    label: "Admin authenticator-app protection",
+    priority: "required-before-sales",
+    source: "Generate a strong TOTP seed and enrol an authenticator app",
+    keys: ["ADMIN_TOTP_SECRET"],
+  },
+  {
+    id: "encrypted-backups",
+    label: "Encrypted database backups and restore drills",
+    priority: "required-before-sales",
+    source: "Generate a strong backup encryption key",
+    keys: ["BACKUP_ENCRYPTION_KEY"],
+  },
+  {
     id: "vapi-webhook-auth",
     label: "Vapi webhook authentication",
     priority: "derived-if-missing",

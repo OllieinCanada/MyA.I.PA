@@ -1,6 +1,6 @@
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
-import Signup, { SignupSuccessPage } from "./Signup";
+import Signup, { HumanVerificationCheck, SignupSuccessPage } from "./Signup";
 
 jest.mock("@vapi-ai/web", () => jest.fn().mockImplementation(() => ({
   on: jest.fn(),
@@ -40,6 +40,26 @@ describe("intuitive signup presentation", () => {
     expect(container.textContent).toMatch(/Step 1 of 8/i);
     expect(container.textContent).toMatch(/Choose your trade/i);
     expect(container.querySelectorAll(".signup-trade-grid button")).toHaveLength(6);
+  });
+
+  test("renders Turnstile explicitly and returns its verified token", () => {
+    const onVerify = jest.fn();
+    window.turnstile = {
+      render: jest.fn((_element, options) => {
+        options.callback("verified-browser-token");
+        return "widget-1";
+      }),
+      remove: jest.fn(),
+    };
+
+    act(() => root.render(
+      <HumanVerificationCheck provider="turnstile" siteKey="test-site-key" onVerify={onVerify} />
+    ));
+
+    expect(container.querySelector('[data-testid="turnstile-container"]')).not.toBeNull();
+    expect(window.turnstile.render).toHaveBeenCalledTimes(1);
+    expect(onVerify).toHaveBeenCalledWith("verified-browser-token");
+    delete window.turnstile;
   });
 
   test.each([

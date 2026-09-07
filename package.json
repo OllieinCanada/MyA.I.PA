@@ -1,5 +1,5 @@
 {
-  "name": "react",
+  "name": "myaipa-website",
   "version": "0.0.0",
   "private": true,
   "homepage": ".",
@@ -46,6 +46,8 @@
     "ops:backup": "node scripts/database-backup.js",
     "ops:backup:check": "node scripts/database-backup.js --check --out=diagnostics/shipping-readiness/backup-readiness.json",
     "ops:backup:restore-drill": "node scripts/restore-backup-drill.js",
+    "admin:totp:enroll": "node scripts/enroll-admin-totp.js",
+    "decommission:signup-canary": "node scripts/decommission-signup-canary.js",
     "oauth:validate": "node scripts/validate-calendar-oauth-readiness.js",
     "security:scan-secrets": "node scripts/scan-secrets.js",
     "test:release": "node scripts/release-gate.js",

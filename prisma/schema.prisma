@@ -754,6 +754,31 @@ model SecurityRateLimit {
   @@index([expiresAt])
 }
 
+model PendingSignupVerification {
+  tokenHash               String    @id
+  ownerEmail              String
+  ownerEmailNormalized    String
+  businessName            String
+  businessNameNormalized  String
+  purpose                 String    @default("email_verification")
+  payload                 Json
+  reviewReasons           Json?
+  deliveryChannels        Json?
+  ipHash                  String?
+  createdAt               DateTime  @default(now())
+  expiresAt               DateTime
+  claimedAt               DateTime?
+  verifiedAt              DateTime?
+  usedAt                  DateTime?
+  supersededAt            DateTime?
+  updatedAt               DateTime  @updatedAt
+
+  @@index([ownerEmailNormalized, createdAt])
+  @@index([businessNameNormalized, createdAt])
+  @@index([purpose, expiresAt])
+  @@index([expiresAt])
+}
+
 model CustomerDashboardLoginCode {
   lookupHash String   @id
   codeHash   String
