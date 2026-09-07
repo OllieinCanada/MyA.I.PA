@@ -126,6 +126,20 @@ const {
 const { buildTwilioMessageStatusIncident } = require("./twilioMessageStatus");
 const { buildForwardingInstructions } = require("./forwardingInstructions");
 const {
+  applyVerificationStatusCallback,
+  createSetupToken,
+  getSetupFromToken,
+  initializeForwardingSetup,
+  isForwardingVerificationCall,
+  markDialerOpened,
+  matchForwardedVerificationCall,
+  recordEvent: recordForwardingEvent,
+  sanitizeSetup: sanitizeForwardingSetup,
+  startVerification: startForwardingVerification,
+  updateSelections: updateForwardingSelections,
+} = require("./callForwardingService");
+const { placeForwardingVerificationCall } = require("./twilioCallVerification");
+const {
   buildTrialReminderSchedule,
   buildTrialPaymentCheckoutParams,
   completeTrialPaymentSetup,
@@ -296,6 +310,13 @@ const signupVerificationProcessRateLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: "Too many verification attempts. Wait a few minutes and try again." },
 });
+const forwardingVerificationCallbackProcessRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many forwarding verification callbacks." },
+});
 const adminOutreachProcessRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: parsePositiveInt(process.env.ADMIN_OUTREACH_MAX_REQUESTS, 10),
@@ -441,6 +462,11 @@ const MISSED_CALL_ALERT_ENABLED = isEnabled(process.env.MISSED_CALL_ALERT_ENABLE
 const DAILY_DIGEST_ENABLED = isEnabled(process.env.DAILY_DIGEST_ENABLED);
 const FRONTEND_APP_URL = String(process.env.FRONTEND_APP_URL || "https://www.myaipa.ca").trim().replace(/\/+$/, "");
 const CUSTOMER_SUPPORT_PHONE = normalizePhoneForMatch(process.env.CUSTOMER_SUPPORT_PHONE || "+12495033301") || "+12495033301";
+const FORWARDING_VERIFICATION_CALLER_ID = normalizePhoneForMatch(process.env.FORWARDING_VERIFICATION_CALLER_ID || process.env.TWILIO_FROM_NUMBER || "");
+const FORWARDING_VERIFICATION_STATUS_CALLBACK_URL = String(
+  process.env.FORWARDING_VERIFICATION_STATUS_CALLBACK_URL
+  || `${String(process.env.PUBLIC_API_BASE_URL || process.env.BACKEND_PUBLIC_URL || process.env.PUBLIC_APP_URL || "").replace(/\/+$/, "")}/api/webhooks/twilio/forwarding-verification-status`
+).trim();
 const TELEGRAM_BOT_TOKEN = String(process.env.TELEGRAM_BOT_TOKEN || "").trim();
 const TELEGRAM_CHAT_ID = String(process.env.TELEGRAM_CHAT_ID || "").trim();
 const RUNTIME_TELEGRAM_ALERTS_ENABLED = process.env.RUNTIME_TELEGRAM_ALERTS_ENABLED == null
@@ -5249,6 +5275,43 @@ function upsertSignupDashboardFromPayload(payload, extra = {}) {
   });
 }
 
+async function prepareForwardingSetupForProvisionedSignup(payload, signupRecord, assignedPhone) {
+  const business = await resolveBusinessForSignup({ signup: signupRecord, db: prisma });
+  const setup = await initializeForwardingSetup({
+    prismaClient: prisma,
+    signupId: signupRecord.signupAttemptId || buildMakeSignupEventKey(payload),
+    ownerEmail: signupRecord.ownerEmail || payload?.owner?.email,
+    businessId: business?.id || null,
+    existingBusinessNumber: signupRecord.businessPhone || payload?.business?.phone || signupRecord.ownerPhone || payload?.owner?.phone,
+    carrier: payload?.callForwarding?.carrier || payload?.aiAssistant?.carrier || "NOT_SURE",
+    lineType: payload?.callForwarding?.lineType || payload?.aiAssistant?.lineType || "NOT_SURE",
+    assignedMyAiPaNumber: assignedPhone,
+    vapiPhoneNumberId: signupRecord.vapiPhoneNumberId,
+  });
+  const token = createSetupToken(setup);
+  const setupUrl = `${FRONTEND_APP_URL}/#/forwarding-setup?token=${encodeURIComponent(token)}`;
+  await recordForwardingEvent(prisma, setup.id, "forwarding_setup_link_created", {}, `${setup.id}:link:${setup.forwardingSetupVersion}`);
+  upsertSignupDashboardRecord({
+    ...signupRecord,
+    forwardingSetupId: setup.id,
+    forwardingStatus: String(setup.status || "").toLowerCase(),
+    forwardingCarrier: String(setup.carrier || "").toLowerCase(),
+    forwardingLineType: String(setup.lineType || "").toLowerCase(),
+  });
+  return { setup, token, setupUrl };
+}
+
+async function recordForwardingSetupSmsDelivery(forwardingSetup, completionDelivery) {
+  if (!forwardingSetup?.setup || !completionDelivery?.channels?.includes("sms")) return;
+  await recordForwardingEvent(
+    prisma,
+    forwardingSetup.setup.id,
+    "forwarding_setup_sms_sent",
+    {},
+    `${forwardingSetup.setup.id}:sms:${forwardingSetup.setup.forwardingSetupVersion}`
+  );
+}
+
 function getUnixMs(value) {
   const n = Number(value || 0);
   return n ? n * 1000 : null;
@@ -6117,10 +6180,24 @@ async function recoverSignupByOperationalTarget(targetId) {
     });
     const consumed = consumePendingSignupProvisioningAttempts(pendingStore, pending.payload);
     writePendingSignupStore(consumed.store);
+    const forwardingSetup = await prepareForwardingSetupForProvisionedSignup(pending.payload, updated, updated.twilioPhoneNumber);
     await attachNoCardStripeTrialToSignup(pending.payload, {
       makeStatus: makeResult.status,
       twilioPhoneNumber: updated.twilioPhoneNumber || "",
     });
+    const completionDelivery = await deliverSignupCompletion({
+      ownerPhone: updated.ownerPhone || pending.payload?.owner?.phone,
+      ownerEmail: updated.ownerEmail || pending.payload?.owner?.email,
+      ownerName: updated.ownerName || pending.payload?.owner?.name,
+      businessName: updated.businessName || pending.payload?.business?.name,
+      assignedPhone: updated.twilioPhoneNumber,
+      dashboardUrl: `${FRONTEND_APP_URL}/#/dashboard`,
+      forwardingSetupUrl: forwardingSetup.setupUrl,
+      priorStatus: updated.setupFollowupStatus,
+      sendSms: ({ to, message }) => sendSmsViaTwilio({ to, message, env: getVapiVoiceSignupSmsEnvironment() }),
+      sendEmail: sendSignupCompletionEmail,
+    });
+    await recordForwardingSetupSmsDelivery(forwardingSetup, completionDelivery);
     return {
       ok: true,
       action: "make_handoff_retried",
@@ -6211,10 +6288,24 @@ async function recoverSignupByOperationalTarget(targetId) {
         provisioningRetriedAt: new Date().toISOString(),
         recoveredFromVoiceCall: true,
       });
+      const forwardingSetup = await prepareForwardingSetupForProvisionedSignup(recoveredPayload, updated, twilioPhoneNumber);
       await attachNoCardStripeTrialToSignup(recoveredPayload, {
         makeStatus: makeResult.status,
         twilioPhoneNumber,
       });
+      const completionDelivery = await deliverSignupCompletion({
+        ownerPhone: updated.ownerPhone || recoveredPayload?.owner?.phone,
+        ownerEmail: updated.ownerEmail || recoveredPayload?.owner?.email,
+        ownerName: updated.ownerName || recoveredPayload?.owner?.name,
+        businessName: updated.businessName || recoveredPayload?.business?.name,
+        assignedPhone: twilioPhoneNumber,
+        dashboardUrl: `${FRONTEND_APP_URL}/#/dashboard`,
+        forwardingSetupUrl: forwardingSetup.setupUrl,
+        priorStatus: updated.setupFollowupStatus,
+        sendSms: ({ to, message }) => sendSmsViaTwilio({ to, message, env: getVapiVoiceSignupSmsEnvironment() }),
+        sendEmail: sendSignupCompletionEmail,
+      });
+      await recordForwardingSetupSmsDelivery(forwardingSetup, completionDelivery);
       const consumed = consumePendingSignupProvisioningAttempts(pendingStore, recoveredPayload);
       if (consumed.consumed) writePendingSignupStore(consumed.store);
       return {
@@ -7522,6 +7613,17 @@ async function getCustomerDashboard({ email, phone }) {
     trial_end: signup.trialEndAt ? Math.floor(Number(signup.trialEndAt) / 1000) : 0,
   };
   const billingState = getTrialPaymentState(storedSubscriptionState);
+  const forwardingMatches = [
+    ...(business?.id ? [{ businessId: business.id }] : []),
+    ...(signup.twilioPhoneNumber ? [{ assignedMyAiPaNumber: normalizePhoneForMatch(signup.twilioPhoneNumber) }] : []),
+    ...(signup.vapiPhoneNumberId ? [{ vapiPhoneNumberId: String(signup.vapiPhoneNumberId).trim() }] : []),
+  ];
+  const forwardingSetup = forwardingMatches.length
+    ? await prisma.callForwardingSetup.findFirst({
+        where: { OR: forwardingMatches },
+        orderBy: { updatedAt: "desc" },
+      })
+    : null;
 
   return {
     businessId: business?.id || null,
@@ -7582,7 +7684,8 @@ async function getCustomerDashboard({ email, phone }) {
       phone: CUSTOMER_SUPPORT_PHONE,
       displayPhone: formatAssignedPhone(CUSTOMER_SUPPORT_PHONE),
     },
-    forwardingInstructions: buildForwardingInstructions(signup.twilioPhoneNumber),
+    forwarding: forwardingSetup ? sanitizeForwardingSetup(forwardingSetup) : null,
+    forwardingInstructions: forwardingSetup ? [] : buildForwardingInstructions(signup.twilioPhoneNumber),
     agentTesting: buildAgentReadiness({ signup, business }),
     trialUsage,
     stats: {
@@ -11060,9 +11163,39 @@ app.post(
     const vapiMessage = payload.message && typeof payload.message === "object" ? payload.message : null;
     const vapiMessageType = String(vapiMessage?.type || "").toLowerCase();
     if (vapiMessageType === "assistant-request") {
+      const call = vapiMessage?.call && typeof vapiMessage.call === "object" ? vapiMessage.call : {};
+      const verification = await matchForwardedVerificationCall({
+        prismaClient: prisma,
+        from: call?.customer?.number || call?.customer?.phoneNumber || call?.from || call?.fromNumber,
+        destination: call?.phoneNumber?.number || call?.phoneNumber?.twilioPhoneNumber || call?.destination?.number || call?.to,
+        phoneNumberId: call?.phoneNumberId || call?.phoneNumber?.id,
+        vapiCallId: call?.id || call?.callId,
+      });
+      if (verification) {
+        return res.json({
+          assistant: {
+            name: "My AI PA forwarding verification",
+            firstMessage: "Your My AI PA forwarding test was received. You are protected. You can hang up now.",
+            firstMessageMode: "assistant-speaks-first",
+            model: {
+              provider: "openai",
+              model: "gpt-4o-mini",
+              messages: [{ role: "system", content: "This is an automated forwarding verification call. Say only that the forwarding test was received, then end the call. Never collect lead details and never use tools." }],
+              tools: [],
+            },
+            voice: { provider: "vapi", voiceId: "Elliot" },
+            maxDurationSeconds: 15,
+            endCallMessage: "Forwarding verification complete.",
+          },
+        });
+      }
       return res.json(await handleTrialAssistantRequest(vapiMessage));
     }
     if (vapiMessageType === "end-of-call-report") {
+      const reportCallId = String(vapiMessage?.call?.id || vapiMessage?.callId || vapiMessage?.id || "").trim();
+      if (await isForwardingVerificationCall({ prismaClient: prisma, vapiCallId: reportCallId })) {
+        return res.status(200).json({ ok: true, eventType: vapiMessageType, verificationCall: true, leadCreated: false });
+      }
       const result = await ingestVapiEndOfCallReport(vapiMessage);
       return res.status(result.duplicate ? 200 : 201).json({
         ok: true,
@@ -12046,6 +12179,12 @@ app.post(
         email: ownerEmail,
         phone: ownerPhone,
       },
+      callForwarding: {
+        existingBusinessNumber: businessPhone || ownerPhone,
+        carrier: String(body.callForwarding?.carrier || body.carrier || setupDetails.carrier || "not_sure").trim(),
+        lineType: String(body.callForwarding?.lineType || body.lineType || setupDetails.lineType || "not_sure").trim(),
+        forwardingMode: "no_answer",
+      },
       pricing: {
         installationFreeEstimate,
         freeEstimateAnswer,
@@ -12248,9 +12387,36 @@ app.post(
       detail: phoneProvisioning.status === "ready" ? "Phone and assistant verified" : phoneProvisioning.code,
       record: provisionedRecord,
     });
+    const forwardingSetup = phoneProvisioning.status === "ready"
+      ? await prepareForwardingSetupForProvisionedSignup(payload, provisionedRecord, twilioPhoneNumber)
+      : null;
     const stripeTrial = phoneProvisioning.status === "ready"
       ? await attachNoCardStripeTrialToSignup(payload, { makeStatus: makeResult.status, twilioPhoneNumber })
       : { skipped: true, error: "Phone provisioning must be ready before trial activation." };
+    let completionDelivery = null;
+    if (phoneProvisioning.status === "ready") {
+      completionDelivery = await deliverSignupCompletion({
+        ownerPhone: provisionedRecord.ownerPhone || payload?.owner?.phone,
+        ownerEmail: provisionedRecord.ownerEmail || payload?.owner?.email,
+        ownerName: provisionedRecord.ownerName || payload?.owner?.name,
+        businessName: provisionedRecord.businessName || payload?.business?.name,
+        assignedPhone: twilioPhoneNumber,
+        dashboardUrl: `${FRONTEND_APP_URL}/#/dashboard`,
+        forwardingSetupUrl: forwardingSetup.setupUrl,
+        priorStatus: provisionedRecord.setupFollowupStatus,
+        sendSms: ({ to, message }) => sendSmsViaTwilio({ to, message, env: getVapiVoiceSignupSmsEnvironment() }),
+        sendEmail: sendSignupCompletionEmail,
+      });
+      await recordForwardingSetupSmsDelivery(forwardingSetup, completionDelivery);
+      upsertSignupDashboardRecord({
+        ...provisionedRecord,
+        setupFollowupStatus: completionDelivery.status,
+        setupFollowupChannels: completionDelivery.channels,
+        setupFollowupErrors: completionDelivery.errors,
+        setupFollowupAttemptedAt: new Date().toISOString(),
+        setupFollowupSentAt: completionDelivery.channels.length ? new Date().toISOString() : "",
+      });
+    }
 
     res.status(phoneProvisioning.status === "ready" ? 200 : 202).json({
       success: true,
@@ -12266,6 +12432,9 @@ app.post(
       trialEndAt: getUnixMs(stripeTrial.subscription?.trial_end),
       stripeTrialSkipped: Boolean(stripeTrial.skipped),
       stripeTrialError: stripeTrial.error || "",
+      forwardingSetupUrl: forwardingSetup?.setupUrl || "",
+      forwarding: forwardingSetup ? sanitizeForwardingSetup(forwardingSetup.setup) : null,
+      completionDelivery: completionDelivery ? { status: completionDelivery.status, channels: completionDelivery.channels } : null,
     });
   })
 );
@@ -12282,7 +12451,7 @@ app.get(
     const store = prunePendingSignupStore(readPendingSignupStore());
     const record = store[tokenHash];
 
-    function renderVerificationPage({ title, body, ok, assignedPhone = "" }) {
+    function renderVerificationPage({ title, body, ok, assignedPhone = "", forwardingSetupUrl = "" }) {
       const canonicalPhone = normalizePhoneForMatch(assignedPhone);
       const displayPhone = formatAssignedPhone(canonicalPhone);
       const setupReady = ok && Boolean(canonicalPhone && displayPhone);
@@ -12332,7 +12501,7 @@ app.get(
                 <p style="margin:0;color:#334155;font-size:16px">Call or text My AI PA support. You do not need to explain everything twice.</p>
                 <div class="actions"><a href="tel:${escapeHtml(CUSTOMER_SUPPORT_PHONE)}">Call support</a><a class="action secondary" href="sms:${escapeHtml(CUSTOMER_SUPPORT_PHONE)}?&body=${encodeURIComponent("Hi My AI PA, I need help with my signup.")}">Text support</a></div>
               </section>
-              <div class="actions"><a class="return" href="${escapeHtml(`${FRONTEND_APP_URL}/#/${setupReady ? "dashboard" : "signup"}`)}">${setupReady ? "Open your dashboard" : "Return to My AI PA"}</a></div>
+              <div class="actions"><a href="${escapeHtml(forwardingSetupUrl || `${FRONTEND_APP_URL}/#/${setupReady ? "dashboard" : "signup"}`)}">${forwardingSetupUrl ? "Protect my missed calls" : setupReady ? "Open your dashboard" : "Return to My AI PA"}</a></div>
             </main>
             ${setupReady ? `<script>
               document.getElementById("copy-number").addEventListener("click", async function () {
@@ -12570,6 +12739,9 @@ app.get(
     if (phoneProvisioning.status === "ready") {
       await attachNoCardStripeTrialToSignup(payload, { makeStatus: makeResult.status, twilioPhoneNumber });
     }
+    const forwardingSetup = phoneProvisioning.status === "ready"
+      ? await prepareForwardingSetupForProvisionedSignup(payload, provisionedRecord, twilioPhoneNumber)
+      : null;
     let completionDelivery = null;
     if (phoneProvisioning.status === "ready") {
       completionDelivery = await deliverSignupCompletion({
@@ -12579,6 +12751,7 @@ app.get(
         businessName: provisionedRecord.businessName || payload?.business?.name,
         assignedPhone: twilioPhoneNumber,
         dashboardUrl: `${FRONTEND_APP_URL}/#/dashboard`,
+        forwardingSetupUrl: forwardingSetup?.setupUrl || "",
         priorStatus: provisionedRecord.setupFollowupStatus,
         sendSms: ({ to, message }) => sendSmsViaTwilio({
           to,
@@ -12587,6 +12760,7 @@ app.get(
         }),
         sendEmail: sendSignupCompletionEmail,
       });
+      await recordForwardingSetupSmsDelivery(forwardingSetup, completionDelivery);
       const deliveryRecord = upsertSignupDashboardRecord({
         ...provisionedRecord,
         setupFollowupStatus: completionDelivery.status,
@@ -12607,6 +12781,9 @@ app.get(
         });
       }
     }
+    if (phoneProvisioning.status === "ready" && forwardingSetup?.setupUrl) {
+      return res.redirect(303, forwardingSetup.setupUrl);
+    }
     return renderVerificationPage({
       ok: phoneProvisioning.status === "ready",
       title: phoneProvisioning.status === "ready" ? "Your setup is ready" : "Contact verified, number setup needs attention",
@@ -12614,6 +12791,7 @@ app.get(
         ? `Your contact details are verified. Your assigned number is ready to test${completionDelivery?.status === "failed" ? ", but we could not deliver the separate follow-up message" : ""}.`
         : phoneProvisioning.message,
       assignedPhone: twilioPhoneNumber,
+      forwardingSetupUrl: forwardingSetup?.setupUrl || "",
     });
   })
 );
@@ -12644,6 +12822,118 @@ app.get(
     }
 
     res.json({ ok: true, dashboard, refreshedAt: new Date().toISOString() });
+  })
+);
+
+function getForwardingBearerToken(req) {
+  const authorization = String(req.headers.authorization || "").trim();
+  if (/^Forwarding\s+/i.test(authorization)) return authorization.replace(/^Forwarding\s+/i, "").trim();
+  return "";
+}
+
+async function requireForwardingSetup(req) {
+  const token = getForwardingBearerToken(req);
+  if (!token) {
+    const error = new Error("A secure forwarding setup link is required.");
+    error.statusCode = 401;
+    error.code = "FORWARDING_TOKEN_REQUIRED";
+    throw error;
+  }
+  return { token, setup: await getSetupFromToken({ prismaClient: prisma, token }) };
+}
+
+app.get(
+  "/api/forwarding/setup",
+  enforcePublicRouteRateLimit("forwarding-setup-view", 60),
+  asyncRoute(async (req, res) => {
+    const { setup } = await requireForwardingSetup(req);
+    await recordForwardingEvent(prisma, setup.id, "forwarding_setup_opened", {}, `${setup.id}:opened`);
+    res.json({ ok: true, forwarding: sanitizeForwardingSetup(setup) });
+  })
+);
+
+app.put(
+  "/api/forwarding/setup/selections",
+  enforcePublicRouteRateLimit("forwarding-selections", 30),
+  asyncRoute(async (req, res) => {
+    const { setup } = await requireForwardingSetup(req);
+    const updated = await updateForwardingSelections({ prismaClient: prisma, setup, carrier: req.body?.carrier, lineType: req.body?.lineType });
+    res.json({ ok: true, forwarding: sanitizeForwardingSetup(updated) });
+  })
+);
+
+app.post(
+  "/api/forwarding/setup/activation-opened",
+  enforcePublicRouteRateLimit("forwarding-activation", 30),
+  asyncRoute(async (req, res) => {
+    const { setup } = await requireForwardingSetup(req);
+    const updated = await markDialerOpened({ prismaClient: prisma, setup });
+    res.json({ ok: true, forwarding: sanitizeForwardingSetup(updated) });
+  })
+);
+
+app.post(
+  "/api/forwarding/setup/verify",
+  enforcePublicRouteRateLimit("forwarding-verification", 10),
+  asyncRoute(async (req, res) => {
+    const { setup } = await requireForwardingSetup(req);
+    if (!FORWARDING_VERIFICATION_CALLER_ID || !/^https:\/\//i.test(FORWARDING_VERIFICATION_STATUS_CALLBACK_URL)) {
+      return res.status(503).json({
+        error: "Automatic testing is not configured yet. Your forwarding settings were not changed. Please use the manual test instructions or contact support.",
+        code: "FORWARDING_VERIFICATION_NOT_CONFIGURED",
+      });
+    }
+    const result = await startForwardingVerification({
+      prismaClient: prisma,
+      setup,
+      verificationCallerNumber: FORWARDING_VERIFICATION_CALLER_ID,
+      statusCallbackUrl: FORWARDING_VERIFICATION_STATUS_CALLBACK_URL,
+      placeCall: (input) => placeForwardingVerificationCall({ ...input }),
+    });
+    res.status(result.duplicate ? 200 : 202).json({
+      ok: true,
+      duplicate: result.duplicate,
+      forwarding: sanitizeForwardingSetup(result.setup),
+      attempt: { id: result.attempt.id, status: String(result.attempt.status).toLowerCase(), expiresAt: result.attempt.expiresAt },
+    });
+  })
+);
+
+app.post(
+  "/api/webhooks/twilio/forwarding-verification-status",
+  forwardingVerificationCallbackProcessRateLimiter,
+  enforcePublicRouteRateLimit("forwarding-verification-callback", 120),
+  express.urlencoded({ extended: false, limit: "8kb" }),
+  asyncRoute(async (req, res) => {
+    if (!verifyTwilioWebhookRequest(req, process.env, { configuredUrl: FORWARDING_VERIFICATION_STATUS_CALLBACK_URL })) {
+      return res.status(401).json({ error: "Invalid verification-call webhook signature." });
+    }
+    await applyVerificationStatusCallback({ prismaClient: prisma, callSid: req.body?.CallSid, callStatus: req.body?.CallStatus, answeredBy: req.body?.AnsweredBy });
+    res.status(204).end();
+  })
+);
+
+app.post(
+  "/api/customer/dashboard/forwarding/setup-link",
+  enforcePublicRouteRateLimit("forwarding-dashboard-link", 30),
+  asyncRoute(async (req, res) => {
+    const lookupHash = getCustomerDashboardSessionLookupHash(req);
+    const match = lookupHash ? findCustomerDashboardSignupByLookupHash(lookupHash) : null;
+    if (!match) return res.status(401).json({ error: "Sign in again to protect your missed calls." });
+    const signup = match.signup;
+    let setup = await prisma.callForwardingSetup.findFirst({ where: { assignedMyAiPaNumber: normalizePhoneForMatch(signup.twilioPhoneNumber || "") }, orderBy: { updatedAt: "desc" } });
+    if (!setup && signup.twilioPhoneNumber) {
+      const prepared = await prepareForwardingSetupForProvisionedSignup({
+        business: { name: signup.businessName, phone: signup.businessPhone },
+        owner: { email: signup.ownerEmail, phone: signup.ownerPhone },
+        source: { app: signup.signupSource || "dashboard" },
+        aiAssistant: { carrier: signup.forwardingCarrier, lineType: signup.forwardingLineType },
+      }, signup, signup.twilioPhoneNumber);
+      setup = prepared.setup;
+    }
+    if (!setup) return res.status(409).json({ error: "Your My AI PA number must finish provisioning before forwarding setup." });
+    const token = createSetupToken(setup);
+    res.json({ ok: true, url: `${FRONTEND_APP_URL}/#/forwarding-setup?token=${encodeURIComponent(token)}`, forwarding: sanitizeForwardingSetup(setup) });
   })
 );
 
@@ -13387,6 +13677,23 @@ app.get(
       listAdminAuditEvents({ prisma, limit: 50 }),
     ]);
     res.json({ ok: true, ...inbox, auditEvents });
+  })
+);
+
+app.get(
+  "/api/admin/forwarding-funnel",
+  requireAdmin,
+  asyncRoute(async (_req, res) => {
+    const [setupsByStatus, eventsByType] = await prisma.$transaction([
+      prisma.callForwardingSetup.groupBy({ by: ["status"], _count: { _all: true } }),
+      prisma.callForwardingEvent.groupBy({ by: ["eventType"], _count: { _all: true } }),
+    ]);
+    res.json({
+      ok: true,
+      setups: Object.fromEntries(setupsByStatus.map((item) => [String(item.status).toLowerCase(), item._count._all])),
+      events: Object.fromEntries(eventsByType.map((item) => [item.eventType, item._count._all])),
+      measuredAt: new Date().toISOString(),
+    });
   })
 );
 

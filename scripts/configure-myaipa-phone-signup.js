@@ -149,6 +149,8 @@ function toolPayload() {
           ownerPhone: { type: "string", description: "Owner's ten-digit Canadian or US mobile number." },
           businessName: { type: "string", description: "The legal or public-facing business name." },
           businessPhone: { type: "string", description: "The business phone number. It may match ownerPhone." },
+          carrier: { type: "string", enum: ["bell", "rogers", "telus", "other", "not_sure"], description: "Provider for the current business number. Use not_sure when the caller does not know." },
+          lineType: { type: "string", enum: ["mobile", "landline", "voip", "not_sure"], description: "Type of current business number. Use not_sure when the caller does not know." },
           streetAddress: { type: "string", description: "Business street address including street number." },
           city: { type: "string", description: "Business city." },
           province: { type: "string", description: "Two-letter Canadian province or territory code, such as ON." },
@@ -178,6 +180,8 @@ function toolPayload() {
           "ownerPhone",
           "businessName",
           "businessPhone",
+          "carrier",
+          "lineType",
           "streetAddress",
           "city",
           "province",
@@ -222,14 +226,14 @@ function withSignupPrompt(messages = []) {
 - If a caller asks to sign up, set up an account, or start the trial, this path takes priority over the demo.
 - Explain before collecting details: the trial is fourteen days, includes up to sixty AI-handled minutes, requires no credit card, and setup does not begin until the owner verifies the link sent after this call.
 - Never collect card or banking information. Never claim the account, agent, phone number, or trial is active before the tool reports success and the owner verifies the link.
-- Collect one item at a time: owner full name; owner email; owner mobile number; business name; business phone; street address; city; province; postal code; trade; service area; and main services. Ask for website and hours only if the caller wants to provide them. Do not guess missing details.
+- Collect one item at a time: owner full name; owner email; owner mobile number; business name; business phone; street address; city; province; postal code; trade; service area; and main services. Then ask naturally: "Who provides the phone service for the business number people currently call — Bell, Rogers, TELUS, or someone else?" Accept "not sure". Then ask: "And is that a mobile phone, a landline or business phone, or a cloud phone system?" Accept "not sure". Ask for website and hours only if the caller wants to provide them. Do not guess missing details.
 - Read every collected detail back in a short, organized summary. Ask exactly: "Is all of that correct, and do you want me to submit your My AI PA signup now?"
-- Use this read-back order exactly once: owner name; email; owner mobile; business name; business phone; street address, city, province, and postal code; business type; service area; main services. Never duplicate a field or merge labels.
+- Use this read-back order exactly once: owner name; email; owner mobile; business name; business phone; phone provider and phone type; street address, city, province, and postal code; business type; service area; main services. Never duplicate a field or merge labels.
 - Say email addresses in short chunks using "at" and "dot". Say phone numbers digit by digit. Say postal codes one character at a time with a pause after the first three; for example L3M 4E7 is "L, three, M — four, E, seven". Never interpret M as metres, meters, or millimetres.
 - If a short yes or no is not captured, pause briefly and ask once: "Sorry, I may have missed that — was that yes or no?"
 - Call begin_myaipa_signup only after an explicit yes. Pass the caller's actual confirming words in confirmationText and set callerConfirmed true. The tool-call turn must contain the tool call only.
 - If validation fails, ask only for the missing or invalid item, read the corrected summary back, and obtain a new explicit yes before retrying.
-- On success, repeat the tool's channel-accurate message without adding a delivery channel. Do not mention Make.com, Vapi, Twilio, tools, or internal systems.
+- On success, explain that after verification and number provisioning My AI PA will text the new number and secure setup button. Say: "Tap it from your business phone and we'll walk you through protecting the calls you miss." Do not read star codes aloud unless text or web setup is unavailable. Do not mention Make.com, Vapi, Twilio, tools, or internal systems.
 - Once signup intent is identified, remain in signup mode for the rest of the call. Never call a demo follow-up tool in signup mode.
 - send_myaipa_demo_followup is only for a non-signup demo caller who explicitly asks for a text. Pass the caller's exact request in callerRequest. A general yes is not permission to text.
 - After a successful signup response, ask once whether the caller needs anything else. If they say no, thanks, goodbye, or equivalent, say "Thanks for calling My A I P A. Take care." Let it finish, then call endCall. Do not ask an unrelated question.`;

@@ -42,6 +42,7 @@ function canonicalPhoneSignup(overrides = {}) {
       tone: "Professional",
       assistantVoice: "elliot",
     },
+    callForwarding: { existingBusinessNumber: "+19055550199", carrier: "rogers", lineType: "mobile", forwardingMode: "no_answer" },
     pricing: {
       freeEstimateAnswer: "yes we do",
       repairVisitFee: "125",
@@ -72,6 +73,8 @@ test("normalizes a canonical phone signup and adds the complete legacy Make alia
   assert.match(payload.provisioning.idempotencyKey, /^[a-f0-9]{64}$/);
   assert.doesNotMatch(payload.provisioning.idempotencyKey, /jamie|example|905/i);
   assert.equal(verifySignupProvisioningAuthorization(payload, SIGNING_SECRET), true);
+  assert.equal(payload.callForwarding.carrier, "rogers");
+  assert.equal(verifySignupProvisioningAuthorization({ ...payload, callForwarding: { ...payload.callForwarding, carrier: "bell" } }, SIGNING_SECRET), false);
 });
 
 test("normalizes an existing website payload into canonical and legacy representations", () => {

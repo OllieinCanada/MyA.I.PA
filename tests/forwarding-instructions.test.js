@@ -4,12 +4,10 @@ const { buildForwardingInstructions } = require("../server/forwardingInstruction
 
 test("forwarding guide uses the assigned number for each carrier path", () => {
   const guides = buildForwardingInstructions("+1 (289) 555-0123");
-  assert.deepEqual(guides.map((item) => item.carrier), [
-    "Rogers or Fido mobile", "Freedom mobile", "Bell mobile", "TELUS, Koodo, or another mobile carrier", "Rogers home phone", "Landline or business phone system",
-  ]);
-  assert.match(guides[0].steps.join(" "), /\*61\*2895550123#/);
-  assert.match(guides[2].steps.join(" "), /unanswered\/no reply/);
-  assert.match(guides.at(-1).steps.join(" "), /15–20 seconds/);
+  assert.deepEqual(guides.map((item) => item.carrier), ["Rogers mobile", "Rogers Home Phone", "Bell business landline"]);
+  assert.match(guides[0].steps.join(" "), /Press Call or Send/);
+  assert.match(guides[1].steps.join(" "), /Dial \*92/);
+  assert.match(guides.at(-1).steps.join(" "), /two beeps/);
   assert.equal(JSON.stringify(guides).includes("+1787"), false);
 });
 

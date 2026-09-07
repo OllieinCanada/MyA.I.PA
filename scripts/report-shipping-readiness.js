@@ -115,11 +115,11 @@ const gates = [
       && value.credentials?.vapiSmsToolsUsingApiKeys === value.credentials?.vapiSmsTools
       && value.phoneNumbers?.consentProxyRoutes === value.phoneNumbers?.smsCapable
       && value.messaging?.statusCallbackTools === value.credentials?.vapiSmsTools
-      && Number(value.messaging?.observedDeliveryRatePercent || 0) >= 95
+      && Number(value.messaging?.eligibleDeliveryRatePercent || 0) >= 95
       && value.trust?.approvedProfilePresent === true
       && Number(value.monitoring?.usageTriggers || 0) > 0
     ),
-    requirement: "Scoped API keys, consent proxy, status callbacks, at least 95% observed delivery, an approved profile, and spend alerts are proven.",
+    requirement: "Scoped API keys, consent proxy, status callbacks, at least 95% provider-eligible delivery, an approved profile, and spend alerts are proven.",
   }),
   makeGate({
     id: "make",

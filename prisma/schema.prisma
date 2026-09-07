@@ -133,6 +133,46 @@ enum SupportReportSeverity {
   HIGH
 }
 
+enum CallForwardingCarrier {
+  BELL
+  ROGERS
+  TELUS
+  OTHER
+  NOT_SURE
+}
+
+enum CallForwardingLineType {
+  MOBILE
+  LANDLINE
+  VOIP
+  NOT_SURE
+}
+
+enum CallForwardingMode {
+  NO_ANSWER
+}
+
+enum CallForwardingStatus {
+  NOT_STARTED
+  CARRIER_NEEDED
+  READY_TO_ACTIVATE
+  DIALER_OPENED
+  VERIFICATION_PENDING
+  ACTIVE
+  VERIFICATION_FAILED
+  MANUAL_SETUP_REQUIRED
+}
+
+enum ForwardingVerificationStatus {
+  PENDING
+  RINGING
+  ANSWERED
+  FORWARDED
+  SUCCEEDED
+  FAILED
+  EXPIRED
+}
+
 model Business {
   id                      Int                      @id @default(autoincrement())
   name                    String
@@ -152,6 +192,73 @@ model Business {
   leadOutcomeEvents       LeadOutcomeEvent[]
   fieldServiceConnections FieldServiceConnection[]
   fieldServiceSyncs       FieldServiceSync[]
+  callForwardingSetups    CallForwardingSetup[]
+}
+
+model CallForwardingSetup {
+  id                       String                       @id @default(cuid())
+  signupKey                String                       @unique
+  businessId               Int?
+  existingBusinessNumber   String
+  carrier                   CallForwardingCarrier
+  lineType                  CallForwardingLineType
+  assignedMyAiPaNumber     String
+  vapiPhoneNumberId        String?
+  forwardingMode           CallForwardingMode           @default(NO_ANSWER)
+  status                   CallForwardingStatus         @default(NOT_STARTED)
+  forwardingVerifiedAt     DateTime?
+  verificationAttempts     Int                          @default(0)
+  forwardingSetupVersion   Int                          @default(1)
+  lastRuleKey              String?
+  activationOpenedAt       DateTime?
+  lastFailureReason        String?
+  createdAt                DateTime                     @default(now())
+  updatedAt                DateTime                     @updatedAt
+  business                 Business?                    @relation(fields: [businessId], references: [id], onDelete: SetNull)
+  verificationAttemptRows  ForwardingVerificationAttempt[]
+  events                   CallForwardingEvent[]
+
+  @@index([businessId])
+  @@index([assignedMyAiPaNumber])
+  @@index([vapiPhoneNumberId])
+  @@index([existingBusinessNumber])
+  @@index([status, updatedAt])
+}
+
+model ForwardingVerificationAttempt {
+  id                       String                       @id @default(cuid())
+  setupId                  String
+  status                   ForwardingVerificationStatus @default(PENDING)
+  outboundCallSid          String?                      @unique
+  verificationCallerNumber String
+  expectedDestination      String
+  inboundVapiCallId        String?                      @unique
+  startedAt                DateTime                     @default(now())
+  expiresAt                DateTime
+  receivedAt               DateTime?
+  completedAt              DateTime?
+  answeredBy               String?
+  resultDetail             String?
+  createdAt                DateTime                     @default(now())
+  updatedAt                DateTime                     @updatedAt
+  setup                     CallForwardingSetup          @relation(fields: [setupId], references: [id], onDelete: Cascade)
+
+  @@index([setupId, status, startedAt])
+  @@index([verificationCallerNumber, expectedDestination, status])
+  @@index([expiresAt])
+}
+
+model CallForwardingEvent {
+  id             String              @id @default(cuid())
+  setupId        String
+  eventType      String
+  metadata       Json?
+  idempotencyKey String              @unique
+  createdAt      DateTime            @default(now())
+  setup          CallForwardingSetup @relation(fields: [setupId], references: [id], onDelete: Cascade)
+
+  @@index([setupId, createdAt])
+  @@index([eventType, createdAt])
 }
 
 model Settings {

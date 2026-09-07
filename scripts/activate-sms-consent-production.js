@@ -15,9 +15,20 @@ const suppressionCheckUrl = String(
 const suppressionApiKey = String(env.SMS_SUPPRESSION_API_KEY || "").trim();
 const applyWebhooks = process.argv.includes("--apply-webhooks");
 const testStopStart = process.argv.includes("--test-stop-start");
+const skippedAssistantAcknowledgement = String(env.SMS_CONSENT_SKIPPED_ASSISTANT_HASHES || "")
+  .split(",")
+  .map((value) => value.trim().toLowerCase())
+  .filter(Boolean)
+  .sort();
 
 function shortHash(value) {
   return crypto.createHash("sha256").update(String(value || "")).digest("hex").slice(0, 12);
+}
+
+function skippedAssistantsAcknowledged(skipped = []) {
+  const actual = skipped.map((row) => String(row.assistantIdHash || "").toLowerCase()).filter(Boolean).sort();
+  return actual.length === skippedAssistantAcknowledgement.length
+    && actual.every((value, index) => value === skippedAssistantAcknowledgement[index]);
 }
 
 function safeHost(value) {
@@ -578,6 +589,7 @@ async function main() {
   if (!targets.length) throw new Error("No active managed service-text numbers were found.");
   const inspection = await inspectConfiguration(targets);
   const blocked = inspection.rows.filter((row) => row.blockedReason);
+  const skippedAcknowledged = skippedAssistantsAcknowledged(skipped);
   const report = {
     mode: applyWebhooks ? "apply-webhooks" : testStopStart ? "test-stop-start" : "dry-run",
     webhookHost: safeHost(webhookUrl),
@@ -587,13 +599,14 @@ async function main() {
     changesPlanned: inspection.rows.filter((row) => !row.desired && !row.blockedReason).length,
     blocked: blocked.length,
     skippedAssistants: skipped.length,
+    skippedAssistantsAcknowledged: skippedAcknowledged,
     rows: inspection.rows.map(publicRow),
     skipped,
   };
   console.log(JSON.stringify(report, null, 2));
-  if (blocked.length || skipped.length) process.exitCode = 2;
-  if ((applyWebhooks || testStopStart) && skipped.length) {
-    throw new Error(`Refusing live activation because ${skipped.length} assistant mapping(s) were skipped.`);
+  if (blocked.length || (skipped.length && !skippedAcknowledged)) process.exitCode = 2;
+  if ((applyWebhooks || testStopStart) && skipped.length && !skippedAcknowledged) {
+    throw new Error(`Refusing live activation because ${skipped.length} assistant mapping(s) were skipped without an exact hash acknowledgement.`);
   }
   if (applyWebhooks) {
     const applied = await applyConfiguration(inspection);

@@ -10,10 +10,12 @@ import {
   ASSISTANT_AGENT,
   BUSINESS_SLIDE_TABS,
   CANADIAN_PROVINCES,
+  CARRIER_OPTIONS,
   CAPTCHA_PROVIDER,
   DEFAULT_DETAILS,
   DEFAULT_PRICING,
   OPENING_DIALOGUE_OPTIONS,
+  LINE_TYPE_OPTIONS,
   SETUP_STEPS,
   SIGNUP_SUBMIT_URL,
   SPECIALIZATION_OPTIONS,
@@ -471,7 +473,7 @@ function LabeledInput({ label, icon, value, onChange, onBlur, placeholder, type 
   );
 }
 
-function LabeledSelect({ label, icon, value, onChange, onBlur, options, className = "", error = "" }) {
+function LabeledSelect({ label, icon, value, onChange, onBlur, options, className = "", error = "", showValue = true }) {
   const inputId = `${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-select`;
   const errorId = `${inputId}-error`;
 
@@ -498,7 +500,7 @@ function LabeledSelect({ label, icon, value, onChange, onBlur, options, classNam
         >
           {options.map((option) => (
             <option key={option.value} value={option.value}>
-              {option.value} - {option.label}
+              {showValue ? `${option.value} - ` : ""}{option.label}
             </option>
           ))}
         </select>
@@ -1434,6 +1436,13 @@ export function SignupSuccessPage({ result, onStartAnother, onRetry }) {
     };
   }, [numberMissing]);
 
+  useEffect(() => {
+    const setupUrl = String(result?.forwardingSetupUrl || "").trim();
+    if (!assignedNumber || reviewRequired || verificationRequired || !setupUrl) return undefined;
+    const timer = window.setTimeout(() => { window.location.href = setupUrl; }, 1400);
+    return () => window.clearTimeout(timer);
+  }, [assignedNumber, result?.forwardingSetupUrl, reviewRequired, verificationRequired]);
+
   const copyAssignedNumber = async () => {
     if (!assignedNumber || typeof navigator === "undefined" || !navigator.clipboard) return;
     await navigator.clipboard.writeText(assignedNumber);
@@ -1671,7 +1680,7 @@ export function SignupSuccessPage({ result, onStartAnother, onRetry }) {
             </div>
             <div className="grid gap-5 lg:col-span-2 lg:grid-cols-[1fr_1fr]">
               {assignedNumber && !reviewRequired && !verificationRequired ? (
-                <ForwardingSetupGuide assignedNumber={assignedNumber} compact />
+                <ForwardingSetupGuide assignedNumber={assignedNumber} setupUrl={result?.forwardingSetupUrl || ""} forwarding={result?.forwarding} compact />
               ) : null}
               <CustomerHelpActions compact />
             </div>
@@ -3227,6 +3236,22 @@ export default function Signup() {
                     autoComplete="tel"
                     inputMode="tel"
                     error={getBusinessFieldError("phone")}
+                  />
+                  <LabeledSelect
+                    label="Who provides your business phone?"
+                    icon="phone"
+                    value={details.carrier}
+                    onChange={updateDetails("carrier")}
+                    options={CARRIER_OPTIONS}
+                    showValue={false}
+                  />
+                  <LabeledSelect
+                    label="What kind of number is it?"
+                    icon="phone"
+                    value={details.lineType}
+                    onChange={updateDetails("lineType")}
+                    options={LINE_TYPE_OPTIONS}
+                    showValue={false}
                   />
                   <LabeledInput
                     label="Email address"

@@ -50,6 +50,23 @@ function normalizeSpecializations(value) {
   return [...new Set(source.map((item) => clean(item, 120)).filter(Boolean))].slice(0, 12);
 }
 
+function normalizeCarrier(value) {
+  const carrier = clean(value, 40).toLowerCase();
+  if (carrier === "bell") return "bell";
+  if (carrier === "rogers") return "rogers";
+  if (carrier === "telus") return "telus";
+  if (["other", "someone else"].includes(carrier)) return "other";
+  return "not_sure";
+}
+
+function normalizeLineType(value) {
+  const lineType = clean(value, 60).toLowerCase();
+  if (/mobile|cell|wireless/.test(lineType)) return "mobile";
+  if (/landline|business phone|home phone/.test(lineType)) return "landline";
+  if (/voip|cloud/.test(lineType)) return "voip";
+  return "not_sure";
+}
+
 function normalizeConfirmation(parameters) {
   const callerConfirmed = parameters?.callerConfirmed === true;
   const confirmationText = clean(parameters?.confirmationText, 180);
@@ -89,6 +106,8 @@ function buildVoiceSignupPayload(parameters = {}, context = {}) {
   const submittedAt = context.submittedAt || new Date().toISOString();
   const callId = clean(context.callId, 180);
   const website = clean(parameters.website, 500);
+  const carrier = normalizeCarrier(parameters.carrier);
+  const lineType = normalizeLineType(parameters.lineType);
 
   return {
     event: "signup.completed",
@@ -129,6 +148,12 @@ function buildVoiceSignupPayload(parameters = {}, context = {}) {
       email: ownerEmail,
       phone: ownerPhone,
     },
+    callForwarding: {
+      existingBusinessNumber: businessPhone,
+      carrier,
+      lineType,
+      forwardingMode: "no_answer",
+    },
     specializations,
     specializationList: specializations.join(", "),
     aiAssistant: {
@@ -138,6 +163,9 @@ function buildVoiceSignupPayload(parameters = {}, context = {}) {
       specializations,
       specializationList: specializations.join(", "),
       callForwardingNumber: ownerPhone,
+      carrier,
+      lineType,
+      forwardingMode: "no_answer",
       bookingPreference: "Text owner first",
       notificationPreference: "SMS",
       tone: "Professional",
@@ -153,5 +181,7 @@ module.exports = {
   buildVoiceSignupPayload,
   isVapiVoiceSignupTool,
   normalizeNanpPhone,
+  normalizeCarrier,
+  normalizeLineType,
   normalizePostalCode,
 };

@@ -1119,6 +1119,7 @@ function CustomerDashboardView({ dashboard, onSignOut, onRefresh, refreshing, re
   const agentTesting = dashboard.agentTesting || {};
   const billing = dashboard.billing || {};
   const support = dashboard.support || {};
+  const forwarding = dashboard.forwarding || null;
   const trialUsage = dashboard.trialUsage || {};
   const checklist = dashboard.setup?.checklist || [];
   const readiness = dashboard.setup?.readinessPercent || 0;
@@ -1238,6 +1239,8 @@ function CustomerDashboardView({ dashboard, onSignOut, onRefresh, refreshing, re
           </div>
         </section>
 
+        {aiNumber ? <ForwardingSetupGuide assignedNumber={aiNumber} forwarding={forwarding} compact /> : null}
+
         <section className="customer-simple-next" aria-labelledby="customer-next-title">
           <span>DO THIS NEXT</span>
           <div>
@@ -1252,8 +1255,6 @@ function CustomerDashboardView({ dashboard, onSignOut, onRefresh, refreshing, re
         <CustomerHelpActions phone={support.phone} />
 
         {aiNumber ? <AgentTestingStation testing={agentTesting} ownerPhone={signup.ownerPhone || signup.businessPhone} onUpdated={onRefresh} /> : null}
-
-        {aiNumber && agentTesting.passed ? <ForwardingSetupGuide assignedNumber={aiNumber} compact /> : null}
 
         <section className="customer-simple-stats" aria-label="Your important numbers">
           <article><span>Calls answered</span><strong>{stats.totalCalls || 0}</strong><small>by My AI PA</small></article>

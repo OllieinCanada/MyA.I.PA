@@ -198,7 +198,24 @@ export const DEFAULT_DETAILS = {
   city: "",
   province: "ON",
   postalCode: "",
+  carrier: "not_sure",
+  lineType: "not_sure",
 };
+
+export const CARRIER_OPTIONS = [
+  { value: "bell", label: "Bell" },
+  { value: "rogers", label: "Rogers" },
+  { value: "telus", label: "TELUS" },
+  { value: "other", label: "Other" },
+  { value: "not_sure", label: "Not sure" },
+];
+
+export const LINE_TYPE_OPTIONS = [
+  { value: "mobile", label: "Mobile / cell phone" },
+  { value: "landline", label: "Business / home landline" },
+  { value: "voip", label: "VoIP / cloud phone" },
+  { value: "not_sure", label: "Not sure" },
+];
 
 export const DEFAULT_PRICING = {
   offersServiceCalls: null,

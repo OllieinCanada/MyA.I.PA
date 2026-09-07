@@ -16,7 +16,7 @@ function formatAssignedPhone(value) {
   return phone;
 }
 
-function buildSignupCompletionContent({ ownerName, businessName, assignedPhone, dashboardUrl } = {}) {
+function buildSignupCompletionContent({ ownerName, businessName, assignedPhone, dashboardUrl, forwardingSetupUrl } = {}) {
   const phone = normalizeAssignedPhone(assignedPhone);
   if (!phone) {
     const error = new Error("A valid assigned phone number is required for the setup-complete follow-up.");
@@ -27,13 +27,14 @@ function buildSignupCompletionContent({ ownerName, businessName, assignedPhone, 
   const greeting = ownerName ? `Hi ${String(ownerName).trim()},` : "Hi,";
   const business = String(businessName || "your business").trim();
   const dashboard = String(dashboardUrl || "").trim();
+  const forwarding = String(forwardingSetupUrl || "").trim();
   const lines = [
     greeting,
     "",
     `Your My AI PA setup for ${business} is ready.`,
     `Your assigned AI phone number is ${displayPhone}.`,
-    "Your agent passed its protected routing and sample-text checks.",
-    "Call it once in the private testing station before forwarding customer calls.",
+    "Now protect the calls you miss. Your phone still rings normally; My AI PA only steps in when you do not answer.",
+    forwarding ? `Open your secure 30-second forwarding setup: ${forwarding}` : "Open your dashboard to protect your missed calls.",
     dashboard ? `Open your dashboard for setup details and next steps: ${dashboard}` : "",
   ].filter((line, index, values) => line || (index > 0 && values[index - 1] !== ""));
   const text = lines.join("\n");
@@ -41,7 +42,7 @@ function buildSignupCompletionContent({ ownerName, businessName, assignedPhone, 
     phone,
     displayPhone,
     subject: `Your My AI PA number for ${business} is ready`,
-    sms: `My AI PA setup for ${business} passed its routing and sample-text checks. Your AI number is ${displayPhone}. Open the private testing station, then call it once before forwarding customer calls.${dashboard ? ` Dashboard: ${dashboard}` : ""}`,
+    sms: `Your My AI PA number is ready: ${displayPhone}\n\nNow protect the calls you miss. Tap below and we'll set up call forwarding for you:\n\n${forwarding || dashboard}\n\nTakes about 30 seconds.`,
     text,
   };
 }
@@ -53,6 +54,7 @@ async function deliverSignupCompletion({
   businessName,
   assignedPhone,
   dashboardUrl,
+  forwardingSetupUrl,
   priorStatus,
   sendSms,
   sendEmail,
@@ -61,7 +63,7 @@ async function deliverSignupCompletion({
     return { status: "skipped", skipped: true, reason: "already_delivered", channels: [], errors: [] };
   }
 
-  const content = buildSignupCompletionContent({ ownerName, businessName, assignedPhone, dashboardUrl });
+  const content = buildSignupCompletionContent({ ownerName, businessName, assignedPhone, dashboardUrl, forwardingSetupUrl });
   const channels = [];
   const errors = [];
   const attempts = [];

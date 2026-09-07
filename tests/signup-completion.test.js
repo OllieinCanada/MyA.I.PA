@@ -13,12 +13,14 @@ test("setup-complete content uses one canonical number in every representation",
     businessName: "Example Electrical",
     assignedPhone: "+13433216155",
     dashboardUrl: "https://www.myaipa.ca/#/dashboard",
+    forwardingSetupUrl: "https://www.myaipa.ca/#/forwarding-setup?token=signed",
   });
   assert.equal(content.phone, "+13433216155");
   assert.equal(content.displayPhone, "+1 (343) 321-6155");
   assert.match(content.sms, /\+1 \(343\) 321-6155/);
-  assert.match(content.text, /passed its protected routing and sample-text checks/i);
-  assert.match(content.text, /private testing station/i);
+  assert.match(content.text, /protect the calls you miss/i);
+  assert.match(content.sms, /Takes about 30 seconds/i);
+  assert.match(content.sms, /forwarding-setup\?token=signed/i);
   assert.match(content.text, /https:\/\/www\.myaipa\.ca\/#\/dashboard/);
   assert.equal(formatAssignedPhone("343-321-6155"), "+1 (343) 321-6155");
 });

@@ -24,6 +24,8 @@ const validSignup = {
   serviceArea: "Hamilton and Burlington",
   services: "Residential electrical repairs, panel upgrades, and hot tub wiring",
   specializations: ["Residential", "Service calls"],
+  carrier: "Rogers",
+  lineType: "mobile phone",
 };
 
 test("builds the canonical Make signup payload from a confirmed phone signup", () => {
@@ -48,6 +50,9 @@ test("builds the canonical Make signup payload from a confirmed phone signup", (
   assert.equal(payload.verification.emailVerified, false);
   assert.equal(payload.security.emailVerificationRequired, true);
   assert.equal(payload.aiAssistant.callForwardingNumber, "+19055550199");
+  assert.equal(payload.callForwarding.carrier, "rogers");
+  assert.equal(payload.callForwarding.lineType, "mobile");
+  assert.equal(payload.callForwarding.forwardingMode, "no_answer");
 });
 
 test("refuses to begin a phone signup without explicit caller confirmation", () => {

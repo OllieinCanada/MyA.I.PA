@@ -1,46 +1,44 @@
-import React, { useMemo } from "react";
+import React, { useState } from "react";
+import { getApiBaseUrl, normalizeApiBase } from "../config/apiBase";
 
-function localDigits(value) {
-  const digits = String(value || "").replace(/\D/g, "");
-  return digits.length === 11 && digits.startsWith("1") ? digits.slice(1) : digits;
-}
+const API_BASE = normalizeApiBase(getApiBaseUrl(process.env.REACT_APP_API_BASE_URL));
 
-export function getForwardingGuide(assignedNumber) {
-  const number = localDigits(assignedNumber);
-  if (number.length !== 10) return [];
-  return [
-    { carrier: "Rogers or Fido mobile", steps: [`Dial *61*${number}#`, "Press Call. Then test from another phone."], note: "If voicemail answers first, ask your carrier to adjust no-answer forwarding." },
-    { carrier: "Freedom mobile", steps: [`Dial *61*${number}#`, "Press Call. Then test from another phone."] },
-    { carrier: "Bell mobile", steps: ["Open Phone settings, then Call forwarding.", `Choose unanswered/no reply and enter ${number}.`, "Wait for Bell's confirmation text. Then test."] },
-    { carrier: "TELUS, Koodo, or another mobile carrier", steps: ["Open Phone settings, then Call forwarding.", `Choose unanswered/no reply and enter ${number}.`, "If you cannot see that option, ask your carrier for no-answer forwarding."] },
-    { carrier: "Rogers home phone", steps: ["Dial *92 and listen for the tone.", `Enter ${number}.`, "Answer the forwarded call or stay on for five seconds. Then test."], note: "Rogers home phone forwards after about four rings." },
-    { carrier: "Landline or business phone system", steps: [`Set a no-answer or overflow rule to ${number}.`, "Choose roughly 15–20 seconds if your provider allows it. Then test."] },
-  ];
-}
+export default function ForwardingSetupGuide({ assignedNumber, forwarding, setupUrl = "", compact = false }) {
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  if (!assignedNumber) return null;
+  const active = forwarding?.forwardingStatus === "active";
 
-export default function ForwardingSetupGuide({ assignedNumber, compact = false }) {
-  const guides = useMemo(() => getForwardingGuide(assignedNumber), [assignedNumber]);
-  const [first, ...rest] = guides;
-  if (!first) return null;
+  const openSetup = async () => {
+    setBusy(true); setMessage("");
+    try {
+      if (setupUrl) {
+        window.location.href = setupUrl;
+        return;
+      }
+      const response = await fetch(`${API_BASE}/api/customer/dashboard/forwarding/setup-link`, {
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: "{}",
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.url) throw new Error(data.error || "Forwarding setup could not be opened.");
+      window.location.href = data.url;
+    } catch (error) {
+      setMessage(error.message);
+      setBusy(false);
+    }
+  };
+
   return (
-    <section className={`forwarding-guide${compact ? " is-compact" : ""}`} aria-labelledby="forwarding-guide-title">
+    <section className={`forwarding-guide${compact ? " is-compact" : ""}${active ? " is-active" : ""}`} aria-labelledby="forwarding-guide-title">
       <div className="forwarding-guide-heading">
-        <span>AFTER ABOUT 3 RINGS</span>
-        <h2 id="forwarding-guide-title">Forward unanswered calls</h2>
-        <p>Your phone rings first. If you cannot answer, My AI PA takes over. Carrier timing varies, so always test from another phone.</p>
+        <span>{active ? "✓ MISSED-CALL PROTECTION ACTIVE" : "YOUR NUMBER IS READY"}</span>
+        <h2 id="forwarding-guide-title">{active ? "You’re protected" : "Protect your missed calls"}</h2>
+        <p>{active ? "Your phone still rings normally. My AI PA steps in when you miss the call." : "One setup button. Your carrier completes the change when you press Call or Send."}</p>
       </div>
-      <details open>
-        <summary>{first.carrier}</summary>
-        <ol>{first.steps.map((step) => <li key={step}>{step}</li>)}</ol>
-        {first.note ? <small>{first.note}</small> : null}
-      </details>
-      {rest.map((guide) => (
-        <details key={guide.carrier}>
-          <summary>{guide.carrier}</summary>
-          <ol>{guide.steps.map((step) => <li key={step}>{step}</li>)}</ol>
-          {guide.note ? <small>{guide.note}</small> : null}
-        </details>
-      ))}
+      <button type="button" className="forwarding-guide-primary" onClick={openSetup} disabled={busy}>
+        {busy ? "Opening…" : active ? "Test Again or Change Setup" : "Protect My Missed Calls"}
+      </button>
+      {message ? <small role="status">{message}</small> : null}
     </section>
   );
 }
