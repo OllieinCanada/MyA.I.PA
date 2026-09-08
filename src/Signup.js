@@ -20,6 +20,7 @@ import {
   SIGNUP_SUBMIT_URL,
   SPECIALIZATION_OPTIONS,
   TRADE_OPTIONS,
+  TURNSTILE_SITE_KEY,
   VAPI_PREVIEW_CONFIG_URL,
   VAPI_PREVIEW_SESSION_URL,
 } from "./features/signup/signupConfig";
@@ -1370,8 +1371,67 @@ function TrialButton({ disabled, busy, finalStep = false, label = "Start free tr
   );
 }
 
-function HumanVerificationCheck() {
-  return null;
+export function HumanVerificationCheck({ provider = CAPTCHA_PROVIDER, siteKey = TURNSTILE_SITE_KEY, onVerify }) {
+  const containerRef = useRef(null);
+  const widgetIdRef = useRef(null);
+  const normalizedProvider = String(provider || "").trim().toLowerCase();
+
+  useEffect(() => {
+    if (normalizedProvider !== "turnstile" || !siteKey || !containerRef.current) return undefined;
+    let cancelled = false;
+
+    const renderWidget = () => {
+      if (cancelled || !containerRef.current || !window.turnstile || widgetIdRef.current != null) return;
+      widgetIdRef.current = window.turnstile.render(containerRef.current, {
+        sitekey: siteKey,
+        theme: "light",
+        size: "flexible",
+        callback: (token) => onVerify?.(String(token || "")),
+        "expired-callback": () => onVerify?.(""),
+        "error-callback": () => onVerify?.(""),
+      });
+    };
+
+    const existingScript = document.querySelector('script[data-myaipa-turnstile="true"]');
+    if (window.turnstile) {
+      renderWidget();
+    } else if (existingScript) {
+      existingScript.addEventListener("load", renderWidget, { once: true });
+    } else {
+      const script = document.createElement("script");
+      script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+      script.async = true;
+      script.defer = true;
+      script.dataset.myaipaTurnstile = "true";
+      script.addEventListener("load", renderWidget, { once: true });
+      document.head.appendChild(script);
+    }
+
+    return () => {
+      cancelled = true;
+      if (existingScript) existingScript.removeEventListener("load", renderWidget);
+      if (widgetIdRef.current != null && window.turnstile?.remove) {
+        window.turnstile.remove(widgetIdRef.current);
+      }
+      widgetIdRef.current = null;
+    };
+  }, [normalizedProvider, siteKey, onVerify]);
+
+  if (!normalizedProvider) return null;
+  if (normalizedProvider !== "turnstile" || !siteKey) {
+    return (
+      <section className="mx-auto mt-5 max-w-[920px] rounded-2xl border border-amber-300 bg-amber-50 p-5 text-center text-sm font-bold text-amber-950" role="alert">
+        Secure signup verification is temporarily unavailable. Please try again shortly.
+      </section>
+    );
+  }
+
+  return (
+    <section className="mx-auto mt-5 max-w-[920px] rounded-2xl border border-blue-100 bg-white p-5 text-center shadow-sm" aria-label="Secure signup verification">
+      <p className="mb-3 text-sm font-bold text-slate-700">Please confirm you’re a real person.</p>
+      <div ref={containerRef} className="mx-auto min-h-[65px] max-w-[420px]" data-testid="turnstile-container" />
+    </section>
+  );
 }
 
 async function postSignupPayload(url, formData) {
@@ -2254,6 +2314,10 @@ export default function Signup() {
             display: none;
           }
 
+          .signup-mobile-offer {
+            display: none;
+          }
+
           @media (max-width: 639px) {
             .signup-mobile-flow {
               min-height: 100dvh;
@@ -2269,6 +2333,15 @@ export default function Signup() {
               font-size: 1.65rem;
               line-height: 1.08;
               letter-spacing: -0.035em;
+            }
+
+            .signup-mobile-offer {
+              display: block;
+              margin-top: 8px;
+              color: #334155;
+              font-size: 0.94rem;
+              font-weight: 800;
+              line-height: 1.35;
             }
 
             .signup-page-header > p,
@@ -2896,6 +2969,7 @@ export default function Signup() {
             Create your AI phone assistant
           </h1>
           <p className="mt-0.5 text-base font-medium text-slate-600 sm:text-lg">Set up your business assistant in minutes.</p>
+          <div className="signup-mobile-offer">Free for 14 days · No credit card required · Cancel anytime</div>
 
           <div className="signup-page-benefits mt-2 flex flex-wrap justify-center gap-x-8 gap-y-1.5">
             <Benefit icon="shield">Free for 14 days</Benefit>
@@ -3503,7 +3577,7 @@ export default function Signup() {
         ) : null}
 
         {currentStep === 3 ? (
-          <HumanVerificationCheck />
+          <HumanVerificationCheck onVerify={setCaptchaToken} />
         ) : null}
 
         <div

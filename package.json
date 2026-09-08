@@ -1,5 +1,5 @@
 {
-  "name": "react",
+  "name": "myaipa-website",
   "version": "0.0.0",
   "private": true,
   "homepage": ".",
@@ -38,6 +38,7 @@
     "transparency:validate": "node scripts/validate-public-transparency.js",
     "test:transparency": "node --test tests/public-transparency.test.js",
     "test:stripe-trial": "node scripts/test-stripe-trial-lifecycle.js",
+    "test:stripe-trial:local": "node scripts/run-local-stripe-simulation.js --cycles=5",
     "ops:validate": "node scripts/validate-operational-readiness.js",
     "ops:monitor": "node scripts/monitor-production.js",
     "test:production-monitor-safety": "node --test tests/production-monitor-safety.test.js",
@@ -46,11 +47,14 @@
     "ops:backup": "node scripts/database-backup.js",
     "ops:backup:check": "node scripts/database-backup.js --check --out=diagnostics/shipping-readiness/backup-readiness.json",
     "ops:backup:restore-drill": "node scripts/restore-backup-drill.js",
+    "admin:totp:enroll": "node scripts/enroll-admin-totp.js",
+    "decommission:signup-canary": "node scripts/decommission-signup-canary.js",
     "oauth:validate": "node scripts/validate-calendar-oauth-readiness.js",
     "security:scan-secrets": "node scripts/scan-secrets.js",
     "test:release": "node scripts/release-gate.js",
     "test:browser:quality": "node scripts/test-browser-quality.js",
     "test:database": "node --test tests/database-integration.test.js",
+    "test:database:disposable-render": "node scripts/run-disposable-postgres-drill.js --confirm=CREATE_DELETE_FREE_DATABASE",
     "start": "react-scripts start",
     "build": "react-scripts build",
     "build:preview": "scripts\\build-preview.cmd",
@@ -108,6 +112,8 @@
     "simulate:vapi-composite-sms": "node scripts/simulate-vapi-composite-sms.js",
     "test:shipping:messages": "node scripts/run-message-routing-gate.js --count=50 --out=diagnostics/shipping-readiness/message-routing-gate.json",
     "test:shipping:signups": "node scripts/run-signup-review-gate.js --post --count=20 --confirm=RUN_REVIEW_SIGNUP_GATE",
+    "test:shipping:signups:local": "node scripts/run-local-signup-simulation.js --count=20",
+    "test:shipping:local-preflight": "npm run test:shipping:signups:local && npm run test:stripe-trial:local && npm run test:audit:make-2026-readiness && npm run security:scan-secrets && npm run render:validate && npm run backend:check && npm run report:shipping-readiness",
     "test:shipping:signup:production-smoke": "node scripts/run-signup-review-gate.js --post --count=1 --api-base-url=https://api.myaipa.ca --confirm=RUN_REVIEW_SIGNUP_GATE",
     "test:shipping:calls": "node scripts/setup-vapi-evals.js --sync --run-safe --repeat=5 --minimum-pass-rate=0.95 --out=diagnostics/shipping-readiness/vapi-call-gate.json",
     "report:shipping-readiness": "node scripts/report-shipping-readiness.js",
@@ -200,7 +206,7 @@
     "codex:wakeup": "powershell -ExecutionPolicy Bypass -File scripts/codex-wakeup.ps1",
     "codex:wakeup:install": "powershell -ExecutionPolicy Bypass -File scripts/codex-schedule-wakeup.ps1 -StartTime 02:11 -EveryHours 5 -LaunchCodex -RunNow",
     "test": "react-scripts test --env=jsdom",
-    "test:backend": "node --test tests",
+    "test:backend": "node scripts/run-backend-tests.js",
     "test:backend:coverage": "node --experimental-test-coverage --test tests",
     "eject": "react-scripts eject"
   },
@@ -216,7 +222,12 @@
     "tailwindcss": "^3.4.19"
   },
   "overrides": {
-    "qs": "6.16.0"
+    "browserslist": "4.28.9",
+    "fast-uri": "3.1.6",
+    "nanoid": "3.3.18",
+    "qs": "6.16.0",
+    "underscore": "1.13.8",
+    "websocket-driver": "0.7.5"
   },
   "prisma": {
     "seed": "node prisma/seed.js"

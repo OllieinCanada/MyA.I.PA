@@ -63,6 +63,27 @@ The support inbox stores reports without extra credentials. For high-priority Te
 
 `SIGNUP_REVIEW_DUPLICATES=true` is recommended for launch so repeat submissions are held for admin review instead of starting duplicate Make/Vapi setup handoffs.
 
+### Public self-service signup release sequence
+
+Keep `SIGNUP_REQUIRE_MANUAL_APPROVAL=true` and `SIGNUP_REQUIRE_VERIFICATION=false` until every item below is complete. This leaves public submissions review-only while the missing provider configuration is finished.
+
+1. Configure `TURNSTILE_SECRET_KEY` in Render and `REACT_APP_TURNSTILE_SITE_KEY` in the GitHub Pages build environment.
+2. Configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, and `EMAIL_FROM`; send and receive a verification email in the non-production environment.
+3. Deploy the Prisma schema, then set `SIGNUP_REQUIRE_VERIFICATION=true` in non-production.
+4. Run `npm run test:database:disposable-render` and `npm run test:shipping:signups:local`.
+5. Run 20 review-only signups against a dedicated non-production API with `npm run test:shipping:signups`.
+6. Confirm `npm run audit:credential-readiness` reports `publicSelfServiceReady: false` only because manual approval is still enabled.
+7. Set `SIGNUP_REQUIRE_MANUAL_APPROVAL=false` in non-production and complete five controlled end-to-end signups, including assistant mapping and both message delivery receipts.
+8. Repeat the five controlled signups in production with approved test identities before opening public traffic.
+
+The local no-billing preflight is:
+
+```bash
+npm run test:shipping:local-preflight
+```
+
+The final ship decision comes from `npm run report:shipping-readiness`. A yellow or red gate is a stop condition; do not infer readiness from a successful build alone.
+
 ## Integration and Vapi Authentication
 
 The following backend routes reject unauthenticated requests:

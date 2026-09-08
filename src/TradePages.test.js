@@ -1,8 +1,11 @@
-import React from "react";
+import React, { act } from "react";
+import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { sharedCallFlow, tradePageOrder, tradePages } from "./tradePageData";
 import { TRADE_OPTIONS } from "./features/signup/signupConfig";
-import TradePages, { tradeCallIcons } from "./TradePages";
+import TradePages, { ResilientTradePhoto, tradeCallIcons } from "./TradePages";
+
+global.IS_REACT_ACT_ENVIRONMENT = true;
 
 test("every public trade page has complete audience-specific content", () => {
   expect(tradePageOrder).toEqual([
@@ -91,5 +94,20 @@ test("every trade flyer renders the reference campaign structure without fabrica
     expect(html).toMatch(/Turn voicemail hang-ups into job opportunities—24\/7/);
     expect(html).not.toMatch(/MIKE T\.|JASON R\.|ANDREW L\./i);
   });
+});
+
+test("trade photos replace a failed download with an accessible branded fallback", () => {
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  act(() => {
+    root.render(<ResilientTradePhoto src="/missing.jpg" alt="Painter working" className="trade-photo" />);
+  });
+  act(() => {
+    container.querySelector("img").dispatchEvent(new Event("error"));
+  });
+  expect(container.querySelector("img")).toBeNull();
+  expect(container.querySelector('[role="img"]')).not.toBeNull();
+  expect(container.textContent).toMatch(/temporarily unavailable/i);
+  act(() => root.unmount());
 });
 

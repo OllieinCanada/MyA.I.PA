@@ -407,6 +407,19 @@ function FlyerIcon({ name }) {
   return <svg viewBox="0 0 24 24" aria-hidden="true">{paths[name] || paths.note}</svg>;
 }
 
+export function ResilientTradePhoto({ className = "", alt, ...imageProps }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) {
+    return (
+      <div className={`${className} contractor-photo-fallback`.trim()} role="img" aria-label={alt}>
+        <FlyerIcon name="user" />
+        <span>Contractor photo temporarily unavailable</span>
+      </div>
+    );
+  }
+  return <img className={className} alt={alt} onError={() => setFailed(true)} {...imageProps} />;
+}
+
 export const tradeCallIcons = {
   electricians: ["outlet", "charger", "wiring", "panel"],
   plumbers: ["leak", "drain", "water", "wrench"],
@@ -490,7 +503,7 @@ function TradeFlyer({ slug, trade }) {
   return (
     <article className="contractor-flyer" aria-label={`${copy.name} My AI PA landing page`}>
       <section className="contractor-hero">
-        <img className="contractor-hero-image" src="/trade-heroes/reference-contractor-hero-864.jpg" srcSet="/trade-heroes/reference-contractor-hero-480.jpg 480w, /trade-heroes/reference-contractor-hero-864.jpg 864w" sizes="(max-width: 720px) 100vw, 520px" decoding="async" fetchpriority="high" alt={`${copy.name} contractor working on site`} />
+        <ResilientTradePhoto className="contractor-hero-image" src="/trade-heroes/reference-contractor-hero-864.jpg" srcSet="/trade-heroes/reference-contractor-hero-480.jpg 480w, /trade-heroes/reference-contractor-hero-864.jpg 864w" sizes="(max-width: 720px) 100vw, 520px" decoding="async" fetchpriority="high" alt={`${copy.name} contractor working on site`} />
         <div className="contractor-hero-shade" />
         <div className="contractor-hero-main">
           <div className="contractor-wordmark"><span>My</span><b>AI</b><span>PA</span><small>AI PHONE ASSISTANT</small></div>
@@ -529,7 +542,7 @@ function TradeFlyer({ slug, trade }) {
           <dl>{jobDetailRows.map(([icon, label, value]) => <div key={label}><FlyerIcon name={icon} /><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
         </section>
         <div className="contractor-middle-grid">
-          <div className="contractor-outcomes-photo"><img src="/trade-heroes/reference-contractor-portrait-864.jpg" srcSet="/trade-heroes/reference-contractor-portrait-480.jpg 480w, /trade-heroes/reference-contractor-portrait-864.jpg 864w" sizes="(max-width: 560px) calc(100vw - 34px), 340px" alt="Smiling contractor ready for the next job" loading="lazy" decoding="async" /></div>
+          <div className="contractor-outcomes-photo"><ResilientTradePhoto src="/trade-heroes/reference-contractor-portrait-864.jpg" srcSet="/trade-heroes/reference-contractor-portrait-480.jpg 480w, /trade-heroes/reference-contractor-portrait-864.jpg 864w" sizes="(max-width: 560px) calc(100vw - 34px), 340px" alt="Smiling contractor ready for the next job" loading="lazy" decoding="async" /></div>
           <div className="contractor-outcomes"><h2>MORE ANSWERS.<br />MORE JOBS.<br /><em>MORE CONTROL.</em></h2>{contractorOutcomes.map(([title, body]) => <p key={title}><FlyerIcon name="check" /><span><strong>{title}</strong> {body}</span></p>)}</div>
           <div className="contractor-side-stack">
             <div className="contractor-built">

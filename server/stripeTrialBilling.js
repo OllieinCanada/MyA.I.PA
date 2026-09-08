@@ -11,7 +11,8 @@ function hasPaymentMethod(subscription) {
 
 function getTrialPaymentState(subscription, { now = Date.now() } = {}) {
   const status = String(subscription?.status || "").toLowerCase();
-  const paymentReady = hasPaymentMethod(subscription);
+  const paymentFailed = ["past_due", "unpaid", "incomplete", "incomplete_expired"].includes(status);
+  const paymentReady = hasPaymentMethod(subscription) && !paymentFailed;
   const trialEndAt = Number(subscription?.trial_end || 0) * 1000;
   const trialEnded = Boolean(trialEndAt && trialEndAt <= Number(now));
   const requiresPayment = ["paused", "past_due", "unpaid", "incomplete"].includes(status);
@@ -21,7 +22,7 @@ function getTrialPaymentState(subscription, { now = Date.now() } = {}) {
     trialEnded,
     checkoutAvailable: !paymentReady && (trialEnded || requiresPayment),
     paused: status === "paused",
-    paymentFailed: ["past_due", "unpaid", "incomplete", "incomplete_expired"].includes(status),
+    paymentFailed,
     canAddPaymentMethod: !paymentReady && (trialEnded || requiresPayment),
   };
 }
