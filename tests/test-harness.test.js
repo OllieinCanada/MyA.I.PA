@@ -5,9 +5,13 @@ const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
 
-test("backend suite discovers the tests directory instead of maintaining a fragile file list", () => {
+test("backend suite discovers the tests directory with bounded concurrency", () => {
   const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
-  assert.equal(packageJson.scripts["test:backend"], "node --test tests");
+  assert.equal(packageJson.scripts["test:backend"], "node scripts/run-backend-tests.js");
+
+  const boundedRunner = fs.readFileSync(path.join(root, "scripts", "run-backend-tests.js"), "utf8");
+  assert.match(boundedRunner, /BATCH_SIZE = 4/);
+  assert.match(boundedRunner, /\.test\\\.js\$/);
 
   const releaseGate = fs.readFileSync(path.join(root, "scripts", "release-gate.js"), "utf8");
   assert.match(releaseGate, /\["run", "test:backend"\]/);
@@ -26,8 +30,11 @@ test("CI exercises real PostgreSQL behavior and required frontend regression tes
 test("cross-browser diagnostics remain available without blocking the required gate", () => {
   const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
   const workflow = fs.readFileSync(path.join(root, ".github", "workflows", "quality.yml"), "utf8");
+  const browserGate = fs.readFileSync(path.join(root, "scripts", "test-browser-quality.js"), "utf8");
   assert.equal(packageJson.scripts["test:browser:quality"], "node scripts/test-browser-quality.js");
   assert.doesNotMatch(workflow, /npm run test:browser:quality/);
+  assert.match(browserGate, /deferred: true/);
+  assert.match(browserGate, /process\.exitCode = 1/);
 });
 
 test("production monitor installs the legacy frontend dependency tree deterministically", () => {

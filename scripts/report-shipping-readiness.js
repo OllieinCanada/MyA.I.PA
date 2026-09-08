@@ -53,6 +53,20 @@ const gates = [
     requirement: "Full backend, frontend, security, build, accessibility, and browser gate passes.",
   }),
   makeGate({
+    id: "browser",
+    title: "Public-page browser and accessibility quality",
+    evidence: "browser-quality-gate.json",
+    pass: (value) => value.ready === true && Number(value.completedChecks || 0) >= 31,
+    requirement: "Homepage, signup, trade hub, and all six trade pages pass desktop, tablet, mobile, keyboard, accessibility, image-failure, slow-image, and narrow reflow checks.",
+  }),
+  makeGate({
+    id: "signup_security",
+    title: "Public signup security configuration",
+    evidence: "../security/credential-readiness-latest.json",
+    pass: (value) => value.signupControls?.publicSelfServiceReady === true,
+    requirement: "Turnstile, SMTP, email verification, admin TOTP, encrypted backups, and automatic self-service mode are all explicitly configured.",
+  }),
+  makeGate({
     id: "operations",
     title: "Operational controls and runbooks",
     evidence: "../operations/readiness-report.json",
@@ -91,6 +105,35 @@ const gates = [
     requirement: "20 uninterrupted review-only signups pass in a dedicated test environment without external provisioning.",
   }),
   makeGate({
+    id: "postgres_verification",
+    title: "Transactional PostgreSQL verification storage",
+    evidence: "postgres-verification-gate.json",
+    pass: (value) => (
+      value.ready === true
+      && value.schemaApplied === true
+      && value.databaseIntegrationPassed === true
+      && value.verificationConcurrencyPassed === true
+      && value.productionDatabaseTouched === false
+      && value.disposableDatabaseDeleted === true
+    ),
+    requirement: "The real Prisma schema and concurrent one-time verification claims pass on an isolated PostgreSQL database that is deleted afterward.",
+    maxAgeHours: 168,
+  }),
+  makeGate({
+    id: "signup_local_simulation",
+    title: "Local signup failure and retry simulation",
+    evidence: "signup-local-simulation.json",
+    pass: (value) => (
+      value.ready === true
+      && value.consecutivePasses >= 20
+      && value.incompleteMappingsRejected >= 20
+      && value.failedDeliveryCallbacksRejected >= 20
+      && value.paidCallsOrMessages === 0
+      && value.externalResourcesCreated === 0
+    ),
+    requirement: "20 no-cost local signups prove duplicate safety, provider-timeout recovery, mapping fail-closure, and delivery-failure readiness revocation.",
+  }),
+  makeGate({
     id: "mapping",
     title: "Assistant-to-business mapping",
     evidence: "vapi-mapping-audit.json",
@@ -125,8 +168,8 @@ const gates = [
     id: "make",
     title: "Make provisioning safety",
     evidence: "make-readiness.json",
-    pass: (value) => value.summary?.highRiskGaps === 0 && value.summary?.unauthenticatedExternalPiiRequests === 0 && value.summary?.inactiveWithHooks === 0,
-    requirement: "No high-risk provisioning, idempotency, authentication, error-route, or private-execution-history gap remains.",
+    pass: (value) => value.readiness === "green" && value.safeToActivate === true,
+    requirement: "Make is green: no high/medium/review provisioning, idempotency, authentication, legacy-module, error-route, credential-boundary, or private-execution-history gap remains.",
   }),
   makeGate({
     id: "calls",
@@ -144,6 +187,13 @@ const gates = [
     requirement: "Five consecutive Stripe test-clock cycles prove trial, pause, secure card handoff, activation, decline, and cancellation.",
   }),
   makeGate({
+    id: "stripe_local_simulation",
+    title: "Local Stripe trial-to-payment simulation",
+    evidence: "stripe-local-simulation.json",
+    pass: (value) => value.ready === true && value.consecutivePasses >= 5 && value.externalStripeObjectsCreated === 0 && value.realPaymentsAttempted === 0,
+    requirement: "Five no-network simulations prove trial, day-14 pause, customer-scoped secure Checkout, activation, decline handling, and cancellation behavior.",
+  }),
+  makeGate({
     id: "human_pilot",
     title: "Unassisted customer pilot",
     evidence: "human-pilot-gate.json",
@@ -153,17 +203,37 @@ const gates = [
   }),
 ];
 
+const colouredGates = gates.map((gate) => ({
+  ...gate,
+  color: gate.status === "passed" ? "green" : gate.status === "not_run" ? "yellow" : "red",
+}));
+const overallColor = colouredGates.some((gate) => gate.color === "red")
+  ? "red"
+  : colouredGates.some((gate) => gate.color === "yellow")
+    ? "yellow"
+    : "green";
+
 const report = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   checkedAt: new Date().toISOString(),
-  readyToShip: gates.every((gate) => gate.status === "passed"),
+  readiness: overallColor,
+  readyToShip: overallColor === "green",
   summary: {
-    passed: gates.filter((gate) => gate.status === "passed").length,
-    failed: gates.filter((gate) => gate.status === "failed").length,
-    notRun: gates.filter((gate) => gate.status === "not_run").length,
-    total: gates.length,
+    green: colouredGates.filter((gate) => gate.color === "green").length,
+    red: colouredGates.filter((gate) => gate.color === "red").length,
+    yellow: colouredGates.filter((gate) => gate.color === "yellow").length,
+    passed: colouredGates.filter((gate) => gate.status === "passed").length,
+    failed: colouredGates.filter((gate) => gate.status === "failed").length,
+    notRun: colouredGates.filter((gate) => gate.status === "not_run").length,
+    total: colouredGates.length,
   },
-  gates,
+  gates: colouredGates,
+  blockers: colouredGates.filter((gate) => gate.color !== "green").map((gate) => ({
+    id: gate.id,
+    color: gate.color,
+    title: gate.title,
+    requirement: gate.requirement,
+  })),
   rule: "A missing, stale, or failed critical gate keeps shipping closed. Reports are generated evidence and are not committed.",
 };
 

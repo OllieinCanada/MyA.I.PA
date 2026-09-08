@@ -1,6 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const crypto = require("node:crypto");
+const { createPendingSignupVerificationStore } = require("../server/pendingSignupVerifications");
 
 const enabled = process.env.RUN_DATABASE_INTEGRATION === "1";
 
@@ -11,9 +12,26 @@ test("PostgreSQL enforces idempotency, uniqueness, and cascade behavior", { skip
   const phone = `+1905${String(Date.now()).slice(-7)}`;
   let businessId;
   let callerId;
+  let pendingVerificationToken;
 
   try {
     await prisma.$queryRaw`SELECT 1`;
+
+    const verificationStore = createPendingSignupVerificationStore({ prisma, minimumTtlMs: 1000 });
+    pendingVerificationToken = await verificationStore.create({
+      payload: { synthetic: true, suffix },
+      ownerEmail: `integration-${suffix}@example.invalid`,
+      businessName: `Verification Integration ${suffix}`,
+    });
+    const verificationClaims = await Promise.all([
+      verificationStore.claim(pendingVerificationToken),
+      verificationStore.claim(pendingVerificationToken),
+    ]);
+    assert.equal(verificationClaims.filter((result) => result.status === "claimed").length, 1);
+    assert.equal(verificationClaims.filter((result) => result.status === "already_claimed").length, 1);
+    assert.equal(await prisma.pendingSignupVerification.count({
+      where: { tokenHash: verificationStore.tokenHash(pendingVerificationToken) },
+    }), 1);
 
     const business = await prisma.business.create({
       data: {
@@ -64,6 +82,10 @@ test("PostgreSQL enforces idempotency, uniqueness, and cascade behavior", { skip
     assert.equal(await prisma.call.count({ where: { externalProvider: "CI", externalId: callExternalId } }), 0);
     assert.ok(await prisma.caller.findUnique({ where: { id: callerId } }), "business deletion must not delete a shared caller");
   } finally {
+    if (pendingVerificationToken) {
+      const { tokenHash } = require("../server/pendingSignupVerifications");
+      await prisma.pendingSignupVerification.deleteMany({ where: { tokenHash: tokenHash(pendingVerificationToken) } }).catch(() => {});
+    }
     await prisma.webhookReplayClaim.deleteMany({ where: { key: `ci-replay-${suffix}` } }).catch(() => {});
     if (businessId) await prisma.business.delete({ where: { id: businessId } }).catch(() => {});
     if (callerId) await prisma.caller.delete({ where: { id: callerId } }).catch(() => {});

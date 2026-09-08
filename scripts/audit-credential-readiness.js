@@ -4,7 +4,7 @@ const path = require("path");
 const { loadProjectEnv, rootPath } = require("./_helpers");
 
 const localEnv = loadProjectEnv();
-const serviceId = String(localEnv.RENDER_SERVICE_ID || "").trim();
+const serviceId = String(localEnv.RENDER_SERVICE_ID || "srv-d92503a8qa3s73crdpog").trim();
 const renderConfigPath = path.join(
   process.env.USERPROFILE || process.env.HOME || "",
   ".render",
@@ -265,9 +265,11 @@ async function validateTwilio(remotePresence, remoteValues) {
 async function main() {
   if (!serviceId) throw new Error("RENDER_SERVICE_ID is not configured.");
   const renderCredentials = readRenderCredentials();
-  const remoteKeys = [...new Set(
-    groups.filter((group) => group.scope !== "local").flatMap((group) => group.keys)
-  )];
+  const remoteKeys = [...new Set([
+    ...groups.filter((group) => group.scope !== "local").flatMap((group) => group.keys),
+    "SIGNUP_REQUIRE_VERIFICATION",
+    "SIGNUP_REQUIRE_MANUAL_APPROVAL",
+  ])];
   const remoteValues = {};
   const remotePresence = {};
 
@@ -315,8 +317,26 @@ async function main() {
     serviceId,
     secretValuesPrinted: false,
     validation: { twilio },
+    signupControls: {
+      captchaProviderSelected: Boolean(remotePresence.TURNSTILE_SECRET_KEY && localPresence.REACT_APP_TURNSTILE_SITE_KEY),
+      captchaConfigured: Boolean(remotePresence.TURNSTILE_SECRET_KEY && localPresence.REACT_APP_TURNSTILE_SITE_KEY),
+      smtpConfigured: ["SMTP_HOST", "SMTP_USER", "SMTP_PASS", "EMAIL_FROM"].every((key) => remotePresence[key]),
+      emailVerificationEnabled: /^(1|true|yes|on)$/i.test(String(remoteValues.SIGNUP_REQUIRE_VERIFICATION || "")),
+      manualApprovalEnabled: !/^(0|false|no|off)$/i.test(String(remoteValues.SIGNUP_REQUIRE_MANUAL_APPROVAL || "true")),
+      adminTotpConfigured: Boolean(remotePresence.ADMIN_TOTP_SECRET),
+      backupEncryptionConfigured: Boolean(remotePresence.BACKUP_ENCRYPTION_KEY),
+    },
     inventory,
   };
+  report.signupControls.publicSelfServiceReady = Boolean(
+    report.signupControls.captchaProviderSelected
+    && report.signupControls.captchaConfigured
+    && report.signupControls.smtpConfigured
+    && report.signupControls.emailVerificationEnabled
+    && !report.signupControls.manualApprovalEnabled
+    && report.signupControls.adminTotpConfigured
+    && report.signupControls.backupEncryptionConfigured
+  );
 
   fs.mkdirSync(path.dirname(reportPath), { recursive: true });
   fs.writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");

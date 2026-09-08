@@ -4,6 +4,7 @@ const net = require("net");
 const path = require("path");
 const { chromium, firefox, webkit } = require("playwright");
 const { rootPath } = require("./_helpers");
+const reportPath = rootPath("diagnostics", "shipping-readiness", "browser-quality-gate.json");
 
 const defaultBuildDir = rootPath("build");
 const pagesBuildDir = rootPath("docs");
@@ -22,14 +23,36 @@ const viewports = [
   { name: "mobile", width: 390, height: 844 },
 ];
 const routeCatalog = [
-  { name: "home", hash: "#/", h1: /never miss a call again/i },
-  { name: "signup", hash: "#/signup", h1: /create your ai phone assistant/i },
+  { name: "home", hash: "#/", h1: /never miss a call again/i, offer: true },
+  { name: "signup", hash: "#/signup", h1: /create your ai phone assistant/i, offer: true },
+  { name: "trades", hash: "#/trades", h1: /never send another good customer to voicemail/i, offer: true },
+  { name: "electricians", hash: "#/trades/electricians", h1: /stop losing jobs/i, offer: true, trade: true },
+  { name: "plumbers", hash: "#/trades/plumbers", h1: /stop losing jobs/i, offer: true, trade: true },
+  { name: "hvac", hash: "#/trades/hvac", h1: /stop losing jobs/i, offer: true, trade: true },
+  { name: "general-contractors", hash: "#/trades/general-contractors", h1: /stop losing jobs/i, offer: true, trade: true },
+  { name: "roofers", hash: "#/trades/roofers", h1: /stop losing jobs/i, offer: true, trade: true },
+  { name: "painters", hash: "#/trades/painters", h1: /stop losing jobs/i, offer: true, trade: true },
 ];
-const requestedRoutes = String(process.env.BROWSER_ROUTES || "home,signup")
+const requestedRoutes = String(process.env.BROWSER_ROUTES || routeCatalog.map((route) => route.name).join(","))
   .split(",")
   .map((name) => name.trim().toLowerCase())
   .filter(Boolean);
 const routes = routeCatalog.filter((route) => requestedRoutes.includes(route.name));
+const knownInternalRoutes = new Set(["", "signup", "trades", "links", "try-demo", "privacy", "terms", "dashboard", "forwarding-setup"]);
+let runReport = {
+  schemaVersion: 2,
+  checkedAt: new Date().toISOString(),
+  ready: false,
+  requestedEngines,
+  requestedRoutes,
+  checks: [],
+  failure: "",
+};
+
+function writeReport() {
+  fs.mkdirSync(path.dirname(reportPath), { recursive: true });
+  fs.writeFileSync(reportPath, `${JSON.stringify(runReport, null, 2)}\n`, "utf8");
+}
 function assertBuildExists() {
   if (!fs.existsSync(path.join(buildDir, "index.html"))) {
     throw new Error("Missing build/index.html and docs/index.html. Build the app before running browser quality checks.");
@@ -133,6 +156,87 @@ function describeViolation(violation) {
   return `${violation.impact || "unknown"}: ${violation.id} (${targets || "unknown target"})`;
 }
 
+function normalizeHashRoute(href = "") {
+  if (!String(href).startsWith("#/")) return "";
+  return String(href).slice(2).split(/[?#]/)[0].replace(/^\/+|\/+$/g, "").toLowerCase();
+}
+
+function internalRouteIsKnown(route) {
+  return knownInternalRoutes.has(route)
+    || route.startsWith("trades/")
+    || route.startsWith("demo/");
+}
+
+async function auditAssetsAndControls(page, route) {
+  const audit = await page.evaluate(() => {
+    const isVisible = (element) => {
+      const style = window.getComputedStyle(element);
+      const rect = element.getBoundingClientRect();
+      return style.display !== "none" && style.visibility !== "hidden" && rect.width > 0 && rect.height > 0;
+    };
+    return {
+      links: Array.from(document.querySelectorAll("a[href]")).map((element) => ({
+        href: element.getAttribute("href") || "",
+        label: (element.getAttribute("aria-label") || element.textContent || "").replace(/\s+/g, " ").trim(),
+      })),
+      unnamedVisibleButtons: Array.from(document.querySelectorAll("button"))
+        .filter(isVisible)
+        .filter((element) => !(element.getAttribute("aria-label") || element.textContent || "").trim()).length,
+      images: Array.from(document.images).map((image) => ({
+        alt: image.getAttribute("alt"),
+        ariaHidden: image.getAttribute("aria-hidden") === "true",
+        loading: image.loading || "auto",
+      })),
+      emptyVisibleSvgs: Array.from(document.querySelectorAll("svg"))
+        .filter(isVisible)
+        .filter((svg) => !svg.querySelector("path, circle, rect, line, polyline, polygon, ellipse, use")).length,
+      text: document.body.innerText.replace(/\s+/g, " ").trim(),
+    };
+  });
+
+  const brokenInternalLinks = audit.links
+    .map((link) => ({ ...link, route: normalizeHashRoute(link.href) }))
+    .filter((link) => link.href.startsWith("#/") && !internalRouteIsKnown(link.route));
+  if (brokenInternalLinks.length) {
+    throw new Error(`${route.name} contains unknown internal routes: ${brokenInternalLinks.map((link) => link.href).join(", ")}`);
+  }
+  const unnamedLinks = audit.links.filter((link) => !link.label && !link.href.startsWith("mailto:") && !link.href.startsWith("tel:"));
+  if (unnamedLinks.length) throw new Error(`${route.name} contains ${unnamedLinks.length} unnamed link(s)`);
+  if (audit.unnamedVisibleButtons) throw new Error(`${route.name} contains ${audit.unnamedVisibleButtons} unnamed visible button(s)`);
+  if (audit.emptyVisibleSvgs) throw new Error(`${route.name} contains ${audit.emptyVisibleSvgs} empty visible symbol(s)`);
+  const imagesWithoutAlternatives = audit.images.filter((image) => image.alt === null && !image.ariaHidden);
+  if (imagesWithoutAlternatives.length) throw new Error(`${route.name} contains ${imagesWithoutAlternatives.length} image(s) without alt text`);
+
+  if (route.offer && !/(?:14[- ]day free trial|free for 14 days)/i.test(audit.text)) {
+    throw new Error(`${route.name} does not state the 14-day free trial`);
+  }
+  if (route.trade) {
+    const signupLinks = audit.links.filter((link) => link.href === "#/signup");
+    const demoLinks = audit.links.filter((link) => link.href === "tel:+12495033301");
+    if (!signupLinks.length || !demoLinks.length) throw new Error(`${route.name} is missing its signup or demo CTA`);
+    if (!/no credit card required/i.test(audit.text)) throw new Error(`${route.name} does not state that the trial needs no credit card`);
+  }
+
+  const images = await page.locator("img").all();
+  for (const image of images) {
+    await image.scrollIntoViewIfNeeded().catch(() => {});
+    await image.evaluate((element) => {
+      if (element.complete) return;
+      return new Promise((resolve) => {
+        const finish = () => resolve();
+        element.addEventListener("load", finish, { once: true });
+        element.addEventListener("error", finish, { once: true });
+        setTimeout(finish, 5000);
+      });
+    });
+  }
+  const failedImages = await page.locator("img").evaluateAll((elements) => elements
+    .filter((image) => image.complete && image.naturalWidth === 0)
+    .map((image) => image.currentSrc || image.src));
+  if (failedImages.length) throw new Error(`${route.name} has broken images: ${failedImages.join(", ")}`);
+  return { linkCount: audit.links.length, imageCount: audit.images.length };
+}
+
 async function auditPage({ browser, baseUrl, engineName, route, viewport }) {
   const context = await browser.newContext({
     viewport: { width: viewport.width, height: viewport.height },
@@ -191,13 +295,22 @@ async function auditPage({ browser, baseUrl, engineName, route, viewport }) {
     if (!layout.title.trim()) throw new Error(`${route.name} has no document title`);
     console.log(`[browser-quality] layout ${engineName}/${route.name}/${viewport.name}`);
 
+    const surface = await auditAssetsAndControls(page, route);
+    console.log(`[browser-quality] assets ${engineName}/${route.name}/${viewport.name}`);
+
     await page.keyboard.press("Tab");
     const focus = await page.evaluate(() => ({
       tag: document.activeElement?.tagName || "",
       tabIndex: document.activeElement?.tabIndex,
+      outlineStyle: document.activeElement ? window.getComputedStyle(document.activeElement).outlineStyle : "",
+      outlineWidth: document.activeElement ? window.getComputedStyle(document.activeElement).outlineWidth : "",
+      boxShadow: document.activeElement ? window.getComputedStyle(document.activeElement).boxShadow : "",
     }));
     if (["", "BODY", "HTML"].includes(focus.tag) || focus.tabIndex === -1) {
       throw new Error(`${route.name} does not expose a keyboard-reachable first control`);
+    }
+    if ((focus.outlineStyle === "none" || focus.outlineWidth === "0px") && (!focus.boxShadow || focus.boxShadow === "none")) {
+      throw new Error(`${route.name} does not visibly identify the keyboard-focused control`);
     }
 
     const axe = await runAxe(page);
@@ -213,6 +326,8 @@ async function auditPage({ browser, baseUrl, engineName, route, viewport }) {
       engine: engineName,
       route: route.name,
       viewport: viewport.name,
+      linkCount: surface.linkCount,
+      imageCount: surface.imageCount,
       accessibilityWarnings: warnings.map(describeViolation),
     };
   } finally {
@@ -244,10 +359,91 @@ async function testSignupJourney(browser, baseUrl) {
   }
 }
 
+async function testTradeImageFailureFallback(browser, baseUrl) {
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await context.route("**/trade-heroes/**", (route) => route.abort());
+  const page = await context.newPage();
+  page.setDefaultTimeout(15_000);
+  try {
+    await page.goto(`${baseUrl}#/trades/painters`, { waitUntil: "domcontentloaded" });
+    const fallback = page.locator(".contractor-photo-fallback").first();
+    await fallback.waitFor({ state: "visible" });
+    if (!/temporarily unavailable/i.test(await fallback.innerText())) {
+      throw new Error("trade image failure did not produce the expected readable fallback");
+    }
+    return { engine: "chromium", route: "trade-image-fallback", viewport: "mobile", accessibilityWarnings: [] };
+  } finally {
+    await context.close();
+  }
+}
+
+async function testSlowTradeImageLayout(browser, baseUrl) {
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await context.route("**/trade-heroes/**", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+    await route.continue();
+  });
+  const page = await context.newPage();
+  page.setDefaultTimeout(15_000);
+  try {
+    await page.goto(`${baseUrl}#/trades/roofers`, { waitUntil: "domcontentloaded" });
+    await page.locator("h1").waitFor({ state: "visible" });
+    const layout = await page.evaluate(() => {
+      const hero = document.querySelector(".contractor-hero");
+      return {
+        heroHeight: hero?.getBoundingClientRect().height || 0,
+        clientWidth: document.documentElement.clientWidth,
+        scrollWidth: document.documentElement.scrollWidth,
+      };
+    });
+    if (layout.heroHeight < 700) throw new Error(`slow image collapsed the hero to ${layout.heroHeight}px`);
+    if (layout.scrollWidth > layout.clientWidth + 2) throw new Error("slow image caused horizontal overflow");
+    await page.locator(".contractor-hero-image").waitFor({ state: "visible" });
+    return { engine: "chromium", route: "trade-slow-image-layout", viewport: "mobile", accessibilityWarnings: [] };
+  } finally {
+    await context.close();
+  }
+}
+
+async function testLargeTextReflow(browser, baseUrl) {
+  const context = await browser.newContext({ viewport: { width: 320, height: 800 }, reducedMotion: "reduce" });
+  const page = await context.newPage();
+  page.setDefaultTimeout(15_000);
+  try {
+    await page.goto(`${baseUrl}#/trades/painters`, { waitUntil: "domcontentloaded" });
+    await page.locator("h1").waitFor({ state: "visible" });
+    const layout = await page.evaluate(() => ({
+      clientWidth: document.documentElement.clientWidth,
+      scrollWidth: document.documentElement.scrollWidth,
+      signupVisible: Array.from(document.querySelectorAll('a[href="#/signup"]')).some((element) => {
+        const rect = element.getBoundingClientRect();
+        const style = window.getComputedStyle(element);
+        return rect.width > 0 && rect.height > 0 && style.display !== "none" && style.visibility !== "hidden";
+      }),
+    }));
+    if (layout.scrollWidth > layout.clientWidth + 2) {
+      throw new Error(`320px reflow overflows horizontally by ${layout.scrollWidth - layout.clientWidth}px`);
+    }
+    if (!layout.signupVisible) throw new Error("primary signup action is not visible in narrow/large-text reflow mode");
+    return { engine: "chromium", route: "large-text-reflow", viewport: "320px", accessibilityWarnings: [] };
+  } finally {
+    await context.close();
+  }
+}
+
 async function main() {
   assertBuildExists();
   if (process.platform === "win32" && process.env.CI !== "true" && process.env.RUN_LOCAL_PLAYWRIGHT !== "1") {
-    console.log("Browser quality checks are deferred to Linux CI on Windows. Set RUN_LOCAL_PLAYWRIGHT=1 to force the local Playwright launcher.");
+    runReport = {
+      ...runReport,
+      checkedAt: new Date().toISOString(),
+      ready: false,
+      deferred: true,
+      failure: "Browser quality checks require Linux CI or an explicitly forced local Playwright run on Windows.",
+    };
+    writeReport();
+    console.error("Browser quality checks are not green: run them in Linux CI or set RUN_LOCAL_PLAYWRIGHT=1 to force the local Playwright launcher.");
+    process.exitCode = 1;
     return;
   }
   const invalidEngines = requestedEngines.filter((name) => !browserTypes[name]);
@@ -267,14 +463,20 @@ async function main() {
             console.log(`[browser-quality] ${engineName}/${route.name}/${viewport.name}`);
             results.push(await withTimeout(
               auditPage({ browser, baseUrl, engineName, route, viewport }),
-              60_000,
+              120_000,
               `${engineName}/${route.name}/${viewport.name}`,
             ));
           }
         }
         if (engineName === "chromium") {
           console.log("[browser-quality] chromium/signup-journey/mobile");
-          results.push(await withTimeout(testSignupJourney(browser, baseUrl), 60_000, "chromium/signup-journey/mobile"));
+          results.push(await withTimeout(testSignupJourney(browser, baseUrl), 120_000, "chromium/signup-journey/mobile"));
+          console.log("[browser-quality] chromium/trade-image-fallback/mobile");
+          results.push(await withTimeout(testTradeImageFailureFallback(browser, baseUrl), 60_000, "chromium/trade-image-fallback/mobile"));
+          console.log("[browser-quality] chromium/trade-slow-image-layout/mobile");
+          results.push(await withTimeout(testSlowTradeImageLayout(browser, baseUrl), 60_000, "chromium/trade-slow-image-layout/mobile"));
+          console.log("[browser-quality] chromium/large-text-reflow/320px");
+          results.push(await withTimeout(testLargeTextReflow(browser, baseUrl), 60_000, "chromium/large-text-reflow/320px"));
         }
       } finally {
         await withTimeout(browser.close(), 15_000, `${engineName} browser shutdown`).catch((error) => {
@@ -292,9 +494,20 @@ async function main() {
     console.warn(`Non-blocking accessibility findings: ${warnings.length}`);
     for (const item of warnings.slice(0, 12)) console.warn(`- ${item.engine}/${item.route}/${item.viewport}: ${item.warning}`);
   }
+  runReport = {
+    ...runReport,
+    checkedAt: new Date().toISOString(),
+    ready: true,
+    completedChecks: results.length,
+    checks: results,
+    warningCount: warnings.length,
+  };
+  writeReport();
 }
 
 main().catch((error) => {
+  runReport = { ...runReport, checkedAt: new Date().toISOString(), ready: false, failure: String(error?.message || error) };
+  writeReport();
   console.error(`Browser quality checks failed: ${error.message || error}`);
   process.exitCode = 1;
 });

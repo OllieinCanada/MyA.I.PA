@@ -100,7 +100,11 @@ test("trial payment states cover no card, declined payment, and paused service",
     status: "trialing", paymentReady: false, trialEnded: false, checkoutAvailable: false, paused: false, paymentFailed: false, canAddPaymentMethod: false,
   });
   assert.equal(getTrialPaymentState({ status: "paused", trial_end: trialEnd }, { now: Date.UTC(2026, 8, 20) }).checkoutAvailable, true);
-  assert.equal(getTrialPaymentState({ status: "past_due", default_payment_method: "pm_declined" }).paymentFailed, true);
+  const declined = getTrialPaymentState({ status: "past_due", default_payment_method: "pm_declined" });
+  assert.equal(declined.paymentFailed, true);
+  assert.equal(declined.paymentReady, false);
+  assert.equal(declined.checkoutAvailable, true);
+  assert.equal(declined.canAddPaymentMethod, true);
   assert.equal(getTrialPaymentState({ status: "paused" }).paused, true);
   assert.equal(getTrialPaymentState({ status: "active", default_payment_method: "pm_valid" }).paymentReady, true);
 });

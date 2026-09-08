@@ -227,6 +227,8 @@ function summarize(reports = []) {
       0
     ),
     highRiskGaps: issues.filter((issue) => issue.level === "high").length,
+    mediumRiskGaps: issues.filter((issue) => issue.level === "medium").length,
+    reviewGaps: issues.filter((issue) => issue.level === "review").length,
     issueCounts: issues.reduce((counts, issue) => {
       counts[issue.key] = (counts[issue.key] || 0) + 1;
       return counts;
@@ -337,8 +339,16 @@ async function runAudit({ env = loadProjectEnv(), fetchImpl = fetch } = {}) {
       action: "Separate the Make inbound webhook key, backend provisioning key, Vapi webhook secret, and read-only Make audit token; remove compatibility fallbacks after callers are migrated.",
     });
   }
+  const blockingBoundaryGap = !credentialBoundary.credentialsDistinct;
+  const readiness = summary.highRiskGaps > 0 || summary.unauthenticatedExternalPiiRequests > 0
+    ? "red"
+    : summary.mediumRiskGaps > 0 || summary.reviewGaps > 0 || warnings.length > 0 || blockingBoundaryGap
+      ? "yellow"
+      : "green";
   return {
     generatedAt: new Date().toISOString(),
+    readiness,
+    safeToActivate: readiness === "green",
     scope: "Read-only Make team inventory. Payload values, webhook paths, credentials, phone numbers, and customer data are never printed.",
     inventory: { scenarios: scenarios.length, hooks: hooks.length, dataStoreReadAvailable: !dataStoreProbe.__error },
     credentialBoundary,
@@ -358,7 +368,7 @@ async function main() {
     fs.writeFileSync(outputPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
   }
   console.log(JSON.stringify(report, null, 2));
-  if (process.argv.includes("--strict") && report.summary.highRiskGaps > 0) process.exitCode = 2;
+  if (process.argv.includes("--strict") && report.readiness !== "green") process.exitCode = 2;
 }
 
 if (require.main === module) {

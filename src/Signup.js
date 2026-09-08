@@ -2314,6 +2314,10 @@ export default function Signup() {
             display: none;
           }
 
+          .signup-mobile-offer {
+            display: none;
+          }
+
           @media (max-width: 639px) {
             .signup-mobile-flow {
               min-height: 100dvh;
@@ -2329,6 +2333,15 @@ export default function Signup() {
               font-size: 1.65rem;
               line-height: 1.08;
               letter-spacing: -0.035em;
+            }
+
+            .signup-mobile-offer {
+              display: block;
+              margin-top: 8px;
+              color: #334155;
+              font-size: 0.94rem;
+              font-weight: 800;
+              line-height: 1.35;
             }
 
             .signup-page-header > p,
@@ -2956,6 +2969,7 @@ export default function Signup() {
             Create your AI phone assistant
           </h1>
           <p className="mt-0.5 text-base font-medium text-slate-600 sm:text-lg">Set up your business assistant in minutes.</p>
+          <div className="signup-mobile-offer">Free for 14 days · No credit card required · Cancel anytime</div>
 
           <div className="signup-page-benefits mt-2 flex flex-wrap justify-center gap-x-8 gap-y-1.5">
             <Benefit icon="shield">Free for 14 days</Benefit>

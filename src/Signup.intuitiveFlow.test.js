@@ -37,6 +37,7 @@ describe("intuitive signup presentation", () => {
     expect(container.querySelectorAll(".signup-visible-progress")).toHaveLength(1);
     expect(container.querySelector(".signup-macro-stepper")).toBeNull();
     expect(container.querySelector(".signup-home-row a").getAttribute("href")).toBe("#/");
+    expect(container.querySelector(".signup-mobile-offer").textContent).toMatch(/Free for 14 days.*No credit card required.*Cancel anytime/i);
     expect(container.textContent).toMatch(/Step 1 of 8/i);
     expect(container.textContent).toMatch(/Choose your trade/i);
     expect(container.querySelectorAll(".signup-trade-grid button")).toHaveLength(6);

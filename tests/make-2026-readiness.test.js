@@ -108,4 +108,23 @@ test("summary counts high-risk gaps without leaking configuration values", () =>
   assert.equal(result.scenarios, 1);
   assert.equal(result.active, 1);
   assert.equal(result.highRiskGaps, 0);
+  assert.equal(result.mediumRiskGaps, 0);
+  assert.equal(result.reviewGaps, 0);
+});
+
+test("summary exposes medium and review gaps so they cannot be mistaken for green", () => {
+  const reports = [
+    evaluateScenario({
+      scenario: { id: "scenario-yellow", name: "Needs hardening", isActive: true },
+      blueprint: {
+        flow: [
+          { id: 1, module: "http:ActionSendData", version: 3, mapper: { url: "https://api.myaipa.ca/health" } },
+        ],
+      },
+    }),
+  ];
+  const result = summarize(reports);
+  assert.equal(result.highRiskGaps, 0);
+  assert.ok(result.mediumRiskGaps > 0);
+  assert.ok(result.reviewGaps > 0);
 });

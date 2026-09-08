@@ -1075,6 +1075,9 @@
   color: #fff;
 }
 .contractor-hero-image { position: absolute; inset: 0 0 0 auto; width: 58%; height: 100%; object-fit: cover; object-position: center; filter: brightness(1.2) contrast(.96) saturate(.94); }
+.contractor-photo-fallback { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 24px; background: linear-gradient(135deg, #192019, #080a08); color: #f9d625; font-weight: 900; text-align: center; }
+.contractor-photo-fallback svg { width: 52px; height: 52px; flex: 0 0 auto; }
+.contractor-hero-image.contractor-photo-fallback { flex-direction: column; filter: none; }
 .contractor-hero-shade { position: absolute; inset: 0; background: linear-gradient(90deg, #050605 0%, #050605 42%, rgba(5,6,5,.66) 57%, rgba(5,6,5,.06) 83%, rgba(5,6,5,.11) 100%); }
 .contractor-hero-main { position: relative; z-index: 3; width: 59%; padding: 28px 26px 24px; }
 .contractor-wordmark { position: relative; width: max-content; display: flex; align-items: baseline; color: #fff; font-family: Arial, sans-serif; font-size: 3rem; font-weight: 1000; line-height: .85; letter-spacing: -.075em; }
@@ -1174,6 +1177,7 @@
 .contractor-middle-grid { display: grid; grid-template-columns: 1.1fr 1fr .95fr; align-items: start; gap: 21px; margin-top: 26px; }
 .contractor-outcomes-photo { height: 315px; overflow: hidden; border-radius: 9px; }
 .contractor-outcomes-photo img { width: 100%; height: 100%; object-fit: cover; }
+.contractor-outcomes-photo .contractor-photo-fallback { width: 100%; height: 100%; }
 .contractor-outcomes h2 { margin: 0 0 13px; font-size: 2.02rem; font-weight: 1000; line-height: .92; }
 .contractor-outcomes h2 em { color: #25ba21; font-style: normal; }
 .contractor-outcomes p { display: flex; gap: 9px; margin: 11px 0; font-family: Arial, sans-serif; font-size: 1rem; line-height: 1.52; }
