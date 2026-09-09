@@ -501,7 +501,7 @@ function TradeFlyer({ slug, trade }) {
     ["Does it book or promise work?", "Only when that capability is intentionally configured. By default it captures the request and sets an honest callback expectation."],
   ];
   return (
-    <article className="contractor-flyer" aria-label={`${copy.name} My AI PA landing page`}>
+    <article className={`contractor-flyer${slug === "general-contractors" ? " is-general-contractors" : ""}`} aria-label={`${copy.name} My AI PA landing page`}>
       <section className="contractor-hero">
         <ResilientTradePhoto className="contractor-hero-image" src="/trade-heroes/reference-contractor-hero-864.jpg" srcSet="/trade-heroes/reference-contractor-hero-480.jpg 480w, /trade-heroes/reference-contractor-hero-864.jpg 864w" sizes="(max-width: 720px) 100vw, 520px" decoding="async" fetchpriority="high" alt={`${copy.name} contractor working on site`} />
         <div className="contractor-hero-shade" />
