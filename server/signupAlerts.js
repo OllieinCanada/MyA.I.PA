@@ -189,6 +189,7 @@ function buildSignupIncidentInput(input = {}) {
     nextAction: providerFailure?.nextAction || signupNextAction(input.state),
     signInDestination: providerFailure?.signInDestination,
     incidentId: input.incidentId || eventKey,
+    affectedCustomer: input.record?.businessName || input.businessName,
     detectedAt: input.record?.updatedAt || input.record?.lastAttemptAt || new Date().toISOString(),
     adminUrl: input.adminUrl,
   };

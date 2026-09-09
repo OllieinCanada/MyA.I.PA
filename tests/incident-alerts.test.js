@@ -101,7 +101,7 @@ test("provider environment credentials and connection-string passwords are redac
   assert.match(redacted, /redis:\/\/\[credentials removed\]@cache\.internal/);
 });
 
-test("incident alert includes every operational section and a redacted snapshot", () => {
+test("incident alert leads with the owner decision and keeps technical evidence out of Telegram", () => {
   const text = buildIncidentTelegramAlert({
     severity: "critical",
     title: "Signup could not finish",
@@ -129,18 +129,20 @@ test("incident alert includes every operational section and a redacted snapshot"
     detectedAt: "2026-08-25T21:03:13.616Z",
   });
 
-  for (const heading of ["WHAT FAILED", "REASON", "IMPACT", "SNAPSHOT", "LAST GOOD CHECKPOINT", "WORKING HYPOTHESIS", "MY AI PA RESPONSE", "SAFETY LIMIT", "DO THIS NEXT", "YOU ARE SIGNING IN TO"]) {
-    assert.match(text, new RegExp(`(?:^|\\n)${heading}(?:\\n|$)`));
+  for (const label of ["Who is affected:", "Customer impact:", "Why:", "What My AI PA did:", "Do this now:", "Status:", "Reference:"]) {
+    assert.match(text, new RegExp(label));
   }
   assert.match(text, /MAKE_SIGNUP_RESPONSE_INCOMPLETE|responded without all verified phone and assistant identifiers/i);
-  assert.match(text, /Business: Example Electric/);
+  assert.match(text, /Who is affected: Example Electric/);
+  assert.match(text, /Full technical evidence is saved/);
+  assert.doesNotMatch(text, /WORKING HYPOTHESIS|SNAPSHOT|Provider HTTP status/);
   assert.equal(text.includes("private@example.com"), false);
   assert.equal(text.includes("9055550123"), false);
   assert.equal(text.includes(`PN${"1".repeat(32)}`), false);
   assert.ok(text.length <= MAX_TELEGRAM_TEXT_LENGTH);
 });
 
-test("incident alert remains under the Telegram limit without dropping required sections", () => {
+test("incident alert remains short and under the Telegram limit", () => {
   const longValue = "provider detail ".repeat(1_000);
   const text = buildIncidentTelegramAlert({
     title: longValue,
@@ -154,9 +156,10 @@ test("incident alert remains under the Telegram limit without dropping required 
   });
 
   assert.ok(text.length <= MAX_TELEGRAM_TEXT_LENGTH);
-  for (const heading of ["WHAT FAILED", "REASON", "IMPACT", "SNAPSHOT", "LAST GOOD CHECKPOINT", "WORKING HYPOTHESIS", "MY AI PA RESPONSE", "SAFETY LIMIT", "DO THIS NEXT", "YOU ARE SIGNING IN TO"]) {
-    assert.ok(text.includes(heading));
+  for (const label of ["Who is affected:", "Customer impact:", "Why:", "What My AI PA did:", "Do this now:", "Status:"]) {
+    assert.ok(text.includes(label));
   }
+  assert.ok(text.length < 2_500);
 });
 
 test("remediation update clearly distinguishes verified recovery from a user action", () => {
@@ -168,9 +171,9 @@ test("remediation update clearly distinguishes verified recovery from a user act
     nextAction: "No action is required.",
   });
   assert.match(resolved, /MY AI PA — VERIFIED FIXED/);
-  assert.match(resolved, /WHAT MY AI PA DID/);
-  assert.match(resolved, /VERIFICATION/);
-  assert.match(resolved, /WHAT HAPPENS NEXT/);
+  assert.match(resolved, /What My AI PA did:/);
+  assert.match(resolved, /How we checked:/);
+  assert.match(resolved, /What you need to do:/);
 
   const blocked = buildIncidentRemediationUpdate({
     status: "needs_user",
@@ -180,7 +183,7 @@ test("remediation update clearly distinguishes verified recovery from a user act
     nextAction: "Add provider funds, then rerun health.",
   });
   assert.match(blocked, /MY AI PA — NEEDS YOU/);
-  assert.match(blocked, /WHAT YOU NEED TO DO NEXT/);
+  assert.match(blocked, /Do this now:/);
   assert.ok(blocked.length <= MAX_TELEGRAM_TEXT_LENGTH);
 });
 

@@ -181,12 +181,12 @@ test("production monitor builds a useful redacted Telegram checklist", () => {
     ],
   }, { sha: "8b54539b02ba0e79d0ab7190bd48d0dbf3928e8f" });
 
-  assert.match(checklist, /ROUTINE STATUS CHECK/);
-  assert.match(checklist, /Website: Online/);
-  assert.match(checklist, /Database: Reachable/);
-  assert.match(checklist, /Operations: 1 critical · 2 warning/);
-  assert.match(checklist, /Failed signups: 1/);
-  assert.match(checklist, /Incomplete signups: 2/);
+  assert.match(checklist, /OWNER CHECK-IN/);
+  assert.match(checklist, /Core systems: Online/);
+  assert.match(checklist, /Critical issues: 1/);
+  assert.match(checklist, /Other warnings: 2/);
+  assert.match(checklist, /Signups stopped: 1/);
+  assert.match(checklist, /Signups waiting: 2/);
   assert.match(checklist, /Release: 8b54539/);
   assert.equal(checklist.includes("1234567890abcdef12345678"), false);
 });
@@ -225,14 +225,12 @@ test("production failure alert explains the reason, snapshot, next action, and e
       }],
     }],
   });
-  assert.match(alert, /WHAT FAILED/);
-  assert.match(alert, /REASON/);
+  assert.match(alert, /Customer impact:/);
+  assert.match(alert, /Why:/);
   assert.match(alert, /Example Electrical/);
-  assert.match(alert, /AI number assigned: no/);
-  assert.match(alert, /Email verification completed/);
   assert.match(alert, /Verify provider state before recovery/);
-  assert.match(alert, /WORKING HYPOTHESIS/);
-  assert.match(alert, /MY AI PA RESPONSE/);
+  assert.match(alert, /What My AI PA did:/);
+  assert.doesNotMatch(alert, /AI number assigned: no|WORKING HYPOTHESIS|SNAPSHOT/);
   assert.equal(incidentAdminUrl({ id: incidentId }), `https://www.myaipa.ca/#/admin?tab=attention&incident=${incidentId}`);
 });
 
@@ -259,7 +257,7 @@ test("an infrastructure outage takes priority over an older operational warning"
   assert.match(alert, /public site health check/i);
   assert.match(alert, /did not answer before the health check timed out/i);
   assert.doesNotMatch(alert, /Old routing warning/);
-  assert.match(alert, /monitor will keep checking automatically/i);
+  assert.match(alert, /monitor confirmed the failure and will keep checking/i);
 });
 
 test("monitor lifecycle uses a stable incident identity and honest recovered wording", () => {

@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import {
   getIncidentSnapshotRows,
+  getOwnerIncidentBrief,
   parseAdminIncidentLink,
 } from "./AdminDashboard";
 
@@ -56,6 +57,26 @@ test("runtime incident context is shown alongside the recovery brief", () => {
     ["Route", "/api/signup"],
     ["Status", "500"],
   ]);
+});
+
+test("owner incident brief leads with impact, protection, and one next action", () => {
+  expect(getOwnerIncidentBrief({
+    businessName: "Example Electrical",
+    actions: ["recover_signup"],
+    incident: {
+      reason: "The assistant was not linked.",
+      impact: "The signup is not live.",
+      lastCheckpoint: "The business record was saved.",
+      nextAction: "Attempt safe recovery.",
+    },
+  })).toEqual({
+    affected: "Example Electrical",
+    reason: "The assistant was not linked.",
+    impact: "The signup is not live.",
+    systemAction: "The issue was recorded. Last confirmed step: The business record was saved.",
+    nextAction: "Attempt safe recovery.",
+    status: "Waiting for you",
+  });
 });
 
 test("the requested incident is focused and visibly identified after loading", () => {

@@ -23,14 +23,11 @@ test("signup alert is actionable without customer contact details", () => {
     record: { makeStatus: 200, makeResponseKind: "acknowledged_incomplete" },
     adminUrl: "https://www.myaipa.ca/#/admin?tab=attention&incident=abcdef1234567890abcdef12",
   });
-  assert.match(text, /CRITICAL INCIDENT/);
+  assert.match(text, /MY AI PA — CRITICAL/);
   assert.match(text, /Example Electrical/);
-  assert.match(text, /14-day trial and AI phone-assistant setup/);
-  assert.match(text, /Business type: Electrical contractor/);
-  assert.match(text, /Service area: Hamilton/);
-  assert.match(text, /Attempt reference: 7890abcdef/);
   assert.match(text, /returned HTTP 200/);
-  assert.match(text, /DO THIS NEXT/);
+  assert.match(text, /Do this now:/);
+  assert.doesNotMatch(text, /Business type:|Service area:|Attempt reference:/);
   assert.doesNotMatch(text, /private@example\.com|9055550123/);
 });
 
@@ -103,13 +100,10 @@ test("signup failure alert distinguishes a Twilio account funding problem and gi
     record: { makeResponseKind: "rejected" },
   });
 
-  assert.match(text, /Twilio stopped the operation because the platform account needs funds/);
+  assert.match(text, /platform account needs funds or credits/);
   assert.match(text, /My AI PA's Twilio account does not have enough funds or credits/);
-  assert.match(text, /Failed stage: TWILIO_NUMBER_PURCHASE/);
-  assert.match(text, /Provider HTTP status: 402/);
-  assert.match(text, /Provider code: INSUFFICIENT_BALANCE/);
   assert.match(text, /Add funds or credits in Twilio Billing/);
-  assert.match(text, /Twilio Console.*Billing/);
+  assert.doesNotMatch(text, /Provider HTTP status:|Provider code:/);
   assert.doesNotMatch(text, /Cause not confirmed yet/);
 });
 
@@ -129,8 +123,8 @@ test("signup failure alert never labels an unconfirmed Make rejection as billing
   });
 
   assert.match(text, /available safe diagnostics do not establish a specific cause/i);
-  assert.match(text, /VAPI_NUMBER_IMPORT/);
-  assert.match(text, /Vapi Dashboard.*Billing.*Logs.*phone numbers/);
+  assert.match(text, /Open the exact incident and provider-safe logs/);
+  assert.doesNotMatch(text, /VAPI_NUMBER_IMPORT/);
   assert.doesNotMatch(text, /needs funds|Add funds or credits|private@example\.ca|9055550123|secret provider response/i);
 });
 
@@ -149,7 +143,7 @@ test("setup-complete delivery failure preserves the number and directs operation
   });
 
   assert.match(text, /customer follow-up needs attention/i);
-  assert.match(text, /AI number assigned: yes/);
+  assert.match(text, /phone number and assistant were verified as assigned/i);
   assert.match(text, /email provider rejected the customer's email destination/i);
   assert.match(text, /Do not provision another number/);
   assert.match(text, /resend only the setup-complete follow-up/);

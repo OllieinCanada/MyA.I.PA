@@ -187,126 +187,50 @@ function humanizeIncidentReason(code, fallback = "") {
     : "Cause not confirmed yet. The available diagnostics do not establish a specific root cause.";
 }
 
-function humanizeSnapshotKey(value) {
-  return String(value || "")
-    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
-    .replace(/[_-]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .replace(/^./, (character) => character.toUpperCase())
-    .slice(0, 80);
+function incidentReference(value) {
+  const incidentId = redactIncidentText(value, { maxLength: 100 }) || "Not assigned";
+  return /^[a-f0-9]{24}$/i.test(incidentId)
+    ? `INC-${incidentId.slice(0, 8).toUpperCase()}`
+    : incidentId;
 }
 
-function snapshotObjectLines(value, prefix = "", lines = [], seen = new WeakSet(), depth = 0) {
-  if (lines.length >= 18 || depth > 2) return lines;
-  if (value == null || typeof value !== "object") {
-    const label = humanizeSnapshotKey(prefix || "Status");
-    lines.push(`${label}: ${value == null || value === "" ? "Not available" : String(value)}`);
-    return lines;
-  }
-  if (seen.has(value)) {
-    lines.push(`${humanizeSnapshotKey(prefix || "Snapshot")}: [circular value removed]`);
-    return lines;
-  }
-  seen.add(value);
-  if (Array.isArray(value)) {
-    const primitives = value.filter((item) => item == null || typeof item !== "object").slice(0, 8);
-    lines.push(`${humanizeSnapshotKey(prefix || "Items")}: ${primitives.length ? primitives.join(", ") : `${value.length} item(s)`}`);
-    return lines;
-  }
-  for (const [key, nestedValue] of Object.entries(value)) {
-    if (lines.length >= 18) break;
-    const path = prefix ? `${prefix}.${key}` : key;
-    if (nestedValue && typeof nestedValue === "object" && !Array.isArray(nestedValue)) {
-      snapshotObjectLines(nestedValue, path, lines, seen, depth + 1);
-    } else if (Array.isArray(nestedValue)) {
-      snapshotObjectLines(nestedValue, path, lines, seen, depth + 1);
-    } else {
-      snapshotObjectLines(nestedValue, path, lines, seen, depth + 1);
-    }
-  }
-  return lines;
-}
-
-function formatSnapshot(snapshot) {
-  if (snapshot == null || snapshot === "") return "No additional snapshot was available.";
-  const raw = typeof snapshot === "object"
-    ? snapshotObjectLines(snapshot).map((line) => `• ${line}`).join("\n")
-    : String(snapshot);
-  return redactIncidentText(raw, { multiline: true, maxLength: 760 }) || "No additional snapshot was available.";
-}
-
-function formatDetectedAt(value) {
-  if (!value) return "Not recorded";
-  const date = new Date(value);
-  if (!Number.isNaN(date.getTime())) return date.toISOString();
-  return redactIncidentText(value, { maxLength: 80 }) || "Not recorded";
+function affectedCustomer(input = {}) {
+  const direct = redactIncidentText(input.affectedCustomer || input.businessName, { maxLength: 120 });
+  if (direct) return direct;
+  const snapshot = input.snapshot && typeof input.snapshot === "object" && !Array.isArray(input.snapshot)
+    ? input.snapshot
+    : {};
+  return redactIncidentText(snapshot.Business || snapshot.business, { maxLength: 120 })
+    || "No customer confirmed";
 }
 
 function buildIncidentTelegramAlert(input = {}) {
   const severity = redactIncidentText(input.severity, { maxLength: 20 }).toUpperCase() || "WARNING";
   const title = redactIncidentText(input.title || input.whatFailed || "My AI PA incident", { maxLength: 140 });
-  const whatFailed = redactIncidentText(input.whatFailed || input.title, { maxLength: 340 }) || "The affected operation was not identified.";
   const reason = capText(humanizeIncidentReason(input.reasonCode, input.reason), 420);
   const impact = redactIncidentText(input.impact, { multiline: true, maxLength: 300 }) || "The customer or operational impact has not been confirmed yet.";
-  const snapshot = capText(formatSnapshot(input.snapshot), 520);
   const lastCheckpoint = redactIncidentText(input.lastCheckpoint, { multiline: true, maxLength: 300 }) || "No verified successful checkpoint is available.";
   const nextAction = redactIncidentText(input.nextAction, { multiline: true, maxLength: 300 }) || "Open the incident in the admin dashboard and inspect it before retrying or changing live resources.";
-  const remediation = input.remediation && typeof input.remediation === "object" ? input.remediation : {};
-  const confidence = ["high", "medium", "low"].includes(String(remediation.confidence || "").toLowerCase())
-    ? String(remediation.confidence).toUpperCase()
-    : "MEDIUM";
-  const hypothesis = redactIncidentText(remediation.hypothesis, { multiline: true, maxLength: 300 })
-    || "My AI PA has not proven a specific repair hypothesis yet, so it will preserve the incident and stop before making an unsafe change.";
-  const proposedSolution = redactIncidentText(remediation.proposedSolution, { multiline: true, maxLength: 360 })
-    || "My AI PA will preserve the evidence and require a verified recovery plan before changing production state.";
-  const safetyBoundary = redactIncidentText(remediation.safetyBoundary, { multiline: true, maxLength: 260 })
-    || "No payment, message, provider resource, credential, or destructive production action will be repeated without proving it is safe.";
-  const incidentId = redactIncidentText(input.incidentId, { maxLength: 100 }) || "Not assigned";
-  const incidentReference = /^[a-f0-9]{24}$/i.test(incidentId)
-    ? `INC-${incidentId.slice(0, 8).toUpperCase()}`
-    : incidentId;
-  const defaultDestination = String(input.adminUrl || "").includes("incident=")
-    ? `Needs Attention → ${incidentReference}`
-    : "My AI PA admin → Needs Attention and logs";
-  const signInDestination = redactIncidentText(input.signInDestination || defaultDestination, { maxLength: 180 });
+  const systemAction = redactIncidentText(input.systemAction, { multiline: true, maxLength: 300 })
+    || `My AI PA recorded the issue and stopped before assuming the workflow succeeded. Last confirmed step: ${lastCheckpoint}`;
+  const reference = incidentReference(input.incidentId);
+  const icon = severity === "CRITICAL" || severity === "HIGH" ? "🔴" : "🟡";
+  const status = redactIncidentText(input.ownerStatus, { maxLength: 80 }) || "Waiting for review";
 
   const text = [
-    `MY AI PA — ${severity} INCIDENT`,
+    `${icon} MY AI PA — ${severity}`,
     title,
-    `Incident: ${incidentId}`,
-    `Detected: ${formatDetectedAt(input.detectedAt)}`,
     "",
-    "WHAT FAILED",
-    whatFailed,
+    `Who is affected: ${affectedCustomer(input)}`,
+    `Customer impact: ${impact}`,
+    `Why: ${reason}`,
     "",
-    "REASON",
-    reason,
+    `What My AI PA did: ${systemAction}`,
+    `Do this now: ${nextAction}`,
+    `Status: ${status}`,
     "",
-    "IMPACT",
-    impact,
-    "",
-    "SNAPSHOT",
-    snapshot,
-    "",
-    "LAST GOOD CHECKPOINT",
-    lastCheckpoint,
-    "",
-    "WORKING HYPOTHESIS",
-    `Confidence: ${confidence}`,
-    hypothesis,
-    "",
-    "MY AI PA RESPONSE",
-    proposedSolution,
-    "",
-    "SAFETY LIMIT",
-    safetyBoundary,
-    "",
-    "DO THIS NEXT",
-    nextAction,
-    "",
-    "YOU ARE SIGNING IN TO",
-    signInDestination,
+    `Reference: ${reference}`,
+    "Full technical evidence is saved in Admin → Needs Attention.",
   ].join("\n");
 
   return capText(text, MAX_TELEGRAM_TEXT_LENGTH, "\n…");
@@ -334,19 +258,15 @@ function buildIncidentRemediationUpdate(input = {}) {
     || (["resolved", "recovered", "cleared"].includes(status)
       ? "No immediate action is required. The original operation was not replayed."
       : "Open the exact incident and review the repair result.");
+  const recovered = ["resolved", "recovered", "cleared"].includes(status);
   const text = [
-    `MY AI PA — ${statusLabels[status]}`,
-    `Incident: ${incidentId}`,
-    `Updated: ${formatDetectedAt(input.completedAt || input.updatedAt || new Date().toISOString())}`,
+    `${recovered ? "✅" : "🟡"} MY AI PA — ${statusLabels[status]}`,
+    `Reference: ${incidentReference(incidentId)}`,
     "",
-    "WHAT MY AI PA DID",
-    actionTaken,
-    "",
-    "VERIFICATION",
-    verification,
-    "",
-    ["resolved", "recovered", "cleared"].includes(status) ? "WHAT HAPPENS NEXT" : "WHAT YOU NEED TO DO NEXT",
-    nextAction,
+    `What My AI PA did: ${actionTaken}`,
+    `How we checked: ${verification}`,
+    `${recovered ? "What you need to do" : "Do this now"}: ${nextAction}`,
+    `Status: ${recovered ? "No immediate action needed" : "Waiting for you"}`,
   ].join("\n");
   return capText(text, MAX_TELEGRAM_TEXT_LENGTH, "\n…");
 }
