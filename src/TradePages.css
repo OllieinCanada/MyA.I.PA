@@ -1079,8 +1079,8 @@
 .contractor-photo-fallback svg { width: 52px; height: 52px; flex: 0 0 auto; }
 .contractor-hero-image.contractor-photo-fallback { flex-direction: column; filter: none; }
 .contractor-hero-shade { position: absolute; inset: 0; background: linear-gradient(90deg, #050605 0%, #050605 42%, rgba(5,6,5,.66) 57%, rgba(5,6,5,.06) 83%, rgba(5,6,5,.11) 100%); }
-.contractor-flyer.is-general-contractors .contractor-hero-image { filter: brightness(1.55) contrast(.91) saturate(.98); }
-.contractor-flyer.is-general-contractors .contractor-hero-shade { background: linear-gradient(90deg, #050605 0%, #050605 42%, rgba(5,6,5,.58) 57%, rgba(5,6,5,.01) 83%, rgba(5,6,5,.03) 100%); }
+.contractor-flyer.is-general-contractors .contractor-hero-image { object-position: right center; transform: scale(1.15); transform-origin: right center; filter: brightness(1.55) contrast(.91) saturate(.98); }
+.contractor-flyer.is-general-contractors .contractor-hero-shade { background: none; }
 .contractor-hero-main { position: relative; z-index: 3; width: 59%; padding: 28px 26px 24px; }
 .contractor-wordmark { position: relative; width: max-content; display: flex; align-items: baseline; color: #fff; font-family: Arial, sans-serif; font-size: 3rem; font-weight: 1000; line-height: .85; letter-spacing: -.075em; }
 .contractor-wordmark b { margin-left: .08em; color: var(--contractor-yellow); }
