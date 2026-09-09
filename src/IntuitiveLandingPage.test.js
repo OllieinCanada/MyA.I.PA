@@ -16,6 +16,7 @@ describe("intuitive homepage journey", () => {
     });
     window.scrollTo = jest.fn();
     Element.prototype.scrollTo = jest.fn();
+    Element.prototype.scrollIntoView = jest.fn();
     window.HTMLMediaElement.prototype.play = jest.fn().mockResolvedValue(undefined);
     window.HTMLMediaElement.prototype.pause = jest.fn();
     container = document.createElement("div");
@@ -70,6 +71,11 @@ describe("intuitive homepage journey", () => {
     expect(container.querySelector('nav[aria-label="Quick page navigation"] a[aria-current="step"]')?.textContent).toMatch(/01Why it matters/i);
     expect(container.querySelector("#why-it-matters .simple-section-heading > span")).toBeNull();
     expect(container.querySelectorAll(".simple-how-details li")).toHaveLength(6);
+
+    const heroSampleCall = container.querySelector(".simple-hero-actions .simple-secondary");
+    expect(heroSampleCall?.textContent).toMatch(/See a Sample Call/i);
+    act(() => heroSampleCall.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith({ behavior: "smooth", block: "start" });
   });
 
   test("restores the three-part animated proof and starts audio only when pressed", async () => {
@@ -92,6 +98,7 @@ describe("intuitive homepage journey", () => {
     expect(container.textContent).toMatch(/Natural conversation and FAQ answers/i);
     expect(container.querySelector("#why-it-matters").textContent).toMatch(/Your customer has a problem/i);
     expect(container.querySelectorAll(".simple-message-phone")).toHaveLength(2);
+    expect(container.querySelector(".simple-follow-up-slide .simple-phone-pair")).not.toBeNull();
     expect(container.querySelectorAll(".simple-message-bullets")).toHaveLength(2);
     expect(container.querySelectorAll(".simple-message-phone.owner .simple-message-bullets li")).toHaveLength(6);
     expect(container.querySelectorAll(".simple-message-phone.customer .simple-message-bullets li")).toHaveLength(5);

@@ -252,6 +252,7 @@ function AnimatedHeroProof({ onSampleCall, onStartTrial }) {
     {
       label: "The follow-up",
       title: "Both sides get a clear text",
+      className: "simple-follow-up-slide",
       content: (
         <div className="simple-phone-pair">
           <article className="simple-message-phone owner">
