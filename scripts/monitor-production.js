@@ -394,39 +394,30 @@ function buildTelegramChecklist(report, { sha = process.env.GITHUB_SHA || "" } =
     ? Number(operations.attentionTotal)
     : signupIssues.length;
   const warningCount = Math.max(0, total - critical);
-  const icon = (check) => check?.healthy ? "✅" : "🔴";
-  const status = (check) => check?.healthy ? "Online" : `Needs attention (${check?.status || check?.error || "failed"})`;
   const databaseHealthy = readiness?.healthy && readiness?.database === "reachable";
+  const coreFailureCount = [publicSite, liveness, readiness].filter((check) => check && !check.healthy).length;
+  const criticalIssueCount = critical + coreFailureCount;
   const shortSha = /^[a-f0-9]{7,40}$/i.test(String(sha)) ? String(sha).slice(0, 7) : "unknown";
   const topIssue = operationalIssues.find((issue) => issue.severity === "critical") || operationalIssues[0];
 
   return [
-    "MY AI PA — ROUTINE STATUS CHECK",
-    report?.ok ? "Overall: ✅ All monitored systems healthy" : "Overall: 🟡 Service online; follow-up needed",
+    report?.ok ? "✅ MY AI PA — OWNER CHECK-IN" : "🟡 MY AI PA — OWNER CHECK-IN",
+    report?.ok ? "You are in control. All monitored systems are healthy." : "At least one monitored check needs your attention.",
     "",
-    `${icon(publicSite)} Website: ${status(publicSite)}`,
-    `${icon(liveness)} API: ${status(liveness)}`,
-    `${databaseHealthy ? "✅" : "🔴"} Database: ${databaseHealthy ? "Reachable" : "Needs attention"}`,
-    `${icon(operations)} Operations: ${critical} critical · ${warningCount} warning`,
-    "",
-    "SIGNUP CHECKLIST",
-    `${failedSignups === 0 ? "✅" : "🔴"} Failed signups: ${failedSignups}`,
-    `${incompleteSignups === 0 ? "✅" : "🟡"} Incomplete signups: ${incompleteSignups}`,
-    `${signupIssues.length === 0 ? "✅" : "🟡"} Signups requiring review: ${signupIssues.length}`,
+    `Critical issues: ${criticalIssueCount}`,
+    `Signups stopped: ${failedSignups}`,
+    `Signups waiting: ${incompleteSignups}`,
+    `Other warnings: ${warningCount}`,
     ...(topIssue ? [
       "",
-      "NEXT ITEM TO REVIEW",
-      `${safeOperationalText(topIssue.title, "Operational issue")}`,
-      `Reason: ${topIssue.incident?.reason || humanizeIncidentReason(topIssue.incident?.reasonCode || topIssue.diagnostics?.phoneProvisioningCode || topIssue.diagnostics?.errorCode, topIssue.summary)}`,
-      `Action: ${topIssue.incident?.nextAction || "Open the Attention inbox and review the affected workflow."}`,
+      `Fix first: ${safeOperationalText(topIssue.title, "Operational issue")}`,
+      `Do this now: ${topIssue.incident?.nextAction || "Open Needs Attention and review the affected workflow."}`,
     ] : []),
     "",
-    "✅ Automatic checks: every 5 minutes",
-    "✅ Immediate failure alerts: enabled",
+    `Core systems: ${publicSite?.healthy && liveness?.healthy && databaseHealthy ? "Online" : "Needs attention"}`,
+    "Automatic checks continue every 5 minutes.",
     `Checked: ${formatTorontoTime(report?.checkedAt)}`,
     `Release: ${shortSha}`,
-    "",
-    "No customer contact details are included in this message.",
   ].join("\n");
 }
 
@@ -619,6 +610,9 @@ function buildProductionIncidentAlert(report, selectedIdentity = monitorIncident
       lastCheckpoint: issue.incident?.lastCheckpoint || "See the stage shown in the snapshot.",
       nextAction: issue.incident?.nextAction || "Open the exact incident, confirm the provider state, and retry only after it is safe.",
       incidentId: issue.id,
+      affectedCustomer: issue.businessName,
+      ownerStatus: Array.isArray(issue.actions) && issue.actions.length ? "Waiting for you" : "Watching automatically",
+      systemAction: `My AI PA recorded the issue and kept it visible. Last confirmed step: ${issue.incident?.lastCheckpoint || "the monitor detected the issue"}. No customer operation was replayed.`,
       detectedAt: report?.checkedAt,
       adminUrl: incidentAdminUrl(issue),
       remediation: issue.remediation || {
@@ -663,6 +657,8 @@ function buildProductionIncidentAlert(report, selectedIdentity = monitorIncident
     lastCheckpoint: "The monitor confirmed the failure with a second check when confirmation was enabled.",
     nextAction: "Open the admin dashboard and hosting logs, then verify the failed service before retrying customer work.",
     incidentId: identity.incidentId,
+    ownerStatus: "Watching automatically; review recommended",
+    systemAction: "The monitor confirmed the failure and will keep checking. It did not replay customer work or change production resources.",
     detectedAt: report?.checkedAt,
     adminUrl: incidentAdminUrl(null),
     remediation: {

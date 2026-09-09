@@ -57,7 +57,8 @@ test("runtime alerts deduplicate the same failure without hiding a different rou
   assert.equal(duplicate.reason, "duplicate_incident");
   assert.equal(different.sent, true);
   assert.equal(calls.length, 2);
-  assert.match(calls[0].text, /WHAT FAILED/);
+  assert.match(calls[0].text, /Customer impact:/);
+  assert.match(calls[0].text, /Do this now:/);
 });
 
 test("different exceptions on the same route do not suppress one another", async () => {

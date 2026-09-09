@@ -107,6 +107,27 @@ export function getIncidentSnapshotRows(item = {}) {
   return [...primaryRows, ...detailRows];
 }
 
+export function getOwnerIncidentBrief(item = {}) {
+  const incident = item.incidentSnapshot || item.incident || {};
+  const reason = incidentSnapshotText(incident.reason ?? item.reason ?? item.summary)
+    || "My AI PA found a workflow that needs review.";
+  const impact = incidentSnapshotText(incident.impact ?? item.impact)
+    || "Customer impact has not been confirmed yet.";
+  const lastCheckpoint = incidentSnapshotText(incident.lastCheckpoint ?? item.lastCheckpoint);
+  const nextAction = incidentSnapshotText(incident.nextAction ?? item.nextAction)
+    || "Review the saved evidence before retrying anything.";
+  return {
+    affected: item.businessName || (item.businessId ? `Business #${item.businessId}` : "No customer confirmed"),
+    reason,
+    impact,
+    systemAction: lastCheckpoint
+      ? `The issue was recorded. Last confirmed step: ${lastCheckpoint}`
+      : "The issue was recorded and kept visible here. No successful result is being assumed.",
+    nextAction,
+    status: (item.actions || []).length ? "Waiting for you" : "Watching automatically",
+  };
+}
+
 function dt(value) {
   if (!value) return "—";
   const d = new Date(value);
@@ -1416,6 +1437,7 @@ function AttentionInbox({ inbox, busyAction, message, incidentId, onRefresh, onA
         {items.length ? items.map((item) => {
           const isRequestedIncident = item.id === incidentId;
           const snapshotRows = getIncidentSnapshotRows(item);
+          const ownerBrief = getOwnerIncidentBrief(item);
           return (
           <article
             key={item.id}
@@ -1423,33 +1445,46 @@ function AttentionInbox({ inbox, busyAction, message, incidentId, onRefresh, onA
             data-incident-id={item.id}
             aria-current={isRequestedIncident ? "true" : undefined}
             tabIndex={isRequestedIncident ? -1 : undefined}
-            className={`rounded-2xl border bg-[#0b1b38] p-5 text-white shadow-xl outline-none ${isRequestedIncident ? "border-sky-300 ring-4 ring-sky-300/40" : "border-white/15"}`}
+            className={`admin-owner-incident ${item.severity === "critical" ? "is-critical" : "is-warning"} ${isRequestedIncident ? "is-requested ring-4 ring-sky-300/40" : ""}`}
           >
-            <div className="flex flex-wrap items-start justify-between gap-3">
+            <header className="admin-owner-incident-head">
               <div>
-                <div className={"text-xs font-black uppercase tracking-[0.18em] " + (item.severity === "critical" ? "text-rose-300" : "text-amber-300")}>{item.severity} · {String(item.kind || "issue").replaceAll("_", " ")}</div>
-                <h3 className="mt-2 text-xl font-black">{item.title}</h3>
-                <p className="mt-2 max-w-3xl text-sm font-semibold leading-6 text-white/70">{item.summary}</p>
-                <div className="mt-3 text-xs font-bold text-white/45">{incidentReference(item.id)} · {item.businessName || `Business #${item.businessId || "—"}`} · {item.ageMinutes == null ? "Just detected" : `${item.ageMinutes} minutes old`}</div>
-                {snapshotRows.length ? (
-                  <dl className="mt-4 grid gap-3 sm:grid-cols-2">
-                    {snapshotRows.map(([label, value]) => (
-                      <div key={label} className="rounded-xl border border-white/10 bg-white/5 p-3">
-                        <dt className="text-[0.68rem] font-black uppercase tracking-[0.16em] text-sky-300">{label}</dt>
-                        <dd className="mt-1 text-sm font-semibold leading-5 text-white/80">{value}</dd>
-                      </div>
-                    ))}
-                  </dl>
-                ) : null}
+                <span className="admin-owner-incident-severity">{item.severity === "critical" ? "Action needed" : "Check this"}</span>
+                <h3>{item.title}</h3>
+                <p>{item.summary}</p>
               </div>
-              <div className="flex flex-wrap gap-2">
+              <strong className="admin-owner-incident-state">{ownerBrief.status}</strong>
+            </header>
+
+            <div className="admin-owner-brief-grid">
+              <div><span>What happened</span><strong>{ownerBrief.reason}</strong></div>
+              <div><span>Who is affected</span><strong>{ownerBrief.affected}</strong></div>
+              <div><span>Customer impact</span><strong>{ownerBrief.impact}</strong></div>
+              <div><span>What My AI PA did</span><strong>{ownerBrief.systemAction}</strong></div>
+            </div>
+
+            <div className="admin-owner-next-action">
+              <div><span>Do this now</span><strong>{ownerBrief.nextAction}</strong></div>
+              <div className="admin-owner-action-buttons">
                 {(item.actions || []).map((action) => (
-                  <button key={action} type="button" disabled={busyAction === `${item.id}:${action}`} onClick={() => onAction(item, action)} className="rounded-full bg-emerald-600 px-4 py-2 text-xs font-black uppercase tracking-[0.12em] text-white disabled:opacity-50">
+                  <button key={action} type="button" disabled={busyAction === `${item.id}:${action}`} onClick={() => onAction(item, action)}>
                     {busyAction === `${item.id}:${action}` ? "Working…" : actionLabels[action] || action}
                   </button>
                 ))}
               </div>
             </div>
+
+            <details className="admin-owner-technical-details">
+              <summary>View technical evidence</summary>
+              <div className="admin-owner-incident-reference">{incidentReference(item.id)} · {item.ageMinutes == null ? "Just detected" : `${item.ageMinutes} minutes old`}</div>
+              {snapshotRows.length ? (
+                <dl>
+                  {snapshotRows.map(([label, value]) => (
+                    <div key={label}><dt>{label}</dt><dd>{value}</dd></div>
+                  ))}
+                </dl>
+              ) : <p>No additional technical snapshot was recorded.</p>}
+            </details>
           </article>
           );
         }) : <div className="admin-support-empty">Nothing needs attention right now.</div>}
