@@ -83,16 +83,18 @@ describe("intuitive homepage journey", () => {
     expect(container.textContent).toMatch(/A real conversation—not voicemail/i);
     expect(container.textContent).toMatch(/Both sides get a clear text/i);
     expect(container.textContent).toMatch(/Worry-Free Coverage — For about the price of a cup of coffee a day/i);
-    expect(container.textContent).toMatch(/Thanks for calling the Tim's Electrical recorded demonstration/i);
-    expect(container.textContent).toMatch(/Next action: quote follow-up/i);
-    expect(container.textContent).not.toMatch(/PREFERRED START DATE - NEXT WEEK/i);
+    expect(container.textContent).toMatch(/Thanks for calling Tim's Electrical\. How can I help today\?/i);
+    expect(container.textContent).toMatch(/Service request: hot tub wiring/i);
+    expect(container.textContent).toMatch(/Preferred start date: next week/i);
+    expect(container.textContent).toMatch(/Have a great day!/i);
+    expect(container.textContent).toMatch(/Customize your assistant's responses/i);
     expect(container.textContent).toMatch(/Owner and customer both receive text summary for easy follow up/i);
     expect(container.textContent).toMatch(/Natural conversation and FAQ answers/i);
     expect(container.querySelector("#why-it-matters").textContent).toMatch(/Your customer has a problem/i);
     expect(container.querySelectorAll(".simple-message-phone")).toHaveLength(2);
     expect(container.querySelectorAll(".simple-message-bullets")).toHaveLength(2);
     expect(container.querySelectorAll(".simple-message-phone.owner .simple-message-bullets li")).toHaveLength(6);
-    expect(container.querySelectorAll(".simple-message-phone.customer .simple-message-bullets li")).toHaveLength(4);
+    expect(container.querySelectorAll(".simple-message-phone.customer .simple-message-bullets li")).toHaveLength(5);
     expect(container.querySelector('audio[src*="tims-electrical-2.wav"]')).not.toBeNull();
     expect(window.HTMLMediaElement.prototype.play).not.toHaveBeenCalled();
 

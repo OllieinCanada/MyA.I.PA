@@ -27,5 +27,6 @@ test("every generated trade flyer uses the standard useful-lead contract", () =>
   assert.match(source, /KEEP YOUR EXISTING BUSINESS NUMBER/);
   assert.doesNotMatch(source, /YOUR BUSINESS\. YOUR NUMBER\./);
   assert.match(styles, /object-position:\s*right center/);
-  assert.match(styles, /brightness\(1\.34\)/);
+  assert.match(source, /is-general-contractors/);
+  assert.match(styles, /is-general-contractors[^}]+brightness\(1\.62\)/s);
 });

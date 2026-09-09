@@ -43,6 +43,60 @@ describe("intuitive signup presentation", () => {
     expect(container.querySelectorAll(".signup-trade-grid button")).toHaveLength(6);
   });
 
+  test("continues past service-call pricing after both prices are entered", () => {
+    act(() => root.render(<Signup />));
+    const form = container.querySelector("form");
+    const submit = () => act(() => form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+    const clickButton = (text, within = container) => {
+      const button = Array.from(within.querySelectorAll("button")).find((item) => item.textContent.trim() === text);
+      expect(button).not.toBeUndefined();
+      act(() => button.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    };
+    const changeValue = (selector, value) => {
+      const field = container.querySelector(selector);
+      expect(field).not.toBeNull();
+      const prototype = field.tagName === "SELECT" ? window.HTMLSelectElement.prototype : window.HTMLInputElement.prototype;
+      const setter = Object.getOwnPropertyDescriptor(prototype, "value").set;
+      act(() => {
+        setter.call(field, value);
+        field.dispatchEvent(new Event("change", { bubbles: true }));
+        field.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+    };
+
+    clickButton("Electrician", container.querySelector(".signup-trade-grid"));
+    submit();
+    clickButton("Residential", container.querySelector(".signup-specialization-grid"));
+    submit();
+    clickButton("Hamilton", container.querySelector(".signup-area-list"));
+    submit();
+
+    changeValue("#your-name-input", "Oliver Arscott");
+    changeValue("#business-name-input", "Arscott Electric");
+    changeValue("#business-phone-number-input", "9057885488");
+    changeValue("#email-address-input", "oliver@arscottelectric.ca");
+    changeValue("#street-address-input", "91 Mountain Road");
+    changeValue("#city-input", "Hamilton");
+    changeValue("#province-select", "ON");
+    changeValue("#postal-code-input", "L8P 1A1");
+    submit();
+
+    expect(container.textContent).toMatch(/Step 5 of 8/i);
+    expect(container.textContent).toMatch(/Do you want your agent to discuss prices and hourly rates for service calls or repairs\?/i);
+    expect(container.querySelector(".signup-mobile-primary").disabled).toBe(false);
+
+    clickButton("Yes", container.querySelector('[role="group"]'));
+    changeValue("#service-call-repair-price-input", "125");
+    submit();
+    expect(container.textContent).toMatch(/Enter both the service-call or repair price and the hourly rate/i);
+    expect(container.textContent).toMatch(/Enter the hourly rate/i);
+
+    changeValue("#hourly-rate-input", "95");
+    submit();
+    expect(container.textContent).toMatch(/Step 6 of 8/i);
+    expect(container.textContent).toMatch(/Setup summary/i);
+  });
+
   test("renders Turnstile explicitly and returns its verified token", () => {
     const onVerify = jest.fn();
     window.turnstile = {

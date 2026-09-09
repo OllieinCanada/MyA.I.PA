@@ -1079,6 +1079,8 @@
 .contractor-photo-fallback svg { width: 52px; height: 52px; flex: 0 0 auto; }
 .contractor-hero-image.contractor-photo-fallback { flex-direction: column; filter: none; }
 .contractor-hero-shade { position: absolute; inset: 0; background: linear-gradient(90deg, #050605 0%, #050605 42%, rgba(5,6,5,.66) 57%, rgba(5,6,5,.06) 83%, rgba(5,6,5,.11) 100%); }
+.contractor-flyer.is-general-contractors .contractor-hero-image { filter: brightness(1.55) contrast(.91) saturate(.98); }
+.contractor-flyer.is-general-contractors .contractor-hero-shade { background: linear-gradient(90deg, #050605 0%, #050605 42%, rgba(5,6,5,.58) 57%, rgba(5,6,5,.01) 83%, rgba(5,6,5,.03) 100%); }
 .contractor-hero-main { position: relative; z-index: 3; width: 59%; padding: 28px 26px 24px; }
 .contractor-wordmark { position: relative; width: max-content; display: flex; align-items: baseline; color: #fff; font-family: Arial, sans-serif; font-size: 3rem; font-weight: 1000; line-height: .85; letter-spacing: -.075em; }
 .contractor-wordmark b { margin-left: .08em; color: var(--contractor-yellow); }
@@ -1254,6 +1256,7 @@
   .contractor-flyer { border: 0; border-radius: 0; box-shadow: none; }
   .contractor-hero { min-height: 760px; }
   .contractor-hero-image { width: 100%; opacity: .78; filter: brightness(1.24) contrast(.95) saturate(.93); }
+  .contractor-flyer.is-general-contractors .contractor-hero-image { opacity: .92; filter: brightness(1.58) contrast(.9) saturate(.98); }
   .contractor-hero-shade { background: linear-gradient(180deg, rgba(5,6,5,.08), #050605 62%, #050605); }
   .contractor-hero-main { width: 100%; padding: 27px 24px 25px; }
   .contractor-wordmark { font-size: 2.55rem; }
@@ -1279,6 +1282,7 @@
 @media (min-width: 561px) and (max-width: 680px) {
   .contractor-hero { min-height: 950px; }
   .contractor-hero-image { width: 100%; opacity: .84; object-position: right center; filter: brightness(1.27) contrast(.94) saturate(.92); }
+  .contractor-flyer.is-general-contractors .contractor-hero-image { opacity: .96; filter: brightness(1.6) contrast(.9) saturate(.98); }
   .contractor-hero-shade {
     background:
       linear-gradient(90deg, #050605 0%, #050605 46%, rgba(5,6,5,.86) 58%, rgba(5,6,5,.09) 100%),
@@ -1306,6 +1310,7 @@
     object-position: right center;
     filter: brightness(1.34) contrast(.93) saturate(.92);
   }
+  .contractor-flyer.is-general-contractors .contractor-hero-image { opacity: 1; filter: brightness(1.62) contrast(.9) saturate(.98); }
   .contractor-hero-shade {
     background:
       linear-gradient(180deg, #050605 0%, #050605 56%, rgba(5,6,5,.94) 62%, rgba(5,6,5,.13) 77%, rgba(5,6,5,.05) 100%),

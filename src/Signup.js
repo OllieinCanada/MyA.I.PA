@@ -1850,13 +1850,13 @@ export default function Signup() {
     pricing.offersServiceCalls !== true ||
     (Number(pricing.repairVisitFee) > 0 && Number(pricing.repairHourlyRate) > 0);
   const pricingStepDisabled = !serviceCallDecisionMade || !hasValidServiceCallPricing;
+  const showPricingErrors = businessSlide === 4 && Boolean(error);
   const businessSlideDisabled =
     currentStep === 1 &&
     ((businessSlide === 1 && tradeSetupPanel === "trade" && tradeStepDisabled) ||
       (businessSlide === 1 && tradeSetupPanel === "specialization" && specializationStepDisabled) ||
       (businessSlide === 2 && selectedAreas.length === 0) ||
-      (businessSlide === 3 && !businessValidation.isValid) ||
-      (businessSlide === 4 && pricingStepDisabled));
+      (businessSlide === 3 && !businessValidation.isValid));
   const businessSlideLabel =
     businessSlide === 1
       ? tradeSetupPanel === "trade" ? "Continue to property types" : "Continue to service areas"
@@ -2093,11 +2093,11 @@ export default function Signup() {
       }
       if (businessSlide === 4) {
         if (!serviceCallDecisionMade) {
-          setError("Choose Yes or No for service calls before continuing.");
+          setError("Choose Yes or No so your assistant knows whether to discuss service-call or repair prices.");
           return;
         }
         if (!hasValidServiceCallPricing) {
-          setError("Enter both the service call price and hourly rate before continuing.");
+          setError("Enter both the service-call or repair price and the hourly rate before continuing.");
           return;
         }
         setError("");
@@ -3409,19 +3409,19 @@ export default function Signup() {
                 <section id="signup-pricing" className="signup-task-layout grid w-full gap-6 lg:grid-cols-[360px_minmax(0,1fr)] xl:grid-cols-[390px_minmax(0,1fr)] lg:items-stretch">
                   <div className="signup-task-explainer flex flex-col justify-center rounded-3xl border border-blue-100 bg-blue-50/70 p-8">
                     <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">Step 5 of 8</p>
-                    <h2 className="mt-2 text-[clamp(2rem,3vw,3.1rem)] font-black leading-tight tracking-[-0.04em] text-slate-950">Pricing script</h2>
-                    <p className="mt-4 text-lg font-medium leading-8 text-slate-600">Set the simple prices your assistant should explain before booking.</p>
+                    <h2 className="mt-2 text-[clamp(2rem,3vw,3.1rem)] font-black leading-tight tracking-[-0.04em] text-slate-950">Service call / repair</h2>
+                    <p className="mt-4 text-lg font-medium leading-8 text-slate-600">Choose whether your assistant should discuss service-call or repair prices and hourly rates.</p>
                   </div>
                   <div className="signup-task-content">
                     <div className="signup-mobile-task-heading">
-                      <h2>What should your assistant quote?</h2>
+                      <h2>Service call / repair</h2>
                       <p>Choose Yes or No. If Yes, add both prices. Then tap Continue.</p>
                     </div>
                     <div className="grid content-start gap-4 sm:grid-cols-2 xl:grid-cols-4 xl:gap-5">
                     <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-4 sm:col-span-2 xl:col-span-4">
-                      <span className="block text-sm font-black text-slate-950">Do you offer service calls?</span>
+                      <span className="block text-sm font-black text-slate-950">Do you want your agent to discuss prices and hourly rates for service calls or repairs?</span>
                       <span className="mt-1 block text-sm font-medium text-slate-600">Choose one. Nothing is selected automatically.</span>
-                      <div className="mt-4 grid grid-cols-2 gap-3" role="group" aria-label="Do you offer service calls?">
+                      <div className="mt-4 grid grid-cols-2 gap-3" role="group" aria-label="Should the assistant discuss service call or repair prices and hourly rates?">
                         {[true, false].map((answer) => {
                           const selected = pricing.offersServiceCalls === answer;
                           return (
@@ -3446,12 +3446,13 @@ export default function Signup() {
                     {pricing.offersServiceCalls === true ? (
                       <>
                         <LabeledInput
-                          label="Service call price"
+                          label="Service call / repair price"
                           icon="card"
                           value={pricing.repairVisitFee}
                           onChange={updatePricing("repairVisitFee")}
                           placeholder="Enter price"
                           type="number"
+                          error={showPricingErrors && Number(pricing.repairVisitFee) <= 0 ? "Enter the service-call or repair price." : ""}
                         />
                         <LabeledInput
                           label="Hourly rate"
@@ -3460,6 +3461,7 @@ export default function Signup() {
                           onChange={updatePricing("repairHourlyRate")}
                           placeholder="Enter rate"
                           type="number"
+                          error={showPricingErrors && Number(pricing.repairHourlyRate) <= 0 ? "Enter the hourly rate." : ""}
                         />
                         <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold leading-6 text-emerald-900 sm:col-span-2 xl:col-span-2">
                           Your assistant will explain these prices, then ask: “Would you like to continue?”
@@ -3468,7 +3470,7 @@ export default function Signup() {
                     ) : null}
                     {pricing.offersServiceCalls === false ? (
                       <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold leading-6 text-slate-600 sm:col-span-2 xl:col-span-4">
-                        No service-call prices will be added to your assistant.
+                        Your assistant will collect the request without discussing service-call, repair, or hourly prices.
                       </div>
                     ) : null}
                     <label className="sm:col-span-2 xl:col-span-4">

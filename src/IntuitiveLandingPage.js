@@ -14,8 +14,27 @@ const coreBenefits = [
 ];
 
 const heroScenario = timsElectricalScenarios.find((scenario) => scenario.id === "new-installation");
-const ownerTextPoints = heroScenario.ownerTextLines;
-const customerTextPoints = heroScenario.customerTextLines;
+const ownerTextPoints = [
+  "NEW INSTALLATION",
+  "Brian Smith",
+  "905-555-1234",
+  "Service request: hot tub wiring",
+  "23 Robb Street, Hamilton",
+  "Preferred start date: next week",
+  "Preferred callback: after 5 p.m.",
+];
+const customerTextPoints = [
+  "Thanks for calling Tim's Electrical.",
+  "Service request: hot tub wiring",
+  "Location: 23 Robb Street, Hamilton",
+  "Preferred start date: next week",
+  "The team will follow up to discuss the details and timing. Have a great day!",
+];
+const naturalCallPreview = [
+  "Thanks for calling Tim's Electrical. How can I help today?",
+  "I need a licensed electrician to wire a newly installed hot tub.",
+  "I can help with that. May I have your full name, please?",
+];
 
 const handoffCards = [
   ["Callback information", "Caller name, callback number, and the best time to reach them."],
@@ -223,9 +242,9 @@ function AnimatedHeroProof({ onSampleCall, onStartTrial }) {
       title: "A real conversation—not voicemail",
       content: (
         <div className="simple-call-conversation">
-          <div className="assistant"><span>My AI PA</span><p>“{heroScenario.transcript[0].text}”</p></div>
-          <div className="caller"><span>Caller · {heroScenario.callerName}</span><p>“{heroScenario.transcript[1].text}”</p></div>
-          <div className="assistant"><span>My AI PA</span><p>“{heroScenario.transcript[2].text}”</p></div>
+          <div className="assistant"><span>My AI PA</span><p>“{naturalCallPreview[0]}”</p></div>
+          <div className="caller"><span>Caller · {heroScenario.callerName}</span><p>“{naturalCallPreview[1]}”</p></div>
+          <div className="assistant"><span>My AI PA</span><p>“{naturalCallPreview[2]}”</p></div>
           <strong className="simple-lead-classification">NEW INSTALLATION</strong>
         </div>
       ),
@@ -398,7 +417,7 @@ export default function IntuitiveLandingPage() {
               <span className="simple-canadian-proof-mark" aria-hidden="true">CA</span>
               <div>
                 <strong>Designed for Canadian contractors</strong>
-                <p><span>Keep your existing business number.</span><span>Test privately before going live.</span></p>
+                <p><span>Keep your existing business number.</span><span>Test privately before going live.</span><span>Customize your assistant's responses.</span></p>
               </div>
             </div>
             <div className="simple-hero-actions">
