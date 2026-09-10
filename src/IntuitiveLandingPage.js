@@ -18,22 +18,24 @@ const ownerTextPoints = [
   "NEW INSTALLATION",
   "Brian Smith",
   "905-555-1234",
-  "Service request: hot tub wiring",
-  "23 Robb Street, Hamilton",
-  "Preferred start date: next week",
-  "Preferred callback: after 5 p.m.",
-];
-const customerTextPoints = [
-  "Thanks for calling Tim's Electrical.",
-  "Service request: hot tub wiring",
+  "Job: hot tub wiring",
   "Location: 23 Robb Street, Hamilton",
   "Preferred start date: next week",
-  "The team will follow up to discuss the details and timing. Have a great day!",
+  "Preferred callback: after 5 p.m.",
+  "Next action: quote follow-up",
+];
+const customerTextPoints = [
+  "TIM'S ELECTRICAL",
+  "Job: hot tub wiring",
+  "Location: 23 Robb Street, Hamilton",
+  "Preferred start date: next week",
+  "Scheduling: the team will follow up to discuss the details and timing.",
+  "Thanks for calling Tim's Electrical. Have a great day!",
 ];
 const naturalCallPreview = [
-  "Thanks for calling Tim's Electrical. How can I help today?",
+  "Thanks for calling Tim's Electrical. We handle residential and commercial electrical work. Are you looking for a new installation, service, or repair today?",
   "I need a licensed electrician to wire a newly installed hot tub.",
-  "I can help with that. May I have your full name, please?",
+  "I can help with that. When would you ideally like the work to begin?",
 ];
 
 const handoffCards = [
@@ -240,6 +242,7 @@ function AnimatedHeroProof({ onSampleCall, onStartTrial }) {
     {
       label: "The call",
       title: "A real conversation—not voicemail",
+      className: "simple-call-slide",
       content: (
         <div className="simple-call-conversation">
           <div className="assistant"><span>My AI PA</span><p>“{naturalCallPreview[0]}”</p></div>
@@ -269,9 +272,11 @@ function AnimatedHeroProof({ onSampleCall, onStartTrial }) {
             <div className="simple-phone-status"><b>9:41</b><i /><b>5G</b></div>
             <header><span>TE</span><div><strong>Customer's cellphone</strong><small>Tim's Electrical · now</small></div></header>
             <div className="simple-message-copy simple-red-pen-message">
+              <strong className="simple-message-heading">{customerTextPoints[0]}</strong>
               <ul className="simple-message-bullets">
-                {customerTextPoints.map((point) => <li key={point}>{point}</li>)}
+                {customerTextPoints.slice(1, -1).map((point) => <li key={point}>{point}</li>)}
               </ul>
+              <span className="closing">{customerTextPoints[customerTextPoints.length - 1]}</span>
             </div>
           </article>
         </div>
@@ -299,6 +304,10 @@ function AnimatedHeroProof({ onSampleCall, onStartTrial }) {
 
   return (
     <aside className="simple-hero-proof simple-proof-carousel" aria-label={`Three-part missed-call demonstration. Slide ${activeSlide + 1} of 3.`}>
+      <picture className="simple-hero-worker" aria-hidden="true">
+        <source media="(max-width: 600px)" srcSet="/trade-heroes/reference-contractor-hero-480.jpg" />
+        <img src="/trade-heroes/reference-contractor-hero-864.jpg" alt="" />
+      </picture>
       <div className="simple-carousel-header">
         <div><span className="simple-live-dot" /><strong>See the missed call become a lead</strong></div>
         <button type="button" className={audioPlaying ? "playing" : ""} onClick={toggleAudio} aria-pressed={audioPlaying}>
@@ -507,7 +516,7 @@ export default function IntuitiveLandingPage() {
         <div className="simple-shell">
           <SectionHeading number="08" eyebrow="Setup and common questions" title="Straight answers before you trust it with a call." />
           <div className="simple-setup-grid">
-            <div className="simple-setup-steps"><article><span>1</span><p>Add your business and common answers</p></article><article><span>2</span><p>Hear a test call in your browser</p></article><article><span>3</span><p>Forward unanswered calls when you are ready</p></article></div>
+            <div className="simple-setup-steps"><article><span>1</span><p>Add your business details and common answers</p></article><article><span>2</span><p>Hear a test call in your browser</p></article><article><span>3</span><p>Forward unanswered calls when you are ready</p></article></div>
             <div><p className="simple-quick">Quick answers</p><FAQList /></div>
           </div>
         </div>

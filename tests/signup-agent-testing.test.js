@@ -93,15 +93,20 @@ test("both new-agent provisioning paths run the delivery test automatically", ()
 test("test messages visibly separate the owner and customer formats", () => {
   const messages = buildAgentTestMessages(signup);
   assert.match(messages.owner, /OWNER COPY/);
-  assert.match(messages.owner, /^\[My AI PA setup test[\s\S]*NEW LEAD/m);
+  assert.match(messages.owner, /^\[My AI PA setup test[\s\S]*SERVICE REQUEST/m);
   assert.match(messages.owner, /- Caller: Pat/);
-  assert.match(messages.owner, /- Work requested:/);
-  assert.match(messages.owner, /- Preferred start:/);
-  assert.match(messages.owner, /- Best callback:/);
+  assert.match(messages.owner, /- Job:/);
+  assert.match(messages.owner, /- Location:/);
+  assert.match(messages.owner, /- Preferred start date:/);
+  assert.match(messages.owner, /- Preferred callback:/);
   assert.match(messages.owner, /- Urgency:/);
+  assert.match(messages.owner, /- Next action:/);
   assert.match(messages.customer, /CUSTOMER COPY/);
-  assert.match(messages.customer, /Thanks for calling Example Electric/);
+  assert.match(messages.customer, /EXAMPLE ELECTRIC/);
+  assert.match(messages.customer, /Scheduling:/);
+  assert.match(messages.customer, /Thanks for calling Example Electric\. Have a great day!/);
   assert.doesNotMatch(messages.customer, /NEW LEAD/);
+  assert.doesNotMatch(messages.customer, /booked|appointment confirmed/i);
 });
 
 test("final Twilio callbacks update the matching test leg and revoke readiness on failure", () => {

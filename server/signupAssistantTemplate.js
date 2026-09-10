@@ -161,6 +161,19 @@ ${values.services ? `- Services: ${values.services}` : ""}
 ${buildSpeechAndClosingOverride(values)}`;
 }
 
+function buildServiceRoutingQuestion(values) {
+  const propertyTypes = values.specializations
+    .map((value) => String(value || "").trim().toLowerCase())
+    .filter((value) => ["residential", "commercial", "industrial"].includes(value));
+  const uniquePropertyTypes = [...new Set(propertyTypes)];
+  const propertyScope = uniquePropertyTypes.length > 1
+    ? `${uniquePropertyTypes.slice(0, -1).join(", ")} and ${uniquePropertyTypes[uniquePropertyTypes.length - 1]}`
+    : uniquePropertyTypes[0] || "local";
+  const trade = String(values.businessType || "service").trim().toLowerCase();
+  const tradeWork = /electric/.test(trade) ? "electrical work" : `${trade} work`;
+  return `We handle ${propertyScope} ${tradeWork}. Are you looking for a new installation, service, or repair today?`;
+}
+
 function buildIndustryAwarePrompt(values) {
   const playbook = classifySignupAssistantPlaybook(values);
   if (playbook === "general") return buildGeneralBusinessPrompt(values);
@@ -168,14 +181,16 @@ function buildIndustryAwarePrompt(values) {
 }
 
 function buildSystemPrompt(values) {
+  const routingQuestion = buildServiceRoutingQuestion(values);
   return `You are the voice agent for ${values.businessName}.
 
-MYAIPA_AGENT_VERSION: 2026-07-12-deterministic-sms-v1
+MYAIPA_AGENT_VERSION: 2026-09-10-red-pen-intake-v3
 
 ## Business context
 - Business name: ${values.businessName}
 - Business type: ${values.businessType}
 - Service area: ${values.serviceArea}
+${values.specializations.length ? `- Property types served: ${values.specializations.join(", ")}` : ""}
 ${values.signupFreeEstimateAnswer ? `- Signup installation estimate answer: ${values.signupFreeEstimateAnswer}` : ""}
 ${values.signupRepairVisitFee ? `- Signup repair visit fee: ${values.signupRepairVisitFee} dollars` : ""}
 ${values.signupRepairHourlyRate ? `- Signup repair hourly rate: ${values.signupRepairHourlyRate} dollars per hour` : ""}
@@ -202,9 +217,9 @@ Do not ignore the social cue, but do not get stuck in small talk.
 ## Opening
 The first message has already greeted the caller and asked: "How are you today?" Wait for the caller's answer before asking what they need.
 After the caller answers how they are, briefly acknowledge it, then give the exact recording notice and ask for consent required by the FINAL OVERRIDE. Do not begin routing or intake until the caller explicitly agrees.
-After recording consent, ask: "Are you looking for a new installation, a repair, maintenance, or would you like to leave a message?"
+After recording consent, say exactly: "${routingQuestion}"
 If the caller already included the request type, do not ask the routing question again after consent; acknowledge briefly and continue the matching installation, repair, maintenance, or message path.
-If unclear, ask once: "Is that for a new installation, a repair, maintenance, or would you like to leave a message?"
+If unclear, ask once: "Is that for a new installation, service, or repair?"
 
 ## Pricing
 Use the pricing from the signup page as the source of truth. The signup page generated this pricing script from the owner's inputs:
@@ -288,14 +303,17 @@ Owner SMS tool arguments:
 - Do not pass body when the collected fields are available. The tool will build the exact owner bullet SMS.
 
 The owner tool deterministically creates this service format:
-NEW LEAD
+<request type, such as NEW INSTALLATION or REPAIR REQUEST>
 - Caller: <name>
 - Phone: <callback number>
-- Work requested: <job details>
-- Address: <street address and city>
-- Preferred start: <preferred start timing>
-- Best callback: <best callback time>
-- Urgency: <caller-stated urgency>
+- Job: <job details>
+- Location: <street address and city>
+- Preferred start date: <preferred start timing>
+- Preferred callback: <best callback time>
+- Urgency: <caller-stated urgency, when provided>
+- Next action: <appropriate follow-up>
+
+The customer tool deterministically creates a short service confirmation with the business name in capitals, Job, Location, Preferred start date, Preferred callback when provided, Scheduling, and a separate thank-you closing. It must never claim that a date or appointment is booked.
 
 The owner tool deterministically creates this message format:
 Message request:
@@ -312,7 +330,7 @@ After the full confirmation sentence, call the customer SMS and owner SMS tools 
 
 ## FINAL OVERRIDE: Social response, pricing consent, deterministic SMS tools, silent tools, and clean ending
 - Opening sequence: the first message asks "How are you today?" after the business greeting. Wait for the caller's response.
-- After the caller answers how they are, acknowledge it in one short natural sentence, then give the exact recording notice and obtain explicit consent as required by the accurate-speech FINAL OVERRIDE. Only then ask: "Are you looking for a new installation, a repair, maintenance, or would you like to leave a message?"
+- After the caller answers how they are, acknowledge it in one short natural sentence, then give the exact recording notice and obtain explicit consent as required by the accurate-speech FINAL OVERRIDE. Only then say exactly: "${routingQuestion}"
 - If the caller's answer already includes the request type, do not ask the routing question again after recording consent; acknowledge briefly and continue the matching intake path.
 - If the caller greets you, answers how they are doing, asks how you are, thanks you, apologizes, laughs, or gives another normal social cue, respond directly in one short natural sentence before continuing the required call flow. Do not ignore the social cue.
 - For an already identified installation such as an EV charger, name the project and ask one concrete missing field, beginning with the caller's name when it is missing. Never replace that with a generic request for more information.
@@ -342,7 +360,7 @@ function buildSignupAssistantConfig(normalizedPayload, options) {
   const values = resolveTemplateValues(normalizedPayload, options);
   const config = {
     name: values.resourceName,
-    firstMessage: `Hi, thanks for calling ${values.businessName}. How are you today?`,
+    firstMessage: `Thanks for calling ${values.businessName}. How are you today?`,
     model: {
       provider: "openai",
       model: "gpt-4o",

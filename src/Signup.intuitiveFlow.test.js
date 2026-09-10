@@ -68,6 +68,8 @@ describe("intuitive signup presentation", () => {
     submit();
     clickButton("Residential", container.querySelector(".signup-specialization-grid"));
     submit();
+    expect(container.querySelector(".signup-area-list button").compareDocumentPosition(container.querySelector(".signup-area-tools")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(container.textContent).toMatch(/Need a different area\?/i);
     clickButton("Hamilton", container.querySelector(".signup-area-list"));
     submit();
 
@@ -83,9 +85,10 @@ describe("intuitive signup presentation", () => {
 
     expect(container.textContent).toMatch(/Step 5 of 8/i);
     expect(container.textContent).toMatch(/Do you want your agent to discuss prices and hourly rates for service calls or repairs\?/i);
-    expect(container.querySelector(".signup-mobile-primary").disabled).toBe(false);
+    expect(container.querySelector(".signup-mobile-primary").disabled).toBe(true);
 
     clickButton("Yes", container.querySelector('[role="group"]'));
+    expect(container.querySelector(".signup-mobile-primary").disabled).toBe(false);
     changeValue("#service-call-repair-price-input", "125");
     submit();
     expect(container.textContent).toMatch(/Enter both the service-call or repair price and the hourly rate/i);
