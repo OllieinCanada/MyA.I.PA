@@ -1856,7 +1856,8 @@ export default function Signup() {
     ((businessSlide === 1 && tradeSetupPanel === "trade" && tradeStepDisabled) ||
       (businessSlide === 1 && tradeSetupPanel === "specialization" && specializationStepDisabled) ||
       (businessSlide === 2 && selectedAreas.length === 0) ||
-      (businessSlide === 3 && !businessValidation.isValid));
+      (businessSlide === 3 && !businessValidation.isValid) ||
+      (businessSlide === 4 && !serviceCallDecisionMade));
   const businessSlideLabel =
     businessSlide === 1
       ? tradeSetupPanel === "trade" ? "Continue to property types" : "Continue to service areas"
@@ -2098,6 +2099,11 @@ export default function Signup() {
         }
         if (!hasValidServiceCallPricing) {
           setError("Enter both the service-call or repair price and the hourly rate before continuing.");
+          window.requestAnimationFrame?.(() => {
+            const firstMissingPrice = document.querySelector("#signup-pricing [aria-invalid='true']");
+            firstMissingPrice?.focus();
+            firstMissingPrice?.scrollIntoView?.({ behavior: "smooth", block: "center" });
+          });
           return;
         }
         setError("");
@@ -3155,7 +3161,7 @@ export default function Signup() {
                 <div className="signup-task-explainer flex flex-col justify-center rounded-3xl border border-blue-100 bg-blue-50/70 p-8">
                   <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">Step 3 of 8</p>
                   <h2 className="mt-2 text-[clamp(2rem,3vw,3.1rem)] font-black leading-tight tracking-[-0.04em] text-slate-950">Service areas</h2>
-                  <p className="mt-4 text-lg font-medium leading-8 text-slate-600">Search, browse by region, or add a city that is not listed.</p>
+                  <p className="mt-4 text-lg font-medium leading-8 text-slate-600">Choose a listed area first. If yours is missing, search or add it at the bottom.</p>
                 </div>
                 <div className="signup-task-content min-h-0 overflow-hidden rounded-3xl">
                   <div className="signup-mobile-task-heading">
@@ -3165,43 +3171,6 @@ export default function Signup() {
                   <div className="signup-mobile-selected-count">
                     <span>Selected areas</span>
                     <span>{selectedAreas.length}</span>
-                  </div>
-                  <div className="signup-area-tools grid gap-3">
-                    <label className="signup-area-search block">
-                      <span className="mb-1.5 block text-sm font-semibold text-slate-700">Search service areas</span>
-                      <span className="flex min-h-[48px] items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-500/10">
-                        <Icon name="pin" className="h-4 w-4 shrink-0 text-blue-600" />
-                        <input
-                          type="search"
-                          value={areaSearch}
-                          onChange={(event) => setAreaSearch(event.target.value)}
-                          placeholder="Search Hamilton, Grimsby…"
-                          className="min-w-0 flex-1 bg-transparent text-base font-medium text-slate-950 outline-none placeholder:text-slate-400"
-                        />
-                      </span>
-                    </label>
-                    <div className="signup-custom-area">
-                      <label htmlFor="custom-service-area" className="mb-1.5 block text-sm font-semibold text-slate-700">Add another city or area</label>
-                      <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
-                        <input
-                          id="custom-service-area"
-                          type="text"
-                          value={customArea}
-                          onChange={(event) => setCustomArea(event.target.value)}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter") {
-                              event.preventDefault();
-                              addCustomArea();
-                            }
-                          }}
-                          placeholder="Enter a city or service area"
-                          className="min-h-[48px] min-w-0 rounded-xl border border-slate-200 bg-white px-3 text-base font-medium text-slate-950 outline-none placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
-                        />
-                        <button type="button" onClick={addCustomArea} className="min-h-[48px] rounded-xl bg-blue-600 px-4 text-sm font-black text-white transition hover:bg-blue-700">
-                          Add area
-                        </button>
-                      </div>
-                    </div>
                   </div>
                   <div className="signup-area-list flex h-full max-h-[42vh] content-start items-start overflow-y-auto pr-2 pb-2 [scrollbar-width:thin] sm:max-h-[46vh] lg:max-h-full">
                     <div className="signup-area-grid grid w-full content-start gap-4">
@@ -3227,9 +3196,50 @@ export default function Signup() {
                       ))}
                       {!filteredAreaGroups.length ? (
                         <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold leading-6 text-amber-900">
-                          No listed area matches. Add the city or area above.
+                          No listed area matches. Add the city or area below.
                         </p>
                       ) : null}
+                      <section className="signup-area-tools grid gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4" aria-label="Find or add another service area">
+                        <div>
+                          <strong className="block text-base font-black text-slate-950">Need a different area?</strong>
+                          <span className="mt-1 block text-sm font-semibold leading-5 text-slate-500">Use this only if the city you need is not listed above.</span>
+                        </div>
+                        <label className="signup-area-search block">
+                          <span className="mb-1.5 block text-sm font-semibold text-slate-700">Search service areas</span>
+                          <span className="flex min-h-[48px] items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-500/10">
+                            <Icon name="pin" className="h-4 w-4 shrink-0 text-blue-600" />
+                            <input
+                              type="search"
+                              value={areaSearch}
+                              onChange={(event) => setAreaSearch(event.target.value)}
+                              placeholder="Search Hamilton, Grimsby…"
+                              className="min-w-0 flex-1 bg-transparent text-base font-medium text-slate-950 outline-none placeholder:text-slate-400"
+                            />
+                          </span>
+                        </label>
+                        <div className="signup-custom-area">
+                          <label htmlFor="custom-service-area" className="mb-1.5 block text-sm font-semibold text-slate-700">Add another city or area</label>
+                          <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+                            <input
+                              id="custom-service-area"
+                              type="text"
+                              value={customArea}
+                              onChange={(event) => setCustomArea(event.target.value)}
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter") {
+                                  event.preventDefault();
+                                  addCustomArea();
+                                }
+                              }}
+                              placeholder="Enter a city or service area"
+                              className="min-h-[48px] min-w-0 rounded-xl border border-slate-200 bg-white px-3 text-base font-medium text-slate-950 outline-none placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
+                            />
+                            <button type="button" onClick={addCustomArea} className="min-h-[48px] rounded-xl bg-blue-600 px-4 text-sm font-black text-white transition hover:bg-blue-700">
+                              Add area
+                            </button>
+                          </div>
+                        </div>
+                      </section>
                       <div className="signup-area-desktop-actions flex flex-wrap gap-3">
                       <button
                         type="button"

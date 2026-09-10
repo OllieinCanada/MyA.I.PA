@@ -141,13 +141,19 @@ test("composite tool sends owner first and customer second", async () => {
   assert.equal(result.owner.sent, true);
   assert.equal(result.customer.sent, true);
   assert.equal(result.complete, true);
-  assert.match(mock.calls[0].body, /^NEW LEAD/m);
-  assert.match(mock.calls[0].body, /Preferred start: right away/);
-  assert.match(mock.calls[0].body, /Best callback: afternoons or after 5 PM/);
-  assert.match(mock.calls[0].body, /Urgency: Not provided/);
-  assert.match(mock.calls[1].body, /Thanks for calling Example Electrical/);
-  assert.match(mock.calls[1].body, /preferred callback time is afternoons or after 5 PM/i);
-  assert.match(mock.calls[1].body, /preferred start timing is right away/i);
+  assert.match(mock.calls[0].body, /^NEW INSTALLATION/m);
+  assert.match(mock.calls[0].body, /Job: hot tub electrical setup/);
+  assert.match(mock.calls[0].body, /Location: 123 Test Street, Hamilton/);
+  assert.match(mock.calls[0].body, /Preferred start date: right away/);
+  assert.match(mock.calls[0].body, /Preferred callback: afternoons or after 5 PM/);
+  assert.match(mock.calls[0].body, /Next action: Quote follow-up/);
+  assert.match(mock.calls[1].body, /^EXAMPLE ELECTRICAL/m);
+  assert.match(mock.calls[1].body, /Job: hot tub electrical setup/);
+  assert.match(mock.calls[1].body, /Preferred callback: afternoons or after 5 PM/);
+  assert.match(mock.calls[1].body, /Preferred start date: right away/);
+  assert.match(mock.calls[1].body, /Scheduling: The team will follow up to discuss the details and timing\./);
+  assert.match(mock.calls[1].body, /Thanks for calling Example Electrical\. Have a great day!/);
+  assert.doesNotMatch(mock.calls[1].body, /booked|scheduled for|appointment confirmed/i);
 });
 
 test("composite tool prefers API-key REST auth and requests delivery callbacks", async () => {

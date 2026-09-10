@@ -89,10 +89,13 @@ describe("intuitive homepage journey", () => {
     expect(container.textContent).toMatch(/A real conversation—not voicemail/i);
     expect(container.textContent).toMatch(/Both sides get a clear text/i);
     expect(container.textContent).toMatch(/Worry-Free Coverage — For about the price of a cup of coffee a day/i);
-    expect(container.textContent).toMatch(/Thanks for calling Tim's Electrical\. How can I help today\?/i);
-    expect(container.textContent).toMatch(/Service request: hot tub wiring/i);
+    expect(container.textContent).toMatch(/We handle residential and commercial electrical work\. Are you looking for a new installation, service, or repair today\?/i);
+    expect(container.textContent).toMatch(/Job: hot tub wiring/i);
+    expect(container.textContent).toMatch(/Location: 23 Robb Street, Hamilton/i);
     expect(container.textContent).toMatch(/Preferred start date: next week/i);
+    expect(container.textContent).toMatch(/Scheduling: the team will follow up to discuss the details and timing/i);
     expect(container.textContent).toMatch(/Have a great day!/i);
+    expect(container.textContent).toMatch(/Add your business details and common answers/i);
     expect(container.textContent).toMatch(/Customize your assistant's responses/i);
     expect(container.textContent).toMatch(/Owner and customer both receive text summary for easy follow up/i);
     expect(container.textContent).toMatch(/Natural conversation and FAQ answers/i);
@@ -100,8 +103,11 @@ describe("intuitive homepage journey", () => {
     expect(container.querySelectorAll(".simple-message-phone")).toHaveLength(2);
     expect(container.querySelector(".simple-follow-up-slide .simple-phone-pair")).not.toBeNull();
     expect(container.querySelectorAll(".simple-message-bullets")).toHaveLength(2);
-    expect(container.querySelectorAll(".simple-message-phone.owner .simple-message-bullets li")).toHaveLength(6);
-    expect(container.querySelectorAll(".simple-message-phone.customer .simple-message-bullets li")).toHaveLength(5);
+    expect(container.querySelectorAll(".simple-message-phone.owner .simple-message-bullets li")).toHaveLength(7);
+    expect(container.querySelectorAll(".simple-message-phone.customer .simple-message-bullets li")).toHaveLength(4);
+    expect(container.querySelector(".simple-message-phone.customer .simple-message-heading").textContent).toBe("TIM'S ELECTRICAL");
+    expect(container.querySelector(".simple-message-phone.customer .closing").textContent).toMatch(/Thanks for calling Tim's Electrical\. Have a great day!/i);
+    expect(container.querySelector('.simple-hero-worker img[src*="reference-contractor-hero-864.jpg"]')).not.toBeNull();
     expect(container.querySelector('audio[src*="tims-electrical-2.wav"]')).not.toBeNull();
     expect(window.HTMLMediaElement.prototype.play).not.toHaveBeenCalled();
 

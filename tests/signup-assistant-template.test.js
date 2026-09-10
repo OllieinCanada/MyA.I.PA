@@ -20,6 +20,7 @@ const normalizedPayload = {
   freeEstimateAnswer: "legacy yes",
   repairVisitFee: "79",
   repairHourlyRate: "119",
+  specializations: ["Residential", "Commercial"],
 };
 
 test("builds the current production Vapi assistant with resolved signup values", () => {
@@ -29,7 +30,7 @@ test("builds the current production Vapi assistant with resolved signup values",
   const prompt = config.model.messages[0].content;
 
   assert.equal(config.name, "My AI PA Agent");
-  assert.equal(config.firstMessage, "Hi, thanks for calling Example Electric. How are you today?");
+  assert.equal(config.firstMessage, "Thanks for calling Example Electric. How are you today?");
   assert.equal(config.model.provider, "openai");
   assert.equal(config.model.model, "gpt-4o");
   assert.equal(config.model.temperature, 0.1);
@@ -66,15 +67,19 @@ test("builds the current production Vapi assistant with resolved signup values",
   assert.match(prompt, /When would you ideally like the work to begin\?/);
   assert.match(prompt, /Before we continue, this call will be recorded for service quality and accurate follow-up\. Is that okay\?/);
   assert.match(prompt, /Stop and wait for an explicit yes before collecting service, contact, address, or job details/i);
+  assert.match(prompt, /We handle residential and commercial electrical work\. Are you looking for a new installation, service, or repair today\?/);
   assert.match(prompt, /already identified installation such as an EV charger/i);
   assert.match(prompt, /Never replace that with a generic request for more information/i);
   assert.match(prompt, /preferredStartDate/);
   assert.match(prompt, /caller-stated urgency/i);
   assert.match(prompt, /Reuse information the caller already supplied/i);
   assert.match(prompt, /ask only for missing details/i);
-  assert.match(prompt, /NEW LEAD/);
-  assert.match(prompt, /- Work requested:/);
-  assert.match(prompt, /- Best callback:/);
+  assert.match(prompt, /NEW INSTALLATION or REPAIR REQUEST/);
+  assert.match(prompt, /- Job:/);
+  assert.match(prompt, /- Location:/);
+  assert.match(prompt, /- Preferred start date:/);
+  assert.match(prompt, /- Preferred callback:/);
+  assert.match(prompt, /- Next action:/);
   assert.match(prompt, /I've sent your information to the team\. Someone will contact you to discuss the request and arrange the next step\./);
   assert.doesNotMatch(prompt, /collect card|card number|banking information/i);
   assert.doesNotMatch(JSON.stringify(config), /\{\{[^}]*\}\}/);

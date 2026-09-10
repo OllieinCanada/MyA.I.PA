@@ -51,6 +51,8 @@
 .tims-message-preview.customer .tims-text-phone-thread { justify-content: flex-end; }
 .tims-message-preview.customer .tims-text-phone-thread { border-radius: 14px 14px 5px 14px; color: #fff; background: #0a84ff; }
 .tims-message-preview.customer .tims-text-phone-thread li::before { background: #fff; }
+.tims-message-preview.customer .tims-message-heading { border-color: rgba(255,255,255,.3); }
+.tims-message-closing { width: 100%; margin: 9px 0 0; border-top: 1px solid rgba(255,255,255,.3); padding-top: 8px; font-weight: 850; line-height: 1.4; }
 .tims-text-phone-status { position: relative; min-height: 44px; display: flex; align-items: flex-start; justify-content: space-between; gap: 6px; margin-top: auto; padding: 7px 10px 20px; color: #8e8e93; font-size: .48rem; font-weight: 850; }
 .tims-text-phone-status::after { content: ""; position: absolute; left: 50%; bottom: 7px; width: 76px; height: 4px; border-radius: 999px; background: #111827; transform: translateX(-50%); }
 .tims-text-phone-status span { color: #168349; font-size: .52rem; font-weight: 950; letter-spacing: .08em; }

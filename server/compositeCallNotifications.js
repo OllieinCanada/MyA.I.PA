@@ -30,6 +30,23 @@ function buildNotificationKeys(callId) {
   };
 }
 
+function buildOwnerHeading(requestType) {
+  const normalized = cleanText(requestType || "service", 40).toLowerCase();
+  if (["installation", "new installation", "new_installation"].includes(normalized)) return "NEW INSTALLATION";
+  if (normalized === "repair") return "REPAIR REQUEST";
+  if (normalized === "maintenance") return "MAINTENANCE REQUEST";
+  if (normalized === "quote") return "QUOTE REQUEST";
+  return "SERVICE REQUEST";
+}
+
+function buildNextAction(requestType) {
+  const normalized = cleanText(requestType || "service", 40).toLowerCase();
+  if (["installation", "new installation", "new_installation", "quote"].includes(normalized)) return "Quote follow-up";
+  if (normalized === "repair") return "Repair follow-up";
+  if (normalized === "maintenance") return "Maintenance follow-up";
+  return "Service follow-up";
+}
+
 function buildOwnerBody(args) {
   const requestType = cleanText(args.requestType || "service", 40).toLowerCase();
   const name = cleanText(args.name || "Unknown caller", 120);
@@ -84,15 +101,17 @@ function buildOwnerBody(args) {
   const city = cleanText(args.city, 120);
   const address = [street, city].filter(Boolean).join(", ") || "Not provided";
   const lines = [
-    "NEW LEAD",
+    buildOwnerHeading(requestType),
     `- Caller: ${name}`,
     `- Phone: ${phone || "Not provided"}`,
-    `- Work requested: ${cleanText(args.jobDetails || requestType || "Not provided", 500)}`,
-    `- Address: ${address}`,
-    `- Preferred start: ${cleanText(args.preferredStartDate || "Not provided", 120)}`,
-    `- Best callback: ${cleanText(args.bestCallbackTime || "Not provided", 160)}`,
-    `- Urgency: ${cleanText(args.urgency || "Not provided", 120)}`,
+    `- Job: ${cleanText(args.jobDetails || requestType || "Not provided", 500)}`,
+    `- Location: ${address}`,
+    `- Preferred start date: ${cleanText(args.preferredStartDate || "Not provided", 120)}`,
+    `- Preferred callback: ${cleanText(args.bestCallbackTime || "Not provided", 160)}`,
   ];
+  const urgency = cleanText(args.urgency, 120);
+  if (urgency) lines.push(`- Urgency: ${urgency}`);
+  lines.push(`- Next action: ${buildNextAction(requestType)}`);
   return lines.join("\n").slice(0, 1600);
 }
 
@@ -119,9 +138,16 @@ function buildCustomerBody(args) {
   const location = [cleanText(args.streetAddress, 180), cleanText(args.city, 120)].filter(Boolean).join(", ");
   const bestCallbackTime = cleanText(args.bestCallbackTime, 160);
   const preferredStartDate = cleanText(args.preferredStartDate, 160);
-  const callbackNote = bestCallbackTime ? ` Your preferred callback time is ${bestCallbackTime}.` : "";
-  const startNote = preferredStartDate ? ` Your preferred start timing is ${preferredStartDate}.` : "";
-  return `Thanks for calling ${businessName}. We received your service request regarding ${job}${location ? ` at ${location}` : ""}.${callbackNote}${startNote} The team will follow up to discuss the details and next step.`.slice(0, 1600);
+  const lines = [
+    businessName.toUpperCase(),
+    `Job: ${job}`,
+  ];
+  if (location) lines.push(`Location: ${location}`);
+  if (preferredStartDate) lines.push(`Preferred start date: ${preferredStartDate}`);
+  if (bestCallbackTime) lines.push(`Preferred callback: ${bestCallbackTime}`);
+  lines.push("Scheduling: The team will follow up to discuss the details and timing.");
+  lines.push(`Thanks for calling ${businessName}. Have a great day!`);
+  return lines.join("\n").slice(0, 1600);
 }
 
 function postSendClosingPrompt() {
@@ -437,6 +463,8 @@ function getVapiCompositeToolCode() {
     normalizeE164,
     stableHash,
     buildNotificationKeys,
+    buildOwnerHeading,
+    buildNextAction,
     buildOwnerBody,
     buildCustomerBody,
     safeProviderError,
@@ -477,8 +505,10 @@ module.exports = {
   COMPOSITE_TOOL_NAME,
   POST_SEND_CLOSING_MARKER,
   buildCustomerBody,
+  buildNextAction,
   callerNumberFallbackPrompt,
   buildNotificationKeys,
+  buildOwnerHeading,
   buildOwnerBody,
   checkSmsPermission,
   executeCompositeNotifications,

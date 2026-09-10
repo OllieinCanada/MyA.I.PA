@@ -809,8 +809,8 @@ function CallDetails({ call, onReport }) {
     ["Phone", call.lead?.callbackNumber || call.caller?.phone],
     ["Work requested", findCapturedValue(call.details, ["jobDetails", "workRequested", "service", "requestType"]) || call.lead?.summary || call.lead?.intent],
     ["Address", capturedAddress],
-    ["Preferred start", findCapturedValue(call.details, ["preferredStartDate", "preferredStart", "desiredStart", "startTiming"])],
-    ["Best callback", findCapturedValue(call.details, ["bestCallbackTime", "callbackTime", "preferredCallbackTime"])],
+    ["Preferred start date", findCapturedValue(call.details, ["preferredStartDate", "preferredStart", "desiredStart", "startTiming"])],
+    ["Preferred callback", findCapturedValue(call.details, ["bestCallbackTime", "callbackTime", "preferredCallbackTime"])],
     ["Urgency", findCapturedValue(call.details, ["urgency", "priority"]) || call.lead?.urgency],
   ];
   return (

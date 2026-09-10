@@ -34,9 +34,12 @@ describe("Tim's Electrical interactive demo", () => {
     expect(transcript).toMatch(/How can I help today/i);
     expect(transcript).toMatch(/licensed electrician to wire a newly installed hot tub/i);
     expect(transcript).toMatch(/23 Robb Street in Hamilton/i);
-    expect(scenario.missing).toContain("Preferred start date");
+    expect(scenario.missing).not.toContain("Preferred start date");
+    expect(scenario.details.find((detail) => detail.label === "Preferred start date")?.value).toBe("Next week");
     expect(scenario.customerText).toMatch(/details and timing/i);
-    expect(scenario.customerText).not.toMatch(/next week|appointment confirmed|work scheduled/i);
+    expect(scenario.customerText).toMatch(/Preferred start date: next week/i);
+    expect(scenario.customerText).toMatch(/^TIM'S ELECTRICAL/i);
+    expect(scenario.customerText).not.toMatch(/appointment confirmed|work scheduled/i);
     expect(scenario.ownerTextLines[0]).toBe("NEW INSTALLATION");
     expect(scenario.details.find((detail) => detail.label === "Callback")?.value).toBe("905-555-1234");
   });

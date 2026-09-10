@@ -255,13 +255,22 @@ function DemoPhone({ scenario, visibleLines, complete }) {
 }
 
 function MessagePreview({ label, status, lines, tone, businessName }) {
+  const structuredCustomer = tone === "customer" && lines.length >= 3 && lines[0] === lines[0].toUpperCase();
+  const heading = tone === "owner" || structuredCustomer ? lines[0] : "";
+  const messageLines = tone === "owner"
+    ? lines.slice(1)
+    : structuredCustomer
+      ? lines.slice(1, -1)
+      : lines;
+  const closing = structuredCustomer ? lines[lines.length - 1] : "";
   return (
     <article className={`tims-message-preview ${tone}`} aria-label={`${label} text message preview`}>
       <div className="tims-text-phone-top"><span>9:41</span><i /><span>5G</span></div>
       <div className="tims-text-phone-contact"><span><Icon name={tone === "owner" ? "document" : "message"} size={15} /></span><div><strong>{label}</strong><small>{tone === "owner" ? "My AI PA" : businessName} · now</small></div></div>
       <div className="tims-text-phone-thread">
-        {tone === "owner" ? <strong className="tims-message-heading">{lines[0]}</strong> : null}
-        <ul>{(tone === "owner" ? lines.slice(1) : lines).map((line) => <li key={line}>{line}</li>)}</ul>
+        {heading ? <strong className="tims-message-heading">{heading}</strong> : null}
+        <ul>{messageLines.map((line) => <li key={line}>{line}</li>)}</ul>
+        {closing ? <p className="tims-message-closing">{closing}</p> : null}
       </div>
       <div className="tims-text-phone-status"><span>{status}</span><small>Simulated text preview</small></div>
     </article>
