@@ -68,8 +68,18 @@ describe("intuitive signup presentation", () => {
     submit();
     clickButton("Residential", container.querySelector(".signup-specialization-grid"));
     submit();
-    expect(container.querySelector(".signup-area-list button").compareDocumentPosition(container.querySelector(".signup-area-tools")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(container.textContent).toMatch(/Need a different area\?/i);
+    const areaList = container.querySelector(".signup-area-list");
+    const unlistedAreaPanel = container.querySelector(".signup-area-tools");
+    expect(areaList.contains(unlistedAreaPanel)).toBe(false);
+    expect(container.querySelector('input[type="search"]')).toBeNull();
+    expect(container.querySelector("#custom-service-area")).toBeNull();
+    act(() => unlistedAreaPanel.querySelector('button[aria-controls="custom-service-area-panel"]').dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    expect(unlistedAreaPanel.querySelector('button[aria-expanded="true"]')).not.toBeNull();
+    expect(container.querySelector("#custom-service-area")).not.toBeNull();
+    changeValue("#custom-service-area", "Beamsville");
+    clickButton("Add area", unlistedAreaPanel);
+    expect(container.querySelector("#custom-service-area")).toBeNull();
+    expect(areaList.textContent).toMatch(/Added by you.*Beamsville/i);
     clickButton("Hamilton", container.querySelector(".signup-area-list"));
     submit();
 

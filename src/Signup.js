@@ -1777,8 +1777,9 @@ export default function Signup() {
   const [tradeSetupPanel, setTradeSetupPanel] = useState("trade");
   const [selectedTradeId, setSelectedTradeId] = useState("");
   const [selectedAreas, setSelectedAreas] = useState([]);
-  const [areaSearch, setAreaSearch] = useState("");
+  const [customAreaPanelOpen, setCustomAreaPanelOpen] = useState(false);
   const [customArea, setCustomArea] = useState("");
+  const customAreaInputRef = useRef(null);
   const [selectedSpecializationIds, setSelectedSpecializationIds] = useState([]);
   const [selectedDialogueId, setSelectedDialogueId] = useState("help-today");
   const [specializationNotes, setSpecializationNotes] = useState("");
@@ -1824,14 +1825,6 @@ export default function Signup() {
     () => SPECIALIZATION_OPTIONS.filter((item) => selectedSpecializationIds.includes(item.id)).map((item) => item.label),
     [selectedSpecializationIds]
   );
-  const filteredAreaGroups = useMemo(() => {
-    const query = areaSearch.trim().toLowerCase();
-    if (!query) return AREA_GROUPS;
-    return AREA_GROUPS.map((group) => ({
-      ...group,
-      areas: group.areas.filter((area) => area.toLowerCase().includes(query)),
-    })).filter((group) => group.areas.length > 0);
-  }, [areaSearch]);
   const customSelectedAreas = useMemo(
     () => selectedAreas.filter((area) => !AREA_OPTIONS.includes(area)),
     [selectedAreas]
@@ -1967,7 +1960,17 @@ export default function Signup() {
       return [...prev, nextArea];
     });
     setCustomArea("");
+    setCustomAreaPanelOpen(false);
     setError("");
+  };
+
+  const toggleCustomAreaPanel = () => {
+    const nextOpen = !customAreaPanelOpen;
+    setCustomAreaPanelOpen(nextOpen);
+    setError("");
+    if (nextOpen) {
+      window.requestAnimationFrame?.(() => customAreaInputRef.current?.focus());
+    }
   };
 
   const selectTrade = (tradeId) => {
@@ -2523,10 +2526,6 @@ export default function Signup() {
               font-size: 0.95rem;
               line-height: 1.2;
               text-align: left;
-            }
-
-            .signup-area-tools {
-              margin-bottom: 18px;
             }
 
             .signup-area-group h3 {
@@ -3161,9 +3160,9 @@ export default function Signup() {
                 <div className="signup-task-explainer flex flex-col justify-center rounded-3xl border border-blue-100 bg-blue-50/70 p-8">
                   <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">Step 3 of 8</p>
                   <h2 className="mt-2 text-[clamp(2rem,3vw,3.1rem)] font-black leading-tight tracking-[-0.04em] text-slate-950">Service areas</h2>
-                  <p className="mt-4 text-lg font-medium leading-8 text-slate-600">Choose a listed area first. If yours is missing, search or add it at the bottom.</p>
+                  <p className="mt-4 text-lg font-medium leading-8 text-slate-600">Choose a listed area. If yours is not shown, use the separate option below the list.</p>
                 </div>
-                <div className="signup-task-content min-h-0 overflow-hidden rounded-3xl">
+                <div className="signup-task-content flex min-h-0 flex-col overflow-hidden rounded-3xl">
                   <div className="signup-mobile-task-heading">
                     <h2>Where do you work?</h2>
                     <p>Choose one or more service areas. Then tap Continue.</p>
@@ -3172,7 +3171,7 @@ export default function Signup() {
                     <span>Selected areas</span>
                     <span>{selectedAreas.length}</span>
                   </div>
-                  <div className="signup-area-list flex h-full max-h-[42vh] content-start items-start overflow-y-auto pr-2 pb-2 [scrollbar-width:thin] sm:max-h-[46vh] lg:max-h-full">
+                  <div className="signup-area-list flex min-h-0 flex-1 content-start items-start overflow-y-auto pr-2 pb-2 [scrollbar-width:thin]">
                     <div className="signup-area-grid grid w-full content-start gap-4">
                       {customSelectedAreas.length ? (
                         <section className="signup-area-group">
@@ -3184,7 +3183,7 @@ export default function Signup() {
                           </div>
                         </section>
                       ) : null}
-                      {filteredAreaGroups.map((group) => (
+                      {AREA_GROUPS.map((group) => (
                         <section key={group.id} className="signup-area-group">
                           <h3>{group.label}</h3>
                           <div className="signup-area-group-grid grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
@@ -3194,53 +3193,49 @@ export default function Signup() {
                           </div>
                         </section>
                       ))}
-                      {!filteredAreaGroups.length ? (
-                        <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold leading-6 text-amber-900">
-                          No listed area matches. Add the city or area below.
-                        </p>
-                      ) : null}
-                      <section className="signup-area-tools grid gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4" aria-label="Find or add another service area">
-                        <div>
-                          <strong className="block text-base font-black text-slate-950">Need a different area?</strong>
-                          <span className="mt-1 block text-sm font-semibold leading-5 text-slate-500">Use this only if the city you need is not listed above.</span>
+                    </div>
+                  </div>
+                  <section className="signup-area-tools mt-4 shrink-0 rounded-2xl border border-slate-200 bg-slate-50 p-3" aria-label="Add an unlisted service area">
+                    <button
+                      type="button"
+                      aria-expanded={customAreaPanelOpen}
+                      aria-controls="custom-service-area-panel"
+                      onClick={toggleCustomAreaPanel}
+                      className="flex min-h-[48px] w-full items-center justify-between gap-4 rounded-xl px-2 text-left text-base font-black text-slate-950 transition hover:bg-white focus:outline-none focus:ring-4 focus:ring-blue-500/10"
+                    >
+                      <span>
+                        <span className="block">My area is not listed</span>
+                        <span className="mt-1 block text-sm font-semibold text-slate-500">Add a different city or service area</span>
+                      </span>
+                      <span aria-hidden="true" className="text-2xl leading-none text-blue-600">{customAreaPanelOpen ? "−" : "+"}</span>
+                    </button>
+                    {customAreaPanelOpen ? (
+                      <div id="custom-service-area-panel" className="signup-custom-area mt-3 border-t border-slate-200 pt-3">
+                        <label htmlFor="custom-service-area" className="mb-1.5 block text-sm font-semibold text-slate-700">City or service area</label>
+                        <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+                          <input
+                            ref={customAreaInputRef}
+                            id="custom-service-area"
+                            type="text"
+                            value={customArea}
+                            onChange={(event) => setCustomArea(event.target.value)}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter") {
+                                event.preventDefault();
+                                addCustomArea();
+                              }
+                            }}
+                            placeholder="Enter a city or service area"
+                            className="min-h-[48px] min-w-0 rounded-xl border border-slate-200 bg-white px-3 text-base font-medium text-slate-950 outline-none placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
+                          />
+                          <button type="button" onClick={addCustomArea} className="min-h-[48px] rounded-xl bg-blue-600 px-4 text-sm font-black text-white transition hover:bg-blue-700">
+                            Add area
+                          </button>
                         </div>
-                        <label className="signup-area-search block">
-                          <span className="mb-1.5 block text-sm font-semibold text-slate-700">Search service areas</span>
-                          <span className="flex min-h-[48px] items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-500/10">
-                            <Icon name="pin" className="h-4 w-4 shrink-0 text-blue-600" />
-                            <input
-                              type="search"
-                              value={areaSearch}
-                              onChange={(event) => setAreaSearch(event.target.value)}
-                              placeholder="Search Hamilton, Grimsby…"
-                              className="min-w-0 flex-1 bg-transparent text-base font-medium text-slate-950 outline-none placeholder:text-slate-400"
-                            />
-                          </span>
-                        </label>
-                        <div className="signup-custom-area">
-                          <label htmlFor="custom-service-area" className="mb-1.5 block text-sm font-semibold text-slate-700">Add another city or area</label>
-                          <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
-                            <input
-                              id="custom-service-area"
-                              type="text"
-                              value={customArea}
-                              onChange={(event) => setCustomArea(event.target.value)}
-                              onKeyDown={(event) => {
-                                if (event.key === "Enter") {
-                                  event.preventDefault();
-                                  addCustomArea();
-                                }
-                              }}
-                              placeholder="Enter a city or service area"
-                              className="min-h-[48px] min-w-0 rounded-xl border border-slate-200 bg-white px-3 text-base font-medium text-slate-950 outline-none placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
-                            />
-                            <button type="button" onClick={addCustomArea} className="min-h-[48px] rounded-xl bg-blue-600 px-4 text-sm font-black text-white transition hover:bg-blue-700">
-                              Add area
-                            </button>
-                          </div>
-                        </div>
-                      </section>
-                      <div className="signup-area-desktop-actions flex flex-wrap gap-3">
+                      </div>
+                    ) : null}
+                  </section>
+                  <div className="signup-area-desktop-actions mt-4 flex shrink-0 flex-wrap gap-3">
                       <button
                         type="button"
                         onClick={() => setBusinessSlide(1)}
@@ -3261,8 +3256,6 @@ export default function Signup() {
                         {busy ? "Saving..." : businessSlideLabel}
                         <Icon name="arrow" className="h-5 w-5" />
                       </button>
-                      </div>
-                    </div>
                   </div>
                 </div>
               </section>
