@@ -89,7 +89,7 @@ describe("intuitive homepage journey", () => {
     expect(container.textContent).toMatch(/A real conversation—not voicemail/i);
     expect(container.textContent).toMatch(/Both sides get a clear text/i);
     expect(container.textContent).toMatch(/Worry-Free Coverage — For about the price of a cup of coffee a day/i);
-    expect(container.textContent).toMatch(/We handle residential and commercial electrical work\. Are you looking for a new installation, service, or repair today\?/i);
+    expect(container.textContent).toMatch(/We handle residential, commercial, and industrial electrical work\. Are you calling about an installation, service, or repair today\?/i);
     expect(container.textContent).toMatch(/Job: hot tub wiring/i);
     expect(container.textContent).toMatch(/Location: 23 Robb Street, Hamilton/i);
     expect(container.textContent).toMatch(/Preferred start date: next week/i);

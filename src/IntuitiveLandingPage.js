@@ -33,7 +33,7 @@ const customerTextPoints = [
   "Thanks for calling Tim's Electrical. Have a great day!",
 ];
 const naturalCallPreview = [
-  "Thanks for calling Tim's Electrical. We handle residential and commercial electrical work. Are you looking for a new installation, service, or repair today?",
+  "Thanks for calling Tim's Electrical. We handle residential, commercial, and industrial electrical work. Are you calling about an installation, service, or repair today?",
   "I need a licensed electrician to wire a newly installed hot tub.",
   "I can help with that. When would you ideally like the work to begin?",
 ];
