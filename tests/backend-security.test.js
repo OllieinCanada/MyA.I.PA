@@ -18,6 +18,7 @@ process.env.TWILIO_WEBHOOK_OAUTH_CLIENT_SECRET = "test-client-secret-at-least-24
 process.env.TWILIO_WEBHOOK_OAUTH_SIGNING_SECRET = "test-signing-secret-at-least-32-characters-long";
 process.env.TWILIO_WEBHOOK_OAUTH_AUDIENCE = "https://staging-api.example.test/api/webhooks/twilio/staging/call-status";
 process.env.TWILIO_WEBHOOK_OAUTH_ISSUER = "myaipa-staging-test";
+process.env.TWILIO_WEBHOOK_OAUTH_CONFIG_VERSION = "test-v1";
 process.env.SMS_SUPPRESSION_API_KEY = "test-suppression-api-key-42";
 process.env.ADMIN_PASSWORD = "test-admin-password-42";
 process.env.ADMIN_SESSION_SECRET = "test-admin-session-secret-42";

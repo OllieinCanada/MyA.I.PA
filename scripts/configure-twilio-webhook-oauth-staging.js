@@ -17,18 +17,11 @@ function flagValue(name, argv = process.argv.slice(2)) {
   return argv.find((item) => item.startsWith(prefix))?.slice(prefix.length) || "";
 }
 
-function shortHash(value) {
-  return crypto.createHash("sha256").update(String(value || "")).digest("hex").slice(0, 12);
-}
-
 function buildResourceNames(config) {
-  const version = shortHash([
-    config.tokenUrl,
-    config.clientId,
-    config.clientSecret,
-    config.audience,
-    config.scope,
-  ].join("|"));
+  const version = String(config.configVersion || "").trim();
+  if (!/^[a-zA-Z0-9._-]{1,32}$/.test(version)) {
+    throw new Error("TWILIO_WEBHOOK_OAUTH_CONFIG_VERSION must be a short non-secret release label such as v1.");
+  }
   return {
     authProfile: `My AI PA staging OAuth ${version}`,
     setting: `My AI PA staging call status ${version}`,

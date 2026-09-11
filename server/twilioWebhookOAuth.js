@@ -61,10 +61,11 @@ function getTwilioWebhookOAuthConfig(env = process.env) {
   const audience = String(env.TWILIO_WEBHOOK_OAUTH_AUDIENCE || callbackUrl || "").trim();
   const issuer = String(env.TWILIO_WEBHOOK_OAUTH_ISSUER || "myaipa-api").trim();
   const scope = String(env.TWILIO_WEBHOOK_OAUTH_SCOPE || DEFAULT_SCOPE).trim();
+  const configVersion = String(env.TWILIO_WEBHOOK_OAUTH_CONFIG_VERSION || "").trim();
   const tokenTtlSeconds = Math.max(60, Math.min(600, Number(env.TWILIO_WEBHOOK_OAUTH_TOKEN_TTL_SECONDS || DEFAULT_TOKEN_TTL_SECONDS) || DEFAULT_TOKEN_TTL_SECONDS));
 
   if (stagingEnabled || oauthEnabled) {
-    if (!baseUrl || !clientId || clientSecret.length < 24 || signingSecret.length < 32 || !audience || !issuer || !scope) {
+    if (!baseUrl || !clientId || clientSecret.length < 24 || signingSecret.length < 32 || !audience || !issuer || !scope || !/^[a-zA-Z0-9._-]{1,32}$/.test(configVersion)) {
       throw httpError("Twilio staging webhook OAuth is enabled but its dedicated credentials or URLs are incomplete.", 503, "TWILIO_WEBHOOK_OAUTH_NOT_CONFIGURED");
     }
   }
@@ -87,15 +88,18 @@ function getTwilioWebhookOAuthConfig(env = process.env) {
     audience,
     issuer,
     scope,
+    configVersion,
     tokenTtlSeconds,
   };
 }
 
 function parseBasicCredentials(authorization) {
-  const match = String(authorization || "").trim().match(/^Basic\s+(.+)$/i);
-  if (!match) return null;
+  const value = String(authorization || "").trim();
+  if (value.length > 8192 || value.slice(0, 6).toLowerCase() !== "basic ") return null;
+  const encoded = value.slice(6);
+  if (!encoded || encoded.includes(" ")) return null;
   try {
-    const decoded = Buffer.from(match[1], "base64").toString("utf8");
+    const decoded = Buffer.from(encoded, "base64").toString("utf8");
     const separator = decoded.indexOf(":");
     if (separator < 1) return null;
     return { clientId: decoded.slice(0, separator), clientSecret: decoded.slice(separator + 1) };
@@ -133,7 +137,6 @@ function issueTwilioWebhookAccessToken({ authorization = "", body = {}, env = pr
     {
       typ: "twilio-webhook-access",
       scope: config.scope,
-      client: crypto.createHash("sha256").update(config.clientId).digest("hex").slice(0, 16),
     },
     config.signingSecret,
     {
@@ -158,10 +161,12 @@ function issueTwilioWebhookAccessToken({ authorization = "", body = {}, env = pr
 function verifyTwilioWebhookBearer(authorization, env = process.env) {
   const config = getTwilioWebhookOAuthConfig(env);
   if (!config.oauthEnabled || !config.stagingEnabled) return false;
-  const match = String(authorization || "").trim().match(/^Bearer\s+(.+)$/i);
-  if (!match) return false;
+  const value = String(authorization || "").trim();
+  if (value.length > 16384 || value.slice(0, 7).toLowerCase() !== "bearer ") return false;
+  const token = value.slice(7);
+  if (!token || token.includes(" ")) return false;
   try {
-    const claims = jwt.verify(match[1], config.signingSecret, {
+    const claims = jwt.verify(token, config.signingSecret, {
       algorithms: ["HS256"],
       audience: config.audience,
       issuer: config.issuer,

@@ -16,6 +16,7 @@ const config = {
   clientSecret: "private-client-secret",
   audience: "https://staging.example.test/api/webhooks/twilio/staging/call-status",
   scope: "twilio:webhooks",
+  configVersion: "test-v1",
 };
 
 test("configuration plan is exact-match, bounded, retry-safe, and secret-free", () => {
@@ -28,10 +29,10 @@ test("configuration plan is exact-match, bounded, retry-safe, and secret-free", 
   assert.doesNotMatch(JSON.stringify(plan), /private-client-secret/);
 });
 
-test("resource names are stable for one credential generation and change after rotation", () => {
+test("resource names use an explicit non-secret rotation version", () => {
   const first = buildResourceNames(config);
   const same = buildResourceNames({ ...config });
-  const rotated = buildResourceNames({ ...config, clientSecret: "rotated-private-client-secret" });
+  const rotated = buildResourceNames({ ...config, clientSecret: "rotated-private-client-secret", configVersion: "test-v2" });
   assert.deepEqual(first, same);
   assert.notEqual(first.authProfile, rotated.authProfile);
   assert.doesNotMatch(first.authProfile, /private-client-secret/);
@@ -60,6 +61,7 @@ test("apply tests the immutable setting before installing an exact-match rule", 
     TWILIO_WEBHOOK_OAUTH_CLIENT_SECRET: "private-client-secret-at-least-24-characters",
     TWILIO_WEBHOOK_OAUTH_SIGNING_SECRET: "private-signing-secret-at-least-32-characters-long",
     TWILIO_WEBHOOK_OAUTH_AUDIENCE: "https://staging.example.test/api/webhooks/twilio/staging/call-status",
+    TWILIO_WEBHOOK_OAUTH_CONFIG_VERSION: "test-v1",
   };
   const headers = { get: (name) => name.toLowerCase() === "operation-id" ? "operation-1" : null };
   const api = async (path, options = {}) => {

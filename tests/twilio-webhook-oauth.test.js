@@ -23,6 +23,7 @@ const TEST_ENV = Object.freeze({
   TWILIO_WEBHOOK_OAUTH_ISSUER: "myaipa-staging",
   TWILIO_WEBHOOK_OAUTH_SCOPE: "twilio:webhooks",
   TWILIO_WEBHOOK_OAUTH_TOKEN_TTL_SECONDS: "300",
+  TWILIO_WEBHOOK_OAUTH_CONFIG_VERSION: "test-v1",
 });
 
 const CALL_STATUS_BODY = Object.freeze({
