@@ -6,7 +6,7 @@
     "exactDialogue": [
       {
         "role": "receptionist",
-        "text": "Hello are you looking for a new installation, repair or maintenance today?"
+        "text": "Hi, thanks for calling Tim’s Electrical. We handle residential, commercial, and industrial electrical work. Do you need maintenance, a new installation, or a repair today?"
       },
       {
         "role": "caller",
@@ -27,6 +27,14 @@
       {
         "role": "caller",
         "text": "23 Robb Street in Hamilton."
+      },
+      {
+        "role": "receptionist",
+        "text": "What is your preferred start date?"
+      },
+      {
+        "role": "caller",
+        "text": "Next week would be ideal."
       },
       {
         "role": "receptionist",
@@ -54,7 +62,15 @@
       },
       {
         "role": "receptionist",
-        "text": "To confirm, that's 23 Robb Street in Hamilton for hot tub wiring, and after five PM is your best callback time. I have the details ready for the team. Thanks for calling."
+        "text": "To confirm, that's 23 Robb Street in Hamilton for hot tub wiring, next week is your preferred start date, and after five PM is your best callback time. Did I miss anything important?"
+      },
+      {
+        "role": "caller",
+        "text": "No, that covers everything."
+      },
+      {
+        "role": "receptionist",
+        "text": "We'll pass this information and we'll get back to you for pricing and scheduling."
       }
     ],
     "facts": [
@@ -68,6 +84,76 @@
     "label": "New installation",
     "callerName": "Brian Smith",
     "opening": "I'm having a hot tub installed and need an electrician to wire it.",
+    "exactDialogue": [
+      {
+        "role": "receptionist",
+        "text": "Hi, thanks for calling Tim’s Electrical. We handle residential, commercial, and industrial electrical work. Do you need maintenance, a new installation, or a repair today?"
+      },
+      {
+        "role": "caller",
+        "text": "I need someone to wire up my hot tub as a new installation."
+      },
+      {
+        "role": "receptionist",
+        "text": "Can I get your first name?"
+      },
+      {
+        "role": "caller",
+        "text": "Brian Smith."
+      },
+      {
+        "role": "receptionist",
+        "text": "What's the address where the work needs to be completed?"
+      },
+      {
+        "role": "caller",
+        "text": "23 Robb Street in Hamilton."
+      },
+      {
+        "role": "receptionist",
+        "text": "What is your preferred start date?"
+      },
+      {
+        "role": "caller",
+        "text": "Next week would be ideal."
+      },
+      {
+        "role": "receptionist",
+        "text": "What is the best phone number to reach you at?"
+      },
+      {
+        "role": "caller",
+        "text": "Nine oh five, five five five, one two three four."
+      },
+      {
+        "role": "receptionist",
+        "text": "Repeating that back, nine oh five, five five five, one two three four. Is that correct?"
+      },
+      {
+        "role": "caller",
+        "text": "Yes."
+      },
+      {
+        "role": "receptionist",
+        "text": "What's the best time to reach you in case we miss you on the callback?"
+      },
+      {
+        "role": "caller",
+        "text": "After five PM is best."
+      },
+      {
+        "role": "receptionist",
+        "text": "To confirm, that's 23 Robb Street in Hamilton for hot tub wiring, next week is your preferred start date, and after five PM is your best callback time. Did I miss anything important?"
+      },
+      {
+        "role": "caller",
+        "text": "No, that covers everything."
+      },
+      {
+        "role": "receptionist",
+        "text": "We'll pass this information and we'll get back to you for pricing and scheduling."
+      }
+    ],
     "facts": [
       "You need a licensed electrician to wire a newly installed hot tub.",
       "The property is 23 Robb Street in Hamilton.",
@@ -87,7 +173,7 @@
     "exactDialogue": [
       {
         "role": "receptionist",
-        "text": "Hello, are you looking for a new installation, repair, or maintenance today?"
+        "text": "Hi, thanks for calling Tim’s Electrical. We handle residential, commercial, and industrial electrical work. Do you need maintenance, a new installation, or a repair today?"
       },
       {
         "role": "caller",
@@ -153,7 +239,7 @@
     "exactDialogue": [
       {
         "role": "receptionist",
-        "text": "Hello, are you looking for a new installation, repair, or maintenance today?"
+        "text": "Hi, thanks for calling Tim’s Electrical. We handle residential, commercial, and industrial electrical work. Do you need maintenance, a new installation, or a repair today?"
       },
       {
         "role": "caller",
@@ -218,7 +304,7 @@
     "exactDialogue": [
       {
         "role": "receptionist",
-        "text": "Hello, are you looking for a new installation, repair, or maintenance today?"
+        "text": "Hi, thanks for calling Tim’s Electrical. We handle residential, commercial, and industrial electrical work. Do you need maintenance, a new installation, or a repair today?"
       },
       {
         "role": "caller",
@@ -283,7 +369,7 @@
     "exactDialogue": [
       {
         "role": "receptionist",
-        "text": "Hello, are you looking for a new installation, repair, or maintenance today?"
+        "text": "Hi, thanks for calling Tim’s Electrical. We handle residential, commercial, and industrial electrical work. Do you need maintenance, a new installation, or a repair today?"
       },
       {
         "role": "caller",
@@ -348,7 +434,7 @@
     "exactDialogue": [
       {
         "role": "receptionist",
-        "text": "Hello, are you looking for a new installation, repair, or maintenance today?"
+        "text": "Hi, thanks for calling Tim’s Electrical. We handle residential, commercial, and industrial electrical work. Do you need maintenance, a new installation, or a repair today?"
       },
       {
         "role": "caller",

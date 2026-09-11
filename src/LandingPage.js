@@ -3503,7 +3503,7 @@ function LandingChapters({
             {[
               ["phone", "Keep your business number", "Forward only the calls you want My AI PA to answer."],
               ["check", "Start with overflow", "Use it after hours or when your team cannot pick up."],
-              ["chat", "Control the answers", "Your services, service area and common answers shape the receptionist."],
+              ["chat", "Control the answers", "Services you provide, your service area and answers to common questions shape the receptionists' dialogue."],
               ["clipboard", "Clear, service-focused texts", "Owner summaries and customer confirmations support a proper follow-up."],
             ].map(([icon, title, body]) => (
               <article key={title} className="rounded-[18px] border border-[#c3dcef] bg-white p-5 shadow-[0_20px_48px_-40px_rgba(12,77,160,0.5)]">
