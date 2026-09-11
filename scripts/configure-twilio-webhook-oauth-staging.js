@@ -17,6 +17,44 @@ function flagValue(name, argv = process.argv.slice(2)) {
   return argv.find((item) => item.startsWith(prefix))?.slice(prefix.length) || "";
 }
 
+function replayPublicConfiguration(env) {
+  const stagingEnabled = /^(1|true|yes|on)$/i.test(String(env.TWILIO_WEBHOOK_STAGING_ENABLED || ""));
+  const oauthEnabled = /^(1|true|yes|on)$/i.test(String(env.TWILIO_WEBHOOK_OAUTH_ENABLED || ""));
+  const baseUrl = String(env.TWILIO_WEBHOOK_STAGING_BASE_URL || "").trim().replace(/\/$/, "");
+  const callbackUrl = `${baseUrl}/api/webhooks/twilio/staging/call-status`;
+  const tokenUrl = `${baseUrl}/api/integrations/twilio/webhook-oauth/token`;
+  const scope = String(env.TWILIO_WEBHOOK_OAUTH_SCOPE || "twilio:webhooks").trim();
+  const audience = String(env.TWILIO_WEBHOOK_OAUTH_AUDIENCE || callbackUrl).trim();
+  let parsedBase;
+  try {
+    parsedBase = new URL(baseUrl);
+  } catch {
+    throw new Error("TWILIO_WEBHOOK_STAGING_BASE_URL must be a valid public HTTPS URL.");
+  }
+  if (
+    !stagingEnabled
+    || !oauthEnabled
+    || parsedBase.protocol !== "https:"
+    || parsedBase.username
+    || parsedBase.password
+    || parsedBase.hash
+    || !scope
+    || !audience
+  ) {
+    throw new Error("Staging webhook OAuth must be fully configured before replaying an event.");
+  }
+  return { callbackUrl, tokenUrl, scope, audience };
+}
+
+function replayCredentials(env) {
+  const clientId = String(env.TWILIO_WEBHOOK_OAUTH_CLIENT_ID || "").trim();
+  const clientSecret = String(env.TWILIO_WEBHOOK_OAUTH_CLIENT_SECRET || "").trim();
+  if (!clientId || clientSecret.length < 24) {
+    throw new Error("Dedicated staging OAuth replay credentials are incomplete.");
+  }
+  return { clientId, clientSecret };
+}
+
 function buildResourceNames(config) {
   const version = String(config.configVersion || "").trim();
   if (!/^[a-zA-Z0-9._-]{1,32}$/.test(version)) {
@@ -229,16 +267,12 @@ async function applyConfiguration(env, dependencies = {}) {
 }
 
 async function replayEvent(env, { fetchImpl = global.fetch } = {}) {
-  const config = getTwilioWebhookOAuthConfig(env);
-  if (!config.stagingEnabled || !config.oauthEnabled) throw new Error("Staging webhook OAuth must be enabled before replaying an event.");
-  // Derive the non-secret callback URL independently from the credential-bearing
-  // configuration object. Besides making the trust boundary explicit, this keeps
-  // security analysis from conflating the callback URL with the OAuth secret.
-  const replayCallbackUrl = `${String(env.TWILIO_WEBHOOK_STAGING_BASE_URL || "").trim().replace(/\/$/, "")}/api/webhooks/twilio/staging/call-status`;
+  const config = replayPublicConfiguration(env);
+  const credentials = replayCredentials(env);
   const tokenBody = new URLSearchParams({
     grant_type: "client_credentials",
-    client_id: config.clientId,
-    client_secret: config.clientSecret,
+    client_id: credentials.clientId,
+    client_secret: credentials.clientSecret,
     scope: config.scope,
     audience: config.audience,
   });
@@ -259,10 +293,10 @@ async function replayEvent(env, { fetchImpl = global.fetch } = {}) {
     CallbackSource: "myaipa-staging-replay",
   };
   const form = new URLSearchParams(event);
-  const signature = getTwilioSignature(replayCallbackUrl, event, env.TWILIO_AUTH_TOKEN);
+  const signature = getTwilioSignature(config.callbackUrl, event, env.TWILIO_AUTH_TOKEN);
   if (!String(env.TWILIO_AUTH_TOKEN || "").trim()) throw new Error("TWILIO_AUTH_TOKEN is required to sign the controlled replay event.");
   const send = async () => {
-    const response = await fetchImpl(replayCallbackUrl, {
+    const response = await fetchImpl(config.callbackUrl, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${token.access_token}`,
@@ -286,15 +320,16 @@ async function replayEvent(env, { fetchImpl = global.fetch } = {}) {
 
 async function main() {
   const env = loadProjectEnv();
-  const config = getTwilioWebhookOAuthConfig(env);
-  const plan = buildConfigurationPlan(config);
   if (!hasFlag("apply") && !hasFlag("replay")) {
+    const config = getTwilioWebhookOAuthConfig(env);
+    const plan = buildConfigurationPlan(config);
     console.log(JSON.stringify({ mode: "dry-run", ready: config.stagingEnabled && config.oauthEnabled, plan }, null, 2));
     return;
   }
   if (hasFlag("apply")) {
     if (flagValue("confirm") !== APPLY_CONFIRMATION) throw new Error(`Applying requires --confirm=${APPLY_CONFIRMATION}.`);
     const result = await applyConfiguration(env);
+    const config = getTwilioWebhookOAuthConfig(env);
     console.log(JSON.stringify({ mode: "apply", ...result, endpoint: config.callbackUrl }, null, 2));
   }
   if (hasFlag("replay")) {
@@ -321,6 +356,8 @@ module.exports = {
   createTwilioApiClient,
   listRecords,
   replayEvent,
+  replayCredentials,
+  replayPublicConfiguration,
   testSettingAfterPropagation,
   waitForOperation,
 };
