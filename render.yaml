@@ -139,6 +139,12 @@ services:
         value: https://api.myaipa.ca/api/webhooks/sms
       - key: TWILIO_STATUS_CALLBACK_URL
         value: https://api.myaipa.ca/api/webhooks/twilio/message-status
+      # The OAuth Webhook Configuration API canary belongs on a separate
+      # non-production Render service. Production remains explicitly off.
+      - key: TWILIO_WEBHOOK_STAGING_ENABLED
+        value: false
+      - key: TWILIO_WEBHOOK_OAUTH_ENABLED
+        value: false
       - key: SMS_SUPPRESSION_CHECK_URL
         value: https://api.myaipa.ca/api/integrations/sms/suppression/check
       - key: SMS_SUPPRESSION_API_KEY

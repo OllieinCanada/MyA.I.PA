@@ -125,6 +125,13 @@ const {
   verifyTwilioWebhookRequest,
 } = require("./smsSuppression");
 const { buildTwilioMessageStatusIncident } = require("./twilioMessageStatus");
+const {
+  getTwilioWebhookOAuthConfig,
+  getTwilioWebhookStagingUrls,
+  issueTwilioWebhookAccessToken,
+  processTwilioStagingCallStatus,
+  verifyTwilioWebhookBearer,
+} = require("./twilioWebhookOAuth");
 const { buildForwardingInstructions } = require("./forwardingInstructions");
 const {
   applyVerificationStatusCallback,
@@ -379,6 +386,20 @@ const SIGNUP_VERIFICATION_TTL_MS = parsePositiveInt(process.env.SIGNUP_VERIFICAT
 const pendingSignupVerifications = createPendingSignupVerificationStore({
   prisma,
   minimumTtlMs: SIGNUP_VERIFICATION_TTL_MS,
+});
+const twilioWebhookOAuthTokenRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many webhook token requests." },
+});
+const twilioStagingWebhookProcessRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many staging webhook requests." },
 });
 const TRIAL_REMINDER_CHECK_INTERVAL_MS = parsePositiveInt(process.env.TRIAL_REMINDER_CHECK_INTERVAL_MS, 60 * 60 * 1000);
 const TRIAL_USAGE_LIMIT_ENABLED = isEnabled(process.env.TRIAL_USAGE_LIMIT_ENABLED);
@@ -10087,6 +10108,22 @@ app.post(
   })
 );
 
+app.post(
+  "/api/integrations/twilio/webhook-oauth/token",
+  twilioWebhookOAuthTokenRateLimiter,
+  express.urlencoded({ extended: false, limit: "2kb" }),
+  asyncRoute(async (req, res) => {
+    const token = issueTwilioWebhookAccessToken({
+      authorization: req.headers.authorization,
+      body: req.body || {},
+      env: process.env,
+    });
+    res.setHeader("Cache-Control", "no-store, max-age=0");
+    res.setHeader("Pragma", "no-cache");
+    return res.json(token);
+  })
+);
+
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true, service: "my-ai-pa-api", time: new Date().toISOString() });
 });
@@ -10731,6 +10768,57 @@ app.post(
       safelyNotifyRuntimeFailure(preparedIncident.error, preparedIncident.context);
     }
     return res.type("application/xml").send("<Response></Response>");
+  })
+);
+
+app.post(
+  "/api/webhooks/twilio/staging/connectivity",
+  twilioStagingWebhookProcessRateLimiter,
+  express.urlencoded({ extended: false, limit: "8kb" }),
+  asyncRoute(async (req, res) => {
+    const config = getTwilioWebhookOAuthConfig(process.env);
+    const urls = getTwilioWebhookStagingUrls(process.env);
+    if (!config.stagingEnabled || !config.oauthEnabled) {
+      return res.status(404).json({ error: "The staging webhook endpoint is disabled." });
+    }
+    if (!verifyTwilioWebhookBearer(req.headers.authorization, process.env)) {
+      return res.status(401).json({ error: "Invalid webhook access token." });
+    }
+    if (!verifyTwilioWebhookRequest(req, process.env, { configuredUrl: urls.connectivityUrl })) {
+      return res.status(401).json({ error: "Invalid Twilio webhook signature." });
+    }
+    return res.status(204).end();
+  })
+);
+
+app.post(
+  "/api/webhooks/twilio/staging/call-status",
+  twilioStagingWebhookProcessRateLimiter,
+  express.urlencoded({ extended: false, limit: "8kb" }),
+  asyncRoute(async (req, res) => {
+    const config = getTwilioWebhookOAuthConfig(process.env);
+    const urls = getTwilioWebhookStagingUrls(process.env);
+    if (!config.stagingEnabled || !config.oauthEnabled) {
+      return res.status(404).json({ error: "The staging webhook endpoint is disabled." });
+    }
+    if (!verifyTwilioWebhookBearer(req.headers.authorization, process.env)) {
+      return res.status(401).json({ error: "Invalid webhook access token." });
+    }
+    if (!verifyTwilioWebhookRequest(req, process.env, { configuredUrl: urls.callbackUrl })) {
+      return res.status(401).json({ error: "Invalid Twilio webhook signature." });
+    }
+    const result = await processTwilioStagingCallStatus({
+      body: req.body || {},
+      claimEvent: claimWebhookEvent,
+      completeEvent: completeWebhookEvent,
+      releaseEvent: releaseWebhookEvent,
+    });
+    console.log("[twilio-webhook-staging] processed", {
+      duplicate: result.duplicate,
+      downstreamCreated: result.downstreamCreated,
+      eventReference: result.eventReference,
+    });
+    return res.status(result.duplicate ? 200 : 202).json(result);
   })
 );
 

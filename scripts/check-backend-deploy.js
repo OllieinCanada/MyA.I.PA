@@ -54,6 +54,7 @@ for (const file of [
   "scripts/validate-render-blueprint.js",
   "server/safeWebsiteFetch.js",
   "server/twilioSms.js",
+  "server/twilioWebhookOAuth.js",
   "server/vapiSms.js",
   "server/leadHandoffs.js",
   "server/revenueRescue.js",
@@ -91,11 +92,19 @@ expectIncludes("render.yaml", "GITHUB_SUPPORT_REPO");
 expectIncludes("render.yaml", "TELEGRAM_BOT_TOKEN");
 expectIncludes("render.yaml", "TELEGRAM_CHAT_ID");
 expectIncludes("render.yaml", "TWILIO_STATUS_CALLBACK_URL");
+expectIncludes("server/index.js", '"/api/integrations/twilio/webhook-oauth/token"');
+expectIncludes("server/index.js", '"/api/webhooks/twilio/staging/connectivity"');
+expectIncludes("server/index.js", '"/api/webhooks/twilio/staging/call-status"');
+expectIncludes("prisma/schema.prisma", "model WebhookReplayClaim");
+expectIncludes("config/backend.env.example", "TWILIO_WEBHOOK_STAGING_ENABLED=false");
+expectIncludes("config/backend.env.example", "TWILIO_WEBHOOK_OAUTH_SIGNING_SECRET=");
 expectIncludes("render.yaml", "FORWARDING_SETUP_SECRET");
 expectIncludes("render.yaml", "FORWARDING_VERIFICATION_CALLER_ID");
 expectIncludes("server/index.js", '"/api/forwarding/setup/verify"');
 expectIncludes("server/index.js", '"/api/webhooks/twilio/forwarding-verification-status"');
 expectIncludes("render.yaml", "https://api.myaipa.ca/api/webhooks/twilio/message-status");
+expectIncludes("render.yaml", "TWILIO_WEBHOOK_STAGING_ENABLED");
+expectIncludes("render.yaml", "TWILIO_WEBHOOK_OAUTH_ENABLED");
 expectIncludes("config/backend.env.example", "ALLOWED_ORIGINS=");
 expectIncludes("config/backend.env.example", "DATABASE_URL=");
 expectIncludes("config/backend.env.example", "ADMIN_PASSWORD=");
