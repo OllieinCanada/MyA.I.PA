@@ -151,7 +151,7 @@ function firstMessageFor(scenario, role) {
     return firstTurn?.role === role ? firstTurn.text : "";
   }
   return role === "receptionist"
-    ? "Thanks for calling the Tim's Electrical recorded demonstration. I'm the virtual receptionist. This synthetic call is being recorded. How can I help today?"
+    ? "Hi, thanks for calling Tim’s Electrical. We handle residential, commercial, and industrial electrical work. Do you need maintenance, a new installation, or a repair today?"
     : "";
 }
 

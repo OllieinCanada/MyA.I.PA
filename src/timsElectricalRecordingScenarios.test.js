@@ -7,6 +7,9 @@ const rerecordedIds = [
   "maintenance",
   "unresolved-concern",
 ];
+const exactDialogueIds = recordingScenarios
+  .filter((scenario) => Array.isArray(scenario.exactDialogue) && scenario.exactDialogue.length > 0)
+  .map((scenario) => scenario.id);
 
 const activeVapiV2Voices = new Set(["Emma", "Kai", "Naina"]);
 
@@ -24,11 +27,11 @@ describe("Tim's Electrical recorded scenario scripts", () => {
     expect(scenarios.every((scenario) => scenario.callerPerformance.length > 20)).toBe(true);
   });
 
-  test.each(rerecordedIds)("%s starts with the exact receptionist opening and alternates speakers", (id) => {
+  test.each(exactDialogueIds)("%s starts with the exact receptionist opening and alternates speakers", (id) => {
     const scenario = recordingScenarios.find((item) => item.id === id);
     expect(scenario.exactDialogue[0]).toEqual({
       role: "receptionist",
-      text: "Hello, are you looking for a new installation, repair, or maintenance today?",
+      text: "Hi, thanks for calling Tim’s Electrical. We handle residential, commercial, and industrial electrical work. Do you need maintenance, a new installation, or a repair today?",
     });
     expect(
       scenario.exactDialogue.every(
@@ -43,6 +46,31 @@ describe("Tim's Electrical recorded scenario scripts", () => {
     expect(script).toMatch(/leave.*immediately/i);
     expect(script).toMatch(/call 911/i);
     expect(script).not.toMatch(/name|address|callback number/i);
+  });
+
+  test("new installation asks for callback timing before the caller provides it", () => {
+    const dialogue = recordingScenarios.find((item) => item.id === "new-installation").exactDialogue;
+    const callbackQuestionIndex = dialogue.findIndex((turn) => /best time to reach you/i.test(turn.text));
+    const callbackAnswerIndex = dialogue.findIndex((turn) => /After five PM is best/i.test(turn.text));
+    expect(callbackQuestionIndex).toBeGreaterThan(-1);
+    expect(callbackAnswerIndex).toBe(callbackQuestionIndex + 1);
+    expect(dialogue[callbackQuestionIndex].role).toBe("receptionist");
+    expect(dialogue[callbackAnswerIndex].role).toBe("caller");
+  });
+
+  test.each(["hero-new-installation", "new-installation"])("%s collects preferred start and confirms the handoff", (id) => {
+    const dialogue = recordingScenarios.find((item) => item.id === id).exactDialogue;
+    const preferredStartQuestionIndex = dialogue.findIndex((turn) => /preferred start date/i.test(turn.text));
+    const preferredStartAnswerIndex = dialogue.findIndex((turn) => /Next week would be ideal/i.test(turn.text));
+    const missedAnythingIndex = dialogue.findIndex((turn) => /Did I miss anything important\?/i.test(turn.text));
+    const handoffIndex = dialogue.findIndex((turn) => /We'll pass this information and we'll get back to you for pricing and scheduling\./i.test(turn.text));
+    expect(preferredStartQuestionIndex).toBeGreaterThan(-1);
+    expect(preferredStartAnswerIndex).toBe(preferredStartQuestionIndex + 1);
+    expect(missedAnythingIndex).toBeGreaterThan(preferredStartAnswerIndex);
+    expect(handoffIndex).toBe(missedAnythingIndex + 2);
+    expect(dialogue[preferredStartQuestionIndex].role).toBe("receptionist");
+    expect(dialogue[preferredStartAnswerIndex].role).toBe("caller");
+    expect(dialogue[handoffIndex].role).toBe("receptionist");
   });
 
   test("keeps serious safety examples out of the personality-recording playlist", () => {

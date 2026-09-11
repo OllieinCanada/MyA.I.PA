@@ -36,7 +36,8 @@ describe("Tim's Electrical interactive demo", () => {
     expect(transcript).toMatch(/23 Robb Street in Hamilton/i);
     expect(scenario.missing).not.toContain("Preferred start date");
     expect(scenario.details.find((detail) => detail.label === "Preferred start date")?.value).toBe("Next week");
-    expect(scenario.customerText).toMatch(/details and timing/i);
+    expect(scenario.ownerText).toMatch(/pricing and scheduling follow-up/i);
+    expect(scenario.customerText).toMatch(/we'll get back to you for pricing and scheduling/i);
     expect(scenario.customerText).toMatch(/Preferred start date: next week/i);
     expect(scenario.customerText).toMatch(/^TIM'S ELECTRICAL/i);
     expect(scenario.customerText).not.toMatch(/appointment confirmed|work scheduled/i);
