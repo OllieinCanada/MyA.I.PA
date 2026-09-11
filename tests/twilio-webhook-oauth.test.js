@@ -4,6 +4,7 @@ const jwt = require("jsonwebtoken");
 const {
   deliverTwilioStagingEvent,
   getTwilioWebhookOAuthConfig,
+  getTwilioWebhookStagingUrls,
   issueTwilioWebhookAccessToken,
   normalizeCallStatusEvent,
   processTwilioStagingCallStatus,
@@ -67,6 +68,17 @@ test("staging webhook OAuth configuration fails closed when enabled credentials 
   const disabled = getTwilioWebhookOAuthConfig({});
   assert.equal(disabled.stagingEnabled, false);
   assert.equal(disabled.oauthEnabled, false);
+});
+
+test("staging webhook URLs are available without loading credential fields", () => {
+  assert.deepEqual(getTwilioWebhookStagingUrls({
+    TWILIO_WEBHOOK_STAGING_BASE_URL: "https://staging.example.test/",
+  }), {
+    baseUrl: "https://staging.example.test",
+    callbackUrl: "https://staging.example.test/api/webhooks/twilio/staging/call-status",
+    connectivityUrl: "https://staging.example.test/api/webhooks/twilio/staging/connectivity",
+    tokenUrl: "https://staging.example.test/api/integrations/twilio/webhook-oauth/token",
+  });
 });
 
 test("OAuth token endpoint issues a short-lived audience-bound bearer token", () => {

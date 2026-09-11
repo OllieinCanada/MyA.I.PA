@@ -47,13 +47,20 @@ function normalizeHttpsUrl(value, label, { optional = false } = {}) {
   return parsed.toString().replace(/\/$/, "");
 }
 
+function getTwilioWebhookStagingUrls(env = process.env) {
+  const baseUrl = normalizeHttpsUrl(env.TWILIO_WEBHOOK_STAGING_BASE_URL, "TWILIO_WEBHOOK_STAGING_BASE_URL", { optional: true });
+  return {
+    baseUrl,
+    callbackUrl: baseUrl ? `${baseUrl}/api/webhooks/twilio/staging/call-status` : "",
+    connectivityUrl: baseUrl ? `${baseUrl}/api/webhooks/twilio/staging/connectivity` : "",
+    tokenUrl: baseUrl ? `${baseUrl}/api/integrations/twilio/webhook-oauth/token` : "",
+  };
+}
+
 function getTwilioWebhookOAuthConfig(env = process.env) {
   const stagingEnabled = enabled(env.TWILIO_WEBHOOK_STAGING_ENABLED);
   const oauthEnabled = enabled(env.TWILIO_WEBHOOK_OAUTH_ENABLED);
-  const baseUrl = normalizeHttpsUrl(env.TWILIO_WEBHOOK_STAGING_BASE_URL, "TWILIO_WEBHOOK_STAGING_BASE_URL", { optional: true });
-  const callbackUrl = baseUrl ? `${baseUrl}/api/webhooks/twilio/staging/call-status` : "";
-  const connectivityUrl = baseUrl ? `${baseUrl}/api/webhooks/twilio/staging/connectivity` : "";
-  const tokenUrl = baseUrl ? `${baseUrl}/api/integrations/twilio/webhook-oauth/token` : "";
+  const { baseUrl, callbackUrl, connectivityUrl, tokenUrl } = getTwilioWebhookStagingUrls(env);
   const downstreamUrl = normalizeHttpsUrl(env.TWILIO_WEBHOOK_STAGING_DOWNSTREAM_URL, "TWILIO_WEBHOOK_STAGING_DOWNSTREAM_URL", { optional: true });
   const clientId = String(env.TWILIO_WEBHOOK_OAUTH_CLIENT_ID || "").trim();
   const clientSecret = String(env.TWILIO_WEBHOOK_OAUTH_CLIENT_SECRET || "").trim();
@@ -275,6 +282,7 @@ module.exports = {
   DEFAULT_SCOPE,
   deliverTwilioStagingEvent,
   getTwilioWebhookOAuthConfig,
+  getTwilioWebhookStagingUrls,
   issueTwilioWebhookAccessToken,
   normalizeCallStatusEvent,
   processTwilioStagingCallStatus,

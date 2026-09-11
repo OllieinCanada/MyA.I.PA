@@ -127,6 +127,7 @@ const {
 const { buildTwilioMessageStatusIncident } = require("./twilioMessageStatus");
 const {
   getTwilioWebhookOAuthConfig,
+  getTwilioWebhookStagingUrls,
   issueTwilioWebhookAccessToken,
   processTwilioStagingCallStatus,
   verifyTwilioWebhookBearer,
@@ -10776,13 +10777,14 @@ app.post(
   express.urlencoded({ extended: false, limit: "8kb" }),
   asyncRoute(async (req, res) => {
     const config = getTwilioWebhookOAuthConfig(process.env);
+    const urls = getTwilioWebhookStagingUrls(process.env);
     if (!config.stagingEnabled || !config.oauthEnabled) {
       return res.status(404).json({ error: "The staging webhook endpoint is disabled." });
     }
     if (!verifyTwilioWebhookBearer(req.headers.authorization, process.env)) {
       return res.status(401).json({ error: "Invalid webhook access token." });
     }
-    if (!verifyTwilioWebhookRequest(req, process.env, { configuredUrl: config.connectivityUrl })) {
+    if (!verifyTwilioWebhookRequest(req, process.env, { configuredUrl: urls.connectivityUrl })) {
       return res.status(401).json({ error: "Invalid Twilio webhook signature." });
     }
     return res.status(204).end();
@@ -10795,13 +10797,14 @@ app.post(
   express.urlencoded({ extended: false, limit: "8kb" }),
   asyncRoute(async (req, res) => {
     const config = getTwilioWebhookOAuthConfig(process.env);
+    const urls = getTwilioWebhookStagingUrls(process.env);
     if (!config.stagingEnabled || !config.oauthEnabled) {
       return res.status(404).json({ error: "The staging webhook endpoint is disabled." });
     }
     if (!verifyTwilioWebhookBearer(req.headers.authorization, process.env)) {
       return res.status(401).json({ error: "Invalid webhook access token." });
     }
-    if (!verifyTwilioWebhookRequest(req, process.env, { configuredUrl: config.callbackUrl })) {
+    if (!verifyTwilioWebhookRequest(req, process.env, { configuredUrl: urls.callbackUrl })) {
       return res.status(401).json({ error: "Invalid Twilio webhook signature." });
     }
     const result = await processTwilioStagingCallStatus({
