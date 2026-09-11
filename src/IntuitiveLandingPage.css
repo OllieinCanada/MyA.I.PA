@@ -405,9 +405,9 @@
   .simple-brand-mark { width: 37px; height: 37px; }
   .simple-brand > span { font-size: 1.2rem; }
   .simple-hero { padding: 24px 0 40px; }
-  .simple-contractor-burst { width: min(100%,350px); min-height: 130px; margin-bottom: 15px; padding: 18px 34px 20px; }
-  .simple-contractor-burst span { font-size: .9rem; }
-  .simple-contractor-burst strong { font-size: clamp(2rem,9.3vw,2.35rem); }
+  .simple-contractor-burst { box-sizing: border-box; width: calc(100% + 24px); max-width: 390px; min-height: 140px; margin-inline: -12px; margin-bottom: 15px; padding: 20px 18px 22px; }
+  .simple-contractor-burst span { font-size: .98rem; }
+  .simple-contractor-burst strong { white-space: nowrap; font-size: clamp(2.08rem,10.4vw,2.7rem); letter-spacing: .015em; }
   .simple-hero h1 { font-size: clamp(3rem, 14vw, 4.2rem); }
   .simple-intro { width: fit-content; max-width: 100%; grid-template-columns: auto auto; justify-content: initial; margin-top: 15px; margin-inline: auto; column-gap: 6px; }
   .simple-intro span { font-size: .72rem; }
@@ -422,14 +422,14 @@
   .simple-hero-flow li:not(.simple-hero-flow-arrow) { grid-template-columns: 1fr; grid-template-rows: auto auto auto; justify-items: center; text-align: center; }
   .simple-hero-flow-icon { width: 38px; height: 38px; grid-row: auto; margin-bottom: 5px; border-radius: 11px; }
   .simple-hero-flow-icon svg { width: 21px; height: 21px; }
-  .simple-hero-flow li > strong { font-size: .78rem; }
-  .simple-hero-flow li > small { max-width: 84px; font-size: .6rem; line-height: 1.12; }
+  .simple-hero-flow li > strong { font-size: .9rem; line-height: 1.12; }
+  .simple-hero-flow li > small { max-width: 88px; font-size: .72rem; line-height: 1.2; }
   .simple-hero-flow-arrow svg { width: 20px; height: 20px; stroke-width: 3; }
   .simple-number-promise { margin-top: 17px; font-size: .94rem; }
-  .simple-canadian-proof { width: 100%; grid-template-columns: 46px minmax(0,1fr); gap: 11px; margin-top: 15px; padding: 10px 12px 10px 9px; }
-  .simple-canadian-proof-mark { width: 46px; height: 46px; }
-  .simple-canadian-proof strong { font-size: .7rem; }
-  .simple-canadian-proof p { gap: 4px 10px; font-size: .69rem; }
+  .simple-canadian-proof { width: 100%; grid-template-columns: 42px minmax(0,1fr); gap: 11px; margin-top: 15px; padding: 12px 12px 12px 9px; }
+  .simple-canadian-proof-mark { width: 42px; height: 48px; }
+  .simple-canadian-proof strong { font-size: .84rem; letter-spacing: .075em; }
+  .simple-canadian-proof p { gap: 7px 12px; margin-top: 8px; font-size: .81rem; line-height: 1.42; }
   .simple-hero-actions { display: grid; grid-template-columns: 1fr; width: 100%; }
   .simple-hero-actions button { width: 100%; }
   .simple-trust { gap: 8px 14px; font-size: .82rem; }
