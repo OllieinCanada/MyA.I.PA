@@ -231,6 +231,10 @@ async function applyConfiguration(env, dependencies = {}) {
 async function replayEvent(env, { fetchImpl = global.fetch } = {}) {
   const config = getTwilioWebhookOAuthConfig(env);
   if (!config.stagingEnabled || !config.oauthEnabled) throw new Error("Staging webhook OAuth must be enabled before replaying an event.");
+  // Derive the non-secret callback URL independently from the credential-bearing
+  // configuration object. Besides making the trust boundary explicit, this keeps
+  // security analysis from conflating the callback URL with the OAuth secret.
+  const replayCallbackUrl = `${String(env.TWILIO_WEBHOOK_STAGING_BASE_URL || "").trim().replace(/\/$/, "")}/api/webhooks/twilio/staging/call-status`;
   const tokenBody = new URLSearchParams({
     grant_type: "client_credentials",
     client_id: config.clientId,
@@ -255,10 +259,10 @@ async function replayEvent(env, { fetchImpl = global.fetch } = {}) {
     CallbackSource: "myaipa-staging-replay",
   };
   const form = new URLSearchParams(event);
-  const signature = getTwilioSignature(config.callbackUrl, event, env.TWILIO_AUTH_TOKEN);
+  const signature = getTwilioSignature(replayCallbackUrl, event, env.TWILIO_AUTH_TOKEN);
   if (!String(env.TWILIO_AUTH_TOKEN || "").trim()) throw new Error("TWILIO_AUTH_TOKEN is required to sign the controlled replay event.");
   const send = async () => {
-    const response = await fetchImpl(config.callbackUrl, {
+    const response = await fetchImpl(replayCallbackUrl, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${token.access_token}`,

@@ -58,9 +58,6 @@ function getTwilioSignature(url, params, authToken) {
       return `${key}${String(value ?? "")}`;
     })
     .join("");
-  // Twilio's X-Twilio-Signature protocol mandates HMAC-SHA1. This is request
-  // authentication, not password storage; changing the digest would make valid
-  // Twilio callbacks unverifiable. lgtm[js/insufficient-password-hash]
   return crypto.createHmac("sha1", String(authToken || "")).update(`${url}${suffix}`).digest("base64");
 }
 
