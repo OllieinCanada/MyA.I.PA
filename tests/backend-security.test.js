@@ -9,6 +9,15 @@ process.env.MAKE_SIGNUP_WEBHOOK_URL = "https://hook.us2.make.com/test-private-we
 process.env.TWILIO_ACCOUNT_SID = "ACtestaccountsid";
 process.env.TWILIO_AUTH_TOKEN = "test-twilio-auth-token";
 process.env.TWILIO_STATUS_CALLBACK_URL = "https://api.myaipa.ca/api/webhooks/twilio/message-status";
+process.env.TWILIO_WEBHOOK_STAGING_ENABLED = "true";
+process.env.TWILIO_WEBHOOK_OAUTH_ENABLED = "true";
+process.env.TWILIO_WEBHOOK_STAGING_BASE_URL = "https://staging-api.example.test";
+process.env.TWILIO_WEBHOOK_STAGING_DOWNSTREAM_URL = "https://staging-make.example.test/hooks/twilio";
+process.env.TWILIO_WEBHOOK_OAUTH_CLIENT_ID = "test-twilio-staging-client";
+process.env.TWILIO_WEBHOOK_OAUTH_CLIENT_SECRET = "test-client-secret-at-least-24-characters";
+process.env.TWILIO_WEBHOOK_OAUTH_SIGNING_SECRET = "test-signing-secret-at-least-32-characters-long";
+process.env.TWILIO_WEBHOOK_OAUTH_AUDIENCE = "https://staging-api.example.test/api/webhooks/twilio/staging/call-status";
+process.env.TWILIO_WEBHOOK_OAUTH_ISSUER = "myaipa-staging-test";
 process.env.SMS_SUPPRESSION_API_KEY = "test-suppression-api-key-42";
 process.env.ADMIN_PASSWORD = "test-admin-password-42";
 process.env.ADMIN_SESSION_SECRET = "test-admin-session-secret-42";
@@ -809,6 +818,43 @@ test("Twilio delivery callbacks verify against the exact configured status URL",
   });
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") || "", /xml/i);
+});
+
+test("Twilio staging OAuth issues a scoped token and requires both bearer and signature", async () => {
+  const tokenForm = new URLSearchParams({
+    grant_type: "client_credentials",
+    client_id: process.env.TWILIO_WEBHOOK_OAUTH_CLIENT_ID,
+    client_secret: process.env.TWILIO_WEBHOOK_OAUTH_CLIENT_SECRET,
+    scope: "twilio:webhooks",
+    audience: process.env.TWILIO_WEBHOOK_OAUTH_AUDIENCE,
+  });
+  const tokenResponse = await request("/api/integrations/twilio/webhook-oauth/token", {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: tokenForm.toString(),
+  });
+  assert.equal(tokenResponse.status, 200);
+  assert.match(tokenResponse.headers.get("cache-control") || "", /no-store/);
+  const token = await tokenResponse.json();
+  assert.equal(token.token_type, "Bearer");
+
+  const missingSignature = await request("/api/webhooks/twilio/staging/connectivity", {
+    method: "POST",
+    headers: { authorization: `Bearer ${token.access_token}` },
+  });
+  assert.equal(missingSignature.status, 401);
+
+  const configuredUrl = "https://staging-api.example.test/api/webhooks/twilio/staging/connectivity";
+  const valid = await request("/api/webhooks/twilio/staging/connectivity", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${token.access_token}`,
+      "content-type": "application/x-www-form-urlencoded",
+      "x-twilio-signature": getTwilioSignature(configuredUrl, {}, process.env.TWILIO_AUTH_TOKEN),
+    },
+    body: "",
+  });
+  assert.equal(valid.status, 204);
 });
 
 test("a signed STOP webhook records one central suppression preference", async () => {

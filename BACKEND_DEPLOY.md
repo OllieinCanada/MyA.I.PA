@@ -248,6 +248,47 @@ In Microsoft Entra, create a web app registration, allow organizational and pers
 
 OAuth access and refresh tokens are encrypted before database storage. Never put provider secrets in the frontend or commit them to Git.
 
+## Staging Twilio webhook OAuth canary
+
+The call-status OAuth canary is deliberately separate from production. Deploy
+this branch to a dedicated non-production Render service and configure the
+`TWILIO_WEBHOOK_*` values documented in `config/backend.env.example`. Use a
+staging-only Make/CRM webhook. Production keeps both feature flags set to
+`false` in `render.yaml`.
+
+The canary endpoint requires two independent checks: a short-lived OAuth 2.0
+Bearer token and Twilio's signed-request header. Accepted call-status events use
+the shared PostgreSQL `WebhookReplayClaim` table, so a retry with the same call
+SID, status, and sequence number cannot create a second downstream record.
+
+Preview the exact-match Rule and retry policy without changing Twilio:
+
+```text
+npm run configure:twilio-webhook-oauth:staging
+```
+
+After the staging service, OAuth secrets, staging Make/CRM destination, Twilio
+API key, and Twilio Auth Token are present, apply the provider configuration:
+
+```text
+npm run configure:twilio-webhook-oauth:staging -- --apply --confirm=CONFIGURE_STAGING_TWILIO_WEBHOOK_OAUTH
+```
+
+The installer creates or reuses a versioned OAuth AuthProfile and Setting,
+waits for Twilio's connectivity test to report `DELIVERED`, and then installs an
+exact-match Rule for only the staging call-status URL. It refuses to replace an
+existing Rule with different settings.
+
+Finally, send the same controlled event twice and require one downstream
+creation plus one duplicate acknowledgement:
+
+```text
+npm run replay:twilio-webhook-oauth:staging
+```
+
+The replay is an HTTPS callback simulation. It does not place a telephone call
+or create normal paid call traffic.
+
 ## Render Blueprint
 
 This repo includes `render.yaml`. In Render:
