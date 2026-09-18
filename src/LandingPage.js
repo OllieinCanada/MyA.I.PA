@@ -1458,7 +1458,7 @@ function ResponsiveProofHero({ goToSignup, playDemo, onHearLiveCall, audioPlayin
         <p className="landing-tablet-coverage">Keep your existing business number.</p>
 
         <div className="landing-tablet-trust" aria-label="Trial details">
-          {['14-Day Free Trial', 'No Credit Card', 'Cancel Anytime'].map((label) => <span key={label}><b aria-hidden="true">✓</b>{label}</span>)}
+          {['14-Day Free Trial', 'No Card Required for Trial', 'Cancel Anytime'].map((label) => <span key={label}><b aria-hidden="true">✓</b>{label}</span>)}
         </div>
       </section>
 
@@ -2685,7 +2685,7 @@ function VoicemailLossesArtboard({ onStart, onPlayDemo }) {
         <div className="mx-auto mt-5 flex max-w-[660px] flex-wrap items-center justify-center gap-x-8 gap-y-3 text-[0.98rem] font-semibold text-[#173763]">
           {[
             ["check", "14-day free trial"],
-            ["shield", "No credit card"],
+            ["shield", "No card required for trial"],
             ["lock", "Cancel anytime"],
           ].map(([icon, text], index) => (
             <div key={text} className="flex items-center gap-3">
@@ -10410,7 +10410,7 @@ function LandingPage() {
                 <MobileHeroCallProof onSampleCall={playDemo} onStartTrial={goToSignup} />
 
                 <div className="landing-mobile-proof-trust" aria-label="Trial details">
-                  {["14-Day Free Trial", "No Credit Card", "Cancel Anytime"].map((label) => (
+                  {["14-Day Free Trial", "No Card Required for Trial", "Cancel Anytime"].map((label) => (
                     <span key={label}><b aria-hidden="true">✓</b>{label}</span>
                   ))}
                 </div>
@@ -10463,7 +10463,7 @@ function LandingPage() {
                 <div className="landing-hero-trust mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-[0.68rem] font-black text-[#294967]">
                   {[
                     { desktop: "14-Day Free Trial", mobile: "14 days free" },
-                    { desktop: "No Credit Card", mobile: "No card" },
+                    { desktop: "No Card Required for Trial", mobile: "No card for trial" },
                     { desktop: "Cancel Anytime", mobile: "Cancel anytime" },
                   ].map((label) => (
                     <span key={label.desktop} className="inline-flex items-center gap-1.5">
@@ -10591,7 +10591,7 @@ function LandingPage() {
             </div>
 
             <div className="mt-5 grid grid-cols-3 gap-2 text-center text-[0.72rem] font-black text-[#294967] sm:text-[0.84rem]">
-              {["14-Day Free Trial", "No Credit Card", "Cancel Anytime"].map((label) => (
+              {["14-Day Free Trial", "No Card Required for Trial", "Cancel Anytime"].map((label) => (
                 <span key={label} className="inline-flex items-center justify-center gap-1.5">
                   <span className="text-[#17951f]" aria-hidden="true">✓</span>
                   {label}
@@ -10661,7 +10661,7 @@ function LandingPage() {
               </div>
 
               <div className="mt-4 rounded-[22px] border border-[#c78c52]/45 bg-[rgba(199,140,82,0.14)] px-4 py-3 text-sm font-black uppercase leading-6 tracking-[0.08em] text-[#ffe1bb] shadow-[0_20px_40px_-28px_rgba(199,140,82,0.55)] sm:hidden">
-                Free 14 day trial: No credit card and no obligations REQUIRED
+                14-day free trial: no credit card required for the trial
               </div>
 
               <svg
@@ -10693,7 +10693,7 @@ function LandingPage() {
               </svg>
 
               <div className="hidden rounded-[18px] border border-[#8b5cff]/50 bg-[#10091e]/85 px-4 py-3 text-sm font-black uppercase leading-6 tracking-[0.08em] text-[#eadcff] shadow-[0_20px_50px_-24px_rgba(139,92,246,0.65)] sm:absolute sm:left-[182px] sm:top-[84px] sm:block sm:max-w-[360px]">
-                  Free 14 day trial: No credit card and no obligations REQUIRED
+                  14-day free trial: no credit card required for the trial
               </div>
             </div>
 

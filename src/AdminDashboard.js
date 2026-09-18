@@ -1393,6 +1393,7 @@ function AttentionInbox({ inbox, busyAction, message, incidentId, onRefresh, onA
     retry_owner_text: "Retry owner text",
     sync_calls: "Resync calls",
     recover_signup: "Attempt safe recovery",
+    reject_signup: "Reject without provisioning",
     reopen_signup: "Reopen signup",
     resend_signup_verification: "Resend verification",
     acknowledge_runtime_incident: "Acknowledge incident",
@@ -1468,7 +1469,11 @@ function AttentionInbox({ inbox, busyAction, message, incidentId, onRefresh, onA
               <div className="admin-owner-action-buttons">
                 {(item.actions || []).map((action) => (
                   <button key={action} type="button" disabled={busyAction === `${item.id}:${action}`} onClick={() => onAction(item, action)}>
-                    {busyAction === `${item.id}:${action}` ? "Working…" : actionLabels[action] || action}
+                    {busyAction === `${item.id}:${action}`
+                      ? "Working…"
+                      : action === "recover_signup" && item.kind === "signup_review_required"
+                        ? "Approve and continue"
+                        : actionLabels[action] || action}
                   </button>
                 ))}
               </div>

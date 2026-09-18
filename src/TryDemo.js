@@ -226,7 +226,7 @@ export default function TryDemo() {
               <div>
                 <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-100">Like what you heard?</p>
                 <h2 className="mt-2 text-2xl font-black tracking-[-0.03em]">Set up your complete assistant free for 14 days.</h2>
-                <p className="mt-2 text-sm font-semibold text-blue-100">No credit card required. Cancel anytime.</p>
+                <p className="mt-2 text-sm font-semibold text-blue-100">No credit card required for the 14-day free trial. Cancel anytime.</p>
               </div>
               <a
                 href="./#/signup"

@@ -779,6 +779,38 @@ model PendingSignupVerification {
   @@index([expiresAt])
 }
 
+model SignupAttempt {
+  id                 String    @id @default(cuid())
+  eventKey           String    @unique
+  publicId           String    @unique
+  statusTokenHash    String
+  businessName       String
+  ownerEmail         String
+  ownerPhone         String?
+  payload            Json
+  status             String    @default("signup_received")
+  stage              String    @default("received")
+  detail             String?
+  reviewRequired     Boolean   @default(false)
+  reviewReasons      Json?
+  assignedPhone      String?
+  vapiAssistantId    String?
+  vapiPhoneNumberId  String?
+  lastErrorCode      String?
+  supportDescription String?
+  supportRequestedAt DateTime?
+  expiresAt          DateTime
+  approvedAt         DateTime?
+  rejectedAt         DateTime?
+  completedAt        DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@index([status, updatedAt])
+  @@index([ownerEmail, createdAt])
+  @@index([expiresAt])
+}
+
 model CustomerDashboardLoginCode {
   lookupHash String   @id
   codeHash   String

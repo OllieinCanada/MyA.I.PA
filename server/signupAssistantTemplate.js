@@ -39,6 +39,10 @@ function firstPresent(...values) {
   return values.find((value) => value !== undefined && value !== null) ?? "";
 }
 
+function firstBoolean(...values) {
+  return values.find((value) => typeof value === "boolean");
+}
+
 function resolveTemplateValues(normalizedPayload, options) {
   if (!normalizedPayload || typeof normalizedPayload !== "object" || Array.isArray(normalizedPayload)) {
     throw templateError("normalizedPayload must be an object.", "normalizedPayload");
@@ -51,6 +55,8 @@ function resolveTemplateValues(normalizedPayload, options) {
   const setupDetails = normalizedPayload.setupDetails || normalizedPayload.aiAssistant || {};
   const owner = normalizedPayload.owner || {};
   const pricing = normalizedPayload.pricing || setupDetails.pricing || {};
+  const offersServiceCalls = firstBoolean(pricing.offersServiceCalls, setupDetails.offersServiceCalls);
+  const repairPricingAllowed = offersServiceCalls !== false;
 
   return {
     resourceName: cleanInline(options.resourceName || "My AI PA Agent", "resourceName", 180, { required: true }),
@@ -93,31 +99,37 @@ function resolveTemplateValues(normalizedPayload, options) {
       "pricing.freeEstimateAnswer",
       120
     ),
-    signupRepairVisitFee: cleanInline(
+    offersServiceCalls,
+    pricingScript: cleanInline(
+      firstPresent(pricing.pricingScript, setupDetails.pricingScript),
+      "pricing.pricingScript",
+      4_000
+    ),
+    signupRepairVisitFee: repairPricingAllowed ? cleanInline(
       firstPresent(pricing.repairVisitFee, setupDetails.repairVisitFee),
       "pricing.repairVisitFee",
       80
-    ),
-    signupRepairHourlyRate: cleanInline(
+    ) : "",
+    signupRepairHourlyRate: repairPricingAllowed ? cleanInline(
       firstPresent(pricing.repairHourlyRate, setupDetails.repairHourlyRate),
       "pricing.repairHourlyRate",
       80
-    ),
+    ) : "",
     legacyFreeEstimateAnswer: cleanInline(
       normalizedPayload.freeEstimateAnswer,
       "freeEstimateAnswer",
       120
     ),
-    legacyRepairVisitFee: cleanInline(
+    legacyRepairVisitFee: repairPricingAllowed ? cleanInline(
       normalizedPayload.repairVisitFee,
       "repairVisitFee",
       80
-    ),
-    legacyRepairHourlyRate: cleanInline(
+    ) : "",
+    legacyRepairHourlyRate: repairPricingAllowed ? cleanInline(
       normalizedPayload.repairHourlyRate,
       "repairHourlyRate",
       80
-    ),
+    ) : "",
   };
 }
 
@@ -194,6 +206,7 @@ ${values.specializations.length ? `- Property types served: ${values.specializat
 ${values.signupFreeEstimateAnswer ? `- Signup installation estimate answer: ${values.signupFreeEstimateAnswer}` : ""}
 ${values.signupRepairVisitFee ? `- Signup repair visit fee: ${values.signupRepairVisitFee} dollars` : ""}
 ${values.signupRepairHourlyRate ? `- Signup repair hourly rate: ${values.signupRepairHourlyRate} dollars per hour` : ""}
+${typeof values.offersServiceCalls === "boolean" ? `- Offers service calls or repairs: ${values.offersServiceCalls ? "yes" : "no"}` : ""}
 ${values.legacyFreeEstimateAnswer ? `- Legacy fallback installation estimate answer: ${values.legacyFreeEstimateAnswer}` : ""}
 ${values.legacyRepairVisitFee ? `- Legacy fallback repair visit fee: ${values.legacyRepairVisitFee} dollars` : ""}
 ${values.legacyRepairHourlyRate ? `- Legacy fallback repair hourly rate: ${values.legacyRepairHourlyRate} dollars per hour` : ""}
@@ -223,10 +236,12 @@ If unclear, ask once: "Is that for a new installation, service, or repair?"
 
 ## Pricing
 Use the pricing from the signup page as the source of truth. The signup page generated this pricing script from the owner's inputs:
+${values.pricingScript ? `- Owner-approved pricing instruction: ${values.pricingScript}` : ""}
 - Installations: use the signup installation estimate answer. If it means yes/free estimate, ask: "Would you like us to come down and give you a free estimate?" If it means no or is blank, say the team will confirm estimate pricing before scheduling.
 - When an installation caller has already named the project, explicitly acknowledge that project and ask exactly one concrete missing intake field. Start with the caller's name when it is missing. Do not ask a vague "tell me more" question for a clearly identified project such as an EV charger installation.
-- Repairs or maintenance: use the signup repair visit fee and signup repair hourly rate exactly. Say: "For repairs and maintenance, it is [repair visit fee] dollars to come out and [repair hourly rate] dollars per hour after that, with parts not included in the final pricing."
-- Then ask exactly: "Would you like to continue?" Stop and wait for the caller's answer before collecting intake details. If they say yes, continue. If they say no, offer to take a message or end politely.
+- If offers service calls or repairs is no: do not quote a visit fee or hourly rate and do not imply the business offers that work. Offer to take a message for the team to confirm whether they can help.
+- If offers service calls or repairs is yes: use the signup repair visit fee and signup repair hourly rate exactly. Say: "For repairs and maintenance, it is [repair visit fee] dollars to come out and [repair hourly rate] dollars per hour after that, with parts not included in the final pricing."
+- Only after quoting an available service-call price, ask exactly: "Would you like to continue?" Stop and wait for the caller's answer before collecting intake details. If they say yes, continue. If they say no, offer to take a message or end politely.
 Use these signup pricing values first: installation estimate answer ${values.signupFreeEstimateAnswer}, repair visit fee ${values.signupRepairVisitFee}, repair hourly rate ${values.signupRepairHourlyRate}.
 Only if a signup pricing value is blank, use the matching legacy fallback value: installation estimate answer ${values.legacyFreeEstimateAnswer}, repair visit fee ${values.legacyRepairVisitFee}, repair hourly rate ${values.legacyRepairHourlyRate}.
 Never invent, round, or replace prices with defaults. If both the signup and fallback pricing values are blank, say: "Our team can confirm pricing when they call you back."

@@ -116,6 +116,7 @@
     "test:shipping:messages": "node scripts/run-message-routing-gate.js --count=50 --out=diagnostics/shipping-readiness/message-routing-gate.json",
     "test:shipping:signups": "node scripts/run-signup-review-gate.js --post --count=20 --confirm=RUN_REVIEW_SIGNUP_GATE",
     "test:shipping:signups:local": "node scripts/run-local-signup-simulation.js --count=20",
+    "test:pilot:signup:local": "node --test tests/signup-attempt-store.test.js tests/signup-status-api.test.js && cross-env CI=true react-scripts test --env=jsdom --watchAll=false --runInBand --runTestsByPath src/Signup.statusFlow.test.js src/Signup.intuitiveFlow.test.js",
     "test:shipping:local-preflight": "npm run test:shipping:signups:local && npm run test:stripe-trial:local && npm run test:audit:make-2026-readiness && npm run security:scan-secrets && npm run render:validate && npm run backend:check && npm run report:shipping-readiness",
     "test:shipping:signup:production-smoke": "node scripts/run-signup-review-gate.js --post --count=1 --api-base-url=https://api.myaipa.ca --confirm=RUN_REVIEW_SIGNUP_GATE",
     "test:shipping:calls": "node scripts/setup-vapi-evals.js --sync --run-safe --repeat=5 --minimum-pass-rate=0.95 --out=diagnostics/shipping-readiness/vapi-call-gate.json",
