@@ -59,9 +59,12 @@ describe("resumable signup status and pre-activation support", () => {
   test("refresh restores the original signup instead of opening another form", () => {
     window.sessionStorage.setItem(SESSION_KEY, JSON.stringify(pending()));
     act(() => root.render(<Signup />));
-    expect(container.textContent).toMatch(/Final safety checks are underway/);
+    expect(container.textContent).toMatch(/Number assignment is pending/);
     expect(container.textContent).not.toMatch(/Choose your trade/);
     expect(container.querySelector("form")).toBeNull();
+    expect(JSON.parse(window.sessionStorage.getItem(SESSION_KEY))).toEqual({
+      signupStatus: { id: "attempt_synthetic", token: "private-status-test-token" },
+    });
   });
 
   test("automatic polling updates readiness and stops at terminal completion", async () => {
@@ -73,9 +76,37 @@ describe("resumable signup status and pre-activation support", () => {
     expect(global.fetch.mock.calls[0][0]).not.toContain("private-status-test-token");
     await tick(5000);
     expect(container.querySelector('a[href="tel:+12895550123"]')).not.toBeNull();
-    expect(JSON.parse(window.sessionStorage.getItem(SESSION_KEY)).signupStatus.state).toBe("ready");
+    expect(JSON.parse(window.sessionStorage.getItem(SESSION_KEY))).toEqual({
+      signupStatus: { id: "attempt_synthetic", token: "private-status-test-token" },
+    });
+    expect(window.sessionStorage.getItem(SESSION_KEY)).not.toContain("+12895550123");
+    expect(window.sessionStorage.getItem(SESSION_KEY)).not.toContain("Synthetic Pilot Electric");
     await tick(60000);
     expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  test("refresh discards old private details and rechecks even a previously completed signup", async () => {
+    window.sessionStorage.setItem(SESSION_KEY, JSON.stringify({
+      ...pending(),
+      ownerEmail: "private-owner@example.invalid",
+      twilioPhoneNumber: "+12895550123",
+      subscriptionId: "private-subscription",
+      signupStatus: { ...pending().signupStatus, state: "ready", terminal: true },
+    }));
+    global.fetch.mockResolvedValue(response({ signup: {
+      state: "ready", terminal: true, assignedPhone: "+12895550456",
+      businessName: "Current Verified Business", message: "Ready for private testing.",
+    } }));
+    act(() => root.render(<Signup />));
+    expect(container.querySelector('a[href="tel:+12895550123"]')).toBeNull();
+    expect(window.sessionStorage.getItem(SESSION_KEY)).not.toContain("private-owner");
+    expect(window.sessionStorage.getItem(SESSION_KEY)).not.toContain("private-subscription");
+    await tick();
+    await tick(5000);
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(container.querySelector('a[href="tel:+12895550456"]')).not.toBeNull();
+    expect(container.textContent).toContain("Current Verified Business");
+    expect(window.sessionStorage.getItem(SESSION_KEY)).not.toContain("+12895550456");
   });
 
   test("an old assigned number is hidden until the saved signup actually passes", async () => {
@@ -86,8 +117,8 @@ describe("resumable signup status and pre-activation support", () => {
     await tick(5000);
     expect(container.querySelector('a[href="tel:+12895550123"]')).toBeNull();
     const saved = JSON.parse(window.sessionStorage.getItem(SESSION_KEY));
-    expect(saved.twilioPhoneNumber).toBe("");
-    expect(saved.phoneProvisioning.e164).toBe("");
+    expect(saved.twilioPhoneNumber).toBeUndefined();
+    expect(saved.phoneProvisioning).toBeUndefined();
     expect(container.textContent).toMatch(/Number setup needs a retry/);
   });
 

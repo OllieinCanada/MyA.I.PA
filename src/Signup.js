@@ -1449,7 +1449,18 @@ const SIGNUP_RESULT_SESSION_KEY = "myaipa_signup_result_v2";
 function readStoredSignupResult() {
   try {
     const parsed = JSON.parse(window.sessionStorage?.getItem(SIGNUP_RESULT_SESSION_KEY) || "null");
-    return parsed?.signupStatus?.id && parsed?.signupStatus?.token ? parsed : null;
+    if (!parsed?.signupStatus?.id || !parsed?.signupStatus?.token) return null;
+    const resumed = {
+      signupStatus: {
+        id: parsed.signupStatus.id,
+        token: parsed.signupStatus.token,
+        state: "processing",
+      },
+    };
+    // Migrate any earlier full response to the same minimal status pointer.
+    // Current phone, business, and billing details are fetched, never restored.
+    storeSignupResult(resumed);
+    return resumed;
   } catch (_error) {
     return null;
   }
@@ -1458,7 +1469,12 @@ function readStoredSignupResult() {
 function storeSignupResult(result) {
   try {
     if (result?.signupStatus?.id && result?.signupStatus?.token) {
-      window.sessionStorage?.setItem(SIGNUP_RESULT_SESSION_KEY, JSON.stringify(result));
+      window.sessionStorage?.setItem(SIGNUP_RESULT_SESSION_KEY, JSON.stringify({
+        signupStatus: {
+          id: result.signupStatus.id,
+          token: result.signupStatus.token,
+        },
+      }));
     }
   } catch (_error) {
     // The status session remains available in memory when storage is blocked.
@@ -1469,6 +1485,7 @@ function mergeSignupStatus(current, status) {
   const ready = status.state === "ready" && Boolean(status.assignedPhone);
   return {
     ...current,
+    businessName: status.businessName || current.businessName,
     reviewRequired: status.state === "final_checks",
     verificationRequired: status.state === "verification_required",
     emailVerificationRequired: status.state === "verification_required",
