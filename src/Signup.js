@@ -7,6 +7,7 @@ import "./components/CustomerSetupActions.css";
 import {
   AREA_GROUPS,
   AREA_OPTIONS,
+  API_BASE,
   ASSISTANT_AGENT,
   BUSINESS_SLIDE_TABS,
   CANADIAN_PROVINCES,
@@ -1443,13 +1444,72 @@ async function postSignupPayload(url, formData) {
   });
 }
 
-export function SignupSuccessPage({ result, onStartAnother, onRetry }) {
+const SIGNUP_RESULT_SESSION_KEY = "myaipa_signup_result_v2";
+
+function readStoredSignupResult() {
+  try {
+    const parsed = JSON.parse(window.sessionStorage?.getItem(SIGNUP_RESULT_SESSION_KEY) || "null");
+    if (!parsed?.signupStatus?.id || !parsed?.signupStatus?.token) return null;
+    const resumed = {
+      signupStatus: {
+        id: parsed.signupStatus.id,
+        token: parsed.signupStatus.token,
+        state: "processing",
+      },
+    };
+    // Migrate any earlier full response to the same minimal status pointer.
+    // Current phone, business, and billing details are fetched, never restored.
+    storeSignupResult(resumed);
+    return resumed;
+  } catch (_error) {
+    return null;
+  }
+}
+
+function storeSignupResult(result) {
+  try {
+    if (result?.signupStatus?.id && result?.signupStatus?.token) {
+      window.sessionStorage?.setItem(SIGNUP_RESULT_SESSION_KEY, JSON.stringify({
+        signupStatus: {
+          id: result.signupStatus.id,
+          token: result.signupStatus.token,
+        },
+      }));
+    }
+  } catch (_error) {
+    // The status session remains available in memory when storage is blocked.
+  }
+}
+
+function mergeSignupStatus(current, status) {
+  const ready = status.state === "ready" && Boolean(status.assignedPhone);
+  return {
+    ...current,
+    businessName: status.businessName || current.businessName,
+    reviewRequired: status.state === "final_checks",
+    verificationRequired: status.state === "verification_required",
+    emailVerificationRequired: status.state === "verification_required",
+    setupNeedsAttention: status.state === "needs_attention",
+    twilioPhoneNumber: ready ? status.assignedPhone : "",
+    phoneProvisioning: {
+      ...(current.phoneProvisioning || {}),
+      status: ready ? "ready" : status.state === "needs_attention" ? "failed" : "pending",
+      e164: ready ? status.assignedPhone : "",
+    },
+    signupStatus: { ...current.signupStatus, ...status },
+  };
+}
+
+export function SignupSuccessPage({ result: initialResult, onStartAnother }) {
+  const [result, setResult] = useState(initialResult);
   const businessName = result?.businessName || "your business";
   const provisioningStatus = String(result?.phoneProvisioning?.status || (result?.twilioPhoneNumber ? "ready" : "pending")).toLowerCase();
-  const assignedNumber = provisioningStatus === "ready" ? String(result?.twilioPhoneNumber || result?.phoneProvisioning?.e164 || "").trim() : "";
+  const statusAllowsNumber = !result?.signupStatus || result.signupStatus.state === "ready";
+  const assignedNumber = provisioningStatus === "ready" && statusAllowsNumber ? String(result?.twilioPhoneNumber || result?.phoneProvisioning?.e164 || "").trim() : "";
+  const signupClosed = result?.signupStatus?.state === "closed";
   const reviewRequired = Boolean(result?.reviewRequired);
   const verificationRequired = Boolean(result?.verificationRequired || result?.emailVerificationRequired);
-  const provisioningFailed = provisioningStatus === "failed";
+  const provisioningFailed = Boolean(result?.setupNeedsAttention || result?.signupStatus?.state === "needs_attention" || provisioningStatus === "failed");
   const subscriptionId = String(result?.subscriptionId || "").trim();
   const subscriptionStatus = String(result?.subscriptionStatus || "").trim().toLowerCase();
   const stripeTrialRejected = Boolean(result?.stripeTrialSkipped || result?.stripeTrialError);
@@ -1461,6 +1521,90 @@ export function SignupSuccessPage({ result, onStartAnother, onRetry }) {
   const [progress, setProgress] = useState(12);
   const [showNumber, setShowNumber] = useState(false);
   const [copiedNumber, setCopiedNumber] = useState(false);
+  const [statusBusy, setStatusBusy] = useState(false);
+  const [statusNotice, setStatusNotice] = useState("");
+  const [supportDescription, setSupportDescription] = useState("");
+  const [supportState, setSupportState] = useState("");
+  const statusRequestRef = useRef(false);
+
+  const refreshSignupStatus = async ({ quiet = false } = {}) => {
+    const access = result?.signupStatus;
+    if (!access?.id || !access?.token || statusRequestRef.current) return;
+    statusRequestRef.current = true;
+    if (!quiet) setStatusBusy(true);
+    try {
+      const response = await fetch(`${API_BASE}${access.pollUrl || `/api/signup/status/${encodeURIComponent(access.id)}`}`, {
+        headers: { "x-signup-status-token": access.token },
+        cache: "no-store",
+      });
+      const data = await parseApiResponse(response, "Signup status could not be checked");
+      const status = data?.signup || {};
+      const next = mergeSignupStatus(result, status);
+      setResult(next);
+      storeSignupResult(next);
+      setStatusNotice(status.message || "Setup status updated.");
+    } catch (requestError) {
+      if (!quiet) setStatusNotice(requestError?.message || "Status could not be checked. Your signup is still saved.");
+    } finally {
+      statusRequestRef.current = false;
+      if (!quiet) setStatusBusy(false);
+    }
+  };
+
+  const requestSignupSupport = async () => {
+    const access = result?.signupStatus;
+    if (!access?.id || !access?.token || supportDescription.trim().length < 8) return;
+    setSupportState("sending");
+    try {
+      const response = await fetch(`${API_BASE}${access.pollUrl || `/api/signup/status/${encodeURIComponent(access.id)}`}/support`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-signup-status-token": access.token },
+        body: JSON.stringify({ description: supportDescription }),
+      });
+      const data = await parseApiResponse(response, "Support request could not be sent");
+      setSupportState(data?.message || "Your support request was received.");
+    } catch (requestError) {
+      setSupportState(requestError?.message || "Support request could not be sent.");
+    }
+  };
+
+  useEffect(() => {
+    storeSignupResult(result);
+  }, [result]);
+
+  useEffect(() => {
+    const access = result?.signupStatus;
+    if (!access?.id || !access?.token || access?.terminal || assignedNumber) return undefined;
+    let cancelled = false;
+    const check = async () => {
+      if (statusRequestRef.current) return;
+      statusRequestRef.current = true;
+      try {
+        const response = await fetch(`${API_BASE}${access.pollUrl || `/api/signup/status/${encodeURIComponent(access.id)}`}`, {
+          headers: { "x-signup-status-token": access.token },
+          cache: "no-store",
+        });
+        const data = await parseApiResponse(response, "Signup status could not be checked");
+        if (cancelled || !data?.signup) return;
+        const status = data.signup;
+        setResult((current) => {
+          const next = mergeSignupStatus(current, status);
+          storeSignupResult(next);
+          return next;
+        });
+        setStatusNotice(status.message || "Setup status updated.");
+      } catch (_error) {
+        // Automatic checks stay quiet; the manual button shows actionable errors.
+      } finally {
+        statusRequestRef.current = false;
+      }
+    };
+    const timer = window.setInterval(check, 15000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [assignedNumber, result?.signupStatus?.id, result?.signupStatus?.terminal, result?.signupStatus?.token]);
 
   useEffect(() => {
     try {
@@ -1560,10 +1704,12 @@ export function SignupSuccessPage({ result, onStartAnother, onRetry }) {
               Thanks, {businessName}.
             </h1>
             <p className="mt-3 max-w-3xl text-base font-medium leading-7 text-blue-50 sm:text-xl sm:leading-8">
-              {verificationRequired
+              {signupClosed
+                ? result.signupStatus.message
+                : verificationRequired
                 ? "We sent a verification email. Click the link before your AI phone assistant setup continues."
                 : reviewRequired
-                ? "Your signup was received and our team was notified. We will review it and contact you before your assistant goes live."
+                ? "Your signup is saved. Final safety checks are underway, and this page checks automatically. You do not need to submit it again."
                 : assignedNumber
                   ? "Your AI phone assistant is ready for testing. Your forwarding number is below."
                   : provisioningFailed
@@ -1582,7 +1728,12 @@ export function SignupSuccessPage({ result, onStartAnother, onRetry }) {
                   </span>
                 ) : null}
               </div>
-              {verificationRequired ? (
+              {signupClosed ? (
+                <div className="mt-5">
+                  <p className="text-[1.28rem] font-black leading-tight tracking-[-0.03em] text-[#07142a]">{result.signupStatus.title || "This signup was closed."}</p>
+                  <p className="mt-3 text-sm font-semibold leading-6 text-slate-500">{result.signupStatus.message}</p>
+                </div>
+              ) : verificationRequired ? (
                 <div className="mt-5">
                   <p className="text-[1.28rem] font-black leading-tight tracking-[-0.03em] text-[#07142a]">
                     Check your email to continue.
@@ -1602,11 +1753,14 @@ export function SignupSuccessPage({ result, onStartAnother, onRetry }) {
               ) : reviewRequired ? (
                 <div className="mt-5">
                   <p className="text-[1.28rem] font-black leading-tight tracking-[-0.03em] text-[#07142a]">
-                    Signup received for review.
+                    Final safety checks are underway.
                   </p>
                   <p className="mt-3 text-sm font-semibold leading-6 text-slate-500">
-                    No number has been assigned yet. Our team has the request and will confirm the next step with you directly.
+                    No number has been assigned yet. We will continue this exact signup after approval; submitting it again is not necessary.
                   </p>
+                  <button type="button" onClick={() => refreshSignupStatus()} disabled={statusBusy} className="mt-5 inline-flex min-h-[52px] items-center justify-center rounded-xl border border-blue-200 bg-white px-5 text-base font-black text-blue-700 transition hover:border-blue-400 hover:bg-blue-50 disabled:opacity-60">
+                    {statusBusy ? "Checking…" : "Check setup status"}
+                  </button>
                 </div>
               ) : showNumber && assignedNumber ? (
                 <div className="mt-5">
@@ -1643,8 +1797,8 @@ export function SignupSuccessPage({ result, onStartAnother, onRetry }) {
                   <p className="mt-3 text-sm font-semibold leading-6 text-slate-500">
                     {result?.phoneProvisioning?.message || "The provider did not return a verified Canadian, voice-ready number. Nothing has been presented as ready."}
                   </p>
-                  <button type="button" onClick={onRetry} className="mt-5 inline-flex min-h-[52px] items-center justify-center rounded-xl bg-[#07142a] px-5 text-base font-black text-white transition hover:bg-blue-800">
-                    Retry phone setup
+                  <button type="button" onClick={() => refreshSignupStatus()} disabled={statusBusy} className="mt-5 inline-flex min-h-[52px] items-center justify-center rounded-xl bg-[#07142a] px-5 text-base font-black text-white transition hover:bg-blue-800 disabled:opacity-60">
+                    {statusBusy ? "Checking…" : "Check setup status"}
                   </button>
                 </div>
               ) : numberMissing ? (
@@ -1655,8 +1809,8 @@ export function SignupSuccessPage({ result, onStartAnother, onRetry }) {
                   <p className="mt-3 text-sm font-semibold leading-6 text-slate-500">
                     Setup is not marked ready and Call/Copy stay disabled until one verified Canadian number is returned.
                   </p>
-                  <button type="button" onClick={onRetry} className="mt-5 inline-flex min-h-[52px] items-center justify-center rounded-xl border border-blue-200 bg-white px-5 text-base font-black text-blue-700 transition hover:border-blue-400 hover:bg-blue-50">
-                    Retry phone setup
+                  <button type="button" onClick={() => refreshSignupStatus()} disabled={statusBusy} className="mt-5 inline-flex min-h-[52px] items-center justify-center rounded-xl border border-blue-200 bg-white px-5 text-base font-black text-blue-700 transition hover:border-blue-400 hover:bg-blue-50 disabled:opacity-60">
+                    {statusBusy ? "Checking…" : "Check setup status"}
                   </button>
                 </div>
               ) : (
@@ -1682,6 +1836,7 @@ export function SignupSuccessPage({ result, onStartAnother, onRetry }) {
               <p className="mt-3 text-base font-medium leading-7 text-slate-600">
                 This is the forwarding destination for missed calls. Keep your current business number and forward calls here when you are ready to test live.
               </p>
+              {statusNotice ? <p className="mt-3 rounded-xl bg-blue-50 px-4 py-3 text-sm font-bold leading-6 text-blue-900" role="status">{statusNotice}</p> : null}
             </div>
 
             <div className="rounded-3xl border border-slate-200 bg-white p-5 sm:p-6">
@@ -1744,6 +1899,23 @@ export function SignupSuccessPage({ result, onStartAnother, onRetry }) {
               ) : null}
               <CustomerHelpActions compact />
             </div>
+            {!assignedNumber && result?.signupStatus?.id ? (
+              <section className="rounded-3xl border border-amber-200 bg-amber-50 p-5 sm:p-6 lg:col-span-2" aria-label="Signup support">
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-amber-700">Need help before activation?</p>
+                <h2 className="mt-1 text-xl font-black text-slate-950">Tell us once. Your signup reference is attached automatically.</h2>
+                <textarea
+                  aria-label="Describe your signup problem"
+                  value={supportDescription}
+                  onChange={(event) => setSupportDescription(event.target.value.slice(0, 1200))}
+                  placeholder="Example: I completed signup, but I am not sure what happens next."
+                  className="mt-4 min-h-[110px] w-full rounded-2xl border border-amber-200 bg-white p-4 text-base font-semibold text-slate-900 outline-none focus:border-amber-500 focus:ring-4 focus:ring-amber-100"
+                />
+                <button type="button" onClick={requestSignupSupport} disabled={supportDescription.trim().length < 8 || supportState === "sending"} className="mt-3 inline-flex min-h-[48px] items-center justify-center rounded-xl bg-[#07142a] px-5 text-base font-black text-white disabled:opacity-50">
+                  {supportState === "sending" ? "Sending…" : "Send signup support request"}
+                </button>
+                {supportState && supportState !== "sending" ? <p className="mt-3 text-sm font-bold text-slate-700" role="status">{supportState}</p> : null}
+              </section>
+            ) : null}
           </div>
 
           <div className="border-t border-slate-100 bg-slate-50/70 px-5 py-5 sm:px-8">
@@ -1786,7 +1958,7 @@ export default function Signup() {
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [signupResult, setSignupResult] = useState(null);
+  const [signupResult, setSignupResult] = useState(() => readStoredSignupResult());
   const [botTrap, setBotTrap] = useState("");
   const [captchaToken, setCaptchaToken] = useState("");
   const [businessStepAttempted, setBusinessStepAttempted] = useState(false);
@@ -2014,6 +2186,7 @@ export default function Signup() {
     setError("");
     setBusy(false);
     setSignupResult(null);
+    try { window.sessionStorage?.removeItem(SIGNUP_RESULT_SESSION_KEY); } catch (_error) { /* ignored */ }
     setBotTrap("");
     setCaptchaToken("");
     setBusinessStepAttempted(false);
@@ -2022,15 +2195,6 @@ export default function Signup() {
     signupStartedAtRef.current = Date.now();
     setDetails({ ...DEFAULT_DETAILS });
     setPricing({ ...DEFAULT_PRICING });
-    window.scrollTo?.({ top: 0, behavior: "smooth" });
-  };
-
-  const retryPhoneSetup = () => {
-    setSignupResult(null);
-    setCurrentStep(3);
-    setStatus("");
-    setError("");
-    setBusy(false);
     window.scrollTo?.({ top: 0, behavior: "smooth" });
   };
 
@@ -2206,7 +2370,7 @@ export default function Signup() {
         throw new Error(data?.error || "Signup could not be completed right now. Please try again later.");
       }
 
-      setSignupResult({
+      const completedSignup = {
         ...formData,
         ...data,
         businessName: data.businessName || formData.businessName || formData.businessProfile?.businessName || "",
@@ -2215,7 +2379,9 @@ export default function Signup() {
         ownerPhone: data.ownerPhone || formData.ownerPhone || formData.phone || formData.setupDetails?.ownerPhone || "",
         twilioPhoneNumber: getTwilioPhoneNumber(data) || data.twilioPhoneNumber || "",
         trialDays: 14,
-      });
+      };
+      setSignupResult(completedSignup);
+      storeSignupResult(completedSignup);
       setBusy(false);
       window.scrollTo?.({ top: 0, behavior: "smooth" });
     } catch (submitError) {
@@ -2225,7 +2391,7 @@ export default function Signup() {
   };
 
   if (signupResult) {
-    return <SignupSuccessPage result={signupResult} onStartAnother={resetSignup} onRetry={retryPhoneSetup} />;
+    return <SignupSuccessPage result={signupResult} onStartAnother={resetSignup} />;
   }
 
   return (
@@ -2967,18 +3133,18 @@ export default function Signup() {
       <form onSubmit={submitSignup} className="signup-mobile-flow mx-auto flex min-h-screen w-full max-w-[1680px] flex-col px-3 pb-5 pt-1 sm:px-6 lg:px-8">
         <div className="signup-home-row">
           <a href="#/" aria-label="Return to My AI PA home"><BrandLogo onLight /></a>
-          <span>Free for 14 days · No credit card required · Cancel anytime</span>
+          <span>14-day free trial · No credit card required for the trial · Cancel anytime</span>
         </div>
         <section className="signup-page-header shrink-0 text-center">
           <h1 className="text-[clamp(1.65rem,3.8vw,2.55rem)] font-black leading-tight tracking-[-0.04em] text-slate-950">
             Create your AI phone assistant
           </h1>
           <p className="mt-0.5 text-base font-medium text-slate-600 sm:text-lg">Set up your business assistant in minutes.</p>
-          <div className="signup-mobile-offer">Free for 14 days · No credit card required · Cancel anytime</div>
+          <div className="signup-mobile-offer">14-day free trial · No credit card required for the trial · Cancel anytime</div>
 
           <div className="signup-page-benefits mt-2 flex flex-wrap justify-center gap-x-8 gap-y-1.5">
             <Benefit icon="shield">Free for 14 days</Benefit>
-            <Benefit icon="card">No credit card required</Benefit>
+            <Benefit icon="card">No credit card required for the trial</Benefit>
             <Benefit icon="refresh">Cancel anytime</Benefit>
           </div>
 
@@ -3617,7 +3783,7 @@ export default function Signup() {
             </p>
           ) : null}
           {currentStep === 3 ? (
-            <p className="signup-mobile-disabled-reason">Free for 14 days · No credit card required · Cancel anytime</p>
+            <p className="signup-mobile-disabled-reason">14-day free trial · No credit card required for the trial · Cancel anytime</p>
           ) : null}
         </div>
 

@@ -131,6 +131,23 @@ test("uses a general intake playbook for non-contractor businesses", () => {
   assert.match(prompt, /call endCall/i);
 });
 
+test("does not quote service or repair prices when the business does not offer service calls", () => {
+  const config = buildSignupAssistantConfig({
+    ...normalizedPayload,
+    pricing: {
+      offersServiceCalls: false,
+      repairVisitFee: "89",
+      repairHourlyRate: "129",
+    },
+  }, { assignedPhone: "+12895550123" });
+  const prompt = config.model.messages[0].content;
+
+  assert.match(prompt, /Offers service calls or repairs: no/i);
+  assert.match(prompt, /If offers service calls or repairs is no/i);
+  assert.match(prompt, /do not quote a visit fee or hourly rate and do not imply the business offers that work/i);
+  assert.doesNotMatch(prompt, /89 dollars|129 dollars/);
+});
+
 test("rejects missing required runtime values", () => {
   const cases = [
     [{ ...normalizedPayload, businessProfile: {} }, { assignedPhone: "+12895550123" }, "businessProfile.businessName"],

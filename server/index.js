@@ -14,6 +14,7 @@ const { Readable } = require("stream");
 const Stripe = require("stripe");
 const { prisma } = require("./prisma");
 const { createPendingSignupVerificationStore, tokenHash: hashPendingSignupToken } = require("./pendingSignupVerifications");
+const { createSignupAttemptStore } = require("./signupAttemptStore");
 const { buildBackendRootPage } = require("./backendRootPage");
 const {
   createSandboxScenarioToken,
@@ -386,6 +387,21 @@ const SIGNUP_VERIFICATION_TTL_MS = parsePositiveInt(process.env.SIGNUP_VERIFICAT
 const pendingSignupVerifications = createPendingSignupVerificationStore({
   prisma,
   minimumTtlMs: SIGNUP_VERIFICATION_TTL_MS,
+});
+const SIGNUP_STATUS_SECRET = String(
+  process.env.SIGNUP_STATUS_SECRET
+    || process.env.PROVISIONING_SIGNING_SECRET
+    || (process.env.NODE_ENV === "production" ? "" : "local-development-signup-status-secret-v1")
+).trim();
+const signupAttempts = SIGNUP_STATUS_SECRET
+  ? createSignupAttemptStore({ prisma, secret: SIGNUP_STATUS_SECRET })
+  : null;
+const signupStatusProcessRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many signup status requests. Wait a few minutes and try again." },
 });
 const twilioWebhookOAuthTokenRateLimiter = rateLimit({
   windowMs: 60 * 1000,
@@ -5243,6 +5259,54 @@ function upsertSignupDashboardFromPayload(payload, extra = {}) {
   });
 }
 
+function buildSignupStatusResponse(registration) {
+  if (!registration?.access?.id || !registration?.access?.token) return null;
+  return {
+    id: registration.access.id,
+    token: registration.access.token,
+    pollUrl: `/api/signup/status/${encodeURIComponent(registration.access.id)}`,
+    state: registration.public?.state || "processing",
+  };
+}
+
+async function registerSignupAttempt(payload, extra = {}) {
+  if (!signupAttempts) {
+    if (process.env.NODE_ENV === "production") {
+      const error = new Error("Signup status tracking is not configured.");
+      error.statusCode = 503;
+      error.code = "SIGNUP_STATUS_NOT_CONFIGURED";
+      throw error;
+    }
+    return null;
+  }
+  const business = payload?.business || payload?.businessProfile || {};
+  const owner = payload?.owner || payload?.setupDetails || {};
+  return signupAttempts.register({
+    eventKey: buildMakeSignupEventKey(payload),
+    payload,
+    businessName: business.name || business.businessName,
+    ownerEmail: owner.email || owner.ownerEmail,
+    ownerPhone: owner.phone || owner.ownerPhone,
+    status: extra.status || "signup_received",
+    stage: extra.stage || "received",
+    reviewRequired: Boolean(extra.reviewRequired || payload?.security?.reviewRequired),
+    reviewReasons: extra.reviewReasons || payload?.security?.reviewReasons || [],
+  });
+}
+
+async function updateSignupAttempt(payload, data = {}) {
+  if (!signupAttempts || !payload) return null;
+  try {
+    return await signupAttempts.updateIfPresent(buildMakeSignupEventKey(payload), data);
+  } catch (error) {
+    console.error("[signup:status] durable status update failed", {
+      code: String(error?.code || "SIGNUP_STATUS_UPDATE_FAILED").slice(0, 80),
+      attemptHash: buildMakeSignupEventKey(payload).slice(-10),
+    });
+    return null;
+  }
+}
+
 async function prepareForwardingSetupForProvisionedSignup(payload, signupRecord, assignedPhone) {
   const business = await resolveBusinessForSignup({ signup: signupRecord, db: prisma });
   const setup = await initializeForwardingSetup({
@@ -6068,6 +6132,51 @@ async function inspectSignupRecoveryState(signup) {
   };
 }
 
+async function rejectSignupByOperationalTarget(targetId) {
+  const signup = findSignupByOperationalTarget(targetId);
+  if (!signup) {
+    const error = new Error("The signup alert no longer matches an active signup record.");
+    error.statusCode = 404;
+    throw error;
+  }
+  if (signupHasProvisioningOrBillingResources(signup)) {
+    const error = new Error("This signup already has provisioned resources and cannot be rejected from the pilot queue.");
+    error.statusCode = 409;
+    error.code = "SIGNUP_REJECTION_REQUIRES_RESOURCE_REVIEW";
+    throw error;
+  }
+  const pendingStore = await readPendingSignupStore();
+  const pendingSignup = findPendingSignupForDashboardRecord(signup, pendingStore);
+  if (pendingSignup?.[0]) await pendingSignupVerifications.removeHash(pendingSignup[0]);
+  const rejectedAt = new Date();
+  const updated = upsertSignupDashboardRecord({
+    ...signup,
+    previousStatus: signup.status || "review_required",
+    status: "rejected",
+    reviewRequired: false,
+    rejectedAt: rejectedAt.toISOString(),
+    rejectedReason: "Pilot signup was deliberately closed by an administrator.",
+  });
+  if (pendingSignup?.[1]?.payload) {
+    await updateSignupAttempt(pendingSignup[1].payload, {
+      status: "rejected",
+      stage: "closed",
+      detail: "Pilot signup closed without provisioning",
+      reviewRequired: false,
+      rejectedAt,
+    });
+  } else if (signupAttempts && signup.signupAttemptId) {
+    await signupAttempts.updateIfPresent(signup.signupAttemptId, {
+      status: "rejected",
+      stage: "closed",
+      detail: "Pilot signup closed without provisioning",
+      reviewRequired: false,
+      rejectedAt,
+    });
+  }
+  return { ok: true, action: "signup_rejected", status: updated.status };
+}
+
 async function recoverSignupByOperationalTarget(targetId) {
   const signup = findSignupByOperationalTarget(targetId);
   if (!signup) {
@@ -6092,6 +6201,13 @@ async function recoverSignupByOperationalTarget(targetId) {
   const pendingSignup = findPendingSignupForDashboardRecord(signup, pendingStore);
   if (pendingSignup?.[1]?.payload) {
     const [, pending] = pendingSignup;
+    await updateSignupAttempt(pending.payload, {
+      status: "provisioning",
+      stage: "provisioning",
+      detail: "Approved; creating and verifying the assistant",
+      approvedAt: new Date(),
+      reviewRequired: false,
+    });
     const makeResult = await sendMakeSignupCompleted(pending.payload);
     const makeData = makeResult.data || {};
     const makeAssessment = classifyMakeSignupResponse(makeResult.body, makeData);
@@ -6106,6 +6222,13 @@ async function recoverSignupByOperationalTarget(targetId) {
         makeEventKey: makeResult.eventKey,
         makeRequestId: makeResult.requestId,
         makeDurationMs: makeResult.durationMs,
+      });
+      await updateSignupAttempt(pending.payload, {
+        status: "setup_error",
+        stage: "needs_attention",
+        detail: "The guarded retry returned an incomplete result",
+        lastErrorCode: makeAssessment.providerCode || makeAssessment.code || "MAKE_SIGNUP_INCOMPLETE",
+        reviewRequired: true,
       });
       const error = new Error("The Make.com handoff still did not complete.");
       error.statusCode = 502;
@@ -6125,6 +6248,13 @@ async function recoverSignupByOperationalTarget(targetId) {
         makeDurationMs: makeResult.durationMs,
         phoneProvisioningStatus: phoneProvisioning.status,
         phoneProvisioningCode: phoneProvisioning.code,
+      });
+      await updateSignupAttempt(pending.payload, {
+        status: "setup_error",
+        stage: "needs_attention",
+        detail: "The assigned phone number did not pass verification",
+        lastErrorCode: phoneProvisioning.code || "PHONE_PROVISIONING_NOT_READY",
+        reviewRequired: true,
       });
       const error = new Error("The provisioning response did not contain a verified, call-ready Canadian number.");
       error.statusCode = 502;
@@ -6148,6 +6278,18 @@ async function recoverSignupByOperationalTarget(targetId) {
       phoneProvisioningStatus: phoneProvisioning.status,
       phoneProvisioningCode: phoneProvisioning.code,
       provisioningRetriedAt: new Date().toISOString(),
+    });
+    await updateSignupAttempt(pending.payload, {
+      status: "setup_ready",
+      stage: "ready",
+      detail: "Assistant and phone routes verified",
+      assignedPhone: twilioPhoneNumber,
+      vapiPhoneNumberId: makeAssessment.vapiPhoneNumberId || null,
+      vapiAssistantId: makeAssessment.vapiAssistantId || null,
+      lastErrorCode: null,
+      reviewRequired: false,
+      reviewReasons: [],
+      completedAt: new Date(),
     });
     const consumed = consumePendingSignupProvisioningAttempts(pendingStore, pending.payload);
     if (consumed.consumed) {
@@ -12128,6 +12270,49 @@ app.post(
 );
 
 app.post(
+  "/api/signup/status/:attemptId/support",
+  signupStatusProcessRateLimiter,
+  enforcePublicRouteRateLimit("signup-status-support", 8),
+  asyncRoute(async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    if (!signupAttempts) return res.status(503).json({ error: "Signup status is temporarily unavailable." });
+    const token = String(req.headers["x-signup-status-token"] || "").trim();
+    const attempt = await signupAttempts.authenticate(req.params.attemptId, token);
+    if (!attempt) return res.status(401).json({ error: "This signup status session is invalid or expired." });
+    const updated = await signupAttempts.requestSupport(attempt, req.body?.description);
+    const signup = listSignupDashboardRecords().find((item) => item.signupAttemptId === attempt.eventKey) || null;
+    if (signup) {
+      upsertSignupDashboardRecord({
+        ...signup,
+        pilotSupportRequestedAt: new Date().toISOString(),
+        pilotSupportDescription: String(req.body?.description || "").replace(/\s+/g, " ").trim().slice(0, 1200),
+      });
+    }
+    await safelyNotifySignupOperations(attempt.payload, {
+      state: "support_requested",
+      detail: "Customer requested help before setup completed",
+      record: signup,
+      reasonCode: "SIGNUP_SUPPORT_REQUESTED",
+    });
+    res.status(202).json({ ok: true, message: "Your support request was received.", signup: signupAttempts.publicAttempt(updated) });
+  })
+);
+
+app.get(
+  "/api/signup/status/:attemptId",
+  signupStatusProcessRateLimiter,
+  enforcePublicRouteRateLimit("signup-status", 120),
+  asyncRoute(async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    if (!signupAttempts) return res.status(503).json({ error: "Signup status is temporarily unavailable." });
+    const token = String(req.headers["x-signup-status-token"] || "").trim();
+    const attempt = await signupAttempts.authenticate(req.params.attemptId, token);
+    if (!attempt) return res.status(401).json({ error: "This signup status session is invalid or expired." });
+    res.json({ ok: true, signup: signupAttempts.publicAttempt(attempt) });
+  })
+);
+
+app.post(
   "/api/integrations/signup-complete",
   asyncRoute(async (req, res) => {
     const body = req.body || {};
@@ -12141,6 +12326,9 @@ app.post(
     const ownerPhone = String(setupDetails.ownerPhone || "").trim();
     const pricingDetails = body.pricing && typeof body.pricing === "object" ? body.pricing : setupDetails.pricing || {};
     const installationFreeEstimate = pricingDetails.installationFreeEstimate !== false;
+    const offersServiceCalls = typeof pricingDetails.offersServiceCalls === "boolean"
+      ? pricingDetails.offersServiceCalls
+      : Boolean(pricingDetails.repairVisitFee || pricingDetails.repairHourlyRate);
     const repairVisitFee = String(pricingDetails.repairVisitFee || "").trim();
     const repairHourlyRate = String(pricingDetails.repairHourlyRate || "").trim();
     const freeEstimateAnswer = String(pricingDetails.freeEstimateAnswer || (installationFreeEstimate ? "yes we do" : "no we don't")).trim();
@@ -12235,6 +12423,7 @@ app.post(
       },
       pricing: {
         installationFreeEstimate,
+        offersServiceCalls,
         freeEstimateAnswer,
         repairVisitFee,
         repairHourlyRate,
@@ -12263,6 +12452,7 @@ app.post(
         emergencyRules: String(setupDetails.emergencyRules || "").trim(),
         pricingScript,
         freeEstimateAnswer,
+        offersServiceCalls,
         repairVisitFee,
         repairHourlyRate,
         faq: String(setupDetails.faq || "").trim(),
@@ -12272,8 +12462,12 @@ app.post(
         doNotHandle: String(setupDetails.doNotHandle || "").trim(),
       },
     });
+    // Carry one server-derived identity through raw form, verification, Make,
+    // and dashboard payloads. Their shapes change, but the attempt must not.
+    payload.signupId = buildMakeSignupEventKey(payload);
     const makePayload = compactObject({
       ...body,
+      signupId: payload.signupId,
       event: payload.event,
       submittedAt: payload.submittedAt,
       source: payload.source,
@@ -12283,6 +12477,13 @@ app.post(
       },
       verification: payload.verification,
     });
+    const attemptRegistration = await registerSignupAttempt(makePayload, {
+      status: "signup_received",
+      stage: "received",
+      reviewRequired: securityDecision.reviewRequired,
+      reviewReasons: securityDecision.reviewReasons,
+    });
+    const signupStatus = buildSignupStatusResponse(attemptRegistration);
 
     const receivedRecord = upsertSignupDashboardFromPayload(payload, {
       status: "signup_received",
@@ -12318,6 +12519,12 @@ app.post(
         reviewRequired: securityDecision.reviewRequired,
         reviewReasons: securityDecision.reviewReasons,
       });
+      await updateSignupAttempt(makePayload, {
+        status: "pending_email_verification",
+        stage: "verification",
+        detail: "Waiting for contact verification",
+        reviewRequired: securityDecision.reviewRequired,
+      });
       await safelyNotifySignupOperations(payload, {
         state: "verification_sent",
         detail: "Email verification sent",
@@ -12332,6 +12539,7 @@ app.post(
         emailSent: Boolean(emailResult.sent),
         devVerificationUrl: emailResult.devVerificationUrl,
         businessName,
+        signupStatus,
         message: "Signup received. Verify your email before setup continues.",
       });
     }
@@ -12356,6 +12564,13 @@ app.post(
         reviewRequired: true,
         reviewReasons: securityDecision.reviewReasons,
       });
+      await updateSignupAttempt(makePayload, {
+        status: "review_required",
+        stage: "final_checks",
+        detail: "Waiting for guarded pilot approval",
+        reviewRequired: true,
+        reviewReasons: securityDecision.reviewReasons,
+      });
       await safelyNotifySignupOperations(payload, {
         state: "review_required",
         detail: "Signup held before provisioning",
@@ -12366,10 +12581,17 @@ app.post(
         ok: true,
         reviewRequired: true,
         businessName,
-        message: "Signup received for review.",
+        signupStatus,
+        message: "Signup received. Final safety checks are underway; you do not need to submit it again.",
       });
     }
 
+    await updateSignupAttempt(makePayload, {
+      status: "provisioning",
+      stage: "provisioning",
+      detail: "Creating and verifying the assistant",
+      reviewRequired: false,
+    });
     let makeResult;
     try {
       makeResult = await sendMakeSignupCompleted(makePayload);
@@ -12390,7 +12612,32 @@ app.post(
       if (telegramAlert?.sent || telegramAlert?.queued || telegramAlert?.duplicate || telegramAlert?.reason === "already_alerted") {
         error.telegramIncidentHandled = true;
       }
-      throw error;
+      await createPendingSignupVerification({
+        payload: makePayload,
+        ownerEmail,
+        businessName,
+        reviewReasons: [error?.code || "provisioning_unreachable"],
+        ipHash: hashKey(securityDecision.ip),
+        purpose: "manual_review_recovery",
+        ttlMs: 7 * 24 * 60 * 60 * 1000,
+      });
+      await updateSignupAttempt(makePayload, {
+        status: "setup_error",
+        stage: "needs_attention",
+        detail: "Provisioning needs a guarded retry",
+        lastErrorCode: error?.code || "MAKE_SIGNUP_FAILED",
+        reviewRequired: true,
+        reviewReasons: [error?.code || "provisioning_unreachable"],
+      });
+      return res.status(202).json({
+        success: true,
+        ok: true,
+        reviewRequired: true,
+        setupNeedsAttention: true,
+        businessName,
+        signupStatus,
+        message: "We found a setup issue and saved your progress. Our team was notified; do not submit the signup again.",
+      });
     }
     const makeData = makeResult.data || {};
     const makeAssessment = classifyMakeSignupResponse(makeResult.body, makeData);
@@ -12411,7 +12658,32 @@ app.post(
         record: incompleteRecord,
         makeAssessment,
       });
-      return res.status(502).json({ error: "Provisioning did not complete. My AI PA has recorded the exact safe provider diagnostics for review." });
+      await createPendingSignupVerification({
+        payload: makePayload,
+        ownerEmail,
+        businessName,
+        reviewReasons: [makeAssessment.providerCode || makeAssessment.code || "provisioning_incomplete"],
+        ipHash: hashKey(securityDecision.ip),
+        purpose: "manual_review_recovery",
+        ttlMs: 7 * 24 * 60 * 60 * 1000,
+      });
+      await updateSignupAttempt(makePayload, {
+        status: "setup_error",
+        stage: "needs_attention",
+        detail: "Provisioning returned an incomplete result",
+        lastErrorCode: makeAssessment.providerCode || makeAssessment.code || "MAKE_SIGNUP_INCOMPLETE",
+        reviewRequired: true,
+        reviewReasons: [makeAssessment.providerCode || makeAssessment.code || "provisioning_incomplete"],
+      });
+      return res.status(202).json({
+        success: true,
+        ok: true,
+        reviewRequired: true,
+        setupNeedsAttention: true,
+        businessName,
+        signupStatus,
+        message: "We saved your signup and found a setup issue. Our team was notified; do not submit it again.",
+      });
     }
 
     const phoneProvisioning = await inspectSignupPhoneProvisioning(makeData, makeResult.body);
@@ -12429,6 +12701,29 @@ app.post(
       vapiAssistantId: makeAssessment.vapiAssistantId,
       phoneProvisioningStatus: phoneProvisioning.status,
       phoneProvisioningCode: phoneProvisioning.code,
+    });
+    if (phoneProvisioning.status !== "ready") {
+      await createPendingSignupVerification({
+        payload: makePayload,
+        ownerEmail,
+        businessName,
+        reviewReasons: [phoneProvisioning.code || "phone_provisioning_not_ready"],
+        ipHash: hashKey(securityDecision.ip),
+        purpose: "manual_review_recovery",
+        ttlMs: 7 * 24 * 60 * 60 * 1000,
+      });
+    }
+    await updateSignupAttempt(makePayload, {
+      status: phoneProvisioning.status === "ready" ? "setup_ready" : "setup_error",
+      stage: phoneProvisioning.status === "ready" ? "ready" : "needs_attention",
+      detail: phoneProvisioning.status === "ready" ? "Assistant and phone routes verified" : "Phone assignment needs a guarded retry",
+      assignedPhone: twilioPhoneNumber || null,
+      vapiPhoneNumberId: makeAssessment.vapiPhoneNumberId || null,
+      vapiAssistantId: makeAssessment.vapiAssistantId || null,
+      lastErrorCode: phoneProvisioning.status === "ready" ? null : phoneProvisioning.code || "PHONE_PROVISIONING_NOT_READY",
+      reviewRequired: phoneProvisioning.status !== "ready",
+      reviewReasons: phoneProvisioning.status === "ready" ? [] : [phoneProvisioning.code || "phone_provisioning_not_ready"],
+      completedAt: phoneProvisioning.status === "ready" ? new Date() : null,
     });
     await safelyNotifySignupOperations(payload, {
       state: phoneProvisioning.status === "ready" ? "provisioning_ready" : "provisioning_failed",
@@ -12483,6 +12778,7 @@ app.post(
       forwardingSetupUrl: forwardingSetup?.setupUrl || "",
       forwarding: forwardingSetup ? sanitizeForwardingSetup(forwardingSetup.setup) : null,
       completionDelivery: completionDelivery ? { status: completionDelivery.status, channels: completionDelivery.channels } : null,
+      signupStatus,
     });
   })
 );
@@ -12615,6 +12911,14 @@ app.get(
       },
     });
 
+    await updateSignupAttempt(payload, {
+      status: Array.isArray(record.reviewReasons) && record.reviewReasons.length ? "review_required" : "provisioning",
+      stage: Array.isArray(record.reviewReasons) && record.reviewReasons.length ? "final_checks" : "provisioning",
+      detail: "Contact verified; continuing the saved signup",
+      reviewRequired: Boolean(record.reviewReasons?.length),
+      reviewReasons: record.reviewReasons || [],
+    });
+
     if (Array.isArray(record.reviewReasons) && record.reviewReasons.length) {
       await retainPendingSignupRecoveryPayload({ tokenHash, record, payload });
       const reviewRecord = upsertSignupDashboardFromPayload(payload, {
@@ -12664,6 +12968,11 @@ app.get(
         makeError: error?.code || "MAKE_SIGNUP_FAILED",
         ...makeFailureRecordFields(providerFailure),
       });
+      await updateSignupAttempt(payload, {
+        status: "setup_error", stage: "needs_attention", reviewRequired: true,
+        lastErrorCode: error?.code || "MAKE_SIGNUP_FAILED",
+        detail: "Contact verified, but provisioning needs a guarded retry",
+      });
       const telegramAlert = await safelyNotifySignupOperations(payload, {
         state: "provisioning_failed",
         detail: "Verified signup could not reach provisioning",
@@ -12700,6 +13009,11 @@ app.get(
         makeEventKey: makeResult.eventKey,
         makeRequestId: makeResult.requestId,
         makeDurationMs: makeResult.durationMs,
+      });
+      await updateSignupAttempt(payload, {
+        status: "setup_error", stage: "needs_attention", reviewRequired: true,
+        lastErrorCode: makeAssessment.providerCode || makeAssessment.code || "MAKE_SIGNUP_INCOMPLETE",
+        detail: "Contact verified, but the provisioning result was incomplete",
       });
       await safelyNotifySignupOperations(payload, {
         state: "provisioning_failed",
@@ -12751,6 +13065,16 @@ app.get(
       vapiAssistantId: makeAssessment.vapiAssistantId,
       phoneProvisioningStatus: phoneProvisioning.status,
       phoneProvisioningCode: phoneProvisioning.code,
+    });
+    await updateSignupAttempt(payload, {
+      status: phoneProvisioning.status === "ready" ? "setup_ready" : "setup_error",
+      stage: phoneProvisioning.status === "ready" ? "ready" : "needs_attention",
+      assignedPhone: twilioPhoneNumber || null,
+      vapiPhoneNumberId: makeAssessment.vapiPhoneNumberId || null,
+      vapiAssistantId: makeAssessment.vapiAssistantId || null,
+      reviewRequired: phoneProvisioning.status !== "ready",
+      lastErrorCode: phoneProvisioning.status === "ready" ? null : phoneProvisioning.code || "PHONE_PROVISIONING_NOT_READY",
+      completedAt: phoneProvisioning.status === "ready" ? new Date() : null,
     });
     await safelyNotifySignupOperations(payload, {
       state: phoneProvisioning.status === "ready" ? "provisioning_ready" : "provisioning_failed",
@@ -13739,6 +14063,8 @@ app.post(
         result = await syncVapiCalls({ limit: Math.min(100, VAPI_CALL_LIMIT) });
       } else if (action === "recover_signup") {
         result = await recoverSignupByOperationalTarget(targetId);
+      } else if (action === "reject_signup") {
+        result = await rejectSignupByOperationalTarget(targetId);
       } else if (action === "reopen_signup") {
         const signup = listSignupDashboardRecords().find((record) => {
           const identity = String(record.subscriptionId || record.checkoutSessionId || record.ownerEmail || record.businessName || record.signedUpAt || "unknown");
@@ -13810,7 +14136,7 @@ app.post(
           ? "lead_handoff"
           : action === "acknowledge_runtime_incident"
             ? "runtime_incident"
-            : ["recover_signup", "reopen_signup", "resend_signup_verification"].includes(action) ? "signup" : "calls",
+            : ["recover_signup", "reject_signup", "reopen_signup", "resend_signup_verification"].includes(action) ? "signup" : "calls",
         targetId,
         details: { initiatedFrom: "attention_inbox" },
       });

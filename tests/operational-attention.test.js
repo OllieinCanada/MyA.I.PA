@@ -270,7 +270,7 @@ test("a reopened signup stays in the queue until it is deliberately resolved", (
   assert.equal(items.length, 1);
   assert.equal(items[0].kind, "signup_review_required");
   assert.equal(items[0].severity, "warning");
-  assert.deepEqual(items[0].actions, ["recover_signup"]);
+  assert.deepEqual(items[0].actions, ["recover_signup", "reject_signup"]);
   assert.equal(JSON.stringify(items).includes("owner@example.com"), false);
 });
 

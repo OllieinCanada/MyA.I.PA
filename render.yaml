@@ -75,6 +75,8 @@ services:
         sync: false
       - key: PROVISIONING_SIGNING_SECRET
         sync: false
+      - key: SIGNUP_STATUS_SECRET
+        generateValue: true
       - key: TWILIO_DEFAULT_CANADIAN_REGION
         value: ON
       - key: INTEGRATION_API_KEY

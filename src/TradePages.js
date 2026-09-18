@@ -208,7 +208,7 @@ function TradeHub() {
             <a className="trade-primary-button" href="#/signup">Start Your Free Trial</a>
             <a className="trade-secondary-button" href="tel:+12495033301">Call the Live Demo</a>
           </div>
-          <div className="trade-trial-proof" aria-label="Trial details"><span>✓ 14-Day Free Trial</span><span>✓ No Credit Card</span><span>✓ Cancel Anytime</span></div>
+          <div className="trade-trial-proof" aria-label="Trial details"><span>✓ 14-Day Free Trial</span><span>✓ No Card Required for Trial</span><span>✓ Cancel Anytime</span></div>
         </div>
       </section>
 
@@ -511,7 +511,7 @@ function TradeFlyer({ slug, trade }) {
           <p>{copy.intro}</p>
           <div className="contractor-benefits">{coreBenefits.map(([icon, label]) => <div key={label}><FlyerIcon name={icon} /><strong>{label}</strong></div>)}</div>
           <div className="contractor-actions"><a href="#/signup"><FlyerIcon name="back" />START MY 14-DAY FREE TRIAL</a><a href="tel:+12495033301"><FlyerIcon name="phone" />HEAR DEMO</a></div>
-          <div className="contractor-mini-proof"><span>● NO CREDIT CARD REQUIRED</span><span>● CANCEL ANYTIME</span></div>
+          <div className="contractor-mini-proof"><span>● NO CARD REQUIRED FOR 14-DAY TRIAL</span><span>● CANCEL ANYTIME</span></div>
         </div>
         <div className="contractor-never-miss"><FlyerIcon name="phone" /><strong>NEVER MISS<br />A CALL AGAIN</strong></div>
         <div className="contractor-live-phone">

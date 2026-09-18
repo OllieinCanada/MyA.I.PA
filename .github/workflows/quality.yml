@@ -84,3 +84,15 @@ jobs:
           test -f docs/asset-manifest.json
           grep -q 'static/js/main\.' docs/index.html
           grep -q 'static/css/main\.' docs/index.html
+
+      - name: Archive verified Pages output
+        uses: actions/upload-artifact@v4
+        with:
+          name: pages-build-${{ github.event.pull_request.head.sha || github.sha }}
+          retention-days: 3
+          path: |
+            docs/index.html
+            docs/404.html
+            docs/asset-manifest.json
+            docs/proof/index.html
+            docs/static/

@@ -2,6 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const { getBackendTestBatchSize } = require("../scripts/run-backend-tests");
 
 const root = path.resolve(__dirname, "..");
 
@@ -10,7 +11,13 @@ test("backend suite discovers the tests directory with bounded concurrency", () 
   assert.equal(packageJson.scripts["test:backend"], "node scripts/run-backend-tests.js");
 
   const boundedRunner = fs.readFileSync(path.join(root, "scripts", "run-backend-tests.js"), "utf8");
-  assert.match(boundedRunner, /BATCH_SIZE = 4/);
+  assert.match(boundedRunner, /BATCH_SIZE = getBackendTestBatchSize\(\)/);
+  assert.equal(getBackendTestBatchSize("win32", ""), 1);
+  assert.equal(getBackendTestBatchSize("linux", ""), 4);
+  assert.equal(getBackendTestBatchSize("win32", "2"), 2);
+  for (const invalid of ["0", "9", "1.5", "invalid", "-1"]) {
+    assert.throws(() => getBackendTestBatchSize("win32", invalid), /integer from 1 to 8/);
+  }
   assert.match(boundedRunner, /\.test\\\.js\$/);
 
   const releaseGate = fs.readFileSync(path.join(root, "scripts", "release-gate.js"), "utf8");

@@ -175,6 +175,12 @@ function selectSignupValues(input) {
       body.installationFreeEstimate,
       setup.installationFreeEstimate
     ),
+    offersServiceCalls: firstNonEmpty(
+      topPricing.offersServiceCalls,
+      setupPricing.offersServiceCalls,
+      body.offersServiceCalls,
+      setup.offersServiceCalls
+    ),
     freeEstimateAnswer: cleanString(firstNonEmpty(
       topPricing.freeEstimateAnswer,
       setupPricing.freeEstimateAnswer,
@@ -374,6 +380,7 @@ function normalizeSignupProvisioningPayload(input, options = {}) {
     specialtyList: values.specializationList,
     pricing: values.pricing,
     installationFreeEstimate: values.pricing.installationFreeEstimate,
+    offersServiceCalls: values.pricing.offersServiceCalls,
     freeEstimateAnswer: values.pricing.freeEstimateAnswer,
     repairVisitFee: values.pricing.repairVisitFee,
     repairHourlyRate: values.pricing.repairHourlyRate,
@@ -403,6 +410,7 @@ function normalizeSignupProvisioningPayload(input, options = {}) {
     specialtyList: values.specializationList,
     pricing: values.pricing,
     installationFreeEstimate: values.pricing.installationFreeEstimate,
+    offersServiceCalls: values.pricing.offersServiceCalls,
     freeEstimateAnswer: values.pricing.freeEstimateAnswer,
     repairVisitFee: values.pricing.repairVisitFee,
     repairHourlyRate: values.pricing.repairHourlyRate,

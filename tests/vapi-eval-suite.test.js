@@ -1,5 +1,7 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
+const path = require("node:path");
+const { spawnSync } = require("node:child_process");
 const suite = require("../config/vapi-agent-evals.json");
 const { evalRunIdFromCreateResponse } = require("../scripts/setup-vapi-evals");
 
@@ -53,4 +55,24 @@ test("commercial downtime eval enforces one question and no arrival guarantee", 
 test("Vapi create-run responses use the returned evalRunId instead of a recent cached run", () => {
   assert.equal(evalRunIdFromCreateResponse({ evalRunId: "fresh-run" }), "fresh-run");
   assert.equal(evalRunIdFromCreateResponse({ runId: "legacy-run" }), "legacy-run");
+});
+
+test("local evaluation previews work without a target but live sync remains blocked", () => {
+  const script = path.resolve(__dirname, "../scripts/setup-vapi-evals.js");
+  const env = {
+    ...process.env,
+    VAPI_EVAL_TARGET_ASSISTANT_ID: "",
+    VAPI_EVAL_TARGET_PHONE: "",
+    VAPI_EVAL_SUITE_FILE: path.resolve(__dirname, "../config/vapi-agent-evals.json"),
+    VAPI_API_KEY: "",
+  };
+  for (const flag of ["--dry-run", "--list"]) {
+    const result = spawnSync(process.execPath, [script, flag], { env, encoding: "utf8", timeout: 15000 });
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /not selected \(required before live evaluation\)/);
+    assert.match(result.stdout, /MyAIPA Vapi Regression Suite/);
+  }
+  const live = spawnSync(process.execPath, [script, "--sync"], { env, encoding: "utf8", timeout: 15000 });
+  assert.equal(live.status, 1);
+  assert.match(live.stderr, /Set VAPI_EVAL_TARGET_ASSISTANT_ID/);
 });

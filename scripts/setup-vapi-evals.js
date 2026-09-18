@@ -1,4 +1,5 @@
 const fs = require("fs");
+const path = require("path");
 const { loadProjectEnv, redact, rootPath } = require("./_helpers");
 
 const env = loadProjectEnv();
@@ -87,7 +88,7 @@ function usage() {
 }
 
 function readSuite(filePath) {
-  const resolved = rootPath(filePath || env.VAPI_EVAL_SUITE_FILE || "config/vapi-agent-evals.json");
+  const resolved = path.resolve(rootPath(), filePath || env.VAPI_EVAL_SUITE_FILE || "config/vapi-agent-evals.json");
   const suite = JSON.parse(fs.readFileSync(resolved, "utf8"));
   if (!Array.isArray(suite.evals) || suite.evals.length === 0) {
     throw new Error(`No evals found in ${resolved}`);
@@ -356,7 +357,9 @@ async function main() {
   let targetAssistantId = options.targetPhone
     ? ""
     : options.targetAssistantId || env.VAPI_EVAL_TARGET_ASSISTANT_ID || suite.targetAssistantIdDefault;
-  if (!targetAssistantId && !targetPhone) throw new Error("Set VAPI_EVAL_TARGET_ASSISTANT_ID, VAPI_EVAL_TARGET_PHONE, --target, or --target-phone.");
+  if (!targetAssistantId && !targetPhone && !options.list && !options.dryRun) {
+    throw new Error("Set VAPI_EVAL_TARGET_ASSISTANT_ID, VAPI_EVAL_TARGET_PHONE, --target, or --target-phone.");
+  }
 
   const scopedEvals = options.keys.length
     ? suite.evals.filter((item) => options.keys.includes(item.key))
@@ -366,7 +369,7 @@ async function main() {
   }
   const syncItems = selectedForSync(scopedEvals, options.includeToolEvals);
   const runItems = selectedForRun(scopedEvals, options);
-  printLocalSummary(suite, syncItems, runItems, options, targetPhone ? `phone ending ${String(targetPhone).replace(/\D/g, "").slice(-4)}` : targetAssistantId, resolved);
+  printLocalSummary(suite, syncItems, runItems, options, targetPhone ? `phone ending ${String(targetPhone).replace(/\D/g, "").slice(-4)}` : targetAssistantId || "not selected (required before live evaluation)", resolved);
 
   if (options.list) return;
   if (options.dryRun) {

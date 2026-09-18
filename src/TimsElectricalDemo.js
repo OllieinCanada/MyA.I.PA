@@ -412,7 +412,7 @@ export function TimsElectricalLiveDemo({ embedded = false, onSignup }) {
         </div>
         {embedded ? (
           <div className="tims-demo-cta">
-            <div><span className="fcr-kicker">Ready to catch the next missed call?</span><strong>Try My AI PA with your own business details.</strong><p>No credit card. Keep your current business number.</p></div>
+            <div><span className="fcr-kicker">Ready to catch the next missed call?</span><strong>Try My AI PA with your own business details.</strong><p>No credit card required for the 14-day free trial. Keep your current business number.</p></div>
             <div><button type="button" onClick={startSignup}>Start Your Free Trial</button><a href="tel:+12495033301">Call the Live Demo · (249) 503-3301</a></div>
           </div>
         ) : null}

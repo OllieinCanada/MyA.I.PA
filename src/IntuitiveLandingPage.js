@@ -434,7 +434,7 @@ export default function IntuitiveLandingPage() {
               <StartButton />
               <button type="button" className="simple-secondary" onClick={scrollToDemo}>See a Sample Call</button>
             </div>
-            <div className="simple-trust" aria-label="Trial details"><span>✓ 14-Day Free Trial</span><span>✓ No Credit Card</span><span>✓ Cancel Anytime</span></div>
+            <div className="simple-trust" aria-label="Trial details"><span>✓ 14-Day Free Trial</span><span>✓ No Card Required for Trial</span><span>✓ Cancel Anytime</span></div>
           </div>
           <AnimatedHeroProof onSampleCall={scrollToDemo} onStartTrial={() => { window.location.hash = "/signup"; }} />
         </div>
@@ -494,7 +494,7 @@ export default function IntuitiveLandingPage() {
             <article><span>2</span><div><p>When ready</p><h3>Choose the calls it covers</h3><small>Start with after-hours, busy, or unanswered calls. Your existing number and staff stay in place.</small></div></article>
             <article><span>3</span><div><p>Before deciding</p><h3>Review the actual handoffs</h3><small>See the caller, callback number, request, address, timing and next action that reached you—plus the confirmation the customer received on your dashboard.</small></div></article>
           </div>
-          <div className="simple-honest-proof"><span><Icon name="check" /></span><div><strong>No fake promises. Hear it, test it, and decide from the calls.</strong><p>No credit card. No setup fee. Cancel anytime.</p></div><StartButton /></div>
+          <div className="simple-honest-proof"><span><Icon name="check" /></span><div><strong>No fake promises. Hear it, test it, and decide from the calls.</strong><p>No credit card required for the 14-day free trial. No setup fee. Cancel anytime.</p></div><StartButton /></div>
         </div>
       </section>
 
@@ -526,7 +526,7 @@ export default function IntuitiveLandingPage() {
         <div className="simple-shell">
           <span>09 · Your decision</span>
           <h2>The next ready-to-hire caller should reach your business—not your voicemail.</h2>
-          <p>Test My AI PA privately for 14 days. No credit card. Keep your current business number.</p>
+          <p>Test My AI PA privately for 14 days. No credit card required for the trial. Keep your current business number.</p>
           <div><StartButton /><button type="button" className="simple-secondary light" onClick={scrollToDemo}>See a Sample Call</button></div>
         </div>
       </section>

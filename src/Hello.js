@@ -1976,7 +1976,7 @@ export default function App() {
             </button>
           </div>
 
-          <div className="mt-5 text-sm font-semibold text-white/70">No credit card required • 14-day free trial • Cancel anytime</div>
+          <div className="mt-5 text-sm font-semibold text-white/70">No credit card required for the 14-day free trial • Cancel anytime</div>
         </div>
 
         <footer id="about" className="border-t border-white/10">

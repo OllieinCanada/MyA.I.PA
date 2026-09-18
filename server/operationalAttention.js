@@ -410,7 +410,7 @@ function signupAttentionItems(signups = [], now = new Date(), stuckMinutes = 60)
         ageMinutes: ageMinutes(signup.reopenedAt || updatedAt, now),
         targetType: "signup",
         targetId,
-        actions: ["recover_signup"],
+        actions: ["recover_signup", "reject_signup"],
         diagnostics: signupDiagnostics(signup, status),
       }));
     }
