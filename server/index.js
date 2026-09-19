@@ -119,6 +119,10 @@ const {
 } = require("./signupProvisioning");
 const { buildSignupAssistantConfig } = require("./signupAssistantTemplate");
 const {
+  assessSignupAssistantContent,
+  buildExpectedSignupAssistantConfig,
+} = require("./signupAssistantVerification");
+const {
   assessAgentRouteBinding,
   buildAgentReadiness,
   buildAgentRouteFingerprint,
@@ -126,6 +130,7 @@ const {
   getAgentTestDeliveryUpdate,
   runAgentTextTest,
 } = require("./signupAgentTesting");
+const { verifyVapiPhoneAssistantBinding } = require("./vapiPhoneImportVerification");
 const {
   assessRepeatedMakeCanaryResults,
   buildSignupProvisioningCanaryPayload,
@@ -2854,6 +2859,7 @@ async function createSignupVapiAssistant({ normalizedPayload, assignedPhone, res
     err.statusCode = 503;
     throw err;
   }
+  const config = buildSignupAssistantConfig(normalizedPayload, { assignedPhone, resourceName });
   const existing = await findSignupVapiAssistantByResourceName(resourceName);
   if (existing) {
     const assistantId = String(existing.id || "").trim();
@@ -2863,10 +2869,33 @@ async function createSignupVapiAssistant({ normalizedPayload, assignedPhone, res
       err.code = "VAPI_ASSISTANT_ID_MISSING";
       throw err;
     }
-    return { assistantId, name: getVapiAssistantName(existing), reused: true };
+    let liveAssistant = await requestVapiResource(`assistant/${encodeURIComponent(assistantId)}`);
+    let assessment = assessSignupAssistantContent({ expectedConfig: config, liveAssistant });
+    let updated = false;
+    if (!assessment.passed) {
+      await requestVapiResource(`assistant/${encodeURIComponent(assistantId)}`, {
+        method: "PATCH",
+        body: config,
+      });
+      updated = true;
+      liveAssistant = await requestVapiResource(`assistant/${encodeURIComponent(assistantId)}`);
+      assessment = assessSignupAssistantContent({ expectedConfig: config, liveAssistant });
+    }
+    if (!assessment.passed) {
+      const err = new Error("The existing Vapi assistant did not match the verified signup configuration after repair.");
+      err.statusCode = 502;
+      err.code = "VAPI_ASSISTANT_CONTENT_MISMATCH";
+      throw err;
+    }
+    return {
+      assistantId,
+      name: getVapiAssistantName(liveAssistant) || getVapiAssistantName(existing),
+      reused: true,
+      updated,
+      contentFingerprint: assessment.expectedFingerprint,
+    };
   }
 
-  const config = buildSignupAssistantConfig(normalizedPayload, { assignedPhone, resourceName });
   const created = await requestVapiResource("assistant", { method: "POST", body: config });
   const assistantId = String(created?.id || "").trim();
   if (!assistantId) {
@@ -2875,7 +2904,21 @@ async function createSignupVapiAssistant({ normalizedPayload, assignedPhone, res
     err.code = "VAPI_ASSISTANT_ID_MISSING";
     throw err;
   }
-  return { assistantId, name: getVapiAssistantName(created) || resourceName, reused: false };
+  const liveAssistant = await requestVapiResource(`assistant/${encodeURIComponent(assistantId)}`);
+  const assessment = assessSignupAssistantContent({ expectedConfig: config, liveAssistant });
+  if (!assessment.passed) {
+    const err = new Error("The new Vapi assistant did not match the verified signup configuration.");
+    err.statusCode = 502;
+    err.code = "VAPI_ASSISTANT_CONTENT_MISMATCH";
+    throw err;
+  }
+  return {
+    assistantId,
+    name: getVapiAssistantName(liveAssistant) || getVapiAssistantName(created) || resourceName,
+    reused: false,
+    updated: false,
+    contentFingerprint: assessment.expectedFingerprint,
+  };
 }
 
 async function reconcileVapiPhoneNumberImport({ twilioPhoneNumber, assistantId, name }) {
@@ -2894,32 +2937,18 @@ async function reconcileVapiPhoneNumberImport({ twilioPhoneNumber, assistantId, 
   }
   if (!matches.length) return null;
 
-  let record = matches[0];
-  if (getVapiAssistantId(record) !== vapiAssistantId) {
-    const recordId = String(record.id || "").trim();
-    if (!recordId) {
-      const err = new Error("The existing Vapi phone record is missing its provider id.");
-      err.statusCode = 502;
-      err.code = "VAPI_PHONE_ID_MISSING";
-      throw err;
-    }
-    record = await requestVapiResource(`phone-number/${encodeURIComponent(recordId)}`, {
-      method: "PATCH",
-      body: {
-        assistantId: vapiAssistantId,
-        ...(name ? { name: sanitizeVapiImportName(name, `${phoneNumber} Number`) } : {}),
-      },
-    });
-  }
-  const summarized = summarizeVapiPhoneNumberImport(record, phoneNumber);
-  const result = { ...summarized, assistantId: summarized.assistantId || vapiAssistantId };
-  if (!result.id || result.assistantId !== vapiAssistantId) {
-    const err = new Error("The existing Vapi phone record could not be verified against the signup assistant.");
-    err.statusCode = 502;
-    err.code = "VAPI_PHONE_RECONCILIATION_FAILED";
-    throw err;
-  }
-  return { ...result, reused: true };
+  const summarized = await verifyVapiPhoneAssistantBinding({
+    phoneRecordId: matches[0]?.id,
+    phoneNumber,
+    assistantId: vapiAssistantId,
+    name,
+  }, {
+    requestResource: requestVapiResource,
+    getAssistantId: getVapiAssistantId,
+    summarize: summarizeVapiPhoneNumberImport,
+    sanitizeName: sanitizeVapiImportName,
+  });
+  return { ...summarized, reused: true };
 }
 
 async function importTwilioPhoneNumberToVapi({ twilioPhoneNumber, assistantId, name }) {
@@ -2981,15 +3010,25 @@ async function importTwilioPhoneNumberToVapi({ twilioPhoneNumber, assistantId, n
     throw createProviderHttpError({ provider: "Vapi", operation: "Twilio number import", status: response.status, data, fallbackCode: "VAPI_TWILIO_IMPORT_FAILED" });
   }
 
-  const summarized = summarizeVapiPhoneNumberImport(data, phoneNumber);
-  const result = { ...summarized, assistantId: summarized.assistantId || vapiAssistantId };
-  if (!result.id || result.assistantId !== vapiAssistantId) {
+  const imported = summarizeVapiPhoneNumberImport(data, phoneNumber);
+  if (!imported.id) {
     const err = new Error("Vapi did not return a verifiable imported phone number.");
     err.statusCode = 502;
     err.code = "VAPI_PHONE_IMPORT_INCOMPLETE";
     throw err;
   }
-  return { ...result, reused: false };
+  const verified = await verifyVapiPhoneAssistantBinding({
+    phoneRecordId: imported.id,
+    phoneNumber,
+    assistantId: vapiAssistantId,
+    name,
+  }, {
+    requestResource: requestVapiResource,
+    getAssistantId: getVapiAssistantId,
+    summarize: summarizeVapiPhoneNumberImport,
+    sanitizeName: sanitizeVapiImportName,
+  });
+  return { ...verified, reused: false };
 }
 
 function getVapiPhoneNumber(record) {
@@ -6860,7 +6899,7 @@ async function ensureSignupAgentRoute({ signup, vapiPhone, business } = {}, depe
     assessment,
     fields,
     repaired,
-    vapiPhone: { ...livePhone, assistantId: expectedAssistantId },
+    vapiPhone: livePhone,
   };
 }
 
@@ -6880,6 +6919,38 @@ async function testSignupAgentBeforeDelivery({ signup, vapiPhone, smsRouting = n
     vapiPhoneNumberId: String(vapiPhone?.id || signup.vapiPhoneNumberId || "").trim(),
     vapiAssistantId: assistantId,
   });
+  try {
+    const liveAssistant = await requestVapiResource(`assistant/${encodeURIComponent(assistantId)}`);
+    const expectedConfig = buildExpectedSignupAssistantConfig(storedSignup, {
+      assignedPhone: aiNumber,
+      resourceName: getVapiAssistantName(liveAssistant) || "My AI PA Agent",
+    });
+    const content = assessSignupAssistantContent({ expectedConfig, liveAssistant });
+    if (!content.passed) {
+      const error = new Error("The live assistant script does not match the customer's saved signup answers.");
+      error.statusCode = 409;
+      error.code = "AGENT_CONTENT_MISMATCH";
+      throw error;
+    }
+    storedSignup = upsertSignupDashboardRecord({
+      ownerEmail: storedSignup.ownerEmail,
+      agentContentStatus: "verified",
+      agentContentFingerprint: content.expectedFingerprint,
+      agentContentVerifiedAt: new Date().toISOString(),
+      agentContentErrorCode: "",
+    });
+  } catch (error) {
+    upsertSignupDashboardRecord({
+      ownerEmail: storedSignup.ownerEmail,
+      agentContentStatus: "failed",
+      agentContentFingerprint: "",
+      agentContentVerifiedAt: "",
+      agentContentErrorCode: String(error?.code || "AGENT_CONTENT_VERIFICATION_FAILED").slice(0, 120),
+      status: "agent_testing",
+      setupReadyBlockedReason: "ASSISTANT_CONTENT_MISMATCH",
+    });
+    throw error;
+  }
   const business = await ensureTrialBusinessAndMappings(storedSignup, {
     ...(vapiPhone || {}),
     id: String(vapiPhone?.id || storedSignup.vapiPhoneNumberId || "").trim(),
@@ -6943,6 +7014,20 @@ async function testSignupAgentBeforeDelivery({ signup, vapiPhone, smsRouting = n
     business: await prisma.business.findUnique({ where: { id: business.id }, include: { settings: true, vapiMappings: true } }),
   });
   if (!readiness.passed) {
+    if (result.pending) {
+      upsertSignupDashboardRecord({
+        ownerEmail: finalSignup.ownerEmail,
+        status: "agent_testing",
+        setupReadyBlockedReason: "WAITING_FOR_CONFIRMED_TEXT_DELIVERY",
+      });
+      return {
+        ...result,
+        readiness,
+        businessId: business.id,
+        routeMode: route.assessment.mode,
+        routeRepaired: route.repaired,
+      };
+    }
     const error = new Error("The agent did not pass every pre-delivery readiness check.");
     error.statusCode = 502;
     error.code = "AGENT_TEST_READINESS_INCOMPLETE";
@@ -6962,6 +7047,54 @@ async function testSignupAgentBeforeDelivery({ signup, vapiPhone, smsRouting = n
     routeMode: route.assessment.mode,
     routeRepaired: route.repaired,
   };
+}
+
+const agentTextTestContinuationLocks = new Map();
+
+async function continueSignupAgentTextTestAfterDelivery(ownerEmail) {
+  const key = String(ownerEmail || "").trim().toLowerCase();
+  if (!key) return null;
+  if (agentTextTestContinuationLocks.has(key)) return agentTextTestContinuationLocks.get(key);
+
+  const continuation = (async () => {
+    let storedSignup = listSignupDashboardRecords().find((record) => (
+      String(record.ownerEmail || "").trim().toLowerCase() === key
+    ));
+    if (!storedSignup) return null;
+    const persist = (fields) => {
+      storedSignup = upsertSignupDashboardRecord({ ownerEmail: storedSignup.ownerEmail, ...fields });
+      return storedSignup;
+    };
+    const result = await runAgentTextTest({
+      signup: storedSignup,
+      sendSms: ({ to, from, message }) => sendSmsViaTwilio({ to, from, message }),
+      persist,
+    });
+    const latestSignup = listSignupDashboardRecords().find((record) => (
+      String(record.ownerEmail || "").trim().toLowerCase() === key
+    )) || storedSignup;
+    const businessId = Number(latestSignup.businessId || 0);
+    const business = businessId
+      ? await prisma.business.findUnique({ where: { id: businessId }, include: { settings: true, vapiMappings: true } })
+      : null;
+    const readiness = buildAgentReadiness({ signup: latestSignup, business });
+    if (readiness.passed) {
+      const readyAt = new Date().toISOString();
+      upsertSignupDashboardRecord({
+        ownerEmail: latestSignup.ownerEmail,
+        status: "setup_ready",
+        agentTestStatus: "passed",
+        agentTestPassedAt: readyAt,
+        setupReadyAt: latestSignup.setupReadyAt || readyAt,
+        setupReadyBlockedReason: "",
+      });
+    }
+    return { ...result, readiness };
+  })().finally(() => {
+    agentTextTestContinuationLocks.delete(key);
+  });
+  agentTextTestContinuationLocks.set(key, continuation);
+  return continuation;
 }
 
 async function getTrialCallUsage(signup, businessId, db = prisma) {
@@ -11266,7 +11399,29 @@ app.post(
         status: messageStatus,
         errorCode: req.body?.ErrorCode,
       });
-      if (update) upsertSignupDashboardRecord({ ownerEmail: matchingSignup.ownerEmail, ...update });
+      if (update) {
+        upsertSignupDashboardRecord({ ownerEmail: matchingSignup.ownerEmail, ...update });
+        if (["delivered", "read"].includes(String(messageStatus || "").trim().toLowerCase())) {
+          try {
+            await continueSignupAgentTextTestAfterDelivery(matchingSignup.ownerEmail);
+          } catch (error) {
+            safelyNotifyRuntimeFailure(error, {
+              area: "agent delivery test",
+              operation: "continue the ordered owner then customer SMS test",
+              whatFailed: "A delivered setup message could not advance the pre-delivery test",
+              impact: "The assistant remains blocked in testing and is not marked ready.",
+              snapshot: {
+                "AI number ending": String(matchingSignup.twilioPhoneNumber || "").slice(-4),
+                "Delivery leg": messageSid === matchingSignup.agentTestOwnerMessageSid ? "Owner" : "Customer",
+                "Failure code": String(error?.code || "AGENT_TEST_CONTINUATION_FAILED").slice(0, 120),
+              },
+              lastCheckpoint: "Twilio confirmed message delivery before the ordered test continuation failed.",
+              nextAction: "Retry the agent testing station after checking Twilio delivery and the signup record.",
+              dedupeFingerprint: `agent-test-continuation:${String(matchingSignup.ownerEmail || "").toLowerCase()}`,
+            });
+          }
+        }
+      }
     }
     if (preparedIncident) {
       safelyNotifyRuntimeFailure(preparedIncident.error, preparedIncident.context);
@@ -12496,9 +12651,11 @@ app.post(
       idempotencyKey: authorization.idempotencyKey,
       contextHash: authorization.contextHash,
       reconcile: async () => {
-        const existing = await findSignupVapiAssistantByResourceName(resourceName);
-        const assistantId = String(existing?.id || "").trim();
-        return assistantId ? { assistantId, name: getVapiAssistantName(existing), reused: true } : null;
+        return createSignupVapiAssistant({
+          normalizedPayload: trustedPayload,
+          assignedPhone,
+          resourceName,
+        });
       },
       execute: () => createSignupVapiAssistant({
         normalizedPayload: trustedPayload,
@@ -13668,7 +13825,14 @@ app.post(
     try {
       const result = await testSignupAgentBeforeDelivery({ signup, vapiPhone, force: true });
       const dashboard = await getCustomerDashboardByLookupHash(lookupHash);
-      return res.json({ ok: true, passed: true, agentTesting: result.readiness, dashboard });
+      return res.status(result.readiness?.passed ? 200 : 202).json({
+        ok: true,
+        passed: result.readiness?.passed === true,
+        pending: result.pending === true,
+        stage: result.stage || "",
+        agentTesting: result.readiness,
+        dashboard,
+      });
     } catch (error) {
       const code = String(error?.providerSignal || error?.providerCode || error?.code || "AGENT_TEXT_TEST_FAILED").slice(0, 120);
       safelyNotifyRuntimeFailure(error, {
@@ -16296,6 +16460,8 @@ module.exports = {
     createSmtpDeliveryError,
     buildSignupSmsRoutingFailureContext,
     safelyProvisionIsolatedSmsForSignup,
+    reconcileVapiPhoneNumberImport,
+    importTwilioPhoneNumberToVapi,
     ensureSignupAgentRoute,
     inspectSignupPhoneProvisioning,
     getVapiVoiceSignupExecutionBusinessId,

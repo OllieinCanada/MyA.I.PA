@@ -6,6 +6,7 @@ const { buildSignupAssistantConfig } = require("../server/signupAssistantTemplat
 const normalizedPayload = {
   businessProfile: {
     businessName: "Example Electric",
+    services: "Panel upgrades and EV charger installs",
   },
   setupDetails: {
     businessType: "Electrical contractor",
@@ -54,6 +55,7 @@ test("builds the current production Vapi assistant with resolved signup values",
   assert.match(prompt, /Business name: Example Electric/);
   assert.match(prompt, /Business type: Electrical contractor/);
   assert.match(prompt, /Service area: Hamilton and Burlington/);
+  assert.match(prompt, /Services: Panel upgrades and EV charger installs/);
   assert.match(prompt, /Signup installation estimate answer: yes we do/);
   assert.match(prompt, /Signup repair visit fee: 89 dollars/);
   assert.match(prompt, /Signup repair hourly rate: 129 dollars per hour/);

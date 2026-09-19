@@ -202,6 +202,7 @@ MYAIPA_AGENT_VERSION: 2026-09-10-red-pen-intake-v3
 - Business name: ${values.businessName}
 - Business type: ${values.businessType}
 - Service area: ${values.serviceArea}
+${values.services ? `- Services: ${values.services}` : ""}
 ${values.specializations.length ? `- Property types served: ${values.specializations.join(", ")}` : ""}
 ${values.signupFreeEstimateAnswer ? `- Signup installation estimate answer: ${values.signupFreeEstimateAnswer}` : ""}
 ${values.signupRepairVisitFee ? `- Signup repair visit fee: ${values.signupRepairVisitFee} dollars` : ""}
