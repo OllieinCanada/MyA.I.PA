@@ -11,6 +11,7 @@ const {
   getTelegramDeliveryReceipt,
   hasTelegramDeliveryReceipt,
   processTelegramOutbox,
+  normalizeInlineKeyboard,
   resetTelegramOutboxLocksForTests,
   validateAdminUrl,
 } = require("../server/telegramOutbox");
@@ -31,6 +32,38 @@ function readOutbox(filePath) {
 }
 
 test.beforeEach(() => resetTelegramOutboxLocksForTests());
+
+test("outbox preserves only signed approval callbacks and safe URLs", async (t) => {
+  const filePath = createOutboxPath(t);
+  const approvalId = "0123456789abcdef";
+  const callback = `tg1.${approvalId}.a.${"x".repeat(18)}`;
+  const inlineKeyboard = {
+    inline_keyboard: [
+      [{ text: "Approve and continue", callback_data: callback }, { text: "Unsafe", callback_data: "approve:anything" }],
+      [{ text: "Open details", url: "https://www.myaipa.ca/#/admin?tab=attention" }],
+    ],
+  };
+  assert.deepEqual(normalizeInlineKeyboard(inlineKeyboard), {
+    inline_keyboard: [
+      [{ text: "Approve and continue", callback_data: callback }],
+      [{ text: "Open details", url: "https://www.myaipa.ca/#/admin?tab=attention" }],
+    ],
+  });
+  await enqueueTelegramMessage({ filePath, text: "Decision required", inlineKeyboard, dedupeKey: "approval:test", now: 1_000 });
+  let sent;
+  await processTelegramOutbox({
+    filePath,
+    token: "bot-secret",
+    chatId: "12345",
+    now: 1_000,
+    fetchImpl: async (_url, options) => {
+      sent = JSON.parse(options.body);
+      return { ok: true, status: 200, json: async () => ({ ok: true, result: { message_id: 7 } }) };
+    },
+  });
+  assert.equal(sent.reply_markup.inline_keyboard[0][0].callback_data, callback);
+  assert.equal(sent.reply_markup.inline_keyboard[0].length, 1);
+});
 
 test("enqueue stores a redacted message, validated exact link, and hashed dedupe key only", async (t) => {
   const filePath = createOutboxPath(t);

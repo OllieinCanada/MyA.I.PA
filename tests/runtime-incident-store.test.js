@@ -174,3 +174,43 @@ test("needs-user incidents do not auto-reopen into another generation", (t) => {
   assert.equal(repeated.item.remediation.status, "needs_user");
   assert.equal(repeated.item.remediation.generation, 1);
 });
+
+test("a needs-user incident restarts only after an explicit owner authorization", (t) => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "myaipa-remediation-owner-"));
+  const filePath = path.join(directory, "runtime-incidents.json");
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const incident = {
+    incidentId: "bbbbbbbbbbbbbbbbbbbbbbbb",
+    reasonCode: "DATABASE_QUERY_IMPLEMENTATION_FAILED",
+    whatFailed: "A guarded query stopped",
+    impact: "The request did not complete",
+    detectedAt: "2026-09-19T12:00:00.000Z",
+    remediation: {
+      version: 1,
+      status: "needs_user",
+      action: "codex_draft_repair",
+      automatic: false,
+      requiresUser: true,
+    },
+  };
+  recordRuntimeIncident(filePath, incident);
+
+  const unapproved = updateRuntimeIncidentRemediation(filePath, incident.incidentId, {
+    status: "queued",
+    updatedAt: "2026-09-19T12:01:00.000Z",
+  });
+  assert.equal(unapproved.updated, false);
+  assert.equal(unapproved.reason, "terminal_remediation_state");
+
+  const approved = updateRuntimeIncidentRemediation(filePath, incident.incidentId, {
+    status: "queued",
+    ownerAuthorized: true,
+    updatedAt: "2026-09-19T12:02:00.000Z",
+    summary: "The owner approved this exact incident generation.",
+  });
+  assert.equal(approved.updated, true);
+  assert.equal(approved.item.remediation.status, "queued");
+  assert.equal(approved.item.remediation.automatic, true);
+  assert.equal(approved.item.remediation.requiresUser, false);
+  assert.equal(approved.item.remediation.ownerAuthorizedAt, "2026-09-19T12:02:00.000Z");
+});

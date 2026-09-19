@@ -202,7 +202,10 @@ function updateRuntimeIncidentRemediation(filePath, incidentId, transition = {})
   if (index < 0) return { updated: false, reason: "not_found" };
   const item = items[index];
   const current = item.remediation && typeof item.remediation === "object" ? item.remediation : {};
-  if (TERMINAL_REMEDIATION_STATUSES.has(current.status) && current.status !== status) {
+  const ownerAuthorizedRestart = current.status === "needs_user"
+    && status === "queued"
+    && transition.ownerAuthorized === true;
+  if (TERMINAL_REMEDIATION_STATUSES.has(current.status) && current.status !== status && !ownerAuthorizedRestart) {
     return { updated: false, reason: "terminal_remediation_state", item };
   }
   const updatedAt = new Date(transition.updatedAt || Date.now()).toISOString();
@@ -224,6 +227,11 @@ function updateRuntimeIncidentRemediation(filePath, incidentId, transition = {})
       : TERMINAL_REMEDIATION_STATUSES.has(status) ? { terminalAt: updatedAt } : {}),
     requiresUser: ["repair_ready", "needs_user", "failed"].includes(status)
       || transition.requiresUser === true,
+    ...(ownerAuthorizedRestart ? {
+      automatic: true,
+      requiresUser: false,
+      ownerAuthorizedAt: updatedAt,
+    } : {}),
     ...(transition.initialReportPreservedAt
       ? { initialReportPreservedAt: new Date(transition.initialReportPreservedAt).toISOString() }
       : {}),
@@ -246,6 +254,21 @@ function updateRuntimeIncidentRemediation(filePath, incidentId, transition = {})
     ...(transition.verification ? { verification: safeRemediationText(transition.verification, 480) } : {}),
     ...(transition.nextAction ? { nextAction: safeRemediationText(transition.nextAction, 480) } : {}),
     ...(transition.referenceUrl ? { referenceUrl: String(transition.referenceUrl).slice(0, 2_048) } : {}),
+    ...(transition.pullRequest && typeof transition.pullRequest === "object"
+      && Number.isSafeInteger(Number(transition.pullRequest.prNumber))
+      && Number(transition.pullRequest.prNumber) > 0
+      && /^[a-f0-9]{40}$/i.test(String(transition.pullRequest.headSha || ""))
+      ? {
+          pullRequest: {
+            prNumber: Number(transition.pullRequest.prNumber),
+            headSha: String(transition.pullRequest.headSha).toLowerCase(),
+            prUrl: String(transition.pullRequest.prUrl || "").slice(0, 2_048),
+          },
+        }
+      : {}),
+    ...(/^[a-f0-9]{16}$/i.test(String(transition.telegramApprovalId || ""))
+      ? { telegramApprovalId: String(transition.telegramApprovalId).toLowerCase() }
+      : {}),
     history,
   };
   const nextItem = { ...item, remediation };

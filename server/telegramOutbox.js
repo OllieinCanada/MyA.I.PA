@@ -39,6 +39,20 @@ function sanitizeButtonText(value) {
   return redactIncidentText(value, { maxLength: 40 }) || "Open exact issue";
 }
 
+function normalizeInlineKeyboard(value) {
+  const rows = Array.isArray(value?.inline_keyboard) ? value.inline_keyboard.slice(0, 3) : [];
+  const keyboard = rows.map((row) => (Array.isArray(row) ? row.slice(0, 3) : []).map((button) => {
+    const text = sanitizeButtonText(button?.text);
+    const callbackData = String(button?.callback_data || "");
+    const url = validateAdminUrl(button?.url);
+    if (/^tg1\.[a-f0-9]{16}\.[a-z]\.[A-Za-z0-9_-]{18}$/.test(callbackData)) {
+      return { text, callback_data: callbackData };
+    }
+    return url ? { text, url } : null;
+  }).filter(Boolean)).filter((row) => row.length);
+  return keyboard.length ? { inline_keyboard: keyboard } : null;
+}
+
 function safeAdminParam(key, value) {
   if (!ALLOWED_ADMIN_QUERY_KEYS.has(String(key || "").toLowerCase())) return false;
   const text = String(value || "");
@@ -121,6 +135,7 @@ function normalizeStoredItem(item) {
     text,
     adminUrl: validateAdminUrl(item.adminUrl),
     buttonText: sanitizeButtonText(item.buttonText),
+    ...(normalizeInlineKeyboard(item.inlineKeyboard) ? { inlineKeyboard: normalizeInlineKeyboard(item.inlineKeyboard) } : {}),
     createdAt,
     nextAttemptAt,
     attempts,
@@ -196,6 +211,7 @@ async function enqueueTelegramMessage({
   adminUrl = "",
   buttonText = "",
   dedupeKey = "",
+  inlineKeyboard = null,
   now,
 } = {}) {
   const resolvedPath = resolveFilePath(filePath);
@@ -203,7 +219,8 @@ async function enqueueTelegramMessage({
   if (!safeText) throw new TypeError("A redacted Telegram message is required.");
   const safeAdminUrl = validateAdminUrl(adminUrl);
   const safeButtonText = sanitizeButtonText(buttonText);
-  const dedupeHash = sha256(dedupeKey || `${safeText}\n${safeAdminUrl}\n${safeButtonText}`);
+  const safeInlineKeyboard = normalizeInlineKeyboard(inlineKeyboard);
+  const dedupeHash = sha256(dedupeKey || `${safeText}\n${safeAdminUrl}\n${safeButtonText}\n${JSON.stringify(safeInlineKeyboard || {})}`);
   const timestamp = nowMs(now);
 
   return withFileLock(resolvedPath, async () => {
@@ -241,6 +258,7 @@ async function enqueueTelegramMessage({
       text: safeText,
       adminUrl: safeAdminUrl,
       buttonText: safeButtonText,
+      ...(safeInlineKeyboard ? { inlineKeyboard: safeInlineKeyboard } : {}),
       createdAt: timestamp,
       nextAttemptAt: timestamp,
       attempts: 0,
@@ -286,7 +304,9 @@ async function postTelegramItem(item, { token, chatId, fetchImpl }) {
     chat_id: chatId,
     text: item.text,
     disable_web_page_preview: true,
-    ...(item.adminUrl ? {
+    ...(item.inlineKeyboard ? {
+      reply_markup: item.inlineKeyboard,
+    } : item.adminUrl ? {
       reply_markup: {
         inline_keyboard: [[{ text: item.buttonText, url: item.adminUrl }]],
       },
@@ -464,5 +484,6 @@ module.exports = {
   hasTelegramDeliveryReceipt,
   processTelegramOutbox,
   resetTelegramOutboxLocksForTests,
+  normalizeInlineKeyboard,
   validateAdminUrl,
 };

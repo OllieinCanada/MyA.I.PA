@@ -77,6 +77,8 @@
     "harden:make:privacy": "node scripts/harden-make-scenario-privacy.js",
     "test:signup-provisioning-canary": "node scripts/run-signup-provisioning-canary.js",
     "test:telegram-production": "node scripts/test-production-telegram.js",
+    "configure:telegram-guarded-actions": "node scripts/configure-telegram-guarded-actions.js",
+    "test:telegram-guarded-actions": "node --test tests/telegram-approval-actions.test.js tests/telegram-bot-api.test.js tests/telegram-pr-landing.test.js tests/telegram-outbox.test.js tests/incident-alerts.test.js tests/signup-alerts.test.js tests/runtime-incident-store.test.js",
     "incident:repair:prepare": "node scripts/prepare-incident-repair-request.js",
     "incident:repair:validate-patch": "node scripts/validate-incident-repair-patch.js",
     "test:incident-remediation": "node --test tests/incident-remediation.test.js tests/incident-repair-workflow.test.js tests/incident-alerts.test.js tests/runtime-incident-store.test.js",
