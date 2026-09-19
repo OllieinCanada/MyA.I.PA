@@ -112,6 +112,7 @@ const {
   validateMakeWebhookUrl,
 } = require("./makeSignupWebhook");
 const {
+  buildProvisioningAccountKey,
   buildProvisioningResourceName,
   normalizeSignupProvisioningPayload,
   verifyProvisioningContextToken,
@@ -136,10 +137,20 @@ const {
   buildSignupProvisioningCanaryPayload,
   isTrustedSignupProvisioningCanary,
 } = require("./signupProvisioningCanary");
-const { readProvisioningStep, runProvisioningStep } = require("./provisioningState");
+const { provisioningStateKey, readProvisioningStep, runProvisioningStep } = require("./provisioningState");
 const { reconcileSignupSupersessionResources } = require("./signupSupersessionReconciliation");
 const {
+  assertExclusiveResourceOwnership,
+  assertSharedSignupIdentity,
+  collectSignupResourceReferences,
+  hashOperationalTarget: hashSignupDecommissionTarget,
+  normalizePhone: normalizeDecommissionPhone,
+  removeSignupTargetsFromStore,
+  selectNewestPendingSignup,
+} = require("./signupDecommission");
+const {
   completeSignupProvisioningContext,
+  contextStoreKey,
   loadSignupProvisioningContext,
   registerSignupProvisioningContext,
 } = require("./signupProvisioningContext");
@@ -6075,6 +6086,292 @@ async function supersedeSignupByOperationalTargets(targetId, canonicalTargetId) 
   });
 }
 
+function providerDeleteError(error) {
+  const status = Number(error?.statusCode || error?.status || error?.raw?.statusCode || 0);
+  const code = String(error?.code || error?.raw?.code || "");
+  return status === 404 || code === "resource_missing";
+}
+
+async function deleteVapiResourceIfPresent(resourcePath) {
+  try {
+    await requestVapiResource(resourcePath, { method: "DELETE" });
+    return "deleted";
+  } catch (error) {
+    if (providerDeleteError(error)) return "already_absent";
+    throw error;
+  }
+}
+
+async function releaseTwilioNumberIfPresent(record) {
+  const sid = String(record?.sid || "").trim();
+  if (!sid) return "already_absent";
+  const response = await fetch(
+    `${TWILIO_API_BASE_URL}/2010-04-01/Accounts/${encodeURIComponent(TWILIO_ACCOUNT_SID)}/IncomingPhoneNumbers/${encodeURIComponent(sid)}.json`,
+    {
+      method: "DELETE",
+      headers: { Authorization: getTwilioAuthHeader(), Accept: "application/json" },
+    }
+  );
+  if (response.ok) return "released";
+  if (response.status === 404) return "already_absent";
+  const data = parseJsonObject(await response.text());
+  throw createProviderHttpError({
+    provider: "Twilio",
+    operation: "phone-number release",
+    status: response.status,
+    data,
+    fallbackCode: "TWILIO_NUMBER_RELEASE_FAILED",
+  });
+}
+
+async function cancelStripeSubscriptionIfPresent(subscriptionId) {
+  if (!stripe) throw Object.assign(new Error("Stripe is not configured."), { statusCode: 503, code: "STRIPE_NOT_CONFIGURED" });
+  try {
+    const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+    if (subscription.status === "canceled") return "already_canceled";
+    await stripe.subscriptions.cancel(subscriptionId);
+    return "canceled";
+  } catch (error) {
+    if (providerDeleteError(error)) return "already_absent";
+    throw error;
+  }
+}
+
+async function expireStripeCheckoutIfOpen(sessionId) {
+  if (!stripe) throw Object.assign(new Error("Stripe is not configured."), { statusCode: 503, code: "STRIPE_NOT_CONFIGURED" });
+  try {
+    const session = await stripe.checkout.sessions.retrieve(sessionId);
+    if (session.status !== "open") return "already_closed";
+    await stripe.checkout.sessions.expire(sessionId);
+    return "expired";
+  } catch (error) {
+    if (providerDeleteError(error)) return "already_absent";
+    throw error;
+  }
+}
+
+async function deleteStripeCustomerIfPresent(customerId) {
+  if (!stripe) throw Object.assign(new Error("Stripe is not configured."), { statusCode: 503, code: "STRIPE_NOT_CONFIGURED" });
+  try {
+    const result = await stripe.customers.del(customerId);
+    return result?.deleted ? "deleted" : "already_absent";
+  } catch (error) {
+    if (providerDeleteError(error)) return "already_absent";
+    throw error;
+  }
+}
+
+async function inspectSignupSetForDecommission({ targetIds, expectedBusinessName }) {
+  const allSignups = listSignupDashboardRecords();
+  const targets = targetIds.map((targetId) => findSignupByOperationalTarget(targetId, allSignups));
+  if (targets.some((record) => !record)) {
+    const error = new Error("One or more decommission targets no longer exist.");
+    error.statusCode = 404;
+    error.code = "SIGNUP_DECOMMISSION_TARGET_NOT_FOUND";
+    throw error;
+  }
+  const identity = assertSharedSignupIdentity(targets);
+  const targetIdSet = new Set(targetIds);
+  const outsideIdentityMatch = allSignups.find((record) => {
+    if (targetIdSet.has(hashSignupDecommissionTarget(record))) return false;
+    const email = String(record.ownerEmail || "").trim().toLowerCase();
+    const phone = normalizeDecommissionPhone(record.ownerPhone);
+    return email === identity.ownerEmail || phone === identity.ownerPhone;
+  });
+  if (outsideIdentityMatch) {
+    const error = new Error("Another signup outside the selected set shares the owner identity.");
+    error.statusCode = 409;
+    error.code = "SIGNUP_DECOMMISSION_IDENTITY_SHARED";
+    throw error;
+  }
+  const declared = assertExclusiveResourceOwnership({ targets, allSignups });
+  const pendingStore = await readPendingSignupStore();
+  const canonicalPending = selectNewestPendingSignup({ pendingStore, identity, expectedBusinessName });
+
+  const [vapiPhones, vapiAssistants, twilioNumbers] = await Promise.all([
+    fetchVapiCollection("phone-number", ["phoneNumbers", "phone_numbers"]),
+    fetchVapiCollection("assistant", ["assistants", "agents"]),
+    fetchTwilioIncomingPhoneNumbers(),
+  ]);
+  const vapiPhoneTargets = vapiPhones.filter((record) => {
+    const id = String(record?.id || record?.phoneNumberId || "").trim();
+    const number = normalizeDecommissionPhone(getVapiPhoneNumber(record));
+    return declared.vapiPhoneIds.has(id) || declared.phoneNumbers.has(number);
+  });
+  const assistantIds = new Set([
+    ...declared.vapiAssistantIds,
+    ...vapiPhoneTargets.map((record) => getVapiAssistantId(record)).filter(Boolean),
+  ]);
+  const outsideVapiPhoneUse = vapiPhones.find((record) => {
+    const id = String(record?.id || record?.phoneNumberId || "").trim();
+    const number = normalizeDecommissionPhone(getVapiPhoneNumber(record));
+    const isTarget = declared.vapiPhoneIds.has(id) || declared.phoneNumbers.has(number);
+    return !isTarget && assistantIds.has(getVapiAssistantId(record));
+  });
+  if (outsideVapiPhoneUse) {
+    const error = new Error("A selected Vapi assistant is attached to a phone outside the decommission set.");
+    error.statusCode = 409;
+    error.code = "SIGNUP_DECOMMISSION_VAPI_ASSISTANT_SHARED";
+    throw error;
+  }
+  const vapiAssistantTargets = vapiAssistants.filter((record) => assistantIds.has(String(record?.id || "").trim()));
+  const twilioTargets = twilioNumbers.filter((record) => declared.phoneNumbers.has(normalizeDecommissionPhone(record?.phone_number)));
+
+  const stripeCustomers = [];
+  if (!stripe) {
+    const error = new Error("Stripe billing reconciliation is unavailable.");
+    error.statusCode = 503;
+    error.code = "STRIPE_NOT_CONFIGURED";
+    throw error;
+  }
+  for await (const customer of stripe.customers.list({ email: identity.ownerEmail, limit: 100 })) {
+    if (String(customer?.email || "").trim().toLowerCase() === identity.ownerEmail) stripeCustomers.push(customer);
+  }
+  for (const customerId of declared.customerIds) {
+    if (stripeCustomers.some((customer) => customer.id === customerId)) continue;
+    try {
+      const customer = await stripe.customers.retrieve(customerId);
+      if (customer && !customer.deleted) stripeCustomers.push(customer);
+    } catch (error) {
+      if (!providerDeleteError(error)) throw error;
+    }
+  }
+  const subscriptionIds = new Set(declared.subscriptionIds);
+  const checkoutSessionIds = new Set(declared.checkoutSessionIds);
+  for (const customer of stripeCustomers) {
+    for await (const subscription of stripe.subscriptions.list({ customer: customer.id, status: "all", limit: 100 })) {
+      subscriptionIds.add(subscription.id);
+    }
+    for await (const session of stripe.checkout.sessions.list({ customer: customer.id, limit: 100 })) {
+      checkoutSessionIds.add(session.id);
+    }
+  }
+
+  return {
+    allSignups,
+    targets,
+    targetIds,
+    identity,
+    pendingStore,
+    canonicalTokenHash: canonicalPending[0],
+    canonicalPending: canonicalPending[1],
+    declared,
+    vapiPhoneTargets,
+    vapiAssistantTargets,
+    twilioTargets,
+    stripeCustomers,
+    subscriptionIds,
+    checkoutSessionIds,
+    summary: {
+      signupRecords: targets.length,
+      vapiPhones: vapiPhoneTargets.length,
+      vapiAssistants: vapiAssistantTargets.length,
+      twilioNumbers: twilioTargets.length,
+      stripeCustomers: stripeCustomers.length,
+      stripeSubscriptions: subscriptionIds.size,
+      stripeCheckoutSessions: checkoutSessionIds.size,
+      replacementPayloads: 1,
+    },
+  };
+}
+
+async function decommissionSignupSetAndRebuild({ targetIds, expectedBusinessName, apply = false }) {
+  const inspection = await inspectSignupSetForDecommission({ targetIds, expectedBusinessName });
+  if (!apply) return { ok: true, action: "dry_run", summary: inspection.summary };
+
+  const billingResults = { subscriptions: [], checkoutSessions: [], customers: [] };
+  for (const subscriptionId of inspection.subscriptionIds) {
+    billingResults.subscriptions.push(await cancelStripeSubscriptionIfPresent(subscriptionId));
+  }
+  for (const sessionId of inspection.checkoutSessionIds) {
+    billingResults.checkoutSessions.push(await expireStripeCheckoutIfOpen(sessionId));
+  }
+  for (const customer of inspection.stripeCustomers) {
+    billingResults.customers.push(await deleteStripeCustomerIfPresent(customer.id));
+  }
+
+  const vapiResults = { phones: [], assistants: [] };
+  for (const phone of inspection.vapiPhoneTargets) {
+    const id = String(phone?.id || phone?.phoneNumberId || "").trim();
+    if (id) vapiResults.phones.push(await deleteVapiResourceIfPresent(`phone-number/${encodeURIComponent(id)}`));
+  }
+  for (const assistant of inspection.vapiAssistantTargets) {
+    const id = String(assistant?.id || "").trim();
+    if (id) vapiResults.assistants.push(await deleteVapiResourceIfPresent(`assistant/${encodeURIComponent(id)}`));
+  }
+
+  const twilioResults = [];
+  for (const number of inspection.twilioTargets) twilioResults.push(await releaseTwilioNumberIfPresent(number));
+
+  const mappingValues = [...new Set([
+    ...inspection.vapiPhoneTargets.flatMap((record) => [record?.id, getVapiPhoneNumber(record)]),
+    ...inspection.vapiAssistantTargets.map((record) => record?.id),
+  ].map((value) => String(value || "").trim()).filter(Boolean))];
+  if (mappingValues.length) {
+    await prisma.vapiBusinessMapping.deleteMany({ where: { matchValue: { in: mappingValues } } });
+  }
+
+  const accountKey = buildProvisioningAccountKey(inspection.identity.ownerEmail, inspection.identity.ownerPhone);
+  const durableKeys = [
+    provisioningStateKey("twilio-number", accountKey),
+    provisioningStateKey("vapi-assistant", accountKey),
+    provisioningStateKey("vapi-import", accountKey),
+    contextStoreKey(accountKey),
+  ];
+  await prisma.runtimeStore.deleteMany({ where: { key: { in: durableKeys } } });
+
+  const dashboardRemoval = removeSignupTargetsFromStore(readSignupDashboardStore(), inspection.targetIds);
+  writeSignupDashboardStore(dashboardRemoval.store);
+  const targetSubscriptionIds = inspection.subscriptionIds;
+  const trialStore = readTrialReminderStore();
+  for (const [key, reminder] of Object.entries(trialStore)) {
+    if (
+      targetSubscriptionIds.has(String(reminder?.subscriptionId || key))
+      || String(reminder?.ownerEmail || "").trim().toLowerCase() === inspection.identity.ownerEmail
+    ) delete trialStore[key];
+  }
+  writeTrialReminderStore(trialStore);
+  const pendingStripeStore = readPendingStripeSignupStore();
+  for (const [key, pending] of Object.entries(pendingStripeStore)) {
+    const email = String(pending?.summary?.ownerEmail || pending?.payload?.owner?.email || pending?.payload?.setupDetails?.ownerEmail || "").trim().toLowerCase();
+    if (email === inspection.identity.ownerEmail || inspection.checkoutSessionIds.has(key)) delete pendingStripeStore[key];
+  }
+  writePendingStripeSignupStore(pendingStripeStore);
+  await Promise.all(Object.keys(inspection.pendingStore)
+    .filter((tokenHash) => tokenHash !== inspection.canonicalTokenHash)
+    .filter((tokenHash) => {
+      const pending = inspection.pendingStore[tokenHash];
+      return String(pending?.ownerEmail || pending?.payload?.owner?.email || "").trim().toLowerCase() === inspection.identity.ownerEmail;
+    })
+    .map((tokenHash) => pendingSignupVerifications.removeHash(tokenHash)));
+
+  const canonicalPayload = inspection.canonicalPending.payload;
+  const canonicalRecord = upsertSignupDashboardFromPayload(canonicalPayload, {
+    status: "manual_review_reopened",
+    reviewRequired: true,
+    reviewReasons: ["authorized_account_rebuild"],
+    emailVerified: true,
+    decommissionedPredecessorCount: inspection.targets.length,
+    rebuildStartedAt: new Date().toISOString(),
+  });
+  const canonicalTargetId = hashOperationalTarget(
+    String(canonicalRecord.subscriptionId || canonicalRecord.checkoutSessionId || canonicalRecord.ownerEmail || canonicalRecord.businessName || canonicalRecord.signedUpAt || "unknown")
+  );
+  const recovery = await recoverSignupByOperationalTarget(canonicalTargetId);
+  return {
+    ok: true,
+    action: "decommissioned_and_rebuilt",
+    summary: inspection.summary,
+    removedSignupRecords: dashboardRemoval.removed,
+    providerResults: {
+      billing: billingResults,
+      vapi: vapiResults,
+      twilio: twilioResults,
+    },
+    recovery,
+  };
+}
+
 function getSignupProviderRecoveryDiagnostics({ signup = {}, pendingSignup = null, vapiNumbers = [], twilioNumbers = [], providerLookup = "not_needed" } = {}) {
   const assignedPhone = normalizePhoneForMatch(signup.twilioPhoneNumber || "");
   const vapiPhone = assignedPhone
@@ -11373,6 +11670,58 @@ app.post(
         targetType: "signup",
         targetId,
         details: { canonicalTargetId, code: error?.code || "SIGNUP_SUPERSESSION_FAILED" },
+      });
+      throw error;
+    }
+  })
+);
+
+app.post(
+  "/api/internal/operations/decommission-signup-set",
+  requireMonitorKey,
+  express.json({ limit: "8kb" }),
+  asyncRoute(async (req, res) => {
+    const targetIds = Array.isArray(req.body?.targetIds)
+      ? [...new Set(req.body.targetIds.map((value) => String(value || "").trim().toLowerCase()))]
+      : [];
+    const expectedBusinessName = String(req.body?.expectedBusinessName || "").trim();
+    const apply = req.body?.apply === true;
+    if (targetIds.length !== 3 || targetIds.some((targetId) => !/^[a-f0-9]{24}$/.test(targetId))) {
+      return res.status(400).json({ error: "Exactly three valid redacted signup target IDs are required." });
+    }
+    if (expectedBusinessName !== "Superdaves Plumbing and Sewer Services") {
+      return res.status(400).json({ error: "The exact replacement business name is required." });
+    }
+    if (apply && String(req.body?.confirmation || "") !== "DECOMMISSION_THREE_AND_REBUILD_SUPERDAVES") {
+      return res.status(400).json({ error: "Explicit decommission-and-rebuild confirmation is required." });
+    }
+    try {
+      const result = await decommissionSignupSetAndRebuild({ targetIds, expectedBusinessName, apply });
+      await recordAdminAuditEvent({
+        prisma,
+        action: "decommission_signup_set_and_rebuild",
+        outcome: apply ? "success" : "dry_run",
+        actorHash: hashKey("monitor-api"),
+        targetType: "signup_set",
+        targetId: hashKey(targetIds.slice().sort().join(":")),
+        details: {
+          apply,
+          targetCount: targetIds.length,
+          replacementBusinessHash: hashKey(expectedBusinessName),
+          summary: result.summary,
+        },
+      });
+      res.setHeader("Cache-Control", "no-store, max-age=0");
+      return res.json(result);
+    } catch (error) {
+      await recordAdminAuditEvent({
+        prisma,
+        action: "decommission_signup_set_and_rebuild",
+        outcome: "failed",
+        actorHash: hashKey("monitor-api"),
+        targetType: "signup_set",
+        targetId: hashKey(targetIds.slice().sort().join(":")),
+        details: { apply, targetCount: targetIds.length, code: error?.code || "SIGNUP_DECOMMISSION_FAILED" },
       });
       throw error;
     }
