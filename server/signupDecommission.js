@@ -49,7 +49,7 @@ function assertSharedSignupIdentity(signups = []) {
   return { ownerEmails: [...emails].sort(), ownerPhone: [...phones][0] };
 }
 
-function selectNewestPendingSignup({ pendingStore = {}, identity = {}, expectedBusinessName = "" } = {}) {
+function selectNewestPendingSignup({ pendingStore = {}, identity = {}, expectedBusinessName = "", allowMissing = false } = {}) {
   const expectedName = clean(expectedBusinessName).toLowerCase();
   if (!expectedName) {
     throw decommissionError("The expected replacement business name is required.", "SIGNUP_DECOMMISSION_CANONICAL_NAME_REQUIRED", 400);
@@ -64,10 +64,31 @@ function selectNewestPendingSignup({ pendingStore = {}, identity = {}, expectedB
       return Boolean(email) && phone === identity.ownerPhone && name === expectedName;
     })
     .sort((left, right) => Number(right[1]?.verifiedAt || right[1]?.createdAt || 0) - Number(left[1]?.verifiedAt || left[1]?.createdAt || 0));
+  if (matches.length === 0 && allowMissing) return null;
   if (matches.length !== 1) {
     throw decommissionError(
       `Expected exactly one active replacement signup; found ${matches.length}.`,
       "SIGNUP_DECOMMISSION_CANONICAL_PAYLOAD_AMBIGUOUS"
+    );
+  }
+  return matches[0];
+}
+
+function selectCanonicalSignupAttempt({ attempts = [], identity = {}, expectedBusinessName = "" } = {}) {
+  const expectedName = clean(expectedBusinessName).toLowerCase();
+  const matches = attempts
+    .filter((attempt) => attempt?.payload)
+    .filter((attempt) => {
+      const payload = attempt.payload || {};
+      const email = normalizeEmail(attempt.ownerEmail || payload?.owner?.email);
+      const phone = normalizePhone(attempt.ownerPhone || payload?.owner?.phone);
+      const name = clean(attempt.businessName || payload?.business?.name).toLowerCase();
+      return Boolean(email) && phone === identity.ownerPhone && name === expectedName;
+    });
+  if (matches.length !== 1) {
+    throw decommissionError(
+      `Expected exactly one durable replacement signup; found ${matches.length}.`,
+      "SIGNUP_DECOMMISSION_CANONICAL_ATTEMPT_AMBIGUOUS"
     );
   }
   return matches[0];
@@ -139,5 +160,6 @@ module.exports = {
   hashOperationalTarget,
   normalizePhone,
   removeSignupTargetsFromStore,
+  selectCanonicalSignupAttempt,
   selectNewestPendingSignup,
 };
