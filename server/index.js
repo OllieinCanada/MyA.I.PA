@@ -6172,11 +6172,12 @@ async function inspectSignupSetForDecommission({ targetIds, expectedBusinessName
   }
   const identity = assertSharedSignupIdentity(targets);
   const targetIdSet = new Set(targetIds);
+  const ownerEmails = new Set(identity.ownerEmails);
   const outsideIdentityMatch = allSignups.find((record) => {
     if (targetIdSet.has(hashSignupDecommissionTarget(record))) return false;
     const email = String(record.ownerEmail || "").trim().toLowerCase();
     const phone = normalizeDecommissionPhone(record.ownerPhone);
-    return email === identity.ownerEmail || phone === identity.ownerPhone;
+    return ownerEmails.has(email) || phone === identity.ownerPhone;
   });
   if (outsideIdentityMatch) {
     const error = new Error("Another signup outside the selected set shares the owner identity.");
@@ -6187,6 +6188,14 @@ async function inspectSignupSetForDecommission({ targetIds, expectedBusinessName
   const declared = assertExclusiveResourceOwnership({ targets, allSignups });
   const pendingStore = await readPendingSignupStore();
   const canonicalPending = selectNewestPendingSignup({ pendingStore, identity, expectedBusinessName });
+  const canonicalEmail = String(canonicalPending[1]?.ownerEmail || canonicalPending[1]?.payload?.owner?.email || "").trim().toLowerCase();
+  if (!canonicalEmail) {
+    const error = new Error("The replacement signup does not contain an owner email.");
+    error.statusCode = 409;
+    error.code = "SIGNUP_DECOMMISSION_CANONICAL_EMAIL_MISSING";
+    throw error;
+  }
+  const cleanupEmails = new Set([...ownerEmails, canonicalEmail]);
 
   const [vapiPhones, vapiAssistants, twilioNumbers] = await Promise.all([
     fetchVapiCollection("phone-number", ["phoneNumbers", "phone_numbers"]),
@@ -6224,8 +6233,13 @@ async function inspectSignupSetForDecommission({ targetIds, expectedBusinessName
     error.code = "STRIPE_NOT_CONFIGURED";
     throw error;
   }
-  for await (const customer of stripe.customers.list({ email: identity.ownerEmail, limit: 100 })) {
-    if (String(customer?.email || "").trim().toLowerCase() === identity.ownerEmail) stripeCustomers.push(customer);
+  for (const email of cleanupEmails) {
+    for await (const customer of stripe.customers.list({ email, limit: 100 })) {
+      if (
+        cleanupEmails.has(String(customer?.email || "").trim().toLowerCase())
+        && !stripeCustomers.some((existing) => existing.id === customer.id)
+      ) stripeCustomers.push(customer);
+    }
   }
   for (const customerId of declared.customerIds) {
     if (stripeCustomers.some((customer) => customer.id === customerId)) continue;
@@ -6252,6 +6266,8 @@ async function inspectSignupSetForDecommission({ targetIds, expectedBusinessName
     targets,
     targetIds,
     identity,
+    canonicalEmail,
+    cleanupEmails,
     pendingStore,
     canonicalTokenHash: canonicalPending[0],
     canonicalPending: canonicalPending[1],
@@ -6311,7 +6327,7 @@ async function decommissionSignupSetAndRebuild({ targetIds, expectedBusinessName
     await prisma.vapiBusinessMapping.deleteMany({ where: { matchValue: { in: mappingValues } } });
   }
 
-  const accountKey = buildProvisioningAccountKey(inspection.identity.ownerEmail, inspection.identity.ownerPhone);
+  const accountKey = buildProvisioningAccountKey(inspection.canonicalEmail, inspection.identity.ownerPhone);
   const durableKeys = [
     provisioningStateKey("twilio-number", accountKey),
     provisioningStateKey("vapi-assistant", accountKey),
@@ -6327,21 +6343,23 @@ async function decommissionSignupSetAndRebuild({ targetIds, expectedBusinessName
   for (const [key, reminder] of Object.entries(trialStore)) {
     if (
       targetSubscriptionIds.has(String(reminder?.subscriptionId || key))
-      || String(reminder?.ownerEmail || "").trim().toLowerCase() === inspection.identity.ownerEmail
+      || inspection.cleanupEmails.has(String(reminder?.ownerEmail || "").trim().toLowerCase())
     ) delete trialStore[key];
   }
   writeTrialReminderStore(trialStore);
   const pendingStripeStore = readPendingStripeSignupStore();
   for (const [key, pending] of Object.entries(pendingStripeStore)) {
     const email = String(pending?.summary?.ownerEmail || pending?.payload?.owner?.email || pending?.payload?.setupDetails?.ownerEmail || "").trim().toLowerCase();
-    if (email === inspection.identity.ownerEmail || inspection.checkoutSessionIds.has(key)) delete pendingStripeStore[key];
+    if (inspection.cleanupEmails.has(email) || inspection.checkoutSessionIds.has(key)) delete pendingStripeStore[key];
   }
   writePendingStripeSignupStore(pendingStripeStore);
   await Promise.all(Object.keys(inspection.pendingStore)
     .filter((tokenHash) => tokenHash !== inspection.canonicalTokenHash)
     .filter((tokenHash) => {
       const pending = inspection.pendingStore[tokenHash];
-      return String(pending?.ownerEmail || pending?.payload?.owner?.email || "").trim().toLowerCase() === inspection.identity.ownerEmail;
+      const email = String(pending?.ownerEmail || pending?.payload?.owner?.email || "").trim().toLowerCase();
+      const phone = normalizeDecommissionPhone(pending?.payload?.owner?.phone);
+      return inspection.cleanupEmails.has(email) || phone === inspection.identity.ownerPhone;
     })
     .map((tokenHash) => pendingSignupVerifications.removeHash(tokenHash)));
 
