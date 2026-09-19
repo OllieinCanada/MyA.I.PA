@@ -440,6 +440,13 @@ const twilioStagingWebhookProcessRateLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: "Too many staging webhook requests." },
 });
+const telegramActionsProcessRateLimiter = rateLimit({
+  windowMs: PUBLIC_ROUTE_WINDOW_MS,
+  limit: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many Telegram approval requests. Wait a few minutes and try again." },
+});
 const TRIAL_REMINDER_CHECK_INTERVAL_MS = parsePositiveInt(process.env.TRIAL_REMINDER_CHECK_INTERVAL_MS, 60 * 60 * 1000);
 const TRIAL_USAGE_LIMIT_ENABLED = isEnabled(process.env.TRIAL_USAGE_LIMIT_ENABLED);
 const TRIAL_USAGE_WARNING_SECONDS = parsePositiveInt(process.env.TRIAL_USAGE_WARNING_SECONDS, 20 * 60);
@@ -10707,6 +10714,7 @@ async function processClaimedTelegramApproval({ approval, callbackQuery }) {
 
 app.post(
   "/api/webhooks/telegram/actions",
+  telegramActionsProcessRateLimiter,
   enforcePublicRouteRateLimit("telegram-actions", 60),
   asyncRoute(async (req, res) => {
     if (!TELEGRAM_GUARDED_ACTIONS_ENABLED) return res.status(404).json({ error: "Telegram actions are disabled." });
