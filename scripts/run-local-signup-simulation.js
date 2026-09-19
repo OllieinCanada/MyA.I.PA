@@ -89,6 +89,9 @@ async function simulateOne(index) {
     vapiPhoneNumberId: `pn_synthetic_${serial}`,
     vapiAssistantId: `asst_synthetic_${serial}`,
     smsRoutingStatus: "healthy",
+    agentContentStatus: "verified",
+    agentContentFingerprint: `synthetic-content-${serial}`,
+    agentContentVerifiedAt: "2026-09-07T12:05:30.000Z",
     agentRouteBindingStatus: "verified",
     agentRouteBindingMode: index % 2 ? "direct" : "trial-gate",
     agentRouteBindingVerifiedAt: "2026-09-07T12:06:00.000Z",
@@ -115,6 +118,14 @@ async function simulateOne(index) {
     return { status: "queued", sid: `SM_SYNTHETIC_${serial}_${sent.length}` };
   };
 
+  await runAgentTextTest({ signup, sendSms, persist });
+  Object.assign(signup, getAgentTestDeliveryUpdate({
+    signup,
+    messageSid: signup.agentTestOwnerMessageSid,
+    status: "delivered",
+    now: "2026-09-07T12:07:00.000Z",
+  }));
+
   let retried = false;
   try {
     await runAgentTextTest({ signup, sendSms, persist });
@@ -123,6 +134,13 @@ async function simulateOne(index) {
     retried = true;
     await runAgentTextTest({ signup, sendSms, persist });
   }
+  Object.assign(signup, getAgentTestDeliveryUpdate({
+    signup,
+    messageSid: signup.agentTestCustomerMessageSid,
+    status: "delivered",
+    now: "2026-09-07T12:08:00.000Z",
+  }));
+  await runAgentTextTest({ signup, sendSms, persist });
 
   signup.agentTestVersion = AGENT_TEST_VERSION;
   const business = completeBusiness(index, signup);
@@ -150,6 +168,7 @@ async function simulateOne(index) {
       assistantId: signup.vapiAssistantId,
       aiNumber: signup.twilioPhoneNumber,
       ownerPhone: signup.ownerPhone,
+      contentFingerprint: signup.agentContentFingerprint,
     }),
   };
   assert.equal(enforceAgentTestReadyStatus(failedSignup).status, "agent_testing");

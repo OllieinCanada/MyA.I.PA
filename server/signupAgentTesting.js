@@ -1,6 +1,6 @@
 const { buildCustomerBody, buildOwnerBody } = require("./compositeCallNotifications");
 
-const AGENT_TEST_VERSION = "2026-09-05-v2";
+const AGENT_TEST_VERSION = "2026-09-19-v4";
 
 function clean(value, max = 240) {
   return String(value || "").replace(/\s+/g, " ").trim().slice(0, max);
@@ -13,8 +13,8 @@ function normalizePhone(value) {
   return /^\+[1-9]\d{7,14}$/.test(normalized) ? normalized : "";
 }
 
-function buildAgentTestFingerprint({ assistantId, aiNumber, ownerPhone } = {}) {
-  return [clean(assistantId, 160), normalizePhone(aiNumber), normalizePhone(ownerPhone)].join("|");
+function buildAgentTestFingerprint({ assistantId, aiNumber, ownerPhone, contentFingerprint } = {}) {
+  return [clean(assistantId, 160), normalizePhone(aiNumber), normalizePhone(ownerPhone), clean(contentFingerprint, 80)].join("|");
 }
 
 function buildAgentRouteFingerprint({ mode, businessId, phoneNumberId, aiNumber, assistantId } = {}) {
@@ -117,7 +117,7 @@ function assessAgentRouteBinding({
       }),
     };
   }
-  if (live.serverUrl) return stop("conflict", "AGENT_PHONE_DYNAMIC_ROUTE_CONFLICT");
+  if (live.serverUrl && !dynamicGateMatches) return stop("conflict", "AGENT_PHONE_DYNAMIC_ROUTE_CONFLICT");
   return { status: "missing", action: "attach", code: "AGENT_PHONE_ASSISTANT_MISSING", expected, live, gate };
 }
 
@@ -177,13 +177,24 @@ function buildAgentReadiness({ signup = {}, business = null } = {}) {
     && signup.agentTestVersion !== AGENT_TEST_VERSION
   );
   const routeBindingReady = currentRouteBindingReady || legacyPassedBeforeRouteProof;
-  const fingerprint = buildAgentTestFingerprint({ assistantId, aiNumber, ownerPhone });
+  const contentReady = Boolean(
+    signup.agentContentStatus === "verified"
+    && signup.agentContentFingerprint
+    && signup.agentContentVerifiedAt
+  );
+  const fingerprint = buildAgentTestFingerprint({
+    assistantId,
+    aiNumber,
+    ownerPhone,
+    contentFingerprint: signup.agentContentFingerprint,
+  });
   const testMatches = Boolean(fingerprint && signup.agentTestFingerprint === fingerprint);
   const ownerProviderStatus = clean(signup.agentTestOwnerProviderStatus, 40).toLowerCase();
   const customerProviderStatus = clean(signup.agentTestCustomerProviderStatus, 40).toLowerCase();
-  const failedStatuses = new Set(["canceled", "failed", "undelivered"]);
+  const deliveredStatuses = new Set(["delivered", "read"]);
   const checks = [
     { key: "assistant", label: "Assistant built", done: Boolean(assistantId) },
+    { key: "assistant-content", label: "Assistant matches the saved signup answers", done: contentReady },
     { key: "number", label: "AI number connected", done: Boolean(aiNumber) },
     { key: "agent-route", label: "Phone routes to the correct assistant", done: routeBindingReady },
     { key: "business", label: "Business record created", done: Boolean(business?.id) },
@@ -191,8 +202,16 @@ function buildAgentReadiness({ signup = {}, business = null } = {}) {
     { key: "phone-id-mapping", label: "Vapi phone record linked to this business", done: phoneIdMappingReady },
     { key: "assistant-mapping", label: "Assistant linked to this business", done: assistantMappingReady },
     { key: "routing", label: "Owner and customer text routes checked", done: signup.smsRoutingStatus === "healthy" },
-    { key: "owner-text", label: "Owner sample text accepted", done: testMatches && Boolean(signup.agentTestOwnerAcceptedAt) && !failedStatuses.has(ownerProviderStatus) },
-    { key: "customer-text", label: "Customer sample text accepted", done: testMatches && Boolean(signup.agentTestCustomerAcceptedAt) && !failedStatuses.has(customerProviderStatus) },
+    {
+      key: "owner-text",
+      label: "Owner sample text delivered",
+      done: testMatches && Boolean(signup.agentTestOwnerDeliveredAt) && deliveredStatuses.has(ownerProviderStatus),
+    },
+    {
+      key: "customer-text",
+      label: "Customer sample text delivered",
+      done: testMatches && Boolean(signup.agentTestCustomerDeliveredAt) && deliveredStatuses.has(customerProviderStatus),
+    },
   ];
   const passed = checks.every((check) => check.done);
   return {
@@ -211,6 +230,7 @@ function enforceAgentTestReadyStatus(record = {}) {
     assistantId: record.vapiAssistantId,
     aiNumber: record.twilioPhoneNumber,
     ownerPhone: record.ownerPhone || record.businessPhone,
+    contentFingerprint: record.agentContentFingerprint,
   });
   const terminalFailure = [record.agentTestOwnerProviderStatus, record.agentTestCustomerProviderStatus]
     .some((status) => ["canceled", "failed", "undelivered"].includes(String(status || "").trim().toLowerCase()));
@@ -222,17 +242,28 @@ function enforceAgentTestReadyStatus(record = {}) {
     assistantId: record.vapiAssistantId,
   });
   const currentVersionRequiresRouteProof = record.agentTestVersion === AGENT_TEST_VERSION;
+  const currentVersionRequiresContentProof = record.agentTestVersion === AGENT_TEST_VERSION;
   const routeProofReady = Boolean(
     record.agentRouteBindingStatus === "verified"
     && record.agentRouteBindingVerifiedAt
     && record.agentRouteBindingFingerprint === expectedRouteFingerprint
   );
+  const contentProofReady = Boolean(
+    record.agentContentStatus === "verified"
+    && record.agentContentFingerprint
+    && record.agentContentVerifiedAt
+  );
   if (
     record.agentTestStatus === "passed"
     && expectedFingerprint
     && record.agentTestFingerprint === expectedFingerprint
+    && (!currentVersionRequiresContentProof || contentProofReady)
     && record.agentTestOwnerAcceptedAt
     && record.agentTestCustomerAcceptedAt
+    && record.agentTestOwnerDeliveredAt
+    && record.agentTestCustomerDeliveredAt
+    && ["delivered", "read"].includes(String(record.agentTestOwnerProviderStatus || "").trim().toLowerCase())
+    && ["delivered", "read"].includes(String(record.agentTestCustomerProviderStatus || "").trim().toLowerCase())
     && (!currentVersionRequiresRouteProof || routeProofReady)
     && !terminalFailure
   ) {
@@ -262,6 +293,13 @@ function getAgentTestDeliveryUpdate({ signup = {}, messageSid, status, errorCode
   };
   if (["delivered", "read"].includes(normalizedStatus)) {
     update[`agentTest${channel}DeliveredAt`] = now;
+    update.agentTestStatus = channel === "Owner" ? "awaiting_customer_delivery" : "passed";
+    if (channel === "Customer" && signup.agentTestOwnerDeliveredAt) {
+      update.agentTestCheckedAt = now;
+      update.agentTestErrorCode = "";
+    } else if (channel === "Customer") {
+      update.agentTestStatus = "awaiting_owner_delivery";
+    }
   }
   if (["canceled", "failed", "undelivered"].includes(normalizedStatus)) {
     update.agentTestStatus = "failed";
@@ -287,15 +325,53 @@ async function runAgentTextTest({ signup = {}, sendSms, persist = () => {}, forc
     throw error;
   }
 
-  const fingerprint = buildAgentTestFingerprint({ assistantId, aiNumber, ownerPhone });
+  if (
+    signup.agentContentStatus !== "verified"
+    || !signup.agentContentFingerprint
+    || !signup.agentContentVerifiedAt
+  ) {
+    const error = new Error("The assistant must match the saved signup answers before text testing can begin.");
+    error.code = "AGENT_CONTENT_NOT_VERIFIED";
+    throw error;
+  }
+
+  const fingerprint = buildAgentTestFingerprint({
+    assistantId,
+    aiNumber,
+    ownerPhone,
+    contentFingerprint: signup.agentContentFingerprint,
+  });
   const sameConfiguration = signup.agentTestFingerprint === fingerprint;
-  if (!force && sameConfiguration && signup.agentTestOwnerAcceptedAt && signup.agentTestCustomerAcceptedAt) {
+  const delivered = (status) => ["delivered", "read"].includes(clean(status, 40).toLowerCase());
+  if (
+    !force
+    && sameConfiguration
+    && signup.agentTestOwnerDeliveredAt
+    && signup.agentTestCustomerDeliveredAt
+    && delivered(signup.agentTestOwnerProviderStatus)
+    && delivered(signup.agentTestCustomerProviderStatus)
+  ) {
     return { passed: true, skipped: true, reason: "already_passed", fingerprint };
   }
 
   const messages = buildAgentTestMessages({ businessName: signup.businessName, ownerName: signup.ownerName });
-  const progress = sameConfiguration ? { ...signup } : {};
+  const resetProgress = force || !sameConfiguration;
+  const progress = resetProgress ? {} : { ...signup };
+  const resetFields = resetProgress ? {
+    agentTestOwnerAcceptedAt: "",
+    agentTestOwnerProviderStatus: "",
+    agentTestOwnerMessageSid: "",
+    agentTestOwnerDeliveredAt: "",
+    agentTestOwnerStatusUpdatedAt: "",
+    agentTestCustomerAcceptedAt: "",
+    agentTestCustomerProviderStatus: "",
+    agentTestCustomerMessageSid: "",
+    agentTestCustomerDeliveredAt: "",
+    agentTestCustomerStatusUpdatedAt: "",
+    agentTestPassedAt: "",
+  } : {};
   const common = {
+    ...resetFields,
     agentTestVersion: AGENT_TEST_VERSION,
     agentTestStatus: "running",
     agentTestFingerprint: fingerprint,
@@ -310,14 +386,52 @@ async function runAgentTextTest({ signup = {}, sendSms, persist = () => {}, forc
       progress.agentTestOwnerAcceptedAt = new Date().toISOString();
       progress.agentTestOwnerProviderStatus = clean(ownerResult?.status || "accepted", 40);
       progress.agentTestOwnerMessageSid = clean(ownerResult?.sid, 80);
-      persist({ ...common, ...progress });
+      persist({ ...common, ...progress, agentTestStatus: "awaiting_owner_delivery" });
+      return {
+        passed: false,
+        pending: true,
+        stage: "owner_delivery",
+        fingerprint,
+        ownerAccepted: true,
+        customerAccepted: false,
+      };
     }
-    if (force || !progress.agentTestCustomerAcceptedAt) {
+    if (!progress.agentTestOwnerDeliveredAt || !delivered(progress.agentTestOwnerProviderStatus)) {
+      persist({ ...common, ...progress, agentTestStatus: "awaiting_owner_delivery" });
+      return {
+        passed: false,
+        pending: true,
+        stage: "owner_delivery",
+        fingerprint,
+        ownerAccepted: true,
+        customerAccepted: Boolean(progress.agentTestCustomerAcceptedAt),
+      };
+    }
+    if (!progress.agentTestCustomerAcceptedAt) {
       const customerResult = await sendSms({ to: ownerPhone, from: aiNumber, message: messages.customer });
       progress.agentTestCustomerAcceptedAt = new Date().toISOString();
       progress.agentTestCustomerProviderStatus = clean(customerResult?.status || "accepted", 40);
       progress.agentTestCustomerMessageSid = clean(customerResult?.sid, 80);
-      persist({ ...common, ...progress });
+      persist({ ...common, ...progress, agentTestStatus: "awaiting_customer_delivery" });
+      return {
+        passed: false,
+        pending: true,
+        stage: "customer_delivery",
+        fingerprint,
+        ownerAccepted: true,
+        customerAccepted: true,
+      };
+    }
+    if (!progress.agentTestCustomerDeliveredAt || !delivered(progress.agentTestCustomerProviderStatus)) {
+      persist({ ...common, ...progress, agentTestStatus: "awaiting_customer_delivery" });
+      return {
+        passed: false,
+        pending: true,
+        stage: "customer_delivery",
+        fingerprint,
+        ownerAccepted: true,
+        customerAccepted: true,
+      };
     }
     const completed = {
       ...common,

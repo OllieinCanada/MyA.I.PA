@@ -23,6 +23,9 @@ const signup = {
   vapiPhoneNumberId: "phone-123",
   smsRoutingStatus: "healthy",
   businessId: 7,
+  agentContentStatus: "verified",
+  agentContentFingerprint: "content-fingerprint-123",
+  agentContentVerifiedAt: "2026-09-05T11:58:00.000Z",
 };
 signup.agentRouteBindingStatus = "verified";
 signup.agentRouteBindingMode = "direct";
@@ -35,7 +38,7 @@ signup.agentRouteBindingFingerprint = buildAgentRouteFingerprint({
   assistantId: signup.vapiAssistantId,
 });
 
-test("agent routing accepts direct and protected trial-gate bindings", () => {
+test("agent routing requires the live phone to retain its direct assistant binding", () => {
   const common = {
     expectedBusinessId: signup.businessId,
     expectedPhoneNumberId: signup.vapiPhoneNumberId,
@@ -49,7 +52,7 @@ test("agent routing accepts direct and protected trial-gate bindings", () => {
   assert.equal(direct.status, "verified");
   assert.equal(direct.mode, "direct");
 
-  const dynamic = assessAgentRouteBinding({
+  const dynamicWithoutAssistant = assessAgentRouteBinding({
     ...common,
     liveServerUrl: "https://api.myaipa.ca/api/webhooks/voice",
     trialGate: {
@@ -60,8 +63,9 @@ test("agent routing accepts direct and protected trial-gate bindings", () => {
       assistantId: signup.vapiAssistantId,
     },
   });
-  assert.equal(dynamic.status, "verified");
-  assert.equal(dynamic.mode, "trial-gate");
+  assert.equal(dynamicWithoutAssistant.status, "verified");
+  assert.equal(dynamicWithoutAssistant.action, "none");
+  assert.equal(dynamicWithoutAssistant.mode, "trial-gate");
 });
 
 test("agent routing repairs only an empty unclaimed phone and stops on conflicts", () => {
@@ -118,6 +122,19 @@ test("final Twilio callbacks update the matching test leg and revoke readiness o
   });
   assert.equal(delivered.agentTestOwnerProviderStatus, "delivered");
   assert.equal(delivered.agentTestOwnerDeliveredAt, "2026-09-05T12:00:02.000Z");
+  assert.equal(delivered.agentTestStatus, "awaiting_customer_delivery");
+
+  const completed = getAgentTestDeliveryUpdate({
+    signup: {
+      agentTestOwnerDeliveredAt: "2026-09-05T12:00:02.000Z",
+      agentTestCustomerMessageSid: "SM_CUSTOMER",
+    },
+    messageSid: "SM_CUSTOMER",
+    status: "delivered",
+    now: "2026-09-05T12:00:04.000Z",
+  });
+  assert.equal(completed.agentTestStatus, "passed");
+  assert.equal(completed.agentTestCheckedAt, "2026-09-05T12:00:04.000Z");
 
   const failed = getAgentTestDeliveryUpdate({
     signup: { agentTestCustomerMessageSid: "SM_CUSTOMER" },
@@ -147,9 +164,17 @@ test("setup-ready is globally held until the mandatory agent test passes", () =>
       assistantId: signup.vapiAssistantId,
       aiNumber: signup.twilioPhoneNumber,
       ownerPhone: signup.ownerPhone,
+      contentFingerprint: signup.agentContentFingerprint,
     }),
     agentTestOwnerAcceptedAt: "2026-09-05T12:00:00.000Z",
     agentTestCustomerAcceptedAt: "2026-09-05T12:00:01.000Z",
+    agentTestOwnerDeliveredAt: "2026-09-05T12:00:02.000Z",
+    agentTestCustomerDeliveredAt: "2026-09-05T12:00:03.000Z",
+    agentTestOwnerProviderStatus: "delivered",
+    agentTestCustomerProviderStatus: "delivered",
+    agentContentStatus: signup.agentContentStatus,
+    agentContentFingerprint: signup.agentContentFingerprint,
+    agentContentVerifiedAt: signup.agentContentVerifiedAt,
     businessId: signup.businessId,
     agentRouteBindingStatus: signup.agentRouteBindingStatus,
     agentRouteBindingMode: signup.agentRouteBindingMode,
@@ -171,40 +196,86 @@ test("setup-ready is globally held until the mandatory agent test passes", () =>
       assistantId: signup.vapiAssistantId,
       aiNumber: signup.twilioPhoneNumber,
       ownerPhone: signup.ownerPhone,
+      contentFingerprint: signup.agentContentFingerprint,
     }),
     agentTestOwnerAcceptedAt: "2026-09-05T12:00:00.000Z",
     agentTestCustomerAcceptedAt: "2026-09-05T12:00:01.000Z",
   });
   assert.equal(currentWithoutRouteProof.status, "agent_testing");
+
+  const currentWithoutContentProof = enforceAgentTestReadyStatus({
+    ...ready,
+    status: "setup_ready",
+    agentTestVersion: AGENT_TEST_VERSION,
+    vapiPhoneNumberId: signup.vapiPhoneNumberId,
+    agentContentStatus: "",
+    agentContentFingerprint: "",
+    agentContentVerifiedAt: "",
+    agentTestFingerprint: buildAgentTestFingerprint({
+      assistantId: signup.vapiAssistantId,
+      aiNumber: signup.twilioPhoneNumber,
+      ownerPhone: signup.ownerPhone,
+      contentFingerprint: "",
+    }),
+  });
+  assert.equal(currentWithoutContentProof.status, "agent_testing");
 });
 
-test("text test sends both samples from the assigned AI number and is replay safe", async () => {
+test("text test waits for confirmed owner delivery before sending the customer copy", async () => {
   const sent = [];
   const stored = { ...signup };
   const sendSms = async (input) => { sent.push(input); return { status: "queued", sid: `SM_TEST_${sent.length}` }; };
   const persist = (fields) => Object.assign(stored, fields);
-  const result = await runAgentTextTest({ signup: stored, sendSms, persist });
-  assert.equal(result.passed, true);
+  const ownerPending = await runAgentTextTest({ signup: stored, sendSms, persist });
+  assert.equal(ownerPending.passed, false);
+  assert.equal(ownerPending.stage, "owner_delivery");
+  assert.equal(sent.length, 1);
+  assert.match(sent[0].message, /OWNER COPY/);
+  Object.assign(stored, getAgentTestDeliveryUpdate({
+    signup: stored,
+    messageSid: stored.agentTestOwnerMessageSid,
+    status: "delivered",
+  }));
+  const customerPending = await runAgentTextTest({ signup: stored, sendSms, persist });
+  assert.equal(customerPending.passed, false);
+  assert.equal(customerPending.stage, "customer_delivery");
   assert.equal(sent.length, 2);
   assert.ok(sent.every((item) => item.to === signup.ownerPhone && item.from === signup.twilioPhoneNumber));
   assert.equal(stored.agentTestOwnerMessageSid, "SM_TEST_1");
   assert.equal(stored.agentTestCustomerMessageSid, "SM_TEST_2");
+  Object.assign(stored, getAgentTestDeliveryUpdate({
+    signup: stored,
+    messageSid: stored.agentTestCustomerMessageSid,
+    status: "delivered",
+  }));
+  const completed = await runAgentTextTest({ signup: stored, sendSms, persist });
+  assert.equal(completed.passed, true);
   const replay = await runAgentTextTest({ signup: stored, sendSms, persist });
   assert.equal(replay.skipped, true);
   assert.equal(sent.length, 2);
 });
 
-test("a partial test resumes only the missing sample", async () => {
+test("a partial test does not send the customer copy until owner delivery is confirmed", async () => {
   const fingerprint = buildAgentTestFingerprint({
     assistantId: signup.vapiAssistantId,
     aiNumber: signup.twilioPhoneNumber,
     ownerPhone: signup.ownerPhone,
+    contentFingerprint: signup.agentContentFingerprint,
   });
   const stored = { ...signup, agentTestFingerprint: fingerprint, agentTestOwnerAcceptedAt: "2026-09-05T12:00:00.000Z" };
   const sent = [];
   await runAgentTextTest({
     signup: stored,
     sendSms: async (input) => { sent.push(input); return { status: "queued" }; },
+    persist: (fields) => Object.assign(stored, fields),
+  });
+  assert.equal(sent.length, 0);
+
+  stored.agentTestOwnerDeliveredAt = "2026-09-05T12:00:01.000Z";
+  stored.agentTestOwnerProviderStatus = "delivered";
+  await runAgentTextTest({
+    signup: stored,
+    sendSms: async (input) => { sent.push(input); return { status: "queued", sid: "SM_CUSTOMER" }; },
     persist: (fields) => Object.assign(stored, fields),
   });
   assert.equal(sent.length, 1);
@@ -228,6 +299,7 @@ test("readiness fails closed until mapping, routing, and both texts pass", () =>
     assistantId: signup.vapiAssistantId,
     aiNumber: signup.twilioPhoneNumber,
     ownerPhone: signup.ownerPhone,
+    contentFingerprint: signup.agentContentFingerprint,
   });
   const after = buildAgentReadiness({
     signup: {
@@ -235,6 +307,10 @@ test("readiness fails closed until mapping, routing, and both texts pass", () =>
       agentTestFingerprint: fingerprint,
       agentTestOwnerAcceptedAt: "2026-09-05T12:00:00.000Z",
       agentTestCustomerAcceptedAt: "2026-09-05T12:00:01.000Z",
+      agentTestOwnerDeliveredAt: "2026-09-05T12:00:02.000Z",
+      agentTestCustomerDeliveredAt: "2026-09-05T12:00:03.000Z",
+      agentTestOwnerProviderStatus: "delivered",
+      agentTestCustomerProviderStatus: "delivered",
     },
     business,
   });
@@ -247,6 +323,7 @@ test("one mapping can never stand in for the complete number, phone-id, and assi
     assistantId: signup.vapiAssistantId,
     aiNumber: signup.twilioPhoneNumber,
     ownerPhone: signup.ownerPhone,
+    contentFingerprint: signup.agentContentFingerprint,
   });
   const readiness = buildAgentReadiness({
     signup: {
@@ -255,6 +332,10 @@ test("one mapping can never stand in for the complete number, phone-id, and assi
       agentTestFingerprint: fingerprint,
       agentTestOwnerAcceptedAt: "2026-09-05T12:00:00.000Z",
       agentTestCustomerAcceptedAt: "2026-09-05T12:00:01.000Z",
+      agentTestOwnerDeliveredAt: "2026-09-05T12:00:02.000Z",
+      agentTestCustomerDeliveredAt: "2026-09-05T12:00:03.000Z",
+      agentTestOwnerProviderStatus: "delivered",
+      agentTestCustomerProviderStatus: "delivered",
     },
     business: {
       id: 7,
