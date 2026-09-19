@@ -40,7 +40,7 @@ test("decommission allows stale duplicate emails when every record shares one ow
 test("the newest replacement must have an email and match owner phone plus exact business name", () => {
   const pendingStore = {
     older: { ownerEmail: "owner@example.com", businessName: "Old Name", createdAt: 10, payload: { owner: { phone: "+19055550100" }, business: { name: "Old Name" } } },
-    newest: { ownerEmail: "owner@example.com", businessName: "Superdaves Plumbing and Sewer Services", verifiedAt: 20, payload: { owner: { phone: "+19055550100" }, business: { name: "Superdaves Plumbing and Sewer Services" } } },
+    newest: { ownerEmail: "replacement@example.com", businessName: "Superdaves Plumbing and Sewer Services", verifiedAt: 20, payload: { owner: { phone: "+19055550100" }, business: { name: "Superdaves Plumbing and Sewer Services" } } },
   };
   const match = selectNewestPendingSignup({
     pendingStore,
@@ -48,6 +48,7 @@ test("the newest replacement must have an email and match owner phone plus exact
     expectedBusinessName: "Superdaves Plumbing and Sewer Services",
   });
   assert.equal(match[0], "newest");
+  assert.equal(match[1].ownerEmail, "replacement@example.com");
   assert.equal(match[1].payload.business.name, "Superdaves Plumbing and Sewer Services");
 });
 

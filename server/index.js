@@ -6176,11 +6176,10 @@ async function inspectSignupSetForDecommission({ targetIds, expectedBusinessName
   const outsideIdentityMatch = allSignups.find((record) => {
     if (targetIdSet.has(hashSignupDecommissionTarget(record))) return false;
     const email = String(record.ownerEmail || "").trim().toLowerCase();
-    const phone = normalizeDecommissionPhone(record.ownerPhone);
-    return ownerEmails.has(email) || phone === identity.ownerPhone;
+    return ownerEmails.has(email);
   });
   if (outsideIdentityMatch) {
-    const error = new Error("Another signup outside the selected set shares the owner identity.");
+    const error = new Error("Another signup outside the selected set shares an owner email.");
     error.statusCode = 409;
     error.code = "SIGNUP_DECOMMISSION_IDENTITY_SHARED";
     throw error;
@@ -6193,6 +6192,16 @@ async function inspectSignupSetForDecommission({ targetIds, expectedBusinessName
     const error = new Error("The replacement signup does not contain an owner email.");
     error.statusCode = 409;
     error.code = "SIGNUP_DECOMMISSION_CANONICAL_EMAIL_MISSING";
+    throw error;
+  }
+  const outsideCanonicalEmailMatch = allSignups.find((record) => {
+    if (targetIdSet.has(hashSignupDecommissionTarget(record))) return false;
+    return String(record.ownerEmail || "").trim().toLowerCase() === canonicalEmail;
+  });
+  if (outsideCanonicalEmailMatch) {
+    const error = new Error("Another signup outside the selected set shares the replacement owner email.");
+    error.statusCode = 409;
+    error.code = "SIGNUP_DECOMMISSION_CANONICAL_EMAIL_SHARED";
     throw error;
   }
   const cleanupEmails = new Set([...ownerEmails, canonicalEmail]);
