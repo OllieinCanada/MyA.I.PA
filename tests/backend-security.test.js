@@ -401,6 +401,40 @@ test("duplicate signup supersession requires the monitor key and explicit confir
   assert.match((await unconfirmed.json()).error, /confirmation/i);
 });
 
+test("signup-set decommission requires the monitor key, exact scope, and explicit confirmation", async () => {
+  const body = {
+    targetIds: [
+      "1234567890abcdef12345678",
+      "abcdef1234567890abcdef12",
+      "fedcba0987654321fedcba09",
+    ],
+    expectedBusinessName: "Superdaves Plumbing and Sewer Services",
+    apply: true,
+    confirmation: "DECOMMISSION_THREE_AND_REBUILD_SUPERDAVES",
+  };
+  const unauthorized = await request("/api/internal/operations/decommission-signup-set", {
+    method: "POST",
+    body,
+  });
+  assert.equal(unauthorized.status, 401);
+
+  const unconfirmed = await request("/api/internal/operations/decommission-signup-set", {
+    method: "POST",
+    headers: { "x-monitor-api-key": process.env.MONITOR_API_KEY },
+    body: { ...body, confirmation: "" },
+  });
+  assert.equal(unconfirmed.status, 400);
+  assert.match((await unconfirmed.json()).error, /confirmation/i);
+
+  const wrongScope = await request("/api/internal/operations/decommission-signup-set", {
+    method: "POST",
+    headers: { "x-monitor-api-key": process.env.MONITOR_API_KEY },
+    body: { ...body, expectedBusinessName: "Another Business" },
+  });
+  assert.equal(wrongScope.status, 400);
+  assert.match((await wrongScope.json()).error, /exact replacement business name/i);
+});
+
 test("duplicate signup supersession is resource-free, auditable, and redacted", () => {
   const duplicateSignup = {
     status: "setup_error",
