@@ -146,6 +146,7 @@ const {
   hashOperationalTarget: hashSignupDecommissionTarget,
   normalizePhone: normalizeDecommissionPhone,
   removeSignupTargetsFromStore,
+  selectCanonicalSignupAttempt,
   selectNewestPendingSignup,
 } = require("./signupDecommission");
 const {
@@ -6186,8 +6187,18 @@ async function inspectSignupSetForDecommission({ targetIds, expectedBusinessName
   }
   const declared = assertExclusiveResourceOwnership({ targets, allSignups });
   const pendingStore = await readPendingSignupStore();
-  const canonicalPending = selectNewestPendingSignup({ pendingStore, identity, expectedBusinessName });
-  const canonicalEmail = String(canonicalPending[1]?.ownerEmail || canonicalPending[1]?.payload?.owner?.email || "").trim().toLowerCase();
+  const canonicalPending = selectNewestPendingSignup({ pendingStore, identity, expectedBusinessName, allowMissing: true });
+  const canonicalAttempt = canonicalPending ? null : selectCanonicalSignupAttempt({
+    attempts: await prisma.signupAttempt.findMany({
+      where: { businessName: { equals: expectedBusinessName, mode: "insensitive" } },
+      orderBy: [{ createdAt: "desc" }],
+      take: 20,
+    }),
+    identity,
+    expectedBusinessName,
+  });
+  const canonicalPayload = canonicalPending?.[1]?.payload || canonicalAttempt?.payload;
+  const canonicalEmail = String(canonicalPending?.[1]?.ownerEmail || canonicalAttempt?.ownerEmail || canonicalPayload?.owner?.email || "").trim().toLowerCase();
   if (!canonicalEmail) {
     const error = new Error("The replacement signup does not contain an owner email.");
     error.statusCode = 409;
@@ -6278,8 +6289,9 @@ async function inspectSignupSetForDecommission({ targetIds, expectedBusinessName
     canonicalEmail,
     cleanupEmails,
     pendingStore,
-    canonicalTokenHash: canonicalPending[0],
-    canonicalPending: canonicalPending[1],
+    canonicalTokenHash: canonicalPending?.[0] || "",
+    canonicalPayload,
+    canonicalSource: canonicalPending ? "pending_verification" : "signup_attempt",
     declared,
     vapiPhoneTargets,
     vapiAssistantTargets,
@@ -6372,7 +6384,18 @@ async function decommissionSignupSetAndRebuild({ targetIds, expectedBusinessName
     })
     .map((tokenHash) => pendingSignupVerifications.removeHash(tokenHash)));
 
-  const canonicalPayload = inspection.canonicalPending.payload;
+  if (inspection.canonicalSource === "signup_attempt") {
+    await createPendingSignupVerification({
+      payload: inspection.canonicalPayload,
+      ownerEmail: inspection.canonicalEmail,
+      businessName: expectedBusinessName,
+      reviewReasons: ["authorized_account_rebuild"],
+      ipHash: hashKey(`authorized-rebuild:${inspection.canonicalEmail}`),
+      purpose: "manual_review_recovery",
+      ttlMs: 7 * 24 * 60 * 60 * 1000,
+    });
+  }
+  const canonicalPayload = inspection.canonicalPayload;
   const canonicalRecord = upsertSignupDashboardFromPayload(canonicalPayload, {
     status: "manual_review_reopened",
     reviewRequired: true,

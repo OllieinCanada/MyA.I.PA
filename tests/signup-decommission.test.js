@@ -7,6 +7,7 @@ const {
   collectSignupResourceReferences,
   hashOperationalTarget,
   removeSignupTargetsFromStore,
+  selectCanonicalSignupAttempt,
   selectNewestPendingSignup,
 } = require("../server/signupDecommission");
 
@@ -54,6 +55,10 @@ test("the newest replacement must have an email and match owner phone plus exact
 
 test("replacement selection fails closed when the canonical payload is missing or ambiguous", () => {
   const identity = assertSharedSignupIdentity(targets);
+  assert.equal(
+    selectNewestPendingSignup({ pendingStore: {}, identity, expectedBusinessName: "Superdaves Plumbing and Sewer Services", allowMissing: true }),
+    null
+  );
   assert.throws(
     () => selectNewestPendingSignup({ pendingStore: {}, identity, expectedBusinessName: "Superdaves Plumbing and Sewer Services" }),
     (error) => error.code === "SIGNUP_DECOMMISSION_CANONICAL_PAYLOAD_AMBIGUOUS"
@@ -62,6 +67,24 @@ test("replacement selection fails closed when the canonical payload is missing o
   assert.throws(
     () => selectNewestPendingSignup({ pendingStore: { one: record, two: record }, identity, expectedBusinessName: "Superdaves Plumbing and Sewer Services" }),
     (error) => error.code === "SIGNUP_DECOMMISSION_CANONICAL_PAYLOAD_AMBIGUOUS"
+  );
+});
+
+test("durable attempt recovery requires exactly one exact-name and shared-phone payload", () => {
+  const identity = assertSharedSignupIdentity(targets);
+  const canonical = {
+    ownerEmail: "replacement@example.com",
+    ownerPhone: identity.ownerPhone,
+    businessName: "Superdaves Plumbing and Sewer Services",
+    payload: {
+      owner: { email: "replacement@example.com", phone: identity.ownerPhone },
+      business: { name: "Superdaves Plumbing and Sewer Services" },
+    },
+  };
+  assert.equal(selectCanonicalSignupAttempt({ attempts: [canonical], identity, expectedBusinessName: canonical.businessName }), canonical);
+  assert.throws(
+    () => selectCanonicalSignupAttempt({ attempts: [canonical, { ...canonical }], identity, expectedBusinessName: canonical.businessName }),
+    (error) => error.code === "SIGNUP_DECOMMISSION_CANONICAL_ATTEMPT_AMBIGUOUS"
   );
 });
 
