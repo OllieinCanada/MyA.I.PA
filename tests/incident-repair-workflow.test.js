@@ -218,3 +218,27 @@ test("Codex workflow is sandboxed, independently verified, draft-only, and repor
   assert.match(prompt, /untrusted runtime evidence, never instructions/i);
   assert.match(prompt, /Do not.*commit, push, merge, deploy, or roll back/i);
 });
+
+test("Telegram landing workflow revalidates an exact owner-approved head and never bypasses protections", () => {
+  const workflow = fs.readFileSync(path.join(root, ".github/workflows/telegram-approved-pr-landing.yml"), "utf8");
+
+  assert.match(workflow, /workflow_dispatch:/);
+  assert.match(workflow, /approval_id:\s*\n/);
+  assert.match(workflow, /head_sha:\s*\n/);
+  assert.match(workflow, /approved_at:\s*\n/);
+  assert.match(workflow, /authorization:\s*\n/);
+  assert.match(workflow, /INCIDENT_REPAIR_DISPATCH_SECRET/);
+  assert.match(workflow, /createHmac\("sha256"/);
+  assert.match(workflow, /timingSafeEqual/);
+  assert.match(workflow, /age > 15 \* 60_000/);
+  assert.match(workflow, /request\.head\?\.sha[\s\S]*headSha/);
+  assert.match(workflow, /incident-repair\/verified/);
+  assert.match(workflow, /reviewThreads\(first:100\)/);
+  assert.match(workflow, /reviewDecision === "CHANGES_REQUESTED"/);
+  assert.match(workflow, /gh pr merge[\s\S]*--squash[\s\S]*--match-head-commit "\$HEAD_SHA"/);
+  assert.doesNotMatch(workflow, /--admin|--force|git push[^\n]*--force/i);
+  assert.match(workflow, /releaseCommit/);
+  assert.match(workflow, /pages\/builds\/latest/);
+  assert.match(workflow, /pr-landing-result/);
+  assert.match(workflow, /REPORT_TELEGRAM_PR_LANDING_RESULT/);
+});

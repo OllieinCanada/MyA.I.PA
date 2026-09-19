@@ -79,6 +79,29 @@ const {
   processTelegramOutbox,
 } = require("./telegramOutbox");
 const {
+  authorizeTelegramCallback,
+  bindTelegramMessage,
+  buildApprovalKeyboard,
+  claimTelegramApproval,
+  createTelegramApproval,
+  finalizeProcessingTelegramApproval,
+  finishTelegramApproval,
+  normalizeTelegramIdentity,
+  prLandingAuthorization,
+  verifyTelegramWebhookSecret,
+} = require("./telegramApprovalActions");
+const {
+  answerTelegramCallback,
+  clearTelegramApprovalButtons,
+  ensureTelegramActionWebhook,
+  sendTelegramOwnerStatus,
+} = require("./telegramBotApi");
+const {
+  dispatchTelegramApprovedPrLanding,
+  inspectPullRequestLandingReadiness,
+  markPullRequestReadyForReview,
+} = require("./telegramPrLanding");
+const {
   buildMakeSignupEventKey,
   buildMakeSignupHeaders,
   classifyMakeSignupResponse,
@@ -417,6 +440,13 @@ const twilioStagingWebhookProcessRateLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: "Too many staging webhook requests." },
 });
+const telegramActionsProcessRateLimiter = rateLimit({
+  windowMs: PUBLIC_ROUTE_WINDOW_MS,
+  limit: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many Telegram approval requests. Wait a few minutes and try again." },
+});
 const TRIAL_REMINDER_CHECK_INTERVAL_MS = parsePositiveInt(process.env.TRIAL_REMINDER_CHECK_INTERVAL_MS, 60 * 60 * 1000);
 const TRIAL_USAGE_LIMIT_ENABLED = isEnabled(process.env.TRIAL_USAGE_LIMIT_ENABLED);
 const TRIAL_USAGE_WARNING_SECONDS = parsePositiveInt(process.env.TRIAL_USAGE_WARNING_SECONDS, 20 * 60);
@@ -511,6 +541,19 @@ const FORWARDING_VERIFICATION_STATUS_CALLBACK_URL = String(
 ).trim();
 const TELEGRAM_BOT_TOKEN = String(process.env.TELEGRAM_BOT_TOKEN || "").trim();
 const TELEGRAM_CHAT_ID = String(process.env.TELEGRAM_CHAT_ID || "").trim();
+const TELEGRAM_ADMIN_USER_ID = normalizeTelegramIdentity(
+  process.env.TELEGRAM_ADMIN_USER_ID || (/^[1-9][0-9]{0,19}$/.test(TELEGRAM_CHAT_ID) ? TELEGRAM_CHAT_ID : "")
+);
+const TELEGRAM_WEBHOOK_SECRET = String(process.env.TELEGRAM_WEBHOOK_SECRET || "");
+const TELEGRAM_ACTION_SIGNING_SECRET = String(process.env.TELEGRAM_ACTION_SIGNING_SECRET || "");
+const TELEGRAM_WEBHOOK_URL = String(
+  process.env.TELEGRAM_WEBHOOK_URL || "https://api.myaipa.ca/api/webhooks/telegram/actions"
+).trim();
+const TELEGRAM_GUARDED_ACTIONS_ENABLED = isEnabled(process.env.TELEGRAM_GUARDED_ACTIONS_ENABLED)
+  && Boolean(TELEGRAM_BOT_TOKEN)
+  && TELEGRAM_WEBHOOK_SECRET.length >= 32
+  && TELEGRAM_ACTION_SIGNING_SECRET.length >= 32
+  && Boolean(TELEGRAM_ADMIN_USER_ID && TELEGRAM_CHAT_ID);
 const RUNTIME_TELEGRAM_ALERTS_ENABLED = process.env.RUNTIME_TELEGRAM_ALERTS_ENABLED == null
   ? String(process.env.NODE_ENV || "").toLowerCase() === "production"
   : isEnabled(process.env.RUNTIME_TELEGRAM_ALERTS_ENABLED);
@@ -5071,7 +5114,7 @@ function upsertSignupDashboardRecord(record) {
   return merged;
 }
 
-async function queueTelegramAlertSafely({ text, adminUrl = "", buttonText = "", dedupeKey = "" } = {}) {
+async function queueTelegramAlertSafely({ text, adminUrl = "", buttonText = "", dedupeKey = "", inlineKeyboard = null } = {}) {
   try {
     const result = await enqueueTelegramMessage({
       filePath: telegramOutboxPath,
@@ -5079,6 +5122,7 @@ async function queueTelegramAlertSafely({ text, adminUrl = "", buttonText = "", 
       adminUrl,
       buttonText,
       dedupeKey,
+      inlineKeyboard,
     });
     if (result.overflow) {
       const incident = buildRuntimeIncident(Object.assign(new Error(
@@ -5174,6 +5218,28 @@ async function safelyNotifySignupOperations(payload, {
     incidentId,
     adminUrl,
   };
+  let telegramApproval = null;
+  let replyMarkup = null;
+  if (TELEGRAM_GUARDED_ACTIONS_ENABLED && state === "review_required" && signupTargetId) {
+    try {
+      telegramApproval = await createTelegramApproval({
+        prismaClient: prisma,
+        purpose: "SIGNUP_REVIEW",
+        targetType: "signup",
+        targetId: signupTargetId,
+        context: { openUrl: adminUrl },
+        dedupeKey: `signup:${signupTargetId}:review`,
+      });
+      if (telegramApproval?.status === "PENDING") {
+        replyMarkup = buildApprovalKeyboard(telegramApproval, TELEGRAM_ACTION_SIGNING_SECRET);
+      }
+    } catch (error) {
+      console.error("[signup:telegram] approval controls unavailable", {
+        attemptHash: eventKey.slice(-10),
+        code: String(error?.code || "TELEGRAM_APPROVAL_CREATE_FAILED").slice(0, 80),
+      });
+    }
+  }
   const markSignupAlertHandled = (delivery) => {
     if (!current || !(delivery?.sent || delivery?.queued || delivery?.duplicate)) return;
     upsertSignupDashboardRecord({
@@ -5190,7 +5256,11 @@ async function safelyNotifySignupOperations(payload, {
     const result = await sendSignupTelegramAlert(alertInput, {
       token: TELEGRAM_BOT_TOKEN,
       chatId: TELEGRAM_CHAT_ID,
+      replyMarkup,
     });
+    if (result?.sent && result.messageId && telegramApproval?.id) {
+      await bindTelegramMessage(prisma, telegramApproval.id, result.messageId).catch(() => null);
+    }
     markSignupAlertHandled(result);
     if (!result.sent && result.reason !== "already_alerted") {
       const queued = await queueTelegramAlertSafely({
@@ -5198,6 +5268,7 @@ async function safelyNotifySignupOperations(payload, {
         adminUrl,
         buttonText: incidentId ? "Open exact incident" : "Open signup dashboard",
         dedupeKey: `signup:${alertKey}`,
+        inlineKeyboard: replyMarkup,
       });
       markSignupAlertHandled(queued);
       return { ...result, ...queued };
@@ -5220,6 +5291,7 @@ async function safelyNotifySignupOperations(payload, {
       adminUrl,
       buttonText: incidentId ? "Open exact incident" : "Open signup dashboard",
       dedupeKey: `signup:${alertKey}`,
+      inlineKeyboard: replyMarkup,
     });
     markSignupAlertHandled(queued);
     return { sent: false, skipped: false, error: "SIGNUP_TELEGRAM_ALERT_FAILED", ...queued };
@@ -10393,6 +10465,7 @@ app.get("/api/health/ready", async (_req, res) => {
     res.json({
       ok: true,
       service: "my-ai-pa-api",
+      releaseCommit: String(process.env.RENDER_GIT_COMMIT || process.env.GITHUB_SHA || "unknown").slice(0, 40),
       dependencies: { database: "reachable" },
       responseTimeMs: Date.now() - startedAt,
       time: new Date().toISOString(),
@@ -10404,6 +10477,7 @@ app.get("/api/health/ready", async (_req, res) => {
     res.status(503).json({
       ok: false,
       service: "my-ai-pa-api",
+      releaseCommit: String(process.env.RENDER_GIT_COMMIT || process.env.GITHUB_SHA || "unknown").slice(0, 40),
       dependencies: { database: "unavailable" },
       responseTimeMs: Date.now() - startedAt,
       time: new Date().toISOString(),
@@ -10475,6 +10549,209 @@ function exactGitHubIncidentUrl(value, kind) {
   }
 }
 
+async function startOwnerAuthorizedIncidentInvestigation(approval) {
+  const incidentId = String(approval?.targetId || "").toLowerCase();
+  const expectedGeneration = Math.max(1, Number(approval?.context?.generation) || 1);
+  const item = listRuntimeIncidents(runtimeIncidentPath).find((entry) => entry.id === incidentId);
+  if (!item) {
+    const error = new Error("This incident is no longer active.");
+    error.code = "INCIDENT_NOT_ACTIVE";
+    throw error;
+  }
+  if (Number(item.remediation?.generation || 1) !== expectedGeneration) {
+    const error = new Error("This incident approval belongs to an older occurrence.");
+    error.code = "INCIDENT_GENERATION_MISMATCH";
+    throw error;
+  }
+  if (!item.remediation?.action || item.remediation.action === "none") {
+    return {
+      started: false,
+      requiresManualReview: true,
+      status: "needs_user",
+      nextAction: item.remediation?.proposedSolution || item.incident?.nextAction || "Open the incident details.",
+    };
+  }
+  const authorized = updateRuntimeIncidentRemediation(runtimeIncidentPath, incidentId, {
+    status: "queued",
+    ownerAuthorized: true,
+    summary: "The owner authorized this exact incident generation from the private Telegram chat.",
+  });
+  if (!authorized.updated) {
+    const error = new Error("The incident state changed before the approval could start.");
+    error.code = "INCIDENT_STATE_CHANGED";
+    throw error;
+  }
+  const incident = incidentFromRuntimeAttentionItem(authorized.item);
+  const result = await runAutomatedRuntimeRemediation(incident, authorized.item);
+  return { started: true, status: result?.status || "in_progress", result };
+}
+
+async function executeTelegramApproval(approval) {
+  const action = String(approval?.decidedAction || "");
+  if (approval.purpose === "SIGNUP_REVIEW") {
+    const result = action === "approve"
+      ? await recoverSignupByOperationalTarget(approval.targetId)
+      : await rejectSignupByOperationalTarget(approval.targetId);
+    await recordAdminAuditEvent({
+      prisma,
+      action: action === "approve" ? "recover_signup" : "reject_signup",
+      outcome: "success",
+      actorHash: hashKey(`telegram:${approval.actorTelegramUserId}`),
+      targetType: "signup",
+      targetId: approval.targetId,
+      details: { initiatedFrom: "telegram_guarded_approval", approvalId: approval.publicId },
+    });
+    await finishTelegramApproval(prisma, approval.id, {
+      status: action === "reject" ? "REJECTED" : "COMPLETED",
+      result: { action: result?.action || action, status: result?.status || "accepted" },
+    });
+    return {
+      terminal: true,
+      text: action === "approve"
+        ? "✅ Signup approved. Guarded provisioning is continuing; duplicate and mapping checks still apply."
+        : "⛔ Signup rejected. No new phone number, assistant, or billing resource was provisioned.",
+      openLabel: "Open details",
+    };
+  }
+  if (approval.purpose === "INCIDENT_REVIEW") {
+    if (action === "dismiss") {
+      const result = acknowledgeRuntimeIncident(runtimeIncidentPath, approval.targetId);
+      if (!result.acknowledged && result.reason !== "not_found") {
+        const error = new Error("The incident could not be dismissed safely.");
+        error.code = "INCIDENT_DISMISS_FAILED";
+        throw error;
+      }
+      await finishTelegramApproval(prisma, approval.id, { status: "REJECTED", result: { dismissed: true } });
+      return { terminal: true, text: "✅ Incident dismissed. No repair, retry, merge, or deployment was started.", openLabel: "Open incident" };
+    }
+    const result = await startOwnerAuthorizedIncidentInvestigation(approval);
+    await finishTelegramApproval(prisma, approval.id, { status: "COMPLETED", result: {
+      started: result.started === true,
+      status: String(result.status || "needs_user"),
+      requiresManualReview: result.requiresManualReview === true,
+    } });
+    return {
+      terminal: true,
+      text: result.started
+        ? "🔎 Safe investigation started. It cannot merge or deploy without a separate exact-head approval."
+        : "🟡 This incident is not safe to automate. No production action ran; open the incident for the exact manual step.",
+      openLabel: "Open incident",
+    };
+  }
+  if (approval.purpose === "PR_LANDING") {
+    if (action === "reject") {
+      await finishTelegramApproval(prisma, approval.id, { status: "REJECTED", result: { rejected: true } });
+      return { terminal: true, text: "⛔ Merge rejected. The PR remains open and nothing was deployed.", openLabel: "Open PR" };
+    }
+    const readiness = await inspectPullRequestLandingReadiness({
+      token: GITHUB_INCIDENT_REPAIR_TOKEN,
+      repository: GITHUB_INCIDENT_REPAIR_REPO,
+      prNumber: approval.context.prNumber,
+      headSha: approval.context.headSha,
+    });
+    if (!readiness.ready) {
+      const error = new Error(`The exact PR is no longer ready (${readiness.reason}).`);
+      error.code = "PR_NOT_READY_FOR_LANDING";
+      throw error;
+    }
+    const dispatch = await dispatchTelegramApprovedPrLanding({
+      token: GITHUB_INCIDENT_REPAIR_TOKEN,
+      repository: GITHUB_INCIDENT_REPAIR_REPO,
+      dispatchSecret: INCIDENT_REPAIR_DISPATCH_SECRET,
+      approvalId: approval.publicId,
+      prNumber: approval.context.prNumber,
+      headSha: approval.context.headSha,
+    });
+    return {
+      terminal: false,
+      text: `🚀 Exact-head landing started for PR #${approval.context.prNumber} at ${approval.context.headSha.slice(0, 12)}. I’ll report the merge and deployment result here.`,
+      openUrl: dispatch.workflowUrl,
+      openLabel: "Open workflow",
+    };
+  }
+  const error = new Error("Unsupported Telegram approval purpose.");
+  error.code = "TELEGRAM_APPROVAL_PURPOSE_UNSUPPORTED";
+  throw error;
+}
+
+async function processClaimedTelegramApproval({ approval, callbackQuery }) {
+  const chatId = String(callbackQuery?.message?.chat?.id || TELEGRAM_CHAT_ID);
+  const messageId = callbackQuery?.message?.message_id;
+  const openUrl = approval?.context?.openUrl || "";
+  try {
+    const result = await executeTelegramApproval(approval);
+    await Promise.allSettled([
+      clearTelegramApprovalButtons({ chatId, messageId }, { token: TELEGRAM_BOT_TOKEN }),
+      sendTelegramOwnerStatus({
+        chatId,
+        text: result.text,
+        openUrl: result.openUrl || openUrl,
+        openLabel: result.openLabel,
+      }, { token: TELEGRAM_BOT_TOKEN }),
+    ]);
+  } catch (error) {
+    await finishTelegramApproval(prisma, approval.id, {
+      status: "FAILED",
+      failureCode: error?.code || "telegram_approval_action_failed",
+      result: { stoppedSafely: true },
+    }).catch(() => null);
+    await Promise.allSettled([
+      clearTelegramApprovalButtons({ chatId, messageId }, { token: TELEGRAM_BOT_TOKEN }),
+      sendTelegramOwnerStatus({
+        chatId,
+        text: `🟡 Action stopped safely. Nothing is being claimed as complete. Reason: ${String(error?.code || "ACTION_FAILED").slice(0, 80)}.`,
+        openUrl,
+        openLabel: approval.purpose === "PR_LANDING" ? "Open PR" : "Open details",
+      }, { token: TELEGRAM_BOT_TOKEN }),
+    ]);
+    console.error("[telegram:approval] guarded action stopped", {
+      approvalId: approval.publicId,
+      purpose: approval.purpose,
+      code: String(error?.code || "TELEGRAM_APPROVAL_ACTION_FAILED").slice(0, 80),
+    });
+  }
+}
+
+app.post(
+  "/api/webhooks/telegram/actions",
+  telegramActionsProcessRateLimiter,
+  enforcePublicRouteRateLimit("telegram-actions", 60),
+  asyncRoute(async (req, res) => {
+    if (!TELEGRAM_GUARDED_ACTIONS_ENABLED) return res.status(404).json({ error: "Telegram actions are disabled." });
+    if (!verifyTelegramWebhookSecret(req.get("x-telegram-bot-api-secret-token"), TELEGRAM_WEBHOOK_SECRET)) {
+      return res.status(401).json({ error: "Invalid Telegram webhook secret." });
+    }
+    const authorization = authorizeTelegramCallback(req.body, {
+      chatId: TELEGRAM_CHAT_ID,
+      userId: TELEGRAM_ADMIN_USER_ID,
+    });
+    if (!authorization.authorized) return res.status(403).json({ error: "Telegram owner authorization failed." });
+    const callbackQuery = req.body?.callback_query;
+    const callbackData = String(callbackQuery?.data || "");
+    if (!callbackQuery?.id || callbackData.length > 64) return res.status(400).json({ error: "Invalid Telegram callback." });
+    const claim = await claimTelegramApproval({
+      prismaClient: prisma,
+      callbackData,
+      signingSecret: TELEGRAM_ACTION_SIGNING_SECRET,
+      actorTelegramUserId: authorization.userId,
+      telegramChatId: authorization.chatId,
+      telegramMessageId: callbackQuery?.message?.message_id,
+    });
+    if (!claim.claimed) {
+      res.status(200).json({ ok: true, accepted: false, reason: claim.reason });
+      void answerTelegramCallback(callbackQuery.id, claim.reason === "expired" ? "This approval expired." : "This decision was already handled.", {
+        token: TELEGRAM_BOT_TOKEN,
+      }).catch(() => null);
+      return;
+    }
+    res.status(200).json({ ok: true, accepted: true });
+    void answerTelegramCallback(callbackQuery.id, "Decision received. Running the guarded action…", {
+      token: TELEGRAM_BOT_TOKEN,
+    }).catch(() => null);
+    void processClaimedTelegramApproval({ approval: claim.approval, callbackQuery });
+  })
+);
+
 app.post(
   "/api/internal/operations/incident-repair-result",
   requireMonitorKey,
@@ -10491,6 +10768,8 @@ app.post(
     const publishResult = String(req.body?.publish_result || "").trim().toLowerCase();
     const baseSha = String(req.body?.base_sha || "").trim().toLowerCase();
     const prUrl = exactGitHubIncidentUrl(req.body?.pr_url, "pull");
+    const prNumber = Number(req.body?.pr_number);
+    const headSha = String(req.body?.head_sha || "").trim().toLowerCase();
     const runUrl = exactGitHubIncidentUrl(req.body?.run_url, "run");
     const allowedJobResults = new Set(["success", "failure", "cancelled", "skipped"]);
     if (!/^[a-f0-9]{24}$/.test(incidentId) || !Number.isInteger(generation) || generation < 1 || generation > 999) {
@@ -10505,6 +10784,7 @@ app.post(
       !runUrl
       || status !== expectedStatus
       || (status === "repair_ready" && !prUrl)
+      || (status === "repair_ready" && (!Number.isSafeInteger(prNumber) || prNumber < 1 || !/^[a-f0-9]{40}$/.test(headSha)))
       || (status === "needs_user" && prUrl)
     ) {
       return res.status(400).json({ error: "The incident-repair status or GitHub result URL is invalid." });
@@ -10536,6 +10816,7 @@ app.post(
           verification: `Draft ${draftResult}; independent verification ${verifyResult}; draft pull request ${publishResult}. This verifies the draft against ${baseSha.slice(0, 12)}, not production recovery.`,
           nextAction: "Review the diagnosis and exact draft pull request. It has not been merged or deployed.",
           referenceUrl,
+          pullRequest: { prNumber, headSha, prUrl },
           completedAt: new Date().toISOString(),
         }
       : {
@@ -10558,6 +10839,87 @@ app.post(
     void drainTelegramOutbox("incident-repair-result");
     res.setHeader("Cache-Control", "no-store, max-age=0");
     return res.status(202).json({ ok: true, accepted: true, queued: delivery?.queued === true });
+  })
+);
+
+app.post(
+  "/api/internal/operations/pr-landing-result",
+  requireMonitorKey,
+  express.json({ limit: "3kb" }),
+  asyncRoute(async (req, res) => {
+    if (String(req.body?.confirmation || "") !== "REPORT_TELEGRAM_PR_LANDING_RESULT") {
+      return res.status(400).json({ error: "Explicit PR landing result confirmation is required." });
+    }
+    const approvalId = String(req.body?.approval_id || "").trim().toLowerCase();
+    const prNumber = Number(req.body?.pr_number);
+    const headSha = String(req.body?.head_sha || "").trim().toLowerCase();
+    const mergeSha = String(req.body?.merge_sha || "").trim().toLowerCase();
+    const outcome = String(req.body?.outcome || "").trim().toLowerCase();
+    const renderStatus = String(req.body?.render_status || "").trim().toLowerCase();
+    const pagesStatus = String(req.body?.pages_status || "").trim().toLowerCase();
+    const runUrl = exactGitHubIncidentUrl(req.body?.run_url, "run");
+    if (!/^[a-f0-9]{16}$/.test(approvalId) || !Number.isSafeInteger(prNumber) || prNumber < 1 || !/^[a-f0-9]{40}$/.test(headSha)) {
+      return res.status(400).json({ error: "The exact Telegram approval and pull-request head are required." });
+    }
+    if (!runUrl || !["merged", "failed"].includes(outcome)) {
+      return res.status(400).json({ error: "The landing outcome or workflow URL is invalid." });
+    }
+    const allowedDeploymentStatuses = new Set(["succeeded", "not_required", "failed", "timed_out"]);
+    if (!allowedDeploymentStatuses.has(renderStatus) || !allowedDeploymentStatuses.has(pagesStatus)) {
+      return res.status(400).json({ error: "The deployment verification result is invalid." });
+    }
+    if (outcome === "merged" && !/^[a-f0-9]{40}$/.test(mergeSha)) {
+      return res.status(400).json({ error: "A merged result requires its exact merge commit." });
+    }
+    const approval = await prisma.telegramApprovalAction.findUnique({ where: { publicId: approvalId } });
+    if (!approval
+      || approval.purpose !== "PR_LANDING"
+      || approval.decidedAction !== "merge"
+      || Number(approval.context?.prNumber) !== prNumber
+      || String(approval.context?.headSha || "").toLowerCase() !== headSha
+      || !["PROCESSING", "COMPLETED", "FAILED"].includes(approval.status)) {
+      return res.status(409).json({ error: "The landing result does not match an owner-approved exact PR head." });
+    }
+    if (["COMPLETED", "FAILED"].includes(approval.status)) {
+      return res.status(202).json({ ok: true, accepted: true, duplicate: true });
+    }
+    const deployed = outcome === "merged"
+      && renderStatus === "succeeded"
+      && ["succeeded", "not_required"].includes(pagesStatus);
+    const landingResult = {
+      outcome,
+      prNumber,
+      headSha,
+      ...(mergeSha ? { mergeSha } : {}),
+      renderStatus,
+      pagesStatus,
+      runUrl,
+    };
+    const text = deployed
+      ? `✅ PR #${prNumber} merged and deployed. Render is serving ${mergeSha.slice(0, 12)}${pagesStatus === "succeeded" ? ", and GitHub Pages finished successfully" : ""}.`
+      : outcome === "merged"
+        ? `🟡 PR #${prNumber} merged, but deployment verification did not finish cleanly. Render: ${renderStatus}. Pages: ${pagesStatus}. Open the workflow before claiming the fix is live.`
+        : `🟡 PR #${prNumber} was not merged. The guarded workflow stopped safely; nothing is being claimed as deployed.`;
+    const delivery = await queueTelegramAlertSafely({
+      text,
+      adminUrl: runUrl,
+      buttonText: "Open workflow",
+      dedupeKey: `pr-landing-result:${approvalId}`,
+    });
+    if (!delivery?.queued && !delivery?.duplicate) {
+      return res.status(503).json({ error: "The final landing result could not be preserved for Telegram delivery." });
+    }
+    const finalized = await finalizeProcessingTelegramApproval(prisma, approval.id, {
+      status: deployed ? "COMPLETED" : "FAILED",
+      failureCode: deployed ? "" : outcome === "merged" ? "deployment_not_verified" : "merge_failed",
+      result: landingResult,
+    });
+    if (!finalized.finalized) {
+      return res.status(202).json({ ok: true, accepted: true, duplicate: true });
+    }
+    void drainTelegramOutbox("pr-landing-result");
+    res.setHeader("Cache-Control", "no-store, max-age=0");
+    return res.status(202).json({ ok: true, accepted: true, deployed });
   })
 );
 
@@ -15038,6 +15400,37 @@ async function preserveIncidentRemediationUpdate(incident, result, generation = 
   };
 }
 
+async function createIncidentTelegramApprovalControls(incident, generation = 1) {
+  if (!TELEGRAM_GUARDED_ACTIONS_ENABLED || !/^[a-f0-9]{24}$/.test(String(incident?.incidentId || ""))) {
+    return { approval: null, replyMarkup: null };
+  }
+  try {
+    const approval = await createTelegramApproval({
+      prismaClient: prisma,
+      purpose: "INCIDENT_REVIEW",
+      targetType: "runtime_incident",
+      targetId: incident.incidentId,
+      context: {
+        generation: Math.max(1, Number(generation) || 1),
+        openUrl: incident.adminUrl,
+      },
+      dedupeKey: `incident:${incident.incidentId}:g${Math.max(1, Number(generation) || 1)}`,
+    });
+    return {
+      approval,
+      replyMarkup: approval?.status === "PENDING"
+        ? buildApprovalKeyboard(approval, TELEGRAM_ACTION_SIGNING_SECRET)
+        : null,
+    };
+  } catch (error) {
+    console.error("[incident:telegram] approval controls unavailable", {
+      incidentId: incident.incidentId,
+      code: String(error?.code || "TELEGRAM_APPROVAL_CREATE_FAILED").slice(0, 80),
+    });
+    return { approval: null, replyMarkup: null };
+  }
+}
+
 async function verifyRuntimeReadiness() {
   const startedAt = Date.now();
   let timeout;
@@ -15218,8 +15611,8 @@ async function runAutomatedRuntimeRemediationInternal(incident, recordedItem) {
 function safelyNotifyRuntimeFailure(error, context = {}) {
   const baseIncident = buildRuntimeIncident(error, context);
   const remediation = createIncidentRemediationPlan(baseIncident, {
-    safeAutoRepairEnabled: INCIDENT_SAFE_AUTO_REPAIR_ENABLED,
-    codeRepairEnabled: INCIDENT_CODE_REPAIR_ENABLED,
+    safeAutoRepairEnabled: INCIDENT_SAFE_AUTO_REPAIR_ENABLED && !TELEGRAM_GUARDED_ACTIONS_ENABLED,
+    codeRepairEnabled: INCIDENT_CODE_REPAIR_ENABLED && !TELEGRAM_GUARDED_ACTIONS_ENABLED,
     codeRepairConfigured: Boolean(
       GITHUB_INCIDENT_REPAIR_TOKEN
       && GITHUB_INCIDENT_REPAIR_REPO
@@ -15252,11 +15645,16 @@ function safelyNotifyRuntimeFailure(error, context = {}) {
       });
       return;
     }
+    const controls = await createIncidentTelegramApprovalControls(
+      incidentForDelivery,
+      recorded.item?.remediation?.generation || 1
+    );
     const queued = await queueTelegramAlertSafely({
       text: buildIncidentTelegramAlert(incidentForDelivery),
       adminUrl: exactAdminUrl,
       buttonText: "Open exact incident",
       dedupeKey: `initial:${preparedIncident.incidentId}:g${recorded.item?.remediation?.generation || 1}`,
+      inlineKeyboard: controls.replyMarkup,
     });
     if (!queued?.queued && !queued?.duplicate) return;
     const preservation = updateRuntimeIncidentRemediation(runtimeIncidentPath, preparedIncident.incidentId, {
@@ -15295,8 +15693,8 @@ async function reportPreviousFatalIncident() {
       };
       const baseIncident = buildRuntimeIncident(error, context);
       const remediation = createIncidentRemediationPlan(baseIncident, {
-        safeAutoRepairEnabled: INCIDENT_SAFE_AUTO_REPAIR_ENABLED,
-        codeRepairEnabled: INCIDENT_CODE_REPAIR_ENABLED,
+        safeAutoRepairEnabled: INCIDENT_SAFE_AUTO_REPAIR_ENABLED && !TELEGRAM_GUARDED_ACTIONS_ENABLED,
+        codeRepairEnabled: INCIDENT_CODE_REPAIR_ENABLED && !TELEGRAM_GUARDED_ACTIONS_ENABLED,
         codeRepairConfigured: Boolean(
           GITHUB_INCIDENT_REPAIR_TOKEN
           && GITHUB_INCIDENT_REPAIR_REPO
@@ -15320,11 +15718,16 @@ async function reportPreviousFatalIncident() {
       if (!RUNTIME_TELEGRAM_ALERTS_ENABLED || !recorded.recorded) {
         return { sent: false, queued: false, reason: "telegram_alert_not_preserved" };
       }
+      const controls = await createIncidentTelegramApprovalControls(
+        incidentForDelivery,
+        recorded.item?.remediation?.generation || 1
+      );
       const queued = await queueTelegramAlertSafely({
         text: buildIncidentTelegramAlert(incidentForDelivery),
         adminUrl: exactAdminUrl,
         buttonText: "Open exact incident",
         dedupeKey: `initial:${preparedIncident.incidentId}:g${recorded.item?.remediation?.generation || 1}`,
+        inlineKeyboard: controls.replyMarkup,
       });
       if (queued.queued || queued.duplicate) {
         const preservation = updateRuntimeIncidentRemediation(runtimeIncidentPath, preparedIncident.incidentId, {
@@ -15423,11 +15826,13 @@ async function preserveMissingInitialIncidentReports() {
     const incident = incidentFromRuntimeAttentionItem(item);
     if (!incident) continue;
     const generation = Math.max(1, Number(item.remediation?.generation || 1));
+    const controls = await createIncidentTelegramApprovalControls(incident, generation);
     const queued = await queueTelegramAlertSafely({
       text: buildIncidentTelegramAlert(incident),
       adminUrl: incident.adminUrl,
       buttonText: "Open exact incident",
       dedupeKey: `initial:${item.id}:g${generation}`,
+      inlineKeyboard: controls.replyMarkup,
     });
     if (!queued?.queued && !queued?.duplicate) continue;
     const transition = updateRuntimeIncidentRemediation(runtimeIncidentPath, item.id, {
@@ -15557,9 +15962,81 @@ async function reconcileDispatchedIncidentRepairs() {
   return { reconciled, skipped: false };
 }
 
+async function reconcileReadyIncidentPullRequests() {
+  if (!TELEGRAM_GUARDED_ACTIONS_ENABLED || !GITHUB_INCIDENT_REPAIR_TOKEN || !GITHUB_INCIDENT_REPAIR_REPO) {
+    return { ready: 0, pending: 0, skipped: true };
+  }
+  let ready = 0;
+  let pending = 0;
+  const candidates = listRuntimeIncidents(runtimeIncidentPath)
+    .filter((item) => item?.remediation?.status === "repair_ready")
+    .filter((item) => item?.remediation?.pullRequest && !item?.remediation?.telegramApprovalId)
+    .slice(0, 5);
+  for (const item of candidates) {
+    const pull = item.remediation.pullRequest;
+    try {
+      const readiness = await inspectPullRequestLandingReadiness({
+        token: GITHUB_INCIDENT_REPAIR_TOKEN,
+        repository: GITHUB_INCIDENT_REPAIR_REPO,
+        prNumber: pull.prNumber,
+        headSha: pull.headSha,
+      });
+      if (readiness.reason === "pull_request_still_draft" && readiness.nodeId) {
+        await markPullRequestReadyForReview({ token: GITHUB_INCIDENT_REPAIR_TOKEN, nodeId: readiness.nodeId });
+        pending += 1;
+        continue;
+      }
+      if (!readiness.ready) {
+        pending += 1;
+        continue;
+      }
+      const approval = await createTelegramApproval({
+        prismaClient: prisma,
+        purpose: "PR_LANDING",
+        targetType: "pull_request",
+        targetId: String(pull.prNumber),
+        context: { prNumber: pull.prNumber, headSha: pull.headSha, openUrl: pull.prUrl },
+        dedupeKey: `pr:${pull.prNumber}:${pull.headSha}`,
+        expiresInMs: 2 * 60 * 60 * 1000,
+      });
+      if (approval?.status !== "PENDING") continue;
+      const replyMarkup = buildApprovalKeyboard(approval, TELEGRAM_ACTION_SIGNING_SECRET);
+      const queued = await queueTelegramAlertSafely({
+        text: [
+          "✅ MY AI PA — GUARDED REPAIR READY",
+          `Pull request: #${pull.prNumber}`,
+          `Exact head: ${pull.headSha.slice(0, 12)}`,
+          "Independent tests passed, required checks are green, and no unresolved review thread remains.",
+          "",
+          "Approve only if you want this exact head squash-merged and its deployment monitored.",
+        ].join("\n"),
+        adminUrl: pull.prUrl,
+        buttonText: "Open PR",
+        inlineKeyboard: replyMarkup,
+        dedupeKey: `pr-landing-approval:${pull.prNumber}:${pull.headSha}`,
+      });
+      if (!queued?.queued && !queued?.duplicate) continue;
+      const transition = updateRuntimeIncidentRemediation(runtimeIncidentPath, item.id, {
+        status: "repair_ready",
+        telegramApprovalId: approval.publicId,
+        summary: `Telegram merge approval was preserved for PR #${pull.prNumber} at ${pull.headSha.slice(0, 12)}.`,
+      });
+      if (transition.updated) ready += 1;
+    } catch (error) {
+      pending += 1;
+      console.error("[incident:pr-approval] readiness reconciliation failed", {
+        incidentId: item.id,
+        code: String(error?.code || "PR_APPROVAL_RECONCILIATION_FAILED").slice(0, 80),
+      });
+    }
+  }
+  return { ready, pending, skipped: false };
+}
+
 async function drainTelegramOutbox(phase = "scheduled") {
   try {
     await preserveMissingInitialIncidentReports();
+    await reconcileReadyIncidentPullRequests();
     let result = await processTelegramOutbox({
       filePath: telegramOutboxPath,
       token: TELEGRAM_BOT_TOKEN,
@@ -15736,9 +16213,20 @@ function startServer(port = PORT) {
       code: String(error?.code || "FATAL_INCIDENT_REPORT_FAILED").slice(0, 80),
     });
   });
-  return app.listen(port, () => {
+  const server = app.listen(port, () => {
     console.log(`My AI PA API listening on http://localhost:${port}`);
+    if (TELEGRAM_GUARDED_ACTIONS_ENABLED) {
+      void ensureTelegramActionWebhook({
+        webhookUrl: TELEGRAM_WEBHOOK_URL,
+        webhookSecret: TELEGRAM_WEBHOOK_SECRET,
+      }, { token: TELEGRAM_BOT_TOKEN }).catch((error) => {
+        console.error("[telegram:approval] guarded webhook configuration failed", {
+          code: String(error?.code || "TELEGRAM_WEBHOOK_CONFIGURATION_FAILED").slice(0, 80),
+        });
+      });
+    }
   });
+  return server;
 }
 
 if (require.main === module) {

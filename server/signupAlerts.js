@@ -235,9 +235,9 @@ function buildSignupTelegramAlert(input = {}) {
   return buildSignupUpdateAlert(input);
 }
 
-async function sendSignupTelegramAlert(input, { token, chatId, fetchImpl = fetch } = {}) {
+async function sendSignupTelegramAlert(input, { token, chatId, fetchImpl = fetch, replyMarkup = null } = {}) {
   if (["provisioning_failed", "review_required", "customer_followup_failed", "customer_followup_partial"].includes(input?.state)) {
-    return sendIncidentTelegramAlert(buildSignupIncidentInput(input), { token, chatId, fetchImpl });
+    return sendIncidentTelegramAlert(buildSignupIncidentInput(input), { token, chatId, fetchImpl, replyMarkup });
   }
   if (!String(token || "").trim() || !String(chatId || "").trim()) {
     return { sent: false, skipped: true, reason: "telegram_not_configured" };
@@ -246,7 +246,9 @@ async function sendSignupTelegramAlert(input, { token, chatId, fetchImpl = fetch
     chat_id: String(chatId).trim(),
     disable_web_page_preview: true,
     text: buildSignupUpdateAlert(input),
-    ...(String(input?.adminUrl || "").startsWith("https://") ? {
+    ...(replyMarkup?.inline_keyboard ? {
+      reply_markup: replyMarkup,
+    } : String(input?.adminUrl || "").startsWith("https://") ? {
       reply_markup: {
         inline_keyboard: [[{ text: "Open signup dashboard", url: String(input.adminUrl) }]],
       },

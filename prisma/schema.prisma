@@ -743,6 +743,34 @@ model RuntimeStore {
   updatedAt DateTime @updatedAt
 }
 
+/// One owner decision delivered through Telegram. Callback payloads contain
+/// only this opaque public ID, a short action code, and an HMAC. The protected
+/// target and exact PR head (when applicable) stay server-side in context.
+model TelegramApprovalAction {
+  id                      String    @id @default(cuid())
+  publicId                String    @unique
+  dedupeKey               String    @unique
+  purpose                 String
+  targetType              String
+  targetId                String
+  context                 Json
+  status                  String    @default("PENDING")
+  decidedAction           String?
+  actorTelegramUserId     String?
+  telegramChatId          String?
+  telegramMessageId       String?
+  failureCode             String?
+  result                  Json?
+  expiresAt               DateTime
+  claimedAt               DateTime?
+  decidedAt               DateTime?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+
+  @@index([status, expiresAt])
+  @@index([purpose, targetId, status])
+}
+
 model SecurityRateLimit {
   key             String   @id
   count           Int

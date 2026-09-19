@@ -285,7 +285,7 @@ function validAdminUrl(value) {
   }
 }
 
-async function sendIncidentTelegramAlert(input, { token, chatId, fetchImpl = fetch } = {}) {
+async function sendIncidentTelegramAlert(input, { token, chatId, fetchImpl = fetch, replyMarkup = null } = {}) {
   const safeToken = String(token || "").trim();
   const safeChatId = String(chatId || "").trim();
   if (!safeToken || !safeChatId) {
@@ -298,7 +298,9 @@ async function sendIncidentTelegramAlert(input, { token, chatId, fetchImpl = fet
     chat_id: safeChatId,
     disable_web_page_preview: true,
     text: buildIncidentTelegramAlert(input),
-    ...(adminUrl ? {
+    ...(replyMarkup?.inline_keyboard ? {
+      reply_markup: replyMarkup,
+    } : adminUrl ? {
       reply_markup: {
         inline_keyboard: [[{ text: buttonText, url: adminUrl }]],
       },
@@ -323,7 +325,7 @@ async function sendIncidentTelegramAlert(input, { token, chatId, fetchImpl = fet
   };
 }
 
-async function sendIncidentRemediationUpdate(input, { token, chatId, fetchImpl = fetch } = {}) {
+async function sendIncidentRemediationUpdate(input, { token, chatId, fetchImpl = fetch, replyMarkup = null } = {}) {
   return sendIncidentTelegramAlert({
     ...input,
     title: input.title || "Incident remediation update",
@@ -339,6 +341,7 @@ async function sendIncidentRemediationUpdate(input, { token, chatId, fetchImpl =
   }, {
     token,
     chatId,
+    replyMarkup,
     fetchImpl: async (url, options) => fetchImpl(url, {
       ...options,
       body: JSON.stringify({

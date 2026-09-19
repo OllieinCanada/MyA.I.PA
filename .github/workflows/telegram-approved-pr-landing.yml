@@ -1,0 +1,232 @@
+name: Telegram-approved exact-head landing
+
+on:
+  workflow_dispatch:
+    inputs:
+      approval_id:
+        description: Opaque Telegram approval ID
+        required: true
+        type: string
+      pr_number:
+        description: Exact pull-request number
+        required: true
+        type: string
+      head_sha:
+        description: Exact approved pull-request head
+        required: true
+        type: string
+      approved_at:
+        description: Owner approval timestamp
+        required: true
+        type: string
+      authorization:
+        description: HMAC authorization sealed by the production API
+        required: true
+        type: string
+
+run-name: Land PR #${{ inputs.pr_number }} at ${{ inputs.head_sha }}
+
+permissions: {}
+
+concurrency:
+  group: telegram-pr-landing-${{ inputs.pr_number }}
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    name: Validate owner approval and exact PR
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+      statuses: read
+      checks: read
+    outputs:
+      authorized: ${{ steps.gate.outputs.authorized }}
+      pages_required: ${{ steps.gate.outputs.pages_required }}
+    steps:
+      - name: Validate the signed, recent, exact-head approval
+        id: gate
+        env:
+          LANDING_SECRET: ${{ secrets.INCIDENT_REPAIR_DISPATCH_SECRET }}
+          GH_TOKEN: ${{ github.token }}
+          APPROVAL_ID: ${{ inputs.approval_id }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          HEAD_SHA: ${{ inputs.head_sha }}
+          APPROVED_AT: ${{ inputs.approved_at }}
+          AUTHORIZATION: ${{ inputs.authorization }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const crypto = require("node:crypto");
+          const { execFileSync } = require("node:child_process");
+          const approvalId = String(process.env.APPROVAL_ID || "").trim().toLowerCase();
+          const prNumber = String(process.env.PR_NUMBER || "").trim();
+          const headSha = String(process.env.HEAD_SHA || "").trim().toLowerCase();
+          const approvedAt = String(process.env.APPROVED_AT || "").trim();
+          const secret = String(process.env.LANDING_SECRET || "");
+          if (!/^[a-f0-9]{16}$/.test(approvalId) || !/^[1-9][0-9]*$/.test(prNumber) || !/^[a-f0-9]{40}$/.test(headSha) || secret.length < 32) {
+            throw new Error("The Telegram approval envelope is invalid.");
+          }
+          const approvedMs = new Date(approvedAt).getTime();
+          const age = Date.now() - approvedMs;
+          if (!Number.isFinite(approvedMs) || age < -120_000 || age > 15 * 60_000) throw new Error("The Telegram approval is stale.");
+          const canonical = JSON.stringify({ approval_id: approvalId, pr_number: prNumber, head_sha: headSha, approved_at: approvedAt });
+          const expected = crypto.createHmac("sha256", secret).update(canonical).digest("hex");
+          const supplied = String(process.env.AUTHORIZATION || "").trim().toLowerCase();
+          if (supplied.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(supplied), Buffer.from(expected))) {
+            throw new Error("The Telegram approval signature is invalid.");
+          }
+          const request = JSON.parse(execFileSync("gh", ["api", `repos/${process.env.GITHUB_REPOSITORY}/pulls/${prNumber}`], { encoding: "utf8" }));
+          if (request.state !== "open" || request.draft || request.base?.ref !== "main" || String(request.head?.sha || "").toLowerCase() !== headSha) {
+            throw new Error("The pull request no longer matches the approved exact head.");
+          }
+          if (String(request.head?.repo?.full_name || "").toLowerCase() !== process.env.GITHUB_REPOSITORY.toLowerCase()) {
+            throw new Error("Fork pull requests cannot use Telegram landing.");
+          }
+          const status = JSON.parse(execFileSync("gh", ["api", `repos/${process.env.GITHUB_REPOSITORY}/commits/${headSha}/status`], { encoding: "utf8" }));
+          if (!(status.statuses || []).some((item) => item.context === "incident-repair/verified" && item.state === "success")) {
+            throw new Error("Independent incident-repair verification is missing.");
+          }
+          if ((status.statuses || []).some((item) => item.state !== "success")) throw new Error("A commit status is not successful.");
+          const checks = JSON.parse(execFileSync("gh", ["api", `repos/${process.env.GITHUB_REPOSITORY}/commits/${headSha}/check-runs?per_page=100`], { encoding: "utf8" }));
+          if ((checks.check_runs || []).some((item) => item.status !== "completed" || !["success", "neutral", "skipped"].includes(item.conclusion))) {
+            throw new Error("A check run is pending or unsuccessful.");
+          }
+          const [owner, name] = process.env.GITHUB_REPOSITORY.split("/");
+          const query = `query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){reviewDecision reviewThreads(first:100){nodes{isResolved}}}}}`;
+          const review = JSON.parse(execFileSync("gh", ["api", "graphql", "-f", `query=${query}`, "-F", `owner=${owner}`, "-F", `name=${name}`, "-F", `number=${prNumber}`], { encoding: "utf8" })).data?.repository?.pullRequest;
+          if (!review || review.reviewDecision === "CHANGES_REQUESTED" || (review.reviewThreads?.nodes || []).some((thread) => thread.isResolved === false)) {
+            throw new Error("Review changes or unresolved threads remain.");
+          }
+          const files = execFileSync("gh", ["api", `repos/${process.env.GITHUB_REPOSITORY}/pulls/${prNumber}/files`, "--paginate", "--jq", ".[].filename"], { encoding: "utf8" }).trim().split(/\r?\n/).filter(Boolean);
+          const frontend = files.some((file) => /^(src|public)\//.test(file) || ["package.json", "package-lock.json"].includes(file));
+          const docs = files.some((file) => file.startsWith("docs/"));
+          if (frontend && !docs) throw new Error("Frontend source changed without its deployable GitHub Pages build.");
+          require("node:fs").appendFileSync(process.env.GITHUB_OUTPUT, `authorized=true\npages_required=${frontend ? "true" : "false"}\n`);
+          NODE
+
+  land:
+    name: Squash-merge the exact approved head
+    needs: gate
+    if: ${{ needs.gate.outputs.authorized == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      merge_sha: ${{ steps.merge.outputs.merge_sha }}
+    steps:
+      - name: Merge without admin bypass or head substitution
+        id: merge
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          HEAD_SHA: ${{ inputs.head_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh pr merge "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --squash --match-head-commit "$HEAD_SHA" --delete-branch
+          merge_sha="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq '.merge_commit_sha')"
+          [[ "$merge_sha" =~ ^[a-f0-9]{40}$ ]]
+          echo "merge_sha=$merge_sha" >> "$GITHUB_OUTPUT"
+
+  deploy:
+    name: Verify Render and GitHub Pages deployment
+    needs: [gate, land]
+    if: ${{ needs.land.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pages: read
+    outputs:
+      render_status: ${{ steps.verify.outputs.render_status }}
+      pages_status: ${{ steps.verify.outputs.pages_status }}
+    steps:
+      - name: Wait for the exact merge commit to become live
+        id: verify
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MERGE_SHA: ${{ needs.land.outputs.merge_sha }}
+          PAGES_REQUIRED: ${{ needs.gate.outputs.pages_required }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          render_status=timed_out
+          for attempt in $(seq 1 45); do
+            live_sha="$(curl --fail --silent --show-error --max-time 10 https://api.myaipa.ca/api/health/ready | node -e 'let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>{try{const j=JSON.parse(s);process.stdout.write(j.ok?String(j.releaseCommit||""):"")}catch{}})')" || true
+            if [[ "$live_sha" == "$MERGE_SHA" ]]; then render_status=succeeded; break; fi
+            sleep 20
+          done
+          pages_status=not_required
+          if [[ "$PAGES_REQUIRED" == "true" ]]; then
+            pages_status=timed_out
+            for attempt in $(seq 1 30); do
+              latest="$(gh api "repos/$GITHUB_REPOSITORY/pages/builds/latest" 2>/dev/null || true)"
+              page_commit="$(printf '%s' "$latest" | node -e 'let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>{try{process.stdout.write(String(JSON.parse(s).commit||""))}catch{}})')"
+              page_status="$(printf '%s' "$latest" | node -e 'let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>{try{process.stdout.write(String(JSON.parse(s).status||""))}catch{}})')"
+              if [[ "$page_commit" == "$MERGE_SHA" && "$page_status" == "built" ]]; then pages_status=succeeded; break; fi
+              if [[ "$page_commit" == "$MERGE_SHA" && "$page_status" == "errored" ]]; then pages_status=failed; break; fi
+              sleep 20
+            done
+          fi
+          echo "render_status=$render_status" >> "$GITHUB_OUTPUT"
+          echo "pages_status=$pages_status" >> "$GITHUB_OUTPUT"
+          [[ "$render_status" == "succeeded" ]]
+          [[ "$pages_status" == "succeeded" || "$pages_status" == "not_required" ]]
+
+  report:
+    name: Report the final owner-approved result
+    if: ${{ always() && needs.gate.outputs.authorized == 'true' }}
+    needs: [gate, land, deploy]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Send the bounded result to the production Telegram outbox
+        env:
+          MONITOR_API_KEY: ${{ secrets.MONITOR_API_KEY }}
+          APPROVAL_ID: ${{ inputs.approval_id }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          HEAD_SHA: ${{ inputs.head_sha }}
+          MERGE_SHA: ${{ needs.land.outputs.merge_sha }}
+          LAND_RESULT: ${{ needs.land.result }}
+          RENDER_STATUS: ${{ needs.deploy.outputs.render_status }}
+          PAGES_STATUS: ${{ needs.deploy.outputs.pages_status }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          node <<'NODE'
+          const merged = process.env.LAND_RESULT === "success";
+          const payload = {
+            confirmation: "REPORT_TELEGRAM_PR_LANDING_RESULT",
+            approval_id: String(process.env.APPROVAL_ID || "").trim().toLowerCase(),
+            pr_number: Number(process.env.PR_NUMBER),
+            head_sha: String(process.env.HEAD_SHA || "").trim().toLowerCase(),
+            merge_sha: merged ? String(process.env.MERGE_SHA || "").trim().toLowerCase() : "",
+            outcome: merged ? "merged" : "failed",
+            render_status: merged ? String(process.env.RENDER_STATUS || "timed_out") : "not_required",
+            pages_status: merged ? String(process.env.PAGES_STATUS || "timed_out") : "not_required",
+            run_url: String(process.env.RUN_URL || ""),
+          };
+          if (!process.env.MONITOR_API_KEY) throw new Error("MONITOR_API_KEY is not configured.");
+          const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+          (async () => {
+            for (const delay of [0, 2_000, 5_000, 10_000]) {
+              if (delay) await wait(delay);
+              try {
+                const response = await fetch("https://api.myaipa.ca/api/internal/operations/pr-landing-result", {
+                  method: "POST",
+                  headers: { Authorization: `Bearer ${process.env.MONITOR_API_KEY}`, "Content-Type": "application/json" },
+                  body: JSON.stringify(payload),
+                  signal: AbortSignal.timeout(10_000),
+                });
+                if (response.ok) return;
+              } catch (_error) { /* bounded retry */ }
+            }
+            throw new Error("The final PR landing result could not be reported.");
+          })().catch((error) => { console.error(error.message); process.exitCode = 1; });
+          NODE

@@ -534,6 +534,8 @@ test("incident repair results require authentication, exact job outcomes, and an
     publish_result: "success",
     base_sha: "a".repeat(40),
     pr_url: "https://github.com/OllieinCanada/MyA.I.PA/pull/123",
+    pr_number: 123,
+    head_sha: "b".repeat(40),
     run_url: "https://github.com/OllieinCanada/MyA.I.PA/actions/runs/456",
   };
   const unauthorized = await request("/api/internal/operations/incident-repair-result", {
@@ -562,6 +564,33 @@ test("incident repair results require authentication, exact job outcomes, and an
     body: base,
   });
   assert.equal(missingIncident.status, 409);
+});
+
+test("Telegram PR landing results require monitor authentication and explicit confirmation", async () => {
+  const payload = {
+    confirmation: "REPORT_TELEGRAM_PR_LANDING_RESULT",
+    approval_id: "0123456789abcdef",
+    pr_number: 123,
+    head_sha: "b".repeat(40),
+    merge_sha: "c".repeat(40),
+    outcome: "merged",
+    render_status: "succeeded",
+    pages_status: "not_required",
+    run_url: "https://github.com/OllieinCanada/MyA.I.PA/actions/runs/456",
+  };
+  const unauthorized = await request("/api/internal/operations/pr-landing-result", {
+    method: "POST",
+    body: payload,
+  });
+  assert.equal(unauthorized.status, 401);
+
+  const unconfirmed = await request("/api/internal/operations/pr-landing-result", {
+    method: "POST",
+    headers: { "x-monitor-api-key": process.env.MONITOR_API_KEY },
+    body: { ...payload, confirmation: "" },
+  });
+  assert.equal(unconfirmed.status, 400);
+  assert.match((await unconfirmed.json()).error, /confirmation/i);
 });
 
 test("incident remediation canary requires the monitor key and explicit confirmation", async () => {

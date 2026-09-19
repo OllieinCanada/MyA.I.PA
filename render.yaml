@@ -235,6 +235,18 @@ services:
         sync: false
       - key: TELEGRAM_CHAT_ID
         sync: false
+      - key: TELEGRAM_ADMIN_USER_ID
+        # Optional for a private bot chat where this equals TELEGRAM_CHAT_ID;
+        # set it explicitly if the alert destination is ever a group.
+        sync: false
+      - key: TELEGRAM_WEBHOOK_SECRET
+        generateValue: true
+      - key: TELEGRAM_ACTION_SIGNING_SECRET
+        generateValue: true
+      - key: TELEGRAM_WEBHOOK_URL
+        value: https://api.myaipa.ca/api/webhooks/telegram/actions
+      - key: TELEGRAM_GUARDED_ACTIONS_ENABLED
+        value: "true"
       - key: RUNTIME_TELEGRAM_ALERTS_ENABLED
         value: "true"
       - key: INCIDENT_SAFE_AUTO_REPAIR_ENABLED

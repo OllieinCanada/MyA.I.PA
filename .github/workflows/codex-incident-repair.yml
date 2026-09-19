@@ -591,13 +591,15 @@ jobs:
     if: ${{ github.ref == 'refs/heads/main' }}
     needs: [draft, verify, seal]
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     permissions:
       contents: write
       pull-requests: write
       statuses: write
     outputs:
       pr_url: ${{ steps.pull_request.outputs.pr_url }}
+      pr_number: ${{ steps.pull_request.outputs.pr_number }}
+      head_sha: ${{ steps.pull_request.outputs.head_sha }}
     steps:
       - name: Check out the verified base with publication credentials
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -700,6 +702,17 @@ jobs:
           git -c core.hooksPath=/dev/null apply --index diagnostics/incident-repair/verified/incident.patch
           node scripts/validate-incident-repair-worktree.js diagnostics/incident-repair/verified/incident.patch
           node scripts/scan-secrets.js --include-untracked
+
+      - name: Build deployable Pages output when frontend source changed
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --cached --name-only | grep -Eq '^(src|public)/|^package(-lock)?\.json$'; then
+            npm ci --legacy-peer-deps --ignore-scripts
+            npm run build:pages
+            git add --all docs
+            node scripts/scan-secrets.js --include-untracked
+          fi
 
       - name: Prepare the review branch and sanitized pull-request body
         id: review
@@ -818,7 +831,19 @@ jobs:
           if (url.protocol !== "https:" || url.hostname !== "github.com" || !url.pathname.toLowerCase().startsWith(expected) || !/\/pull\/[1-9][0-9]*$/.test(url.pathname)) {
             throw new Error("GitHub returned an unexpected pull-request URL.");
           }
-          fs.writeFileSync(process.env.GITHUB_OUTPUT, `pr_url=${url.toString()}\n`, { flag: "a" });
+          const number = Number(url.pathname.split("/").pop());
+          if (!Number.isSafeInteger(number) || number < 1) throw new Error("The pull-request number is invalid.");
+          // GITHUB_SHA still names the workflow base; read the committed repair
+          // head from Git so the owner approval is sealed to the exact patch.
+          const { execFileSync } = require("node:child_process");
+          const repairHead = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim().toLowerCase();
+          if (!/^[a-f0-9]{40}$/.test(repairHead)) throw new Error("The repair head SHA is invalid.");
+          fs.writeFileSync(process.env.GITHUB_OUTPUT, [
+            `pr_url=${url.toString()}`,
+            `pr_number=${number}`,
+            `head_sha=${repairHead}`,
+            "",
+          ].join("\n"), { flag: "a" });
           NODE
 
   notify:
@@ -844,6 +869,8 @@ jobs:
           VERIFY_RESULT: ${{ needs.verify.result }}
           PUBLISH_RESULT: ${{ needs.publish.result }}
           PR_URL: ${{ needs.publish.outputs.pr_url }}
+          PR_NUMBER: ${{ needs.publish.outputs.pr_number }}
+          HEAD_SHA: ${{ needs.publish.outputs.head_sha }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           node <<'NODE'
@@ -865,6 +892,8 @@ jobs:
             publish_result: publishResult,
             base_sha: String(process.env.BASE_SHA || "").trim().toLowerCase(),
             pr_url: allSucceeded ? String(process.env.PR_URL || "").trim() : "",
+            pr_number: allSucceeded ? Number(process.env.PR_NUMBER) : 0,
+            head_sha: allSucceeded ? String(process.env.HEAD_SHA || "").trim().toLowerCase() : "",
             run_url: String(process.env.RUN_URL || "").trim(),
           };
           if (!process.env.MONITOR_API_KEY) throw new Error("MONITOR_API_KEY is not configured for the incident callback.");
