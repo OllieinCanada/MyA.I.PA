@@ -40,13 +40,13 @@ function assertSharedSignupIdentity(signups = []) {
   }
   const emails = new Set(signups.map((record) => normalizeEmail(record.ownerEmail)).filter(Boolean));
   const phones = new Set(signups.map((record) => normalizePhone(record.ownerPhone)).filter(Boolean));
-  if (emails.size !== 1 || phones.size !== 1) {
+  if (emails.size < 1 || phones.size !== 1) {
     throw decommissionError(
-      "The selected records do not share one verified owner identity.",
+      "The selected records do not share one verified owner phone.",
       "SIGNUP_DECOMMISSION_IDENTITY_MISMATCH"
     );
   }
-  return { ownerEmail: [...emails][0], ownerPhone: [...phones][0] };
+  return { ownerEmails: [...emails].sort(), ownerPhone: [...phones][0] };
 }
 
 function selectNewestPendingSignup({ pendingStore = {}, identity = {}, expectedBusinessName = "" } = {}) {
@@ -61,7 +61,7 @@ function selectNewestPendingSignup({ pendingStore = {}, identity = {}, expectedB
       const email = normalizeEmail(pending.ownerEmail || payload?.owner?.email);
       const phone = normalizePhone(payload?.owner?.phone);
       const name = clean(pending.businessName || payload?.business?.name).toLowerCase();
-      return email === identity.ownerEmail && phone === identity.ownerPhone && name === expectedName;
+      return Boolean(email) && phone === identity.ownerPhone && name === expectedName;
     })
     .sort((left, right) => Number(right[1]?.verifiedAt || right[1]?.createdAt || 0) - Number(left[1]?.verifiedAt || left[1]?.createdAt || 0));
   if (matches.length !== 1) {
