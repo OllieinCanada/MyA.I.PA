@@ -55,6 +55,13 @@ const {
   redactIncidentText,
   sendIncidentTelegramAlert,
 } = require("./incidentAlerts");
+const {
+  canRemoveSignupAlias,
+  findSignupDashboardExistingKey,
+  getSignupAliases,
+  getSignupDashboardKey,
+  normalizeSignupSubmissionId,
+} = require("./signupDashboardIdentity");
 const { buildRuntimeIncident } = require("./runtimeAlerts");
 const {
   createIncidentRemediationPlan,
@@ -5122,29 +5129,11 @@ async function sendDailyDigest() {
   return { sent: true, digest };
 }
 
-function getSignupDashboardKey(record = {}) {
-  const subscriptionId = String(record.subscriptionId || "").trim();
-  if (subscriptionId) return `sub:${subscriptionId}`;
-  const ownerEmail = String(record.ownerEmail || "").trim().toLowerCase();
-  if (ownerEmail) return `email:${ownerEmail}`;
-  const checkoutSessionId = String(record.checkoutSessionId || "").trim();
-  if (checkoutSessionId) return `checkout:${checkoutSessionId}`;
-  return `signup:${crypto.randomUUID()}`;
-}
-
-function getSignupAliases(record = {}) {
-  return [
-    record.subscriptionId ? `sub:${String(record.subscriptionId).trim()}` : "",
-    record.ownerEmail ? `email:${String(record.ownerEmail).trim().toLowerCase()}` : "",
-    record.checkoutSessionId ? `checkout:${String(record.checkoutSessionId).trim()}` : "",
-  ].filter(Boolean);
-}
-
 function upsertSignupDashboardRecord(record) {
   if (!record || typeof record !== "object") return null;
   const store = readSignupDashboardStore();
   const aliases = getSignupAliases(record);
-  const existingKey = aliases.find((alias) => store[alias]) || getSignupDashboardKey(record);
+  const existingKey = findSignupDashboardExistingKey(store, record) || `signup:${crypto.randomUUID()}`;
   const existing = store[existingKey] || {};
   const signedUpAt = existing.signedUpAt || record.signedUpAt || record.createdAt || new Date().toISOString();
   const merged = enforceAgentTestReadyStatus(compactObject({
@@ -5159,7 +5148,7 @@ function upsertSignupDashboardRecord(record) {
 
   store[existingKey] = merged;
   for (const alias of aliases) {
-    if (alias !== existingKey) delete store[alias];
+    if (alias !== existingKey && canRemoveSignupAlias(store[alias], merged)) delete store[alias];
   }
   writeSignupDashboardStore(store);
   return merged;
@@ -5480,6 +5469,7 @@ function upsertSignupDashboardFromCheckoutSession(session, extra = {}) {
   const metadata = session?.metadata || {};
   const details = session?.customer_details || {};
   return upsertSignupDashboardRecord({
+    signupAttemptId: String(extra.signupAttemptId || metadata.signupAttemptId || "").trim(),
     checkoutSessionId: session?.id || "",
     subscriptionId: typeof session?.subscription === "string" ? session.subscription : session?.subscription?.id || "",
     customerId: typeof session?.customer === "string" ? session.customer : session?.customer?.id || "",
@@ -5500,6 +5490,7 @@ function upsertSignupDashboardFromSubscription(subscription, extra = {}) {
   const periodStartMs = getUnixMs(subscription?.trial_start) || getUnixMs(subscription?.current_period_start);
   const periodEndMs = getSubscriptionPeriodEndMs(subscription);
   return upsertSignupDashboardRecord({
+    signupAttemptId: String(extra.signupAttemptId || metadata.signupAttemptId || "").trim(),
     subscriptionId: subscription?.id || "",
     customerId: typeof subscription?.customer === "string" ? subscription.customer : subscription?.customer?.id || "",
     ownerEmail: String(extra.ownerEmail || metadata.ownerEmail || metadata.email || subscription?.customer_email || "").trim(),
@@ -9821,6 +9812,7 @@ function getSignupBillingIdentity(payload, extra = {}) {
   const business = payload?.business || {};
   const owner = payload?.owner || {};
   return {
+    signupAttemptId: String(extra.signupAttemptId || buildMakeSignupEventKey(payload)).trim(),
     businessName: String(extra.businessName || business.name || "").trim(),
     ownerName: String(extra.ownerName || owner.name || "").trim(),
     ownerEmail: String(extra.ownerEmail || owner.email || "").trim(),
@@ -9841,6 +9833,7 @@ async function createNoCardStripeTrialForSignup(payload, extra = {}) {
   }
 
   const metadata = compactObject({
+    signupAttemptId: identity.signupAttemptId,
     businessName: identity.businessName,
     ownerName: identity.ownerName,
     ownerEmail: identity.ownerEmail,
@@ -13635,6 +13628,7 @@ app.post(
     const specialtyList = String(body.specialtyList || setupDetails.specialtyList || specializationList).trim();
     const countryCode = String(body.country || "").trim().toLowerCase();
     const googlePlaceId = String(body.selectedPlace?.place_id || body.selectedPlace?.placeId || "").trim();
+    const submissionId = normalizeSignupSubmissionId(body.submissionId) || crypto.randomUUID();
 
     if (!businessName) {
       return res.status(400).json({ error: "businessProfile.businessName is required." });
@@ -13667,6 +13661,7 @@ app.post(
 
     const payload = compactObject({
       event: "signup.completed",
+      submissionId,
       submittedAt: new Date().toISOString(),
       source: {
         app: "my-ai-pa-signup",
@@ -13752,6 +13747,7 @@ app.post(
     const makePayload = compactObject({
       ...body,
       signupId: payload.signupId,
+      submissionId: payload.submissionId,
       event: payload.event,
       submittedAt: payload.submittedAt,
       source: payload.source,

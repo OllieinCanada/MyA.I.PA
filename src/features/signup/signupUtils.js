@@ -249,6 +249,7 @@ export function formatPhoneNumber(value) {
 }
 
 export function buildSignupPayload({
+  submissionId,
   details,
   pricing,
   selectedAreas,
@@ -269,6 +270,7 @@ export function buildSignupPayload({
   const specializationList = selectedSpecializationLabels.join(", ");
 
   return {
+    submissionId: String(submissionId || "").trim(),
     country: "ca",
     businessName: details.businessName.trim(),
     ownerName: details.ownerName.trim(),

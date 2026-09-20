@@ -1444,6 +1444,20 @@ async function postSignupPayload(url, formData) {
   });
 }
 
+function createSignupSubmissionId() {
+  if (typeof window !== "undefined" && typeof window.crypto?.randomUUID === "function") {
+    return window.crypto.randomUUID();
+  }
+  if (typeof window !== "undefined" && typeof window.crypto?.getRandomValues === "function") {
+    const bytes = window.crypto.getRandomValues(new Uint8Array(16));
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    const value = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+    return `${value.slice(0, 8)}-${value.slice(8, 12)}-${value.slice(12, 16)}-${value.slice(16, 20)}-${value.slice(20)}`;
+  }
+  return "";
+}
+
 const SIGNUP_RESULT_SESSION_KEY = "myaipa_signup_result_v2";
 
 function readStoredSignupResult() {
@@ -1944,6 +1958,7 @@ export function SignupSuccessPage({ result: initialResult, onStartAnother }) {
 
 export default function Signup() {
   const signupStartedAtRef = useRef(Date.now());
+  const signupSubmissionIdRef = useRef("");
   const [currentStep, setCurrentStep] = useState(1);
   const [businessSlide, setBusinessSlide] = useState(1);
   const [tradeSetupPanel, setTradeSetupPanel] = useState("trade");
@@ -2193,6 +2208,7 @@ export default function Signup() {
     setTouchedDetails({});
     setReturnToReviewAfterEdit(false);
     signupStartedAtRef.current = Date.now();
+    signupSubmissionIdRef.current = "";
     setDetails({ ...DEFAULT_DETAILS });
     setPricing({ ...DEFAULT_PRICING });
     window.scrollTo?.({ top: 0, behavior: "smooth" });
@@ -2347,7 +2363,9 @@ export default function Signup() {
     setError("");
     setStatus("");
 
+    if (!signupSubmissionIdRef.current) signupSubmissionIdRef.current = createSignupSubmissionId();
     const formData = buildSignupPayload({
+      submissionId: signupSubmissionIdRef.current,
       details,
       pricing,
       selectedAreas,

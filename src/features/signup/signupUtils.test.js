@@ -52,6 +52,7 @@ test("signup validation rejects placeholders and malformed contact details", () 
 
 test("the signup payload keeps owner, business, pricing, and agent fields aligned", () => {
   const payload = buildSignupPayload({
+    submissionId: "bf618a68-091f-4f3f-8f93-9b0f4544f512",
     details: validDetails,
     pricing: {
       offersServiceCalls: true,
@@ -76,6 +77,7 @@ test("the signup payload keeps owner, business, pricing, and agent fields aligne
   });
 
   expect(payload.businessName).toBe(validDetails.businessName);
+  expect(payload.submissionId).toBe("bf618a68-091f-4f3f-8f93-9b0f4544f512");
   expect(payload.ownerEmail).toBe(validDetails.email);
   expect(payload.businessProfile.address).toContain("Hamilton");
   expect(payload.setupDetails.ownerPhone).toBe(validDetails.phone);

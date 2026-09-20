@@ -18,6 +18,14 @@ function yesNo(value) {
   return value ? "yes" : "no";
 }
 
+function formatAssignedAiNumber(value) {
+  const digits = String(value || "").replace(/\D/g, "");
+  if (digits.length === 11 && digits.startsWith("1")) {
+    return `+1 (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
+  }
+  return safeLabel(value, "Not assigned yet", 40);
+}
+
 function makeFailureContext(input = {}, record = {}) {
   const explicit = input.makeFailure
     || input.providerFailure
@@ -76,6 +84,7 @@ function signupContext(input = {}) {
       || record.emailVerifiedAt
     ),
     phoneAssigned: Boolean(record.twilioPhoneNumber),
+    assignedAiNumber: record.twilioPhoneNumber ? formatAssignedAiNumber(record.twilioPhoneNumber) : "",
     assistantAssigned: Boolean(record.vapiAssistantId),
     trialStarted: Boolean(record.subscriptionId || record.trialStartedAt || record.stripeTrialStartedAt),
     status: input.state || record.status || "signup update",
@@ -101,6 +110,7 @@ function buildSignupSnapshot(input = {}) {
     "Contact captured": yesNo(context.contactCaptured),
     "Contact verified": yesNo(context.verified),
     "AI number assigned": yesNo(context.phoneAssigned),
+    "Assigned AI number": context.assignedAiNumber || "Not assigned yet",
     "Assistant assigned": yesNo(context.assistantAssigned),
     "Trial/billing started": yesNo(context.trialStarted),
     Stage: context.status,
@@ -206,7 +216,12 @@ function buildSignupUpdateAlert(input = {}) {
     ? String(input.eventKey).slice(-10)
     : "unknown";
   const snapshotLines = Object.entries(buildSignupSnapshot(input))
-    .map(([key, value]) => `• ${safeLabel(key)}: ${safeLabel(value, "Not supplied", 220)}`);
+    .map(([key, value]) => {
+      const safeValue = key === "Assigned AI number"
+        ? formatAssignedAiNumber(value)
+        : safeLabel(value, "Not supplied", 220);
+      return `• ${safeLabel(key)}: ${safeValue}`;
+    });
   return [
     `MY AI PA — ${labels[input.state] || "SIGNUP UPDATE"}`,
     "",
@@ -224,7 +239,7 @@ function buildSignupUpdateAlert(input = {}) {
         ? "Provisioning stays paused until the customer verifies their contact details."
         : "My AI PA will hold or continue the setup according to the verification and manual-review safeguards.",
     "",
-    "No customer email, phone number, street address, or provider credential is included.",
+    "The assigned My AI PA number is shown when one exists. Customer email, customer phone number, street address, and provider credentials remain hidden.",
   ].join("\n").slice(0, 3_900);
 }
 
