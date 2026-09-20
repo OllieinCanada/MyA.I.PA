@@ -70,6 +70,10 @@ describe("intuitive signup presentation", () => {
     submit();
     const areaList = container.querySelector(".signup-area-list");
     const unlistedAreaPanel = container.querySelector(".signup-area-tools");
+    const nearbyNext = container.querySelector(".signup-mobile-selected-count .signup-mobile-selected-next");
+    expect(nearbyNext).not.toBeNull();
+    expect(nearbyNext.disabled).toBe(true);
+    expect(container.querySelector(".signup-mobile-action-bar .signup-mobile-primary")).toBeNull();
     expect(areaList.contains(unlistedAreaPanel)).toBe(false);
     expect(container.querySelector('input[type="search"]')).toBeNull();
     expect(container.querySelector("#custom-service-area")).toBeNull();
@@ -80,8 +84,10 @@ describe("intuitive signup presentation", () => {
     clickButton("Add area", unlistedAreaPanel);
     expect(container.querySelector("#custom-service-area")).toBeNull();
     expect(areaList.textContent).toMatch(/Added by you.*Beamsville/i);
+    expect(container.querySelector(".signup-mobile-selected-value").textContent).toBe("1");
+    expect(nearbyNext.disabled).toBe(false);
     clickButton("Hamilton", container.querySelector(".signup-area-list"));
-    submit();
+    clickButton("Next", container.querySelector(".signup-mobile-selected-count"));
 
     changeValue("#your-name-input", "Oliver Arscott");
     changeValue("#business-name-input", "Arscott Electric");
@@ -94,6 +100,8 @@ describe("intuitive signup presentation", () => {
     submit();
 
     expect(container.textContent).toMatch(/Step 5 of 8/i);
+    expect(container.textContent).toMatch(/Service call \/ repair pricing/i);
+    expect(container.textContent).toMatch(/plus parts/i);
     expect(container.textContent).toMatch(/Do you want your agent to discuss prices and hourly rates for service calls or repairs\?/i);
     expect(container.querySelector(".signup-mobile-primary").disabled).toBe(true);
 
@@ -107,7 +115,7 @@ describe("intuitive signup presentation", () => {
     changeValue("#hourly-rate-input", "95");
     submit();
     expect(container.textContent).toMatch(/Step 6 of 8/i);
-    expect(container.textContent).toMatch(/Setup summary/i);
+    expect(container.textContent).toMatch(/Check your setup/i);
   });
 
   test("renders Turnstile explicitly and returns its verified token", () => {
