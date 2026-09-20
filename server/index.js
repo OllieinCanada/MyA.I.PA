@@ -6621,11 +6621,31 @@ function normalizeSignupRecoveryText(value) {
 
 function assertPendingSignupRecoveryIdentity(signup = {}, payload = {}) {
   const storedEmail = String(signup.ownerEmail || "").trim().toLowerCase();
-  const payloadEmail = String(payload?.owner?.email || payload?.setupDetails?.ownerEmail || "").trim().toLowerCase();
+  const payloadEmail = String(
+    payload?.owner?.email
+      || payload?.setupDetails?.ownerEmail
+      || payload?.ownerEmail
+      || payload?.email
+      || ""
+  ).trim().toLowerCase();
   const storedPhone = normalizeCustomerDashboardPhone(signup.ownerPhone || signup.businessPhone || "");
-  const payloadPhone = normalizeCustomerDashboardPhone(payload?.owner?.phone || payload?.setupDetails?.ownerPhone || "");
+  const payloadPhone = normalizeCustomerDashboardPhone(
+    payload?.owner?.phone
+      || payload?.setupDetails?.ownerPhone
+      || payload?.ownerPhone
+      || payload?.phone
+      || payload?.business?.phone
+      || payload?.businessProfile?.phone
+      || payload?.businessPhone
+      || ""
+  );
   const storedBusiness = normalizeSignupRecoveryText(signup.businessName);
-  const payloadBusiness = normalizeSignupRecoveryText(payload?.business?.name || payload?.setupDetails?.businessName);
+  const payloadBusiness = normalizeSignupRecoveryText(
+    payload?.business?.name
+      || payload?.businessProfile?.businessName
+      || payload?.setupDetails?.businessName
+      || payload?.businessName
+  );
   const storedAttempt = String(signup.signupAttemptId || "").trim();
   const payloadAttempt = buildMakeSignupEventKey(payload);
 

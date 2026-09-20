@@ -82,3 +82,19 @@ test("requires pending recovery identity to match the saved signup", () => {
     (error) => error.code === "SIGNUP_RECOVERY_EMAIL_MISMATCH"
   );
 });
+
+test("accepts the flat website signup aliases used by pending verification records", () => {
+  const payload = {
+    businessName: "David Supere Business Electrical",
+    ownerEmail: "david@example.ca",
+    phone: "289-555-0198",
+  };
+  const identity = __test.assertPendingSignupRecoveryIdentity({
+    businessName: "David Supere Business Electrical",
+    ownerEmail: "david@example.ca",
+    ownerPhone: "+12895550198",
+  }, payload);
+  assert.equal(identity.businessName, "david supere business electrical");
+  assert.equal(identity.ownerEmail, "david@example.ca");
+  assert.equal(identity.ownerPhone, "+12895550198");
+});
