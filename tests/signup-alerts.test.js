@@ -147,5 +147,36 @@ test("setup-complete delivery failure preserves the number and directs operation
   assert.match(text, /email provider rejected the customer's email destination/i);
   assert.match(text, /Do not provision another number/);
   assert.match(text, /resend only the setup-complete follow-up/);
-  assert.doesNotMatch(text, /3433216155/);
+  assert.doesNotMatch(text, /\(343\) 321-6155|3433216155/);
+});
+
+test("signup update shows the assigned AI number but keeps customer contact details private", () => {
+  const text = buildSignupTelegramAlert({
+    businessName: "Example Painting",
+    state: "received",
+    eventKey: "signup_1234567890abcdef1234567890abcdef",
+    payload: {
+      business: { name: "Example Painting" },
+      owner: { email: "private@example.com", phone: "+19055550123" },
+    },
+    record: {
+      twilioPhoneNumber: "+12892169256",
+      vapiAssistantId: "assistant-safe-id",
+    },
+  });
+
+  assert.match(text, /Assigned AI number: \+1 \(289\) 216-9256/);
+  assert.doesNotMatch(text, /private@example\.com|9055550123/);
+});
+
+test("manual-review update says plainly when no AI number has been assigned", () => {
+  const text = buildSignupTelegramAlert({
+    businessName: "John's Painting",
+    state: "received",
+    eventKey: "signup_1234567890abcdef1234567890abcdef",
+    record: { status: "review_required" },
+  });
+
+  assert.match(text, /AI number assigned: no/);
+  assert.match(text, /Assigned AI number: Not assigned yet/);
 });

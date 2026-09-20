@@ -181,18 +181,20 @@ test("support endpoint limits repeated submissions", async () => {
 });
 
 test("web signup, pending verification, and dashboard share one server-owned identity", async () => {
-  const signup = await fetch(`${baseUrl}/api/integrations/signup-complete`, {
+  const requestBody = {
+    signupId: "untrusted-client-attempt-id",
+    country: "ca",
+    businessProfile: { businessName: "Synthetic Signup Electric", phone: "+19055550111", address: "100 Test Street, Hamilton, ON" },
+    setupDetails: { ownerName: "Synthetic Owner", ownerEmail: "signup@example.invalid", ownerPhone: "+12895550111", businessType: "Electrical" },
+    callForwarding: { carrier: "other", lineType: "voip" },
+    pricing: { offersServiceCalls: false },
+    security: { clientElapsedMs: 10000 },
+  };
+  const postSignup = () => fetch(`${baseUrl}/api/integrations/signup-complete`, {
     method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      signupId: "untrusted-client-attempt-id",
-      country: "ca",
-      businessProfile: { businessName: "Synthetic Signup Electric", phone: "+19055550111", address: "100 Test Street, Hamilton, ON" },
-      setupDetails: { ownerName: "Synthetic Owner", ownerEmail: "signup@example.invalid", ownerPhone: "+12895550111", businessType: "Electrical" },
-      callForwarding: { carrier: "other", lineType: "voip" },
-      pricing: { offersServiceCalls: false },
-      security: { clientElapsedMs: 10000 },
-    }),
+    body: JSON.stringify(requestBody),
   });
+  const signup = await postSignup();
   assert.equal(signup.status, 202, await signup.clone().text());
   const result = await signup.json();
   assert.equal(result.reviewRequired, true);
@@ -202,6 +204,7 @@ test("web signup, pending verification, and dashboard share one server-owned ide
   const pending = [...pendingRows.values()].find((row) => row.ownerEmail === "signup@example.invalid");
   assert.ok(pending);
   assert.match(pending.payload.signupId, /^signup_[a-f0-9]{32}$/);
+  assert.match(pending.payload.submissionId, /^[0-9a-f-]{36}$/);
   assert.notEqual(pending.payload.signupId, "untrusted-client-attempt-id");
   const { buildMakeSignupEventKey } = require("../server/makeSignupWebhook");
   assert.equal(buildMakeSignupEventKey(pending.payload), attempt.eventKey);
@@ -210,6 +213,12 @@ test("web signup, pending verification, and dashboard share one server-owned ide
   const records = Array.isArray(dashboard) ? dashboard : dashboard.items || dashboard.records || Object.values(dashboard);
   assert.ok(records.some((row) => row.signupAttemptId === attempt.eventKey));
   assert.equal((await (await request(access)).json()).signup.state, "final_checks");
+
+  const repeatedSignup = await postSignup();
+  assert.equal(repeatedSignup.status, 202, await repeatedSignup.clone().text());
+  const matchingPendingRows = [...pendingRows.values()].filter((row) => row.ownerEmail === "signup@example.invalid");
+  assert.equal(matchingPendingRows.length, 2);
+  assert.equal(new Set(matchingPendingRows.map((row) => row.payload.signupId)).size, 2);
 });
 
 test("opening a verification link advances the same saved status without provisioning a review-held signup", async () => {
