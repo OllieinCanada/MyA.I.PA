@@ -6608,6 +6608,136 @@ function getSignupProviderRecoveryDiagnostics({ signup = {}, pendingSignup = nul
   };
 }
 
+function signupRecoveryError(message, code, statusCode = 409) {
+  const error = new Error(message);
+  error.code = code;
+  error.statusCode = statusCode;
+  return error;
+}
+
+function normalizeSignupRecoveryText(value) {
+  return String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function assertPendingSignupRecoveryIdentity(signup = {}, payload = {}) {
+  const storedEmail = String(signup.ownerEmail || "").trim().toLowerCase();
+  const payloadEmail = String(payload?.owner?.email || payload?.setupDetails?.ownerEmail || "").trim().toLowerCase();
+  const storedPhone = normalizeCustomerDashboardPhone(signup.ownerPhone || signup.businessPhone || "");
+  const payloadPhone = normalizeCustomerDashboardPhone(payload?.owner?.phone || payload?.setupDetails?.ownerPhone || "");
+  const storedBusiness = normalizeSignupRecoveryText(signup.businessName);
+  const payloadBusiness = normalizeSignupRecoveryText(payload?.business?.name || payload?.setupDetails?.businessName);
+  const storedAttempt = String(signup.signupAttemptId || "").trim();
+  const payloadAttempt = buildMakeSignupEventKey(payload);
+
+  if (!storedEmail || !payloadEmail || storedEmail !== payloadEmail) {
+    throw signupRecoveryError("The saved signup and pending recovery email do not match.", "SIGNUP_RECOVERY_EMAIL_MISMATCH");
+  }
+  if (!storedPhone || !payloadPhone || storedPhone !== payloadPhone) {
+    throw signupRecoveryError("The saved signup and pending recovery phone do not match.", "SIGNUP_RECOVERY_PHONE_MISMATCH");
+  }
+  if (!storedBusiness || !payloadBusiness || storedBusiness !== payloadBusiness) {
+    throw signupRecoveryError("The saved signup and pending recovery business do not match.", "SIGNUP_RECOVERY_BUSINESS_MISMATCH");
+  }
+  if (storedAttempt && storedAttempt !== payloadAttempt) {
+    throw signupRecoveryError("The pending recovery belongs to a different signup attempt.", "SIGNUP_RECOVERY_ATTEMPT_MISMATCH");
+  }
+  return { ownerEmail: storedEmail, ownerPhone: storedPhone, businessName: storedBusiness, eventKey: payloadAttempt };
+}
+
+function buildProvisioningReadbackAssessment({
+  signup = {}, twilioStep = {}, assistantStep = {}, importStep = {}, twilioNumbers = [], vapiNumbers = [], vapiAssistants = [],
+} = {}) {
+  for (const [label, step] of Object.entries({ twilioStep, assistantStep, importStep })) {
+    if (step?.status !== "completed" || !step?.result || typeof step.result !== "object") {
+      throw signupRecoveryError(`The durable ${label} provisioning result is not complete.`, "SIGNUP_RECOVERY_DURABLE_STEP_INCOMPLETE");
+    }
+  }
+
+  const twilioResult = twilioStep.result;
+  const assistantResult = assistantStep.result;
+  const importResult = importStep.result;
+  const twilioPhoneNumber = normalizeVapiImportPhone(twilioResult.twilioPhoneNumber || twilioResult.phoneNumber || twilioResult.phone_number);
+  const importedPhoneNumber = normalizeVapiImportPhone(importResult.number || importResult.twilioPhoneNumber);
+  const assistantId = String(assistantResult.assistantId || "").trim();
+  const importedAssistantId = String(importResult.assistantId || "").trim();
+  const vapiPhoneNumberId = String(importResult.id || importResult.phoneNumberId || "").trim();
+  const storedPhoneNumber = normalizeVapiImportPhone(signup.twilioPhoneNumber || "");
+  const storedAssistantId = String(signup.vapiAssistantId || "").trim();
+  const storedVapiPhoneId = String(signup.vapiPhoneNumberId || "").trim();
+
+  if (!twilioPhoneNumber || twilioPhoneNumber !== importedPhoneNumber) {
+    throw signupRecoveryError("The durable Twilio and Vapi phone results do not identify the same number.", "SIGNUP_RECOVERY_PHONE_RESULT_MISMATCH");
+  }
+  if (!assistantId || !importedAssistantId || assistantId !== importedAssistantId) {
+    throw signupRecoveryError("The durable Vapi assistant and phone results do not identify the same assistant.", "SIGNUP_RECOVERY_ASSISTANT_RESULT_MISMATCH");
+  }
+  if (!vapiPhoneNumberId) {
+    throw signupRecoveryError("The durable Vapi phone result has no provider identifier.", "SIGNUP_RECOVERY_VAPI_PHONE_ID_MISSING");
+  }
+  if (storedPhoneNumber && storedPhoneNumber !== twilioPhoneNumber) {
+    throw signupRecoveryError("The live provisioning result does not match the number saved on the signup.", "SIGNUP_RECOVERY_STORED_PHONE_MISMATCH");
+  }
+  if (storedAssistantId && storedAssistantId !== assistantId) {
+    throw signupRecoveryError("The live provisioning result does not match the assistant saved on the signup.", "SIGNUP_RECOVERY_STORED_ASSISTANT_MISMATCH");
+  }
+  if (storedVapiPhoneId && storedVapiPhoneId !== vapiPhoneNumberId) {
+    throw signupRecoveryError("The live provisioning result does not match the Vapi phone saved on the signup.", "SIGNUP_RECOVERY_STORED_VAPI_PHONE_MISMATCH");
+  }
+
+  const twilioMatches = twilioNumbers.filter((record) => normalizeVapiImportPhone(record?.phone_number || record?.phoneNumber) === twilioPhoneNumber);
+  const vapiPhoneMatches = vapiNumbers.filter((record) => (
+    String(record?.id || record?.phoneNumberId || "").trim() === vapiPhoneNumberId
+    && normalizeVapiImportPhone(getVapiPhoneNumber(record)) === twilioPhoneNumber
+  ));
+  const vapiAssistantMatches = vapiAssistants.filter((record) => String(record?.id || "").trim() === assistantId);
+  if (twilioMatches.length !== 1 || vapiPhoneMatches.length !== 1 || vapiAssistantMatches.length !== 1) {
+    throw signupRecoveryError(
+      "The live providers did not return one exact Twilio number, Vapi phone, and Vapi assistant.",
+      "SIGNUP_RECOVERY_PROVIDER_PAIR_AMBIGUOUS"
+    );
+  }
+
+  const twilioRecord = twilioMatches[0];
+  if (!String(twilioRecord?.voice_url || "").trim() || twilioRecord?.capabilities?.voice === false || twilioRecord?.capabilities?.sms === false) {
+    throw signupRecoveryError("The existing Twilio number is not ready for both calls and text messages.", "SIGNUP_RECOVERY_TWILIO_NOT_READY", 502);
+  }
+  if (getVapiAssistantId(vapiPhoneMatches[0]) !== assistantId) {
+    throw signupRecoveryError("The existing Vapi phone is attached to a different assistant.", "SIGNUP_RECOVERY_VAPI_BINDING_MISMATCH");
+  }
+
+  return {
+    complete: true,
+    kind: "completed_from_durable_provider_readback",
+    code: "",
+    providerCode: "",
+    twilioPhoneNumber,
+    vapiPhoneNumberId,
+    vapiAssistantId: assistantId,
+  };
+}
+
+async function reconcileAcknowledgedSignupProvisioning({ signup, payload }) {
+  const identity = assertPendingSignupRecoveryIdentity(signup, payload);
+  const accountKey = buildProvisioningAccountKey(identity.ownerEmail, identity.ownerPhone);
+  const [twilioState, assistantState, importState, twilioNumbers, vapiNumbers, vapiAssistants] = await Promise.all([
+    readProvisioningStep({ prisma, kind: "twilio-number", idempotencyKey: accountKey }),
+    readProvisioningStep({ prisma, kind: "vapi-assistant", idempotencyKey: accountKey }),
+    readProvisioningStep({ prisma, kind: "vapi-import", idempotencyKey: accountKey }),
+    fetchTwilioIncomingPhoneNumbers(),
+    fetchVapiCollection("phone-number", ["phoneNumbers", "phone_numbers"]),
+    fetchVapiCollection("assistant", ["assistants", "agents"]),
+  ]);
+  return buildProvisioningReadbackAssessment({
+    signup,
+    twilioStep: twilioState.data,
+    assistantStep: assistantState.data,
+    importStep: importState.data,
+    twilioNumbers,
+    vapiNumbers,
+    vapiAssistants,
+  });
+}
+
 function getVoiceSignupToolArguments(call = {}) {
   const messages = Array.isArray(call?.artifact?.messages) && call.artifact.messages.length
     ? call.artifact.messages
@@ -6828,6 +6958,7 @@ async function recoverSignupByOperationalTarget(targetId) {
   const pendingSignup = findPendingSignupForDashboardRecord(signup, pendingStore);
   if (pendingSignup?.[1]?.payload) {
     const [, pending] = pendingSignup;
+    assertPendingSignupRecoveryIdentity(signup, pending.payload);
     await updateSignupAttempt(pending.payload, {
       status: "provisioning",
       stage: "provisioning",
@@ -6836,8 +6967,20 @@ async function recoverSignupByOperationalTarget(targetId) {
       reviewRequired: false,
     });
     const makeResult = await sendMakeSignupCompleted(pending.payload);
-    const makeData = makeResult.data || {};
-    const makeAssessment = classifyMakeSignupResponse(makeResult.body, makeData);
+    let makeData = makeResult.data || {};
+    let makeAssessment = classifyMakeSignupResponse(makeResult.body, makeData);
+    let recoveredFromProviderReadback = false;
+    if (!makeAssessment.complete && makeAssessment.kind === "acknowledged_incomplete") {
+      makeAssessment = await reconcileAcknowledgedSignupProvisioning({ signup, payload: pending.payload });
+      makeData = {
+        success: true,
+        ok: true,
+        twilioPhoneNumber: makeAssessment.twilioPhoneNumber,
+        phoneNumberId: makeAssessment.vapiPhoneNumberId,
+        assistantId: makeAssessment.vapiAssistantId,
+      };
+      recoveredFromProviderReadback = true;
+    }
     if (!makeAssessment.complete) {
       upsertSignupDashboardRecord({
         ...signup,
@@ -6905,6 +7048,7 @@ async function recoverSignupByOperationalTarget(targetId) {
       phoneProvisioningStatus: phoneProvisioning.status,
       phoneProvisioningCode: phoneProvisioning.code,
       provisioningRetriedAt: new Date().toISOString(),
+      provisioningReceiptReconciledAt: recoveredFromProviderReadback ? new Date().toISOString() : "",
     });
     await updateSignupAttempt(pending.payload, {
       status: "setup_ready",
@@ -6943,10 +7087,11 @@ async function recoverSignupByOperationalTarget(targetId) {
     await recordForwardingSetupSmsDelivery(forwardingSetup, completionDelivery);
     return {
       ok: true,
-      action: "make_handoff_retried",
+      action: recoveredFromProviderReadback ? "existing_provider_pair_reconciled" : "make_handoff_retried",
       makeStatus: makeResult.status,
       assignedPhone: Boolean(updated.twilioPhoneNumber),
       assistantAssigned: Boolean(updated.vapiAssistantId),
+      recoveredFromProviderReadback,
     };
   }
 
@@ -17079,6 +17224,8 @@ module.exports = {
     buildSupersededSignupRecord,
     buildSafeSignupSupersessionResult,
     getSignupProviderRecoveryDiagnostics,
+    assertPendingSignupRecoveryIdentity,
+    buildProvisioningReadbackAssessment,
     getVoiceSignupToolArguments,
     isRecoverableVoiceSignupStatus,
     buildRecoveredVoiceSignupPayload,
