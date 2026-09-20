@@ -86,6 +86,20 @@ test("durable attempt recovery requires exactly one exact-name and shared-phone 
     () => selectCanonicalSignupAttempt({ attempts: [canonical, { ...canonical }], identity, expectedBusinessName: canonical.businessName }),
     (error) => error.code === "SIGNUP_DECOMMISSION_CANONICAL_ATTEMPT_AMBIGUOUS"
   );
+  assert.throws(
+    () => selectCanonicalSignupAttempt({
+      attempts: [{
+        ...canonical,
+        payload: {
+          ...canonical.payload,
+          business: { name: "Stale HVAC payload" },
+        },
+      }],
+      identity,
+      expectedBusinessName: canonical.businessName,
+    }),
+    (error) => error.code === "SIGNUP_DECOMMISSION_CANONICAL_ATTEMPT_AMBIGUOUS"
+  );
 });
 
 test("resource ownership fails closed when an outside account references a target resource", () => {

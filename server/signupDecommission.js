@@ -82,8 +82,16 @@ function selectCanonicalSignupAttempt({ attempts = [], identity = {}, expectedBu
       const payload = attempt.payload || {};
       const email = normalizeEmail(attempt.ownerEmail || payload?.owner?.email);
       const phone = normalizePhone(attempt.ownerPhone || payload?.owner?.phone);
-      const name = clean(attempt.businessName || payload?.business?.name).toLowerCase();
-      return Boolean(email) && phone === identity.ownerPhone && name === expectedName;
+      const storedName = clean(attempt.businessName).toLowerCase();
+      const payloadName = clean(payload?.business?.name).toLowerCase();
+      const payloadEmail = normalizeEmail(payload?.owner?.email);
+      const payloadPhone = normalizePhone(payload?.owner?.phone);
+      return Boolean(email)
+        && storedName === expectedName
+        && payloadName === expectedName
+        && phone === identity.ownerPhone
+        && payloadPhone === identity.ownerPhone
+        && payloadEmail === email;
     });
   if (matches.length !== 1) {
     throw decommissionError(
