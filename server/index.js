@@ -6422,6 +6422,175 @@ async function decommissionSignupSetAndRebuild({ targetIds, expectedBusinessName
   };
 }
 
+async function inspectFailedSuperdavesRebuildRollback({ targetId, expectedBusinessName }) {
+  const allSignups = listSignupDashboardRecords();
+  const target = findSignupByOperationalTarget(targetId, allSignups);
+  if (!target) {
+    const error = new Error("The failed rebuild target no longer exists.");
+    error.statusCode = 404;
+    error.code = "FAILED_REBUILD_TARGET_NOT_FOUND";
+    throw error;
+  }
+  if (String(target.businessName || "").trim() !== expectedBusinessName) {
+    const error = new Error("The failed rebuild business name does not match the exact rollback target.");
+    error.statusCode = 409;
+    error.code = "FAILED_REBUILD_NAME_MISMATCH";
+    throw error;
+  }
+  if (
+    String(target.makeError || "") !== "MAKE_SIGNUP_RESPONSE_INCOMPLETE"
+    || String(target.setupReadyBlockedReason || "") !== "ASSISTANT_CONTENT_MISMATCH"
+  ) {
+    const error = new Error("The selected signup is not the known failed Superdaves rebuild.");
+    error.statusCode = 409;
+    error.code = "FAILED_REBUILD_STATE_MISMATCH";
+    throw error;
+  }
+
+  const targets = [target];
+  const identity = assertSharedSignupIdentity(targets);
+  const declared = assertExclusiveResourceOwnership({ targets, allSignups });
+  const [vapiPhones, vapiAssistants, twilioNumbers] = await Promise.all([
+    fetchVapiCollection("phone-number", ["phoneNumbers", "phone_numbers"]),
+    fetchVapiCollection("assistant", ["assistants", "agents"]),
+    fetchTwilioIncomingPhoneNumbers(),
+  ]);
+  const vapiPhoneTargets = vapiPhones.filter((record) => {
+    const id = String(record?.id || record?.phoneNumberId || "").trim();
+    const number = normalizeDecommissionPhone(getVapiPhoneNumber(record));
+    return declared.vapiPhoneIds.has(id) || declared.phoneNumbers.has(number);
+  });
+  const assistantIds = new Set([
+    ...declared.vapiAssistantIds,
+    ...vapiPhoneTargets.map((record) => getVapiAssistantId(record)).filter(Boolean),
+  ]);
+  const sharedAssistant = vapiPhones.find((record) => {
+    const id = String(record?.id || record?.phoneNumberId || "").trim();
+    const number = normalizeDecommissionPhone(getVapiPhoneNumber(record));
+    const isTarget = declared.vapiPhoneIds.has(id) || declared.phoneNumbers.has(number);
+    return !isTarget && assistantIds.has(getVapiAssistantId(record));
+  });
+  if (sharedAssistant) {
+    const error = new Error("The failed rebuild assistant is attached to another Vapi phone.");
+    error.statusCode = 409;
+    error.code = "FAILED_REBUILD_ASSISTANT_SHARED";
+    throw error;
+  }
+  const vapiAssistantTargets = vapiAssistants.filter((record) => assistantIds.has(String(record?.id || "").trim()));
+  const twilioTargets = twilioNumbers.filter((record) => declared.phoneNumbers.has(normalizeDecommissionPhone(record?.phone_number)));
+
+  if (!stripe) {
+    const error = new Error("Stripe billing reconciliation is unavailable.");
+    error.statusCode = 503;
+    error.code = "STRIPE_NOT_CONFIGURED";
+    throw error;
+  }
+  const stripeCustomers = [];
+  for (const customerId of declared.customerIds) {
+    try {
+      const customer = await stripe.customers.retrieve(customerId);
+      if (customer && !customer.deleted) stripeCustomers.push(customer);
+    } catch (error) {
+      if (!providerDeleteError(error)) throw error;
+    }
+  }
+  const subscriptionIds = new Set(declared.subscriptionIds);
+  const checkoutSessionIds = new Set(declared.checkoutSessionIds);
+  for (const customer of stripeCustomers) {
+    for await (const subscription of stripe.subscriptions.list({ customer: customer.id, status: "all", limit: 100 })) {
+      subscriptionIds.add(subscription.id);
+    }
+    for await (const session of stripe.checkout.sessions.list({ customer: customer.id, limit: 100 })) {
+      checkoutSessionIds.add(session.id);
+    }
+  }
+  const pendingStore = await readPendingSignupStore();
+  const pendingSignup = findPendingSignupForDashboardRecord(target, pendingStore);
+  return {
+    target,
+    targetId,
+    identity,
+    declared,
+    pendingSignup,
+    vapiPhoneTargets,
+    vapiAssistantTargets,
+    twilioTargets,
+    stripeCustomers,
+    subscriptionIds,
+    checkoutSessionIds,
+    summary: {
+      signupRecords: 1,
+      vapiPhones: vapiPhoneTargets.length,
+      vapiAssistants: vapiAssistantTargets.length,
+      twilioNumbers: twilioTargets.length,
+      stripeCustomers: stripeCustomers.length,
+      stripeSubscriptions: subscriptionIds.size,
+      stripeCheckoutSessions: checkoutSessionIds.size,
+      pendingPayloads: pendingSignup ? 1 : 0,
+    },
+  };
+}
+
+async function rollbackFailedSuperdavesRebuild({ targetId, expectedBusinessName, apply = false }) {
+  const inspection = await inspectFailedSuperdavesRebuildRollback({ targetId, expectedBusinessName });
+  if (!apply) return { ok: true, action: "dry_run", summary: inspection.summary };
+
+  const billingResults = { subscriptions: [], checkoutSessions: [], customers: [] };
+  for (const subscriptionId of inspection.subscriptionIds) {
+    billingResults.subscriptions.push(await cancelStripeSubscriptionIfPresent(subscriptionId));
+  }
+  for (const sessionId of inspection.checkoutSessionIds) {
+    billingResults.checkoutSessions.push(await expireStripeCheckoutIfOpen(sessionId));
+  }
+  for (const customer of inspection.stripeCustomers) {
+    billingResults.customers.push(await deleteStripeCustomerIfPresent(customer.id));
+  }
+  const vapiResults = { phones: [], assistants: [] };
+  for (const phone of inspection.vapiPhoneTargets) {
+    const id = String(phone?.id || phone?.phoneNumberId || "").trim();
+    if (id) vapiResults.phones.push(await deleteVapiResourceIfPresent(`phone-number/${encodeURIComponent(id)}`));
+  }
+  for (const assistant of inspection.vapiAssistantTargets) {
+    const id = String(assistant?.id || "").trim();
+    if (id) vapiResults.assistants.push(await deleteVapiResourceIfPresent(`assistant/${encodeURIComponent(id)}`));
+  }
+  const twilioResults = [];
+  for (const number of inspection.twilioTargets) twilioResults.push(await releaseTwilioNumberIfPresent(number));
+
+  const mappingValues = [...new Set([
+    ...inspection.vapiPhoneTargets.flatMap((record) => [record?.id, getVapiPhoneNumber(record)]),
+    ...inspection.vapiAssistantTargets.map((record) => record?.id),
+  ].map((value) => String(value || "").trim()).filter(Boolean))];
+  if (mappingValues.length) await prisma.vapiBusinessMapping.deleteMany({ where: { matchValue: { in: mappingValues } } });
+
+  const accountKey = buildProvisioningAccountKey(inspection.target.ownerEmail, inspection.identity.ownerPhone);
+  await prisma.runtimeStore.deleteMany({ where: { key: { in: [
+    provisioningStateKey("twilio-number", accountKey),
+    provisioningStateKey("vapi-assistant", accountKey),
+    provisioningStateKey("vapi-import", accountKey),
+    contextStoreKey(accountKey),
+  ] } } });
+  if (inspection.pendingSignup?.[0]) await pendingSignupVerifications.removeHash(inspection.pendingSignup[0]);
+  const removed = removeSignupTargetsFromStore(readSignupDashboardStore(), [inspection.targetId]);
+  writeSignupDashboardStore(removed.store);
+  if (signupAttempts && inspection.target.signupAttemptId) {
+    await signupAttempts.updateIfPresent(inspection.target.signupAttemptId, {
+      status: "rejected",
+      stage: "closed",
+      detail: "Incorrect stale-payload rebuild was rolled back",
+      reviewRequired: false,
+      rejectedAt: new Date(),
+    });
+  }
+  return {
+    ok: true,
+    action: "failed_rebuild_rolled_back",
+    summary: inspection.summary,
+    removedSignupRecords: removed.removed,
+    providerResults: { billing: billingResults, vapi: vapiResults, twilio: twilioResults },
+  };
+}
+
 function getSignupProviderRecoveryDiagnostics({ signup = {}, pendingSignup = null, vapiNumbers = [], twilioNumbers = [], providerLookup = "not_needed" } = {}) {
   const assignedPhone = normalizePhoneForMatch(signup.twilioPhoneNumber || "");
   const vapiPhone = assignedPhone
@@ -11775,6 +11944,38 @@ app.post(
       });
       throw error;
     }
+  })
+);
+
+app.post(
+  "/api/internal/operations/rollback-failed-superdaves-rebuild",
+  requireMonitorKey,
+  express.json({ limit: "4kb" }),
+  asyncRoute(async (req, res) => {
+    const targetId = String(req.body?.targetId || "").trim().toLowerCase();
+    const expectedBusinessName = String(req.body?.expectedBusinessName || "").trim();
+    const apply = req.body?.apply === true;
+    if (!/^[a-f0-9]{24}$/.test(targetId)) {
+      return res.status(400).json({ error: "A valid redacted signup target ID is required." });
+    }
+    if (expectedBusinessName !== "SuperdaveS Hvac") {
+      return res.status(400).json({ error: "The exact failed-rebuild business name is required." });
+    }
+    if (apply && String(req.body?.confirmation || "") !== "ROLLBACK_FAILED_SUPERDAVES_REBUILD") {
+      return res.status(400).json({ error: "Explicit failed-rebuild rollback confirmation is required." });
+    }
+    const result = await rollbackFailedSuperdavesRebuild({ targetId, expectedBusinessName, apply });
+    await recordAdminAuditEvent({
+      prisma,
+      action: "rollback_failed_superdaves_rebuild",
+      outcome: apply ? "success" : "dry_run",
+      actorHash: hashKey("monitor-api"),
+      targetType: "signup",
+      targetId,
+      details: { apply, summary: result.summary },
+    });
+    res.setHeader("Cache-Control", "no-store, max-age=0");
+    res.json(result);
   })
 );
 

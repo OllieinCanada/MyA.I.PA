@@ -435,6 +435,44 @@ test("signup-set decommission requires the monitor key, exact scope, and explici
   assert.match((await wrongScope.json()).error, /exact replacement business name/i);
 });
 
+test("failed Superdaves rebuild rollback requires the monitor key, exact target, exact scope, and explicit confirmation", async () => {
+  const body = {
+    targetId: "1234567890abcdef12345678",
+    expectedBusinessName: "SuperdaveS Hvac",
+    apply: true,
+    confirmation: "ROLLBACK_FAILED_SUPERDAVES_REBUILD",
+  };
+  const unauthorized = await request("/api/internal/operations/rollback-failed-superdaves-rebuild", {
+    method: "POST",
+    body,
+  });
+  assert.equal(unauthorized.status, 401);
+
+  const invalidTarget = await request("/api/internal/operations/rollback-failed-superdaves-rebuild", {
+    method: "POST",
+    headers: { "x-monitor-api-key": process.env.MONITOR_API_KEY },
+    body: { ...body, targetId: "not-a-target-id" },
+  });
+  assert.equal(invalidTarget.status, 400);
+  assert.match((await invalidTarget.json()).error, /valid redacted signup target ID/i);
+
+  const wrongScope = await request("/api/internal/operations/rollback-failed-superdaves-rebuild", {
+    method: "POST",
+    headers: { "x-monitor-api-key": process.env.MONITOR_API_KEY },
+    body: { ...body, expectedBusinessName: "Another Business" },
+  });
+  assert.equal(wrongScope.status, 400);
+  assert.match((await wrongScope.json()).error, /exact failed-rebuild business name/i);
+
+  const unconfirmed = await request("/api/internal/operations/rollback-failed-superdaves-rebuild", {
+    method: "POST",
+    headers: { "x-monitor-api-key": process.env.MONITOR_API_KEY },
+    body: { ...body, confirmation: "" },
+  });
+  assert.equal(unconfirmed.status, 400);
+  assert.match((await unconfirmed.json()).error, /confirmation/i);
+});
+
 test("duplicate signup supersession is resource-free, auditable, and redacted", () => {
   const duplicateSignup = {
     status: "setup_error",
