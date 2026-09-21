@@ -51,10 +51,21 @@ function validOpenUrl(value) {
   }
 }
 
+function validSignupAttemptId(value) {
+  const attemptId = String(value || "").trim().toLowerCase();
+  return /^signup_[a-f0-9]{32}$/.test(attemptId) ? attemptId : "";
+}
+
 function sanitizeContext(purpose, value = {}) {
   const input = value && typeof value === "object" && !Array.isArray(value) ? value : {};
   const openUrl = validOpenUrl(input.openUrl);
-  if (purpose === "SIGNUP_REVIEW") return { ...(openUrl ? { openUrl } : {}) };
+  if (purpose === "SIGNUP_REVIEW") {
+    const signupAttemptId = validSignupAttemptId(input.signupAttemptId);
+    return {
+      ...(signupAttemptId ? { signupAttemptId } : {}),
+      ...(openUrl ? { openUrl } : {}),
+    };
+  }
   if (purpose === "INCIDENT_REVIEW") {
     const generation = Math.max(1, Math.min(999, Number(input.generation) || 1));
     return { generation, ...(openUrl ? { openUrl } : {}) };
@@ -287,6 +298,7 @@ module.exports = {
   parseCallbackData,
   prLandingAuthorization,
   sanitizeContext,
+  validSignupAttemptId,
   validOpenUrl,
   verifyCallbackData,
   verifyTelegramWebhookSecret,

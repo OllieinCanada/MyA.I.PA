@@ -1283,6 +1283,25 @@ test("signup recovery selects the exact attempt and never matches email to a dif
     { wrong: wrongBusinessEntry }
   );
   assert.equal(mismatch, null);
+
+  const missingExactAttempt = __test.findPendingSignupForDashboardRecord(
+    { ownerEmail: "owner@example.com", businessName: "Old Electrical", signupAttemptId: `signup_${"f".repeat(32)}` },
+    { wrong: wrongBusinessEntry }
+  );
+  assert.equal(missingExactAttempt, null);
+});
+
+test("operational signup targets resolve the exact attempt when contact details are reused", () => {
+  const { hashTarget, signupIdentity } = require("../server/operationalAttention");
+  const signups = [
+    { ownerEmail: "shared@example.com", businessName: "Old Business", signupAttemptId: `signup_${"a".repeat(32)}` },
+    { ownerEmail: "shared@example.com", businessName: "New Business", signupAttemptId: `signup_${"b".repeat(32)}` },
+  ];
+  const newestTarget = hashTarget(signupIdentity(signups[1]));
+  assert.equal(__test.findSignupByOperationalTarget(newestTarget, signups), signups[1]);
+  assert.equal(__test.findSignupByOperationalTarget(newestTarget, signups, signups[1].signupAttemptId), signups[1]);
+  assert.equal(__test.findSignupByOperationalTarget(newestTarget, signups, signups[0].signupAttemptId), null);
+  assert.notEqual(newestTarget, hashTarget(signupIdentity(signups[0])));
 });
 
 test("integration credentials are not accepted from a request body", async () => {

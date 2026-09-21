@@ -1,9 +1,11 @@
 const { loadProjectEnv, rootPath } = require("./_helpers");
+const { buildSignupTestHeaders, resolveSignupTestEndpoint } = require("./signup-test-endpoint");
 const fs = require("fs");
 
 const env = loadProjectEnv();
 const shouldPost = process.argv.includes("--post");
 const reviewOnly = process.argv.includes("--review-only");
+const directMake = process.argv.includes("--direct-make");
 const outputPathIndex = process.argv.indexOf("--out");
 const outputPath = outputPathIndex >= 0 ? process.argv[outputPathIndex + 1] : "";
 const argValue = (name, fallback = "") => {
@@ -26,11 +28,13 @@ const defaultApiBase = "https://api.myaipa.ca";
 const signupApiPath = "/api/integrations/signup-complete";
 const configuredSignupEndpoint = env.MAKE_SIGNUP_WEBHOOK_URL || env.REACT_APP_MAKE_SIGNUP_WEBHOOK_URL || "";
 const configuredApiBase = env.REACT_APP_API_BASE_URL || env.API_BASE_URL || defaultApiBase;
-const endpoint = configuredSignupEndpoint || (
-  /^https:\/\/hook\.[^/]+\.make\.com\//.test(configuredApiBase)
-    ? configuredApiBase.replace(/\/+$/, "")
-    : `${configuredApiBase.replace(/\/+$/, "")}${signupApiPath}`
-);
+const endpoint = resolveSignupTestEndpoint({
+  directMake,
+  configuredSignupEndpoint,
+  configuredApiBase,
+  defaultApiBase,
+  signupApiPath,
+});
 const makeApiKey = env.MAKE_SIGNUP_WEBHOOK_API_KEY || env.REACT_APP_MAKE_SIGNUP_WEBHOOK_API_KEY || "";
 
 const payload = {
@@ -150,10 +154,7 @@ if (outputPath) {
 if (shouldPost) {
   fetch(endpoint, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(makeApiKey ? { "x-make-apikey": makeApiKey } : {}),
-    },
+    headers: buildSignupTestHeaders({ directMake, makeApiKey }),
     body: JSON.stringify(payload),
   })
     .then(async (response) => {
