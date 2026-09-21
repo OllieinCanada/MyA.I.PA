@@ -317,6 +317,7 @@ const {
 const {
   getOperationalAttentionInbox,
   hashTarget: hashOperationalTarget,
+  signupIdentity: signupOperationalIdentity,
 } = require("./operationalAttention");
 
 loadPowerShellEnvAssignments(path.join(__dirname, "..", ".env.local"));
@@ -5234,7 +5235,7 @@ async function safelyNotifySignupOperations(payload, {
   }
 
   const signupTargetId = current
-    ? hashOperationalTarget(current.subscriptionId || current.checkoutSessionId || current.ownerEmail || current.businessName || current.signedUpAt || "unknown")
+    ? hashOperationalTarget(signupOperationalIdentity(current))
     : "";
   const attentionKind = ["provisioning_failed", "customer_followup_failed", "customer_followup_partial"].includes(state)
     ? "signup_failed"
@@ -5267,7 +5268,10 @@ async function safelyNotifySignupOperations(payload, {
         purpose: "SIGNUP_REVIEW",
         targetType: "signup",
         targetId: signupTargetId,
-        context: { openUrl: adminUrl },
+        context: {
+          openUrl: adminUrl,
+          signupAttemptId: String(current.signupAttemptId || eventKey).trim(),
+        },
         dedupeKey: `signup:${signupTargetId}:review`,
       });
       if (telegramApproval?.status === "PENDING") {
@@ -5778,7 +5782,10 @@ function findPendingSignupForDashboardRecord(signup, pendingStore = {}) {
   const exactAttempt = attemptId
     ? entries.find(([, pending]) => buildMakeSignupEventKey(pending.payload) === attemptId)
     : null;
-  if (exactAttempt) return exactAttempt;
+  // Once an attempt has a server-owned identity, recovery must fail closed if
+  // that exact pending payload is unavailable. Falling back to contact fields
+  // can attach an older signup belonging to the same owner.
+  if (attemptId) return exactAttempt || null;
   return entries.find(([, pending]) => {
     const pendingEmail = String(pending?.ownerEmail || pending?.payload?.owner?.email || "").trim().toLowerCase();
     const pendingBusiness = String(pending?.businessName || pending?.payload?.business?.name || "").trim().toLowerCase();
@@ -5817,12 +5824,14 @@ function consumePendingSignupProvisioningAttempts(pendingStore, completedPayload
   return { store, consumed };
 }
 
-function findSignupByOperationalTarget(targetId, signups = listSignupDashboardRecords()) {
+function findSignupByOperationalTarget(targetId, signups = listSignupDashboardRecords(), expectedSignupAttemptId = "") {
   const expected = String(targetId || "").trim().toLowerCase();
+  const expectedAttempt = String(expectedSignupAttemptId || "").trim().toLowerCase();
   if (!/^[a-f0-9]{24}$/.test(expected)) return null;
   return signups.find((record) => {
-    const identity = String(record.subscriptionId || record.checkoutSessionId || record.ownerEmail || record.businessName || record.signedUpAt || "unknown");
-    return hashOperationalTarget(identity) === expected;
+    const recordAttempt = String(record?.signupAttemptId || "").trim().toLowerCase();
+    return hashOperationalTarget(signupOperationalIdentity(record)) === expected
+      && (!expectedAttempt || recordAttempt === expectedAttempt);
   }) || null;
 }
 
@@ -6900,8 +6909,8 @@ async function inspectSignupRecoveryState(signup) {
   };
 }
 
-async function rejectSignupByOperationalTarget(targetId) {
-  const signup = findSignupByOperationalTarget(targetId);
+async function rejectSignupByOperationalTarget(targetId, expectedSignupAttemptId = "") {
+  const signup = findSignupByOperationalTarget(targetId, listSignupDashboardRecords(), expectedSignupAttemptId);
   if (!signup) {
     const error = new Error("The signup alert no longer matches an active signup record.");
     error.statusCode = 404;
@@ -6945,8 +6954,8 @@ async function rejectSignupByOperationalTarget(targetId) {
   return { ok: true, action: "signup_rejected", status: updated.status };
 }
 
-async function recoverSignupByOperationalTarget(targetId) {
-  const signup = findSignupByOperationalTarget(targetId);
+async function recoverSignupByOperationalTarget(targetId, expectedSignupAttemptId = "") {
+  const signup = findSignupByOperationalTarget(targetId, listSignupDashboardRecords(), expectedSignupAttemptId);
   if (!signup) {
     const error = new Error("The signup alert no longer matches an active signup record.");
     error.statusCode = 404;
@@ -11396,9 +11405,10 @@ async function startOwnerAuthorizedIncidentInvestigation(approval) {
 async function executeTelegramApproval(approval) {
   const action = String(approval?.decidedAction || "");
   if (approval.purpose === "SIGNUP_REVIEW") {
+    const expectedSignupAttemptId = String(approval?.context?.signupAttemptId || "").trim();
     const result = action === "approve"
-      ? await recoverSignupByOperationalTarget(approval.targetId)
-      : await rejectSignupByOperationalTarget(approval.targetId);
+      ? await recoverSignupByOperationalTarget(approval.targetId, expectedSignupAttemptId)
+      : await rejectSignupByOperationalTarget(approval.targetId, expectedSignupAttemptId);
     await recordAdminAuditEvent({
       prisma,
       action: action === "approve" ? "recover_signup" : "reject_signup",

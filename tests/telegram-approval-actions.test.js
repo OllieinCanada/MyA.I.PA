@@ -78,10 +78,12 @@ test("only the configured private Telegram owner is authorized", () => {
 
 test("approval creation is deduplicated and a decision can be claimed only once", async () => {
   const prisma = fakePrisma();
-  const input = { prismaClient: prisma, purpose: "SIGNUP_REVIEW", targetType: "signup", targetId: "a".repeat(24), dedupeKey: `signup:${"a".repeat(24)}:review`, context: { openUrl: "https://www.myaipa.ca/#/admin" } };
+  const signupAttemptId = `signup_${"c".repeat(32)}`;
+  const input = { prismaClient: prisma, purpose: "SIGNUP_REVIEW", targetType: "signup", targetId: "a".repeat(24), dedupeKey: `signup:${"a".repeat(24)}:review`, context: { signupAttemptId, openUrl: "https://www.myaipa.ca/#/admin" } };
   const first = await createTelegramApproval(input);
   const duplicate = await createTelegramApproval(input);
   assert.equal(first.id, duplicate.id);
+  assert.equal(first.context.signupAttemptId, signupAttemptId);
   const callbackData = buildCallbackData(first.publicId, "a", secret);
   const claimed = await claimTelegramApproval({ prismaClient: prisma, callbackData, signingSecret: secret, actorTelegramUserId: "123", telegramChatId: "123" });
   assert.equal(claimed.claimed, true);
@@ -91,6 +93,19 @@ test("approval creation is deduplicated and a decision can be claimed only once"
   assert.equal(replay.reason, "already_decided");
   const finished = await finishTelegramApproval(prisma, first.id, { status: "COMPLETED", result: { safe: true } });
   assert.equal(finished.status, "COMPLETED");
+});
+
+test("signup approvals discard malformed attempt identities", async () => {
+  const prisma = fakePrisma();
+  const approval = await createTelegramApproval({
+    prismaClient: prisma,
+    purpose: "SIGNUP_REVIEW",
+    targetType: "signup",
+    targetId: "d".repeat(24),
+    dedupeKey: `signup:${"d".repeat(24)}:review`,
+    context: { signupAttemptId: "signup_not-a-server-owned-id" },
+  });
+  assert.equal(approval.context.signupAttemptId, undefined);
 });
 
 test("expired approvals fail closed without executing", async () => {

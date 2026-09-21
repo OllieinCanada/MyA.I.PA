@@ -271,6 +271,8 @@ function signupDiagnostics(signup = {}, status = "unknown") {
 }
 
 function signupIdentity(signup = {}) {
+  const attemptId = String(signup.signupAttemptId || "").trim();
+  if (attemptId) return `attempt:${attemptId}`;
   return String(signup.subscriptionId || signup.checkoutSessionId || signup.ownerEmail || signup.businessName || signup.signedUpAt || "unknown");
 }
 
@@ -667,5 +669,6 @@ module.exports = {
   hashTarget,
   knownProviderReason,
   signupAttentionItems,
+  signupIdentity,
   summarizeAttention,
 };

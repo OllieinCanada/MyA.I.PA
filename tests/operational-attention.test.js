@@ -4,6 +4,7 @@ const {
   getOperationalAttentionInbox,
   knownProviderReason,
   signupAttentionItems,
+  signupIdentity,
   summarizeAttention,
 } = require("../server/operationalAttention");
 
@@ -53,6 +54,25 @@ test("failed and stuck signups become redacted attention items", () => {
     setupFollowupStatus: "",
     setupFollowupChannels: [],
   });
+});
+
+test("separate signup attempts sharing one email receive separate operational targets", () => {
+  const now = new Date("2026-09-21T19:00:00.000Z");
+  const shared = {
+    ownerEmail: "same-owner@example.com",
+    status: "review_required",
+    reviewRequired: true,
+    updatedAt: "2026-09-21T18:58:00.000Z",
+  };
+  const first = { ...shared, businessName: "First Business", signupAttemptId: `signup_${"a".repeat(32)}` };
+  const second = { ...shared, businessName: "Second Business", signupAttemptId: `signup_${"b".repeat(32)}` };
+  const items = signupAttentionItems([first, second], now, 60)
+    .filter((item) => item.kind === "signup_review_required");
+
+  assert.equal(items.length, 2);
+  assert.notEqual(items[0].targetId, items[1].targetId);
+  assert.equal(signupIdentity(first), `attempt:${first.signupAttemptId}`);
+  assert.equal(signupIdentity(second), `attempt:${second.signupAttemptId}`);
 });
 
 test("a failed setup-complete delivery is actionable without treating the provisioned number as failed", () => {
