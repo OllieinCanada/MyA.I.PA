@@ -122,6 +122,25 @@ test("resource collection and store removal are deterministic", () => {
   assert.deepEqual(Object.keys(removed.store), ["keep"]);
 });
 
+test("attempt-scoped records use the same operational identity for lookup and removal", () => {
+  const attemptRecord = {
+    ownerEmail: "owner@example.com",
+    signupAttemptId: "signup_attempt_exact",
+  };
+  const expected = require("node:crypto")
+    .createHash("sha256")
+    .update("attempt:signup_attempt_exact")
+    .digest("hex")
+    .slice(0, 24);
+  assert.equal(hashOperationalTarget(attemptRecord), expected);
+  const removed = removeSignupTargetsFromStore(
+    { attempt: attemptRecord, keep: { ownerEmail: "keep@example.com" } },
+    [expected]
+  );
+  assert.equal(removed.removed, 1);
+  assert.deepEqual(Object.keys(removed.store), ["keep"]);
+});
+
 test("preserve-number decommission never calls the Twilio release function", async () => {
   let releases = 0;
   const results = await applyTwilioDecommissionPolicy({
