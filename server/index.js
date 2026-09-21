@@ -6420,9 +6420,7 @@ async function decommissionSignupSetAndRebuild({
     decommissionedPredecessorCount: inspection.targets.length,
     rebuildStartedAt: new Date().toISOString(),
   });
-  const canonicalTargetId = hashOperationalTarget(
-    String(canonicalRecord.subscriptionId || canonicalRecord.checkoutSessionId || canonicalRecord.ownerEmail || canonicalRecord.businessName || canonicalRecord.signedUpAt || "unknown")
-  );
+  const canonicalTargetId = hashSignupDecommissionTarget(canonicalRecord);
   const recovery = await recoverSignupByOperationalTarget(canonicalTargetId);
   return {
     ok: true,

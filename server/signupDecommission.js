@@ -16,6 +16,10 @@ function normalizePhone(value) {
 }
 
 function hashOperationalTarget(record = {}) {
+  const signupAttemptId = clean(record.signupAttemptId);
+  if (signupAttemptId) {
+    return crypto.createHash("sha256").update(`attempt:${signupAttemptId}`).digest("hex").slice(0, 24);
+  }
   const identity = clean(
     record.subscriptionId
       || record.checkoutSessionId
