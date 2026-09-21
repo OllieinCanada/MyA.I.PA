@@ -446,8 +446,9 @@ test("preserve-number contact rebuild requires the monitor key, exact five-recor
     ],
     expectedBusinessName: "My AI PA Controlled Signup Test Sep 21",
     preserveTwilioNumbers: true,
+    rebuildMode: "fresh_signup",
     apply: true,
-    confirmation: "DECOMMISSION_FIVE_PRESERVE_NUMBERS_AND_REBUILD_MY_AI_PA",
+    confirmation: "DECOMMISSION_FIVE_PRESERVE_NUMBERS_FOR_FRESH_SIGNUP",
   };
   const unauthorized = await request("/api/internal/operations/rebuild-test-contact-preserving-numbers", {
     method: "POST",
@@ -462,6 +463,14 @@ test("preserve-number contact rebuild requires the monitor key, exact five-recor
   });
   assert.equal(notPreserved.status, 400);
   assert.match((await notPreserved.json()).error, /preservation/i);
+
+  const wrongMode = await request("/api/internal/operations/rebuild-test-contact-preserving-numbers", {
+    method: "POST",
+    headers: { "x-monitor-api-key": process.env.MONITOR_API_KEY },
+    body: { ...body, rebuildMode: "stored_payload" },
+  });
+  assert.equal(wrongMode.status, 400);
+  assert.match((await wrongMode.json()).error, /fresh signup/i);
 
   const unconfirmed = await request("/api/internal/operations/rebuild-test-contact-preserving-numbers", {
     method: "POST",

@@ -6163,7 +6163,11 @@ async function deleteStripeCustomerIfPresent(customerId) {
   }
 }
 
-async function inspectSignupSetForDecommission({ targetIds, expectedBusinessName }) {
+async function inspectSignupSetForDecommission({
+  targetIds,
+  expectedBusinessName,
+  requireReplacementPayload = true,
+}) {
   const allSignups = listSignupDashboardRecords();
   const targets = targetIds.map((targetId) => findSignupByOperationalTarget(targetId, allSignups));
   if (targets.some((record) => !record)) {
@@ -6188,18 +6192,27 @@ async function inspectSignupSetForDecommission({ targetIds, expectedBusinessName
   }
   const declared = assertExclusiveResourceOwnership({ targets, allSignups });
   const pendingStore = await readPendingSignupStore();
-  const canonicalPending = selectNewestPendingSignup({ pendingStore, identity, expectedBusinessName, allowMissing: true });
-  const canonicalAttempt = canonicalPending ? null : selectCanonicalSignupAttempt({
-    attempts: await prisma.signupAttempt.findMany({
-      where: { businessName: { equals: expectedBusinessName, mode: "insensitive" } },
-      orderBy: [{ createdAt: "desc" }],
-      take: 20,
-    }),
-    identity,
-    expectedBusinessName,
-  });
-  const canonicalPayload = canonicalPending?.[1]?.payload || canonicalAttempt?.payload;
-  const canonicalEmail = String(canonicalPending?.[1]?.ownerEmail || canonicalAttempt?.ownerEmail || canonicalPayload?.owner?.email || "").trim().toLowerCase();
+  let canonicalPending = null;
+  let canonicalAttempt = null;
+  let canonicalPayload = null;
+  let canonicalEmail = "";
+  if (requireReplacementPayload) {
+    canonicalPending = selectNewestPendingSignup({ pendingStore, identity, expectedBusinessName, allowMissing: true });
+    canonicalAttempt = canonicalPending ? null : selectCanonicalSignupAttempt({
+      attempts: await prisma.signupAttempt.findMany({
+        where: { businessName: { equals: expectedBusinessName, mode: "insensitive" } },
+        orderBy: [{ createdAt: "desc" }],
+        take: 20,
+      }),
+      identity,
+      expectedBusinessName,
+    });
+    canonicalPayload = canonicalPending?.[1]?.payload || canonicalAttempt?.payload;
+    canonicalEmail = String(canonicalPending?.[1]?.ownerEmail || canonicalAttempt?.ownerEmail || canonicalPayload?.owner?.email || "").trim().toLowerCase();
+  } else {
+    const newestTarget = targets.find((record) => String(record.businessName || "").trim() === expectedBusinessName) || targets[0];
+    canonicalEmail = String(newestTarget?.ownerEmail || identity.ownerEmails[0] || "").trim().toLowerCase();
+  }
   if (!canonicalEmail) {
     const error = new Error("The replacement signup does not contain an owner email.");
     error.statusCode = 409;
@@ -6308,7 +6321,7 @@ async function inspectSignupSetForDecommission({ targetIds, expectedBusinessName
       stripeCustomers: stripeCustomers.length,
       stripeSubscriptions: subscriptionIds.size,
       stripeCheckoutSessions: checkoutSessionIds.size,
-      replacementPayloads: 1,
+      replacementPayloads: requireReplacementPayload ? 1 : 0,
     },
   };
 }
@@ -6318,13 +6331,19 @@ async function decommissionSignupSetAndRebuild({
   expectedBusinessName,
   apply = false,
   preserveTwilioNumbers = false,
+  cleanupOnly = false,
 }) {
-  const inspection = await inspectSignupSetForDecommission({ targetIds, expectedBusinessName });
+  const inspection = await inspectSignupSetForDecommission({
+    targetIds,
+    expectedBusinessName,
+    requireReplacementPayload: !cleanupOnly,
+  });
   if (!apply) {
     return {
       ok: true,
       action: "dry_run",
       twilioNumberPolicy: preserveTwilioNumbers ? "preserve" : "release",
+      rebuildMode: cleanupOnly ? "fresh_signup" : "stored_payload",
       summary: inspection.summary,
     };
   }
@@ -6364,13 +6383,13 @@ async function decommissionSignupSetAndRebuild({
     await prisma.vapiBusinessMapping.deleteMany({ where: { matchValue: { in: mappingValues } } });
   }
 
-  const accountKey = buildProvisioningAccountKey(inspection.canonicalEmail, inspection.identity.ownerPhone);
-  const durableKeys = [
+  const accountKeys = [...inspection.cleanupEmails].map((email) => buildProvisioningAccountKey(email, inspection.identity.ownerPhone));
+  const durableKeys = [...new Set(accountKeys.flatMap((accountKey) => [
     provisioningStateKey("twilio-number", accountKey),
     provisioningStateKey("vapi-assistant", accountKey),
     provisioningStateKey("vapi-import", accountKey),
     contextStoreKey(accountKey),
-  ];
+  ]))];
   await prisma.runtimeStore.deleteMany({ where: { key: { in: durableKeys } } });
 
   const dashboardRemoval = removeSignupTargetsFromStore(readSignupDashboardStore(), inspection.targetIds);
@@ -6399,6 +6418,34 @@ async function decommissionSignupSetAndRebuild({
       return inspection.cleanupEmails.has(email) || phone === inspection.identity.ownerPhone;
     })
     .map((tokenHash) => pendingSignupVerifications.removeHash(tokenHash)));
+
+  if (cleanupOnly) {
+    if (signupAttempts) {
+      for (const target of inspection.targets) {
+        if (!target.signupAttemptId) continue;
+        await signupAttempts.updateIfPresent(target.signupAttemptId, {
+          status: "rejected",
+          stage: "closed",
+          detail: "Authorized test-account decommission before a fresh signup",
+          reviewRequired: false,
+          rejectedAt: new Date(),
+        });
+      }
+    }
+    return {
+      ok: true,
+      action: "decommissioned_ready_for_fresh_signup",
+      twilioNumberPolicy: preserveTwilioNumbers ? "preserve" : "release",
+      rebuildMode: "fresh_signup",
+      summary: inspection.summary,
+      removedSignupRecords: dashboardRemoval.removed,
+      providerResults: {
+        billing: billingResults,
+        vapi: vapiResults,
+        twilio: twilioResults,
+      },
+    };
+  }
 
   if (inspection.canonicalSource === "signup_attempt") {
     await createPendingSignupVerification({
@@ -12141,6 +12188,7 @@ app.post(
     const expectedBusinessName = String(req.body?.expectedBusinessName || "").trim();
     const apply = req.body?.apply === true;
     const preserveTwilioNumbers = req.body?.preserveTwilioNumbers === true;
+    const rebuildMode = String(req.body?.rebuildMode || "").trim();
     if (targetIds.length !== 5 || targetIds.some((targetId) => !/^[a-f0-9]{24}$/.test(targetId))) {
       return res.status(400).json({ error: "Exactly five valid redacted signup target IDs are required." });
     }
@@ -12150,7 +12198,10 @@ app.post(
     if (!preserveTwilioNumbers) {
       return res.status(400).json({ error: "This guarded rebuild requires explicit Twilio-number preservation." });
     }
-    if (apply && String(req.body?.confirmation || "") !== "DECOMMISSION_FIVE_PRESERVE_NUMBERS_AND_REBUILD_MY_AI_PA") {
+    if (rebuildMode !== "fresh_signup") {
+      return res.status(400).json({ error: "This guarded operation requires a fresh signup after cleanup." });
+    }
+    if (apply && String(req.body?.confirmation || "") !== "DECOMMISSION_FIVE_PRESERVE_NUMBERS_FOR_FRESH_SIGNUP") {
       return res.status(400).json({ error: "Explicit preserve-number rebuild confirmation is required." });
     }
     try {
@@ -12159,6 +12210,7 @@ app.post(
         expectedBusinessName,
         apply,
         preserveTwilioNumbers: true,
+        cleanupOnly: true,
       });
       await recordAdminAuditEvent({
         prisma,
@@ -12172,6 +12224,7 @@ app.post(
           targetCount: targetIds.length,
           replacementBusinessHash: hashKey(expectedBusinessName),
           twilioNumberPolicy: "preserve",
+          rebuildMode: "fresh_signup",
           summary: result.summary,
         },
       });
@@ -12189,6 +12242,7 @@ app.post(
           apply,
           targetCount: targetIds.length,
           twilioNumberPolicy: "preserve",
+          rebuildMode: "fresh_signup",
           code: error?.code || "SIGNUP_DECOMMISSION_FAILED",
         },
       });
