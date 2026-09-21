@@ -435,6 +435,51 @@ test("signup-set decommission requires the monitor key, exact scope, and explici
   assert.match((await wrongScope.json()).error, /exact replacement business name/i);
 });
 
+test("preserve-number contact rebuild requires the monitor key, exact five-record scope, preservation, and confirmation", async () => {
+  const body = {
+    targetIds: [
+      "1234567890abcdef12345678",
+      "abcdef1234567890abcdef12",
+      "fedcba0987654321fedcba09",
+      "0123456789abcdef01234567",
+      "76543210fedcba9876543210",
+    ],
+    expectedBusinessName: "My AI PA Controlled Signup Test Sep 21",
+    preserveTwilioNumbers: true,
+    apply: true,
+    confirmation: "DECOMMISSION_FIVE_PRESERVE_NUMBERS_AND_REBUILD_MY_AI_PA",
+  };
+  const unauthorized = await request("/api/internal/operations/rebuild-test-contact-preserving-numbers", {
+    method: "POST",
+    body,
+  });
+  assert.equal(unauthorized.status, 401);
+
+  const notPreserved = await request("/api/internal/operations/rebuild-test-contact-preserving-numbers", {
+    method: "POST",
+    headers: { "x-monitor-api-key": process.env.MONITOR_API_KEY },
+    body: { ...body, preserveTwilioNumbers: false },
+  });
+  assert.equal(notPreserved.status, 400);
+  assert.match((await notPreserved.json()).error, /preservation/i);
+
+  const unconfirmed = await request("/api/internal/operations/rebuild-test-contact-preserving-numbers", {
+    method: "POST",
+    headers: { "x-monitor-api-key": process.env.MONITOR_API_KEY },
+    body: { ...body, confirmation: "" },
+  });
+  assert.equal(unconfirmed.status, 400);
+  assert.match((await unconfirmed.json()).error, /confirmation/i);
+
+  const wrongScope = await request("/api/internal/operations/rebuild-test-contact-preserving-numbers", {
+    method: "POST",
+    headers: { "x-monitor-api-key": process.env.MONITOR_API_KEY },
+    body: { ...body, expectedBusinessName: "Another Business" },
+  });
+  assert.equal(wrongScope.status, 400);
+  assert.match((await wrongScope.json()).error, /exact replacement business name/i);
+});
+
 test("failed Superdaves rebuild rollback requires the monitor key, exact target, exact scope, and explicit confirmation", async () => {
   const body = {
     targetId: "1234567890abcdef12345678",

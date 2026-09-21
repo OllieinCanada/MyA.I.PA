@@ -161,7 +161,21 @@ function removeSignupTargetsFromStore(store = {}, targetIds = []) {
   return { store: next, removed };
 }
 
+async function applyTwilioDecommissionPolicy({ targets = [], preserve = false, release } = {}) {
+  if (!Array.isArray(targets)) {
+    throw new TypeError("Twilio decommission targets must be an array.");
+  }
+  if (preserve) return targets.map(() => "preserved");
+  if (typeof release !== "function") {
+    throw new TypeError("A Twilio release function is required when numbers are not preserved.");
+  }
+  const results = [];
+  for (const target of targets) results.push(await release(target));
+  return results;
+}
+
 module.exports = {
+  applyTwilioDecommissionPolicy,
   assertExclusiveResourceOwnership,
   assertSharedSignupIdentity,
   collectSignupResourceReferences,
