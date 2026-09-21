@@ -2,6 +2,7 @@ const assert = require("node:assert/strict");
 const { test } = require("node:test");
 
 const {
+  applyTwilioDecommissionPolicy,
   assertExclusiveResourceOwnership,
   assertSharedSignupIdentity,
   collectSignupResourceReferences,
@@ -119,4 +120,31 @@ test("resource collection and store removal are deterministic", () => {
   const removed = removeSignupTargetsFromStore(store, targets.map(hashOperationalTarget));
   assert.equal(removed.removed, 3);
   assert.deepEqual(Object.keys(removed.store), ["keep"]);
+});
+
+test("preserve-number decommission never calls the Twilio release function", async () => {
+  let releases = 0;
+  const results = await applyTwilioDecommissionPolicy({
+    targets: [{ sid: "PN_one" }, { sid: "PN_two" }],
+    preserve: true,
+    release: async () => {
+      releases += 1;
+      return "released";
+    },
+  });
+  assert.equal(releases, 0);
+  assert.deepEqual(results, ["preserved", "preserved"]);
+});
+
+test("ordinary decommission still releases each selected Twilio number", async () => {
+  const released = [];
+  const results = await applyTwilioDecommissionPolicy({
+    targets: [{ sid: "PN_one" }, { sid: "PN_two" }],
+    release: async (target) => {
+      released.push(target.sid);
+      return "released";
+    },
+  });
+  assert.deepEqual(released, ["PN_one", "PN_two"]);
+  assert.deepEqual(results, ["released", "released"]);
 });

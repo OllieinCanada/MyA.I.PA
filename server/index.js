@@ -147,6 +147,7 @@ const {
 const { provisioningStateKey, readProvisioningStep, runProvisioningStep } = require("./provisioningState");
 const { reconcileSignupSupersessionResources } = require("./signupSupersessionReconciliation");
 const {
+  applyTwilioDecommissionPolicy,
   assertExclusiveResourceOwnership,
   assertSharedSignupIdentity,
   collectSignupResourceReferences,
@@ -6312,9 +6313,21 @@ async function inspectSignupSetForDecommission({ targetIds, expectedBusinessName
   };
 }
 
-async function decommissionSignupSetAndRebuild({ targetIds, expectedBusinessName, apply = false }) {
+async function decommissionSignupSetAndRebuild({
+  targetIds,
+  expectedBusinessName,
+  apply = false,
+  preserveTwilioNumbers = false,
+}) {
   const inspection = await inspectSignupSetForDecommission({ targetIds, expectedBusinessName });
-  if (!apply) return { ok: true, action: "dry_run", summary: inspection.summary };
+  if (!apply) {
+    return {
+      ok: true,
+      action: "dry_run",
+      twilioNumberPolicy: preserveTwilioNumbers ? "preserve" : "release",
+      summary: inspection.summary,
+    };
+  }
 
   const billingResults = { subscriptions: [], checkoutSessions: [], customers: [] };
   for (const subscriptionId of inspection.subscriptionIds) {
@@ -6337,8 +6350,11 @@ async function decommissionSignupSetAndRebuild({ targetIds, expectedBusinessName
     if (id) vapiResults.assistants.push(await deleteVapiResourceIfPresent(`assistant/${encodeURIComponent(id)}`));
   }
 
-  const twilioResults = [];
-  for (const number of inspection.twilioTargets) twilioResults.push(await releaseTwilioNumberIfPresent(number));
+  const twilioResults = await applyTwilioDecommissionPolicy({
+    targets: inspection.twilioTargets,
+    preserve: preserveTwilioNumbers,
+    release: releaseTwilioNumberIfPresent,
+  });
 
   const mappingValues = [...new Set([
     ...inspection.vapiPhoneTargets.flatMap((record) => [record?.id, getVapiPhoneNumber(record)]),
@@ -6411,6 +6427,7 @@ async function decommissionSignupSetAndRebuild({ targetIds, expectedBusinessName
   return {
     ok: true,
     action: "decommissioned_and_rebuilt",
+    twilioNumberPolicy: preserveTwilioNumbers ? "preserve" : "release",
     summary: inspection.summary,
     removedSignupRecords: dashboardRemoval.removed,
     providerResults: {
@@ -12109,6 +12126,73 @@ app.post(
         targetType: "signup_set",
         targetId: hashKey(targetIds.slice().sort().join(":")),
         details: { apply, targetCount: targetIds.length, code: error?.code || "SIGNUP_DECOMMISSION_FAILED" },
+      });
+      throw error;
+    }
+  })
+);
+
+app.post(
+  "/api/internal/operations/rebuild-test-contact-preserving-numbers",
+  requireMonitorKey,
+  express.json({ limit: "8kb" }),
+  asyncRoute(async (req, res) => {
+    const targetIds = Array.isArray(req.body?.targetIds)
+      ? [...new Set(req.body.targetIds.map((value) => String(value || "").trim().toLowerCase()))]
+      : [];
+    const expectedBusinessName = String(req.body?.expectedBusinessName || "").trim();
+    const apply = req.body?.apply === true;
+    const preserveTwilioNumbers = req.body?.preserveTwilioNumbers === true;
+    if (targetIds.length !== 5 || targetIds.some((targetId) => !/^[a-f0-9]{24}$/.test(targetId))) {
+      return res.status(400).json({ error: "Exactly five valid redacted signup target IDs are required." });
+    }
+    if (expectedBusinessName !== "My AI PA Controlled Signup Test Sep 21") {
+      return res.status(400).json({ error: "The exact replacement business name is required." });
+    }
+    if (!preserveTwilioNumbers) {
+      return res.status(400).json({ error: "This guarded rebuild requires explicit Twilio-number preservation." });
+    }
+    if (apply && String(req.body?.confirmation || "") !== "DECOMMISSION_FIVE_PRESERVE_NUMBERS_AND_REBUILD_MY_AI_PA") {
+      return res.status(400).json({ error: "Explicit preserve-number rebuild confirmation is required." });
+    }
+    try {
+      const result = await decommissionSignupSetAndRebuild({
+        targetIds,
+        expectedBusinessName,
+        apply,
+        preserveTwilioNumbers: true,
+      });
+      await recordAdminAuditEvent({
+        prisma,
+        action: "rebuild_test_contact_preserving_numbers",
+        outcome: apply ? "success" : "dry_run",
+        actorHash: hashKey("monitor-api"),
+        targetType: "signup_set",
+        targetId: hashKey(targetIds.slice().sort().join(":")),
+        details: {
+          apply,
+          targetCount: targetIds.length,
+          replacementBusinessHash: hashKey(expectedBusinessName),
+          twilioNumberPolicy: "preserve",
+          summary: result.summary,
+        },
+      });
+      res.setHeader("Cache-Control", "no-store, max-age=0");
+      return res.json(result);
+    } catch (error) {
+      await recordAdminAuditEvent({
+        prisma,
+        action: "rebuild_test_contact_preserving_numbers",
+        outcome: "failed",
+        actorHash: hashKey("monitor-api"),
+        targetType: "signup_set",
+        targetId: hashKey(targetIds.slice().sort().join(":")),
+        details: {
+          apply,
+          targetCount: targetIds.length,
+          twilioNumberPolicy: "preserve",
+          code: error?.code || "SIGNUP_DECOMMISSION_FAILED",
+        },
       });
       throw error;
     }
