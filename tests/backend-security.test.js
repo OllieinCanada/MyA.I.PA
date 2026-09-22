@@ -489,6 +489,35 @@ test("preserve-number contact rebuild requires the monitor key, exact five-recor
   assert.match((await wrongScope.json()).error, /exact replacement business name/i);
 });
 
+test("agent-test signup finalization requires the monitor key, exact attempt, and explicit confirmation", async () => {
+  const body = {
+    targetId: "1234567890abcdef12345678",
+    expectedSignupAttemptId: "signup_1234567890abcdef1234567890abcdef",
+    confirmation: "FINALIZE_SIGNUP_AFTER_AGENT_TEST",
+  };
+  const unauthorized = await request("/api/internal/operations/finalize-signup-after-agent-test", {
+    method: "POST",
+    body,
+  });
+  assert.equal(unauthorized.status, 401);
+
+  const invalidAttempt = await request("/api/internal/operations/finalize-signup-after-agent-test", {
+    method: "POST",
+    headers: { "x-monitor-api-key": process.env.MONITOR_API_KEY },
+    body: { ...body, expectedSignupAttemptId: "not-an-attempt" },
+  });
+  assert.equal(invalidAttempt.status, 400);
+  assert.match((await invalidAttempt.json()).error, /exact signup attempt identity/i);
+
+  const unconfirmed = await request("/api/internal/operations/finalize-signup-after-agent-test", {
+    method: "POST",
+    headers: { "x-monitor-api-key": process.env.MONITOR_API_KEY },
+    body: { ...body, confirmation: "" },
+  });
+  assert.equal(unconfirmed.status, 400);
+  assert.match((await unconfirmed.json()).error, /confirmation/i);
+});
+
 test("failed Superdaves rebuild rollback requires the monitor key, exact target, exact scope, and explicit confirmation", async () => {
   const body = {
     targetId: "1234567890abcdef12345678",

@@ -94,6 +94,39 @@ function assessSignupAssistantContent({ expectedConfig, liveAssistant } = {}) {
   };
 }
 
+function assessSignupAssistantContentWithReceipt({
+  expectedConfig,
+  liveAssistant,
+  durableReceipt,
+  assistantId,
+} = {}) {
+  const assessment = assessSignupAssistantContent({ expectedConfig, liveAssistant });
+  if (assessment.passed) return { ...assessment, verificationSource: "dashboard_reconstruction" };
+
+  const receiptData = durableReceipt?.data && typeof durableReceipt.data === "object"
+    ? durableReceipt.data
+    : durableReceipt && typeof durableReceipt === "object"
+      ? durableReceipt
+      : {};
+  const result = receiptData?.result && typeof receiptData.result === "object" ? receiptData.result : {};
+  const receiptAssistantId = clean(result.assistantId);
+  const expectedAssistantId = clean(assistantId || liveAssistant?.id);
+  const receiptFingerprint = clean(result.contentFingerprint);
+  const receiptVerified = (
+    receiptData.status === "completed"
+    && receiptAssistantId
+    && expectedAssistantId
+    && receiptAssistantId === expectedAssistantId
+    && receiptFingerprint
+    && receiptFingerprint === assessment.liveFingerprint
+  );
+  return {
+    ...assessment,
+    passed: receiptVerified,
+    verificationSource: receiptVerified ? "durable_provisioning_receipt" : "mismatch",
+  };
+}
+
 function buildExpectedSignupAssistantConfig(signup, { assignedPhone, resourceName } = {}) {
   return buildSignupAssistantConfig(buildNormalizedPayloadFromSignupRecord(signup), {
     assignedPhone: normalizePhone(assignedPhone || signup?.twilioPhoneNumber),
@@ -103,6 +136,7 @@ function buildExpectedSignupAssistantConfig(signup, { assignedPhone, resourceNam
 
 module.exports = {
   assessSignupAssistantContent,
+  assessSignupAssistantContentWithReceipt,
   buildExpectedSignupAssistantConfig,
   buildNormalizedPayloadFromSignupRecord,
   canonicalAssistantContent,

@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 
 const {
   assessSignupAssistantContent,
+  assessSignupAssistantContentWithReceipt,
   buildExpectedSignupAssistantConfig,
   buildNormalizedPayloadFromSignupRecord,
 } = require("../server/signupAssistantVerification");
@@ -51,6 +52,55 @@ test("accepts only an exact semantic readback of the generated assistant", () =>
   const result = assessSignupAssistantContent({ expectedConfig, liveAssistant });
   assert.equal(result.passed, true);
   assert.equal(result.expectedFingerprint, result.liveFingerprint);
+});
+
+test("accepts a live assistant verified by the exact durable provisioning receipt", () => {
+  const expectedConfig = buildExpectedSignupAssistantConfig(signup, { resourceName: "signup-agent" });
+  const liveAssistant = structuredClone(expectedConfig);
+  liveAssistant.id = "assistant-123";
+  liveAssistant.firstMessage = "A greeting captured from the complete signed signup payload.";
+  const baseline = assessSignupAssistantContent({ expectedConfig, liveAssistant });
+  assert.equal(baseline.passed, false);
+
+  const result = assessSignupAssistantContentWithReceipt({
+    expectedConfig,
+    liveAssistant,
+    assistantId: "assistant-123",
+    durableReceipt: {
+      data: {
+        status: "completed",
+        result: {
+          assistantId: "assistant-123",
+          contentFingerprint: baseline.liveFingerprint,
+        },
+      },
+    },
+  });
+  assert.equal(result.passed, true);
+  assert.equal(result.verificationSource, "durable_provisioning_receipt");
+});
+
+test("rejects a durable receipt for another assistant or another live fingerprint", () => {
+  const expectedConfig = buildExpectedSignupAssistantConfig(signup, { resourceName: "signup-agent" });
+  const liveAssistant = { ...structuredClone(expectedConfig), id: "assistant-123", firstMessage: "Changed" };
+  const baseline = assessSignupAssistantContent({ expectedConfig, liveAssistant });
+  for (const result of [
+    assessSignupAssistantContentWithReceipt({
+      expectedConfig,
+      liveAssistant,
+      assistantId: "assistant-123",
+      durableReceipt: { data: { status: "completed", result: { assistantId: "assistant-other", contentFingerprint: baseline.liveFingerprint } } },
+    }),
+    assessSignupAssistantContentWithReceipt({
+      expectedConfig,
+      liveAssistant,
+      assistantId: "assistant-123",
+      durableReceipt: { data: { status: "completed", result: { assistantId: "assistant-123", contentFingerprint: "wrong" } } },
+    }),
+  ]) {
+    assert.equal(result.passed, false);
+    assert.equal(result.verificationSource, "mismatch");
+  }
 });
 
 test("includes the saved contractor service list in the expected live script", () => {
