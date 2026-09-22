@@ -8,7 +8,10 @@ const LINE_TYPES = [["mobile", "Mobile / cell phone"], ["landline", "Business / 
 
 function tokenFromLocation() {
   const query = String(window.location.hash || "").split("?")[1] || window.location.search.replace(/^\?/, "");
-  return new URLSearchParams(query).get("token") || "";
+  const queryToken = new URLSearchParams(query).get("token") || "";
+  if (queryToken) return queryToken;
+  const shortMatch = String(window.location.hash || "").match(/^#\/?f\/([^/?#]+)/i);
+  return shortMatch ? decodeURIComponent(shortMatch[1]) : "";
 }
 
 function fmtPhone(value) {
@@ -161,8 +164,9 @@ export default function ForwardingSetup() {
               {status === "verification_failed" ? <div className="forwarding-alert is-warning"><strong>We didn’t receive the forwarded call yet.</strong><span>{forwarding.lastFailureReason || "Voicemail may have answered first, or the carrier may need a different setup."}</span></div> : null}
               {manual ? <div className="forwarding-alert is-warning"><strong>Guided setup required</strong><span>We do not have a verified one-tap command for this phone service, so we will not guess one.</span></div> : null}
               <ol className="forwarding-steps">{forwarding.rule.humanInstructions.map((step) => <li key={step}>{step}</li>)}</ol>
+              {forwarding.rule.timing ? <div className="forwarding-timing"><strong>When My AI PA answers</strong><span>{forwarding.rule.timing.customerCopy}</span><small>{forwarding.rule.timing.adjustmentCopy}</small></div> : null}
               {forwarding.rule.warnings.map((warning) => <p className="forwarding-warning" key={warning}>{warning}</p>)}
-              {forwarding.rule.activationMethod === "DIAL_STRING" && supportsMobileDialer ? <button className="forwarding-primary" onClick={openDialer} disabled={busy}>Protect My Missed Calls</button> : null}
+              {forwarding.rule.activationMethod === "DIAL_STRING" && supportsMobileDialer ? <button className="forwarding-primary" onClick={openDialer} disabled={busy}>Open Phone App and Protect My Missed Calls</button> : null}
               {forwarding.rule.activationMethod === "DIAL_STRING" && !supportsMobileDialer ? <div className="forwarding-alert"><strong>Open this link on your business phone</strong><span>Desktop browsers cannot reliably open a mobile carrier command. You can copy the command below instead.</span></div> : null}
               {forwarding.rule.activationDialString ? <div className="forwarding-command"><span>Dial this from your business phone</span><strong>{forwarding.rule.activationDialString}</strong><button className="secondary" onClick={copyCommand}>{copied ? "Copied" : "Copy"}</button></div> : null}
               {manual ? <div className="forwarding-command"><span>Forward unanswered calls to</span><strong>{fmtPhone(forwarding.assignedMyAiPaNumber)}</strong><button className="secondary" onClick={copyCommand}>{copied ? "Copied" : "Copy"}</button></div> : null}

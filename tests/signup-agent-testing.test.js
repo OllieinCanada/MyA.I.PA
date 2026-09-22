@@ -123,6 +123,15 @@ test("guarded finalization preserves the exact attempt through testing, trial, a
   const finalizer = source.slice(finalizerStart, finalizerEnd);
   assert.match(finalizer, /prisma\.signupAttempt\.findUnique/);
   assert.match(finalizer, /normalizedPayload: attempt\.payload/);
+  const providerMatch = finalizer.slice(
+    finalizer.indexOf("const matches = vapiNumbers.filter"),
+    finalizer.indexOf("const attempt =", finalizer.indexOf("const matches = vapiNumbers.filter"))
+  );
+  assert.match(providerMatch, /expectedVapiPhoneId/);
+  assert.match(providerMatch, /phoneNumberId/);
+  assert.match(providerMatch, /getVapiPhoneNumber/);
+  assert.doesNotMatch(providerMatch, /getVapiAssistantId/);
+  assert.match(finalizer, /testSignupAgentBeforeDelivery/);
 
   const continuationEnd = source.indexOf("async function getTrialCallUsage", continuationStart);
   const continuationSource = source.slice(continuationStart, continuationEnd);

@@ -17,6 +17,8 @@ test("selects the official Rogers mobile no-answer rule and encodes service char
   assert.equal(rule.deactivationTelUri, "tel:%23%2361%23");
   assert.equal(rule.forwardingType, "NO_ANSWER");
   assert.equal(rule.supported, true);
+  assert.equal(rule.timing.exactThreeRingsSupported, false);
+  assert.match(rule.timing.customerCopy, /does not publish a fixed ring count/i);
 });
 
 test("selects separate Rogers Home Phone and Bell business rules", () => {
@@ -24,8 +26,23 @@ test("selects separate Rogers Home Phone and Bell business rules", () => {
   const bell = resolveForwardingRule({ carrier: "Bell", lineType: "business phone", destination: "+19055550123" });
   assert.equal(rogers.activationDialString, "*92");
   assert.match(rogers.source, /rogers\.com/);
+  assert.match(rogers.timing.customerCopy, /four rings/i);
   assert.equal(bell.key, "bell-business-no-answer-v1");
   assert.match(bell.warnings.join(" "), /Bell Mobility/);
+  assert.match(bell.timing.adjustmentCopy, /will not guess/i);
+});
+
+test("gives product-specific safe guidance for Bell and TELUS mobile without inventing a star code", () => {
+  const bell = resolveForwardingRule({ carrier: "bell", lineType: "mobile", destination: "+19055550123" });
+  const telus = resolveForwardingRule({ carrier: "telus", lineType: "mobile", destination: "+19055550123" });
+  for (const rule of [bell, telus]) {
+    assert.equal(rule.activationMethod, "MANUAL");
+    assert.equal(rule.activationDialString, "");
+    assert.equal(rule.timing.exactThreeRingsSupported, false);
+    assert.match(rule.humanInstructions.join(" "), /unanswered|no-answer/i);
+  }
+  assert.match(bell.source, /bell\.ca/i);
+  assert.match(telus.source, /telus\.com/i);
 });
 
 test("never guesses for TELUS, Bell mobile, VoIP, other, or unknown combinations", () => {

@@ -47,7 +47,7 @@ function RouterRoot() {
   else if (route === "terms") page = <Terms />;
   else if (route === "links") page = <LinksPage />;
   else if (route === "try-demo") page = <TryDemo />;
-  else if (route === "forwarding-setup") page = <ForwardingSetup />;
+  else if (route === "forwarding-setup" || route.startsWith("f/")) page = <ForwardingSetup />;
   else if (route === "demo/first-class-rentals") page = <FirstClassRentalsDemo />;
   else if (route === "demo/dean-allison") page = <DeanAllisonDemo />;
   else if (route === "trades") page = <TradePages />;

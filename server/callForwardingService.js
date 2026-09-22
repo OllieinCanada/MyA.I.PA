@@ -58,6 +58,23 @@ function createSetupToken(setup, env = process.env) {
   });
 }
 
+function hashShortSetupToken(token) {
+  return crypto.createHash("sha256").update(String(token || "")).digest("hex");
+}
+
+async function issueShortSetupToken({ prismaClient, setup, env = process.env }) {
+  const ttl = Math.max(300, Math.min(Number(env.FORWARDING_SETUP_URL_TTL_SECONDS || 86400), 604800));
+  const token = crypto.randomBytes(18).toString("base64url");
+  const expiresAt = new Date(Date.now() + (ttl * 1000));
+  await prismaClient.callForwardingSetupLink.deleteMany({
+    where: { setupId: setup.id, expiresAt: { lte: new Date() } },
+  });
+  await prismaClient.callForwardingSetupLink.create({
+    data: { setupId: setup.id, tokenHash: hashShortSetupToken(token), expiresAt },
+  });
+  return { token, expiresAt, setup };
+}
+
 function verifySetupToken(token, env = process.env) {
   try {
     const decoded = jwt.verify(String(token || ""), getSigningSecret(env), {
@@ -149,9 +166,22 @@ function sanitizeSetup(setup) {
 }
 
 async function getSetupFromToken({ prismaClient, token, env = process.env }) {
-  const claim = verifySetupToken(token, env);
-  const setup = await prismaClient.callForwardingSetup.findUnique({ where: { id: claim.sid } });
-  if (!setup || setup.signupKey !== claim.sk) throw forwardingError("Forwarding setup was not found.", 404, "FORWARDING_SETUP_NOT_FOUND");
+  const rawToken = String(token || "").trim();
+  let setup;
+  if (rawToken.includes(".")) {
+    const claim = verifySetupToken(rawToken, env);
+    setup = await prismaClient.callForwardingSetup.findUnique({ where: { id: claim.sid } });
+    if (!setup || setup.signupKey !== claim.sk) throw forwardingError("Forwarding setup was not found.", 404, "FORWARDING_SETUP_NOT_FOUND");
+  } else {
+    const link = await prismaClient.callForwardingSetupLink.findUnique({
+      where: { tokenHash: hashShortSetupToken(rawToken) },
+      include: { setup: true },
+    });
+    if (!link || link.expiresAt <= new Date()) {
+      throw forwardingError("This forwarding setup link is invalid or has expired. Open your dashboard for a new link.", 401, "FORWARDING_TOKEN_INVALID");
+    }
+    setup = link.setup;
+  }
   if (setup.status === "VERIFICATION_PENDING") {
     const attempt = await prismaClient.forwardingVerificationAttempt.findFirst({ where: { setupId: setup.id, status: { in: ["PENDING", "RINGING", "ANSWERED"] } }, orderBy: { startedAt: "desc" } });
     if (attempt && attempt.expiresAt <= new Date()) {
@@ -269,6 +299,7 @@ module.exports = {
   createSetupToken,
   getSetupFromToken,
   initializeForwardingSetup,
+  issueShortSetupToken,
   isForwardingVerificationCall,
   markDialerOpened,
   matchForwardedVerificationCall,

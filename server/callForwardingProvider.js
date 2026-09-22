@@ -1,6 +1,6 @@
 const { normalizeSmsPhone } = require("./smsSuppression");
 
-const SETUP_VERSION = 1;
+const SETUP_VERSION = 2;
 const CARRIERS = new Set(["BELL", "ROGERS", "TELUS", "OTHER", "NOT_SURE"]);
 const LINE_TYPES = new Set(["MOBILE", "LANDLINE", "VOIP", "NOT_SURE"]);
 
@@ -50,7 +50,13 @@ const RULES = Object.freeze([
     source: "https://www.rogers.com/support/mobility/use-call-forwarding",
     verifiedAt: "2026-09-06",
     supported: true,
-    warnings: ["Rogers voicemail can answer before no-reply forwarding. If testing fails, ask Rogers to adjust voicemail/no-reply timing."],
+    timing: {
+      mode: "CARRIER_CONTROLLED",
+      exactThreeRingsSupported: false,
+      customerCopy: "Your phone rings first. Rogers does not publish a fixed ring count for this mobile command.",
+      adjustmentCopy: "Rogers voicemail must be off for conditional forwarding to work. If the test fails, contact Rogers before relying on the setup.",
+    },
+    warnings: ["Rogers says conditional forwarding will not work while Rogers voicemail is active."],
   },
   {
     key: "rogers-home-no-answer-v1",
@@ -64,6 +70,12 @@ const RULES = Object.freeze([
     source: "https://www.rogers.com/support/home-phone/forward-calls-when-no-answer",
     verifiedAt: "2026-09-06",
     supported: true,
+    timing: {
+      mode: "FIXED_FOUR_RINGS",
+      exactThreeRingsSupported: false,
+      customerCopy: "Rogers Home Phone forwards an unanswered call after four rings.",
+      adjustmentCopy: "The *92 setup does not include a separate three-ring setting. Do not expect exactly three rings from this procedure.",
+    },
     warnings: ["This applies to Rogers Home Phone and normally forwards after four rings. Voicemail or account features can change the result."],
   },
   {
@@ -78,7 +90,50 @@ const RULES = Object.freeze([
     source: "https://business.bell.ca/support/small-business/phone/calling-features/how-to-use-call-forwarding",
     verifiedAt: "2026-09-06",
     supported: true,
+    timing: {
+      mode: "PRODUCT_SPECIFIC",
+      exactThreeRingsSupported: false,
+      customerCopy: "The number of rings is controlled separately and varies by Bell business-phone product.",
+      adjustmentCopy: "Use the Bell business portal or the timing feature documented for your exact product. My AI PA will not guess a timing command.",
+    },
     warnings: ["This is only for Bell business lines with Call Forward Don’t Answer Programmable. Bell Mobility and other Bell products require manual confirmation."],
+  },
+]);
+
+const MANUAL_RULES = Object.freeze([
+  {
+    carrier: "BELL",
+    lineType: "MOBILE",
+    source: "https://support.bell.ca/Mobility/Rate_plans_features/How_to_use_Call_Forwarding_on_my_mobile_phone",
+    humanInstructions: [
+      "Open the Phone or Call settings on the business phone only if they offer a separate unanswered or no-answer option.",
+      "Do not turn on a generic Call Forwarding or Always Forward switch. That can send every call away from your phone.",
+      "Enter the My AI PA number only under unanswered or no-answer calls. If that choice is missing, contact Bell, then return here to test it.",
+    ],
+    timing: {
+      mode: "DEVICE_OR_ACCOUNT_SETTING",
+      exactThreeRingsSupported: false,
+      customerCopy: "Bell Mobility controls the delay in seconds or through the phone settings, not as a guaranteed number of rings.",
+      adjustmentCopy: "Choose the closest available delay. Ring length differs by phone, so My AI PA verifies the result with a real test call.",
+    },
+    warnings: ["Bell may charge for forwarded minutes. Confirm that Call Forwarding or No Answer Transfer is included in the mobile plan."],
+  },
+  {
+    carrier: "TELUS",
+    lineType: "MOBILE",
+    source: "https://www.telus.com/en/business/small/mobility/add-ons",
+    humanInstructions: [
+      "Open the Phone or Call settings on the business phone only if they offer a separate unanswered or no-answer option.",
+      "Do not turn on a generic Call Forwarding or Always Forward switch. That can send every call away from your phone.",
+      "Enter the My AI PA number only under unanswered or no-answer calls. If that choice is missing, contact TELUS, then return here to test it.",
+    ],
+    timing: {
+      mode: "DEVICE_OR_ACCOUNT_SETTING",
+      exactThreeRingsSupported: false,
+      customerCopy: "TELUS timing depends on the mobile plan and phone settings.",
+      adjustmentCopy: "My AI PA will not generate an unverified TELUS service code. Use the phone settings or TELUS support, then run the test call.",
+    },
+    warnings: ["TELUS Call Forwarding may need to be added to the mobile plan before unanswered-call forwarding can work."],
   },
 ]);
 
@@ -89,6 +144,7 @@ function resolveForwardingRule({ carrier, lineType, forwardingMode = "NO_ANSWER"
   const destinationDigits = digits10(destination);
   const rule = RULES.find((item) => item.carrier === normalizedCarrier && item.lineType === normalizedLineType && item.forwardingType === mode);
   if (!rule) {
+    const manualRule = MANUAL_RULES.find((item) => item.carrier === normalizedCarrier && item.lineType === normalizedLineType);
     return {
       key: `manual-${normalizedCarrier.toLowerCase()}-${normalizedLineType.toLowerCase()}-v${SETUP_VERSION}`,
       carrier: normalizedCarrier,
@@ -100,15 +156,24 @@ function resolveForwardingRule({ carrier, lineType, forwardingMode = "NO_ANSWER"
       deactivationDialString: "",
       deactivationTelUri: "",
       destinationDigits,
-      humanInstructions: [
+      humanInstructions: manualRule?.humanInstructions || [
         "Contact your phone provider or open your cloud-phone settings.",
         `Ask for unanswered/no-reply calls to forward to ${destinationDigits}.`,
         "Keep forwarding-all turned off, then return here to test.",
       ],
-      source: "",
-      verifiedAt: "",
+      source: manualRule?.source || "",
+      verifiedAt: manualRule ? "2026-09-22" : "",
       supported: false,
-      warnings: ["My AI PA does not have a verified one-tap command for this phone service. We will not guess one."],
+      timing: manualRule?.timing || {
+        mode: "PROVIDER_SPECIFIC",
+        exactThreeRingsSupported: false,
+        customerCopy: "The ring delay depends on this provider and phone product.",
+        adjustmentCopy: "Ask the provider for unanswered-call forwarding. My AI PA will verify the result instead of guessing a command.",
+      },
+      warnings: [
+        ...(manualRule?.warnings || []),
+        "My AI PA does not have a verified one-tap command for this phone service. We will not guess one.",
+      ],
     };
   }
   const activationDialString = rule.buildActivation ? rule.buildActivation(destinationDigits) : rule.activationDialString;

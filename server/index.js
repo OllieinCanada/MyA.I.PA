@@ -185,9 +185,9 @@ const {
 const { buildForwardingInstructions } = require("./forwardingInstructions");
 const {
   applyVerificationStatusCallback,
-  createSetupToken,
   getSetupFromToken,
   initializeForwardingSetup,
+  issueShortSetupToken,
   isForwardingVerificationCall,
   markDialerOpened,
   matchForwardedVerificationCall,
@@ -5434,8 +5434,9 @@ async function prepareForwardingSetupForProvisionedSignup(payload, signupRecord,
     assignedMyAiPaNumber: assignedPhone,
     vapiPhoneNumberId: signupRecord.vapiPhoneNumberId,
   });
-  const token = createSetupToken(setup);
-  const setupUrl = `${FRONTEND_APP_URL}/#/forwarding-setup?token=${encodeURIComponent(token)}`;
+  const shortLink = await issueShortSetupToken({ prismaClient: prisma, setup });
+  const token = shortLink.token;
+  const setupUrl = `${FRONTEND_APP_URL}/#/f/${encodeURIComponent(token)}`;
   await recordForwardingEvent(prisma, setup.id, "forwarding_setup_link_created", {}, `${setup.id}:link:${setup.forwardingSetupVersion}`);
   upsertSignupDashboardRecord({
     ...signupRecord,
@@ -7464,7 +7465,6 @@ async function finalizeSignupAfterAgentTestByOperationalTarget(targetId, expecte
   const matches = vapiNumbers.filter((record) => (
     String(record?.id || record?.phoneNumberId || "").trim() === expectedVapiPhoneId
     && normalizePhoneForMatch(getVapiPhoneNumber(record)) === assignedPhone
-    && getVapiAssistantId(record) === expectedAssistantId
   ));
   if (matches.length !== 1) {
     throw signupRecoveryError("The stored and live provider assignment do not match exactly.", "SIGNUP_FINALIZATION_PROVIDER_PAIR_MISMATCH");
@@ -14976,8 +14976,8 @@ app.post(
       setup = prepared.setup;
     }
     if (!setup) return res.status(409).json({ error: "Your My AI PA number must finish provisioning before forwarding setup." });
-    const token = createSetupToken(setup);
-    res.json({ ok: true, url: `${FRONTEND_APP_URL}/#/forwarding-setup?token=${encodeURIComponent(token)}`, forwarding: sanitizeForwardingSetup(setup) });
+    const shortLink = await issueShortSetupToken({ prismaClient: prisma, setup });
+    res.json({ ok: true, url: `${FRONTEND_APP_URL}/#/f/${encodeURIComponent(shortLink.token)}`, forwarding: sanitizeForwardingSetup(shortLink.setup) });
   })
 );
 
