@@ -6,7 +6,9 @@ const {
   assessSignupAssistantContentWithReceipt,
   buildExpectedSignupAssistantConfig,
   buildNormalizedPayloadFromSignupRecord,
+  getFirstMessage,
 } = require("../server/signupAssistantVerification");
+const { RECORDING_NOTICE } = require("../server/vapiIsolatedSmsProvisioning");
 
 const signup = {
   businessName: "Example Electric",
@@ -52,6 +54,20 @@ test("accepts only an exact semantic readback of the generated assistant", () =>
   const result = assessSignupAssistantContent({ expectedConfig, liveAssistant });
   assert.equal(result.passed, true);
   assert.equal(result.expectedFingerprint, result.liveFingerprint);
+});
+
+test("accepts the exact server-owned recording notice without ignoring other greeting changes", () => {
+  const expectedConfig = buildExpectedSignupAssistantConfig(signup, { resourceName: "signup-agent" });
+  const hardenedAssistant = structuredClone(expectedConfig);
+  hardenedAssistant.firstMessage = `${RECORDING_NOTICE} ${expectedConfig.firstMessage}`;
+
+  const accepted = assessSignupAssistantContent({ expectedConfig, liveAssistant: hardenedAssistant });
+  assert.equal(accepted.passed, true);
+  assert.equal(getFirstMessage(hardenedAssistant), expectedConfig.firstMessage);
+
+  hardenedAssistant.firstMessage += " This unexpected sentence must still fail verification.";
+  const rejected = assessSignupAssistantContent({ expectedConfig, liveAssistant: hardenedAssistant });
+  assert.equal(rejected.passed, false);
 });
 
 test("accepts a live assistant verified by the exact durable provisioning receipt", () => {

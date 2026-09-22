@@ -7470,7 +7470,16 @@ async function finalizeSignupAfterAgentTestByOperationalTarget(targetId, expecte
     throw signupRecoveryError("The stored and live provider assignment do not match exactly.", "SIGNUP_FINALIZATION_PROVIDER_PAIR_MISMATCH");
   }
 
-  const agentTest = await testSignupAgentBeforeDelivery({ signup, vapiPhone: matches[0] });
+  const attempt = await prisma.signupAttempt.findUnique({ where: { eventKey: attemptId } });
+  if (!attempt?.payload || typeof attempt.payload !== "object") {
+    throw signupRecoveryError("The durable signup payload is unavailable for finalization.", "SIGNUP_FINALIZATION_PAYLOAD_MISSING");
+  }
+
+  const agentTest = await testSignupAgentBeforeDelivery({
+    signup,
+    vapiPhone: matches[0],
+    normalizedPayload: attempt.payload,
+  });
   const latest = listSignupDashboardRecords().find((record) => (
     String(record.signupAttemptId || "").trim() === attemptId
   ));
@@ -7484,10 +7493,6 @@ async function finalizeSignupAfterAgentTestByOperationalTarget(targetId, expecte
     };
   }
 
-  const attempt = await prisma.signupAttempt.findUnique({ where: { eventKey: attemptId } });
-  if (!attempt?.payload || typeof attempt.payload !== "object") {
-    throw signupRecoveryError("The durable signup payload is unavailable for finalization.", "SIGNUP_FINALIZATION_PAYLOAD_MISSING");
-  }
   const readyAt = new Date().toISOString();
   let canonical = upsertSignupDashboardRecord({
     ...latest,
@@ -7806,7 +7811,7 @@ async function ensureSignupAgentRoute({ signup, vapiPhone, business } = {}, depe
   };
 }
 
-async function testSignupAgentBeforeDelivery({ signup, vapiPhone, smsRouting = null, force = false } = {}) {
+async function testSignupAgentBeforeDelivery({ signup, vapiPhone, smsRouting = null, force = false, normalizedPayload = null } = {}) {
   if (!signup?.ownerEmail) {
     const error = new Error("A stored signup is required before the agent delivery test can run.");
     error.statusCode = 409;
@@ -7824,10 +7829,30 @@ async function testSignupAgentBeforeDelivery({ signup, vapiPhone, smsRouting = n
   });
   try {
     const liveAssistant = await requestVapiResource(`assistant/${encodeURIComponent(assistantId)}`);
-    const expectedConfig = buildExpectedSignupAssistantConfig(storedSignup, {
-      assignedPhone: aiNumber,
-      resourceName: getVapiAssistantName(liveAssistant) || "My AI PA Agent",
-    });
+    let exactSignupPayload = normalizedPayload && typeof normalizedPayload === "object"
+      ? normalizedPayload
+      : null;
+    const signupAttemptId = String(storedSignup.signupAttemptId || "").trim();
+    if (!exactSignupPayload && signupAttemptId) {
+      const attempt = await prisma.signupAttempt.findUnique({ where: { eventKey: signupAttemptId } });
+      if (!attempt?.payload || typeof attempt.payload !== "object") {
+        const error = new Error("The complete verified signup answers are unavailable for assistant verification.");
+        error.statusCode = 409;
+        error.code = "AGENT_SIGNUP_SOURCE_MISSING";
+        throw error;
+      }
+      exactSignupPayload = attempt.payload;
+    }
+    const resourceName = getVapiAssistantName(liveAssistant) || "My AI PA Agent";
+    const expectedConfig = exactSignupPayload
+      ? buildSignupAssistantConfig(exactSignupPayload, {
+        assignedPhone: aiNumber,
+        resourceName,
+      })
+      : buildExpectedSignupAssistantConfig(storedSignup, {
+        assignedPhone: aiNumber,
+        resourceName,
+      });
     let durableReceipt = null;
     try {
       const accountKey = buildProvisioningAccountKey(
@@ -7859,7 +7884,9 @@ async function testSignupAgentBeforeDelivery({ signup, vapiPhone, smsRouting = n
       agentContentStatus: "verified",
       agentContentFingerprint: content.liveFingerprint,
       agentContentVerifiedAt: new Date().toISOString(),
-      agentContentVerificationSource: content.verificationSource,
+      agentContentVerificationSource: exactSignupPayload && content.verificationSource === "dashboard_reconstruction"
+        ? "durable_signup_payload"
+        : content.verificationSource,
       agentContentErrorCode: "",
     });
   } catch (error) {
@@ -13879,6 +13906,7 @@ app.post(
             assistantId: result.assistantId || assistantId,
           },
           smsRouting,
+          normalizedPayload: trustedPayload,
         });
       } catch (error) {
         safelyNotifyRuntimeFailure(error, {

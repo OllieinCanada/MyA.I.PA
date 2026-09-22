@@ -109,9 +109,18 @@ test("guarded finalization preserves the exact attempt through testing, trial, a
   const testSource = source.slice(testStart, continuationStart);
   assert.match(testSource, /assessSignupAssistantContentWithReceipt/);
   assert.match(testSource, /readProvisioningStep/);
+  assert.match(testSource, /prisma\.signupAttempt\.findUnique/);
+  assert.match(testSource, /buildSignupAssistantConfig\(exactSignupPayload/);
+  assert.match(testSource, /AGENT_SIGNUP_SOURCE_MISSING/);
   assert.match(testSource, /upsertSignupDashboardRecord\(\{ \.\.\.storedSignup, \.\.\.fields \}\)/);
   assert.match(testSource, /signupAttemptId && String\(record\.signupAttemptId/);
   assert.doesNotMatch(testSource, /upsertSignupDashboardRecord\(\{\s*ownerEmail: finalSignup\.ownerEmail/);
+
+  const finalizerStart = source.indexOf("async function finalizeSignupAfterAgentTestByOperationalTarget");
+  const finalizerEnd = source.indexOf("async function", finalizerStart + 20);
+  const finalizer = source.slice(finalizerStart, finalizerEnd);
+  assert.match(finalizer, /prisma\.signupAttempt\.findUnique/);
+  assert.match(finalizer, /normalizedPayload: attempt\.payload/);
 
   const continuationEnd = source.indexOf("async function getTrialCallUsage", continuationStart);
   const continuationSource = source.slice(continuationStart, continuationEnd);

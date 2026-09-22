@@ -1,6 +1,7 @@
 const crypto = require("crypto");
 
 const { buildSignupAssistantConfig } = require("./signupAssistantTemplate");
+const { RECORDING_NOTICE } = require("./vapiIsolatedSmsProvisioning");
 
 function clean(value) {
   return String(value ?? "").replace(/\r\n/g, "\n").trim();
@@ -60,10 +61,21 @@ function getSystemPrompt(assistant = {}) {
     .trim();
 }
 
+function getFirstMessage(assistant = {}) {
+  const message = clean(assistant.firstMessage);
+  const hardenedPrefix = `${RECORDING_NOTICE} `;
+  return message.startsWith(hardenedPrefix)
+    ? message.slice(hardenedPrefix.length).trim()
+    : message;
+}
+
 function canonicalAssistantContent(assistant = {}) {
   return {
     name: clean(assistant.name),
-    firstMessage: clean(assistant.firstMessage),
+    // The protected SMS-routing step installs this exact server-owned
+    // recording notice after assistant creation. Treat only that known prefix
+    // as infrastructure hardening; any other greeting change still fails.
+    firstMessage: getFirstMessage(assistant),
     systemPrompt: getSystemPrompt(assistant),
     model: {
       provider: clean(assistant?.model?.provider),
@@ -141,5 +153,6 @@ module.exports = {
   buildNormalizedPayloadFromSignupRecord,
   canonicalAssistantContent,
   fingerprintAssistantContent,
+  getFirstMessage,
   getSystemPrompt,
 };
