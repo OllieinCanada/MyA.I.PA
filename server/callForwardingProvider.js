@@ -1,6 +1,6 @@
 const { normalizeSmsPhone } = require("./smsSuppression");
 
-const SETUP_VERSION = 2;
+const SETUP_VERSION = 3;
 const CARRIERS = new Set(["BELL", "ROGERS", "TELUS", "OTHER", "NOT_SURE"]);
 const LINE_TYPES = new Set(["MOBILE", "LANDLINE", "VOIP", "NOT_SURE"]);
 
@@ -38,6 +38,33 @@ function encodeDialStringToTelUri(command) {
 }
 
 const RULES = Object.freeze([
+  {
+    key: "bell-mobile-no-answer-15-seconds-v1",
+    carrier: "BELL",
+    lineType: "MOBILE",
+    forwardingType: "NO_ANSWER",
+    activationMethod: "DIAL_STRING",
+    buildActivation: (number) => `*61*${number}*11*15#`,
+    deactivationDialString: "",
+    humanInstructions: [
+      "Tap the button from the Bell business phone.",
+      "Press Call or Send. Bell should show a status message confirming the change.",
+      "Return here and let My AI PA test the setup automatically.",
+    ],
+    source: "https://support.bell.ca/mobility/rate_plans_features/how_to_use_message_centre?step=8",
+    verifiedAt: "2026-09-22",
+    supported: true,
+    timing: {
+      mode: "FIFTEEN_SECONDS",
+      exactThreeRingsSupported: false,
+      customerCopy: "Bell will wait 15 seconds before forwarding an unanswered call. That is usually about three rings, but ringtone length varies by phone.",
+      adjustmentCopy: "Bell accepts delays in five-second steps. My AI PA uses 15 seconds as the closest practical setting and verifies the result with a real test call.",
+    },
+    warnings: [
+      "This replaces Bell's current no-answer destination, which is often voicemail. Bell may charge for forwarded minutes depending on the plan.",
+      "If Bell rejects the command, use Call settings → Call Forwarding → unanswered calls or contact Bell to enable the feature.",
+    ],
+  },
   {
     key: "rogers-mobile-no-answer-v1",
     carrier: "ROGERS",
@@ -101,23 +128,6 @@ const RULES = Object.freeze([
 ]);
 
 const MANUAL_RULES = Object.freeze([
-  {
-    carrier: "BELL",
-    lineType: "MOBILE",
-    source: "https://support.bell.ca/Mobility/Rate_plans_features/How_to_use_Call_Forwarding_on_my_mobile_phone",
-    humanInstructions: [
-      "Open the Phone or Call settings on the business phone only if they offer a separate unanswered or no-answer option.",
-      "Do not turn on a generic Call Forwarding or Always Forward switch. That can send every call away from your phone.",
-      "Enter the My AI PA number only under unanswered or no-answer calls. If that choice is missing, contact Bell, then return here to test it.",
-    ],
-    timing: {
-      mode: "DEVICE_OR_ACCOUNT_SETTING",
-      exactThreeRingsSupported: false,
-      customerCopy: "Bell Mobility controls the delay in seconds or through the phone settings, not as a guaranteed number of rings.",
-      adjustmentCopy: "Choose the closest available delay. Ring length differs by phone, so My AI PA verifies the result with a real test call.",
-    },
-    warnings: ["Bell may charge for forwarded minutes. Confirm that Call Forwarding or No Answer Transfer is included in the mobile plan."],
-  },
   {
     carrier: "TELUS",
     lineType: "MOBILE",
