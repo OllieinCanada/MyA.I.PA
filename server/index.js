@@ -1620,11 +1620,7 @@ async function sendSignupVerificationEmail({ req, ownerEmail, ownerName, busines
 async function sendSignupCompletionEmail({ to, subject, text, content }) {
   const emailConfig = getEmailTransportConfig();
   if (!emailConfig) {
-    const error = new Error("Setup-complete email delivery is not configured.");
-    error.code = "SMTP_NOT_CONFIGURED";
-    error.provider = "smtp";
-    error.providerCode = error.code;
-    throw error;
+    return { sent: false, skipped: true, reason: "smtp_not_configured" };
   }
   const transporter = nodemailer.createTransport(emailConfig.transport);
   try {
@@ -7164,6 +7160,8 @@ async function recoverSignupByOperationalTarget(targetId, expectedSignupAttemptI
       dashboardUrl: `${FRONTEND_APP_URL}/#/dashboard`,
       forwardingSetupUrl: forwardingSetup.setupUrl,
       priorStatus: updated.setupFollowupStatus,
+      priorChannels: updated.setupFollowupChannels,
+      priorErrors: updated.setupFollowupErrors,
       sendSms: ({ to, message }) => sendSmsViaTwilio({ to, message, env: getVapiVoiceSignupSmsEnvironment() }),
       sendEmail: sendSignupCompletionEmail,
     });
@@ -7273,6 +7271,8 @@ async function recoverSignupByOperationalTarget(targetId, expectedSignupAttemptI
         dashboardUrl: `${FRONTEND_APP_URL}/#/dashboard`,
         forwardingSetupUrl: forwardingSetup.setupUrl,
         priorStatus: updated.setupFollowupStatus,
+        priorChannels: updated.setupFollowupChannels,
+        priorErrors: updated.setupFollowupErrors,
         sendSms: ({ to, message }) => sendSmsViaTwilio({ to, message, env: getVapiVoiceSignupSmsEnvironment() }),
         sendEmail: sendSignupCompletionEmail,
       });
@@ -7534,6 +7534,8 @@ async function finalizeSignupAfterAgentTestByOperationalTarget(targetId, expecte
     dashboardUrl: `${FRONTEND_APP_URL}/#/dashboard`,
     forwardingSetupUrl: forwardingSetup?.setupUrl || "",
     priorStatus: canonical.setupFollowupStatus,
+    priorChannels: canonical.setupFollowupChannels,
+    priorErrors: canonical.setupFollowupErrors,
     sendSms: ({ to, message }) => sendSmsViaTwilio({ to, message, env: getVapiVoiceSignupSmsEnvironment() }),
     sendEmail: sendSignupCompletionEmail,
   });
@@ -7916,7 +7918,7 @@ async function testSignupAgentBeforeDelivery({ signup, vapiPhone, smsRouting = n
   let route;
   try {
     route = await ensureSignupAgentRoute({ signup: storedSignup, vapiPhone, business });
-    storedSignup = upsertSignupDashboardRecord({ ...storedSignup, ...route.fields });
+    storedSignup = upsertSignupDashboardRecord({ ...storedSignup, businessId: business.id, ...route.fields });
   } catch (error) {
     upsertSignupDashboardRecord({
       ...storedSignup,
@@ -14440,6 +14442,8 @@ app.post(
         dashboardUrl: `${FRONTEND_APP_URL}/#/dashboard`,
         forwardingSetupUrl: forwardingSetup.setupUrl,
         priorStatus: provisionedRecord.setupFollowupStatus,
+        priorChannels: provisionedRecord.setupFollowupChannels,
+        priorErrors: provisionedRecord.setupFollowupErrors,
         sendSms: ({ to, message }) => sendSmsViaTwilio({ to, message, env: getVapiVoiceSignupSmsEnvironment() }),
         sendEmail: sendSignupCompletionEmail,
       });
@@ -14791,6 +14795,8 @@ app.get(
         dashboardUrl: `${FRONTEND_APP_URL}/#/dashboard`,
         forwardingSetupUrl: forwardingSetup?.setupUrl || "",
         priorStatus: provisionedRecord.setupFollowupStatus,
+        priorChannels: provisionedRecord.setupFollowupChannels,
+        priorErrors: provisionedRecord.setupFollowupErrors,
         sendSms: ({ to, message }) => sendSmsViaTwilio({
           to,
           message,

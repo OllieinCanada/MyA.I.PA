@@ -114,6 +114,7 @@ test("guarded finalization preserves the exact attempt through testing, trial, a
   assert.match(testSource, /buildSignupAssistantConfig\(normalizedSignupPayload/);
   assert.match(testSource, /AGENT_SIGNUP_SOURCE_MISSING/);
   assert.match(testSource, /upsertSignupDashboardRecord\(\{ \.\.\.storedSignup, \.\.\.fields \}\)/);
+  assert.match(testSource, /businessId: business\.id, \.\.\.route\.fields/);
   assert.match(testSource, /signupAttemptId && String\(record\.signupAttemptId/);
   assert.doesNotMatch(testSource, /upsertSignupDashboardRecord\(\{\s*ownerEmail: finalSignup\.ownerEmail/);
 

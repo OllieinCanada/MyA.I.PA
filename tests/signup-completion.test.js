@@ -48,8 +48,39 @@ test("setup-complete delivery is replay-safe after a prior success", async () =>
     assignedPhone: "+13433216155",
     sendSms: async () => { calls += 1; },
   });
-  assert.equal(result.status, "skipped");
+  assert.equal(result.status, "sent");
+  assert.equal(result.skipped, true);
   assert.equal(result.reason, "already_delivered");
+  assert.equal(calls, 0);
+});
+
+test("setup-complete delivery treats unavailable optional email as skipped when SMS succeeds", async () => {
+  const result = await deliverSignupCompletion({
+    ownerPhone: "+19055550123",
+    ownerEmail: "owner@example.com",
+    assignedPhone: "+13433216155",
+    sendSms: async () => {},
+    sendEmail: async () => ({ skipped: true, reason: "smtp_not_configured" }),
+  });
+  assert.equal(result.status, "sent");
+  assert.deepEqual(result.channels, ["sms"]);
+  assert.deepEqual(result.errors, []);
+  assert.deepEqual(result.skippedChannels, [{ channel: "email", reason: "smtp_not_configured" }]);
+});
+
+test("setup-complete delivery reconciles an existing SMS success without sending it twice", async () => {
+  let calls = 0;
+  const result = await deliverSignupCompletion({
+    priorStatus: "partial",
+    priorChannels: ["sms"],
+    priorErrors: [{ channel: "email", code: "SMTP_NOT_CONFIGURED" }],
+    ownerPhone: "+19055550123",
+    assignedPhone: "+13433216155",
+    sendSms: async () => { calls += 1; },
+  });
+  assert.equal(result.status, "sent");
+  assert.equal(result.reason, "optional_email_unavailable");
+  assert.deepEqual(result.channels, ["sms"]);
   assert.equal(calls, 0);
 });
 
