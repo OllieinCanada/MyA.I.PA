@@ -32,21 +32,30 @@ test("selects separate Rogers Home Phone and Bell business rules", () => {
   assert.match(bell.timing.adjustmentCopy, /will not guess/i);
 });
 
-test("gives product-specific safe guidance for Bell and TELUS mobile without inventing a star code", () => {
+test("builds Bell's documented mobile no-answer command with the closest practical three-ring delay", () => {
   const bell = resolveForwardingRule({ carrier: "bell", lineType: "mobile", destination: "+19055550123" });
-  const telus = resolveForwardingRule({ carrier: "telus", lineType: "mobile", destination: "+19055550123" });
-  for (const rule of [bell, telus]) {
-    assert.equal(rule.activationMethod, "MANUAL");
-    assert.equal(rule.activationDialString, "");
-    assert.equal(rule.timing.exactThreeRingsSupported, false);
-    assert.match(rule.humanInstructions.join(" "), /unanswered|no-answer/i);
-  }
+  assert.equal(bell.key, "bell-mobile-no-answer-15-seconds-v1");
+  assert.equal(bell.activationMethod, "DIAL_STRING");
+  assert.equal(bell.activationDialString, "*61*9055550123*11*15#");
+  assert.equal(bell.activationTelUri, "tel:*61*9055550123*11*15%23");
+  assert.equal(bell.supported, true);
+  assert.equal(bell.timing.exactThreeRingsSupported, false);
+  assert.match(bell.timing.customerCopy, /15 seconds/i);
+  assert.match(bell.timing.customerCopy, /about three rings/i);
   assert.match(bell.source, /bell\.ca/i);
+});
+
+test("gives product-specific safe guidance for TELUS mobile without inventing a star code", () => {
+  const telus = resolveForwardingRule({ carrier: "telus", lineType: "mobile", destination: "+19055550123" });
+  assert.equal(telus.activationMethod, "MANUAL");
+  assert.equal(telus.activationDialString, "");
+  assert.equal(telus.timing.exactThreeRingsSupported, false);
+  assert.match(telus.humanInstructions.join(" "), /unanswered|no-answer/i);
   assert.match(telus.source, /telus\.com/i);
 });
 
-test("never guesses for TELUS, Bell mobile, VoIP, other, or unknown combinations", () => {
-  for (const [carrier, lineType] of [["telus", "mobile"], ["bell", "mobile"], ["rogers", "voip"], ["other", "landline"], ["not_sure", "not_sure"]]) {
+test("never guesses for TELUS, VoIP, other, or unknown combinations", () => {
+  for (const [carrier, lineType] of [["telus", "mobile"], ["rogers", "voip"], ["other", "landline"], ["not_sure", "not_sure"]]) {
     const rule = resolveForwardingRule({ carrier, lineType, destination: "+19055550123" });
     assert.equal(rule.supported, false);
     assert.equal(rule.activationMethod, "MANUAL");
