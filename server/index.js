@@ -128,6 +128,7 @@ const {
 const { buildSignupAssistantConfig } = require("./signupAssistantTemplate");
 const {
   assessSignupAssistantContent,
+  assessSignupAssistantContentWithReceipt,
   buildExpectedSignupAssistantConfig,
 } = require("./signupAssistantVerification");
 const {
@@ -7408,6 +7409,165 @@ async function recoverSignupByOperationalTarget(targetId, expectedSignupAttemptI
   throw error;
 }
 
+function removeCompletedSignupLegacyAliases(canonicalSignup) {
+  const store = readSignupDashboardStore();
+  const canonicalKey = findSignupDashboardExistingKey(store, canonicalSignup);
+  const canonicalEmail = String(canonicalSignup.ownerEmail || "").trim().toLowerCase();
+  const canonicalPhone = normalizePhoneForMatch(canonicalSignup.twilioPhoneNumber || "");
+  const canonicalVapiPhoneId = String(canonicalSignup.vapiPhoneNumberId || "").trim();
+  const canonicalAssistantId = String(canonicalSignup.vapiAssistantId || "").trim();
+  let removed = 0;
+  for (const [key, candidate] of Object.entries(store)) {
+    if (key === canonicalKey || String(candidate?.signupAttemptId || "").trim()) continue;
+    const sameEmail = canonicalEmail
+      && String(candidate?.ownerEmail || "").trim().toLowerCase() === canonicalEmail;
+    const sameProviderPair = Boolean(
+      (canonicalPhone && normalizePhoneForMatch(candidate?.twilioPhoneNumber || "") === canonicalPhone)
+      || (canonicalVapiPhoneId && String(candidate?.vapiPhoneNumberId || "").trim() === canonicalVapiPhoneId)
+      || (canonicalAssistantId && String(candidate?.vapiAssistantId || "").trim() === canonicalAssistantId)
+    );
+    const status = String(candidate?.status || "").trim().toLowerCase();
+    const removable = (
+      (sameProviderPair && ["agent_testing", "setup_started", "setup_ready"].includes(status))
+      || (sameEmail && status === "subscription_cancelled")
+    );
+    if (!removable) continue;
+    delete store[key];
+    removed += 1;
+  }
+  if (removed) writeSignupDashboardStore(store);
+  return removed;
+}
+
+async function finalizeSignupAfterAgentTestByOperationalTarget(targetId, expectedSignupAttemptId = "") {
+  if (!signupAttempts) {
+    throw signupRecoveryError(
+      "Durable signup-attempt verification is unavailable.",
+      "SIGNUP_FINALIZATION_ATTEMPT_STORE_UNAVAILABLE",
+      503
+    );
+  }
+  const signup = findSignupByOperationalTarget(targetId, listSignupDashboardRecords(), expectedSignupAttemptId);
+  if (!signup) throw signupRecoveryError("The signup finalization target no longer exists.", "SIGNUP_FINALIZATION_TARGET_NOT_FOUND", 404);
+  const attemptId = String(expectedSignupAttemptId || signup.signupAttemptId || "").trim();
+  if (!attemptId || attemptId !== String(signup.signupAttemptId || "").trim()) {
+    throw signupRecoveryError("The signup attempt identity changed before finalization.", "SIGNUP_FINALIZATION_ATTEMPT_MISMATCH");
+  }
+  const assignedPhone = normalizePhoneForMatch(signup.twilioPhoneNumber || "");
+  const expectedVapiPhoneId = String(signup.vapiPhoneNumberId || "").trim();
+  const expectedAssistantId = String(signup.vapiAssistantId || "").trim();
+  if (!assignedPhone || !expectedVapiPhoneId || !expectedAssistantId) {
+    throw signupRecoveryError("The signup does not have one complete provider assignment.", "SIGNUP_FINALIZATION_PROVIDER_PAIR_INCOMPLETE");
+  }
+
+  const vapiNumbers = await fetchVapiCollection("phone-number", ["phoneNumbers", "phone_numbers"]);
+  const matches = vapiNumbers.filter((record) => (
+    String(record?.id || record?.phoneNumberId || "").trim() === expectedVapiPhoneId
+    && normalizePhoneForMatch(getVapiPhoneNumber(record)) === assignedPhone
+    && getVapiAssistantId(record) === expectedAssistantId
+  ));
+  if (matches.length !== 1) {
+    throw signupRecoveryError("The stored and live provider assignment do not match exactly.", "SIGNUP_FINALIZATION_PROVIDER_PAIR_MISMATCH");
+  }
+
+  const agentTest = await testSignupAgentBeforeDelivery({ signup, vapiPhone: matches[0] });
+  const latest = listSignupDashboardRecords().find((record) => (
+    String(record.signupAttemptId || "").trim() === attemptId
+  ));
+  if (!latest) throw signupRecoveryError("The signup disappeared during its agent test.", "SIGNUP_FINALIZATION_TARGET_LOST", 409);
+  if (agentTest?.readiness?.passed !== true) {
+    return {
+      ok: true,
+      action: "agent_test_pending",
+      status: String(latest.agentTestStatus || latest.status || "agent_testing"),
+      assignedNumberEnding: assignedPhone.slice(-4),
+    };
+  }
+
+  const attempt = await prisma.signupAttempt.findUnique({ where: { eventKey: attemptId } });
+  if (!attempt?.payload || typeof attempt.payload !== "object") {
+    throw signupRecoveryError("The durable signup payload is unavailable for finalization.", "SIGNUP_FINALIZATION_PAYLOAD_MISSING");
+  }
+  const readyAt = new Date().toISOString();
+  let canonical = upsertSignupDashboardRecord({
+    ...latest,
+    status: "setup_ready",
+    reviewRequired: false,
+    reviewReasons: [],
+    setupReadyBlockedReason: "",
+    setupReadyAt: latest.setupReadyAt || readyAt,
+    agentTestPassedAt: latest.agentTestPassedAt || readyAt,
+  });
+  const trialResult = await attachNoCardStripeTrialToSignup(attempt.payload, {
+    signupAttemptId: attemptId,
+    businessName: canonical.businessName,
+    ownerName: canonical.ownerName,
+    ownerEmail: canonical.ownerEmail,
+    ownerPhone: canonical.ownerPhone,
+    businessPhone: canonical.businessPhone,
+    businessAddress: canonical.businessAddress,
+    makeStatus: canonical.makeStatus,
+    twilioPhoneNumber: assignedPhone,
+  });
+  if (!trialResult?.subscription) {
+    throw signupRecoveryError(
+      "The assistant passed, but the no-card trial could not be attached.",
+      String(trialResult?.code || "SIGNUP_FINALIZATION_TRIAL_MISSING"),
+      502
+    );
+  }
+  canonical = listSignupDashboardRecords().find((record) => (
+    String(record.signupAttemptId || "").trim() === attemptId
+  )) || canonical;
+  const forwardingSetup = await prepareForwardingSetupForProvisionedSignup(attempt.payload, canonical, assignedPhone);
+  const completionDelivery = await deliverSignupCompletion({
+    ownerPhone: canonical.ownerPhone,
+    ownerEmail: canonical.ownerEmail,
+    ownerName: canonical.ownerName,
+    businessName: canonical.businessName,
+    assignedPhone,
+    dashboardUrl: `${FRONTEND_APP_URL}/#/dashboard`,
+    forwardingSetupUrl: forwardingSetup?.setupUrl || "",
+    priorStatus: canonical.setupFollowupStatus,
+    sendSms: ({ to, message }) => sendSmsViaTwilio({ to, message, env: getVapiVoiceSignupSmsEnvironment() }),
+    sendEmail: sendSignupCompletionEmail,
+  });
+  await recordForwardingSetupSmsDelivery(forwardingSetup, completionDelivery);
+  canonical = upsertSignupDashboardRecord({
+    ...canonical,
+    status: "setup_ready",
+    reviewRequired: false,
+    reviewReasons: [],
+    setupFollowupStatus: completionDelivery.status,
+    setupFollowupChannels: completionDelivery.channels,
+    setupFollowupErrors: completionDelivery.errors,
+    setupFollowupAttemptedAt: new Date().toISOString(),
+    setupFollowupSentAt: completionDelivery.channels.length ? new Date().toISOString() : "",
+  });
+  await signupAttempts.updateIfPresent(attemptId, {
+    status: "setup_ready",
+    stage: "ready",
+    detail: "Assistant, phone route, text delivery, and trial verified",
+    assignedPhone,
+    vapiPhoneNumberId: expectedVapiPhoneId,
+    vapiAssistantId: expectedAssistantId,
+    reviewRequired: false,
+    reviewReasons: [],
+    lastErrorCode: null,
+    completedAt: new Date(),
+  });
+  const removedLegacyAliases = removeCompletedSignupLegacyAliases(canonical);
+  return {
+    ok: true,
+    action: "signup_finalized",
+    status: "setup_ready",
+    assignedNumberEnding: assignedPhone.slice(-4),
+    trialAttached: true,
+    completionDelivery: completionDelivery.status,
+    removedLegacyAliases,
+  };
+}
+
 let publicNetworkStatsLoader = async () => {
   const [callsAnswered, followUpOpportunities] = await prisma.$transaction([
     prisma.call.count({ where: { status: "COMPLETED" } }),
@@ -7668,7 +7828,26 @@ async function testSignupAgentBeforeDelivery({ signup, vapiPhone, smsRouting = n
       assignedPhone: aiNumber,
       resourceName: getVapiAssistantName(liveAssistant) || "My AI PA Agent",
     });
-    const content = assessSignupAssistantContent({ expectedConfig, liveAssistant });
+    let durableReceipt = null;
+    try {
+      const accountKey = buildProvisioningAccountKey(
+        storedSignup.ownerEmail,
+        storedSignup.ownerPhone || storedSignup.businessPhone
+      );
+      durableReceipt = await readProvisioningStep({
+        prisma,
+        kind: "vapi-assistant",
+        idempotencyKey: accountKey,
+      });
+    } catch (_error) {
+      durableReceipt = null;
+    }
+    const content = assessSignupAssistantContentWithReceipt({
+      expectedConfig,
+      liveAssistant,
+      durableReceipt,
+      assistantId,
+    });
     if (!content.passed) {
       const error = new Error("The live assistant script does not match the customer's saved signup answers.");
       error.statusCode = 409;
@@ -7676,15 +7855,16 @@ async function testSignupAgentBeforeDelivery({ signup, vapiPhone, smsRouting = n
       throw error;
     }
     storedSignup = upsertSignupDashboardRecord({
-      ownerEmail: storedSignup.ownerEmail,
+      ...storedSignup,
       agentContentStatus: "verified",
-      agentContentFingerprint: content.expectedFingerprint,
+      agentContentFingerprint: content.liveFingerprint,
       agentContentVerifiedAt: new Date().toISOString(),
+      agentContentVerificationSource: content.verificationSource,
       agentContentErrorCode: "",
     });
   } catch (error) {
     upsertSignupDashboardRecord({
-      ownerEmail: storedSignup.ownerEmail,
+      ...storedSignup,
       agentContentStatus: "failed",
       agentContentFingerprint: "",
       agentContentVerifiedAt: "",
@@ -7703,10 +7883,10 @@ async function testSignupAgentBeforeDelivery({ signup, vapiPhone, smsRouting = n
   let route;
   try {
     route = await ensureSignupAgentRoute({ signup: storedSignup, vapiPhone, business });
-    storedSignup = upsertSignupDashboardRecord({ ownerEmail: storedSignup.ownerEmail, ...route.fields });
+    storedSignup = upsertSignupDashboardRecord({ ...storedSignup, ...route.fields });
   } catch (error) {
     upsertSignupDashboardRecord({
-      ownerEmail: storedSignup.ownerEmail,
+      ...storedSignup,
       agentRouteBindingStatus: "failed",
       agentRouteBindingVerifiedAt: "",
       agentRouteBindingErrorCode: String(error?.code || "AGENT_ROUTE_VERIFICATION_FAILED").slice(0, 120),
@@ -7727,7 +7907,7 @@ async function testSignupAgentBeforeDelivery({ signup, vapiPhone, smsRouting = n
     smsRoutingVerifiedAt: currentRouting.healthy ? new Date().toISOString() : "",
     smsRoutingError: currentRouting.skipped ? currentRouting.reason : currentRouting.healthy ? "" : currentRouting.error || "Vapi read-back did not verify isolated routing.",
   };
-  storedSignup = upsertSignupDashboardRecord({ ownerEmail: storedSignup.ownerEmail, ...routingFields });
+  storedSignup = upsertSignupDashboardRecord({ ...storedSignup, ...routingFields });
   if (!currentRouting.healthy) {
     const error = new Error("The agent was built, but protected owner and customer text routing did not pass.");
     error.statusCode = 502;
@@ -7735,12 +7915,16 @@ async function testSignupAgentBeforeDelivery({ signup, vapiPhone, smsRouting = n
     throw error;
   }
 
-  storedSignup = listSignupDashboardRecords().find((record) => (
+  const signupAttemptId = String(signup.signupAttemptId || "").trim();
+  const signupRecords = listSignupDashboardRecords();
+  storedSignup = signupRecords.find((record) => (
+    signupAttemptId && String(record.signupAttemptId || "").trim() === signupAttemptId
+  )) || (!signupAttemptId ? signupRecords.find((record) => (
     String(record.ownerEmail || "").trim().toLowerCase() === String(signup.ownerEmail || "").trim().toLowerCase()
-  )) || storedSignup;
+  )) : null) || storedSignup;
 
   const persist = (fields) => {
-    storedSignup = upsertSignupDashboardRecord({ ownerEmail: storedSignup.ownerEmail, ...fields });
+    storedSignup = upsertSignupDashboardRecord({ ...storedSignup, ...fields });
     return storedSignup;
   };
   const result = await runAgentTextTest({
@@ -7749,9 +7933,12 @@ async function testSignupAgentBeforeDelivery({ signup, vapiPhone, smsRouting = n
     sendSms: ({ to, from, message }) => sendSmsViaTwilio({ to, from, message }),
     persist,
   });
-  const finalSignup = listSignupDashboardRecords().find((record) => (
+  const finalRecords = listSignupDashboardRecords();
+  const finalSignup = finalRecords.find((record) => (
+    signupAttemptId && String(record.signupAttemptId || "").trim() === signupAttemptId
+  )) || (!signupAttemptId ? finalRecords.find((record) => (
     String(record.ownerEmail || "").trim().toLowerCase() === String(signup.ownerEmail || "").trim().toLowerCase()
-  )) || storedSignup;
+  )) : null) || storedSignup;
   const readiness = buildAgentReadiness({
     signup: finalSignup,
     business: await prisma.business.findUnique({ where: { id: business.id }, include: { settings: true, vapiMappings: true } }),
@@ -7759,7 +7946,7 @@ async function testSignupAgentBeforeDelivery({ signup, vapiPhone, smsRouting = n
   if (!readiness.passed) {
     if (result.pending) {
       upsertSignupDashboardRecord({
-        ownerEmail: finalSignup.ownerEmail,
+        ...finalSignup,
         status: "agent_testing",
         setupReadyBlockedReason: "WAITING_FOR_CONFIRMED_TEXT_DELIVERY",
       });
@@ -7778,7 +7965,7 @@ async function testSignupAgentBeforeDelivery({ signup, vapiPhone, smsRouting = n
   }
   const readyAt = new Date().toISOString();
   upsertSignupDashboardRecord({
-    ownerEmail: finalSignup.ownerEmail,
+    ...finalSignup,
     status: "setup_ready",
     agentTestPassedAt: readyAt,
     setupReadyAt: finalSignup.setupReadyAt || readyAt,
@@ -7794,18 +7981,22 @@ async function testSignupAgentBeforeDelivery({ signup, vapiPhone, smsRouting = n
 
 const agentTextTestContinuationLocks = new Map();
 
-async function continueSignupAgentTextTestAfterDelivery(ownerEmail) {
+async function continueSignupAgentTextTestAfterDelivery(ownerEmail, signupAttemptId = "") {
   const key = String(ownerEmail || "").trim().toLowerCase();
   if (!key) return null;
-  if (agentTextTestContinuationLocks.has(key)) return agentTextTestContinuationLocks.get(key);
+  const expectedAttemptId = String(signupAttemptId || "").trim();
+  const lockKey = expectedAttemptId || key;
+  if (agentTextTestContinuationLocks.has(lockKey)) return agentTextTestContinuationLocks.get(lockKey);
 
   const continuation = (async () => {
     let storedSignup = listSignupDashboardRecords().find((record) => (
+      expectedAttemptId && String(record.signupAttemptId || "").trim() === expectedAttemptId
+    )) || listSignupDashboardRecords().find((record) => (
       String(record.ownerEmail || "").trim().toLowerCase() === key
     ));
     if (!storedSignup) return null;
     const persist = (fields) => {
-      storedSignup = upsertSignupDashboardRecord({ ownerEmail: storedSignup.ownerEmail, ...fields });
+      storedSignup = upsertSignupDashboardRecord({ ...storedSignup, ...fields });
       return storedSignup;
     };
     const result = await runAgentTextTest({
@@ -7813,9 +8004,12 @@ async function continueSignupAgentTextTestAfterDelivery(ownerEmail) {
       sendSms: ({ to, from, message }) => sendSmsViaTwilio({ to, from, message }),
       persist,
     });
-    const latestSignup = listSignupDashboardRecords().find((record) => (
+    const latestRecords = listSignupDashboardRecords();
+    const latestSignup = latestRecords.find((record) => (
+      expectedAttemptId && String(record.signupAttemptId || "").trim() === expectedAttemptId
+    )) || (!expectedAttemptId ? latestRecords.find((record) => (
       String(record.ownerEmail || "").trim().toLowerCase() === key
-    )) || storedSignup;
+    )) : null) || storedSignup;
     const businessId = Number(latestSignup.businessId || 0);
     const business = businessId
       ? await prisma.business.findUnique({ where: { id: businessId }, include: { settings: true, vapiMappings: true } })
@@ -7824,7 +8018,7 @@ async function continueSignupAgentTextTestAfterDelivery(ownerEmail) {
     if (readiness.passed) {
       const readyAt = new Date().toISOString();
       upsertSignupDashboardRecord({
-        ownerEmail: latestSignup.ownerEmail,
+        ...latestSignup,
         status: "setup_ready",
         agentTestStatus: "passed",
         agentTestPassedAt: readyAt,
@@ -7834,9 +8028,9 @@ async function continueSignupAgentTextTestAfterDelivery(ownerEmail) {
     }
     return { ...result, readiness };
   })().finally(() => {
-    agentTextTestContinuationLocks.delete(key);
+    agentTextTestContinuationLocks.delete(lockKey);
   });
-  agentTextTestContinuationLocks.set(key, continuation);
+  agentTextTestContinuationLocks.set(lockKey, continuation);
   return continuation;
 }
 
@@ -12079,6 +12273,42 @@ app.post(
 );
 
 app.post(
+  "/api/internal/operations/finalize-signup-after-agent-test",
+  requireMonitorKey,
+  express.json({ limit: "4kb" }),
+  asyncRoute(async (req, res) => {
+    const targetId = String(req.body?.targetId || "").trim().toLowerCase();
+    const expectedSignupAttemptId = String(req.body?.expectedSignupAttemptId || "").trim();
+    if (!/^[a-f0-9]{24}$/.test(targetId)) {
+      return res.status(400).json({ error: "A valid redacted signup target ID is required." });
+    }
+    if (!/^signup_[a-f0-9]{32}$/.test(expectedSignupAttemptId)) {
+      return res.status(400).json({ error: "The exact signup attempt identity is required." });
+    }
+    if (String(req.body?.confirmation || "") !== "FINALIZE_SIGNUP_AFTER_AGENT_TEST") {
+      return res.status(400).json({ error: "Explicit agent-test finalization confirmation is required." });
+    }
+    const result = await finalizeSignupAfterAgentTestByOperationalTarget(targetId, expectedSignupAttemptId);
+    await recordAdminAuditEvent({
+      prisma,
+      action: "finalize_signup_after_agent_test",
+      outcome: result.action === "signup_finalized" ? "success" : "pending",
+      actorHash: hashKey("monitor-api"),
+      targetType: "signup",
+      targetId,
+      details: {
+        action: result.action,
+        status: result.status,
+        trialAttached: result.trialAttached === true,
+        removedLegacyAliases: Number(result.removedLegacyAliases || 0),
+      },
+    });
+    res.setHeader("Cache-Control", "no-store, max-age=0");
+    res.json(result);
+  })
+);
+
+app.post(
   "/api/internal/operations/supersede-signup",
   requireMonitorKey,
   express.json({ limit: "4kb" }),
@@ -12304,10 +12534,13 @@ app.post(
         errorCode: req.body?.ErrorCode,
       });
       if (update) {
-        upsertSignupDashboardRecord({ ownerEmail: matchingSignup.ownerEmail, ...update });
+        upsertSignupDashboardRecord({ ...matchingSignup, ...update });
         if (["delivered", "read"].includes(String(messageStatus || "").trim().toLowerCase())) {
           try {
-            await continueSignupAgentTextTestAfterDelivery(matchingSignup.ownerEmail);
+            await continueSignupAgentTextTestAfterDelivery(
+              matchingSignup.ownerEmail,
+              matchingSignup.signupAttemptId
+            );
           } catch (error) {
             safelyNotifyRuntimeFailure(error, {
               area: "agent delivery test",

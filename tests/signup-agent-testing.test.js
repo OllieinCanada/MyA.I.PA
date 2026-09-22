@@ -94,6 +94,37 @@ test("both new-agent provisioning paths run the delivery test automatically", ()
   assert.match(source.slice(modernStart, modernEnd), /deliveryReady:/);
 });
 
+test("guarded finalization preserves the exact attempt through testing, trial, and delivery", () => {
+  const source = fs.readFileSync(path.join(__dirname, "..", "server", "index.js"), "utf8");
+  const routeStart = source.indexOf('"/api/internal/operations/finalize-signup-after-agent-test"');
+  const routeEnd = source.indexOf("app.post(", routeStart + 1);
+  assert.ok(routeStart > 0 && routeEnd > routeStart);
+  const route = source.slice(routeStart, routeEnd);
+  assert.match(route, /FINALIZE_SIGNUP_AFTER_AGENT_TEST/);
+  assert.match(route, /expectedSignupAttemptId/);
+  assert.match(route, /finalizeSignupAfterAgentTestByOperationalTarget/);
+
+  const testStart = source.indexOf("async function testSignupAgentBeforeDelivery");
+  const continuationStart = source.indexOf("async function continueSignupAgentTextTestAfterDelivery", testStart);
+  const testSource = source.slice(testStart, continuationStart);
+  assert.match(testSource, /assessSignupAssistantContentWithReceipt/);
+  assert.match(testSource, /readProvisioningStep/);
+  assert.match(testSource, /upsertSignupDashboardRecord\(\{ \.\.\.storedSignup, \.\.\.fields \}\)/);
+  assert.match(testSource, /signupAttemptId && String\(record\.signupAttemptId/);
+  assert.doesNotMatch(testSource, /upsertSignupDashboardRecord\(\{\s*ownerEmail: finalSignup\.ownerEmail/);
+
+  const continuationEnd = source.indexOf("async function getTrialCallUsage", continuationStart);
+  const continuationSource = source.slice(continuationStart, continuationEnd);
+  assert.match(continuationSource, /expectedAttemptId && String\(record\.signupAttemptId/);
+  assert.doesNotMatch(continuationSource, /upsertSignupDashboardRecord\(\{\s*ownerEmail: latestSignup\.ownerEmail/);
+
+  const callbackStart = source.indexOf('"/api/webhooks/twilio/message-status"');
+  const callbackEnd = source.indexOf("app.post(", callbackStart + 1);
+  const callback = source.slice(callbackStart, callbackEnd);
+  assert.match(callback, /upsertSignupDashboardRecord\(\{ \.\.\.matchingSignup, \.\.\.update \}\)/);
+  assert.match(callback, /matchingSignup\.signupAttemptId/);
+});
+
 test("test messages visibly separate the owner and customer formats", () => {
   const messages = buildAgentTestMessages(signup);
   assert.match(messages.owner, /OWNER COPY/);
