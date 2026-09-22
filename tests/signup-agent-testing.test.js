@@ -110,7 +110,8 @@ test("guarded finalization preserves the exact attempt through testing, trial, a
   assert.match(testSource, /assessSignupAssistantContentWithReceipt/);
   assert.match(testSource, /readProvisioningStep/);
   assert.match(testSource, /prisma\.signupAttempt\.findUnique/);
-  assert.match(testSource, /buildSignupAssistantConfig\(exactSignupPayload/);
+  assert.match(testSource, /normalizeSignupProvisioningPayload\(exactSignupPayload/);
+  assert.match(testSource, /buildSignupAssistantConfig\(normalizedSignupPayload/);
   assert.match(testSource, /AGENT_SIGNUP_SOURCE_MISSING/);
   assert.match(testSource, /upsertSignupDashboardRecord\(\{ \.\.\.storedSignup, \.\.\.fields \}\)/);
   assert.match(testSource, /signupAttemptId && String\(record\.signupAttemptId/);

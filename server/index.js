@@ -7843,9 +7843,15 @@ async function testSignupAgentBeforeDelivery({ signup, vapiPhone, smsRouting = n
       }
       exactSignupPayload = attempt.payload;
     }
+    const normalizedSignupPayload = exactSignupPayload
+      ? normalizeSignupProvisioningPayload(exactSignupPayload, {
+        signingSecret: getProvisioningSigningSecret(),
+        defaultRegion: process.env.TWILIO_DEFAULT_CANADIAN_REGION || "ON",
+      })
+      : null;
     const resourceName = getVapiAssistantName(liveAssistant) || "My AI PA Agent";
-    const expectedConfig = exactSignupPayload
-      ? buildSignupAssistantConfig(exactSignupPayload, {
+    const expectedConfig = normalizedSignupPayload
+      ? buildSignupAssistantConfig(normalizedSignupPayload, {
         assignedPhone: aiNumber,
         resourceName,
       })
@@ -7884,7 +7890,7 @@ async function testSignupAgentBeforeDelivery({ signup, vapiPhone, smsRouting = n
       agentContentStatus: "verified",
       agentContentFingerprint: content.liveFingerprint,
       agentContentVerifiedAt: new Date().toISOString(),
-      agentContentVerificationSource: exactSignupPayload && content.verificationSource === "dashboard_reconstruction"
+      agentContentVerificationSource: normalizedSignupPayload && content.verificationSource === "dashboard_reconstruction"
         ? "durable_signup_payload"
         : content.verificationSource,
       agentContentErrorCode: "",
