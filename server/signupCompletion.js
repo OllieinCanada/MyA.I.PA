@@ -56,16 +56,45 @@ async function deliverSignupCompletion({
   dashboardUrl,
   forwardingSetupUrl,
   priorStatus,
+  priorChannels = [],
+  priorErrors = [],
   sendSms,
   sendEmail,
 } = {}) {
-  if (["sent", "partial"].includes(String(priorStatus || "").toLowerCase())) {
-    return { status: "skipped", skipped: true, reason: "already_delivered", channels: [], errors: [] };
+  const normalizedPriorStatus = String(priorStatus || "").toLowerCase();
+  const normalizedPriorChannels = Array.isArray(priorChannels) ? priorChannels.filter(Boolean).sort() : [];
+  const normalizedPriorErrors = Array.isArray(priorErrors) ? priorErrors.filter(Boolean) : [];
+  const onlyOptionalEmailWasUnavailable = Boolean(
+    normalizedPriorStatus === "partial"
+    && normalizedPriorChannels.includes("sms")
+    && normalizedPriorErrors.length
+    && normalizedPriorErrors.every((item) => item?.channel === "email" && item?.code === "SMTP_NOT_CONFIGURED")
+  );
+  if (normalizedPriorStatus === "sent" || onlyOptionalEmailWasUnavailable) {
+    return {
+      status: "sent",
+      skipped: true,
+      reason: onlyOptionalEmailWasUnavailable ? "optional_email_unavailable" : "already_delivered",
+      channels: normalizedPriorChannels,
+      errors: [],
+      skippedChannels: onlyOptionalEmailWasUnavailable ? [{ channel: "email", reason: "smtp_not_configured" }] : [],
+    };
+  }
+  if (normalizedPriorStatus === "partial") {
+    return {
+      status: "partial",
+      skipped: true,
+      reason: "already_partially_delivered",
+      channels: normalizedPriorChannels,
+      errors: normalizedPriorErrors,
+      skippedChannels: [],
+    };
   }
 
   const content = buildSignupCompletionContent({ ownerName, businessName, assignedPhone, dashboardUrl, forwardingSetupUrl });
   const channels = [];
   const errors = [];
+  const skippedChannels = [];
   const attempts = [];
 
   if (String(ownerPhone || "").trim() && typeof sendSms === "function") {
@@ -82,12 +111,16 @@ async function deliverSignupCompletion({
   if (String(ownerEmail || "").trim() && typeof sendEmail === "function") {
     attempts.push((async () => {
       try {
-        await sendEmail({
+        const result = await sendEmail({
           to: ownerEmail,
           subject: content.subject,
           text: content.text,
           content,
         });
+        if (result?.skipped) {
+          skippedChannels.push({ channel: "email", reason: String(result.reason || "unavailable") });
+          return;
+        }
         channels.push("email");
       } catch (error) {
         errors.push({ channel: "email", code: String(error?.providerCode || error?.code || "EMAIL_DELIVERY_FAILED") });
@@ -96,12 +129,13 @@ async function deliverSignupCompletion({
   }
 
   await Promise.all(attempts);
-  if (!attempts.length) errors.push({ channel: "none", code: "SIGNUP_COMPLETION_NO_DELIVERY_CHANNEL" });
+  if (!channels.length && !errors.length) errors.push({ channel: "none", code: "SIGNUP_COMPLETION_NO_DELIVERY_CHANNEL" });
   return {
     status: channels.length ? (errors.length ? "partial" : "sent") : "failed",
     skipped: false,
     channels: channels.sort(),
     errors,
+    skippedChannels,
     content,
   };
 }
