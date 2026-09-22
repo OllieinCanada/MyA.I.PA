@@ -217,12 +217,25 @@ model CallForwardingSetup {
   business                 Business?                    @relation(fields: [businessId], references: [id], onDelete: SetNull)
   verificationAttemptRows  ForwardingVerificationAttempt[]
   events                   CallForwardingEvent[]
+  setupLinks               CallForwardingSetupLink[]
 
   @@index([businessId])
   @@index([assignedMyAiPaNumber])
   @@index([vapiPhoneNumberId])
   @@index([existingBusinessNumber])
   @@index([status, updatedAt])
+}
+
+model CallForwardingSetupLink {
+  id         String              @id @default(cuid())
+  setupId    String
+  tokenHash  String              @unique
+  expiresAt  DateTime
+  createdAt  DateTime            @default(now())
+  setup      CallForwardingSetup @relation(fields: [setupId], references: [id], onDelete: Cascade)
+
+  @@index([setupId, expiresAt])
+  @@index([expiresAt])
 }
 
 model ForwardingVerificationAttempt {

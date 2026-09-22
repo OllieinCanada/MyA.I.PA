@@ -9,9 +9,23 @@ const dashboard = fs.readFileSync(path.join(__dirname, "..", "src", "CustomerDas
 test("forwarding screen includes every customer-visible state and recovery action", () => {
   for (const text of [
     "carrier_needed", "verification_pending", "active", "verification_failed", "manual_setup_required",
-    "Protect My Missed Calls", "Test My Setup", "Test Again", "Change Setup", "Turn off / view disable instructions",
+    "Open Phone App and Protect My Missed Calls", "Test My Setup", "Test Again", "Change Setup", "Turn off / view disable instructions",
     "We didn’t receive the forwarded call yet", "Choose Different Carrier or Phone Type",
   ]) assert.match(source, new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));
+});
+
+test("the short SMS route is accepted without exposing a long JWT in the URL", () => {
+  const router = fs.readFileSync(path.join(__dirname, "..", "src", "index.js"), "utf8");
+  assert.match(router, /route\.startsWith\("f\/"\)/);
+  assert.match(source, /const shortMatch = String\(window\.location\.hash/);
+  assert.match(source, /decodeURIComponent\(shortMatch\[1\]\)/);
+  assert.match(source, /queryToken/);
+});
+
+test("the screen explains carrier-specific ring timing without promising exactly three rings", () => {
+  assert.match(source, /When My AI PA answers/);
+  assert.match(source, /timing\.customerCopy/);
+  assert.doesNotMatch(source, /exactly three rings/i);
 });
 
 test("the UI explains the carrier boundary and never claims silent browser activation", () => {
