@@ -933,7 +933,7 @@ test("public call network stats expose aggregate counts without customer details
 });
 
 test("signup verification rejects forged channel claims and has an independent public rate limit", async () => {
-  const forgedPath = "/api/integrations/verify-signup-email?token=missing&channel=sms&channelProof=forged";
+  const forgedPath = "/api/integrations/verify-signup-contact?token=missing&channel=sms&channelProof=forged";
   for (let index = 0; index < 20; index += 1) {
     const response = await request(forgedPath);
     assert.equal(response.status, 400);

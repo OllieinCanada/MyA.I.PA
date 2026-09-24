@@ -1502,7 +1502,7 @@ function mergeSignupStatus(current, status) {
     businessName: status.businessName || current.businessName,
     reviewRequired: status.state === "final_checks",
     verificationRequired: status.state === "verification_required",
-    emailVerificationRequired: status.state === "verification_required",
+    smsVerificationRequired: status.state === "verification_required",
     setupNeedsAttention: status.state === "needs_attention",
     twilioPhoneNumber: ready ? status.assignedPhone : "",
     phoneProvisioning: {
@@ -1522,7 +1522,7 @@ export function SignupSuccessPage({ result: initialResult, onStartAnother }) {
   const assignedNumber = provisioningStatus === "ready" && statusAllowsNumber ? String(result?.twilioPhoneNumber || result?.phoneProvisioning?.e164 || "").trim() : "";
   const signupClosed = result?.signupStatus?.state === "closed";
   const reviewRequired = Boolean(result?.reviewRequired);
-  const verificationRequired = Boolean(result?.verificationRequired || result?.emailVerificationRequired);
+  const verificationRequired = Boolean(result?.verificationRequired || result?.smsVerificationRequired || result?.emailVerificationRequired);
   const provisioningFailed = Boolean(result?.setupNeedsAttention || result?.signupStatus?.state === "needs_attention" || provisioningStatus === "failed");
   const subscriptionId = String(result?.subscriptionId || "").trim();
   const subscriptionStatus = String(result?.subscriptionStatus || "").trim().toLowerCase();
@@ -1672,7 +1672,7 @@ export function SignupSuccessPage({ result: initialResult, onStartAnother }) {
     { label: "Signup received", detail: "Business details saved for setup.", done: true },
     {
       label: "Owner verification",
-      detail: verificationRequired ? "Waiting for the email verification link." : "No verification block right now.",
+      detail: verificationRequired ? "Waiting for the verification link sent to your phone." : "No verification block right now.",
       done: !verificationRequired,
       active: verificationRequired,
     },
@@ -1712,7 +1712,7 @@ export function SignupSuccessPage({ result: initialResult, onStartAnother }) {
               <Icon name="check" className="h-8 w-8" />
             </div>
             <p className="mt-5 text-sm font-black uppercase tracking-[0.18em] text-[#9edaff]">
-              {verificationRequired ? "Email verification required" : "Setup milestone unlocked"}
+              {verificationRequired ? "Phone verification required" : "Setup milestone unlocked"}
             </p>
             <h1 className="mt-2 text-[clamp(2.1rem,8vw,4.6rem)] font-black leading-tight tracking-[-0.055em]">
               Thanks, {businessName}.
@@ -1721,7 +1721,7 @@ export function SignupSuccessPage({ result: initialResult, onStartAnother }) {
               {signupClosed
                 ? result.signupStatus.message
                 : verificationRequired
-                ? "We sent a verification email. Click the link before your AI phone assistant setup continues."
+                ? "We texted a secure verification link to your phone. Open it before your AI phone assistant setup continues."
                 : reviewRequired
                 ? "Your signup is saved. Final safety checks are underway, and this page checks automatically. You do not need to submit it again."
                 : assignedNumber
@@ -1750,10 +1750,10 @@ export function SignupSuccessPage({ result: initialResult, onStartAnother }) {
               ) : verificationRequired ? (
                 <div className="mt-5">
                   <p className="text-[1.28rem] font-black leading-tight tracking-[-0.03em] text-[#07142a]">
-                    Check your email to continue.
+                    Check your phone to continue.
                   </p>
                   <p className="mt-3 text-sm font-semibold leading-6 text-slate-500">
-                    We will not create your agent until the owner email is verified. The verification link expires after 24 hours.
+                    We will not create your agent until the signup phone is verified. The secure link expires after 24 hours.
                   </p>
                   {result?.devVerificationUrl ? (
                     <a

@@ -38,7 +38,8 @@ const {
   saveOutreachPackage,
   sendStoredOutreachPackage,
 } = require("./outreach");
-const { sendSmsViaTwilio } = require("./twilioSms");
+const { normalizeE164, sendSmsViaTwilio } = require("./twilioSms");
+const { deliverSignupVerificationText } = require("./signupSmsVerification");
 const {
   deliverSignupCompletion,
   formatAssignedPhone,
@@ -1379,7 +1380,7 @@ function getSignupVerificationUrl(req, token, channel = "email") {
   const baseUrl = configured || getPublicBaseUrl(req);
   const normalizedChannel = normalizeVerificationChannel(channel);
   const channelProof = createVerificationChannelProof(token, normalizedChannel, getAdminSessionSecret());
-  return `${baseUrl}/api/integrations/verify-signup-email?token=${encodeURIComponent(token)}&channel=${encodeURIComponent(normalizedChannel)}&channelProof=${encodeURIComponent(channelProof)}`;
+  return `${baseUrl}/api/integrations/verify-signup-contact?token=${encodeURIComponent(token)}&channel=${encodeURIComponent(normalizedChannel)}&channelProof=${encodeURIComponent(channelProof)}`;
 }
 
 function getEmailTransportConfig() {
@@ -4585,9 +4586,10 @@ async function searchCallTranscripts({ q = "", businessId, limit = 100 } = {}) {
 }
 
 function getBillingReadinessForSignup(signup) {
+  const contactVerificationRequired = Boolean(signup.emailVerificationRequired || signup.smsVerificationRequired);
   return [
     { key: "signup", label: "Signup submitted", done: Boolean(signup.signedUpAt || signup.createdAt) },
-    { key: "email", label: "Contact verified", done: Boolean(isContactVerified(signup) || !signup.emailVerificationRequired) },
+    { key: "email", label: "Contact verified", done: Boolean(isContactVerified(signup) || !contactVerificationRequired) },
     { key: "setup", label: "Agent setup started", done: ["setup_started", "checkout_started", "checkout_completed", "subscription_trialing", "subscription_active"].includes(String(signup.status || "")) },
     { key: "checkout", label: "Free trial started", done: Boolean(signup.subscriptionId) },
     { key: "subscription", label: "Subscription/trial active", done: Boolean(signup.subscriptionId || signup.subscriptionStatus === "trialing" || signup.subscriptionStatus === "active") },
@@ -4686,8 +4688,9 @@ function deriveCustomerSetupStep(stepKey, { signup, business, calls, envStatus }
   }
 
   if (stepKey === "email") {
-    if (isContactVerified(signup) || !signup.emailVerificationRequired) return setupStep("done", "Contact verification is complete or not required.");
-    return setupStep("waiting", "Owner email verification is still pending.");
+    const contactVerificationRequired = Boolean(signup.emailVerificationRequired || signup.smsVerificationRequired);
+    if (isContactVerified(signup) || !contactVerificationRequired) return setupStep("done", "Contact verification is complete or not required.");
+    return setupStep("waiting", "Owner contact verification is still pending.");
   }
 
   if (stepKey === "stripe") {
@@ -8938,6 +8941,8 @@ async function getCustomerDashboard({ email, phone }) {
       reviewRequired: Boolean(signup.reviewRequired),
       emailVerificationRequired: Boolean(signup.emailVerificationRequired),
       emailVerified: Boolean(signup.emailVerified),
+      smsVerificationRequired: Boolean(signup.smsVerificationRequired),
+      smsVerified: Boolean(signup.smsVerified),
     },
     assistant: {
       aiNumber: signup.twilioPhoneNumber || business?.vapiMappings?.find((mapping) => /phone/i.test(mapping.matchType))?.matchValue || "",
@@ -14057,6 +14062,15 @@ app.post(
       return res.status(400).json({ error: "Owner email must be a valid email address." });
     }
 
+    let verifiedOwnerPhone = ownerPhone;
+    if (isEnabled(process.env.SIGNUP_REQUIRE_VERIFICATION)) {
+      try {
+        verifiedOwnerPhone = normalizeE164(ownerPhone, "Owner phone");
+      } catch (_error) {
+        return res.status(400).json({ error: "Owner phone must be a valid mobile number so we can text the verification link." });
+      }
+    }
+
     const securityDecision = await getSignupSecurityDecision(req, body, {
       businessName,
       businessPhone,
@@ -14107,7 +14121,7 @@ app.post(
       owner: {
         name: ownerName,
         email: ownerEmail,
-        phone: ownerPhone,
+        phone: verifiedOwnerPhone,
       },
       callForwarding: {
         existingBusinessNumber: businessPhone || ownerPhone,
@@ -14198,31 +14212,77 @@ app.post(
         businessName,
         reviewReasons: securityDecision.reviewReasons,
         ipHash: hashKey(securityDecision.ip),
+        purpose: "sms_verification",
       });
-      const emailResult = await sendSignupVerificationEmail({
-        req,
-        ownerEmail,
-        ownerName,
-        businessName,
-        token,
-      });
+      const smsVerificationUrl = getSignupVerificationUrl(req, token, "sms");
+      let smsResult;
+      try {
+        smsResult = await deliverSignupVerificationText({
+          ownerPhone: verifiedOwnerPhone,
+          businessName,
+          verificationUrl: smsVerificationUrl,
+        });
+      } catch (error) {
+        await removePendingSignupVerification(token);
+        const deliveryError = new Error("We could not send the verification text. Please confirm the mobile number and try again.");
+        deliveryError.statusCode = Number(error?.statusCode) >= 400 ? Number(error.statusCode) : 503;
+        deliveryError.code = String(error?.code || "SIGNUP_SMS_VERIFICATION_DELIVERY_FAILED");
+        deliveryError.provider = error?.provider || "twilio";
+        deliveryError.providerCode = error?.providerCode || deliveryError.code;
+        throw deliveryError;
+      }
+
+      let emailResult = null;
+      let emailError = null;
+      if (getEmailTransportConfig()) {
+        try {
+          emailResult = await sendSignupVerificationEmail({
+            req,
+            ownerEmail,
+            ownerName,
+            businessName,
+            token,
+          });
+        } catch (error) {
+          emailError = error;
+        }
+      }
+      const emailSent = emailResult?.sent === true;
+      await recordPendingSignupDeliveryChannels(token, ["sms", ...(emailSent ? ["email"] : [])]);
+      if (emailError) {
+        safelyNotifyRuntimeFailure(emailError, {
+          area: "web signup verification delivery",
+          provider: "smtp",
+          operation: "optional signup verification email",
+          businessName,
+          whatFailed: "The optional verification email failed after the required verification text was sent",
+          impact: "The customer can continue using the texted link; signup remains safely blocked until that link is opened.",
+          snapshot: { "Text sent": "Yes", "Email sent": "No" },
+          lastCheckpoint: "Twilio accepted the verification text, but SMTP did not confirm the optional email copy.",
+          dedupeFingerprint: `web-signup-verification-email:${hashKey(payload.signupId || ownerEmail)}`,
+        });
+      }
 
       const verificationRecord = upsertSignupDashboardFromPayload(payload, {
-        status: "pending_email_verification",
-        emailVerificationRequired: true,
-        emailVerificationSentAt: new Date().toISOString(),
+        status: "pending_verification",
+        emailVerificationRequired: false,
+        smsVerificationRequired: true,
+        verificationDeliveryPolicy: "sms_required_email_optional",
+        verificationDeliveryChannels: ["sms", ...(emailSent ? ["email"] : [])],
+        smsVerificationSentAt: new Date().toISOString(),
+        emailVerificationSentAt: emailSent ? new Date().toISOString() : undefined,
         reviewRequired: securityDecision.reviewRequired,
         reviewReasons: securityDecision.reviewReasons,
       });
       await updateSignupAttempt(makePayload, {
-        status: "pending_email_verification",
+        status: "pending_verification",
         stage: "verification",
-        detail: "Waiting for contact verification",
+        detail: "Verification text sent; waiting for phone verification",
         reviewRequired: securityDecision.reviewRequired,
       });
       await safelyNotifySignupOperations(payload, {
         state: "verification_sent",
-        detail: "Email verification sent",
+        detail: emailSent ? "Verification sent by text and email" : "Verification text sent",
         record: verificationRecord,
       });
 
@@ -14230,12 +14290,13 @@ app.post(
         success: true,
         ok: true,
         verificationRequired: true,
-        emailVerificationRequired: true,
-        emailSent: Boolean(emailResult.sent),
-        devVerificationUrl: emailResult.devVerificationUrl,
+        emailVerificationRequired: false,
+        smsVerificationRequired: true,
+        smsSent: true,
+        emailSent,
         businessName,
         signupStatus,
-        message: "Signup received. Verify your email before setup continues.",
+        message: "Signup received. Open the secure link we texted you to verify your phone before setup continues.",
       });
     }
 
@@ -14481,7 +14542,7 @@ app.post(
 );
 
 app.get(
-  "/api/integrations/verify-signup-email",
+  ["/api/integrations/verify-signup-contact", "/api/integrations/verify-signup-email"],
   signupVerificationProcessRateLimiter,
   enforcePublicRouteRateLimit("signup-verification", 20),
   asyncRoute(async (req, res) => {
@@ -15807,21 +15868,48 @@ app.post(
           businessName: pending.businessName,
           reviewReasons: pending.reviewReasons || [],
           ipHash: pending.ipHash || hashKey(`admin-resend:${targetId}`),
+          purpose: pending.purpose === "sms_verification" || signup.smsVerificationRequired
+            ? "sms_verification"
+            : "email_verification",
         });
-        const email = await sendSignupVerificationEmail({
-          req,
-          ownerEmail: pending.ownerEmail,
-          ownerName: pending.payload?.owner?.name,
-          businessName: pending.businessName,
-          token,
-        });
-        result = { sent: Boolean(email.sent), channel: "email" };
-        upsertSignupDashboardRecord({
-          ...signup,
-          status: "pending_email_verification",
-          emailVerificationSentAt: new Date().toISOString(),
-          verificationResentAt: new Date().toISOString(),
-        });
+        if (pending.purpose === "sms_verification" || signup.smsVerificationRequired) {
+          try {
+            const sms = await deliverSignupVerificationText({
+              ownerPhone: pending.payload?.owner?.phone || signup.ownerPhone,
+              businessName: pending.businessName,
+              verificationUrl: getSignupVerificationUrl(req, token, "sms"),
+            });
+            await recordPendingSignupDeliveryChannels(token, ["sms"]);
+            result = { sent: true, channel: "sms", providerStatus: sms.status || "queued" };
+            upsertSignupDashboardRecord({
+              ...signup,
+              status: "pending_verification",
+              emailVerificationRequired: false,
+              smsVerificationRequired: true,
+              smsVerificationSentAt: new Date().toISOString(),
+              verificationResentAt: new Date().toISOString(),
+            });
+          } catch (error) {
+            await removePendingSignupVerification(token);
+            throw error;
+          }
+        } else {
+          const email = await sendSignupVerificationEmail({
+            req,
+            ownerEmail: pending.ownerEmail,
+            ownerName: pending.payload?.owner?.name,
+            businessName: pending.businessName,
+            token,
+          });
+          await recordPendingSignupDeliveryChannels(token, ["email"]);
+          result = { sent: Boolean(email.sent), channel: "email" };
+          upsertSignupDashboardRecord({
+            ...signup,
+            status: "pending_email_verification",
+            emailVerificationSentAt: new Date().toISOString(),
+            verificationResentAt: new Date().toISOString(),
+          });
+        }
       } else if (action === "acknowledge_runtime_incident") {
         result = acknowledgeRuntimeIncident(runtimeIncidentPath, targetId);
         if (!result.acknowledged) {
