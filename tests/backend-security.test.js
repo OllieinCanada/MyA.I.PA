@@ -779,7 +779,7 @@ test("incident remediation canary requires the monitor key and explicit confirma
   assert.equal(unconfirmedStatus.status, 400);
 });
 
-test("incident remediation canary status exposes only receipt-backed lifecycle proof", () => {
+test("incident remediation canary status exposes only receipt-backed lifecycle proof", async () => {
   const incidentId = "abcdef1234567890abcdef12";
   const initialOutboxId = "111111111111111111111111";
   const completionOutboxId = "222222222222222222222222";
@@ -787,7 +787,7 @@ test("incident remediation canary status exposes only receipt-backed lifecycle p
     [initialOutboxId, { id: initialOutboxId, deliveredAt: 1000, providerMessageId: 91 }],
     [completionOutboxId, { id: completionOutboxId, deliveredAt: 1001, providerMessageId: 92 }],
   ]);
-  const status = __test.getIncidentRemediationCanaryStatus(incidentId, [{
+  const status = await __test.getIncidentRemediationCanaryStatus(incidentId, [{
     id: incidentId,
     incident: { reasonCode: "CONTROLLED_READINESS_REMEDIATION_TEST" },
     snapshot: { "Controlled canary": "Yes", Business: "must not be returned" },
@@ -822,7 +822,7 @@ test("incident remediation canary status exposes only receipt-backed lifecycle p
   assert.equal(serializedStatus.includes(incidentId), false);
   assert.doesNotMatch(serializedStatus, /incidentId|outbox|messageId|deliveredAt|snapshot|business/i);
 
-  const pending = __test.getIncidentRemediationCanaryStatus(incidentId, [{
+  const pending = await __test.getIncidentRemediationCanaryStatus(incidentId, [{
     id: incidentId,
     incident: { reasonCode: "CONTROLLED_READINESS_REMEDIATION_TEST" },
     snapshot: { "Controlled canary": "Yes" },
@@ -840,7 +840,7 @@ test("incident remediation canary status exposes only receipt-backed lifecycle p
   assert.equal(pending.deliveryReceiptCount, 2);
   assert.equal(pending.readOnlyReadinessVerified, false);
 
-  const forgedState = __test.getIncidentRemediationCanaryStatus(incidentId, [{
+  const forgedState = await __test.getIncidentRemediationCanaryStatus(incidentId, [{
     id: incidentId,
     incident: { reasonCode: "CONTROLLED_READINESS_REMEDIATION_TEST" },
     snapshot: { "Controlled canary": "Yes" },
@@ -861,7 +861,7 @@ test("incident remediation canary status exposes only receipt-backed lifecycle p
     [initialOutboxId, { deliveredAt: 1002, providerMessageId: 91 }],
     [completionOutboxId, { deliveredAt: 1001, providerMessageId: 92 }],
   ]);
-  const reversed = __test.getIncidentRemediationCanaryStatus(incidentId, [{
+  const reversed = await __test.getIncidentRemediationCanaryStatus(incidentId, [{
     id: incidentId,
     incident: { reasonCode: "CONTROLLED_READINESS_REMEDIATION_TEST" },
     snapshot: { "Controlled canary": "Yes" },
@@ -877,7 +877,7 @@ test("incident remediation canary status exposes only receipt-backed lifecycle p
   assert.equal(reversed.deliverySequenceConfirmed, false);
   assert.equal(reversed.lifecycleComplete, false);
 
-  const duplicateOutboxMessage = __test.getIncidentRemediationCanaryStatus(incidentId, [{
+  const duplicateOutboxMessage = await __test.getIncidentRemediationCanaryStatus(incidentId, [{
     id: incidentId,
     incident: { reasonCode: "CONTROLLED_READINESS_REMEDIATION_TEST" },
     snapshot: { "Controlled canary": "Yes" },
@@ -893,7 +893,7 @@ test("incident remediation canary status exposes only receipt-backed lifecycle p
   assert.equal(duplicateOutboxMessage.deliveryReceiptCount, 0);
   assert.equal(duplicateOutboxMessage.lifecycleComplete, false);
 
-  const unrelated = __test.getIncidentRemediationCanaryStatus(incidentId, [{
+  const unrelated = await __test.getIncidentRemediationCanaryStatus(incidentId, [{
     id: incidentId,
     incident: { reasonCode: "PROVIDER_ACCOUNT_FUNDING_REQUIRED" },
     snapshot: { "Controlled canary": "Yes" },

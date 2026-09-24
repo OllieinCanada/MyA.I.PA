@@ -2,7 +2,10 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
-const { getBackendTestBatchSize } = require("../scripts/run-backend-tests");
+const {
+  getBackendTestBatchSize,
+  getBackendTestBatchTimeout,
+} = require("../scripts/run-backend-tests");
 
 const root = path.resolve(__dirname, "..");
 
@@ -17,6 +20,11 @@ test("backend suite discovers the tests directory with bounded concurrency", () 
   assert.equal(getBackendTestBatchSize("win32", "2"), 2);
   for (const invalid of ["0", "9", "1.5", "invalid", "-1"]) {
     assert.throws(() => getBackendTestBatchSize("win32", invalid), /integer from 1 to 8/);
+  }
+  assert.equal(getBackendTestBatchTimeout(""), 120_000);
+  assert.equal(getBackendTestBatchTimeout("45000"), 45_000);
+  for (const invalid of ["9999", "600001", "1.5", "invalid"]) {
+    assert.throws(() => getBackendTestBatchTimeout(invalid), /integer from 10000 to 600000/);
   }
   assert.match(boundedRunner, /\.test\\\.js\$/);
 

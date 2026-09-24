@@ -75,6 +75,7 @@ function createRemediationState(incident, previous, detectedAt) {
     status,
     action: String(plan.action || "none").replace(/[^a-z0-9_.:-]+/gi, "_").slice(0, 80),
     automatic: plan.automatic === true,
+    codexFirst: plan.codexFirst === true,
     requiresUser: plan.requiresUser !== false,
     confidence: ["high", "medium", "low"].includes(String(plan.confidence || "").toLowerCase())
       ? String(plan.confidence).toLowerCase()
@@ -139,6 +140,13 @@ function createAttentionItem(incident, previous = null) {
     targetId: id,
     actions: ["acknowledge_runtime_incident"],
     remediation,
+    knowledge: {
+      fingerprint: id,
+      recurrenceCount: previousOccurrences + 1,
+      ...(previous?.knowledge?.rootCause ? { rootCause: previous.knowledge.rootCause } : {}),
+      ...(previous?.knowledge?.fixedCommit ? { fixedCommit: previous.knowledge.fixedCommit } : {}),
+      ...(previous?.knowledge?.regressionEvidence ? { regressionEvidence: previous.knowledge.regressionEvidence } : {}),
+    },
     diagnostics: {
       occurrences: previousOccurrences + 1,
       originalSeverity: severity,
@@ -192,15 +200,10 @@ function acknowledgeRuntimeIncident(filePath, incidentId) {
   }
 }
 
-function updateRuntimeIncidentRemediation(filePath, incidentId, transition = {}) {
-  const id = safeRuntimeIncidentId(incidentId);
-  if (!id) return { updated: false, reason: "invalid_incident_id" };
+function applyRuntimeIncidentTransition(item, transition = {}) {
+  if (!item || !safeRuntimeIncidentId(item.id)) return { updated: false, reason: "not_found" };
   const status = String(transition.status || "").trim().toLowerCase();
   if (!REMEDIATION_STATUSES.has(status)) return { updated: false, reason: "invalid_remediation_status" };
-  const items = readStore(filePath);
-  const index = items.findIndex((item) => item.id === id);
-  if (index < 0) return { updated: false, reason: "not_found" };
-  const item = items[index];
   const current = item.remediation && typeof item.remediation === "object" ? item.remediation : {};
   const ownerAuthorizedRestart = current.status === "needs_user"
     && status === "queued"
@@ -235,6 +238,9 @@ function updateRuntimeIncidentRemediation(filePath, incidentId, transition = {})
     ...(transition.initialReportPreservedAt
       ? { initialReportPreservedAt: new Date(transition.initialReportPreservedAt).toISOString() }
       : {}),
+    ...(transition.codexMemoPreservedAt
+      ? { codexMemoPreservedAt: new Date(transition.codexMemoPreservedAt).toISOString() }
+      : {}),
     ...(["sent", "duplicate", "queued"].includes(String(transition.initialReportDelivery || ""))
       ? { initialReportDelivery: String(transition.initialReportDelivery) }
       : {}),
@@ -243,6 +249,15 @@ function updateRuntimeIncidentRemediation(filePath, incidentId, transition = {})
       : {}),
     ...(transition.completionReportPreservedAt
       ? { completionReportPreservedAt: new Date(transition.completionReportPreservedAt).toISOString() }
+      : {}),
+    ...(transition.containmentReportPreservedAt
+      ? { containmentReportPreservedAt: new Date(transition.containmentReportPreservedAt).toISOString() }
+      : {}),
+    ...(["sent", "duplicate", "queued"].includes(String(transition.containmentReportDelivery || ""))
+      ? { containmentReportDelivery: String(transition.containmentReportDelivery) }
+      : {}),
+    ...(/^[a-f0-9]{24}$/i.test(String(transition.containmentReportOutboxId || ""))
+      ? { containmentReportOutboxId: String(transition.containmentReportOutboxId).toLowerCase() }
       : {}),
     ...(["sent", "queued"].includes(String(transition.completionReportDelivery || ""))
       ? { completionReportDelivery: String(transition.completionReportDelivery) }
@@ -271,7 +286,27 @@ function updateRuntimeIncidentRemediation(filePath, incidentId, transition = {})
       : {}),
     history,
   };
-  const nextItem = { ...item, remediation };
+  const knowledge = {
+    ...(item.knowledge && typeof item.knowledge === "object" ? item.knowledge : {}),
+    fingerprint: item.knowledge?.fingerprint || item.id,
+    recurrenceCount: Math.max(1, Number(item.diagnostics?.occurrences || item.knowledge?.recurrenceCount || 1)),
+    ...(transition.diagnosis ? { rootCause: safeRemediationText(transition.diagnosis, 1200) } : {}),
+    ...(transition.pullRequest?.headSha ? { fixedCommit: String(transition.pullRequest.headSha).toLowerCase() } : {}),
+    ...(transition.verification ? { regressionEvidence: safeRemediationText(transition.verification, 1200) } : {}),
+  };
+  const nextItem = { ...item, remediation, knowledge };
+  return { updated: true, item: nextItem };
+}
+
+function updateRuntimeIncidentRemediation(filePath, incidentId, transition = {}) {
+  const id = safeRuntimeIncidentId(incidentId);
+  if (!id) return { updated: false, reason: "invalid_incident_id" };
+  const items = readStore(filePath);
+  const index = items.findIndex((item) => item.id === id);
+  if (index < 0) return { updated: false, reason: "not_found" };
+  const applied = applyRuntimeIncidentTransition(items[index], transition);
+  if (!applied.updated) return applied;
+  const nextItem = applied.item;
   items[index] = nextItem;
   try {
     writeStore(filePath, items);
@@ -283,6 +318,7 @@ function updateRuntimeIncidentRemediation(filePath, incidentId, transition = {})
 
 module.exports = {
   acknowledgeRuntimeIncident,
+  applyRuntimeIncidentTransition,
   createAttentionItem,
   listRuntimeIncidents,
   recordRuntimeIncident,

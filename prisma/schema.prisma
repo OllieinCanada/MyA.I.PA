@@ -881,6 +881,50 @@ model WebhookReplayClaim {
   @@index([status, leaseExpiresAt])
 }
 
+model RuntimeIncidentRecord {
+  id             String   @id
+  fingerprint    String
+  severity       String
+  reasonCode     String
+  remediation    String
+  generation     Int      @default(1)
+  recurrenceCount Int     @default(1)
+  firstDetectedAt DateTime
+  lastDetectedAt DateTime
+  payload        Json
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([lastDetectedAt])
+  @@index([fingerprint, lastDetectedAt])
+  @@index([remediation, lastDetectedAt])
+}
+
+model TelegramOutboxMessage {
+  id                String    @id
+  dedupeHash        String    @unique
+  text              String
+  adminUrl          String?
+  buttonText        String?
+  inlineKeyboard    Json?
+  status            String    @default("PENDING")
+  attempts          Int       @default(0)
+  nextAttemptAt     DateTime  @default(now())
+  lastAttemptAt     DateTime?
+  lastStatus        Int?
+  lastFailure       String?
+  claimToken        String?
+  leaseExpiresAt    DateTime?
+  deliveredAt       DateTime?
+  providerMessageId Int?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([status, nextAttemptAt])
+  @@index([status, leaseExpiresAt])
+  @@index([deliveredAt])
+}
+
 model SmsSuppression {
   id             String    @id @default(cuid())
   phoneNumber    String    @unique

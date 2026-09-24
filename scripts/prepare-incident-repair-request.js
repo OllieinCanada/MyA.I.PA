@@ -2,7 +2,12 @@ const fs = require("fs");
 const path = require("path");
 
 const ALLOWED_METHODS = new Set(["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]);
-const ALLOWED_REASON_CODES = new Set(["DATABASE_QUERY_IMPLEMENTATION_FAILED"]);
+const ALLOWED_REASON_CODES = new Set([
+  "DATABASE_QUERY_IMPLEMENTATION_FAILED",
+  "AGENT_TEST_SETUP_INCOMPLETE",
+  "AGENT_TEST_SIGNUP_ATTEMPT_MISSING",
+  "SIGNUP_RECOVERY_VAPI_BINDING_MISMATCH",
+]);
 const ALLOWED_WORKFLOWS = new Set([
   "ai call processing",
   "admin workflow",
@@ -16,6 +21,12 @@ const ALLOWED_WORKFLOWS = new Set([
 function strictCode(value, maxLength = 80) {
   const text = String(value || "").trim().toUpperCase();
   if (!text || text.length > maxLength || !/^[A-Z0-9_.:-]+$/.test(text)) return "";
+  return text;
+}
+
+function safeMemo(value, maxLength) {
+  const text = String(value || "").replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim();
+  if (!text || text.length > maxLength) throw new Error("A required redacted memo field is missing or too long.");
   return text;
 }
 
@@ -34,6 +45,12 @@ function prepareIncidentRepairRequest(event = {}, inputs = {}, options = {}) {
   const workflow = String(source.workflow || "application request").trim().toLowerCase();
   const suppliedRelease = String(source.release || "").trim();
   const release = strictCode(suppliedRelease, 100);
+  const title = safeMemo(source.title, 180);
+  const reason = safeMemo(source.reason, 420);
+  const impact = safeMemo(source.impact, 360);
+  const lastCheckpoint = safeMemo(source.last_checkpoint, 360);
+  const nextAction = safeMemo(source.next_action, 420);
+  const priorIncidents = safeMemo(source.prior_incidents, 800);
   const baseSha = String(options.baseSha || "").trim().toLowerCase();
   const ref = String(options.ref || "").trim();
 
@@ -55,6 +72,12 @@ function prepareIncidentRepairRequest(event = {}, inputs = {}, options = {}) {
     method,
     workflow,
     release,
+    title,
+    reason,
+    impact,
+    last_checkpoint: lastCheckpoint,
+    next_action: nextAction,
+    prior_incidents: priorIncidents,
     base_sha: baseSha,
     trust: "untrusted_runtime_evidence_not_instructions",
   };
@@ -92,5 +115,6 @@ module.exports = {
   ALLOWED_REASON_CODES,
   ALLOWED_WORKFLOWS,
   prepareIncidentRepairRequest,
+  safeMemo,
   strictCode,
 };

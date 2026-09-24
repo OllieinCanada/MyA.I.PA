@@ -29,6 +29,8 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: OPERATIONAL_STATE_BACKEND
+        value: database
       - key: DATA_DIR
         value: /data
       - key: PUBLIC_APP_URL
@@ -254,11 +256,11 @@ services:
         # Telegram retry playbook. Paid/provider mutations remain denied.
         value: "true"
       - key: INCIDENT_CODE_REPAIR_ENABLED
-        # Keep disabled until the dedicated Render dispatch token and GitHub
-        # OPENAI_API_KEY secret are configured and a manual workflow test passes.
-        value: "false"
+        # Dispatches only the isolated, redacted, draft-PR repair workflow.
+        # Provider mutations, merging, and deployment remain denied.
+        value: "true"
       - key: INCIDENT_CODE_REPAIR_MAX_DAILY
-        # Hard circuit breaker for the still-disabled code-draft path.
+        # Hard circuit breaker for the code-draft path.
         value: "3"
       - key: INCIDENT_CODE_REPAIR_COOLDOWN_MS
         # A repeated incident signature cannot dispatch more than once per hour.
@@ -266,7 +268,25 @@ services:
       - key: INCIDENT_READINESS_TIMEOUT_MS
         # Read-only recovery probes fail closed instead of occupying a worker.
         value: "5000"
-      - key: GITHUB_INCIDENT_REPAIR_TOKEN
+      - key: INCIDENT_CONTAINMENT_NOTICE_AFTER_MS
+        # Tell the owner only when confirmed customer impact remains contained
+        # for two minutes while the guarded Codex diagnosis continues.
+        value: "120000"
+      - key: INCIDENT_SLO_CAPTURE_MS
+        value: "10000"
+      - key: INCIDENT_SLO_CODEX_DISPATCH_MS
+        value: "60000"
+      - key: INCIDENT_SLO_CONTAINMENT_MS
+        value: "180000"
+      - key: INCIDENT_SLO_DRAFT_REPAIR_MS
+        value: "1800000"
+      - key: INCIDENT_SLO_MAXIMUM_UNACKNOWLEDGED_MS
+        value: "3600000"
+      - key: GITHUB_INCIDENT_REPAIR_APP_ID
+        sync: false
+      - key: GITHUB_INCIDENT_REPAIR_INSTALLATION_ID
+        sync: false
+      - key: GITHUB_INCIDENT_REPAIR_APP_PRIVATE_KEY
         sync: false
       - key: INCIDENT_REPAIR_DISPATCH_SECRET
         # Configure the exact same 32+ character value in GitHub Actions so

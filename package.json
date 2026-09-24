@@ -82,6 +82,7 @@
     "incident:repair:prepare": "node scripts/prepare-incident-repair-request.js",
     "incident:repair:validate-patch": "node scripts/validate-incident-repair-patch.js",
     "test:incident-remediation": "node --test tests/incident-remediation.test.js tests/incident-repair-workflow.test.js tests/incident-alerts.test.js tests/runtime-incident-store.test.js",
+    "test:incident-pipeline:synthetic": "node --test tests/incident-pipeline-e2e.test.js",
     "test:incident-remediation:production": "node scripts/test-production-incident-remediation.js",
     "configure:make-scenario-state": "node scripts/set-make-scenario-state.js",
     "report:admin-stats": "node scripts/report-admin-stats.js",

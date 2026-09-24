@@ -70,7 +70,12 @@ describe("intuitive signup presentation", () => {
     submit();
     const areaList = container.querySelector(".signup-area-list");
     const unlistedAreaPanel = container.querySelector(".signup-area-tools");
+    const areaNext = container.querySelector(".signup-mobile-selected-count .signup-mobile-area-next");
     expect(areaList.contains(unlistedAreaPanel)).toBe(false);
+    expect(areaNext).not.toBeNull();
+    expect(areaNext.textContent.trim()).toBe("Next");
+    expect(areaNext.disabled).toBe(true);
+    expect(container.querySelector(".signup-mobile-action-bar .signup-mobile-primary")).toBeNull();
     expect(container.querySelector('input[type="search"]')).toBeNull();
     expect(container.querySelector("#custom-service-area")).toBeNull();
     act(() => unlistedAreaPanel.querySelector('button[aria-controls="custom-service-area-panel"]').dispatchEvent(new MouseEvent("click", { bubbles: true })));
@@ -80,8 +85,9 @@ describe("intuitive signup presentation", () => {
     clickButton("Add area", unlistedAreaPanel);
     expect(container.querySelector("#custom-service-area")).toBeNull();
     expect(areaList.textContent).toMatch(/Added by you.*Beamsville/i);
+    expect(areaNext.disabled).toBe(false);
     clickButton("Hamilton", container.querySelector(".signup-area-list"));
-    submit();
+    clickButton("Next", container.querySelector(".signup-mobile-selected-count"));
 
     changeValue("#your-name-input", "Oliver Arscott");
     changeValue("#business-name-input", "Arscott Electric");

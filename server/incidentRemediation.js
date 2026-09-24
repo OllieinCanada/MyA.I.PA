@@ -21,6 +21,9 @@ const TELEGRAM_RETRY_CODES = new Set([
 
 const CODE_REPAIR_CODES = new Set([
   "DATABASE_QUERY_IMPLEMENTATION_FAILED",
+  "AGENT_TEST_SETUP_INCOMPLETE",
+  "AGENT_TEST_SIGNUP_ATTEMPT_MISSING",
+  "SIGNUP_RECOVERY_VAPI_BINDING_MISMATCH",
 ]);
 
 const HUMAN_ONLY_CODES = new Set([
@@ -82,6 +85,10 @@ function safeCode(value) {
 
 function safePlanText(value, maxLength = 420) {
   return redactIncidentText(value, { multiline: true, maxLength });
+}
+
+function safeMemoText(value, maxLength) {
+  return redactIncidentText(value, { multiline: false, maxLength });
 }
 
 function isProbableCodeDefect(reasonCode) {
@@ -158,18 +165,22 @@ function createIncidentRemediationPlan(incident = {}, options = {}) {
   }
 
   if (isProbableCodeDefect(reasonCode)) {
+    const enabled = codeRepairEnabled;
     const configured = codeRepairEnabled && codeRepairConfigured;
     return {
       ...base,
       confidence: "medium",
-      automatic: configured,
-      requiresUser: !configured,
+      automatic: enabled,
+      codexFirst: enabled,
+      requiresUser: !enabled,
       action: "codex_draft_repair",
-      status: configured ? "queued" : "needs_user",
+      status: enabled ? "queued" : "needs_user",
       hypothesis: "The failure is most consistent with an application-code or query defect rather than a provider-account action.",
       proposedSolution: configured
         ? "My AI PA will send a sanitized repair brief to an isolated Codex GitHub job. Codex may draft a patch, but independent tests must pass and the result remains a draft pull request—never an automatic production deploy."
-        : "Enable the guarded Codex incident-repair workflow, or open this incident for a manual code diagnosis. No production credential should be given to the repair job.",
+        : enabled
+          ? "My AI PA will try the guarded Codex handoff before Telegram. If its dedicated credentials are unavailable, it will stop safely and send only a short setup explanation."
+          : "Enable the guarded Codex incident-repair workflow, or open this incident for a manual code diagnosis. No production credential should be given to the repair job.",
       safetyBoundary: "The repair agent receives no Render, Twilio, Vapi, Stripe, database, deployment, or Telegram credentials and cannot merge or deploy its own patch.",
     };
   }
@@ -337,6 +348,15 @@ function buildCodexIncidentPayload(incident = {}, generation = 1) {
     method: ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"].includes(method) ? method : "",
     workflow: allowedWorkflows.has(workflow) ? workflow : "application request",
     release: safeCode(snapshot.Release),
+    title: safeMemoText(incident.whatFailed || "My AI PA code incident", 180),
+    reason: safeMemoText(incident.reason || "The application stopped before it could prove a safe result.", 420),
+    impact: safeMemoText(incident.impact || "The affected operation remains safely incomplete.", 360),
+    last_checkpoint: safeMemoText(incident.lastCheckpoint || "No verified checkpoint was supplied.", 360),
+    next_action: safeMemoText(incident.nextAction || "Inspect the exact code path and add a regression test before proposing a repair.", 420),
+    prior_incidents: safeMemoText(
+      incident.priorIncidents || "No verified prior repair evidence is stored for this incident fingerprint.",
+      800
+    ),
   };
 }
 
@@ -351,6 +371,12 @@ function incidentRepairDispatchSignature(payload = {}, secret = "") {
     method: String(payload.method || ""),
     workflow: String(payload.workflow || ""),
     release: String(payload.release || ""),
+    title: String(payload.title || ""),
+    reason: String(payload.reason || ""),
+    impact: String(payload.impact || ""),
+    last_checkpoint: String(payload.last_checkpoint || ""),
+    next_action: String(payload.next_action || ""),
+    prior_incidents: String(payload.prior_incidents || ""),
   });
   return crypto.createHmac("sha256", signingSecret).update(canonical).digest("hex");
 }

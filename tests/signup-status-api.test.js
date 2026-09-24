@@ -65,6 +65,16 @@ prisma.pendingSignupVerification.update = async ({ where, data }) => {
 prisma.signupAttempt.findUnique = async ({ where }) => [...rows.values()].find((row) => (
   (where.publicId && row.publicId === where.publicId) || (where.eventKey && row.eventKey === where.eventKey)
 )) || null;
+prisma.signupAttempt.create = async ({ data }) => {
+  if (rows.has(data.eventKey)) {
+    const error = new Error("Unique constraint failed");
+    error.code = "P2002";
+    throw error;
+  }
+  const row = { ...data, id: `row-${rows.size}`, createdAt: new Date(), updatedAt: new Date() };
+  rows.set(data.eventKey, row);
+  return row;
+};
 prisma.signupAttempt.upsert = async ({ where, create, update }) => {
   const existing = rows.get(where.eventKey);
   const row = { ...(existing || create), ...(existing ? update : {}), id: existing?.id || `row-${rows.size}`, updatedAt: new Date() };
@@ -183,6 +193,7 @@ test("support endpoint limits repeated submissions", async () => {
 test("web signup, pending verification, and dashboard share one server-owned identity", async () => {
   const requestBody = {
     signupId: "untrusted-client-attempt-id",
+    submissionId: "e7d7ae2b-6d25-4eec-a6bb-2ce5e012e0da",
     country: "ca",
     businessProfile: { businessName: "Synthetic Signup Electric", phone: "+19055550111", address: "100 Test Street, Hamilton, ON" },
     setupDetails: { ownerName: "Synthetic Owner", ownerEmail: "signup@example.invalid", ownerPhone: "+12895550111", businessType: "Electrical" },
@@ -190,10 +201,13 @@ test("web signup, pending verification, and dashboard share one server-owned ide
     pricing: { offersServiceCalls: false },
     security: { clientElapsedMs: 10000 },
   };
-  const postSignup = () => fetch(`${baseUrl}/api/integrations/signup-complete`, {
+  const postSignup = (body = requestBody) => fetch(`${baseUrl}/api/integrations/signup-complete`, {
     method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify(requestBody),
+    body: JSON.stringify(body),
   });
+  const missingIdentity = await postSignup({ ...requestBody, submissionId: undefined });
+  assert.equal(missingIdentity.status, 400);
+  assert.equal((await missingIdentity.json()).code, "SIGNUP_SUBMISSION_ID_REQUIRED");
   const signup = await postSignup();
   assert.equal(signup.status, 202, await signup.clone().text());
   const result = await signup.json();
@@ -217,8 +231,8 @@ test("web signup, pending verification, and dashboard share one server-owned ide
   const repeatedSignup = await postSignup();
   assert.equal(repeatedSignup.status, 202, await repeatedSignup.clone().text());
   const matchingPendingRows = [...pendingRows.values()].filter((row) => row.ownerEmail === "signup@example.invalid");
-  assert.equal(matchingPendingRows.length, 2);
-  assert.equal(new Set(matchingPendingRows.map((row) => row.payload.signupId)).size, 2);
+  assert.equal(matchingPendingRows.length, 1);
+  assert.equal(new Set(matchingPendingRows.map((row) => row.payload.signupId)).size, 1);
 });
 
 test("opening a verification link advances the same saved status without provisioning a review-held signup", async () => {

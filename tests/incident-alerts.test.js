@@ -129,12 +129,12 @@ test("incident alert leads with the owner decision and keeps technical evidence 
     detectedAt: "2026-08-25T21:03:13.616Z",
   });
 
-  for (const label of ["Who is affected:", "Customer impact:", "Why:", "What My AI PA did:", "Do this now:", "Status:", "Reference:"]) {
+  for (const label of ["ELI10:", "What stopped:", "Who it affects:", "What is safe:", "What happens next:", "Status:", "Reference:"]) {
     assert.match(text, new RegExp(label));
   }
   assert.match(text, /MAKE_SIGNUP_RESPONSE_INCOMPLETE|responded without all verified phone and assistant identifiers/i);
-  assert.match(text, /Who is affected: Example Electric/);
-  assert.match(text, /Full technical evidence is saved/);
+  assert.match(text, /Who it affects: Example Electric/);
+  assert.match(text, /Technical evidence: Admin/);
   assert.doesNotMatch(text, /WORKING HYPOTHESIS|SNAPSHOT|Provider HTTP status/);
   assert.equal(text.includes("private@example.com"), false);
   assert.equal(text.includes("9055550123"), false);
@@ -156,7 +156,7 @@ test("incident alert remains short and under the Telegram limit", () => {
   });
 
   assert.ok(text.length <= MAX_TELEGRAM_TEXT_LENGTH);
-  for (const label of ["Who is affected:", "Customer impact:", "Why:", "What My AI PA did:", "Do this now:", "Status:"]) {
+  for (const label of ["ELI10:", "What stopped:", "Who it affects:", "What is safe:", "What happens next:", "Status:"]) {
     assert.ok(text.includes(label));
   }
   assert.ok(text.length < 2_500);
@@ -171,9 +171,10 @@ test("remediation update clearly distinguishes verified recovery from a user act
     nextAction: "No action is required.",
   });
   assert.match(resolved, /MY AI PA — VERIFIED FIXED/);
-  assert.match(resolved, /What My AI PA did:/);
-  assert.match(resolved, /How we checked:/);
-  assert.match(resolved, /What you need to do:/);
+  assert.match(resolved, /ELI10:/);
+  assert.match(resolved, /What Codex\/My AI PA did:/);
+  assert.match(resolved, /How it was checked:/);
+  assert.match(resolved, /Your next step:/);
 
   const blocked = buildIncidentRemediationUpdate({
     status: "needs_user",
@@ -183,7 +184,7 @@ test("remediation update clearly distinguishes verified recovery from a user act
     nextAction: "Add provider funds, then rerun health.",
   });
   assert.match(blocked, /MY AI PA — NEEDS YOU/);
-  assert.match(blocked, /Do this now:/);
+  assert.match(blocked, /Your next step:/);
   assert.ok(blocked.length <= MAX_TELEGRAM_TEXT_LENGTH);
 });
 

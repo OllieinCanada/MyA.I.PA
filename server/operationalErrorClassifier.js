@@ -203,6 +203,32 @@ function classifyOperationalError(error = {}, context = {}) {
   const label = providerName(provider);
   const exactTwilio = provider === "TWILIO" ? TWILIO_CODE_GUIDANCE[code] : null;
 
+  if (["AGENT_TEST_SETUP_INCOMPLETE", "AGENT_TEST_SIGNUP_ATTEMPT_MISSING"].includes(code)) {
+    return result(details, "signup_identity_defect", {
+      reasonCode: code,
+      reason: code === "AGENT_TEST_SIGNUP_ATTEMPT_MISSING"
+        ? "The pre-delivery test could not find the exact signup attempt. My AI PA refused to borrow another signup that happened to use the same email."
+        : "The pre-delivery test received a signup record without the exact owner, phone, and assistant identity. This is an application record-selection defect, not evidence of a Twilio billing problem.",
+      retryable: false,
+      whatFailed: "The exact signup identity could not be proven before delivery",
+      impact: "The agent remains contained and is not marked ready for customer calls.",
+      nextAction: "Repair the exact-attempt lookup, verify its saved owner/phone/assistant pairing, and rerun only that same signup attempt.",
+      signInDestination: "My AI PA Admin → Needs Attention → exact signup attempt",
+    });
+  }
+
+  if (code === "SIGNUP_RECOVERY_VAPI_BINDING_MISMATCH") {
+    return result(details, "signup_route_reconciliation_defect", {
+      reasonCode: code,
+      reason: "The guarded recovery saw a Vapi route that did not match its expected direct binding. A protected trial-gate route must be verified against its saved gate configuration before it is called a mismatch.",
+      retryable: false,
+      whatFailed: "The signup recovery could not prove the phone-to-assistant route",
+      impact: "Recovery stopped before rewiring a phone or changing another customer's assistant.",
+      nextAction: "Verify the exact phone, assistant, business, and protected trial-gate record together. Accept only an exact direct or trial-gate match.",
+      signInDestination: "My AI PA Admin → Needs Attention → exact signup route",
+    });
+  }
+
   if (
     provider === "DATABASE"
     && /FAILED TO DESERIALIZE COLUMN OF TYPE ['\"]?VOID|PG_ADVISORY_XACT_LOCK|PRISMA\.\$QUERYRAW/i.test(source)

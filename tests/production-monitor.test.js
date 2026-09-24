@@ -225,11 +225,11 @@ test("production failure alert explains the reason, snapshot, next action, and e
       }],
     }],
   });
-  assert.match(alert, /Customer impact:/);
-  assert.match(alert, /Why:/);
+  assert.match(alert, /What is safe:/);
+  assert.match(alert, /What stopped:/);
   assert.match(alert, /Example Electrical/);
   assert.match(alert, /Verify provider state before recovery/);
-  assert.match(alert, /What My AI PA did:/);
+  assert.match(alert, /What happens next:/);
   assert.doesNotMatch(alert, /AI number assigned: no|WORKING HYPOTHESIS|SNAPSHOT/);
   assert.equal(incidentAdminUrl({ id: incidentId }), `https://www.myaipa.ca/#/admin?tab=attention&incident=${incidentId}`);
 });

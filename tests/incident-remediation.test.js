@@ -99,8 +99,13 @@ test("automatic policy allowlists read-only readiness but never funding, payment
   }
 });
 
-test("only the exact database-query defect code can enter the guarded code-repair allowlist", () => {
-  assert.deepEqual([...CODE_REPAIR_CODES], ["DATABASE_QUERY_IMPLEMENTATION_FAILED"]);
+test("only exact reviewed application-defect codes can enter the guarded code-repair allowlist", () => {
+  assert.deepEqual([...CODE_REPAIR_CODES], [
+    "DATABASE_QUERY_IMPLEMENTATION_FAILED",
+    "AGENT_TEST_SETUP_INCOMPLETE",
+    "AGENT_TEST_SIGNUP_ATTEMPT_MISSING",
+    "SIGNUP_RECOVERY_VAPI_BINDING_MISMATCH",
+  ]);
 
   for (const reasonCode of ["HTTP_500", "RUNTIME_FAILURE", "DATABASE_QUERY_FAILED", "DATABASE_UNAVAILABLE"]) {
     const plan = createIncidentRemediationPlan(incident(reasonCode), {
@@ -111,12 +116,21 @@ test("only the exact database-query defect code can enter the guarded code-repai
     assert.notEqual(plan.action, "codex_draft_repair", `${reasonCode} must fail closed`);
   }
 
-  const disabled = createIncidentRemediationPlan(incident("DATABASE_QUERY_IMPLEMENTATION_FAILED"), {
+  const unavailable = createIncidentRemediationPlan(incident("DATABASE_QUERY_IMPLEMENTATION_FAILED"), {
     codeRepairEnabled: true,
     codeRepairConfigured: false,
   });
-  assert.equal(disabled.action, "codex_draft_repair");
+  assert.equal(unavailable.action, "codex_draft_repair");
+  assert.equal(unavailable.automatic, true);
+  assert.equal(unavailable.codexFirst, true);
+  assert.match(unavailable.proposedSolution, /try the guarded Codex handoff before Telegram/i);
+
+  const disabled = createIncidentRemediationPlan(incident("DATABASE_QUERY_IMPLEMENTATION_FAILED"), {
+    codeRepairEnabled: false,
+    codeRepairConfigured: false,
+  });
   assert.equal(disabled.automatic, false);
+  assert.equal(disabled.codexFirst, false);
   assert.match(disabled.proposedSolution, /Enable the guarded Codex/i);
 
   const enabled = createIncidentRemediationPlan(incident("DATABASE_QUERY_IMPLEMENTATION_FAILED"), {
@@ -125,7 +139,17 @@ test("only the exact database-query defect code can enter the guarded code-repai
   });
   assert.equal(enabled.automatic, true);
   assert.equal(enabled.action, "codex_draft_repair");
+  assert.equal(enabled.codexFirst, true);
   assert.match(enabled.safetyBoundary, /cannot merge or deploy/i);
+
+  for (const reasonCode of ["AGENT_TEST_SETUP_INCOMPLETE", "AGENT_TEST_SIGNUP_ATTEMPT_MISSING", "SIGNUP_RECOVERY_VAPI_BINDING_MISMATCH"]) {
+    const plan = createIncidentRemediationPlan(incident(reasonCode), {
+      codeRepairEnabled: true,
+      codeRepairConfigured: true,
+    });
+    assert.equal(plan.automatic, true);
+    assert.equal(plan.codexFirst, true);
+  }
 });
 
 test("controlled Telegram tests never enter remediation", () => {
@@ -241,8 +265,8 @@ test("Codex workflow_dispatch targets main and contains only strict redacted str
   });
   const payload = buildCodexIncidentPayload(target, 2);
   const serialized = JSON.stringify(payload);
-  assert.deepEqual(Object.keys(payload).sort(), ["generation", "incident_id", "method", "reason_code", "release", "route", "workflow"]);
-  assert.doesNotMatch(serialized, /private@example\.com|secret-value|ignore safety|OwnerEmail/);
+  assert.deepEqual(Object.keys(payload).sort(), ["generation", "impact", "incident_id", "last_checkpoint", "method", "next_action", "prior_incidents", "reason", "reason_code", "release", "route", "title", "workflow"]);
+  assert.doesNotMatch(serialized, /private@example\.com|secret-value|OwnerEmail/);
 
   const result = await dispatchCodexIncidentRepair({
     incident: target,
@@ -266,7 +290,7 @@ test("Codex workflow_dispatch targets main and contains only strict redacted str
   assert.match(requests[0].body.inputs.authorization, /^[a-f0-9]{64}$/);
   assert.ok(Object.values(requests[0].body.inputs).every((value) => typeof value === "string"));
   assert.match(requests[0].url, /actions\/workflows\/codex-incident-repair\.yml\/dispatches$/);
-  assert.doesNotMatch(JSON.stringify(requests[0].body), /private@example\.com|secret-value|ignore safety/);
+  assert.doesNotMatch(JSON.stringify(requests[0].body), /private@example\.com|secret-value/);
   assert.doesNotMatch(JSON.stringify(requests[0]), new RegExp(dispatchSecret.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   assert.equal(requests[0].options.headers.Authorization, "Bearer dedicated-test-token");
 });

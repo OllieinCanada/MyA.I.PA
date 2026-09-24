@@ -62,8 +62,10 @@ const {
   getSignupAliases,
   getSignupDashboardKey,
   normalizeSignupSubmissionId,
+  selectSignupDashboardRecordForProvisioning,
 } = require("./signupDashboardIdentity");
 const { buildRuntimeIncident } = require("./runtimeAlerts");
+const { assessIncidentSlo } = require("./incidentSlo");
 const {
   createIncidentRemediationPlan,
   dispatchCodexIncidentRepair,
@@ -75,17 +77,27 @@ const {
   reportStoredFatalIncident,
 } = require("./fatalIncidentCapture");
 const {
-  acknowledgeRuntimeIncident,
-  listRuntimeIncidents,
-  recordRuntimeIncident,
-  updateRuntimeIncidentRemediation,
+  acknowledgeRuntimeIncident: acknowledgeRuntimeIncidentFile,
+  listRuntimeIncidents: listRuntimeIncidentsFile,
+  recordRuntimeIncident: recordRuntimeIncidentFile,
+  updateRuntimeIncidentRemediation: updateRuntimeIncidentRemediationFile,
 } = require("./runtimeIncidentStore");
 const {
-  enqueueTelegramMessage,
-  getTelegramDeliveryReceipt,
-  hasTelegramDeliveryReceipt,
-  processTelegramOutbox,
+  enqueueTelegramMessage: enqueueTelegramMessageFile,
+  getTelegramDeliveryReceipt: getTelegramDeliveryReceiptFile,
+  processTelegramOutbox: processTelegramOutboxFile,
 } = require("./telegramOutbox");
+const {
+  acknowledgeRuntimeIncidentDb,
+  listRuntimeIncidentsDb,
+  recordRuntimeIncidentDb,
+  updateRuntimeIncidentRemediationDb,
+} = require("./runtimeIncidentRepository");
+const {
+  enqueueTelegramMessageDb,
+  getTelegramDeliveryReceiptDb,
+  processTelegramOutboxDb,
+} = require("./telegramOutboxRepository");
 const {
   authorizeTelegramCallback,
   bindTelegramMessage,
@@ -109,6 +121,10 @@ const {
   inspectPullRequestLandingReadiness,
   markPullRequestReadyForReview,
 } = require("./telegramPrLanding");
+const {
+  getGitHubAppInstallationToken,
+  hasGitHubAppCredentials,
+} = require("./githubAppToken");
 const {
   buildMakeSignupEventKey,
   buildMakeSignupHeaders,
@@ -176,6 +192,7 @@ const {
   verifyTwilioWebhookRequest,
 } = require("./smsSuppression");
 const { buildTwilioMessageStatusIncident } = require("./twilioMessageStatus");
+const { buildTwilioReplayIdentity } = require("./twilioWebhookReplay");
 const {
   getTwilioWebhookOAuthConfig,
   getTwilioWebhookStagingUrls,
@@ -601,14 +618,68 @@ const INCIDENT_READINESS_TIMEOUT_MS = Math.min(
 const fatalIncidentPath = path.join(dataDir, "fatal-incident.json");
 const runtimeIncidentPath = path.join(dataDir, "runtime-incidents.json");
 const telegramOutboxPath = path.join(dataDir, "telegram-outbox.json");
+const USE_DATABASE_OPERATIONAL_STATE = String(
+  process.env.OPERATIONAL_STATE_BACKEND
+  || (String(process.env.NODE_ENV || "").toLowerCase() === "production" ? "database" : "file")
+).trim().toLowerCase() === "database";
+
+async function recordRuntimeIncident(_filePath, incident) {
+  return USE_DATABASE_OPERATIONAL_STATE
+    ? recordRuntimeIncidentDb(prisma, incident)
+    : recordRuntimeIncidentFile(runtimeIncidentPath, incident);
+}
+
+async function listRuntimeIncidents(_filePath, options) {
+  return USE_DATABASE_OPERATIONAL_STATE
+    ? listRuntimeIncidentsDb(prisma, options)
+    : listRuntimeIncidentsFile(runtimeIncidentPath, options);
+}
+
+async function acknowledgeRuntimeIncident(_filePath, incidentId) {
+  return USE_DATABASE_OPERATIONAL_STATE
+    ? acknowledgeRuntimeIncidentDb(prisma, incidentId)
+    : acknowledgeRuntimeIncidentFile(runtimeIncidentPath, incidentId);
+}
+
+async function updateRuntimeIncidentRemediation(_filePath, incidentId, transition) {
+  return USE_DATABASE_OPERATIONAL_STATE
+    ? updateRuntimeIncidentRemediationDb(prisma, incidentId, transition)
+    : updateRuntimeIncidentRemediationFile(runtimeIncidentPath, incidentId, transition);
+}
+
+async function enqueueTelegramMessage(options) {
+  return USE_DATABASE_OPERATIONAL_STATE
+    ? enqueueTelegramMessageDb(prisma, options)
+    : enqueueTelegramMessageFile(options);
+}
+
+async function getTelegramDeliveryReceipt(_filePath, itemId) {
+  return USE_DATABASE_OPERATIONAL_STATE
+    ? getTelegramDeliveryReceiptDb(prisma, itemId)
+    : getTelegramDeliveryReceiptFile(telegramOutboxPath, itemId);
+}
+
+async function processTelegramOutbox(options) {
+  return USE_DATABASE_OPERATIONAL_STATE
+    ? processTelegramOutboxDb(prisma, options)
+    : processTelegramOutboxFile(options);
+}
 const GITHUB_SUPPORT_TOKEN = String(process.env.GITHUB_SUPPORT_TOKEN || "").trim();
 const GITHUB_SUPPORT_REPO = String(process.env.GITHUB_SUPPORT_REPO || "OllieinCanada/MyA.I.PA").trim();
 const GITHUB_SUPPORT_LABELS = parseCsv(process.env.GITHUB_SUPPORT_LABELS || "");
-const GITHUB_INCIDENT_REPAIR_TOKEN = String(process.env.GITHUB_INCIDENT_REPAIR_TOKEN || "").trim();
 const GITHUB_INCIDENT_REPAIR_REPO = String(
   process.env.GITHUB_INCIDENT_REPAIR_REPO || GITHUB_SUPPORT_REPO || "OllieinCanada/MyA.I.PA"
 ).trim();
 const INCIDENT_REPAIR_DISPATCH_SECRET = String(process.env.INCIDENT_REPAIR_DISPATCH_SECRET || "");
+const GITHUB_INCIDENT_REPAIR_APP_CONFIGURED = hasGitHubAppCredentials(process.env);
+
+async function getIncidentRepairGitHubToken() {
+  return getGitHubAppInstallationToken({ env: process.env });
+}
+
+function incidentRepairCredentialConfigured() {
+  return GITHUB_INCIDENT_REPAIR_APP_CONFIGURED;
+}
 const DEFAULT_ALLOWED_ORIGINS = [
   "https://www.myaipa.ca",
   "https://myaipa.ca",
@@ -1964,6 +2035,16 @@ async function completeWebhookEvent(claim, now = Date.now()) {
 async function releaseWebhookEvent(claim) {
   if (!claim?.claimed || !claim.key || !claim.claimToken) return false;
   return releaseWebhookReplay({ key: claim.key, claimToken: claim.claimToken });
+}
+
+async function claimTwilioWebhookRequest(req, eventType) {
+  const eventId = buildTwilioReplayIdentity({
+    headers: req?.headers || {},
+    body: req?.body || {},
+    eventType,
+  });
+  if (!eventId) return { claimed: false, duplicate: false, skipped: true, invalid: true };
+  return claimWebhookEvent({ provider: "twilio", eventId, eventType });
 }
 
 function parseVapiBusinessMap() {
@@ -5180,7 +5261,7 @@ async function queueTelegramAlertSafely({ text, adminUrl = "", buttonText = "", 
         lastCheckpoint: "My AI PA redacted the incident and checked the durable outbox before attempting to add it.",
         nextAction: "Repair Telegram delivery, let the outbox drain, then review all active Needs Attention incidents. Acknowledge this capacity warning only after the queue is healthy.",
       });
-      const recorded = recordRuntimeIncident(runtimeIncidentPath, incident);
+      const recorded = await recordRuntimeIncident(runtimeIncidentPath, incident);
       if (!recorded.recorded) {
         console.error("[telegram:outbox] capacity warning could not be persisted", {
           reason: recorded.reason || "runtime_incident_store_failed",
@@ -6728,7 +6809,7 @@ function assertPendingSignupRecoveryIdentity(signup = {}, payload = {}) {
 }
 
 function buildProvisioningReadbackAssessment({
-  signup = {}, twilioStep = {}, assistantStep = {}, importStep = {}, twilioNumbers = [], vapiNumbers = [], vapiAssistants = [],
+  signup = {}, twilioStep = {}, assistantStep = {}, importStep = {}, twilioNumbers = [], vapiNumbers = [], vapiAssistants = [], routeAssessment = null,
 } = {}) {
   for (const [label, step] of Object.entries({ twilioStep, assistantStep, importStep })) {
     if (step?.status !== "completed" || !step?.result || typeof step.result !== "object") {
@@ -6784,7 +6865,15 @@ function buildProvisioningReadbackAssessment({
   if (!String(twilioRecord?.voice_url || "").trim() || twilioRecord?.capabilities?.voice === false || twilioRecord?.capabilities?.sms === false) {
     throw signupRecoveryError("The existing Twilio number is not ready for both calls and text messages.", "SIGNUP_RECOVERY_TWILIO_NOT_READY", 502);
   }
-  if (getVapiAssistantId(vapiPhoneMatches[0]) !== assistantId) {
+  const directAssistantMatches = getVapiAssistantId(vapiPhoneMatches[0]) === assistantId;
+  const protectedTrialGateMatches = Boolean(
+    routeAssessment?.status === "verified"
+    && routeAssessment?.mode === "trial-gate"
+    && routeAssessment?.expected?.assistantId === assistantId.toLowerCase()
+    && routeAssessment?.expected?.phoneNumberId === vapiPhoneNumberId.toLowerCase()
+    && routeAssessment?.expected?.phoneNumber === twilioPhoneNumber
+  );
+  if (!directAssistantMatches && !protectedTrialGateMatches) {
     throw signupRecoveryError("The existing Vapi phone is attached to a different assistant.", "SIGNUP_RECOVERY_VAPI_BINDING_MISMATCH");
   }
 
@@ -6810,6 +6899,30 @@ async function reconcileAcknowledgedSignupProvisioning({ signup, payload }) {
     fetchVapiCollection("phone-number", ["phoneNumbers", "phone_numbers"]),
     fetchVapiCollection("assistant", ["assistants", "agents"]),
   ]);
+  const assistantId = String(assistantState.data?.result?.assistantId || "").trim();
+  const vapiPhoneNumberId = String(importState.data?.result?.id || importState.data?.result?.phoneNumberId || "").trim();
+  const expectedPhoneNumber = normalizeVapiImportPhone(importState.data?.result?.number || twilioState.data?.result?.twilioPhoneNumber);
+  const liveVapiPhone = vapiNumbers.find((record) => (
+    String(record?.id || record?.phoneNumberId || "").trim() === vapiPhoneNumberId
+    && normalizeVapiImportPhone(getVapiPhoneNumber(record)) === expectedPhoneNumber
+  ));
+  const business = await findBusinessForSignup(signup);
+  const trialGate = liveVapiPhone ? await readTrialGateConfiguration({
+    phoneNumberId: vapiPhoneNumberId,
+    phoneNumber: { id: vapiPhoneNumberId, number: expectedPhoneNumber },
+  }) : null;
+  const routeAssessment = assessAgentRouteBinding({
+    expectedBusinessId: business?.id,
+    expectedPhoneNumberId: vapiPhoneNumberId,
+    expectedPhoneNumber,
+    expectedAssistantId: assistantId,
+    livePhoneNumberId: liveVapiPhone?.id,
+    livePhoneNumber: getVapiPhoneNumber(liveVapiPhone),
+    liveAssistantId: getVapiAssistantId(liveVapiPhone),
+    liveServerUrl: getVapiNestedString(liveVapiPhone, ["server.url", "serverUrl"]),
+    trialGateWebhookUrl: TRIAL_USAGE_GATE_WEBHOOK_URL,
+    trialGate,
+  });
   return buildProvisioningReadbackAssessment({
     signup,
     twilioStep: twilioState.data,
@@ -6818,6 +6931,7 @@ async function reconcileAcknowledgedSignupProvisioning({ signup, payload }) {
     twilioNumbers,
     vapiNumbers,
     vapiAssistants,
+    routeAssessment,
   });
 }
 
@@ -11602,10 +11716,11 @@ app.get(
   requireMonitorKey,
   asyncRoute(async (_req, res) => {
     const signups = listSignupDashboardRecords();
+    const runtimeIncidents = await listRuntimeIncidents(runtimeIncidentPath);
     const inbox = await getOperationalAttentionInbox({
       prisma,
       signups,
-      runtimeIncidents: listRuntimeIncidents(runtimeIncidentPath),
+      runtimeIncidents,
     });
     const signupRecovery = new Map();
     await Promise.all(inbox.items
@@ -11620,6 +11735,7 @@ app.get(
       service: "my-ai-pa-operations",
       generatedAt: inbox.generatedAt,
       attention: inbox.summary,
+      incidentSlo: assessIncidentSlo(runtimeIncidents),
       issues: inbox.items.map((item) => ({
         id: item.id,
         kind: item.kind,
@@ -11664,7 +11780,7 @@ function exactGitHubIncidentUrl(value, kind) {
 async function startOwnerAuthorizedIncidentInvestigation(approval) {
   const incidentId = String(approval?.targetId || "").toLowerCase();
   const expectedGeneration = Math.max(1, Number(approval?.context?.generation) || 1);
-  const item = listRuntimeIncidents(runtimeIncidentPath).find((entry) => entry.id === incidentId);
+  const item = (await listRuntimeIncidents(runtimeIncidentPath)).find((entry) => entry.id === incidentId);
   if (!item) {
     const error = new Error("This incident is no longer active.");
     error.code = "INCIDENT_NOT_ACTIVE";
@@ -11683,7 +11799,7 @@ async function startOwnerAuthorizedIncidentInvestigation(approval) {
       nextAction: item.remediation?.proposedSolution || item.incident?.nextAction || "Open the incident details.",
     };
   }
-  const authorized = updateRuntimeIncidentRemediation(runtimeIncidentPath, incidentId, {
+  const authorized = await updateRuntimeIncidentRemediation(runtimeIncidentPath, incidentId, {
     status: "queued",
     ownerAuthorized: true,
     summary: "The owner authorized this exact incident generation from the private Telegram chat.",
@@ -11728,7 +11844,7 @@ async function executeTelegramApproval(approval) {
   }
   if (approval.purpose === "INCIDENT_REVIEW") {
     if (action === "dismiss") {
-      const result = acknowledgeRuntimeIncident(runtimeIncidentPath, approval.targetId);
+      const result = await acknowledgeRuntimeIncident(runtimeIncidentPath, approval.targetId);
       if (!result.acknowledged && result.reason !== "not_found") {
         const error = new Error("The incident could not be dismissed safely.");
         error.code = "INCIDENT_DISMISS_FAILED";
@@ -11756,8 +11872,14 @@ async function executeTelegramApproval(approval) {
       await finishTelegramApproval(prisma, approval.id, { status: "REJECTED", result: { rejected: true } });
       return { terminal: true, text: "⛔ Merge rejected. The PR remains open and nothing was deployed.", openLabel: "Open PR" };
     }
+    const githubToken = await getIncidentRepairGitHubToken();
+    if (!githubToken) {
+      throw Object.assign(new Error("The dedicated GitHub repair credential is not configured."), {
+        code: "GITHUB_INCIDENT_REPAIR_AUTH_MISSING",
+      });
+    }
     const readiness = await inspectPullRequestLandingReadiness({
-      token: GITHUB_INCIDENT_REPAIR_TOKEN,
+      token: githubToken,
       repository: GITHUB_INCIDENT_REPAIR_REPO,
       prNumber: approval.context.prNumber,
       headSha: approval.context.headSha,
@@ -11768,7 +11890,7 @@ async function executeTelegramApproval(approval) {
       throw error;
     }
     const dispatch = await dispatchTelegramApprovedPrLanding({
-      token: GITHUB_INCIDENT_REPAIR_TOKEN,
+      token: githubToken,
       repository: GITHUB_INCIDENT_REPAIR_REPO,
       dispatchSecret: INCIDENT_REPAIR_DISPATCH_SECRET,
       approvalId: approval.publicId,
@@ -11884,6 +12006,7 @@ app.post(
     const prNumber = Number(req.body?.pr_number);
     const headSha = String(req.body?.head_sha || "").trim().toLowerCase();
     const runUrl = exactGitHubIncidentUrl(req.body?.run_url, "run");
+    const diagnosis = redactIncidentText(req.body?.diagnosis, { multiline: true, maxLength: 1200 });
     const allowedJobResults = new Set(["success", "failure", "cancelled", "skipped"]);
     if (!/^[a-f0-9]{24}$/.test(incidentId) || !Number.isInteger(generation) || generation < 1 || generation > 999) {
       return res.status(400).json({ error: "A valid incident ID and generation are required." });
@@ -11903,7 +12026,7 @@ app.post(
       return res.status(400).json({ error: "The incident-repair status or GitHub result URL is invalid." });
     }
 
-    const current = listRuntimeIncidents(runtimeIncidentPath).find((item) => item.id === incidentId);
+    const current = (await listRuntimeIncidents(runtimeIncidentPath)).find((item) => item.id === incidentId);
     const referenceUrl = status === "repair_ready" ? prUrl : runUrl;
     if (
       current?.remediation?.status === status
@@ -11926,6 +12049,7 @@ app.post(
           status: "repair_ready",
           verified: true,
           actionTaken: "Codex drafted a minimal patch in an isolated job, and a separate clean job validated the patch policy and completed the configured regression, database, security, configuration, and build checks against the sealed base commit.",
+          diagnosis: diagnosis || "Codex produced a verified draft repair. Open the pull request to review its diagnosis before deciding whether to merge it.",
           verification: `Draft ${draftResult}; independent verification ${verifyResult}; draft pull request ${publishResult}. This verifies the draft against ${baseSha.slice(0, 12)}, not production recovery.`,
           nextAction: "Review the diagnosis and exact draft pull request. It has not been merged or deployed.",
           referenceUrl,
@@ -11936,6 +12060,7 @@ app.post(
           status: "needs_user",
           verified: false,
           actionTaken: "The guarded code-repair pipeline stopped before a production deployment.",
+          diagnosis: "Codex could not produce a verified repair, so My AI PA stopped and did not claim the incident was fixed.",
           verification: `Draft ${draftResult}; independent verification ${verifyResult}; draft pull request ${publishResult}. No production fix is being claimed.`,
           nextAction: "Open the exact GitHub Actions run, review the first failed stage, and decide whether a revised repair should be authorized.",
           referenceUrl,
@@ -12091,7 +12216,7 @@ app.post(
   "/api/internal/operations/incident-remediation-canary",
   requireMonitorKey,
   express.json({ limit: "1kb" }),
-  (req, res) => {
+  asyncRoute(async (req, res) => {
     if (String(req.body?.confirmation || "") !== "RUN_INCIDENT_REMEDIATION_CANARY") {
       return res.status(400).json({ error: "Explicit incident-remediation canary confirmation is required." });
     }
@@ -12102,7 +12227,7 @@ app.post(
       });
     }
     const canaryId = crypto.randomBytes(8).toString("hex");
-    const notification = safelyNotifyRuntimeFailure(
+    const notification = await safelyNotifyRuntimeFailure(
       Object.assign(new Error("Controlled incident-remediation readiness canary."), {
         code: "CONTROLLED_READINESS_REMEDIATION_TEST",
       }),
@@ -12127,19 +12252,25 @@ app.post(
     }
     res.setHeader("Cache-Control", "no-store, max-age=0");
     return res.status(202).json({ ok: true, accepted: true, incidentId: notification.incidentId });
-  }
+  })
 );
 
-function getIncidentRemediationCanaryStatus(
+async function getIncidentRemediationCanaryStatus(
   incidentId,
-  incidents = listRuntimeIncidents(runtimeIncidentPath),
-  receiptLookup = (outboxId) => getTelegramDeliveryReceipt(telegramOutboxPath, outboxId)
+  incidents = null,
+  receiptLookup = null
 ) {
   const safeIncidentId = /^[a-f0-9]{24}$/i.test(String(incidentId || ""))
     ? String(incidentId).toLowerCase()
     : "";
   if (!safeIncidentId) return null;
-  const incident = (Array.isArray(incidents) ? incidents : [])
+  const activeIncidents = Array.isArray(incidents)
+    ? incidents
+    : await listRuntimeIncidents(runtimeIncidentPath);
+  const lookupReceipt = typeof receiptLookup === "function"
+    ? receiptLookup
+    : (outboxId) => getTelegramDeliveryReceipt(telegramOutboxPath, outboxId);
+  const incident = activeIncidents
     .find((item) => item.id === safeIncidentId);
   if (
     !incident
@@ -12155,8 +12286,8 @@ function getIncidentRemediationCanaryStatus(
   const distinctOutboxMessages = /^[a-f0-9]{24}$/.test(initialReportOutboxId)
     && /^[a-f0-9]{24}$/.test(completionReportOutboxId)
     && initialReportOutboxId !== completionReportOutboxId;
-  const initialReceipt = distinctOutboxMessages ? receiptLookup(initialReportOutboxId) : null;
-  const completionReceipt = distinctOutboxMessages ? receiptLookup(completionReportOutboxId) : null;
+  const initialReceipt = distinctOutboxMessages ? await lookupReceipt(initialReportOutboxId) : null;
+  const completionReceipt = distinctOutboxMessages ? await lookupReceipt(completionReportOutboxId) : null;
   const initialReceiptConfirmed = Number.isSafeInteger(Number(initialReceipt?.providerMessageId))
     && Number(initialReceipt.providerMessageId) > 0
     && Number.isFinite(Number(initialReceipt?.deliveredAt));
@@ -12205,7 +12336,7 @@ app.post(
       return res.status(400).json({ error: "A valid private canary reference is required." });
     }
     await drainTelegramOutbox("incident-remediation-canary-status");
-    const status = getIncidentRemediationCanaryStatus(incidentId);
+    const status = await getIncidentRemediationCanaryStatus(incidentId);
     if (!status) return res.status(404).json({ error: "The controlled canary was not found." });
     res.setHeader("Cache-Control", "no-store, max-age=0");
     return res.json(status);
@@ -12310,6 +12441,10 @@ app.post(
     res.setHeader("Cache-Control", "no-store, max-age=0");
     res.json(result);
   })
+);
+const INCIDENT_CONTAINMENT_NOTICE_AFTER_MS = Math.max(
+  60_000,
+  Math.min(15 * 60 * 1000, parsePositiveInt(process.env.INCIDENT_CONTAINMENT_NOTICE_AFTER_MS, 2 * 60 * 1000))
 );
 
 app.post(
@@ -12560,6 +12695,11 @@ app.post(
     if (!verifyTwilioWebhookRequest(req, process.env, { configuredUrl: TWILIO_STATUS_CALLBACK_URL })) {
       return res.status(401).json({ error: "Invalid messaging webhook signature." });
     }
+    const replayClaim = await claimTwilioWebhookRequest(req, "message_status");
+    if (replayClaim.invalid) return res.status(400).json({ error: "Twilio message SID and status are required." });
+    if (replayClaim.duplicate) return res.type("application/xml").send("<Response></Response>");
+    if (!replayClaim.claimed) return res.status(503).json({ error: "Webhook replay protection is unavailable." });
+    try {
     const preparedIncident = buildTwilioMessageStatusIncident(req.body || {});
     const messageSid = req.body?.MessageSid || req.body?.SmsSid;
     const messageStatus = req.body?.MessageStatus || req.body?.SmsStatus;
@@ -12603,7 +12743,17 @@ app.post(
     if (preparedIncident) {
       safelyNotifyRuntimeFailure(preparedIncident.error, preparedIncident.context);
     }
+    if (!await completeWebhookEvent(replayClaim)) {
+      throw Object.assign(new Error("The Twilio message-status replay claim could not be completed."), {
+        code: "TWILIO_WEBHOOK_REPLAY_COMPLETE_FAILED",
+        status: 503,
+      });
+    }
     return res.type("application/xml").send("<Response></Response>");
+    } catch (error) {
+      await releaseWebhookEvent(replayClaim);
+      throw error;
+    }
   })
 );
 
@@ -12645,6 +12795,7 @@ app.post(
     }
     const result = await processTwilioStagingCallStatus({
       body: req.body || {},
+      replayEventId: buildTwilioReplayIdentity({ headers: req.headers, body: req.body || {}, eventType: "call_status" }),
       claimEvent: claimWebhookEvent,
       completeEvent: completeWebhookEvent,
       releaseEvent: releaseWebhookEvent,
@@ -12665,6 +12816,11 @@ app.post(
     if (!verifyTwilioWebhookRequest(req)) {
       return res.status(401).json({ error: "Invalid messaging webhook signature." });
     }
+    const replayClaim = await claimTwilioWebhookRequest(req, "inbound_sms");
+    if (replayClaim.invalid) return res.status(400).json({ error: "Twilio message SID is required." });
+    if (replayClaim.duplicate) return res.type("application/xml").send("<Response></Response>");
+    if (!replayClaim.claimed) return res.status(503).json({ error: "Webhook replay protection is unavailable." });
+    try {
     const preference = classifySmsPreference(req.body?.Body);
     if (["SUPPRESS", "RESUME"].includes(preference.action)) {
       const result = await recordSmsPreference({
@@ -12687,12 +12843,28 @@ app.post(
         toLast4: normalizeSmsPhone(req.body?.To, "To").slice(-4),
         upstreamHost: forwarded.upstreamHost,
       });
+      if (!await completeWebhookEvent(replayClaim)) {
+        throw Object.assign(new Error("The inbound-SMS replay claim could not be completed."), {
+          code: "TWILIO_WEBHOOK_REPLAY_COMPLETE_FAILED",
+          status: 503,
+        });
+      }
       return res
         .status(forwarded.status)
         .type(forwarded.contentType)
         .send(forwarded.body);
     }
+    if (!await completeWebhookEvent(replayClaim)) {
+      throw Object.assign(new Error("The inbound-SMS replay claim could not be completed."), {
+        code: "TWILIO_WEBHOOK_REPLAY_COMPLETE_FAILED",
+        status: 503,
+      });
+    }
     res.type("application/xml").send("<Response></Response>");
+    } catch (error) {
+      await releaseWebhookEvent(replayClaim);
+      throw error;
+    }
   })
 );
 
@@ -13876,13 +14048,16 @@ app.post(
 
     const ownerEmail = String(trustedPayload.owner?.email || trustedPayload.setupDetails?.ownerEmail || "").trim();
     const ownerPhone = String(trustedPayload.owner?.phone || trustedPayload.setupDetails?.ownerPhone || "").trim();
+    const signupAttemptId = buildMakeSignupEventKey(trustedPayload);
     const syntheticCanary = isTrustedSignupProvisioningCanary(trustedPayload);
     if (!syntheticCanary && ownerEmail && isValidEmailAddress(ownerEmail)) {
       upsertSignupDashboardRecord({
+        signupAttemptId,
         ownerEmail,
         twilioPhoneNumber: result.number,
         vapiPhoneNumberId: result.id,
         vapiAssistantId: result.assistantId || String(body.assistantId || "").trim(),
+        provisioningIdempotencyKey: authorization.idempotencyKey,
         makeStatus: 200,
         status: "setup_started",
       });
@@ -13896,7 +14071,9 @@ app.post(
     });
     if (!syntheticCanary && ownerEmail && isValidEmailAddress(ownerEmail)) {
       upsertSignupDashboardRecord({
+        signupAttemptId,
         ownerEmail,
+        provisioningIdempotencyKey: authorization.idempotencyKey,
         smsRoutingStatus: smsRouting.healthy ? "healthy" : smsRouting.skipped ? "waiting" : "failed",
         smsRoutingToolId: smsRouting.toolId || "",
         smsRoutingToolName: smsRouting.toolName || "",
@@ -13907,10 +14084,17 @@ app.post(
 
     let agentDeliveryTest = { skipped: true, reason: syntheticCanary ? "synthetic_canary" : "signup_identity_missing" };
     if (!syntheticCanary && ownerEmail && isValidEmailAddress(ownerEmail)) {
-      const signup = listSignupDashboardRecords().find((record) => (
-        String(record.ownerEmail || "").trim().toLowerCase() === ownerEmail.toLowerCase()
-      ));
+      const signup = selectSignupDashboardRecordForProvisioning(listSignupDashboardRecords(), {
+        signupAttemptId,
+        ownerEmail,
+      });
       try {
+        if (!signup) {
+          throw signupRecoveryError(
+            "The exact signup attempt could not be found for the pre-delivery test.",
+            "AGENT_TEST_SIGNUP_ATTEMPT_MISSING"
+          );
+        }
         agentDeliveryTest = await testSignupAgentBeforeDelivery({
           signup,
           vapiPhone: {
@@ -13933,7 +14117,9 @@ app.post(
             "Failure code": String(error?.providerSignal || error?.providerCode || error?.code || "AGENT_TEST_FAILED").slice(0, 120),
           },
           lastCheckpoint: "The build stopped at the pre-delivery test station before setup completion.",
-          nextAction: "Correct the mapping, Twilio billing, sender, or recipient problem shown by the failure code, then rerun the same signup test.",
+          nextAction: ["AGENT_TEST_SETUP_INCOMPLETE", "AGENT_TEST_SIGNUP_ATTEMPT_MISSING"].includes(String(error?.code || ""))
+            ? "Review the exact signup-attempt identity and its saved phone/assistant pairing. Do not change Twilio billing or retry a different signup record."
+            : "Correct the exact provider or delivery problem shown by the failure code, then rerun this same signup attempt.",
           dedupeFingerprint: `agent-delivery-test:${String(result.assistantId || assistantId).slice(0, 80)}`,
         });
         throw error;
@@ -14048,7 +14234,13 @@ app.post(
     const specialtyList = String(body.specialtyList || setupDetails.specialtyList || specializationList).trim();
     const countryCode = String(body.country || "").trim().toLowerCase();
     const googlePlaceId = String(body.selectedPlace?.place_id || body.selectedPlace?.placeId || "").trim();
-    const submissionId = normalizeSignupSubmissionId(body.submissionId) || crypto.randomUUID();
+    const submissionId = normalizeSignupSubmissionId(body.submissionId);
+    if (!submissionId) {
+      return res.status(400).json({
+        error: "A valid signup submission ID is required. Refresh the signup page and try again.",
+        code: "SIGNUP_SUBMISSION_ID_REQUIRED",
+      });
+    }
 
     if (!businessName) {
       return res.status(400).json({ error: "businessProfile.businessName is required." });
@@ -14193,6 +14385,25 @@ app.post(
       reviewReasons: securityDecision.reviewReasons,
     });
     const signupStatus = buildSignupStatusResponse(attemptRegistration);
+
+    if (attemptRegistration?.reused) {
+      const publicAttempt = attemptRegistration.public || {};
+      const verificationRequired = publicAttempt.state === "verification_required";
+      return res.status(202).json({
+        success: true,
+        ok: true,
+        duplicate: true,
+        reviewRequired: Boolean(attemptRegistration.record?.reviewRequired),
+        verificationRequired,
+        emailVerificationRequired: false,
+        smsVerificationRequired: verificationRequired,
+        businessName: attemptRegistration.record?.businessName || businessName,
+        signupStatus,
+        message: verificationRequired
+          ? "This signup was already received. Open the verification text we already sent; do not submit it again."
+          : "This signup was already received and is still being processed. You do not need to submit it again.",
+      });
+    }
 
     const receivedRecord = upsertSignupDashboardFromPayload(payload, {
       status: "signup_received",
@@ -15013,8 +15224,23 @@ app.post(
     if (!verifyTwilioWebhookRequest(req, process.env, { configuredUrl: FORWARDING_VERIFICATION_STATUS_CALLBACK_URL })) {
       return res.status(401).json({ error: "Invalid verification-call webhook signature." });
     }
-    await applyVerificationStatusCallback({ prismaClient: prisma, callSid: req.body?.CallSid, callStatus: req.body?.CallStatus, answeredBy: req.body?.AnsweredBy });
-    res.status(204).end();
+    const replayClaim = await claimTwilioWebhookRequest(req, "forwarding_verification_status");
+    if (replayClaim.invalid) return res.status(400).json({ error: "Twilio call SID and status are required." });
+    if (replayClaim.duplicate) return res.status(204).end();
+    if (!replayClaim.claimed) return res.status(503).json({ error: "Webhook replay protection is unavailable." });
+    try {
+      await applyVerificationStatusCallback({ prismaClient: prisma, callSid: req.body?.CallSid, callStatus: req.body?.CallStatus, answeredBy: req.body?.AnsweredBy });
+      if (!await completeWebhookEvent(replayClaim)) {
+        throw Object.assign(new Error("The forwarding-status replay claim could not be completed."), {
+          code: "TWILIO_WEBHOOK_REPLAY_COMPLETE_FAILED",
+          status: 503,
+        });
+      }
+      return res.status(204).end();
+    } catch (error) {
+      await releaseWebhookEvent(replayClaim);
+      throw error;
+    }
   })
 );
 
@@ -15780,11 +16006,12 @@ app.get(
   "/api/admin/attention",
   requireAdmin,
   asyncRoute(async (_req, res) => {
+    const runtimeIncidents = await listRuntimeIncidents(runtimeIncidentPath);
     const [inbox, auditEvents] = await Promise.all([
       getOperationalAttentionInbox({
         prisma,
         signups: listSignupDashboardRecords(),
-        runtimeIncidents: listRuntimeIncidents(runtimeIncidentPath),
+        runtimeIncidents,
       }),
       listAdminAuditEvents({ prisma, limit: 50 }),
     ]);
@@ -15911,7 +16138,7 @@ app.post(
           });
         }
       } else if (action === "acknowledge_runtime_incident") {
-        result = acknowledgeRuntimeIncident(runtimeIncidentPath, targetId);
+        result = await acknowledgeRuntimeIncident(runtimeIncidentPath, targetId);
         if (!result.acknowledged) {
           if (result.reason === "not_found") return res.status(404).json({ error: "This incident is no longer active." });
           if (result.reason === "invalid_incident_id") return res.status(400).json({ error: "The incident reference is invalid." });
@@ -15937,7 +16164,7 @@ app.post(
       const inbox = await getOperationalAttentionInbox({
         prisma,
         signups: listSignupDashboardRecords(),
-        runtimeIncidents: listRuntimeIncidents(runtimeIncidentPath),
+        runtimeIncidents: await listRuntimeIncidents(runtimeIncidentPath),
       });
       res.json({ ok: true, action, result, inbox });
     } catch (error) {
@@ -16809,7 +17036,7 @@ async function preserveIncidentRemediationUpdate(incident, result, generation = 
     return { ...queued, sent: false, preserved: false };
   }
   const deliveryState = queued.delivered === true ? "sent" : "queued";
-  const transition = updateRuntimeIncidentRemediation(runtimeIncidentPath, incident.incidentId, {
+  const transition = await updateRuntimeIncidentRemediation(runtimeIncidentPath, incident.incidentId, {
     ...result,
     completionReportPreservedAt: new Date().toISOString(),
     completionReportDelivery: deliveryState,
@@ -16898,7 +17125,7 @@ async function verifyRuntimeReadiness() {
 const activeIncidentRemediations = new Map();
 
 async function runAutomatedRuntimeRemediation(incident, recordedItem) {
-  const latestItem = listRuntimeIncidents(runtimeIncidentPath)
+  const latestItem = (await listRuntimeIncidents(runtimeIncidentPath))
     .find((item) => item.id === incident.incidentId) || recordedItem;
   const latestRemediation = latestItem?.remediation || incident.remediation || {};
   const generation = Math.max(1, Number(latestRemediation.generation || 1));
@@ -16934,7 +17161,7 @@ async function runAutomatedRuntimeRemediationInternal(incident, recordedItem) {
     return result;
   }
 
-  const transition = updateRuntimeIncidentRemediation(runtimeIncidentPath, incident.incidentId, {
+  const transition = await updateRuntimeIncidentRemediation(runtimeIncidentPath, incident.incidentId, {
     status: "repairing",
     summary: `The allowlisted ${remediation.action} playbook started.`,
   });
@@ -16956,7 +17183,7 @@ async function runAutomatedRuntimeRemediationInternal(incident, recordedItem) {
     handlers.verify = async () => findCodexIncidentRepairRun({
       incident,
       generation,
-      token: GITHUB_INCIDENT_REPAIR_TOKEN,
+      token: await getIncidentRepairGitHubToken(),
       repository: GITHUB_INCIDENT_REPAIR_REPO,
     });
     handlers.codex_draft_repair = async () => {
@@ -16993,9 +17220,17 @@ async function runAutomatedRuntimeRemediationInternal(incident, recordedItem) {
         };
       }
       return dispatchCodexIncidentRepair({
-        incident,
+        incident: {
+          ...incident,
+          priorIncidents: [
+            `This fingerprint has been observed ${Math.max(1, Number(recordedItem?.knowledge?.recurrenceCount || recordedItem?.diagnostics?.occurrences || 1))} time(s).`,
+            recordedItem?.knowledge?.rootCause ? `Last verified diagnosis: ${recordedItem.knowledge.rootCause}` : "No prior verified diagnosis is stored.",
+            recordedItem?.knowledge?.fixedCommit ? `Last verified repair head: ${recordedItem.knowledge.fixedCommit}.` : "No prior verified repair head is stored.",
+            recordedItem?.knowledge?.regressionEvidence ? `Prior regression evidence: ${recordedItem.knowledge.regressionEvidence}` : "No prior regression evidence is stored.",
+          ].join(" "),
+        },
         generation,
-        token: GITHUB_INCIDENT_REPAIR_TOKEN,
+        token: await getIncidentRepairGitHubToken(),
         repository: GITHUB_INCIDENT_REPAIR_REPO,
         dispatchSecret: INCIDENT_REPAIR_DISPATCH_SECRET,
       });
@@ -17015,7 +17250,7 @@ async function runAutomatedRuntimeRemediationInternal(incident, recordedItem) {
       generation,
       handlers,
       onTransition: async (status) => {
-        updateRuntimeIncidentRemediation(runtimeIncidentPath, incident.incidentId, { status });
+        await updateRuntimeIncidentRemediation(runtimeIncidentPath, incident.incidentId, { status });
       },
     });
   } catch (error) {
@@ -17036,17 +17271,25 @@ async function runAutomatedRuntimeRemediationInternal(incident, recordedItem) {
     };
   }
   if (result.status === "in_progress") return result;
+  if (result.status === "repair_dispatched" && remediation.codexFirst === true) {
+    await updateRuntimeIncidentRemediation(runtimeIncidentPath, incident.incidentId, {
+      ...result,
+      codexMemoPreservedAt: remediation.codexMemoPreservedAt || new Date().toISOString(),
+      summary: "The sanitized incident memo was accepted by the isolated Codex repair workflow. Telegram is waiting for the reviewed result.",
+    });
+    return result;
+  }
   await preserveIncidentRemediationUpdate(incident, result, generation);
   return result;
 }
 
-function safelyNotifyRuntimeFailure(error, context = {}) {
+async function safelyNotifyRuntimeFailure(error, context = {}) {
   const baseIncident = buildRuntimeIncident(error, context);
   const remediation = createIncidentRemediationPlan(baseIncident, {
     safeAutoRepairEnabled: INCIDENT_SAFE_AUTO_REPAIR_ENABLED && !TELEGRAM_GUARDED_ACTIONS_ENABLED,
-    codeRepairEnabled: INCIDENT_CODE_REPAIR_ENABLED && !TELEGRAM_GUARDED_ACTIONS_ENABLED,
+    codeRepairEnabled: INCIDENT_CODE_REPAIR_ENABLED,
     codeRepairConfigured: Boolean(
-      GITHUB_INCIDENT_REPAIR_TOKEN
+      incidentRepairCredentialConfigured()
       && GITHUB_INCIDENT_REPAIR_REPO
       && INCIDENT_REPAIR_DISPATCH_SECRET.length >= 32
     ),
@@ -17063,7 +17306,16 @@ function safelyNotifyRuntimeFailure(error, context = {}) {
     adminUrl: exactAdminUrl,
     signInDestination,
   };
-  const recorded = recordRuntimeIncident(runtimeIncidentPath, incidentForDelivery);
+  let recorded;
+  try {
+    recorded = await recordRuntimeIncident(runtimeIncidentPath, incidentForDelivery);
+  } catch (storeError) {
+    console.error("[runtime-incident] incident snapshot store failed", {
+      incidentId: preparedIncident.incidentId,
+      code: String(storeError?.code || "RUNTIME_INCIDENT_STORE_FAILED").slice(0, 80),
+    });
+    return { incidentId: preparedIncident.incidentId, recorded: false };
+  }
   if (!recorded.recorded) {
     console.error("[runtime-incident] incident snapshot could not be persisted", {
       incidentId: preparedIncident.incidentId,
@@ -17071,12 +17323,23 @@ function safelyNotifyRuntimeFailure(error, context = {}) {
     });
   }
   void (async () => {
-    if (!RUNTIME_TELEGRAM_ALERTS_ENABLED || !recorded.recorded) {
-      console.error("[incident:remediation] stopped because the initial incident report was not preserved", {
+    if (!recorded.recorded) {
+      console.error("[incident:remediation] stopped because the incident memo was not preserved", {
         incidentId: preparedIncident.incidentId,
       });
       return;
     }
+    if (remediation.codexFirst === true && remediation.automatic === true) {
+      const memo = await updateRuntimeIncidentRemediation(runtimeIncidentPath, preparedIncident.incidentId, {
+        status: remediation.status,
+        codexMemoPreservedAt: new Date().toISOString(),
+        summary: "A sanitized incident memo was saved for Codex review before any Telegram owner alert.",
+      });
+      if (!memo.updated) return;
+      await runAutomatedRuntimeRemediation(incidentForDelivery, memo.item);
+      return;
+    }
+    if (!RUNTIME_TELEGRAM_ALERTS_ENABLED) return;
     const controls = await createIncidentTelegramApprovalControls(
       incidentForDelivery,
       recorded.item?.remediation?.generation || 1
@@ -17089,7 +17352,7 @@ function safelyNotifyRuntimeFailure(error, context = {}) {
       inlineKeyboard: controls.replyMarkup,
     });
     if (!queued?.queued && !queued?.duplicate) return;
-    const preservation = updateRuntimeIncidentRemediation(runtimeIncidentPath, preparedIncident.incidentId, {
+    const preservation = await updateRuntimeIncidentRemediation(runtimeIncidentPath, preparedIncident.incidentId, {
       status: recorded.item?.remediation?.status || remediation.status,
       initialReportPreservedAt: new Date().toISOString(),
       initialReportDelivery: queued.delivered === true ? "sent" : "queued",
@@ -17098,7 +17361,12 @@ function safelyNotifyRuntimeFailure(error, context = {}) {
     });
     if (!preservation.updated) return;
     await drainTelegramOutbox("new-incident");
-  })();
+  })().catch((remediationError) => {
+    console.error("[incident:remediation] asynchronous incident workflow stopped safely", {
+      incidentId: preparedIncident.incidentId,
+      code: String(remediationError?.code || "INCIDENT_REMEDIATION_FAILED").slice(0, 80),
+    });
+  });
   return { incidentId: preparedIncident.incidentId, recorded: recorded.recorded };
 }
 
@@ -17128,7 +17396,7 @@ async function reportPreviousFatalIncident() {
         safeAutoRepairEnabled: INCIDENT_SAFE_AUTO_REPAIR_ENABLED && !TELEGRAM_GUARDED_ACTIONS_ENABLED,
         codeRepairEnabled: INCIDENT_CODE_REPAIR_ENABLED && !TELEGRAM_GUARDED_ACTIONS_ENABLED,
         codeRepairConfigured: Boolean(
-          GITHUB_INCIDENT_REPAIR_TOKEN
+          incidentRepairCredentialConfigured()
           && GITHUB_INCIDENT_REPAIR_REPO
           && INCIDENT_REPAIR_DISPATCH_SECRET.length >= 32
         ),
@@ -17140,7 +17408,7 @@ async function reportPreviousFatalIncident() {
         adminUrl: exactAdminUrl,
         signInDestination: `Needs Attention → INC-${preparedIncident.incidentId.slice(0, 8).toUpperCase()}, then Render logs`,
       };
-      const recorded = recordRuntimeIncident(runtimeIncidentPath, incidentForDelivery);
+      const recorded = await recordRuntimeIncident(runtimeIncidentPath, incidentForDelivery);
       if (!recorded.recorded) {
         console.error("[fatal-incident] admin snapshot could not be persisted", {
           incidentId: preparedIncident.incidentId,
@@ -17162,7 +17430,7 @@ async function reportPreviousFatalIncident() {
         inlineKeyboard: controls.replyMarkup,
       });
       if (queued.queued || queued.duplicate) {
-        const preservation = updateRuntimeIncidentRemediation(runtimeIncidentPath, preparedIncident.incidentId, {
+        const preservation = await updateRuntimeIncidentRemediation(runtimeIncidentPath, preparedIncident.incidentId, {
           status: recorded.item?.remediation?.status || remediation.status,
           initialReportPreservedAt: new Date().toISOString(),
           initialReportDelivery: queued.delivered === true ? "sent" : "queued",
@@ -17248,11 +17516,66 @@ function incidentFromRuntimeAttentionItem(item) {
   };
 }
 
+function runtimeIncidentHasCustomerImpact(item) {
+  if (String(item?.severity || "").toLowerCase() !== "critical") return false;
+  const evidence = [
+    item?.businessName,
+    item?.summary,
+    item?.incident?.impact,
+    item?.snapshot?.Business,
+    item?.snapshot?.business,
+  ].filter(Boolean).join(" ");
+  if (!evidence.trim()) return false;
+  return !/no customer confirmed|no customer impact|synthetic|test only/i.test(evidence);
+}
+
+async function preserveDueCodexContainmentReports(now = Date.now()) {
+  if (!RUNTIME_TELEGRAM_ALERTS_ENABLED) return { preserved: 0, skipped: true };
+  let preserved = 0;
+  const candidates = (await listRuntimeIncidents(runtimeIncidentPath))
+    .filter((item) => item?.remediation?.codexFirst === true)
+    .filter((item) => item?.remediation?.automatic === true)
+    .filter((item) => !item?.remediation?.containmentReportPreservedAt)
+    .filter((item) => !["resolved", "recovered", "repair_ready", "needs_user", "failed", "not_required"].includes(String(item?.remediation?.status || "")))
+    .filter((item) => runtimeIncidentHasCustomerImpact(item))
+    .filter((item) => now - new Date(item?.detectedAt || 0).getTime() >= INCIDENT_CONTAINMENT_NOTICE_AFTER_MS)
+    .slice(0, 20);
+
+  for (const item of candidates) {
+    const incident = incidentFromRuntimeAttentionItem(item);
+    if (!incident) continue;
+    const business = item.businessName || item.snapshot?.Business || "A customer";
+    const queued = await queueTelegramAlertSafely({
+      text: [
+        "🟡 MY AI PA — SAFELY CONTAINED",
+        `${business}: ${item.title || "a customer workflow stopped"}.`,
+        "My AI PA stopped before claiming the signup or repair succeeded. No duplicate phone, assistant, or billing action is being assumed.",
+        "Codex is checking the cause now. You do not need to act yet; you will receive a plain-language result when the guarded investigation finishes.",
+        `Reference: INC-${String(item.id).slice(0, 8).toUpperCase()}`,
+      ].join("\n"),
+      adminUrl: incident.adminUrl,
+      buttonText: "Open contained issue",
+      dedupeKey: `containment:${item.id}:g${Math.max(1, Number(item.remediation?.generation || 1))}`,
+    });
+    if (!queued?.queued && !queued?.duplicate) continue;
+    const transition = await updateRuntimeIncidentRemediation(runtimeIncidentPath, item.id, {
+      status: item.remediation.status,
+      containmentReportPreservedAt: new Date(now).toISOString(),
+      containmentReportDelivery: queued.delivered === true ? "sent" : queued.duplicate ? "duplicate" : "queued",
+      containmentReportOutboxId: queued.id,
+      summary: "A short customer-impact containment notice was saved while Codex continued the guarded investigation.",
+    });
+    if (transition.updated) preserved += 1;
+  }
+  return { preserved, skipped: false };
+}
+
 async function preserveMissingInitialIncidentReports() {
   if (!RUNTIME_TELEGRAM_ALERTS_ENABLED) return { preserved: 0, skipped: true };
   let preserved = 0;
-  const candidates = listRuntimeIncidents(runtimeIncidentPath)
+  const candidates = (await listRuntimeIncidents(runtimeIncidentPath))
     .filter((item) => !item?.remediation?.initialReportPreservedAt)
+    .filter((item) => item?.remediation?.codexFirst !== true)
     .slice(0, 20);
   for (const item of candidates) {
     const incident = incidentFromRuntimeAttentionItem(item);
@@ -17267,7 +17590,7 @@ async function preserveMissingInitialIncidentReports() {
       inlineKeyboard: controls.replyMarkup,
     });
     if (!queued?.queued && !queued?.duplicate) continue;
-    const transition = updateRuntimeIncidentRemediation(runtimeIncidentPath, item.id, {
+    const transition = await updateRuntimeIncidentRemediation(runtimeIncidentPath, item.id, {
       status: item.remediation?.status || "needs_user",
       initialReportPreservedAt: new Date().toISOString(),
       initialReportDelivery: queued.delivered === true ? "sent" : "queued",
@@ -17281,15 +17604,30 @@ async function preserveMissingInitialIncidentReports() {
 
 async function reconcileIncidentReportReceipts() {
   let initialReports = 0;
+  let containmentReports = 0;
   let completionReports = 0;
   const acknowledgeAfterDelivery = [];
-  for (const item of listRuntimeIncidents(runtimeIncidentPath).slice(0, 100)) {
+  for (const item of (await listRuntimeIncidents(runtimeIncidentPath)).slice(0, 100)) {
     let latest = item;
-    if (
-      latest.remediation?.initialReportDelivery === "queued"
-      && hasTelegramDeliveryReceipt(telegramOutboxPath, latest.remediation.initialReportOutboxId)
-    ) {
-      const transition = updateRuntimeIncidentRemediation(runtimeIncidentPath, latest.id, {
+    const containmentReceipt = latest.remediation?.containmentReportDelivery === "queued"
+      ? await getTelegramDeliveryReceipt(telegramOutboxPath, latest.remediation.containmentReportOutboxId)
+      : null;
+    if (containmentReceipt) {
+      const transition = await updateRuntimeIncidentRemediation(runtimeIncidentPath, latest.id, {
+        status: latest.remediation.status,
+        containmentReportDelivery: "sent",
+        summary: "Telegram confirmed delivery of the customer-impact containment notice.",
+      });
+      if (transition.updated) {
+        latest = transition.item;
+        containmentReports += 1;
+      }
+    }
+    const initialReceipt = latest.remediation?.initialReportDelivery === "queued"
+      ? await getTelegramDeliveryReceipt(telegramOutboxPath, latest.remediation.initialReportOutboxId)
+      : null;
+    if (initialReceipt) {
+      const transition = await updateRuntimeIncidentRemediation(runtimeIncidentPath, latest.id, {
         status: latest.remediation.status,
         initialReportDelivery: "sent",
         summary: "Telegram confirmed delivery of the durable initial incident report.",
@@ -17299,11 +17637,11 @@ async function reconcileIncidentReportReceipts() {
         initialReports += 1;
       }
     }
-    if (
-      latest.remediation?.completionReportDelivery === "queued"
-      && hasTelegramDeliveryReceipt(telegramOutboxPath, latest.remediation.completionReportOutboxId)
-    ) {
-      const transition = updateRuntimeIncidentRemediation(runtimeIncidentPath, latest.id, {
+    const completionReceipt = latest.remediation?.completionReportDelivery === "queued"
+      ? await getTelegramDeliveryReceipt(telegramOutboxPath, latest.remediation.completionReportOutboxId)
+      : null;
+    if (completionReceipt) {
+      const transition = await updateRuntimeIncidentRemediation(runtimeIncidentPath, latest.id, {
         status: latest.remediation.status,
         completionReportDelivery: "sent",
         summary: "Telegram confirmed delivery of the durable remediation follow-up.",
@@ -17321,21 +17659,25 @@ async function reconcileIncidentReportReceipts() {
       acknowledgeAfterDelivery.push(latest.id);
     }
   }
-  for (const incidentId of acknowledgeAfterDelivery) acknowledgeRuntimeIncident(runtimeIncidentPath, incidentId);
-  return { initialReports, completionReports, acknowledged: acknowledgeAfterDelivery.length };
+  for (const incidentId of acknowledgeAfterDelivery) await acknowledgeRuntimeIncident(runtimeIncidentPath, incidentId);
+  return { initialReports, containmentReports, completionReports, acknowledged: acknowledgeAfterDelivery.length };
 }
 
 async function resumeInterruptedIncidentRemediations() {
-  if (!RUNTIME_TELEGRAM_ALERTS_ENABLED) return { resumed: 0, skipped: true };
+  if (!RUNTIME_TELEGRAM_ALERTS_ENABLED && !INCIDENT_CODE_REPAIR_ENABLED) {
+    return { resumed: 0, skipped: true };
+  }
   let resumed = 0;
-  const candidates = listRuntimeIncidents(runtimeIncidentPath)
+  const candidates = (await listRuntimeIncidents(runtimeIncidentPath))
     .filter((item) => item?.remediation?.automatic === true)
     .filter((item) => ["queued", "repairing", "verifying"].includes(String(item.remediation.status || "")))
-    .filter((item) => item.remediation.initialReportPreservedAt)
+    .filter((item) => item.remediation.codexFirst === true
+      ? item.remediation.codexMemoPreservedAt
+      : item.remediation.initialReportPreservedAt)
     .slice(0, 20);
   for (const candidate of candidates) {
     let item = candidate;
-    if (item.remediation.initialReportDelivery !== "sent") continue;
+    if (item.remediation.codexFirst !== true && item.remediation.initialReportDelivery !== "sent") continue;
     const incident = incidentFromRuntimeAttentionItem(item);
     if (!incident) continue;
     await runAutomatedRuntimeRemediation(incident, item);
@@ -17345,12 +17687,14 @@ async function resumeInterruptedIncidentRemediations() {
 }
 
 async function reconcileDispatchedIncidentRepairs() {
-  if (!INCIDENT_CODE_REPAIR_ENABLED || !GITHUB_INCIDENT_REPAIR_TOKEN || !GITHUB_INCIDENT_REPAIR_REPO) {
+  if (!INCIDENT_CODE_REPAIR_ENABLED || !incidentRepairCredentialConfigured() || !GITHUB_INCIDENT_REPAIR_REPO) {
     return { reconciled: 0, skipped: true };
   }
+  const githubToken = await getIncidentRepairGitHubToken();
+  if (!githubToken) return { reconciled: 0, skipped: true };
   let reconciled = 0;
   const now = Date.now();
-  const candidates = listRuntimeIncidents(runtimeIncidentPath)
+  const candidates = (await listRuntimeIncidents(runtimeIncidentPath))
     .filter((item) => item?.remediation?.action === "codex_draft_repair")
     .filter((item) => item?.remediation?.status === "repair_dispatched")
     .filter((item) => now - new Date(item.remediation.updatedAt || item.detectedAt || 0).getTime() >= 10 * 60 * 1000)
@@ -17362,7 +17706,7 @@ async function reconcileDispatchedIncidentRepairs() {
       let result = await findCodexIncidentRepairRun({
         incident,
         generation: item.remediation.generation || 1,
-        token: GITHUB_INCIDENT_REPAIR_TOKEN,
+        token: githubToken,
         repository: GITHUB_INCIDENT_REPAIR_REPO,
         now,
       });
@@ -17395,12 +17739,14 @@ async function reconcileDispatchedIncidentRepairs() {
 }
 
 async function reconcileReadyIncidentPullRequests() {
-  if (!TELEGRAM_GUARDED_ACTIONS_ENABLED || !GITHUB_INCIDENT_REPAIR_TOKEN || !GITHUB_INCIDENT_REPAIR_REPO) {
+  if (!TELEGRAM_GUARDED_ACTIONS_ENABLED || !incidentRepairCredentialConfigured() || !GITHUB_INCIDENT_REPAIR_REPO) {
     return { ready: 0, pending: 0, skipped: true };
   }
+  const githubToken = await getIncidentRepairGitHubToken();
+  if (!githubToken) return { ready: 0, pending: 0, skipped: true };
   let ready = 0;
   let pending = 0;
-  const candidates = listRuntimeIncidents(runtimeIncidentPath)
+  const candidates = (await listRuntimeIncidents(runtimeIncidentPath))
     .filter((item) => item?.remediation?.status === "repair_ready")
     .filter((item) => item?.remediation?.pullRequest && !item?.remediation?.telegramApprovalId)
     .slice(0, 5);
@@ -17408,13 +17754,13 @@ async function reconcileReadyIncidentPullRequests() {
     const pull = item.remediation.pullRequest;
     try {
       const readiness = await inspectPullRequestLandingReadiness({
-        token: GITHUB_INCIDENT_REPAIR_TOKEN,
+        token: githubToken,
         repository: GITHUB_INCIDENT_REPAIR_REPO,
         prNumber: pull.prNumber,
         headSha: pull.headSha,
       });
       if (readiness.reason === "pull_request_still_draft" && readiness.nodeId) {
-        await markPullRequestReadyForReview({ token: GITHUB_INCIDENT_REPAIR_TOKEN, nodeId: readiness.nodeId });
+        await markPullRequestReadyForReview({ token: githubToken, nodeId: readiness.nodeId });
         pending += 1;
         continue;
       }
@@ -17448,7 +17794,7 @@ async function reconcileReadyIncidentPullRequests() {
         dedupeKey: `pr-landing-approval:${pull.prNumber}:${pull.headSha}`,
       });
       if (!queued?.queued && !queued?.duplicate) continue;
-      const transition = updateRuntimeIncidentRemediation(runtimeIncidentPath, item.id, {
+      const transition = await updateRuntimeIncidentRemediation(runtimeIncidentPath, item.id, {
         status: "repair_ready",
         telegramApprovalId: approval.publicId,
         summary: `Telegram merge approval was preserved for PR #${pull.prNumber} at ${pull.headSha.slice(0, 12)}.`,
@@ -17467,6 +17813,7 @@ async function reconcileReadyIncidentPullRequests() {
 
 async function drainTelegramOutbox(phase = "scheduled") {
   try {
+    await preserveDueCodexContainmentReports();
     await preserveMissingInitialIncidentReports();
     await reconcileReadyIncidentPullRequests();
     let result = await processTelegramOutbox({
@@ -17534,7 +17881,7 @@ async function drainTelegramOutbox(phase = "scheduled") {
           safeAutoRepairEnabled: INCIDENT_SAFE_AUTO_REPAIR_ENABLED,
         }),
       };
-      const recorded = recordRuntimeIncident(runtimeIncidentPath, incident);
+      const recorded = await recordRuntimeIncident(runtimeIncidentPath, incident);
       if (!recorded.recorded) {
         console.error("[telegram:outbox] delivery issue snapshot could not be persisted", {
           reason: recorded.reason || "runtime_incident_store_failed",
@@ -17542,7 +17889,7 @@ async function drainTelegramOutbox(phase = "scheduled") {
       }
     } else if (!result.skipped && !result.busy) {
       if (Number(result.remaining || 0) !== 0) return result;
-      for (const item of listRuntimeIncidents(runtimeIncidentPath)) {
+      for (const item of await listRuntimeIncidents(runtimeIncidentPath)) {
         if (
           ["TELEGRAM_OUTBOX_DELIVERY_RETRYING", "TELEGRAM_OUTBOX_DRAIN_FAILED"].includes(String(item?.incident?.reasonCode || ""))
           && !["resolved", "recovered"].includes(String(item?.remediation?.status || ""))
@@ -17585,7 +17932,7 @@ async function drainTelegramOutbox(phase = "scheduled") {
         safeAutoRepairEnabled: INCIDENT_SAFE_AUTO_REPAIR_ENABLED,
       }),
     };
-    recordRuntimeIncident(runtimeIncidentPath, incident);
+    await recordRuntimeIncident(runtimeIncidentPath, incident);
     return { processed: 0, sent: 0, retried: 0, permanentFailures: 0, error: "outbox_drain_failed" };
   }
 }
