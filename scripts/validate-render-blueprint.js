@@ -111,7 +111,7 @@ if (!service) {
   expectEnvValue(service, "SMS_SUPPRESSION_CHECK_URL", "https://api.myaipa.ca/api/integrations/sms/suppression/check");
   expectEnvValue(service, "SIGNUP_REQUIRE_MANUAL_APPROVAL", true);
   expectEnvValue(service, "TWILIO_DEFAULT_CANADIAN_REGION", "ON");
-  expectEnvValue(service, "SIGNUP_REQUIRE_VERIFICATION", false);
+  expectEnvValue(service, "SIGNUP_REQUIRE_VERIFICATION", true);
   expectEnvValue(service, "SIGNUP_IP_WINDOW_MS", 900000);
   expectEnvValue(service, "SIGNUP_IP_MAX_REQUESTS", 5);
   expectEnvValue(service, "SIGNUP_IDENTITY_WINDOW_MS", 3600000);

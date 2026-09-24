@@ -160,7 +160,7 @@ services:
         # Set false only after a duplicate-safe end-to-end canary passes.
         value: true
       - key: SIGNUP_REQUIRE_VERIFICATION
-        value: false
+        value: true
       - key: SIGNUP_IP_WINDOW_MS
         value: 900000
       - key: SIGNUP_IP_MAX_REQUESTS

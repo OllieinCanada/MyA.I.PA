@@ -85,7 +85,7 @@ function createPendingSignupVerificationStore({ prisma, minimumTtlMs = 24 * 60 *
       await tx.pendingSignupVerification.deleteMany({
         where: { OR: [{ expiresAt: { lte: now } }, { usedAt: { not: null } }, { supersededAt: { not: null } }] },
       });
-      if (purpose === "manual_review_recovery") {
+      if (purpose === "manual_review_recovery" || ["email_verification", "sms_verification", "contact_verification"].includes(purpose)) {
         await tx.pendingSignupVerification.updateMany({
           where: {
             purpose,

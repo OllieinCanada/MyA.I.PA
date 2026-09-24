@@ -4395,7 +4395,7 @@ export default function AdminDashboard() {
                             {expiry.label || "No end date"}
                           </div>
                           <div className="mt-2 text-xs font-semibold text-white/45">{signup.status || "signup_received"}</div>
-                          {signup.emailVerificationRequired && !signup.emailVerified ? <div className="mt-1 text-xs font-semibold text-amber-100">Email verification pending</div> : null}
+                          {(signup.emailVerificationRequired || signup.smsVerificationRequired) && !(signup.emailVerified || signup.smsVerified) ? <div className="mt-1 text-xs font-semibold text-amber-100">Contact verification pending</div> : null}
                         </td>
                       </tr>
                     );

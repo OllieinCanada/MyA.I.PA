@@ -232,7 +232,7 @@ test("opening a verification link advances the same saved status without provisi
   const { buildMakeSignupEventKey } = require("../server/makeSignupWebhook");
   const attempt = await store.register({ eventKey: buildMakeSignupEventKey(payload), payload, status: "pending_email_verification" });
   const token = await pendingStore.create({ payload, ownerEmail: payload.owner.email, businessName: payload.business.name, reviewReasons: ["manual_approval_enabled"], ttlMs: 3600000 });
-  const verified = await fetch(`${baseUrl}/api/integrations/verify-signup-email?token=${encodeURIComponent(token)}`);
+  const verified = await fetch(`${baseUrl}/api/integrations/verify-signup-contact?token=${encodeURIComponent(token)}`);
   assert.equal(verified.status, 200, await verified.clone().text());
   assert.match(await verified.text(), /Contact verified/);
   const status = (await (await request(attempt.access)).json()).signup;

@@ -98,6 +98,25 @@ test("delivery proof is recorded without storing the raw token", async () => {
   assert.equal(rows.has(token), false);
 });
 
+test("a newer SMS verification supersedes the older active link for the same owner", async () => {
+  const { prisma, rows } = mockPrisma();
+  const store = createPendingSignupVerificationStore({ prisma, minimumTtlMs: 1000 });
+  const first = await store.create({
+    ownerEmail: "owner@example.com",
+    businessName: "Safe Co",
+    purpose: "sms_verification",
+  });
+  const second = await store.create({
+    ownerEmail: "OWNER@example.com",
+    businessName: "Safe Co",
+    purpose: "sms_verification",
+  });
+  assert.notEqual(first, second);
+  assert.equal((await store.claim(first)).status, "missing");
+  assert.equal((await store.claim(second)).status, "claimed");
+  assert.equal([...rows.values()].filter((row) => !row.supersededAt && !row.usedAt).length, 1);
+});
+
 test("active legacy records migrate once without overwriting PostgreSQL state", async () => {
   const { prisma, rows } = mockPrisma();
   const store = createPendingSignupVerificationStore({ prisma, minimumTtlMs: 1000 });
