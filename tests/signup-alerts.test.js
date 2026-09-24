@@ -26,7 +26,7 @@ test("signup alert is actionable without customer contact details", () => {
   assert.match(text, /MY AI PA — CRITICAL/);
   assert.match(text, /Example Electrical/);
   assert.match(text, /returned HTTP 200/);
-  assert.match(text, /Do this now:/);
+  assert.match(text, /What happens next:/);
   assert.doesNotMatch(text, /Business type:|Service area:|Attempt reference:/);
   assert.doesNotMatch(text, /private@example\.com|9055550123/);
 });

@@ -199,6 +199,25 @@ test("the production Prisma void result is identified as a database implementati
   assert.match(classified.nextAction, /supported advisory-lock query/i);
 });
 
+test("signup identity defects are not mislabeled as billing, credentials, or provider outages", () => {
+  const incomplete = classifyOperationalError(
+    Object.assign(new Error("Agent test setup is incomplete"), { code: "AGENT_TEST_SETUP_INCOMPLETE", statusCode: 502 }),
+    { provider: "vapi", operation: "new agent delivery test" }
+  );
+  assert.equal(incomplete.category, "signup_identity_defect");
+  assert.equal(incomplete.reasonCode, "AGENT_TEST_SETUP_INCOMPLETE");
+  assert.match(incomplete.reason, /record-selection defect/i);
+  assert.doesNotMatch(incomplete.nextAction, /billing|credentials/i);
+
+  const route = classifyOperationalError(
+    Object.assign(new Error("Vapi binding mismatch"), { code: "SIGNUP_RECOVERY_VAPI_BINDING_MISMATCH", statusCode: 409 }),
+    { provider: "vapi", operation: "guarded signup recovery" }
+  );
+  assert.equal(route.category, "signup_route_reconciliation_defect");
+  assert.equal(route.reasonCode, "SIGNUP_RECOVERY_VAPI_BINDING_MISMATCH");
+  assert.match(route.nextAction, /trial-gate/i);
+});
+
 test("timeouts require reconciliation before a retry", () => {
   const classified = classifyOperationalError(
     Object.assign(new Error("request timed out"), { code: "ETIMEDOUT" }),

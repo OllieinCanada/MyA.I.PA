@@ -485,5 +485,8 @@ module.exports = {
   processTelegramOutbox,
   resetTelegramOutboxLocksForTests,
   normalizeInlineKeyboard,
+  postTelegramItem,
+  retryDelayMs,
+  sanitizeButtonText,
   validateAdminUrl,
 };

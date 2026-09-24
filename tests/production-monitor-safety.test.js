@@ -33,21 +33,22 @@ function validState() {
   };
 }
 
-test("Render pins the guarded repair controls and keeps code repair off", () => {
+test("Render enables the circuit-broken draft-only Codex repair path", () => {
   const blueprint = YAML.parse(fs.readFileSync(path.join(root, "render.yaml"), "utf8"));
   const service = blueprint.services.find((item) => item.name === "myaipa-api");
   const byKey = new Map(service.envVars.map((item) => [item.key, item]));
 
   assert.equal(byKey.get("RUNTIME_TELEGRAM_ALERTS_ENABLED").value, "true");
   assert.equal(byKey.get("INCIDENT_SAFE_AUTO_REPAIR_ENABLED").value, "true");
-  assert.equal(byKey.get("INCIDENT_CODE_REPAIR_ENABLED").value, "false");
+  assert.equal(byKey.get("INCIDENT_CODE_REPAIR_ENABLED").value, "true");
   assert.equal(byKey.get("INCIDENT_CODE_REPAIR_MAX_DAILY").value, "3");
   assert.equal(byKey.get("INCIDENT_CODE_REPAIR_COOLDOWN_MS").value, "3600000");
   assert.equal(byKey.get("INCIDENT_READINESS_TIMEOUT_MS").value, "5000");
-  assert.deepEqual(byKey.get("GITHUB_INCIDENT_REPAIR_TOKEN"), {
-    key: "GITHUB_INCIDENT_REPAIR_TOKEN",
-    sync: false,
-  });
+  assert.equal(byKey.has("GITHUB_INCIDENT_REPAIR_TOKEN"), false);
+  for (const key of ["GITHUB_INCIDENT_REPAIR_APP_ID", "GITHUB_INCIDENT_REPAIR_INSTALLATION_ID", "GITHUB_INCIDENT_REPAIR_APP_PRIVATE_KEY"]) {
+    assert.deepEqual(byKey.get(key), { key, sync: false });
+  }
+  assert.equal(byKey.get("OPERATIONAL_STATE_BACKEND").value, "database");
   assert.deepEqual(byKey.get("INCIDENT_REPAIR_DISPATCH_SECRET"), {
     key: "INCIDENT_REPAIR_DISPATCH_SECRET",
     sync: false,

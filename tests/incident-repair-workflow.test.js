@@ -18,6 +18,12 @@ function validInputs(overrides = {}) {
     method: "POST",
     workflow: "customer signup",
     release: "ABC123",
+    title: "Signup delivery test stopped",
+    reason: "The exact signup identity could not be proven.",
+    impact: "The agent remains contained and is not marked ready.",
+    last_checkpoint: "The provider resources were created but delivery was not approved.",
+    next_action: "Inspect the exact signup attempt and add a regression test.",
+    prior_incidents: "No verified prior repair evidence is stored for this incident fingerprint.",
     ...overrides,
   };
 }

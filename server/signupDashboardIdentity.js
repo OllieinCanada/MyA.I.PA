@@ -53,6 +53,22 @@ function findSignupDashboardExistingKey(store = {}, record = {}) {
   }) || getSignupDashboardKey(record);
 }
 
+function selectSignupDashboardRecordForProvisioning(records = [], identity = {}) {
+  const candidates = Array.isArray(records) ? records : [];
+  const attemptId = normalizedAttemptId(identity);
+  if (attemptId) {
+    return candidates.find((candidate) => normalizedAttemptId(candidate) === attemptId) || null;
+  }
+
+  const ownerEmail = String(identity.ownerEmail || "").trim().toLowerCase();
+  if (!ownerEmail) return null;
+  const legacyMatches = candidates.filter((candidate) => (
+    !normalizedAttemptId(candidate)
+    && String(candidate?.ownerEmail || "").trim().toLowerCase() === ownerEmail
+  ));
+  return legacyMatches.length === 1 ? legacyMatches[0] : null;
+}
+
 function canRemoveSignupAlias(candidate = {}, merged = {}) {
   if (!candidate || typeof candidate !== "object") return false;
   const mergedAttemptId = normalizedAttemptId(merged);
@@ -71,4 +87,5 @@ module.exports = {
   getSignupDashboardKey,
   normalizeSignupSubmissionId,
   normalizedAttemptId,
+  selectSignupDashboardRecordForProvisioning,
 };

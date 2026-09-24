@@ -138,13 +138,29 @@ function createSignupAttemptStore({ prisma, secret, ttlMs = 7 * 24 * 60 * 60 * 1
       expiresAt: new Date(Date.now() + statusTtlMs),
     };
     // Atomic create-or-read: only explicit workflow transitions may alter an
-    // existing attempt. A browser retry must not reset progress or extend access.
-    const record = await prisma.signupAttempt.upsert({
-      where: { eventKey },
-      create: { eventKey, ...data },
-      update: {},
-    });
-    return { access: { id: access.publicId, token: access.token }, record, public: publicAttempt(record) };
+    // existing attempt. A browser retry must not reset progress, extend access,
+    // or send another verification message for the same submission ID.
+    let record;
+    let reused = false;
+    if (typeof prisma.signupAttempt.create === "function") {
+      try {
+        record = await prisma.signupAttempt.create({ data: { eventKey, ...data } });
+      } catch (error) {
+        if (String(error?.code || "") !== "P2002") throw error;
+        record = await prisma.signupAttempt.findUnique({ where: { eventKey } });
+        reused = true;
+      }
+    } else {
+      const existing = await prisma.signupAttempt.findUnique({ where: { eventKey } });
+      record = await prisma.signupAttempt.upsert({
+        where: { eventKey },
+        create: { eventKey, ...data },
+        update: {},
+      });
+      reused = Boolean(existing);
+    }
+    if (!record) throw new Error("The signup attempt could not be created or recovered.");
+    return { access: { id: access.publicId, token: access.token }, record, public: publicAttempt(record), reused };
   }
 
   async function authenticate(publicId, token) {

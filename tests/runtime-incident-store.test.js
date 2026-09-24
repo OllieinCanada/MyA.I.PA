@@ -214,3 +214,41 @@ test("a needs-user incident restarts only after an explicit owner authorization"
   assert.equal(approved.item.remediation.requiresUser, false);
   assert.equal(approved.item.remediation.ownerAuthorizedAt, "2026-09-19T12:02:00.000Z");
 });
+
+test("Codex-first incident memo state survives a process restart", (t) => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "myaipa-codex-first-store-"));
+  const filePath = path.join(directory, "runtime-incidents.json");
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const incident = {
+    incidentId: "cccccccccccccccccccccccc",
+    reasonCode: "AGENT_TEST_SETUP_INCOMPLETE",
+    whatFailed: "Signup agent pre-delivery test",
+    impact: "The signup is not ready for customer calls",
+    detectedAt: "2026-09-24T12:00:00.000Z",
+    remediation: {
+      version: 1,
+      status: "queued",
+      action: "codex_draft_repair",
+      automatic: true,
+      requiresUser: false,
+      codexFirst: true,
+    },
+  };
+
+  const recorded = recordRuntimeIncident(filePath, incident);
+  assert.equal(recorded.item.remediation.codexFirst, true);
+  assert.equal(recorded.item.remediation.initialReportPreservedAt, undefined);
+
+  const memoTime = "2026-09-24T12:00:01.000Z";
+  const preserved = updateRuntimeIncidentRemediation(filePath, incident.incidentId, {
+    status: "queued",
+    codexMemoPreservedAt: memoTime,
+    summary: "A redacted memo was saved before Telegram delivery.",
+  });
+  assert.equal(preserved.updated, true);
+
+  const reloaded = listRuntimeIncidents(filePath)[0];
+  assert.equal(reloaded.remediation.codexFirst, true);
+  assert.equal(reloaded.remediation.codexMemoPreservedAt, memoTime);
+  assert.equal(reloaded.remediation.initialReportPreservedAt, undefined);
+});

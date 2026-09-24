@@ -12,6 +12,14 @@ function getBackendTestBatchSize(platform = process.platform, configured = proce
   return batchSize;
 }
 
+function getBackendTestBatchTimeout(configured = process.env.BACKEND_TEST_BATCH_TIMEOUT_MS) {
+  const timeoutMs = Number(configured || 120_000);
+  if (!Number.isInteger(timeoutMs) || timeoutMs < 10_000 || timeoutMs > 600_000) {
+    throw new Error("BACKEND_TEST_BATCH_TIMEOUT_MS must be an integer from 10000 to 600000.");
+  }
+  return timeoutMs;
+}
+
 function collectTestFiles(directory) {
   return fs.readdirSync(directory, { withFileTypes: true })
     .flatMap((entry) => {
@@ -24,6 +32,7 @@ function collectTestFiles(directory) {
 
 function runBackendTests() {
   const BATCH_SIZE = getBackendTestBatchSize();
+  const BATCH_TIMEOUT_MS = getBackendTestBatchTimeout();
   const files = collectTestFiles(TESTS_DIR);
   if (files.length === 0) {
     console.error("No backend test files were found.");
@@ -39,7 +48,14 @@ function runBackendTests() {
       cwd: ROOT,
       env: process.env,
       stdio: "inherit",
+      timeout: BATCH_TIMEOUT_MS,
+      killSignal: "SIGTERM",
     });
+    if (result.error?.code === "ETIMEDOUT") {
+      const relativeFiles = batch.map((file) => path.relative(ROOT, file)).join(", ");
+      console.error(`[backend-tests] Timed out after ${BATCH_TIMEOUT_MS}ms: ${relativeFiles}`);
+      process.exit(124);
+    }
     if (result.error) throw result.error;
     if (result.status !== 0) process.exit(result.status || 1);
   }
@@ -48,4 +64,4 @@ function runBackendTests() {
 }
 
 if (require.main === module) runBackendTests();
-module.exports = { getBackendTestBatchSize };
+module.exports = { getBackendTestBatchSize, getBackendTestBatchTimeout };

@@ -1459,6 +1459,23 @@ function createSignupSubmissionId() {
 }
 
 const SIGNUP_RESULT_SESSION_KEY = "myaipa_signup_result_v2";
+const SIGNUP_SUBMISSION_SESSION_KEY = "myaipa_signup_submission_v1";
+
+function getOrCreateSignupSubmissionId() {
+  try {
+    const existing = String(window.sessionStorage?.getItem(SIGNUP_SUBMISSION_SESSION_KEY) || "").trim().toLowerCase();
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(existing)) return existing;
+    const created = createSignupSubmissionId();
+    if (created) window.sessionStorage?.setItem(SIGNUP_SUBMISSION_SESSION_KEY, created);
+    return created;
+  } catch (_error) {
+    return createSignupSubmissionId();
+  }
+}
+
+function clearSignupSubmissionId() {
+  try { window.sessionStorage?.removeItem(SIGNUP_SUBMISSION_SESSION_KEY); } catch (_error) { /* ignored */ }
+}
 
 function readStoredSignupResult() {
   try {
@@ -2209,6 +2226,7 @@ export default function Signup() {
     setReturnToReviewAfterEdit(false);
     signupStartedAtRef.current = Date.now();
     signupSubmissionIdRef.current = "";
+    clearSignupSubmissionId();
     setDetails({ ...DEFAULT_DETAILS });
     setPricing({ ...DEFAULT_PRICING });
     window.scrollTo?.({ top: 0, behavior: "smooth" });
@@ -2363,7 +2381,12 @@ export default function Signup() {
     setError("");
     setStatus("");
 
-    if (!signupSubmissionIdRef.current) signupSubmissionIdRef.current = createSignupSubmissionId();
+    if (!signupSubmissionIdRef.current) signupSubmissionIdRef.current = getOrCreateSignupSubmissionId();
+    if (!signupSubmissionIdRef.current) {
+      setBusy(false);
+      setError("This browser could not create a secure signup reference. Refresh the page and try again.");
+      return;
+    }
     const formData = buildSignupPayload({
       submissionId: signupSubmissionIdRef.current,
       details,
@@ -2398,6 +2421,7 @@ export default function Signup() {
         twilioPhoneNumber: getTwilioPhoneNumber(data) || data.twilioPhoneNumber || "",
         trialDays: 14,
       };
+      clearSignupSubmissionId();
       setSignupResult(completedSignup);
       storeSignupResult(completedSignup);
       setBusy(false);
@@ -2729,6 +2753,7 @@ export default function Signup() {
               display: flex;
               align-items: center;
               justify-content: space-between;
+              gap: 12px;
               margin-bottom: 12px;
               border-radius: 12px;
               background: #eff6ff;
@@ -2736,6 +2761,48 @@ export default function Signup() {
               color: #1d4ed8;
               font-size: 0.9rem;
               font-weight: 800;
+            }
+
+            .signup-mobile-selected-summary {
+              display: inline-flex;
+              min-width: 0;
+              align-items: center;
+              gap: 8px;
+            }
+
+            .signup-mobile-selected-summary strong {
+              display: inline-flex;
+              min-width: 26px;
+              height: 26px;
+              align-items: center;
+              justify-content: center;
+              border-radius: 999px;
+              background: #dbeafe;
+              color: #1d4ed8;
+              font-size: 0.82rem;
+            }
+
+            .signup-mobile-area-next {
+              display: inline-flex;
+              min-height: 42px;
+              flex: 0 0 auto;
+              align-items: center;
+              justify-content: center;
+              gap: 7px;
+              border: 0;
+              border-radius: 11px;
+              background: linear-gradient(90deg, #2563eb, #4f46e5);
+              padding: 8px 16px;
+              color: #fff;
+              font-size: 0.92rem;
+              font-weight: 900;
+              box-shadow: 0 12px 24px -18px rgba(37, 99, 235, 0.95);
+            }
+
+            .signup-mobile-area-next:disabled {
+              background: #cbd5e1;
+              color: #64748b;
+              box-shadow: none;
             }
 
             .signup-business-fields {
@@ -2794,6 +2861,14 @@ export default function Signup() {
 
             .signup-mobile-action-bar.is-first-step {
               grid-template-columns: 1fr;
+            }
+
+            .signup-mobile-action-bar.is-service-area-step {
+              grid-template-columns: minmax(92px, 140px);
+              border: 0;
+              background: transparent;
+              padding: 0 0 12px;
+              box-shadow: none;
             }
 
             .signup-mobile-action-bar button {
@@ -3349,11 +3424,21 @@ export default function Signup() {
                 <div className="signup-task-content flex min-h-0 flex-col overflow-hidden rounded-3xl">
                   <div className="signup-mobile-task-heading">
                     <h2>Where do you work?</h2>
-                    <p>Choose one or more service areas. Then tap Continue.</p>
+                    <p>Choose one or more service areas. Then tap Next.</p>
                   </div>
                   <div className="signup-mobile-selected-count">
-                    <span>Selected areas</span>
-                    <span>{selectedAreas.length}</span>
+                    <span className="signup-mobile-selected-summary">
+                      <span>Selected areas</span>
+                      <strong>{selectedAreas.length}</strong>
+                    </span>
+                    <button
+                      type="submit"
+                      disabled={businessSlideDisabled || busy}
+                      className="signup-mobile-area-next"
+                    >
+                      {busy ? "Saving…" : "Next"}
+                      <Icon name="arrow" className="h-4 w-4" />
+                    </button>
                   </div>
                   <div className="signup-area-list flex min-h-0 flex-1 content-start items-start overflow-y-auto pr-2 pb-2 [scrollbar-width:thin]">
                     <div className="signup-area-grid grid w-full content-start gap-4">
@@ -3773,6 +3858,7 @@ export default function Signup() {
           className={
             "signup-mobile-action-bar " +
             (currentStep === 1 && businessSlide === 1 ? "is-choice-step " : "") +
+            (currentStep === 1 && businessSlide === 2 ? "is-service-area-step " : "") +
             (currentStep === 1 && businessSlide === 1 && tradeSetupPanel === "trade" ? "is-first-step" : "")
           }
         >
@@ -3781,10 +3867,12 @@ export default function Signup() {
               {currentStep === 2 ? "Skip for now" : "Back"}
             </button>
           )}
-          <button type="submit" disabled={mobilePrimaryDisabled || busy} className="signup-mobile-primary">
-            {busy ? "Saving…" : mobilePrimaryLabel}
-            <Icon name="arrow" className="h-4 w-4" />
-          </button>
+          {currentStep === 1 && businessSlide === 2 ? null : (
+            <button type="submit" disabled={mobilePrimaryDisabled || busy} className="signup-mobile-primary">
+              {busy ? "Saving…" : mobilePrimaryLabel}
+              <Icon name="arrow" className="h-4 w-4" />
+            </button>
+          )}
           {mobilePrimaryDisabled ? (
             <p className="signup-mobile-disabled-reason">
               {currentStep === 1 && businessSlide === 1

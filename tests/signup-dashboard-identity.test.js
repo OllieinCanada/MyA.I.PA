@@ -6,6 +6,7 @@ const {
   findSignupDashboardExistingKey,
   getSignupAliases,
   normalizeSignupSubmissionId,
+  selectSignupDashboardRecordForProvisioning,
 } = require("../server/signupDashboardIdentity");
 
 test("accepts only random UUID submission identities", () => {
@@ -76,4 +77,28 @@ test("attempt aliases are first-class and only exact-attempt duplicates are remo
     { signupAttemptId: "signup_other" },
     { signupAttemptId: "signup_exact" }
   ), false);
+});
+
+test("provisioning selects only the exact signup attempt when an email was reused", () => {
+  const records = [
+    { signupAttemptId: "attempt-old", ownerEmail: "owner@example.com", ownerPhone: "+19055550101" },
+    { signupAttemptId: "attempt-new", ownerEmail: "owner@example.com", ownerPhone: "+19055550102" },
+  ];
+  assert.equal(selectSignupDashboardRecordForProvisioning(records, {
+    signupAttemptId: "attempt-new",
+    ownerEmail: "owner@example.com",
+  }), records[1]);
+  assert.equal(selectSignupDashboardRecordForProvisioning(records, {
+    signupAttemptId: "attempt-missing",
+    ownerEmail: "owner@example.com",
+  }), null);
+});
+
+test("legacy provisioning fails closed when an email maps to more than one unowned record", () => {
+  const records = [
+    { ownerEmail: "owner@example.com", businessName: "First" },
+    { ownerEmail: "owner@example.com", businessName: "Second" },
+  ];
+  assert.equal(selectSignupDashboardRecordForProvisioning(records, { ownerEmail: "owner@example.com" }), null);
+  assert.equal(selectSignupDashboardRecordForProvisioning(records.slice(0, 1), { ownerEmail: "owner@example.com" }), records[0]);
 });

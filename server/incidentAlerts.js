@@ -43,6 +43,9 @@ const INCIDENT_REASON_CATALOG = Object.freeze({
   CALL_TOOL_EXECUTION_STUCK: "A call-side action remained in progress beyond the safety window.",
   DATABASE_UNAVAILABLE: "The application could not reach its production database.",
   DATABASE_QUERY_IMPLEMENTATION_FAILED: "A database query could not be processed safely by the application, so the protected operation stopped.",
+  AGENT_TEST_SETUP_INCOMPLETE: "The pre-delivery test received a signup record that did not contain the exact owner, AI number, and assistant pairing.",
+  AGENT_TEST_SIGNUP_ATTEMPT_MISSING: "The pre-delivery test could not find the exact signup attempt and refused to use another record with the same email.",
+  SIGNUP_RECOVERY_VAPI_BINDING_MISMATCH: "The guarded recovery could not prove that the live Vapi route belongs to the expected phone, assistant, and business.",
   PROVIDER_ACCOUNT_FUNDING_REQUIRED: "The affected provider explicitly reported that the My AI PA platform account needs funds or credits.",
   TWILIO_ACCOUNT_ACCESS_REJECTED: "Twilio denied account access. Check Twilio Billing and Account status first because a suspended or unpaid account can look like a credential failure.",
   CUSTOMER_PAYMENT_FAILED: "The customer's Stripe payment failed. This is not a Twilio or Vapi account-funding issue.",
@@ -219,18 +222,16 @@ function buildIncidentTelegramAlert(input = {}) {
 
   const text = [
     `${icon} MY AI PA — ${severity}`,
-    title,
+    `ELI10: ${title}`,
     "",
-    `Who is affected: ${affectedCustomer(input)}`,
-    `Customer impact: ${impact}`,
-    `Why: ${reason}`,
-    "",
-    `What My AI PA did: ${systemAction}`,
-    `Do this now: ${nextAction}`,
+    `What stopped: ${reason}`,
+    `Who it affects: ${affectedCustomer(input)}`,
+    `What is safe: ${impact} ${systemAction}`,
+    `What happens next: ${nextAction}`,
     `Status: ${status}`,
     "",
     `Reference: ${reference}`,
-    "Full technical evidence is saved in Admin → Needs Attention.",
+    "Technical evidence: Admin → Needs Attention.",
   ].join("\n");
 
   return capText(text, MAX_TELEGRAM_TEXT_LENGTH, "\n…");
@@ -258,14 +259,16 @@ function buildIncidentRemediationUpdate(input = {}) {
     || (["resolved", "recovered", "cleared"].includes(status)
       ? "No immediate action is required. The original operation was not replayed."
       : "Open the exact incident and review the repair result.");
+  const eli10 = redactIncidentText(input.eli10 || input.diagnosis || actionTaken, { multiline: true, maxLength: 520 });
   const recovered = ["resolved", "recovered", "cleared"].includes(status);
   const text = [
     `${recovered ? "✅" : "🟡"} MY AI PA — ${statusLabels[status]}`,
     `Reference: ${incidentReference(incidentId)}`,
     "",
-    `What My AI PA did: ${actionTaken}`,
-    `How we checked: ${verification}`,
-    `${recovered ? "What you need to do" : "Do this now"}: ${nextAction}`,
+    `ELI10: ${eli10}`,
+    `What Codex/My AI PA did: ${actionTaken}`,
+    `How it was checked: ${verification}`,
+    `Your next step: ${nextAction}`,
     `Status: ${recovered ? "No immediate action needed" : "Waiting for you"}`,
   ].join("\n");
   return capText(text, MAX_TELEGRAM_TEXT_LENGTH, "\n…");

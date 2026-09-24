@@ -52,6 +52,34 @@ test("refuses recovery when the live Vapi phone is attached to another assistant
   );
 });
 
+test("accepts an exact protected trial-gate route during guarded recovery", () => {
+  const routeAssessment = {
+    status: "verified",
+    mode: "trial-gate",
+    expected: {
+      assistantId,
+      phoneNumberId,
+      phoneNumber: phone,
+    },
+  };
+  const result = __test.buildProvisioningReadbackAssessment(validReadback({
+    vapiNumbers: [{ id: phoneNumberId, number: phone, server: { url: "https://api.example.test/trial-gate" } }],
+    routeAssessment,
+  }));
+  assert.equal(result.complete, true);
+  assert.equal(result.vapiAssistantId, assistantId);
+});
+
+test("does not accept an unverified dynamic Vapi route during guarded recovery", () => {
+  assert.throws(
+    () => __test.buildProvisioningReadbackAssessment(validReadback({
+      vapiNumbers: [{ id: phoneNumberId, number: phone, server: { url: "https://unknown.example.test" } }],
+      routeAssessment: { status: "conflict", mode: "trial-gate", expected: { assistantId, phoneNumberId, phoneNumber: phone } },
+    })),
+    (error) => error.code === "SIGNUP_RECOVERY_VAPI_BINDING_MISMATCH"
+  );
+});
+
 test("refuses recovery when more than one live provider record matches", () => {
   const twilioRecord = { phone_number: phone, voice_url: "https://hook.make.com/voice", capabilities: { voice: true, sms: true } };
   assert.throws(

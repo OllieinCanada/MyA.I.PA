@@ -35,6 +35,30 @@ on:
         required: false
         default: ""
         type: string
+      title:
+        description: Redacted ELI10 incident title
+        required: true
+        type: string
+      reason:
+        description: Redacted observed reason
+        required: true
+        type: string
+      impact:
+        description: Redacted customer impact
+        required: true
+        type: string
+      last_checkpoint:
+        description: Redacted last verified checkpoint
+        required: true
+        type: string
+      next_action:
+        description: Redacted proposed next action
+        required: true
+        type: string
+      prior_incidents:
+        description: Redacted prior root cause and regression evidence for this fingerprint
+        required: true
+        type: string
       authorization:
         description: One-use backend HMAC authorization for this exact repair envelope
         required: true
@@ -72,6 +96,12 @@ jobs:
           REPAIR_METHOD: ${{ inputs.method }}
           REPAIR_WORKFLOW: ${{ inputs.workflow }}
           REPAIR_RELEASE: ${{ inputs.release }}
+          REPAIR_TITLE: ${{ inputs.title }}
+          REPAIR_REASON: ${{ inputs.reason }}
+          REPAIR_IMPACT: ${{ inputs.impact }}
+          REPAIR_LAST_CHECKPOINT: ${{ inputs.last_checkpoint }}
+          REPAIR_NEXT_ACTION: ${{ inputs.next_action }}
+          REPAIR_PRIOR_INCIDENTS: ${{ inputs.prior_incidents }}
           REPAIR_AUTHORIZATION: ${{ inputs.authorization }}
         run: |
           node <<'NODE'
@@ -85,6 +115,12 @@ jobs:
           const method = value("REPAIR_METHOD");
           const workflow = value("REPAIR_WORKFLOW");
           const release = value("REPAIR_RELEASE");
+          const title = value("REPAIR_TITLE");
+          const reason = value("REPAIR_REASON");
+          const impact = value("REPAIR_IMPACT");
+          const lastCheckpoint = value("REPAIR_LAST_CHECKPOINT");
+          const nextAction = value("REPAIR_NEXT_ACTION");
+          const priorIncidents = value("REPAIR_PRIOR_INCIDENTS");
           const authorization = value("REPAIR_AUTHORIZATION");
           const secret = value("INCIDENT_REPAIR_DISPATCH_SECRET");
           const methods = new Set(["", "DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]);
@@ -97,17 +133,30 @@ jobs:
             "customer signup",
             "text-message handoff",
           ]);
+          const allowedReasonCodes = new Set([
+            "DATABASE_QUERY_IMPLEMENTATION_FAILED",
+            "AGENT_TEST_SETUP_INCOMPLETE",
+            "AGENT_TEST_SIGNUP_ATTEMPT_MISSING",
+            "SIGNUP_RECOVERY_VAPI_BINDING_MISMATCH",
+          ]);
+          const safeMemo = (text, max) => Boolean(text) && text.length <= max && !/[\u0000-\u001f\u007f]/.test(text);
           if (
             secret.length < 32
             || !/^[a-f0-9]{24}$/.test(incidentId)
             || !/^[1-9][0-9]{0,2}$/.test(generation)
-            || reasonCode !== "DATABASE_QUERY_IMPLEMENTATION_FAILED"
+            || !allowedReasonCodes.has(reasonCode)
             || !route
             || route.length > 160
             || !/^\/[A-Za-z0-9_./:-]*$/.test(route)
             || !methods.has(method)
             || !workflows.has(workflow)
             || (release && (release.length > 100 || !/^[A-Z0-9_.:-]+$/.test(release)))
+            || !safeMemo(title, 180)
+            || !safeMemo(reason, 420)
+            || !safeMemo(impact, 360)
+            || !safeMemo(lastCheckpoint, 360)
+            || !safeMemo(nextAction, 420)
+            || !safeMemo(priorIncidents, 800)
             || !/^[a-f0-9]{64}$/.test(authorization)
           ) {
             throw new Error("The signed incident-repair envelope is invalid.");
@@ -120,6 +169,12 @@ jobs:
             method,
             workflow,
             release,
+            title,
+            reason,
+            impact,
+            last_checkpoint: lastCheckpoint,
+            next_action: nextAction,
+            prior_incidents: priorIncidents,
           };
           const expected = crypto
             .createHmac("sha256", secret)
@@ -234,8 +289,14 @@ jobs:
           REPAIR_METHOD: ${{ inputs.method }}
           REPAIR_WORKFLOW: ${{ inputs.workflow }}
           REPAIR_RELEASE: ${{ inputs.release }}
+          REPAIR_TITLE: ${{ inputs.title }}
+          REPAIR_REASON: ${{ inputs.reason }}
+          REPAIR_IMPACT: ${{ inputs.impact }}
+          REPAIR_LAST_CHECKPOINT: ${{ inputs.last_checkpoint }}
+          REPAIR_NEXT_ACTION: ${{ inputs.next_action }}
+          REPAIR_PRIOR_INCIDENTS: ${{ inputs.prior_incidents }}
         run: |
-          INCIDENT_REPAIR_INPUTS_JSON="$(node -e 'process.stdout.write(JSON.stringify({incident_id:process.env.REPAIR_INCIDENT_ID,generation:process.env.REPAIR_GENERATION,reason_code:process.env.REPAIR_REASON_CODE,route:process.env.REPAIR_ROUTE,method:process.env.REPAIR_METHOD,workflow:process.env.REPAIR_WORKFLOW,release:process.env.REPAIR_RELEASE}))')"
+          INCIDENT_REPAIR_INPUTS_JSON="$(node -e 'process.stdout.write(JSON.stringify({incident_id:process.env.REPAIR_INCIDENT_ID,generation:process.env.REPAIR_GENERATION,reason_code:process.env.REPAIR_REASON_CODE,route:process.env.REPAIR_ROUTE,method:process.env.REPAIR_METHOD,workflow:process.env.REPAIR_WORKFLOW,release:process.env.REPAIR_RELEASE,title:process.env.REPAIR_TITLE,reason:process.env.REPAIR_REASON,impact:process.env.REPAIR_IMPACT,last_checkpoint:process.env.REPAIR_LAST_CHECKPOINT,next_action:process.env.REPAIR_NEXT_ACTION,prior_incidents:process.env.REPAIR_PRIOR_INCIDENTS}))')"
           export INCIDENT_REPAIR_INPUTS_JSON
           node scripts/prepare-incident-repair-request.js diagnostics/incident-repair/request.json
 
@@ -389,9 +450,15 @@ jobs:
           REPAIR_METHOD: ${{ inputs.method }}
           REPAIR_WORKFLOW: ${{ inputs.workflow }}
           REPAIR_RELEASE: ${{ inputs.release }}
+          REPAIR_TITLE: ${{ inputs.title }}
+          REPAIR_REASON: ${{ inputs.reason }}
+          REPAIR_IMPACT: ${{ inputs.impact }}
+          REPAIR_LAST_CHECKPOINT: ${{ inputs.last_checkpoint }}
+          REPAIR_NEXT_ACTION: ${{ inputs.next_action }}
+          REPAIR_PRIOR_INCIDENTS: ${{ inputs.prior_incidents }}
         run: |
           test "$(git rev-parse HEAD)" = "$INCIDENT_REPAIR_BASE_SHA"
-          INCIDENT_REPAIR_INPUTS_JSON="$(node -e 'process.stdout.write(JSON.stringify({incident_id:process.env.REPAIR_INCIDENT_ID,generation:process.env.REPAIR_GENERATION,reason_code:process.env.REPAIR_REASON_CODE,route:process.env.REPAIR_ROUTE,method:process.env.REPAIR_METHOD,workflow:process.env.REPAIR_WORKFLOW,release:process.env.REPAIR_RELEASE}))')"
+          INCIDENT_REPAIR_INPUTS_JSON="$(node -e 'process.stdout.write(JSON.stringify({incident_id:process.env.REPAIR_INCIDENT_ID,generation:process.env.REPAIR_GENERATION,reason_code:process.env.REPAIR_REASON_CODE,route:process.env.REPAIR_ROUTE,method:process.env.REPAIR_METHOD,workflow:process.env.REPAIR_WORKFLOW,release:process.env.REPAIR_RELEASE,title:process.env.REPAIR_TITLE,reason:process.env.REPAIR_REASON,impact:process.env.REPAIR_IMPACT,last_checkpoint:process.env.REPAIR_LAST_CHECKPOINT,next_action:process.env.REPAIR_NEXT_ACTION,prior_incidents:process.env.REPAIR_PRIOR_INCIDENTS}))')"
           export INCIDENT_REPAIR_INPUTS_JSON
           node scripts/prepare-incident-repair-request.js diagnostics/incident-repair/request.json
 
@@ -502,11 +569,17 @@ jobs:
           REPAIR_METHOD: ${{ inputs.method }}
           REPAIR_WORKFLOW: ${{ inputs.workflow }}
           REPAIR_RELEASE: ${{ inputs.release }}
+          REPAIR_TITLE: ${{ inputs.title }}
+          REPAIR_REASON: ${{ inputs.reason }}
+          REPAIR_IMPACT: ${{ inputs.impact }}
+          REPAIR_LAST_CHECKPOINT: ${{ inputs.last_checkpoint }}
+          REPAIR_NEXT_ACTION: ${{ inputs.next_action }}
+          REPAIR_PRIOR_INCIDENTS: ${{ inputs.prior_incidents }}
         shell: bash
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$INCIDENT_REPAIR_BASE_SHA"
-          INCIDENT_REPAIR_INPUTS_JSON="$(node -e 'process.stdout.write(JSON.stringify({incident_id:process.env.REPAIR_INCIDENT_ID,generation:process.env.REPAIR_GENERATION,reason_code:process.env.REPAIR_REASON_CODE,route:process.env.REPAIR_ROUTE,method:process.env.REPAIR_METHOD,workflow:process.env.REPAIR_WORKFLOW,release:process.env.REPAIR_RELEASE}))')"
+          INCIDENT_REPAIR_INPUTS_JSON="$(node -e 'process.stdout.write(JSON.stringify({incident_id:process.env.REPAIR_INCIDENT_ID,generation:process.env.REPAIR_GENERATION,reason_code:process.env.REPAIR_REASON_CODE,route:process.env.REPAIR_ROUTE,method:process.env.REPAIR_METHOD,workflow:process.env.REPAIR_WORKFLOW,release:process.env.REPAIR_RELEASE,title:process.env.REPAIR_TITLE,reason:process.env.REPAIR_REASON,impact:process.env.REPAIR_IMPACT,last_checkpoint:process.env.REPAIR_LAST_CHECKPOINT,next_action:process.env.REPAIR_NEXT_ACTION,prior_incidents:process.env.REPAIR_PRIOR_INCIDENTS}))')"
           export INCIDENT_REPAIR_INPUTS_JSON
           node scripts/prepare-incident-repair-request.js diagnostics/incident-repair/request.json
 
@@ -600,6 +673,7 @@ jobs:
       pr_url: ${{ steps.pull_request.outputs.pr_url }}
       pr_number: ${{ steps.pull_request.outputs.pr_number }}
       head_sha: ${{ steps.pull_request.outputs.head_sha }}
+      diagnosis_b64: ${{ steps.review.outputs.diagnosis_b64 }}
     steps:
       - name: Check out the verified base with publication credentials
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -643,6 +717,12 @@ jobs:
           REPAIR_METHOD: ${{ inputs.method }}
           REPAIR_WORKFLOW: ${{ inputs.workflow }}
           REPAIR_RELEASE: ${{ inputs.release }}
+          REPAIR_TITLE: ${{ inputs.title }}
+          REPAIR_REASON: ${{ inputs.reason }}
+          REPAIR_IMPACT: ${{ inputs.impact }}
+          REPAIR_LAST_CHECKPOINT: ${{ inputs.last_checkpoint }}
+          REPAIR_NEXT_ACTION: ${{ inputs.next_action }}
+          REPAIR_PRIOR_INCIDENTS: ${{ inputs.prior_incidents }}
         shell: bash
         run: |
           set -euo pipefail
@@ -685,7 +765,7 @@ jobs:
             throw new Error("The publish artifact does not match the exact immutable draft tested in isolation.");
           }
           NODE
-          INCIDENT_REPAIR_INPUTS_JSON="$(node -e 'process.stdout.write(JSON.stringify({incident_id:process.env.REPAIR_INCIDENT_ID,generation:process.env.REPAIR_GENERATION,reason_code:process.env.REPAIR_REASON_CODE,route:process.env.REPAIR_ROUTE,method:process.env.REPAIR_METHOD,workflow:process.env.REPAIR_WORKFLOW,release:process.env.REPAIR_RELEASE}))')"
+          INCIDENT_REPAIR_INPUTS_JSON="$(node -e 'process.stdout.write(JSON.stringify({incident_id:process.env.REPAIR_INCIDENT_ID,generation:process.env.REPAIR_GENERATION,reason_code:process.env.REPAIR_REASON_CODE,route:process.env.REPAIR_ROUTE,method:process.env.REPAIR_METHOD,workflow:process.env.REPAIR_WORKFLOW,release:process.env.REPAIR_RELEASE,title:process.env.REPAIR_TITLE,reason:process.env.REPAIR_REASON,impact:process.env.REPAIR_IMPACT,last_checkpoint:process.env.REPAIR_LAST_CHECKPOINT,next_action:process.env.REPAIR_NEXT_ACTION,prior_incidents:process.env.REPAIR_PRIOR_INCIDENTS}))')"
           export INCIDENT_REPAIR_INPUTS_JSON
           node scripts/prepare-incident-repair-request.js "$RUNNER_TEMP/publish-request.json"
           cmp --silent "$RUNNER_TEMP/publish-request.json" diagnostics/incident-repair/verified/request.json
@@ -760,7 +840,9 @@ jobs:
             "A separate clean runner revalidated the patch, applied it to the Git index, scanned it for secrets, and completed the configured backend, frontend, database, operations, deployment, dependency, and production-build checks before this draft was opened.",
             "",
           ].join("\n");
-          fs.writeFileSync(process.env.GITHUB_OUTPUT, `branch_name=${branch}\n`, { flag: "a" });
+          const diagnosis = String(output.diagnosis || "").replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 1200);
+          const diagnosisB64 = Buffer.from(diagnosis, "utf8").toString("base64");
+          fs.writeFileSync(process.env.GITHUB_OUTPUT, `branch_name=${branch}\ndiagnosis_b64=${diagnosisB64}\n`, { flag: "a" });
           fs.writeFileSync(`${process.env.RUNNER_TEMP}/incident-branch.txt`, `${branch}\n`, { mode: 0o600 });
           fs.writeFileSync(`${process.env.RUNNER_TEMP}/incident-pr-body.md`, body, { mode: 0o600 });
           NODE
@@ -872,6 +954,7 @@ jobs:
           PR_NUMBER: ${{ needs.publish.outputs.pr_number }}
           HEAD_SHA: ${{ needs.publish.outputs.head_sha }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          DIAGNOSIS_B64: ${{ needs.publish.outputs.diagnosis_b64 }}
         run: |
           node <<'NODE'
           const allowedResults = new Set(["success", "failure", "cancelled", "skipped"]);
@@ -882,6 +965,9 @@ jobs:
           const verifyResult = result(process.env.VERIFY_RESULT);
           const publishResult = result(process.env.PUBLISH_RESULT);
           const allSucceeded = [draftResult, verifyResult, publishResult].every((value) => value === "success");
+          const diagnosis = allSucceeded
+            ? Buffer.from(String(process.env.DIAGNOSIS_B64 || ""), "base64").toString("utf8").replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 1200)
+            : "";
           const payload = {
             confirmation: "REPORT_INCIDENT_REPAIR_RESULT",
             incident_id: String(process.env.INCIDENT_ID || "").trim().toLowerCase(),
@@ -895,6 +981,7 @@ jobs:
             pr_number: allSucceeded ? Number(process.env.PR_NUMBER) : 0,
             head_sha: allSucceeded ? String(process.env.HEAD_SHA || "").trim().toLowerCase() : "",
             run_url: String(process.env.RUN_URL || "").trim(),
+            diagnosis,
           };
           if (!process.env.MONITOR_API_KEY) throw new Error("MONITOR_API_KEY is not configured for the incident callback.");
           const delays = [0, 1_500, 4_000, 8_000];

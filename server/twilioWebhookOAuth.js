@@ -250,6 +250,7 @@ async function deliverTwilioStagingEvent({ event, env = process.env, fetchImpl =
 
 async function processTwilioStagingCallStatus({
   body,
+  replayEventId = "",
   claimEvent,
   completeEvent,
   releaseEvent,
@@ -259,7 +260,11 @@ async function processTwilioStagingCallStatus({
     throw new Error("Twilio staging webhook processing dependencies are incomplete.");
   }
   const event = normalizeCallStatusEvent(body);
-  const claim = await claimEvent({ provider: "twilio-staging", eventId: event.eventId, eventType: "call-status" });
+  const claim = await claimEvent({
+    provider: "twilio-staging",
+    eventId: replayEventId || event.eventId,
+    eventType: "call-status",
+  });
   if (claim.duplicate) {
     return { received: true, duplicate: true, downstreamCreated: false, eventReference: event.eventReference };
   }
