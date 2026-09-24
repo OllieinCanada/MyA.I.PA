@@ -83,6 +83,7 @@ test("the signup payload keeps owner, business, pricing, and agent fields aligne
   expect(payload.setupDetails.ownerPhone).toBe(validDetails.phone);
   expect(payload.setupDetails.callForwardingNumber).toBe(validDetails.phone);
   expect(payload.setupDetails.pricing.repairVisitFee).toBe("125");
+  expect(payload.setupDetails.pricing.pricingScript).toContain("95 dollars per hour, plus parts");
   expect(payload.setupDetails.offersServiceCalls).toBe(true);
   expect(payload.setupDetails.greetingScript).toContain("Taylor Electrical");
   expect(payload.security.turnstileToken).toBe("verified-token");

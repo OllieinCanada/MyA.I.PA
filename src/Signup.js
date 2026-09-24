@@ -352,8 +352,8 @@ function MobileSignupProgress({ currentStep, businessSlide, tradeSetupPanel }) {
             : businessSlide === 3
               ? "Business details"
               : businessSlide === 4
-                ? "Service-call details"
-                : "Setup summary";
+                ? "Service call / repair pricing"
+                : "Check your setup";
 
   return (
     <div className="signup-mobile-progress signup-visible-progress" aria-label={`Step ${stepNumber} of 8: ${title}`}>
@@ -440,8 +440,8 @@ function SpecializationCard({ item, selected, onClick }) {
   );
 }
 
-function LabeledInput({ label, icon, value, onChange, onBlur, placeholder, type = "text", className = "", error = "", autoComplete, inputMode }) {
-  const inputId = `${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-input`;
+function LabeledInput({ label, icon, value, onChange, onBlur, placeholder, type = "text", className = "", error = "", autoComplete, inputMode, inputId: requestedInputId }) {
+  const inputId = requestedInputId || `${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-input`;
   const errorId = `${inputId}-error`;
 
   return (
@@ -1176,7 +1176,7 @@ function ReviewPanel({ title = "Setup summary", description = "Check your choice
   const pricingScript = pricing ? buildPricingScript(pricing) : "";
   const pricingSummary =
     pricing?.offersServiceCalls === true
-      ? `$${pricing.repairVisitFee} service call · $${pricing.repairHourlyRate}/hour`
+      ? `$${pricing.repairVisitFee} service call · $${pricing.repairHourlyRate}/hour + parts`
       : pricing?.offersServiceCalls === false
         ? "No service calls"
         : "Not selected";
@@ -2044,9 +2044,9 @@ export default function Signup() {
       : businessSlide === 2
         ? "Continue to business details"
         : businessSlide === 3
-          ? "Continue to service calls"
+          ? "Continue to service call / repair pricing."
           : businessSlide === 4
-            ? "Continue to setup summary"
+            ? "Continue to check your setup."
             : "Continue to voice preview";
   const maxBusinessSlide =
     !selectedTradeId || specializationStepDisabled
@@ -2069,10 +2069,10 @@ export default function Signup() {
           ? tradeSetupPanel === "trade" ? "Continue to property types" : "Continue to service areas"
           : businessSlide === 2
             ? "Continue to business details"
-            : businessSlide === 3
-              ? "Continue to service calls"
+          : businessSlide === 3
+              ? "Continue to service call / repair pricing."
               : businessSlide === 4
-                ? "Continue to setup summary"
+                ? "Continue to check your setup."
                 : "Continue to voice preview";
   const mobilePrimaryDisabled = currentStep === 1 ? businessSlideDisabled : currentStep === 2 ? voiceStepDisabled : securityStepDisabled;
 
@@ -2726,16 +2726,50 @@ export default function Signup() {
             }
 
             .signup-mobile-selected-count {
-              display: flex;
+              display: grid;
+              grid-template-columns: minmax(0, 1fr) auto auto;
               align-items: center;
-              justify-content: space-between;
+              gap: 8px;
               margin-bottom: 12px;
               border-radius: 12px;
               background: #eff6ff;
-              padding: 10px 12px;
+              padding: 8px 8px 8px 12px;
               color: #1d4ed8;
               font-size: 0.9rem;
               font-weight: 800;
+            }
+
+            .signup-mobile-selected-value {
+              display: inline-flex;
+              min-width: 32px;
+              min-height: 32px;
+              align-items: center;
+              justify-content: center;
+              border-radius: 999px;
+              background: #dbeafe;
+              color: #1e40af;
+            }
+
+            .signup-mobile-selected-next {
+              display: inline-flex;
+              min-height: 40px;
+              align-items: center;
+              justify-content: center;
+              gap: 6px;
+              border: 0;
+              border-radius: 10px;
+              background: #2563eb;
+              padding: 8px 13px;
+              color: #fff;
+              font-size: 0.9rem;
+              font-weight: 900;
+              box-shadow: 0 12px 24px -18px rgba(37, 99, 235, 0.95);
+            }
+
+            .signup-mobile-selected-next:disabled {
+              background: #cbd5e1;
+              color: #64748b;
+              box-shadow: none;
             }
 
             .signup-business-fields {
@@ -2793,6 +2827,10 @@ export default function Signup() {
             }
 
             .signup-mobile-action-bar.is-first-step {
+              grid-template-columns: 1fr;
+            }
+
+            .signup-mobile-action-bar.is-service-area-step {
               grid-template-columns: 1fr;
             }
 
@@ -3349,11 +3387,21 @@ export default function Signup() {
                 <div className="signup-task-content flex min-h-0 flex-col overflow-hidden rounded-3xl">
                   <div className="signup-mobile-task-heading">
                     <h2>Where do you work?</h2>
-                    <p>Choose one or more service areas. Then tap Continue.</p>
+                    <p>Choose one or more service areas. Then tap Next.</p>
                   </div>
                   <div className="signup-mobile-selected-count">
                     <span>Selected areas</span>
-                    <span>{selectedAreas.length}</span>
+                    <span className="signup-mobile-selected-value" aria-label={`${selectedAreas.length} selected areas`}>
+                      {selectedAreas.length}
+                    </span>
+                    <button
+                      type="submit"
+                      disabled={businessSlideDisabled || busy}
+                      className="signup-mobile-selected-next"
+                    >
+                      {busy ? "Saving…" : "Next"}
+                      <Icon name="arrow" className="h-4 w-4" />
+                    </button>
                   </div>
                   <div className="signup-area-list flex min-h-0 flex-1 content-start items-start overflow-y-auto pr-2 pb-2 [scrollbar-width:thin]">
                     <div className="signup-area-grid grid w-full content-start gap-4">
@@ -3596,13 +3644,13 @@ export default function Signup() {
                 <section id="signup-pricing" className="signup-task-layout grid w-full gap-6 lg:grid-cols-[360px_minmax(0,1fr)] xl:grid-cols-[390px_minmax(0,1fr)] lg:items-stretch">
                   <div className="signup-task-explainer flex flex-col justify-center rounded-3xl border border-blue-100 bg-blue-50/70 p-8">
                     <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">Step 5 of 8</p>
-                    <h2 className="mt-2 text-[clamp(2rem,3vw,3.1rem)] font-black leading-tight tracking-[-0.04em] text-slate-950">Service call / repair</h2>
-                    <p className="mt-4 text-lg font-medium leading-8 text-slate-600">Choose whether your assistant should discuss service-call or repair prices and hourly rates.</p>
+                    <h2 className="mt-2 text-[clamp(2rem,3vw,3.1rem)] font-black leading-tight tracking-[-0.04em] text-slate-950">Service call / repair pricing</h2>
+                    <p className="mt-4 text-lg font-medium leading-8 text-slate-600">Tell customers your service call and repair pricing upfront, plus parts, to see if they want to continue.</p>
                   </div>
                   <div className="signup-task-content">
                     <div className="signup-mobile-task-heading">
-                      <h2>Service call / repair</h2>
-                      <p>Choose Yes or No. If Yes, add both prices. Then tap Continue.</p>
+                      <h2>Service call / repair pricing</h2>
+                      <p>Tell customers your service call and repair pricing upfront, plus parts, to see if they want to continue.</p>
                     </div>
                     <div className="grid content-start gap-4 sm:grid-cols-2 xl:grid-cols-4 xl:gap-5">
                     <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-4 sm:col-span-2 xl:col-span-4">
@@ -3642,7 +3690,8 @@ export default function Signup() {
                           error={showPricingErrors && Number(pricing.repairVisitFee) <= 0 ? "Enter the service-call or repair price." : ""}
                         />
                         <LabeledInput
-                          label="Hourly rate"
+                          label="Repair hourly rate + parts"
+                          inputId="hourly-rate-input"
                           icon="card"
                           value={pricing.repairHourlyRate}
                           onChange={updatePricing("repairHourlyRate")}
@@ -3651,7 +3700,7 @@ export default function Signup() {
                           error={showPricingErrors && Number(pricing.repairHourlyRate) <= 0 ? "Enter the hourly rate." : ""}
                         />
                         <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold leading-6 text-emerald-900 sm:col-span-2 xl:col-span-2">
-                          Your assistant will explain these prices, then ask: “Would you like to continue?”
+                          Your assistant will explain the service-call price and repair hourly rate, plus parts, then ask: “Would you like to continue?”
                         </div>
                       </>
                     ) : null}
@@ -3681,7 +3730,7 @@ export default function Signup() {
                 <section className="signup-task-layout grid w-full gap-6 lg:grid-cols-[360px_minmax(0,1fr)] xl:grid-cols-[390px_minmax(0,1fr)] lg:items-stretch">
                   <div className="signup-task-explainer flex flex-col justify-center rounded-3xl border border-blue-100 bg-blue-50/70 p-8">
                     <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">Step 6 of 8</p>
-                    <h2 className="mt-2 text-[clamp(2rem,3vw,3.1rem)] font-black leading-tight tracking-[-0.04em] text-slate-950">Setup summary</h2>
+                    <h2 className="mt-2 text-[clamp(2rem,3vw,3.1rem)] font-black leading-tight tracking-[-0.04em] text-slate-950">Check your setup</h2>
                     <p className="mt-4 text-lg font-medium leading-8 text-slate-600">Check your choices before the voice preview. Use Back or the top columns to change anything.</p>
                   </div>
                   <div className="signup-task-content content-center">
@@ -3690,7 +3739,7 @@ export default function Signup() {
                       <p>Check everything below. Then continue to your voice preview.</p>
                     </div>
                     <ReviewPanel
-                      title="Setup summary"
+                      title="Check your setup"
                       description="Check your choices before continuing to the voice preview."
                       trade={selectedTrade}
                       areas={selectedAreas}
@@ -3773,7 +3822,8 @@ export default function Signup() {
           className={
             "signup-mobile-action-bar " +
             (currentStep === 1 && businessSlide === 1 ? "is-choice-step " : "") +
-            (currentStep === 1 && businessSlide === 1 && tradeSetupPanel === "trade" ? "is-first-step" : "")
+            (currentStep === 1 && businessSlide === 1 && tradeSetupPanel === "trade" ? "is-first-step " : "") +
+            (currentStep === 1 && businessSlide === 2 ? "is-service-area-step" : "")
           }
         >
           {currentStep === 1 && businessSlide === 1 && tradeSetupPanel === "trade" ? null : (
@@ -3781,11 +3831,13 @@ export default function Signup() {
               {currentStep === 2 ? "Skip for now" : "Back"}
             </button>
           )}
-          <button type="submit" disabled={mobilePrimaryDisabled || busy} className="signup-mobile-primary">
-            {busy ? "Saving…" : mobilePrimaryLabel}
-            <Icon name="arrow" className="h-4 w-4" />
-          </button>
-          {mobilePrimaryDisabled ? (
+          {currentStep === 1 && businessSlide === 2 ? null : (
+            <button type="submit" disabled={mobilePrimaryDisabled || busy} className="signup-mobile-primary">
+              {busy ? "Saving…" : mobilePrimaryLabel}
+              <Icon name="arrow" className="h-4 w-4" />
+            </button>
+          )}
+          {mobilePrimaryDisabled && !(currentStep === 1 && businessSlide === 2) ? (
             <p className="signup-mobile-disabled-reason">
               {currentStep === 1 && businessSlide === 1
                 ? tradeSetupPanel === "trade"
