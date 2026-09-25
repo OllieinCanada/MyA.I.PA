@@ -178,6 +178,69 @@ test("a recovered active Stripe subscription suppresses a stale trial-creation e
   assert.equal(items.length, 0);
 });
 
+test("closed signups do not return as failures, billing alerts, or duplicate warnings", () => {
+  const now = new Date("2026-09-24T12:00:00.000Z");
+  const items = signupAttentionItems([
+    {
+      ownerEmail: "rejected@example.com",
+      businessName: "Rejected Sandbox",
+      status: "rejected",
+      reviewRequired: false,
+      updatedAt: "2026-09-24T11:59:00.000Z",
+    },
+    {
+      ownerEmail: "archived@example.com",
+      businessName: "Archived Pricing Test",
+      status: "abandoned_archived",
+      subscriptionId: "sub_archived",
+      subscriptionStatus: "paused",
+      updatedAt: "2026-09-01T11:59:00.000Z",
+    },
+    {
+      ownerEmail: "duplicate@example.com",
+      status: "superseded_duplicate",
+      updatedAt: "2026-09-24T11:59:00.000Z",
+    },
+    {
+      ownerEmail: "duplicate@example.com",
+      status: "rejected",
+      updatedAt: "2026-09-24T11:59:00.000Z",
+    },
+    {
+      ownerEmail: "cancelled@example.com",
+      status: "subscription_cancelled",
+      subscriptionStatus: "paused",
+      updatedAt: "2026-09-24T11:59:00.000Z",
+    },
+  ], now, 10);
+
+  assert.deepEqual(items, []);
+});
+
+test("a newer terminal record closes older legacy aliases without hiding a newer retry", () => {
+  const now = new Date("2026-09-24T12:00:00.000Z");
+  const olderFailure = {
+    ownerEmail: "legacy@example.com",
+    status: "setup_error",
+    makeError: "old failure",
+    updatedAt: "2026-09-24T10:00:00.000Z",
+  };
+  const newerRejection = {
+    ownerEmail: "legacy@example.com",
+    status: "rejected",
+    updatedAt: "2026-09-24T11:00:00.000Z",
+  };
+  assert.deepEqual(signupAttentionItems([olderFailure, newerRejection], now, 10), []);
+
+  const newerFailure = {
+    ...olderFailure,
+    updatedAt: "2026-09-24T11:30:00.000Z",
+  };
+  const retried = signupAttentionItems([newerRejection, newerFailure], now, 10);
+  assert.equal(retried.length, 1);
+  assert.equal(retried[0].kind, "signup_failed");
+});
+
 test("customer subscription billing statuses produce distinct safe attention items", () => {
   const now = new Date("2026-08-28T12:00:00.000Z");
   const statuses = [
