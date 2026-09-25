@@ -3,6 +3,13 @@ const crypto = require("crypto");
 const FAILED_SIGNUP = /(error|failed|rejected|blocked)/i;
 const BLOCKED_PROVISIONING = /^provisioning_(pending|unknown)$/i;
 const IN_PROGRESS_SIGNUP = /^(signup_received|checkout_completed|setup_started|pending_(?:email_)?verification|provisioning_(pending|unknown)|subscription_(trialing|active))$/i;
+const CLOSED_SIGNUP_STATUSES = new Set([
+  "abandoned_archived",
+  "rejected",
+  "subscription_canceled",
+  "subscription_cancelled",
+  "superseded_duplicate",
+]);
 const PROBLEM_HANDOFF_STATUSES = ["RETRY_DUE", "ESCALATION_DUE", "FAILED"];
 const CUSTOMER_BILLING_STATUSES = new Set(["payment_failed", "past_due", "unpaid", "paused"]);
 const SAFE_BILLING_DIAGNOSTIC_STATUSES = new Set([
@@ -279,10 +286,31 @@ function signupIdentity(signup = {}) {
 function signupAttentionItems(signups = [], now = new Date(), stuckMinutes = 60) {
   const items = [];
   const seenIdentities = new Map();
+  const latestStatusByIdentity = new Map();
+  for (const signup of signups.filter(Boolean)) {
+    const identity = signupIdentity(signup);
+    const status = String(signup.status || "unknown").trim().toLowerCase();
+    const timestamp = new Date(signup.updatedAt || signup.signedUpAt || signup.createdAt || 0).getTime();
+    const current = latestStatusByIdentity.get(identity);
+    if (
+      !current
+      || timestamp > current.timestamp
+      || (timestamp === current.timestamp && CLOSED_SIGNUP_STATUSES.has(status))
+    ) {
+      latestStatusByIdentity.set(identity, {
+        status,
+        timestamp: Number.isFinite(timestamp) ? timestamp : 0,
+      });
+    }
+  }
   for (const signup of signups.filter(Boolean)) {
     const identity = signupIdentity(signup);
     const targetId = hashTarget(identity);
     const status = String(signup.status || "unknown");
+    if (
+      CLOSED_SIGNUP_STATUSES.has(status.trim().toLowerCase())
+      || CLOSED_SIGNUP_STATUSES.has(latestStatusByIdentity.get(identity)?.status)
+    ) continue;
     const updatedAt = signup.updatedAt || signup.signedUpAt || signup.createdAt;
     const age = ageMinutes(updatedAt, now);
     const billingAttention = signupBillingAttention(signup, status);
