@@ -6220,3 +6220,294 @@
     gap: 3px;
   }
 }
+
+/* Pilot-ready dashboard redesign pass */
+.admin-pilot-command {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(22rem, 0.9fr) auto;
+  gap: 1rem;
+  align-items: stretch;
+  border: 1px solid #d9e7f6;
+  border-radius: 0.9rem;
+  background: linear-gradient(135deg, #ffffff 0%, #f7fbff 100%);
+  padding: 1rem;
+  box-shadow: 0 18px 50px rgba(13, 54, 96, 0.07);
+}
+
+.admin-pilot-command.is-blocked {
+  border-color: #fecaca;
+  background: linear-gradient(135deg, #fff 0%, #fff7f7 100%);
+}
+
+.admin-pilot-command.is-ready {
+  border-color: #bbf7d0;
+  background: linear-gradient(135deg, #fff 0%, #f3fff8 100%);
+}
+
+.admin-pilot-command-copy span,
+.admin-attention-readiness span,
+.admin-attention-next span,
+.admin-command-center-head span,
+.admin-command-card span {
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 950;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.admin-pilot-command-copy h2,
+.admin-attention-readiness h3 {
+  margin: 0.28rem 0 0;
+  color: #07142a !important;
+  font-size: clamp(1.45rem, 2.3vw, 2.1rem);
+  line-height: 1.02;
+  font-weight: 950;
+  letter-spacing: -0.045em;
+}
+
+.admin-pilot-command-copy p,
+.admin-attention-readiness p,
+.admin-attention-next p {
+  margin: 0.55rem 0 0;
+  color: #526b85;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  font-weight: 700;
+}
+
+.admin-pilot-command-metrics,
+.admin-attention-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.myai-admin .admin-pilot-command-metrics button,
+.admin-attention-metrics div {
+  display: grid;
+  align-content: center;
+  min-height: 5.1rem;
+  border: 1px solid #e1e7ef !important;
+  border-radius: 0.75rem;
+  background: #fff !important;
+  padding: 0.8rem;
+  color: #172033 !important;
+  text-align: left;
+  box-shadow: none !important;
+}
+
+.admin-pilot-command-metrics strong,
+.admin-attention-metrics strong {
+  color: #07142a;
+  font-size: 1.55rem;
+  font-weight: 950;
+  line-height: 1;
+}
+
+.admin-pilot-command-metrics span,
+.admin-attention-metrics span {
+  margin-top: 0.35rem;
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 900;
+}
+
+.myai-admin .admin-pilot-command-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  min-width: 13rem;
+  border: 0 !important;
+  border-radius: 0.75rem;
+  background: #0f6fff !important;
+  color: #fff !important;
+  padding: 0.9rem 1rem;
+  font-weight: 950;
+  box-shadow: 0 14px 30px rgba(15, 111, 255, 0.24) !important;
+}
+
+.admin-attention-heading-v2 p {
+  max-width: 760px;
+}
+
+.admin-attention-command {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(22rem, 0.9fr) minmax(16rem, 0.7fr);
+  gap: 1rem;
+  align-items: stretch;
+  margin-bottom: 1rem;
+}
+
+.admin-attention-readiness,
+.admin-attention-next {
+  border: 1px solid #dbe7f4;
+  border-radius: 0.95rem;
+  background: #fff;
+  padding: 1rem;
+  box-shadow: 0 14px 36px rgba(13, 54, 96, 0.06);
+}
+
+.admin-attention-readiness.is-blocked {
+  border-color: #fecaca;
+  background: linear-gradient(180deg, #fff, #fff7f7);
+}
+
+.admin-attention-readiness.is-ready {
+  border-color: #bbf7d0;
+  background: linear-gradient(180deg, #fff, #f3fff8);
+}
+
+.admin-attention-metrics {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.admin-attention-next strong {
+  display: block;
+  margin-top: 0.35rem;
+  color: #07142a;
+  font-size: 1rem;
+  font-weight: 950;
+}
+
+.admin-attention-board {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  align-items: start;
+}
+
+.admin-attention-bucket {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid #dce8f4;
+  border-radius: 1rem;
+  background: #ffffff;
+  box-shadow: 0 14px 42px rgba(13, 54, 96, 0.06);
+}
+
+.admin-attention-bucket.is-fix_now {
+  border-color: #fecaca;
+}
+
+.admin-attention-bucket.is-owner_decision {
+  border-color: #fed7aa;
+}
+
+.admin-attention-bucket.is-old_clutter {
+  border-color: #c7d2fe;
+}
+
+.admin-attention-bucket > header {
+  position: relative;
+  display: grid;
+  gap: 0.25rem;
+  border-bottom: 1px solid #edf2f7;
+  padding: 1rem 3.8rem 1rem 1rem;
+  background: #f8fbff;
+}
+
+.admin-attention-bucket > header span {
+  color: #64748b;
+  font-size: 0.68rem;
+  font-weight: 950;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.admin-attention-bucket > header h3 {
+  margin: 0;
+  color: #07142a;
+  font-size: 1.1rem;
+  font-weight: 950;
+}
+
+.admin-attention-bucket > header p {
+  margin: 0;
+  color: #526b85;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  font-weight: 700;
+}
+
+.admin-attention-bucket > header > strong {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  display: grid;
+  place-items: center;
+  min-width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 999px;
+  background: #eaf3ff;
+  color: #0f6fff;
+  font-weight: 950;
+}
+
+.admin-attention-bucket-list {
+  display: grid;
+  gap: 0.85rem;
+  padding: 0.9rem;
+}
+
+.admin-owner-incident-v2 {
+  margin: 0 !important;
+  border-radius: 0.85rem !important;
+  box-shadow: none !important;
+}
+
+.admin-owner-incident-v2 .admin-owner-brief-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.admin-owner-next-action small {
+  display: block;
+  margin-top: 0.35rem;
+  color: #64748b;
+  font-size: 0.75rem;
+  font-weight: 750;
+  line-height: 1.45;
+}
+
+.admin-no-safe-action {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #475569;
+  padding: 0.45rem 0.7rem;
+  font-size: 0.75rem;
+  font-weight: 900;
+}
+
+.admin-attention-empty-small {
+  border: 1px dashed #dbe7f4;
+  border-radius: 0.75rem;
+  color: #64748b;
+  padding: 0.9rem;
+  font-size: 0.86rem;
+  font-weight: 800;
+  text-align: center;
+}
+
+@media (max-width: 1180px) {
+  .admin-pilot-command,
+  .admin-attention-command {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-pilot-command-action {
+    min-height: 3.2rem;
+  }
+}
+
+@media (max-width: 900px) {
+  .admin-attention-board {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-owner-incident-v2 .admin-owner-brief-grid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -7131,6 +7131,88 @@ async function rejectSignupByOperationalTarget(targetId, expectedSignupAttemptId
   return { ok: true, action: "signup_rejected", status: updated.status };
 }
 
+async function archiveSignupRecordByOperationalTarget(targetId, expectedSignupAttemptId = "") {
+  const signup = findSignupByOperationalTarget(targetId, listSignupDashboardRecords(), expectedSignupAttemptId);
+  if (!signup) {
+    const error = new Error("The signup alert no longer matches an active signup record.");
+    error.statusCode = 404;
+    throw error;
+  }
+  const archivedAt = new Date();
+  const updated = upsertSignupDashboardRecord({
+    ...signup,
+    previousStatus: signup.status || "unknown",
+    status: "abandoned_archived",
+    makeError: "",
+    reviewRequired: false,
+    archivedAt: archivedAt.toISOString(),
+    archivedReason: "operator_closed_stale_attention_item",
+  });
+  if (signupAttempts && signup.signupAttemptId) {
+    await signupAttempts.updateIfPresent(signup.signupAttemptId, {
+      status: "abandoned_archived",
+      stage: "closed",
+      detail: "Operator archived stale attention record without provisioning retries",
+      reviewRequired: false,
+      archivedAt,
+    });
+  }
+  return {
+    ok: true,
+    action: "signup_archived",
+    status: updated.status,
+    retainedProviderReferences: Boolean(
+      signup.twilioPhoneNumber
+        || signup.vapiAssistantId
+        || signup.vapiPhoneNumberId
+        || signup.subscriptionId
+        || signup.checkoutSessionId
+    ),
+  };
+}
+
+async function clearCompletedSignupReviewByOperationalTarget(targetId, expectedSignupAttemptId = "") {
+  const signup = findSignupByOperationalTarget(targetId, listSignupDashboardRecords(), expectedSignupAttemptId);
+  if (!signup) {
+    const error = new Error("The signup alert no longer matches an active signup record.");
+    error.statusCode = 404;
+    throw error;
+  }
+  const status = String(signup.status || "").trim().toLowerCase();
+  const readyStatus = ["setup_ready", "agent_testing"].includes(status);
+  const hasVerifiedResources = Boolean(
+    signup.twilioPhoneNumber
+      && signup.vapiAssistantId
+      && (signup.vapiPhoneNumberId || String(signup.phoneProvisioningStatus || "").toLowerCase() === "ready")
+      && String(signup.smsRoutingStatus || "").toLowerCase() !== "failed"
+  );
+  const readinessPassed = String(signup.agentTestStatus || signup.agentReadinessStatus || "").toLowerCase() === "passed"
+    || status === "setup_ready";
+  if (!readyStatus || !hasVerifiedResources || !readinessPassed) {
+    const error = new Error("This signup has not proven a ready phone, assistant, and delivery-test state.");
+    error.statusCode = 409;
+    error.code = "SIGNUP_REVIEW_CLEARANCE_NOT_SAFE";
+    throw error;
+  }
+  const updated = upsertSignupDashboardRecord({
+    ...signup,
+    status: "setup_ready",
+    makeError: "",
+    reviewRequired: false,
+    reviewClearedAt: new Date().toISOString(),
+    reviewClearedReason: "verified_resources_and_agent_test_passed",
+  });
+  if (signupAttempts && signup.signupAttemptId) {
+    await signupAttempts.updateIfPresent(signup.signupAttemptId, {
+      status: "setup_ready",
+      stage: "ready",
+      detail: "Verified resources and agent delivery test passed",
+      reviewRequired: false,
+    });
+  }
+  return { ok: true, action: "signup_review_cleared", status: updated.status };
+}
+
 async function recoverSignupByOperationalTarget(targetId, expectedSignupAttemptId = "") {
   const signup = findSignupByOperationalTarget(targetId, listSignupDashboardRecords(), expectedSignupAttemptId);
   if (!signup) {
@@ -16059,6 +16141,10 @@ app.post(
         result = await recoverSignupByOperationalTarget(targetId);
       } else if (action === "reject_signup") {
         result = await rejectSignupByOperationalTarget(targetId);
+      } else if (action === "archive_signup") {
+        result = await archiveSignupRecordByOperationalTarget(targetId);
+      } else if (action === "clear_signup_review") {
+        result = await clearCompletedSignupReviewByOperationalTarget(targetId);
       } else if (action === "reopen_signup") {
         const signup = listSignupDashboardRecords().find((record) => {
           const identity = String(record.subscriptionId || record.checkoutSessionId || record.ownerEmail || record.businessName || record.signedUpAt || "unknown");
@@ -16157,7 +16243,7 @@ app.post(
           ? "lead_handoff"
           : action === "acknowledge_runtime_incident"
             ? "runtime_incident"
-            : ["recover_signup", "reject_signup", "reopen_signup", "resend_signup_verification"].includes(action) ? "signup" : "calls",
+            : ["recover_signup", "reject_signup", "archive_signup", "clear_signup_review", "reopen_signup", "resend_signup_verification"].includes(action) ? "signup" : "calls",
         targetId,
         details: { initiatedFrom: "attention_inbox" },
       });

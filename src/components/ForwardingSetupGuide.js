@@ -29,7 +29,7 @@ export default function ForwardingSetupGuide({ assignedNumber, forwarding, setup
   };
 
   return (
-    <section className={`forwarding-guide${compact ? " is-compact" : ""}${active ? " is-active" : ""}`} aria-labelledby="forwarding-guide-title">
+    <section id="forwarding-setup" className={`forwarding-guide${compact ? " is-compact" : ""}${active ? " is-active" : ""}`} aria-labelledby="forwarding-guide-title">
       <div className="forwarding-guide-heading">
         <span>{active ? "✓ MISSED-CALL PROTECTION ACTIVE" : "YOUR NUMBER IS READY"}</span>
         <h2 id="forwarding-guide-title">{active ? "You’re protected" : "Protect your missed calls"}</h2>

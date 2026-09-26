@@ -325,7 +325,7 @@ function signupAttentionItems(signups = [], now = new Date(), stuckMinutes = 60)
         ageMinutes: ageMinutes(signup.lastPaymentFailedAt || updatedAt, now),
         targetType: "signup",
         targetId,
-        actions: [],
+        actions: ["archive_signup"],
         diagnostics: signupDiagnostics(signup, status),
       }));
     } else if (["failed", "partial"].includes(String(signup.setupFollowupStatus || "").toLowerCase())) {
@@ -419,11 +419,18 @@ function signupAttentionItems(signups = [], now = new Date(), stuckMinutes = 60)
         targetType: "signup",
         targetId,
         actions: waitingForVerification
-          ? ["resend_signup_verification", "reopen_signup"]
-          : ["recover_signup", "reopen_signup"],
+          ? ["resend_signup_verification", "reopen_signup", "archive_signup"]
+          : ["recover_signup", "reopen_signup", "archive_signup"],
         diagnostics: signupDiagnostics(signup, status),
       }));
     } else if (signup.reviewRequired || status === "manual_review_reopened") {
+      const hasVerifiedResources = Boolean(
+        signup.twilioPhoneNumber
+          && signup.vapiAssistantId
+          && (signup.vapiPhoneNumberId || String(signup.phoneProvisioningStatus || "").toLowerCase() === "ready")
+          && String(signup.smsRoutingStatus || "").toLowerCase() !== "failed"
+      );
+      const agentPassed = String(signup.agentTestStatus || signup.agentReadinessStatus || "").toLowerCase() === "passed";
       items.push(attentionItem({
         kind: "signup_review_required",
         severity: "warning",
@@ -440,7 +447,9 @@ function signupAttentionItems(signups = [], now = new Date(), stuckMinutes = 60)
         ageMinutes: ageMinutes(signup.reopenedAt || updatedAt, now),
         targetType: "signup",
         targetId,
-        actions: ["recover_signup", "reject_signup"],
+        actions: hasVerifiedResources && (agentPassed || String(status).toLowerCase() === "setup_ready")
+          ? ["clear_signup_review", "archive_signup"]
+          : ["recover_signup", "reject_signup", "archive_signup"],
         diagnostics: signupDiagnostics(signup, status),
       }));
     }
@@ -582,6 +591,12 @@ async function getOperationalAttentionInbox({ prisma, signups = [], runtimeIncid
     }));
   }
   for (const business of businesses) {
+    if (
+      String(business.name || "").trim().toLowerCase() === "my aipa"
+      && !business.vapiMappings.length
+    ) {
+      continue;
+    }
     if (!business.settings?.ownerPhone || !business.vapiMappings.length) {
       const ownerPhoneMissing = !business.settings?.ownerPhone;
       items.push(attentionItem({

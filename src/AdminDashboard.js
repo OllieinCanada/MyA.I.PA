@@ -128,6 +128,64 @@ export function getOwnerIncidentBrief(item = {}) {
   };
 }
 
+function getAttentionBucket(item = {}) {
+  const kind = String(item.kind || "");
+  const severity = String(item.severity || "");
+  if (kind === "signup_duplicate" || kind === "business_mapping_incomplete") return "old_clutter";
+  if (["signup_review_required", "signup_stuck"].includes(kind)) return "owner_decision";
+  if (severity === "critical" || kind.includes("failed") || kind.includes("paused")) return "fix_now";
+  return "watch";
+}
+
+function getAttentionBucketMeta(bucket) {
+  const map = {
+    fix_now: {
+      label: "Fix now",
+      title: "Real blockers",
+      detail: "These can affect a live or nearly-live customer. Handle these first.",
+    },
+    owner_decision: {
+      label: "Decision",
+      title: "Needs your call",
+      detail: "These are safe to close, clear, or retry only after choosing what should happen.",
+    },
+    old_clutter: {
+      label: "Cleanup",
+      title: "Old clutter",
+      detail: "Duplicates, internal records, or stale tests that should stop looking scary.",
+    },
+    watch: {
+      label: "Watch",
+      title: "System notes",
+      detail: "Useful technical signals that do not need an immediate customer action.",
+    },
+  };
+  return map[bucket] || map.watch;
+}
+
+function getPlainIssueType(item = {}) {
+  const kind = String(item.kind || "");
+  if (kind === "subscription_paused") return "Billing/subscription";
+  if (kind === "signup_review_required") return "Manual review";
+  if (kind === "signup_stuck") return "Stuck setup";
+  if (kind === "signup_duplicate") return "Duplicate signup";
+  if (kind === "business_mapping_incomplete") return "Internal mapping";
+  if (kind === "runtime_incident") return "System incident";
+  if (kind.includes("text")) return "Text delivery";
+  if (kind.includes("handoff")) return "Lead handoff";
+  return String(item.title || kind || "Issue");
+}
+
+function getPlainIssueRecommendation(item = {}) {
+  const actions = item.actions || [];
+  if (actions.includes("archive_signup")) return "Archive it if this is old/test clutter. This does not retry Twilio, Vapi, or Stripe.";
+  if (actions.includes("clear_signup_review")) return "Clear the review if the phone and assistant are already confirmed ready.";
+  if (actions.includes("recover_signup")) return "Retry only after checking it will not duplicate resources.";
+  if (actions.includes("acknowledge_runtime_incident")) return "Acknowledge after confirming the underlying event is understood.";
+  if (item.kind === "subscription_paused") return "Do not rebuild this. Decide whether to archive the old record or fix Stripe billing.";
+  return "Review the evidence, then choose the safest action.";
+}
+
 function dt(value) {
   if (!value) return "—";
   const d = new Date(value);
@@ -1106,6 +1164,7 @@ function ConceptOverview({
   signups,
   apiSourceLabel,
   leadHandoffs,
+  attentionInbox,
   onOpenTab,
   onSyncCalls,
 }) {
@@ -1120,9 +1179,41 @@ function ConceptOverview({
   const booked = calls.filter((call) => call.outcome === "BOOKED").length;
   const pulseAction = fixRows[0];
   const pulseActionTab = pulseAction?.actionTab || "calls";
+  const attentionSummary = attentionInbox?.summary || {};
+  const attentionItems = attentionInbox?.items || [];
+  const criticalCount = attentionSummary.bySeverity?.critical || attentionItems.filter((item) => item.severity === "critical").length;
+  const warningCount = attentionSummary.bySeverity?.warning || attentionItems.filter((item) => item.severity === "warning").length;
+  const oldClutterCount = attentionItems.filter((item) => getAttentionBucket(item) === "old_clutter").length;
+  const pilotBlocked = criticalCount > 0 || attentionItems.some((item) => getAttentionBucket(item) === "fix_now");
+  const pilotMessage = pilotBlocked
+    ? "Not pilot-clean yet"
+    : warningCount
+      ? "Usable, but clean warnings first"
+      : "Pilot-clean";
 
   return (
     <div className="admin-v2-overview">
+      <section className={`admin-pilot-command ${pilotBlocked ? "is-blocked" : warningCount ? "is-watch" : "is-ready"}`}>
+        <div className="admin-pilot-command-copy">
+          <span>Pilot readiness</span>
+          <h2>{pilotMessage}</h2>
+          <p>{pilotBlocked
+            ? "There are still real blockers or old billing states that should be closed before calling a first pilot customer."
+            : warningCount
+              ? "The core system is up, but a few review/cleanup items should be handled before you treat it as clean."
+              : "No active operational issues are blocking a controlled pilot."}</p>
+        </div>
+        <div className="admin-pilot-command-metrics">
+          <button type="button" onClick={() => onOpenTab("attention")}><strong>{criticalCount}</strong><span>Fix now</span></button>
+          <button type="button" onClick={() => onOpenTab("attention")}><strong>{warningCount}</strong><span>Warnings</span></button>
+          <button type="button" onClick={() => onOpenTab("attention")}><strong>{oldClutterCount}</strong><span>Old clutter</span></button>
+        </div>
+        <button type="button" className="admin-pilot-command-action" onClick={() => onOpenTab("attention")}>
+          Open pilot cleanup board
+          <span aria-hidden="true">→</span>
+        </button>
+      </section>
+
       <section className={"admin-v2-pulse " + (fixRows.length ? "has-attention" : "is-clear")}>
         <span className="admin-v2-pulse-icon" aria-hidden="true">{fixRows.length ? "!" : "✓"}</span>
         <div>
@@ -1394,10 +1485,22 @@ function AttentionInbox({ inbox, busyAction, message, incidentId, onRefresh, onA
     sync_calls: "Resync calls",
     recover_signup: "Attempt safe recovery",
     reject_signup: "Reject without provisioning",
+    archive_signup: "Archive stale record",
+    clear_signup_review: "Clear completed review",
     reopen_signup: "Reopen signup",
     resend_signup_verification: "Resend verification",
     acknowledge_runtime_incident: "Acknowledge incident",
   };
+  const groupedItems = useMemo(() => {
+    const buckets = { fix_now: [], owner_decision: [], old_clutter: [], watch: [] };
+    items.forEach((item) => {
+      const bucket = getAttentionBucket(item);
+      (buckets[bucket] || buckets.watch).push(item);
+    });
+    return buckets;
+  }, [items]);
+  const bucketOrder = ["fix_now", "owner_decision", "old_clutter", "watch"];
+  const firstActionable = items.find((item) => (item.actions || []).length);
 
   useEffect(() => {
     if (!incidentId || !requestedIncidentFound) return undefined;
@@ -1418,15 +1521,33 @@ function AttentionInbox({ inbox, busyAction, message, incidentId, onRefresh, onA
 
   return (
     <div className="admin-support-page">
-      <div className="admin-support-heading">
-        <div><span>Operations command center</span><h2>Needs Attention</h2><p>One queue for failed signups, missing call handoffs, text problems, routing gaps, and high-priority reports.</p></div>
+      <div className="admin-support-heading admin-attention-heading-v2">
+        <div><span>Operations command center</span><h2>Pilot cleanup board</h2><p>Plain-English buckets for what blocks a pilot, what needs your decision, and what is old clutter.</p></div>
         <button type="button" onClick={onRefresh}>Refresh checks</button>
       </div>
-      <div className="admin-support-metrics">
-        <div><span>Total</span><strong>{summary.total || 0}</strong></div>
-        <div><span>Critical</span><strong>{summary.bySeverity?.critical || 0}</strong></div>
-        <div><span>Warnings</span><strong>{summary.bySeverity?.warning || 0}</strong></div>
-        <div><span>Last checked</span><strong>{inbox?.generatedAt ? dt(inbox.generatedAt) : "—"}</strong></div>
+      <div className="admin-attention-command">
+        <div className={`admin-attention-readiness ${(summary.bySeverity?.critical || 0) ? "is-blocked" : (summary.total || 0) ? "is-watch" : "is-ready"}`}>
+          <span>{(summary.bySeverity?.critical || 0) ? "Not pilot-clean" : (summary.total || 0) ? "Cleanup remaining" : "Pilot-clean"}</span>
+          <h3>{summary.total || 0} active {summary.total === 1 ? "issue" : "issues"}</h3>
+          <p>{(summary.bySeverity?.critical || 0)
+            ? "Handle the real blockers first. Do not retry old provider/billing records just to make the warning disappear."
+            : (summary.total || 0)
+              ? "No critical blocker is showing, but cleanup will make the pilot dashboard easier to trust."
+              : "Nothing needs attention right now."}</p>
+        </div>
+        <div className="admin-attention-metrics">
+          <div><span>Fix now</span><strong>{groupedItems.fix_now.length}</strong></div>
+          <div><span>Owner decision</span><strong>{groupedItems.owner_decision.length}</strong></div>
+          <div><span>Old clutter</span><strong>{groupedItems.old_clutter.length}</strong></div>
+          <div><span>Last checked</span><strong>{inbox?.generatedAt ? dt(inbox.generatedAt) : "—"}</strong></div>
+        </div>
+        {firstActionable ? (
+          <div className="admin-attention-next">
+            <span>Recommended next action</span>
+            <strong>{firstActionable.businessName || firstActionable.title}</strong>
+            <p>{getPlainIssueRecommendation(firstActionable)}</p>
+          </div>
+        ) : null}
       </div>
       {message ? <div className="admin-support-message" role="status">{message}</div> : null}
       {incidentId && inbox?.generatedAt && !requestedIncidentFound ? (
@@ -1434,8 +1555,20 @@ function AttentionInbox({ inbox, busyAction, message, incidentId, onRefresh, onA
           {incidentReference(incidentId)} is no longer in the active queue. It may already be resolved; check the audit trail below.
         </div>
       ) : null}
-      <div className="admin-support-list">
-        {items.length ? items.map((item) => {
+      <div className="admin-attention-board">
+        {items.length ? bucketOrder.map((bucket) => {
+          const bucketItems = groupedItems[bucket] || [];
+          const meta = getAttentionBucketMeta(bucket);
+          return (
+            <section key={bucket} className={`admin-attention-bucket is-${bucket}`}>
+              <header>
+                <span>{meta.label}</span>
+                <h3>{meta.title}</h3>
+                <p>{meta.detail}</p>
+                <strong>{bucketItems.length}</strong>
+              </header>
+              <div className="admin-attention-bucket-list">
+                {bucketItems.length ? bucketItems.map((item) => {
           const isRequestedIncident = item.id === incidentId;
           const snapshotRows = getIncidentSnapshotRows(item);
           const ownerBrief = getOwnerIncidentBrief(item);
@@ -1446,11 +1579,11 @@ function AttentionInbox({ inbox, busyAction, message, incidentId, onRefresh, onA
             data-incident-id={item.id}
             aria-current={isRequestedIncident ? "true" : undefined}
             tabIndex={isRequestedIncident ? -1 : undefined}
-            className={`admin-owner-incident ${item.severity === "critical" ? "is-critical" : "is-warning"} ${isRequestedIncident ? "is-requested ring-4 ring-sky-300/40" : ""}`}
+            className={`admin-owner-incident admin-owner-incident-v2 ${item.severity === "critical" ? "is-critical" : "is-warning"} ${isRequestedIncident ? "is-requested ring-4 ring-sky-300/40" : ""}`}
           >
             <header className="admin-owner-incident-head">
               <div>
-                <span className="admin-owner-incident-severity">{item.severity === "critical" ? "Action needed" : "Check this"}</span>
+                <span className="admin-owner-incident-severity">{getPlainIssueType(item)}</span>
                 <h3>{item.title}</h3>
                 <p>{item.summary}</p>
               </div>
@@ -1465,7 +1598,7 @@ function AttentionInbox({ inbox, busyAction, message, incidentId, onRefresh, onA
             </div>
 
             <div className="admin-owner-next-action">
-              <div><span>Do this now</span><strong>{ownerBrief.nextAction}</strong></div>
+              <div><span>Best plain-English action</span><strong>{getPlainIssueRecommendation(item)}</strong><small>{ownerBrief.nextAction}</small></div>
               <div className="admin-owner-action-buttons">
                 {(item.actions || []).map((action) => (
                   <button key={action} type="button" disabled={busyAction === `${item.id}:${action}`} onClick={() => onAction(item, action)}>
@@ -1476,6 +1609,7 @@ function AttentionInbox({ inbox, busyAction, message, incidentId, onRefresh, onA
                         : actionLabels[action] || action}
                   </button>
                 ))}
+                {!(item.actions || []).length ? <span className="admin-no-safe-action">No safe one-click action</span> : null}
               </div>
             </div>
 
@@ -1491,6 +1625,10 @@ function AttentionInbox({ inbox, busyAction, message, incidentId, onRefresh, onA
               ) : <p>No additional technical snapshot was recorded.</p>}
             </details>
           </article>
+          );
+        }) : <div className="admin-attention-empty-small">No items in this bucket.</div>}
+              </div>
+            </section>
           );
         }) : <div className="admin-support-empty">Nothing needs attention right now.</div>}
       </div>
@@ -3062,6 +3200,7 @@ export default function AdminDashboard() {
             signups={signups}
             apiSourceLabel={API_SOURCE_LABEL}
             leadHandoffs={leadHandoffs}
+            attentionInbox={attentionInbox}
             onOpenTab={setActiveTab}
             onSyncCalls={syncVapiCalls}
           />
