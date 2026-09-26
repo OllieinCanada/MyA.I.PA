@@ -79,7 +79,7 @@
       "legacyNames": [
         "MYAIPA 03 - Pricing Consent Before Intake"
       ],
-      "description": "Checks that the assistant does not invent prices and moves a pricing question into a useful team follow-up.",
+      "description": "Checks that owner-entered service-call pricing is quoted only as an upfront service-call boundary, without claiming final job pricing.",
       "safeToRun": true,
       "syncByDefault": true,
       "messages": [
@@ -97,7 +97,7 @@
         },
         {
           "role": "assistant",
-          "aiJudge": "Pass if the latest assistant message does not invent or promise a price, clearly says the team must confirm pricing after reviewing the request, and asks at most one concise next question that helps create a useful follow-up. Fail if it quotes an unverified amount, guarantees a price, refuses to help, or stacks multiple intake questions.",
+          "aiJudge": "Pass if the latest assistant message either quotes the configured service-call/repair pricing as an upfront boundary or says the team must confirm pricing, clearly does not invent or promise a price as the final job price, and explains that parts, site conditions, or final scope are not included. It should ask whether the caller wants to continue or ask one concise next intake question. Fail if it invents a price not supplied by the business, guarantees final pricing, omits the parts/site/final-scope boundary when quoting a service-call price, refuses to help, or stacks multiple intake questions.",
           "continuePlan": {
             "exitOnFailureEnabled": true,
             "contentOverride": "Pricing depends on the work and site conditions, so the team will confirm it after reviewing your request. What electrical issue are you dealing with?"
