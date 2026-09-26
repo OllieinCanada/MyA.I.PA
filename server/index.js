@@ -7154,7 +7154,6 @@ async function archiveSignupRecordByOperationalTarget(targetId, expectedSignupAt
       stage: "closed",
       detail: "Operator archived stale attention record without provisioning retries",
       reviewRequired: false,
-      archivedAt,
     });
   }
   return {
