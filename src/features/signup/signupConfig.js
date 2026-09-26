@@ -20,7 +20,10 @@ export const CHECKOUT_SESSION_URL = `${CHECKOUT_API_BASE}${CHECKOUT_API_PATH}`;
 export const VAPI_PREVIEW_CONFIG_URL = `${API_BASE}/api/public/vapi-preview-config`;
 export const VAPI_PREVIEW_SESSION_URL = `${API_BASE}/api/public/vapi-preview-session`;
 
-export const TURNSTILE_SITE_KEY = String(process.env.REACT_APP_TURNSTILE_SITE_KEY || "").trim();
+export const DEFAULT_TURNSTILE_SITE_KEY = "0x4AAAAAAFD2gXNJCtKJRRUb";
+export const TURNSTILE_SITE_KEY = String(
+  process.env.REACT_APP_TURNSTILE_SITE_KEY || DEFAULT_TURNSTILE_SITE_KEY
+).trim();
 export const RECAPTCHA_SITE_KEY = String(process.env.REACT_APP_RECAPTCHA_SITE_KEY || "").trim();
 export const CAPTCHA_PROVIDER = String(
   process.env.REACT_APP_CAPTCHA_PROVIDER
