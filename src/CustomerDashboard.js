@@ -1042,7 +1042,7 @@ function SimpleTrialBar({ usage = {}, trialText = "", trialEndAt = "", billing =
     }
   };
   return (
-    <section className={`customer-simple-trial${paused ? " is-paused" : ""}`} aria-label="Free trial usage">
+    <section id="billing" className={`customer-simple-trial${paused ? " is-paused" : ""}`} aria-label="Free trial usage">
       <div>
         <span>Free trial</span>
         <strong>{paused ? "New AI calls are paused" : `${remaining} minutes left`}</strong>
@@ -1107,6 +1107,73 @@ function AgentTestingStation({ testing = {}, ownerPhone, onUpdated }) {
         <small>No real customer is contacted. No callback is needed.</small>
       </div>
       {message ? <p className="customer-agent-test-message" role="status">{message}</p> : null}
+    </section>
+  );
+}
+
+function CustomerReadinessCommandCenter({ aiNumber, agentTesting = {}, forwarding = null, messaging = {}, billing = {}, trialUsage = {}, stats = {}, onRefresh, onSettings }) {
+  const phoneReady = Boolean(aiNumber);
+  const testReady = Boolean(agentTesting.passed);
+  const forwardingReady = Boolean(forwarding?.completed || forwarding?.verified || forwarding?.status === "verified");
+  const textReady = Boolean(messaging.serviceTextsActive);
+  const billingNeedsHelp = Boolean(billing.paymentFailed || billing.paused || trialUsage.newCallsPaused);
+  const cards = [
+    {
+      key: "phone",
+      label: "AI phone",
+      value: phoneReady ? fmtPhone(aiNumber) : "Preparing",
+      detail: phoneReady ? "Call this once before forwarding real customers." : "We are still assigning the number.",
+      tone: phoneReady ? "ready" : "wait",
+      action: phoneReady ? { label: "Call test", href: `tel:${aiNumber}` } : { label: "Refresh", onClick: onRefresh },
+    },
+    {
+      key: "forwarding",
+      label: "Forwarding",
+      value: forwardingReady ? "Connected" : "Not confirmed",
+      detail: forwardingReady ? "Missed calls should route to My AI PA." : "Set this after the AI phone test sounds right.",
+      tone: forwardingReady ? "ready" : "warn",
+      action: { label: "Setup guide", href: "#forwarding-setup" },
+    },
+    {
+      key: "texts",
+      label: "Text alerts",
+      value: textReady ? "On" : messaging.status === "PAUSED" ? "Paused" : "Needs check",
+      detail: textReady ? "Owner/customer updates are enabled." : (messaging.guidance || "Text delivery is not fully confirmed."),
+      tone: textReady ? "ready" : "warn",
+      action: { label: "Settings", onClick: onSettings },
+    },
+    {
+      key: "trial",
+      label: "Trial / billing",
+      value: billingNeedsHelp ? "Needs attention" : `${stats.totalCalls || 0} calls handled`,
+      detail: billingNeedsHelp ? "Calls may be paused until billing is fixed." : "No billing action is blocking setup right now.",
+      tone: billingNeedsHelp ? "danger" : "ready",
+      action: { label: billingNeedsHelp ? "Open billing" : "See calls", href: billingNeedsHelp ? "#billing" : "#calls" },
+    },
+  ];
+  return (
+    <section className="customer-command-center" aria-label="Setup command center">
+      <div className="customer-command-center-head">
+        <span>Your dashboard, simplified</span>
+        <h2>What is ready right now?</h2>
+        <p>Use these four cards before you send real customers through the assistant.</p>
+      </div>
+      <div className="customer-command-grid">
+        {cards.map((card) => (
+          <article key={card.key} className={`customer-command-card is-${card.tone}`}>
+            <div>
+              <span>{card.label}</span>
+              <strong>{card.value}</strong>
+              <p>{card.detail}</p>
+            </div>
+            {card.action?.href ? (
+              <a href={card.action.href}>{card.action.label}</a>
+            ) : (
+              <button type="button" onClick={card.action?.onClick}>{card.action?.label || "Open"}</button>
+            )}
+          </article>
+        ))}
+      </div>
     </section>
   );
 }
@@ -1240,6 +1307,18 @@ function CustomerDashboardView({ dashboard, onSignOut, onRefresh, refreshing, re
         </section>
 
         {aiNumber ? <ForwardingSetupGuide assignedNumber={aiNumber} forwarding={forwarding} compact /> : null}
+
+        <CustomerReadinessCommandCenter
+          aiNumber={aiNumber}
+          agentTesting={agentTesting}
+          forwarding={forwarding}
+          messaging={messaging}
+          billing={billing}
+          trialUsage={trialUsage}
+          stats={stats}
+          onRefresh={onRefresh}
+          onSettings={openMoreSettings}
+        />
 
         <section className="customer-simple-next" aria-labelledby="customer-next-title">
           <span>DO THIS NEXT</span>

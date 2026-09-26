@@ -628,6 +628,7 @@ video {
 }
 
 .sticky {
+  position: -webkit-sticky;
   position: sticky;
 }
 
@@ -1694,6 +1695,7 @@ video {
 }
 
 .w-fit {
+  width: -webkit-fit-content;
   width: fit-content;
 }
 
@@ -1734,6 +1736,7 @@ video {
 }
 
 .min-w-max {
+  min-width: -webkit-max-content;
   min-width: max-content;
 }
 
@@ -7783,19 +7786,23 @@ video {
 }
 
 .underline {
-  text-decoration-line: underline;
+  -webkit-text-decoration-line: underline;
+          text-decoration-line: underline;
 }
 
 .no-underline {
-  text-decoration-line: none;
+  -webkit-text-decoration-line: none;
+          text-decoration-line: none;
 }
 
 .decoration-blue-200 {
-  text-decoration-color: #bfdbfe;
+  -webkit-text-decoration-color: #bfdbfe;
+          text-decoration-color: #bfdbfe;
 }
 
 .decoration-white\/35 {
-  text-decoration-color: rgb(255 255 255 / 0.35);
+  -webkit-text-decoration-color: rgb(255 255 255 / 0.35);
+          text-decoration-color: rgb(255 255 255 / 0.35);
 }
 
 .decoration-2 {
@@ -9497,9 +9504,9 @@ video {
 }
 
 .transition {
-  transition-property: color, background-color, border-color, text-decoration-color, fill, stroke, opacity, box-shadow, transform, filter, -webkit-backdrop-filter;
+  transition-property: color, background-color, border-color, fill, stroke, opacity, box-shadow, transform, filter, -webkit-text-decoration-color, -webkit-backdrop-filter;
   transition-property: color, background-color, border-color, text-decoration-color, fill, stroke, opacity, box-shadow, transform, filter, backdrop-filter;
-  transition-property: color, background-color, border-color, text-decoration-color, fill, stroke, opacity, box-shadow, transform, filter, backdrop-filter, -webkit-backdrop-filter;
+  transition-property: color, background-color, border-color, text-decoration-color, fill, stroke, opacity, box-shadow, transform, filter, backdrop-filter, -webkit-text-decoration-color, -webkit-backdrop-filter;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
   transition-duration: 150ms;
 }
@@ -9571,7 +9578,8 @@ video {
 }
 
 .\[clip-path\:polygon\(50\%_0\%\2c 92\%_18\%\2c 85\%_72\%\2c 50\%_100\%\2c 15\%_72\%\2c 8\%_18\%\)\] {
-  clip-path: polygon(50% 0%,92% 18%,85% 72%,50% 100%,15% 72%,8% 18%);
+  -webkit-clip-path: polygon(50% 0%,92% 18%,85% 72%,50% 100%,15% 72%,8% 18%);
+          clip-path: polygon(50% 0%,92% 18%,85% 72%,50% 100%,15% 72%,8% 18%);
 }
 
 .\[filter\:drop-shadow\(0_0_3px_rgba\(143\2c 209\2c 255\2c 0\.32\)\)\] {
@@ -10874,6 +10882,7 @@ video {
 
 @media (min-width: 1024px) {
   .lg\:sticky {
+    position: -webkit-sticky;
     position: sticky;
   }
 

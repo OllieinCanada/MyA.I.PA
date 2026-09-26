@@ -118,7 +118,7 @@ test("pending verification exposes a guarded resend action after it becomes stuc
       { ownerEmail: "owner@example.com", businessName: "Example Co", status, updatedAt: "2026-08-20T02:30:00.000Z" },
     ], now, 60);
     assert.equal(items.length, 1);
-    assert.deepEqual(items[0].actions, ["resend_signup_verification", "reopen_signup"]);
+    assert.deepEqual(items[0].actions, ["resend_signup_verification", "reopen_signup", "archive_signup"]);
     assert.equal(items[0].incident.reasonCode, "CONTACT_VERIFICATION_PENDING");
     assert.match(items[0].incident.reason, /text or email/i);
   }
@@ -136,7 +136,7 @@ test("an active trial still alerts when provisioning never becomes ready", () =>
 
   assert.equal(items.length, 1);
   assert.equal(items[0].kind, "signup_stuck");
-  assert.deepEqual(items[0].actions, ["recover_signup", "reopen_signup"]);
+  assert.deepEqual(items[0].actions, ["recover_signup", "reopen_signup", "archive_signup"]);
 });
 
 test("Stripe trial creation failures are explicit without exposing the raw error or claiming platform funding", () => {
@@ -353,8 +353,30 @@ test("a reopened signup stays in the queue until it is deliberately resolved", (
   assert.equal(items.length, 1);
   assert.equal(items[0].kind, "signup_review_required");
   assert.equal(items[0].severity, "warning");
-  assert.deepEqual(items[0].actions, ["recover_signup", "reject_signup"]);
+  assert.deepEqual(items[0].actions, ["recover_signup", "reject_signup", "archive_signup"]);
   assert.equal(JSON.stringify(items).includes("owner@example.com"), false);
+});
+
+test("completed manual-review signups can be cleared without retrying provider provisioning", () => {
+  const now = new Date("2026-09-26T12:00:00.000Z");
+  const items = signupAttentionItems([{
+    ownerEmail: "owner@example.com",
+    businessName: "Ready Contractor",
+    status: "setup_ready",
+    reviewRequired: true,
+    twilioPhoneNumber: "+12895559256",
+    vapiPhoneNumberId: "vapi-phone-id",
+    vapiAssistantId: "assistant-id",
+    smsRoutingStatus: "healthy",
+    agentTestStatus: "passed",
+    updatedAt: "2026-09-26T11:55:00.000Z",
+  }], now, 60);
+
+  assert.equal(items.length, 1);
+  assert.equal(items[0].kind, "signup_review_required");
+  assert.deepEqual(items[0].actions, ["clear_signup_review", "archive_signup"]);
+  assert.equal(items[0].diagnostics.hasAssignedPhone, true);
+  assert.equal(items[0].diagnostics.hasAssistant, true);
 });
 
 test("operational incidents include a safe reason and snapshot metadata across issue types", async () => {
@@ -395,6 +417,7 @@ test("operational incidents include a safe reason and snapshot metadata across i
       findMany: async () => [
         { id: 1, name: "Acme\nElectrical", settings: { ownerPhone: "+19055550100" }, vapiMappings: [{ id: 1 }] },
         { id: 2, name: "Missing Route Co", settings: { ownerPhone: "" }, vapiMappings: [] },
+        { id: 6, name: "My AIPA", settings: { ownerPhone: "+19057885488" }, vapiMappings: [] },
       ],
     },
     vapiToolExecution: {
@@ -474,6 +497,7 @@ test("operational incidents include a safe reason and snapshot metadata across i
   assert.ok(inbox.items.every((item) => ["high", "medium", "low"].includes(item.incident.confidence)));
   assert.equal(inbox.items.find((item) => item.businessId === 1).businessName, "Acme Electrical");
   assert.equal(inbox.items.find((item) => item.businessId === 2).businessName, "Missing Route Co");
+  assert.equal(inbox.items.some((item) => item.businessId === 6), false);
   assert.match(inbox.items.find((item) => item.targetId === "handoff_2").incident.reason, /carrier filtered/i);
   assert.equal(inbox.items.find((item) => item.targetId === "handoff_2").incident.reasonCode, "30007");
 
