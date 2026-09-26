@@ -215,7 +215,12 @@
     "test": "react-scripts test --env=jsdom",
     "test:backend": "node scripts/run-backend-tests.js",
     "test:backend:coverage": "node --experimental-test-coverage --test tests",
-    "eject": "react-scripts eject"
+    "eject": "react-scripts eject",
+    "audit:vapi-2026-readiness:render-env": "node scripts/run-with-render-env.js --keys=VAPI_API_KEY -- node scripts/audit-vapi-2026-readiness.js",
+    "audit:twilio-2026-readiness:render-env": "node scripts/run-with-render-env.js --keys=TWILIO_ACCOUNT_SID,TWILIO_AUTH_TOKEN --optional-keys=TWILIO_API_KEY_SID,TWILIO_API_KEY_SECRET,VAPI_API_KEY -- node scripts/audit-twilio-2026-readiness.js --out=diagnostics/shipping-readiness/twilio-readiness.json",
+    "ops:monitor:render-env": "node scripts/run-with-render-env.js --keys=MONITOR_API_KEY -- node scripts/monitor-production.js --include-operational --confirm-failure",
+    "ops:alert-drill:render-env": "node scripts/run-with-render-env.js --keys=MONITOR_API_KEY -- node scripts/test-production-incident-remediation.js --apply --confirm=RUN_INCIDENT_REMEDIATION_CANARY",
+    "evals:vapi:render-env": "node scripts/run-with-render-env.js --keys=VAPI_API_KEY -- node scripts/setup-vapi-evals.js --sync --run-safe --repeat=5 --minimum-pass-rate=0.95 --out=diagnostics/shipping-readiness/vapi-call-gate.json"
   },
   "devDependencies": {
     "axe-core": "^4.10.0",

@@ -70,6 +70,12 @@ test("builds the current production Vapi assistant with resolved signup values",
   assert.match(prompt, /Before we continue, this call will be recorded for service quality and accurate follow-up\. Is that okay\?/);
   assert.match(prompt, /Stop and wait for an explicit yes before collecting service, contact, address, or job details/i);
   assert.match(prompt, /We handle residential and commercial electrical work\. Are you looking for a new installation, service, or repair today\?/);
+  assert.match(prompt, /Safety and priority gate before pricing/i);
+  assert.match(prompt, /downed, arcing, or sparking wire/i);
+  assert.match(prompt, /stay well away, keep other people and pets away/i);
+  assert.match(prompt, /Do not tell them to shut off power, move the wire, drive over it, or touch nearby objects/i);
+  assert.match(prompt, /commercial downtime/i);
+  assert.match(prompt, /do not guarantee arrival/i);
   assert.match(prompt, /already identified installation such as an EV charger/i);
   assert.match(prompt, /Never replace that with a generic request for more information/i);
   assert.match(prompt, /preferredStartDate/);
