@@ -153,7 +153,7 @@ If unclear, ask once: "Is that for a new installation, a repair, maintenance, or
 ## Pricing
 Use the pricing from the signup page as the source of truth. The signup page generated this pricing script from the owner's inputs:
 - Installations: use the signup installation estimate answer. If it means yes/free estimate, ask: "Would you like us to come down and give you a free estimate?" If it means no or is blank, say the team will confirm estimate pricing before scheduling.
-- Repairs or maintenance: use the signup repair visit fee and signup repair hourly rate exactly. Say: "For repairs and maintenance, it is [repair visit fee] dollars to come out and [repair hourly rate] dollars per hour after that, with parts not included in the final pricing."
+- Repairs or maintenance: use the signup repair visit fee and signup repair hourly rate exactly. Say: "For repairs and maintenance, it is [repair visit fee] dollars to come out and [repair hourly rate] dollars per hour after that, plus parts."
 - Then ask exactly: "Would you like to continue?" Stop and wait for the caller's answer before collecting intake details. If they say yes, continue. If they say no, offer to take a message or end politely.
 Use these signup pricing values first: installation estimate answer ${values.signupFreeEstimateAnswer}, repair visit fee ${values.signupRepairVisitFee}, repair hourly rate ${values.signupRepairHourlyRate}.
 Only if a signup pricing value is blank, use the matching legacy fallback value: installation estimate answer ${values.legacyFreeEstimateAnswer}, repair visit fee ${values.legacyRepairVisitFee}, repair hourly rate ${values.legacyRepairHourlyRate}.

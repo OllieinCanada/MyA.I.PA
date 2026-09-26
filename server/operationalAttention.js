@@ -257,6 +257,10 @@ function signupDiagnostics(signup = {}, status = "unknown") {
     phoneProvisioningCode: safeDiagnosticLabel(signup.phoneProvisioningCode),
     makeResponseKind: safeDiagnosticLabel(signup.makeResponseKind),
     signupAlertFailed: Boolean(signup.signupTelegramAlertError),
+    setupFollowupStatus: safeDiagnosticLabel(signup.setupFollowupStatus),
+    setupFollowupChannels: Array.isArray(signup.setupFollowupChannels)
+      ? signup.setupFollowupChannels.map(safeDiagnosticLabel).filter(Boolean).slice(0, 3)
+      : [],
   };
 }
 
@@ -283,6 +287,29 @@ function signupAttentionItems(signups = [], now = new Date(), stuckMinutes = 60)
         lastCheckpoint: billingAttention.lastCheckpoint || signupLastCheckpoint(status),
         detectedAt: signup.lastPaymentFailedAt || updatedAt,
         ageMinutes: ageMinutes(signup.lastPaymentFailedAt || updatedAt, now),
+        targetType: "signup",
+        targetId,
+        actions: [],
+        diagnostics: signupDiagnostics(signup, status),
+      }));
+    } else if (["failed", "partial"].includes(String(signup.setupFollowupStatus || "").toLowerCase())) {
+      const deliveryCode = safeReasonCode(
+        Array.isArray(signup.setupFollowupErrors) ? signup.setupFollowupErrors[0]?.code : ""
+      ) || "SIGNUP_COMPLETION_DELIVERY_FAILED";
+      items.push(attentionItem({
+        kind: "signup_failed",
+        severity: "warning",
+        title: "Signup completed but customer follow-up needs attention",
+        summary: "The assigned number is ready, but the customer did not receive every setup-complete message.",
+        businessName: signup.businessName,
+        reason: "The setup-complete SMS or email delivery failed after provisioning succeeded.",
+        reasonCode: deliveryCode,
+        confidence: "high",
+        impact: "The setup remains live and the assigned number must be preserved, but the customer may not know which number to test.",
+        lastCheckpoint: "Phone number and assistant verified as assigned",
+        nextAction: "Do not provision another number. Repair the failed delivery channel, then resend only the setup-complete follow-up.",
+        detectedAt: signup.setupFollowupAttemptedAt || updatedAt,
+        ageMinutes: ageMinutes(signup.setupFollowupAttemptedAt || updatedAt, now),
         targetType: "signup",
         targetId,
         actions: [],

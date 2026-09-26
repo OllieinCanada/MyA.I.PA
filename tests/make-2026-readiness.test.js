@@ -70,6 +70,35 @@ test("requires Webhook response to be last", () => {
   assert.ok(report.issues.some((issue) => issue.key === "webhook-response-order"));
 });
 
+test("accepts three signed backend-owned provisioning stages as a durable replay guard", () => {
+  const stage = (id, url) => ({
+    id,
+    module: "http:MakeRequest",
+    version: 4,
+    mapper: {
+      url,
+      headers: [{ name: "x-provisioning-token", value: "{{21.provisioning.authorizationToken}}" }],
+      jsonStringBodyContent: '{"idempotencyKey":"{{21.provisioning.idempotencyKey}}"}',
+    },
+    onerror: [{ id: id + 100, module: "builtin:Break", mapper: { count: "3" } }],
+  });
+  const report = evaluateScenario({
+    scenario: { id: "scenario-protected", name: "Protected signup", isActive: true },
+    blueprint: {
+      metadata: { scenario: { sequential: false, confidential: true } },
+      flow: [
+        stage(1, "https://api.myaipa.ca/api/integrations/twilio/purchase-number"),
+        stage(2, "https://api.myaipa.ca/api/integrations/vapi/create-signup-assistant"),
+        stage(3, "https://api.myaipa.ca/api/integrations/vapi/import-twilio-number"),
+        webhookResponse(),
+      ],
+    },
+  });
+  assert.equal(report.workflow.backendProvisioningGuard, true);
+  assert.equal(report.workflow.hasVisibleIdempotencyStorage, true);
+  assert.ok(!report.issues.some((issue) => ["provisioning-idempotency", "parallel-provisioning"].includes(issue.key)));
+});
+
 test("summary counts high-risk gaps without leaking configuration values", () => {
   const reports = [
     evaluateScenario({

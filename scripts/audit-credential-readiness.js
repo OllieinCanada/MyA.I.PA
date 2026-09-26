@@ -100,6 +100,20 @@ const groups = [
     keys: ["SMTP_HOST", "SMTP_USER", "SMTP_PASS", "EMAIL_FROM"],
   },
   {
+    id: "admin-mfa",
+    label: "Admin two-factor authentication",
+    priority: "required-before-public-signup",
+    source: "Generate a TOTP enrollment secret and scan it before activation",
+    keys: ["ADMIN_TOTP_SECRET"],
+  },
+  {
+    id: "encrypted-backups",
+    label: "Encrypted database backups",
+    priority: "required-before-public-signup",
+    source: "Generate and retain a separate backup encryption key",
+    keys: ["BACKUP_ENCRYPTION_KEY"],
+  },
+  {
     id: "telegram",
     label: "High-priority support alerts",
     priority: "optional",

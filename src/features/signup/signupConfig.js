@@ -20,11 +20,14 @@ export const CHECKOUT_SESSION_URL = `${CHECKOUT_API_BASE}${CHECKOUT_API_PATH}`;
 export const VAPI_PREVIEW_CONFIG_URL = `${API_BASE}/api/public/vapi-preview-config`;
 export const VAPI_PREVIEW_SESSION_URL = `${API_BASE}/api/public/vapi-preview-session`;
 
-export const CAPTCHA_PROVIDER = "";
-export const RECAPTCHA_SITE_KEY = "";
+export const TURNSTILE_SITE_KEY = String(process.env.REACT_APP_TURNSTILE_SITE_KEY || "").trim();
+export const RECAPTCHA_SITE_KEY = String(process.env.REACT_APP_RECAPTCHA_SITE_KEY || "").trim();
+export const CAPTCHA_PROVIDER = String(
+  process.env.REACT_APP_CAPTCHA_PROVIDER
+  || (TURNSTILE_SITE_KEY ? "turnstile" : RECAPTCHA_SITE_KEY ? "recaptcha" : "")
+).trim().toLowerCase();
 export const RECAPTCHA_MODE = "score";
 export const USE_RECAPTCHA_ENTERPRISE = false;
-export const TURNSTILE_SITE_KEY = "";
 
 export const TRADE_OPTIONS = [
   {

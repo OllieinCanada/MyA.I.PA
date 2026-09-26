@@ -14,8 +14,10 @@ const coreBenefits = [
 ];
 
 const heroScenario = timsElectricalScenarios.find((scenario) => scenario.id === "new-installation");
+const heroTranscriptPreview = heroScenario.transcript.slice(0, 8);
 const ownerTextPoints = heroScenario.ownerTextLines;
 const customerTextPoints = heroScenario.customerTextLines;
+const coffeeCupImageSource = `${process.env.PUBLIC_URL || ""}/illustrations/tim-hortons-canadian-cup.png`;
 
 const handoffCards = [
   ["Callback information", "Caller name, callback number, and the best time to reach them."],
@@ -223,10 +225,16 @@ function AnimatedHeroProof({ onSampleCall, onStartTrial }) {
       title: "A real conversation—not voicemail",
       content: (
         <div className="simple-call-conversation">
-          <div className="assistant"><span>My AI PA</span><p>“{heroScenario.transcript[0].text}”</p></div>
-          <div className="caller"><span>Caller · {heroScenario.callerName}</span><p>“{heroScenario.transcript[1].text}”</p></div>
-          <div className="assistant"><span>My AI PA</span><p>“{heroScenario.transcript[2].text}”</p></div>
-          <strong className="simple-lead-classification">NEW INSTALLATION</strong>
+          {heroTranscriptPreview.map((turn, index) => (
+            <div
+              className={`${turn.speaker === "caller" ? "caller" : "assistant"}${index >= 3 ? " simple-transcript-turn-extended" : ""}`}
+              key={`${turn.speaker}-${turn.startSeconds ?? index}`}
+            >
+              <span>{turn.speaker === "caller" ? `Caller · ${heroScenario.callerName}` : "My AI PA"}</span>
+              <p>“{turn.text}”</p>
+            </div>
+          ))}
+          <strong className="simple-lead-classification">{heroScenario.intent.toUpperCase()}</strong>
         </div>
       ),
     },
@@ -244,6 +252,8 @@ function AnimatedHeroProof({ onSampleCall, onStartTrial }) {
                 {ownerTextPoints.slice(1).map((point) => <li key={point}>{point}</li>)}
               </ul>
             </div>
+            <div className="simple-message-toolbar" aria-hidden="true"><span>＋</span><span>Text Message</span><span>↑</span></div>
+            <i className="simple-phone-home-indicator" aria-hidden="true" />
           </article>
           <article className="simple-message-phone customer">
             <div className="simple-phone-status"><b>9:41</b><i /><b>5G</b></div>
@@ -253,6 +263,8 @@ function AnimatedHeroProof({ onSampleCall, onStartTrial }) {
                 {customerTextPoints.map((point) => <li key={point}>{point}</li>)}
               </ul>
             </div>
+            <div className="simple-message-toolbar" aria-hidden="true"><span>＋</span><span>Text Message</span><span>↑</span></div>
+            <i className="simple-phone-home-indicator" aria-hidden="true" />
           </article>
         </div>
       ),
@@ -264,7 +276,7 @@ function AnimatedHeroProof({ onSampleCall, onStartTrial }) {
         <div className="simple-carousel-benefits">
           <figure className="simple-coffee-cup">
             <span className="simple-coffee-steam" aria-hidden="true"><i /><i /><i /></span>
-            <img src="/illustrations/tim-hortons-canadian-cup.png" alt="A hand-drawn Tim Hortons cup with Canadian nature-inspired artwork" />
+            <img src={coffeeCupImageSource} alt="A hand-drawn Tim Hortons cup with Canadian nature-inspired artwork" decoding="async" />
           </figure>
           <ul>
             <li><Icon name="phone" />Picks up after three rings</li>

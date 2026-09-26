@@ -100,6 +100,12 @@ function flattenModules(flow, route = "root", target = []) {
       mapper: safeObject(module.mapper || {}),
       parameters: safeObject(module.parameters || {}),
       filter: safeObject(module.filter || {}),
+      errorHandlers: (module.onerror || []).map((handler) => ({
+        id: handler.id,
+        module: handler.module || "",
+        version: handler.version || "",
+        mapper: safeObject(handler.mapper || {}),
+      })),
     });
     for (const [index, branch] of (module.routes || []).entries()) {
       flattenModules(branch.flow || branch, `${route}/${module.id}:route-${index + 1}`, target);

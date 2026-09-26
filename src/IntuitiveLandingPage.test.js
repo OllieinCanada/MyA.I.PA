@@ -84,12 +84,16 @@ describe("intuitive homepage journey", () => {
     expect(container.textContent).toMatch(/Both sides get a clear text/i);
     expect(container.textContent).toMatch(/Worry-Free Coverage — For about the price of a cup of coffee a day/i);
     expect(container.textContent).toMatch(/Thanks for calling the Tim's Electrical recorded demonstration/i);
+    expect(container.textContent).toMatch(/23 Robb Street in Hamilton/i);
+    expect(container.textContent).toMatch(/905-555-1234\. After 5 p\.m\. is best/i);
     expect(container.textContent).toMatch(/Next action: quote follow-up/i);
     expect(container.textContent).not.toMatch(/PREFERRED START DATE - NEXT WEEK/i);
     expect(container.textContent).toMatch(/Owner and customer both receive text summary for easy follow up/i);
     expect(container.textContent).toMatch(/Natural conversation and FAQ answers/i);
     expect(container.querySelector("#why-it-matters").textContent).toMatch(/Your customer has a problem/i);
     expect(container.querySelectorAll(".simple-message-phone")).toHaveLength(2);
+    expect(container.querySelectorAll(".simple-call-conversation > div")).toHaveLength(8);
+    expect(container.querySelectorAll(".simple-message-toolbar")).toHaveLength(2);
     expect(container.querySelectorAll(".simple-message-bullets")).toHaveLength(2);
     expect(container.querySelectorAll(".simple-message-phone.owner .simple-message-bullets li")).toHaveLength(6);
     expect(container.querySelectorAll(".simple-message-phone.customer .simple-message-bullets li")).toHaveLength(4);

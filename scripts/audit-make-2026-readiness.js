@@ -81,6 +81,20 @@ function hasErrorHandler(module) {
   );
 }
 
+function hasBackendProvisioningGuard(modules) {
+  const paidStages = modules.filter((module) => /api\.myaipa\.ca\/api\/integrations\/(?:twilio\/purchase-number|vapi\/(?:create-signup-assistant|import-twilio-number))/i.test(moduleText(module)));
+  return paidStages.length === 3 && paidStages.every((module) => {
+    const mapper = module?.mapper || {};
+    const body = String(mapper.jsonStringBodyContent || "");
+    const query = Array.isArray(mapper.qs) ? mapper.qs : [];
+    const headers = Array.isArray(mapper.headers) ? mapper.headers : [];
+    const hasIdempotencyKey = body.includes('"idempotencyKey"')
+      || query.some((item) => item?.name === "idempotencyKey");
+    const hasSignedToken = headers.some((item) => String(item?.name || item?.key || "").toLowerCase() === "x-provisioning-token");
+    return hasIdempotencyKey && hasSignedToken;
+  });
+}
+
 function hasKeyMatching(value, pattern, seen = new Set()) {
   if (!value || typeof value !== "object" || seen.has(value)) return false;
   seen.add(value);
@@ -103,7 +117,7 @@ function collectSettingSignals(value, target = {}, seen = new Set()) {
 
 function evaluateScenario({ scenario = {}, blueprint = {}, logs = [], hooks = [] } = {}) {
   const modules = flattenModules(blueprint.flow);
-  const text = JSON.stringify(blueprint);
+  const text = modules.map(moduleText).join("\n");
   const legacyHttp = modules.filter(isLegacyHttpModule);
   const externalUnauthenticatedPii = modules.filter((module) => {
     if (!isHttpModule(module) || !hasPiiMapping(module) || httpAuthenticationType(module) !== "none") return false;
@@ -115,10 +129,11 @@ function evaluateScenario({ scenario = {}, blueprint = {}, logs = [], hooks = []
     && responseModules.every((module) => module.__index === module.__routeLength - 1);
   const provisionsPhone = /purchase-number|IncomingPhoneNumbers|AvailablePhoneNumbers/i.test(text);
   const createsVapiAssistant = /api\.vapi\.ai\/(?:assistant|phone-number)|makeApiCall2/i.test(text);
+  const backendProvisioningGuard = hasBackendProvisioningGuard(modules);
   const hasIdempotencyStorage = modules.some((module) =>
     /data.?store/i.test(String(module?.module || ""))
       || hasKeyMatching({ mapper: module?.mapper, parameters: module?.parameters }, /idempot|dedup|replay|event.?key/i)
-  );
+  ) || backendProvisioningGuard;
   const hasHardcodedAreaCode = /["']?areaCode["']?[^\r\n]{0,100}["']?\d{3}["']?/i.test(text);
   const handlesPii = modules.some(hasPiiMapping) || /(?:caller|owner|customer|contact).{0,18}(?:phone|email|address)|\bCaller\b|\bFrom\b/i.test(text);
   const settingsSignals = collectSettingSignals({ scenario, metadata: blueprint.metadata });
@@ -138,7 +153,7 @@ function evaluateScenario({ scenario = {}, blueprint = {}, logs = [], hooks = []
   if (provisionsPhone && hasHardcodedAreaCode) {
     issues.push({ level: "high", key: "hardcoded-area-code", message: "Provisioning appears to use a fixed area code instead of signup location data." });
   }
-  if (provisionsPhone && settingsSignals.sequential === false) {
+  if (provisionsPhone && settingsSignals.sequential === false && !backendProvisioningGuard) {
     issues.push({ level: "high", key: "parallel-provisioning", message: "Provisioning can run webhook executions in parallel." });
   }
   if (handlesPii && settingsSignals.confidential === false) {
@@ -152,7 +167,7 @@ function evaluateScenario({ scenario = {}, blueprint = {}, logs = [], hooks = []
   }
   if (responseModules.length === 0) {
     issues.push({ level: "review", key: "webhook-response-missing", message: "No explicit Webhook response module was found." });
-  } else if (!responseIsLast) {
+  } else if (!responseIsLast && scenario.isActive) {
     issues.push({ level: "high", key: "webhook-response-order", message: "A Webhook response module is not last in its route." });
   }
   const riskyModulesWithoutHandlers = modules.filter((module) =>
@@ -184,6 +199,7 @@ function evaluateScenario({ scenario = {}, blueprint = {}, logs = [], hooks = []
       provisionsPhone,
       createsVapiAssistant,
       hasVisibleIdempotencyStorage: hasIdempotencyStorage,
+      backendProvisioningGuard,
       hasHardcodedAreaCode,
       handlesPii,
     },

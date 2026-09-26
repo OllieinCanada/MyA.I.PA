@@ -62,7 +62,7 @@ export function buildPricingScript(pricing) {
       ? "New installations: Offer a free quote."
       : "Installations: Tell the caller the team will confirm estimate pricing before scheduling.",
     offersServiceCalls && visitFee && hourlyRate
-      ? `Service calls: ${visitFee} dollars to come out and ${hourlyRate} dollars per hour.`
+      ? `Service calls and repairs: ${visitFee} dollars to come out and ${hourlyRate} dollars per hour, plus parts.`
       : offersServiceCalls
         ? "Service calls: The owner will confirm pricing before scheduling."
         : "Service calls: This business does not offer service calls.",

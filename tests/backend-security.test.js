@@ -286,6 +286,21 @@ test("signup recovery requires the monitor key and explicit confirmation", async
   assert.match((await unconfirmed.json()).error, /confirmation/i);
 });
 
+test("explicit Turnstile signups fail closed when the server secret is missing", async () => {
+  const prior = process.env.TURNSTILE_SECRET_KEY;
+  delete process.env.TURNSTILE_SECRET_KEY;
+  try {
+    const result = await __test.verifySignupCaptcha({
+      captchaProvider: "turnstile",
+      turnstileToken: "browser-token",
+    }, "203.0.113.10");
+    assert.deepEqual(result, { ok: false, reason: "captcha_not_configured" });
+  } finally {
+    if (prior == null) delete process.env.TURNSTILE_SECRET_KEY;
+    else process.env.TURNSTILE_SECRET_KEY = prior;
+  }
+});
+
 test("duplicate signup supersession requires the monitor key and explicit confirmation", async () => {
   const unauthorized = await request("/api/internal/operations/supersede-signup", {
     method: "POST",

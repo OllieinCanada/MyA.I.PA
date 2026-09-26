@@ -133,3 +133,25 @@ test("signup failure alert never labels an unconfirmed Make rejection as billing
   assert.match(text, /Vapi Dashboard.*Billing.*Logs.*phone numbers/);
   assert.doesNotMatch(text, /needs funds|Add funds or credits|private@example\.ca|9055550123|secret provider response/i);
 });
+
+test("setup-complete delivery failure preserves the number and directs operations to resend only the follow-up", () => {
+  const text = buildSignupTelegramAlert({
+    businessName: "Example Electrical",
+    state: "customer_followup_failed",
+    eventKey: "signup_1234567890abcdef1234567890abcdef",
+    detail: "Setup completed, but the assigned-number follow-up could not be delivered",
+    reasonCode: "SMTP_RECIPIENT_REJECTED",
+    record: {
+      twilioPhoneNumber: "+13433216155",
+      vapiAssistantId: "assistant-safe-id",
+      setupFollowupStatus: "failed",
+    },
+  });
+
+  assert.match(text, /customer follow-up needs attention/i);
+  assert.match(text, /AI number assigned: yes/);
+  assert.match(text, /email provider rejected the customer's email destination/i);
+  assert.match(text, /Do not provision another number/);
+  assert.match(text, /resend only the setup-complete follow-up/);
+  assert.doesNotMatch(text, /3433216155/);
+});

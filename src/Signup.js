@@ -15,6 +15,7 @@ import {
   SIGNUP_SUBMIT_URL,
   SPECIALIZATION_OPTIONS,
   TRADE_OPTIONS,
+  TURNSTILE_SITE_KEY,
   VAPI_PREVIEW_CONFIG_URL,
   VAPI_PREVIEW_SESSION_URL,
 } from "./features/signup/signupConfig";
@@ -288,6 +289,56 @@ function getPaymentReturnStatus() {
   return String(params.get("payment") || "").toLowerCase();
 }
 
+export const SIGNUP_QA_PREFILL_STORAGE_KEY = "myaipa_signup_qa_contact_v1";
+
+const SIGNUP_QA_FIXTURE = {
+  selectedTradeId: "painter",
+  selectedAreas: ["Port Colborne"],
+  selectedSpecializationIds: ["residential", "commercial"],
+  selectedDialogueId: "help-today",
+  details: {
+    ownerName: "Quality Assurance",
+    businessName: "QA Painter Services",
+    phone: "",
+    email: "",
+    streetAddress: "23 Robb Street",
+    city: "Port Colborne",
+    province: "ON",
+    postalCode: "L3K 1A1",
+  },
+  pricing: {
+    offersServiceCalls: true,
+    installationFreeEstimate: true,
+    repairVisitFee: "89",
+    repairHourlyRate: "95",
+  },
+};
+
+function getSignupQueryParams() {
+  if (typeof window === "undefined") return new URLSearchParams();
+  const hash = window.location.hash || "";
+  const hashQuery = hash.includes("?") ? hash.slice(hash.indexOf("?") + 1) : "";
+  return new URLSearchParams(hashQuery || window.location.search);
+}
+
+function getSignupQaMode() {
+  return String(getSignupQueryParams().get("qa") || "").trim().toLowerCase();
+}
+
+function getStoredSignupQaContact() {
+  if (typeof window === "undefined" || !window.localStorage) return {};
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(SIGNUP_QA_PREFILL_STORAGE_KEY) || "{}");
+    if (!parsed || typeof parsed !== "object") return {};
+    return {
+      phone: String(parsed.phone || "").trim(),
+      email: String(parsed.email || "").trim(),
+    };
+  } catch {
+    return {};
+  }
+}
+
 function Benefit({ icon, children }) {
   return (
     <div className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600">
@@ -345,8 +396,8 @@ function MobileSignupProgress({ currentStep, businessSlide, tradeSetupPanel }) {
             : businessSlide === 3
               ? "Business details"
               : businessSlide === 4
-                ? "Service-call details"
-                : "Setup summary";
+                ? "Service call / repair pricing"
+                : "Check your setup";
 
   return (
     <div className="signup-mobile-progress signup-visible-progress" aria-label={`Step ${stepNumber} of 8: ${title}`}>
@@ -1169,7 +1220,7 @@ function ReviewPanel({ title = "Setup summary", description = "Check your choice
   const pricingScript = pricing ? buildPricingScript(pricing) : "";
   const pricingSummary =
     pricing?.offersServiceCalls === true
-      ? `$${pricing.repairVisitFee} service call · $${pricing.repairHourlyRate}/hour`
+      ? `$${pricing.repairVisitFee} service call · $${pricing.repairHourlyRate}/hour + parts`
       : pricing?.offersServiceCalls === false
         ? "No service calls"
         : "Not selected";
@@ -1365,8 +1416,67 @@ function TrialButton({ disabled, busy, finalStep = false, label = "Start free tr
   );
 }
 
-function HumanVerificationCheck() {
-  return null;
+export function HumanVerificationCheck({ provider = CAPTCHA_PROVIDER, siteKey = TURNSTILE_SITE_KEY, onVerify }) {
+  const containerRef = useRef(null);
+  const widgetIdRef = useRef(null);
+  const normalizedProvider = String(provider || "").trim().toLowerCase();
+
+  useEffect(() => {
+    if (normalizedProvider !== "turnstile" || !siteKey || !containerRef.current) return undefined;
+    let cancelled = false;
+
+    const renderWidget = () => {
+      if (cancelled || !containerRef.current || !window.turnstile || widgetIdRef.current != null) return;
+      widgetIdRef.current = window.turnstile.render(containerRef.current, {
+        sitekey: siteKey,
+        theme: "light",
+        size: "flexible",
+        callback: (token) => onVerify?.(String(token || "")),
+        "expired-callback": () => onVerify?.(""),
+        "error-callback": () => onVerify?.(""),
+      });
+    };
+
+    const existingScript = document.querySelector('script[data-myaipa-turnstile="true"]');
+    if (window.turnstile) {
+      renderWidget();
+    } else if (existingScript) {
+      existingScript.addEventListener("load", renderWidget, { once: true });
+    } else {
+      const script = document.createElement("script");
+      script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+      script.async = true;
+      script.defer = true;
+      script.dataset.myaipaTurnstile = "true";
+      script.addEventListener("load", renderWidget, { once: true });
+      document.head.appendChild(script);
+    }
+
+    return () => {
+      cancelled = true;
+      if (existingScript) existingScript.removeEventListener("load", renderWidget);
+      if (widgetIdRef.current != null && window.turnstile?.remove) {
+        window.turnstile.remove(widgetIdRef.current);
+      }
+      widgetIdRef.current = null;
+    };
+  }, [normalizedProvider, siteKey, onVerify]);
+
+  if (!normalizedProvider) return null;
+  if (normalizedProvider !== "turnstile" || !siteKey) {
+    return (
+      <section className="mx-auto mt-5 max-w-[920px] rounded-2xl border border-amber-300 bg-amber-50 p-5 text-center text-sm font-bold text-amber-950" role="alert">
+        Secure signup verification is temporarily unavailable. Please try again shortly.
+      </section>
+    );
+  }
+
+  return (
+    <section className="mx-auto mt-5 max-w-[920px] rounded-2xl border border-blue-100 bg-white p-5 text-center shadow-sm" aria-label="Secure signup verification">
+      <p className="mb-3 text-sm font-bold text-slate-700">Please confirm you’re a real person.</p>
+      <div ref={containerRef} className="mx-auto min-h-[65px] max-w-[420px]" data-testid="turnstile-container" />
+    </section>
+  );
 }
 
 async function postSignupPayload(url, formData) {
@@ -1694,6 +1804,7 @@ export function SignupSuccessPage({ result, onStartAnother, onRetry }) {
 
 export default function Signup() {
   const signupStartedAtRef = useRef(Date.now());
+  const qaModeRef = useRef(getSignupQaMode());
   const [currentStep, setCurrentStep] = useState(1);
   const [businessSlide, setBusinessSlide] = useState(1);
   const [tradeSetupPanel, setTradeSetupPanel] = useState("trade");
@@ -1715,6 +1826,7 @@ export default function Signup() {
   const [returnToReviewAfterEdit, setReturnToReviewAfterEdit] = useState(false);
   const [details, setDetails] = useState(() => ({ ...DEFAULT_DETAILS }));
   const [pricing, setPricing] = useState(() => ({ ...DEFAULT_PRICING }));
+  const isSignupQaTurnstileMode = qaModeRef.current === "turnstile";
   const paymentReturnStatus = useMemo(() => getPaymentReturnStatus(), []);
   const paymentReturnNotice = useMemo(() => {
     if (paymentReturnStatus === "success") {
@@ -1733,6 +1845,37 @@ export default function Signup() {
     }
     return null;
   }, [paymentReturnStatus]);
+
+  useEffect(() => {
+    if (!isSignupQaTurnstileMode) return;
+    const storedContact = getStoredSignupQaContact();
+    const qaDetails = {
+      ...SIGNUP_QA_FIXTURE.details,
+      phone: storedContact.phone || SIGNUP_QA_FIXTURE.details.phone,
+      email: storedContact.email || SIGNUP_QA_FIXTURE.details.email,
+    };
+    const hasContactOverride = Boolean(qaDetails.phone && qaDetails.email);
+
+    setSelectedTradeId(SIGNUP_QA_FIXTURE.selectedTradeId);
+    setSelectedAreas([...SIGNUP_QA_FIXTURE.selectedAreas]);
+    setSelectedSpecializationIds([...SIGNUP_QA_FIXTURE.selectedSpecializationIds]);
+    setSelectedDialogueId(SIGNUP_QA_FIXTURE.selectedDialogueId);
+    setSpecializationNotes("QA path for live Turnstile and backend acceptance checks. No real customer work is requested.");
+    setDetails(qaDetails);
+    setPricing({ ...SIGNUP_QA_FIXTURE.pricing });
+    setBusinessStepAttempted(!hasContactOverride);
+    setTouchedDetails(hasContactOverride ? {} : { phone: true, email: true });
+    setTradeSetupPanel("specialization");
+    setBusinessSlide(hasContactOverride ? 5 : 3);
+    setCurrentStep(hasContactOverride ? 3 : 1);
+    setStatus(
+      hasContactOverride
+        ? "QA prefill loaded. Complete the real verification check, then submit to test the backend."
+        : "QA prefill loaded. Add QA contact details to browser storage before running the final Turnstile submit."
+    );
+    setError("");
+    signupStartedAtRef.current = Date.now();
+  }, [isSignupQaTurnstileMode]);
 
   useEffect(() => {
     window.requestAnimationFrame?.(() => window.scrollTo?.({ top: 0, behavior: "auto" }));
@@ -1785,7 +1928,7 @@ export default function Signup() {
       : businessSlide === 2
         ? "Continue to business details"
         : businessSlide === 3
-          ? "Continue to service calls"
+          ? "Continue to service call / repair pricing."
           : businessSlide === 4
             ? "Continue to setup summary"
             : "Continue to voice preview";
@@ -1811,7 +1954,7 @@ export default function Signup() {
           : businessSlide === 2
             ? "Continue to business details"
             : businessSlide === 3
-              ? "Continue to service calls"
+              ? "Continue to service call / repair pricing."
               : businessSlide === 4
                 ? "Continue to setup summary"
                 : "Continue to voice preview";
@@ -2446,16 +2589,50 @@ export default function Signup() {
             }
 
             .signup-mobile-selected-count {
-              display: flex;
+              display: grid;
+              grid-template-columns: minmax(0, 1fr) auto auto;
               align-items: center;
-              justify-content: space-between;
+              gap: 8px;
               margin-bottom: 12px;
               border-radius: 12px;
               background: #eff6ff;
-              padding: 10px 12px;
+              padding: 8px 8px 8px 12px;
               color: #1d4ed8;
               font-size: 0.9rem;
               font-weight: 800;
+            }
+
+            .signup-mobile-selected-value {
+              display: inline-flex;
+              min-width: 32px;
+              min-height: 32px;
+              align-items: center;
+              justify-content: center;
+              border-radius: 999px;
+              background: #dbeafe;
+              color: #1e40af;
+            }
+
+            .signup-mobile-selected-next {
+              display: inline-flex;
+              min-height: 40px;
+              align-items: center;
+              justify-content: center;
+              gap: 6px;
+              border: 0;
+              border-radius: 10px;
+              background: #2563eb;
+              padding: 8px 13px;
+              color: #fff;
+              font-size: 0.9rem;
+              font-weight: 900;
+              box-shadow: 0 12px 24px -18px rgba(37, 99, 235, 0.95);
+            }
+
+            .signup-mobile-selected-next:disabled {
+              background: #cbd5e1;
+              color: #64748b;
+              box-shadow: none;
             }
 
             .signup-business-fields {
@@ -2513,6 +2690,10 @@ export default function Signup() {
             }
 
             .signup-mobile-action-bar.is-first-step {
+              grid-template-columns: 1fr;
+            }
+
+            .signup-mobile-action-bar.is-service-area-step {
               grid-template-columns: 1fr;
             }
 
@@ -3068,11 +3249,21 @@ export default function Signup() {
                 <div className="signup-task-content min-h-0 overflow-hidden rounded-3xl">
                   <div className="signup-mobile-task-heading">
                     <h2>Where do you work?</h2>
-                    <p>Choose one or more service areas. Then tap Continue.</p>
+                    <p>Choose one or more service areas. Then tap Next.</p>
                   </div>
                   <div className="signup-mobile-selected-count">
                     <span>Selected areas</span>
-                    <span>{selectedAreas.length}</span>
+                    <span className="signup-mobile-selected-value" aria-label={`${selectedAreas.length} selected areas`}>
+                      {selectedAreas.length}
+                    </span>
+                    <button
+                      type="submit"
+                      disabled={businessSlideDisabled || busy}
+                      className="signup-mobile-selected-next"
+                    >
+                      {busy ? "Saving…" : "Next"}
+                      <Icon name="arrow" className="h-4 w-4" />
+                    </button>
                   </div>
                   <div className="signup-area-tools grid gap-3">
                     <label className="signup-area-search block">
@@ -3301,13 +3492,13 @@ export default function Signup() {
                 <section id="signup-pricing" className="signup-task-layout grid w-full gap-6 lg:grid-cols-[360px_minmax(0,1fr)] xl:grid-cols-[390px_minmax(0,1fr)] lg:items-stretch">
                   <div className="signup-task-explainer flex flex-col justify-center rounded-3xl border border-blue-100 bg-blue-50/70 p-8">
                     <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">Step 5 of 8</p>
-                    <h2 className="mt-2 text-[clamp(2rem,3vw,3.1rem)] font-black leading-tight tracking-[-0.04em] text-slate-950">Pricing script</h2>
-                    <p className="mt-4 text-lg font-medium leading-8 text-slate-600">Set the simple prices your assistant should explain before booking.</p>
+                    <h2 className="mt-2 text-[clamp(2rem,3vw,3.1rem)] font-black leading-tight tracking-[-0.04em] text-slate-950">Service call / repair pricing</h2>
+                    <p className="mt-4 text-lg font-medium leading-8 text-slate-600">Tell customers your service call and repair pricing upfront, plus parts, to see if they want to continue.</p>
                   </div>
                   <div className="signup-task-content">
                     <div className="signup-mobile-task-heading">
-                      <h2>What should your assistant quote?</h2>
-                      <p>Choose Yes or No. If Yes, add both prices. Then tap Continue.</p>
+                      <h2>Service call / repair pricing</h2>
+                      <p>Tell customers your service call and repair pricing upfront, plus parts, to see if they want to continue.</p>
                     </div>
                     <div className="grid content-start gap-4 sm:grid-cols-2 xl:grid-cols-4 xl:gap-5">
                     <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-4 sm:col-span-2 xl:col-span-4">
@@ -3346,7 +3537,7 @@ export default function Signup() {
                           type="number"
                         />
                         <LabeledInput
-                          label="Hourly rate"
+                          label="Repair hourly rate + parts"
                           icon="card"
                           value={pricing.repairHourlyRate}
                           onChange={updatePricing("repairHourlyRate")}
@@ -3354,7 +3545,7 @@ export default function Signup() {
                           type="number"
                         />
                         <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold leading-6 text-emerald-900 sm:col-span-2 xl:col-span-2">
-                          Your assistant will explain these prices, then ask: “Would you like to continue?”
+                          Your assistant will explain the service-call price and repair hourly rate, plus parts, then ask: “Would you like to continue?”
                         </div>
                       </>
                     ) : null}
@@ -3384,7 +3575,7 @@ export default function Signup() {
                 <section className="signup-task-layout grid w-full gap-6 lg:grid-cols-[360px_minmax(0,1fr)] xl:grid-cols-[390px_minmax(0,1fr)] lg:items-stretch">
                   <div className="signup-task-explainer flex flex-col justify-center rounded-3xl border border-blue-100 bg-blue-50/70 p-8">
                     <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">Step 6 of 8</p>
-                    <h2 className="mt-2 text-[clamp(2rem,3vw,3.1rem)] font-black leading-tight tracking-[-0.04em] text-slate-950">Setup summary</h2>
+                    <h2 className="mt-2 text-[clamp(2rem,3vw,3.1rem)] font-black leading-tight tracking-[-0.04em] text-slate-950">Check your setup</h2>
                     <p className="mt-4 text-lg font-medium leading-8 text-slate-600">Check your choices before the voice preview. Use Back or the top columns to change anything.</p>
                   </div>
                   <div className="signup-task-content content-center">
@@ -3393,7 +3584,7 @@ export default function Signup() {
                       <p>Check everything below. Then continue to your voice preview.</p>
                     </div>
                     <ReviewPanel
-                      title="Setup summary"
+                      title="Check your setup"
                       description="Check your choices before continuing to the voice preview."
                       trade={selectedTrade}
                       areas={selectedAreas}
@@ -3469,14 +3660,15 @@ export default function Signup() {
         ) : null}
 
         {currentStep === 3 ? (
-          <HumanVerificationCheck />
+          <HumanVerificationCheck onVerify={setCaptchaToken} />
         ) : null}
 
         <div
           className={
             "signup-mobile-action-bar " +
             (currentStep === 1 && businessSlide === 1 ? "is-choice-step " : "") +
-            (currentStep === 1 && businessSlide === 1 && tradeSetupPanel === "trade" ? "is-first-step" : "")
+            (currentStep === 1 && businessSlide === 1 && tradeSetupPanel === "trade" ? "is-first-step " : "") +
+            (currentStep === 1 && businessSlide === 2 ? "is-service-area-step" : "")
           }
         >
           {currentStep === 1 && businessSlide === 1 && tradeSetupPanel === "trade" ? null : (
@@ -3484,11 +3676,13 @@ export default function Signup() {
               {currentStep === 2 ? "Skip for now" : "Back"}
             </button>
           )}
-          <button type="submit" disabled={mobilePrimaryDisabled || busy} className="signup-mobile-primary">
-            {busy ? "Saving…" : mobilePrimaryLabel}
-            <Icon name="arrow" className="h-4 w-4" />
-          </button>
-          {mobilePrimaryDisabled ? (
+          {currentStep === 1 && businessSlide === 2 ? null : (
+            <button type="submit" disabled={mobilePrimaryDisabled || busy} className="signup-mobile-primary">
+              {busy ? "Saving…" : mobilePrimaryLabel}
+              <Icon name="arrow" className="h-4 w-4" />
+            </button>
+          )}
+          {mobilePrimaryDisabled && !(currentStep === 1 && businessSlide === 2) ? (
             <p className="signup-mobile-disabled-reason">
               {currentStep === 1 && businessSlide === 1
                 ? tradeSetupPanel === "trade"

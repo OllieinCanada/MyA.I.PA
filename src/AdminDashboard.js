@@ -4019,6 +4019,7 @@ export default function AdminDashboard() {
                 <Labeled label="Days">
                   <Select value={costDays} onChange={(e) => setCostDays(e.target.value)}>
                     <option value="7">7</option>
+                    <option value="14">14</option>
                     <option value="30">30</option>
                     <option value="60">60</option>
                     <option value="90">90</option>

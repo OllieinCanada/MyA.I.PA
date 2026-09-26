@@ -50,7 +50,32 @@ test("failed and stuck signups become redacted attention items", () => {
     phoneProvisioningCode: "",
     makeResponseKind: "",
     signupAlertFailed: false,
+    setupFollowupStatus: "",
+    setupFollowupChannels: [],
   });
+});
+
+test("a failed setup-complete delivery is actionable without treating the provisioned number as failed", () => {
+  const now = new Date("2026-08-31T20:00:00.000Z");
+  const items = signupAttentionItems([{
+    ownerEmail: "private@example.com",
+    businessName: "Example Electrical",
+    status: "subscription_trialing",
+    twilioPhoneNumber: "+13433216155",
+    vapiAssistantId: "assistant-safe-id",
+    setupFollowupStatus: "failed",
+    setupFollowupErrors: [{ channel: "email", code: "SMTP_RECIPIENT_REJECTED" }],
+    setupFollowupAttemptedAt: "2026-08-31T19:58:00.000Z",
+    updatedAt: "2026-08-31T19:58:00.000Z",
+  }], now, 60);
+
+  assert.equal(items.length, 1);
+  assert.equal(items[0].kind, "signup_failed");
+  assert.equal(items[0].severity, "warning");
+  assert.equal(items[0].incident.reasonCode, "SMTP_RECIPIENT_REJECTED");
+  assert.match(items[0].incident.nextAction, /Do not provision another number/);
+  assert.equal(items[0].diagnostics.hasAssignedPhone, true);
+  assert.equal(JSON.stringify(items).includes("3433216155"), false);
 });
 
 test("attention summary groups critical and warning issues", () => {

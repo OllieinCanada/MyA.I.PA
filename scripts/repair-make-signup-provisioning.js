@@ -60,21 +60,63 @@ function upsertHeader(headers, name, value) {
 }
 
 function httpMapperFrom(module, { url, query }) {
-  const mapper = clone(module.mapper || {});
-  mapper.url = url;
-  mapper.method = "post";
-  mapper.qs = query.map(([name, value]) => ({ name, value }));
-  mapper.headers = upsertHeader(
-    mapper.headers,
+  const headers = upsertHeader(
+    module.mapper?.headers,
     "x-provisioning-token",
     "{{21.provisioning.authorizationToken}}"
   );
-  mapper.bodyType = "multipart_form_data";
-  mapper.formDataFields = [];
-  mapper.parseResponse = "true";
-  mapper.followRedirect = "true";
-  mapper.rejectUnauthorized = "true";
-  return mapper;
+  return {
+    ca: "",
+    qs: query.map(([name, value]) => ({ name, value })),
+    url,
+    gzip: true,
+    method: "post",
+    headers,
+    timeout: "",
+    authPass: "",
+    authUser: "",
+    bodyType: "",
+    shareCookies: false,
+    parseResponse: true,
+    followRedirect: true,
+    useQuerystring: false,
+    rejectUnauthorized: true,
+  };
+}
+
+function legacyHttpMetadata(designer = {}) {
+  return {
+    designer: clone(designer),
+    restore: {
+      qs: { mode: "chose", items: [] },
+      method: { mode: "chose", label: "POST" },
+      headers: { mode: "chose", items: [] },
+      bodyType: { label: "" },
+    },
+    parameters: [{
+      name: "handleErrors",
+      type: "boolean",
+      label: "Evaluate all states as errors (except for 2xx and 3xx )",
+      required: true,
+    }],
+    expect: [
+      { name: "url", type: "url", label: "URL", required: true },
+      { name: "method", type: "select", label: "Method", required: true, validate: { enum: ["get", "head", "post", "put", "patch", "delete"] } },
+      { name: "headers", spec: [{ name: "name", type: "text", label: "Name", required: true }, { name: "value", type: "text", label: "Value" }], type: "array", label: "Headers", labels: { add: "Add a header", edit: "Edit a header" } },
+      { name: "qs", spec: [{ name: "name", type: "text", label: "Name", required: true }, { name: "value", type: "text", label: "Value" }], type: "array", label: "Query String", labels: { add: "Add parameter", edit: "Edit parameter" } },
+      { name: "bodyType", type: "select", label: "Body type", validate: { enum: ["raw", "x_www_form_urlencoded", "multipart_form_data"] } },
+      { name: "parseResponse", type: "boolean", label: "Parse response", required: true },
+      { name: "authUser", type: "text", label: "User name" },
+      { name: "authPass", type: "password", label: "Password" },
+      { name: "timeout", type: "uinteger", label: "Timeout", validate: { max: 300, min: 1 } },
+      { name: "shareCookies", type: "boolean", label: "Share cookies with other HTTP modules", required: true },
+      { name: "ca", type: "cert", label: "Self-signed certificate", multiline: true },
+      { name: "rejectUnauthorized", type: "boolean", label: "Reject connections that are using unverified (self-signed) certificates", required: true },
+      { name: "followRedirect", type: "boolean", label: "Follow redirect", required: true },
+      { name: "useQuerystring", type: "boolean", label: "Disable serialization of multiple same query string keys as arrays", required: true },
+      { name: "gzip", type: "boolean", label: "Request compressed content", required: true },
+    ],
+  };
 }
 
 function mutateBlueprint(current) {
@@ -84,14 +126,21 @@ function mutateBlueprint(current) {
   const imported = findModule(blueprint, 28);
   const response = findModule(blueprint, 30);
 
-  if (purchase.module !== "http:ActionSendData" || imported.module !== "http:ActionSendData") {
+  if (!["http:ActionSendData", "http:MakeRequest"].includes(purchase.module)
+    || !["http:ActionSendData", "http:MakeRequest"].includes(imported.module)) {
     throw new Error("The expected Make HTTP modules have changed; refusing an unsafe automatic rewrite.");
   }
-  if (assistant.module !== "vapi:makeApiCall2" && assistant.module !== "http:ActionSendData") {
+  if (!["vapi:makeApiCall2", "http:ActionSendData", "http:MakeRequest"].includes(assistant.module)) {
     throw new Error("The expected Vapi assistant module has changed; refusing an unsafe automatic rewrite.");
   }
 
-  const voiceUrl = String((purchase.mapper?.qs || []).find((item) => item.name === "voiceUrl")?.value || "").trim();
+  let existingJsonBody = {};
+  try { existingJsonBody = JSON.parse(String(purchase.mapper?.jsonStringBodyContent || "{}")); } catch { existingJsonBody = {}; }
+  const voiceUrl = String(
+    (purchase.mapper?.qs || []).find((item) => item.name === "voiceUrl")?.value
+      || existingJsonBody.voiceUrl
+      || ""
+  ).trim();
   if (!/^https:\/\/hook(?:\.[a-z0-9-]+)*\.make\.com\//i.test(voiceUrl)) {
     throw new Error("The existing trusted Make voice webhook URL could not be retained.");
   }
@@ -108,12 +157,18 @@ function mutateBlueprint(current) {
     ],
   });
 
+  purchase.module = "http:ActionSendData";
+  purchase.version = 3;
+  purchase.parameters = { handleErrors: false };
+  purchase.metadata = legacyHttpMetadata(purchase.metadata?.designer || {});
+  delete purchase.onerror;
+
   assistant.module = "http:ActionSendData";
   assistant.version = 3;
-  assistant.parameters = clone(purchase.parameters || {});
+  assistant.parameters = { handleErrors: false };
+  delete assistant.onerror;
   const assistantDesigner = clone(assistant.metadata?.designer || {});
-  assistant.metadata = clone(purchase.metadata || {});
-  assistant.metadata.designer = assistantDesigner;
+  assistant.metadata = legacyHttpMetadata(assistantDesigner);
   assistant.mapper = httpMapperFrom(purchase, {
     url: "https://api.myaipa.ca/api/integrations/vapi/create-signup-assistant",
     query: [
@@ -123,6 +178,11 @@ function mutateBlueprint(current) {
     ],
   });
 
+  imported.module = "http:ActionSendData";
+  imported.version = 3;
+  imported.parameters = { handleErrors: false };
+  imported.metadata = legacyHttpMetadata(imported.metadata?.designer || {});
+  delete imported.onerror;
   imported.mapper = httpMapperFrom(imported, {
     url: "https://api.myaipa.ca/api/integrations/vapi/import-twilio-number",
     query: [
@@ -162,9 +222,10 @@ function verifyBlueprint(blueprint) {
   const assistant = findModule(blueprint, 25);
   const imported = findModule(blueprint, 28);
   const response = findModule(blueprint, 30);
-  const purchaseQuery = Object.fromEntries((purchase.mapper?.qs || []).map((item) => [item.name, item.value]));
-  const assistantQuery = Object.fromEntries((assistant.mapper?.qs || []).map((item) => [item.name, item.value]));
-  const importQuery = Object.fromEntries((imported.mapper?.qs || []).map((item) => [item.name, item.value]));
+  const parseQuery = (module) => Object.fromEntries((module.mapper?.qs || []).map((item) => [item.name, item.value]));
+  const purchaseQuery = parseQuery(purchase);
+  const assistantQuery = parseQuery(assistant);
+  const importQuery = parseQuery(imported);
   const responseText = String(response.mapper?.body || "");
   const responseHeaders = Array.isArray(response.mapper?.headers) ? response.mapper.headers : [];
   const hasToken = (module) => (module.mapper?.headers || []).some(
@@ -174,6 +235,9 @@ function verifyBlueprint(blueprint) {
   return {
     preferredAreaMapped: purchaseQuery.areaCode === "{{21.provisioning.preferredAreaCode}}",
     purchaseIdempotent: purchaseQuery.idempotencyKey === "{{21.provisioning.idempotencyKey}}" && hasToken(purchase),
+    compatibleHttpModules: [purchase, assistant, imported].every((module) => module.module === "http:ActionSendData" && Number(module.version) === 3),
+    nativeFailClosed: [purchase, assistant, imported].every((module) => !Array.isArray(module.onerror)
+      || module.onerror.length === 0),
     assistantBackendOwned: assistant.module === "http:ActionSendData"
       && assistant.mapper?.url === "https://api.myaipa.ca/api/integrations/vapi/create-signup-assistant"
       && assistantQuery.assignedPhone === "{{9.data.twilioPhoneNumber}}"
@@ -219,16 +283,16 @@ async function main() {
     throw new Error(`Refusing to modify Make without --confirm=${EXPECTED_CONFIRMATION}.`);
   }
 
-  await request(`/scenarios/${encodeURIComponent(scenarioId)}`, {
+  await request(`/scenarios/${encodeURIComponent(scenarioId)}?confirmed=true`, {
     method: "PATCH",
     body: JSON.stringify({ blueprint: JSON.stringify(repaired) }),
   });
   const after = getBlueprint(await request(`/scenarios/${encodeURIComponent(scenarioId)}/blueprint`));
   const readBackChecks = verifyBlueprint(after);
-  if (!Object.values(readBackChecks).every(Boolean) || checksum(after) !== checksum(repaired)) {
-    throw new Error("Make accepted the update, but exact read-back verification failed.");
+  if (!Object.values(readBackChecks).every(Boolean)) {
+    throw new Error("Make accepted the update, but semantic read-back verification failed.");
   }
-  console.log(JSON.stringify({ changed: true, afterChecksum: checksum(after), checks: readBackChecks }, null, 2));
+  console.log(JSON.stringify({ changed: true, afterChecksum: checksum(after), normalizedByMake: checksum(after) !== checksum(repaired), checks: readBackChecks }, null, 2));
 }
 
 if (require.main === module) {

@@ -56,6 +56,7 @@ test("builds the current production Vapi assistant with resolved signup values",
   assert.match(prompt, /Signup installation estimate answer: yes we do/);
   assert.match(prompt, /Signup repair visit fee: 89 dollars/);
   assert.match(prompt, /Signup repair hourly rate: 129 dollars per hour/);
+  assert.match(prompt, /dollars per hour after that, plus parts/);
   assert.match(prompt, /Legacy fallback repair visit fee: 79 dollars/);
   assert.match(prompt, /Assigned AI\/Twilio sender number: \+12895550123/);
   assert.match(prompt, /Owner notification number: \+19055550199/);

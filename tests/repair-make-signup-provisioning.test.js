@@ -62,11 +62,16 @@ test("rewrites the three paid provisioning stages and fail-closed response mappi
   const repaired = mutateBlueprint(current);
   assert.ok(Object.values(verifyBlueprint(repaired)).every(Boolean));
   assert.equal(current.flow.find((item) => item.id === 9).mapper.qs[0].value, "249");
-  assert.equal(repaired.flow.find((item) => item.id === 25).module, "http:ActionSendData");
-  assert.deepEqual(repaired.flow.find((item) => item.id === 25).metadata.expect, [
-    { name: "url" },
-    { name: "method" },
-  ]);
+  for (const id of [9, 25, 28]) {
+    const module = repaired.flow.find((item) => item.id === id);
+    assert.equal(module.module, "http:ActionSendData");
+    assert.equal(module.version, 3);
+    assert.equal(module.mapper.parseResponse, true);
+    assert.ok(Array.isArray(module.mapper.qs));
+    assert.deepEqual(module.parameters, { handleErrors: false });
+    assert.equal(module.onerror, undefined);
+  }
+  assert.ok(repaired.flow.find((item) => item.id === 25).metadata.expect.some((item) => item.name === "url"));
   assert.deepEqual(repaired.flow.find((item) => item.id === 25).metadata.designer, { x: 300, y: 400 });
   assert.deepEqual(repaired.flow.find((item) => item.id === 30).mapper.headers, [
     { key: "Content-Type", value: "application/json" },

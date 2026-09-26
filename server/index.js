@@ -13,6 +13,8 @@ const path = require("path");
 const { Readable } = require("stream");
 const Stripe = require("stripe");
 const { prisma } = require("./prisma");
+const { createPendingSignupVerificationStore, tokenHash: hashPendingSignupToken } = require("./pendingSignupVerifications");
+const { getStripeFinanceSnapshot } = require("./financeLedger");
 const {
   inspectCanadianNumber,
   validateProvisionedCanadianNumber,
@@ -27,6 +29,10 @@ const {
   sendStoredOutreachPackage,
 } = require("./outreach");
 const { sendSmsViaTwilio } = require("./twilioSms");
+const {
+  deliverSignupCompletion,
+  formatAssignedPhone,
+} = require("./signupCompletion");
 const {
   persistSignupBusinessId,
   resolveBusinessForSignup,
@@ -209,7 +215,6 @@ const app = express();
 const PORT = Number(process.env.PORT || 8787);
 const dataDir = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.join(__dirname, "..", "data");
 const signupDuplicateSubmissions = new Map();
-const pendingSignupPath = path.join(dataDir, "pending-signup-verifications.json");
 const pendingStripeSignupPath = path.join(dataDir, "pending-stripe-signups.json");
 const trialReminderPath = path.join(dataDir, "trial-reminders.json");
 const signupDashboardPath = path.join(dataDir, "signup-dashboard.json");
@@ -280,6 +285,10 @@ const CALL_RECORDING_RETENTION_DAYS = Math.max(0, Number(process.env.CALL_RECORD
 const ADMIN_AUDIT_RETENTION_DAYS = Math.max(30, Number(process.env.ADMIN_AUDIT_RETENTION_DAYS || 365) || 365);
 const SENSITIVE_CALL_CLEANUP_INTERVAL_MS = 1000 * 60 * 60 * 6;
 const SIGNUP_VERIFICATION_TTL_MS = parsePositiveInt(process.env.SIGNUP_VERIFICATION_TTL_MS, 24 * 60 * 60 * 1000);
+const pendingSignupVerifications = createPendingSignupVerificationStore({
+  prisma,
+  minimumTtlMs: SIGNUP_VERIFICATION_TTL_MS,
+});
 const TRIAL_REMINDER_CHECK_INTERVAL_MS = parsePositiveInt(process.env.TRIAL_REMINDER_CHECK_INTERVAL_MS, 60 * 60 * 1000);
 const TRIAL_HALFWAY_REMINDER_DAYS = parsePositiveInt(process.env.TRIAL_HALFWAY_REMINDER_DAYS, 7);
 const TRIAL_USAGE_LIMIT_ENABLED = isEnabled(process.env.TRIAL_USAGE_LIMIT_ENABLED);
@@ -477,7 +486,7 @@ app.post("/api/payments/stripe-webhook", express.raw({ type: "application/json" 
           const makeData = makeResult.data || {};
           const makeAssessment = classifyMakeSignupResponse(makeResult.body, makeData);
           if (!makeAssessment.complete) {
-            createPendingSignupVerification({
+            await createPendingSignupVerification({
               payload: makePayload,
               ownerEmail: pendingSignup.summary?.ownerEmail || checkoutRecord?.ownerEmail || "",
               businessName: pendingSignup.summary?.businessName || checkoutRecord?.businessName || "",
@@ -507,7 +516,7 @@ app.post("/api/payments/stripe-webhook", express.raw({ type: "application/json" 
           } else {
             const phoneProvisioning = await inspectSignupPhoneProvisioning(makeData, makeResult.body);
             if (phoneProvisioning.status !== "ready") {
-              createPendingSignupVerification({
+              await createPendingSignupVerification({
                 payload: makePayload,
                 ownerEmail: pendingSignup.summary?.ownerEmail || checkoutRecord?.ownerEmail || "",
                 businessName: pendingSignup.summary?.businessName || checkoutRecord?.businessName || "",
@@ -548,7 +557,7 @@ app.post("/api/payments/stripe-webhook", express.raw({ type: "application/json" 
             providerCode: providerFailure.providerCode || "MAKE_SIGNUP_FAILED",
             providerStatus: providerFailure.providerStatus || null,
           });
-          createPendingSignupVerification({
+          await createPendingSignupVerification({
             payload: makePayload,
             ownerEmail: pendingSignup.summary?.ownerEmail || checkoutRecord?.ownerEmail || "",
             businessName: pendingSignup.summary?.businessName || checkoutRecord?.businessName || "",
@@ -1187,30 +1196,6 @@ async function sendOutreachEmailMessage(message) {
   }
 }
 
-function ensurePendingSignupStore() {
-  fs.mkdirSync(path.dirname(pendingSignupPath), { recursive: true });
-  if (!fs.existsSync(pendingSignupPath)) {
-    fs.writeFileSync(pendingSignupPath, "{}\n");
-  }
-}
-
-function readPendingSignupStore() {
-  ensurePendingSignupStore();
-  try {
-    const data = JSON.parse(fs.readFileSync(pendingSignupPath, "utf8"));
-    return data && typeof data === "object" ? data : {};
-  } catch {
-    return {};
-  }
-}
-
-function writePendingSignupStore(store) {
-  ensurePendingSignupStore();
-  const temporaryPath = `${pendingSignupPath}.${process.pid}.${crypto.randomBytes(6).toString("hex")}.tmp`;
-  fs.writeFileSync(temporaryPath, `${JSON.stringify(store, null, 2)}\n`, { flag: "wx" });
-  fs.renameSync(temporaryPath, pendingSignupPath);
-}
-
 function ensurePendingStripeSignupStore() {
   fs.mkdirSync(path.dirname(pendingStripeSignupPath), { recursive: true });
   if (!fs.existsSync(pendingStripeSignupPath)) {
@@ -1268,20 +1253,12 @@ function takePendingStripeSignup(sessionId) {
   return record;
 }
 
-function hashSignupVerificationToken(token) {
-  return crypto.createHash("sha256").update(String(token || "")).digest("hex");
+async function readPendingSignupStore() {
+  const records = await pendingSignupVerifications.listActive();
+  return Object.fromEntries(records.map((record) => [record.tokenHash, record]));
 }
 
-function prunePendingSignupStore(store, now = Date.now()) {
-  for (const [tokenHash, record] of Object.entries(store)) {
-    if (record?.usedAt || Number(record?.expiresAt || 0) <= now) {
-      delete store[tokenHash];
-    }
-  }
-  return store;
-}
-
-function createPendingSignupVerification({
+async function createPendingSignupVerification({
   payload,
   ownerEmail,
   businessName,
@@ -1290,53 +1267,12 @@ function createPendingSignupVerification({
   purpose = "email_verification",
   ttlMs = SIGNUP_VERIFICATION_TTL_MS,
 }) {
-  const token = crypto.randomBytes(32).toString("base64url");
-  const tokenHash = hashSignupVerificationToken(token);
-  const now = Date.now();
-  const store = prunePendingSignupStore(readPendingSignupStore(), now);
-
-  if (purpose === "manual_review_recovery") {
-    const normalizedEmail = String(ownerEmail || "").trim().toLowerCase();
-    const normalizedBusiness = String(businessName || "").trim().toLowerCase();
-    for (const [existingTokenHash, existing] of Object.entries(store)) {
-      if (existing?.purpose !== "manual_review_recovery") continue;
-      const existingEmail = String(existing?.ownerEmail || existing?.payload?.owner?.email || "").trim().toLowerCase();
-      const existingBusiness = String(existing?.businessName || existing?.payload?.business?.name || "").trim().toLowerCase();
-      const sameEmail = normalizedEmail && existingEmail && normalizedEmail === existingEmail;
-      const sameBusiness = normalizedBusiness && existingBusiness && normalizedBusiness === existingBusiness;
-      if (sameEmail || (!normalizedEmail && sameBusiness)) delete store[existingTokenHash];
-    }
-  }
-
-  store[tokenHash] = {
-    tokenHash,
-    ownerEmail,
-    businessName,
-    reviewReasons: Array.isArray(reviewReasons) ? reviewReasons : [],
-    ipHash,
-    purpose,
-    payload,
-    createdAt: now,
-    expiresAt: now + Math.max(SIGNUP_VERIFICATION_TTL_MS, Number(ttlMs) || 0),
-  };
-
-  writePendingSignupStore(store);
-  return token;
+  return pendingSignupVerifications.create({ payload, ownerEmail, businessName, reviewReasons, ipHash, purpose, ttlMs });
 }
 
-function retainPendingSignupRecoveryPayload({ store, tokenHash, record, payload, reviewReasons = record?.reviewReasons } = {}) {
-  if (!store || !tokenHash || !record || !payload) return;
-  const now = Date.now();
-  store[tokenHash] = {
-    ...record,
-    payload,
-    purpose: "manual_review_recovery",
-    reviewReasons: Array.isArray(reviewReasons) ? reviewReasons : [],
-    verifiedAt: now,
-    expiresAt: Math.max(Number(record.expiresAt || 0), now + 7 * 24 * 60 * 60 * 1000),
-  };
-  delete store[tokenHash].claimedAt;
-  writePendingSignupStore(store);
+async function retainPendingSignupRecoveryPayload({ tokenHash, record, payload, reviewReasons = record?.reviewReasons } = {}) {
+  if (!tokenHash || !record || !payload) return null;
+  return pendingSignupVerifications.retainForRecovery(tokenHash, { record, payload, reviewReasons });
 }
 
 async function sendSignupVerificationEmail({ req, ownerEmail, ownerName, businessName, token }) {
@@ -1399,12 +1335,41 @@ async function sendSignupVerificationEmail({ req, ownerEmail, ownerName, busines
   return { sent: true };
 }
 
-function removePendingSignupVerification(token) {
-  const tokenHash = hashSignupVerificationToken(token);
-  const store = prunePendingSignupStore(readPendingSignupStore());
-  if (!store[tokenHash]) return;
-  delete store[tokenHash];
-  writePendingSignupStore(store);
+async function sendSignupCompletionEmail({ to, subject, text, content }) {
+  const emailConfig = getEmailTransportConfig();
+  if (!emailConfig) {
+    const error = new Error("Setup-complete email delivery is not configured.");
+    error.code = "SMTP_NOT_CONFIGURED";
+    error.provider = "smtp";
+    error.providerCode = error.code;
+    throw error;
+  }
+  const transporter = nodemailer.createTransport(emailConfig.transport);
+  try {
+    await transporter.sendMail({
+      from: emailConfig.from,
+      to,
+      subject,
+      text,
+      html: `
+        <div style="font-family:Arial,sans-serif;line-height:1.55;color:#0f172a;max-width:640px">
+          <h1 style="font-size:28px;line-height:1.1;margin:0 0 16px">Your My AI PA number is ready</h1>
+          <p>Your assigned AI phone number is:</p>
+          <p style="font-size:24px;font-weight:800"><a href="tel:${escapeHtml(content.phone)}" style="color:#07142a">${escapeHtml(content.displayPhone)}</a></p>
+          <p>Call it now to test the assistant before sharing it with customers.</p>
+          <p><a href="${escapeHtml(`${FRONTEND_APP_URL}/#/dashboard`)}" style="display:inline-block;background:#07142a;color:#fff;text-decoration:none;font-weight:700;padding:14px 18px;border-radius:10px">Open your dashboard</a></p>
+        </div>
+      `,
+    });
+  } catch (error) {
+    throw createSmtpDeliveryError(error, "setup-complete delivery");
+  } finally {
+    transporter.close();
+  }
+}
+
+async function removePendingSignupVerification(token) {
+  await pendingSignupVerifications.removeToken(token);
 }
 
 function getVoiceSignupReviewReasons(env = process.env) {
@@ -1420,7 +1385,7 @@ async function beginVoiceSignupVerification({ req, parameters, call }) {
   const owner = payload.owner || {};
   const business = payload.business || {};
   const reviewReasons = getVoiceSignupReviewReasons();
-  const token = createPendingSignupVerification({
+  const token = await createPendingSignupVerification({
     payload,
     ownerEmail: owner.email,
     businessName: business.name,
@@ -1462,7 +1427,7 @@ async function beginVoiceSignupVerification({ req, parameters, call }) {
   const smsFailureCode = String(smsError?.providerCode || smsError?.code || "SMS_DELIVERY_NOT_SENT")
     .toUpperCase().replace(/[^A-Z0-9_.:-]+/g, "_").slice(0, 80);
   if (!emailSent && !smsSent) {
-    removePendingSignupVerification(token);
+    await removePendingSignupVerification(token);
     const error = new Error("The signup details were valid, but the verification link could not be delivered.");
     error.statusCode = 503;
     error.code = "VOICE_SIGNUP_VERIFICATION_DELIVERY_FAILED";
@@ -4790,6 +4755,7 @@ async function safelyNotifySignupOperations(payload, {
   record = null,
   makeAssessment = null,
   providerFailure = null,
+  reasonCode = "",
 } = {}) {
   const eventKey = buildMakeSignupEventKey(payload);
   const alertKey = crypto
@@ -4805,7 +4771,7 @@ async function safelyNotifySignupOperations(payload, {
   const signupTargetId = current
     ? hashOperationalTarget(current.subscriptionId || current.checkoutSessionId || current.ownerEmail || current.businessName || current.signedUpAt || "unknown")
     : "";
-  const attentionKind = state === "provisioning_failed"
+  const attentionKind = ["provisioning_failed", "customer_followup_failed", "customer_followup_partial"].includes(state)
     ? "signup_failed"
     : state === "review_required" ? "signup_review_required" : "";
   const incidentId = signupTargetId && attentionKind
@@ -4820,7 +4786,7 @@ async function safelyNotifySignupOperations(payload, {
     source: payload?.source?.app || payload?.source?.channel || current?.signupSource || "website",
     eventKey,
     detail,
-    reasonCode: current?.phoneProvisioningCode || current?.makeError || "",
+    reasonCode: reasonCode || current?.phoneProvisioningCode || current?.makeError || "",
     makeFailure: providerFailure || makeAssessment || null,
     payload,
     record: current,
@@ -5219,7 +5185,7 @@ function listSignupDashboardRecords() {
     .sort((a, b) => Number(new Date(b.lastAttemptAt || b.updatedAt || b.signedUpAt || b.createdAt || 0)) - Number(new Date(a.lastAttemptAt || a.updatedAt || a.signedUpAt || a.createdAt || 0)));
 }
 
-function findPendingSignupForDashboardRecord(signup, pendingStore = prunePendingSignupStore(readPendingSignupStore())) {
+function findPendingSignupForDashboardRecord(signup, pendingStore = {}) {
   const ownerEmail = String(signup?.ownerEmail || "").trim().toLowerCase();
   const businessName = String(signup?.businessName || "").trim().toLowerCase();
   const attemptId = String(signup?.signupAttemptId || "").trim();
@@ -5508,9 +5474,12 @@ async function supersedeSignupByOperationalTargets(targetId, canonicalTargetId) 
     loadVapiPhoneNumbers: () => fetchVapiCollection("phone-number", ["phoneNumbers", "phone_numbers"]),
     loadStripeResources: loadStripeSignupResourcesForSupersession,
   });
-  const pendingStore = prunePendingSignupStore(readPendingSignupStore());
+  const pendingStore = await readPendingSignupStore();
   const disabled = disablePendingSignupAttemptsForRecord(duplicateSignup, pendingStore);
-  if (disabled.disabled) writePendingSignupStore(disabled.store);
+  if (disabled.disabled) {
+    const retained = new Set(Object.keys(disabled.store));
+    await Promise.all(Object.keys(pendingStore).filter((key) => !retained.has(key)).map((key) => pendingSignupVerifications.removeHash(key)));
+  }
   const updated = buildSupersededSignupRecord({
     signup: duplicateSignup,
     canonicalTargetId,
@@ -5667,7 +5636,7 @@ function isStaleSignupArchiveEligible({ signup = {}, diagnostics = {}, now = new
 }
 
 async function inspectSignupRecoveryState(signup) {
-  const pendingSignup = findPendingSignupForDashboardRecord(signup);
+  const pendingSignup = findPendingSignupForDashboardRecord(signup, await readPendingSignupStore());
   if (!signup?.twilioPhoneNumber) {
     return getSignupProviderRecoveryDiagnostics({ signup, pendingSignup });
   }
@@ -5713,7 +5682,7 @@ async function recoverSignupByOperationalTarget(targetId) {
     throw error;
   }
 
-  const pendingStore = prunePendingSignupStore(readPendingSignupStore());
+  const pendingStore = await readPendingSignupStore();
   const pendingSignup = findPendingSignupForDashboardRecord(signup, pendingStore);
   if (pendingSignup?.[1]?.payload) {
     const [, pending] = pendingSignup;
@@ -5775,7 +5744,10 @@ async function recoverSignupByOperationalTarget(targetId) {
       provisioningRetriedAt: new Date().toISOString(),
     });
     const consumed = consumePendingSignupProvisioningAttempts(pendingStore, pending.payload);
-    writePendingSignupStore(consumed.store);
+    if (consumed.consumed) {
+      const retained = new Set(Object.keys(consumed.store));
+      await Promise.all(Object.keys(pendingStore).filter((key) => !retained.has(key)).map((key) => pendingSignupVerifications.removeHash(key)));
+    }
     await attachNoCardStripeTrialToSignup(pending.payload, {
       makeStatus: makeResult.status,
       twilioPhoneNumber: updated.twilioPhoneNumber || "",
@@ -5875,7 +5847,10 @@ async function recoverSignupByOperationalTarget(targetId) {
         twilioPhoneNumber,
       });
       const consumed = consumePendingSignupProvisioningAttempts(pendingStore, recoveredPayload);
-      if (consumed.consumed) writePendingSignupStore(consumed.store);
+      if (consumed.consumed) {
+        const retained = new Set(Object.keys(consumed.store));
+        await Promise.all(Object.keys(pendingStore).filter((key) => !retained.has(key)).map((key) => pendingSignupVerifications.removeHash(key)));
+      }
       return {
         ok: true,
         action: "voice_signup_replayed_from_provider_call",
@@ -7939,9 +7914,13 @@ function rememberDuplicateSignup(key) {
   return Boolean(previous && previous > now);
 }
 
-async function verifyTurnstileToken(token, ip) {
+async function verifyTurnstileToken(token, ip, options = {}) {
   const secret = String(process.env.TURNSTILE_SECRET_KEY || "").trim();
-  if (!secret) return { ok: true, skipped: true };
+  if (!secret) {
+    return options.required
+      ? { ok: false, reason: "captcha_not_configured" }
+      : { ok: true, skipped: true };
+  }
   if (!token) return { ok: false, reason: "missing_captcha" };
 
   const body = new URLSearchParams();
@@ -7999,7 +7978,7 @@ async function verifySignupCaptcha(security, ip) {
   }
 
   if (provider === "turnstile" || turnstileToken) {
-    return verifyTurnstileToken(turnstileToken || genericToken, ip);
+    return verifyTurnstileToken(turnstileToken || genericToken, ip, { required: true });
   }
 
   if (process.env.RECAPTCHA_SECRET_KEY || process.env.GOOGLE_RECAPTCHA_SECRET_KEY) {
@@ -11187,7 +11166,7 @@ app.post(
     });
 
     if (isEnabled(process.env.SIGNUP_REQUIRE_VERIFICATION)) {
-      const token = createPendingSignupVerification({
+      const token = await createPendingSignupVerification({
         payload,
         ownerEmail,
         businessName,
@@ -11233,7 +11212,7 @@ app.post(
         ipHash: hashKey(securityDecision.ip),
         emailHash: hashKey(ownerEmail),
       });
-      createPendingSignupVerification({
+      await createPendingSignupVerification({
         payload: makePayload,
         ownerEmail,
         businessName,
@@ -11352,11 +11331,14 @@ app.get(
   "/api/integrations/verify-signup-email",
   asyncRoute(async (req, res) => {
     const token = String(req.query.token || "").trim();
-    const tokenHash = hashSignupVerificationToken(token);
-    const store = prunePendingSignupStore(readPendingSignupStore());
-    const record = store[tokenHash];
+    const claim = token ? await pendingSignupVerifications.claim(token) : { status: "missing", record: null };
+    const tokenHash = claim.tokenHash || hashPendingSignupToken(token);
+    const record = claim.record;
 
-    function renderVerificationPage({ title, body, ok }) {
+    function renderVerificationPage({ title, body, ok, assignedPhone = "" }) {
+      const canonicalPhone = normalizePhoneForMatch(assignedPhone);
+      const displayPhone = formatAssignedPhone(canonicalPhone);
+      const setupReady = ok && Boolean(canonicalPhone && displayPhone);
       res.status(ok ? 200 : 400).send(`<!doctype html>
         <html lang="en">
           <head>
@@ -11365,11 +11347,18 @@ app.get(
             <title>${escapeHtml(title)} | My AI PA</title>
             <style>
               body{margin:0;font-family:Arial,sans-serif;background:linear-gradient(135deg,#eef6ff,#fff);color:#07142a;display:grid;min-height:100vh;place-items:center;padding:24px}
-              main{max-width:680px;border:1px solid #d7e7fb;background:rgba(255,255,255,.94);border-radius:28px;padding:34px;box-shadow:0 34px 100px -70px rgba(15,23,42,.86)}
+              main{width:min(680px,100%);box-sizing:border-box;border:1px solid #d7e7fb;background:rgba(255,255,255,.94);border-radius:28px;padding:34px;box-shadow:0 34px 100px -70px rgba(15,23,42,.86)}
               .badge{display:inline-flex;border-radius:999px;background:${ok ? "#dcfce7" : "#fee2e2"};color:${ok ? "#166534" : "#991b1b"};padding:8px 12px;font-size:12px;font-weight:900;letter-spacing:.14em;text-transform:uppercase}
               h1{font-size:clamp(32px,7vw,54px);line-height:1.02;margin:18px 0 12px;letter-spacing:-.05em}
               p{font-size:18px;line-height:1.6;color:#334155}
-              a{display:inline-flex;margin-top:12px;border-radius:14px;background:#07142a;color:white;text-decoration:none;font-weight:900;padding:14px 18px}
+              .number{margin:24px 0;padding:22px;border:1px solid #bfdbfe;background:#eff6ff;border-radius:20px}
+              .number-label{margin:0 0 6px;font-size:13px;font-weight:900;letter-spacing:.12em;text-transform:uppercase;color:#0369a1}
+              .number-value{margin:0;font-size:clamp(25px,7vw,38px);font-weight:900;line-height:1.2;color:#07142a;letter-spacing:-.03em}
+              .actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px}
+              a,.action{display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:14px;background:#07142a;color:white;text-decoration:none;font:inherit;font-weight:900;padding:14px 18px;cursor:pointer}
+              .action.secondary{background:#e0f2fe;color:#075985}
+              .return{background:transparent;color:#075985;padding-left:0;padding-right:0}
+              @media(max-width:520px){body{padding:14px}main{padding:24px}.actions>*{flex:1 1 140px}.return{flex-basis:100%}}
             </style>
           </head>
           <body>
@@ -11377,14 +11366,39 @@ app.get(
               <span class="badge">${ok ? "Verified" : "Needs attention"}</span>
               <h1>${escapeHtml(title)}</h1>
               <p>${escapeHtml(body)}</p>
-              <a href="${escapeHtml(`${FRONTEND_APP_URL}/#/signup`)}">Return to My AI PA</a>
+              ${setupReady ? `
+                <section class="number" aria-label="Assigned My AI PA number">
+                  <p class="number-label">Your My AI PA number</p>
+                  <p class="number-value">${escapeHtml(displayPhone)}</p>
+                  <div class="actions">
+                    <a href="tel:${escapeHtml(canonicalPhone)}">Call the number</a>
+                    <button class="action secondary" id="copy-number" type="button" data-phone="${escapeHtml(canonicalPhone)}">Copy number</button>
+                  </div>
+                </section>
+              ` : ""}
+              <div class="actions"><a class="return" href="${escapeHtml(`${FRONTEND_APP_URL}/#/${setupReady ? "dashboard" : "signup"}`)}">${setupReady ? "Open your dashboard" : "Return to My AI PA"}</a></div>
             </main>
+            ${setupReady ? `<script>
+              document.getElementById("copy-number").addEventListener("click", async function () {
+                const phone = this.dataset.phone;
+                try {
+                  await navigator.clipboard.writeText(phone);
+                } catch (_) {
+                  const input = document.createElement("input");
+                  input.value = phone;
+                  document.body.appendChild(input);
+                  input.select();
+                  document.execCommand("copy");
+                  input.remove();
+                }
+                this.textContent = "Copied";
+              });
+            </script>` : ""}
           </body>
         </html>`);
     }
 
-    if (!token || !record) {
-      writePendingSignupStore(store);
+    if (!token || !record || claim.status === "missing") {
       return renderVerificationPage({
         ok: false,
         title: "Verification link is invalid or expired",
@@ -11392,26 +11406,13 @@ app.get(
       });
     }
 
-    if (Number(record.expiresAt || 0) <= Date.now()) {
-      delete store[tokenHash];
-      writePendingSignupStore(store);
-      return renderVerificationPage({
-        ok: false,
-        title: "Verification link expired",
-        body: "Please submit the signup form again to receive a fresh verification email.",
-      });
-    }
-
-    if (record.claimedAt) {
+    if (claim.status === "already_claimed") {
       return renderVerificationPage({
         ok: true,
         title: "Verification is already processing",
         body: "This link has already been opened. Setup is processing; return to My AI PA for the latest status.",
       });
     }
-    store[tokenHash] = { ...record, claimedAt: Date.now() };
-    writePendingSignupStore(store);
-
     const payload = compactObject({
       ...(record.payload || {}),
       verifiedAt: new Date().toISOString(),
@@ -11427,7 +11428,7 @@ app.get(
     });
 
     if (Array.isArray(record.reviewReasons) && record.reviewReasons.length) {
-      retainPendingSignupRecoveryPayload({ store, tokenHash, record, payload });
+      await retainPendingSignupRecoveryPayload({ tokenHash, record, payload });
       const reviewRecord = upsertSignupDashboardFromPayload(payload, {
         status: "review_required",
         emailVerified: true,
@@ -11456,16 +11457,7 @@ app.get(
       makeResult = await sendMakeSignupCompleted(payload);
     } catch (error) {
       const providerFailure = makeFailureFromError(error);
-      const retryStore = readPendingSignupStore();
-      if (retryStore[tokenHash]) {
-        retainPendingSignupRecoveryPayload({
-          store: retryStore,
-          tokenHash,
-          record: retryStore[tokenHash],
-          payload,
-          reviewReasons: ["provisioning_unreachable"],
-        });
-      }
+      await retainPendingSignupRecoveryPayload({ tokenHash, record, payload, reviewReasons: ["provisioning_unreachable"] });
       const failedRecord = upsertSignupDashboardFromPayload(payload, {
         status: "setup_error",
         emailVerified: true,
@@ -11488,16 +11480,7 @@ app.get(
     const makeData = makeResult.data || {};
     const makeAssessment = classifyMakeSignupResponse(makeResult.body, makeData);
     if (!makeAssessment.complete) {
-      const retryStore = readPendingSignupStore();
-      if (retryStore[tokenHash]) {
-        retainPendingSignupRecoveryPayload({
-          store: retryStore,
-          tokenHash,
-          record: retryStore[tokenHash],
-          payload,
-          reviewReasons: [makeAssessment.code || "provisioning_incomplete"],
-        });
-      }
+      await retainPendingSignupRecoveryPayload({ tokenHash, record, payload, reviewReasons: [makeAssessment.code || "provisioning_incomplete"] });
       const incompleteRecord = upsertSignupDashboardFromPayload(payload, {
         status: "setup_error",
         emailVerified: true,
@@ -11531,11 +11514,9 @@ app.get(
     const phoneProvisioning = await inspectSignupPhoneProvisioning(makeData, makeResult.body);
     const twilioPhoneNumber = phoneProvisioning.status === "ready" ? phoneProvisioning.e164 : "";
     if (phoneProvisioning.status === "ready") {
-      delete store[tokenHash];
-      writePendingSignupStore(store);
+      await pendingSignupVerifications.removeHash(tokenHash);
     } else {
-      retainPendingSignupRecoveryPayload({
-        store,
+      await retainPendingSignupRecoveryPayload({
         tokenHash,
         record,
         payload,
@@ -11566,10 +11547,50 @@ app.get(
     if (phoneProvisioning.status === "ready") {
       await attachNoCardStripeTrialToSignup(payload, { makeStatus: makeResult.status, twilioPhoneNumber });
     }
+    let completionDelivery = null;
+    if (phoneProvisioning.status === "ready") {
+      completionDelivery = await deliverSignupCompletion({
+        ownerPhone: provisionedRecord.ownerPhone || payload?.owner?.phone,
+        ownerEmail: provisionedRecord.ownerEmail || payload?.owner?.email,
+        ownerName: provisionedRecord.ownerName || payload?.owner?.name,
+        businessName: provisionedRecord.businessName || payload?.business?.name,
+        assignedPhone: twilioPhoneNumber,
+        dashboardUrl: `${FRONTEND_APP_URL}/#/dashboard`,
+        priorStatus: provisionedRecord.setupFollowupStatus,
+        sendSms: ({ to, message }) => sendSmsViaTwilio({
+          to,
+          message,
+          env: getVapiVoiceSignupSmsEnvironment(),
+        }),
+        sendEmail: sendSignupCompletionEmail,
+      });
+      const deliveryRecord = upsertSignupDashboardRecord({
+        ...provisionedRecord,
+        setupFollowupStatus: completionDelivery.status,
+        setupFollowupChannels: completionDelivery.channels,
+        setupFollowupErrors: completionDelivery.errors,
+        setupFollowupAttemptedAt: new Date().toISOString(),
+        setupFollowupSentAt: completionDelivery.channels.length ? new Date().toISOString() : "",
+      });
+      if (["failed", "partial"].includes(completionDelivery.status)) {
+        const errorCodes = completionDelivery.errors.map((item) => item.code).filter(Boolean);
+        await safelyNotifySignupOperations(payload, {
+          state: completionDelivery.status === "failed" ? "customer_followup_failed" : "customer_followup_partial",
+          detail: completionDelivery.status === "failed"
+            ? "Setup completed, but the assigned-number follow-up could not be delivered"
+            : `Setup completed, but follow-up delivery was partial (${completionDelivery.channels.join(", ") || "no successful channel"})`,
+          reasonCode: errorCodes[0] || "SIGNUP_COMPLETION_DELIVERY_FAILED",
+          record: deliveryRecord,
+        });
+      }
+    }
     return renderVerificationPage({
       ok: phoneProvisioning.status === "ready",
-      title: phoneProvisioning.status === "ready" ? "Email verified" : "Email verified, number setup needs attention",
-      body: phoneProvisioning.status === "ready" ? "Your email is verified and your My AI PA setup is now continuing." : phoneProvisioning.message,
+      title: phoneProvisioning.status === "ready" ? "Your setup is ready" : "Email verified, number setup needs attention",
+      body: phoneProvisioning.status === "ready"
+        ? `Your email is verified. Your assigned number is ready to test${completionDelivery?.status === "failed" ? ", but we could not deliver the separate follow-up message" : ""}.`
+        : phoneProvisioning.message,
+      assignedPhone: twilioPhoneNumber,
     });
   })
 );
@@ -12350,7 +12371,7 @@ app.post(
           return hashOperationalTarget(identity) === targetId;
         });
         if (!signup) return res.status(404).json({ error: "Signup record was not found." });
-        const pendingStore = prunePendingSignupStore(readPendingSignupStore());
+        const pendingStore = await readPendingSignupStore();
         const pendingEntry = Object.entries(pendingStore).find(([, record]) => {
           const sameEmail = signup.ownerEmail && String(record?.ownerEmail || "").toLowerCase() === String(signup.ownerEmail).toLowerCase();
           const sameBusiness = signup.businessName && String(record?.businessName || "").toLowerCase() === String(signup.businessName).toLowerCase();
@@ -12360,9 +12381,9 @@ app.post(
           return res.status(409).json({ error: "The verification request expired. Reopen the signup and ask the customer to confirm the form again." });
         }
         delete pendingStore[pendingEntry[0]];
-        writePendingSignupStore(pendingStore);
+        await pendingSignupVerifications.removeHash(pendingEntry[0]);
         const pending = pendingEntry[1];
-        const token = createPendingSignupVerification({
+        const token = await createPendingSignupVerification({
           payload: pending.payload,
           ownerEmail: pending.ownerEmail,
           businessName: pending.businessName,
@@ -12750,6 +12771,36 @@ app.get(
   requireAdmin,
   asyncRoute(async (_req, res) => {
     res.json({ ok: true, ...(await getStripeTrialsDashboard()) });
+  })
+);
+
+app.get(
+  "/api/admin/finance-ledger",
+  requireAdmin,
+  asyncRoute(async (req, res) => {
+    const days = req.query.days || 30;
+    const [costAudit, stripeFinance] = await Promise.all([
+      getCostAudit({ days }),
+      getStripeFinanceSnapshot({ stripeClient: stripe, days }),
+    ]);
+    res.json({
+      ok: true,
+      ledger: {
+        schemaVersion: 1,
+        generatedAt: new Date().toISOString(),
+        readOnly: true,
+        mutationsPerformed: 0,
+        operatingCosts: costAudit,
+        paymentProcessor: {
+          ...stripeFinance,
+          mode: STRIPE_SECRET_KEY.startsWith("sk_live_")
+            ? "live"
+            : STRIPE_SECRET_KEY.startsWith("sk_test_")
+              ? "test"
+              : "unknown",
+        },
+      },
+    });
   })
 );
 
@@ -13922,6 +13973,7 @@ module.exports = {
     getSupportSuggestionRateLimitDecision,
     getSupportReportRateLimitDecision,
     getClientIp,
+    verifySignupCaptcha,
     extractOpenAiResponseText,
     getSupportTicketNumber,
     sanitizeCustomerSupportReport,
