@@ -295,6 +295,56 @@ function getPaymentReturnStatus() {
   return String(params.get("payment") || "").toLowerCase();
 }
 
+export const SIGNUP_QA_PREFILL_STORAGE_KEY = "myaipa_signup_qa_contact_v1";
+
+const SIGNUP_QA_FIXTURE = {
+  selectedTradeId: "painter",
+  selectedAreas: ["Port Colborne"],
+  selectedSpecializationIds: ["residential", "commercial"],
+  selectedDialogueId: "help-today",
+  details: {
+    ownerName: "Quality Assurance",
+    businessName: "QA Painter Services",
+    phone: "",
+    email: "",
+    streetAddress: "23 Robb Street",
+    city: "Port Colborne",
+    province: "ON",
+    postalCode: "L3K 1A1",
+  },
+  pricing: {
+    offersServiceCalls: true,
+    installationFreeEstimate: true,
+    repairVisitFee: "89",
+    repairHourlyRate: "95",
+  },
+};
+
+function getSignupQueryParams() {
+  if (typeof window === "undefined") return new URLSearchParams();
+  const hash = window.location.hash || "";
+  const hashQuery = hash.includes("?") ? hash.slice(hash.indexOf("?") + 1) : "";
+  return new URLSearchParams(hashQuery || window.location.search);
+}
+
+function getSignupQaMode() {
+  return String(getSignupQueryParams().get("qa") || "").trim().toLowerCase();
+}
+
+function getStoredSignupQaContact() {
+  if (typeof window === "undefined" || !window.localStorage) return {};
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(SIGNUP_QA_PREFILL_STORAGE_KEY) || "{}");
+    if (!parsed || typeof parsed !== "object") return {};
+    return {
+      phone: String(parsed.phone || "").trim(),
+      email: String(parsed.email || "").trim(),
+    };
+  } catch {
+    return {};
+  }
+}
+
 function Benefit({ icon, children }) {
   return (
     <div className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600">
@@ -1976,6 +2026,7 @@ export function SignupSuccessPage({ result: initialResult, onStartAnother }) {
 export default function Signup() {
   const signupStartedAtRef = useRef(Date.now());
   const signupSubmissionIdRef = useRef("");
+  const qaModeRef = useRef(getSignupQaMode());
   const [currentStep, setCurrentStep] = useState(1);
   const [businessSlide, setBusinessSlide] = useState(1);
   const [tradeSetupPanel, setTradeSetupPanel] = useState("trade");
@@ -1998,6 +2049,7 @@ export default function Signup() {
   const [returnToReviewAfterEdit, setReturnToReviewAfterEdit] = useState(false);
   const [details, setDetails] = useState(() => ({ ...DEFAULT_DETAILS }));
   const [pricing, setPricing] = useState(() => ({ ...DEFAULT_PRICING }));
+  const isSignupQaTurnstileMode = qaModeRef.current === "turnstile";
   const paymentReturnStatus = useMemo(() => getPaymentReturnStatus(), []);
   const paymentReturnNotice = useMemo(() => {
     if (paymentReturnStatus === "success") {
@@ -2016,6 +2068,39 @@ export default function Signup() {
     }
     return null;
   }, [paymentReturnStatus]);
+
+  useEffect(() => {
+    if (!isSignupQaTurnstileMode) return;
+    const storedContact = getStoredSignupQaContact();
+    const qaDetails = {
+      ...SIGNUP_QA_FIXTURE.details,
+      phone: storedContact.phone || SIGNUP_QA_FIXTURE.details.phone,
+      email: storedContact.email || SIGNUP_QA_FIXTURE.details.email,
+    };
+    const hasContactOverride = Boolean(qaDetails.phone && qaDetails.email);
+
+    setSelectedTradeId(SIGNUP_QA_FIXTURE.selectedTradeId);
+    setSelectedAreas([...SIGNUP_QA_FIXTURE.selectedAreas]);
+    setSelectedSpecializationIds([...SIGNUP_QA_FIXTURE.selectedSpecializationIds]);
+    setSelectedDialogueId(SIGNUP_QA_FIXTURE.selectedDialogueId);
+    setSpecializationNotes("QA path for live Turnstile and backend acceptance checks. No real customer work is requested.");
+    setDetails(qaDetails);
+    setPricing({ ...SIGNUP_QA_FIXTURE.pricing });
+    setBusinessStepAttempted(!hasContactOverride);
+    setTouchedDetails(hasContactOverride ? {} : { phone: true, email: true });
+    setTradeSetupPanel("specialization");
+    setBusinessSlide(hasContactOverride ? 5 : 3);
+    setCurrentStep(hasContactOverride ? 3 : 1);
+    setSignupResult(null);
+    setStatus(
+      hasContactOverride
+        ? "QA prefill loaded. Complete the real verification check, then submit to test the backend."
+        : "QA prefill loaded. Add QA contact details to browser storage before running the final Turnstile submit."
+    );
+    setError("");
+    signupStartedAtRef.current = Date.now();
+    signupSubmissionIdRef.current = "";
+  }, [isSignupQaTurnstileMode]);
 
   useEffect(() => {
     window.requestAnimationFrame?.(() => window.scrollTo?.({ top: 0, behavior: "auto" }));
