@@ -1,6 +1,6 @@
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
-import Signup, { HumanVerificationCheck, SignupSuccessPage } from "./Signup";
+import Signup, { HumanVerificationCheck, SIGNUP_QA_PREFILL_STORAGE_KEY, SignupSuccessPage } from "./Signup";
 
 jest.mock("@vapi-ai/web", () => jest.fn().mockImplementation(() => ({
   on: jest.fn(),
@@ -29,6 +29,8 @@ describe("intuitive signup presentation", () => {
   afterEach(() => {
     act(() => root.unmount());
     container.remove();
+    window.localStorage.clear();
+    window.location.hash = "";
   });
 
   test("shows one progress route and one question", () => {
@@ -134,6 +136,23 @@ describe("intuitive signup presentation", () => {
     expect(window.turnstile.render).toHaveBeenCalledTimes(1);
     expect(onVerify).toHaveBeenCalledWith("verified-browser-token");
     delete window.turnstile;
+  });
+
+  test("loads the Turnstile QA route with stored contact overrides and no manual contact typing", () => {
+    window.location.hash = "#/signup?qa=turnstile";
+    window.localStorage.setItem(SIGNUP_QA_PREFILL_STORAGE_KEY, JSON.stringify({
+      phone: "9057885488",
+      email: "qa-run@myaipa.ca",
+    }));
+
+    act(() => root.render(<Signup />));
+
+    expect(container.textContent).toMatch(/Final review/i);
+    expect(container.textContent).toMatch(/QA Painter Services/i);
+    expect(container.textContent).toMatch(/9057885488/i);
+    expect(container.textContent).toMatch(/qa-run@myaipa.ca/i);
+    expect(container.textContent).toMatch(/QA prefill loaded/i);
+    expect(container.textContent).not.toMatch(/Enter a real 10-digit business phone number/i);
   });
 
   test.each([
