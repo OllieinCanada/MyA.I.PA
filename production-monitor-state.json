@@ -7,66 +7,6 @@
       "checkName": "operational_health",
       "firstDetectedAt": "2026-09-11T06:00:38.195Z"
     },
-    "issue:operational_health:public_59c6aef83008d4c9278c7ccded697320": {
-      "lifecycleId": "public_507249ec6d35071bd1276e4d",
-      "type": "operational",
-      "checkName": "operational_health",
-      "firstDetectedAt": "2026-09-20T01:30:52.000Z"
-    },
-    "issue:operational_health:public_10b7bdca8df5ec65123a4a742d22be44": {
-      "lifecycleId": "public_4d7b310405546cdffe05808c",
-      "type": "operational",
-      "checkName": "operational_health",
-      "firstDetectedAt": "2026-09-20T01:30:52.000Z"
-    },
-    "issue:operational_health:public_78c0c376fe7eea278c6552d3c169c169": {
-      "lifecycleId": "public_ef6b2273ced3e5c00bddaf73",
-      "type": "operational",
-      "checkName": "operational_health",
-      "firstDetectedAt": "2026-09-20T01:30:52.000Z"
-    },
-    "issue:operational_health:public_dc2799f4828d782881ee83cc225ecb9c": {
-      "lifecycleId": "public_5c732f1efe8e811679f27d88",
-      "type": "operational",
-      "checkName": "operational_health",
-      "firstDetectedAt": "2026-09-20T01:30:52.000Z"
-    },
-    "issue:operational_health:public_b28947ba15a7ec37691d44aece2a0586": {
-      "lifecycleId": "public_77eb4e8460677be4f686b8c6",
-      "type": "operational",
-      "checkName": "operational_health",
-      "firstDetectedAt": "2026-09-20T01:30:52.000Z"
-    },
-    "issue:operational_health:public_d7dbbd780dc76d0826a2edcf90a2f790": {
-      "lifecycleId": "public_cec30fa57c00563d8fad5bc7",
-      "type": "operational",
-      "checkName": "operational_health",
-      "firstDetectedAt": "2026-09-20T18:54:36.830Z"
-    },
-    "issue:operational_health:public_f79976b6a1ca0ee9458fb1ad66cf3c1b": {
-      "lifecycleId": "public_c6c3407726edc4e68d23e12a",
-      "type": "operational",
-      "checkName": "operational_health",
-      "firstDetectedAt": "2026-09-20T18:54:36.830Z"
-    },
-    "issue:operational_health:public_897b8367aa31e8e43ef2b62248330caa": {
-      "lifecycleId": "public_cda3575e7cf71179cb857b38",
-      "type": "operational",
-      "checkName": "operational_health",
-      "firstDetectedAt": "2026-09-20T18:54:36.830Z"
-    },
-    "issue:operational_health:public_7748a1ae6f0943447baf74d822d03728": {
-      "lifecycleId": "public_c28ee5d7f1d27ce4dd185eaa",
-      "type": "operational",
-      "checkName": "operational_health",
-      "firstDetectedAt": "2026-09-21T18:51:04.846Z"
-    },
-    "issue:operational_health:public_3a056337b3d13600120db4c964202d42": {
-      "lifecycleId": "public_9360d63a82c00206d65ae7f4",
-      "type": "operational",
-      "checkName": "operational_health",
-      "firstDetectedAt": "2026-09-21T18:51:04.846Z"
-    },
     "issue:operational_health:public_f0eccf0bdeb08941963ab5fdbd1c62fe": {
       "lifecycleId": "public_e5c98c7db1bbd3ddf82b2f5a",
       "type": "operational",
