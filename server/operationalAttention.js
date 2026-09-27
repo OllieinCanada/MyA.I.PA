@@ -306,7 +306,8 @@ function signupAttentionItems(signups = [], now = new Date(), stuckMinutes = 60)
   for (const signup of signups.filter(Boolean)) {
     const identity = signupIdentity(signup);
     const targetId = hashTarget(identity);
-    const status = String(signup.status || "unknown");
+    const rawStatus = String(signup.status || "").trim().toLowerCase();
+    const status = rawStatus || "unknown";
     if (
       CLOSED_SIGNUP_STATUSES.has(status.trim().toLowerCase())
       || CLOSED_SIGNUP_STATUSES.has(latestStatusByIdentity.get(identity)?.status)
@@ -454,7 +455,15 @@ function signupAttentionItems(signups = [], now = new Date(), stuckMinutes = 60)
       }));
     }
     const duplicateKey = String(signup.ownerEmail || signup.checkoutSessionId || "").trim().toLowerCase();
-    if (duplicateKey) {
+    const meaningfulDuplicateCandidate = Boolean(
+      rawStatus
+        || signup.signupAttemptId
+        || signup.checkoutSessionId
+        || signup.subscriptionId
+        || signup.twilioPhoneNumber
+        || signup.vapiAssistantId
+    );
+    if (duplicateKey && meaningfulDuplicateCandidate && !CLOSED_SIGNUP_STATUSES.has(rawStatus)) {
       const duplicate = seenIdentities.get(duplicateKey) || { count: 0, businessName: "" };
       seenIdentities.set(duplicateKey, {
         count: duplicate.count + 1,

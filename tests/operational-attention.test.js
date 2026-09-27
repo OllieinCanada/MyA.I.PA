@@ -217,6 +217,42 @@ test("closed signups do not return as failures, billing alerts, or duplicate war
   assert.deepEqual(items, []);
 });
 
+test("empty signup shells do not create duplicate warnings against the canonical ready signup", () => {
+  const now = new Date("2026-09-26T21:00:00.000Z");
+  const items = signupAttentionItems([
+    {
+      ownerEmail: "owner@example.com",
+      signedUpAt: "2026-09-26T20:49:31.233Z",
+      updatedAt: "2026-09-26T20:57:50.057Z",
+    },
+    {
+      ownerEmail: "owner@example.com",
+      businessName: "Archived Test",
+      status: "abandoned_archived",
+      subscriptionId: "sub_archived",
+      updatedAt: "2026-09-26T20:49:31.219Z",
+    },
+    {
+      ownerEmail: "owner@example.com",
+      businessName: "Rejected Test",
+      status: "rejected",
+      signupAttemptId: "signup_rejected",
+      updatedAt: "2026-09-26T19:26:21.844Z",
+    },
+    {
+      ownerEmail: "owner@example.com",
+      businessName: "Canonical Ready",
+      status: "setup_ready",
+      signupAttemptId: "signup_ready",
+      twilioPhoneNumber: "+12892780752",
+      vapiAssistantId: "assistant_ready",
+      updatedAt: "2026-09-22T21:10:35.633Z",
+    },
+  ], now, 60);
+
+  assert.equal(items.some((item) => item.kind === "signup_duplicate"), false);
+});
+
 test("a newer terminal record closes older legacy aliases without hiding a newer retry", () => {
   const now = new Date("2026-09-24T12:00:00.000Z");
   const olderFailure = {
