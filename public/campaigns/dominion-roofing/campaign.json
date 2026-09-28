@@ -1,0 +1,46 @@
+{
+  "campaign_slug": "dominion-roofing",
+  "business": {
+    "name": "Dominion Roofing",
+    "website": "https://dominionroofing.com/",
+    "trade": "Roofing",
+    "service_area": "Toronto and the Greater Toronto Area",
+    "contact_name": "Dominion Roofing team"
+  },
+  "send_policy": {
+    "send_to_target_company": false,
+    "send_realistic_test": true,
+    "test_recipient": "olliefromcanada@gmail.com",
+    "target_company_email_stored": false
+  },
+  "email": {
+    "subject": "A quick thought about Dominion’s overflow calls",
+    "primary_cta": "See the private Dominion version",
+    "secondary_cta": "Call the live demo"
+  },
+  "public": {
+    "page_url": "https://www.myaipa.ca/campaigns/dominion-roofing/",
+    "image_url": "https://www.myaipa.ca/campaigns/dominion-roofing/assets/email-flyer.jpg"
+  },
+  "offer": {
+    "price_cad_monthly": 79,
+    "daily_equivalent_cad_before_tax": 2.60,
+    "trial_days": 14,
+    "included_ai_minutes": 60,
+    "overage_cad_per_minute": 0.25,
+    "setup_fee_cad": 0,
+    "credit_card_required_for_trial": false
+  },
+  "live_demo": {
+    "display": "(249) 503-3301",
+    "tel": "+12495033301"
+  },
+  "example_lead": {
+    "service": "Active roof leak",
+    "property": "Residential",
+    "location": "North York",
+    "roof_type": "Shingles",
+    "urgency": "Water entering now",
+    "status": "Ready for callback"
+  }
+}
