@@ -403,7 +403,7 @@ function MobileSignupProgress({ currentStep, businessSlide, tradeSetupPanel }) {
               ? "Business details"
               : businessSlide === 4
                 ? "Service-call details"
-                : "Setup summary";
+                : "Check your setup";
 
   return (
     <div className="signup-mobile-progress signup-visible-progress" aria-label={`Step ${stepNumber} of 8: ${title}`}>
@@ -608,7 +608,7 @@ function SpecializationPreview({ selectedLabels }) {
           <span className="font-black text-blue-600">Caller:</span> Do you handle commercial jobs?
         </div>
         <div className="rounded-xl border border-blue-100 bg-blue-50/80 p-4 text-slate-800">
-          <span className="font-black text-blue-600">AI:</span> Yes, we handle {primary} work. How can I help you today?
+          <span className="font-black text-blue-600">AI:</span> Yes, we handle {primary} work. Do you need a new installation, repair, maintenance, or another service today?
         </div>
       </div>
 
@@ -746,7 +746,7 @@ export function VoiceDemoStep({ agent, businessName, trade, areas, standalone = 
   const primaryArea = Array.isArray(areas) && areas.length ? String(areas[0]) : "Southern Ontario";
   const greeting = standalone
     ? `Hi, thanks for calling ${safeBusinessName}. Do you need an installation, repair, or maintenance today?`
-    : `Hi, thanks for calling ${safeBusinessName}. How can I help you today?`;
+    : `Hi, thanks for calling ${safeBusinessName}. Do you need a new installation, repair, maintenance, or another service today?`;
   const configuredMaxDurationSeconds = Math.max(
     15,
     Math.min(60, Number(previewConfig?.maxDurationSeconds || (standalone ? 60 : 30)) || (standalone ? 60 : 30))
@@ -1033,7 +1033,7 @@ export function VoiceDemoStep({ agent, businessName, trade, areas, standalone = 
                 <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">
                   {standalone
                     ? "Your assistant will ask whether you need an installation, repair, or maintenance today."
-                    : "Ask one short question, just like a customer would."}
+                    : "Your assistant opens by asking whether the caller needs a new installation, repair, maintenance, or another service."}
                 </p>
               </div>
               <span
@@ -1221,7 +1221,7 @@ export function VoiceDemoStep({ agent, businessName, trade, areas, standalone = 
   );
 }
 
-function ReviewPanel({ title = "Setup summary", description = "Check your choices before continuing.", trade, areas, specializations, voice, details, pricing, onUpdateDetails, onEditBusinessSlide, onEditVoice, getFieldError, onFieldBlur }) {
+function ReviewPanel({ title = "Check your setup", description = "Check your choices before continuing.", trade, areas, specializations, voice, details, pricing, onUpdateDetails, onEditBusinessSlide, onEditVoice, getFieldError, onFieldBlur }) {
   const businessAddress = formatBusinessAddress(details);
   const pricingScript = pricing ? buildPricingScript(pricing) : "";
   const pricingSummary =
@@ -2148,7 +2148,7 @@ export default function Signup() {
         : businessSlide === 3
           ? "Continue to service calls"
           : businessSlide === 4
-            ? "Continue to setup summary"
+            ? "Continue to check your setup"
             : "Continue to voice preview";
   const maxBusinessSlide =
     !selectedTradeId || specializationStepDisabled
@@ -2174,7 +2174,7 @@ export default function Signup() {
             : businessSlide === 3
               ? "Continue to service calls"
               : businessSlide === 4
-                ? "Continue to setup summary"
+                ? "Continue to check your setup"
                 : "Continue to voice preview";
   const mobilePrimaryDisabled = currentStep === 1 ? businessSlideDisabled : currentStep === 2 ? voiceStepDisabled : securityStepDisabled;
 
@@ -3406,12 +3406,38 @@ export default function Signup() {
                       <div className="signup-mobile-task-heading">
                         <h2>Choose your trade</h2>
                         <p>Choose one trade. Then tap Continue.</p>
+                        <button
+                          type="submit"
+                          disabled={businessSlideDisabled || busy}
+                          className={
+                            "mt-3 inline-flex min-h-[48px] w-full items-center justify-center gap-2 rounded-2xl px-5 text-base font-black text-white transition sm:hidden " +
+                            (businessSlideDisabled || busy
+                              ? "cursor-not-allowed bg-slate-300"
+                              : "bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 shadow-[0_16px_42px_-28px_rgba(79,70,229,0.95)]")
+                          }
+                        >
+                          {busy ? "Saving..." : businessSlideLabel}
+                          <Icon name="arrow" className="h-4 w-4" />
+                        </button>
                       </div>
                       <div className="signup-task-content-title mb-4 hidden items-end justify-between gap-3 sm:flex">
                         <div>
                           <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">Trade</p>
                           <p className="mt-1 text-sm font-semibold text-slate-500">Choose one trade, then press Continue.</p>
                         </div>
+                        <button
+                          type="submit"
+                          disabled={businessSlideDisabled || busy}
+                          className={
+                            "inline-flex min-h-[46px] items-center justify-center gap-2 rounded-xl px-5 text-sm font-black text-white transition " +
+                            (businessSlideDisabled || busy
+                              ? "cursor-not-allowed bg-slate-300"
+                              : "bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 shadow-[0_14px_30px_-24px_rgba(79,70,229,0.95)] hover:-translate-y-0.5 hover:brightness-110")
+                          }
+                        >
+                          {busy ? "Saving..." : businessSlideLabel}
+                          <Icon name="arrow" className="h-4 w-4" />
+                        </button>
                       </div>
                       <div className="signup-trade-grid grid grid-cols-2 gap-4 sm:grid-cols-3 xl:gap-5">
                         {TRADE_OPTIONS.map((trade) => (
@@ -3447,22 +3473,50 @@ export default function Signup() {
                       <div className="signup-mobile-task-heading">
                         <h2>What types of properties do you work on?</h2>
                         <p>Choose all that apply. Then tap Continue.</p>
+                        <button
+                          type="submit"
+                          disabled={businessSlideDisabled || busy}
+                          className={
+                            "mt-3 inline-flex min-h-[48px] w-full items-center justify-center gap-2 rounded-2xl px-5 text-base font-black text-white transition sm:hidden " +
+                            (businessSlideDisabled || busy
+                              ? "cursor-not-allowed bg-slate-300"
+                              : "bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 shadow-[0_16px_42px_-28px_rgba(79,70,229,0.95)]")
+                          }
+                        >
+                          {busy ? "Saving..." : businessSlideLabel}
+                          <Icon name="arrow" className="h-4 w-4" />
+                        </button>
                       </div>
                       <div className="signup-task-content-title hidden flex-wrap items-end justify-between gap-3 sm:flex">
                         <div>
                           <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">Property types</p>
                           <p className="mt-1 text-sm font-semibold text-slate-500">Choose all that apply.</p>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setTradeSetupPanel("trade");
-                            setError("");
-                          }}
-                          className="inline-flex min-h-[42px] items-center justify-center rounded-xl border border-blue-100 bg-white px-4 text-sm font-black text-blue-600 transition hover:border-blue-300 hover:bg-blue-50"
-                        >
-                          Back to trades
-                        </button>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setTradeSetupPanel("trade");
+                              setError("");
+                            }}
+                            className="inline-flex min-h-[42px] items-center justify-center rounded-xl border border-blue-100 bg-white px-4 text-sm font-black text-blue-600 transition hover:border-blue-300 hover:bg-blue-50"
+                          >
+                            Back to trades
+                          </button>
+                          <button
+                            type="submit"
+                            disabled={businessSlideDisabled || busy}
+                            className={
+                              "inline-flex min-h-[42px] items-center justify-center gap-2 rounded-xl px-4 text-sm font-black text-white transition " +
+                              (businessSlideDisabled || busy
+                                ? "cursor-not-allowed bg-slate-300"
+                                : "bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 shadow-[0_14px_30px_-24px_rgba(79,70,229,0.95)] hover:-translate-y-0.5 hover:brightness-110")
+                            }
+                          >
+                            {busy ? "Saving..." : businessSlideLabel}
+                            <Icon name="arrow" className="h-4 w-4" />
+                          </button>
+                        </div>
                       </div>
                       <div className="signup-specialization-grid grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-6 xl:gap-5">
                         {SPECIALIZATION_OPTIONS.map((item) => (
@@ -3766,17 +3820,17 @@ export default function Signup() {
                 <section id="signup-pricing" className="signup-task-layout grid w-full gap-6 lg:grid-cols-[360px_minmax(0,1fr)] xl:grid-cols-[390px_minmax(0,1fr)] lg:items-stretch">
                   <div className="signup-task-explainer flex flex-col justify-center rounded-3xl border border-blue-100 bg-blue-50/70 p-8">
                     <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">Step 5 of 8</p>
-                    <h2 className="mt-2 text-[clamp(2rem,3vw,3.1rem)] font-black leading-tight tracking-[-0.04em] text-slate-950">Service call / repair</h2>
-                    <p className="mt-4 text-lg font-medium leading-8 text-slate-600">Choose whether your assistant should discuss service-call or repair prices and hourly rates.</p>
+                    <h2 className="mt-2 text-[clamp(2rem,3vw,3.1rem)] font-black leading-tight tracking-[-0.04em] text-slate-950">Service call / repair pricing</h2>
+                    <p className="mt-4 text-lg font-medium leading-8 text-slate-600">Tell callers your service-call or repair pricing upfront so they can decide whether they want to continue.</p>
                   </div>
                   <div className="signup-task-content">
                     <div className="signup-mobile-task-heading">
-                      <h2>Service call / repair</h2>
-                      <p>Choose Yes or No. If Yes, add both prices. Then tap Continue.</p>
+                      <h2>Service call / repair pricing</h2>
+                      <p>Tell customers the price upfront. If Yes, add the call-out price and hourly rate. Then tap Continue.</p>
                     </div>
                     <div className="grid content-start gap-4 sm:grid-cols-2 xl:grid-cols-4 xl:gap-5">
                     <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-4 sm:col-span-2 xl:col-span-4">
-                      <span className="block text-sm font-black text-slate-950">Do you want your agent to discuss prices and hourly rates for service calls or repairs?</span>
+                      <span className="block text-sm font-black text-slate-950">Do you want your agent to tell callers your service-call or repair pricing upfront?</span>
                       <span className="mt-1 block text-sm font-medium text-slate-600">Choose one. Nothing is selected automatically.</span>
                       <div className="mt-4 grid grid-cols-2 gap-3" role="group" aria-label="Should the assistant discuss service call or repair prices and hourly rates?">
                         {[true, false].map((answer) => {
@@ -3821,7 +3875,7 @@ export default function Signup() {
                           error={showPricingErrors && Number(pricing.repairHourlyRate) <= 0 ? "Enter the hourly rate." : ""}
                         />
                         <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold leading-6 text-emerald-900 sm:col-span-2 xl:col-span-2">
-                          Your assistant will explain these prices, then ask: “Would you like to continue?”
+                          Your assistant will explain these prices, mention parts are extra when applicable, then ask: “Would you like to continue?”
                         </div>
                       </>
                     ) : null}
@@ -3851,8 +3905,8 @@ export default function Signup() {
                 <section className="signup-task-layout grid w-full gap-6 lg:grid-cols-[360px_minmax(0,1fr)] xl:grid-cols-[390px_minmax(0,1fr)] lg:items-stretch">
                   <div className="signup-task-explainer flex flex-col justify-center rounded-3xl border border-blue-100 bg-blue-50/70 p-8">
                     <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">Step 6 of 8</p>
-                    <h2 className="mt-2 text-[clamp(2rem,3vw,3.1rem)] font-black leading-tight tracking-[-0.04em] text-slate-950">Setup summary</h2>
-                    <p className="mt-4 text-lg font-medium leading-8 text-slate-600">Check your choices before the voice preview. Use Back or the top columns to change anything.</p>
+                    <h2 className="mt-2 text-[clamp(2rem,3vw,3.1rem)] font-black leading-tight tracking-[-0.04em] text-slate-950">Check your setup</h2>
+                    <p className="mt-4 text-lg font-medium leading-8 text-slate-600">Confirm your trade, areas, business details, and pricing before the voice preview.</p>
                   </div>
                   <div className="signup-task-content content-center">
                     <div className="signup-mobile-task-heading">
@@ -3860,7 +3914,7 @@ export default function Signup() {
                       <p>Check everything below. Then continue to your voice preview.</p>
                     </div>
                     <ReviewPanel
-                      title="Setup summary"
+                      title="Check your setup"
                       description="Check your choices before continuing to the voice preview."
                       trade={selectedTrade}
                       areas={selectedAreas}
