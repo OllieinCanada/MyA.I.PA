@@ -102,7 +102,7 @@ describe("intuitive signup presentation", () => {
     submit();
 
     expect(container.textContent).toMatch(/Step 5 of 8/i);
-    expect(container.textContent).toMatch(/Do you want your agent to discuss prices and hourly rates for service calls or repairs\?/i);
+    expect(container.textContent).toMatch(/Do you want your agent to tell callers your service-call or repair pricing upfront\?/i);
     expect(container.querySelector(".signup-mobile-primary").disabled).toBe(true);
 
     clickButton("Yes", container.querySelector('[role="group"]'));
@@ -115,7 +115,7 @@ describe("intuitive signup presentation", () => {
     changeValue("#hourly-rate-input", "95");
     submit();
     expect(container.textContent).toMatch(/Step 6 of 8/i);
-    expect(container.textContent).toMatch(/Setup summary/i);
+    expect(container.textContent).toMatch(/Check your setup/i);
   });
 
   test("renders Turnstile explicitly and returns its verified token", () => {
