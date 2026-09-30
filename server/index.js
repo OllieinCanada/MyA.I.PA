@@ -12242,6 +12242,11 @@ app.post(
   })
 );
 
+require("./providerNotificationRoutes").registerProviderNotificationRoutes(app, {
+  requireMonitorKey,
+  prisma,
+});
+
 app.post(
   "/api/internal/operations/telegram-test",
   requireMonitorKey,
