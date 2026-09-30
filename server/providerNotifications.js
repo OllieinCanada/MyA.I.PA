@@ -18,13 +18,15 @@ const EVENTS = {
   call_failed: ['critical', 'Call failed', 'Open the call logs to review the failure.'],
   setup_failed: ['critical', 'Assistant setup failed', 'Check the saved setup before trying again.'],
   spending_alert: ['warning', 'Spending threshold reached', 'Review recent usage and your spending threshold.'],
+  provider_error: ['critical', 'Twilio reported an error', 'Open Twilio Debugger to review the provider error. No automatic retry or billing change was performed.'],
+  provider_warning: ['warning', 'Twilio reported a warning', 'Open Twilio Debugger to review the provider warning.'],
   deploy_succeeded: ['info', 'Deployment succeeded', 'The new deployment is live.'],
   deploy_failed: ['critical', 'Deployment failed', 'Open the deployment logs to see what stopped it.'],
   service_down: ['critical', 'Service unreachable', 'Check the service and its recent logs.'],
   service_recovered: ['info', 'Service reachable again', 'The service is responding to health checks again.'],
 };
 const ALLOWED = {
-  twilio: ['recharge_confirmed','recharge_failed','low_balance','spending_alert'],
+  twilio: ['recharge_confirmed','recharge_failed','low_balance','spending_alert','provider_error','provider_warning'],
   make: ['credits_low','usage_warning','workflow_failed','scenario_disabled','spending_alert'],
   vapi: ['recharge_confirmed','recharge_failed','low_balance','call_failed','setup_failed','spending_alert'],
   render: ['deploy_succeeded','deploy_failed','service_down','service_recovered','spending_alert'],

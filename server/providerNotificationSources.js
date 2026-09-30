@@ -4,7 +4,7 @@ const list=(body,key)=>Array.isArray(body)?body:Array.isArray(body?.[key])?body[
 async function collectProviderNotifications({env=process.env,fetchImpl=fetch,previous={},now=Date.now()}={}) {
   const events=[],snapshots={...previous},readiness={};
   const occurredAt=new Date(now).toISOString();
-  const recent=value=>{const time=Date.parse(value);return Number.isFinite(time)&&time>=now-15*60000&&time<=now+300000;};
+  const recent=value=>{const time=Date.parse(value);return Number.isFinite(time)&&time>=now-75*60000&&time<=now+300000;};
   async function get(url,headers={}) {
     const r=await fetchImpl(url,{headers,signal:AbortSignal.timeout(10000)});
     if(!r.ok)throw new Error(`provider_http_${r.status}`);
@@ -52,12 +52,13 @@ async function collectProviderNotifications({env=process.env,fetchImpl=fetch,pre
     }else readiness.makeCredits={status:'organization_configuration_required'};
   });
   await source('vapi',env.VAPI_API_KEY,async()=>{
-    const calls=list(await get('https://api.vapi.ai/call?limit=100&createdAtGe='+encodeURIComponent(new Date(now-15*60000).toISOString()),{Authorization:`Bearer ${env.VAPI_API_KEY}`}), 'data');
+    const calls=list(await get('https://api.vapi.ai/call?limit=100&createdAtGe='+encodeURIComponent(new Date(now-75*60000).toISOString()),{Authorization:`Bearer ${env.VAPI_API_KEY}`}), 'data');
+    if(calls.length>=100)throw new Error('call_history_incomplete');
     let cost=0;
     for(const call of calls){
       const reason=String(call.endedReason||'');
       if(call.status==='ended'&&recent(call.endedAt||call.updatedAt)&&/(?:error|failed|worker-died|worker-shutdown|transport-never-connected|assistant-not-found|closed-websocket)/i.test(reason))events.push({provider:'vapi',type:'call_failed',id:`call:${fingerprint(call.id)}`,occurredAt:call.endedAt||call.updatedAt});
-      if(Number.isFinite(Number(call.cost)))cost+=Number(call.cost);
+      if(Date.parse(call.createdAt)>=now-15*60000&&Number.isFinite(Number(call.cost)))cost+=Number(call.cost);
     }
     const threshold=Number(env.PROVIDER_VAPI_WINDOW_SPEND_USD);
     if(threshold>0)transition('vapi','window_spend',cost>=threshold,'spending_alert',{amount:cost,currency:'USD'});

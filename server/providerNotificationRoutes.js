@@ -3,6 +3,7 @@ const {collectProviderNotifications}=require('./providerNotificationSources');
 function registerProviderNotificationRoutes(app,{requireMonitorKey,prisma,env=process.env}={}) {
   let polling=false;
   const options={prisma,token:env.TELEGRAM_BOT_TOKEN,chatId:env.TELEGRAM_CHAT_ID};
+  require('./twilioProviderEvents').registerTwilioProviderEvents(app,{prisma,env});
   app.post('/api/internal/operations/provider-notifications/event',requireMonitorKey,async(req,res,next)=>{
     try{
       // Only an authenticated receipt relay or trusted internal adapter may publish.
@@ -24,15 +25,26 @@ function registerProviderNotificationRoutes(app,{requireMonitorKey,prisma,env=pr
       });
       if(!locked)return res.status(409).json({error:'A provider poll is already running.'});
       const key='provider-notifications:poll-state',row=await prisma.runtimeStore.findUnique({where:{key}});
-      const report=await collectProviderNotifications({env,previous:row?.data?.snapshots||{}});
-      const events=[...new Map([...(row?.data?.pending||[]),...report.events].map(event=>[`${event.provider}:${event.id}`,event])).values()];
+      const lastCollected=Date.parse(row?.data?.lastCollectedAt);
+      const due=!Number.isFinite(lastCollected) || Date.now()-lastCollected>=3600000;
+      let report;
+      if(due)report=await collectProviderNotifications({env,previous:row?.data?.snapshots||{}});
+      else {
+        // Vapi's 15-minute spending warning cannot safely be sampled only hourly.
+        const vapi=await collectProviderNotifications({env:{VAPI_API_KEY:env.VAPI_API_KEY,PROVIDER_VAPI_WINDOW_SPEND_USD:env.PROVIDER_VAPI_WINDOW_SPEND_USD},previous:row.data.snapshots||{}});
+        report={events:vapi.events,snapshots:vapi.snapshots,readiness:{...row.data.readiness,vapi:vapi.readiness.vapi},receiptNotifications:'receipt_bridge_required'};
+      }
+      // Retry durable direct-event failures even after Twilio exhausts callback retries.
+      const failedDirect=await prisma.runtimeStore.findMany({where:{key:{startsWith:'provider-notification:'},OR:[{data:{path:['lastFailure'],equals:'telegram_delivery_unconfirmed'}},{AND:[{data:{path:['leaseUntil'],gt:0}},{data:{path:['leaseUntil'],lt:Date.now()}}]}]},take:100});
+      const retryEvents=failedDirect.map(record=>record.data?.event).filter(event=>event&&Date.parse(event.occurredAt)>=Date.now()-7*86400000);
+      const events=[...new Map([...(row?.data?.pending||[]),...retryEvents,...report.events].map(event=>[`${event.provider}:${event.id}`,event])).values()];
       if(events.length>5000)throw new Error('Provider notification backlog needs attention; no queued events were discarded.');
       const pending=[];let delivered=0,duplicates=0;
       for(const event of events.slice(0,10)){
         try{const r=await deliverDurably(event,options);if(r.delivered)delivered++;else duplicates++;}catch{pending.push(event);}
       }
       pending.push(...events.slice(10));
-      const data={snapshots:report.snapshots,pending,updatedAt:new Date().toISOString()};
+      const data={snapshots:report.snapshots,pending,readiness:report.readiness,lastCollectedAt:due?new Date().toISOString():row.data.lastCollectedAt,updatedAt:new Date().toISOString()};
       await prisma.runtimeStore.upsert({where:{key},create:{key,data},update:{data}});
       return res.json({ok:pending.length===0,coverageComplete:Object.values(report.readiness).every(item=>item.status==='checked'),delivered,duplicates,pending:pending.length,readiness:report.readiness,receiptNotifications:report.receiptNotifications});
     }catch(e){next(e);}finally{if(locked)await prisma.runtimeStore.update({where:{key:lockKey},data:{data:{leaseUntil:0}}}).catch(()=>{});polling=false;}

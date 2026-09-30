@@ -11,7 +11,7 @@ test('Make live usage converts centicredits and reports denied access',async()=>
  assert.equal(denied.readiness.makeCredits.status,'provider_http_401');assert.equal(denied.events.length,0);
 });
 test('Vapi five-dollar warning is notification-only and deduplicated',async()=>{
- const env={VAPI_API_KEY:'test',PROVIDER_VAPI_WINDOW_SPEND_USD:'5'},fetchImpl=async()=>({ok:true,json:async()=>[{cost:5.25}]});
+ const env={VAPI_API_KEY:'test',PROVIDER_VAPI_WINDOW_SPEND_USD:'5'},fetchImpl=async()=>({ok:true,json:async()=>[{cost:5.25,createdAt:new Date().toISOString()}]});
  const first=await collectProviderNotifications({env,fetchImpl});assert.equal(first.events[0].amount,5.25);assert.equal(first.events[0].currency,'USD');
  const again=await collectProviderNotifications({env,fetchImpl,previous:first.snapshots});assert.equal(again.events.length,0);
 });

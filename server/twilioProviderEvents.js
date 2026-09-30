@@ -1,0 +1,39 @@
+const crypto = require('crypto');
+const {verifyTwilioWebhookRequest} = require('./smsSuppression');
+const {deliverDurably,validateEvent} = require('./providerNotifications');
+const PATH = '/api/webhooks/twilio/provider-alerts';
+function toEvent(body, accountSid) {
+  if (!accountSid || body.AccountSid !== accountSid) throw new Error('Account mismatch');
+  let id, type, occurredAt;
+  if (body.UsageTriggerSid) {
+    if (!/^UT[0-9a-f]{32}$/i.test(body.UsageTriggerSid) || !body.IdempotencyToken || String(body.IdempotencyToken).length > 512 || body.TriggerBy !== 'price' || body.UsageCategory !== 'totalprice') throw new Error('Invalid usage event');
+    id = 'usage:' + crypto.createHash('sha256').update(String(body.IdempotencyToken)).digest('hex');
+    type = 'spending_alert'; occurredAt = body.DateFired;
+  } else {
+    if (!/^NO[0-9a-f]{32}$/i.test(body.Sid) || !['ERROR','WARNING'].includes(String(body.Level).toUpperCase())) throw new Error('Invalid debugger event');
+    id = 'debug:' + body.Sid; occurredAt = body.Timestamp;
+    type = String(body.Level).toUpperCase() === 'ERROR' ? 'provider_error' : 'provider_warning';
+  }
+  // Do not store the raw Payload: it can contain phone numbers and credentials.
+  // Currency is not supplied in usage callbacks, so never guess a currency.
+  return validateEvent({provider:'twilio',type,id,occurredAt});
+}
+function registerTwilioProviderEvents(app,{prisma,env=process.env,deliver=deliverDurably}={}) {
+  app.post(PATH, require('express').urlencoded({extended:false,limit:'32kb'}), async(req,res)=>{
+    const configuredUrl = 'https://api.myaipa.ca' + PATH;
+    if (!req.is('application/x-www-form-urlencoded') || !verifyTwilioWebhookRequest(req,env,{configuredUrl})) return res.status(403).json({error:'Invalid Twilio signature.'});
+    let event;
+    try {event=toEvent(req.body,env.TWILIO_ACCOUNT_SID);} catch {return res.status(400).json({error:'Invalid Twilio event.'});}
+    try {
+      const result=await deliver(event,{prisma,token:env.TELEGRAM_BOT_TOKEN,chatId:env.TELEGRAM_CHAT_ID});
+      // A lease is not a confirmed delivery; return retryable status until confirmed.
+      if(result.duplicate) {
+        const key='provider-notification:'+crypto.createHash('sha256').update(`${event.provider}:${event.id}`).digest('hex');
+        const row=await prisma.runtimeStore.findUnique({where:{key}});
+        if(!row?.data?.deliveredAt)return res.sendStatus(503);
+      }
+      return res.sendStatus(204);
+    }catch {return res.sendStatus(503);}
+  });
+}
+module.exports={PATH,toEvent,registerTwilioProviderEvents};
