@@ -48,6 +48,7 @@ jobs:
           MONITOR_STATE_SYNC_WARNING: ${{ steps.restore_state.outputs.warning }}
         run: npm run ops:monitor -- --include-operational --confirm-failure --telegram-lifecycle
       - name: Carry sanitized lifecycle state to the persistence job
+        # Provider alerts keep their delivery state in the production database.
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -63,6 +64,11 @@ jobs:
           path: diagnostics/operations/production-monitor.json
           if-no-files-found: ignore
           retention-days: 14
+      - name: Check provider notifications
+        if: always()
+        env:
+          MONITOR_API_KEY: ${{ secrets.MONITOR_API_KEY }}
+        run: npm run notifications:providers
 
   persist_state:
     name: Persist sanitized lifecycle state
