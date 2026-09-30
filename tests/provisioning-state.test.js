@@ -49,6 +49,7 @@ test("an exact replay returns the durable result without another provider call",
     idempotencyKey: "signup_provisioning_v1_abc",
     contextHash: "context-a",
     reconcile: async () => null,
+    verifyCompleted: async () => true,
     execute: async () => {
       executions += 1;
       return { twilioPhoneNumber: "+19055550123", twilioSid: "PN1" };
@@ -63,6 +64,41 @@ test("an exact replay returns the durable result without another provider call",
   assert.equal(executions, 1);
   assert.ok(rawQueries.length >= 2);
   assert.ok(rawQueries.every((query) => /pg_advisory_xact_lock[\s\S]*::text AS lock_result/i.test(query)));
+});
+
+test("missing cached resources are invalidated without executing a paid step", async () => {
+  const { prisma, rows } = createFakePrisma();
+  let executions = 0;
+  const input = { prisma, kind: "vapi-assistant", idempotencyKey: "stale", contextHash: "a",
+    execute: async () => { executions++; return { assistantId: "deleted" }; },
+    verifyCompleted: async () => false };
+  await runProvisioningStep(input);
+  await assert.rejects(runProvisioningStep(input), { code: "PROVISIONING_RESULT_STALE" });
+  const saved = rows.get(provisioningStateKey(input.kind, input.idempotencyKey));
+  assert.equal(saved.status, "invalidated");
+  assert.equal(saved.result.assistantId, "deleted");
+  assert.ok(saved.completedAt);
+  await assert.rejects(runProvisioningStep(input), { code: "PROVISIONING_RESULT_STALE" });
+  assert.equal(executions, 1);
+});
+
+test("provider outage does not invalidate completion evidence or create replacements", async () => {
+  const { prisma, rows } = createFakePrisma();
+  let executions=0;
+  const input={prisma,kind:"vapi-import",idempotencyKey:"outage",contextHash:"a",
+    execute:async()=>{executions++;return {id:"phone"};},
+    verifyCompleted:async()=>{throw Object.assign(new Error("unavailable"),{code:"VAPI_503"});}};
+  await runProvisioningStep(input);
+  await assert.rejects(runProvisioningStep(input),{code:"VAPI_503"});
+  assert.equal(rows.get(provisioningStateKey(input.kind,input.idempotencyKey)).status,"completed");
+  assert.equal(executions,1);
+});
+
+test("completed results cannot be reused without verification", async () => {
+ const {prisma}=createFakePrisma();
+ const input={prisma,kind:"twilio-number",idempotencyKey:"unverified",contextHash:"a",execute:async()=>({sid:"PN1"})};
+ await runProvisioningStep(input);
+ await assert.rejects(runProvisioningStep(input),{code:"PROVISIONING_RESULT_UNVERIFIED"});
 });
 
 test("provider reconciliation closes the post-create crash window", async () => {

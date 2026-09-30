@@ -71,6 +71,10 @@ async function claimProvisioningStep({
     const data = normalizeStoredData(row);
     validateContext(data, contextHash);
 
+    if (data.status === "invalidated") {
+      throw provisioningError("Saved provisioning resources require guarded recovery.", "PROVISIONING_RESULT_STALE");
+    }
+
     if (data.status === "completed" && data.result && typeof data.result === "object") {
       return { claimed: false, completed: true, key, result: data.result, data };
     }
@@ -168,11 +172,18 @@ async function runProvisioningStep({
   contextHash,
   reconcile,
   execute,
+  verifyCompleted,
 }) {
+  const reuse = (key, result) => ["twilio-number", "vapi-assistant", "vapi-import"].includes(kind) || verifyCompleted
+    ? verifyCompletedProvisioningResult({ prisma, key, result, verifyCompleted })
+    : { ...result, reused: true };
   const existing = await readProvisioningStep({ prisma, kind, idempotencyKey });
   validateContext(existing.data, contextHash);
   if (existing.data.status === "completed" && existing.data.result && typeof existing.data.result === "object") {
-    return { ...existing.data.result, reused: true };
+    return reuse(existing.key, existing.data.result);
+  }
+  if (existing.data.status === "invalidated") {
+    throw provisioningError("Saved provisioning resources are stale and require guarded recovery.", "PROVISIONING_RESULT_STALE");
   }
 
   // Provider reconciliation happens before a new claim. It closes the crash window
@@ -180,7 +191,7 @@ async function runProvisioningStep({
   const reconciled = typeof reconcile === "function" ? await reconcile() : null;
   if (reconciled && typeof reconciled === "object") {
     const claim = await claimProvisioningStep({ prisma, kind, idempotencyKey, contextHash });
-    if (claim.completed) return { ...claim.result, reused: true };
+    if (claim.completed) return reuse(claim.key, claim.result);
     if (claim.inProgress) {
       throw provisioningError("This provisioning step is already running.", "PROVISIONING_ALREADY_IN_PROGRESS", 409);
     }
@@ -190,7 +201,7 @@ async function runProvisioningStep({
   }
 
   const claim = await claimProvisioningStep({ prisma, kind, idempotencyKey, contextHash });
-  if (claim.completed) return { ...claim.result, reused: true };
+  if (claim.completed) return reuse(claim.key, claim.result);
   if (claim.inProgress) {
     throw provisioningError("This provisioning step is already running.", "PROVISIONING_ALREADY_IN_PROGRESS", 409);
   }
@@ -208,6 +219,30 @@ async function runProvisioningStep({
   }
 }
 
+async function verifyCompletedProvisioningResult({ prisma, key, result, verifyCompleted }) {
+  if (typeof verifyCompleted !== "function") {
+    throw provisioningError("Saved provider resources must be verified before reuse.", "PROVISIONING_RESULT_UNVERIFIED", 503);
+  }
+  // A failed provider request is inconclusive: propagate it without erasing
+  // completion evidence. Only a successful, definitive negative invalidates.
+  const healthy = await verifyCompleted(result);
+  if (healthy === true) return { ...result, reused: true };
+  if (healthy !== false) throw provisioningError("Provider verification was inconclusive.", "PROVISIONING_RESULT_UNVERIFIED", 503);
+  await prisma.$transaction(async (tx) => {
+    if (typeof tx.$queryRaw === "function") await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))::text AS lock_result`;
+    const row = await tx.runtimeStore.findUnique({ where: { key } });
+    const data = normalizeStoredData(row);
+    if (data.status !== "completed" || JSON.stringify(data.result) !== JSON.stringify(result)) {
+      throw provisioningError("Provisioning state changed during verification.", "PROVISIONING_CLAIM_LOST");
+    }
+    const next = { ...data, status: "invalidated", invalidatedAt: new Date().toISOString(), lastErrorCode: "PROVISIONING_RESULT_STALE" };
+    // Keep the original IDs and completion timestamp for reconciliation. Never
+    // automatically recreate resources or restart a paid step from this state.
+    await tx.runtimeStore.upsert({ where: { key }, update: { data: next }, create: { key, data: next } });
+  });
+  throw provisioningError("Saved provider resources are missing or no longer match this signup. Guarded recovery is required; no replacement was created.", "PROVISIONING_RESULT_STALE");
+}
+
 module.exports = {
   DEFAULT_LEASE_MS,
   PROVISIONING_STATE_PREFIX,
@@ -218,4 +253,5 @@ module.exports = {
   readProvisioningStep,
   runProvisioningStep,
   validateContext,
+  verifyCompletedProvisioningResult,
 };

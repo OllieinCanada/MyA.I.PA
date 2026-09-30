@@ -162,7 +162,7 @@ const {
   buildSignupProvisioningCanaryPayload,
   isTrustedSignupProvisioningCanary,
 } = require("./signupProvisioningCanary");
-const { provisioningStateKey, readProvisioningStep, runProvisioningStep } = require("./provisioningState");
+const { provisioningStateKey, readProvisioningStep, runProvisioningStep, verifyCompletedProvisioningResult } = require("./provisioningState");
 const { reconcileSignupSupersessionResources } = require("./signupSupersessionReconciliation");
 const {
   applyTwilioDecommissionPolicy,
@@ -10844,7 +10844,54 @@ async function requireCompletedProvisioningStage(authorization, kind, fields) {
       throw error;
     }
   }
-  return state.data.result;
+  return verifyCompletedProvisioningResult({
+    prisma, key: state.key, result: state.data.result,
+    verifyCompleted: (result) => verifySavedProvisioningResources(kind, result),
+  });
+}
+
+async function verifySavedProvisioningResources(kind, result) {
+  const readSavedVapiResource = async (resource, id) => {
+    if (!id) return null;
+    try {
+      const live = await requestVapiResource(`${resource}/${encodeURIComponent(id)}`);
+      if (live?.id !== id) {
+        const error = new Error("Provider resource verification returned an unexpected response.");
+        error.code = "PROVISIONING_RESULT_UNVERIFIED";
+        error.statusCode = 502;
+        throw error;
+      }
+      return live;
+    } catch (error) {
+      if (error?.providerStatus === 404) return null;
+      throw error;
+    }
+  };
+  if (kind === "twilio-number") {
+    const numbers = await fetchTwilioIncomingPhoneNumbers();
+    const sid = String(result.twilioSid || result.sid || "");
+    const number = normalizePhoneForMatch(result.twilioPhoneNumber || result.phoneNumber);
+    return Boolean(sid && number && numbers.some((item) => item.sid === sid
+      && normalizePhoneForMatch(item.phone_number) === number));
+  }
+  if (kind === "vapi-assistant") {
+    return Boolean(await readSavedVapiResource("assistant", result.assistantId));
+  }
+  if (kind === "vapi-import") {
+    const [phone, assistant] = await Promise.all([
+      readSavedVapiResource("phone-number", result.id || result.phoneNumberId),
+      readSavedVapiResource("assistant", result.assistantId),
+    ]);
+    if (!phone || !assistant
+      || normalizePhoneForMatch(getVapiPhoneNumber(phone)) !== normalizePhoneForMatch(result.number || result.twilioPhoneNumber)) return false;
+    if (getVapiAssistantId(phone) === result.assistantId) return true;
+    const gate = await readTrialGateConfiguration({ phoneNumberId: phone.id, phoneNumber: phone });
+    return Boolean(!getVapiAssistantId(phone) && gate?.status === "active" && gate?.assistantId === result.assistantId
+      && gate?.phoneNumberId === phone.id
+      && normalizePhoneForMatch(gate?.phoneNumber) === normalizePhoneForMatch(getVapiPhoneNumber(phone))
+      && getVapiNestedString(phone, ["server.url", "serverUrl"]) === TRIAL_USAGE_GATE_WEBHOOK_URL);
+  }
+  return false;
 }
 
 function sanitizeAdminCall(call) {
@@ -14047,6 +14094,7 @@ app.post(
       kind: "twilio-number",
       idempotencyKey: authorization.idempotencyKey,
       contextHash: authorization.contextHash,
+      verifyCompleted: (result) => verifySavedProvisioningResources("twilio-number", result),
       reconcile: null,
       execute: () => purchaseTwilioPhoneNumber({
         areaCode: preferredAreaCode,
@@ -14085,6 +14133,7 @@ app.post(
       kind: "vapi-assistant",
       idempotencyKey: authorization.idempotencyKey,
       contextHash: authorization.contextHash,
+      verifyCompleted: (result) => verifySavedProvisioningResources("vapi-assistant", result),
       reconcile: async () => {
         return createSignupVapiAssistant({
           normalizedPayload: trustedPayload,
@@ -14120,6 +14169,7 @@ app.post(
       kind: "vapi-import",
       idempotencyKey: authorization.idempotencyKey,
       contextHash: authorization.contextHash,
+      verifyCompleted: (result) => verifySavedProvisioningResources("vapi-import", result),
       reconcile: () => reconcileVapiPhoneNumberImport({
         twilioPhoneNumber,
         assistantId,
