@@ -415,13 +415,23 @@ async function runAgentTextTest({ signup = {}, sendSms, persist = () => {}, forc
   persist(common);
 
   try {
-    const providerUpdates = await reconcileAgentTestDeliveryFromProvider({
-      signup: progress,
-      fetchMessageStatus,
-    });
+    let providerUpdates;
+    try {
+      providerUpdates = await reconcileAgentTestDeliveryFromProvider({ signup: progress, fetchMessageStatus });
+    } catch (error) {
+      // An unavailable status lookup is not evidence that delivery failed.
+      const stage = progress.agentTestCustomerAcceptedAt ? "customer_delivery" : "owner_delivery";
+      persist({ ...common, ...progress, agentTestStatus: `awaiting_${stage}`, agentTestStatusLookupError: clean(error?.code || "TWILIO_STATUS_LOOKUP_UNAVAILABLE", 120) });
+      return { passed: false, pending: true, stage, fingerprint, lookupUnavailable: true };
+    }
     if (Object.keys(providerUpdates).length) {
       Object.assign(progress, providerUpdates);
       persist({ ...common, ...progress });
+    }
+    if ([progress.agentTestOwnerProviderStatus, progress.agentTestCustomerProviderStatus].some((status) => ["failed", "undelivered", "canceled"].includes(clean(status, 40).toLowerCase()))) {
+      const error = new Error("Twilio confirmed that a setup test text was not delivered.");
+      error.code = "AGENT_TEST_DELIVERY_FAILED";
+      throw error;
     }
 
     if (force || !progress.agentTestOwnerAcceptedAt) {

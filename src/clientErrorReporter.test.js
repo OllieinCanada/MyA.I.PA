@@ -1,12 +1,21 @@
 import {
   buildClientErrorReport,
   getSafeClientRoute,
+  getSafeFailedAsset,
   redactClientErrorMessage,
   reportClientError,
   resetClientErrorReporterForTests,
 } from "./clientErrorReporter";
 
 beforeEach(() => resetClientErrorReporterForTests());
+
+test("failed asset diagnostics identify public build files without exposing tokens", () => {
+  const locationValue = { href: "https://www.myaipa.ca/" };
+  expect(getSafeFailedAsset({ href: "/static/css/main.123.css?token=secret" }, locationValue))
+    .toBe("/static/css/main.123.css");
+  expect(getSafeFailedAsset({ src: "https://other.example/static/js/main.js" }, locationValue)).toBe("");
+  expect(getSafeFailedAsset({ href: "/forwarding-setup?token=secret" }, locationValue)).toBe("");
+});
 
 test("client crash report removes private details, stack-free URLs, and hash queries", () => {
   const report = buildClientErrorReport({

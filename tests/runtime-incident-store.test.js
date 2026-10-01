@@ -247,7 +247,7 @@ test("Codex-first incident memo state survives a process restart", (t) => {
   });
   assert.equal(preserved.updated, true);
 
-  const reloaded = listRuntimeIncidents(filePath)[0];
+  const reloaded = listRuntimeIncidents(filePath, { now: new Date(memoTime) })[0];
   assert.equal(reloaded.remediation.codexFirst, true);
   assert.equal(reloaded.remediation.codexMemoPreservedAt, memoTime);
   assert.equal(reloaded.remediation.initialReportPreservedAt, undefined);

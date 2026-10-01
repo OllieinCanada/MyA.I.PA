@@ -1,6 +1,19 @@
 const assert = require("node:assert/strict");
 const { test } = require("node:test");
-const { getTwilioFailureSignal, normalizeE164, sendSmsViaTwilio } = require("../server/twilioSms");
+const { fetchSmsStatusViaTwilio, getTwilioFailureSignal, normalizeE164, sendSmsViaTwilio } = require("../server/twilioSms");
+
+test("status polling uses a read-only account-scoped request and checks message identity", async () => {
+  const sid = "SM" + "a".repeat(32);
+  const env = { TWILIO_ACCOUNT_SID: "AC_test", TWILIO_AUTH_TOKEN: "test" };
+  const fetchImpl = async (url, options) => {
+    assert.equal(options.method, "GET");
+    assert.ok(url.endsWith(`/Accounts/AC_test/Messages/${sid}.json`));
+    return { ok: true, json: async () => ({ sid, account_sid: "AC_test", status: "delivered" }) };
+  };
+  assert.deepEqual(await fetchSmsStatusViaTwilio({ sid, env, fetchImpl }), { status: "delivered", errorCode: null });
+  await assert.rejects(fetchSmsStatusViaTwilio({ sid: "../../wrong", env, fetchImpl }), /Invalid/);
+  await assert.rejects(fetchSmsStatusViaTwilio({ sid, env, fetchImpl: async () => ({ ok: true, json: async () => ({ sid, account_sid: "other" }) }) }), /identity/);
+});
 
 test("phone numbers are normalized to E.164", () => {
   assert.equal(normalizeE164("(249) 503-3301", "to"), "+12495033301");

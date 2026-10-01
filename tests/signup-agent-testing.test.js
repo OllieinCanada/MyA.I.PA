@@ -374,6 +374,29 @@ test("text test can reconcile missed Twilio delivery callbacks by polling the me
   assert.equal(sent.length, 2);
 });
 
+test("unavailable polling stays pending without resending or declaring a delivery failure", async () => {
+  const stored = { ...signup };
+  let sends = 0;
+  const sendSms = async () => { sends++; return { status: "queued", sid: "SM_pending" }; };
+  const persist = (fields) => Object.assign(stored, fields);
+  await runAgentTextTest({ signup: stored, sendSms, persist });
+  const result = await runAgentTextTest({ signup: stored, sendSms, persist, fetchMessageStatus: async () => { throw new Error("timeout"); } });
+  assert.equal(result.pending, true);
+  assert.equal(stored.agentTestStatus, "awaiting_owner_delivery");
+  assert.equal(sends, 1);
+});
+
+test("a polled definitive delivery failure cannot advance the customer copy", async () => {
+  const stored = { ...signup };
+  let sends = 0;
+  const sendSms = async () => { sends++; return { status: "queued", sid: "SM_pending" }; };
+  const persist = (fields) => Object.assign(stored, fields);
+  await runAgentTextTest({ signup: stored, sendSms, persist });
+  await assert.rejects(runAgentTextTest({ signup: stored, sendSms, persist, fetchMessageStatus: async () => ({ status: "undelivered", errorCode: 30003 }) }), /not delivered/);
+  assert.equal(stored.agentTestStatus, "failed");
+  assert.equal(sends, 1);
+});
+
 test("readiness fails closed until mapping, routing, and both texts pass", () => {
   const business = {
     id: 7,

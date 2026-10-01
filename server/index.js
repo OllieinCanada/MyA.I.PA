@@ -38,7 +38,9 @@ const {
   saveOutreachPackage,
   sendStoredOutreachPackage,
 } = require("./outreach");
-const { normalizeE164, sendSmsViaTwilio } = require("./twilioSms");
+const { normalizeE164, sendSmsViaTwilio, fetchSmsStatusViaTwilio } = require("./twilioSms");
+const { selectTrialSignup } = require("./trialSignupSelection");
+const { fetchProviderReadText } = require("./providerRead");
 const { deliverSignupVerificationText } = require("./signupSmsVerification");
 const {
   deliverSignupCompletion,
@@ -59,6 +61,7 @@ const {
 const {
   canRemoveSignupAlias,
   findSignupDashboardExistingKey,
+  findSignupReminderKey,
   getSignupAliases,
   getSignupDashboardKey,
   normalizeSignupSubmissionId,
@@ -2659,13 +2662,12 @@ async function fetchVapiCalls({ limit = VAPI_CALL_LIMIT, createdAtGt } = {}) {
   url.searchParams.set("limit", String(Math.max(1, Math.min(1000, Number(limit) || VAPI_CALL_LIMIT))));
   if (createdAtGt) url.searchParams.set("createdAtGt", String(createdAtGt));
 
-  const response = await fetch(url, {
+  const { response, text: rawText } = await fetchProviderReadText(url, {
     headers: {
       Authorization: `Bearer ${VAPI_API_KEY}`,
       Accept: "application/json",
     },
   });
-  const rawText = await response.text();
   const data = parseJsonObject(rawText);
 
   if (!response.ok) {
@@ -5805,8 +5807,10 @@ function mergeSignupDashboardWithTrialReminders(dashboardStore = {}, reminderSto
   // status. Merge reminder metadata in memory and preserve the signup status.
   for (const reminder of Object.values(reminderStore)) {
     if (!reminder?.subscriptionId) continue;
-    const aliases = getSignupAliases(reminder);
-    const existingKey = aliases.find((alias) => combinedStore[alias]) || `sub:${String(reminder.subscriptionId).trim()}`;
+    const existingKey = findSignupReminderKey(combinedStore, reminder);
+    // Orphan/ambiguous billing reminders must not manufacture an incomplete
+    // customer signup or overwrite another subscription belonging to its owner.
+    if (!existingKey) continue;
     const existing = combinedStore[existingKey] || {};
     const legacyReminderStatus = String(existing.status || "") === "trial_reminder_scheduled";
     const restoredStatus = legacyReminderStatus
@@ -8164,6 +8168,7 @@ async function testSignupAgentBeforeDelivery({ signup, vapiPhone, smsRouting = n
     signup: storedSignup,
     force,
     sendSms: ({ to, from, message }) => sendSmsViaTwilio({ to, from, message }),
+    fetchMessageStatus: (sid) => fetchSmsStatusViaTwilio({ sid }),
     persist,
   });
   const finalRecords = listSignupDashboardRecords();
@@ -8214,6 +8219,21 @@ async function testSignupAgentBeforeDelivery({ signup, vapiPhone, smsRouting = n
 
 const agentTextTestContinuationLocks = new Map();
 
+async function pollPendingSignupAgentTests() {
+  const pending = listSignupDashboardRecords().filter((record) => (
+    record.signupAttemptId && record.ownerEmail
+    && ["awaiting_owner_delivery", "awaiting_customer_delivery"].includes(record.agentTestStatus)
+    && record.status === "agent_testing"
+  ));
+  // Rotate the bounded batch by last check so one unavailable message cannot
+  // starve later signups. Never select a different attempt by email.
+  pending.sort((a, b) => String(a.agentTestPolledAt || "").localeCompare(String(b.agentTestPolledAt || "")));
+  for (const signup of pending.slice(0, 10)) {
+    upsertSignupDashboardRecord({ ...signup, agentTestPolledAt: new Date().toISOString() });
+    await continueSignupAgentTextTestAfterDelivery(signup.ownerEmail, signup.signupAttemptId);
+  }
+}
+
 async function continueSignupAgentTextTestAfterDelivery(ownerEmail, signupAttemptId = "") {
   const key = String(ownerEmail || "").trim().toLowerCase();
   if (!key) return null;
@@ -8224,9 +8244,9 @@ async function continueSignupAgentTextTestAfterDelivery(ownerEmail, signupAttemp
   const continuation = (async () => {
     let storedSignup = listSignupDashboardRecords().find((record) => (
       expectedAttemptId && String(record.signupAttemptId || "").trim() === expectedAttemptId
-    )) || listSignupDashboardRecords().find((record) => (
+    )) || (!expectedAttemptId ? listSignupDashboardRecords().find((record) => (
       String(record.ownerEmail || "").trim().toLowerCase() === key
-    ));
+    )) : null);
     if (!storedSignup) return null;
     const persist = (fields) => {
       storedSignup = upsertSignupDashboardRecord({ ...storedSignup, ...fields });
@@ -8235,6 +8255,7 @@ async function continueSignupAgentTextTestAfterDelivery(ownerEmail, signupAttemp
     const result = await runAgentTextTest({
       signup: storedSignup,
       sendSms: ({ to, from, message }) => sendSmsViaTwilio({ to, from, message }),
+      fetchMessageStatus: (sid) => fetchSmsStatusViaTwilio({ sid }),
       persist,
     });
     const latestRecords = listSignupDashboardRecords();
@@ -8258,6 +8279,14 @@ async function continueSignupAgentTextTestAfterDelivery(ownerEmail, signupAttemp
         setupReadyAt: latestSignup.setupReadyAt || readyAt,
         setupReadyBlockedReason: "",
       });
+      if (expectedAttemptId && isContactVerified(latestSignup) && latestSignup.reviewRequired !== true
+        && !["sent", "delivered"].includes(String(latestSignup.setupFollowupStatus || ""))) {
+        // Reuse the existing guarded/idempotent finalizer; do not invent a
+        // second provisioning path when the callback or polling completes.
+        await finalizeSignupAfterAgentTestByOperationalTarget(
+          hashOperationalTarget(signupOperationalIdentity(latestSignup)), expectedAttemptId
+        );
+      }
     }
     return { ...result, readiness };
   })().finally(() => {
@@ -8789,12 +8818,9 @@ async function handleTrialAssistantRequest(message) {
     return { error: "This phone assistant is temporarily unavailable. Please try again later." };
   }
   const signups = listSignupDashboardRecords();
-  const signup = signups.find((record) => (
-    (config.subscriptionId && record.subscriptionId === config.subscriptionId)
-    || (config.ownerEmail && String(record.ownerEmail || "").toLowerCase() === String(config.ownerEmail).toLowerCase())
-    || normalizePhoneForMatch(record.twilioPhoneNumber) === normalizePhoneForMatch(config.phoneNumber)
-  ));
+  const signup = selectTrialSignup(signups, config);
   if (!signup) {
+    console.warn("[trial-usage] route selection blocked", { code: "TRIAL_SIGNUP_ROUTE_IDENTITY_UNPROVEN", businessId: config.businessId });
     return { error: "This phone assistant is temporarily unavailable. Please try again later." };
   }
 
@@ -8803,6 +8829,7 @@ async function handleTrialAssistantRequest(message) {
   const callId = String(call.id || call.callId || "").trim();
   if (!callId) return { error: "This phone assistant is temporarily unavailable. Please try again later." };
   const decision = await reserveTrialCall({ signup, config, callId });
+  console.info("[trial-usage] call route decision", { callId, businessId: config.businessId, action: decision.action, reason: decision.reason || "", lifecycle: lifecycle.state });
   if (decision.action === "block") {
     setImmediate(() => {
       evaluateTrialUsageForSignup(signup, config.businessId).catch((error) => {
@@ -18078,6 +18105,10 @@ async function drainTelegramOutbox(phase = "scheduled") {
 }
 
 function startBackgroundJobs() {
+  runBackgroundJob("signup text delivery polling", pollPendingSignupAgentTests, "initial");
+  setInterval(() => {
+    runBackgroundJob("signup text delivery polling", pollPendingSignupAgentTests);
+  }, 60 * 1000);
   void drainTelegramOutbox("initial");
   runBackgroundJob("appointment reminders", processAppointmentReminders, "initial");
   runBackgroundJob("sensitive call-data cleanup", cleanupSensitiveCallData, "initial");

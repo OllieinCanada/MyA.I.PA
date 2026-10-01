@@ -4,6 +4,11 @@ const test = require("node:test");
 const { classifyOperationalError } = require("../server/operationalErrorClassifier");
 const { buildRuntimeIncident } = require("../server/runtimeAlerts");
 
+test("a reset hidden in fetch's cause is classified as a network failure", () => {
+  const error = new TypeError("terminated", { cause: Object.assign(new Error("read ECONNRESET"), { code: "ECONNRESET" }) });
+  assert.equal(classifyOperationalError(error, { provider: "Vapi" }).reasonCode, "PROVIDER_CONNECTION_FAILED");
+});
+
 test("explicit Twilio balance errors become platform-funding instructions", () => {
   const classified = classifyOperationalError(
     Object.assign(new Error("Twilio account balance is insufficient; add funds"), { statusCode: 402 }),

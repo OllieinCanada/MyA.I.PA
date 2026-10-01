@@ -79,9 +79,21 @@ function canRemoveSignupAlias(candidate = {}, merged = {}) {
   return true;
 }
 
+// Billing reminders are metadata for a subscription, not new signups. Never
+// join by email: one owner can have multiple businesses or signup attempts.
+function findSignupReminderKey(store = {}, reminder = {}) {
+  const subscriptionId = String(reminder.subscriptionId || "").trim();
+  if (!subscriptionId) return null;
+  const matches = Object.entries(store).filter(([, candidate]) =>
+    String(candidate?.subscriptionId || "").trim() === subscriptionId
+  );
+  return matches.length === 1 ? matches[0][0] : null;
+}
+
 module.exports = {
   canRemoveSignupAlias,
   findSignupDashboardExistingKey,
+  findSignupReminderKey,
   getSignupAliases,
   getSignupAttemptKey,
   getSignupDashboardKey,

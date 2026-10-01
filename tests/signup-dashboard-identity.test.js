@@ -4,10 +4,24 @@ const test = require("node:test");
 const {
   canRemoveSignupAlias,
   findSignupDashboardExistingKey,
+  findSignupReminderKey,
   getSignupAliases,
   normalizeSignupSubmissionId,
   selectSignupDashboardRecordForProvisioning,
 } = require("../server/signupDashboardIdentity");
+
+test("reminders join the subscription stored in an attempt-keyed record", () => {
+  assert.equal(findSignupReminderKey({ "attempt:a": { subscriptionId: "sub_a" } },
+    { subscriptionId: "sub_a" }), "attempt:a");
+});
+
+test("reminders cannot borrow another subscription through the owner's email", () => {
+  assert.equal(findSignupReminderKey({ "email:owner@example.com": {
+    ownerEmail: "owner@example.com", subscriptionId: "sub_other"
+  } }, { ownerEmail: "owner@example.com", subscriptionId: "sub_a" }), null);
+  assert.equal(findSignupReminderKey({ a: { subscriptionId: "sub_a" },
+    b: { subscriptionId: "sub_a" } }, { subscriptionId: "sub_a" }), null);
+});
 
 test("accepts only random UUID submission identities", () => {
   assert.equal(
