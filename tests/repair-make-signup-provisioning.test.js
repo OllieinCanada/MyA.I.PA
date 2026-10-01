@@ -73,6 +73,21 @@ test("rewrites the three paid provisioning stages and fail-closed response mappi
   ]);
   assert.equal(repaired.metadata.scenario.sequential, false);
   assert.equal(repaired.metadata.scenario.confidential, true);
+  const handlerIds = new Set();
+  for (const id of [9, 25, 28]) {
+    const module = repaired.flow.find((item) => item.id === id);
+    assert.equal(module.parameters.handleErrors, true);
+    assert.equal(module.onerror.length, 1);
+    const handler = module.onerror[0];
+    assert.equal(handler.module, "gateway:WebhookRespond");
+    const failure = JSON.parse(handler.mapper.body);
+    assert.equal(failure.ok, false);
+    assert.equal(failure.success, false);
+    assert.equal(failure.code, "MAKE_PROVISIONING_STAGE_FAILED");
+    assert.ok(["number_purchase", "assistant_creation", "number_binding"].includes(failure.stage));
+    assert.ok(!handlerIds.has(handler.id));
+    handlerIds.add(handler.id);
+  }
 });
 
 test("refuses to rewrite an unexpected paid module", () => {

@@ -254,10 +254,33 @@ test("duplicate conflicts and compliance blocks never recommend an automatic ret
   );
   assert.equal(duplicate.category, "duplicate_conflict");
   assert.equal(duplicate.retryable, false);
+  assert.match(duplicate.reason, /safety gate worked/i);
+  assert.match(duplicate.reason, /not proof that the SMS text test itself is broken/i);
   assert.match(duplicate.nextAction, /canonical signup/i);
   assert.equal(compliance.category, "permission_or_compliance");
   assert.equal(compliance.retryable, false);
   assert.match(compliance.nextAction, /consent|compliance|permission|opt-out|opts back/i);
+});
+
+test("signup duplicate conflicts do not keep a misleading text-test-failed headline", () => {
+  const incident = buildRuntimeIncident(
+    Object.assign(new Error("provisioning already in progress for this signup"), {
+      code: "PROVISIONING_ALREADY_IN_PROGRESS",
+      statusCode: 409,
+    }),
+    {
+      area: "new agent delivery test",
+      operation: "verify business mapping and send owner/customer sample texts",
+      whatFailed: "A newly built signup agent did not pass its mandatory text test",
+      impact: "The number and assistant may exist, but the agent was not marked ready for customer calls.",
+    }
+  );
+  assert.equal(incident.reasonCode, "DUPLICATE_OR_STATE_CONFLICT");
+  assert.equal(incident.snapshot["Failure category"], "duplicate_conflict");
+  assert.match(incident.whatFailed, /duplicate or conflicting signup/i);
+  assert.doesNotMatch(incident.whatFailed, /mandatory text test/i);
+  assert.match(incident.reason, /safety gate worked/i);
+  assert.match(incident.nextAction, /archive or supersede stale duplicates/i);
 });
 
 test("unknown failures remain explicitly unconfirmed", () => {

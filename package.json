@@ -122,6 +122,8 @@
     "test:pilot:signup:local": "node --test tests/signup-attempt-store.test.js tests/signup-status-api.test.js && cross-env CI=true react-scripts test --env=jsdom --watchAll=false --runInBand --runTestsByPath src/Signup.statusFlow.test.js src/Signup.intuitiveFlow.test.js",
     "test:shipping:local-preflight": "npm run test:shipping:signups:local && npm run test:stripe-trial:local && npm run test:audit:make-2026-readiness && npm run security:scan-secrets && npm run render:validate && npm run backend:check && npm run report:shipping-readiness",
     "test:shipping:signup:production-smoke": "node scripts/run-signup-review-gate.js --post --count=1 --api-base-url=https://api.myaipa.ca --confirm=RUN_REVIEW_SIGNUP_GATE",
+    "test:pilot:readiness": "node --test tests/signup-agent-testing.test.js tests/call-forwarding-provider.test.js tests/call-forwarding-security.test.js tests/call-forwarding-lifecycle.test.js tests/forwarding-instructions.test.js tests/forwarding-ui-contract.test.js tests/twilio-call-verification.test.js tests/make-signup-webhook.test.js tests/make-2026-readiness.test.js tests/vapi-2026-readiness.test.js tests/vapi-call-playbook-audit.test.js tests/operational-error-classifier.test.js",
+    "test:pilot:live-smoke": "npm run test:shipping:signup:production-smoke && npm run test:shipping:calls",
     "test:shipping:calls": "node scripts/setup-vapi-evals.js --sync --run-safe --repeat=5 --minimum-pass-rate=0.95 --out=diagnostics/shipping-readiness/vapi-call-gate.json",
     "report:shipping-readiness": "node scripts/report-shipping-readiness.js",
     "test:shipping:gate": "node scripts/report-shipping-readiness.js --strict",

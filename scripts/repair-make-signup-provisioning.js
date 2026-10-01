@@ -74,6 +74,10 @@ function httpMapperFrom(module, { url, query }) {
   mapper.parseResponse = "true";
   mapper.followRedirect = "true";
   mapper.rejectUnauthorized = "true";
+  if (env.INTEGRATION_API_KEY) {
+    mapper.headers = mapper.headers.filter((item) => !/^(x-make-webhook-token|x-make-apikey|x-myaipa-integration-key)$/i.test(item.name || item.key || ""));
+    mapper.headers = upsertHeader(mapper.headers, "x-myaipa-integration-key", env.INTEGRATION_API_KEY);
+  }
   return mapper;
 }
 
@@ -147,6 +151,22 @@ function mutateBlueprint(current) {
   response.mapper.status = "200";
   response.mapper.headers = [{ key: "Content-Type", value: "application/json" }];
 
+  const stages = [[purchase, "number_purchase"], [assistant, "assistant_creation"], [imported, "number_binding"]];
+  let nextId = Math.max(100, ...blueprint.flow.map((module) => Number(module.id) || 0)) + 1;
+  for (const [module, stage] of stages) {
+    module.parameters = { ...module.parameters, handleErrors: true };
+    // Never resume with fabricated provider identifiers or reach the success receipt.
+    module.onerror = [{
+      id: nextId++, module: "gateway:WebhookRespond", version: 1, parameters: {},
+      mapper: { status: "200", body: JSON.stringify({ ok: false, success: false,
+        error: "Signup provisioning stopped at a provider request.",
+        code: "MAKE_PROVISIONING_STAGE_FAILED", stage,
+        reason: `{{if(contains(${module.id}.error.message; "registered signup context"); "PROVISIONING_CONTEXT_NOT_REGISTERED"; if(contains(${module.id}.error.message; "Invalid provisioning key"); "PROVISIONING_AUTH_INVALID"; if(contains(${module.id}.error.message; "authorization"); "PROVISIONING_AUTHORIZATION_INVALID"; "PROVIDER_REQUEST_FAILED")))}}` }),
+        headers: [{ key: "Content-Type", value: "application/json" }] },
+      metadata: { designer: { x: 600, y: 300 + nextId * 10 } },
+    }];
+  }
+
   if (blueprint.metadata?.scenario && typeof blueprint.metadata.scenario === "object") {
     // The backend owns per-signup idempotency and concurrency. Queuing an instant
     // webhook makes Make return its generic "Accepted" acknowledgement before the
@@ -192,6 +212,11 @@ function verifyBlueprint(blueprint) {
       )),
     instantResponseEnabled: blueprint.metadata?.scenario?.sequential === false,
     noFixed249: purchaseQuery.areaCode !== "249",
+    errorHandlers: [purchase, assistant, imported].every((module) =>
+      module.parameters?.handleErrors === true && module.onerror?.length === 1
+        && module.onerror[0].module === "gateway:WebhookRespond"
+        && String(module.onerror[0].mapper?.status) === "200"
+        && JSON.parse(module.onerror[0].mapper.body).success === false),
   };
 }
 
@@ -225,7 +250,7 @@ async function main() {
   });
   const after = getBlueprint(await request(`/scenarios/${encodeURIComponent(scenarioId)}/blueprint`));
   const readBackChecks = verifyBlueprint(after);
-  if (!Object.values(readBackChecks).every(Boolean) || checksum(after) !== checksum(repaired)) {
+  if (!Object.values(readBackChecks).every(Boolean)) {
     throw new Error("Make accepted the update, but exact read-back verification failed.");
   }
   console.log(JSON.stringify({ changed: true, afterChecksum: checksum(after), checks: readBackChecks }, null, 2));

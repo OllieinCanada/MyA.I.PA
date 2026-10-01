@@ -309,7 +309,41 @@ function getAgentTestDeliveryUpdate({ signup = {}, messageSid, status, errorCode
   return update;
 }
 
-async function runAgentTextTest({ signup = {}, sendSms, persist = () => {}, force = false } = {}) {
+async function reconcileAgentTestDeliveryFromProvider({ signup = {}, fetchMessageStatus, now = new Date().toISOString() } = {}) {
+  if (typeof fetchMessageStatus !== "function") return {};
+  const updates = {};
+  const delivered = (status) => ["delivered", "read"].includes(clean(status, 40).toLowerCase());
+  const failed = (status) => ["canceled", "failed", "undelivered"].includes(clean(status, 40).toLowerCase());
+  const legs = [
+    {
+      sid: signup.agentTestOwnerMessageSid,
+      deliveredAt: signup.agentTestOwnerDeliveredAt,
+      providerStatus: signup.agentTestOwnerProviderStatus,
+    },
+    {
+      sid: signup.agentTestCustomerMessageSid,
+      deliveredAt: signup.agentTestCustomerDeliveredAt,
+      providerStatus: signup.agentTestCustomerProviderStatus,
+    },
+  ];
+  for (const leg of legs) {
+    const sid = clean(leg.sid, 80);
+    if (!sid || leg.deliveredAt || delivered(leg.providerStatus) || failed(leg.providerStatus)) continue;
+    const providerResult = await fetchMessageStatus(sid);
+    const status = clean(providerResult?.status || providerResult?.messageStatus || providerResult?.MessageStatus, 40);
+    if (!status) continue;
+    Object.assign(updates, getAgentTestDeliveryUpdate({
+      signup: { ...signup, ...updates },
+      messageSid: sid,
+      status,
+      errorCode: providerResult?.errorCode || providerResult?.error_code || providerResult?.ErrorCode,
+      now,
+    }));
+  }
+  return updates;
+}
+
+async function runAgentTextTest({ signup = {}, sendSms, persist = () => {}, force = false, fetchMessageStatus } = {}) {
   if (typeof sendSms !== "function") throw new TypeError("A text sender is required.");
   const aiNumber = normalizePhone(signup.twilioPhoneNumber);
   const ownerPhone = normalizePhone(signup.ownerPhone || signup.businessPhone);
@@ -381,6 +415,15 @@ async function runAgentTextTest({ signup = {}, sendSms, persist = () => {}, forc
   persist(common);
 
   try {
+    const providerUpdates = await reconcileAgentTestDeliveryFromProvider({
+      signup: progress,
+      fetchMessageStatus,
+    });
+    if (Object.keys(providerUpdates).length) {
+      Object.assign(progress, providerUpdates);
+      persist({ ...common, ...progress });
+    }
+
     if (force || !progress.agentTestOwnerAcceptedAt) {
       const ownerResult = await sendSms({ to: ownerPhone, from: aiNumber, message: messages.owner });
       progress.agentTestOwnerAcceptedAt = new Date().toISOString();
