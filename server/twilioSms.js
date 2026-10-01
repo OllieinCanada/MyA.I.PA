@@ -146,7 +146,32 @@ async function sendSmsViaTwilio({
   };
 }
 
+async function fetchSmsStatusViaTwilio({ sid, env = process.env, fetchImpl = global.fetch } = {}) {
+  if (!/^SM[0-9a-f]{32}$/i.test(String(sid || ""))) throw createHttpError("Invalid SMS message reference.", 400);
+  const config = getTwilioSmsConfig(env);
+  const credentials = getTwilioRestCredentials(config);
+  if (!config.accountSid || !credentials.username || !credentials.password) {
+    throw createHttpError("Twilio status lookup is not configured.", 503);
+  }
+  const response = await fetchImpl(
+    `${config.apiBaseUrl}/2010-04-01/Accounts/${encodeURIComponent(config.accountSid)}/Messages/${encodeURIComponent(sid)}.json`,
+    { method: "GET", headers: { authorization: `Basic ${Buffer.from(`${credentials.username}:${credentials.password}`).toString("base64")}` }, signal: AbortSignal.timeout(10000) }
+  );
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = createHttpError("Twilio message status could not be checked.", 502, "TWILIO_STATUS_LOOKUP_FAILED");
+    error.providerStatus = response.status;
+    error.providerCode = payload.code || null;
+    throw error;
+  }
+  if (payload.sid !== sid || payload.account_sid !== config.accountSid) {
+    throw createHttpError("Twilio message identity did not match.", 502, "TWILIO_STATUS_IDENTITY_MISMATCH");
+  }
+  return { status: payload.status || "", errorCode: payload.error_code || null };
+}
+
 module.exports = {
+  fetchSmsStatusViaTwilio,
   getTwilioSmsConfig,
   getTwilioFailureSignal,
   getTwilioRestCredentials,

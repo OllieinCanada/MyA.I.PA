@@ -136,6 +136,7 @@ function providerDetails(error = {}, context = {}) {
       || nested.code
       || nested?.error?.code
       || error.code
+      || error?.cause?.code
   );
   const status = numericStatus(
     context.upstreamStatus,

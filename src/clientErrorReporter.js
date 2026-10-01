@@ -4,6 +4,17 @@ const API_BASE = normalizeApiBase(getApiBaseUrl(process.env.REACT_APP_API_BASE_U
 const seenErrors = new Set();
 let installed = false;
 
+export function getSafeFailedAsset(target, locationValue = window.location) {
+  try {
+    const url = new URL(target?.src || target?.href || "", locationValue.href);
+    // Only report public build assets, never customer URLs, query strings,
+    // forwarding tokens, third-party URLs, or arbitrary resource paths.
+    if (url.origin !== new URL(locationValue.href).origin) return "";
+    return /^\/(?:static\/(?:js|css|media)\/[a-z0-9_.-]+|favicon\.ico|manifest\.json)$/i.test(url.pathname)
+      ? url.pathname : "";
+  } catch (_error) { return ""; }
+}
+
 export function getSafeClientRoute(locationValue = typeof window !== "undefined" ? window.location : {}) {
   const hashRoute = String(locationValue?.hash || "")
     .replace(/^#\/?/, "")
@@ -62,10 +73,11 @@ export function installClientErrorReporting() {
     const resourceTag = event?.target && event.target !== window
       ? String(event.target.tagName || "resource").toLowerCase()
       : "";
+    const asset = resourceTag ? getSafeFailedAsset(event.target) : "";
     void reportClientError({
       type: resourceTag ? "resource_error" : "uncaught_error",
       message: resourceTag
-        ? `${resourceTag} resource failed to load`
+        ? `${resourceTag} resource failed to load${asset ? `: ${asset}` : ""}`
         : event?.error?.message || event?.message || "Uncaught browser error",
       component: resourceTag,
     });

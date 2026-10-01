@@ -331,6 +331,22 @@ test("reading trial reminders preserves provisioning state and timestamps", () =
   assert.equal(dashboard["email:owner@example.com"].trialReminderStatus, undefined);
 });
 
+test("trial reminder reads do not create ghost signups or cross-wire subscriptions", () => {
+  const dashboard = {
+    "attempt:one": { signupAttemptId: "one", subscriptionId: "sub_one", ownerEmail: "owner@example.com", status: "setup_ready" },
+    "attempt:two": { signupAttemptId: "two", subscriptionId: "sub_two", ownerEmail: "owner@example.com", status: "archived" },
+  };
+  const merged = __test.mergeSignupDashboardWithTrialReminders(dashboard, {
+    one: { subscriptionId: "sub_one", ownerEmail: "owner@example.com", status: "scheduled" },
+    orphan: { subscriptionId: "sub_old", ownerEmail: "owner@example.com", status: "scheduled" },
+  });
+  assert.deepEqual(Object.keys(merged), Object.keys(dashboard));
+  assert.equal(merged["attempt:one"].status, "setup_ready");
+  assert.equal(merged["attempt:one"].trialReminderStatus, "scheduled");
+  assert.equal(merged["attempt:two"].subscriptionId, "sub_two");
+  assert.equal(merged["attempt:two"].status, "archived");
+});
+
 test("only old unverified signups absent from both providers can be archived", () => {
   const now = new Date("2026-08-20T12:00:00.000Z");
   const stale = {

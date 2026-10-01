@@ -49,7 +49,8 @@ test("short setup links are random, hashed at rest, account-bound, and expire", 
   assert.equal(rows[0].tokenHash.length, 64);
   assert.equal(rows[0].tokenHash.includes(issued.token), false);
   assert.equal((await getSetupFromToken({ prismaClient: prisma, token: issued.token, env })).id, setup.id);
-  await assert.rejects(() => getSetupFromToken({ prismaClient: prisma, token: `${issued.token.slice(0, -1)}x`, env }), /invalid or has expired/i);
+  const changedToken = `${issued.token[0] === "x" ? "y" : "x"}${issued.token.slice(1)}`;
+  await assert.rejects(() => getSetupFromToken({ prismaClient: prisma, token: changedToken, env }), /invalid or has expired/i);
   rows[0].expiresAt = new Date(Date.now() - 1000);
   await assert.rejects(() => getSetupFromToken({ prismaClient: prisma, token: issued.token, env }), /expired/i);
 });
