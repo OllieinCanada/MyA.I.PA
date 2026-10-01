@@ -333,6 +333,47 @@ test("a partial test does not send the customer copy until owner delivery is con
   assert.match(sent[0].message, /CUSTOMER COPY/);
 });
 
+test("text test can reconcile missed Twilio delivery callbacks by polling the message status", async () => {
+  const stored = { ...signup };
+  const sent = [];
+  const sendSms = async (input) => { sent.push(input); return { status: "queued", sid: `SM_POLL_${sent.length}` }; };
+  const persist = (fields) => Object.assign(stored, fields);
+
+  const ownerPending = await runAgentTextTest({ signup: stored, sendSms, persist });
+  assert.equal(ownerPending.passed, false);
+  assert.equal(ownerPending.stage, "owner_delivery");
+  assert.equal(sent.length, 1);
+
+  const customerPending = await runAgentTextTest({
+    signup: stored,
+    sendSms,
+    persist,
+    fetchMessageStatus: async (sid) => {
+      assert.equal(sid, "SM_POLL_1");
+      return { status: "delivered" };
+    },
+  });
+  assert.equal(customerPending.passed, false);
+  assert.equal(customerPending.stage, "customer_delivery");
+  assert.equal(stored.agentTestOwnerProviderStatus, "delivered");
+  assert.ok(stored.agentTestOwnerDeliveredAt);
+  assert.equal(sent.length, 2);
+
+  const completed = await runAgentTextTest({
+    signup: stored,
+    sendSms,
+    persist,
+    fetchMessageStatus: async (sid) => {
+      assert.equal(sid, "SM_POLL_2");
+      return { status: "delivered" };
+    },
+  });
+  assert.equal(completed.passed, true);
+  assert.equal(stored.agentTestCustomerProviderStatus, "delivered");
+  assert.ok(stored.agentTestCustomerDeliveredAt);
+  assert.equal(sent.length, 2);
+});
+
 test("readiness fails closed until mapping, routing, and both texts pass", () => {
   const business = {
     id: 7,

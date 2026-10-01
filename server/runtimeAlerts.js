@@ -46,6 +46,23 @@ function safeSnapshot(input) {
     ]));
 }
 
+function incidentWhatFailed(context = {}, classification = {}) {
+  const contextWhatFailed = String(context.whatFailed || "").trim();
+  const combined = [
+    contextWhatFailed,
+    context.area,
+    context.workflow,
+    context.operation,
+  ].filter(Boolean).join(" ");
+  if (
+    classification.category === "duplicate_conflict"
+    && /\b(?:signup|agent|provision|delivery|text test|testing station)\b/i.test(combined)
+  ) {
+    return classification.whatFailed || "A duplicate or conflicting signup was safely held before going live";
+  }
+  return contextWhatFailed || classification.whatFailed || `${String(context.area || context.workflow || "application request").trim().slice(0, 100)} failed`;
+}
+
 function buildRuntimeIncident(error, context = {}) {
   const classification = classifyOperationalError(error, context);
   const area = String(context.area || context.workflow || "application request").trim().slice(0, 100);
@@ -64,7 +81,7 @@ function buildRuntimeIncident(error, context = {}) {
   const key = [area, method, route, reasonCode, fingerprint].join(":");
   return {
     severity: context.severity || (classification.known ? "critical" : "warning"),
-    whatFailed: context.whatFailed || classification.whatFailed || `${area} failed`,
+    whatFailed: incidentWhatFailed(context, classification),
     reasonCode,
     reason: classification.known
       ? classification.reason

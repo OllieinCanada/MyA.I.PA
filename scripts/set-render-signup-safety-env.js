@@ -7,6 +7,7 @@ const { loadProjectEnv } = require("./_helpers");
 const env = loadProjectEnv();
 const args = process.argv.slice(2);
 const apply = args.includes("--apply");
+const approvalOnly = args.includes("--approval-only");
 const rotateSigningSecret = args.includes("--rotate-signing-secret");
 const confirmation = args.find((arg) => arg.startsWith("--confirm="))?.slice("--confirm=".length) || "";
 const serviceId = (
@@ -82,7 +83,7 @@ async function main() {
   if (!/^srv-[a-z0-9]+$/i.test(serviceId)) {
     throw new Error("Provide a valid Render service ID with --service-id=... or RENDER_SERVICE_ID.");
   }
-  if (!telegramBotToken || !telegramChatId) {
+  if (!approvalOnly && (!telegramBotToken || !telegramChatId)) {
     throw new Error("TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID must be configured locally.");
   }
   if (!["true", "false"].includes(manualApproval)) {
@@ -92,21 +93,23 @@ async function main() {
     throw new Error("Refusing to rotate while a local PROVISIONING_SIGNING_SECRET is configured.");
   }
 
-  const updates = new Map([
+  if (approvalOnly && rotateSigningSecret) throw new Error("Approval-only mode must not rotate credentials.");
+  const updates = approvalOnly ? new Map([["SIGNUP_REQUIRE_MANUAL_APPROVAL", manualApproval]]) : new Map([
     ["TELEGRAM_BOT_TOKEN", telegramBotToken],
     ["TELEGRAM_CHAT_ID", telegramChatId],
     ["RUNTIME_TELEGRAM_ALERTS_ENABLED", "true"],
     ["SIGNUP_REQUIRE_MANUAL_APPROVAL", manualApproval],
     ["TWILIO_STATUS_CALLBACK_URL", twilioStatusCallbackUrl],
   ]);
-  if (signingSecret) updates.set("PROVISIONING_SIGNING_SECRET", signingSecret);
+  if (!approvalOnly && signingSecret) updates.set("PROVISIONING_SIGNING_SECRET", signingSecret);
 
   console.log(JSON.stringify({
     mode: apply ? "apply" : "dry-run",
     serviceId,
     keys: [...updates.keys()],
     manualApproval,
-    telegramCredentialsPresent: true,
+    approvalOnly,
+    telegramCredentialsPresent: Boolean(telegramBotToken && telegramChatId),
     signingSecretAction: rotateSigningSecret
       ? "generate"
       : signingSecret
@@ -123,6 +126,8 @@ async function main() {
   }
 
   const credentials = readRenderCredentials();
+  const previousApproval = envValue(await renderRequest(credentials, `/services/${encodeURIComponent(serviceId)}/env-vars/SIGNUP_REQUIRE_MANUAL_APPROVAL`));
+  console.log(JSON.stringify({previousManualApproval:previousApproval,requestedManualApproval:manualApproval}));
   for (const [key, value] of updates) {
     await renderRequest(
       credentials,
@@ -139,7 +144,7 @@ async function main() {
     if (stored !== expected) throw new Error(`Render did not verify the expected value for ${key}.`);
   }
 
-  if (!updates.has("PROVISIONING_SIGNING_SECRET")) {
+  if (!approvalOnly && !updates.has("PROVISIONING_SIGNING_SECRET")) {
     const storedSigningSecret = envValue(await renderRequest(
       credentials,
       `/services/${encodeURIComponent(serviceId)}/env-vars/PROVISIONING_SIGNING_SECRET`

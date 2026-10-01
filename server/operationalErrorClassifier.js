@@ -421,11 +421,11 @@ function classifyOperationalError(error = {}, context = {}) {
   ) {
     return result(details, "duplicate_conflict", {
       reasonCode: "DUPLICATE_OR_STATE_CONFLICT",
-      reason: "My AI PA stopped because durable state indicates a duplicate, concurrent operation, or conflicting provisioning context.",
+      reason: "The safety gate worked: My AI PA found duplicate, concurrent, or conflicting signup state and stopped before pretending the agent was ready. This is not proof that the SMS text test itself is broken.",
       retryable: false,
-      whatFailed: "Duplicate protection or state reconciliation blocked the operation",
-      impact: "The operation remains incomplete, but the stop prevents duplicate resources or charges.",
-      nextAction: "Inspect the canonical signup and provider resources. Resolve or supersede the duplicate before retrying the one canonical operation.",
+      whatFailed: "A duplicate or conflicting signup was safely held before going live",
+      impact: "The customer is not live yet, but the stop prevents duplicate phone numbers, assistants, billing actions, or wrong-customer routing.",
+      nextAction: "Pick the one canonical signup, archive or supersede stale duplicates, verify its saved phone and assistant pairing, then rerun only that one guarded setup/test.",
     });
   }
 
