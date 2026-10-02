@@ -1,48 +1,6 @@
 {
   "schemaVersion": 2,
   "incidents": {
-    "issue:operational_health:public_a2268ad12bde5ea053e8428d9d0d5b3e": {
-      "lifecycleId": "public_3d55a309e7685291e867765e",
-      "type": "operational",
-      "checkName": "operational_health",
-      "firstDetectedAt": "2026-09-29T06:05:38.656Z"
-    },
-    "issue:operational_health:public_6c1c7b36c40a96297066f45f184b76f4": {
-      "lifecycleId": "public_fb90b0c6c56bb109721aa0f9",
-      "type": "operational",
-      "checkName": "operational_health",
-      "firstDetectedAt": "2026-09-29T06:05:38.656Z"
-    },
-    "issue:operational_health:public_09d8f25206cadfadac380cf6b877dad0": {
-      "lifecycleId": "public_9680514fe63d1c316440e280",
-      "type": "operational",
-      "checkName": "operational_health",
-      "firstDetectedAt": "2026-09-29T06:05:38.656Z"
-    },
-    "issue:operational_health:public_afbb3e8cc7cd489a3b5b7fdd55a6fa43": {
-      "lifecycleId": "public_dae55881be1e46c9d29cced9",
-      "type": "operational",
-      "checkName": "operational_health",
-      "firstDetectedAt": "2026-09-29T06:05:38.656Z"
-    },
-    "issue:operational_health:public_a17320732edae1f46dce859953b19c34": {
-      "lifecycleId": "public_1e9572c28a63f8fb8a09deb5",
-      "type": "operational",
-      "checkName": "operational_health",
-      "firstDetectedAt": "2026-09-29T06:05:38.656Z"
-    },
-    "issue:operational_health:public_5f7b9852c00fc4d226b0dc0beb4b109f": {
-      "lifecycleId": "public_b3916a308b0307ebd49f3823",
-      "type": "operational",
-      "checkName": "operational_health",
-      "firstDetectedAt": "2026-09-30T19:15:11.252Z"
-    },
-    "issue:operational_health:public_47e2f95630e23dfbcbc5b30de16f8460": {
-      "lifecycleId": "public_4ca995aac38f70ff5d7008d1",
-      "type": "operational",
-      "checkName": "operational_health",
-      "firstDetectedAt": "2026-09-30T19:15:11.252Z"
-    },
     "issue:operational_health:public_b06db31c77c8602bbba5afa9731f54e3": {
       "lifecycleId": "public_f5d8818226561f943ec8b37b",
       "type": "operational",
