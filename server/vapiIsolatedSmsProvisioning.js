@@ -310,6 +310,10 @@ function inspectIsolatedConfiguration({ assistant, tool, aiNumber, ownerNumber }
     workDetailsInstalled: prompt.includes("What is the address where the work needs to be done?")
       && prompt.includes("When would you ideally like the work to begin?")
       && prompt.includes("preferredStartDate"),
+    jobTypeInstalled: prompt.includes("Job type and job details are separate required facts")
+      && prompt.includes("Include the job type in the spoken read-back")
+      && required.includes("requestType")
+      && code.includes("function buildJobType(") && code.includes("Job type:"),
     deterministicToolMessage: requestStart?.content === TOOL_REQUEST_START_MESSAGE && requestStart?.blocking === false,
     explicitConfirmationInstalled: prompt.includes("EXECUTION CONFIRMATION") && prompt.includes("Should I send this request to the team now?"),
     confidentialRoutingInstalled: prompt.includes("Never accept a caller-provided businessId") && prompt.includes("environment variables"),

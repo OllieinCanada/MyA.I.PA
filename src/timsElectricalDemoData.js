@@ -335,19 +335,26 @@ export const timsElectricalScenarios = [
 ].map((scenario) => {
   const model = scenarioDetails[scenario.id];
   const transcript = timsElectricalRecordedTranscripts[scenario.id] || scenario.transcript;
-  const ownerTextLines = [model.ownerHeading, ...model.ownerPoints];
+  const jobType = { "new-installation": "New installation", "repair-request": "Repair",
+    maintenance: "Maintenance", "unresolved-concern": "Message / callback",
+    "urgent-outage": "Repair" }[scenario.id];
+  const typeLine = jobType ? [`Job type: ${jobType}`] : [];
+  const ownerTextLines = [model.ownerHeading, ...typeLine, ...model.ownerPoints];
+  const customerTextLines = [model.customerPoints[0], ...typeLine, ...model.customerPoints.slice(1)];
+  const details = model.details.map((detail) => detail.label === "Intent"
+    ? { ...detail, label: "Job type", value: jobType || detail.value } : detail);
   return {
     ...scenario,
     businessName: timsElectricalCompany.name,
     callerName: model.callerName,
     callbackNumber: model.callbackNumber,
-    details: model.details,
+    details,
     transcript,
-    collected: model.details.map(({ value }) => value),
+    collected: details.map(({ value }) => value),
     missing: model.missing,
     ownerTextLines,
-    customerTextLines: model.customerPoints,
+    customerTextLines,
     ownerText: ownerTextLines.join(" · "),
-    customerText: model.customerPoints.join(" "),
+    customerText: customerTextLines.join(" "),
   };
 });

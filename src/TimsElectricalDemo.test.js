@@ -31,11 +31,14 @@ describe("Tim's Electrical preloaded landing-page demo", () => {
     expect(container.textContent).not.toMatch(/Start voice demo/i);
     expect(container.textContent).toMatch(/Homeowner needs a hot tub wired/i);
     expect(container.textContent).toMatch(/Summary builds during the call/i);
-    expect(container.textContent).not.toMatch(/NEW INSTALLATIONBrian Smith/i);
+    expect(container.textContent).not.toMatch(/NEW INSTALLATIONJob type: New installationBrian Smith/i);
 
     act(() => jest.advanceTimersByTime(6500));
 
-    expect(container.textContent).toMatch(/NEW INSTALLATIONBrian Smith/i);
+    expect(container.textContent).toMatch(/NEW INSTALLATIONJob type: New installationBrian Smith/i);
+    container.querySelectorAll(".tims-message-preview").forEach((phone) => {
+      expect(phone.textContent).toMatch(/Job type: New installation/i);
+    });
     expect(container.textContent).toMatch(/Owner's cellphone/i);
     expect(container.textContent).toMatch(/100%/i);
   });
@@ -49,12 +52,12 @@ describe("Tim's Electrical preloaded landing-page demo", () => {
     act(() => repairButton.dispatchEvent(new MouseEvent("click", { bubbles: true })));
 
     expect(container.textContent).toMatch(/Homeowner reports an outlet stopped working/i);
-    expect(container.textContent).not.toMatch(/NEW INSTALLATIONBrian Smith/i);
-    expect(container.textContent).not.toMatch(/REPAIR REQUESTMaya Chen/i);
+    expect(container.textContent).not.toMatch(/NEW INSTALLATIONJob type: New installationBrian Smith/i);
+    expect(container.textContent).not.toMatch(/REPAIR REQUESTJob type: RepairMaya Chen/i);
 
     act(() => jest.advanceTimersByTime(6500));
 
-    expect(container.textContent).toMatch(/REPAIR REQUESTMaya Chen/i);
+    expect(container.textContent).toMatch(/REPAIR REQUESTJob type: RepairMaya Chen/i);
     expect(container.textContent).toMatch(/100%/i);
   });
 
@@ -79,7 +82,7 @@ describe("Tim's Electrical preloaded landing-page demo", () => {
 
     act(() => jest.advanceTimersByTime(2100));
 
-    expect(container.textContent).toMatch(/IntentNew installation/i);
+    expect(container.textContent).toMatch(/Job typeNew installation/i);
     expect(container.textContent).toMatch(/CustomerBrian Smith/i);
     expect(container.textContent).toMatch(/Job address23 Robb Street, Hamilton/i);
   });

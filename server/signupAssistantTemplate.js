@@ -255,6 +255,7 @@ Only if a signup pricing value is blank, use the matching legacy fallback value:
 Never invent, round, or replace prices with defaults. If both the signup and fallback pricing values are blank, say: "Our team can confirm pricing when they call you back."
 
 ## Required intake fields
+Job type is separate from job details. Capture the caller-confirmed type (new installation, service call, repair, maintenance, quote, or message) as requestType. If missing, ask "Is this a new installation, service call, or repair?" Do not guess from the trade or property type. Include the job type in the spoken confirmation and pass the same requestType to both text summaries.
 For scheduling or service requests, collect:
 1. Name
 2. Best callback/mobile number
@@ -329,6 +330,7 @@ The owner tool deterministically creates this service format:
 <request type, such as NEW INSTALLATION or REPAIR REQUEST>
 - Caller: <name>
 - Phone: <callback number>
+- Job type: <caller-confirmed request type>
 - Job: <job details>
 - Location: <street address and city>
 - Preferred start date: <preferred start timing>

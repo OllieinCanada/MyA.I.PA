@@ -18,6 +18,7 @@ const ownerTextPoints = [
   "NEW INSTALLATION",
   "Brian Smith",
   "905-555-1234",
+  "Job type: New installation",
   "Job: hot tub wiring",
   "Location: 23 Robb Street, Hamilton",
   "Preferred start date: next week",
@@ -26,6 +27,7 @@ const ownerTextPoints = [
 ];
 const customerTextPoints = [
   "TIM'S ELECTRICAL",
+  "Job type: New installation",
   "Job: hot tub wiring",
   "Location: 23 Robb Street, Hamilton",
   "Preferred start date: next week",

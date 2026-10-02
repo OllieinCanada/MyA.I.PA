@@ -96,7 +96,7 @@ function CallSummary({ scenario, complete, onAction }) {
         <span className={`fcr-status-pill ${complete ? "ready" : ""}`}>{complete ? "READY" : "LISTENING"}</span>
       </div>
       <div className="fcr-summary-grid">
-        <div><small>Intent</small><strong>{scenario.intent}</strong></div>
+        <div><small>Job type</small><strong>{scenario.intent}</strong></div>
         <div><small>Priority</small><strong>{scenario.priority}</strong></div>
         <div><small>Route</small><strong>{scenario.route}</strong></div>
       </div>

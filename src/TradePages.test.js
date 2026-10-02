@@ -81,6 +81,7 @@ test("every trade flyer renders the reference campaign structure without fabrica
     expect(html).toMatch(/contractor-caller-avatar/);
     expect(html.match(/contractor-phone-wave/g)).toHaveLength(2);
     expect(html).toMatch(/MyAIPA is answering/);
+    expect(html).toMatch(/JOB TYPE/);
     expect(html).toMatch(/contractor-phone-answer/);
     expect(html).toMatch(/BUILT FOR CONTRACTORS/);
     expect(html).toMatch(/HVAC Contractors/);
