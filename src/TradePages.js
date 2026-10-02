@@ -484,11 +484,12 @@ function TradeFlyer({ slug, trade }) {
   const jobDetailRows = [
     ["user", "CALLER", leadExample.CALLER || "Jordan Lee"],
     ["phone", "PHONE", "(905) 555-0123"],
+    ["note", "JOB TYPE", leadExample.INTENT || "Service request"],
     ["note", "WORK REQUESTED", leadExample.SERVICE || copy.calls[0]],
     ["building", "ADDRESS", leadExample.LOCATION || "Hamilton, ON"],
     ["clock", "PREFERRED START", "Next week — preference only"],
     ["clock", "BEST CALLBACK", leadExample.CALLBACK || "Weekday afternoon"],
-    ["bolt", "URGENCY", leadExample.INTENT || "Routine follow-up"],
+    ["bolt", "URGENCY", /Priority|Urgent/i.test(leadExample.CALLBACK || "") ? "Priority review requested" : "Routine follow-up"],
   ];
   const faqs = [
     ["Will I keep my current phone number?", "Yes. Your normal business number stays in place; unanswered or after-hours calls can forward to My AI PA."],
@@ -516,7 +517,7 @@ function TradeFlyer({ slug, trade }) {
         <div className="contractor-never-miss"><FlyerIcon name="phone" /><strong>NEVER MISS<br />A CALL AGAIN</strong></div>
         <div className="contractor-live-phone">
           <div className="contractor-live-phone-status">Incoming Call</div>
-          <h2>New Lead</h2><strong>(555) 667-5309</strong>
+          <h2>New Lead</h2><p>Job type: <strong>{leadExample.INTENT || "Service request"}</strong></p><strong>(555) 667-5309</strong>
           <div className="contractor-caller-visual" aria-hidden="true">
             <span className="contractor-phone-wave">{[0, 1, 2, 3, 4].map((bar) => <i key={`left-${bar}`} />)}</span>
             <span className="contractor-caller-avatar" />

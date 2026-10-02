@@ -18,6 +18,19 @@ test("routing verification messages are explicit and promise no callback", () =>
   assert.match(buildCustomerBody(routingTest), /No response or callback is required/);
 });
 
+test("both copies carry job type separately from work details for every service category", () => {
+  for (const [requestType, label] of Object.entries({ installation: "New installation", "new installation": "New installation", new_installation: "New installation", repair: "Repair", maintenance: "Maintenance", service: "Service call", quote: "Quote / estimate", message: "Message / callback", rental: "Rental inquiry", application: "Rental application", tenant_maintenance: "Tenant maintenance", tenant_complaint: "Tenant concern", tenant_urgent: "Urgent tenant issue" })) {
+    const input = { requestType, jobDetails: "Outlet has no power", businessName: "Electrical team" };
+    for (const build of [buildOwnerBody, buildCustomerBody]) {
+      assert.ok(build(input).includes(`Job type: ${label}`), requestType);
+    }
+  }
+  assert.match(buildOwnerBody({ jobDetails: "Outlet has no power" }), /Job type: Not provided/);
+  assert.match(buildCustomerBody({ requestType: "unknown", jobDetails: "Outlet has no power" }), /Job type: Not provided/);
+  assert.match(callerNumberFallbackPrompt("summary_tool"), /Include the job type in the spoken read-back/);
+  assert.match(getVapiCompositeToolCode(), /function buildJobType/);
+});
+
 test("private constituent demo messages cannot imply official delivery or a callback", () => {
   const input = {
     businessName: "My AI PA private demonstration",
@@ -143,12 +156,14 @@ test("composite tool sends owner first and customer second", async () => {
   assert.equal(result.complete, true);
   assert.match(mock.calls[0].body, /^NEW INSTALLATION/m);
   assert.match(mock.calls[0].body, /Job: hot tub electrical setup/);
+  assert.match(mock.calls[0].body, /Job type: New installation/);
   assert.match(mock.calls[0].body, /Location: 123 Test Street, Hamilton/);
   assert.match(mock.calls[0].body, /Preferred start date: right away/);
   assert.match(mock.calls[0].body, /Preferred callback: afternoons or after 5 PM/);
   assert.match(mock.calls[0].body, /Next action: Quote follow-up/);
   assert.match(mock.calls[1].body, /^EXAMPLE ELECTRICAL/m);
   assert.match(mock.calls[1].body, /Job: hot tub electrical setup/);
+  assert.match(mock.calls[1].body, /Job type: New installation/);
   assert.match(mock.calls[1].body, /Preferred callback: afternoons or after 5 PM/);
   assert.match(mock.calls[1].body, /Preferred start date: right away/);
   assert.match(mock.calls[1].body, /Scheduling: The team will follow up to discuss the details and timing\./);

@@ -47,6 +47,16 @@ function buildNextAction(requestType) {
   return "Service follow-up";
 }
 
+function buildJobType(requestType) {
+  const type = cleanText(requestType, 40).toLowerCase().replace(/_/g, " ");
+  const labels = { installation: "New installation", "new installation": "New installation",
+    repair: "Repair", maintenance: "Maintenance", quote: "Quote / estimate",
+    service: "Service call", message: "Message / callback", rental: "Rental inquiry",
+    application: "Rental application", "tenant maintenance": "Tenant maintenance",
+    "tenant complaint": "Tenant concern", "tenant urgent": "Urgent tenant issue" };
+  return labels[type] || "Not provided";
+}
+
 function buildOwnerBody(args) {
   const requestType = cleanText(args.requestType || "service", 40).toLowerCase();
   const name = cleanText(args.name || "Unknown caller", 120);
@@ -79,6 +89,7 @@ function buildOwnerBody(args) {
       `- Tenant: ${name}`,
       `- Phone: ${phone || "Not provided"}`,
       `- Issue: ${cleanText(args.jobDetails || args.message || "Not provided", 500)}`,
+      `- Job type: ${buildJobType(requestType)}`,
     ];
     const property = cleanText(args.streetAddress, 180);
     const city = cleanText(args.city, 120);
@@ -94,6 +105,7 @@ function buildOwnerBody(args) {
       "Message request:",
       `- Name: ${name}`,
       `- Phone: ${phone || "Not provided"}`,
+      `- Job type: ${buildJobType(requestType)}`,
       `- Message: ${cleanText(args.message || "No message provided", 500)}`,
     ].join("\n").slice(0, 1600);
   }
@@ -104,6 +116,7 @@ function buildOwnerBody(args) {
     buildOwnerHeading(requestType),
     `- Caller: ${name}`,
     `- Phone: ${phone || "Not provided"}`,
+    `- Job type: ${buildJobType(args.requestType)}`,
     `- Job: ${cleanText(args.jobDetails || requestType || "Not provided", 500)}`,
     `- Location: ${address}`,
     `- Preferred start date: ${cleanText(args.preferredStartDate || "Not provided", 120)}`,
@@ -125,14 +138,14 @@ function buildCustomerBody(args) {
     return "MY AI PA PRIVATE DEMO — Your simulated constituent-service message was recorded for this demonstration. It was not sent to or received by Dean Allison or his office, and no response from that office is expected.";
   }
   if (requestType === "tenant_urgent") {
-    return `Thanks for calling ${businessName}. Your urgent tenant message has been received for review. A response time and emergency dispatch are not guaranteed. If anyone is in immediate danger, leave the area and call 911.`.slice(0, 1600);
+    return `Job type: ${buildJobType(requestType)}\nThanks for calling ${businessName}. Your urgent tenant message has been received for review. A response time and emergency dispatch are not guaranteed. If anyone is in immediate danger, leave the area and call 911.`.slice(0, 1600);
   }
   if (requestType === "tenant_maintenance" || requestType === "tenant_complaint") {
     const label = requestType === "tenant_maintenance" ? "maintenance message" : "tenant concern";
-    return `Thanks for calling ${businessName}. Your ${label} has been received for review. Your preferred contact time was noted, but a response time is not guaranteed.`.slice(0, 1600);
+    return `Job type: ${buildJobType(requestType)}\nThanks for calling ${businessName}. Your ${label} has been received for review. Your preferred contact time was noted, but a response time is not guaranteed.`.slice(0, 1600);
   }
   if (requestType === "message") {
-    return `Thanks for calling ${businessName}. We received your message: "${cleanText(args.message || "No message provided", 500)}" The team will review it and follow up.`.slice(0, 1600);
+    return `Job type: ${buildJobType(requestType)}\nThanks for calling ${businessName}. We received your message: "${cleanText(args.message || "No message provided", 500)}" The team will review it and follow up.`.slice(0, 1600);
   }
   const job = cleanText(args.jobDetails || `${requestType} service`, 500);
   const location = [cleanText(args.streetAddress, 180), cleanText(args.city, 120)].filter(Boolean).join(", ");
@@ -140,6 +153,7 @@ function buildCustomerBody(args) {
   const preferredStartDate = cleanText(args.preferredStartDate, 160);
   const lines = [
     businessName.toUpperCase(),
+    `Job type: ${buildJobType(args.requestType)}`,
     `Job: ${job}`,
   ];
   if (location) lines.push(`Location: ${location}`);
@@ -194,6 +208,9 @@ CALLBACK CONSISTENCY:
 - Pass the caller's final clarified preference in bestCallbackTime.
 
 REQUIRED WORK DETAILS:
+- Job type and job details are separate required facts. Capture whether this is a new installation, service call, repair, maintenance, quote, or message in requestType; capture the actual work in jobDetails.
+- If the caller has not identified the job type, ask: "Is this a new installation, service call, or repair?" Ask only for missing information; never guess from the business trade or property type.
+- Include the job type in the spoken read-back before asking permission to send. Preserve the same requestType for both text copies.
 - When the request needs a work location, ask exactly: "What is the address where the work needs to be done?"
 - For installation, repair, maintenance, quote, or other service work, ask exactly: "When would you ideally like the work to begin?"
 - Pass the caller's answer in preferredStartDate. Do not turn a preferred date into a booked appointment or promise.
@@ -441,7 +458,7 @@ function compositeToolParameters() {
     type: "object",
     properties: {
       businessName: { type: "string", description: "Business name used in the caller confirmation." },
-      requestType: { type: "string", enum: ["installation", "repair", "maintenance", "quote", "message", "service", "rental", "application", "tenant_maintenance", "tenant_complaint", "tenant_urgent", "constituent_demo"] },
+      requestType: { type: "string", description: "Caller-confirmed job type, separate from jobDetails. Ask if unknown; never infer from the business trade or property type.", enum: ["installation", "new installation", "new_installation", "repair", "maintenance", "quote", "message", "service", "rental", "application", "tenant_maintenance", "tenant_complaint", "tenant_urgent", "constituent_demo"] },
       name: { type: "string", description: "Caller's name." },
       rawPhoneNumber: { type: "string", description: "Fallback callback number, used only when trusted caller ID is unavailable and the caller has confirmed the full number." },
       callbackNumber: { type: "string", description: "Optional callback-number alias when rawPhoneNumber is unavailable." },
@@ -465,6 +482,7 @@ function getVapiCompositeToolCode() {
     buildNotificationKeys,
     buildOwnerHeading,
     buildNextAction,
+    buildJobType,
     buildOwnerBody,
     buildCustomerBody,
     safeProviderError,

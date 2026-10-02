@@ -123,8 +123,11 @@ describe("intuitive homepage journey", () => {
     expect(container.querySelectorAll(".simple-message-phone")).toHaveLength(2);
     expect(container.querySelector(".simple-follow-up-slide .simple-phone-pair")).not.toBeNull();
     expect(container.querySelectorAll(".simple-message-bullets")).toHaveLength(2);
-    expect(container.querySelectorAll(".simple-message-phone.owner .simple-message-bullets li")).toHaveLength(7);
-    expect(container.querySelectorAll(".simple-message-phone.customer .simple-message-bullets li")).toHaveLength(4);
+    expect(container.querySelectorAll(".simple-message-phone.owner .simple-message-bullets li")).toHaveLength(8);
+    expect(container.querySelectorAll(".simple-message-phone.customer .simple-message-bullets li")).toHaveLength(5);
+    container.querySelectorAll(".simple-message-phone").forEach((phone) => {
+      expect(phone.textContent).toMatch(/Job type: New installation/i);
+    });
     expect(container.querySelector(".simple-message-phone.customer .simple-message-heading").textContent).toBe("TIM'S ELECTRICAL");
     expect(container.querySelector(".simple-message-phone.customer .closing").textContent).toMatch(/Thanks for calling Tim's Electrical\. Have a great day!/i);
     expect(container.querySelector('.simple-hero-worker img[src*="reference-contractor-hero-864.jpg"]')).not.toBeNull();
