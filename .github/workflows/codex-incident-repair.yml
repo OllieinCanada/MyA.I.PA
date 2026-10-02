@@ -420,6 +420,7 @@ jobs:
       CI: "true"
       DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/ci
       REACT_APP_API_BASE_URL: https://api.myaipa.ca
+      REACT_APP_GOOGLE_MAPS_API_KEY: ${{ vars.GOOGLE_MAPS_BROWSER_KEY }}
     steps:
       - name: Check out the independently sealed base
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -785,6 +786,8 @@ jobs:
 
       - name: Build deployable Pages output when frontend source changed
         shell: bash
+        env:
+          REACT_APP_GOOGLE_MAPS_API_KEY: ${{ vars.GOOGLE_MAPS_BROWSER_KEY }}
         run: |
           set -euo pipefail
           if git diff --cached --name-only | grep -Eq '^(src|public)/|^package(-lock)?\.json$'; then

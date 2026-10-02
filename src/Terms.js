@@ -2,6 +2,11 @@ import React from "react";
 
 const sections = [
   {
+    title: "Google Maps address suggestions",
+    body: ["Optional address suggestions use Google Maps. Your use of this feature is also subject to Google's Terms of Service and the Google Maps/Google Earth Additional Terms of Service. Suggestions do not verify business ownership or replace contact verification. Review the selected address and enter any missing details manually."],
+    links: [{ label: "Google Terms of Service", href: "https://policies.google.com/terms" }, { label: "Google Maps/Google Earth Additional Terms", href: "https://maps.google.com/help/terms_maps/" }],
+  },
+  {
     title: "1. Agreement to These Terms",
     body: [
       "These Terms of Service govern access to and use of the My AI PA website, signup flow, AI phone answering service, call handling tools, text notifications, integrations, and related services. By using the services, creating an account, starting a trial, or authorizing service setup, you agree to these Terms.",
@@ -136,6 +141,7 @@ function Terms() {
                 {section.body.map((paragraph) => (
                   <p key={paragraph} className="text-base font-medium leading-7 text-[#d8e7f7] sm:text-lg sm:leading-8">{paragraph}</p>
                 ))}
+                {section.links?.map((link) => <a key={link.href} href={link.href} className="block text-[#8ec5ff] underline" target="_blank" rel="noreferrer">{link.label}</a>)}
               </div>
             </article>
           ))}
