@@ -41,7 +41,13 @@ test('HTTP callback rejects spoofing and distinguishes confirmed duplicates from
   }));
   const body={AccountSid:account,Sid:'NO'+'c'.repeat(32),Level:'WARNING',Timestamp:new Date().toISOString()};
   const url=`http://127.0.0.1:${server.address().port}${PATH}`;
-  const send=signature=>fetch(url,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','X-Twilio-Signature':signature},body:new URLSearchParams(body).toString()});
+  const send=async signature=>{
+    const response=await fetch(url,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','X-Twilio-Signature':signature,'Connection':'close'},body:new URLSearchParams(body).toString(),signal:AbortSignal.timeout(10000)});
+    // Drain error bodies too: unread Fetch responses can retain client handles
+    // after the server closes, especially on the older Windows Node runtime.
+    await response.arrayBuffer();
+    return response;
+  };
   assert.equal((await send('spoofed')).status,403);assert.equal(calls,0);
   const signature=getTwilioSignature('https://api.myaipa.ca'+PATH,body,'test-secret');
   assert.equal((await send(signature)).status,204);

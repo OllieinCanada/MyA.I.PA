@@ -25,8 +25,8 @@ test("signup alert is actionable without customer contact details", () => {
   });
   assert.match(text, /MY AI PA — CRITICAL/);
   assert.match(text, /Example Electrical/);
-  assert.match(text, /returned HTTP 200/);
-  assert.match(text, /What happens next:/);
+  assert.match(text, /Make replied without a verified phone and assistant/);
+  assert.match(text, /Next:/);
   assert.doesNotMatch(text, /Business type:|Service area:|Attempt reference:/);
   assert.doesNotMatch(text, /private@example\.com|9055550123/);
 });
@@ -73,15 +73,15 @@ test("failed signup Telegram delivery includes an exact incident button and hone
     token: "test-token",
     chatId: "test-chat",
     fetchImpl: async (_url, options) => {
-      calls.push(JSON.parse(options.body));
-      return new Response(JSON.stringify({ ok: true }), {
+      calls.push({ text: options.body.get('caption'), reply_markup: JSON.parse(options.body.get('reply_markup')) });
+      return new Response(JSON.stringify({ ok: true, result: { message_id: 42 } }), {
         status: 200,
         headers: { "content-type": "application/json" },
       });
     },
   });
 
-  assert.match(calls[0].text, /Cause not confirmed yet/);
+  assert.match(calls[0].text, /Cause not confirmed/);
   assert.equal(
     calls[0].reply_markup.inline_keyboard[0][0].url,
     "https://www.myaipa.ca/#/admin?tab=attention&incident=abcdef1234567890abcdef12"
@@ -103,8 +103,8 @@ test("signup failure alert distinguishes a Twilio account funding problem and gi
     record: { makeResponseKind: "rejected" },
   });
 
-  assert.match(text, /platform account needs funds or credits/);
-  assert.match(text, /My AI PA's Twilio account does not have enough funds or credits/);
+  assert.match(text, /provider account needs funds or credits/);
+  assert.match(text, /Twilio Billing/);
   assert.match(text, /Add funds or credits in Twilio Billing/);
   assert.doesNotMatch(text, /Provider HTTP status:|Provider code:/);
   assert.doesNotMatch(text, /Cause not confirmed yet/);
@@ -125,7 +125,7 @@ test("signup failure alert never labels an unconfirmed Make rejection as billing
     record: { makeResponseKind: "rejected" },
   });
 
-  assert.match(text, /available safe diagnostics do not establish a specific cause/i);
+  assert.match(text, /Cause not confirmed/i);
   assert.match(text, /Open the exact incident and provider-safe logs/);
   assert.doesNotMatch(text, /VAPI_NUMBER_IMPORT/);
   assert.doesNotMatch(text, /needs funds|Add funds or credits|private@example\.ca|9055550123|secret provider response/i);
@@ -146,10 +146,9 @@ test("setup-complete delivery failure preserves the number and directs operation
   });
 
   assert.match(text, /customer follow-up needs attention/i);
-  assert.match(text, /phone number and assistant were verified as assigned/i);
-  assert.match(text, /email provider rejected the customer's email destination/i);
-  assert.match(text, /Do not provision another number/);
-  assert.match(text, /resend only the setup-complete follow-up/);
+  assert.match(text, /email provider rejected the customer’s email address/i);
+  assert.match(text, /Keep the existing number/);
+  assert.match(text, /resend only the setup message/);
   assert.doesNotMatch(text, /\(343\) 321-6155|3433216155/);
 });
 

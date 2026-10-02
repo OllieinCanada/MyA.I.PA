@@ -159,12 +159,12 @@ function signupLastCheckpoint(context) {
 
 function signupNextAction(state) {
   if (state === "review_required") {
-    return "Open this exact signup, review the saved request and safety flags, and approve recovery only when no duplicate resources can be created.";
+    return "Review this signup. Check for duplicates before approving recovery.";
   }
   if (["customer_followup_failed", "customer_followup_partial"].includes(state)) {
-    return "Do not provision another number. Open the signup, verify the existing assigned number, repair the failed SMS or email channel, then resend only the setup-complete follow-up.";
+    return "Keep the existing number. Fix SMS/email delivery; resend only the setup message.";
   }
-  return "Open this exact incident, verify Make, Twilio, and Vapi state, then run guarded recovery only after duplicate phone, assistant, and billing actions are ruled out.";
+  return "Check Make, Twilio and Vapi. Recover this signup only after ruling out duplicates.";
 }
 
 function buildSignupIncidentInput(input = {}) {
@@ -189,10 +189,10 @@ function buildSignupIncidentInput(input = {}) {
     reasonCode: providerFailure?.reasonCode || signupReasonCode(input, context),
     reason: providerFailure?.reason || input.detail || "The signup workflow stopped without verified completion proof.",
     impact: providerFailure?.impact || (review
-      ? "The customer setup is not live. No phone, assistant, or billing action should be assumed while review is pending."
+      ? "Setup is paused, not confirmed live."
       : deliveryFailure
-        ? "The setup remains live and the assigned number must be preserved, but the customer may not know which number to test or what to do next."
-      : "The customer setup is not live. They may be waiting, and no phone, assistant, or trial/billing success should be assumed."),
+        ? "The number exists, but the customer may not have received their setup message."
+      : "Setup is not confirmed live. The customer may be waiting."),
     snapshot: {
       ...buildSignupSnapshot(input),
       "Attempt reference": eventKey,
@@ -218,16 +218,16 @@ function buildSignupUpdateAlert(input = {}) {
     ? String(input.eventKey).slice(-10)
     : "unknown";
   const status = input.state === "provisioning_ready"
-    ? "Phone and assistant checked. Text delivery and a test call still need confirmation."
+    ? "Phone and assistant checked. Texts and a call still need testing."
     : input.state === "verification_sent"
-      ? "Waiting for the customer to verify their contact details."
+      ? "Waiting for customer verification."
       : input.record?.status === 'review_required' || input.record?.reviewRequired
         ? "Signup saved, but setup is paused for review."
         : "Signup saved. Setup is not confirmed ready yet.";
   const next = input.state === "provisioning_ready"
-    ? "Confirm delivery tests and trial activation, then test the AI number."
+    ? "Confirm text delivery, trial activation and a test call."
     : input.state === "verification_sent"
-      ? "The customer must complete verification before setup continues."
+      ? "Customer: tap Verify to continue setup."
       : "Check verification and any setup hold in the dashboard.";
   return [
     `📞 MY AI PA — ${labels[input.state] || "SIGNUP UPDATE"}`,

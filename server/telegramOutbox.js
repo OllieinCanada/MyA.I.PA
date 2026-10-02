@@ -3,12 +3,12 @@ const fs = require("fs");
 const path = require("path");
 
 const { redactIncidentText } = require("./incidentAlerts");
+const { noticeRequest } = require('./telegramNotice');
 
 const OUTBOX_VERSION = 2;
 const MAX_OUTBOX_ITEMS = 500;
 const MAX_BATCH_SIZE = 100;
 const DEFAULT_BATCH_SIZE = 10;
-const REQUEST_TIMEOUT_MS = 7_000;
 const BASE_RETRY_MS = 60_000;
 const MAX_RETRY_MS = 6 * 60 * 60 * 1000;
 const MAX_DELIVERY_RECEIPTS = 500;
@@ -315,14 +315,9 @@ async function postTelegramItem(item, { token, chatId, fetchImpl }) {
   let response;
   let data = {};
   try {
-    response = await fetchImpl(`https://api.telegram.org/bot${token}/sendMessage`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-      signal: typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function"
-        ? AbortSignal.timeout(REQUEST_TIMEOUT_MS)
-        : undefined,
-    });
+    response = await fetchImpl(`https://api.telegram.org/bot${token}/sendPhoto`, noticeRequest(body.text, {
+      chatId, replyMarkup: body.reply_markup,
+    }));
     data = await response.json().catch(() => ({}));
   } catch (error) {
     return { success: false, ...failureKind({ error }) };

@@ -1,4 +1,6 @@
 const REQUEST_TIMEOUT_MS = 7_000;
+const { noticeRequest } = require('./telegramNotice');
+const { redactIncidentText, buildIncidentTelegramAlert } = require('./incidentAlerts');
 
 function safeBotToken(value) {
   return String(value || "").trim();
@@ -9,14 +11,14 @@ async function telegramBotRequest(method, payload, { token, fetchImpl = fetch } 
   if (!botToken) return { ok: false, skipped: true, reason: "telegram_not_configured" };
   const response = await fetchImpl(`https://api.telegram.org/bot${botToken}/${method}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload || {}),
+    ...(method === 'sendPhoto' ? noticeRequest(payload.text, { chatId: payload.chat_id, replyMarkup: payload.reply_markup })
+      : { headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload || {}) }),
     signal: typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function"
       ? AbortSignal.timeout(REQUEST_TIMEOUT_MS)
       : undefined,
   });
   const body = await response.json().catch(() => ({}));
-  if (!response.ok || body?.ok !== true) {
+  if (!response.ok || body?.ok !== true || (method === 'sendPhoto' && (!Number.isSafeInteger(body?.result?.message_id) || body.result.message_id <= 0))) {
     const error = new Error(`Telegram ${method} was not accepted (${response.status}).`);
     error.code = "TELEGRAM_ACTION_RESPONSE_FAILED";
     error.statusCode = 502;
@@ -48,10 +50,15 @@ function clearTelegramApprovalButtons({ chatId, messageId } = {}, options = {}) 
 
 function sendTelegramOwnerStatus({ chatId, text, openUrl = "", openLabel = "Open details" } = {}, options = {}) {
   const url = String(openUrl || "").trim();
-  return telegramBotRequest("sendMessage", {
+  const reasonCode = String(text || '').match(/Action stopped safely[\s\S]*Reason:\s*([A-Z0-9_]+)/)?.[1];
+  const message = reasonCode ? buildIncidentTelegramAlert({
+    title: 'Action stopped', reasonCode,
+    impact: 'Completion was not confirmed. No automatic retry.',
+    nextAction: 'Open details. Check the saved failure before retrying.',
+  }) : text;
+  return telegramBotRequest("sendPhoto", {
     chat_id: String(chatId || "").trim(),
-    text: String(text || "").slice(0, 3_900),
-    disable_web_page_preview: true,
+    text: redactIncidentText(message, { multiline: true, maxLength: 3_900 }),
     ...(url.startsWith("https://") ? {
       reply_markup: { inline_keyboard: [[{ text: String(openLabel || "Open details").slice(0, 40), url }]] },
     } : {}),

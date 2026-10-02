@@ -552,6 +552,7 @@ function buildMonitorRecoveryUpdate(report, previousState) {
   }
   return buildIncidentRemediationUpdate({
     status: operational ? "cleared" : "recovered",
+    title: operational ? 'Operations alert' : `${String(previousState?.checkName || 'Service').replace(/_/g, ' ')} check`,
     incidentId: lifecycleId,
     completedAt: report?.checkedAt,
     actionTaken: operational
@@ -560,7 +561,7 @@ function buildMonitorRecoveryUpdate(report, previousState) {
     verification: operational
       ? "The authenticated operational feed is healthy and no longer reports the same incident signature. This does not by itself prove why it disappeared or that an acknowledged/expired item was repaired."
       : `${String(previousState?.checkName || "service").replace(/_/g, " ")} is responding normally again${check?.status ? ` (HTTP ${check.status})` : ""}. This proves current recovery, not the original request outcome or underlying root cause.`,
-    nextAction: "No immediate infrastructure action is required. If the incident returns, use the new report and do not assume the original customer operation completed.",
+    nextAction: "No immediate action. If it returns, open the new alert.",
   });
 }
 
@@ -677,25 +678,16 @@ async function sendTelegramText(text, { adminUrl = "", buttonText = "Open exact 
   if (!token || !chatId) return { attempted: false, reason: "telegram_not_configured" };
   const safeAdminUrl = validAdminUrl(adminUrl);
   try {
-    const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text,
-        disable_web_page_preview: true,
-        ...(safeAdminUrl ? {
-          reply_markup: {
-            inline_keyboard: [[{ text: buttonText, url: safeAdminUrl }]],
-          },
-        } : {}),
-      }),
-      signal: typeof AbortSignal?.timeout === "function" ? AbortSignal.timeout(7_000) : undefined,
-    });
+    const response = await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, require('../server/telegramNotice').noticeRequest(text, {
+      chatId, replyMarkup: { inline_keyboard: [[
+        { text: 'Open dashboard', url: 'https://www.myaipa.ca/#/admin' },
+        { text: 'Open details', url: safeAdminUrl || 'https://www.myaipa.ca/#/admin?tab=needs-attention' },
+      ]] },
+    }));
     const data = await response.json().catch(() => ({}));
     return {
       attempted: true,
-      accepted: Boolean(response.ok && data?.ok === true),
+      accepted: Boolean(response.ok && data?.ok === true && Number.isSafeInteger(data?.result?.message_id) && data.result.message_id > 0),
       status: response.status,
       ...(!response.ok || data?.ok !== true ? { reason: safeOperationalText(data?.description, "telegram_rejected") } : {}),
     };

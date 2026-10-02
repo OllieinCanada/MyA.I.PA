@@ -32,8 +32,8 @@ test("runtime alerts deduplicate the same failure without hiding a different rou
     chatId: "test-chat",
     now: 100_000,
     fetchImpl: async (_url, request) => {
-      calls.push(JSON.parse(request.body));
-      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      calls.push({ text: request.body.get('caption') });
+      return new Response(JSON.stringify({ ok: true, result: { message_id: 42 } }), { status: 200 });
     },
   };
   const first = await notifyRuntimeIncident(Object.assign(new Error("database unavailable"), { code: "DATABASE_UNAVAILABLE" }), {
@@ -59,10 +59,10 @@ test("runtime alerts deduplicate the same failure without hiding a different rou
   assert.equal(calls.length, 2);
   assert.match(calls[0].text, /Issue:/);
   assert.doesNotMatch(calls[0].text, /ELI10/);
-  assert.match(calls[0].text, /What stopped:/);
-  assert.match(calls[0].text, /Who it affects:/);
-  assert.match(calls[0].text, /What is safe:/);
-  assert.match(calls[0].text, /What happens next:/);
+  assert.match(calls[0].text, /Cause:/);
+  assert.match(calls[0].text, /Business:/);
+  assert.match(calls[0].text, /Impact:/);
+  assert.match(calls[0].text, /Next:/);
 });
 
 test("different exceptions on the same route do not suppress one another", async () => {
@@ -73,8 +73,8 @@ test("different exceptions on the same route do not suppress one another", async
     chatId: "test-chat",
     now: 200_000,
     fetchImpl: async (_url, request) => {
-      calls.push(JSON.parse(request.body));
-      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      calls.push({ text: request.body.get('caption') });
+      return new Response(JSON.stringify({ ok: true, result: { message_id: 42 } }), { status: 200 });
     },
   };
   const context = { area: "signup request", method: "POST", path: "/api/signup", status: 500 };
