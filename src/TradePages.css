@@ -469,7 +469,7 @@
   background: linear-gradient(180deg, #ff7a00, #ff6500);
   box-shadow: 0 18px 42px -24px rgba(255,106,0,.95);
 }
-.trade-kicker { color: #f06a00; }
+.trade-kicker { color: #b54d00; }
 .trade-primary-button {
   border-radius: 12px;
   background: linear-gradient(180deg, #ff7a00, #ff6500);
@@ -1148,7 +1148,7 @@
 
 .contractor-number-promise { display: grid; grid-template-columns: 64px 1fr; align-items: center; gap: 18px; padding: 20px 27px; border-top: 4px solid var(--contractor-yellow); border-bottom: 1px solid #c9c9c9; background: #fff; color: #111; }
 .contractor-number-promise > svg { width: 60px; height: 60px; padding: 12px; border-radius: 50%; background: #111; color: var(--contractor-yellow); }
-.contractor-number-promise span { display: block; color: #a96f00; font-size: .78rem; font-weight: 1000; letter-spacing: .1em; }
+.contractor-number-promise span { display: block; color: #8a5900; font-size: .78rem; font-weight: 1000; letter-spacing: .1em; }
 .contractor-number-promise strong { display: block; margin-top: 3px; font-size: 1.35rem; line-height: 1.25; }
 .contractor-number-promise p { margin: 4px 0 0; font-family: Arial, sans-serif; font-size: 1rem; line-height: 1.5; }
 
@@ -1165,7 +1165,7 @@
 .contractor-workflow h3 { margin: 0; font-size: 1rem; font-weight: 1000; line-height: 1.25; }
 .contractor-workflow p { margin: 9px 0 0; font-family: Arial, sans-serif; font-size: .96rem; line-height: 1.52; }
 .contractor-job-details { display: grid; grid-template-columns: .72fr 1.28fr; gap: 24px; align-items: center; margin-top: 28px; padding: 22px; border: 2px solid #111; border-radius: 10px; background: #f8f8f6; }
-.contractor-job-details > div > span { color: #a96f00; font-size: .78rem; font-weight: 1000; letter-spacing: .1em; }
+.contractor-job-details > div > span { color: #8a5900; font-size: .78rem; font-weight: 1000; letter-spacing: .1em; }
 .contractor-job-details h2 { margin: 6px 0; font-size: 1.8rem; line-height: 1.05; }
 .contractor-job-details > div > p { margin: 0; font-family: Arial, sans-serif; font-size: .98rem; line-height: 1.55; }
 .contractor-job-details dl { display: grid; grid-template-columns: 1fr 1fr; margin: 0; overflow: hidden; border: 1px solid #c9c9c9; border-radius: 8px; background: #fff; }
@@ -1181,7 +1181,7 @@
 .contractor-outcomes-photo img { width: 100%; height: 100%; object-fit: cover; }
 .contractor-outcomes-photo .contractor-photo-fallback { width: 100%; height: 100%; }
 .contractor-outcomes h2 { margin: 0 0 13px; font-size: 2.02rem; font-weight: 1000; line-height: .92; }
-.contractor-outcomes h2 em { color: #25ba21; font-style: normal; }
+.contractor-outcomes h2 em { color: #107b0d; font-style: normal; }
 .contractor-outcomes p { display: flex; gap: 9px; margin: 11px 0; font-family: Arial, sans-serif; font-size: 1rem; line-height: 1.52; }
 .contractor-outcomes p svg { width: 21px; height: 21px; flex: 0 0 auto; padding: 4px; border-radius: 50%; background: #34c934; color: #fff; stroke-width: 3; }
 .contractor-side-stack { display: grid; gap: 13px; }

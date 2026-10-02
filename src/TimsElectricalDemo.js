@@ -230,7 +230,7 @@ function DemoPhone({ scenario, visibleLines, complete }) {
         <strong>{callbackDetail?.value || "Phone context appears when confirmed"}</strong>
       </div>
       <ScenarioRecording scenario={scenario} onTranscriptPosition={setRecordingTime} />
-      <div className={`fcr-phone-transcript ${recordingTime !== null ? "is-audio-following" : ""}`} ref={transcriptRef} aria-live="polite">
+      <div className={`fcr-phone-transcript ${recordingTime !== null ? "is-audio-following" : ""}`} ref={transcriptRef} tabIndex={0} role="region" aria-label="Demo call transcript" aria-live="polite">
         {displayedLineCount === 0 ? (
           <div className="fcr-phone-empty"><Icon name="phone" size={30} /><strong>Loading the selected call…</strong><span>No real call or text will be sent.</span></div>
         ) : scenario.transcript.slice(0, displayedLineCount).map((line, index) => {

@@ -118,7 +118,7 @@ describe("intuitive homepage journey", () => {
     expect(container.textContent).toMatch(/customer name and callback number/i);
     expect(container.textContent).toMatch(/preferred start date/i);
     expect(container.textContent).toMatch(/urgent requests passed on instantly/i);
-    expect(container.textContent).toMatch(/A compact, organized callback ready text summary/i);
+    expect(container.textContent).toMatch(/Customer contact info and job details, texted together to your cell phone for an easy callback/i);
     expect(container.textContent).toMatch(/Confirmation that the service request was received along with a summary of the call for follow up/i);
     expect(container.querySelectorAll(".simple-message-phone")).toHaveLength(2);
     expect(container.querySelector(".simple-follow-up-slide .simple-phone-pair")).not.toBeNull();

@@ -209,9 +209,16 @@ function buildSignupIncidentInput(input = {}) {
 
 function buildSignupUpdateAlert(input = {}) {
   const context = signupContext(input);
+  const delivery = input.record?.smsVerificationDeliveryStatus || "pending";
+  const verificationStatus = delivery === "delivered"
+    ? context.verified ? "Carrier confirmed delivery. Contact verified."
+      : "Carrier confirmed delivery. Customer has not verified yet."
+    : delivery === "failed" ? "Verification text failed. Setup remains blocked."
+      : "Text submitted. Delivery is not confirmed. Setup remains blocked.";
   const labels = {
     received: "NEW SIGNUP RECEIVED",
-    verification_sent: "SIGNUP VERIFICATION SENT",
+    verification_sent: delivery === "delivered" ? "VERIFICATION TEXT DELIVERED"
+      : delivery === "failed" ? "VERIFICATION TEXT FAILED" : "VERIFICATION TEXT PENDING",
     provisioning_ready: "SIGNUP SETUP VERIFIED",
   };
   const eventKey = /^signup_[a-f0-9]{32}$/i.test(String(input.eventKey || ""))
@@ -220,14 +227,16 @@ function buildSignupUpdateAlert(input = {}) {
   const status = input.state === "provisioning_ready"
     ? "Phone and assistant checked. Texts and a call still need testing."
     : input.state === "verification_sent"
-      ? "Waiting for customer verification."
+      ? verificationStatus
       : input.record?.status === 'review_required' || input.record?.reviewRequired
         ? "Signup saved, but setup is paused for review."
         : "Signup saved. Setup is not confirmed ready yet.";
   const next = input.state === "provisioning_ready"
     ? "Confirm text delivery, trial activation and a test call."
     : input.state === "verification_sent"
-      ? "Customer: tap Verify to continue setup."
+      ? delivery === "delivered" ? "Check Messages or spam; tap Verify to continue."
+        : delivery === "failed" ? "Check the delivery error; resend verification only."
+          : "Wait for delivery confirmation. Do not create another signup."
       : "Check verification and any setup hold in the dashboard.";
   return [
     `📞 MY AI PA — ${labels[input.state] || "SIGNUP UPDATE"}`,
@@ -239,6 +248,10 @@ function buildSignupUpdateAlert(input = {}) {
     `Trial started: ${yesNo(context.trialStarted)}`,
     "",
     `Status: ${status}`,
+    ...(input.state === "verification_sent" ? [
+      `Recipient: •••• ${String(input.record?.ownerPhone || "").replace(/\D/g, "").slice(-4) || "unknown"}`,
+      ...(input.record?.smsVerificationErrorCode ? [`Delivery code: ${safeLabel(input.record.smsVerificationErrorCode, "unknown", 30)}`] : []),
+    ] : []),
     `Next: ${next}`,
     "",
     `Reference: ${eventKey}`,
@@ -263,7 +276,7 @@ async function sendSignupTelegramAlert(input, { token, chatId, fetchImpl = fetch
   const form = new FormData();
   form.append('chat_id', String(chatId).trim());
   form.append('caption', buildSignupUpdateAlert(input));
-  form.append('photo', new Blob([card('signup', input?.record?.reviewRequired || input?.record?.status === 'review_required' ? 'warning' : 'info')], { type: 'image/png' }), 'signup-alert.png');
+  form.append('photo', new Blob([card('signup', input?.record?.reviewRequired || input?.record?.status === 'review_required' || input?.record?.smsVerificationDeliveryStatus === 'failed' ? 'warning' : 'info')], { type: 'image/png' }), 'signup-alert.png');
   const keyboard = replyMarkup?.inline_keyboard ? replyMarkup : adminUrl ? {
     inline_keyboard: [[{ text: "Open signup dashboard", url: adminUrl }]],
   } : null;

@@ -193,8 +193,9 @@
 .simple-carousel-controls { min-height: 44px; display: grid; grid-template-columns: 40px 1fr 40px; align-items: center; gap: 12px; margin-top: 7px; }
 .simple-carousel-controls > button { width: 39px; height: 39px; border: 1px solid rgba(150,202,240,.25); border-radius: 50%; background: rgba(255,255,255,.07); color: #fff; font-size: 1.1rem; font-weight: 900; cursor: pointer; }
 .simple-carousel-controls > div { display: flex; justify-content: center; gap: 8px; }
-.simple-carousel-controls > div button { width: 9px; height: 9px; border: 0; border-radius: 50%; background: #60768e; padding: 0; cursor: pointer; transition: width .2s ease, background .2s ease; }
-.simple-carousel-controls > div button.active { width: 30px; border-radius: 999px; background: #36c6fb; }
+.simple-carousel-controls > div button { width: 44px; height: 44px; display: grid; place-items: center; border: 0; border-radius: 12px; background: transparent; padding: 0; cursor: pointer; }
+.simple-carousel-controls > div button::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: #60768e; transition: width .2s ease, background .2s ease; }
+.simple-carousel-controls > div button.active::before { width: 30px; border-radius: 999px; background: #36c6fb; }
 .simple-carousel-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 4px; }
 .simple-carousel-actions .simple-primary, .simple-carousel-actions .simple-secondary { min-height: 48px; padding-inline: 12px; font-size: .78rem; }
 .simple-proof-carousel audio { display: none; }

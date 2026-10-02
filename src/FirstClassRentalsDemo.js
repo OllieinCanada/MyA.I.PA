@@ -73,7 +73,7 @@ function DemoPhone({ scenario, visibleLines, running }) {
         <div><strong>First Class Rentals</strong><small>{running ? "Virtual receptionist active" : "Ready for a simulated call"}</small></div>
         <span className={`fcr-live-dot ${running ? "is-live" : ""}`} />
       </div>
-      <div className="fcr-phone-transcript" ref={transcriptRef} aria-live="polite">
+      <div className="fcr-phone-transcript" ref={transcriptRef} tabIndex={0} role="region" aria-label="Demo call transcript" aria-live="polite">
         {visibleLines === 0 ? (
           <div className="fcr-phone-empty"><Icon name="phone" size={30} /><strong>Choose a situation and start the demo</strong><span>No real call or message will be sent.</span></div>
         ) : scenario.transcript.slice(0, visibleLines).map((line, index) => (

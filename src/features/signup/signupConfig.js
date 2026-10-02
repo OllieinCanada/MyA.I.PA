@@ -132,7 +132,6 @@ export const AREA_OPTIONS = AREA_GROUPS.flatMap((group) => group.areas);
 
 export const SETUP_STEPS = [
   { number: 1, label: "Your business" },
-  { number: 2, label: "Voice preview" },
   { number: 3, label: "Final review & launch" },
 ];
 

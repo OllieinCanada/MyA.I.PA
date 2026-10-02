@@ -40,9 +40,13 @@ describe("intuitive signup presentation", () => {
     expect(container.querySelector(".signup-macro-stepper")).toBeNull();
     expect(container.querySelector(".signup-home-row a").getAttribute("href")).toBe("#/");
     expect(container.querySelector(".signup-mobile-offer").textContent).toMatch(/14-day free trial.*No credit card required for the trial.*Cancel anytime/i);
-    expect(container.textContent).toMatch(/Step 1 of 8/i);
+    expect(container.textContent).toMatch(/Step 1 of 7/i);
     expect(container.textContent).toMatch(/Choose your trade/i);
     expect(container.querySelectorAll(".signup-trade-grid button")).toHaveLength(6);
+    const topContinue = container.querySelector(".signup-trade-top-continue");
+    expect(topContinue).not.toBeNull();
+    expect(topContinue.classList.contains("sm:hidden")).toBe(false);
+    expect(topContinue.compareDocumentPosition(container.querySelector(".signup-trade-grid")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   test("continues past service-call pricing after both prices are entered", () => {
@@ -91,6 +95,9 @@ describe("intuitive signup presentation", () => {
     clickButton("Hamilton", container.querySelector(".signup-area-list"));
     clickButton("Next", container.querySelector(".signup-mobile-selected-count"));
 
+    expect(container.textContent).not.toMatch(/Who provides your business phone|What kind of number is it|Why we ask for your business address/i);
+    expect(container.textContent).toMatch(/Continue to service call pricing/i);
+
     changeValue("#your-name-input", "Oliver Arscott");
     changeValue("#business-name-input", "Arscott Electric");
     changeValue("#business-phone-number-input", "9057885488");
@@ -101,21 +108,28 @@ describe("intuitive signup presentation", () => {
     changeValue("#postal-code-input", "L8P 1A1");
     submit();
 
-    expect(container.textContent).toMatch(/Step 5 of 8/i);
+    expect(container.textContent).toMatch(/Step 5 of 7/i);
     expect(container.textContent).toMatch(/Do you want your agent to tell callers your service-call or repair pricing upfront\?/i);
     expect(container.querySelector(".signup-mobile-primary").disabled).toBe(true);
 
     clickButton("Yes", container.querySelector('[role="group"]'));
     expect(container.querySelector(".signup-mobile-primary").disabled).toBe(false);
-    changeValue("#service-call-repair-price-input", "125");
+    changeValue("#call-out-visit-fee-input", "125");
     submit();
     expect(container.textContent).toMatch(/Enter both the service-call or repair price and the hourly rate/i);
     expect(container.textContent).toMatch(/Enter the hourly rate/i);
 
     changeValue("#hourly-rate-input", "95");
     submit();
-    expect(container.textContent).toMatch(/Step 6 of 8/i);
+    expect(container.textContent).toMatch(/Step 6 of 7/i);
     expect(container.textContent).toMatch(/Check your setup/i);
+    expect(container.textContent).not.toMatch(/Assistant voice|voice preview/i);
+    submit();
+    expect(container.textContent).toMatch(/Step 7 of 7/i);
+    expect(container.textContent).toMatch(/Final review/i);
+    expect(container.querySelector(".signup-review-step")).not.toBeNull();
+    act(() => container.querySelector(".signup-mobile-back").dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    expect(container.textContent).toMatch(/Step 6 of 7/i);
   });
 
   test("renders Turnstile explicitly and returns its verified token", () => {
