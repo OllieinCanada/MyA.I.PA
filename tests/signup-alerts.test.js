@@ -42,8 +42,8 @@ test("signup alert sends one Telegram message through the injected client", asyn
     token: "test-token",
     chatId: "test-chat",
     fetchImpl: async (url, options) => {
-      calls.push({ url, body: JSON.parse(options.body) });
-      return new Response(JSON.stringify({ ok: true }), {
+      calls.push({ url, body: options.body });
+      return new Response(JSON.stringify({ ok: true, result: { message_id: 123 } }), {
         status: 200,
         headers: { "content-type": "application/json" },
       });
@@ -51,8 +51,11 @@ test("signup alert sends one Telegram message through the injected client", asyn
   });
   assert.equal(result.sent, true);
   assert.equal(calls.length, 1);
-  assert.equal(calls[0].body.chat_id, "test-chat");
-  assert.match(calls[0].body.text, /WHAT THIS SIGNUP IS FOR/);
+  assert.equal(calls[0].body.get('chat_id'), "test-chat");
+  assert.match(calls[0].url, /sendPhoto$/);
+  assert.ok(calls[0].body.get('photo'));
+  assert.match(calls[0].body.get('caption'), /NEW SIGNUP RECEIVED/);
+  assert.ok(calls[0].body.get('caption').length <= 1024);
 });
 
 test("failed signup Telegram delivery includes an exact incident button and honest unknown cause", async () => {
@@ -177,6 +180,22 @@ test("manual-review update says plainly when no AI number has been assigned", ()
     record: { status: "review_required" },
   });
 
-  assert.match(text, /AI number assigned: no/);
   assert.match(text, /Assigned AI number: Not assigned yet/);
+  assert.match(text, /paused for review/);
+});
+
+test("signup cards stay within the caption limit and preserve supplied action buttons", async () => {
+  const replyMarkup = { inline_keyboard: [[{ text: 'Open exact signup', url: 'https://www.myaipa.ca/#/admin' }]] };
+  await sendSignupTelegramAlert({ state: 'provisioning_ready', businessName: 'Business '.repeat(100),
+    record: { businessType: 'Electrical '.repeat(100), serviceArea: 'Niagara '.repeat(100) } }, {
+    token: 'test', chatId: '1', replyMarkup, fetchImpl: async (_url, options) => {
+      assert.ok(options.body.get('caption').length <= 1024);
+      assert.doesNotMatch(options.body.get('caption'), /ELI10|ready for customer calls/i);
+      assert.deepEqual(JSON.parse(options.body.get('reply_markup')), replyMarkup);
+      return new Response(JSON.stringify({ ok: true, result: { message_id: 9 } }));
+    },
+  });
+  await assert.rejects(sendSignupTelegramAlert({ state: 'received' }, {
+    token: 'test', chatId: '1', fetchImpl: async () => new Response(JSON.stringify({ ok: true })),
+  }), /not confirmed/);
 });

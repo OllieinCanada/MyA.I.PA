@@ -1,4 +1,5 @@
 const crypto = require("crypto");
+const { CLOSED_SIGNUP_STATUSES, isClosedSignup } = require("./signupBusinessIdentity");
 
 function sha256(value) {
   return crypto.createHash("sha256").update(String(value || "")).digest("hex");
@@ -42,6 +43,9 @@ function constantTimeEqual(left, right) {
 function customerStatus(record = {}) {
   const status = String(record.status || "signup_received").toLowerCase();
   const assignedPhone = String(record.assignedPhone || "").trim();
+  if (isClosedSignup(record)) {
+    return { state: "closed", title: "This signup is closed.", message: "Contact My AI PA if you want to start again.", assignedPhone: "", terminal: true };
+  }
   if (status === "setup_ready" && assignedPhone && !record.reviewRequired) {
     return {
       state: "ready",
@@ -173,7 +177,12 @@ function createSignupAttemptStore({ prisma, secret, ttlMs = 7 * 24 * 60 * 60 * 1
   async function update(eventKey, values = {}) {
     const data = { ...values };
     if (data.reviewReasons !== undefined && !Array.isArray(data.reviewReasons)) data.reviewReasons = [];
-    return prisma.signupAttempt.update({ where: { eventKey }, data });
+    // The condition is part of the database write: a concurrent archive wins.
+    if (typeof prisma.signupAttempt.updateMany !== "function") {
+      throw Object.assign(new Error("Atomic signup updates are unavailable."), { code: "SIGNUP_ATOMIC_UPDATE_REQUIRED" });
+    }
+    await prisma.signupAttempt.updateMany({ where: { eventKey, status: { notIn: CLOSED_SIGNUP_STATUSES } }, data });
+    return prisma.signupAttempt.findUnique({ where: { eventKey } });
   }
 
   async function updateIfPresent(eventKey, values = {}) {

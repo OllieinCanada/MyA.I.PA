@@ -6,6 +6,7 @@ const PROVIDERS = {
   make: { name: 'MAKE', icon: '🔗', color: [142, 75, 233], url: 'https://us2.make.com/' },
   vapi: { name: 'VAPI', icon: '🎙️', color: [26, 184, 152], url: 'https://dashboard.vapi.ai/' },
   render: { name: 'RENDER', icon: '☁️', color: [70, 132, 238], url: 'https://dashboard.render.com/' },
+  signup: { name: 'SIGNUP', icon: '📞', color: [26, 184, 152], url: 'https://www.myaipa.ca/#/admin' },
 };
 const EVENTS = {
   recharge_confirmed: ['info', 'Auto-recharge confirmed', 'Your payment was confirmed.'],
@@ -41,19 +42,38 @@ function validateEvent(event) {
   if (event.amount != null && !/^[A-Z]{3}$/.test(String(event.currency || ''))) throw new TypeError('An explicit currency is required.');
   return { provider:event.provider,type:event.type,id:event.id,occurredAt:new Date(timestamp).toISOString(),
     ...(event.amount != null ? {amount:Number(event.amount),currency:event.currency} : {}),
+    ...(event.provider === 'twilio' && ['provider_error','provider_warning'].includes(event.type)
+      && /^\d{4,6}$/.test(String(event.errorCode || '')) ? {errorCode:String(event.errorCode)} : {}),
     ...(event.paymentId ? {paymentId:String(event.paymentId).slice(0,100),evidence:event.evidence} : {}) };
 }
 const escape = value => String(value).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+function debuggerExplanation(errorCode) {
+  const known = {
+    '11200': ['Twilio could not read a website response.', 'A call or text callback may not have completed.', 'Check the failed webhook and server logs.'],
+    '11205': ['Twilio could not connect to the website.', 'A call or text callback may not have completed.', 'Check the website address, network, and server health.'],
+    '20003': ['Twilio rejected the account credentials.', 'The affected request could not run.', 'Check the account and API credentials.'],
+    '21610': ['The recipient opted out of texts.', 'The affected text was blocked.', 'Do not resend unless the recipient opts back in.'],
+    '30003': ['The recipient phone was unreachable.', 'This text was not delivered.', 'Confirm the phone is reachable before retrying.'],
+    '30005': ['Twilio could not find the destination phone.', 'This text was not delivered.', 'Check the destination number.'],
+    '30007': ['A carrier filtered the text.', 'This text was not delivered.', 'Review sender registration and message content before retrying.'],
+  };
+  const [issue,impact,next] = known[errorCode] || ['Twilio reported a problem; the cause is not confirmed.', 'No customer impact is confirmed yet.', 'Open the Twilio log to identify the affected request.'];
+  return `Issue: ${issue}\nImpact: ${impact}\nNext: ${next}${errorCode ? `\nCode: ${errorCode}` : ''}`;
+}
 function presentation(input) {
   const event=validateEvent(input); const provider=PROVIDERS[event.provider]; const [severity,title,action]=EVENTS[event.type];
   const amount=event.amount == null ? '' : `${new Intl.NumberFormat('en-CA',{style:'currency',currency:event.currency}).format(event.amount)} ${event.currency}`;
   const time=new Date(event.occurredAt).toLocaleString('en-CA',{timeZone:'America/Toronto'});
-  return { event, severity, caption:`${provider.icon} <b>${provider.name} · ${escape(title)}</b>\n${amount ? `<b>${escape(amount)}</b>\n` : ''}\n${escape(action)}\n\n${escape(time)} (Toronto)`,
-    keyboard:{inline_keyboard:[[{text:'Open dashboard',url:provider.url},{text:'Open details',url:'https://www.myaipa.ca/#/admin?tab=needs-attention'}]]} };
+  const debuggerEvent = ['provider_error','provider_warning'].includes(event.type);
+  const summary = debuggerEvent ? debuggerExplanation(event.errorCode) : action;
+  const detailsUrl = debuggerEvent ? (event.errorCode ? `https://www.twilio.com/docs/api/errors/${event.errorCode}` : 'https://console.twilio.com/us1/monitor/logs/debugger') : 'https://www.myaipa.ca/#/admin?tab=needs-attention';
+  return { event, severity, caption:`${provider.icon} <b>${provider.name} · ${escape(title)}</b>\n${amount ? `<b>${escape(amount)}</b>\n` : ''}\n${escape(summary)}\n\n${escape(time)} (Toronto)`,
+    keyboard:{inline_keyboard:[[{text:debuggerEvent?'Open Twilio log':'Open dashboard',url:debuggerEvent?'https://console.twilio.com/us1/monitor/logs/debugger':provider.url},{text:'Open details',url:detailsUrl}]]} };
 }
 
 // Small deterministic PNG cards: no browser, hosted image, or image service needed.
 const FONT={A:['01110','10001','10001','11111','10001','10001','10001'],E:['11111','10000','10000','11110','10000','10000','11111'],I:['111','010','010','010','010','010','111'],K:['10001','10010','10100','11000','10100','10010','10001'],L:['10000','10000','10000','10000','10000','10000','11111'],M:['10001','11011','10101','10101','10001','10001','10001'],N:['10001','11001','10101','10011','10001','10001','10001'],O:['01110','10001','10001','10001','10001','10001','01110'],P:['11110','10001','10001','11110','10000','10000','10000'],R:['11110','10001','10001','11110','10100','10010','10001'],T:['11111','00100','00100','00100','00100','00100','00100'],V:['10001','10001','10001','10001','10001','01010','00100'],W:['10001','10001','10001','10101','10101','10101','01010'],D:['11110','10001','10001','10001','10001','10001','11110'],F:['11111','10000','10000','11110','10000','10000','10000'],S:['01111','10000','10000','01110','00001','00001','11110'],U:['10001','10001','10001','10001','10001','10001','01110'],' ':['00000','00000','00000','00000','00000','00000','00000']};
+Object.assign(FONT, {G:['01110','10001','10000','10111','10001','10001','01110'],H:['10001','10001','10001','11111','10001','10001','10001'],Y:['10001','10001','01010','00100','00100','00100','00100']});
 function crc32(bytes) {let crc=0xffffffff;for(const b of bytes){crc^=b;for(let i=0;i<8;i++)crc=(crc>>>1)^((crc&1)?0xedb88320:0);}return (crc^0xffffffff)>>>0;}
 function chunk(name,data){const type=Buffer.from(name),size=Buffer.alloc(4),crc=Buffer.alloc(4);size.writeUInt32BE(data.length);crc.writeUInt32BE(crc32(Buffer.concat([type,data])));return Buffer.concat([size,type,data,crc]);}
 function card(providerKey,severity='info') {

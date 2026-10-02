@@ -22,9 +22,23 @@ test('recharge never follows a balance increase and requires receipt evidence',(
   assert.match(view.caption,/USD/);assert.match(view.caption,/confirmed/);
 });
 test('cards are PNG files and buttons stay on known dashboards',()=>{
-  for(const provider of ['twilio','make','vapi','render'])assert.deepEqual([...card(provider).subarray(0,8)],[137,80,78,71,13,10,26,10]);
+  for(const provider of ['twilio','make','vapi','render','signup'])assert.deepEqual([...card(provider).subarray(0,8)],[137,80,78,71,13,10,26,10]);
   assert.equal(presentation(event()).keyboard.inline_keyboard[0][0].url,'https://console.twilio.com/');
   assert.throws(()=>validateEvent(event({provider:'attacker'})));
+});
+test('Twilio warning explains a known code without trusting raw provider text',()=>{
+ const view=presentation(event({type:'provider_warning',errorCode:'11200',message:'private@example.com token=secret'}));
+ assert.match(view.caption,/could not read a website response/);
+ assert.match(view.caption,/Impact:/);assert.match(view.caption,/Next:/);assert.match(view.caption,/Code: 11200/);
+ assert.doesNotMatch(view.caption,/private@example.com|secret|ELI10/);
+ assert.equal(view.event.message,undefined);
+ assert.equal(view.keyboard.inline_keyboard[0][1].url,'https://www.twilio.com/docs/api/errors/11200');
+});
+test('unknown Twilio warnings explicitly avoid a guessed cause or affected customer',()=>{
+ const view=presentation(event({type:'provider_warning',errorCode:'99999'}));
+ assert.match(view.caption,/cause is not confirmed/);assert.match(view.caption,/No customer impact is confirmed/);
+ assert.ok(view.caption.length<700);
+ assert.equal(validateEvent(event({type:'provider_warning',errorCode:'11200 token=secret'})).errorCode,undefined);
 });
 test('successful photo deliveries must have a Telegram receipt',async()=>{
   let form;

@@ -88,6 +88,15 @@ prisma.signupAttempt.update = async ({ where, data }) => {
   rows.set(updated.eventKey, updated);
   return updated;
 };
+prisma.signupAttempt.updateMany = async ({ where, data }) => {
+  let count = 0;
+  for (const [key, row] of rows) {
+    if (row.eventKey !== where.eventKey || where.status.notIn.includes(row.status)) continue;
+    rows.set(key, { ...row, ...data, updatedAt: new Date() });
+    count += 1;
+  }
+  return { count };
+};
 
 const { createSignupAttemptStore } = require("../server/signupAttemptStore");
 const store = createSignupAttemptStore({ prisma, secret: process.env.SIGNUP_STATUS_SECRET });
@@ -252,4 +261,13 @@ test("opening a verification link advances the same saved status without provisi
   const status = (await (await request(attempt.access)).json()).signup;
   assert.equal(status.state, "final_checks");
   assert.equal(status.assignedPhone, "");
+});
+
+test("a delayed completion cannot reopen an archived signup through its real status endpoint", async () => {
+  await store.update(first.record.eventKey, { status: "abandoned_archived", stage: "closed" });
+  await store.update(first.record.eventKey, { status: "setup_ready", stage: "ready", assignedPhone: "+12895550123" });
+  const status = (await (await request()).json()).signup;
+  assert.equal(status.state, "closed");
+  assert.equal(status.assignedPhone, "");
+  assert.equal(status.stage, "closed");
 });

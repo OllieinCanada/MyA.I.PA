@@ -40,6 +40,48 @@ const { app, __test } = require("../server/index");
 const { prisma } = require("../server/prisma");
 const { getTwilioSignature } = require("../server/smsSuppression");
 
+test("business-scoped Stripe customer and trial keys prevent double billing for simultaneous submissions", async () => {
+  const customers = [];
+  const subscriptions = [];
+  const keys = new Map();
+  const client = {
+    customers: {
+      list: async () => ({ data: [...customers] }),
+      create: async (data, options) => {
+        assert.match(options.idempotencyKey, /^signup-customer:/);
+        if (keys.has(options.idempotencyKey)) return keys.get(options.idempotencyKey);
+        const item = { ...data, id: `customer-${customers.length}` };
+        customers.push(item); keys.set(options.idempotencyKey, item); return item;
+      },
+      update: async (id, data) => Object.assign(customers.find((item) => item.id === id), data),
+    },
+    subscriptions: {
+      list: async ({ customer }) => ({ data: subscriptions.filter((item) => item.customer === customer) }),
+      create: async (data, options) => {
+        assert.match(options.idempotencyKey, /^signup-trial:/);
+        if (keys.has(options.idempotencyKey)) return keys.get(options.idempotencyKey);
+        const item = { ...data, status: "trialing", id: `subscription-${subscriptions.length}` };
+        subscriptions.push(item); keys.set(options.idempotencyKey, item); return item;
+      },
+      update: async (id, data) => Object.assign(subscriptions.find((item) => item.id === id), data),
+    },
+  };
+  const identity = { ownerEmail: "same-owner@example.test", ownerPhone: "+19055550111", businessName: "North Electric" };
+  const { signupBusinessKey } = require("../server/signupBusinessIdentity");
+  const key = signupBusinessKey(identity);
+  const [one, two] = await Promise.all([
+    __test.createBusinessStripeTrial({ ...identity, signupAttemptId: "one" }, key, client),
+    __test.createBusinessStripeTrial({ ...identity, signupAttemptId: "two" }, key, client),
+  ]);
+  assert.equal(one.subscription.id, two.subscription.id);
+  assert.equal(customers.length, 1);
+  assert.equal(subscriptions.length, 1);
+  const secondBusiness = { ...identity, businessName: "South Plumbing" };
+  const south = await __test.createBusinessStripeTrial(secondBusiness, signupBusinessKey(secondBusiness), client);
+  assert.notEqual(south.customer.id, one.customer.id);
+  assert.equal(subscriptions.length, 2);
+});
+
 __test.setPublicNetworkStatsLoaderForTests(async () => ({
   callsAnswered: 12,
   followUpOpportunities: 8,
@@ -145,6 +187,68 @@ test("agent route verification attaches only an empty phone and proves the read-
   });
   assert.equal(result.assessment.mode, "direct");
   assert.equal(result.repaired, true);
+});
+
+test("verified exact signup refreshes the protected gate snapshot and proves readback", async () => {
+  const { fingerprintAssistantContent } = require("../server/signupAssistantVerification");
+  const assistant = { id: "assistant-123", name: "Exact business", firstMessage: "Correct greeting",
+    model: { provider: "openai", model: "gpt-4o", messages: [{ role: "system", content: "Saved answers" }] },
+    server: { url: "https://api.myaipa.ca/tools", secret: "must-not-be-saved" } };
+  let gate = { status: "active", businessId: 7, phoneNumberId: "phone-123",
+    phoneNumber: "+12895550123", assistantId: "assistant-123", assistantMaxSeconds: 240,
+    assistantSnapshot: { firstMessage: "Obsolete greeting" } };
+  let writes = 0;
+  const result = await __test.ensureSignupAgentRoute({
+    signup: { businessId: 7, twilioPhoneNumber: gate.phoneNumber, vapiPhoneNumberId: gate.phoneNumberId,
+      vapiAssistantId: gate.assistantId, agentContentStatus: "verified",
+      agentContentFingerprint: fingerprintAssistantContent(assistant) },
+    business: { id: 7 }, vapiPhone: { id: gate.phoneNumberId, number: gate.phoneNumber },
+  }, {
+    requestResource: async resource => resource.startsWith("assistant/") ? assistant
+      : { id: gate.phoneNumberId, number: gate.phoneNumber, server: { url: "https://api.myaipa.ca/api/webhooks/voice" } },
+    readGate: async () => gate,
+    writeGate: async updated => { writes++; gate = updated; },
+  });
+  assert.equal(result.assessment.mode, "trial-gate");
+  assert.equal(writes, 1);
+  assert.equal(gate.assistantSnapshot.firstMessage, "Correct greeting");
+  assert.equal(gate.assistantSnapshot.server.secret, undefined);
+  assert.equal(gate.assistantSnapshot.maxDurationSeconds, 240);
+  assert.equal(gate.assistantId, assistant.id);
+});
+
+test("gate snapshot recovery rejects stale content proof without writing", async () => {
+  let writes = 0;
+  await assert.rejects(() => __test.ensureSignupAgentRoute({
+    signup: { twilioPhoneNumber: "+12895550123", vapiPhoneNumberId: "phone-123", vapiAssistantId: "assistant-123",
+      agentContentStatus: "verified", agentContentFingerprint: "stale-proof" },
+    business: { id: 7 }, vapiPhone: { id: "phone-123", number: "+12895550123" },
+  }, {
+    requestResource: async resource => resource.startsWith("assistant/") ? { id: "assistant-123" }
+      : { id: "phone-123", number: "+12895550123", server: { url: "https://api.myaipa.ca/api/webhooks/voice" } },
+    readGate: async () => ({ status: "active", businessId: 7, phoneNumberId: "phone-123",
+      phoneNumber: "+12895550123", assistantId: "assistant-123" }),
+    writeGate: async () => { writes++; },
+  }), error => error.code === "AGENT_GATE_CONTENT_UNVERIFIED");
+  assert.equal(writes, 0);
+});
+
+test("gate snapshot recovery fails closed when persistence readback remains stale", async () => {
+  const { fingerprintAssistantContent } = require("../server/signupAssistantVerification");
+  const assistant = { id: "assistant-123", name: "Exact business", firstMessage: "Correct greeting" };
+  const gate = { status: "active", businessId: 7, phoneNumberId: "phone-123",
+    phoneNumber: "+12895550123", assistantId: "assistant-123", assistantSnapshot: { firstMessage: "Old greeting" } };
+  await assert.rejects(() => __test.ensureSignupAgentRoute({
+    signup: { twilioPhoneNumber: gate.phoneNumber, vapiPhoneNumberId: gate.phoneNumberId,
+      vapiAssistantId: gate.assistantId, agentContentStatus: "verified",
+      agentContentFingerprint: fingerprintAssistantContent(assistant) },
+    business: { id: 7 }, vapiPhone: { id: gate.phoneNumberId, number: gate.phoneNumber },
+  }, {
+    requestResource: async resource => resource.startsWith("assistant/") ? assistant
+      : { id: gate.phoneNumberId, number: gate.phoneNumber, server: { url: "https://api.myaipa.ca/api/webhooks/voice" } },
+    readGate: async () => gate,
+    writeGate: async () => {},
+  }), error => error.code === "AGENT_GATE_SNAPSHOT_READBACK_FAILED");
 });
 
 test("agent route verification refuses to overwrite another assistant", async () => {
@@ -1394,13 +1498,14 @@ test("operational signup targets resolve the exact attempt when contact details 
   const { hashTarget, signupIdentity } = require("../server/operationalAttention");
   const signups = [
     { ownerEmail: "shared@example.com", businessName: "Old Business", signupAttemptId: `signup_${"a".repeat(32)}` },
-    { ownerEmail: "shared@example.com", businessName: "New Business", signupAttemptId: `signup_${"b".repeat(32)}` },
+    { ownerEmail: "shared@example.com", businessName: "New Business", businessId: 42, signupAttemptId: `signup_${"b".repeat(32)}` },
   ];
   const newestTarget = hashTarget(signupIdentity(signups[1]));
   assert.equal(__test.findSignupByOperationalTarget(newestTarget, signups), signups[1]);
   assert.equal(__test.findSignupByOperationalTarget(newestTarget, signups, signups[1].signupAttemptId), signups[1]);
   assert.equal(__test.findSignupByOperationalTarget(newestTarget, signups, signups[0].signupAttemptId), null);
   assert.notEqual(newestTarget, hashTarget(signupIdentity(signups[0])));
+  assert.equal(__test.findSignupByOperationalTarget(newestTarget, [{ ...signups[1], status: "abandoned_archived" }]), null);
 });
 
 test("integration credentials are not accepted from a request body", async () => {

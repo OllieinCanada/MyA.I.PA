@@ -1,3 +1,5 @@
+const { signupBusinessKey } = require("./signupBusinessIdentity");
+
 function normalizePhoneForLookup(value) {
   return String(value || "").replace(/[^\d+]/g, "").replace(/^00/, "+").toLowerCase();
 }
@@ -33,6 +35,13 @@ async function resolveBusinessForSignup({ signup = {}, db, include } = {}) {
     return business || null;
   }
 
+  const key = signupBusinessKey(signup);
+  if (key && db.runtimeStore) {
+    const registry = await db.runtimeStore.findUnique({ where: { key: `signup-business:${key}` } });
+    if (registry?.data?.closed) return null;
+    if (registry?.data?.businessId) return db.business.findUnique({ where: { id: registry.data.businessId }, ...includeArgs(include) });
+  }
+
   const aiNumber = normalizePhoneForLookup(signup.twilioPhoneNumber);
   if (aiNumber) {
     const mapping = await db.vapiBusinessMapping.findUnique({
@@ -42,6 +51,7 @@ async function resolveBusinessForSignup({ signup = {}, db, include } = {}) {
     if (
       mapping?.business
       && String(mapping.matchType || "").trim().toLowerCase() === "phonenumber"
+      && (!signup.businessName || String(mapping.business.name).trim().toLowerCase() === String(signup.businessName).trim().toLowerCase())
     ) {
       return mapping.business;
     }
@@ -53,10 +63,10 @@ async function resolveBusinessForSignup({ signup = {}, db, include } = {}) {
     businessName ? { name: { equals: businessName, mode: "insensitive" } } : null,
     businessPhone ? { phone: businessPhone } : null,
   ].filter(Boolean);
-  if (!lookup.length) return null;
+  if (lookup.length !== 2) return null;
 
   const candidates = await db.business.findMany({
-    where: { OR: lookup },
+    where: { AND: lookup },
     ...includeArgs(include),
     orderBy: { id: "asc" },
     take: 2,
@@ -66,6 +76,7 @@ async function resolveBusinessForSignup({ signup = {}, db, include } = {}) {
 
 function getSignupStoreAliases(signup = {}) {
   return [
+    signup.signupAttemptId ? `attempt:${String(signup.signupAttemptId).trim()}` : "",
     signup.subscriptionId ? `sub:${String(signup.subscriptionId).trim()}` : "",
     signup.ownerEmail ? `email:${String(signup.ownerEmail).trim().toLowerCase()}` : "",
     signup.checkoutSessionId ? `checkout:${String(signup.checkoutSessionId).trim()}` : "",
@@ -90,6 +101,10 @@ function persistSignupBusinessId({ signup = {}, businessId, readStore, writeStor
   const matchingKeys = [...new Set(
     getSignupStoreAliases(signup).filter((alias) => Object.prototype.hasOwnProperty.call(store, alias))
   )];
+  if (signup.signupAttemptId) {
+    const exact = Object.keys(store).filter((key) => String(store[key]?.signupAttemptId || "") === String(signup.signupAttemptId));
+    matchingKeys.splice(0, matchingKeys.length, ...exact);
+  }
   if (matchingKeys.length !== 1) {
     return { persisted: false, reason: matchingKeys.length ? "ambiguous-signup" : "signup-not-found" };
   }

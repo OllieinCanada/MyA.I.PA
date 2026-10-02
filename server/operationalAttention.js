@@ -1,4 +1,5 @@
 const crypto = require("crypto");
+const { signupBusinessKey } = require("./signupBusinessIdentity");
 
 const FAILED_SIGNUP = /(error|failed|rejected|blocked)/i;
 const BLOCKED_PROVISIONING = /^provisioning_(pending|unknown)$/i;
@@ -454,7 +455,7 @@ function signupAttentionItems(signups = [], now = new Date(), stuckMinutes = 60)
         diagnostics: signupDiagnostics(signup, status),
       }));
     }
-    const duplicateKey = String(signup.ownerEmail || signup.checkoutSessionId || "").trim().toLowerCase();
+    const duplicateKey = signupBusinessKey(signup) || (signup.businessName ? `${String(signup.ownerEmail || "").toLowerCase()}:${String(signup.businessName).trim().toLowerCase()}` : String(signup.checkoutSessionId || ""));
     const meaningfulDuplicateCandidate = Boolean(
       rawStatus
         || signup.signupAttemptId

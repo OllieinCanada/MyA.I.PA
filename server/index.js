@@ -15,6 +15,8 @@ const Stripe = require("stripe");
 const { prisma } = require("./prisma");
 const { createPendingSignupVerificationStore, tokenHash: hashPendingSignupToken } = require("./pendingSignupVerifications");
 const { createSignupAttemptStore } = require("./signupAttemptStore");
+const { assertSignupOpen, isClosedSignup, signupBusinessKey } = require("./signupBusinessIdentity");
+const { ensureSignupBusinessBindings, closeSignupBusinessIdentity, upsertOwnedProviderMapping } = require("./signupBusinessRegistry");
 const { buildBackendRootPage } = require("./backendRootPage");
 const {
   createSandboxScenarioToken,
@@ -150,6 +152,7 @@ const {
   assessSignupAssistantContent,
   assessSignupAssistantContentWithReceipt,
   buildExpectedSignupAssistantConfig,
+  fingerprintAssistantContent,
 } = require("./signupAssistantVerification");
 const {
   assessAgentRouteBinding,
@@ -5220,6 +5223,7 @@ function upsertSignupDashboardRecord(record) {
   const aliases = getSignupAliases(record);
   const existingKey = findSignupDashboardExistingKey(store, record) || `signup:${crypto.randomUUID()}`;
   const existing = store[existingKey] || {};
+  if (isClosedSignup(existing)) return existing;
   const signedUpAt = existing.signedUpAt || record.signedUpAt || record.createdAt || new Date().toISOString();
   const merged = enforceAgentTestReadyStatus(compactObject({
     ...existing,
@@ -5916,6 +5920,7 @@ function findSignupByOperationalTarget(targetId, signups = listSignupDashboardRe
   const expectedAttempt = String(expectedSignupAttemptId || "").trim().toLowerCase();
   if (!/^[a-f0-9]{24}$/.test(expected)) return null;
   return signups.find((record) => {
+    if (isClosedSignup(record)) return false;
     const recordAttempt = String(record?.signupAttemptId || "").trim().toLowerCase();
     return hashOperationalTarget(signupOperationalIdentity(record)) === expected
       && (!expectedAttempt || recordAttempt === expectedAttempt);
@@ -7143,6 +7148,9 @@ async function archiveSignupRecordByOperationalTarget(targetId, expectedSignupAt
     throw error;
   }
   const archivedAt = new Date();
+  const businessKey = signupBusinessKey(signup);
+  const otherActiveAttempt = businessKey && listSignupDashboardRecords().some((item) => item.signupAttemptId !== signup.signupAttemptId && !isClosedSignup(item) && signupBusinessKey(item) === businessKey);
+  if (!otherActiveAttempt) await closeSignupBusinessIdentity({ prisma, signup });
   const updated = upsertSignupDashboardRecord({
     ...signup,
     previousStatus: signup.status || "unknown",
@@ -7844,6 +7852,8 @@ function findSignupForBusiness(business, signups = listSignupDashboardRecords())
   const businessPhone = normalizePhoneForMatch(business.phone || "");
   const mappedValues = new Set((business.vapiMappings || []).map((mapping) => normalizePhoneForMatch(mapping.matchValue)).filter(Boolean));
   return signups.find((record) => {
+    if (isClosedSignup(record)) return false;
+    if (record.businessId) return Number(record.businessId) === Number(business.id);
     const sameName = businessName && normalizeForKey(record.businessName || "") === businessName;
     const samePhone = businessPhone && [
       record.businessPhone,
@@ -7852,7 +7862,7 @@ function findSignupForBusiness(business, signups = listSignupDashboardRecords())
     ].some((value) => normalizePhoneForMatch(value) === businessPhone);
     const sameAiNumber = normalizePhoneForMatch(record.twilioPhoneNumber)
       && mappedValues.has(normalizePhoneForMatch(record.twilioPhoneNumber));
-    return sameName || samePhone || sameAiNumber;
+    return sameName && (samePhone || sameAiNumber);
   }) || null;
 }
 
@@ -7872,71 +7882,23 @@ function getTrialFallbackPhone(signup = {}, aiNumber = "") {
 }
 
 async function ensureTrialBusinessAndMappings(signup, vapiPhone) {
-  let business = await findBusinessForSignup(signup);
+  assertSignupOpen(signup);
   const aiNumber = normalizePhoneForMatch(getVapiPhoneNumber(vapiPhone) || signup.twilioPhoneNumber || "");
   const fallbackPhone = normalizePhoneForMatch(signup.businessPhone || signup.ownerPhone || aiNumber);
-  if (!business) {
-    business = await prisma.business.create({
-      data: {
-        name: String(signup.businessName || signup.ownerName || "My AI PA Trial").trim().slice(0, 160),
-        phone: fallbackPhone,
-        timezone: "America/Toronto",
-      },
-      include: { settings: true, vapiMappings: true },
-    });
-  }
-
   const ownerPhone = String(signup.ownerPhone || signup.businessPhone || fallbackPhone).trim();
-  if (!business.settings) {
-    await prisma.settings.create({
-      data: {
-        businessId: business.id,
-        ownerPhone,
-        answerAfterRings: 3,
-        afterHoursMode: "AI_ALWAYS_ON",
-      },
-    });
-  } else if (ownerPhone && ownerPhone !== business.settings.ownerPhone) {
-    await prisma.settings.update({ where: { businessId: business.id }, data: { ownerPhone } });
-  }
-
   const mappings = [
     { matchType: "phoneNumber", matchValue: aiNumber },
     { matchType: "phoneNumberId", matchValue: String(vapiPhone?.id || "").trim().toLowerCase() },
     { matchType: "assistantId", matchValue: getVapiAssistantId(vapiPhone).toLowerCase() },
   ].filter((mapping) => mapping.matchValue);
-  const existingMappings = await prisma.vapiBusinessMapping.findMany({
-    where: { matchValue: { in: mappings.map((mapping) => mapping.matchValue) } },
-  });
-  const ownershipConflict = existingMappings.find((mapping) => mapping.businessId !== business.id);
-  if (ownershipConflict) {
-    const error = new Error("A provider resource is already assigned to a different business.");
-    error.statusCode = 409;
-    error.code = "AGENT_MAPPING_OWNERSHIP_CONFLICT";
-    throw error;
-  }
-  const existingValues = new Set(existingMappings.map((mapping) => mapping.matchValue));
-  const label = String(signup.businessName || business.name).slice(0, 120);
-  await prisma.$transaction(mappings.map((mapping) => (
-    existingValues.has(mapping.matchValue)
-      ? prisma.vapiBusinessMapping.update({
-          where: { matchValue: mapping.matchValue },
-          data: { matchType: mapping.matchType, label },
-        })
-      : prisma.vapiBusinessMapping.create({
-          data: { businessId: business.id, ...mapping, label },
-        })
-  )));
+  const business = await ensureSignupBusinessBindings({ prisma, signup, mappings, fallbackPhone, ownerPhone });
   persistSignupBusinessId({
     signup,
     businessId: business.id,
     readStore: readSignupDashboardStore,
     writeStore: writeSignupDashboardStore,
   });
-  return prisma.business.findUnique({
-    where: { id: business.id },
-    include: { settings: true, vapiMappings: true },
-  });
+  return business;
 }
 
 function createAgentRouteError(assessment, fallbackMessage) {
@@ -7949,6 +7911,7 @@ function createAgentRouteError(assessment, fallbackMessage) {
 async function ensureSignupAgentRoute({ signup, vapiPhone, business } = {}, dependencies = {}) {
   const requestResource = dependencies.requestResource || requestVapiResource;
   const readGate = dependencies.readGate || readTrialGateConfiguration;
+  const writeGate = dependencies.writeGate || writeTrialGateConfiguration;
   const expectedAssistantId = String(getVapiAssistantId(vapiPhone) || signup?.vapiAssistantId || "").trim();
   const expectedPhoneNumberId = String(vapiPhone?.id || signup?.vapiPhoneNumberId || "").trim();
   const expectedPhoneNumber = normalizePhoneForMatch(getVapiPhoneNumber(vapiPhone) || signup?.twilioPhoneNumber || "");
@@ -7959,7 +7922,7 @@ async function ensureSignupAgentRoute({ signup, vapiPhone, business } = {}, depe
     );
   }
 
-  await requestResource(`assistant/${encodeURIComponent(expectedAssistantId)}`);
+  const liveAssistant = await requestResource(`assistant/${encodeURIComponent(expectedAssistantId)}`);
   let livePhone = await requestResource(`phone-number/${encodeURIComponent(expectedPhoneNumberId)}`);
   const trialGate = await readGate({
     phoneNumberId: expectedPhoneNumberId,
@@ -7996,6 +7959,37 @@ async function ensureSignupAgentRoute({ signup, vapiPhone, business } = {}, depe
         ? "This AI number is attached to a different assistant. It was not changed automatically."
         : "The AI number still could not be verified against its assistant route."
     );
+  }
+
+  // A protected route executes its saved snapshot, not the provider's current
+  // assistant. Refresh only after this exact signup's content has been proved;
+  // matching IDs alone must never make an obsolete script appear ready.
+  if (assessment.mode === "trial-gate" && signup?.agentContentStatus === "verified") {
+    const contentFingerprint = fingerprintAssistantContent(liveAssistant);
+    if (String(liveAssistant?.id || "") !== expectedAssistantId
+      || !signup.agentContentFingerprint
+      || signup.agentContentFingerprint !== contentFingerprint) {
+      throw createAgentRouteError({ code: "AGENT_GATE_CONTENT_UNVERIFIED" },
+        "The protected call gate cannot refresh an assistant without exact content verification.");
+    }
+    const snapshot = sanitizeTransientAssistant(liveAssistant, {
+      maxDurationSeconds: trialGate.assistantMaxSeconds || DEFAULT_MAX_CALL_SECONDS,
+    });
+    if (snapshot.server && typeof snapshot.server === "object") delete snapshot.server.secret;
+    if (JSON.stringify(trialGate.assistantSnapshot) !== JSON.stringify(snapshot)) {
+      await writeGate({ ...trialGate, assistantSnapshot: snapshot,
+        assistantContentFingerprint: contentFingerprint,
+        assistantSnapshotVerifiedAt: new Date().toISOString() });
+      const persisted = await readGate({ phoneNumberId: expectedPhoneNumberId,
+        phoneNumber: { id: expectedPhoneNumberId, number: expectedPhoneNumber } });
+      if (!persisted || persisted.assistantId !== expectedAssistantId
+        || persisted.phoneNumberId !== expectedPhoneNumberId
+        || persisted.businessId !== business.id
+        || fingerprintAssistantContent(persisted.assistantSnapshot) !== contentFingerprint) {
+        throw createAgentRouteError({ code: "AGENT_GATE_SNAPSHOT_READBACK_FAILED" },
+          "The protected call gate's updated script could not be verified.");
+      }
+    }
   }
 
   const verifiedAt = new Date().toISOString();
@@ -8067,7 +8061,8 @@ async function testSignupAgentBeforeDelivery({ signup, vapiPhone, smsRouting = n
     try {
       const accountKey = buildProvisioningAccountKey(
         storedSignup.ownerEmail,
-        storedSignup.ownerPhone || storedSignup.businessPhone
+        storedSignup.ownerPhone || storedSignup.businessPhone,
+        normalizedSignupPayload?.provisioning?.businessKey ? storedSignup.businessName : undefined
       );
       durableReceipt = await readProvisioningStep({
         prisma,
@@ -10358,9 +10353,25 @@ async function createNoCardStripeTrialForSignup(payload, extra = {}) {
   if (!identity.ownerEmail || !isValidEmailAddress(identity.ownerEmail)) {
     return { ok: false, skipped: true, reason: "invalid_owner_email" };
   }
+  const businessKey = signupBusinessKey(identity);
+  if (!businessKey) throw Object.assign(new Error("Billing requires complete business identity."), { code: "SIGNUP_BUSINESS_IDENTITY_REQUIRED", statusCode: 409 });
+  const record = listSignupDashboardRecords().find((item) => item.signupAttemptId === identity.signupAttemptId);
+  assertSignupOpen(record || {});
+  return runProvisioningStep({
+    prisma, kind: "stripe-trial", idempotencyKey: businessKey,
+    contextHash: hashKey(`${businessKey}:${STRIPE_PRICE_ID}:${STRIPE_TRIAL_DAYS}`),
+    verifyCompleted: async (result) => {
+      const subscription = await stripe.subscriptions.retrieve(result.subscription.id);
+      return subscription.metadata?.businessKey === businessKey && !["canceled", "incomplete_expired", "unpaid"].includes(subscription.status);
+    },
+    execute: () => createBusinessStripeTrial(identity, businessKey),
+  });
+}
+
+async function createBusinessStripeTrial(identity, businessKey, client = stripe) {
 
   const metadata = compactObject({
-    signupAttemptId: identity.signupAttemptId,
+    businessKey,
     businessName: identity.businessName,
     ownerName: identity.ownerName,
     ownerEmail: identity.ownerEmail,
@@ -10370,43 +10381,53 @@ async function createNoCardStripeTrialForSignup(payload, extra = {}) {
     trialType: "no-card",
   });
 
-  const existingCustomers = await stripe.customers.list({
+  const existingCustomers = await client.customers.list({
     email: identity.ownerEmail,
-    limit: 1,
+    limit: 100,
   });
-  const existingCustomer = existingCustomers.data?.[0] || null;
+  const matches = (existingCustomers.data || []).filter((item) => item.metadata?.businessKey === businessKey || (
+    !item.metadata?.businessKey
+    && String(item.metadata?.businessName || "").trim().toLowerCase() === identity.businessName.toLowerCase()
+    && normalizePhoneForMatch(item.metadata?.ownerPhone || item.phone) === normalizePhoneForMatch(identity.ownerPhone)
+  ));
+  if (matches.length > 1 || existingCustomers.has_more) throw Object.assign(new Error("Billing ownership is ambiguous."), { code: "SIGNUP_BILLING_OWNERSHIP_CONFLICT", statusCode: 409 });
+  const existingCustomer = matches[0] || null;
   const customer = existingCustomer
-    ? await stripe.customers.update(existingCustomer.id, {
+    ? await client.customers.update(existingCustomer.id, {
         name: identity.ownerName || identity.businessName || undefined,
         phone: identity.ownerPhone || identity.businessPhone || undefined,
         metadata,
       })
-    : await stripe.customers.create({
+    : await client.customers.create({
         email: identity.ownerEmail,
         name: identity.ownerName || identity.businessName || undefined,
         phone: identity.ownerPhone || identity.businessPhone || undefined,
         metadata,
-      });
+      }, { idempotencyKey: `signup-customer:${businessKey}` });
 
-  const subscriptions = await stripe.subscriptions.list({
+  const subscriptions = await client.subscriptions.list({
     customer: customer.id,
     status: "all",
     limit: 20,
   });
-  const existingSubscription = subscriptions.data.find((subscription) => {
+  const matchingSubscriptions = subscriptions.data.filter((subscription) => {
     const status = String(subscription.status || "");
     if (["canceled", "incomplete_expired", "unpaid"].includes(status)) return false;
     const subMetadata = subscription.metadata || {};
     if (subMetadata.source !== "my-ai-pa-signup") return false;
-    if (!identity.businessName) return true;
+    if (subMetadata.businessKey) return subMetadata.businessKey === businessKey;
+    if (!identity.businessName) return false;
     return String(subMetadata.businessName || "").trim().toLowerCase() === identity.businessName.toLowerCase();
   });
-
+  if (matchingSubscriptions.length > 1) throw Object.assign(new Error("Multiple live trials already exist for this business."), { code: "SIGNUP_BILLING_OWNERSHIP_CONFLICT", statusCode: 409 });
+  const existingSubscription = matchingSubscriptions[0];
+  if (subscriptions.has_more) throw Object.assign(new Error("Billing history requires review."), { code: "SIGNUP_BILLING_OWNERSHIP_CONFLICT", statusCode: 409 });
   if (existingSubscription) {
+    await client.subscriptions.update(existingSubscription.id, { metadata: { ...existingSubscription.metadata, businessKey } });
     return { ok: true, customer, subscription: existingSubscription, reused: true };
   }
 
-  const subscription = await stripe.subscriptions.create({
+  const subscription = await client.subscriptions.create({
     customer: customer.id,
     items: [{ price: STRIPE_PRICE_ID }],
     trial_period_days: STRIPE_TRIAL_DAYS,
@@ -10416,7 +10437,7 @@ async function createNoCardStripeTrialForSignup(payload, extra = {}) {
       },
     },
     metadata,
-  });
+  }, { idempotencyKey: `signup-trial:${businessKey}` });
 
   return { ok: true, customer, subscription, reused: false };
 }
@@ -10663,7 +10684,23 @@ async function sendMakeSignupCompleted(payload) {
     payload: proposedPayload,
   });
   const eventKey = buildMakeSignupEventKey(payload);
-  const headers = buildMakeSignupHeaders({ apiKey, eventKey });
+  const canonicalEventKey = buildMakeSignupEventKey(normalizedPayload);
+  if (canonicalEventKey !== eventKey) {
+    // A new browser submission is still a separate verification/status record.
+    // After verified handoff, close that history entry and resume the existing
+    // business setup. Never hand out its status token before verification.
+    const canonical = listSignupDashboardRecords().find((item) => item.signupAttemptId === canonicalEventKey);
+    assertSignupOpen(canonical || {});
+    const closed = await prisma.signupAttempt.findUnique({ where: { eventKey: canonicalEventKey } });
+    assertSignupOpen(closed || {});
+    await updateSignupAttempt(payload, { status: "superseded_duplicate", stage: "closed", detail: "Resumed the existing business setup without creating another", reviewRequired: false });
+    upsertSignupDashboardRecord({
+      signupAttemptId: eventKey, businessName: payload.business?.name,
+      ownerEmail: payload.owner?.email, ownerPhone: payload.owner?.phone,
+      status: "superseded_duplicate", canonicalSignupAttemptId: canonicalEventKey, reviewRequired: false,
+    });
+  }
+  const headers = buildMakeSignupHeaders({ apiKey, eventKey: canonicalEventKey });
   const timeoutMs = parseMakeSignupTimeoutMs(process.env.MAKE_SIGNUP_TIMEOUT_MS);
   const startedAt = Date.now();
 
@@ -10847,6 +10884,28 @@ async function loadTrustedProvisioningContext(req) {
     error.statusCode = 401;
     error.code = "PROVISIONING_CONTEXT_AUTHORIZATION_FAILED";
     throw error;
+  }
+  const attemptId = buildMakeSignupEventKey(payload);
+  const attempt = await prisma.signupAttempt.findUnique({ where: { eventKey: attemptId } });
+  assertSignupOpen(attempt || {});
+  const record = listSignupDashboardRecords().find((item) => item.signupAttemptId === attemptId);
+  assertSignupOpen(record || {});
+  const businessRegistry = await prisma.runtimeStore.findUnique({ where: { key: `signup-business:${signupBusinessKey(payload)}` } });
+  if (businessRegistry?.data?.closed) assertSignupOpen({ status: "archived" });
+  if (payload.provisioning?.businessKey) {
+    const prior = listSignupDashboardRecords().filter((item) => item.signupAttemptId !== attemptId && signupBusinessKey(item) === payload.provisioning.businessKey);
+    // Pre-upgrade resources have owner-scoped receipts. Never silently buy a
+    // second set because the new business-scoped receipt has not been migrated.
+    if (prior.some((item) => signupHasProvisioningOrBillingResources(item) && !item.provisioningBusinessKey)) {
+      throw Object.assign(new Error("Existing business resources require identity migration before retrying."), { code: "SIGNUP_BUSINESS_MIGRATION_REQUIRED", statusCode: 409 });
+    }
+  } else {
+    const identity = signupBusinessKey(payload);
+    const ambiguous = listSignupDashboardRecords().some((item) => !isClosedSignup(item) && signupHasProvisioningOrBillingResources(item)
+      && String(item.ownerEmail || "").trim().toLowerCase() === String(payload.owner?.email || "").trim().toLowerCase()
+      && normalizePhoneForMatch(item.ownerPhone) === normalizePhoneForMatch(payload.owner?.phone)
+      && signupBusinessKey(item) && signupBusinessKey(item) !== identity);
+    if (ambiguous) throw Object.assign(new Error("Legacy owner-scoped resources require business identity migration."), { code: "SIGNUP_BUSINESS_MIGRATION_REQUIRED", statusCode: 409 });
   }
   return payload;
 }
@@ -13958,11 +14017,7 @@ app.post(
           { matchType: "assistantId", matchValue: getVapiAssistantId(vapiNumber).toLowerCase() },
         ].filter((mapping) => mapping.matchValue);
         for (const mapping of mappingValues) {
-          await prisma.vapiBusinessMapping.upsert({
-            where: { matchValue: mapping.matchValue },
-            update: { businessId: business.id, matchType: mapping.matchType, label: businessName.slice(0, 120) },
-            create: { businessId: business.id, ...mapping, label: businessName.slice(0, 120) },
-          });
+          await upsertOwnedProviderMapping({ prisma, businessId: business.id, ...mapping, label: businessName.slice(0, 120) });
         }
       }
     }
@@ -14221,6 +14276,7 @@ app.post(
         vapiPhoneNumberId: result.id,
         vapiAssistantId: result.assistantId || String(body.assistantId || "").trim(),
         provisioningIdempotencyKey: authorization.idempotencyKey,
+        provisioningBusinessKey: trustedPayload.provisioning?.businessKey || "",
         makeStatus: 200,
         status: "setup_started",
       });
@@ -16855,20 +16911,7 @@ app.post(
       const matchValue = matchType.toLowerCase().includes("phone")
         ? normalizePhoneForMatch(rawMatchValue)
         : rawMatchValue.toLowerCase();
-      mapping = await prisma.vapiBusinessMapping.upsert({
-        where: { matchValue },
-        update: {
-          businessId: business.id,
-          matchType,
-          label: String(body.vapiLabel || name).trim().slice(0, 120) || null,
-        },
-        create: {
-          businessId: business.id,
-          matchType,
-          matchValue,
-          label: String(body.vapiLabel || name).trim().slice(0, 120) || null,
-        },
-      });
+      mapping = await upsertOwnedProviderMapping({ prisma, businessId: business.id, matchType, matchValue, label: String(body.vapiLabel || name).trim().slice(0, 120) || null });
     }
 
     res.status(201).json({ ok: true, business, settings, mapping });
@@ -16885,12 +16928,7 @@ app.post(
     const rawValue = String(body.matchValue || "").trim();
     if (!rawValue) return res.status(400).json({ error: "matchValue is required." });
     const matchValue = matchType.toLowerCase().includes("phone") ? normalizePhoneForMatch(rawValue) : rawValue.toLowerCase();
-    const mapping = await prisma.vapiBusinessMapping.upsert({
-      where: { matchValue },
-      update: { businessId, matchType, label: String(body.label || "").trim().slice(0, 120) || null },
-      create: { businessId, matchType, matchValue, label: String(body.label || "").trim().slice(0, 120) || null },
-      include: { business: true },
-    });
+    const mapping = await upsertOwnedProviderMapping({ prisma, businessId, matchType, matchValue, label: String(body.label || "").trim().slice(0, 120) || null, include: { business: true } });
     res.status(201).json({ ok: true, mapping });
   })
 );
@@ -18187,6 +18225,8 @@ module.exports = {
   app,
   startServer,
   __test: {
+    createBusinessStripeTrial,
+    upsertSignupDashboardRecord,
     deriveCustomerSetupStep,
     getVapiCost,
     getVapiDurationSeconds,

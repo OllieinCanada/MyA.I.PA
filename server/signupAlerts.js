@@ -5,6 +5,8 @@ const {
 } = require("./incidentAlerts");
 const { sanitizeMakeFailureEnvelope } = require("./makeSignupWebhook");
 const { classifyOperationalError } = require("./operationalErrorClassifier");
+const { card } = require("./providerNotifications");
+const { validAdminUrl } = require("./incidentAlerts");
 
 function safeLabel(value, fallback = "unknown", maxLength = 160) {
   const text = redactIncidentText(String(value || ""), { maxLength })
@@ -215,32 +217,32 @@ function buildSignupUpdateAlert(input = {}) {
   const eventKey = /^signup_[a-f0-9]{32}$/i.test(String(input.eventKey || ""))
     ? String(input.eventKey).slice(-10)
     : "unknown";
-  const snapshotLines = Object.entries(buildSignupSnapshot(input))
-    .map(([key, value]) => {
-      const safeValue = key === "Assigned AI number"
-        ? formatAssignedAiNumber(value)
-        : safeLabel(value, "Not supplied", 220);
-      return `• ${safeLabel(key)}: ${safeValue}`;
-    });
+  const status = input.state === "provisioning_ready"
+    ? "Phone and assistant checked. Text delivery and a test call still need confirmation."
+    : input.state === "verification_sent"
+      ? "Waiting for the customer to verify their contact details."
+      : input.record?.status === 'review_required' || input.record?.reviewRequired
+        ? "Signup saved, but setup is paused for review."
+        : "Signup saved. Setup is not confirmed ready yet.";
+  const next = input.state === "provisioning_ready"
+    ? "Confirm delivery tests and trial activation, then test the AI number."
+    : input.state === "verification_sent"
+      ? "The customer must complete verification before setup continues."
+      : "Check verification and any setup hold in the dashboard.";
   return [
-    `MY AI PA — ${labels[input.state] || "SIGNUP UPDATE"}`,
+    `📞 MY AI PA — ${labels[input.state] || "SIGNUP UPDATE"}`,
+    safeLabel(context.businessName, "Name unavailable", 100),
+    `${safeLabel(context.businessType, "Trade not supplied", 60)} · ${safeLabel(context.serviceArea, "Area not supplied", 80)}`,
     "",
-    "WHAT THIS SIGNUP IS FOR",
-    ...snapshotLines,
-    `• Attempt reference: ${eventKey}`,
+    `Assigned AI number: ${context.assignedAiNumber || "Not assigned yet"}`,
+    `Contact verified: ${yesNo(context.verified)} · Assistant assigned: ${yesNo(context.assistantAssigned)}`,
+    `Trial started: ${yesNo(context.trialStarted)}`,
     "",
-    "CURRENT STATUS",
-    safeLabel(input.detail || context.status, "Signup update received", 300),
+    `Status: ${status}`,
+    `Next: ${next}`,
     "",
-    "WHAT HAPPENS NEXT",
-    input.state === "provisioning_ready"
-      ? "The verified setup can continue to trial activation and customer testing."
-      : input.state === "verification_sent"
-        ? "Provisioning stays paused until the customer verifies their contact details."
-        : "My AI PA will hold or continue the setup according to the verification and manual-review safeguards.",
-    "",
-    "The assigned My AI PA number is shown when one exists. Customer email, customer phone number, street address, and provider credentials remain hidden.",
-  ].join("\n").slice(0, 3_900);
+    `Reference: ${eventKey}`,
+  ].join("\n");
 }
 
 function buildSignupTelegramAlert(input = {}) {
@@ -257,27 +259,23 @@ async function sendSignupTelegramAlert(input, { token, chatId, fetchImpl = fetch
   if (!String(token || "").trim() || !String(chatId || "").trim()) {
     return { sent: false, skipped: true, reason: "telegram_not_configured" };
   }
-  const body = {
-    chat_id: String(chatId).trim(),
-    disable_web_page_preview: true,
-    text: buildSignupUpdateAlert(input),
-    ...(replyMarkup?.inline_keyboard ? {
-      reply_markup: replyMarkup,
-    } : String(input?.adminUrl || "").startsWith("https://") ? {
-      reply_markup: {
-        inline_keyboard: [[{ text: "Open signup dashboard", url: String(input.adminUrl) }]],
-      },
-    } : {}),
-  };
-  const response = await fetchImpl(`https://api.telegram.org/bot${String(token).trim()}/sendMessage`, {
+  const adminUrl = validAdminUrl(input?.adminUrl);
+  const form = new FormData();
+  form.append('chat_id', String(chatId).trim());
+  form.append('caption', buildSignupUpdateAlert(input));
+  form.append('photo', new Blob([card('signup', input?.record?.reviewRequired || input?.record?.status === 'review_required' ? 'warning' : 'info')], { type: 'image/png' }), 'signup-alert.png');
+  const keyboard = replyMarkup?.inline_keyboard ? replyMarkup : adminUrl ? {
+    inline_keyboard: [[{ text: "Open signup dashboard", url: adminUrl }]],
+  } : null;
+  if (keyboard) form.append('reply_markup', JSON.stringify(keyboard));
+  const response = await fetchImpl(`https://api.telegram.org/bot${String(token).trim()}/sendPhoto`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    body: form,
     signal: typeof AbortSignal?.timeout === "function" ? AbortSignal.timeout(7_000) : undefined,
   });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok || data?.ok !== true) {
-    const error = new Error(data?.description || `Telegram signup alert failed (${response.status}).`);
+  if (!response.ok || data?.ok !== true || !data?.result?.message_id) {
+    const error = new Error(`Telegram signup card was not confirmed (${response.status}).`);
     error.statusCode = 502;
     throw error;
   }
