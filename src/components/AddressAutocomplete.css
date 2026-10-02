@@ -1,0 +1,8 @@
+.signup-address-autocomplete { position: relative; min-width: 0; }
+.signup-address-results { position: relative; z-index: 20; margin-top: 6px; border: 1px solid #cbd5e1; border-radius: 12px; background: #fff; box-shadow: 0 8px 24px #0f172a18; overflow: hidden; }
+.signup-address-results ul { list-style: none; padding: 0; margin: 0; }
+.signup-address-results li { min-height: 44px; padding: 12px 14px; color: #0f172a; font-size: 15px; line-height: 1.4; cursor: pointer; overflow-wrap: anywhere; }
+.signup-address-results li + li { border-top: 1px solid #e2e8f0; }
+.signup-address-results li:hover, .signup-address-results li.is-active { background: #eff6ff; }
+.signup-address-attribution { display: block; padding: 10px 14px; border-top: 1px solid #e2e8f0; color: #5e5e5e; font: 400 12px/1.4 Arial, sans-serif; white-space: nowrap; letter-spacing: normal; }
+.signup-address-hint { margin: 6px 0 0; color: #475569; font-size: 12px; line-height: 1.4; }

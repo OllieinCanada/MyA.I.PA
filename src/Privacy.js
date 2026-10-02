@@ -2,6 +2,11 @@ import React from "react";
 
 const sections = [
   {
+    title: "Address suggestions from Google Maps",
+    body: ["When you use address suggestions, the address text you type is sent to Google Maps to find matching Canadian addresses. Selecting a suggestion fills the business address fields; you can review and change them. Your phone number and email are not sent by this lookup. Manual address entry remains available. Google's Privacy Policy also applies to its processing."],
+    links: [{ label: "Google Privacy Policy", href: "https://policies.google.com/privacy" }],
+  },
+  {
     title: "1. Who We Are",
     body: [
       "My AI PA provides AI-powered phone answering, call intake, caller follow-up, and business notification tools for trades and service businesses. In this Privacy Policy, “My AI PA,” “we,” “us,” and “our” refer to the operator of the My AI PA website and services.",
@@ -128,6 +133,7 @@ function Privacy() {
                 {section.body.map((paragraph) => (
                   <p key={paragraph} className="text-base font-medium leading-7 text-[#d8e7f7] sm:text-lg sm:leading-8">{paragraph}</p>
                 ))}
+                {section.links?.map((link) => <a key={link.href} href={link.href} className="block text-[#8ec5ff] underline" target="_blank" rel="noreferrer">{link.label}</a>)}
               </div>
             </article>
           ))}

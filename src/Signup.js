@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import Vapi from "@vapi-ai/web";
 import CustomerHelpActions from "./components/CustomerHelpActions";
+import AddressAutocomplete from "./components/AddressAutocomplete";
 import ForwardingSetupGuide from "./components/ForwardingSetupGuide";
 import "./components/CustomerSetupActions.css";
 
@@ -484,7 +485,7 @@ function SpecializationCard({ item, selected, onClick }) {
   );
 }
 
-function LabeledInput({ label, icon, value, onChange, onBlur, placeholder, type = "text", className = "", error = "", autoComplete, inputMode }) {
+function LabeledInput({ label, icon, value, onChange, onBlur, placeholder, type = "text", className = "", error = "", autoComplete, inputMode, inputProps = {} }) {
   const inputId = `${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-input`;
   const errorId = `${inputId}-error`;
 
@@ -510,7 +511,8 @@ function LabeledInput({ label, icon, value, onChange, onBlur, placeholder, type 
           autoComplete={autoComplete}
           inputMode={inputMode}
           aria-invalid={Boolean(error)}
-          aria-describedby={error ? errorId : undefined}
+          {...inputProps}
+          aria-describedby={[error ? errorId : "", inputProps["aria-describedby"] || ""].filter(Boolean).join(" ") || undefined}
           className="min-w-0 flex-1 bg-transparent text-base font-medium text-slate-950 outline-none placeholder:text-slate-400"
         />
       </span>
@@ -1304,15 +1306,14 @@ function ReviewPanel({ title = "Check your setup", description = "Check your cho
               type="email"
               error={getFieldError?.("email") || ""}
             />
-            <LabeledInput
+            <AddressAutocomplete
               className="sm:col-span-2"
-              label="Street address"
-              icon="pin"
               value={details.streetAddress}
               onChange={onUpdateDetails("streetAddress")}
               onBlur={onFieldBlur?.("streetAddress")}
-              placeholder="23 Robb Street"
-              error={getFieldError?.("streetAddress") || ""}
+              onSelect={(address) => Object.entries(address).forEach(([field, value]) => onUpdateDetails(field)({ target: { value } }))}
+              renderInput={(inputProps) => <LabeledInput label="Street address" icon="pin" value={details.streetAddress}
+                placeholder="Start typing your address" autoComplete="street-address" error={getFieldError?.("streetAddress") || ""} inputProps={inputProps} />}
             />
             <LabeledInput
               label="City"
@@ -3693,16 +3694,17 @@ export default function Signup() {
                     error={getBusinessFieldError("email")}
                   />
                   <p className="signup-mobile-field-group address">Business address</p>
-                  <LabeledInput
+                  <AddressAutocomplete
                     className="sm:col-span-2 lg:col-span-2"
-                    label="Street address"
-                    icon="pin"
                     value={details.streetAddress}
                     onChange={updateDetails("streetAddress")}
                     onBlur={markDetailTouched("streetAddress")}
-                    placeholder="23 Robb Street"
-                    autoComplete="street-address"
-                    error={getBusinessFieldError("streetAddress")}
+                    onSelect={(address) => {
+                      setDetails((prev) => ({ ...prev, ...address }));
+                      setStatus(""); setError("");
+                    }}
+                    renderInput={(inputProps) => <LabeledInput label="Street address" icon="pin" value={details.streetAddress}
+                      placeholder="Start typing your address" autoComplete="street-address" error={getBusinessFieldError("streetAddress")} inputProps={inputProps} />}
                   />
                   <LabeledInput
                     label="City"
