@@ -11,6 +11,7 @@ Object.assign(process.env, {
   DATABASE_URL: "",
   SECURITY_STATE_FORCE_DATABASE: "false",
   SIGNUP_STATUS_SECRET: "local-status-api-test-secret-at-least-32-characters",
+  ADMIN_SESSION_SECRET: "local-verification-confirmation-test-secret",
   SIGNUP_REQUIRE_MANUAL_APPROVAL: "true", SIGNUP_REQUIRE_VERIFICATION: "false",
   TURNSTILE_SECRET_KEY: "", RECAPTCHA_SECRET_KEY: "", SIGNUP_CAPTCHA_REQUIRED: "false",
   TELEGRAM_BOT_TOKEN: "", TELEGRAM_CHAT_ID: "",
@@ -244,7 +245,7 @@ test("web signup, pending verification, and dashboard share one server-owned ide
   assert.equal(new Set(matchingPendingRows.map((row) => row.payload.signupId)).size, 1);
 });
 
-test("opening a verification link advances the same saved status without provisioning a review-held signup", async () => {
+test("link previews are read-only and only explicit confirmation advances a saved signup", async () => {
   const { createPendingSignupVerificationStore } = require("../server/pendingSignupVerifications");
   const pendingStore = createPendingSignupVerificationStore({ prisma });
   const payload = {
@@ -255,12 +256,50 @@ test("opening a verification link advances the same saved status without provisi
   const { buildMakeSignupEventKey } = require("../server/makeSignupWebhook");
   const attempt = await store.register({ eventKey: buildMakeSignupEventKey(payload), payload, status: "pending_email_verification" });
   const token = await pendingStore.create({ payload, ownerEmail: payload.owner.email, businessName: payload.business.name, reviewReasons: ["manual_approval_enabled"], ttlMs: 3600000 });
-  const verified = await fetch(`${baseUrl}/api/integrations/verify-signup-contact?token=${encodeURIComponent(token)}`);
+  const verificationUrl = `${baseUrl}/api/integrations/verify-signup-contact?token=${encodeURIComponent(token)}`;
+  const beforePreview = JSON.stringify([...pendingRows.values()]);
+  const beforeAttempt = JSON.stringify(rows.get(attempt.record.eventKey));
+  let html;
+  for (const endpoint of [verificationUrl, verificationUrl.replace("verify-signup-contact", "verify-signup-email")]) {
+    for (const method of ["GET", "HEAD"]) {
+      const preview = await fetch(endpoint, { method });
+      assert.equal(preview.status, 200);
+      assert.equal(preview.headers.get("cache-control"), "no-store");
+      assert.equal(preview.headers.get("referrer-policy"), "no-referrer");
+      const page = await preview.text();
+      if (method === "GET") {
+        html = page;
+        assert.match(page, /Verify and continue/);
+        assert.match(page, /form method="post"/);
+        assert.doesNotMatch(page, /<span class="badge">Verified/);
+      }
+      assert.equal(JSON.stringify([...pendingRows.values()]), beforePreview, "Previews cannot claim or modify tokens");
+      assert.equal(JSON.stringify(rows.get(attempt.record.eventKey)), beforeAttempt, "Previews cannot advance signup state");
+    }
+  }
+  for (const body of [{ token }, { token, confirmation: "VERIFY_AND_CONTINUE", confirmationProof: "forged" }]) {
+    const denied = await fetch(`${baseUrl}/api/integrations/verify-signup-contact`, {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
+    });
+    assert.equal(denied.status, 400);
+    assert.match(await denied.text(), /Confirmation required/);
+    assert.equal(JSON.stringify([...pendingRows.values()]), beforePreview);
+    assert.equal(JSON.stringify(rows.get(attempt.record.eventKey)), beforeAttempt);
+  }
+  const form = new URLSearchParams();
+  for (const [, name, value] of html.matchAll(/<input type="hidden" name="([^"]+)" value="([^"]*)"/g)) form.set(name, value);
+  form.set("confirmation", "VERIFY_AND_CONTINUE");
+  const verified = await fetch(`${baseUrl}/api/integrations/verify-signup-contact`, {
+    method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: form.toString(),
+  });
   assert.equal(verified.status, 200, await verified.clone().text());
   assert.match(await verified.text(), /Contact verified/);
   const status = (await (await request(attempt.access)).json()).signup;
   assert.equal(status.state, "final_checks");
   assert.equal(status.assignedPhone, "");
+  const pending = [...pendingRows.values()].find((row) => row.ownerEmail === payload.owner.email);
+  assert.ok(pending.verifiedAt);
+  assert.equal(pending.payload.verification.emailVerified, true);
 });
 
 test("a delayed completion cannot reopen an archived signup through its real status endpoint", async () => {
@@ -270,4 +309,35 @@ test("a delayed completion cannot reopen an archived signup through its real sta
   assert.equal(status.state, "closed");
   assert.equal(status.assignedPhone, "");
   assert.equal(status.stage, "closed");
+});
+
+test("SMS confirmation preserves its channel and expired links cannot display a confirm button", async () => {
+  const { createPendingSignupVerificationStore } = require("../server/pendingSignupVerifications");
+  const { createVerificationChannelProof } = require("../server/signupVerificationChannel");
+  const pendingStore = createPendingSignupVerificationStore({ prisma });
+  const payload = { signupId: "sms-confirmation-attempt", business: { name: "SMS Test Electric" }, owner: { email: "sms-verify@example.invalid", phone: "+12895550113" } };
+  const token = await pendingStore.create({ payload, ownerEmail: payload.owner.email, businessName: payload.business.name, reviewReasons: ["manual_approval_enabled"] });
+  const proof = createVerificationChannelProof(token, "sms", process.env.ADMIN_SESSION_SECRET);
+  const url = `${baseUrl}/api/integrations/verify-signup-contact?token=${token}&channel=sms&channelProof=${proof}`;
+  const preview = await fetch(url);
+  assert.equal(preview.status, 200);
+  const html = await preview.text();
+  assert.equal(pendingRows.get(pendingStore.tokenHash(token)).claimedAt, null);
+  const form = new URLSearchParams();
+  for (const [, name, value] of html.matchAll(/<input type="hidden" name="([^"]+)" value="([^"]*)"/g)) form.set(name, value);
+  form.set("confirmation", "VERIFY_AND_CONTINUE");
+  const verified = await fetch(`${baseUrl}/api/integrations/verify-signup-contact`, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: form.toString() });
+  assert.equal(verified.status, 200, await verified.clone().text());
+  await verified.text();
+  const record = pendingRows.get(pendingStore.tokenHash(token));
+  assert.equal(record.payload.verification.smsVerified, true);
+  assert.equal(record.payload.verification.emailVerified, false);
+  record.expiresAt = new Date(Date.now() - 1000);
+  const expired = await fetch(url);
+  assert.equal(expired.status, 400);
+  assert.doesNotMatch(await expired.text(), /form method="post"/);
+  assert.ok(pendingRows.has(pendingStore.tokenHash(token)), "Read-only expiry check does not prune records");
+  const retry = await fetch(`${baseUrl}/api/integrations/verify-signup-contact`, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: form.toString() });
+  assert.equal(retry.status, 400);
+  assert.match(await retry.text(), /invalid or expired/);
 });

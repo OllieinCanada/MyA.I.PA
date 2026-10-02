@@ -1,7 +1,7 @@
 const { normalizeE164, sendSmsViaTwilio } = require("./twilioSms");
 
 function buildSignupVerificationText({ businessName, verificationUrl }) {
-  return `My AI PA signup for ${String(businessName || "your business").trim()}: tap to verify your phone and continue setup. ${String(verificationUrl || "").trim()} This link expires in 24 hours.`;
+  return `My AI PA signup for ${String(businessName || "your business").trim()}: tap to verify your phone, then press Verify and continue to start setup. ${String(verificationUrl || "").trim()} This link expires in 24 hours.`;
 }
 
 async function deliverSignupVerificationText({

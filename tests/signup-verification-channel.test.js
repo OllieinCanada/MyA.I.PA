@@ -3,9 +3,11 @@ const assert = require("node:assert/strict");
 const {
   buildVerificationState,
   createVerificationChannelProof,
+  createVerificationConfirmationProof,
   isContactVerified,
   normalizeVerificationChannel,
   verifyVerificationChannelProof,
+  verifyVerificationConfirmationProof,
 } = require("../server/signupVerificationChannel");
 
 test("records the channel that was actually verified", () => {
@@ -27,4 +29,12 @@ test("channel proof prevents an SMS link from being relabelled as email", () => 
 test("defaults old channel-less links to email for compatibility", () => {
   assert.equal(normalizeVerificationChannel(""), "email");
   assert.equal(buildVerificationState("email").emailVerified, true);
+});
+
+test("confirmation proof is separate from link proof and bound to token and channel", () => {
+  const proof = createVerificationConfirmationProof("token-1", "sms", "test-secret");
+  assert.equal(verifyVerificationConfirmationProof("token-1", "sms", proof, "test-secret"), true);
+  assert.equal(verifyVerificationConfirmationProof("token-2", "sms", proof, "test-secret"), false);
+  assert.equal(verifyVerificationConfirmationProof("token-1", "email", proof, "test-secret"), false);
+  assert.equal(verifyVerificationConfirmationProof("token-1", "sms", createVerificationChannelProof("token-1", "sms", "test-secret"), "test-secret"), false);
 });
