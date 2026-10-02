@@ -198,3 +198,11 @@ test("signup cards stay within the caption limit and preserve supplied action bu
     token: 'test', chatId: '1', fetchImpl: async () => new Response(JSON.stringify({ ok: true })),
   }), /not confirmed/);
 });
+test("verification captions distinguish pending, failed and delivered without exposing full contact", () => {
+  for (const [status, title] of [["pending","PENDING"],["failed","FAILED"],["delivered","DELIVERED"]]) {
+    const text = buildSignupTelegramAlert({state:"verification_sent",record:{businessName:"Test",ownerPhone:"+19055557422",smsVerificationDeliveryStatus:status}});
+    assert.match(text,new RegExp(`VERIFICATION TEXT ${title}`));
+    assert.match(text,/Recipient: •••• 7422/);
+    assert.doesNotMatch(text,/19055557422/);
+  }
+});

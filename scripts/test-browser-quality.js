@@ -8,7 +8,9 @@ const reportPath = rootPath("diagnostics", "shipping-readiness", "browser-qualit
 
 const defaultBuildDir = rootPath("build");
 const pagesBuildDir = rootPath("docs");
-const buildDir = fs.existsSync(path.join(defaultBuildDir, "index.html"))
+const buildDir = process.env.BUILD_PREVIEW_DIR
+  ? path.resolve(process.env.BUILD_PREVIEW_DIR)
+  : fs.existsSync(path.join(defaultBuildDir, "index.html"))
   ? defaultBuildDir
   : pagesBuildDir;
 const axePath = require.resolve("axe-core/axe.min.js");
@@ -214,7 +216,7 @@ async function auditAssetsAndControls(page, route) {
     const signupLinks = audit.links.filter((link) => link.href === "#/signup");
     const demoLinks = audit.links.filter((link) => link.href === "tel:+12495033301");
     if (!signupLinks.length || !demoLinks.length) throw new Error(`${route.name} is missing its signup or demo CTA`);
-    if (!/no credit card required/i.test(audit.text)) throw new Error(`${route.name} does not state that the trial needs no credit card`);
+    if (!/no (?:credit )?card required/i.test(audit.text)) throw new Error(`${route.name} does not state that the trial needs no credit card`);
   }
 
   const images = await page.locator("img").all();
@@ -240,6 +242,7 @@ async function auditAssetsAndControls(page, route) {
 async function auditPage({ browser, baseUrl, engineName, route, viewport }) {
   const context = await browser.newContext({
     viewport: { width: viewport.width, height: viewport.height },
+    serviceWorkers: "block",
   });
   const page = await context.newPage();
   page.setDefaultTimeout(15_000);
@@ -335,8 +338,10 @@ async function auditPage({ browser, baseUrl, engineName, route, viewport }) {
   }
 }
 
-async function testSignupJourney(browser, baseUrl) {
-  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+async function testSignupJourney(browser, baseUrl, viewport) {
+  const context = await browser.newContext({ viewport: { width: viewport.width, height: viewport.height }, serviceWorkers: "block" });
+  // This is UI QA only: never provision resources or send verification texts.
+  await context.route("**/api/integrations/signup-complete", (route) => route.abort());
   const page = await context.newPage();
   page.setDefaultTimeout(15_000);
   page.setDefaultNavigationTimeout(15_000);
@@ -347,20 +352,62 @@ async function testSignupJourney(browser, baseUrl) {
     await page.waitForURL(/#\/signup$/);
     await page.getByRole("heading", { level: 1, name: /create your ai phone assistant/i }).waitFor({ state: "visible" });
 
+    const topContinue = page.locator(".signup-trade-top-continue");
+    const topBounds = await topContinue.boundingBox();
+    const choicesBounds = await page.locator(".signup-trade-grid").boundingBox();
+    if (!topBounds || !choicesBounds || topBounds.y + topBounds.height > choicesBounds.y) {
+      throw new Error(`Continue is not above the trade choices on ${viewport.name}`);
+    }
+
     await clickVisibleByText(page, "Electrician");
     await clickVisibleByText(page, "Continue to property types");
     await clickVisibleByText(page, "Residential");
     await clickVisibleByText(page, "Continue to service areas");
     await page.getByText("Where do you work?", { exact: true }).first().waitFor({ state: "visible" });
+    await clickVisibleByText(page, "Hamilton");
+    await clickVisibleByText(page, viewport.width < 640 ? "Next" : "Continue to business details");
+    const detailsText = await page.locator("form").innerText();
+    if (/Who provides your business phone|What kind of number is it|Why we ask for your business address/i.test(detailsText)) {
+      throw new Error("Removed signup questions returned");
+    }
+    for (const [id, value] of Object.entries({
+      "your-name-input": "Alex Morgan",
+      "business-name-input": "UI QA Electrical",
+      "business-phone-number-input": "9055550123",
+      "email-address-input": "ui-qa@signup.invalid",
+      "street-address-input": "123 Birch Road",
+      "city-input": "Hamilton",
+      "postal-code-input": "L8P 1A1",
+    })) await page.locator(`#${id}`).fill(value);
+    await page.locator("#province-select").selectOption("ON");
+    await clickVisibleByText(page, "Continue to service call pricing");
+    await clickVisibleByText(page, "Yes");
+    await page.locator("#call-out-visit-fee-input").fill("125");
+    await page.locator("#hourly-rate-input").fill("95");
+    const screenshotDir = rootPath("diagnostics", "browser-drive");
+    fs.mkdirSync(screenshotDir, { recursive: true });
+    await page.screenshot({ path: path.join(screenshotDir, `notes-pricing-${viewport.name}.png`), fullPage: true, animations: "disabled" });
+    await clickVisibleByText(page, "Continue to check your setup");
+    await clickVisibleByText(page, "Continue to final review");
+    await page.locator(".signup-review-step").waitFor({ state: "visible" });
+    const finalText = await page.locator("form").innerText();
+    if (!/Step 7 of 7/.test(finalText) || /voice preview|Assistant voice/i.test(finalText)) {
+      throw new Error("Signup did not reach final review directly without voice preview");
+    }
+    await page.screenshot({ path: path.join(screenshotDir, `notes-final-review-${viewport.name}.png`), fullPage: true, animations: "disabled" });
+    await clickVisibleByText(page, "Back");
+    if (!/Step 6 of 7/.test(await page.locator("form").innerText())) {
+      throw new Error("Back from final review did not return to Check your setup");
+    }
 
-    return { engine: "chromium", route: "signup-journey", viewport: "mobile", accessibilityWarnings: [] };
+    return { engine: "chromium", route: "signup-journey", viewport: viewport.name, accessibilityWarnings: [] };
   } finally {
     await context.close();
   }
 }
 
 async function testTradeImageFailureFallback(browser, baseUrl) {
-  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: "block" });
   await context.route("**/trade-heroes/**", (route) => route.abort());
   const page = await context.newPage();
   page.setDefaultTimeout(15_000);
@@ -378,7 +425,7 @@ async function testTradeImageFailureFallback(browser, baseUrl) {
 }
 
 async function testSlowTradeImageLayout(browser, baseUrl) {
-  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: "block" });
   await context.route("**/trade-heroes/**", async (route) => {
     await new Promise((resolve) => setTimeout(resolve, 1200));
     await route.continue();
@@ -406,7 +453,7 @@ async function testSlowTradeImageLayout(browser, baseUrl) {
 }
 
 async function testLargeTextReflow(browser, baseUrl) {
-  const context = await browser.newContext({ viewport: { width: 320, height: 800 }, reducedMotion: "reduce" });
+  const context = await browser.newContext({ viewport: { width: 320, height: 800 }, reducedMotion: "reduce", serviceWorkers: "block" });
   const page = await context.newPage();
   page.setDefaultTimeout(15_000);
   try {
@@ -469,8 +516,10 @@ async function main() {
           }
         }
         if (engineName === "chromium") {
-          console.log("[browser-quality] chromium/signup-journey/mobile");
-          results.push(await withTimeout(testSignupJourney(browser, baseUrl), 120_000, "chromium/signup-journey/mobile"));
+          for (const viewport of viewports) {
+            console.log(`[browser-quality] chromium/signup-journey/${viewport.name}`);
+            results.push(await withTimeout(testSignupJourney(browser, baseUrl, viewport), 120_000, `chromium/signup-journey/${viewport.name}`));
+          }
           console.log("[browser-quality] chromium/trade-image-fallback/mobile");
           results.push(await withTimeout(testTradeImageFailureFallback(browser, baseUrl), 60_000, "chromium/trade-image-fallback/mobile"));
           console.log("[browser-quality] chromium/trade-slow-image-layout/mobile");

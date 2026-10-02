@@ -112,10 +112,11 @@
 .fcr-avatar { width: 43px; height: 43px; display: grid; place-items: center; border-radius: 50%; color: white; background: var(--fcr-blue); }
 .fcr-phone-call > div:nth-child(2) { display: flex; flex-direction: column; }
 .fcr-phone-call strong { font-size: .82rem; }
-.fcr-phone-call small { color: #718094; font-size: .75rem; }
+.fcr-phone-call small { color: #526174; font-size: .75rem; }
 .fcr-live-dot { width: 9px; height: 9px; margin-left: auto; border-radius: 50%; background: #aeb9c0; }
 .fcr-live-dot.is-live { background: #20c98e; box-shadow: 0 0 0 5px rgba(32,201,142,.14); }
 .fcr-phone-transcript { flex: 1; padding: 18px 13px 12px; overflow-y: auto; background: linear-gradient(#f4f8f9, #edf4f5); }
+.fcr-phone-transcript:focus-visible { outline: 3px solid #176bff; outline-offset: -3px; }
 .fcr-phone-empty { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #7b8999; text-align: center; }
 .fcr-phone-empty svg { margin-bottom: 12px; color: #50a8a2; }
 .fcr-phone-empty strong { color: #344b60; font-size: .78rem; }

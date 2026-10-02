@@ -32,7 +32,7 @@ const steps = [
   ...(!skipPages
     ? [
         ["Production Pages build", nodeCommand(), [path.join("scripts", "build-pages.js")]],
-        ["Browser journeys, accessibility, and responsive layout checks", npmCommand, ["run", "test:browser:quality"]],
+        ["Browser journeys, accessibility, and responsive layout checks", npmCommand, ["run", "test:browser:quality"], { env: { BUILD_PREVIEW_DIR: rootPath("docs") } }],
       ]
     : []),
 ];

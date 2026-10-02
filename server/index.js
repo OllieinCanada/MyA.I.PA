@@ -43,7 +43,7 @@ const {
 const { normalizeE164, sendSmsViaTwilio, fetchSmsStatusViaTwilio } = require("./twilioSms");
 const { selectTrialSignup } = require("./trialSignupSelection");
 const { fetchProviderReadText } = require("./providerRead");
-const { deliverSignupVerificationText } = require("./signupSmsVerification");
+const { deliverSignupVerificationText, verificationDeliveryFields, verificationDeliveryUpdate } = require("./signupSmsVerification");
 const {
   deliverSignupCompletion,
   formatAssignedPhone,
@@ -1776,10 +1776,12 @@ async function beginVoiceSignupVerification({ req, parameters, call }) {
   }
 
   try {
-    smsResult = await sendSmsViaTwilio({
-      to: owner.phone,
-      message: `My AI PA signup for ${business.name}: verify your contact details to continue setup. ${smsVerificationUrl} This link expires in 24 hours.`,
-      env: getVapiVoiceSignupSmsEnvironment(),
+    smsResult = await deliverSignupVerificationText({
+      ownerPhone: owner.phone,
+      businessName: business.name,
+      verificationUrl: smsVerificationUrl,
+      sendSms: (request) => sendSmsViaTwilio({ ...request, env: getVapiVoiceSignupSmsEnvironment() }),
+      fetchStatus: (request) => fetchSmsStatusViaTwilio({ ...request, env: getVapiVoiceSignupSmsEnvironment() }),
     });
   } catch (error) {
     smsError = error;
@@ -1862,6 +1864,7 @@ async function beginVoiceSignupVerification({ req, parameters, call }) {
     ],
     emailVerificationSentAt: emailSent ? new Date().toISOString() : undefined,
     smsVerificationSentAt: smsSent ? new Date().toISOString() : undefined,
+    ...(smsResult ? verificationDeliveryFields(smsResult) : {}),
     signupSource: "voice",
     vapiCallId: payload.source?.callId || "",
     reviewRequired: reviewReasons.length > 0,
@@ -5313,10 +5316,10 @@ async function safelyNotifySignupOperations(payload, {
   providerFailure = null,
   reasonCode = "",
 } = {}) {
-  const eventKey = buildMakeSignupEventKey(payload);
+  const eventKey = record?.signupAttemptId || buildMakeSignupEventKey(payload);
   const alertKey = crypto
     .createHash("sha256")
-    .update(`${eventKey}:${String(state || "update")}`)
+    .update(`${eventKey}:${String(state || "update")}${state === "verification_sent" ? `:${record?.smsVerificationMessageSid || ""}:${record?.smsVerificationDeliveryStatus || "pending"}` : ""}`)
     .digest("hex")
     .slice(0, 24);
   const current = record || listSignupDashboardRecords().find((item) => item.signupAttemptId === eventKey) || null;
@@ -12924,6 +12927,20 @@ app.post(
     const preparedIncident = buildTwilioMessageStatusIncident(req.body || {});
     const messageSid = req.body?.MessageSid || req.body?.SmsSid;
     const messageStatus = req.body?.MessageStatus || req.body?.SmsStatus;
+    const verificationSignup = listSignupDashboardRecords().find((signup) => (
+      !isClosedSignup(signup) && signup.smsVerificationMessageSid === String(messageSid || "").trim()
+    ));
+    if (verificationSignup) {
+      const update = verificationDeliveryUpdate(verificationSignup, {
+        sid: messageSid, status: messageStatus, errorCode: req.body?.ErrorCode,
+      });
+      if (update) {
+        const updated = upsertSignupDashboardRecord({ ...verificationSignup, ...update });
+        if (update.smsVerificationDeliveryStatus !== "pending") {
+          await safelyNotifySignupOperations({}, { state: "verification_sent", record: updated });
+        }
+      }
+    }
     const matchingSignup = listSignupDashboardRecords().find((signup) => (
       messageSid && [signup.agentTestOwnerMessageSid, signup.agentTestCustomerMessageSid].includes(String(messageSid).trim())
     ));
@@ -14701,6 +14718,7 @@ app.post(
         smsVerificationRequired: true,
         verificationDeliveryPolicy: "sms_required_email_optional",
         verificationDeliveryChannels: ["sms", ...(emailSent ? ["email"] : [])],
+        ...verificationDeliveryFields(smsResult),
         smsVerificationSentAt: new Date().toISOString(),
         emailVerificationSentAt: emailSent ? new Date().toISOString() : undefined,
         reviewRequired: securityDecision.reviewRequired,
@@ -14709,7 +14727,7 @@ app.post(
       await updateSignupAttempt(makePayload, {
         status: "pending_verification",
         stage: "verification",
-        detail: "Verification text sent; waiting for phone verification",
+        detail: `Verification text ${verificationDeliveryFields(smsResult).smsVerificationDeliveryStatus}; waiting for phone verification`,
         reviewRequired: securityDecision.reviewRequired,
       });
       await safelyNotifySignupOperations(payload, {
@@ -14725,10 +14743,15 @@ app.post(
         emailVerificationRequired: false,
         smsVerificationRequired: true,
         smsSent: true,
+        smsDeliveryStatus: verificationDeliveryFields(smsResult).smsVerificationDeliveryStatus,
         emailSent,
         businessName,
         signupStatus,
-        message: "Signup received. Open the secure link we texted you to verify your phone before setup continues.",
+        message: verificationDeliveryFields(smsResult).smsVerificationDeliveryStatus === "delivered"
+          ? "Carrier confirmed delivery. Open the text and press Verify to continue setup."
+          : verificationDeliveryFields(smsResult).smsVerificationDeliveryStatus === "failed"
+            ? "Signup saved, but verification text delivery failed. Setup remains blocked; contact support before retrying."
+            : "Signup saved. Verification text delivery is still pending. Do not submit another signup.",
       });
     }
 
@@ -16328,17 +16351,10 @@ app.post(
           reopenedAt: new Date().toISOString(),
         });
       } else if (action === "resend_signup_verification") {
-        const signup = listSignupDashboardRecords().find((record) => {
-          const identity = String(record.subscriptionId || record.checkoutSessionId || record.ownerEmail || record.businessName || record.signedUpAt || "unknown");
-          return hashOperationalTarget(identity) === targetId;
-        });
+        const signup = findSignupByOperationalTarget(targetId, listSignupDashboardRecords(), req.body?.signupAttemptId);
         if (!signup) return res.status(404).json({ error: "Signup record was not found." });
         const pendingStore = await readPendingSignupStore();
-        const pendingEntry = Object.entries(pendingStore).find(([, record]) => {
-          const sameEmail = signup.ownerEmail && String(record?.ownerEmail || "").toLowerCase() === String(signup.ownerEmail).toLowerCase();
-          const sameBusiness = signup.businessName && String(record?.businessName || "").toLowerCase() === String(signup.businessName).toLowerCase();
-          return sameEmail || sameBusiness;
-        });
+        const pendingEntry = findPendingSignupForDashboardRecord(signup, pendingStore);
         if (!pendingEntry?.[1]?.payload) {
           return res.status(409).json({ error: "The verification request expired. Reopen the signup and ask the customer to confirm the form again." });
         }
@@ -16366,6 +16382,7 @@ app.post(
             upsertSignupDashboardRecord({
               ...signup,
               status: "pending_verification",
+              ...verificationDeliveryFields(sms),
               emailVerificationRequired: false,
               smsVerificationRequired: true,
               smsVerificationSentAt: new Date().toISOString(),

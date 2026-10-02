@@ -122,6 +122,23 @@ describe("resumable signup status and pre-activation support", () => {
     expect(container.textContent).toMatch(/Number setup needs a retry/);
   });
 
+  test("verification instructions require opening the phone link and hide any old AI number", () => {
+    render({
+      ...pending(),
+      reviewRequired: false,
+      verificationRequired: true,
+      smsVerificationRequired: true,
+      twilioPhoneNumber: "+12895550123",
+      phoneProvisioning: { status: "ready", e164: "+12895550123" },
+      signupStatus: { ...pending().signupStatus, state: "verification_required" },
+    });
+    expect(container.textContent).toMatch(/Open the verification link on your phone to continue/i);
+    expect(container.textContent).toMatch(/wait a few minutes/i);
+    expect(container.querySelector('a[href="tel:+12895550123"]')).toBeNull();
+    expect(container.textContent).not.toMatch(/Your AI phone assistant is ready for testing/i);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
   test("a closed signup is clearly explained and is not polled again", async () => {
     global.fetch.mockResolvedValue(response({ signup: { state: "closed", terminal: true, assignedPhone: "", title: "This pilot signup was not activated.", message: "Contact My AI PA if this was a mistake." } }));
     render();
