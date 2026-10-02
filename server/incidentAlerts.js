@@ -1,4 +1,5 @@
-const MAX_TELEGRAM_TEXT_LENGTH = 3_900;
+const { noticeRequest } = require('./telegramNotice');
+const MAX_TELEGRAM_TEXT_LENGTH = 950;
 
 const INCIDENT_REASON_CATALOG = Object.freeze({
   SIGNUP_VALIDATION_FAILED: "The signup did not pass the required validation checks.",
@@ -209,29 +210,42 @@ function affectedCustomer(input = {}) {
 
 function buildIncidentTelegramAlert(input = {}) {
   const severity = redactIncidentText(input.severity, { maxLength: 20 }).toUpperCase() || "WARNING";
-  const title = redactIncidentText(input.title || input.whatFailed || "My AI PA incident", { maxLength: 140 });
-  const reason = capText(humanizeIncidentReason(input.reasonCode, input.reason), 300);
+  const title = redactIncidentText(input.title || input.whatFailed || "My AI PA incident", { maxLength: 100 });
+  const briefReasons = {
+    MAKE_SIGNUP_RESPONSE_INCOMPLETE: 'Make replied without a verified phone and assistant.',
+    MAKE_SIGNUP_RESPONSE_EMPTY: 'Make returned no setup result.',
+    MAKE_SIGNUP_TIMEOUT: 'Make did not respond in time.',
+    SIGNUP_VERIFICATION_REQUIRED: 'Waiting for the customer to verify their contact details.',
+    SIGNUP_REVIEW_REQUIRED: 'Setup is paused for review.',
+    SIGNUP_DUPLICATE: 'A matching signup exists. Duplicate setup was blocked.',
+    DUPLICATE_OR_STATE_CONFLICT: 'A duplicate or conflicting setup was blocked.',
+    SIGNUP_RECOVERY_VAPI_BINDING_MISMATCH: 'The AI number could not be matched to this business’s assistant.',
+    PROVIDER_ACCOUNT_FUNDING_REQUIRED: 'The provider account needs funds or credits.',
+    UNKNOWN_OPERATIONAL_FAILURE: 'Cause not confirmed. Check the saved error.',
+    SMTP_RECIPIENT_REJECTED: 'The email provider rejected the customer’s email address.',
+    '30007': 'The carrier filtered the text.',
+    '30003': 'The recipient’s phone was unreachable.',
+    '20003': 'Twilio denied access. Check account status and credentials.',
+  };
+  const code = normalizeReasonCode(input.reasonCode);
+  const reason = capText(code === 'INVALID_HEALTH_RESPONSE' && input.reason
+    ? redactIncidentText(input.reason, { maxLength: 160 })
+    : briefReasons[code] || INCIDENT_REASON_CATALOG[code] || 'Cause not confirmed. Open details for the recorded error.', 160);
   const impact = redactIncidentText(input.impact, { multiline: true, maxLength: 300 }) || "The customer or operational impact has not been confirmed yet.";
-  const lastCheckpoint = redactIncidentText(input.lastCheckpoint, { multiline: true, maxLength: 300 }) || "No verified successful checkpoint is available.";
   const nextAction = redactIncidentText(input.nextAction, { multiline: true, maxLength: 300 }) || "Open the incident in the admin dashboard and inspect it before retrying or changing live resources.";
   const reference = incidentReference(input.incidentId);
   const icon = severity === "CRITICAL" || severity === "HIGH" ? "🔴" : "🟡";
-  const status = redactIncidentText(input.ownerStatus, { maxLength: 80 }) || "Waiting for review";
 
   const text = [
     `${icon} MY AI PA — ${severity}`,
     `Issue: ${title}`,
     "",
-    `What stopped: ${reason}`,
-    `Who it affects: ${affectedCustomer(input)}`,
-    `What is safe: ${impact}`,
-    ...(input.systemAction ? [`Action: ${redactIncidentText(input.systemAction, { maxLength: 220 })}`] : []),
-    ...(input.lastCheckpoint ? [`Last checked: ${lastCheckpoint}`] : []),
-    `What happens next: ${nextAction}`,
-    `Status: ${status}`,
+    `Cause: ${reason}`,
+    `Business: ${capText(affectedCustomer(input), 80)}`,
+    `Impact: ${capText(impact, 120)}`,
+    `Next: ${nextAction.length > 180 ? 'Open details before retrying or changing live resources.' : nextAction}`,
     "",
     `Reference: ${reference}`,
-    "Technical evidence: Admin → Needs Attention.",
   ].join("\n");
 
   return capText(text, MAX_TELEGRAM_TEXT_LENGTH, "\n…");
@@ -261,15 +275,20 @@ function buildIncidentRemediationUpdate(input = {}) {
       : "Open the exact incident and review the repair result.");
   const eli10 = redactIncidentText(input.eli10 || input.diagnosis || actionTaken, { multiline: true, maxLength: 520 });
   const recovered = ["resolved", "recovered", "cleared"].includes(status);
+  const summary = status === 'cleared'
+    ? `Alert no longer appears. Repair is not confirmed.${/did not replay|not retried/i.test(actionTaken) ? ' Customer work was not retried.' : ''}`
+    : status === 'recovered'
+      ? 'Service responds again. The original customer request is not confirmed complete.'
+      : capText(eli10, 150);
   const text = [
     `${recovered ? "✅" : "🟡"} MY AI PA — ${statusLabels[status]}`,
+    ...(input.title ? [`Issue: ${redactIncidentText(input.title, { maxLength: 100 })}`] : []),
     `Reference: ${incidentReference(incidentId)}`,
     "",
-    `Summary: ${eli10}`,
-    `What Codex/My AI PA did: ${actionTaken}`,
-    `How it was checked: ${verification}`,
-    `Your next step: ${nextAction}`,
-    `Status: ${recovered ? "No immediate action needed" : "Waiting for you"}`,
+    `Summary: ${summary}`,
+    ...(!['cleared', 'recovered'].includes(status) && actionTaken !== eli10 ? [`Done: ${capText(actionTaken, 150)}`] : []),
+    ...(!['cleared', 'recovered'].includes(status) ? [`Check: ${capText(verification, 150)}`] : []),
+    `Next: ${nextAction.length > 180 ? 'Open details before retrying or changing live resources.' : nextAction}`,
   ].join("\n");
   return capText(text, MAX_TELEGRAM_TEXT_LENGTH, "\n…");
 }
@@ -288,7 +307,7 @@ function validAdminUrl(value) {
   }
 }
 
-async function sendIncidentTelegramAlert(input, { token, chatId, fetchImpl = fetch, replyMarkup = null } = {}) {
+async function sendIncidentNotice(input, text, { token, chatId, fetchImpl = fetch, replyMarkup = null } = {}) {
   const safeToken = String(token || "").trim();
   const safeChatId = String(chatId || "").trim();
   if (!safeToken || !safeChatId) {
@@ -299,24 +318,20 @@ async function sendIncidentTelegramAlert(input, { token, chatId, fetchImpl = fet
   const buttonText = redactIncidentText(input?.buttonText, { maxLength: 40 }) || "Open exact issue";
   const body = {
     chat_id: safeChatId,
-    disable_web_page_preview: true,
-    text: buildIncidentTelegramAlert(input),
+    text,
     ...(replyMarkup?.inline_keyboard ? {
       reply_markup: replyMarkup,
     } : adminUrl ? {
       reply_markup: {
-        inline_keyboard: [[{ text: buttonText, url: adminUrl }]],
+        inline_keyboard: [[{ text: buttonText, url: adminUrl }, { text: 'Open dashboard', url: 'https://www.myaipa.ca/#/admin' }]],
       },
     } : {}),
   };
-  const response = await fetchImpl(`https://api.telegram.org/bot${safeToken}/sendMessage`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-    signal: typeof AbortSignal?.timeout === "function" ? AbortSignal.timeout(7_000) : undefined,
-  });
+  const response = await fetchImpl(`https://api.telegram.org/bot${safeToken}/sendPhoto`, noticeRequest(body.text, {
+    chatId: safeChatId, replyMarkup: body.reply_markup,
+  }));
   const data = await response.json().catch(() => ({}));
-  if (!response.ok || data?.ok !== true) {
+  if (!response.ok || data?.ok !== true || !Number.isSafeInteger(data?.result?.message_id) || data.result.message_id <= 0) {
     const error = new Error(data?.description || `Telegram incident alert failed (${response.status}).`);
     error.statusCode = 502;
     throw error;
@@ -328,31 +343,12 @@ async function sendIncidentTelegramAlert(input, { token, chatId, fetchImpl = fet
   };
 }
 
-async function sendIncidentRemediationUpdate(input, { token, chatId, fetchImpl = fetch, replyMarkup = null } = {}) {
-  return sendIncidentTelegramAlert({
-    ...input,
-    title: input.title || "Incident remediation update",
-    whatFailed: input.actionTaken || "Incident remediation update",
-    reasonCode: input.reasonCode || "INCIDENT_REMEDIATION_UPDATE",
-    reason: input.verification || input.actionTaken,
-    impact: input.status === "resolved"
-      ? "The required postcondition was verified."
-      : "The incident remains contained and has not been reported as fixed.",
-    snapshot: input.snapshot || { Status: input.status || "failed" },
-    lastCheckpoint: input.verification,
-    nextAction: input.nextAction,
-  }, {
-    token,
-    chatId,
-    replyMarkup,
-    fetchImpl: async (url, options) => fetchImpl(url, {
-      ...options,
-      body: JSON.stringify({
-        ...JSON.parse(options.body),
-        text: buildIncidentRemediationUpdate(input),
-      }),
-    }),
-  });
+function sendIncidentTelegramAlert(input, options = {}) {
+  return sendIncidentNotice(input, buildIncidentTelegramAlert(input), options);
+}
+
+function sendIncidentRemediationUpdate(input, options = {}) {
+  return sendIncidentNotice(input, buildIncidentRemediationUpdate(input), options);
 }
 
 module.exports = {

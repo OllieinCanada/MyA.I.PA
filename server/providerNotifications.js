@@ -7,6 +7,7 @@ const PROVIDERS = {
   vapi: { name: 'VAPI', icon: '🎙️', color: [26, 184, 152], url: 'https://dashboard.vapi.ai/' },
   render: { name: 'RENDER', icon: '☁️', color: [70, 132, 238], url: 'https://dashboard.render.com/' },
   signup: { name: 'SIGNUP', icon: '📞', color: [26, 184, 152], url: 'https://www.myaipa.ca/#/admin' },
+  ops: { name: 'MY AI PA', icon: '🔎', color: [52, 124, 246], url: 'https://www.myaipa.ca/#/admin' },
 };
 const EVENTS = {
   recharge_confirmed: ['info', 'Auto-recharge confirmed', 'Your payment was confirmed.'],

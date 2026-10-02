@@ -225,11 +225,11 @@ test("production failure alert explains the reason, snapshot, next action, and e
       }],
     }],
   });
-  assert.match(alert, /What is safe:/);
-  assert.match(alert, /What stopped:/);
+  assert.match(alert, /Impact:/);
+  assert.match(alert, /Cause:/);
   assert.match(alert, /Example Electrical/);
   assert.match(alert, /Verify provider state before recovery/);
-  assert.match(alert, /What happens next:/);
+  assert.match(alert, /Next:/);
   assert.doesNotMatch(alert, /AI number assigned: no|WORKING HYPOTHESIS|SNAPSHOT/);
   assert.equal(incidentAdminUrl({ id: incidentId }), `https://www.myaipa.ca/#/admin?tab=attention&incident=${incidentId}`);
 });
@@ -257,7 +257,7 @@ test("an infrastructure outage takes priority over an older operational warning"
   assert.match(alert, /public site health check/i);
   assert.match(alert, /did not answer before the health check timed out/i);
   assert.doesNotMatch(alert, /Old routing warning/);
-  assert.match(alert, /monitor confirmed the failure and will keep checking/i);
+  assert.match(alert, /verify the failed service before retrying customer work/i);
 });
 
 test("monitor lifecycle uses a stable incident identity and honest recovered wording", () => {
@@ -287,9 +287,10 @@ test("monitor lifecycle uses a stable incident identity and honest recovered wor
   }, first);
   assert.match(recovery, /SERVICE HEALTHY AGAIN/);
   assert.doesNotMatch(recovery, /VERIFIED FIXED/);
-  assert.match(recovery, /did not replay customer work/i);
-  assert.match(recovery, /api readiness is responding normally again/i);
-  assert.match(recovery, /not the original request outcome or underlying root cause/i);
+  assert.match(recovery, /api readiness check/i);
+  assert.match(recovery, /Service responds again/i);
+  assert.match(recovery, /original customer request is not confirmed complete/i);
+  assert.ok(recovery.length < 400);
 });
 
 test("monitor v2 lifecycle state is durable, bounded, and contains no unsafe details", (t) => {

@@ -57,7 +57,7 @@ test("outbox preserves only signed approval callbacks and safe URLs", async (t) 
     chatId: "12345",
     now: 1_000,
     fetchImpl: async (_url, options) => {
-      sent = JSON.parse(options.body);
+      sent = { reply_markup: JSON.parse(options.body.get('reply_markup')) };
       return { ok: true, status: 200, json: async () => ({ ok: true, result: { message_id: 7 } }) };
     },
   });
@@ -136,7 +136,7 @@ test("processor removes only messages Telegram confirms with exact ok true", asy
     permanentFailures: 0,
   });
   assert.equal(readOutbox(filePath).items.length, 0);
-  assert.match(requests[0].url, /botbot-secret\/sendMessage$/);
+  assert.match(requests[0].url, /botbot-secret\/sendPhoto$/);
   assert.equal(fs.readFileSync(filePath, "utf8").includes("bot-secret"), false);
   assert.equal(fs.readFileSync(filePath, "utf8").includes("12345"), false);
 });

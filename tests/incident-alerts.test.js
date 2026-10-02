@@ -129,12 +129,11 @@ test("incident alert leads with the owner decision and keeps technical evidence 
     detectedAt: "2026-08-25T21:03:13.616Z",
   });
 
-  for (const label of ["Issue:", "What stopped:", "Who it affects:", "What is safe:", "What happens next:", "Status:", "Reference:"]) {
+  for (const label of ["Issue:", "Cause:", "Business:", "Impact:", "Next:", "Reference:"]) {
     assert.match(text, new RegExp(label));
   }
-  assert.match(text, /MAKE_SIGNUP_RESPONSE_INCOMPLETE|responded without all verified phone and assistant identifiers/i);
-  assert.match(text, /Who it affects: Example Electric/);
-  assert.match(text, /Technical evidence: Admin/);
+  assert.match(text, /Make replied without a verified phone and assistant/i);
+  assert.match(text, /Business: Example Electric/);
   assert.doesNotMatch(text, /WORKING HYPOTHESIS|SNAPSHOT|Provider HTTP status/);
   assert.equal(text.includes("private@example.com"), false);
   assert.equal(text.includes("9055550123"), false);
@@ -156,7 +155,7 @@ test("incident alert remains short and under the Telegram limit", () => {
   });
 
   assert.ok(text.length <= MAX_TELEGRAM_TEXT_LENGTH);
-  for (const label of ["Issue:", "What stopped:", "Who it affects:", "What is safe:", "What happens next:", "Status:"]) {
+  for (const label of ["Issue:", "Cause:", "Business:", "Impact:", "Next:", "Reference:"]) {
     assert.ok(text.includes(label));
   }
   assert.ok(text.length < 2_500);
@@ -173,9 +172,9 @@ test("remediation update clearly distinguishes verified recovery from a user act
   assert.match(resolved, /MY AI PA — VERIFIED FIXED/);
   assert.match(resolved, /Summary:/);
   assert.doesNotMatch(resolved, /ELI10/);
-  assert.match(resolved, /What Codex\/My AI PA did:/);
-  assert.match(resolved, /How it was checked:/);
-  assert.match(resolved, /Your next step:/);
+  assert.doesNotMatch(resolved, /Done:/); // Same action is not repeated as summary.
+  assert.match(resolved, /Check:/);
+  assert.match(resolved, /Next:/);
 
   const blocked = buildIncidentRemediationUpdate({
     status: "needs_user",
@@ -185,7 +184,7 @@ test("remediation update clearly distinguishes verified recovery from a user act
     nextAction: "Add provider funds, then rerun health.",
   });
   assert.match(blocked, /MY AI PA — NEEDS YOU/);
-  assert.match(blocked, /Your next step:/);
+  assert.match(blocked, /Next:/);
   assert.ok(blocked.length <= MAX_TELEGRAM_TEXT_LENGTH);
 });
 
@@ -202,7 +201,7 @@ test("sendIncidentRemediationUpdate posts the terminal lifecycle message", async
     token: "bot-token",
     chatId: "chat-42",
     fetchImpl: async (_url, options) => {
-      requests.push(JSON.parse(options.body));
+      requests.push({ text: options.body.get('caption') });
       return { ok: true, status: 200, json: async () => ({ ok: true, result: { message_id: 91 } }) };
     },
   });
@@ -228,7 +227,7 @@ test("sendIncidentTelegramAlert posts the brief with an exact-admin button", asy
     token: "bot-token",
     chatId: "chat-42",
     fetchImpl: async (url, options) => {
-      requests.push({ url, options, body: JSON.parse(options.body) });
+      requests.push({ url, options, body: { chat_id: options.body.get('chat_id'), text: options.body.get('caption'), reply_markup: JSON.parse(options.body.get('reply_markup')) } });
       return {
         ok: true,
         status: 200,
@@ -239,7 +238,7 @@ test("sendIncidentTelegramAlert posts the brief with an exact-admin button", asy
 
   assert.deepEqual(result, { sent: true, skipped: false, messageId: 88 });
   assert.equal(requests.length, 1);
-  assert.equal(requests[0].url, "https://api.telegram.org/botbot-token/sendMessage");
+  assert.equal(requests[0].url, "https://api.telegram.org/botbot-token/sendPhoto");
   assert.equal(requests[0].body.chat_id, "chat-42");
   assert.equal(requests[0].body.reply_markup.inline_keyboard[0][0].url, adminUrl);
   assert.equal(requests[0].body.reply_markup.inline_keyboard[0][0].text, "Open exact issue");
