@@ -3,6 +3,13 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { chromium } = require("playwright");
 
+function isGoogleApiUrl(value) {
+  try {
+    const { protocol, hostname } = new URL(value);
+    return protocol === "https:" && (hostname === "googleapis.com" || hostname.endsWith(".googleapis.com"));
+  } catch (_) { return false; }
+}
+
 // Safe by default: mock Google, never submit a signup or create any resources.
 async function main() {
   const live = process.argv.includes("--live-google");
@@ -44,10 +51,10 @@ async function main() {
         if (code) providerErrors.add(code);
       });
       page.on("requestfailed", (request) => {
-        if (new URL(request.url()).hostname.endsWith("googleapis.com")) providerErrors.add(`Google network failure: ${request.failure()?.errorText || "unknown"}`);
+        if (isGoogleApiUrl(request.url())) providerErrors.add(`Google network failure: ${request.failure()?.errorText || "unknown"}`);
       });
       page.on("response", async (response) => {
-        if (new URL(response.url()).hostname.endsWith("googleapis.com") && response.status() >= 400) {
+        if (isGoogleApiUrl(response.url()) && response.status() >= 400) {
           providerErrors.add(`Google ${new URL(response.url()).pathname} HTTP ${response.status()}`);
           const body = await response.text().catch(() => "");
           let error = {};
@@ -87,4 +94,5 @@ async function main() {
     console.log(JSON.stringify({ mode: live ? "live-google" : "mock", origin: new URL(url).origin, signupSubmitted: false, results }, null, 2));
   } finally { await browser.close(); }
 }
-main().catch(() => { console.error("Address autocomplete check failed; no signup was submitted. Check the local preview and provider configuration."); process.exitCode = 1; });
+module.exports = { isGoogleApiUrl };
+if (require.main === module) main().catch(() => { console.error("Address autocomplete check failed; no signup was submitted. Check the local preview and provider configuration."); process.exitCode = 1; });
