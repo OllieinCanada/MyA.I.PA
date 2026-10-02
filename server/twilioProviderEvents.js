@@ -16,7 +16,16 @@ function toEvent(body, accountSid) {
   }
   // Do not store the raw Payload: it can contain phone numbers and credentials.
   // Currency is not supplied in usage callbacks, so never guess a currency.
-  return validateEvent({provider:'twilio',type,id,occurredAt});
+  let errorCode;
+  if (type === 'provider_error' || type === 'provider_warning') {
+    // Extract only the documented numeric code. Never persist or forward the
+    // provider's message, webhook body, URL, phone numbers, or credentials.
+    try {
+      const payload = JSON.parse(String(body.Payload || '{}'));
+      if (/^\d{4,6}$/.test(String(payload?.error_code || ''))) errorCode = String(payload.error_code);
+    } catch (_) { /* Missing evidence stays explicitly unknown. */ }
+  }
+  return validateEvent({provider:'twilio',type,id,occurredAt,errorCode});
 }
 function registerTwilioProviderEvents(app,{prisma,env=process.env,deliver=deliverDurably}={}) {
   app.post(PATH, require('express').urlencoded({extended:false,limit:'32kb'}), async(req,res)=>{

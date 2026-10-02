@@ -129,7 +129,7 @@ test("incident alert leads with the owner decision and keeps technical evidence 
     detectedAt: "2026-08-25T21:03:13.616Z",
   });
 
-  for (const label of ["ELI10:", "What stopped:", "Who it affects:", "What is safe:", "What happens next:", "Status:", "Reference:"]) {
+  for (const label of ["Issue:", "What stopped:", "Who it affects:", "What is safe:", "What happens next:", "Status:", "Reference:"]) {
     assert.match(text, new RegExp(label));
   }
   assert.match(text, /MAKE_SIGNUP_RESPONSE_INCOMPLETE|responded without all verified phone and assistant identifiers/i);
@@ -156,7 +156,7 @@ test("incident alert remains short and under the Telegram limit", () => {
   });
 
   assert.ok(text.length <= MAX_TELEGRAM_TEXT_LENGTH);
-  for (const label of ["ELI10:", "What stopped:", "Who it affects:", "What is safe:", "What happens next:", "Status:"]) {
+  for (const label of ["Issue:", "What stopped:", "Who it affects:", "What is safe:", "What happens next:", "Status:"]) {
     assert.ok(text.includes(label));
   }
   assert.ok(text.length < 2_500);
@@ -171,7 +171,8 @@ test("remediation update clearly distinguishes verified recovery from a user act
     nextAction: "No action is required.",
   });
   assert.match(resolved, /MY AI PA — VERIFIED FIXED/);
-  assert.match(resolved, /ELI10:/);
+  assert.match(resolved, /Summary:/);
+  assert.doesNotMatch(resolved, /ELI10/);
   assert.match(resolved, /What Codex\/My AI PA did:/);
   assert.match(resolved, /How it was checked:/);
   assert.match(resolved, /Your next step:/);

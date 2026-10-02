@@ -1,4 +1,5 @@
 const clean = (value) => String(value || "").trim();
+const { isClosedSignup } = require("./signupBusinessIdentity");
 const phone = (value) => clean(value).replace(/\D/g, "");
 
 function selectTrialSignup(records = [], config = {}) {
@@ -12,7 +13,7 @@ function selectTrialSignup(records = [], config = {}) {
     if (clean(record.vapiAssistantId) !== clean(config.assistantId)) return false;
     if (record.businessId && Number(record.businessId) !== Number(config.businessId)) return false;
     if (config.phoneNumberId && clean(record.vapiPhoneNumberId) !== clean(config.phoneNumberId)) return false;
-    return !/^(archived|rejected|superseded|superseded_duplicate|decommissioned)$/.test(clean(record.status).toLowerCase());
+    return !isClosedSignup(record) && clean(record.status).toLowerCase() !== "superseded";
   });
   return matches.length === 1 ? matches[0] : null;
 }

@@ -210,23 +210,23 @@ function affectedCustomer(input = {}) {
 function buildIncidentTelegramAlert(input = {}) {
   const severity = redactIncidentText(input.severity, { maxLength: 20 }).toUpperCase() || "WARNING";
   const title = redactIncidentText(input.title || input.whatFailed || "My AI PA incident", { maxLength: 140 });
-  const reason = capText(humanizeIncidentReason(input.reasonCode, input.reason), 420);
+  const reason = capText(humanizeIncidentReason(input.reasonCode, input.reason), 300);
   const impact = redactIncidentText(input.impact, { multiline: true, maxLength: 300 }) || "The customer or operational impact has not been confirmed yet.";
   const lastCheckpoint = redactIncidentText(input.lastCheckpoint, { multiline: true, maxLength: 300 }) || "No verified successful checkpoint is available.";
   const nextAction = redactIncidentText(input.nextAction, { multiline: true, maxLength: 300 }) || "Open the incident in the admin dashboard and inspect it before retrying or changing live resources.";
-  const systemAction = redactIncidentText(input.systemAction, { multiline: true, maxLength: 300 })
-    || `My AI PA recorded the issue and stopped before assuming the workflow succeeded. Last confirmed step: ${lastCheckpoint}`;
   const reference = incidentReference(input.incidentId);
   const icon = severity === "CRITICAL" || severity === "HIGH" ? "🔴" : "🟡";
   const status = redactIncidentText(input.ownerStatus, { maxLength: 80 }) || "Waiting for review";
 
   const text = [
     `${icon} MY AI PA — ${severity}`,
-    `ELI10: ${title}`,
+    `Issue: ${title}`,
     "",
     `What stopped: ${reason}`,
     `Who it affects: ${affectedCustomer(input)}`,
-    `What is safe: ${impact} ${systemAction}`,
+    `What is safe: ${impact}`,
+    ...(input.systemAction ? [`Action: ${redactIncidentText(input.systemAction, { maxLength: 220 })}`] : []),
+    ...(input.lastCheckpoint ? [`Last checked: ${lastCheckpoint}`] : []),
     `What happens next: ${nextAction}`,
     `Status: ${status}`,
     "",
@@ -265,7 +265,7 @@ function buildIncidentRemediationUpdate(input = {}) {
     `${recovered ? "✅" : "🟡"} MY AI PA — ${statusLabels[status]}`,
     `Reference: ${incidentReference(incidentId)}`,
     "",
-    `ELI10: ${eli10}`,
+    `Summary: ${eli10}`,
     `What Codex/My AI PA did: ${actionTaken}`,
     `How it was checked: ${verification}`,
     `Your next step: ${nextAction}`,

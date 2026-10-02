@@ -186,20 +186,7 @@ async function runProvisioningStep({
     throw provisioningError("Saved provisioning resources are stale and require guarded recovery.", "PROVISIONING_RESULT_STALE");
   }
 
-  // Provider reconciliation happens before a new claim. It closes the crash window
-  // where the provider accepted a purchase/create but the local completion write failed.
-  const reconciled = typeof reconcile === "function" ? await reconcile() : null;
-  if (reconciled && typeof reconciled === "object") {
-    const claim = await claimProvisioningStep({ prisma, kind, idempotencyKey, contextHash });
-    if (claim.completed) return reuse(claim.key, claim.result);
-    if (claim.inProgress) {
-      throw provisioningError("This provisioning step is already running.", "PROVISIONING_ALREADY_IN_PROGRESS", 409);
-    }
-    const result = { ...reconciled, reused: true };
-    await completeProvisioningStep({ prisma, key: claim.key, claimToken: claim.claimToken, result });
-    return result;
-  }
-
+  // The lease also owns reconciliation, which closes the post-create crash window.
   const claim = await claimProvisioningStep({ prisma, kind, idempotencyKey, contextHash });
   if (claim.completed) return reuse(claim.key, claim.result);
   if (claim.inProgress) {
@@ -207,7 +194,12 @@ async function runProvisioningStep({
   }
 
   try {
-    const result = await execute();
+    // Some reconciliation adapters create missing resources. They must run
+    // under the same lease as execute, never before the duplicate lock.
+    const reconciled = typeof reconcile === "function" ? await reconcile() : null;
+    const result = reconciled && typeof reconciled === "object"
+      ? { reused: true, ...reconciled }
+      : await execute();
     if (!result || typeof result !== "object") {
       throw provisioningError("The provider returned no provisioning result.", "PROVISIONING_RESULT_MISSING", 502);
     }

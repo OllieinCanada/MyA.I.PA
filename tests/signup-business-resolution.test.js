@@ -16,7 +16,7 @@ function createFakeDb({ businesses = [], mappings = [] } = {}) {
       },
       async findMany({ where, take }) {
         calls.businessFindMany += 1;
-        return businesses.filter((business) => where.OR.some((condition) => {
+        return businesses.filter((business) => where.AND.every((condition) => {
           if (condition.name) {
             return String(business.name || "").toLowerCase() === String(condition.name.equals || "").toLowerCase();
           }

@@ -8,11 +8,32 @@ const {
 
 const SECRET = "pilot-status-secret-that-is-long-enough";
 
+test("archived attempts cannot be reopened by delayed verification or completion", async () => {
+  const prisma = prismaMock();
+  const store = createSignupAttemptStore({ prisma, secret: SECRET });
+  const eventKey = `signup_${"f".repeat(32)}`;
+  await store.register({ eventKey });
+  await store.update(eventKey, { status: "abandoned_archived", stage: "closed" });
+  await Promise.all([
+    store.update(eventKey, { status: "setup_ready", assignedPhone: "+12895550123" }),
+    store.updateIfPresent(eventKey, { status: "contact_verified", reviewRequired: false }),
+  ]);
+  assert.equal(prisma.rows.get(eventKey).status, "abandoned_archived");
+  assert.equal(prisma.rows.get(eventKey).assignedPhone, undefined);
+  assert.equal(customerStatus(prisma.rows.get(eventKey)).state, "closed");
+});
+
 function prismaMock() {
   const rows = new Map();
   return {
     rows,
     signupAttempt: {
+      updateMany: async ({ where, data }) => {
+        const row = rows.get(where.eventKey);
+        if (!row || where.status.notIn.includes(row.status)) return { count: 0 };
+        rows.set(where.eventKey, { ...row, ...data, updatedAt: new Date() });
+        return { count: 1 };
+      },
       findUnique: async ({ where }) => [...rows.values()].find((row) => (
         (where.eventKey && row.eventKey === where.eventKey)
         || (where.publicId && row.publicId === where.publicId)

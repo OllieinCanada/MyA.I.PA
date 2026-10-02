@@ -57,7 +57,8 @@ test("runtime alerts deduplicate the same failure without hiding a different rou
   assert.equal(duplicate.reason, "duplicate_incident");
   assert.equal(different.sent, true);
   assert.equal(calls.length, 2);
-  assert.match(calls[0].text, /ELI10:/);
+  assert.match(calls[0].text, /Issue:/);
+  assert.doesNotMatch(calls[0].text, /ELI10/);
   assert.match(calls[0].text, /What stopped:/);
   assert.match(calls[0].text, /Who it affects:/);
   assert.match(calls[0].text, /What is safe:/);

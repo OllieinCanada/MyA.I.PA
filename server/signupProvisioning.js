@@ -1,4 +1,5 @@
 const crypto = require("crypto");
+const { signupBusinessKey } = require("./signupBusinessIdentity");
 
 const {
   inspectCanadianNumber,
@@ -69,7 +70,7 @@ function requireSigningSecret(value) {
   return secret;
 }
 
-function buildProvisioningAccountKey(ownerEmail, ownerPhone) {
+function buildProvisioningAccountKey(ownerEmail, ownerPhone, businessName) {
   const email = cleanEmail(ownerEmail);
   const phone = normalizeNorthAmericanE164(ownerPhone);
   if (!email || !phone) {
@@ -77,6 +78,12 @@ function buildProvisioningAccountKey(ownerEmail, ownerPhone) {
     error.code = "PROVISIONING_ACCOUNT_IDENTITY_REQUIRED";
     throw error;
   }
+  if (businessName !== undefined) {
+    const key = signupBusinessKey({ ownerEmail: email, ownerPhone: phone, businessName });
+    if (!key) throw Object.assign(new Error("Business identity is required."), { code: "PROVISIONING_BUSINESS_IDENTITY_REQUIRED" });
+    return key;
+  }
+  // Read-only compatibility for historical receipts and decommission tooling.
   return sha256(`myaipa-provisioning-account-v1\u0000${email}\u0000${phone}`);
 }
 
@@ -236,6 +243,7 @@ function provisioningAuthorizationProjection(payload) {
   const provisioning = payload?.provisioning || {};
   return {
     authorizationVersion: provisioning.authorizationVersion,
+    businessKey: provisioning.businessKey,
     idempotencyKey: provisioning.idempotencyKey,
     preferredAreaCode: provisioning.preferredAreaCode,
     preferredRegion: provisioning.preferredRegion,
@@ -282,7 +290,8 @@ function verifySignupProvisioningAuthorization(payload, signingSecret) {
     const provisioning = payload?.provisioning;
     if (!provisioning || provisioning.authorizationVersion !== AUTHORIZATION_VERSION) return false;
     const values = selectSignupValues(payload);
-    const expectedAccountKey = buildProvisioningAccountKey(values.ownerEmail, values.ownerPhone);
+    const expectedAccountKey = buildProvisioningAccountKey(values.ownerEmail, values.ownerPhone, provisioning.businessKey ? values.businessName : undefined);
+    if (provisioning.businessKey && !constantTimeTextEqual(provisioning.businessKey, expectedAccountKey)) return false;
     if (!constantTimeTextEqual(provisioning.idempotencyKey, expectedAccountKey)) return false;
     if (!constantTimeTextEqual(provisioning.resourceMarker, buildProvisioningResourceMarker(expectedAccountKey))) return false;
     const expectedContextHash = buildProvisioningContextHash(payload);
@@ -306,7 +315,8 @@ function verifyProvisioningContextToken(contextHash, accountKey, authorizationTo
 function normalizeSignupProvisioningPayload(input, options = {}) {
   const signingSecret = requireSigningSecret(options.signingSecret);
   const values = selectSignupValues(input);
-  const accountKey = buildProvisioningAccountKey(values.ownerEmail, values.ownerPhone);
+  const legacyAuthorized = !input?.provisioning?.businessKey && verifySignupProvisioningAuthorization(input, signingSecret);
+  const accountKey = buildProvisioningAccountKey(values.ownerEmail, values.ownerPhone, legacyAuthorized ? undefined : values.businessName);
   const preferredAreaCode = inferOntarioLocalAreaCode(values)
     || inferPreferredCanadianAreaCode(values.ownerPhone, values.businessPhone);
   const preferredRegion = normalizeProvisioningRegion(values.province, options.defaultRegion);
@@ -423,6 +433,7 @@ function normalizeSignupProvisioningPayload(input, options = {}) {
     provisioning: {
       ...(values.body.provisioning && typeof values.body.provisioning === "object" ? values.body.provisioning : {}),
       authorizationVersion: AUTHORIZATION_VERSION,
+      businessKey: legacyAuthorized ? undefined : accountKey,
       idempotencyKey: accountKey,
       preferredAreaCode,
       preferredRegion,
