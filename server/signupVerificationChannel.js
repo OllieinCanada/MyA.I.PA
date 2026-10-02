@@ -36,11 +36,26 @@ function verifyVerificationChannelProof(token, channel, proof, secret) {
   return crypto.timingSafeEqual(Buffer.from(actual), Buffer.from(expected));
 }
 
+function createVerificationConfirmationProof(token, channel, secret) {
+  return crypto.createHmac("sha256", String(secret || ""))
+    .update(`signup-verification-confirmation:v1:${String(token || "")}:${normalizeVerificationChannel(channel)}`)
+    .digest("base64url");
+}
+
+function verifyVerificationConfirmationProof(token, channel, proof, secret) {
+  const expected = createVerificationConfirmationProof(token, channel, secret);
+  const actual = String(proof || "");
+  return actual.length === expected.length
+    && crypto.timingSafeEqual(Buffer.from(actual), Buffer.from(expected));
+}
+
 module.exports = {
   buildVerificationState,
   createVerificationChannelProof,
+  createVerificationConfirmationProof,
   isContactVerified,
   normalizeVerificationChannel,
   verifyVerificationChannelProof,
+  verifyVerificationConfirmationProof,
 };
 const crypto = require("crypto");

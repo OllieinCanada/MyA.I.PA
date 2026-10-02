@@ -318,9 +318,11 @@ const {
 const {
   buildVerificationState,
   createVerificationChannelProof,
+  createVerificationConfirmationProof,
   isContactVerified,
   normalizeVerificationChannel,
   verifyVerificationChannelProof,
+  verifyVerificationConfirmationProof,
 } = require("./signupVerificationChannel");
 const {
   executeVapiDemoFollowup,
@@ -14971,17 +14973,27 @@ app.post(
   })
 );
 
-app.get(
+app.all(
   ["/api/integrations/verify-signup-contact", "/api/integrations/verify-signup-email"],
   signupVerificationProcessRateLimiter,
   enforcePublicRouteRateLimit("signup-verification", 20),
+  express.urlencoded({ extended: false, limit: "2kb" }),
   asyncRoute(async (req, res) => {
-    const token = String(req.query.token || "").trim();
-    const verificationChannel = normalizeVerificationChannel(req.query.channel);
-    const channelProof = String(req.query.channelProof || "").trim();
+    res.set("Cache-Control", "no-store");
+    res.set("Referrer-Policy", "no-referrer");
+    res.set("X-Robots-Tag", "noindex, nofollow");
+    res.set("X-Frame-Options", "DENY");
+    res.set("Content-Security-Policy", "frame-ancestors 'none'; form-action 'self'; base-uri 'none'");
+    if (!["GET", "HEAD", "POST"].includes(req.method)) {
+      return res.set("Allow", "GET, HEAD, POST").status(405).send("Method not allowed");
+    }
+    const input = req.method === "POST" ? req.body || {} : req.query;
+    const token = String(input.token || "").trim();
+    const verificationChannel = normalizeVerificationChannel(input.channel);
+    const channelProof = String(input.channelProof || "").trim();
     const tokenHash = hashPendingSignupToken(token);
 
-    function renderVerificationPage({ title, body, ok, assignedPhone = "", forwardingSetupUrl = "" }) {
+    function renderVerificationPage({ title, body, ok, assignedPhone = "", forwardingSetupUrl = "", confirmation = false }) {
       const canonicalPhone = normalizePhoneForMatch(assignedPhone);
       const displayPhone = formatAssignedPhone(canonicalPhone);
       const setupReady = ok && Boolean(canonicalPhone && displayPhone);
@@ -15009,9 +15021,16 @@ app.get(
           </head>
           <body>
             <main>
-              <span class="badge">${ok ? "Verified" : "Needs attention"}</span>
+              <span class="badge">${confirmation ? "Confirm your contact" : ok ? "Verified" : "Needs attention"}</span>
               <h1>${escapeHtml(title)}</h1>
               <p>${escapeHtml(body)}</p>
+              ${confirmation ? `<form method="post" action="${escapeHtml(req.path)}">
+                <input type="hidden" name="token" value="${escapeHtml(token)}" />
+                <input type="hidden" name="channel" value="${escapeHtml(verificationChannel)}" />
+                <input type="hidden" name="channelProof" value="${escapeHtml(createVerificationChannelProof(token, verificationChannel, getAdminSessionSecret()))}" />
+                <input type="hidden" name="confirmationProof" value="${escapeHtml(createVerificationConfirmationProof(token, verificationChannel, getAdminSessionSecret()))}" />
+                <button class="action" type="submit" name="confirmation" value="VERIFY_AND_CONTINUE">Verify and continue</button>
+              </form>` : ""}
               ${setupReady ? `
                 <section class="number" aria-label="Assigned My AI PA number">
                   <p class="number-label">Your My AI PA number</p>
@@ -15053,13 +15072,26 @@ app.get(
         </html>`);
     }
 
-    const hasChannelClaim = Boolean(req.query.channel || channelProof);
+    const hasChannelClaim = Boolean(input.channel || channelProof);
     if (hasChannelClaim && !verifyVerificationChannelProof(token, verificationChannel, channelProof, getAdminSessionSecret())) {
       return renderVerificationPage({
         ok: false,
         title: "Verification link is invalid or expired",
         body: "Please use the complete verification link that My AI PA sent you.",
       });
+    }
+
+    if (req.method !== "POST") {
+      const pending = token ? await pendingSignupVerifications.inspect(token) : null;
+      if (!pending) return renderVerificationPage({ ok: false, title: "Verification link is invalid or expired", body: "Please submit the signup again to receive a fresh verification link." });
+      return renderVerificationPage({
+        ok: true, confirmation: true, title: "Verify your contact details",
+        body: "Press Verify and continue to confirm your contact details and start setup. Opening or previewing this page does not verify you.",
+      });
+    }
+    if (input.confirmation !== "VERIFY_AND_CONTINUE"
+      || !verifyVerificationConfirmationProof(token, verificationChannel, input.confirmationProof, getAdminSessionSecret())) {
+      return renderVerificationPage({ ok: false, title: "Confirmation required", body: "Open your verification link and press Verify and continue. Your setup has not started." });
     }
 
     await ensureLegacyPendingSignupMigration();
@@ -15077,7 +15109,7 @@ app.get(
       return renderVerificationPage({
         ok: true,
         title: "Verification is already processing",
-        body: "This link has already been opened. Setup is processing; return to My AI PA for the latest status.",
+        body: "This signup has already been confirmed. Setup is processing; return to My AI PA for the latest status.",
       });
     }
 

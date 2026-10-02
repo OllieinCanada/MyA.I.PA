@@ -118,6 +118,13 @@ function createPendingSignupVerificationStore({ prisma, minimumTtlMs = 24 * 60 *
     return token;
   }
 
+  // Read-only: previews must never claim, prune, verify, or migrate a token.
+  async function inspect(token, now = new Date()) {
+    const record = await prisma.pendingSignupVerification.findUnique({ where: { tokenHash: tokenHash(token) } });
+    if (!record || record.usedAt || record.supersededAt || new Date(record.expiresAt).getTime() <= now.getTime()) return null;
+    return publicRecord(record);
+  }
+
   async function claim(token, now = new Date()) {
     const digest = tokenHash(token);
     return prisma.$transaction(async (tx) => {
@@ -190,7 +197,7 @@ function createPendingSignupVerificationStore({ prisma, minimumTtlMs = 24 * 60 *
     return matches.length;
   }
 
-  return { claim, create, importLegacyRecords, listActive, prune, recordDeliveryChannels, removeHash, removeToken, retainForRecovery, consumeMatching, tokenHash };
+  return { inspect, claim, create, importLegacyRecords, listActive, prune, recordDeliveryChannels, removeHash, removeToken, retainForRecovery, consumeMatching, tokenHash };
 }
 
 module.exports = { createPendingSignupVerificationStore, tokenHash };
