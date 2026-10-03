@@ -121,4 +121,19 @@ async function deliverDurably(input,{prisma,token,chatId,fetchImpl=fetch,now=Dat
     throw error;
   }
 }
-module.exports={PROVIDERS,EVENTS,validateEvent,presentation,card,sendProviderNotification,deliverDurably};
+async function enqueueProviderNotification(input,{prisma,now=Date.now()}={}) {
+  const event=validateEvent(input);
+  const key='provider-notification:'+crypto.createHash('sha256').update(`${event.provider}:${event.id}`).digest('hex');
+  if(!prisma?.runtimeStore || typeof prisma.$transaction!=='function')throw new Error('Durable notification storage is unavailable.');
+  return prisma.$transaction(async tx=>{
+    if(typeof tx.$queryRaw!=='function')throw new Error('Durable notification locking is unavailable.');
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))::text AS lock_result`;
+    const row=await tx.runtimeStore.findUnique({where:{key}});
+    if(row?.data?.event && JSON.stringify(row.data.event)!==JSON.stringify(event))throw new Error('Notification identity conflict.');
+    if(row)return {accepted:true,duplicate:true,delivered:Boolean(row.data?.deliveredAt)};
+    const data={event,queued:true,queuedAt:new Date(now).toISOString(),leaseUntil:0};
+    await tx.runtimeStore.upsert({where:{key},create:{key,data},update:{data}});
+    return {accepted:true,duplicate:false,delivered:false};
+  });
+}
+module.exports={PROVIDERS,EVENTS,validateEvent,presentation,card,sendProviderNotification,deliverDurably,enqueueProviderNotification};

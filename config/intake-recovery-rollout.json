@@ -1,0 +1,58 @@
+{
+  "status": "implemented_locally_not_deployed",
+  "localCheck": "npm run test:intake-recovery",
+  "snapshotCheck": "npm run test:intake-recovery -- --parity=PATH_TO_FRESH_PARITY_JSON --evidence=PATH_TO_FRESH_RESOURCE_JSON",
+  "report": "diagnostics/shipping-readiness/intake-recovery-drill.json",
+  "liveDrillRequirements": [
+    "Choose an isolated staging Make scenario and hook, with staging-only provider credentials.",
+    "Capture staging and production release, blueprint and settings; declare only exact intentional environment differences.",
+    "Connect authoritative running-execution counts to the queue adapter; missing counts block deletion.",
+    "Save and decrypt-check the intake journal copy before any queue cleanup.",
+    "Read both exact queue items; stop processors; confirm exactly one candidate and one survivor.",
+    "Collect fresh exhaustive CRM, Twilio, Vapi, billing, charges and delivered-SMS evidence using authenticated provider readers.",
+    "Run both automatic duplicate prevention and separate guarded manual cleanup drills.",
+    "After deployment, run one controlled production smoke test; staging success alone is not production proof."
+  ],
+  "safetyNotes": [
+    "Queue deletion is staging-only, exact-item-only and locked per event. Never automatically retry an uncertain deletion.",
+    "Paid provider retries cannot blindly create replacements when reconciliation finds no resource.",
+    "Provider inventories must be complete; capped or malformed Vapi responses block reconciliation.",
+    "Current SMS/billing replay tests use simulated side effects, not live delivery or charge evidence.",
+    "Journal payloads are encrypted and cannot be replayed after 30 days. Physical retention cleanup must be configured separately.",
+    "Accepted webhook responses do not mean signup ready. Existing verification and delivery gates remain required.",
+    "Make MCP is not connected in this session; the queue adapter uses the documented Make API."
+  ],
+  "researchedServices": [
+    {
+      "provider": "Twilio",
+      "feature": "Event Streams",
+      "recommendation": "Evaluate next for unified near-real-time messaging, call and error events with existing authenticated deduplication and fallback polling.",
+      "limitations": "At-least-once delivery; duplicates and out-of-order events possible; no latency SLA. Does not establish a recharge receipt integration.",
+      "source": "https://www.twilio.com/docs/events"
+    },
+    {
+      "provider": "Vapi",
+      "feature": "Published assistant/tool versions, evals and simulations",
+      "recommendation": "Use existing release-safety, tool-pinning and evaluation scripts before pilot changes; retain a known published rollback version.",
+      "limitations": "Simulations are not proof of live carrier routing or SMS delivery. Latest tool selection can change independently; pin intentionally.",
+      "sources": ["https://docs.vapi.ai/assistants/versioning/versioning-assistants", "https://docs.vapi.ai/assistants/versioning/versioning-with-assistants-and-tools", "https://docs.vapi.ai/test/voice-testing"]
+    },
+    {
+      "provider": "Render",
+      "feature": "Preview Environments",
+      "recommendation": "Consider isolated disposable stacks built from the same release, with explicit staging secret and webhook destinations.",
+      "limitations": "Requires Pro workspace or higher; preview services have costs. Production database data is not copied; external Make/provider configuration still needs parity checks.",
+      "source": "https://render.com/docs/preview-environments"
+    },
+    {
+      "provider": "Render",
+      "feature": "Workflows",
+      "recommendation": "Consider later as a managed queued-task alternative for provisioning rather than migrating the pilot workflow immediately.",
+      "limitations": "Architecture migration and usage costs; external side effects still require idempotency. Workflows are not included in Preview Environments.",
+      "source": "https://render.com/docs/workflows"
+    }
+  ],
+  "paidPlanChangesMade": false,
+  "liveQueueDeletesMade": 0,
+  "productionHealthProven": false
+}

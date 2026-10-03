@@ -2748,7 +2748,7 @@ async function patchVapiAssistant(assistantId, patch) {
   return data && typeof data === "object" ? data : null;
 }
 
-async function fetchVapiCollection(resourcePath, collectionKeys = []) {
+async function fetchVapiCollection(resourcePath, collectionKeys = [], { requireComplete = false } = {}) {
   if (!VAPI_API_KEY) {
     const err = new Error("VAPI_API_KEY is not configured.");
     err.statusCode = 503;
@@ -2771,9 +2771,24 @@ async function fetchVapiCollection(resourcePath, collectionKeys = []) {
     throw createProviderHttpError({ provider: "Vapi", operation: `${resourcePath} collection`, status: response.status, data, fallbackCode: "VAPI_COLLECTION_FAILED" });
   }
 
-  if (Array.isArray(data)) return data;
+  const checkedCollection = (records) => {
+    if (requireComplete && (records.length >= 1000 || data?.hasMore || data?.has_more || data?.nextCursor || data?.nextPage || data?.pagination?.nextCursor)) {
+      const err = new Error("Vapi inventory completeness could not be established. No replacement may be created.");
+      err.code = "VAPI_INVENTORY_INCOMPLETE";
+      err.statusCode = 409;
+      throw err;
+    }
+    return records;
+  };
+  if (Array.isArray(data)) return checkedCollection(data);
   for (const key of ["data", "items", "results", ...collectionKeys]) {
-    if (Array.isArray(data?.[key])) return data[key];
+    if (Array.isArray(data?.[key])) return checkedCollection(data[key]);
+  }
+  if (requireComplete) {
+    const err = new Error("Vapi returned an unrecognized inventory response. No replacement may be created.");
+    err.code = "VAPI_INVENTORY_INCOMPLETE";
+    err.statusCode = 502;
+    throw err;
   }
   return [];
 }
@@ -2952,7 +2967,7 @@ function summarizeVapiPhoneNumberImport(data, fallbackPhoneNumber) {
 async function findSignupVapiAssistantByResourceName(resourceName) {
   const expectedName = sanitizeVapiImportName(resourceName, "");
   if (!expectedName) return null;
-  const assistants = await fetchVapiCollection("assistant", ["assistants", "agents"]);
+  const assistants = await fetchVapiCollection("assistant", ["assistants", "agents"], { requireComplete: true });
   const matches = assistants.filter((record) => getVapiAssistantName(record) === expectedName);
   if (matches.length > 1) {
     const err = new Error("More than one Vapi assistant has the deterministic provisioning name.");
@@ -2963,7 +2978,7 @@ async function findSignupVapiAssistantByResourceName(resourceName) {
   return matches[0] || null;
 }
 
-async function createSignupVapiAssistant({ normalizedPayload, assignedPhone, resourceName }) {
+async function createSignupVapiAssistant({ normalizedPayload, assignedPhone, resourceName, reconcileOnly = false }) {
   if (!VAPI_API_KEY) {
     const err = new Error("VAPI_API_KEY is not configured.");
     err.statusCode = 503;
@@ -3006,6 +3021,7 @@ async function createSignupVapiAssistant({ normalizedPayload, assignedPhone, res
     };
   }
 
+  if (reconcileOnly) return null;
   const created = await requestVapiResource("assistant", { method: "POST", body: config });
   const assistantId = String(created?.id || "").trim();
   if (!assistantId) {
@@ -3035,7 +3051,7 @@ async function reconcileVapiPhoneNumberImport({ twilioPhoneNumber, assistantId, 
   const phoneNumber = normalizeVapiImportPhone(twilioPhoneNumber);
   const vapiAssistantId = String(assistantId || "").trim();
   if (!phoneNumber || !vapiAssistantId) return null;
-  const phoneNumbers = await fetchVapiCollection("phone-number", ["phoneNumbers", "phone_numbers"]);
+  const phoneNumbers = await fetchVapiCollection("phone-number", ["phoneNumbers", "phone_numbers"], { requireComplete: true });
   const matches = phoneNumbers.filter(
     (record) => normalizeVapiImportPhone(getVapiPhoneNumber(record)) === phoneNumber
   );
@@ -10706,6 +10722,12 @@ async function sendMakeSignupCompleted(payload) {
     });
   }
   const headers = buildMakeSignupHeaders({ apiKey, eventKey: canonicalEventKey });
+  const { saveRecoveryCopy, recordRecoveryOperation } = require("./intakeRecoveryJournal");
+  // Persist the exact signed intake before Make receives it. A storage failure
+  // stops delivery; there is no fire-and-forget or local-file fallback.
+  const recoveryIdentity = await saveRecoveryCopy({ prisma, payload: normalizedPayload, secret: signingSecret });
+  const recoveryOperationId = crypto.randomUUID();
+  await recordRecoveryOperation({ prisma, identity: recoveryIdentity, operationId: recoveryOperationId, kind: "handoff", status: "started" });
   const timeoutMs = parseMakeSignupTimeoutMs(process.env.MAKE_SIGNUP_TIMEOUT_MS);
   const startedAt = Date.now();
 
@@ -10718,6 +10740,7 @@ async function sendMakeSignupCompleted(payload) {
       signal: createTimeoutSignal(timeoutMs),
     });
   } catch (error) {
+    await recordRecoveryOperation({ prisma, identity: recoveryIdentity, operationId: recoveryOperationId, kind: "handoff", status: "uncertain" }).catch(() => {});
     console.error("[make:signup] webhook request failed", {
       eventKey,
       durationMs: Date.now() - startedAt,
@@ -10732,6 +10755,9 @@ async function sendMakeSignupCompleted(payload) {
   }
 
   const rawText = await response.text();
+  // Accepted is not delivered, provisioned, or ready. The existing downstream
+  // provider checks still determine completion. A timeout remains uncertain.
+  await recordRecoveryOperation({ prisma, identity: recoveryIdentity, operationId: recoveryOperationId, kind: "handoff", status: response.ok ? "accepted" : "uncertain" });
   const requestId = getMakeRequestId(response);
   if (!response.ok) {
     console.error("[make:signup] webhook rejected request", {
@@ -14240,6 +14266,7 @@ app.post(
           normalizedPayload: trustedPayload,
           assignedPhone,
           resourceName,
+          reconcileOnly: true,
         });
       },
       execute: () => createSignupVapiAssistant({

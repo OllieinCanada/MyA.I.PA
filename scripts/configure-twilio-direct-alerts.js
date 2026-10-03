@@ -16,7 +16,9 @@ async function run({env=process.env,fetchImpl=fetch,apply=false,dailyLimit}={}) 
   if(body.next_page_uri)throw new Error('Trigger listing incomplete; refusing changes');
   const owned=(body.usage_triggers||[]).filter(x=>x.friendly_name==='My AI PA daily spending warning');
   if(owned.length>1)throw new Error('Duplicate managed triggers require review');
-  if(!apply)return {mode:'audit',managedTriggers:owned.length,callback,debuggerSetup:'Configure Console Debugger webhook after deployment; preserve any existing integration.'};
+  const expectedLimit=Number.isFinite(dailyLimit)&&dailyLimit>0?dailyLimit:5;
+  const matches=owned.length===1 && owned[0].callback_url===callback && owned[0].callback_method==='POST' && owned[0].recurring==='daily' && owned[0].usage_category==='totalprice' && owned[0].trigger_by==='price' && Number(owned[0].trigger_value)===expectedLimit;
+  if(!apply)return {mode:'audit',managedTriggers:owned.length,matchesRequestedConfiguration:matches,expectedDailyWarning:expectedLimit,callback,debuggerSetup:'Configure Console Debugger webhook after deployment; preserve any existing integration.'};
   if(!Number.isFinite(dailyLimit)||dailyLimit<=0)throw new Error('Explicit positive daily spending warning required');
   const probeBody={AccountSid:sid};
   const probe=await fetchImpl(callback,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','X-Twilio-Signature':getTwilioSignature(callback,probeBody,token)},body:new URLSearchParams(probeBody).toString(),signal:AbortSignal.timeout(10000)});

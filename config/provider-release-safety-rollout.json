@@ -1,0 +1,35 @@
+{
+  "status": "local_changes_verified_deployment_pending",
+  "scope": "Strengthen existing Twilio direct alerts and Vapi regression testing; no workflow migration.",
+  "checks": {
+    "local": "npm run test:provider-release-safety",
+    "twilioReadOnly": "npm run audit:twilio-direct-alerts:render-env",
+    "vapiControlled": "npm run evals:vapi:pilot-safety:render-env -- --target-phone=EXACT_AI_NUMBER"
+  },
+  "verifiedLive": {
+    "checkedDate": "2026-10-03",
+    "twilioDailyWarning": 5,
+    "twilioTriggerMatchesRequestedConfiguration": true,
+    "productionTelegramTestConfirmed": true,
+    "vapiTarget": "First Class Rentals Niagara AI, phone ending 4508",
+    "vapiObservedPublishedVersion": "v16",
+    "vapiSelectedSafetyRunsPassed": 6,
+    "vapiSelectedSafetyRunsTotal": 6,
+    "vapiConfigurationUnchangedAcrossRun": true,
+    "report": "diagnostics/shipping-readiness/vapi-release-safety-gate.json"
+  },
+  "remaining": [
+    "Deploy the durable alert inbox and callback acknowledgement changes.",
+    "After deployment, run a signed controlled alert and confirm both durable acceptance and Telegram delivery, including backup recovery.",
+    "Review floating tool-version references before publishing tool changes; do not infer that restoring an assistant restores every Latest tool.",
+    "Run business-specific conversation coverage and a controlled real call/SMS smoke test before declaring pilot readiness."
+  ],
+  "limitations": [
+    "No new Event Streams sink or subscription was activated; existing direct alerts and backup checks remain in place.",
+    "A provider event stored successfully is accepted, not yet delivered to Telegram.",
+    "Duplicate detection reduces repeated notifications; a lost Telegram receipt after a successful send can still cause a repeated card.",
+    "Assistant and tool configuration are checked before and after tests; this is not atomic immutable-version pinning.",
+    "Six mock-conversation safety checks do not prove carrier routing, audio quality, customer SMS delivery, or every signup's health.",
+    "No assistant was published, no voice/provider was changed, and no Make scenario was migrated."
+  ]
+}

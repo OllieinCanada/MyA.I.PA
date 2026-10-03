@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
-const { loadProjectEnv, redact, rootPath } = require("./_helpers");
+const { loadProjectEnv, rootPath } = require("./_helpers");
+const {captureRelease,releaseUnchanged,definitionMatches,assessRuns}=require("./vapi-release-evidence");
 
 const env = loadProjectEnv();
 
@@ -150,7 +151,15 @@ function selectedForSync(evals, includeToolEvals) {
 function selectedForRun(evals, options) {
   if (options.runAll) return evals;
   if (!options.runSafe) return [];
-  return evals.filter((item) => item.safeToRun !== false);
+  return evals.filter((item) => item.safeToRun === true);
+}
+function initializeRunReport(options) {
+  if(!options.outputPath || (!options.runSafe && !options.runAll))return;
+  const reportPath=rootPath(options.outputPath);
+  fs.mkdirSync(path.dirname(reportPath),{recursive:true});
+  // Invalidate an older passing report before any network request. An update,
+  // timeout or configuration-read failure must never leave a fresh-looking pass.
+  fs.writeFileSync(reportPath,`${JSON.stringify({checkedAt:new Date().toISOString(),ready:false,status:"incomplete",carrierReadinessProven:false,reason:"This run has not completed and verified its release."},null,2)}\n`,"utf8");
 }
 
 function requireApiKey() {
@@ -168,6 +177,8 @@ function buildClient(apiKey) {
     for (let attempt = 1; attempt <= 4; attempt += 1) {
       const response = await fetch(`${baseUrl}${path}`, {
         method,
+        redirect: "error",
+        signal: AbortSignal.timeout(15000),
         headers: {
           Authorization: `Bearer ${apiKey}`,
           ...(options.body ? { "Content-Type": "application/json" } : {}),
@@ -181,8 +192,7 @@ function buildClient(apiKey) {
         await sleep(attempt * 750);
         continue;
       }
-      const detail = text ? `: ${text.slice(0, 700)}` : "";
-      throw new Error(`${label} failed with HTTP ${response.status}${detail}`);
+      throw new Error(`${label} failed with HTTP ${response.status}.`);
     }
     throw new Error(`${label} failed after read-only retries.`);
   };
@@ -232,13 +242,6 @@ async function upsertEval(api, localEval, payload, existingByName) {
         await sleep(attempt * 750);
       }
     }
-    if (/HTTP 5\d\d\b/.test(String(lastError?.message || ""))) {
-      return {
-        action: "kept-existing-after-vapi-error",
-        eval: existing,
-        warning: String(lastError.message || lastError),
-      };
-    }
     throw lastError;
   }
   const created = await api("/eval", { method: "POST", body: payload }, `Create ${payload.name}`);
@@ -260,25 +263,11 @@ async function pollRun(api, runId) {
   throw new Error(`Eval run ${runId} did not finish within ${timeoutMs}ms.`);
 }
 
-async function findRecentRun(api, evalId, startedAtMs) {
-  for (let attempt = 0; attempt < 20; attempt += 1) {
-    const data = await api("/eval/run?limit=25&page=1", {}, `Find recent eval run for ${evalId}`);
-    const runs = Array.isArray(data) ? data : data.results || data.data || [];
-    const matching = runs
-      .filter((run) => run.evalId === evalId && new Date(run.createdAt).getTime() >= startedAtMs - 5000)
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    if (matching[0]) return matching[0];
-    await sleep(1000);
-  }
-  throw new Error(`Could not find recent eval run for ${evalId}.`);
-}
-
 function evalRunIdFromCreateResponse(created) {
   return created?.evalRunId || created?.runId || created?.id || created?.run?.id || created?.data?.id || "";
 }
 
 async function runEval(api, evalRecord, payload, targetAssistantId) {
-  const startedAtMs = Date.now();
   const created = await api(
     "/eval/run",
     {
@@ -295,8 +284,10 @@ async function runEval(api, evalRecord, payload, targetAssistantId) {
     `Run ${payload.name}`
   );
   const runId = evalRunIdFromCreateResponse(created);
-  const createdRun = runId ? created : await findRecentRun(api, evalRecord.id, startedAtMs);
-  const run = createdRun.status === "ended" ? createdRun : await pollRun(api, runId || createdRun.id);
+  if(!runId)throw new Error("Vapi did not confirm a fresh eval run ID. No recent cached run was substituted.");
+  const run = created.status === "ended" ? created : await pollRun(api, runId);
+  if(run.id && run.id!==runId)throw new Error("Vapi returned a different eval run.");
+  if(run.evalId && run.evalId!==evalRecord.id)throw new Error("Vapi returned results for another eval.");
   const resultStatuses = (run.results || []).map((result) => result.status);
   const passed =
     run.status === "ended" &&
@@ -345,6 +336,7 @@ async function main() {
     console.log(usage());
     return;
   }
+  if(!options.list && !options.dryRun)initializeRunReport(options);
 
   if (options.runAll && !options.allowLiveTools) {
     throw new Error("--run-all requires --allow-live-tools because tool-call evals can invoke live SMS tools.");
@@ -381,10 +373,14 @@ async function main() {
   const apiKey = requireApiKey();
   const api = buildClient(apiKey);
   if (targetPhone) targetAssistantId = await resolveTargetAssistantFromPhone(api, targetPhone);
+  const releaseBefore = (options.runSafe || options.runAll) ? await captureRelease(api,targetAssistantId) : null;
   console.log("");
-  console.log(`Vapi API: ${(env.VAPI_API_BASE_URL || "https://api.vapi.ai").replace(/\/+$/, "")} (${redact(apiKey)})`);
+  console.log("Vapi credentials loaded; secret values are not printed.");
 
   const existing = await listRemoteEvals(api);
+  for(const item of syncItems) {
+    if(existing.filter(record=>record.name===item.name || item.legacyNames?.includes(record.name)).length>1)throw new Error("Ambiguous remote eval definitions require review.");
+  }
   const existingByName = new Map(existing.map((item) => [item.name, item]));
   const syncedByKey = new Map();
 
@@ -443,6 +439,8 @@ async function main() {
         }
 
         const payload = toVapiEval(item, suite);
+        const definition = await api(`/eval/${encodeURIComponent(evalRecord.id)}`,{},"Verify test definition");
+        if(!definitionMatches(payload,definition))throw new Error("The saved test definition differs from the requested suite. Testing stopped.");
         const result = await runEval(api, evalRecord, payload, targetAssistantId);
         results.push({ item, repetition, ...result });
         const cost = typeof result.run.cost === "number" ? `, $${result.run.cost.toFixed(4)}` : "";
@@ -455,11 +453,14 @@ async function main() {
     const failures = results.filter((result) => !result.passed);
     const passed = results.length - failures.length;
     const passRate = results.length ? passed / results.length : 0;
+    const releaseAfter = await captureRelease(api,targetAssistantId);
+    const stableRelease=releaseUnchanged(releaseBefore,releaseAfter);
+    const caseGate=assessRuns(results,{minimumPassRate:options.minimumPassRate});
     const report = {
       checkedAt: new Date().toISOString(),
       suite: suite.suiteName,
       suiteVersion: suite.version,
-      mode: "vapi-safe-mock-conversation",
+      mode: options.runAll ? "vapi-live-tool-evaluation" : "vapi-safe-mock-conversation",
       selectedEvalCount: runItems.length,
       repetitions: options.repeat,
       totalRuns: results.length,
@@ -467,15 +468,21 @@ async function main() {
       failed: failures.length,
       passRate,
       minimumPassRate: options.minimumPassRate,
-      ready: results.length > 0 && passRate >= options.minimumPassRate,
+      ready: results.length > 0 && passRate >= options.minimumPassRate && caseGate.pass && stableRelease,
+      release: releaseBefore,
+      releaseUnchanged: stableRelease,
+      perCase: caseGate.cases,
+      carrierReadinessProven: false,
       failures: failures.map((failure) => ({
         key: failure.item.key,
         repetition: failure.repetition,
-        reasons: summarizeRunFailure(failure.run).slice(0, 3),
+        reasons: ["judgment_failed"],
       })),
       limitations: [
         "These are Vapi mock-conversation evaluations, not carrier audio calls.",
-        "Tool-calling and live SMS are excluded from safe runs.",
+        options.runAll ? "Live tools were explicitly allowed; this is not a side-effect-free safety run." : "Tool-calling and live SMS are excluded from safe runs.",
+        "Configuration stability was checked before and after, not atomically pinned throughout the run.",
+        "A passing evaluation is not permission to publish or proof of live call/SMS routing.",
       ],
     };
     if (options.outputPath) {
@@ -506,4 +513,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { evalRunIdFromCreateResponse, parseArgs, toVapiEval };
+module.exports = { evalRunIdFromCreateResponse, parseArgs, toVapiEval, runEval, upsertEval, initializeRunReport, selectedForRun };

@@ -194,9 +194,15 @@ async function runProvisioningStep({
   }
 
   try {
-    // Some reconciliation adapters create missing resources. They must run
-    // under the same lease as execute, never before the duplicate lock.
+    // Reconciliation must not create missing paid resources. It runs under
+    // the lease, and creation is confined to the first execute attempt.
     const reconciled = typeof reconcile === "function" ? await reconcile() : null;
+    if (!reconciled && claim.data.attempts > 1 && ["twilio-number", "vapi-assistant", "vapi-import"].includes(kind)) {
+      // A lost response or expired lease does not prove that the provider did
+      // nothing. Reuse provider-confirmed resources, but never blindly create
+      // another paid resource when a previous attempt has an unknown outcome.
+      throw provisioningError("The prior provider attempt has no confirmed recovery result. Inspect provider inventory before creating a replacement.", "PROVISIONING_RECONCILIATION_REQUIRED");
+    }
     const result = reconciled && typeof reconciled === "object"
       ? { reused: true, ...reconciled }
       : await execute();
