@@ -18,6 +18,18 @@
       "type": "operational",
       "checkName": "operational_health",
       "firstDetectedAt": "2026-10-02T06:22:50.876Z"
+    },
+    "issue:operational_health:public_07146f51f1d49ed23daa0dffe7ecd9c4": {
+      "lifecycleId": "public_c9048454100d6b9187b94553",
+      "type": "operational",
+      "checkName": "operational_health",
+      "firstDetectedAt": "2026-10-03T16:19:48.855Z"
+    },
+    "issue:operational_health:public_4eda276aeed8be2d4d9a05ce02808d24": {
+      "lifecycleId": "public_a83ca4fdeee910688d712e5c",
+      "type": "operational",
+      "checkName": "operational_health",
+      "firstDetectedAt": "2026-10-03T16:19:48.855Z"
     }
   }
 }
