@@ -120,6 +120,18 @@ test("provider reconciliation closes the post-create crash window", async () => 
   assert.equal(executions, 0);
 });
 
+test("lost provider responses cannot trigger a second paid creation without reconciliation", async () => {
+  const { prisma } = createFakePrisma();
+  let executions = 0;
+  const input = { prisma, kind: "twilio-number", idempotencyKey: "lost-response", contextHash: "a",
+    reconcile: async () => null, execute: async () => { executions++; throw new Error("provider response lost after creation"); } };
+  await assert.rejects(runProvisioningStep(input));
+  await assert.rejects(runProvisioningStep(input), { code: "PROVISIONING_RECONCILIATION_REQUIRED" });
+  assert.equal(executions, 1);
+  const recovered = await runProvisioningStep({ ...input, reconcile: async () => ({ twilioSid: "provider-existing" }) });
+  assert.equal(recovered.twilioSid, "provider-existing"); assert.equal(executions, 1);
+});
+
 test("one provisioning key cannot be reused for a different signed context", async () => {
   const { prisma } = createFakePrisma();
   const base = {

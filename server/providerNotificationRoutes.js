@@ -35,7 +35,7 @@ function registerProviderNotificationRoutes(app,{requireMonitorKey,prisma,env=pr
         report={events:vapi.events,snapshots:vapi.snapshots,readiness:{...row.data.readiness,vapi:vapi.readiness.vapi},receiptNotifications:'receipt_bridge_required'};
       }
       // Retry durable direct-event failures even after Twilio exhausts callback retries.
-      const failedDirect=await prisma.runtimeStore.findMany({where:{key:{startsWith:'provider-notification:'},OR:[{data:{path:['lastFailure'],equals:'telegram_delivery_unconfirmed'}},{AND:[{data:{path:['leaseUntil'],gt:0}},{data:{path:['leaseUntil'],lt:Date.now()}}]}]},take:100});
+      const failedDirect=await prisma.runtimeStore.findMany({where:{key:{startsWith:'provider-notification:'},OR:[{data:{path:['queued'],equals:true}},{data:{path:['lastFailure'],equals:'telegram_delivery_unconfirmed'}},{AND:[{data:{path:['leaseUntil'],gt:0}},{data:{path:['leaseUntil'],lt:Date.now()}}]}]},take:100});
       const retryEvents=failedDirect.map(record=>record.data?.event).filter(event=>event&&Date.parse(event.occurredAt)>=Date.now()-7*86400000);
       const events=[...new Map([...(row?.data?.pending||[]),...retryEvents,...report.events].map(event=>[`${event.provider}:${event.id}`,event])).values()];
       if(events.length>5000)throw new Error('Provider notification backlog needs attention; no queued events were discarded.');

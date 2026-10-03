@@ -28,10 +28,10 @@ test('configuration fails closed before activation on an undeployed endpoint',as
     return {status:404,json:async()=>({})};
   }}));assert.equal(writes,0);
 });
-test('HTTP callback rejects spoofing and distinguishes confirmed duplicates from active leases',async t=>{
+test('HTTP callback rejects spoofing, acknowledges durable acceptance and retries storage failures',async t=>{
   const app=require('express')();let delivered=false,calls=0,mode='delivered';
   const prisma={runtimeStore:{findUnique:async()=>({data:delivered?{deliveredAt:new Date().toISOString()}:{leaseUntil:Date.now()+60000}})}};
-  registerTwilioProviderEvents(app,{prisma,env:{TWILIO_ACCOUNT_SID:account,TWILIO_AUTH_TOKEN:'test-secret'},deliver:async()=>{calls++;if(mode==='failure')throw new Error('offline');return mode==='duplicate'?{duplicate:true}:{delivered:true};}});
+  registerTwilioProviderEvents(app,{prisma,env:{TWILIO_ACCOUNT_SID:account,TWILIO_AUTH_TOKEN:'test-secret'},enqueue:async()=>{if(mode==='storage-failure')throw new Error('database offline');return {accepted:true,delivered};},deliver:async()=>{calls++;if(mode==='failure')throw new Error('offline');return mode==='duplicate'?{duplicate:true}:{delivered:true};}});
   const server=app.listen(0,'127.0.0.1');await new Promise(resolve=>server.once('listening',resolve));
   t.after(()=>new Promise(resolve=>{
     server.close(resolve);
@@ -51,7 +51,8 @@ test('HTTP callback rejects spoofing and distinguishes confirmed duplicates from
   assert.equal((await send('spoofed')).status,403);assert.equal(calls,0);
   const signature=getTwilioSignature('https://api.myaipa.ca'+PATH,body,'test-secret');
   assert.equal((await send(signature)).status,204);
-  mode='duplicate';assert.equal((await send(signature)).status,503);
+  mode='duplicate';assert.equal((await send(signature)).status,204);
   delivered=true;assert.equal((await send(signature)).status,204);
-  mode='failure';assert.equal((await send(signature)).status,503);
+  delivered=false;mode='failure';assert.equal((await send(signature)).status,204);
+  mode='storage-failure';assert.equal((await send(signature)).status,503);
 });

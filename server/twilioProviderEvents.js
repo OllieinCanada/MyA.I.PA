@@ -1,6 +1,6 @@
 const crypto = require('crypto');
 const {verifyTwilioWebhookRequest} = require('./smsSuppression');
-const {deliverDurably,validateEvent} = require('./providerNotifications');
+const {deliverDurably,validateEvent,enqueueProviderNotification} = require('./providerNotifications');
 const PATH = '/api/webhooks/twilio/provider-alerts';
 function toEvent(body, accountSid) {
   if (!accountSid || body.AccountSid !== accountSid) throw new Error('Account mismatch');
@@ -27,21 +27,24 @@ function toEvent(body, accountSid) {
   }
   return validateEvent({provider:'twilio',type,id,occurredAt,errorCode});
 }
-function registerTwilioProviderEvents(app,{prisma,env=process.env,deliver=deliverDurably}={}) {
+function registerTwilioProviderEvents(app,{prisma,env=process.env,deliver=deliverDurably,enqueue=enqueueProviderNotification}={}) {
   app.post(PATH, require('express').urlencoded({extended:false,limit:'32kb'}), async(req,res)=>{
     const configuredUrl = 'https://api.myaipa.ca' + PATH;
     if (!req.is('application/x-www-form-urlencoded') || !verifyTwilioWebhookRequest(req,env,{configuredUrl})) return res.status(403).json({error:'Invalid Twilio signature.'});
     let event;
     try {event=toEvent(req.body,env.TWILIO_ACCOUNT_SID);} catch {return res.status(400).json({error:'Invalid Twilio event.'});}
     try {
-      const result=await deliver(event,{prisma,token:env.TELEGRAM_BOT_TOKEN,chatId:env.TELEGRAM_CHAT_ID});
-      // A lease is not a confirmed delivery; return retryable status until confirmed.
-      if(result.duplicate) {
-        const key='provider-notification:'+crypto.createHash('sha256').update(`${event.provider}:${event.id}`).digest('hex');
-        const row=await prisma.runtimeStore.findUnique({where:{key}});
-        if(!row?.data?.deliveredAt)return res.sendStatus(503);
+      // Acknowledge only after the redacted event is safely stored. Telegram
+      // latency must not keep Twilio's callback open or lose the notification.
+      const result=await enqueue(event,{prisma});
+      if(result?.accepted!==true)return res.sendStatus(503);
+      res.sendStatus(204);
+      if(!result.delivered) {
+        // Best-effort immediate delivery. A process restart or delivery failure
+        // leaves durable work for the existing authenticated backup poll.
+        Promise.resolve().then(()=>deliver(event,{prisma,token:env.TELEGRAM_BOT_TOKEN,chatId:env.TELEGRAM_CHAT_ID})).catch(()=>{});
       }
-      return res.sendStatus(204);
+      return;
     }catch {return res.sendStatus(503);}
   });
 }
