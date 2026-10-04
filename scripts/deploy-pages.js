@@ -16,6 +16,7 @@ const stagePaths = [
   "scripts/deploy-pages.js",
   "scripts/build-pages.js",
   "src",
+  "public/campaigns",
   "docs/.nojekyll",
   "docs/404.html",
   "docs/index.html",
@@ -26,6 +27,7 @@ const stagePaths = [
   "docs/logo192.png",
   "docs/logo512.png",
   "docs/proof",
+  "docs/campaigns",
   "docs/static",
 ];
 const existingStagePaths = stagePaths.filter((stagePath) => require("fs").existsSync(rootPath(stagePath)));
