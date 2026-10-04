@@ -396,15 +396,18 @@ function signupAttentionItems(signups = [], now = new Date(), stuckMinutes = 60)
         actions: ["recover_signup", "reopen_signup"],
         diagnostics: signupDiagnostics(signup, status),
       }));
-    } else if (IN_PROGRESS_SIGNUP.test(status) && age != null && age >= stuckMinutes) {
+    } else if (IN_PROGRESS_SIGNUP.test(status) && age != null
+      && (age >= (/^pending_(?:email_)?verification$/i.test(status) ? 24 * 60 : stuckMinutes)
+        || (/^pending_(?:email_)?verification$/i.test(status) && signup.smsVerificationDeliveryStatus === "failed"))) {
       const waitingForVerification = /^pending_(?:email_)?verification$/i.test(status);
+      const verificationFailed = waitingForVerification && signup.smsVerificationDeliveryStatus === "failed";
       items.push(attentionItem({
         kind: "signup_stuck",
         severity: "warning",
-        title: "Signup appears stuck",
-        summary: `Setup has not advanced for at least ${stuckMinutes} minutes.`,
+        title: verificationFailed ? "Verification text was not delivered" : waitingForVerification ? "Contact verification still incomplete" : "Signup appears stuck",
+        summary: verificationFailed ? "Twilio reported a failed verification delivery. Setup remains paused." : waitingForVerification ? "The customer has not completed verification after 24 hours. Setup remains paused." : `Setup has not advanced for at least ${stuckMinutes} minutes.`,
         businessName: signup.businessName,
-        reason: waitingForVerification
+        reason: verificationFailed ? "The SMS provider confirmed that the verification text was not delivered." : waitingForVerification
           ? "The signup is still waiting for the customer to open the verification link sent by text or email."
           : "The signup has remained at the same safe checkpoint longer than expected.",
         impact: waitingForVerification
@@ -414,7 +417,7 @@ function signupAttentionItems(signups = [], now = new Date(), stuckMinutes = 60)
         nextAction: waitingForVerification
           ? "Resend the verification message or reopen the signup if the original request expired."
           : "Inspect the safe diagnostics, then recover or reopen the signup without creating duplicate resources.",
-        reasonCode: waitingForVerification ? "CONTACT_VERIFICATION_PENDING" : "SIGNUP_CHECKPOINT_STALE",
+        reasonCode: verificationFailed ? "CONTACT_VERIFICATION_DELIVERY_FAILED" : waitingForVerification ? "CONTACT_VERIFICATION_PENDING" : "SIGNUP_CHECKPOINT_STALE",
         confidence: "high",
         detectedAt: updatedAt,
         ageMinutes: age,

@@ -51,6 +51,21 @@ function findSignupDashboardExistingKey(store = {}, record = {}) {
     return legacyAttemptEntry?.[0] || attemptKey;
   }
 
+  // Stripe webhooks often arrive without an attempt ID. Join by the exact
+  // subscription (or a complete business identity before its first callback),
+  // never by owner email. Otherwise a second billing-only signup is created.
+  const subscriptionId = String(record.subscriptionId || "").trim();
+  if (subscriptionId) {
+    const exact = Object.entries(store).filter(([, candidate]) => normalizedAttemptId(candidate)
+      && String(candidate.subscriptionId || "").trim() === subscriptionId);
+    if (exact.length > 1) throw Object.assign(new Error("Subscription ownership is ambiguous."), { code: "SIGNUP_SUBSCRIPTION_IDENTITY_CONFLICT" });
+    if (exact.length === 1) return exact[0][0];
+    const businessKey = signupBusinessKey(record);
+    const pending = businessKey ? Object.entries(store).filter(([, candidate]) => normalizedAttemptId(candidate)
+      && signupBusinessKey(candidate) === businessKey && !candidate.subscriptionId) : [];
+    if (pending.length > 1) throw Object.assign(new Error("Business billing ownership is ambiguous."), { code: "SIGNUP_SUBSCRIPTION_IDENTITY_CONFLICT" });
+    if (pending.length === 1) return pending[0][0];
+  }
   const aliases = getSignupAliases(record);
   return aliases.find((alias) => {
     const candidate = store[alias];
@@ -79,9 +94,56 @@ function canRemoveSignupAlias(candidate = {}, merged = {}) {
   const mergedAttemptId = normalizedAttemptId(merged);
   const candidateAttemptId = normalizedAttemptId(candidate);
   if (mergedAttemptId || candidateAttemptId) {
+    if (mergedAttemptId && !candidateAttemptId && isBillingAlias(candidate, merged)) return true;
     return Boolean(mergedAttemptId && candidateAttemptId && mergedAttemptId === candidateAttemptId);
   }
   return true;
+}
+
+function isBillingAlias(candidate = {}, canonical = {}) {
+  const subscription = String(candidate.subscriptionId || "").trim();
+  const businessKey = signupBusinessKey(candidate);
+  return Boolean(!normalizedAttemptId(candidate) && normalizedAttemptId(canonical)
+    && subscription && subscription === String(canonical.subscriptionId || "").trim()
+    && businessKey && businessKey === signupBusinessKey(canonical)
+    && !candidate.twilioPhoneNumber && !candidate.vapiAssistantId && !candidate.vapiPhoneNumberId
+    && !candidate.checkoutSessionId && !candidate.signupSource);
+}
+
+function preserveSignupWorkflowForBilling(existing = {}, incoming = {}) {
+  if (!normalizedAttemptId(existing) || !incoming.subscriptionId) return incoming;
+  const result = { ...incoming };
+  // Billing is a separate state dimension; a healthy Stripe update must not
+  // replace setup_ready, pending_verification, or an unresolved setup failure.
+  if (/^subscription_(trialing|active|updated)$/.test(String(incoming.status || ""))) result.status = existing.status || incoming.status;
+  for (const key of ["ownerEmail", "ownerPhone", "ownerName", "businessName"]) {
+    if (!String(result[key] || "").trim() && existing[key]) result[key] = existing[key];
+  }
+  return result;
+}
+
+function withoutBillingAliases(store = {}) {
+  const result = { ...store };
+  for (const [key, candidate] of Object.entries(store)) {
+    const owners = Object.entries(store).filter(([, canonical]) => isBillingAlias(candidate, canonical));
+    if (owners.length !== 1) continue;
+    const [ownerKey] = owners[0];
+    const canonical = { ...result[ownerKey] };
+    // Preserve billing and gate evidence before removing a display-only alias.
+    // Never borrow contacts, verification, readiness, or paid resource IDs.
+    for (const field of ['subscriptionStatus','paymentMethodReady','trialStartAt','trialEndAt','periodStartAt','periodEndAt','trialUsageGateStatus','trialUsageGateActivatedAt','trialUsageLimitMinutes','trialUsageWarningMinutes','trialUsageCompletionReserveMinutes']) {
+      if (canonical[field] == null && candidate[field] != null) canonical[field] = candidate[field];
+    }
+    if (Number.isFinite(Date.parse(candidate.agentRouteBindingVerifiedAt))
+      && Date.parse(candidate.agentRouteBindingVerifiedAt) > (Date.parse(canonical.agentRouteBindingVerifiedAt) || 0)) {
+      for (const field of ['agentRouteBindingStatus','agentRouteBindingMode','agentRouteBindingFingerprint','agentRouteBindingVerifiedAt']) {
+        if (candidate[field] != null) canonical[field] = candidate[field];
+      }
+    }
+    result[ownerKey] = canonical;
+    delete result[key];
+  }
+  return result;
 }
 
 // Billing reminders are metadata for a subscription, not new signups. Never
@@ -89,7 +151,7 @@ function canRemoveSignupAlias(candidate = {}, merged = {}) {
 function findSignupReminderKey(store = {}, reminder = {}) {
   const subscriptionId = String(reminder.subscriptionId || "").trim();
   if (!subscriptionId) return null;
-  const matches = Object.entries(store).filter(([, candidate]) =>
+  const matches = Object.entries(withoutBillingAliases(store)).filter(([, candidate]) =>
     String(candidate?.subscriptionId || "").trim() === subscriptionId
   );
   return matches.length === 1 ? matches[0][0] : null;
@@ -104,5 +166,8 @@ module.exports = {
   getSignupDashboardKey,
   normalizeSignupSubmissionId,
   normalizedAttemptId,
+  isBillingAlias,
+  preserveSignupWorkflowForBilling,
+  withoutBillingAliases,
   selectSignupDashboardRecordForProvisioning,
 };

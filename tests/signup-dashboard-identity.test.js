@@ -8,7 +8,44 @@ const {
   getSignupAliases,
   normalizeSignupSubmissionId,
   selectSignupDashboardRecordForProvisioning,
+  isBillingAlias,
+  preserveSignupWorkflowForBilling,
+  withoutBillingAliases,
 } = require("../server/signupDashboardIdentity");
+
+const business = {ownerEmail:'owner@example.com',ownerPhone:'+19055550101',businessName:'Example Co'};
+test('Stripe callback without attempt ID joins the unique canonical subscription',()=>{
+ const canonical={...business,signupAttemptId:'attempt-a',subscriptionId:'sub-a',status:'setup_ready'};
+ const alias={...business,subscriptionId:'sub-a',status:'subscription_trialing'};
+ assert.equal(findSignupDashboardExistingKey({a:canonical,b:alias},alias),'a');
+ assert.equal(findSignupDashboardExistingKey({a:{...canonical,subscriptionId:undefined}},alias),'a');
+ assert.throws(()=>findSignupDashboardExistingKey({a:canonical,b:{...canonical,signupAttemptId:'attempt-b'}},alias),/ambiguous/);
+ assert.equal(preserveSignupWorkflowForBilling(canonical,alias).status,'setup_ready');
+ assert.equal(preserveSignupWorkflowForBilling(canonical,{...alias,signupAttemptId:'attempt-a'}).status,'setup_ready');
+ assert.equal(preserveSignupWorkflowForBilling({...canonical,status:'setup_error'},alias).status,'setup_error');
+ assert.equal(canRemoveSignupAlias(alias,canonical),true);
+});
+test('billing aliases are projected once, without removing real attempts or unrelated businesses',()=>{
+ const canonical={...business,signupAttemptId:'attempt-a',subscriptionId:'sub-a'};
+ const alias={...business,subscriptionId:'sub-a'};
+ assert.equal(isBillingAlias(alias,canonical),true);
+ assert.deepEqual(Object.keys(withoutBillingAliases({a:canonical,b:alias})),['a']);
+ assert.equal(findSignupReminderKey({a:canonical,b:alias},{subscriptionId:'sub-a'}),'a');
+ assert.equal(isBillingAlias({...alias,vapiAssistantId:'other'},canonical),false);
+ assert.equal(isBillingAlias({...alias,businessName:'Different Co'},canonical),false);
+ assert.deepEqual(Object.keys(withoutBillingAliases({a:canonical,b:{...alias,signupAttemptId:'attempt-b'}})),['a','b']);
+ assert.deepEqual(Object.keys(withoutBillingAliases({a:canonical,b:{...canonical,signupAttemptId:'attempt-b'},c:alias})),['a','b','c']);
+});
+
+test('coalescing retains newer trial gate evidence but not billing-alias readiness or contacts',()=>{
+ const canonical={...business,signupAttemptId:'attempt-a',subscriptionId:'sub-a',status:'setup_ready',smsVerified:true,agentRouteBindingMode:'direct',agentRouteBindingVerifiedAt:'2026-10-02T00:00:00Z'};
+ const alias={...business,subscriptionId:'sub-a',status:'subscription_trialing',agentRouteBindingMode:'trial-gate',agentRouteBindingVerifiedAt:'2026-10-02T00:01:00Z',trialUsageGateStatus:'active'};
+ const merged=withoutBillingAliases({a:canonical,b:alias}).a;
+ assert.equal(merged.status,'setup_ready');assert.equal(merged.smsVerified,true);
+ assert.equal(merged.agentRouteBindingMode,'trial-gate');assert.equal(merged.trialUsageGateStatus,'active');
+ assert.equal(canonical.agentRouteBindingMode,'direct');
+ assert.equal(withoutBillingAliases({a:{...canonical,agentRouteBindingVerifiedAt:'2026-10-02T00:02:00Z'},b:alias}).a.agentRouteBindingMode,'direct');
+});
 
 test("reminders join the subscription stored in an attempt-keyed record", () => {
   assert.equal(findSignupReminderKey({ "attempt:a": { subscriptionId: "sub_a" } },
