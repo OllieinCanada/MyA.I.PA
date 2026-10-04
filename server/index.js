@@ -67,6 +67,8 @@ const {
   getSignupAliases,
   getSignupDashboardKey,
   normalizeSignupSubmissionId,
+  preserveSignupWorkflowForBilling,
+  withoutBillingAliases,
   selectSignupDashboardRecordForProvisioning,
 } = require("./signupDashboardIdentity");
 const { buildRuntimeIncident } = require("./runtimeAlerts");
@@ -5243,8 +5245,9 @@ function upsertSignupDashboardRecord(record) {
   const store = readSignupDashboardStore();
   const aliases = getSignupAliases(record);
   const existingKey = findSignupDashboardExistingKey(store, record) || `signup:${crypto.randomUUID()}`;
-  const existing = store[existingKey] || {};
+  const existing = withoutBillingAliases(store)[existingKey] || store[existingKey] || {};
   if (isClosedSignup(existing)) return existing;
+  record = preserveSignupWorkflowForBilling(existing, record);
   const signedUpAt = existing.signedUpAt || record.signedUpAt || record.createdAt || new Date().toISOString();
   const merged = enforceAgentTestReadyStatus(compactObject({
     ...existing,
@@ -5824,7 +5827,7 @@ async function getStripeTrialsDashboard() {
 }
 
 function mergeSignupDashboardWithTrialReminders(dashboardStore = {}, reminderStore = {}) {
-  const combinedStore = { ...dashboardStore };
+  const combinedStore = withoutBillingAliases(dashboardStore);
 
   // Reading the dashboard must not mutate signup state. Previously this loop
   // called upsertSignupDashboardRecord(), which rewrote updatedAt on every
@@ -10393,6 +10396,7 @@ async function createBusinessStripeTrial(identity, businessKey, client = stripe)
 
   const metadata = compactObject({
     businessKey,
+    signupAttemptId: identity.signupAttemptId,
     businessName: identity.businessName,
     ownerName: identity.ownerName,
     ownerEmail: identity.ownerEmail,
