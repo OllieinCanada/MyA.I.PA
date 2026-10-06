@@ -363,7 +363,7 @@ async function testSignupJourney(browser, baseUrl, viewport) {
     await clickVisibleByText(page, "Continue to property types");
     await clickVisibleByText(page, "Residential");
     await clickVisibleByText(page, "Continue to service areas");
-    await page.getByText("What areas do you cover?", { exact: true }).first().waitFor({ state: "visible" });
+    await page.locator("h2:visible").filter({ hasText: /^What areas do you cover\?$/ }).first().waitFor({ state: "visible" });
     await clickVisibleByText(page, "Hamilton");
     await clickVisibleByText(page, viewport.width < 640 ? "Next" : "Continue to business details");
     const detailsText = await page.locator("form").innerText();
