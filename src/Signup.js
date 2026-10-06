@@ -401,13 +401,13 @@ function MobileSignupProgress({ currentStep, businessSlide, tradeSetupPanel }) {
                 : "Check your setup";
 
   return (
-    <div className="signup-mobile-progress signup-visible-progress" aria-label={`Step ${stepNumber} of 7: ${title}`}>
+    <div className="signup-mobile-progress signup-visible-progress" aria-label={`Step ${stepNumber} of 8: ${title}`}>
       <div className="signup-mobile-progress-copy">
-        <span>Step {stepNumber} of 7</span>
+        <span>Step {stepNumber} of 8</span>
         <strong>{title}</strong>
       </div>
       <div className="signup-mobile-progress-track" aria-hidden="true">
-        <span style={{ width: `${(stepNumber / 7) * 100}%` }} />
+        <span style={{ width: `${(stepNumber / 8) * 100}%` }} />
       </div>
     </div>
   );
@@ -1768,21 +1768,21 @@ export function SignupSuccessPage({ result: initialResult, onStartAnother }) {
 
       <section className="mx-auto grid min-h-[calc(100vh-64px)] w-full max-w-6xl place-items-center px-4 py-8 sm:px-6">
         <div className="w-full overflow-hidden rounded-[28px] border border-blue-100 bg-white/98 shadow-[0_34px_100px_-70px_rgba(15,23,42,0.86)]">
-          <div className="bg-[linear-gradient(135deg,#07142a_0%,#0b3b7a_58%,#1357af_100%)] px-5 py-7 text-white sm:px-8 sm:py-10">
+          <div className="bg-[linear-gradient(135deg,#2563eb_0%,#7c3aed_55%,#db2777_100%)] px-5 py-7 text-white shadow-[0_0_60px_-20px_rgba(124,58,237,0.7)] sm:px-8 sm:py-10">
             <div className="inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-[#00c853] text-white shadow-[0_0_36px_-12px_rgba(0,200,83,1)]">
               <Icon name="check" className="h-8 w-8" />
             </div>
             <p className="mt-5 text-sm font-black uppercase tracking-[0.18em] text-[#9edaff]">
-              {verificationRequired ? "Phone verification required" : "Setup milestone unlocked"}
+              {verificationRequired ? "Step 8 of 8 · Phone verification" : assignedNumber && !reviewRequired && !signupClosed ? "Let’s bring your assistant to life!" : "Your setup progress"}
             </p>
             <h1 className="mt-2 text-[clamp(2.1rem,8vw,4.6rem)] font-black leading-tight tracking-[-0.055em]">
-              Thanks, {businessName}.
+              {assignedNumber && !reviewRequired && !verificationRequired && !signupClosed ? `Welcome aboard, ${businessName}!` : `Thanks, ${businessName}.`}
             </h1>
             <p className="mt-3 max-w-3xl text-base font-medium leading-7 text-blue-50 sm:text-xl sm:leading-8">
               {signupClosed
                 ? result.signupStatus.message
                 : verificationRequired
-                ? "Open the verification link on your phone to continue. If it hasn’t arrived, wait a few minutes and check your messages."
+                ? "Open the verification link in your text messages to continue. No text yet? Check delivery below."
                 : reviewRequired
                 ? "Your signup is saved. Final safety checks are underway, and this page checks automatically. You do not need to submit it again."
                 : assignedNumber
@@ -2041,6 +2041,7 @@ export default function Signup() {
   const [businessStepAttempted, setBusinessStepAttempted] = useState(false);
   const [touchedDetails, setTouchedDetails] = useState({});
   const [returnToReviewAfterEdit, setReturnToReviewAfterEdit] = useState(false);
+  const [reviewReturnStep, setReviewReturnStep] = useState(1);
   const [details, setDetails] = useState(() => ({ ...DEFAULT_DETAILS }));
   const [pricing, setPricing] = useState(() => ({ ...DEFAULT_PRICING }));
   const isSignupQaTurnstileMode = qaModeRef.current === "turnstile";
@@ -2135,7 +2136,7 @@ export default function Signup() {
       (businessSlide === 3 && !businessValidation.isValid) ||
       (businessSlide === 4 && !serviceCallDecisionMade));
   const businessSlideLabel =
-    businessSlide === 1
+    returnToReviewAfterEdit ? "Continue" : businessSlide === 1
       ? tradeSetupPanel === "trade" ? "Continue to property types" : "Continue to service areas"
       : businessSlide === 2
         ? "Continue to business details"
@@ -2156,7 +2157,7 @@ export default function Signup() {
             : 5;
   const securityStepDisabled = Boolean(CAPTCHA_PROVIDER && !captchaToken);
   const mobilePrimaryLabel =
-    currentStep === 3
+    returnToReviewAfterEdit ? "Continue" : currentStep === 3
         ? "Start my free 14-day trial"
         : businessSlide === 1
           ? tradeSetupPanel === "trade" ? "Continue to property types" : "Continue to service areas"
@@ -2171,6 +2172,12 @@ export default function Signup() {
 
   const goBackFromMobileStep = () => {
     setError("");
+    if (returnToReviewAfterEdit) {
+      setReturnToReviewAfterEdit(false);
+      setCurrentStep(reviewReturnStep);
+      setBusinessSlide(5);
+      return;
+    }
     if (currentStep === 3) {
       setCurrentStep(1);
       setBusinessSlide(5);
@@ -2255,6 +2262,7 @@ export default function Signup() {
   };
 
   const editBusinessSlideFromReview = (slideNumber, panel = "") => {
+    setReviewReturnStep(currentStep);
     setReturnToReviewAfterEdit(true);
     setError("");
     if (slideNumber === 1) setTradeSetupPanel(panel || "trade");
@@ -2307,6 +2315,13 @@ export default function Signup() {
             setError("Choose your trade before continuing.");
             return;
           }
+          if (returnToReviewAfterEdit) {
+            setReturnToReviewAfterEdit(false);
+            setCurrentStep(reviewReturnStep);
+            setBusinessSlide(5);
+            setError("");
+            return;
+          }
           setTradeSetupPanel("specialization");
           return;
         }
@@ -2316,6 +2331,7 @@ export default function Signup() {
         }
         if (returnToReviewAfterEdit) {
           setReturnToReviewAfterEdit(false);
+          setCurrentStep(reviewReturnStep);
           setBusinessSlide(5);
           return;
         }
@@ -2330,6 +2346,7 @@ export default function Signup() {
         setError("");
         if (returnToReviewAfterEdit) {
           setReturnToReviewAfterEdit(false);
+          setCurrentStep(reviewReturnStep);
           setBusinessSlide(5);
           return;
         }
@@ -2352,6 +2369,7 @@ export default function Signup() {
         setError("");
         if (returnToReviewAfterEdit) {
           setReturnToReviewAfterEdit(false);
+          setCurrentStep(reviewReturnStep);
           setBusinessSlide(5);
           return;
         }
@@ -2375,6 +2393,7 @@ export default function Signup() {
         setError("");
         if (returnToReviewAfterEdit) {
           setReturnToReviewAfterEdit(false);
+          setCurrentStep(reviewReturnStep);
         }
         setBusinessSlide(5);
         return;
@@ -3352,7 +3371,7 @@ export default function Signup() {
               {businessSlide === 1 ? (
                 <section className="signup-task-layout grid w-full gap-6 lg:grid-cols-[360px_minmax(0,1fr)] xl:grid-cols-[390px_minmax(0,1fr)] lg:items-stretch">
                   <div className="signup-task-explainer flex flex-col justify-center rounded-3xl border border-blue-100 bg-blue-50/70 p-8">
-                    <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">Step {tradeSetupPanel === "trade" ? "1" : "2"} of 7</p>
+                    <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">Step {tradeSetupPanel === "trade" ? "1" : "2"} of 8</p>
                     <h2 className="mt-2 text-[clamp(2rem,3vw,3.1rem)] font-black leading-tight tracking-[-0.04em] text-slate-950">
                       {tradeSetupPanel === "trade" ? "Choose your trade" : "What types of properties do you work on?"}
                     </h2>
@@ -3523,13 +3542,13 @@ export default function Signup() {
               {businessSlide === 2 ? (
               <section className="signup-task-layout grid min-h-0 w-full gap-6 lg:grid-cols-[360px_minmax(0,1fr)] xl:grid-cols-[390px_minmax(0,1fr)] lg:items-stretch">
                 <div className="signup-task-explainer flex flex-col justify-center rounded-3xl border border-blue-100 bg-blue-50/70 p-8">
-                  <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">Step 3 of 7</p>
-                  <h2 className="mt-2 text-[clamp(2rem,3vw,3.1rem)] font-black leading-tight tracking-[-0.04em] text-slate-950">Service areas</h2>
+                  <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">Step 3 of 8</p>
+                  <h2 className="mt-2 text-[clamp(2rem,3vw,3.1rem)] font-black leading-tight tracking-[-0.04em] text-slate-950">What areas do you cover?</h2>
                   <p className="mt-4 text-lg font-medium leading-8 text-slate-600">Choose a listed area. If yours is not shown, use the separate option below the list.</p>
                 </div>
                 <div className="signup-task-content flex min-h-0 flex-col overflow-hidden rounded-3xl">
                   <div className="signup-mobile-task-heading">
-                    <h2>Where do you work?</h2>
+                    <h2>What areas do you cover?</h2>
                     <p>Choose one or more service areas. Then tap Next.</p>
                   </div>
                   <div className="signup-mobile-selected-count">
@@ -3613,7 +3632,7 @@ export default function Signup() {
                   <div className="signup-area-desktop-actions mt-4 flex shrink-0 flex-wrap gap-3">
                       <button
                         type="button"
-                        onClick={() => setBusinessSlide(1)}
+                        onClick={goBackFromMobileStep}
                         className="signup-inline-action min-h-[54px] min-w-[160px] rounded-2xl border border-slate-200 bg-white px-6 py-3 text-base font-bold text-slate-600 transition hover:border-blue-300 hover:text-blue-600 sm:text-lg"
                       >
                         Back
@@ -3639,7 +3658,7 @@ export default function Signup() {
               {businessSlide === 3 ? (
               <section id="signup-business-details" className="signup-task-layout grid w-full gap-6 lg:grid-cols-[360px_minmax(0,1fr)] xl:grid-cols-[390px_minmax(0,1fr)] lg:items-stretch">
                 <div className="signup-task-explainer flex flex-col justify-center rounded-3xl border border-blue-100 bg-blue-50/70 p-8">
-                  <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">Step 4 of 7</p>
+                  <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">Step 4 of 8</p>
                   <h2 className="mt-2 text-[clamp(2rem,3vw,3.1rem)] font-black leading-tight tracking-[-0.04em] text-slate-950">Business details</h2>
                   <p className="mt-4 text-lg font-medium leading-8 text-slate-600">These details personalize your greeting, alerts, and local service information.</p>
                 </div>
@@ -3737,7 +3756,7 @@ export default function Signup() {
                   />
                   <button
                     type="button"
-                    onClick={() => setBusinessSlide(2)}
+                    onClick={goBackFromMobileStep}
                     className="signup-inline-action mt-auto flex min-h-[54px] items-center justify-center rounded-xl border border-slate-200 bg-white px-5 text-base font-bold text-slate-600 transition hover:border-blue-300 hover:text-blue-600"
                   >
                     Back
@@ -3763,7 +3782,7 @@ export default function Signup() {
               {businessSlide === 4 ? (
                 <section id="signup-pricing" className="signup-task-layout grid w-full gap-6 lg:grid-cols-[360px_minmax(0,1fr)] xl:grid-cols-[390px_minmax(0,1fr)] lg:items-stretch">
                   <div className="signup-task-explainer flex flex-col justify-center rounded-3xl border border-blue-100 bg-blue-50/70 p-8">
-                    <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">Step 5 of 7</p>
+                    <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">Step 5 of 8</p>
                     <h2 className="mt-2 text-[clamp(2rem,3vw,3.1rem)] font-black leading-tight tracking-[-0.04em] text-slate-950">Service call / repair pricing</h2>
                     <p className="mt-4 text-lg font-medium leading-8 text-slate-600">Tell callers your service-call or repair pricing upfront so they can decide whether they want to continue.</p>
                   </div>
@@ -3797,6 +3816,10 @@ export default function Signup() {
                           );
                         })}
                       </div>
+                      <button type="submit" disabled={pricingStepDisabled || busy} className="mt-4 flex min-h-[54px] w-full items-center justify-center rounded-xl bg-blue-600 px-5 font-black text-white disabled:opacity-50">
+                        {returnToReviewAfterEdit ? "Continue" : "Continue to check your setup"}
+                      </button>
+                      {pricing.offersServiceCalls === true && !hasValidServiceCallPricing ? <p className="mt-2 text-sm font-semibold text-slate-600">Enter the prices below to continue.</p> : null}
                     </div>
                     {pricing.offersServiceCalls === true ? (
                       <>
@@ -3848,7 +3871,7 @@ export default function Signup() {
               {businessSlide === 5 ? (
                 <section className="signup-task-layout grid w-full gap-6 lg:grid-cols-[360px_minmax(0,1fr)] xl:grid-cols-[390px_minmax(0,1fr)] lg:items-stretch">
                   <div className="signup-task-explainer flex flex-col justify-center rounded-3xl border border-blue-100 bg-blue-50/70 p-8">
-                    <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">Step 6 of 7</p>
+                    <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">Step 6 of 8</p>
                     <h2 className="mt-2 text-[clamp(2rem,3vw,3.1rem)] font-black leading-tight tracking-[-0.04em] text-slate-950">Check your setup</h2>
                     <p className="mt-4 text-lg font-medium leading-8 text-slate-600">Confirm your trade, areas, business details, and pricing before the final review.</p>
                   </div>
@@ -3880,7 +3903,7 @@ export default function Signup() {
                   <div className="mx-auto grid max-w-[920px] gap-3 sm:grid-cols-[220px_minmax(0,1fr)] sm:items-center">
                     <button
                       type="button"
-                      onClick={() => setBusinessSlide((slide) => Math.max(1, slide - 1))}
+                      onClick={goBackFromMobileStep}
                       className="flex min-h-[54px] items-center justify-center rounded-xl border border-slate-200 bg-white px-5 text-base font-bold text-slate-600 transition hover:border-blue-300 hover:text-blue-600"
                     >
                       Back
@@ -3932,7 +3955,7 @@ export default function Signup() {
             (currentStep === 1 && businessSlide === 1 && tradeSetupPanel === "trade" ? "is-first-step" : "")
           }
         >
-          {currentStep === 1 && businessSlide === 1 && tradeSetupPanel === "trade" ? null : (
+          {currentStep === 1 && businessSlide === 1 && tradeSetupPanel === "trade" && !returnToReviewAfterEdit ? null : (
             <button type="button" onClick={goBackFromMobileStep} className="signup-mobile-back">
               Back
             </button>
