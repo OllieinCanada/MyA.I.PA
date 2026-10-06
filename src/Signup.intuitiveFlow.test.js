@@ -40,7 +40,7 @@ describe("intuitive signup presentation", () => {
     expect(container.querySelector(".signup-macro-stepper")).toBeNull();
     expect(container.querySelector(".signup-home-row a").getAttribute("href")).toBe("#/");
     expect(container.querySelector(".signup-mobile-offer").textContent).toMatch(/14-day free trial.*No credit card required for the trial.*Cancel anytime/i);
-    expect(container.textContent).toMatch(/Step 1 of 7/i);
+    expect(container.textContent).toMatch(/Step 1 of 8/i);
     expect(container.textContent).toMatch(/Choose your trade/i);
     expect(container.querySelectorAll(".signup-trade-grid button")).toHaveLength(6);
     const topContinue = container.querySelector(".signup-trade-top-continue");
@@ -108,7 +108,7 @@ describe("intuitive signup presentation", () => {
     changeValue("#postal-code-input", "L8P 1A1");
     submit();
 
-    expect(container.textContent).toMatch(/Step 5 of 7/i);
+    expect(container.textContent).toMatch(/Step 5 of 8/i);
     expect(container.textContent).toMatch(/Do you want your agent to tell callers your service-call or repair pricing upfront\?/i);
     expect(container.querySelector(".signup-mobile-primary").disabled).toBe(true);
 
@@ -121,15 +121,47 @@ describe("intuitive signup presentation", () => {
 
     changeValue("#hourly-rate-input", "95");
     submit();
-    expect(container.textContent).toMatch(/Step 6 of 7/i);
+    expect(container.textContent).toMatch(/Step 6 of 8/i);
     expect(container.textContent).toMatch(/Check your setup/i);
     expect(container.textContent).not.toMatch(/Assistant voice|voice preview/i);
     submit();
-    expect(container.textContent).toMatch(/Step 7 of 7/i);
+    expect(container.textContent).toMatch(/Step 7 of 8/i);
     expect(container.textContent).toMatch(/Final review/i);
     expect(container.querySelector(".signup-review-step")).not.toBeNull();
+    clickButton("Change", container.querySelector(".signup-review-step"));
+    expect(container.textContent).toMatch(/Choose your trade/i);
+    clickButton("Plumber", container.querySelector(".signup-trade-grid"));
+    expect(container.querySelector(".signup-trade-top-continue").textContent).toMatch(/Continue/);
+    submit();
+    expect(container.textContent).toMatch(/Step 7 of 8/i);
+    expect(container.querySelector(".signup-specialization-grid")).toBeNull();
+    expect(container.querySelector(".signup-review-step").textContent).toMatch(/Plumber/);
+    expect(container.querySelector(".signup-review-step").textContent).toMatch(/Residential/);
+    expect(container.querySelector(".signup-review-step").textContent).toMatch(/Hamilton/);
+    expect(container.querySelector(".signup-review-step").textContent).toMatch(/Beamsville/);
+    expect(container.querySelector(".signup-review-step").textContent).toMatch(/125/);
+    expect(container.querySelector(".signup-review-step").textContent).toMatch(/95/);
+    expect(container.querySelector(".signup-review-step")).not.toBeNull();
+    clickButton("Change", container.querySelector(".signup-review-step"));
     act(() => container.querySelector(".signup-mobile-back").dispatchEvent(new MouseEvent("click", { bubbles: true })));
-    expect(container.textContent).toMatch(/Step 6 of 7/i);
+    expect(container.textContent).toMatch(/Step 7 of 8/i);
+    act(() => container.querySelector(".signup-mobile-back").dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    expect(container.textContent).toMatch(/Step 6 of 8/i);
+    clickButton("Change", container.querySelector(".signup-task-content"));
+    clickButton("Painter", container.querySelector(".signup-trade-grid"));
+    submit();
+    expect(container.textContent).toMatch(/Step 6 of 8/i);
+    expect(container.querySelector(".signup-specialization-grid")).toBeNull();
+    expect(container.textContent).toMatch(/Residential/);
+    expect(container.textContent).toMatch(/Arscott Electric/);
+  });
+
+  test("shows personalized phone verification without welcoming an unfinished setup", () => {
+    act(() => root.render(<SignupSuccessPage result={{businessName: "Mcdoober Electrical", verificationRequired: true}} onStartAnother={jest.fn()} onRetry={jest.fn()} />));
+    expect(container.textContent).toMatch(/Step 8 of 8 · Phone verification/i);
+    expect(container.textContent).toMatch(/Thanks, Mcdoober Electrical/i);
+    expect(container.textContent).toMatch(/Open the verification link in your text messages/i);
+    expect(container.textContent).not.toMatch(/Welcome aboard/i);
   });
 
   test("renders Turnstile explicitly and returns its verified token", () => {

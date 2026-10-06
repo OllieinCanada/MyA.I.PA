@@ -363,7 +363,7 @@ async function testSignupJourney(browser, baseUrl, viewport) {
     await clickVisibleByText(page, "Continue to property types");
     await clickVisibleByText(page, "Residential");
     await clickVisibleByText(page, "Continue to service areas");
-    await page.getByText("Where do you work?", { exact: true }).first().waitFor({ state: "visible" });
+    await page.locator("h2:visible").filter({ hasText: /^What areas do you cover\?$/ }).first().waitFor({ state: "visible" });
     await clickVisibleByText(page, "Hamilton");
     await clickVisibleByText(page, viewport.width < 640 ? "Next" : "Continue to business details");
     const detailsText = await page.locator("form").innerText();
@@ -391,12 +391,22 @@ async function testSignupJourney(browser, baseUrl, viewport) {
     await clickVisibleByText(page, "Continue to final review");
     await page.locator(".signup-review-step").waitFor({ state: "visible" });
     const finalText = await page.locator("form").innerText();
-    if (!/Step 7 of 7/.test(finalText) || /voice preview|Assistant voice/i.test(finalText)) {
+    if (!/Step 7 of 8/.test(finalText) || /voice preview|Assistant voice/i.test(finalText)) {
       throw new Error("Signup did not reach final review directly without voice preview");
+    }
+    await page.locator(".signup-review-step").getByRole("button", { name: "Change", exact: true }).first().click();
+    await clickVisibleByText(page, "Plumber");
+    await clickVisibleByText(page, "Continue");
+    await page.locator(".signup-review-step").waitFor({ state: "visible" });
+    const editedText = await page.locator("form").innerText();
+    if (!/Step 7 of 8/.test(editedText) || !/Plumber/.test(editedText)
+      || !/Residential/.test(editedText) || !/Hamilton/.test(editedText)
+      || !/125/.test(editedText) || !/95/.test(editedText)) {
+      throw new Error("Trade edit did not return directly to review with saved choices");
     }
     await page.screenshot({ path: path.join(screenshotDir, `notes-final-review-${viewport.name}.png`), fullPage: true, animations: "disabled" });
     await clickVisibleByText(page, "Back");
-    if (!/Step 6 of 7/.test(await page.locator("form").innerText())) {
+    if (!/Step 6 of 8/.test(await page.locator("form").innerText())) {
       throw new Error("Back from final review did not return to Check your setup");
     }
 
