@@ -1,3 +1,4 @@
+const { isClosedSignup } = require("./signupBusinessIdentity");
 const DEFAULT_TRIAL_WARNING_SECONDS = 20 * 60;
 const DEFAULT_TRIAL_LIMIT_SECONDS = 60 * 60;
 const DEFAULT_COMPLETION_RESERVE_SECONDS = 5 * 60;
@@ -36,6 +37,9 @@ function getTrialWindow(signup = {}) {
 }
 
 function getTrialLifecycle(signup = {}, now = Date.now()) {
+  // Closing a signup takes precedence over retained provider billing history.
+  // Archived trialing/paid rows must never reconfigure routing or send notices.
+  if (isClosedSignup(signup)) return { state: "archived", status: "archived", ...getTrialWindow(signup) };
   const status = String(
     signup.subscriptionStatus || signup.paymentStatus || signup.checkoutStatus || signup.status || ""
   ).trim().toLowerCase().replace(/^subscription_/, "");

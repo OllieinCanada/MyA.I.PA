@@ -117,12 +117,15 @@ function safeFailureToken(value, { maxLength = 100, numericMaxLength = 6 } = {})
 function sanitizeMakeFailureEnvelope(value) {
   const input = value && typeof value === "object" && !Array.isArray(value) ? value : {};
   const providerToken = safeFailureToken(input.provider, { maxLength: 24 });
-  const stageToken = safeFailureToken(input.failedStage, { maxLength: 48 });
+  const legacyStages = { number_purchase: "TWILIO_NUMBER_PURCHASE", assistant_creation: "VAPI_ASSISTANT_CREATE", number_binding: "VAPI_NUMBER_IMPORT" };
+  const stageToken = safeFailureToken(input.failedStage || legacyStages[input.stage], { maxLength: 48 });
   const statusNumber = Number(input.providerStatus);
   const providerStatus = Number.isInteger(statusNumber) && statusNumber >= 100 && statusNumber <= 599
     ? statusNumber
     : 0;
-  const providerCode = safeFailureToken(input.providerCode, { maxLength: 80 });
+  const legacyReason = safeFailureToken(input.reason, { maxLength: 80 });
+  const providerCode = safeFailureToken(input.providerCode, { maxLength: 80 })
+    || (/^(?:PROVISIONING_|SIGNUP_ARCHIVED_RESOURCES_|SIGNUP_BUSINESS_MIGRATION_REQUIRED$|SIGNUP_CLOSED$|PROVIDER_REQUEST_FAILED$)/.test(legacyReason) ? legacyReason : "");
 
   return {
     ...(MAKE_SIGNUP_FAILURE_STAGES.has(stageToken) ? { failedStage: stageToken } : {}),

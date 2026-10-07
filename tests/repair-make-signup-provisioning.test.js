@@ -84,6 +84,11 @@ test("rewrites the three paid provisioning stages and fail-closed response mappi
     assert.equal(failure.ok, false);
     assert.equal(failure.success, false);
     assert.equal(failure.code, "MAKE_PROVISIONING_STAGE_FAILED");
+    assert.ok(["TWILIO_NUMBER_PURCHASE", "VAPI_ASSISTANT_CREATE", "VAPI_NUMBER_IMPORT"].includes(failure.failedStage));
+    assert.equal(failure.retryable, false);
+    assert.match(failure.providerCode, /SIGNUP_ARCHIVED_RESOURCES_STILL_OWNED/);
+    assert.match(failure.providerCode, /SIGNUP_BUSINESS_MIGRATION_REQUIRED/);
+    assert.doesNotMatch(failure.providerCode, /parseJSON|\.error\.body|\.error\.headers/);
     assert.ok(["number_purchase", "assistant_creation", "number_binding"].includes(failure.stage));
     assert.ok(!handlerIds.has(handler.id));
     handlerIds.add(handler.id);
