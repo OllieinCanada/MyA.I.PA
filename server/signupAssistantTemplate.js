@@ -4,6 +4,7 @@ const SIGNUP_ASSISTANT_TOOL_IDS = Object.freeze([
   "1bf11961-f731-43b7-9f97-d765acdb51cd",
 ]);
 const { classifySignupAssistantPlaybook } = require("./signupVoiceQuality");
+const { signupSpeechPatch, normalizeConsentPrompt } = require("./signupSpeechPolicy");
 
 function templateError(message, field, code = "SIGNUP_ASSISTANT_CONFIG_INVALID") {
   const error = new Error(message);
@@ -239,6 +240,8 @@ If unclear, ask once: "Is that for a new installation, service, or repair?"
 Before quoting any repair, maintenance, or service-call price, first check whether the caller has described a safety hazard or business interruption.
 - If the caller mentions sparks, arcing, shock, burning smell, smoke, fire, flooding near electrical equipment, water near a panel, downed wires, a wire across a driveway, or anything energized that may be dangerous: stop ordinary pricing and intake. Give safety guidance first. Do not quote pricing, diagnose, dispatch, or promise arrival.
 - For a downed, arcing, or sparking wire or utility line: tell the caller to stay well away, keep other people and pets away, avoid touching the wire or anything touching it, and call 911/local emergency services or the electric utility. Do not tell them to shut off power, move the wire, drive over it, or touch nearby objects.
+- Give one concise safety warning for the reported hazard. Do not repeat it during routine confirmation or closing unless the caller is confused, danger changes, or a reminder is necessary. Never remove the initial safety direction to shorten a call.
+- Pass safetyConcern as "reported_hazard" in summary-tool arguments only when the caller reports a current hazard. Use "none" for ordinary requests, past/resolved hazards, or an explicit denial of danger. Preserve the caller's hazard description in jobDetails or message; do not diagnose it.
 - If a business says it cannot operate, has commercial downtime, lost power in a restaurant/shop/site, or asks for a rapid arrival: recognize it as high priority, do not guarantee arrival, and either briefly check for immediate danger or offer a priority owner handoff. Ask no more than one concise next question before collecting the lead.
 
 ## Pricing
@@ -247,8 +250,9 @@ ${values.pricingScript ? `- Owner-approved pricing instruction: ${values.pricing
 - Installations: use the signup installation estimate answer. If it means yes/free estimate, ask: "Would you like us to come down and give you a free estimate?" If it means no or is blank, say the team will confirm estimate pricing before scheduling.
 - When an installation caller has already named the project, explicitly acknowledge that project and ask exactly one concrete missing intake field. Start with the caller's name when it is missing. Do not ask a vague "tell me more" question for a clearly identified project such as an EV charger installation.
 - If offers service calls or repairs is no: do not quote a visit fee or hourly rate and do not imply the business offers that work. Offer to take a message for the team to confirm whether they can help.
-- If offers service calls or repairs is yes: use the signup repair visit fee and signup repair hourly rate exactly. Say: "For repairs and maintenance, it is [repair visit fee] dollars to come out and [repair hourly rate] dollars per hour after that, with parts not included in the final pricing."
-- When quoting owner-entered repair or service-call pricing, make clear that parts, site conditions, and final scope are not included and the team will confirm final pricing after reviewing the request.
+- If offers service calls or repairs is yes: use the signup repair visit fee and signup repair hourly rate exactly. Say: "For repairs and maintenance, the minimum service-visit fee is [repair visit fee] dollars, and labour is [repair hourly rate] dollars per hour. Parts are extra. The technician will assess the work and confirm the final price before starting."
+- These rates are not a fixed total quote. Never invent an assessment, price approval, appointment, or dispatch.
+- Pass pricingDiscussed as true to the summary tool only after actually explaining verified service/repair rates. Use false for installations, message-only requests, hazard calls, or when no prices were discussed. Both summaries will include the parts-extra and assessment reminder without inventing a quoted total.
 - Only after quoting an available service-call price, ask exactly: "Would you like to continue?" Stop and wait for the caller's answer before collecting intake details. If they say yes, continue. If they say no, offer to take a message or end politely.
 Use these signup pricing values first: installation estimate answer ${values.signupFreeEstimateAnswer}, repair visit fee ${values.signupRepairVisitFee}, repair hourly rate ${values.signupRepairHourlyRate}.
 Only if a signup pricing value is blank, use the matching legacy fallback value: installation estimate answer ${values.legacyFreeEstimateAnswer}, repair visit fee ${values.legacyRepairVisitFee}, repair hourly rate ${values.legacyRepairHourlyRate}.
@@ -389,6 +393,7 @@ function buildSignupAssistantConfig(normalizedPayload, options) {
   const config = {
     name: values.resourceName,
     firstMessage: `Thanks for calling ${values.businessName}. How are you today?`,
+    ...signupSpeechPatch({ firstMessage: `Thanks for calling ${values.businessName}. How are you today?` }),
     model: {
       provider: "openai",
       model: "gpt-4o",
@@ -397,14 +402,9 @@ function buildSignupAssistantConfig(normalizedPayload, options) {
       messages: [
         {
           role: "system",
-          content: buildIndustryAwarePrompt(values),
+          content: normalizeConsentPrompt(buildIndustryAwarePrompt(values)),
         },
       ],
-    },
-    voice: {
-      provider: "vapi",
-      voiceId: "Jess",
-      version: 2,
     },
     transcriber: {
       provider: "deepgram",

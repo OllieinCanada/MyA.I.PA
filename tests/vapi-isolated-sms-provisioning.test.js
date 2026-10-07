@@ -137,7 +137,7 @@ test("assistant hardening enables filters, explicit artifact policy, notice, and
     artifactPlan: { recordingEnabled: true },
   });
   assert.equal(hardened.maxDurationSeconds, MAX_CALL_DURATION_SECONDS);
-  assert.match(hardened.firstMessage, /^For quality and service purposes, this call may be recorded\./);
+  assert.match(hardened.firstMessage, /^Thanks for calling\. This call will be recorded/);
   assert.equal(hardened.artifactPlan.recordingEnabled, true);
   assert.equal(hardened.artifactPlan.loggingEnabled, true);
   assert.equal(hardened.artifactPlan.pcapEnabled, false);

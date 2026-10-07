@@ -1222,7 +1222,7 @@ function ReviewPanel({ title = "Check your setup", description = "Check your cho
   const pricingScript = pricing ? buildPricingScript(pricing) : "";
   const pricingSummary =
     pricing?.offersServiceCalls === true
-      ? `$${pricing.repairVisitFee} service call · $${pricing.repairHourlyRate}/hour`
+      ? `$${pricing.repairVisitFee} minimum visit fee · $${pricing.repairHourlyRate}/hour · Parts extra`
       : pricing?.offersServiceCalls === false
         ? "No service calls"
         : "Not selected";
@@ -3789,11 +3789,11 @@ export default function Signup() {
                   <div className="signup-task-content">
                     <div className="signup-mobile-task-heading">
                       <h2>Service call / repair pricing</h2>
-                      <p>Tell customers the price upfront. If Yes, add the call-out price and hourly rate. Then tap Continue.</p>
+                      <p>Choose whether to share your rates. If Yes, enter your minimum visit fee and hourly labour rate.</p>
                     </div>
                     <div className="grid content-start gap-4 sm:grid-cols-2 xl:grid-cols-4 xl:gap-5">
                     <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-4 sm:col-span-2 xl:col-span-4">
-                      <span className="block text-sm font-black text-slate-950">Do you want your agent to tell callers your service-call or repair pricing upfront?</span>
+                      <span className="block text-sm font-black text-slate-950">Do you want to tell customers your service-call rates?</span>
                       <span className="mt-1 block text-sm font-medium text-slate-600">Choose one. Nothing is selected automatically.</span>
                       <div className="mt-4 grid grid-cols-2 gap-3" role="group" aria-label="Should the assistant discuss service call or repair prices and hourly rates?">
                         {[true, false].map((answer) => {
@@ -3823,8 +3823,9 @@ export default function Signup() {
                     </div>
                     {pricing.offersServiceCalls === true ? (
                       <>
+                        <h3 className="text-lg font-black text-slate-950 sm:col-span-2 xl:col-span-4">Repairs / maintenance</h3>
                         <LabeledInput
-                          label="Call-out / visit fee"
+                          label="Minimum service-visit fee"
                           icon="card"
                           value={pricing.repairVisitFee}
                           onChange={updatePricing("repairVisitFee")}
@@ -3833,7 +3834,7 @@ export default function Signup() {
                           error={showPricingErrors && Number(pricing.repairVisitFee) <= 0 ? "Enter the service-call or repair price." : ""}
                         />
                         <LabeledInput
-                          label="Hourly rate"
+                          label="Hourly labour rate"
                           icon="card"
                           value={pricing.repairHourlyRate}
                           onChange={updatePricing("repairHourlyRate")}
@@ -3842,7 +3843,7 @@ export default function Signup() {
                           error={showPricingErrors && Number(pricing.repairHourlyRate) <= 0 ? "Enter the hourly rate." : ""}
                         />
                         <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold leading-6 text-emerald-900 sm:col-span-2 xl:col-span-2">
-                          Your assistant will explain these prices, mention parts are extra when applicable, then ask: “Would you like to continue?”
+                          Parts are extra. The technician will assess the work and confirm the final price before starting. Your assistant will explain your rates, then ask: “Would you like to continue?”
                         </div>
                       </>
                     ) : null}

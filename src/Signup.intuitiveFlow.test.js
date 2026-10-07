@@ -109,17 +109,20 @@ describe("intuitive signup presentation", () => {
     submit();
 
     expect(container.textContent).toMatch(/Step 5 of 8/i);
-    expect(container.textContent).toMatch(/Do you want your agent to tell callers your service-call or repair pricing upfront\?/i);
+    expect(container.textContent).toMatch(/Do you want to tell customers your service-call rates\?/i);
     expect(container.querySelector(".signup-mobile-primary").disabled).toBe(true);
 
     clickButton("Yes", container.querySelector('[role="group"]'));
     expect(container.querySelector(".signup-mobile-primary").disabled).toBe(false);
-    changeValue("#call-out-visit-fee-input", "125");
+    expect(container.textContent).toMatch(/Repairs \/ maintenance/);
+    expect(container.textContent).toMatch(/Parts are extra/);
+    expect(container.textContent).toMatch(/confirm the final price before starting/);
+    changeValue("#minimum-service-visit-fee-input", "125");
     submit();
     expect(container.textContent).toMatch(/Enter both the service-call or repair price and the hourly rate/i);
     expect(container.textContent).toMatch(/Enter the hourly rate/i);
 
-    changeValue("#hourly-rate-input", "95");
+    changeValue("#hourly-labour-rate-input", "95");
     submit();
     expect(container.textContent).toMatch(/Step 6 of 8/i);
     expect(container.textContent).toMatch(/Check your setup/i);

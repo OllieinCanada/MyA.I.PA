@@ -57,6 +57,20 @@ function buildJobType(requestType) {
   return labels[type] || "Not provided";
 }
 
+function reportedSafetyReminder(args) {
+  // Explicit caller-reported context only: never infer danger from trade,
+  // urgency, or keywords that could occur in a denial ("no sparks").
+  return args.safetyConcern === "reported_hazard"
+    ? "Safety: Stay away from the hazard. If anyone is in immediate danger, call 911. This text is not emergency dispatch."
+    : "";
+}
+
+function discussedPricingReminder(args) {
+  return args.pricingDiscussed === true && !reportedSafetyReminder(args)
+    ? "Pricing: Parts are extra. Final price confirmed after assessment, before work starts."
+    : "";
+}
+
 function buildOwnerBody(args) {
   const requestType = cleanText(args.requestType || "service", 40).toLowerCase();
   const name = cleanText(args.name || "Unknown caller", 120);
@@ -107,6 +121,7 @@ function buildOwnerBody(args) {
       `- Phone: ${phone || "Not provided"}`,
       `- Job type: ${buildJobType(requestType)}`,
       `- Message: ${cleanText(args.message || "No message provided", 500)}`,
+      ...(reportedSafetyReminder(args) ? [`- URGENT: Caller reported a hazard. No emergency dispatch confirmed.`] : []),
     ].join("\n").slice(0, 1600);
   }
   const street = cleanText(args.streetAddress, 180);
@@ -124,6 +139,8 @@ function buildOwnerBody(args) {
   ];
   const urgency = cleanText(args.urgency, 120);
   if (urgency) lines.push(`- Urgency: ${urgency}`);
+  if (reportedSafetyReminder(args)) lines.push("- URGENT: Caller reported a hazard. No emergency dispatch confirmed.");
+  if (discussedPricingReminder(args)) lines.push(`- ${discussedPricingReminder(args)}`);
   lines.push(`- Next action: ${buildNextAction(requestType)}`);
   return lines.join("\n").slice(0, 1600);
 }
@@ -145,7 +162,7 @@ function buildCustomerBody(args) {
     return `Job type: ${buildJobType(requestType)}\nThanks for calling ${businessName}. Your ${label} has been received for review. Your preferred contact time was noted, but a response time is not guaranteed.`.slice(0, 1600);
   }
   if (requestType === "message") {
-    return `Job type: ${buildJobType(requestType)}\nThanks for calling ${businessName}. We received your message: "${cleanText(args.message || "No message provided", 500)}" The team will review it and follow up.`.slice(0, 1600);
+    return [reportedSafetyReminder(args), `Job type: ${buildJobType(requestType)}\nThanks for calling ${businessName}. We received your message: "${cleanText(args.message || "No message provided", 500)}" The team will review it and follow up.`].filter(Boolean).join("\n").slice(0, 1600);
   }
   const job = cleanText(args.jobDetails || `${requestType} service`, 500);
   const location = [cleanText(args.streetAddress, 180), cleanText(args.city, 120)].filter(Boolean).join(", ");
@@ -153,12 +170,14 @@ function buildCustomerBody(args) {
   const preferredStartDate = cleanText(args.preferredStartDate, 160);
   const lines = [
     businessName.toUpperCase(),
+    ...(reportedSafetyReminder(args) ? [reportedSafetyReminder(args)] : []),
     `Job type: ${buildJobType(args.requestType)}`,
     `Job: ${job}`,
   ];
   if (location) lines.push(`Location: ${location}`);
   if (preferredStartDate) lines.push(`Preferred start date: ${preferredStartDate}`);
   if (bestCallbackTime) lines.push(`Preferred callback: ${bestCallbackTime}`);
+  if (discussedPricingReminder(args)) lines.push(discussedPricingReminder(args));
   lines.push("Scheduling: The team will follow up to discuss the details and timing.");
   lines.push(`Thanks for calling ${businessName}. Have a great day!`);
   return lines.join("\n").slice(0, 1600);
@@ -468,6 +487,8 @@ function compositeToolParameters() {
       preferredStartDate: { type: "string", description: "When the caller wants the work to start." },
       bestCallbackTime: { type: "string", description: "Best time to call the customer back." },
       urgency: { type: "string", description: "Caller-stated urgency. Capture it without diagnosing or promising dispatch." },
+      safetyConcern: { type: "string", enum: ["none", "reported_hazard"], description: "Use reported_hazard only for a caller-reported current safety hazard. Use none for ordinary requests, denied danger, or past/resolved hazards. Not a diagnosis." },
+      pricingDiscussed: { type: "boolean", description: "True only when the business's verified repair/service rates were actually discussed in this call. False for installations, messages, hazard calls, or no pricing discussion. Never implies a quote was approved." },
       message: { type: "string", description: "Message content when requestType is message." },
     },
     required: ["businessName", "requestType", "name"],
@@ -483,6 +504,8 @@ function getVapiCompositeToolCode() {
     buildOwnerHeading,
     buildNextAction,
     buildJobType,
+    reportedSafetyReminder,
+    discussedPricingReminder,
     buildOwnerBody,
     buildCustomerBody,
     safeProviderError,

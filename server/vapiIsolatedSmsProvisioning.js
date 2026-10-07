@@ -1,4 +1,5 @@
 const crypto = require("crypto");
+const { signupSpeechPatch, normalizeConsentPrompt, inspectSignupSpeech } = require("./signupSpeechPolicy");
 const {
   POST_SEND_CLOSING_MARKER,
   callerNumberFallbackPrompt,
@@ -45,17 +46,14 @@ function assistantSecurityPatch(assistant = {}) {
   const compliancePlan = assistant.compliancePlan && typeof assistant.compliancePlan === "object"
     ? assistant.compliancePlan
     : {};
-  const firstMessage = String(assistant.firstMessage || "").trim();
   return {
+    ...signupSpeechPatch(assistant),
     maxDurationSeconds: Math.min(
       MAX_CALL_DURATION_SECONDS,
       Number.isFinite(Number(assistant.maxDurationSeconds)) && Number(assistant.maxDurationSeconds) > 0
         ? Number(assistant.maxDurationSeconds)
         : MAX_CALL_DURATION_SECONDS
     ),
-    firstMessage: firstMessage.toLowerCase().includes("call may be recorded")
-      ? firstMessage
-      : `${RECORDING_NOTICE}${firstMessage ? ` ${firstMessage}` : " How can I help you today?"}`,
     artifactPlan: {
       ...artifactPlan,
       recordingEnabled: artifactPlan.recordingEnabled !== false,
@@ -90,7 +88,7 @@ function inspectAssistantSecurity(assistant = {}) {
   const artifactPlan = assistant?.artifactPlan || {};
   return {
     maxDurationLimited: Number(assistant.maxDurationSeconds) > 0 && Number(assistant.maxDurationSeconds) <= MAX_CALL_DURATION_SECONDS,
-    recordingNoticeInstalled: String(assistant.firstMessage || "").toLowerCase().includes("call may be recorded"),
+    recordingNoticeInstalled: /this call will be recorded/i.test(String(assistant.firstMessage || "")),
     promptInjectionFilterEnabled: filterPlan.enabled === true && filterPlan.mode === "reject" && filterTypes.has("prompt-injection"),
     dangerousInputFiltersEnabled: ["rce", "ssrf", "sql-injection", "xss"].every((type) => filterTypes.has(type)),
     packetCaptureDisabled: artifactPlan.pcapEnabled === false,
@@ -213,6 +211,9 @@ EMERGENCY SAFETY:
 - If the caller reports active sparks, smoke, fire, electric shock, a gas smell, a serious injury, or immediate danger, do not begin pricing or routine intake.
 - Tell them to move away from the danger and call 911 or local emergency services now. Suggest shutting off power only if they can do so safely, and never give hazardous repair instructions.
 - Do not promise dispatch or claim a technician is on the way. After the immediate safety direction, offer to take an urgent message for the business.
+- Give the safety direction once; repeat only for confusion, changed danger, or a necessary reminder. Do not repeat routine warnings at closing.
+- Set safetyConcern to "reported_hazard" in the summary tool only for a caller-reported current hazard; use "none" for denied, resolved, or absent hazards. Preserve the reported issue in jobDetails or message without diagnosing.
+- Set pricingDiscussed to true only after discussing verified service/repair rates from the business context; false for hazard calls, installations, messages, or no pricing discussion. Never invent rates or quote approval.
 CONTEXT ACKNOWLEDGEMENT:
 - When a caller describes how they feel and names a specific problem in the same message, briefly acknowledge both before moving to pricing or the next intake question.
 SCOPE CONTROL:
@@ -239,7 +240,7 @@ function updateMessages(messages, toolName) {
       .replace(new RegExp(`\\n*${start}[\\s\\S]*?${end}`, "g"), "")
       .replace(new RegExp(`\\n*${legacyPilotStart}[\\s\\S]*$`, "g"), ""))
       .trimEnd();
-    return { ...message, content: `${content}\n\n${promptOverride(toolName)}` };
+    return { ...message, content: normalizeConsentPrompt(`${content}\n\n${promptOverride(toolName)}`) };
   });
   if (!updatedSystem) throw new Error("The Vapi assistant has no system prompt to update.");
   return output;
@@ -320,6 +321,7 @@ function inspectIsolatedConfiguration({ assistant, tool, aiNumber, ownerNumber }
     toolConfirmationRejectionInstalled: Array.isArray(tool?.rejectionPlan?.conditions) && tool.rejectionPlan.conditions.length > 0,
     ...securityChecks,
     ...timingChecks,
+    ...inspectSignupSpeech(assistant),
   };
   return { healthy: Object.values(checks).every(Boolean), checks };
 }
@@ -340,6 +342,10 @@ function assistantRollbackPayload(assistant) {
   return {
     model: assistant.model,
     firstMessage: assistant.firstMessage,
+    firstMessageMode: assistant.firstMessageMode || "assistant-speaks-first",
+    firstMessageInterruptionsEnabled: assistant.firstMessageInterruptionsEnabled ?? false,
+    voice: assistant.voice,
+    modelOutputInMessagesEnabled: assistant.modelOutputInMessagesEnabled ?? false,
     maxDurationSeconds: assistant.maxDurationSeconds,
     artifactPlan: assistant.artifactPlan,
     compliancePlan: assistant.compliancePlan,

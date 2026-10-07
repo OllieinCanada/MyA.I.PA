@@ -15140,11 +15140,12 @@ app.all(
                   <p style="margin:0;color:#334155;font-size:16px;line-height:1.55">No card was collected for your 14-day trial. If you want service to continue afterward, open your dashboard and choose <strong>Add card securely</strong>. Stripe Checkout handles the card details; My AI PA never asks for them by phone.</p>
                 </section>
               ` : ""}
-              <section class="number" aria-label="Need help now">
+              ${!ok ? `<section class="number" aria-label="Need help now">
                 <p class="number-label">Need help now?</p>
                 <p style="margin:0;color:#334155;font-size:16px">Call or text My AI PA support. You do not need to explain everything twice.</p>
                 <div class="actions"><a href="tel:${escapeHtml(CUSTOMER_SUPPORT_PHONE)}">Call support</a><a class="action secondary" href="sms:${escapeHtml(CUSTOMER_SUPPORT_PHONE)}?&body=${encodeURIComponent("Hi My AI PA, I need help with my signup.")}">Text support</a></div>
-              </section>
+              </section>` : ""}
+              ${confirmation ? `<a id="verification-support" hidden href="tel:${escapeHtml(CUSTOMER_SUPPORT_PHONE)}">Call signup support</a>` : ""}
               <div class="actions"><a href="${escapeHtml(forwardingSetupUrl || `${FRONTEND_APP_URL}/#/${setupReady ? "dashboard" : "signup"}`)}">${setupReady ? "Continue" : "Return to My AI PA"}</a></div>
             </main>
             ${confirmation ? verificationPageClientScript({ automaticSmsConfirmation }) : ""}

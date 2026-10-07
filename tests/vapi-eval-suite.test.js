@@ -46,6 +46,15 @@ test("pricing boundary eval never tells the assistant to invent a dollar amount"
   assert.match(evalText, /does not invent or promise a price/i);
 });
 
+test("opening regressions judge social answers rather than assuming consent", () => {
+  for (const key of ["positive-social-routing", "social-response-repair-routing"]) {
+    const item = byKey(key);
+    assert.match(item.messages[0].content, /This call will be recorded.*Is that okay/);
+    assert.ok(item.messages.some(m => /consent/i.test(m.aiJudge || "")));
+    assert.doesNotMatch(item.messages[0].content, /How are you today/);
+  }
+});
+
 test("commercial downtime eval enforces one question and no arrival guarantee", () => {
   const evalText = JSON.stringify(byKey("commercial-downtime-priority"));
   assert.match(evalText, /no more than one concise next question/i);

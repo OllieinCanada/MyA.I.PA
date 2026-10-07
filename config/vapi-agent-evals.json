@@ -18,13 +18,13 @@
       "legacyNames": [
         "MYAIPA 01 - First Turn How Are You"
       ],
-      "description": "Checks that after the greeting asks how the caller is doing, a positive answer is acknowledged before intake.",
+      "description": "Checks that a social answer is not treated as recording consent, then intake follows explicit consent.",
       "safeToRun": true,
       "syncByDefault": true,
       "messages": [
         {
           "role": "assistant",
-          "content": "Hi, thanks for calling. How are you today?"
+          "content": "Thanks for calling. This call will be recorded for service quality and accurate follow-up. Is that okay?"
         },
         {
           "role": "user",
@@ -32,7 +32,11 @@
         },
         {
           "role": "assistant",
-          "content": "Glad to hear it. Before we continue, this call will be recorded for service quality and accurate follow-up. Is that okay?"
+          "aiJudge": "Pass only if the assistant treats I am doing well as a social answer, not consent, and asks one short recording-consent question without repeating the full notice or collecting service/contact details.",
+          "continuePlan": {
+            "exitOnFailureEnabled": true,
+            "contentOverride": "Is it okay to record this call?"
+          }
         },
         {
           "role": "user",
@@ -51,13 +55,13 @@
     {
       "key": "social-response-repair-routing",
       "name": "MYAIPA 02 - Social Response Repair Routing",
-      "description": "Checks that the assistant responds directly to the caller's mood before moving into repair flow.",
+      "description": "Checks that a negative social answer is acknowledged without bypassing or duplicating recording consent.",
       "safeToRun": true,
       "syncByDefault": true,
       "messages": [
         {
           "role": "assistant",
-          "content": "Hi, thanks for calling. How are you today?"
+          "content": "Thanks for calling. This call will be recorded for service quality and accurate follow-up. Is that okay?"
         },
         {
           "role": "user",
@@ -65,10 +69,10 @@
         },
         {
           "role": "assistant",
-          "aiJudge": "Pass if the latest assistant message responds empathetically to the caller not doing well, clearly says the call will be recorded, and asks whether continuing is okay. It may use one consent question and must not begin collecting a name, phone number, address, or job details before consent. Fail if it ignores the caller's mood, asks how they are again, describes recording as optional or uncertain, omits consent, or starts service intake.",
+          "aiJudge": "Pass if the assistant acknowledges the caller's mood briefly and asks one short recording-consent question. The first message already gave the full recording notice: fail if it repeats that notice, assumes consent from the social answer, or begins collecting service/contact details.",
           "continuePlan": {
             "exitOnFailureEnabled": true,
-            "contentOverride": "I'm sorry to hear that. Before we continue, this call will be recorded for service quality and accurate follow-up. Is that okay?"
+            "contentOverride": "I'm sorry to hear that. Is it okay to record this call?"
           }
         }
       ]
