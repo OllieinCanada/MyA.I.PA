@@ -78,5 +78,8 @@ test("the API accepts the signed token only in the authorization header", () => 
   assert.match(source, /forwarding\/setup-link",\s*enforcePublicRouteRateLimit\("forwarding-dashboard-link"/);
   assert.match(source, /#\/f\/\$\{encodeURIComponent\(shortLink\.token\)\}/);
   assert.doesNotMatch(source, /window\.location\.href\s*=\s*\$\{JSON\.stringify\(forwardingSetupUrl\)/);
-  assert.match(source, /res\.redirect\(303, forwardingSetup\.setupUrl\)/);
+  const verification = source.slice(source.indexOf('["/api/integrations/verify-signup-contact"'), source.indexOf('"/api/payments/create-checkout-session"'));
+  assert.doesNotMatch(verification, /res\.redirect\(303, forwardingSetup\.setupUrl\)/);
+  assert.match(verification, /forwardingSetupUrl: forwardingSetup\?\.setupUrl/);
+  assert.match(verification, /assignedPhone: twilioPhoneNumber/);
 });

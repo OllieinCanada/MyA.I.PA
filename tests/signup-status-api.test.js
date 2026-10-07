@@ -322,6 +322,9 @@ test("SMS confirmation preserves its channel and expired links cannot display a 
   const preview = await fetch(url);
   assert.equal(preview.status, 200);
   const html = await preview.text();
+  assert.match(html, /signup-verification-form/);
+  assert.match(html, /Your AI phone number will appear here/);
+  assert.match(html, /visibilitychange/);
   assert.equal(pendingRows.get(pendingStore.tokenHash(token)).claimedAt, null);
   const form = new URLSearchParams();
   for (const [, name, value] of html.matchAll(/<input type="hidden" name="([^"]+)" value="([^"]*)"/g)) form.set(name, value);

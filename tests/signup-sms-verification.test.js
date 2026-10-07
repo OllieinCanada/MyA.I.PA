@@ -58,6 +58,8 @@ test("website signup verification text contains the secure link and expiry", () 
   assert.match(text, /Test Electric/);
   assert.match(text, /verify-signup-contact\?token=signed/);
   assert.match(text, /expires in 24 hours/i);
+  assert.match(text, /number will appear on the page/i);
+  assert.doesNotMatch(text, /then press Verify and continue/i);
 });
 
 test("website signup verification requires a real provider acceptance", async () => {
