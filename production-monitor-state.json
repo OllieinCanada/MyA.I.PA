@@ -18,6 +18,12 @@
       "type": "operational",
       "checkName": "operational_health",
       "firstDetectedAt": "2026-10-07T09:00:25.092Z"
+    },
+    "issue:operational_health:public_e4699f50f3b42de97c2b10ad8ef6007b": {
+      "lifecycleId": "public_9246525fe750f53651ca10b3",
+      "type": "operational",
+      "checkName": "operational_health",
+      "firstDetectedAt": "2026-10-07T21:28:33.865Z"
     }
   }
 }
