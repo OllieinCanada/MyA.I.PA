@@ -215,6 +215,13 @@ function signupLastCheckpoint(status) {
 }
 
 function signupFailureReason(signup = {}, status = "unknown") {
+  const actualCode = safeReasonCode(signup.makeProviderCode || signup.makeError);
+  const resourceReasons = {
+    SIGNUP_BUSINESS_MIGRATION_REQUIRED: "An older active setup owns resources. Reconcile it before creating another.",
+    SIGNUP_ARCHIVED_RESOURCES_STILL_OWNED: "The old signup is archived, but its phone, assistant or billing still exists. Reconcile it first.",
+    SIGNUP_ARCHIVED_RESOURCES_UNVERIFIED: "The old signup is archived. Its live resources could not be checked; setup paused to prevent duplicates.",
+  };
+  if (resourceReasons[actualCode]) return { reason: resourceReasons[actualCode], reasonCode: actualCode, confidence: "high" };
   const phoneCode = safeReasonCode(signup.phoneProvisioningCode);
   const makeKind = safeDiagnosticLabel(signup.makeResponseKind);
   if (phoneCode === "PHONE_NUMBER_PENDING") {
@@ -270,6 +277,9 @@ function signupDiagnostics(signup = {}, status = "unknown") {
     phoneProvisioningStatus: safeDiagnosticLabel(signup.phoneProvisioningStatus),
     phoneProvisioningCode: safeDiagnosticLabel(signup.phoneProvisioningCode),
     makeResponseKind: safeDiagnosticLabel(signup.makeResponseKind),
+    ...(signup.makeFailedStage ? { makeFailedStage: safeDiagnosticLabel(signup.makeFailedStage) } : {}),
+    ...(signup.makeFailureProvider ? { makeFailureProvider: safeDiagnosticLabel(signup.makeFailureProvider) } : {}),
+    ...(signup.makeProviderCode ? { makeProviderCode: safeReasonCode(signup.makeProviderCode) } : {}),
     signupAlertFailed: Boolean(signup.signupTelegramAlertError),
     setupFollowupStatus: safeDiagnosticLabel(signup.setupFollowupStatus),
     setupFollowupChannels: Array.isArray(signup.setupFollowupChannels)

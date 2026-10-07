@@ -16,6 +16,7 @@ const { prisma } = require("./prisma");
 const { createPendingSignupVerificationStore, tokenHash: hashPendingSignupToken } = require("./pendingSignupVerifications");
 const { createSignupAttemptStore } = require("./signupAttemptStore");
 const { assertSignupOpen, isClosedSignup, signupBusinessKey } = require("./signupBusinessIdentity");
+const { assertTrialGateOwnership } = require("./trialGateOwnership");
 const { ensureSignupBusinessBindings, closeSignupBusinessIdentity, upsertOwnedProviderMapping } = require("./signupBusinessRegistry");
 const { buildBackendRootPage } = require("./backendRootPage");
 const {
@@ -171,6 +172,7 @@ const {
   isTrustedSignupProvisioningCanary,
 } = require("./signupProvisioningCanary");
 const { provisioningStateKey, readProvisioningStep, runProvisioningStep, verifyCompletedProvisioningResult } = require("./provisioningState");
+const { assertLegacyBusinessResourcesSafe, inspectArchivedSignupResources } = require("./signupLegacyResourceSafety");
 const { reconcileSignupSupersessionResources } = require("./signupSupersessionReconciliation");
 const {
   applyTwilioDecommissionPolicy,
@@ -5320,7 +5322,7 @@ function makeFailureRecordFields(value) {
 
 function makeFailureFromError(error, failedStage = "MAKE_WEBHOOK") {
   return sanitizeMakeFailureEnvelope({
-    failedStage,
+    failedStage: error?.failedStage || failedStage,
     provider: error?.provider || "make",
     providerStatus: Number(error?.upstreamStatus || error?.providerStatus || error?.statusCode || 0),
     providerCode: error?.providerCode || error?.code || "MAKE_SIGNUP_FAILED",
@@ -8420,8 +8422,14 @@ async function configureTrialGateForSignup(signup, phoneInventory = null) {
     phoneNumberId: phone.id,
     phoneNumber: { id: phone.id, number: aiNumber },
   });
+  assertTrialGateOwnership(signup, existingConfig, listSignupDashboardRecords());
   const currentAssistantId = getVapiAssistantId(phone);
   if (!currentAssistantId && existingConfig?.assistantId) {
+    // CRM binding ownership must be proven before any provider route mutation.
+    const business = await ensureTrialBusinessAndMappings(signup, {
+      ...phone,
+      assistantId: existingConfig.assistantId,
+    });
     const currentServerUrl = getVapiNestedString(phone, ["server.url", "serverUrl"]);
     if (currentServerUrl !== TRIAL_USAGE_GATE_WEBHOOK_URL) {
       await requestVapiResource(`phone-number/${encodeURIComponent(String(phone.id))}`, {
@@ -8436,12 +8444,10 @@ async function configureTrialGateForSignup(signup, phoneInventory = null) {
         },
       });
     }
-    const business = await ensureTrialBusinessAndMappings(signup, {
-      ...phone,
-      assistantId: existingConfig.assistantId,
-    });
     const current = {
       ...existingConfig,
+      businessKey: signupBusinessKey(signup),
+      signupAttemptId: signup.signupAttemptId,
       businessId: business.id,
       subscriptionId: signup.subscriptionId || existingConfig.subscriptionId || "",
       ownerEmail: signup.ownerEmail || existingConfig.ownerEmail || "",
@@ -8452,6 +8458,7 @@ async function configureTrialGateForSignup(signup, phoneInventory = null) {
     await writeTrialGateConfiguration(current);
     const routeVerifiedAt = new Date().toISOString();
     upsertSignupDashboardRecord({
+      ...signup,
       ownerEmail: signup.ownerEmail || "",
       agentRouteBindingStatus: "verified",
       agentRouteBindingMode: "trial-gate",
@@ -8485,6 +8492,8 @@ async function configureTrialGateForSignup(signup, phoneInventory = null) {
   const business = await ensureTrialBusinessAndMappings(signup, phone);
   const config = {
     version: 1,
+    businessKey: signupBusinessKey(signup),
+    signupAttemptId: signup.signupAttemptId,
     status: "prepared",
     businessId: business.id,
     subscriptionId: signup.subscriptionId || "",
@@ -8516,6 +8525,7 @@ async function configureTrialGateForSignup(signup, phoneInventory = null) {
   const activated = { ...config, status: "active", activatedAt: new Date().toISOString() };
   await writeTrialGateConfiguration(activated);
   upsertSignupDashboardRecord({
+    ...signup,
     subscriptionId: signup.subscriptionId || "",
     ownerEmail: signup.ownerEmail || "",
     trialUsageGateStatus: "active",
@@ -10710,6 +10720,9 @@ async function sendMakeSignupCompleted(payload) {
   });
   const eventKey = buildMakeSignupEventKey(payload);
   const canonicalEventKey = buildMakeSignupEventKey(normalizedPayload);
+  // Surface legacy/archived resource conflicts before Make's error handler can
+  // replace the actual backend reason with a generic provisioning rejection.
+  await assertSignupLegacyResourcesSafe(normalizedPayload, canonicalEventKey);
   if (canonicalEventKey !== eventKey) {
     // A new browser submission is still a separate verification/status record.
     // After verified handoff, close that history entry and resume the existing
@@ -10928,12 +10941,7 @@ async function loadTrustedProvisioningContext(req) {
   const businessRegistry = await prisma.runtimeStore.findUnique({ where: { key: `signup-business:${signupBusinessKey(payload)}` } });
   if (businessRegistry?.data?.closed) assertSignupOpen({ status: "archived" });
   if (payload.provisioning?.businessKey) {
-    const prior = listSignupDashboardRecords().filter((item) => item.signupAttemptId !== attemptId && signupBusinessKey(item) === payload.provisioning.businessKey);
-    // Pre-upgrade resources have owner-scoped receipts. Never silently buy a
-    // second set because the new business-scoped receipt has not been migrated.
-    if (prior.some((item) => signupHasProvisioningOrBillingResources(item) && !item.provisioningBusinessKey)) {
-      throw Object.assign(new Error("Existing business resources require identity migration before retrying."), { code: "SIGNUP_BUSINESS_MIGRATION_REQUIRED", statusCode: 409 });
-    }
+    await assertSignupLegacyResourcesSafe(payload, attemptId);
   } else {
     const identity = signupBusinessKey(payload);
     const ambiguous = listSignupDashboardRecords().some((item) => !isClosedSignup(item) && signupHasProvisioningOrBillingResources(item)
@@ -10943,6 +10951,35 @@ async function loadTrustedProvisioningContext(req) {
     if (ambiguous) throw Object.assign(new Error("Legacy owner-scoped resources require business identity migration."), { code: "SIGNUP_BUSINESS_MIGRATION_REQUIRED", statusCode: 409 });
   }
   return payload;
+}
+
+async function assertSignupLegacyResourcesSafe(payload, attemptId) {
+  if (!payload.provisioning?.businessKey) return;
+  let numbers;
+  const readStripe = async (reader, absent) => {
+    if (!stripe) throw new Error("Stripe resource verification is unavailable.");
+    try { return await reader(); } catch (error) {
+      if (error?.code === "resource_missing" && Number(error?.statusCode) === 404) return absent;
+      throw error;
+    }
+  };
+  await assertLegacyBusinessResourcesSafe({
+    records: listSignupDashboardRecords(), businessKey: payload.provisioning.businessKey,
+    attemptId, hasResources: signupHasProvisioningOrBillingResources,
+    inspectArchived: (record) => inspectArchivedSignupResources(record, {
+      readTwilioNumbers: async () => numbers || (numbers = await fetchTwilioIncomingPhoneNumbers()),
+      readVapi: async (resource, id) => {
+        try {
+          const value = await requestVapiResource(`${resource}/${encodeURIComponent(id)}`);
+          if (value?.id !== id) throw new Error("Provider resource verification returned an unexpected response.");
+          return value;
+        } catch (error) { if (error?.providerStatus === 404) return null; throw error; }
+      },
+      readSubscription: (id) => readStripe(() => stripe.subscriptions.retrieve(id), null),
+      readCheckout: (id) => readStripe(() => stripe.checkout.sessions.retrieve(id), null),
+      readCustomerSubscriptions: (id) => readStripe(() => stripe.subscriptions.list({ customer: id, status: "all", limit: 100 }).autoPagingToArray({ limit: 10000 }), []),
+    }),
+  });
 }
 
 async function requireCompletedProvisioningStage(authorization, kind, fields) {
@@ -17758,6 +17795,10 @@ app.use((err, req, res, _next) => {
   const body = { error: message };
   if (String(err.code || "").startsWith("MAKE_SIGNUP_")) {
     body.code = err.code;
+  }
+  if (/^\/api\/integrations\/(?:twilio\/purchase-number|vapi\/(?:create-signup-assistant|import-twilio-number))$/.test(req.path || "")) {
+    const diagnostic = sanitizeMakeFailureEnvelope({ providerCode: err.code });
+    if (diagnostic.providerCode) body.code = diagnostic.providerCode;
   }
   if (Number.isInteger(err.upstreamStatus) && err.upstreamStatus >= 400 && err.upstreamStatus <= 599) {
     body.upstreamStatus = err.upstreamStatus;

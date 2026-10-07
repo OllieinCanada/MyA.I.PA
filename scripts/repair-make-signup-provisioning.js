@@ -161,7 +161,12 @@ function mutateBlueprint(current) {
       mapper: { status: "200", body: JSON.stringify({ ok: false, success: false,
         error: "Signup provisioning stopped at a provider request.",
         code: "MAKE_PROVISIONING_STAGE_FAILED", stage,
-        reason: `{{if(contains(${module.id}.error.message; "registered signup context"); "PROVISIONING_CONTEXT_NOT_REGISTERED"; if(contains(${module.id}.error.message; "Invalid provisioning key"); "PROVISIONING_AUTH_INVALID"; if(contains(${module.id}.error.message; "authorization"); "PROVISIONING_AUTHORIZATION_INVALID"; "PROVIDER_REQUEST_FAILED")))}}` }),
+        failedStage: { number_purchase: "TWILIO_NUMBER_PURCHASE", assistant_creation: "VAPI_ASSISTANT_CREATE", number_binding: "VAPI_NUMBER_IMPORT" }[stage],
+        provider: "MAKE",
+        // Return only fixed diagnostic codes, never raw error messages/headers
+        // that may contain contact details or signed provisioning credentials.
+        providerCode: buildSafeFailureCodeMapping(module.id),
+        retryable: false }),
         headers: [{ key: "Content-Type", value: "application/json" }] },
       metadata: { designer: { x: 600, y: 300 + nextId * 10 } },
     }];
@@ -175,6 +180,25 @@ function mutateBlueprint(current) {
     blueprint.metadata.scenario.confidential = true;
   }
   return blueprint;
+}
+
+function buildSafeFailureCodeMapping(moduleId) {
+  const cases = [
+    ["SIGNUP_ARCHIVED_RESOURCES_STILL_OWNED", "SIGNUP_ARCHIVED_RESOURCES_STILL_OWNED"],
+    ["SIGNUP_ARCHIVED_RESOURCES_UNVERIFIED", "SIGNUP_ARCHIVED_RESOURCES_UNVERIFIED"],
+    ["SIGNUP_BUSINESS_MIGRATION_REQUIRED", "SIGNUP_BUSINESS_MIGRATION_REQUIRED"],
+    ["SIGNUP_CLOSED", "SIGNUP_CLOSED"],
+    ["LOCAL_CANADIAN_NUMBER_INVENTORY_UNAVAILABLE", "LOCAL_CANADIAN_NUMBER_INVENTORY_UNAVAILABLE"],
+    ["PROVISIONING_INVENTORY_CONTEXT_MISMATCH", "PROVISIONING_INVENTORY_CONTEXT_MISMATCH"],
+    ["PROVISIONING_ALREADY_IN_PROGRESS", "PROVISIONING_ALREADY_IN_PROGRESS"],
+    ["PROVISIONING_RESULT_STALE", "PROVISIONING_RESULT_STALE"],
+    ["registered signup context", "PROVISIONING_CONTEXT_NOT_REGISTERED"],
+    ["Invalid provisioning key", "PROVISIONING_AUTH_INVALID"],
+    ["Invalid signed provisioning request", "PROVISIONING_AUTHORIZATION_INVALID"],
+  ];
+  let expression = '"PROVIDER_REQUEST_FAILED"';
+  for (const [needle, code] of cases.reverse()) expression = `if(contains(${moduleId}.error.message; "${needle}"); "${code}"; ${expression})`;
+  return `{{${expression}}}`;
 }
 
 function verifyBlueprint(blueprint) {

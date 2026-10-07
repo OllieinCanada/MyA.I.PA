@@ -163,3 +163,12 @@ test("combines safe nested failure fields without retaining the nested response"
   });
   assert.doesNotMatch(JSON.stringify(result), /private|authorization|secret/i);
 });
+
+test("legacy Make error handlers retain the safe stage and actual blocking reason", () => {
+  const payload = { ok: false, success: false, stage: "number_purchase", reason: "SIGNUP_ARCHIVED_RESOURCES_STILL_OWNED" };
+  const result = classifyMakeSignupResponse(JSON.stringify(payload), payload);
+  assert.equal(result.failedStage, "TWILIO_NUMBER_PURCHASE");
+  assert.equal(result.providerCode, "SIGNUP_ARCHIVED_RESOURCES_STILL_OWNED");
+  const unsafe = classifyMakeSignupResponse('', { ...payload, reason: 'owner@example.ca Bearer private-key' });
+  assert.equal(unsafe.providerCode, undefined);
+});
