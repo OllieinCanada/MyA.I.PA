@@ -132,8 +132,8 @@ describe("resumable signup status and pre-activation support", () => {
       phoneProvisioning: { status: "ready", e164: "+12895550123" },
       signupStatus: { ...pending().signupStatus, state: "verification_required" },
     });
-    expect(container.textContent).toMatch(/Open the verification link in your text messages/i);
-    expect(container.textContent).toMatch(/Check delivery below/i);
+    expect(container.textContent).toMatch(/Click this link for the text verification\./i);
+    expect(container.textContent).toMatch(/No text yet\? Check below\./i);
     expect(container.querySelector('a[href="tel:+12895550123"]')).toBeNull();
     expect(container.textContent).not.toMatch(/Your AI phone assistant is ready for testing/i);
     expect(global.fetch).not.toHaveBeenCalled();

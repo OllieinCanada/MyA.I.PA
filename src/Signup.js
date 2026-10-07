@@ -1222,16 +1222,16 @@ function ReviewPanel({ title = "Check your setup", description = "Check your cho
   const pricingScript = pricing ? buildPricingScript(pricing) : "";
   const pricingSummary =
     pricing?.offersServiceCalls === true
-      ? `$${pricing.repairVisitFee} service call · $${pricing.repairHourlyRate}/hour`
+      ? `${pricing.repairVisitFee} service call plus parts · ${pricing.repairHourlyRate}/hour plus parts`
       : pricing?.offersServiceCalls === false
         ? "No service calls"
         : "Not selected";
-  const installationSummary = pricing?.installationFreeEstimate !== false ? "New installations · Free quote" : "Installation pricing confirmed later";
+  const installationSummary = pricing?.installationFreeEstimate !== false ? "Free quote for new installation" : "Installation pricing confirmed later";
   const optionItems = [
     ["Trade", trade?.label || "Not selected", () => onEditBusinessSlide?.(1, "trade")],
     ["Service areas", areas.join(", ") || "Not selected", () => onEditBusinessSlide?.(2)],
     [
-      "Service calls & installations",
+      "Service and installation",
       pricingScript,
       () => onEditBusinessSlide?.(4),
       `${pricingSummary} · ${installationSummary}`,
@@ -1782,7 +1782,7 @@ export function SignupSuccessPage({ result: initialResult, onStartAnother }) {
               {signupClosed
                 ? result.signupStatus.message
                 : verificationRequired
-                ? "Open the verification link in your text messages to continue. No text yet? Check delivery below."
+                ? "Check your texts. Click this link for the text verification. No text yet? Check below."
                 : reviewRequired
                 ? "Your signup is saved. Final safety checks are underway, and this page checks automatically. You do not need to submit it again."
                 : assignedNumber
@@ -1814,7 +1814,7 @@ export function SignupSuccessPage({ result: initialResult, onStartAnother }) {
                     Check your phone to continue.
                   </p>
                   <p className="mt-3 text-sm font-semibold leading-6 text-slate-500">
-                    We will not create your agent until the signup phone is verified. The secure link expires after 24 hours.
+                    Tap the link in your text to set up your assistant. The link expires in 24 hours.
                   </p>
                   {result?.devVerificationUrl ? (
                     <a
@@ -3326,6 +3326,19 @@ export default function Signup() {
 
         <MobileSignupProgress currentStep={currentStep} businessSlide={businessSlide} tradeSetupPanel={tradeSetupPanel} />
 
+        {currentStep === 1 && businessSlide === 3 ? (
+          <div className="mt-3 flex justify-center">
+            <button
+              type="submit"
+              disabled={businessSlideDisabled || busy}
+              className="signup-business-top-continue inline-flex min-h-[54px] w-full max-w-[620px] items-center justify-center gap-3 rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 px-6 text-base font-black text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50 sm:text-lg"
+            >
+              {busy ? "Saving..." : businessSlideLabel}
+              <Icon name="arrow" className="h-5 w-5" />
+            </button>
+          </div>
+        ) : null}
+
         {currentStep === 1 ? (
           <section className="signup-task-section mt-2 flex flex-1 flex-col">
             <div className="signup-task-shell flex flex-1 flex-col rounded-3xl border border-slate-200 bg-white/96 shadow-[0_34px_90px_-70px_rgba(15,23,42,0.8)]">
@@ -3789,7 +3802,7 @@ export default function Signup() {
                   <div className="signup-task-content">
                     <div className="signup-mobile-task-heading">
                       <h2>Service call / repair pricing</h2>
-                      <p>Tell customers the price upfront. If Yes, add the call-out price and hourly rate. Then tap Continue.</p>
+                      <p>Tell customers the price upfront. If Yes, add the service price and hourly rate. Then tap Continue.</p>
                     </div>
                     <div className="grid content-start gap-4 sm:grid-cols-2 xl:grid-cols-4 xl:gap-5">
                     <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-4 sm:col-span-2 xl:col-span-4">
@@ -3824,7 +3837,7 @@ export default function Signup() {
                     {pricing.offersServiceCalls === true ? (
                       <>
                         <LabeledInput
-                          label="Call-out / visit fee"
+                          label="Service price"
                           icon="card"
                           value={pricing.repairVisitFee}
                           onChange={updatePricing("repairVisitFee")}

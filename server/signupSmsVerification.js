@@ -19,7 +19,7 @@ function verificationDeliveryUpdate(signup, { sid, status, errorCode } = {}) {
 }
 
 function buildSignupVerificationText({ businessName, verificationUrl }) {
-  return `My AI PA signup for ${String(businessName || "your business").trim()}: tap to verify your phone, then press Verify and continue to start setup. ${String(verificationUrl || "").trim()} This link expires in 24 hours.`;
+  return `Welcome abroad ${String(businessName || "your business").trim()} to my AI PA! tap link to continue. ${String(verificationUrl || "").trim()} This link expires in 24 hours.`;
 }
 
 async function deliverSignupVerificationText({

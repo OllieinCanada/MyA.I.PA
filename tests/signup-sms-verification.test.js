@@ -85,7 +85,7 @@ test("website signup verification normalizes the destination without making a pa
   });
   assert.equal(request.to, "+19055550123");
   assert.equal(delivered.to, "+19055550123");
-  assert.match(request.message, /tap to verify your phone/i);
+  assert.match(request.message, /Welcome abroad Test Electric to my AI PA! tap link to continue\./);
 });
 
 test("website signup verification rejects non-HTTPS links and malformed phones", async () => {
@@ -97,4 +97,10 @@ test("website signup verification rejects non-HTTPS links and malformed phones",
     deliverSignupVerificationText({ ownerPhone: "+19055550123", verificationUrl: "http://api.myaipa.ca/verify" }),
     (error) => error.code === "SIGNUP_VERIFICATION_URL_INVALID"
   );
+});
+
+test("verification SMS uses the requested welcome and never asks for a second tap", () => {
+  const text = buildSignupVerificationText({businessName: "Smith Electric", verificationUrl: "https://api.myaipa.ca/verify"});
+  assert.equal(text, "Welcome abroad Smith Electric to my AI PA! tap link to continue. https://api.myaipa.ca/verify This link expires in 24 hours.");
+  assert.doesNotMatch(text, /press Verify/i);
 });

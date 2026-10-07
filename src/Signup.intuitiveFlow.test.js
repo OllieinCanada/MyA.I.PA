@@ -97,6 +97,10 @@ describe("intuitive signup presentation", () => {
 
     expect(container.textContent).not.toMatch(/Who provides your business phone|What kind of number is it|Why we ask for your business address/i);
     expect(container.textContent).toMatch(/Continue to service call pricing/i);
+    const businessTopContinue = container.querySelector(".signup-business-top-continue");
+    expect(businessTopContinue).not.toBeNull();
+    expect(businessTopContinue.disabled).toBe(true);
+    expect(businessTopContinue.compareDocumentPosition(container.querySelector("#signup-business-details")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
     changeValue("#your-name-input", "Oliver Arscott");
     changeValue("#business-name-input", "Arscott Electric");
@@ -106,6 +110,8 @@ describe("intuitive signup presentation", () => {
     changeValue("#city-input", "Hamilton");
     changeValue("#province-select", "ON");
     changeValue("#postal-code-input", "L8P 1A1");
+    expect(businessTopContinue.disabled).toBe(false);
+    expect(businessTopContinue.type).toBe("submit");
     submit();
 
     expect(container.textContent).toMatch(/Step 5 of 8/i);
@@ -114,7 +120,7 @@ describe("intuitive signup presentation", () => {
 
     clickButton("Yes", container.querySelector('[role="group"]'));
     expect(container.querySelector(".signup-mobile-primary").disabled).toBe(false);
-    changeValue("#call-out-visit-fee-input", "125");
+    changeValue("#service-price-input", "125");
     submit();
     expect(container.textContent).toMatch(/Enter both the service-call or repair price and the hourly rate/i);
     expect(container.textContent).toMatch(/Enter the hourly rate/i);
@@ -123,6 +129,8 @@ describe("intuitive signup presentation", () => {
     submit();
     expect(container.textContent).toMatch(/Step 6 of 8/i);
     expect(container.textContent).toMatch(/Check your setup/i);
+    expect(container.textContent).toMatch(/125 service call plus parts.*95\/hour plus parts/i);
+    expect(container.textContent).toMatch(/Free quote for new installation/i);
     expect(container.textContent).not.toMatch(/Assistant voice|voice preview/i);
     submit();
     expect(container.textContent).toMatch(/Step 7 of 8/i);
@@ -160,7 +168,7 @@ describe("intuitive signup presentation", () => {
     act(() => root.render(<SignupSuccessPage result={{businessName: "Mcdoober Electrical", verificationRequired: true}} onStartAnother={jest.fn()} onRetry={jest.fn()} />));
     expect(container.textContent).toMatch(/Step 8 of 8 · Phone verification/i);
     expect(container.textContent).toMatch(/Thanks, Mcdoober Electrical/i);
-    expect(container.textContent).toMatch(/Open the verification link in your text messages/i);
+    expect(container.textContent).toMatch(/Click this link for the text verification\./i);
     expect(container.textContent).not.toMatch(/Welcome aboard/i);
   });
 
