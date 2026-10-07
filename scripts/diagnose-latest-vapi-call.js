@@ -1,6 +1,7 @@
 const crypto = require("crypto");
 const { loadProjectEnv, redact } = require("./_helpers");
 const { analyzeVapiSmsCall, normalizePhone } = require("../server/vapiCallDiagnostics");
+const { speechLogEvidence } = require("./vapi-speech-log-evidence");
 
 const env = loadProjectEnv();
 const apiKey = String(env.VAPI_API_KEY || env.VAPI_KEY || env.VAPI_TOKEN || "").trim();
@@ -255,9 +256,10 @@ async function main() {
   const limit = Math.max(1, Math.min(100, Number(argument("limit", "20")) || 20));
   const call = await findLatestCall({ aiPhone, sinceMinutes, limit });
   const report = analyzeVapiSmsCall(call, { aiPhone, ownerPhone, ownerLast4, customerPhone: customerPhone(call) });
+  report.speech = await speechLogEvidence(call);
   if (hasFlag("twilio-status")) report.delivery = await reconcileTwilioMessages(call);
   if (hasFlag("json")) console.log(JSON.stringify(report, null, 2));
-  else printHuman(report);
+  else { printHuman(report); console.log(`Speech: ${report.speech.status}. ${report.speech.next || "Audio review still required."}`); }
   if (report.finding.severity === "critical") process.exitCode = 2;
 }
 

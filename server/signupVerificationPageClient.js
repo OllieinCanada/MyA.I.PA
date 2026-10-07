@@ -34,6 +34,8 @@ function verificationPageClientScript({ automaticSmsConfirmation = false } = {})
           document.getElementById("verification-title").textContent = "We couldn’t confirm setup yet";
           document.getElementById("verification-description").textContent = "Your details are saved. Contact support to check this signup—don’t submit another one.";
           form.hidden = true;
+          const support = document.getElementById("verification-support");
+          if (support) support.hidden = false;
         }
       }
       form.addEventListener("submit", continueSignup);

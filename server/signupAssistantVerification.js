@@ -86,7 +86,12 @@ function canonicalAssistantContent(assistant = {}) {
       provider: clean(assistant?.voice?.provider),
       voiceId: clean(assistant?.voice?.voiceId),
       version: Number(assistant?.voice?.version ?? 0),
+      model: clean(assistant?.voice?.model),
+      cachingEnabled: assistant?.voice?.cachingEnabled ?? null,
     },
+    firstMessageMode: clean(assistant.firstMessageMode),
+    firstMessageInterruptionsEnabled: assistant.firstMessageInterruptionsEnabled ?? null,
+    modelOutputInMessagesEnabled: assistant.modelOutputInMessagesEnabled ?? null,
   };
 }
 

@@ -10,6 +10,32 @@ const {
   getVapiCompositeToolDefinition,
 } = require("../server/compositeCallNotifications");
 
+test("current reported hazards get one safety reminder and urgent owner context", () => {
+  for (const requestType of ["repair", "message"]) {
+    const input = { requestType, safetyConcern: "reported_hazard", jobDetails: "Panel is sparking", message: "Panel is sparking", businessName: "Test Electric" };
+    assert.equal((buildCustomerBody(input).match(/Safety:/g) || []).length, 1);
+    assert.match(buildCustomerBody(input), /call 911/);
+    assert.match(buildCustomerBody(input), /not emergency dispatch/);
+    assert.match(buildOwnerBody(input), /URGENT: Caller reported a hazard/);
+  }
+  for (const safetyConcern of [undefined, "none", "unknown"]) {
+    const input = { requestType: "repair", safetyConcern, jobDetails: "No sparks, no smoke", urgency: "urgent" };
+    assert.doesNotMatch(buildCustomerBody(input), /Safety:|call 911/);
+    assert.doesNotMatch(buildOwnerBody(input), /Caller reported a hazard/);
+  }
+  assert.match(getVapiCompositeToolCode(), /function reportedSafetyReminder/);
+  assert.deepEqual(getVapiCompositeToolDefinition().function.parameters.properties.safetyConcern.enum, ["none", "reported_hazard"]);
+});
+
+test("both summaries retain pricing caveats only when rates were actually discussed", () => {
+  for (const build of [buildOwnerBody, buildCustomerBody]) {
+    assert.match(build({ requestType: "repair", pricingDiscussed: true }), /Parts are extra.*before work starts/);
+    assert.doesNotMatch(build({ requestType: "repair" }), /Pricing:/);
+    assert.doesNotMatch(build({ requestType: "repair", pricingDiscussed: true, safetyConcern: "reported_hazard" }), /Pricing:/);
+  }
+  assert.match(getVapiCompositeToolCode(), /function discussedPricingReminder/);
+});
+
 test("routing verification messages are explicit and promise no callback", () => {
   const routingTest = { businessName: "First Class Rentals Niagara", requestType: "routing_test" };
   assert.match(buildOwnerBody(routingTest), /MY AI PA TEST/);

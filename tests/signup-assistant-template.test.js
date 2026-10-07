@@ -29,9 +29,14 @@ test("builds the current production Vapi assistant with resolved signup values",
     assignedPhone: "+12895550123",
   });
   const prompt = config.model.messages[0].content;
+  assert.match(prompt, /minimum service-visit fee/);
+  assert.match(prompt, /Parts are extra.*confirm the final price before starting/);
+  assert.match(prompt, /Do not repeat it.*unless the caller is confused/);
+  assert.match(prompt, /safetyConcern as "reported_hazard"/);
+  assert.match(prompt, /pricingDiscussed as true/);
 
   assert.equal(config.name, "My AI PA Agent");
-  assert.equal(config.firstMessage, "Thanks for calling Example Electric. How are you today?");
+  assert.equal(config.firstMessage, "Thanks for calling Example Electric. This call will be recorded for service quality and accurate follow-up. Is that okay?");
   assert.equal(config.model.provider, "openai");
   assert.equal(config.model.model, "gpt-4o");
   assert.equal(config.model.temperature, 0.1);
@@ -41,9 +46,10 @@ test("builds the current production Vapi assistant with resolved signup values",
     "1bf11961-f731-43b7-9f97-d765acdb51cd",
   ]);
   assert.deepEqual(config.voice, {
-    provider: "vapi",
-    voiceId: "Jess",
-    version: 2,
+    provider: "openai",
+    voiceId: "alloy",
+    model: "tts-1",
+    cachingEnabled: false,
   });
   assert.deepEqual(config.transcriber, {
     provider: "deepgram",
@@ -67,7 +73,7 @@ test("builds the current production Vapi assistant with resolved signup values",
   assert.match(prompt, /endCall/);
   assert.match(prompt, /What is the address where the work needs to be done\?/);
   assert.match(prompt, /When would you ideally like the work to begin\?/);
-  assert.match(prompt, /Before we continue, this call will be recorded for service quality and accurate follow-up\. Is that okay\?/);
+  assert.match(prompt, /fixed first message has already greeted the caller and asked for recording consent/);
   assert.match(prompt, /Stop and wait for an explicit yes before collecting service, contact, address, or job details/i);
   assert.match(prompt, /We handle residential and commercial electrical work\. Are you looking for a new installation, service, or repair today\?/);
   assert.match(prompt, /Safety and priority gate before pricing/i);
@@ -101,7 +107,7 @@ test("uses a caller-supplied resource name without changing the voice stack", ()
 
   assert.equal(config.name, "signup-42-example-electric");
   assert.equal(config.model.model, "gpt-4o");
-  assert.equal(config.voice.voiceId, "Jess");
+  assert.equal(config.voice.voiceId, "alloy");
   assert.equal(config.transcriber.model, "nova-3");
 });
 

@@ -70,4 +70,6 @@ test("backend stays on the number page and forwarding is an explicit Continue li
   assert.match(route, /assignedPhone: twilioPhoneNumber/);
   assert.match(route, /setupReady \? "Continue"/);
   assert.match(route, /verificationPageClientScript\(\{ automaticSmsConfirmation \}\)/);
+  assert.match(route, /\$\{!ok \? `<section class="number" aria-label="Need help now">/);
+  assert.match(route, /id="verification-support" hidden/);
 });

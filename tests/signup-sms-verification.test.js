@@ -88,6 +88,8 @@ test("website signup verification normalizes the destination without making a pa
   assert.equal(request.to, "+19055550123");
   assert.equal(delivered.to, "+19055550123");
   assert.match(request.message, /tap to verify your phone/i);
+  assert.match(request.message, /Welcome, Test Electric! Signup received/);
+  assert.doesNotMatch(request.message, /Signup complete|setup is ready/i);
 });
 
 test("website signup verification rejects non-HTTPS links and malformed phones", async () => {

@@ -149,11 +149,12 @@ export default function ForwardingSetup() {
         ) : (
           <>
             <p className="forwarding-eyebrow">YOUR MY AI PA NUMBER IS READY</p>
-            <h1>Protect the calls you miss.</h1>
-            <p>Nothing changes about how you answer your phone. It still rings normally. My AI PA simply catches what you miss.</p>
+            <h1>Set up your new receptionist.</h1>
+            <p>Pass the calls you don’t answer on to My AI PA.</p>
             {forwarding ? <div className="forwarding-number"><span>Your My AI PA number</span><strong>{fmtPhone(forwarding.assignedMyAiPaNumber)}</strong></div> : null}
 
             {needsChoices ? <div className="forwarding-form">
+              <p>We need your phone-service details to show the correct instructions. We won’t guess a forwarding code.</p>
               <label>Who provides your business phone?<select value={carrier} onChange={(event) => setCarrier(event.target.value)}>{CARRIERS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
               <label>What kind of number is it?<select value={lineType} onChange={(event) => setLineType(event.target.value)}>{LINE_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
               <button onClick={saveChoices} disabled={busy || !forwarding}>{busy ? "Saving…" : "Continue"}</button>

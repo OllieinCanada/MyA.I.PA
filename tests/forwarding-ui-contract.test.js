@@ -6,6 +6,15 @@ const test = require("node:test");
 const source = fs.readFileSync(path.join(__dirname, "..", "src", "ForwardingSetup.js"), "utf8");
 const dashboard = fs.readFileSync(path.join(__dirname, "..", "src", "CustomerDashboard.js"), "utf8");
 
+test("forwarding reuses saved service choices and asks only when recovery needs them", () => {
+  assert.match(source, /setCarrier\(data.forwarding.carrier\)/);
+  assert.match(source, /setLineType\(data.forwarding.lineType\)/);
+  assert.match(source, /const needsChoices = status === "carrier_needed" \|\| !forwarding/);
+  assert.match(source, /\{needsChoices \? <div className="forwarding-form">/);
+  assert.match(source, /Set up your new receptionist/);
+  assert.doesNotMatch(source, /Nothing changes about how you answer your phone/);
+});
+
 test("forwarding screen includes every customer-visible state and recovery action", () => {
   for (const text of [
     "carrier_needed", "verification_pending", "active", "verification_failed", "manual_setup_required",
