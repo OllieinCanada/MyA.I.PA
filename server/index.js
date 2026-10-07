@@ -15079,7 +15079,7 @@ app.all(
               <span class="badge">${confirmation ? "Confirm your contact" : ok ? "Verified" : "Needs attention"}</span>
               <h1>${escapeHtml(title)}</h1>
               <p>${escapeHtml(body)}</p>
-              ${confirmation ? `<form id="signup-verification-form" method="post" action="${escapeHtml(req.path)}">
+              ${confirmation ? `<form method="post" id="signup-verification-form" action="${escapeHtml(req.path)}">
                 <input type="hidden" name="token" value="${escapeHtml(token)}" />
                 <input type="hidden" name="channel" value="${escapeHtml(verificationChannel)}" />
                 <input type="hidden" name="channelProof" value="${escapeHtml(createVerificationChannelProof(token, verificationChannel, getAdminSessionSecret()))}" />
