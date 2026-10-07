@@ -15051,6 +15051,7 @@ app.all(
       const canonicalPhone = normalizePhoneForMatch(assignedPhone);
       const displayPhone = formatAssignedPhone(canonicalPhone);
       const setupReady = ok && Boolean(canonicalPhone && displayPhone);
+      const automaticSmsConfirmation = confirmation && verificationChannel === "sms" && req.method === "GET";
       res.status(ok ? 200 : 400).send(`<!doctype html>
         <html lang="en">
           <head>
@@ -15078,12 +15079,13 @@ app.all(
               <span class="badge">${confirmation ? "Confirm your contact" : ok ? "Verified" : "Needs attention"}</span>
               <h1>${escapeHtml(title)}</h1>
               <p>${escapeHtml(body)}</p>
-              ${confirmation ? `<form method="post" action="${escapeHtml(req.path)}">
+              ${confirmation ? `<form id="signup-verification-form" method="post" action="${escapeHtml(req.path)}">
                 <input type="hidden" name="token" value="${escapeHtml(token)}" />
                 <input type="hidden" name="channel" value="${escapeHtml(verificationChannel)}" />
                 <input type="hidden" name="channelProof" value="${escapeHtml(createVerificationChannelProof(token, verificationChannel, getAdminSessionSecret()))}" />
                 <input type="hidden" name="confirmationProof" value="${escapeHtml(createVerificationConfirmationProof(token, verificationChannel, getAdminSessionSecret()))}" />
-                <button class="action" type="submit" name="confirmation" value="VERIFY_AND_CONTINUE">Verify and continue</button>
+                <input type="hidden" name="confirmation" value="VERIFY_AND_CONTINUE" />
+                ${automaticSmsConfirmation ? '<noscript><button class="action" type="submit">Continue</button></noscript>' : '<button class="action" type="submit">Verify and continue</button>'}
               </form>` : ""}
               ${setupReady ? `
                 <section class="number" aria-label="Assigned My AI PA number">
@@ -15106,6 +15108,17 @@ app.all(
               </section>
               <div class="actions"><a href="${escapeHtml(forwardingSetupUrl || `${FRONTEND_APP_URL}/#/${setupReady ? "dashboard" : "signup"}`)}">${forwardingSetupUrl ? "Protect my missed calls" : setupReady ? "Open your dashboard" : "Return to My AI PA"}</a></div>
             </main>
+            ${automaticSmsConfirmation ? `<script>
+              // Keep GET/HEAD read-only; a visible browser sends the existing signed POST.
+              let submitted = false;
+              function continueSignup() {
+                if (submitted || document.visibilityState !== "visible") return;
+                submitted = true;
+                document.getElementById("signup-verification-form").requestSubmit();
+              }
+              document.addEventListener("visibilitychange", continueSignup);
+              continueSignup();
+            </script>` : ""}
             ${setupReady ? `<script>
               document.getElementById("copy-number").addEventListener("click", async function () {
                 const phone = this.dataset.phone;
@@ -15139,8 +15152,11 @@ app.all(
       const pending = token ? await pendingSignupVerifications.inspect(token) : null;
       if (!pending) return renderVerificationPage({ ok: false, title: "Verification link is invalid or expired", body: "Please submit the signup again to receive a fresh verification link." });
       return renderVerificationPage({
-        ok: true, confirmation: true, title: "Verify your contact details",
-        body: "Press Verify and continue to confirm your contact details and start setup. Opening or previewing this page does not verify you.",
+        ok: true, confirmation: true,
+        title: verificationChannel === "sms" ? "Setting up your assistant" : "Verify your contact details",
+        body: verificationChannel === "sms"
+          ? "Keep this page open. Your AI phone number will appear when setup is ready."
+          : "Tap Verify and continue to start setup.",
       });
     }
     if (input.confirmation !== "VERIFY_AND_CONTINUE"
