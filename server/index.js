@@ -3,6 +3,7 @@ dotenv.config();
 dotenv.config({ path: ".env.local", override: false });
 
 const crypto = require("crypto");
+const { hasIndividualPricingChoices, individualPricingPolicy } = require("../src/features/signup/pricingPolicy");
 const cors = require("cors");
 const express = require("express");
 const { rateLimit } = require("express-rate-limit");
@@ -5465,6 +5466,7 @@ function upsertSignupDashboardFromPayload(payload, extra = {}) {
     ? payload.specializations.map((value) => String(value || "").trim()).filter(Boolean).slice(0, 12)
     : [];
   return upsertSignupDashboardRecord({
+    pricing: payload?.pricing || {},
     ownerName: String(owner.name || extra.ownerName || "").trim(),
     ownerEmail: String(owner.email || extra.ownerEmail || "").trim(),
     ownerPhone: String(owner.phone || extra.ownerPhone || "").trim(),
@@ -14514,7 +14516,10 @@ app.post(
     const ownerName = String(setupDetails.ownerName || "").trim();
     const ownerEmail = String(setupDetails.ownerEmail || "").trim();
     const ownerPhone = String(setupDetails.ownerPhone || "").trim();
-    const pricingDetails = body.pricing && typeof body.pricing === "object" ? body.pricing : setupDetails.pricing || {};
+    const rawPricingDetails = body.pricing && typeof body.pricing === "object" ? body.pricing : setupDetails.pricing || {};
+    const individualChoices = hasIndividualPricingChoices(rawPricingDetails);
+    const pricingDetails = individualChoices ? individualPricingPolicy(rawPricingDetails) : rawPricingDetails;
+    if (individualChoices && !pricingDetails.valid) return res.status(400).json({ error: "Enter a positive price for each checked rate.", code: "SIGNUP_PRICING_INVALID" });
     const installationFreeEstimate = pricingDetails.installationFreeEstimate !== false;
     const offersServiceCalls = typeof pricingDetails.offersServiceCalls === "boolean"
       ? pricingDetails.offersServiceCalls
@@ -14522,7 +14527,7 @@ app.post(
     const repairVisitFee = String(pricingDetails.repairVisitFee || "").trim();
     const repairHourlyRate = String(pricingDetails.repairHourlyRate || "").trim();
     const freeEstimateAnswer = String(pricingDetails.freeEstimateAnswer || (installationFreeEstimate ? "yes we do" : "no we don't")).trim();
-    const pricingScript = String(body.pricingScript || setupDetails.pricingScript || "").trim();
+    const pricingScript = individualChoices ? pricingDetails.pricingScript : String(body.pricingScript || setupDetails.pricingScript || "").trim();
     const rawSpecializations = Array.isArray(body.specializations)
       ? body.specializations
       : Array.isArray(setupDetails.specializations)
@@ -14629,6 +14634,7 @@ app.post(
         forwardingMode: "no_answer",
       },
       pricing: {
+        ...(individualChoices ? Object.fromEntries(["includeVisitFee", "includeHourlyRate", "includeAssessment", "includePartsExtra"].map((key) => [key, pricingDetails[key]])) : {}),
         installationFreeEstimate,
         offersServiceCalls,
         freeEstimateAnswer,

@@ -1,5 +1,6 @@
 const crypto = require("crypto");
 const { signupBusinessKey } = require("./signupBusinessIdentity");
+const { hasIndividualPricingChoices, individualPricingPolicy } = require("../src/features/signup/pricingPolicy");
 
 const {
   inspectCanadianNumber,
@@ -213,6 +214,17 @@ function selectSignupValues(input) {
       setup.pricingScript
     ), 4_000),
   };
+  if (hasIndividualPricingChoices(pricing)) {
+    const policy = individualPricingPolicy(pricing);
+    if (!policy.valid) {
+      const error = new Error("Enter a positive price for each selected pricing rate.");
+      error.statusCode = 400;
+      error.code = "SIGNUP_PRICING_INVALID";
+      throw error;
+    }
+    const { valid, ...canonicalPricing } = policy;
+    Object.assign(pricing, canonicalPricing);
+  }
 
   return {
     body,

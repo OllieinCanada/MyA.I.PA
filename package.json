@@ -54,6 +54,7 @@
     "test:release": "node scripts/release-gate.js",
     "test:browser:quality": "node scripts/test-browser-quality.js",
     "test:address-autocomplete": "node scripts/test-address-autocomplete.js",
+    "test:signup-pricing-choices": "node scripts/test-signup-pricing-choices.js",
     "test:database": "node --test tests/database-integration.test.js",
     "test:database:disposable-render": "node scripts/run-disposable-postgres-drill.js --confirm=CREATE_DELETE_FREE_DATABASE",
     "start": "react-scripts start",

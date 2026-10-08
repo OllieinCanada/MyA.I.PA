@@ -11,6 +11,7 @@ const {toolPatch}=require('./refresh-vapi-job-type');
 const {repairPayload,speechSnapshot}=require('./repair-signup-speech');
 const {updateMessages}=require('../server/vapiIsolatedSmsProvisioning');
 const {inspectSignupSpeech}=require('../server/signupSpeechPolicy');
+const {pricingSummaryOptionsFromAssistant}=require('../src/features/signup/pricingPolicy');
 const {definitionMatches}=require('./vapi-release-evidence');
 const hash=v=>crypto.createHash('sha256').update(JSON.stringify(v)).digest('hex');
 const norm=v=>String(v||'').replace(/\D/g,'');
@@ -25,8 +26,10 @@ Give necessary hazard guidance once, repeating only for confusion or new danger.
 Set safetyConcern to reported_hazard only for a caller-reported current hazard; none for absent, denied or resolved danger. Keep job type in spoken confirmation and both summaries.
 ## END MYAIPA LIVE PRICING POLICY`;
 function assistantPatch(a,t) {
+  const choices=pricingSummaryOptionsFromAssistant(a);
+  if(choices && (t.environmentVariables||[]).find(v=>v.name==='PRICING_SUMMARY_OPTIONS')?.value!==JSON.stringify(choices)) throw Error('Saved pricing policy and summary tool do not match; run guarded SMS provisioning first.');
   const patch=repairPayload(a);
-  patch.model.messages=updateMessages(patch.model.messages,t.function.name).map(m=>m.role==='system'?{...m,content:String(m.content).replace(/\n*## MYAIPA LIVE PRICING POLICY 2026-10-07[\s\S]*?## END MYAIPA LIVE PRICING POLICY/g,'').trimEnd()+'\n\n'+POLICY}:m);
+  patch.model.messages=updateMessages(patch.model.messages,t.function.name).map(m=>m.role==='system'?{...m,content:String(m.content).replace(/\n*## MYAIPA LIVE PRICING POLICY 2026-10-07[\s\S]*?## END MYAIPA LIVE PRICING POLICY/g,'').trimEnd()+(choices?'':'\n\n'+POLICY)}:m);
   return patch;
 }
 function toolSnapshot(t){return {function:t.function,code:t.code};}

@@ -2,6 +2,7 @@ const crypto = require("crypto");
 
 const { buildSignupAssistantConfig } = require("./signupAssistantTemplate");
 const { RECORDING_NOTICE } = require("./vapiIsolatedSmsProvisioning");
+const { hasIndividualPricingChoices, individualPricingPolicy } = require("../src/features/signup/pricingPolicy");
 
 function clean(value) {
   return String(value ?? "").replace(/\r\n/g, "\n").trim();
@@ -36,12 +37,13 @@ function buildNormalizedPayloadFromSignupRecord(signup = {}) {
       repairVisitFee: clean(signup.repairVisitFee),
       repairHourlyRate: clean(signup.repairHourlyRate),
     },
-    pricing: {
-      freeEstimateAnswer: clean(signup.freeEstimateAnswer || signup.installationFreeEstimateAnswer),
-      offersServiceCalls: typeof signup.offersServiceCalls === "boolean" ? signup.offersServiceCalls : undefined,
-      repairVisitFee: clean(signup.repairVisitFee),
-      repairHourlyRate: clean(signup.repairHourlyRate),
-      pricingScript: clean(signup.pricingScript),
+    pricing: hasIndividualPricingChoices(signup.pricing || {}) ? individualPricingPolicy(signup.pricing) : {
+      ...(signup.pricing || {}),
+      freeEstimateAnswer: clean(signup.freeEstimateAnswer || signup.installationFreeEstimateAnswer || signup.pricing?.freeEstimateAnswer),
+      offersServiceCalls: typeof signup.offersServiceCalls === "boolean" ? signup.offersServiceCalls : signup.pricing?.offersServiceCalls,
+      repairVisitFee: clean(signup.repairVisitFee || signup.pricing?.repairVisitFee),
+      repairHourlyRate: clean(signup.repairHourlyRate || signup.pricing?.repairHourlyRate),
+      pricingScript: clean(signup.pricingScript || signup.pricing?.pricingScript),
     },
     specializations: Array.isArray(signup.specializations) ? signup.specializations : [],
     businessName: clean(signup.businessName),

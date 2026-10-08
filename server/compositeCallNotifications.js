@@ -66,9 +66,12 @@ function reportedSafetyReminder(args) {
 }
 
 function discussedPricingReminder(args) {
-  return args.pricingDiscussed === true && !reportedSafetyReminder(args)
-    ? "Pricing: Parts are extra. Final price confirmed after assessment, before work starts."
-    : "";
+  if (args.pricingDiscussed !== true || reportedSafetyReminder(args)) return "";
+  const statements = [
+    args.includePartsExtra !== false ? "Parts are extra." : "",
+    args.includeAssessment !== false ? "Final price confirmed after assessment, before work starts." : "",
+  ].filter(Boolean);
+  return statements.length ? `Pricing: ${statements.join(" ")}` : "";
 }
 
 function buildOwnerBody(args) {
@@ -421,7 +424,19 @@ async function executeCompositeNotifications({ args, env, fetchImpl, btoaImpl, U
       ownerSmsEnabled,
     };
   }
-  const trustedInput = { ...input, rawPhoneNumber: customerNumber };
+  // Pricing reminders come from server-provisioned policy, never tool/caller arguments.
+  let pricingOptions = { includePartsExtra: true, includeAssessment: true };
+  const policyJson = env && env.PRICING_SUMMARY_OPTIONS;
+  if (policyJson) {
+    try {
+      const parsed = JSON.parse(policyJson);
+      if (typeof parsed.includePartsExtra !== "boolean" || typeof parsed.includeAssessment !== "boolean") throw new Error("Invalid policy");
+      pricingOptions = { includePartsExtra: parsed.includePartsExtra, includeAssessment: parsed.includeAssessment };
+    } catch {
+      return { ok: false, complete: false, errorCode: "pricing_policy_invalid", executionOrder: [] };
+    }
+  }
+  const trustedInput = { ...input, ...pricingOptions, rawPhoneNumber: customerNumber };
   const order = [];
 
   let owner = {
@@ -488,7 +503,7 @@ function compositeToolParameters() {
       bestCallbackTime: { type: "string", description: "Best time to call the customer back." },
       urgency: { type: "string", description: "Caller-stated urgency. Capture it without diagnosing or promising dispatch." },
       safetyConcern: { type: "string", enum: ["none", "reported_hazard"], description: "Use reported_hazard only for a caller-reported current safety hazard. Use none for ordinary requests, denied danger, or past/resolved hazards. Not a diagnosis." },
-      pricingDiscussed: { type: "boolean", description: "True only when the business's verified repair/service rates were actually discussed in this call. False for installations, messages, hazard calls, or no pricing discussion. Never implies a quote was approved." },
+      pricingDiscussed: { type: "boolean", description: "True only when an owner-approved repair/service pricing statement (selected rate, assessment policy, or parts policy) was actually discussed. False for installations, messages, hazard calls, or no pricing discussion. Never implies a quote was approved." },
       message: { type: "string", description: "Message content when requestType is message." },
     },
     required: ["businessName", "requestType", "name"],
@@ -526,6 +541,7 @@ function getVapiCompositeToolDefinition() {
     },
     code: getVapiCompositeToolCode(),
     environmentVariableNames: [
+      "PRICING_SUMMARY_OPTIONS",
       "TWILIO_ACCOUNT_SID",
       "TWILIO_AUTH_TOKEN",
       "TWILIO_API_KEY_SID",

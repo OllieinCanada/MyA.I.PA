@@ -56,8 +56,24 @@ test('failed readback restores tool and assistant without touching another busin
  assert.deepEqual(speechSnapshot(f.assistant),speechSnapshot(f.plan.assistant));assert.equal(f.tool.code,'old');
 });
 test('published summary smoke uses stub transport for pricing, hazard and no hazard',async()=>{
- const tool={code:getVapiCompositeToolCode(),environmentVariables:['TWILIO_API_KEY_SID','TWILIO_API_KEY_SECRET','OWNER_SMS_ENABLED'].map(name=>({name}))};
+ const tool={code:getVapiCompositeToolCode(),environmentVariables:['TWILIO_API_KEY_SID','TWILIO_API_KEY_SECRET','OWNER_SMS_ENABLED','PRICING_SUMMARY_OPTIONS'].map(name=>({name}))};
  for(const args of [{requestType:'repair',pricingDiscussed:true,safetyConcern:'none'},{requestType:'message',safetyConcern:'reported_hazard'},{requestType:'installation',safetyConcern:'none'}]) assert.equal(await checkSummary(tool,args),true);
+});
+test('policy rollout preserves individual choices and refuses a mismatched summary policy',()=>{
+ const f=fixture();
+ const choices={includeVisitFee:false,includeHourlyRate:true,includeAssessment:false,includePartsExtra:false,installationFreeEstimate:false};
+ f.assistant.model.messages[0].content+='\nMYAIPA_PRICING_CHOICES: '+JSON.stringify(choices);
+ assert.throws(()=>assistantPatch(f.assistant,f.tool),/pricing policy and summary tool do not match/);
+ f.tool.environmentVariables.push({name:'PRICING_SUMMARY_OPTIONS',value:JSON.stringify({includePartsExtra:false,includeAssessment:false})});
+ const patch=assistantPatch(f.assistant,f.tool);
+ assert.ok(patch.model.messages[0].content.includes('MYAIPA_PRICING_CHOICES:'));
+ assert.ok(!patch.model.messages[0].content.includes(POLICY));
+});
+test('published summary smoke respects all individual reminder choices with fake transport',async()=>{
+ for(const includePartsExtra of [false,true])for(const includeAssessment of [false,true]){
+  const tool={code:getVapiCompositeToolCode(),environmentVariables:['TWILIO_API_KEY_SID','TWILIO_API_KEY_SECRET','OWNER_SMS_ENABLED'].map(name=>({name})).concat({name:'PRICING_SUMMARY_OPTIONS',value:JSON.stringify({includePartsExtra,includeAssessment})})};
+  assert.equal(await checkSummary(tool,{requestType:'repair',pricingDiscussed:true,safetyConcern:'none'}),true);
+ }
 });
 test('summary smoke refuses unexpected remote code before execution',async()=>{
  await assert.rejects(checkSummary({code:'throw Error("must not run")'},{requestType:'repair'}),/audited local definition/);

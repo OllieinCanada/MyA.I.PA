@@ -223,8 +223,12 @@ export const LINE_TYPE_OPTIONS = [
 ];
 
 export const DEFAULT_PRICING = {
-  offersServiceCalls: null,
-  installationFreeEstimate: true,
+  offersServiceCalls: true,
+  includeVisitFee: false,
+  includeHourlyRate: false,
+  includeAssessment: false,
+  includePartsExtra: false,
+  installationFreeEstimate: false,
   repairVisitFee: "",
   repairHourlyRate: "",
 };

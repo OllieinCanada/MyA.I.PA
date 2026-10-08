@@ -1,4 +1,5 @@
 const crypto = require("crypto");
+const { pricingSummaryOptionsFromAssistant } = require("../src/features/signup/pricingPolicy");
 const { signupSpeechPatch, normalizeConsentPrompt, inspectSignupSpeech } = require("./signupSpeechPolicy");
 const {
   POST_SEND_CLOSING_MARKER,
@@ -151,6 +152,7 @@ function isManagedIsolatedTool(tool) {
 }
 
 function buildIsolatedToolPayload({
+  pricingOptions = null,
   aiNumber,
   ownerNumber,
   twilioAccountSid,
@@ -183,6 +185,7 @@ function buildIsolatedToolPayload({
     },
     code: definition.code,
     environmentVariables: [
+      { name: "PRICING_SUMMARY_OPTIONS", value: pricingOptions ? JSON.stringify(pricingOptions) : "" },
       { name: "TWILIO_ACCOUNT_SID", value: String(twilioAccountSid).trim() },
       { name: "TWILIO_AUTH_TOKEN", value: String(twilioAuthToken || "").trim() },
       { name: "TWILIO_API_KEY_SID", value: String(twilioApiKeySid || "").trim() },
@@ -213,7 +216,7 @@ EMERGENCY SAFETY:
 - Do not promise dispatch or claim a technician is on the way. After the immediate safety direction, offer to take an urgent message for the business.
 - Give the safety direction once; repeat only for confusion, changed danger, or a necessary reminder. Do not repeat routine warnings at closing.
 - Set safetyConcern to "reported_hazard" in the summary tool only for a caller-reported current hazard; use "none" for denied, resolved, or absent hazards. Preserve the reported issue in jobDetails or message without diagnosing.
-- Set pricingDiscussed to true only after discussing verified service/repair rates from the business context; false for hazard calls, installations, messages, or no pricing discussion. Never invent rates or quote approval.
+- Set pricingDiscussed to true only after discussing an owner-approved service/repair pricing statement from the business context, including a selected rate, assessment policy, or parts-extra policy; false for hazard calls, installations, messages, or no pricing discussion. Never invent rates or quote approval.
 CONTEXT ACKNOWLEDGEMENT:
 - When a caller describes how they feel and names a specific problem in the same message, briefly acknowledge both before moving to pricing or the next intake question.
 SCOPE CONTROL:
@@ -276,6 +279,8 @@ function inspectIsolatedConfiguration({ assistant, tool, aiNumber, ownerNumber }
   const timingChecks = inspectAssistantTiming(assistant);
   const securityChecks = inspectAssistantSecurity(assistant);
   const checks = {
+    pricingPolicyProtected: env.PRICING_SUMMARY_OPTIONS === JSON.stringify(pricingSummaryOptionsFromAssistant(assistant))
+      || (!pricingSummaryOptionsFromAssistant(assistant) && !env.PRICING_SUMMARY_OPTIONS),
     toolAttached: Boolean(toolId && toolIds.includes(toolId)),
     sharedCustomerRemoved: !toolIds.includes(SHARED_CUSTOMER_TOOL_ID),
     sharedOwnerRemoved: !toolIds.includes(SHARED_OWNER_TOOL_ID),
@@ -374,6 +379,7 @@ async function provisionIsolatedSmsRouting({
   deleteTool,
 }) {
   const payload = buildIsolatedToolPayload({
+    pricingOptions: pricingSummaryOptionsFromAssistant(assistant),
     aiNumber,
     ownerNumber,
     twilioAccountSid,

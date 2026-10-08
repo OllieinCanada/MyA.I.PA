@@ -381,9 +381,16 @@ async function testSignupJourney(browser, baseUrl, viewport) {
     })) await page.locator(`#${id}`).fill(value);
     await page.locator("#province-select").selectOption("ON");
     await clickVisibleByText(page, "Continue to service call pricing");
-    await clickVisibleByText(page, "Yes");
-    await page.locator("#call-out-visit-fee-input").fill("125");
-    await page.locator("#hourly-rate-input").fill("95");
+    const pricingChoices = page.locator('#signup-pricing input[type="checkbox"]');
+    if (await pricingChoices.count() !== 5) throw new Error("Pricing must expose five individual choices");
+    for (let index = 0; index < 5; index += 1) {
+      if (await pricingChoices.nth(index).isChecked()) throw new Error("Pricing choices must not be selected automatically");
+    }
+    await page.getByRole("checkbox", { name: "Share minimum service visit fee", exact: true }).check();
+    await page.locator("#minimum-service-visit-fee-input").fill("125");
+    if (await page.locator("#hourly-labour-rate-input").count()) throw new Error("Unselected rates must stay hidden");
+    await page.getByRole("checkbox", { name: "Share hourly labour rate", exact: true }).check();
+    await page.locator("#hourly-labour-rate-input").fill("95");
     const screenshotDir = rootPath("diagnostics", "browser-drive");
     fs.mkdirSync(screenshotDir, { recursive: true });
     await page.screenshot({ path: path.join(screenshotDir, `notes-pricing-${viewport.name}.png`), fullPage: true, animations: "disabled" });

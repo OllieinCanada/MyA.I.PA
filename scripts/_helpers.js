@@ -10,7 +10,8 @@ function rootPath(...parts) {
 }
 
 function run(command, args = [], options = {}) {
-  const result = spawnSync(command, args, {
+  const invocation = resolveRunCommand(command, args);
+  const result = spawnSync(invocation.command, invocation.args, {
     cwd: rootDir,
     stdio: options.capture ? "pipe" : "inherit",
     shell: false,
@@ -28,6 +29,25 @@ function run(command, args = [], options = {}) {
   }
 
   return result;
+}
+
+// Windows batch launchers cannot be spawned with shell:false on modern Node.
+// Run npm's JavaScript CLI directly; keep arguments out of a command shell.
+function resolveRunCommand(command, args = [], {
+  platform = process.platform,
+  nodePath = process.execPath,
+  npmCli = process.env.npm_execpath,
+} = {}) {
+  if (platform !== "win32" || !/^npm(?:\.cmd)?$/i.test(command)) return { command, args };
+  const candidates = [
+    npmCli,
+    path.join(path.dirname(nodePath), "node_modules", "npm", "bin", "npm-cli.js"),
+    ...String(process.env.PATH || "").split(path.delimiter).filter(Boolean)
+      .map((folder) => path.join(folder, "node_modules", "npm", "bin", "npm-cli.js")),
+  ];
+  const cli = candidates.find((candidate) => candidate && fs.existsSync(candidate));
+  if (!cli) throw new Error("Cannot locate npm's JavaScript CLI. Run this script through npm run.");
+  return { command: nodePath, args: [cli, ...args] };
 }
 
 function npmCommand() {
@@ -125,6 +145,7 @@ module.exports = {
   removeDir,
   rootDir,
   rootPath,
+  resolveRunCommand,
   run,
   spawnDetached,
 };

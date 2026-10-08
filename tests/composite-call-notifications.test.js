@@ -169,6 +169,30 @@ function execute(fetchImpl, overrides = {}) {
   });
 }
 
+test("caller arguments cannot override the saved pricing reminder policy", async () => {
+  for (const includePartsExtra of [false, true]) {
+    for (const includeAssessment of [false, true]) {
+      const mock = makeFetch([]);
+      await execute(mock.fetchImpl, {
+        args: { requestType: "repair", pricingDiscussed: true, includePartsExtra: !includePartsExtra, includeAssessment: !includeAssessment },
+        env: { PRICING_SUMMARY_OPTIONS: JSON.stringify({ includePartsExtra, includeAssessment }) },
+      });
+      assert.equal(mock.calls.length, 2);
+      for (const call of mock.calls) {
+        assert.equal(call.body.includes("Parts are extra."), includePartsExtra);
+        assert.equal(call.body.includes("Final price confirmed after assessment"), includeAssessment);
+      }
+    }
+  }
+});
+
+test("invalid saved pricing policy fails before sending any texts", async () => {
+  const mock = makeFetch([]);
+  const result = await execute(mock.fetchImpl, { env: { PRICING_SUMMARY_OPTIONS: "bad json" } });
+  assert.equal(result.errorCode, "pricing_policy_invalid");
+  assert.equal(mock.calls.length, 0);
+});
+
 test("composite tool sends owner first and customer second", async () => {
   const mock = makeFetch([
     { ok: true, status: 201, payload: { sid: "SM_OWNER", status: "queued" } },
