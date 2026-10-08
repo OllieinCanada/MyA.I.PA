@@ -54,6 +54,19 @@ function mockPrisma() {
   return { prisma, rows };
 }
 
+test("completed verification links remain read-only and are excluded from recovery",async()=>{
+  const {prisma}=mockPrisma(), store=createPendingSignupVerificationStore({prisma});
+  const token=await store.create({payload:{signupId:'saved-attempt'},ownerEmail:'test@example.invalid',businessName:'Test'});
+  const original=await store.claim(token);
+  await store.completeHash(original.tokenHash);
+  const completed=await store.inspect(token);
+  assert.equal(completed.purpose,'signup_progress');
+  assert.ok(completed.verifiedAt);
+  assert.equal(completed.expiresAt,original.record.expiresAt);
+  assert.equal((await store.claim(token)).status,'already_claimed');
+  assert.deepEqual(await store.listActive(),[]);
+});
+
 test("verification tokens are stored hashed and can be claimed only once", async () => {
   const { prisma, rows } = mockPrisma();
   const store = createPendingSignupVerificationStore({ prisma, minimumTtlMs: 1000 });

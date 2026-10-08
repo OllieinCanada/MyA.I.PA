@@ -1,5 +1,5 @@
-// Shared by initial provisioning and recovery: a recovery must not restore the
-// retired voice or prepend a second disclosure to the opening.
+// Shared by initial provisioning and recovery: preserve the owner's selected
+// Jess voice and never prepend a second disclosure to the opening.
 const CONSENT_NOTICE = "This call will be recorded for service quality and accurate follow-up. Is that okay?";
 const SPEECH_POLICY_MARKER = "## MYAIPA VERIFIED SPEECH OPENING";
 const CONSENT_POLICY = `${SPEECH_POLICY_MARKER}
@@ -36,9 +36,9 @@ function signupSpeechPatch(assistant = {}) {
     firstMessage: fixedConsentOpening(assistant.firstMessage),
     firstMessageMode: "assistant-speaks-first",
     firstMessageInterruptionsEnabled: false,
-    // Do not reuse the retired voice's cached audio. Keep this separate from
-    // LLM choice: the observed model output was already correct.
-    voice: { provider: "openai", model: "tts-1", voiceId: "alloy", cachingEnabled: false },
+    // Keep the original Jess voice. Speech/consent fixes must not silently
+    // replace the owner's voice choice. Avoid reusing cached opening audio.
+    voice: { provider: "vapi", voiceId: "Jess", version: "2", cachingEnabled: false },
     // Preserve the actual generated text for diagnosis rather than allowing
     // assistant-channel ASR mistakes to become the next turn's model history.
     modelOutputInMessagesEnabled: true,
@@ -51,7 +51,7 @@ function inspectSignupSpeech(assistant = {}) {
   return {
     fixedConsentOpeningInstalled: assistant.firstMessage === fixedConsentOpening(assistant.firstMessage)
       && (String(assistant.firstMessage).match(/recorded/gi) || []).length === 1,
-    speechVoicePinned: voice.provider === "openai" && voice.model === "tts-1" && voice.voiceId === "alloy" && voice.cachingEnabled === false,
+    speechVoicePinned: voice.provider === "vapi" && String(voice.version) === "2" && voice.voiceId === "Jess" && voice.cachingEnabled === false,
     openingNotInterruptible: assistant.firstMessageInterruptionsEnabled === false && assistant.firstMessageMode === "assistant-speaks-first",
     generatedTextHistoryEnabled: assistant.modelOutputInMessagesEnabled === true,
     consentPolicyInstalled: prompt.includes(CONSENT_POLICY),

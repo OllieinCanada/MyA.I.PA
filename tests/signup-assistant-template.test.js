@@ -46,9 +46,9 @@ test("builds the current production Vapi assistant with resolved signup values",
     "1bf11961-f731-43b7-9f97-d765acdb51cd",
   ]);
   assert.deepEqual(config.voice, {
-    provider: "openai",
-    voiceId: "alloy",
-    model: "tts-1",
+    provider: "vapi",
+    voiceId: "Jess",
+    version: "2",
     cachingEnabled: false,
   });
   assert.deepEqual(config.transcriber, {
@@ -107,7 +107,7 @@ test("uses a caller-supplied resource name without changing the voice stack", ()
 
   assert.equal(config.name, "signup-42-example-electric");
   assert.equal(config.model.model, "gpt-4o");
-  assert.equal(config.voice.voiceId, "alloy");
+  assert.equal(config.voice.voiceId, "Jess");
   assert.equal(config.transcriber.model, "nova-3");
 });
 

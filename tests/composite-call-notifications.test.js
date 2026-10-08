@@ -10,6 +10,16 @@ const {
   getVapiCompositeToolDefinition,
 } = require("../server/compositeCallNotifications");
 
+test("generated Vapi code exposes only declared call arguments, never business pricing switches",()=>{
+  const definition=getVapiCompositeToolDefinition();
+  const declared=new Set(Object.keys(definition.function.parameters.properties));
+  const references=[...definition.code.matchAll(/\bargs(?:\.([A-Za-z_$][\w$]*)|\["([^"]+)"\])/g)].map(x=>x[1]||x[2]);
+  assert.deepEqual([...new Set(references)].filter(x=>!declared.has(x)),[]);
+  assert.equal(declared.has('includePartsExtra'),false);
+  assert.equal(declared.has('includeAssessment'),false);
+  assert.match(definition.code,/const trustedInput = \{ \.\.\.input, \.\.\.pricingOptions/);
+});
+
 test("current reported hazards get one safety reminder and urgent owner context", () => {
   for (const requestType of ["repair", "message"]) {
     const input = { requestType, safetyConcern: "reported_hazard", jobDetails: "Panel is sparking", message: "Panel is sparking", businessName: "Test Electric" };

@@ -3,6 +3,7 @@ dotenv.config();
 dotenv.config({ path: ".env.local", override: false });
 
 const crypto = require("crypto");
+const { providerFailureDetail } = require("./providerFailureDetail");
 const { hasIndividualPricingChoices, individualPricingPolicy } = require("../src/features/signup/pricingPolicy");
 const cors = require("cors");
 const express = require("express");
@@ -15,10 +16,11 @@ const { Readable } = require("stream");
 const Stripe = require("stripe");
 const { prisma } = require("./prisma");
 const { createPendingSignupVerificationStore, tokenHash: hashPendingSignupToken } = require("./pendingSignupVerifications");
-const { createSignupAttemptStore } = require("./signupAttemptStore");
+const { createSignupAttemptStore, deriveSignupStatusAccess } = require("./signupAttemptStore");
 const { assertSignupOpen, isClosedSignup, signupBusinessKey } = require("./signupBusinessIdentity");
 const { assertTrialGateOwnership } = require("./trialGateOwnership");
 const { verificationPageClientScript } = require("./signupVerificationPageClient");
+const { verificationProgressScript } = require("./signupVerificationProgress");
 const { ensureSignupBusinessBindings, closeSignupBusinessIdentity, upsertOwnedProviderMapping } = require("./signupBusinessRegistry");
 const { buildBackendRootPage } = require("./backendRootPage");
 const {
@@ -2926,7 +2928,11 @@ async function safelyProvisionIsolatedSmsForSignup(input, dependencies = {}) {
     return await provision(input);
   } catch (error) {
     try {
-      notify(error, buildSignupSmsRoutingFailureContext(input));
+      const context=buildSignupSmsRoutingFailureContext(input);
+      notify(error, {...context,snapshot:{...context.snapshot,
+        "Provider status":Number(error?.providerStatus)||"Not available",
+        "Provider validation":String(error?.providerDetail||"Not supplied").slice(0,1000),
+      }});
     } catch (notificationError) {
       console.error("[signup:sms-routing] failure alert could not be prepared", {
         code: String(notificationError?.code || "SMS_ROUTING_ALERT_FAILED").slice(0, 80),
@@ -2938,6 +2944,9 @@ async function safelyProvisionIsolatedSmsForSignup(input, dependencies = {}) {
       healthy: false,
       reason: "isolated_sms_provisioning_failed",
       error: String(error?.message || "Vapi isolated SMS provisioning failed.").slice(0, 240),
+      providerCode: String(error?.providerCode || error?.code || "VAPI_REQUEST_FAILED").slice(0, 80),
+      providerStatus: Number(error?.providerStatus || error?.statusCode) || 0,
+      providerDetail: String(error?.providerDetail || "").slice(0, 1000),
     };
   }
 }
@@ -7384,7 +7393,7 @@ async function recoverSignupByOperationalTarget(targetId, expectedSignupAttemptI
     const consumed = consumePendingSignupProvisioningAttempts(pendingStore, pending.payload);
     if (consumed.consumed) {
       const retained = new Set(Object.keys(consumed.store));
-      await Promise.all(Object.keys(pendingStore).filter((key) => !retained.has(key)).map((key) => pendingSignupVerifications.removeHash(key)));
+      await Promise.all(Object.keys(pendingStore).filter((key) => !retained.has(key)).map((key) => pendingSignupVerifications.completeHash(key)));
     }
     const forwardingSetup = await prepareForwardingSetupForProvisionedSignup(pending.payload, updated, updated.twilioPhoneNumber);
     await attachNoCardStripeTrialToSignup(pending.payload, {
@@ -8163,6 +8172,9 @@ async function testSignupAgentBeforeDelivery({ signup, vapiPhone, smsRouting = n
   });
   const routingFields = {
     smsRoutingStatus: currentRouting.healthy ? "healthy" : currentRouting.skipped ? "waiting" : "failed",
+    smsRoutingProviderCode: currentRouting.healthy ? "" : currentRouting.providerCode || "",
+    smsRoutingProviderStatus: currentRouting.healthy ? 0 : currentRouting.providerStatus || 0,
+    smsRoutingProviderDetail: currentRouting.healthy ? "" : currentRouting.providerDetail || "",
     smsRoutingToolId: currentRouting.toolId || "",
     smsRoutingToolName: currentRouting.toolName || "",
     smsRoutingVerifiedAt: currentRouting.healthy ? new Date().toISOString() : "",
@@ -8173,6 +8185,9 @@ async function testSignupAgentBeforeDelivery({ signup, vapiPhone, smsRouting = n
     const error = new Error("The agent was built, but protected owner and customer text routing did not pass.");
     error.statusCode = 502;
     error.code = "AGENT_TEST_ROUTING_NOT_READY";
+    error.providerCode = currentRouting.providerCode;
+    error.providerStatus = currentRouting.providerStatus;
+    error.providerDetail = currentRouting.providerDetail;
     throw error;
   }
 
@@ -10575,6 +10590,8 @@ function createProviderHttpError({ provider, operation, status, data, fallbackCo
   error.code = providerCode;
   error.provider = normalizedProvider;
   error.providerCode = providerCode;
+  error.providerDetail = providerFailureDetail(data, Object.entries(process.env)
+    .filter(([key]) => /token|secret|password|api.?key|database_url/i.test(key)).map(([,value])=>value));
   if (Number.isInteger(providerStatus) && providerStatus >= 400 && providerStatus <= 599) {
     error.statusCode = providerStatus;
     error.providerStatus = providerStatus;
@@ -14384,6 +14401,9 @@ app.post(
         ownerEmail,
         provisioningIdempotencyKey: authorization.idempotencyKey,
         smsRoutingStatus: smsRouting.healthy ? "healthy" : smsRouting.skipped ? "waiting" : "failed",
+        smsRoutingProviderCode: smsRouting.healthy ? "" : smsRouting.providerCode || "",
+        smsRoutingProviderStatus: smsRouting.healthy ? 0 : smsRouting.providerStatus || 0,
+        smsRoutingProviderDetail: smsRouting.healthy ? "" : smsRouting.providerDetail || "",
         smsRoutingToolId: smsRouting.toolId || "",
         smsRoutingToolName: smsRouting.toolName || "",
         smsRoutingVerifiedAt: smsRouting.healthy ? new Date().toISOString() : "",
@@ -14391,6 +14411,12 @@ app.post(
       });
     }
 
+    if (smsRouting.failed) {
+      const error = new Error(smsRouting.error);
+      Object.assign(error,{code:smsRouting.providerCode||"VAPI_SMS_TOOL_FAILED",provider:"vapi",providerCode:smsRouting.providerCode,
+        providerStatus:smsRouting.providerStatus,providerDetail:smsRouting.providerDetail,statusCode:smsRouting.providerStatus||502});
+      throw error;
+    }
     let agentDeliveryTest = { skipped: true, reason: syntheticCanary ? "synthetic_canary" : "signup_identity_missing" };
     if (!syntheticCanary && ownerEmail && isValidEmailAddress(ownerEmail)) {
       const signup = selectSignupDashboardRecordForProvisioning(listSignupDashboardRecords(), {
@@ -14489,6 +14515,31 @@ app.post(
     res.status(202).json({ ok: true, message: "Your support request was received.", signup: signupAttempts.publicAttempt(updated) });
   })
 );
+
+async function readVerificationProgress(pending) {
+  if (!pending || !signupAttempts || (!pending.verifiedAt && !pending.claimedAt)) return null;
+  const access = deriveSignupStatusAccess(buildMakeSignupEventKey(pending.payload), SIGNUP_STATUS_SECRET);
+  const attempt = await signupAttempts.authenticate(access.publicId, access.token);
+  if(!attempt) return null;
+  const state=signupAttempts.publicAttempt(attempt);
+  const saved=listSignupDashboardRecords().find(s=>s.signupAttemptId===attempt.eventKey);
+  if(state.state!=="closed"&&state.state!=="ready"&&saved?.smsRoutingStatus==="failed") {
+    return {...state,state:"needs_attention",title:"Your text-message setup needs attention.",
+      message:"We could not finish configuring your assistant’s texts. Our team has been notified. Keep this link to check progress—do not sign up again.",assignedPhone:"",terminal:false};
+  }
+  return state;
+}
+
+app.get("/api/signup/verification-progress", signupStatusProcessRateLimiter,
+  enforcePublicRouteRateLimit("signup-progress", 120), asyncRoute(async(req,res)=>{
+    res.set("Cache-Control","no-store").set("Referrer-Policy","no-referrer");
+    const token=String(req.query.token||""), channel=normalizeVerificationChannel(req.query.channel);
+    if(!verifyVerificationChannelProof(token,channel,String(req.query.channelProof||""),getAdminSessionSecret())) return res.status(401).json({error:"Invalid progress link."});
+    const pending=await pendingSignupVerifications.inspect(token);
+    const signup=await readVerificationProgress(pending);
+    if(!signup) return res.status(410).json({error:"Progress link is expired or unavailable. Contact support; do not sign up again."});
+    return res.json({ok:true,signup});
+  }));
 
 app.get(
   "/api/signup/status/:attemptId",
@@ -15091,7 +15142,7 @@ app.all(
     const channelProof = String(input.channelProof || "").trim();
     const tokenHash = hashPendingSignupToken(token);
 
-    function renderVerificationPage({ title, body, ok, assignedPhone = "", forwardingSetupUrl = "", confirmation = false }) {
+    function renderVerificationPage({ title, body, ok, assignedPhone = "", forwardingSetupUrl = "", confirmation = false, progress = false }) {
       const canonicalPhone = normalizePhoneForMatch(assignedPhone);
       const displayPhone = formatAssignedPhone(canonicalPhone);
       const setupReady = ok && Boolean(canonicalPhone && displayPhone);
@@ -15171,8 +15222,16 @@ app.all(
                 this.textContent = "Copied";
               });
             </script>` : ""}
+            ${progress ? verificationProgressScript(`/api/signup/verification-progress?${new URLSearchParams({token,channel:verificationChannel,channelProof:createVerificationChannelProof(token,verificationChannel,getAdminSessionSecret())})}`) : ""}
           </body>
         </html>`);
+    }
+
+    async function renderSavedProgress(pending) {
+      const state=await readVerificationProgress(pending);
+      if(!state) return renderVerificationPage({ok:false,title:"Your signup is saved",body:"We cannot load its progress yet. Contact support—do not sign up again."});
+      return renderVerificationPage({ok:state.state!=="needs_attention"&&state.state!=="closed",title:state.title,body:state.message,
+        assignedPhone:state.state==="ready"?state.assignedPhone:"",progress:!state.terminal});
     }
 
     const hasChannelClaim = Boolean(input.channel || channelProof);
@@ -15186,7 +15245,8 @@ app.all(
 
     if (req.method !== "POST") {
       const pending = token ? await pendingSignupVerifications.inspect(token) : null;
-      if (!pending) return renderVerificationPage({ ok: false, title: "Verification link is invalid or expired", body: "Please submit the signup again to receive a fresh verification link." });
+      if (!pending) return renderVerificationPage({ ok: false, title: "Verification link is invalid or expired", body: "Contact My AI PA support for a fresh link to your saved signup. Do not sign up again." });
+      if(pending.verifiedAt || pending.claimedAt) return renderSavedProgress(pending);
       return renderVerificationPage({
         ok: true, confirmation: true,
         title: verificationChannel === "sms" ? "Setting up your assistant" : "Verify your contact details",
@@ -15201,22 +15261,20 @@ app.all(
     }
 
     await ensureLegacyPendingSignupMigration();
+    const saved=token?await pendingSignupVerifications.inspect(token):null;
+    if(saved?.verifiedAt || saved?.claimedAt) return renderSavedProgress(saved);
     const claim = token ? await pendingSignupVerifications.claim(token) : { status: "missing", record: null };
     const record = claim.record;
     if (!token || !record || claim.status === "missing") {
       return renderVerificationPage({
         ok: false,
         title: "Verification link is invalid or expired",
-        body: "Please submit the signup again to receive a fresh verification link.",
+        body: "Contact My AI PA support for a fresh link to your saved signup. Do not sign up again.",
       });
     }
 
     if (claim.status === "already_claimed") {
-      return renderVerificationPage({
-        ok: true,
-        title: "Verification is already processing",
-        body: "This signup has already been confirmed. Setup is processing; return to My AI PA for the latest status.",
-      });
+      return renderSavedProgress(record);
     }
 
     const verifiedAt = new Date().toISOString();
@@ -15271,7 +15329,8 @@ app.all(
       return renderVerificationPage({
         ok: true,
         title: "Contact verified",
-        body: "Your contact details are verified. Your signup needs a quick manual review before the agent setup continues.",
+        body: "Your contact details are verified. Your signup needs a quick manual review before the agent setup continues. Do not sign up again.",
+        progress: true,
       });
     }
 
@@ -15308,7 +15367,7 @@ app.all(
       if (telegramAlert?.sent || telegramAlert?.queued || telegramAlert?.duplicate || telegramAlert?.reason === "already_alerted") {
         error.telegramIncidentHandled = true;
       }
-      throw error;
+      return renderSavedProgress(await pendingSignupVerifications.inspect(token));
     }
     const makeData = makeResult.data || {};
     const makeAssessment = classifyMakeSignupResponse(makeResult.body, makeData);
@@ -15352,17 +15411,13 @@ app.all(
         providerCode: makeAssessment.providerCode || makeAssessment.code || "MAKE_SIGNUP_INCOMPLETE",
         emailHash: hashKey(record.ownerEmail),
       });
-      return renderVerificationPage({
-        ok: false,
-        title: "Contact verified, setup needs attention",
-        body: "Your contact details were verified, but the automated setup handoff did not finish. Please contact My AI PA support.",
-      });
+      return renderSavedProgress(await pendingSignupVerifications.inspect(token));
     }
 
     const phoneProvisioning = await inspectSignupPhoneProvisioning(makeData, makeResult.body);
     const twilioPhoneNumber = phoneProvisioning.status === "ready" ? phoneProvisioning.e164 : "";
     if (phoneProvisioning.status === "ready") {
-      await pendingSignupVerifications.removeHash(tokenHash);
+      await pendingSignupVerifications.completeHash(tokenHash);
     } else {
       await retainPendingSignupRecoveryPayload({
         tokenHash,
