@@ -73,7 +73,7 @@ function customerStatus(record = {}) {
       terminal: true,
     };
   }
-  if (/error|failed/i.test(status)) {
+  if (/error|failed/i.test(status) || (record.reviewRequired && (record.stage === "needs_attention" || record.lastErrorCode))) {
     return {
       state: "needs_attention",
       title: "We found a setup issue.",

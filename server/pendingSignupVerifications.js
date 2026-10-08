@@ -167,6 +167,16 @@ function createPendingSignupVerificationStore({ prisma, minimumTtlMs = 24 * 60 *
     await prisma.pendingSignupVerification.deleteMany({ where: { tokenHash: digest } });
   }
 
+  // A completed verification remains a read-only progress capability until its
+  // original expiry. It cannot provision again and is excluded from recovery.
+  async function completeHash(digest) {
+    const record = await prisma.pendingSignupVerification.findUnique({where:{tokenHash:digest}});
+    if (!record || record.usedAt || record.supersededAt) return;
+    await prisma.pendingSignupVerification.update({where:{tokenHash:digest},data:{
+      purpose:"signup_progress", claimedAt:record.claimedAt || new Date(), verifiedAt:record.verifiedAt || new Date(), reviewReasons:[],
+    }});
+  }
+
   async function recordDeliveryChannels(token, channels) {
     const normalizedChannels = [...new Set((channels || []).map((channel) => String(channel || "").trim().toLowerCase()).filter(Boolean))];
     const updated = await prisma.pendingSignupVerification.updateMany({
@@ -182,7 +192,7 @@ function createPendingSignupVerificationStore({ prisma, minimumTtlMs = 24 * 60 *
       where: { expiresAt: { gt: now }, usedAt: null, supersededAt: null },
       orderBy: [{ verifiedAt: "desc" }, { createdAt: "desc" }],
     });
-    return records.map(publicRecord);
+    return records.filter(record=>record.purpose!=="signup_progress").map(publicRecord);
   }
 
   async function consumeMatching(predicate) {
@@ -197,7 +207,7 @@ function createPendingSignupVerificationStore({ prisma, minimumTtlMs = 24 * 60 *
     return matches.length;
   }
 
-  return { inspect, claim, create, importLegacyRecords, listActive, prune, recordDeliveryChannels, removeHash, removeToken, retainForRecovery, consumeMatching, tokenHash };
+  return { inspect, claim, create, importLegacyRecords, listActive, prune, recordDeliveryChannels, removeHash, completeHash, removeToken, retainForRecovery, consumeMatching, tokenHash };
 }
 
 module.exports = { createPendingSignupVerificationStore, tokenHash };

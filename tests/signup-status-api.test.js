@@ -344,3 +344,38 @@ test("SMS confirmation preserves its channel and expired links cannot display a 
   assert.equal(retry.status, 400);
   assert.match(await retry.text(), /invalid or expired/);
 });
+
+test("reopening a verified link resumes its exact attempt without provisioning, including after recovery",async()=>{
+  const {createPendingSignupVerificationStore}=require('../server/pendingSignupVerifications');
+  const {createVerificationChannelProof}=require('../server/signupVerificationChannel');
+  const {buildMakeSignupEventKey}=require('../server/makeSignupWebhook');
+  const pendingStore=createPendingSignupVerificationStore({prisma});
+  const payload={signupId:'progress-resume-synthetic',business:{name:'Progress Test'},owner:{email:'progress@example.invalid'}};
+  const attempt=await store.register({eventKey:buildMakeSignupEventKey(payload),payload,status:'review_required',stage:'needs_attention',reviewRequired:true});
+  const token=await pendingStore.create({payload,ownerEmail:payload.owner.email,businessName:payload.business.name});
+  const claim=await pendingStore.claim(token);
+  await pendingStore.retainForRecovery(claim.tokenHash,{record:claim.record,payload,reviewReasons:['MAKE_SIGNUP_REJECTED']});
+  const proof=createVerificationChannelProof(token,'sms',process.env.ADMIN_SESSION_SECRET);
+  const query=new URLSearchParams({token,channel:'sms',channelProof:proof});
+  const url=`${baseUrl}/api/integrations/verify-signup-contact?${query}`;
+  const before=JSON.stringify([...pendingRows.values()]);
+  const reopen=await fetch(url),html=await reopen.text();
+  assert.equal(reopen.status,400);
+  assert.match(html,/We found a setup issue/);
+  assert.match(html,/verification-progress/);
+  assert.doesNotMatch(html,/signup-verification-form|Assigned My AI PA number/);
+  assert.equal(JSON.stringify([...pendingRows.values()]),before);
+  const progressUrl=`${baseUrl}/api/signup/verification-progress?${query}`;
+  assert.equal((await(await fetch(progressUrl)).json()).signup.state,'needs_attention');
+  assert.equal((await fetch(progressUrl.replace(proof,'wrong'))).status,401);
+  await store.update(attempt.record.eventKey,{status:'setup_ready',stage:'ready',reviewRequired:false,assignedPhone:'+12895550177'});
+  await pendingStore.completeHash(claim.tokenHash);
+  const ready=await(await fetch(url)).text();
+  assert.match(ready,/Assigned My AI PA number/);
+  assert.match(ready,/tel:\+12895550177/);
+  assert.doesNotMatch(ready,/signup-verification-form/);
+  await store.update(attempt.record.eventKey,{status:'abandoned_archived'});
+  const closed=await(await fetch(url)).text();
+  assert.match(closed,/This signup is closed/);
+  assert.doesNotMatch(closed,/tel:\+12895550177/);
+});

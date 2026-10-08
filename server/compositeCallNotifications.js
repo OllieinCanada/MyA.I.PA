@@ -65,11 +65,13 @@ function reportedSafetyReminder(args) {
     : "";
 }
 
-function discussedPricingReminder(args) {
-  if (args.pricingDiscussed !== true || reportedSafetyReminder(args)) return "";
+function discussedPricingReminder(summary) {
+  if (summary.pricingDiscussed !== true || reportedSafetyReminder(summary)) return "";
   const statements = [
-    args.includePartsExtra !== false ? "Parts are extra." : "",
-    args.includeAssessment !== false ? "Final price confirmed after assessment, before work starts." : "",
+    // These are trusted server policy, not model-supplied tool parameters.
+    // Keep the merged summary distinct from Vapi's public `args` object.
+    summary.includePartsExtra !== false ? "Parts are extra." : "",
+    summary.includeAssessment !== false ? "Final price confirmed after assessment, before work starts." : "",
   ].filter(Boolean);
   return statements.length ? `Pricing: ${statements.join(" ")}` : "";
 }

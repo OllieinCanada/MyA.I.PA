@@ -27,7 +27,7 @@ test("provisioning and recovery use the same speech policy", () => {
   assert.equal(normalizeConsentPrompt(config.model.messages[0].content), config.model.messages[0].content);
   const recovered = { ...config, model: { ...config.model, messages: updateMessages(config.model.messages, "send_call_summaries_1234_abc12345_v2") } };
   assert.equal(assessSignupAssistantContent({ expectedConfig: config, liveAssistant: recovered }).passed, true);
-  const old = { ...config, voice: { provider: "vapi", voiceId: "Jess", version: 2 } };
+  const old = { ...config, voice: { provider: "openai", voiceId: "alloy", model: "tts-1", cachingEnabled: false } };
   assert.equal(inspectSignupSpeech(old).speechVoicePinned, false);
 });
 
