@@ -313,6 +313,10 @@ const SIGNUP_QA_FIXTURE = {
   },
   pricing: {
     offersServiceCalls: true,
+    includeVisitFee: true,
+    includeHourlyRate: true,
+    includeAssessment: true,
+    includePartsExtra: true,
     installationFreeEstimate: true,
     repairVisitFee: "89",
     repairHourlyRate: "95",
@@ -1220,21 +1224,15 @@ export function VoiceDemoStep({ agent, businessName, trade, areas, standalone = 
 function ReviewPanel({ title = "Check your setup", description = "Check your choices before continuing.", trade, areas, specializations, details, pricing, onUpdateDetails, onEditBusinessSlide, getFieldError, onFieldBlur }) {
   const businessAddress = formatBusinessAddress(details);
   const pricingScript = pricing ? buildPricingScript(pricing) : "";
-  const pricingSummary =
-    pricing?.offersServiceCalls === true
-      ? `$${pricing.repairVisitFee} minimum visit fee · $${pricing.repairHourlyRate}/hour · Parts extra`
-      : pricing?.offersServiceCalls === false
-        ? "No service calls"
-        : "Not selected";
-  const installationSummary = pricing?.installationFreeEstimate !== false ? "New installations · Free quote" : "Installation pricing confirmed later";
+  const pricingSummary = pricingScript || "No pricing announcements selected. Your assistant will still collect service requests.";
   const optionItems = [
     ["Trade", trade?.label || "Not selected", () => onEditBusinessSlide?.(1, "trade")],
     ["Service areas", areas.join(", ") || "Not selected", () => onEditBusinessSlide?.(2)],
     [
       "Service calls & installations",
-      pricingScript,
+      pricingSummary,
       () => onEditBusinessSlide?.(4),
-      `${pricingSummary} · ${installationSummary}`,
+      pricingSummary,
     ],
     ["Property types", specializations.join(", ") || "Not selected", () => onEditBusinessSlide?.(1, "specialization")],
   ];
@@ -2122,11 +2120,10 @@ export default function Signup() {
 
   const tradeStepDisabled = !selectedTradeId;
   const specializationStepDisabled = selectedSpecializationIds.length === 0;
-  const serviceCallDecisionMade = typeof pricing.offersServiceCalls === "boolean";
   const hasValidServiceCallPricing =
-    pricing.offersServiceCalls !== true ||
-    (Number(pricing.repairVisitFee) > 0 && Number(pricing.repairHourlyRate) > 0);
-  const pricingStepDisabled = !serviceCallDecisionMade || !hasValidServiceCallPricing;
+    (!pricing.includeVisitFee || (Number.isFinite(Number(pricing.repairVisitFee)) && Number(pricing.repairVisitFee) > 0)) &&
+    (!pricing.includeHourlyRate || (Number.isFinite(Number(pricing.repairHourlyRate)) && Number(pricing.repairHourlyRate) > 0));
+  const pricingStepDisabled = !hasValidServiceCallPricing;
   const showPricingErrors = businessSlide === 4 && Boolean(error);
   const businessSlideDisabled =
     currentStep === 1 &&
@@ -2134,7 +2131,7 @@ export default function Signup() {
       (businessSlide === 1 && tradeSetupPanel === "specialization" && specializationStepDisabled) ||
       (businessSlide === 2 && selectedAreas.length === 0) ||
       (businessSlide === 3 && !businessValidation.isValid) ||
-      (businessSlide === 4 && !serviceCallDecisionMade));
+      (businessSlide === 4 && pricingStepDisabled));
   const businessSlideLabel =
     returnToReviewAfterEdit ? "Continue" : businessSlide === 1
       ? tradeSetupPanel === "trade" ? "Continue to property types" : "Continue to service areas"
@@ -2200,16 +2197,6 @@ export default function Signup() {
   const updatePricing = (field) => (event) => {
     const value = event.target.type === "checkbox" ? event.target.checked : event.target.value;
     setPricing((prev) => ({ ...prev, [field]: value }));
-    setStatus("");
-    setError("");
-  };
-
-  const selectServiceCalls = (offersServiceCalls) => {
-    setPricing((prev) => ({
-      ...prev,
-      offersServiceCalls,
-      ...(offersServiceCalls ? {} : { repairVisitFee: "", repairHourlyRate: "" }),
-    }));
     setStatus("");
     setError("");
   };
@@ -2377,12 +2364,8 @@ export default function Signup() {
         return;
       }
       if (businessSlide === 4) {
-        if (!serviceCallDecisionMade) {
-          setError("Choose Yes or No so your assistant knows whether to discuss service-call or repair prices.");
-          return;
-        }
         if (!hasValidServiceCallPricing) {
-          setError("Enter both the service-call or repair price and the hourly rate before continuing.");
+          setError("Enter a price for each checked rate, or uncheck it to leave it out.");
           window.requestAnimationFrame?.(() => {
             const firstMissingPrice = document.querySelector("#signup-pricing [aria-invalid='true']");
             firstMissingPrice?.focus();
@@ -3789,81 +3772,38 @@ export default function Signup() {
                   <div className="signup-task-content">
                     <div className="signup-mobile-task-heading">
                       <h2>Service call / repair pricing</h2>
-                      <p>Choose whether to share your rates. If Yes, enter your minimum visit fee and hourly labour rate.</p>
+                      <p>Check only what your assistant should tell callers. Unchecked items are left out.</p>
                     </div>
                     <div className="grid content-start gap-4 sm:grid-cols-2 xl:grid-cols-4 xl:gap-5">
                     <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-4 sm:col-span-2 xl:col-span-4">
-                      <span className="block text-sm font-black text-slate-950">Do you want to tell customers your service-call rates?</span>
-                      <span className="mt-1 block text-sm font-medium text-slate-600">Choose one. Nothing is selected automatically.</span>
-                      <div className="mt-4 grid grid-cols-2 gap-3" role="group" aria-label="Should the assistant discuss service call or repair prices and hourly rates?">
-                        {[true, false].map((answer) => {
-                          const selected = pricing.offersServiceCalls === answer;
-                          return (
-                            <button
-                              key={String(answer)}
-                              type="button"
-                              aria-pressed={selected}
-                              onClick={() => selectServiceCalls(answer)}
-                              className={
-                                "min-h-[54px] rounded-xl border px-5 text-lg font-black transition " +
-                                (selected
-                                  ? "border-blue-600 bg-blue-600 text-white shadow-[0_14px_30px_-22px_rgba(37,99,235,0.95)]"
-                                  : "border-slate-200 bg-white text-slate-700 hover:border-blue-300 hover:text-blue-600")
-                              }
-                            >
-                              {answer ? "Yes" : "No"}
-                            </button>
-                          );
-                        })}
+                      <span className="block text-sm font-black text-slate-950">What should your assistant include?</span>
+                      <span className="mt-1 block text-sm font-medium text-slate-600">Each choice is separate. Nothing is selected automatically.</span>
+                      <div className="mt-4 grid gap-3" role="group" aria-label="Service-call pricing choices">
+                        {[
+                          ["includeVisitFee", "Share minimum service visit fee", "repairVisitFee", "Minimum service-visit fee"],
+                          ["includeHourlyRate", "Share hourly labour rate", "repairHourlyRate", "Hourly labour rate"],
+                          ["includeAssessment", "Technician assesses the work and confirms the price before starting"],
+                          ["installationFreeEstimate", "New installations – Free quote"],
+                          ["includePartsExtra", "Parts are extra"],
+                        ].map(([choice, label, amountField, amountLabel]) => (
+                          <div key={choice} className="rounded-xl border border-slate-200 bg-white p-4">
+                            <label className="flex min-h-[40px] cursor-pointer items-center gap-3 text-base font-semibold text-slate-950">
+                              <input type="checkbox" checked={pricing[choice] === true} onChange={updatePricing(choice)} className="h-5 w-5 shrink-0 rounded border-slate-300 accent-blue-600" />
+                              {label}
+                            </label>
+                            {amountField && pricing[choice] === true ? (
+                              <div className="mt-3">
+                                <LabeledInput label={amountLabel} icon="card" value={pricing[amountField]} onChange={updatePricing(amountField)} placeholder="Enter price" type="number" error={showPricingErrors && !(Number(pricing[amountField]) > 0) ? "Enter a price greater than zero." : ""} />
+                              </div>
+                            ) : null}
+                          </div>
+                        ))}
                       </div>
                       <button type="submit" disabled={pricingStepDisabled || busy} className="mt-4 flex min-h-[54px] w-full items-center justify-center rounded-xl bg-blue-600 px-5 font-black text-white disabled:opacity-50">
                         {returnToReviewAfterEdit ? "Continue" : "Continue to check your setup"}
                       </button>
-                      {pricing.offersServiceCalls === true && !hasValidServiceCallPricing ? <p className="mt-2 text-sm font-semibold text-slate-600">Enter the prices below to continue.</p> : null}
+                      {!hasValidServiceCallPricing ? <p className="mt-2 text-sm font-semibold text-slate-600">Enter each checked rate, or uncheck it to leave it out.</p> : null}
                     </div>
-                    {pricing.offersServiceCalls === true ? (
-                      <>
-                        <h3 className="text-lg font-black text-slate-950 sm:col-span-2 xl:col-span-4">Repairs / maintenance</h3>
-                        <LabeledInput
-                          label="Minimum service-visit fee"
-                          icon="card"
-                          value={pricing.repairVisitFee}
-                          onChange={updatePricing("repairVisitFee")}
-                          placeholder="Enter price"
-                          type="number"
-                          error={showPricingErrors && Number(pricing.repairVisitFee) <= 0 ? "Enter the service-call or repair price." : ""}
-                        />
-                        <LabeledInput
-                          label="Hourly labour rate"
-                          icon="card"
-                          value={pricing.repairHourlyRate}
-                          onChange={updatePricing("repairHourlyRate")}
-                          placeholder="Enter rate"
-                          type="number"
-                          error={showPricingErrors && Number(pricing.repairHourlyRate) <= 0 ? "Enter the hourly rate." : ""}
-                        />
-                        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold leading-6 text-emerald-900 sm:col-span-2 xl:col-span-2">
-                          Parts are extra. The technician will assess the work and confirm the final price before starting. Your assistant will explain your rates, then ask: “Would you like to continue?”
-                        </div>
-                      </>
-                    ) : null}
-                    {pricing.offersServiceCalls === false ? (
-                      <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold leading-6 text-slate-600 sm:col-span-2 xl:col-span-4">
-                        Your assistant will collect the request without discussing service-call, repair, or hourly prices.
-                      </div>
-                    ) : null}
-                    <label className="sm:col-span-2 xl:col-span-4">
-                      <span className="mb-1.5 block text-sm font-semibold leading-none text-slate-700">Installations</span>
-                      <span className="flex min-h-[54px] items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 text-lg font-semibold text-slate-950 shadow-[0_1px_0_rgba(15,23,42,0.02)]">
-                        <input
-                          type="checkbox"
-                          checked={pricing.installationFreeEstimate !== false}
-                          onChange={updatePricing("installationFreeEstimate")}
-                          className="h-5 w-5 rounded border-slate-300 text-blue-600 accent-blue-600"
-                        />
-                        New installations – Free quote
-                      </span>
-                    </label>
                     </div>
                   </div>
                 </section>

@@ -4,6 +4,7 @@ import {
   SIGNUP_ATTEMPT_STORAGE_KEY,
   SIGNUP_ATTEMPT_WINDOW_MS,
 } from "./signupConfig";
+import { hasIndividualPricingChoices, individualPricingPolicy } from "./pricingPolicy";
 
 export function getBrowserSignupAttempts() {
   if (typeof window === "undefined" || !window.localStorage) return [];
@@ -49,6 +50,7 @@ export function formatBusinessAddress(details) {
 }
 
 export function buildPricingScript(pricing) {
+  if (hasIndividualPricingChoices(pricing)) return individualPricingPolicy(pricing).pricingScript;
   const visitFee = String(pricing.repairVisitFee ?? "").trim();
   const hourlyRate = String(pricing.repairHourlyRate ?? "").trim();
   const installationFreeEstimate = pricing.installationFreeEstimate !== false;
@@ -73,6 +75,10 @@ export function buildPricingScript(pricing) {
 }
 
 export function buildPricingPayload(pricing) {
+  if (hasIndividualPricingChoices(pricing)) {
+    const { valid, ...payload } = individualPricingPolicy(pricing);
+    return payload;
+  }
   const rawVisitFee = String(pricing.repairVisitFee ?? "").trim();
   const rawHourlyRate = String(pricing.repairHourlyRate ?? "").trim();
   const offersServiceCalls =

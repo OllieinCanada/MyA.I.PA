@@ -19,6 +19,16 @@ const validDetails = {
   postalCode: "L8P 1A1",
 };
 
+test("individual pricing payload strips unchecked amounts without disabling service calls", () => {
+  const input = { includeVisitFee: true, includeHourlyRate: false, includeAssessment: false, includePartsExtra: false, installationFreeEstimate: false, repairVisitFee: "125", repairHourlyRate: "95" };
+  const payload = buildPricingPayload(input);
+  expect(payload.repairVisitFee).toBe("125");
+  expect(payload.repairHourlyRate).toBe("");
+  expect(payload.offersServiceCalls).toBe(true);
+  expect(payload.pricingScript).toBe("Minimum service visit: 125 dollars.");
+  expect(buildPricingPayload({ ...input, includeVisitFee: false }).pricingScript).toBe("");
+});
+
 test("signup validation accepts complete Canadian business details", () => {
   expect(validateBusinessDetails(validDetails)).toEqual({
     errors: {

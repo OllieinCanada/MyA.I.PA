@@ -11,7 +11,7 @@ function toolPatch(tool) {
   // Older tools use Auth Token credentials. Do not add/replace credentials or
   // policy variables merely to satisfy Vapi's static environment validator.
   let code = definition.code;
-  for (const name of ["TWILIO_API_KEY_SID", "TWILIO_API_KEY_SECRET", "OWNER_SMS_ENABLED"]) {
+  for (const name of ["TWILIO_API_KEY_SID", "TWILIO_API_KEY_SECRET", "OWNER_SMS_ENABLED", "PRICING_SUMMARY_OPTIONS"]) {
     if (!envNames.has(name)) code = code.replaceAll(`env.${name}`, '""');
   }
   return { function: { ...tool.function, description: definition.function.description,

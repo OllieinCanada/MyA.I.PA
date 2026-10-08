@@ -16,11 +16,15 @@ async function checkSummary(tool,args){
    return {ok:true,status:201,json:async()=>({sid:`SM_FAKE_${messages.length}`,status:'queued'})};
  };
  const env={TWILIO_ACCOUNT_SID:'AC_FAKE',TWILIO_AUTH_TOKEN:'FAKE',TWILIO_API_KEY_SID:'SK_FAKE',TWILIO_API_KEY_SECRET:'FAKE',DEFAULT_FROM_NUMBER:'+19055550100',DEFAULT_OWNER_TO_NUMBER:'+19055550101',SMS_SUPPRESSION_CHECK_URL:'https://stub.invalid/check',SMS_SUPPRESSION_API_KEY:'FAKE',CALL_ID:'stub-'+args.requestType,OWNER_SMS_ENABLED:'true'};
+ env.PRICING_SUMMARY_OPTIONS=(tool.environmentVariables||[]).find(v=>v.name==='PRICING_SUMMARY_OPTIONS')?.value||'';
  const runner=new Function('args','env','fetch','btoa','URLSearchParams',`return (async()=>{${tool.code}\n})()`);
  const result=await runner({...args,businessName:'QA Business',name:'Test caller',rawPhoneNumber:'+19055550102',jobDetails:'QA request',message:'QA message',streetAddress:'1 Test St',city:'Test City'},env,fakeFetch,v=>Buffer.from(String(v)).toString('base64'),URLSearchParams);
  if(!result.complete||messages.length!==2||messages[0].to!==env.DEFAULT_OWNER_TO_NUMBER||messages[1].to!=='+19055550102'||messages.some(m=>m.from!==env.DEFAULT_FROM_NUMBER))throw Error('Fake summary routing failed.');
  if(messages.some(m=>!m.body.includes('Job type:')))throw Error('Summary job type missing.');
- if(args.pricingDiscussed&&args.safetyConcern!=='reported_hazard'&&messages.some(m=>!m.body.includes('Parts are extra')))throw Error('Pricing caveat missing.');
+ const choices=env.PRICING_SUMMARY_OPTIONS?JSON.parse(env.PRICING_SUMMARY_OPTIONS):{includePartsExtra:true,includeAssessment:true};
+ const discussed=args.pricingDiscussed===true&&args.safetyConcern!=='reported_hazard';
+ if(messages.some(m=>m.body.includes('Parts are extra.')!==Boolean(discussed&&choices.includePartsExtra)))throw Error('Parts reminder differs from saved pricing policy.');
+ if(messages.some(m=>m.body.includes('Final price confirmed after assessment')!==Boolean(discussed&&choices.includeAssessment)))throw Error('Assessment reminder differs from saved pricing policy.');
  if(args.safetyConcern==='reported_hazard'&&!messages.some(m=>m.body.includes('Safety:')))throw Error('Safety reminder missing.');
  if(args.safetyConcern==='none'&&messages.some(m=>m.body.includes('Safety:')))throw Error('False hazard reminder.');
  return true;

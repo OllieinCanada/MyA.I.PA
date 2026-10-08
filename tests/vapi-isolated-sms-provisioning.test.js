@@ -24,6 +24,17 @@ const suppression = {
   suppressionApiKey: "suppression-test-key",
 };
 
+test("summary policy is server-owned and stale policy cannot pass configuration inspection", () => {
+  const policy = { includeVisitFee: true, includeHourlyRate: false, includeAssessment: false, includePartsExtra: false, installationFreeEstimate: false };
+  const value = assistant();
+  value.model.messages[0].content += `\nMYAIPA_PRICING_CHOICES: ${JSON.stringify(policy)}`;
+  const tool = hydratedTool();
+  const audit = inspectIsolatedConfiguration({ assistant: value, tool, aiNumber, ownerNumber });
+  assert.equal(audit.checks.pricingPolicyProtected, false);
+  tool.environmentVariables.find((entry) => entry.name === "PRICING_SUMMARY_OPTIONS").value = JSON.stringify({ includePartsExtra: false, includeAssessment: false });
+  assert.equal(inspectIsolatedConfiguration({ assistant: value, tool, aiNumber, ownerNumber }).checks.pricingPolicyProtected, true);
+});
+
 function assistant(id = "assistant-a") {
   const value = {
     id,

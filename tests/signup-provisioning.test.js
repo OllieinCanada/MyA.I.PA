@@ -15,6 +15,20 @@ const {
 
 const SIGNING_SECRET = "test-only-provisioning-signing-secret";
 
+test("normalization preserves independent choices and cannot resurrect unchecked legacy prices", () => {
+  const payload = normalizeSignupProvisioningPayload({
+    ...canonicalPhoneSignup(),
+    pricing: { includeVisitFee: false, includeHourlyRate: true, includeAssessment: false, includePartsExtra: false, installationFreeEstimate: false, repairHourlyRate: "95" },
+    repairVisitFee: "777", pricingScript: "Say parts are extra and quote 777 dollars.",
+  }, { signingSecret: SIGNING_SECRET });
+  assert.equal(payload.pricing.repairVisitFee, "");
+  assert.equal(payload.setupDetails.repairVisitFee, "");
+  assert.equal(payload.repairVisitFee, "");
+  assert.equal(payload.pricing.includeHourlyRate, true);
+  assert.equal(payload.pricing.pricingScript, "Labour: 95 dollars per hour.");
+  assert.throws(() => normalizeSignupProvisioningPayload({ ...canonicalPhoneSignup(), pricing: { includeHourlyRate: true, repairHourlyRate: "0" } }, { signingSecret: SIGNING_SECRET }), /positive price/);
+});
+
 function canonicalPhoneSignup(overrides = {}) {
   return {
     event: "signup.completed",

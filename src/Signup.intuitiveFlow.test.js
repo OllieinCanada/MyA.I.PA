@@ -109,18 +109,20 @@ describe("intuitive signup presentation", () => {
     submit();
 
     expect(container.textContent).toMatch(/Step 5 of 8/i);
-    expect(container.textContent).toMatch(/Do you want to tell customers your service-call rates\?/i);
-    expect(container.querySelector(".signup-mobile-primary").disabled).toBe(true);
-
-    clickButton("Yes", container.querySelector('[role="group"]'));
+    expect(container.textContent).toMatch(/What should your assistant include\?/i);
+    const pricingChoices = () => Array.from(container.querySelectorAll('#signup-pricing input[type="checkbox"]'));
+    expect(pricingChoices()).toHaveLength(5);
+    expect(pricingChoices().every((checkbox) => !checkbox.checked)).toBe(true);
     expect(container.querySelector(".signup-mobile-primary").disabled).toBe(false);
-    expect(container.textContent).toMatch(/Repairs \/ maintenance/);
+    act(() => pricingChoices()[0].click());
+    expect(container.querySelector(".signup-mobile-primary").disabled).toBe(true);
+    expect(container.querySelector("#hourly-labour-rate-input")).toBeNull();
     expect(container.textContent).toMatch(/Parts are extra/);
-    expect(container.textContent).toMatch(/confirm the final price before starting/);
     changeValue("#minimum-service-visit-fee-input", "125");
+    expect(container.querySelector(".signup-mobile-primary").disabled).toBe(false);
+    act(() => pricingChoices()[1].click());
     submit();
-    expect(container.textContent).toMatch(/Enter both the service-call or repair price and the hourly rate/i);
-    expect(container.textContent).toMatch(/Enter the hourly rate/i);
+    expect(container.textContent).toMatch(/Enter a price for each checked rate/i);
 
     changeValue("#hourly-labour-rate-input", "95");
     submit();
