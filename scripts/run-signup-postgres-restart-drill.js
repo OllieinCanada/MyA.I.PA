@@ -6,6 +6,7 @@ const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const { PrismaClient } = require('@prisma/client');
 const { provisioningStateKey } = require('../server/provisioningState');
+const {receiptKey,WORKER_KEY}=require('../server/twilioStatusInbox');
 const databaseUrl = process.env.SIGNUP_RECOVERY_DRILL_DATABASE_URL;
 const reportPath = path.resolve('diagnostics/signup-failure-recovery-audit/postgres-restart.json');
 
@@ -19,8 +20,8 @@ async function main() {
   await prisma.runtimeStore.count().catch(async error => { await prisma.$disconnect(); throw error; });
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'myaipa-pg-restart-'));
   const children = new Set(), keys = new Set(), cases = [];
-  async function start() {
-    const child = fork(path.resolve('tests/helpers/signup-postgres-restart-worker.js'), [], {
+  async function start(args=[]) {
+    const child = fork(path.resolve('tests/helpers/signup-postgres-restart-worker.js'), args, {
       execArgv: ['--max-old-space-size=96'],
       cwd, stdio: ['ignore', 'ignore', 'pipe', 'ipc'],
       env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, NODE_ENV: 'test', DATABASE_URL: databaseUrl,
@@ -95,6 +96,32 @@ async function main() {
           console.log(JSON.stringify({ kind: purpose, fault, passed: true }));
         } finally { second.child.kill(); competitor.child.kill(); await Promise.all([second.exited, competitor.exited]); }
       }
+    }
+    for(const fault of ['after-receipt','after-send']){
+      const sid='SM'+crypto.randomBytes(16).toString('hex'),endpoint='/__local-twilio-receipt-drill';
+      const key=receiptKey({MessageSid:sid,MessageStatus:'delivered'}),providerKey='drill-status-provider:'+sid;
+      const dispatchIdentity=crypto.createHash('sha256').update(JSON.stringify([sid,'status-drill','','+19055550123',''])).digest('hex');
+      keys.add(key);keys.add(WORKER_KEY);keys.add(providerKey);keys.add(provisioningStateKey('signup-sms',dispatchIdentity));
+      const first=await start(['--status-inbox-drill']);
+      if(fault==='after-send')await first.call({sid,action:'enqueue'},endpoint);
+      await first.call({sid,action:fault==='after-receipt'?'enqueue':'drain',fault},endpoint).catch(()=>{});
+      assert.equal(await first.exited,86);
+      if(fault==='after-send'){
+        for(const target of [key,WORKER_KEY]){
+          const row=await prisma.runtimeStore.findUnique({where:{key:target}});
+          await prisma.runtimeStore.update({where:{key:target},data:{data:{...row.data,leaseExpiresAt:0}}});
+        }
+      }
+      const second=await start(['--status-inbox-drill']),competitor=await start(['--status-inbox-drill']);
+      try{
+        await Promise.all([second.call({sid,action:'drain'},endpoint),competitor.call({sid,action:'drain'},endpoint)]);
+        assert.equal((await prisma.runtimeStore.findUnique({where:{key:providerKey}})).data.creates,1);
+        assert.equal((await prisma.runtimeStore.findUnique({where:{key}})).data.status,'completed');
+        await second.call({sid,action:'enqueue'},endpoint);await second.call({sid,action:'drain'},endpoint);
+        assert.equal((await prisma.runtimeStore.findUnique({where:{key:providerKey}})).data.creates,1);
+        cases.push({kind:'twilio-status-inbox',fault,recovered:true,providerCreates:1,independentProcesses:2});
+        console.log(JSON.stringify({kind:'twilio-status-inbox',fault,passed:true}));
+      }finally{second.child.kill();competitor.child.kill();await Promise.all([second.exited,competitor.exited]);}
     }
     return { passed: true, realPostgresLocks: true, fullApplicationProcessRestarts: true, externalProvidersMocked: true, leaseExpirySimulated: true, productionTouched: false, cases };
   } finally {

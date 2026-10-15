@@ -1105,10 +1105,15 @@ test("inbound messaging preferences require a valid provider signature", async (
 });
 
 test("Twilio delivery callbacks verify against the exact configured status URL", async () => {
+  const {memoryDb} = require('./helpers/twilio-status-memory-db');
+  const originalTransaction = prisma.$transaction;
+  const db = memoryDb();
+  prisma.$transaction = db.prisma.$transaction;
   const form = {
-    MessageSid: "SM_DELIVERED_TEST",
+    MessageSid: "SM" + '7'.repeat(32),
     MessageStatus: "delivered",
   };
+  try {
   const response = await request("/api/webhooks/twilio/message-status", {
     method: "POST",
     headers: {
@@ -1123,6 +1128,32 @@ test("Twilio delivery callbacks verify against the exact configured status URL",
   });
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") || "", /xml/i);
+  assert.equal(db.rows.size, 1);
+  assert.equal([...db.rows.values()][0].data.status, 'pending');
+  } finally { prisma.$transaction = originalTransaction; }
+});
+
+test('Twilio callback refuses acknowledgment when the receipt DB is unavailable', async () => {
+  const original = prisma.$transaction;
+  prisma.$transaction = async () => { throw new Error('synthetic database outage'); };
+  const form = {MessageSid:'SM'+'8'.repeat(32),MessageStatus:'delivered'};
+  try {
+    const response = await request('/api/webhooks/twilio/message-status', {method:'POST',headers:{
+      'content-type':'application/x-www-form-urlencoded',
+      'x-twilio-signature':getTwilioSignature(process.env.TWILIO_STATUS_CALLBACK_URL,form,process.env.TWILIO_AUTH_TOKEN),
+    },body:new URLSearchParams(form).toString()});
+    assert.equal(response.status,503);
+    assert.doesNotMatch(await response.text(),/synthetic database outage/);
+  } finally {prisma.$transaction=original;}
+});
+
+test('Twilio invalid signatures never enter the durable receipt inbox', async () => {
+  const original = prisma.$transaction; let writes=0;
+  prisma.$transaction = async () => {writes++;throw Error('must not write');};
+  try {
+    const response=await request('/api/webhooks/twilio/message-status',{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded','x-twilio-signature':'forged'},body:new URLSearchParams({MessageSid:'SM'+'9'.repeat(32),MessageStatus:'delivered'}).toString()});
+    assert.equal(response.status,401);assert.equal(writes,0);
+  } finally {prisma.$transaction=original;}
 });
 
 test("Twilio staging OAuth issues a scoped token and requires both bearer and signature", async () => {
