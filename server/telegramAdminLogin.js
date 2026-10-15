@@ -56,6 +56,10 @@ function verifyAuthorization(params, c, now = Date.now()) {
   return { target: destination(params.get('target') || 'https://www.myaipa.ca/#/admin'), proof: params.get('hash'), userId: c.userId };
 }
 function challenge(secret, proof, nonce) { return `${nonce}.${mac(secret, `${proof}:${nonce}`)}`; }
+function escapeHtml(value) {
+  return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
 function registerTelegramAdminLogin(app, { prisma, rateLimiter, sessionSecret, setSession, audit, env = process.env, now = Date.now }) {
   const headers = res => {
     res.set('Cache-Control', 'no-store, max-age=0');
@@ -77,7 +81,7 @@ function registerTelegramAdminLogin(app, { prisma, rateLimiter, sessionSecret, s
       const payload = Buffer.from(params.toString()).toString('base64url');
       res.set('Set-Cookie', `${COOKIE}=${challenge(sessionSecret(), auth.proof, nonce)}; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=120`);
       res.set('Content-Security-Policy', `default-src 'none'; script-src 'nonce-${scriptNonce}'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'`);
-      res.type('html').send(`<!doctype html><html><head><meta name="referrer" content="no-referrer"><title>Opening admin</title></head><body><p>Opening your admin dashboard…</p><form method="post" action="${CALLBACK}"><input type="hidden" name="payload" value="${payload}"><input type="hidden" name="nonce" value="${nonce}"><button>Open admin</button></form><script nonce="${scriptNonce}">history.replaceState(null,'','${CALLBACK}');document.forms[0].submit();</script></body></html>`);
+      res.type('html').send(`<!doctype html><html><head><meta name="referrer" content="no-referrer"><title>Opening admin</title></head><body><p>Opening your admin dashboard…</p><form method="post" action="${CALLBACK}"><input type="hidden" name="payload" value="${escapeHtml(payload)}"><input type="hidden" name="nonce" value="${nonce}"><button>Open admin</button></form><script nonce="${scriptNonce}">history.replaceState(null,'','${CALLBACK}');document.forms[0].submit();</script></body></html>`);
     } catch (error) { try { await denied(res); } catch (e) { next(e); } }
   });
   app.post(CALLBACK, rateLimiter, express.urlencoded({ extended: false, limit: '8kb' }), async (req, res, next) => {
@@ -102,4 +106,4 @@ function registerTelegramAdminLogin(app, { prisma, rateLimiter, sessionSecret, s
     }
   });
 }
-module.exports = { config, destination, loginKeyboard, verifyAuthorization, challenge, registerTelegramAdminLogin, CALLBACK, COOKIE };
+module.exports = { config, destination, loginKeyboard, verifyAuthorization, challenge, escapeHtml, registerTelegramAdminLogin, CALLBACK, COOKIE };

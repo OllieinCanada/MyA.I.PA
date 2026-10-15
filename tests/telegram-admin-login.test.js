@@ -2,10 +2,13 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const express = require('express');
-const { loginKeyboard, verifyAuthorization, registerTelegramAdminLogin, CALLBACK, COOKIE } = require('../server/telegramAdminLogin');
+const { loginKeyboard, verifyAuthorization, registerTelegramAdminLogin, escapeHtml, CALLBACK, COOKIE } = require('../server/telegramAdminLogin');
 const env = { TELEGRAM_ADMIN_LOGIN_ENABLED: 'true', TELEGRAM_ADMIN_USER_ID: '123456', TELEGRAM_BOT_TOKEN: 'test-bot-secret' };
 const now = 1792097000000;
 const conf = { enabled: true, token: env.TELEGRAM_BOT_TOKEN, userId: env.TELEGRAM_ADMIN_USER_ID };
+test('confirmation form escapes every HTML attribute delimiter', () => {
+  assert.equal(escapeHtml('<script>"&\''), '&lt;script&gt;&quot;&amp;&#39;');
+});
 function signed(changes = {}) {
   const p = new URLSearchParams({ id: conf.userId, first_name: 'Ollie', auth_date: String(now / 1000), ...changes });
   const data = [...p].sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => `${k}=${v}`).join('\n');
@@ -39,9 +42,10 @@ test('browser-bound POST issues a session once; previews, wrong origins, replay 
   const server = await new Promise(resolve => { const s = app.listen(0, '127.0.0.1', () => resolve(s)); });
   try {
     const base = `http://127.0.0.1:${server.address().port}`;
-    const get = await fetch(`${base}${CALLBACK}?${signed()}`);
+    const get = await fetch(`${base}${CALLBACK}?${signed({first_name:'<script>alert("no")</script>'})}`);
     const cookie = get.headers.get('set-cookie').split(';')[0], html = await get.text();
     assert.equal(sessions.length, 0); // GET/link scanners never create admin sessions.
+    assert.doesNotMatch(html, /<script>alert/);
     assert.match(cookie, new RegExp(`^${COOKIE}=`));
     assert.match(get.headers.get('content-security-policy'), /frame-ancestors 'none'/);
     const body = new URLSearchParams({ payload: html.match(/name="payload" value="([^"]+)"/)[1], nonce: html.match(/name="nonce" value="([^"]+)"/)[1] });
