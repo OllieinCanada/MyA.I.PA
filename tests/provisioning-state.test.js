@@ -34,6 +34,38 @@ function createFakePrisma() {
   return { prisma, rawQueries, rows };
 }
 
+test('sanitized provider explanation survives a later reconciliation hold', async () => {
+  const {prisma,rows}=createFakePrisma();
+  const input={prisma,kind:'vapi-import',idempotencyKey:'diagnostic-fixture',contextHash:'context',
+    reconcile:async()=>null,verifyCompleted:async()=>true,execute:async()=>{throw Object.assign(new Error('Import failed'),{providerCode:'VAPI_TWILIO_IMPORT_FAILED',providerStatus:400,providerDetail:'name must be shorter; person@example.com'});}};
+  await assert.rejects(runProvisioningStep(input));
+  await assert.rejects(runProvisioningStep(input));
+  const d=rows.get(provisioningStateKey(input.kind,input.idempotencyKey));
+  assert.match(d.originalProviderDetail,/name must be shorter/);
+  assert.doesNotMatch(d.originalProviderDetail,/person@example.com/);
+  assert.equal(d.originalProviderStatus,400);
+  assert.equal(d.originalErrorCode,'VAPI_TWILIO_IMPORT_FAILED');
+  assert.equal(d.lastProviderDetail,d.originalProviderDetail);
+});
+
+test('a rejected import recovers from one operator-confirmed phone without dispatching again', async () => {
+  const {prisma}=createFakePrisma();
+  let dispatches=0,providerPhone=null;
+  const input={prisma,kind:'vapi-import',idempotencyKey:'isolated-rejected-import',contextHash:'exact-context',
+    reconcile:async()=>providerPhone,verifyCompleted:async result=>result.id===providerPhone?.id,
+    execute:async()=>{dispatches++;throw Object.assign(Error('Rejected'),{providerCode:'VAPI_TWILIO_IMPORT_FAILED',providerStatus:400,providerDetail:'isolated validation rejection'});}};
+  await assert.rejects(runProvisioningStep(input));
+  await assert.rejects(runProvisioningStep(input),{code:'PROVISIONING_RECONCILIATION_REQUIRED'});
+  assert.equal(dispatches,1);
+  // Model the explicit operator repair, not an automatic retry or a purchased number.
+  providerPhone={id:'one-isolated-phone',assistantId:'one-isolated-assistant',number:'+19055550123'};
+  const recovered=await runProvisioningStep(input);
+  assert.equal(recovered.id,providerPhone.id);assert.equal(recovered.reused,true);
+  const replayed=await Promise.all([runProvisioningStep(input),runProvisioningStep(input)]);
+  assert.ok(replayed.every(x=>x.id===providerPhone.id&&x.reused));
+  assert.equal(dispatches,1);
+});
+
 test("provisioning state keys contain no raw signup identity", () => {
   const key = provisioningStateKey("twilio-number", "owner@example.ca:+19055550123");
   assert.match(key, /^signup-provisioning:twilio-number:[a-f0-9]{64}$/);
