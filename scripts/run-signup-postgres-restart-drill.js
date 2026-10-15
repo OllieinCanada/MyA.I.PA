@@ -98,6 +98,13 @@ async function main() {
       }
     }
     for(const fault of ['after-receipt','after-send']){
+      // Earlier full-app cases start the normal inbox worker. A killed child
+      // can leave its empty-queue lease behind; isolate the next fault case
+      // only after every previous child has stopped. This is a disposable DB.
+      assert.equal(children.size,0);
+      keys.add(WORKER_KEY);
+      const priorWorker=await prisma.runtimeStore.findUnique({where:{key:WORKER_KEY}});
+      if(priorWorker)await prisma.runtimeStore.update({where:{key:WORKER_KEY},data:{data:{token:null,leaseExpiresAt:0}}});
       const sid='SM'+crypto.randomBytes(16).toString('hex'),endpoint='/__local-twilio-receipt-drill';
       const key=receiptKey({MessageSid:sid,MessageStatus:'delivered'}),providerKey='drill-status-provider:'+sid;
       const dispatchIdentity=crypto.createHash('sha256').update(JSON.stringify([sid,'status-drill','','+19055550123',''])).digest('hex');
