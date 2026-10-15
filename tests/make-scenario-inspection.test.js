@@ -37,3 +37,10 @@ test("secret-labelled Make fields are redacted recursively", () => {
     { headers: [{ name: "[redacted]", value: "[redacted]" }] }
   );
 });
+
+test('integration and webhook key headers are never printed by diagnostics', () => {
+  for (const name of ['x-myaipa-integration-key', 'x-webhook-key', 'x-make-apikey']) {
+    const output = JSON.stringify(safeObject({ headers: [{ name, value: 'private-diagnostic-fixture' }] }));
+    assert.doesNotMatch(output, /private-diagnostic-fixture/);
+  }
+});

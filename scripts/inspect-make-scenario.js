@@ -83,7 +83,7 @@ function safeObject(value, parentKey = "") {
       .filter(([key]) => !/metadata|sample|designer/i.test(key))
       .map(([key, item]) => [
         key,
-        /(?:api.?key|token|secret|authorization|password|credential)/i.test(`${secretLabel}.${key}`)
+        /(?:api.?key|integration.?key|webhook.?key|token|secret|authorization|password|credential)/i.test(`${secretLabel}.${key}`)
           ? "[redacted]"
           : safeObject(item, `${parentKey}.${key}`),
       ])
