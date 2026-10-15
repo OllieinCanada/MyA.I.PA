@@ -50,6 +50,7 @@ const {
   sendStoredOutreachPackage,
 } = require("./outreach");
 const { normalizeE164, sendSmsViaTwilio, fetchSmsStatusViaTwilio } = require("./twilioSms");
+const { enqueueTwilioStatus, drainTwilioStatuses } = require('./twilioStatusInbox');
 const { selectTrialSignup } = require("./trialSignupSelection");
 const { fetchProviderReadText } = require("./providerRead");
 const { dispatchSignupSms } = require("./signupSmsDispatch");
@@ -504,6 +505,14 @@ const twilioStagingWebhookProcessRateLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Too many staging webhook requests." },
+});
+const twilioStatusCallbackProcessRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  // Separate from customer form limits: provider IPs can deliver bursts.
+  limit: 600,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many delivery callbacks. Retry later.' },
 });
 const telegramActionsProcessRateLimiter = rateLimit({
   windowMs: PUBLIC_ROUTE_WINDOW_MS,
@@ -12975,27 +12984,16 @@ app.post(
   })
 );
 
-app.post(
-  "/api/webhooks/twilio/message-status",
-  express.urlencoded({ extended: false, limit: "8kb" }),
-  asyncRoute(async (req, res) => {
-    if (!verifyTwilioWebhookRequest(req, process.env, { configuredUrl: TWILIO_STATUS_CALLBACK_URL })) {
-      return res.status(401).json({ error: "Invalid messaging webhook signature." });
-    }
-    const replayClaim = await claimTwilioWebhookRequest(req, "message_status");
-    if (replayClaim.invalid) return res.status(400).json({ error: "Twilio message SID and status are required." });
-    if (replayClaim.duplicate) return res.type("application/xml").send("<Response></Response>");
-    if (!replayClaim.claimed) return res.status(503).json({ error: "Webhook replay protection is unavailable." });
-    try {
-    const preparedIncident = buildTwilioMessageStatusIncident(req.body || {});
-    const messageSid = req.body?.MessageSid || req.body?.SmsSid;
-    const messageStatus = req.body?.MessageStatus || req.body?.SmsStatus;
+async function processSavedTwilioMessageStatus(body) {
+    const preparedIncident = buildTwilioMessageStatusIncident(body);
+    const messageSid = body.MessageSid;
+    const messageStatus = body.MessageStatus;
     const verificationSignup = listSignupDashboardRecords().find((signup) => (
       !isClosedSignup(signup) && signup.smsVerificationMessageSid === String(messageSid || "").trim()
     ));
     if (verificationSignup) {
       const update = verificationDeliveryUpdate(verificationSignup, {
-        sid: messageSid, status: messageStatus, errorCode: req.body?.ErrorCode,
+        sid: messageSid, status: messageStatus, errorCode: body.ErrorCode,
       });
       if (update) {
         const updated = upsertSignupDashboardRecord({ ...verificationSignup, ...update });
@@ -13005,14 +13003,14 @@ app.post(
       }
     }
     const matchingSignup = listSignupDashboardRecords().find((signup) => (
-      messageSid && [signup.agentTestOwnerMessageSid, signup.agentTestCustomerMessageSid].includes(String(messageSid).trim())
+      !isClosedSignup(signup) && messageSid && [signup.agentTestOwnerMessageSid, signup.agentTestCustomerMessageSid].includes(String(messageSid).trim())
     ));
     if (matchingSignup?.ownerEmail) {
       const update = getAgentTestDeliveryUpdate({
         signup: matchingSignup,
         messageSid,
         status: messageStatus,
-        errorCode: req.body?.ErrorCode,
+        errorCode: body.ErrorCode,
       });
       if (update) {
         upsertSignupDashboardRecord({ ...matchingSignup, ...update });
@@ -13037,6 +13035,7 @@ app.post(
               nextAction: "Retry the agent testing station after checking Twilio delivery and the signup record.",
               dedupeFingerprint: `agent-test-continuation:${String(matchingSignup.ownerEmail || "").toLowerCase()}`,
             });
+            throw error; // Keep the durable job retryable, never silently lose it.
           }
         }
       }
@@ -13044,17 +13043,37 @@ app.post(
     if (preparedIncident) {
       safelyNotifyRuntimeFailure(preparedIncident.error, preparedIncident.context);
     }
-    if (!await completeWebhookEvent(replayClaim)) {
-      throw Object.assign(new Error("The Twilio message-status replay claim could not be completed."), {
-        code: "TWILIO_WEBHOOK_REPLAY_COMPLETE_FAILED",
-        status: 503,
+}
+
+async function processTwilioStatusInbox() {
+  return drainTwilioStatuses({ prisma, processReceipt: processSavedTwilioMessageStatus,
+    onFailure: async ({ code, exhausted }) => {
+      if (exhausted) safelyNotifyRuntimeFailure(Object.assign(new Error('Saved SMS delivery processing needs recovery.'), { code }), {
+        area: 'Twilio delivery inbox', operation: 'resume saved signup delivery processing',
+        whatFailed: 'A saved delivery report exhausted its automatic retries',
+        impact: 'The receipt is preserved, but signup continuation may need operator recovery.',
+        nextAction: 'Inspect the saved delivery job and exact signup. Do not resend texts or create another setup.',
       });
+    },
+  });
+}
+
+app.post(
+  "/api/webhooks/twilio/message-status",
+  twilioStatusCallbackProcessRateLimiter,
+  express.urlencoded({ extended: false, limit: "8kb" }),
+  asyncRoute(async (req, res) => {
+    if (!verifyTwilioWebhookRequest(req, process.env, { configuredUrl: TWILIO_STATUS_CALLBACK_URL })) {
+      return res.status(401).json({ error: "Invalid messaging webhook signature." });
     }
-    return res.type("application/xml").send("<Response></Response>");
-    } catch (error) {
-      await releaseWebhookEvent(replayClaim);
-      throw error;
+    // The DB inbox is both the receipt and the replay guard. ACK only after
+    // commit. No provider calls, notifications or continuation on this path.
+    try { await enqueueTwilioStatus({ prisma, body: req.body }); }
+    catch (error) {
+      if (error.code === 'TWILIO_RECEIPT_INVALID') return res.status(400).json({ error: error.message });
+      return res.status(503).json({ error: 'Delivery receipt could not be saved. Retry safely.' });
     }
+    return res.type('application/xml').send('<Response></Response>');
   })
 );
 
@@ -18315,6 +18334,10 @@ async function drainTelegramOutbox(phase = "scheduled") {
 }
 
 function startBackgroundJobs() {
+  runBackgroundJob('saved Twilio delivery reports', processTwilioStatusInbox, 'initial');
+  setInterval(() => {
+    runBackgroundJob('saved Twilio delivery reports', processTwilioStatusInbox);
+  }, 5000);
   runBackgroundJob("signup text delivery polling", pollPendingSignupAgentTests, "initial");
   setInterval(() => {
     runBackgroundJob("signup text delivery polling", pollPendingSignupAgentTests);

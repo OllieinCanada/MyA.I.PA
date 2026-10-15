@@ -1,6 +1,7 @@
 // Started only by the isolated recovery drill, with an empty cwd/environment.
 const { runProvisioningStep } = require('../../server/provisioningState');
 const { dispatchSignupSms } = require('../../server/signupSmsDispatch');
+const {enqueueTwilioStatus,drainTwilioStatuses}=require('../../server/twilioStatusInbox');
 const target = new URL(process.env.DATABASE_URL);
 if (!['localhost', '127.0.0.1', '[::1]'].includes(target.hostname) || !/^\/myaipa_recovery_drill_[a-z0-9_]+$/.test(target.pathname)) throw Error('Isolated loopback drill database required');
 const allowedKeys = ['PATH', 'SystemRoot', 'NODE_ENV', 'DATABASE_URL', 'DATA_DIR', 'JWT_SECRET', 'ADMIN_PASSWORD', 'DISABLE_LOCAL_ENV_FILES'];
@@ -61,5 +62,30 @@ app.post('/__local-signup-sms-drill', async (req, res) => {
     res.json(result);
   } catch (error) { res.status(409).json({ code: error.code || 'DRILL_FAILED' }); }
 });
-const server = startServer(0, '127.0.0.1');
+// Controlled queue mode keeps the automatic worker paused so fault injection
+// can kill the process at an exact point. The complete app is still loaded.
+app.post('/__local-twilio-receipt-drill', async(req,res)=>{
+  const {sid,action,fault}=req.body;
+  if(!/^SM[a-f0-9]{32}$/.test(sid||'')||!['enqueue','drain'].includes(action))return res.sendStatus(400);
+  const receipt={MessageSid:sid,MessageStatus:'delivered'};
+  if(action==='enqueue'){
+    const result=await enqueueTwilioStatus({prisma,body:receipt});
+    if(fault==='after-receipt')process.exit(86);
+    return res.json(result);
+  }
+  const result=await drainTwilioStatuses({prisma,processReceipt:async body=>{
+    const providerKey='drill-status-provider:'+body.MessageSid;
+    await dispatchSignupSms({prisma,identity:body.MessageSid,purpose:'status-drill',request:{to:'+19055550123',message:'ISOLATED STATUS DRILL'},
+      sendSms:async()=>{
+        const prior=await prisma.runtimeStore.findUnique({where:{key:providerKey}});
+        const data={creates:Number(prior?.data?.creates||0)+1};
+        await prisma.runtimeStore.upsert({where:{key:providerKey},update:{data},create:{key:providerKey,data}});
+        return {sid:'SMisolated',status:'delivered'};
+      },
+    });
+    if(fault==='after-send')process.exit(86);
+  }});
+  return res.json(result);
+});
+const server = process.argv.includes('--status-inbox-drill') ? app.listen(0,'127.0.0.1') : startServer(0, '127.0.0.1');
 server.once('listening', () => process.send({ port: server.address().port }));

@@ -287,18 +287,30 @@ function getAgentTestDeliveryUpdate({ signup = {}, messageSid, status, errorCode
       : "";
   if (!channel) return null;
 
+  const previous = clean(signup[`agentTest${channel}ProviderStatus`], 40).toLowerCase();
+  const delivered = value => ['delivered', 'read'].includes(value);
+  const failed = value => ['canceled', 'failed', 'undelivered'].includes(value);
+  const rank = { accepted: 0, scheduled: 0, queued: 1, sending: 2, sent: 3, delivered: 4, read: 5 };
+  // Persisted jobs can arrive out of order or replay after a process restart.
+  // Never discard a provider failure: hold readiness for reconciliation even
+  // if an earlier delivery receipt exists. Only stale progress is ignored.
+  if (delivered(previous) && ((!delivered(normalizedStatus) && !failed(normalizedStatus)) || rank[normalizedStatus] < rank[previous])) return null;
+  if (failed(previous) && !delivered(normalizedStatus) && normalizedStatus !== previous) return null;
+  if (rank[previous] != null && rank[normalizedStatus] != null && rank[normalizedStatus] < rank[previous]) return null;
+
   const update = {
     [`agentTest${channel}ProviderStatus`]: normalizedStatus,
     [`agentTest${channel}StatusUpdatedAt`]: now,
   };
   if (["delivered", "read"].includes(normalizedStatus)) {
-    update[`agentTest${channel}DeliveredAt`] = now;
-    update.agentTestStatus = channel === "Owner" ? "awaiting_customer_delivery" : "passed";
-    if (channel === "Customer" && signup.agentTestOwnerDeliveredAt) {
+    update[`agentTest${channel}DeliveredAt`] = signup[`agentTest${channel}DeliveredAt`] || now;
+    const otherDelivered = channel === 'Owner'
+      ? Boolean(signup.agentTestCustomerDeliveredAt && delivered(signup.agentTestCustomerProviderStatus))
+      : Boolean(signup.agentTestOwnerDeliveredAt && delivered(signup.agentTestOwnerProviderStatus));
+    update.agentTestStatus = otherDelivered ? 'passed' : channel === 'Owner' ? 'awaiting_customer_delivery' : 'awaiting_owner_delivery';
+    if (otherDelivered) {
       update.agentTestCheckedAt = now;
       update.agentTestErrorCode = "";
-    } else if (channel === "Customer") {
-      update.agentTestStatus = "awaiting_owner_delivery";
     }
   }
   if (["canceled", "failed", "undelivered"].includes(normalizedStatus)) {
