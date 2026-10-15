@@ -116,7 +116,7 @@ before(async () => {
   // Refuse every external request, even if an unexpected credential is present.
   global.fetch = (url, options) => {
     if (["https://challenges.cloudflare.com/turnstile/v0/siteverify", "https://www.google.com/recaptcha/api/siteverify"].includes(String(url))) {
-      const google = String(url).includes("google.com");
+      const google = new URL(url).hostname === "www.google.com";
       assert.equal(options.body.get("secret"), google ? "synthetic-api-google-secret" : "synthetic-api-captcha-secret");
       const valid = options.body.get("response") === (google ? "synthetic-api-google-proof" : "synthetic-api-proof");
       return Promise.resolve(new Response(JSON.stringify({ success: valid, hostname: "www.myaipa.ca", "error-codes": valid ? [] : ["invalid-input-response"] }), {
