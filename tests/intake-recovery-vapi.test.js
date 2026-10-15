@@ -2,6 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const vm = require("node:vm");
+const { fetchProviderReadText } = require("../server/providerRead");
 const source = fs.readFileSync(require.resolve("../server/index.js"), "utf8");
 function load(name, next, bindings) {
   const text = source.slice(source.indexOf(`async function ${name}(`), source.indexOf(`async function ${next}(`));
@@ -27,7 +28,10 @@ test("actual Vapi inventory reader rejects malformed and capped reconciliation i
   for (const response of [{}, { items: [], hasMore: true }, Array.from({ length: 1000 }, (_, i) => ({ id: String(i) }))]) {
     const fetchCollection = load("fetchVapiCollection", "requestVapiResource", {
       VAPI_API_KEY: "synthetic", VAPI_API_BASE_URL: "https://example.invalid", URL,
-      fetch: async () => ({ ok: true, text: async () => JSON.stringify(response) }),
+      fetchProviderReadText: (url, options) => fetchProviderReadText(url, options, {
+        fetchImpl: async () => ({ ok: true, text: async () => JSON.stringify(response) }),
+        sleep: async () => {},
+      }),
       parseJsonObject: JSON.parse,
     });
     await assert.rejects(fetchCollection("assistant", [], { requireComplete: true }), { code: "VAPI_INVENTORY_INCOMPLETE" });

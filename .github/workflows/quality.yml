@@ -58,6 +58,24 @@ jobs:
           npx prisma db push --skip-generate
           npm run test:database
 
+      - name: Exercise isolated signup restart and concurrent-replay recovery
+        env:
+          DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/myaipa_recovery_drill_ci?connection_limit=2
+          SIGNUP_RECOVERY_DRILL_DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/myaipa_recovery_drill_ci?connection_limit=2
+        run: |
+          node -e 'const {Client}=require("pg"); const client=new Client({connectionString:"postgresql://ci:ci@127.0.0.1:5432/ci"}); (async()=>{await client.connect(); try {await client.query("CREATE DATABASE myaipa_recovery_drill_ci");} finally {await client.end();}})().catch(error=>{console.error(error.message);process.exitCode=1;});'
+          npx prisma db push --skip-generate
+          npm run test:signup-recovery:postgres
+
+      - name: Save signup recovery evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: signup-recovery-${{ github.event.pull_request.head.sha || github.sha }}
+          retention-days: 7
+          path: diagnostics/signup-failure-recovery-audit/postgres-restart.json
+          if-no-files-found: ignore
+
       - name: Validate private legal drafts when present
         run: npm run legal:validate
 

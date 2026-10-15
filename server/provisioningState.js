@@ -95,6 +95,9 @@ async function claimProvisioningStep({
       claimedAt: new Date(now).toISOString(),
       leaseExpiresAt: new Date(now + safeLeaseMs).toISOString(),
       lastErrorCode: "",
+      dispatchStartedAt: Object.hasOwn(data, "dispatchStartedAt") ? data.dispatchStartedAt : (Number(data.attempts || 0) > 0 ? "unknown" : null),
+      originalErrorCode: data.originalErrorCode || "",
+      originalProviderStatus: data.originalProviderStatus || null,
       updatedAt: new Date(now).toISOString(),
     };
     await tx.runtimeStore.upsert({
@@ -153,7 +156,10 @@ async function failProvisioningStep({ prisma, key, claimToken, error, now = Date
       status: "failed",
       failedAt: new Date(now).toISOString(),
       leaseExpiresAt: null,
-      lastErrorCode: String(error?.code || "PROVISIONING_STEP_FAILED").slice(0, 100),
+      lastErrorCode: String(error?.providerCode || error?.cause?.code || error?.code || "PROVISIONING_STEP_FAILED").slice(0, 100),
+      lastProviderStatus: Number(error?.providerStatus || error?.statusCode || 0) || null,
+      originalErrorCode: data.originalErrorCode || String(error?.providerCode || error?.cause?.code || error?.code || "PROVISIONING_STEP_FAILED").slice(0, 100),
+      originalProviderStatus: data.originalProviderStatus || Number(error?.providerStatus || 0) || null,
       updatedAt: new Date(now).toISOString(),
     };
     await tx.runtimeStore.upsert({
@@ -197,7 +203,11 @@ async function runProvisioningStep({
     // Reconciliation must not create missing paid resources. It runs under
     // the lease, and creation is confined to the first execute attempt.
     const reconciled = typeof reconcile === "function" ? await reconcile() : null;
-    if (!reconciled && claim.data.attempts > 1 && ["twilio-number", "vapi-assistant", "vapi-import"].includes(kind)) {
+    const guardedKind = ["twilio-number", "vapi-assistant", "vapi-import", "signup-sms"].includes(kind);
+    // Legacy records without this marker remain ambiguous. Only new records
+    // explicitly persisted as not dispatched may restart automatically.
+    if (!reconciled && claim.data.attempts > 1 && guardedKind
+      && existing.data.dispatchStartedAt !== null) {
       // A lost response or expired lease does not prove that the provider did
       // nothing. Reuse provider-confirmed resources, but never blindly create
       // another paid resource when a previous attempt has an unknown outcome.
@@ -205,7 +215,10 @@ async function runProvisioningStep({
     }
     const result = reconciled && typeof reconciled === "object"
       ? { reused: true, ...reconciled }
-      : await execute();
+      : await (async () => {
+        await markProvisioningDispatch({ prisma, key: claim.key, claimToken: claim.claimToken });
+        return execute();
+      })();
     if (!result || typeof result !== "object") {
       throw provisioningError("The provider returned no provisioning result.", "PROVISIONING_RESULT_MISSING", 502);
     }
@@ -215,6 +228,20 @@ async function runProvisioningStep({
     await failProvisioningStep({ prisma, key: claim.key, claimToken: claim.claimToken, error }).catch(() => {});
     throw error;
   }
+}
+
+async function markProvisioningDispatch({ prisma, key, claimToken }) {
+  return prisma.$transaction(async (tx) => {
+    if (typeof tx.$queryRaw === "function") await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))::text AS lock_result`;
+    const row = await tx.runtimeStore.findUnique({ where: { key } });
+    const data = normalizeStoredData(row);
+    if (data.claimToken !== claimToken || data.status !== "processing"
+      || Number(new Date(data.leaseExpiresAt)) <= Date.now()) {
+      throw provisioningError("The provisioning dispatch lease expired.", "PROVISIONING_CLAIM_LOST");
+    }
+    const next = { ...data, dispatchStartedAt: new Date().toISOString() };
+    await tx.runtimeStore.upsert({ where: { key }, update: { data: next }, create: { key, data: next } });
+  });
 }
 
 async function verifyCompletedProvisioningResult({ prisma, key, result, verifyCompleted }) {

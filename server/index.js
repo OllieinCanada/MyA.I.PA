@@ -1,9 +1,12 @@
 const dotenv = require("dotenv");
-dotenv.config();
-dotenv.config({ path: ".env.local", override: false });
+if (process.env.DISABLE_LOCAL_ENV_FILES !== "1") {
+  dotenv.config();
+  dotenv.config({ path: ".env.local", override: false });
+}
 
 const crypto = require("crypto");
 const { providerFailureDetail } = require("./providerFailureDetail");
+const { configuredCaptchaProvider, verifySignupCaptcha } = require("./signupCaptcha");
 const { hasIndividualPricingChoices, individualPricingPolicy } = require("../src/features/signup/pricingPolicy");
 const cors = require("cors");
 const express = require("express");
@@ -48,6 +51,7 @@ const {
 const { normalizeE164, sendSmsViaTwilio, fetchSmsStatusViaTwilio } = require("./twilioSms");
 const { selectTrialSignup } = require("./trialSignupSelection");
 const { fetchProviderReadText } = require("./providerRead");
+const { dispatchSignupSms } = require("./signupSmsDispatch");
 const { deliverSignupVerificationText, verificationDeliveryFields, verificationDeliveryUpdate } = require("./signupSmsVerification");
 const {
   deliverSignupCompletion,
@@ -356,7 +360,7 @@ const {
   signupIdentity: signupOperationalIdentity,
 } = require("./operationalAttention");
 
-loadPowerShellEnvAssignments(path.join(__dirname, "..", ".env.local"));
+if (process.env.DISABLE_LOCAL_ENV_FILES !== "1") loadPowerShellEnvAssignments(path.join(__dirname, "..", ".env.local"));
 
 const app = express();
 const PORT = Number(process.env.PORT || 8787);
@@ -367,7 +371,6 @@ const pendingStripeSignupPath = path.join(dataDir, "pending-stripe-signups.json"
 const trialReminderPath = path.join(dataDir, "trial-reminders.json");
 const signupDashboardPath = path.join(dataDir, "signup-dashboard.json");
 const vapiCallSyncPath = path.join(dataDir, "vapi-call-sync.json");
-const GOOGLE_RECAPTCHA_TEST_SECRET_KEY = "6LeIxAcTAAAAAGG-vFI1TnRWxMZNFuojJ4WifJWe";
 const ASSISTANT_MAX_CHARS = 2000;
 const ASSISTANT_WINDOW_MS = 60 * 1000;
 const ASSISTANT_MAX_REQUESTS_PER_WINDOW = 12;
@@ -2766,13 +2769,12 @@ async function fetchVapiCollection(resourcePath, collectionKeys = [], { requireC
   const url = new URL(`${VAPI_API_BASE_URL}/${String(resourcePath || "").replace(/^\/+/, "")}`);
   url.searchParams.set("limit", "1000");
 
-  const response = await fetch(url, {
+  const { response, text: rawText } = await fetchProviderReadText(url, {
     headers: {
       Authorization: `Bearer ${VAPI_API_KEY}`,
       Accept: "application/json",
     },
   });
-  const rawText = await response.text();
   const data = parseJsonObject(rawText);
 
   if (!response.ok) {
@@ -2807,7 +2809,8 @@ async function requestVapiResource(resourcePath, { method = "GET", body } = {}) 
     err.statusCode = 503;
     throw err;
   }
-  const response = await fetch(`${VAPI_API_BASE_URL}/${String(resourcePath || "").replace(/^\/+/, "")}`, {
+  const url = `${VAPI_API_BASE_URL}/${String(resourcePath || "").replace(/^\/+/, "")}`;
+  const options = {
     method,
     headers: {
       Authorization: `Bearer ${VAPI_API_KEY}`,
@@ -2815,8 +2818,13 @@ async function requestVapiResource(resourcePath, { method = "GET", body } = {}) 
       ...(body ? { "Content-Type": "application/json" } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
-  });
-  const rawText = await response.text();
+  };
+  const { response, text: rawText } = String(method).toUpperCase() === "GET"
+    ? await fetchProviderReadText(url, options)
+    : await (async () => {
+      const response = await fetch(url, options);
+      return { response, text: await response.text() };
+    })();
   const data = parseJsonObject(rawText);
   if (!response.ok) {
     throw createProviderHttpError({ provider: "Vapi", operation: `${method} ${resourcePath}`, status: response.status, data, fallbackCode: "VAPI_REQUEST_FAILED" });
@@ -7108,7 +7116,17 @@ function isStaleSignupArchiveEligible({ signup = {}, diagnostics = {}, now = new
 
 async function inspectSignupRecoveryState(signup) {
   const pendingSignup = findPendingSignupForDashboardRecord(signup, await readPendingSignupStore());
-  if (!signup?.twilioPhoneNumber) {
+  const inspectionSignup = { ...signup };
+  const provisioning = pendingSignup?.[1]?.payload?.provisioning;
+  if (!inspectionSignup.twilioPhoneNumber && provisioning?.idempotencyKey && provisioning?.contextHash) {
+    const step = await readProvisioningStep({ prisma, kind: "twilio-number", idempotencyKey: provisioning.idempotencyKey });
+    if (step.data.contextHash === provisioning.contextHash && step.data.status === "completed") {
+      inspectionSignup.twilioPhoneNumber = step.data.result?.twilioPhoneNumber || "";
+    }
+  }
+  // A missing dashboard number is not proof that the provider did no work.
+  // Only the exact signed context may supply a missing number, never owner email.
+  if (!inspectionSignup.twilioPhoneNumber && !provisioning?.idempotencyKey) {
     return getSignupProviderRecoveryDiagnostics({ signup, pendingSignup });
   }
   const [vapiResult, twilioResult] = await Promise.allSettled([
@@ -7121,7 +7139,7 @@ async function inspectSignupRecoveryState(signup) {
       ? "partial"
       : "unavailable";
   const diagnostics = getSignupProviderRecoveryDiagnostics({
-    signup,
+    signup: inspectionSignup,
     pendingSignup,
     vapiNumbers: vapiResult.status === "fulfilled" ? vapiResult.value : [],
     twilioNumbers: twilioResult.status === "fulfilled" ? twilioResult.value : [],
@@ -7129,6 +7147,8 @@ async function inspectSignupRecoveryState(signup) {
   });
   return {
     ...diagnostics,
+    partialResourceEvidence: Boolean(!signup.twilioPhoneNumber && inspectionSignup.twilioPhoneNumber),
+    providerReconciliationRequired: !inspectionSignup.twilioPhoneNumber,
     staleArchiveEligible: isStaleSignupArchiveEligible({ signup, diagnostics }),
   };
 }
@@ -7401,6 +7421,8 @@ async function recoverSignupByOperationalTarget(targetId, expectedSignupAttemptI
       twilioPhoneNumber: updated.twilioPhoneNumber || "",
     });
     const completionDelivery = await deliverSignupCompletion({
+      prisma,
+      dispatchIdentity: updated.businessId || updated.signupAttemptId || buildMakeSignupEventKey(pending.payload),
       ownerPhone: updated.ownerPhone || pending.payload?.owner?.phone,
       ownerEmail: updated.ownerEmail || pending.payload?.owner?.email,
       ownerName: updated.ownerName || pending.payload?.owner?.name,
@@ -7512,6 +7534,8 @@ async function recoverSignupByOperationalTarget(targetId, expectedSignupAttemptI
         twilioPhoneNumber,
       });
       const completionDelivery = await deliverSignupCompletion({
+        prisma,
+        dispatchIdentity: updated.businessId || updated.signupAttemptId || buildMakeSignupEventKey(recoveredPayload),
         ownerPhone: updated.ownerPhone || recoveredPayload?.owner?.phone,
         ownerEmail: updated.ownerEmail || recoveredPayload?.owner?.email,
         ownerName: updated.ownerName || recoveredPayload?.owner?.name,
@@ -7774,6 +7798,8 @@ async function finalizeSignupAfterAgentTestByOperationalTarget(targetId, expecte
   )) || canonical;
   const forwardingSetup = await prepareForwardingSetupForProvisionedSignup(attempt.payload, canonical, assignedPhone);
   const completionDelivery = await deliverSignupCompletion({
+    prisma,
+    dispatchIdentity: canonical.businessId || canonical.signupAttemptId,
     ownerPhone: canonical.ownerPhone,
     ownerEmail: canonical.ownerEmail,
     ownerName: canonical.ownerName,
@@ -8206,7 +8232,7 @@ async function testSignupAgentBeforeDelivery({ signup, vapiPhone, smsRouting = n
   const result = await runAgentTextTest({
     signup: storedSignup,
     force,
-    sendSms: ({ to, from, message }) => sendSmsViaTwilio({ to, from, message }),
+    sendSms: (request) => dispatchSignupSms({ prisma, identity: storedSignup.signupAttemptId || storedSignup.businessId, purpose: "agent-test", request, sendSms: sendSmsViaTwilio }),
     fetchMessageStatus: (sid) => fetchSmsStatusViaTwilio({ sid }),
     persist,
   });
@@ -8293,7 +8319,7 @@ async function continueSignupAgentTextTestAfterDelivery(ownerEmail, signupAttemp
     };
     const result = await runAgentTextTest({
       signup: storedSignup,
-      sendSms: ({ to, from, message }) => sendSmsViaTwilio({ to, from, message }),
+      sendSms: (request) => dispatchSignupSms({ prisma, identity: storedSignup.signupAttemptId || storedSignup.businessId, purpose: "agent-test", request, sendSms: sendSmsViaTwilio }),
       fetchMessageStatus: (sid) => fetchSmsStatusViaTwilio({ sid }),
       persist,
     });
@@ -10123,15 +10149,6 @@ function isEnabled(value) {
   return /^(1|true|yes|on)$/i.test(String(value || ""));
 }
 
-function isLocalPageUrl(value) {
-  try {
-    const url = new URL(String(value || ""));
-    return /^(localhost|127\.0\.0\.1)$/.test(url.hostname);
-  } catch {
-    return false;
-  }
-}
-
 function normalizeForKey(value) {
   return String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
 }
@@ -10209,80 +10226,6 @@ function rememberDuplicateSignup(key) {
   return Boolean(previous && previous > now);
 }
 
-async function verifyTurnstileToken(token, ip, options = {}) {
-  const secret = String(process.env.TURNSTILE_SECRET_KEY || "").trim();
-  if (!secret) {
-    return options.required
-      ? { ok: false, skipped: false, reason: "captcha_not_configured" }
-      : { ok: true, skipped: true };
-  }
-  if (!token) return { ok: false, reason: "missing_captcha" };
-
-  const body = new URLSearchParams();
-  body.set("secret", secret);
-  body.set("response", token);
-  if (ip && ip !== "unknown") body.set("remoteip", ip);
-
-  try {
-    const response = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
-      method: "POST",
-      body,
-    });
-    const data = await response.json().catch(() => ({}));
-    return { ok: Boolean(data?.success), reason: data?.["error-codes"]?.join(",") || "" };
-  } catch (error) {
-    console.error("[signup:security] captcha verification failed", { message: error?.message || String(error) });
-    return { ok: false, reason: "captcha_unreachable" };
-  }
-}
-
-async function verifyRecaptchaToken(token, ip, options = {}) {
-  const secret = options.useTestSecret
-    ? GOOGLE_RECAPTCHA_TEST_SECRET_KEY
-    : String(process.env.RECAPTCHA_SECRET_KEY || process.env.GOOGLE_RECAPTCHA_SECRET_KEY || "").trim();
-  if (!secret) return { ok: true, skipped: true };
-  if (!token) return { ok: false, reason: "missing_captcha" };
-
-  const body = new URLSearchParams();
-  body.set("secret", secret);
-  body.set("response", token);
-  if (ip && ip !== "unknown") body.set("remoteip", ip);
-
-  try {
-    const response = await fetch("https://www.google.com/recaptcha/api/siteverify", {
-      method: "POST",
-      body,
-    });
-    const data = await response.json().catch(() => ({}));
-    return { ok: Boolean(data?.success), reason: data?.["error-codes"]?.join(",") || "" };
-  } catch (error) {
-    console.error("[signup:security] recaptcha verification failed", { message: error?.message || String(error) });
-    return { ok: false, reason: "captcha_unreachable" };
-  }
-}
-
-async function verifySignupCaptcha(security, ip) {
-  const provider = String(security.captchaProvider || "").trim().toLowerCase();
-  const genericToken = String(security.captchaToken || "").trim();
-  const recaptchaToken = String(security.recaptchaToken || "").trim();
-  const turnstileToken = String(security.turnstileToken || "").trim();
-  const useLocalRecaptchaTestKey = isLocalPageUrl(security.pageUrl);
-
-  if (provider === "recaptcha" || recaptchaToken) {
-    return verifyRecaptchaToken(recaptchaToken || genericToken, ip, { useTestSecret: useLocalRecaptchaTestKey });
-  }
-
-  if (provider === "turnstile" || turnstileToken) {
-    return verifyTurnstileToken(turnstileToken || genericToken, ip, { required: provider === "turnstile" });
-  }
-
-  if (process.env.RECAPTCHA_SECRET_KEY || process.env.GOOGLE_RECAPTCHA_SECRET_KEY) {
-    return verifyRecaptchaToken(genericToken, ip, { useTestSecret: useLocalRecaptchaTestKey });
-  }
-
-  return verifyTurnstileToken(genericToken, ip);
-}
-
 async function getSignupSecurityDecision(req, body, fields) {
   const security = body.security || {};
   const ip = getClientIp(req);
@@ -10350,6 +10293,7 @@ async function getSignupSecurityDecision(req, body, fields) {
     reasons,
     reviewReasons,
     captchaSkipped: Boolean(captcha.skipped),
+    captchaProvider: configuredCaptchaProvider(),
   };
 }
 
@@ -14654,7 +14598,7 @@ app.post(
         ipHash: hashKey(securityDecision.ip),
       },
       security: {
-        captchaProvider: String(body.security?.captchaProvider || "").trim(),
+        captchaProvider: securityDecision.captchaProvider,
         reviewRequired: securityDecision.reviewRequired,
         reviewReasons: securityDecision.reviewReasons,
         captchaSkipped: securityDecision.captchaSkipped,
@@ -15076,6 +15020,8 @@ app.post(
     let completionDelivery = null;
     if (phoneProvisioning.status === "ready") {
       completionDelivery = await deliverSignupCompletion({
+        prisma,
+        dispatchIdentity: provisionedRecord.businessId || provisionedRecord.signupAttemptId || buildMakeSignupEventKey(payload),
         ownerPhone: provisionedRecord.ownerPhone || payload?.owner?.phone,
         ownerEmail: provisionedRecord.ownerEmail || payload?.owner?.email,
         ownerName: provisionedRecord.ownerName || payload?.owner?.name,
@@ -15471,6 +15417,8 @@ app.all(
     let completionDelivery = null;
     if (phoneProvisioning.status === "ready") {
       completionDelivery = await deliverSignupCompletion({
+        prisma,
+        dispatchIdentity: provisionedRecord.businessId || provisionedRecord.signupAttemptId || buildMakeSignupEventKey(payload),
         ownerPhone: provisionedRecord.ownerPhone || payload?.owner?.phone,
         ownerEmail: provisionedRecord.ownerEmail || payload?.owner?.email,
         ownerName: provisionedRecord.ownerName || payload?.owner?.name,
@@ -17866,8 +17814,10 @@ app.use((err, req, res, _next) => {
     body.code = err.code;
   }
   if (/^\/api\/integrations\/(?:twilio\/purchase-number|vapi\/(?:create-signup-assistant|import-twilio-number))$/.test(req.path || "")) {
-    const diagnostic = sanitizeMakeFailureEnvelope({ providerCode: err.code });
+    const diagnostic = sanitizeMakeFailureEnvelope({ providerCode: err.providerCode || err.cause?.code || err.code,
+      providerStatus: err.providerStatus || err.upstreamStatus });
     if (diagnostic.providerCode) body.code = diagnostic.providerCode;
+    if (diagnostic.providerStatus) body.providerStatus = diagnostic.providerStatus;
   }
   if (Number.isInteger(err.upstreamStatus) && err.upstreamStatus >= 400 && err.upstreamStatus <= 599) {
     body.upstreamStatus = err.upstreamStatus;
@@ -18384,14 +18334,14 @@ function startBackgroundJobs() {
   }, 24 * 60 * 60 * 1000);
 }
 
-function startServer(port = PORT) {
+function startServer(port = PORT, host) {
   startBackgroundJobs();
   void reportPreviousFatalIncident().catch((error) => {
     console.error("[fatal-incident] stored crash report could not be processed", {
       code: String(error?.code || "FATAL_INCIDENT_REPORT_FAILED").slice(0, 80),
     });
   });
-  const server = app.listen(port, () => {
+  const server = app.listen(port, host, () => {
     console.log(`My AI PA API listening on http://localhost:${port}`);
     if (TELEGRAM_GUARDED_ACTIONS_ENABLED) {
       void ensureTelegramActionWebhook({
