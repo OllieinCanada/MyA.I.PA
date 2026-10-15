@@ -83,6 +83,8 @@ function httpMapperFrom(module, { url, query }) {
 
 function mutateBlueprint(current) {
   const blueprint = clone(current);
+  const parser = findModule(blueprint, 21);
+  if (parser.module !== "json:ParseJSON") throw new Error("The expected signup JSON parser changed; refusing an unsafe automatic rewrite.");
   const purchase = findModule(blueprint, 9);
   const assistant = findModule(blueprint, 25);
   const imported = findModule(blueprint, 28);
@@ -162,7 +164,7 @@ function mutateBlueprint(current) {
         error: "Signup provisioning stopped at a provider request.",
         code: "MAKE_PROVISIONING_STAGE_FAILED", stage,
         failedStage: { number_purchase: "TWILIO_NUMBER_PURCHASE", assistant_creation: "VAPI_ASSISTANT_CREATE", number_binding: "VAPI_NUMBER_IMPORT" }[stage],
-        provider: "MAKE",
+        provider: module.id === purchase.id ? "TWILIO" : "VAPI",
         // Return only fixed diagnostic codes, never raw error messages/headers
         // that may contain contact details or signed provisioning credentials.
         providerCode: buildSafeFailureCodeMapping(module.id),
@@ -171,6 +173,14 @@ function mutateBlueprint(current) {
       metadata: { designer: { x: 600, y: 300 + nextId * 10 } },
     }];
   }
+  parser.onerror = [{
+    id: nextId++, module: "gateway:WebhookRespond", version: 1, parameters: {},
+    mapper: { status: "400", body: JSON.stringify({ ok: false, success: false,
+      error: "Signup payload is not valid JSON.", code: "MAKE_SIGNUP_PAYLOAD_INVALID",
+      provider: "MAKE", failedStage: "MAKE_WEBHOOK", retryable: false }),
+      headers: [{ key: "Content-Type", value: "application/json" }] },
+    metadata: { designer: { x: 400, y: 600 } },
+  }];
 
   if (blueprint.metadata?.scenario && typeof blueprint.metadata.scenario === "object") {
     // The backend owns per-signup idempotency and concurrency. Queuing an instant
@@ -184,6 +194,10 @@ function mutateBlueprint(current) {
 
 function buildSafeFailureCodeMapping(moduleId) {
   const cases = [
+    ["UND_ERR_SOCKET", "UND_ERR_SOCKET"],
+    ["UND_ERR_CONNECT_TIMEOUT", "UND_ERR_CONNECT_TIMEOUT"],
+    ["ECONNRESET", "ECONNRESET"],
+    ["PROVISIONING_RECONCILIATION_REQUIRED", "PROVISIONING_RECONCILIATION_REQUIRED"],
     ["SIGNUP_ARCHIVED_RESOURCES_STILL_OWNED", "SIGNUP_ARCHIVED_RESOURCES_STILL_OWNED"],
     ["SIGNUP_ARCHIVED_RESOURCES_UNVERIFIED", "SIGNUP_ARCHIVED_RESOURCES_UNVERIFIED"],
     ["SIGNUP_BUSINESS_MIGRATION_REQUIRED", "SIGNUP_BUSINESS_MIGRATION_REQUIRED"],
@@ -216,6 +230,10 @@ function verifyBlueprint(blueprint) {
       && String(item.value || "").includes("provisioning.authorizationToken")
   );
   return {
+    parserErrorHandler: blueprint.flow.some((module) => module.id === 21 && module.module === "json:ParseJSON"
+      && module.onerror?.length === 1 && module.onerror[0].module === "gateway:WebhookRespond"
+      && String(module.onerror[0].mapper?.status) === "400"
+      && JSON.parse(module.onerror[0].mapper.body).code === "MAKE_SIGNUP_PAYLOAD_INVALID"),
     preferredAreaMapped: purchaseQuery.areaCode === "{{21.provisioning.preferredAreaCode}}",
     purchaseIdempotent: purchaseQuery.idempotencyKey === "{{21.provisioning.idempotencyKey}}" && hasToken(purchase),
     assistantBackendOwned: assistant.module === "http:ActionSendData"

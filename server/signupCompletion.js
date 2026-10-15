@@ -1,3 +1,5 @@
+const { dispatchSignupSms } = require("./signupSmsDispatch");
+
 function normalizeAssignedPhone(value) {
   const raw = String(value || "").trim();
   const digits = raw.replace(/\D/g, "");
@@ -48,6 +50,8 @@ function buildSignupCompletionContent({ ownerName, businessName, assignedPhone, 
 }
 
 async function deliverSignupCompletion({
+  prisma,
+  dispatchIdentity,
   ownerPhone,
   ownerEmail,
   ownerName,
@@ -96,11 +100,16 @@ async function deliverSignupCompletion({
   const errors = [];
   const skippedChannels = [];
   const attempts = [];
+  const receipts = {};
 
   if (String(ownerPhone || "").trim() && typeof sendSms === "function") {
     attempts.push((async () => {
       try {
-        await sendSms({ to: ownerPhone, message: content.sms });
+        const request = { to: ownerPhone, message: content.sms };
+        const receipt = prisma
+          ? await dispatchSignupSms({ prisma, identity: dispatchIdentity, purpose: "setup-complete", request, sendSms })
+          : await sendSms(request);
+        receipts.sms = { sid: receipt?.sid || "", status: receipt?.status || "accepted", delivered: ["delivered", "read"].includes(receipt?.status) };
         channels.push("sms");
       } catch (error) {
         errors.push({ channel: "sms", code: String(error?.providerCode || error?.code || "SMS_DELIVERY_FAILED") });
@@ -137,6 +146,7 @@ async function deliverSignupCompletion({
     errors,
     skippedChannels,
     content,
+    receipts,
   };
 }
 

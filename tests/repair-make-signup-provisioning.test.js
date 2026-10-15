@@ -74,6 +74,9 @@ test("rewrites the three paid provisioning stages and fail-closed response mappi
   assert.equal(repaired.metadata.scenario.sequential, false);
   assert.equal(repaired.metadata.scenario.confidential, true);
   const handlerIds = new Set();
+  const parserFailure = JSON.parse(repaired.flow.find((item) => item.id === 21).onerror[0].mapper.body);
+  assert.equal(parserFailure.code, "MAKE_SIGNUP_PAYLOAD_INVALID");
+  assert.equal(parserFailure.failedStage, "MAKE_WEBHOOK");
   for (const id of [9, 25, 28]) {
     const module = repaired.flow.find((item) => item.id === id);
     assert.equal(module.parameters.handleErrors, true);
@@ -86,6 +89,8 @@ test("rewrites the three paid provisioning stages and fail-closed response mappi
     assert.equal(failure.code, "MAKE_PROVISIONING_STAGE_FAILED");
     assert.ok(["TWILIO_NUMBER_PURCHASE", "VAPI_ASSISTANT_CREATE", "VAPI_NUMBER_IMPORT"].includes(failure.failedStage));
     assert.equal(failure.retryable, false);
+    assert.equal(failure.provider, id === 9 ? "TWILIO" : "VAPI");
+    assert.match(failure.providerCode, /UND_ERR_SOCKET/);
     assert.match(failure.providerCode, /SIGNUP_ARCHIVED_RESOURCES_STILL_OWNED/);
     assert.match(failure.providerCode, /SIGNUP_BUSINESS_MIGRATION_REQUIRED/);
     assert.doesNotMatch(failure.providerCode, /parseJSON|\.error\.body|\.error\.headers/);

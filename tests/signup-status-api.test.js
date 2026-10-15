@@ -13,7 +13,11 @@ Object.assign(process.env, {
   SIGNUP_STATUS_SECRET: "local-status-api-test-secret-at-least-32-characters",
   ADMIN_SESSION_SECRET: "local-verification-confirmation-test-secret",
   SIGNUP_REQUIRE_MANUAL_APPROVAL: "true", SIGNUP_REQUIRE_VERIFICATION: "false",
-  TURNSTILE_SECRET_KEY: "", RECAPTCHA_SECRET_KEY: "", SIGNUP_CAPTCHA_REQUIRED: "false",
+  CAPTCHA_PROVIDER: "turnstile", TURNSTILE_SECRET_KEY: "synthetic-api-captcha-secret", RECAPTCHA_SECRET_KEY: "",
+  CAPTCHA_ALLOWED_HOSTNAMES: "www.myaipa.ca",
+  // This file exercises several CAPTCHA rejection cases from one loopback IP.
+  // Dedicated rate-limit tests cover production thresholds separately.
+  SIGNUP_IP_MAX_REQUESTS: "20",
   TELEGRAM_BOT_TOKEN: "", TELEGRAM_CHAT_ID: "",
   TWILIO_ACCOUNT_SID: "", TWILIO_AUTH_TOKEN: "", TWILIO_API_KEY_SID: "", TWILIO_API_KEY_SECRET: "",
   VAPI_API_KEY: "", STRIPE_SECRET_KEY: "",
@@ -111,6 +115,14 @@ let second;
 before(async () => {
   // Refuse every external request, even if an unexpected credential is present.
   global.fetch = (url, options) => {
+    if (["https://challenges.cloudflare.com/turnstile/v0/siteverify", "https://www.google.com/recaptcha/api/siteverify"].includes(String(url))) {
+      const google = new URL(url).hostname === "www.google.com";
+      assert.equal(options.body.get("secret"), google ? "synthetic-api-google-secret" : "synthetic-api-captcha-secret");
+      const valid = options.body.get("response") === (google ? "synthetic-api-google-proof" : "synthetic-api-proof");
+      return Promise.resolve(new Response(JSON.stringify({ success: valid, hostname: "www.myaipa.ca", "error-codes": valid ? [] : ["invalid-input-response"] }), {
+        status: 200, headers: { "content-type": "application/json" },
+      }));
+    }
     assert.equal(new URL(url).hostname, "127.0.0.1", "Local API tests must never contact a provider.");
     return nativeFetch(url, options);
   };
@@ -209,7 +221,7 @@ test("web signup, pending verification, and dashboard share one server-owned ide
     setupDetails: { ownerName: "Synthetic Owner", ownerEmail: "signup@example.invalid", ownerPhone: "+12895550111", businessType: "Electrical" },
     callForwarding: { carrier: "other", lineType: "voip" },
     pricing: { offersServiceCalls: false },
-    security: { clientElapsedMs: 10000 },
+    security: { clientElapsedMs: 10000, captchaProvider: "turnstile", captchaToken: "synthetic-api-proof" },
   };
   const postSignup = (body = requestBody) => fetch(`${baseUrl}/api/integrations/signup-complete`, {
     method: "POST", headers: { "content-type": "application/json" },
@@ -218,6 +230,19 @@ test("web signup, pending verification, and dashboard share one server-owned ide
   const missingIdentity = await postSignup({ ...requestBody, submissionId: undefined });
   assert.equal(missingIdentity.status, 400);
   assert.equal((await missingIdentity.json()).code, "SIGNUP_SUBMISSION_ID_REQUIRED");
+  const initialAttempts = rows.size;
+  const initialPending = pendingRows.size;
+  let rejectedCase = 0;
+  for (const security of [{},
+    { captchaProvider: "recaptcha", recaptchaToken: "fake", pageUrl: "http://localhost:3000" },
+    { captchaProvider: "turnstile", captchaToken: "fake", pageUrl: "http://127.0.0.1:3000" }]) {
+    const denied = await postSignup({ ...requestBody, security,
+      businessProfile: { ...requestBody.businessProfile, businessName: `Synthetic Rejected Captcha ${rejectedCase++}` },
+    });
+    assert.equal(denied.status, 429, await denied.clone().text());
+    assert.equal(rows.size, initialAttempts, "Rejected CAPTCHA must not save a signup attempt");
+    assert.equal(pendingRows.size, initialPending, "Rejected CAPTCHA must not begin verification");
+  }
   const signup = await postSignup();
   assert.equal(signup.status, 202, await signup.clone().text());
   const result = await signup.json();
@@ -243,6 +268,36 @@ test("web signup, pending verification, and dashboard share one server-owned ide
   const matchingPendingRows = [...pendingRows.values()].filter((row) => row.ownerEmail === "signup@example.invalid");
   assert.equal(matchingPendingRows.length, 1);
   assert.equal(new Set(matchingPendingRows.map((row) => row.payload.signupId)).size, 1);
+});
+
+test("dual CAPTCHA is enforced by the real signup endpoint before saving a customer", async () => {
+  const previous = { provider: process.env.CAPTCHA_PROVIDER, google: process.env.RECAPTCHA_SECRET_KEY };
+  process.env.CAPTCHA_PROVIDER = "turnstile+recaptcha";
+  process.env.RECAPTCHA_SECRET_KEY = "synthetic-api-google-secret";
+  try {
+    const payload = { submissionId: "f7d7ae2b-6d25-4eec-a6bb-2ce5e012e0db", country: "ca",
+      businessProfile: { businessName: "Synthetic Dual Protected Electric", phone: "+19055550115", address: "200 Test Street, Hamilton, ON" },
+      setupDetails: { ownerName: "Synthetic Owner", ownerEmail: "dual-signup@example.invalid", ownerPhone: "+12895550115", businessType: "Electrical" },
+      security: { captchaProvider: "turnstile+recaptcha", turnstileToken: "synthetic-api-proof", recaptchaToken: "synthetic-api-google-proof", clientElapsedMs: 10000 },
+    };
+    const initial = { attempts: rows.size, pending: pendingRows.size };
+    let index = 0;
+    for (const security of [{ ...payload.security, recaptchaToken: "" },
+      { ...payload.security, captchaProvider: "turnstile" }, { ...payload.security, recaptchaToken: "fake" }]) {
+      const denied = await fetch(`${baseUrl}/api/integrations/signup-complete`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({
+        ...payload, security, businessProfile: { ...payload.businessProfile, businessName: `Synthetic Dual Denied ${index++}` },
+      }) });
+      assert.equal(denied.status, 429);
+      assert.equal(rows.size, initial.attempts);
+      assert.equal(pendingRows.size, initial.pending);
+    }
+    const accepted = await fetch(`${baseUrl}/api/integrations/signup-complete`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
+    assert.equal(accepted.status, 202, await accepted.clone().text());
+    assert.equal(pendingRows.size, initial.pending + 1);
+  } finally {
+    process.env.CAPTCHA_PROVIDER = previous.provider;
+    process.env.RECAPTCHA_SECRET_KEY = previous.google;
+  }
 });
 
 test("link previews are read-only and only explicit confirmation advances a saved signup", async () => {

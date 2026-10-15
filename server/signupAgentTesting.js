@@ -435,7 +435,7 @@ async function runAgentTextTest({ signup = {}, sendSms, persist = () => {}, forc
     }
 
     if (force || !progress.agentTestOwnerAcceptedAt) {
-      const ownerResult = await sendSms({ to: ownerPhone, from: aiNumber, message: messages.owner });
+      const ownerResult = await sendSms({ to: ownerPhone, from: aiNumber, message: messages.owner, purpose: "owner-test" });
       progress.agentTestOwnerAcceptedAt = new Date().toISOString();
       progress.agentTestOwnerProviderStatus = clean(ownerResult?.status || "accepted", 40);
       progress.agentTestOwnerMessageSid = clean(ownerResult?.sid, 80);
@@ -461,7 +461,7 @@ async function runAgentTextTest({ signup = {}, sendSms, persist = () => {}, forc
       };
     }
     if (!progress.agentTestCustomerAcceptedAt) {
-      const customerResult = await sendSms({ to: ownerPhone, from: aiNumber, message: messages.customer });
+      const customerResult = await sendSms({ to: ownerPhone, from: aiNumber, message: messages.customer, purpose: "customer-test" });
       progress.agentTestCustomerAcceptedAt = new Date().toISOString();
       progress.agentTestCustomerProviderStatus = clean(customerResult?.status || "accepted", 40);
       progress.agentTestCustomerMessageSid = clean(customerResult?.sid, 80);
