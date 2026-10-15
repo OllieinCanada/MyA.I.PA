@@ -5,6 +5,7 @@ if (process.env.DISABLE_LOCAL_ENV_FILES !== "1") {
 }
 
 const crypto = require("crypto");
+const { buildTwilioImportRequest } = require('./vapiTwilioImportRequest');
 const { providerFailureDetail } = require("./providerFailureDetail");
 const { configuredCaptchaProvider, verifySignupCaptcha } = require("./signupCaptcha");
 const { hasIndividualPricingChoices, individualPricingPolicy } = require("../src/features/signup/pricingPolicy");
@@ -3135,13 +3136,9 @@ async function importTwilioPhoneNumberToVapi({ twilioPhoneNumber, assistantId, n
   });
   if (existing) return existing;
 
-  const payload = {
-    twilioPhoneNumber: phoneNumber,
-    twilioAccountSid: TWILIO_ACCOUNT_SID,
-    twilioAuthToken: TWILIO_AUTH_TOKEN,
-    name: sanitizeVapiImportName(name, `${phoneNumber} Number`),
-    assistantId: vapiAssistantId,
-  };
+  const payload = buildTwilioImportRequest({ phoneNumber, assistantId:vapiAssistantId,
+    accountSid:TWILIO_ACCOUNT_SID, authToken:TWILIO_AUTH_TOKEN,
+    name:sanitizeVapiImportName(name, `${phoneNumber} Number`) });
 
   const response = await fetch(`${VAPI_API_BASE_URL}/phone-number/import/twilio`, {
     method: "POST",
@@ -7117,7 +7114,41 @@ function isStaleSignupArchiveEligible({ signup = {}, diagnostics = {}, now = new
 async function inspectSignupRecoveryState(signup) {
   const pendingSignup = findPendingSignupForDashboardRecord(signup, await readPendingSignupStore());
   const inspectionSignup = { ...signup };
-  const provisioning = pendingSignup?.[1]?.payload?.provisioning;
+  let provisioning = pendingSignup?.[1]?.payload?.provisioning;
+  if (!provisioning?.idempotencyKey && pendingSignup?.[1]?.payload && isContactVerified(signup)
+    && /error|failed|provisioning|agent_testing|setup_started/.test(String(signup.status || ''))) {
+    // Pending records predate signed handoff normalization. Read the registered
+    // context by its exact deterministic key; never infer ownership from email.
+    const candidate = normalizeSignupProvisioningPayload(pendingSignup[1].payload, {
+      signingSecret: getProvisioningSigningSecret(),
+      defaultRegion: process.env.TWILIO_DEFAULT_CANADIAN_REGION || 'ON',
+    });
+    const row = await prisma.runtimeStore.findUnique({where:{key:contextStoreKey(candidate.provisioning.idempotencyKey)}});
+    if (row?.data?.payload) {
+      assertPendingSignupRecoveryIdentity(signup, row.data.payload);
+      if (row.data.payload.provisioning?.idempotencyKey !== candidate.provisioning.idempotencyKey
+        || row.data.contextHash !== row.data.payload.provisioning?.contextHash) {
+        throw signupRecoveryError('Registered diagnostic context does not match this signup.', 'SIGNUP_RECOVERY_CONTEXT_MISMATCH');
+      }
+      provisioning = row.data.payload.provisioning;
+    }
+  }
+  const provisioningStages = {};
+  if (provisioning?.idempotencyKey) {
+    for (const kind of ['twilio-number','vapi-assistant','vapi-import']) {
+      const step = await readProvisioningStep({prisma,kind,idempotencyKey:provisioning.idempotencyKey});
+      if (step.data.contextHash && step.data.contextHash !== provisioning.contextHash) {
+        provisioningStages[kind] = {status:'context_mismatch'};
+        continue;
+      }
+      provisioningStages[kind] = {status:step.data.status || 'not_started',
+        originalErrorCode:String(step.data.originalErrorCode || '').slice(0,100),
+        originalProviderStatus:Number(step.data.originalProviderStatus) || null,
+        originalProviderDetail:providerFailureDetail({message:step.data.originalProviderDetail}),
+        lastErrorCode:String(step.data.lastErrorCode || '').slice(0,100),
+        lastProviderDetail:providerFailureDetail({message:step.data.lastProviderDetail})};
+    }
+  }
   if (!inspectionSignup.twilioPhoneNumber && provisioning?.idempotencyKey && provisioning?.contextHash) {
     const step = await readProvisioningStep({ prisma, kind: "twilio-number", idempotencyKey: provisioning.idempotencyKey });
     if (step.data.contextHash === provisioning.contextHash && step.data.status === "completed") {
@@ -7147,6 +7178,7 @@ async function inspectSignupRecoveryState(signup) {
   });
   return {
     ...diagnostics,
+    provisioningStages,
     partialResourceEvidence: Boolean(!signup.twilioPhoneNumber && inspectionSignup.twilioPhoneNumber),
     providerReconciliationRequired: !inspectionSignup.twilioPhoneNumber,
     staleArchiveEligible: isStaleSignupArchiveEligible({ signup, diagnostics }),

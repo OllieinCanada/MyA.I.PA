@@ -98,6 +98,7 @@ test('partial recovery reads a purchased number from the exact durable signed co
   const start = source.indexOf('async function inspectSignupRecoveryState('), end = source.indexOf('\nasync function ', start + 1);
   let inspectedPhone = '';
   const context = { prisma: {}, readPendingSignupStore: async () => ({}),
+    providerFailureDetail: ({message}) => message || '',
     findPendingSignupForDashboardRecord: () => ['hash', { payload: { provisioning: { idempotencyKey: 'exact-key', contextHash: 'exact-context' } } }],
     readProvisioningStep: async input => { assert.equal(input.idempotencyKey, 'exact-key'); return { data: { status: 'completed', contextHash: 'exact-context', result: { twilioPhoneNumber: request.from } } }; },
     fetchVapiCollection: async () => [], fetchTwilioIncomingPhoneNumbers: async () => [],
@@ -110,4 +111,25 @@ test('partial recovery reads a purchased number from the exact durable signed co
   context.readProvisioningStep = async () => ({ data: { status: 'completed', contextHash: 'wrong-context', result: { twilioPhoneNumber: request.from } } });
   const refused = await context.subject({ signupAttemptId: 'exact-attempt' });
   assert.equal(inspectedPhone, undefined); assert.equal(refused.providerReconciliationRequired, true);
+});
+
+test('raw pending signup diagnostics read only its exact registered context and preserve the original import failure', async () => {
+  const source = fs.readFileSync(require.resolve('../server/index'), 'utf8');
+  const start = source.indexOf('async function inspectSignupRecoveryState('), end = source.indexOf('\nasync function ', start + 1);
+  let reads=0,identityChecked=false;
+  const registered={business:{name:'isolated roofing'},provisioning:{idempotencyKey:'exact-key',contextHash:'exact-context'}};
+  const context={process:{env:{}},prisma:{runtimeStore:{findUnique:async({where})=>{assert.equal(where.key,'context:exact-key');reads++;return {data:{payload:registered,contextHash:'exact-context'}};}}},
+    readPendingSignupStore:async()=>({}),findPendingSignupForDashboardRecord:()=>['hash',{payload:{business:{name:'isolated roofing'}}}],
+    isContactVerified:()=>true,getProvisioningSigningSecret:()=> 'fixture',contextStoreKey:key=>'context:'+key,
+    normalizeSignupProvisioningPayload:()=>registered,assertPendingSignupRecoveryIdentity:()=>{identityChecked=true;},
+    providerFailureDetail:({message})=>message||'',signupRecoveryError:(m,c)=>Object.assign(Error(m),{code:c}),
+    readProvisioningStep:async({kind})=>({data:{contextHash:'exact-context',status:kind==='vapi-import'?'failed':'completed',
+      result:{twilioPhoneNumber:request.from},originalErrorCode:kind==='vapi-import'?'VAPI_TWILIO_IMPORT_FAILED':'',originalProviderStatus:kind==='vapi-import'?400:null,originalProviderDetail:kind==='vapi-import'?'specific validation explanation':''}}),
+    fetchVapiCollection:async()=>[],fetchTwilioIncomingPhoneNumbers:async()=>[],getSignupProviderRecoveryDiagnostics:()=>({}),isStaleSignupArchiveEligible:()=>false};
+  vm.createContext(context);vm.runInContext(`${source.slice(start,end)};this.subject=inspectSignupRecoveryState;`,context);
+  const report=await context.subject({status:'setup_error'});
+  assert.equal(reads,1);assert.equal(identityChecked,true);
+  assert.equal(report.provisioningStages['vapi-import'].originalProviderStatus,400);
+  assert.equal(report.provisioningStages['vapi-import'].originalProviderDetail,'specific validation explanation');
+  assert.equal(report.partialResourceEvidence,true);
 });

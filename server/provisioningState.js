@@ -1,4 +1,5 @@
 const crypto = require("crypto");
+const { providerFailureDetail } = require('./providerFailureDetail');
 
 const PROVISIONING_STATE_PREFIX = "signup-provisioning:";
 const DEFAULT_LEASE_MS = 5 * 60 * 1000;
@@ -98,6 +99,8 @@ async function claimProvisioningStep({
       dispatchStartedAt: Object.hasOwn(data, "dispatchStartedAt") ? data.dispatchStartedAt : (Number(data.attempts || 0) > 0 ? "unknown" : null),
       originalErrorCode: data.originalErrorCode || "",
       originalProviderStatus: data.originalProviderStatus || null,
+      originalProviderDetail: data.originalProviderDetail || '',
+      lastProviderDetail: data.lastProviderDetail || '',
       updatedAt: new Date(now).toISOString(),
     };
     await tx.runtimeStore.upsert({
@@ -151,6 +154,8 @@ async function failProvisioningStep({ prisma, key, claimToken, error, now = Date
     const data = normalizeStoredData(row);
     if (data.status === "completed") return false;
     if (!data.claimToken || data.claimToken !== claimToken) return false;
+    const detail = providerFailureDetail({message:error?.providerDetail}, Object.entries(process.env)
+      .filter(([name]) => /token|secret|password|api.?key|database_url/i.test(name)).map(([,value])=>value));
     const failed = {
       ...data,
       status: "failed",
@@ -160,6 +165,9 @@ async function failProvisioningStep({ prisma, key, claimToken, error, now = Date
       lastProviderStatus: Number(error?.providerStatus || error?.statusCode || 0) || null,
       originalErrorCode: data.originalErrorCode || String(error?.providerCode || error?.cause?.code || error?.code || "PROVISIONING_STEP_FAILED").slice(0, 100),
       originalProviderStatus: data.originalProviderStatus || Number(error?.providerStatus || 0) || null,
+      lastProviderDetail: detail || data.lastProviderDetail || '',
+      originalProviderDetail: data.originalProviderDetail || (!data.originalErrorCode
+        || data.originalErrorCode === String(error?.providerCode || error?.cause?.code || error?.code || 'PROVISIONING_STEP_FAILED') ? detail : ''),
       updatedAt: new Date(now).toISOString(),
     };
     await tx.runtimeStore.upsert({
