@@ -506,6 +506,14 @@ const twilioStagingWebhookProcessRateLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: "Too many staging webhook requests." },
 });
+const twilioStatusCallbackProcessRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  // Separate from customer form limits: provider IPs can deliver bursts.
+  limit: 600,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many delivery callbacks. Retry later.' },
+});
 const telegramActionsProcessRateLimiter = rateLimit({
   windowMs: PUBLIC_ROUTE_WINDOW_MS,
   limit: 60,
@@ -13052,6 +13060,7 @@ async function processTwilioStatusInbox() {
 
 app.post(
   "/api/webhooks/twilio/message-status",
+  twilioStatusCallbackProcessRateLimiter,
   express.urlencoded({ extended: false, limit: "8kb" }),
   asyncRoute(async (req, res) => {
     if (!verifyTwilioWebhookRequest(req, process.env, { configuredUrl: TWILIO_STATUS_CALLBACK_URL })) {

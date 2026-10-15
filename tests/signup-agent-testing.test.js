@@ -142,6 +142,7 @@ test("guarded finalization preserves the exact attempt through testing, trial, a
   const callbackEnd = source.indexOf("app.post(", callbackStart + 1);
   const callback = source.slice(callbackStart, callbackEnd);
   assert.match(callback, /await enqueueTwilioStatus/);
+  assert.match(callback, /twilioStatusCallbackProcessRateLimiter/);
   assert.doesNotMatch(callback, /continueSignupAgentTextTestAfterDelivery|safelyNotifySignupOperations/);
   const processor = source.slice(source.indexOf('async function processSavedTwilioMessageStatus'), source.indexOf('async function processTwilioStatusInbox'));
   assert.match(processor, /upsertSignupDashboardRecord\(\{ \.\.\.matchingSignup, \.\.\.update \}\)/);
