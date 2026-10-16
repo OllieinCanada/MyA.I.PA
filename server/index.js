@@ -163,6 +163,7 @@ const {
   verifySignupProvisioningAuthorization,
 } = require("./signupProvisioning");
 const { buildSignupAssistantConfig } = require("./signupAssistantTemplate");
+const { assertMissingAssistantRecovery } = require('./signupAssistantRecovery');
 const {
   assessSignupAssistantContent,
   assessSignupAssistantContentWithReceipt,
@@ -3627,7 +3628,7 @@ function getTwilioAuthHeader() {
   return `Basic ${Buffer.from(`${TWILIO_REST_AUTH.username}:${TWILIO_REST_AUTH.password}`).toString("base64")}`;
 }
 
-async function fetchTwilioIncomingPhoneNumbers() {
+async function fetchTwilioIncomingPhoneNumbers({ requireComplete = false } = {}) {
   if (!TWILIO_REST_AUTH.configured) {
     const err = new Error(TWILIO_REST_AUTH.warning || "Twilio reporting credentials are not configured.");
     err.statusCode = 503;
@@ -3651,11 +3652,17 @@ async function fetchTwilioIncomingPhoneNumbers() {
     if (!response.ok) {
       throw createProviderHttpError({ provider: "Twilio", operation: "owned phone-number list", status: response.status, data, fallbackCode: "TWILIO_NUMBER_LIST_FAILED" });
     }
+    if (requireComplete && !Array.isArray(data?.incoming_phone_numbers)) {
+      throw signupRecoveryError('Twilio returned an invalid number inventory.', 'TWILIO_INVENTORY_INCOMPLETE');
+    }
 
     records.push(...(Array.isArray(data?.incoming_phone_numbers) ? data.incoming_phone_numbers : []));
     nextUrl = data?.next_page_uri ? new URL(data.next_page_uri, TWILIO_API_BASE_URL) : null;
   }
 
+  if (requireComplete && nextUrl) {
+    throw signupRecoveryError('Twilio number inventory was truncated.', 'TWILIO_INVENTORY_INCOMPLETE');
+  }
   return records;
 }
 
@@ -17219,6 +17226,55 @@ app.get(
   requireAdmin,
   asyncRoute(async (_req, res) => {
     res.json({ ok: true, signups: listSignupDashboardRecords() });
+  })
+);
+
+app.post(
+  '/api/admin/signups/recover-missing-assistant',
+  adminSignupRepairProcessRateLimiter,
+  requireAdmin,
+  requireProvisioningAuthorization,
+  asyncRoute(async (req, res) => {
+    const { signupAttemptId, expectedPhone, confirmation, apply } = req.body || {};
+    if (confirmation !== 'RECOVER_MISSING_ASSISTANT_ONLY' || !/^signup_[a-f0-9]{32}$/.test(signupAttemptId || '')
+      || !/^\+1\d{10}$/.test(expectedPhone || '') || typeof apply !== 'boolean') {
+      return res.status(400).json({ error: 'Exact signup, existing phone, confirmation and explicit apply flag are required.' });
+    }
+    const payload = await loadTrustedProvisioningContext(req);
+    const authorization = req.provisioningAuthorization;
+    const actorHash = getAdminActorHash(req);
+    const verifyAbsent = async () => {
+      await loadTrustedProvisioningContext(req);
+      const [numberStage, assistantStage, importStage] = await Promise.all(
+        ['twilio-number', 'vapi-assistant', 'vapi-import'].map(kind => readProvisioningStep({ prisma, kind,
+          idempotencyKey: authorization.idempotencyKey })));
+      const [twilioNumbers, assistants, vapiPhones] = await Promise.all([
+        fetchTwilioIncomingPhoneNumbers({ requireComplete: true }),
+        fetchVapiCollection('assistant', ['assistants', 'agents'], { requireComplete: true }),
+        fetchVapiCollection('phone-number', ['phoneNumbers', 'phone_numbers'], { requireComplete: true }),
+      ]);
+      return assertMissingAssistantRecovery({ payload, signupAttemptId, expectedPhone,
+        records: listSignupDashboardRecords(), numberStage: numberStage.data, assistantStage: assistantStage.data,
+        importStage: importStage.data, twilioNumbers, assistants, vapiPhones });
+    };
+    // Dry run never releases a lock or calls a provider mutation.
+    await verifyAbsent();
+    if (!apply) return res.json({ ok: true, eligible: true, applied: false, aiNumberLast4: expectedPhone.slice(-4),
+      numbersPurchased: 0, textsSent: 0, callsPlaced: 0, billingChanged: false });
+    await recordAdminAuditEvent({ prisma, action: 'recover_missing_signup_assistant', outcome: 'requested', actorHash,
+      targetType: 'signup', targetId: hashKey(signupAttemptId).slice(0, 24), details: { stage: 'vapi-assistant' } });
+    const resourceName = buildProvisioningResourceName('vapi-assistant', authorization.idempotencyKey);
+    const result = await runProvisioningStep({ prisma, kind: 'vapi-assistant', idempotencyKey: authorization.idempotencyKey,
+      contextHash: authorization.contextHash,
+      verifyCompleted: saved => verifySavedProvisioningResources('vapi-assistant', saved),
+      reconcile: () => createSignupVapiAssistant({ normalizedPayload: payload, assignedPhone: expectedPhone, resourceName, reconcileOnly: true }),
+      execute: () => createSignupVapiAssistant({ normalizedPayload: payload, assignedPhone: expectedPhone, resourceName }),
+      missingAssistantRecovery: { actorHash, verifyAbsent },
+    });
+    await recordAdminAuditEvent({ prisma, action: 'recover_missing_signup_assistant', outcome: 'success', actorHash,
+      targetType: 'signup', targetId: hashKey(signupAttemptId).slice(0, 24), details: { stage: 'vapi-assistant', reused: !!result.reused } });
+    res.json({ ok: true, applied: true, assistantId: result.assistantId, reused: !!result.reused,
+      numbersPurchased: 0, textsSent: 0, callsPlaced: 0, billingChanged: false });
   })
 );
 

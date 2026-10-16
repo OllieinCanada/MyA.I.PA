@@ -126,6 +126,15 @@ async function request(path, options = {}) {
   });
 }
 
+test('missing-assistant repair requires admin authentication and a signed provisioning context', async () => {
+  const path='/api/admin/signups/recover-missing-assistant';
+  const body={confirmation:'RECOVER_MISSING_ASSISTANT_ONLY',apply:true,signupAttemptId:'signup_'+'a'.repeat(32),expectedPhone:'+12895550123'};
+  assert.equal((await request(path,{method:'POST',body,headers:{'x-api-key':process.env.INTEGRATION_API_KEY}})).status,401);
+  const response=await request(path,{method:'POST',body,headers:{'x-admin-password':process.env.ADMIN_PASSWORD}});
+  assert.equal(response.status,401);
+  assert.match((await response.json()).error,/signed provisioning/);
+});
+
 test("health endpoint remains public and carries baseline security headers", async () => {
   const response = await request("/api/health");
   assert.equal(response.status, 200);

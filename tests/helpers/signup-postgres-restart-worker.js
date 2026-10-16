@@ -21,17 +21,20 @@ if (['STRIPE_SECRET_KEY', 'VAPI_API_KEY', 'TWILIO_AUTH_TOKEN', 'TWILIO_API_KEY_S
 }
 const prisma = global.__myAiPaPrisma;
 app.post('/__local-signup-recovery-drill', async (req, res) => {
-  const { identity, kind, fault } = req.body;
+  const { identity, kind, fault, recoverMissingAssistant } = req.body;
   if (!/^drill-[a-z0-9-]+$/.test(identity || '') || !['twilio-number', 'vapi-assistant', 'vapi-import', 'signup-sms', 'stripe-trial', 'crm'].includes(kind)) return res.sendStatus(400);
   const providerKey = `drill-provider:${identity}:${kind}`;
   try {
     const result = await runProvisioningStep({ prisma, kind, idempotencyKey: identity, contextHash: 'isolated-drill',
+      missingAssistantRecovery: recoverMissingAssistant === true ? { actorHash: 'a'.repeat(32),
+        verifyAbsent: async () => !(await prisma.runtimeStore.findUnique({ where: { key: providerKey } })) } : undefined,
       reconcile: async () => {
         if (fault === 'before-dispatch') process.exit(86);
         return (await prisma.runtimeStore.findUnique({ where: { key: providerKey } }))?.data || null;
       },
       verifyCompleted: async saved => (await prisma.runtimeStore.findUnique({ where: { key: providerKey } }))?.data?.id === saved.id,
       execute: async () => {
+        if (fault === 'failed-before-provider') throw Error('Synthetic pre-provider failure');
         const prior = await prisma.runtimeStore.findUnique({ where: { key: providerKey } });
         const receipt = { id: `${identity}-${kind}`, sid: 'SMisolated', creates: Number(prior?.data?.creates || 0) + 1 };
         await prisma.runtimeStore.upsert({ where: { key: providerKey }, update: { data: receipt }, create: { key: providerKey, data: receipt } });
