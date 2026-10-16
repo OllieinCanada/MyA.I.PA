@@ -1,41 +1,4 @@
 {
   "schemaVersion": 2,
-  "incidents": {
-    "issue:operational_health:public_30dbb9159f991639055272ff18d5de51": {
-      "lifecycleId": "public_86a4baec0648afa512537c4a",
-      "type": "operational",
-      "checkName": "operational_health",
-      "firstDetectedAt": "2026-10-14T15:15:32.401Z"
-    },
-    "issue:operational_health:public_a45ef78d59cbe0d0d4871343facebc37": {
-      "lifecycleId": "public_e8a2299575783e8e713104e1",
-      "type": "operational",
-      "checkName": "operational_health",
-      "firstDetectedAt": "2026-10-15T22:21:32.922Z"
-    },
-    "issue:operational_health:public_1e7376cb3fd19548502735de28b44b7d": {
-      "lifecycleId": "public_f6c9fd216cf74cfe12d57348",
-      "type": "operational",
-      "checkName": "operational_health",
-      "firstDetectedAt": "2026-10-15T22:21:32.922Z"
-    },
-    "issue:operational_health:public_8361aab3de790aa4a8bb122c2b4de48b": {
-      "lifecycleId": "public_2b293972e00511287244852e",
-      "type": "operational",
-      "checkName": "operational_health",
-      "firstDetectedAt": "2026-10-15T22:21:32.922Z"
-    },
-    "issue:operational_health:public_66e170fdfc62e8422ee44f8d96315e1c": {
-      "lifecycleId": "public_029ed650a63d67c28f1f30d8",
-      "type": "operational",
-      "checkName": "operational_health",
-      "firstDetectedAt": "2026-10-16T04:58:28.353Z"
-    },
-    "check:operational_health:public_fb704d24577919f6d089300e98db5793": {
-      "lifecycleId": "public_53fd280ebb8e7f47a26a4717",
-      "type": "check",
-      "checkName": "operational_health",
-      "firstDetectedAt": "2026-10-16T14:20:10.338Z"
-    }
-  }
+  "incidents": {}
 }
