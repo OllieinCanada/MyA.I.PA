@@ -2,6 +2,7 @@ const fs = require("fs");
 const path = require("path");
 
 const { humanizeIncidentReason, redactIncidentText } = require("./incidentAlerts");
+const { requiresSyncRecovery } = require('./callSyncHealth');
 
 const DEFAULT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_INCIDENTS = 100;
@@ -61,7 +62,7 @@ function createRemediationState(incident, previous, detectedAt) {
       && REOPENABLE_REMEDIATION_STATUSES.has(previousState.status)
       && Number.isFinite(previousDetectedAt)
       && Number.isFinite(currentDetectedAt)
-      && currentDetectedAt - previousDetectedAt >= REMEDIATION_RECURRENCE_MS
+      && (previous?.syncRecovery || currentDetectedAt - previousDetectedAt >= REMEDIATION_RECURRENCE_MS)
   );
   if (previousState && !recurrent) return previousState;
 
@@ -150,7 +151,7 @@ function createAttentionItem(incident, previous = null) {
     diagnostics: {
       occurrences: previousOccurrences + 1,
       originalSeverity: severity,
-      firstDetectedAt: previous?.diagnostics?.firstDetectedAt || detectedAt,
+      firstDetectedAt: previous?.syncRecovery ? detectedAt : previous?.diagnostics?.firstDetectedAt || detectedAt,
       lastDetectedAt: detectedAt,
     },
   };
@@ -163,7 +164,8 @@ function recordRuntimeIncident(filePath, incident) {
     const previous = items.find((item) => item.id === id) || null;
     const next = createAttentionItem(incident, previous);
     if (!next) return { recorded: false, reason: "invalid_incident_id" };
-    const updated = [next, ...items.filter((item) => item.id !== id)].slice(0, MAX_INCIDENTS);
+    const candidates = [next, ...items.filter((item) => item.id !== id)];
+    const updated = candidates.filter(requiresSyncRecovery).concat(candidates.filter(item => !requiresSyncRecovery(item)).slice(0, MAX_INCIDENTS));
     writeStore(filePath, updated);
     return { recorded: true, item: next };
   } catch (_error) {
@@ -176,7 +178,7 @@ function listRuntimeIncidents(filePath, { now = new Date(), ttlMs = DEFAULT_TTL_
   const all = readStore(filePath);
   const active = all.filter((item) => {
     const detectedMs = new Date(item?.diagnostics?.lastDetectedAt || item?.detectedAt || 0).getTime();
-    return safeRuntimeIncidentId(item?.id) && Number.isFinite(detectedMs) && nowMs - detectedMs <= ttlMs;
+    return safeRuntimeIncidentId(item?.id) && Number.isFinite(detectedMs) && (requiresSyncRecovery(item) || nowMs - detectedMs <= ttlMs);
   }).map((item) => ({
     ...item,
     ageMinutes: Math.max(0, Math.floor((nowMs - new Date(item.detectedAt).getTime()) / 60_000)),
@@ -205,10 +207,22 @@ function applyRuntimeIncidentTransition(item, transition = {}) {
   const status = String(transition.status || "").trim().toLowerCase();
   if (!REMEDIATION_STATUSES.has(status)) return { updated: false, reason: "invalid_remediation_status" };
   const current = item.remediation && typeof item.remediation === "object" ? item.remediation : {};
+  const proof = transition.syncRecovery;
+  const verifiedSyncRecovery = status === 'recovered' && proof
+    && item.snapshot?.Workflow === 'Vapi call sync background job'
+    && proof.workflow === item.snapshot.Workflow
+    && proof.lastFailureAt === (item.diagnostics?.lastDetectedAt || item.detectedAt)
+    && proof.occurrences === item.diagnostics?.occurrences
+    && Number.isFinite(Date.parse(proof.startedAt))
+    && Date.parse(proof.startedAt) >= Date.parse(proof.lastFailureAt)
+    && Date.parse(proof.completedAt) >= Date.parse(proof.startedAt)
+    && Number.isInteger(proof.fetched) && proof.fetched >= 0
+    && Number.isInteger(proof.synced) && proof.synced >= 0 && proof.synced <= proof.fetched;
+  if (proof && !verifiedSyncRecovery) return { updated: false, reason: 'invalid_sync_recovery_evidence', item };
   const ownerAuthorizedRestart = current.status === "needs_user"
     && status === "queued"
     && transition.ownerAuthorized === true;
-  if (TERMINAL_REMEDIATION_STATUSES.has(current.status) && current.status !== status && !ownerAuthorizedRestart) {
+  if (TERMINAL_REMEDIATION_STATUSES.has(current.status) && current.status !== status && !ownerAuthorizedRestart && !verifiedSyncRecovery) {
     return { updated: false, reason: "terminal_remediation_state", item };
   }
   const updatedAt = new Date(transition.updatedAt || Date.now()).toISOString();
@@ -294,7 +308,7 @@ function applyRuntimeIncidentTransition(item, transition = {}) {
     ...(transition.pullRequest?.headSha ? { fixedCommit: String(transition.pullRequest.headSha).toLowerCase() } : {}),
     ...(transition.verification ? { regressionEvidence: safeRemediationText(transition.verification, 1200) } : {}),
   };
-  const nextItem = { ...item, remediation, knowledge };
+  const nextItem = { ...item, remediation, knowledge, ...(verifiedSyncRecovery ? { syncRecovery: proof } : {}) };
   return { updated: true, item: nextItem };
 }
 

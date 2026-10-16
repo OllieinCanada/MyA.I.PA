@@ -41,7 +41,7 @@
     "test:stripe-trial:local": "node scripts/run-local-stripe-simulation.js --cycles=5",
     "ops:validate": "node scripts/validate-operational-readiness.js",
     "ops:monitor": "node scripts/monitor-production.js",
-    "test:production-monitor-safety": "node --test tests/production-monitor-safety.test.js",
+    "test:production-monitor-safety": "node --test tests/production-monitor-safety.test.js tests/call-sync-health.test.js",
     "ops:retention:audit": "node scripts/retention-audit.js",
     "ops:privacy:drill": "node scripts/privacy-request-drill.js",
     "ops:backup": "node scripts/database-backup.js",

@@ -644,11 +644,13 @@ function buildProductionIncidentAlert(report, selectedIdentity = monitorIncident
         : first.error || (first.status ? `Health check returned HTTP ${first.status}.` : "The health check did not return a usable response.");
   const identity = selectedIdentity || monitorIncidentIdentity(report);
   return buildIncidentTelegramAlert({
-    severity: "critical",
-    whatFailed: first.name ? `${String(first.name).replace(/_/g, " ")} health check` : "Production health check",
+    severity: first.name === 'operational_health' ? 'warning' : 'critical',
+    whatFailed: first.name === 'operational_health' ? 'Operational status check is unavailable' : first.name ? `${String(first.name).replace(/_/g, " ")} health check` : "Production health check",
     reasonCode,
     reason: observedReason,
-    impact: first.name === "public_site" ? "Visitors may be unable to open My AI PA." : "One or more My AI PA workflows may be unavailable.",
+    impact: first.name === 'operational_health'
+      ? 'The operational status could not be checked. This alone does not confirm a website outage or failed customer work; website and database checks are separate.'
+      : first.name === "public_site" ? "Visitors may be unable to open My AI PA." : "One or more My AI PA workflows may be unavailable.",
     snapshot: {
       Service: first.name || "unknown",
       URL: publicUrl(first.url || ""),
