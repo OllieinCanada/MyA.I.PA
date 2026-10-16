@@ -200,6 +200,14 @@ function result(details, category, overrides = {}) {
 
 function classifyOperationalError(error = {}, context = {}) {
   const details = providerDetails(error, context);
+  if (context.reasonCode === 'VAPI_CALL_SYNC_DELAYED' && context.area === 'Vapi call sync background job') {
+    return result(details, 'call_sync_delay', {
+      reasonCode: 'VAPI_CALL_SYNC_DELAYED',
+      reason: `Call-record synchronization did not finish (${normalizeToken(error?.code || error?.cause?.code || error?.name || 'UNKNOWN')}). The saved error needs review; this is not proof that a live call failed.`,
+      retryable: true,
+      nextAction: 'The next scheduled sync will try again. Investigate persistent delays; do not resend texts or redo signup. Only a complete sync confirms recovery.',
+    });
+  }
   const { code, provider, source, status } = details;
   const label = providerName(provider);
   const exactTwilio = provider === "TWILIO" ? TWILIO_CODE_GUIDANCE[code] : null;

@@ -2,9 +2,11 @@ const {
   applyRuntimeIncidentTransition,
   createAttentionItem,
 } = require("./runtimeIncidentStore");
+const { requiresSyncRecovery, WORKFLOW } = require('./callSyncHealth');
 
 const DEFAULT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_INCIDENTS = 100;
+const protectedSync = { payload: { path: ['snapshot', 'Workflow'], equals: WORKFLOW }, remediation: { notIn: ['resolved', 'recovered', 'not_required'] } };
 
 function validId(value) {
   return /^[a-f0-9]{24}$/i.test(String(value || "")) ? String(value).toLowerCase() : "";
@@ -42,9 +44,10 @@ async function recordRuntimeIncidentDb(prismaClient, incident) {
     const stale = await prismaClient.runtimeIncidentRecord.findMany({
       orderBy: { lastDetectedAt: "desc" },
       skip: MAX_INCIDENTS,
-      select: { id: true },
+      select: { id: true, payload: true },
     });
-    if (stale.length) await prismaClient.runtimeIncidentRecord.deleteMany({ where: { id: { in: stale.map((row) => row.id) } } });
+    const removable = stale.filter(row => !requiresSyncRecovery(row.payload));
+    if (removable.length) await prismaClient.runtimeIncidentRecord.deleteMany({ where: { id: { in: removable.map((row) => row.id) }, NOT: protectedSync } });
     return { recorded: true, item };
   } catch (_error) {
     return { recorded: false, reason: "runtime_incident_store_failed" };
@@ -54,13 +57,14 @@ async function recordRuntimeIncidentDb(prismaClient, incident) {
 async function listRuntimeIncidentsDb(prismaClient, { now = new Date(), ttlMs = DEFAULT_TTL_MS } = {}) {
   const current = now instanceof Date ? now : new Date(now);
   const cutoff = new Date(current.getTime() - Number(ttlMs || DEFAULT_TTL_MS));
-  await prismaClient.runtimeIncidentRecord.deleteMany({ where: { lastDetectedAt: { lt: cutoff } } });
+  await prismaClient.runtimeIncidentRecord.deleteMany({ where: { lastDetectedAt: { lt: cutoff }, NOT: protectedSync } });
   const rows = await prismaClient.runtimeIncidentRecord.findMany({
     where: { lastDetectedAt: { gte: cutoff } },
     orderBy: { lastDetectedAt: "desc" },
     take: MAX_INCIDENTS,
   });
-  return rows.map((row) => ({
+  const pendingSync = await prismaClient.runtimeIncidentRecord.findMany({ where: protectedSync });
+  return [...new Map([...rows, ...pendingSync].map(row => [row.id, row])).values()].map((row) => ({
     ...row.payload,
     ageMinutes: Math.max(0, Math.floor((current.getTime() - new Date(row.payload?.detectedAt || row.lastDetectedAt).getTime()) / 60_000)),
   }));

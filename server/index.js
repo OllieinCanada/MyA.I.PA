@@ -84,6 +84,7 @@ const {
   selectSignupDashboardRecordForProvisioning,
 } = require("./signupDashboardIdentity");
 const { buildRuntimeIncident } = require("./runtimeAlerts");
+const { createCallSyncMonitor } = require("./callSyncHealth");
 const { assessIncidentSlo } = require("./incidentSlo");
 const {
   createIncidentRemediationPlan,
@@ -2724,13 +2725,12 @@ async function fetchVapiCallDetail(callId) {
     throw err;
   }
 
-  const response = await fetch(`${VAPI_API_BASE_URL}/call/${encodeURIComponent(id)}`, {
+  const { response, text: rawText } = await fetchProviderReadText(`${VAPI_API_BASE_URL}/call/${encodeURIComponent(id)}`, {
     headers: {
       Authorization: `Bearer ${VAPI_API_KEY}`,
       Accept: "application/json",
     },
   });
-  const rawText = await response.text();
   const data = parseJsonObject(rawText);
 
   if (!response.ok) {
@@ -3453,6 +3453,18 @@ async function ingestVapiEndOfCallReport(message) {
 }
 
 async function syncVapiCalls(options = {}) {
+  // A limited/manual lookup is not evidence that the scheduled full sync recovered.
+  if (Object.keys(options).length) return performVapiCallSync(options);
+  return monitoredCallSync(() => performVapiCallSync(options));
+}
+
+const monitoredCallSync = createCallSyncMonitor({
+  listIncidents: () => listRuntimeIncidents(runtimeIncidentPath),
+  notifyFailure: (error, context) => safelyNotifyRuntimeFailure(error, context),
+  recoverIncident: (id, transition) => updateRuntimeIncidentRemediation(runtimeIncidentPath, id, transition),
+});
+
+async function performVapiCallSync(options = {}) {
   const calls = await fetchVapiCalls(options);
   const store = readVapiCallSyncStore();
   const results = [];
@@ -3478,7 +3490,9 @@ async function syncVapiCalls(options = {}) {
         };
       }
     } catch (error) {
-      detailErrors.push({ vapiCallId, message: error?.message || "Could not fetch Vapi call detail." });
+      detailErrors.push({ vapiCallId, message: error?.message || "Could not fetch Vapi call detail.",
+        code: String(error?.code || error?.cause?.code || error?.name || '').slice(0, 80),
+        providerStatus: Number(error?.providerStatus || error?.upstreamStatus) || null });
     }
 
     try {
@@ -12082,17 +12096,13 @@ app.get(
       signups,
       runtimeIncidents,
     });
-    const signupRecovery = new Map();
-    await Promise.all(inbox.items
-      .filter((item) => item.targetType === "signup")
-      .map(async (item) => {
-        const signup = findSignupByOperationalTarget(item.targetId, signups);
-        if (signup) signupRecovery.set(item.targetId, await inspectSignupRecoveryState(signup));
-      }));
+    // Health is a database-backed snapshot, not a synchronous provider audit.
+    // Live provider reconciliation remains available through guarded admin diagnostics.
     res.setHeader("Cache-Control", "no-store, max-age=0");
     res.json({
       ok: inbox.summary.bySeverity.critical === 0,
       service: "my-ai-pa-operations",
+      providerChecks: { liveLookups: false, mode: "separate" },
       generatedAt: inbox.generatedAt,
       attention: inbox.summary,
       incidentSlo: assessIncidentSlo(runtimeIncidents),
@@ -12114,7 +12124,6 @@ app.get(
         ...(item.diagnostics ? {
           diagnostics: {
             ...item.diagnostics,
-            ...(signupRecovery.get(item.targetId) || {}),
           },
         } : {}),
       })),
@@ -17774,7 +17783,11 @@ async function runAutomatedRuntimeRemediationInternal(incident, recordedItem) {
 
 async function safelyNotifyRuntimeFailure(error, context = {}) {
   const baseIncident = buildRuntimeIncident(error, context);
-  const remediation = createIncidentRemediationPlan(baseIncident, {
+  const remediation = context.reasonCode === 'VAPI_CALL_SYNC_DELAYED' ? {
+    action: 'none', status: 'verifying', automatic: false, requiresUser: false,
+    proposedSolution: 'Wait for the next scheduled sync; investigate if the delay persists. Only a full successful sync clears this incident.',
+    safetyBoundary: 'Do not replay customer texts, signups, payments, or resource purchases.',
+  } : createIncidentRemediationPlan(baseIncident, {
     safeAutoRepairEnabled: INCIDENT_SAFE_AUTO_REPAIR_ENABLED && !TELEGRAM_GUARDED_ACTIONS_ENABLED,
     codeRepairEnabled: INCIDENT_CODE_REPAIR_ENABLED,
     codeRepairConfigured: Boolean(
@@ -17837,7 +17850,7 @@ async function safelyNotifyRuntimeFailure(error, context = {}) {
       text: buildIncidentTelegramAlert(incidentForDelivery),
       adminUrl: exactAdminUrl,
       buttonText: "Open exact incident",
-      dedupeKey: `initial:${preparedIncident.incidentId}:g${recorded.item?.remediation?.generation || 1}`,
+      dedupeKey: `initial:${preparedIncident.incidentId}:g${recorded.item?.remediation?.generation || 1}${context.reasonCode === 'VAPI_CALL_SYNC_DELAYED' ? `:${preparedIncident.severity}` : ''}`,
       inlineKeyboard: controls.replyMarkup,
     });
     if (!queued?.queued && !queued?.duplicate) return;
@@ -17980,6 +17993,7 @@ function runBackgroundJob(jobName, task, phase = "scheduled") {
     .then(task)
     .catch((err) => {
       console.error(`[${jobName}] ${phase} run failed`, err);
+      if (jobName === 'Vapi call sync' && err.callSyncFailureRecorded) return null;
       safelyNotifyRuntimeFailure(err, {
         area: `${jobName} background job`,
         phase,
