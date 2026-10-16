@@ -24,7 +24,7 @@ const { createSignupAttemptStore, deriveSignupStatusAccess } = require("./signup
 const { assertSignupOpen, isClosedSignup, signupBusinessKey } = require("./signupBusinessIdentity");
 const { assertTrialGateOwnership } = require("./trialGateOwnership");
 const { verificationPageClientScript } = require("./signupVerificationPageClient");
-const { verificationProgressScript } = require("./signupVerificationProgress");
+const { verificationProgressScript, verificationProgressMarkup } = require("./signupVerificationProgress");
 const { ensureSignupBusinessBindings, closeSignupBusinessIdentity, upsertOwnedProviderMapping } = require("./signupBusinessRegistry");
 const { buildBackendRootPage } = require("./backendRootPage");
 const {
@@ -15247,6 +15247,7 @@ app.all(
               <h1 id="verification-title">${escapeHtml(title)}</h1>
               <p id="verification-description">${escapeHtml(body)}</p>
               <p id="setup-progress" role="status" aria-live="polite" hidden>Verifying your phone and assigning your AI number… Please keep this page open.</p>
+              ${(confirmation || progress) && !setupReady ? verificationProgressMarkup() : ""}
               ${confirmation ? `<form method="post" id="signup-verification-form" action="${escapeHtml(req.path)}">
                 <input type="hidden" name="token" value="${escapeHtml(token)}" />
                 <input type="hidden" name="channel" value="${escapeHtml(verificationChannel)}" />
@@ -15277,6 +15278,7 @@ app.all(
               ${confirmation ? `<a id="verification-support" hidden href="tel:${escapeHtml(CUSTOMER_SUPPORT_PHONE)}">Call signup support</a>` : ""}
               <div class="actions"><a href="${escapeHtml(forwardingSetupUrl || `${FRONTEND_APP_URL}/#/${setupReady ? "dashboard" : "signup"}`)}">${setupReady ? "Continue" : "Return to My AI PA"}</a></div>
             </main>
+            ${(confirmation || progress) && !setupReady ? verificationProgressScript(`/api/signup/verification-progress?${new URLSearchParams({token,channel:verificationChannel,channelProof:createVerificationChannelProof(token,verificationChannel,getAdminSessionSecret())})}`, { awaitConfirmation: confirmation }) : ""}
             ${confirmation ? verificationPageClientScript({ automaticSmsConfirmation }) : ""}
             ${setupReady ? `<script>
               document.getElementById("copy-number").addEventListener("click", async function () {
@@ -15294,7 +15296,6 @@ app.all(
                 this.textContent = "Copied";
               });
             </script>` : ""}
-            ${progress ? verificationProgressScript(`/api/signup/verification-progress?${new URLSearchParams({token,channel:verificationChannel,channelProof:createVerificationChannelProof(token,verificationChannel,getAdminSessionSecret())})}`) : ""}
           </body>
         </html>`);
     }

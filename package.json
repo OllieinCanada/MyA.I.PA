@@ -55,6 +55,8 @@
     "test:browser:quality": "node scripts/test-browser-quality.js",
     "test:address-autocomplete": "node scripts/test-address-autocomplete.js",
     "test:signup-pricing-choices": "node scripts/test-signup-pricing-choices.js",
+    "test:signup-verification-progress": "node --test --test-concurrency=1 tests/signup-verification-progress.test.js tests/signup-verification-page-client.test.js tests/signup-attempt-store.test.js tests/signup-status-api.test.js tests/signup-sms-verification.test.js",
+    "preview:signup-verification-progress": "node scripts/preview-signup-verification-progress.js",
     "test:database": "node --test tests/database-integration.test.js",
     "test:signup-recovery": "node --test --test-concurrency=1 tests/signup-recovery-hardening.test.js tests/provisioning-state.test.js tests/provider-read.test.js tests/signup-provider-recovery.test.js tests/signup-agent-testing.test.js tests/signup-completion.test.js tests/operational-error-classifier.test.js tests/repair-make-signup-provisioning.test.js",
     "test:vapi-import-request": "node --test tests/vapi-twilio-import-request.test.js tests/provider-failure-detail.test.js tests/provisioning-state.test.js",

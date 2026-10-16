@@ -12,6 +12,7 @@ function verificationPageClientScript({ automaticSmsConfirmation = false } = {})
         if (event) event.preventDefault();
         if (submitted || document.visibilityState !== "visible") return;
         submitted = true;
+        document.dispatchEvent(new Event("signup-verification-started"));
         progress.hidden = false;
         form.querySelectorAll("button").forEach(button => { button.disabled = true; });
         document.getElementById("verification-title").textContent = "Setting up your assistant";
@@ -30,6 +31,7 @@ function verificationPageClientScript({ automaticSmsConfirmation = false } = {})
           // page at the same URL. No numbers or tokens go into browser storage.
           document.open(); document.write(html); document.close();
         } catch (_) {
+          document.dispatchEvent(new Event("signup-verification-problem"));
           progress.hidden = true;
           document.getElementById("verification-title").textContent = "We couldn’t confirm setup yet";
           document.getElementById("verification-description").textContent = "Your details are saved. Contact support to check this signup—don’t submit another one.";
