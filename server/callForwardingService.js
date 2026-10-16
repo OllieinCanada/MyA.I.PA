@@ -96,7 +96,7 @@ function transitionStatus(current, requested) {
 }
 
 function inferInitialStatus(carrier, lineType, rule) {
-  if (carrier === "NOT_SURE" || lineType === "NOT_SURE") return "CARRIER_NEEDED";
+  if (lineType === "NOT_SURE") return "CARRIER_NEEDED";
   return rule.supported ? "READY_TO_ACTIVATE" : "MANUAL_SETUP_REQUIRED";
 }
 
@@ -220,7 +220,7 @@ async function markDialerOpened({ prismaClient, setup }) {
 
 async function startVerification({ prismaClient, setup, verificationCallerNumber, placeCall, statusCallbackUrl, now = new Date() }) {
   if (["NOT_STARTED", "CARRIER_NEEDED"].includes(setup.status)) {
-    throw forwardingError("Choose the phone provider and phone type before testing.", 409, "FORWARDING_SELECTIONS_REQUIRED");
+    throw forwardingError("Choose your phone type before testing.", 409, "FORWARDING_SELECTIONS_REQUIRED");
   }
   const since = new Date(now.getTime() - 60 * 60 * 1000);
   const recent = await prismaClient.forwardingVerificationAttempt.count({ where: { setupId: setup.id, startedAt: { gte: since } } });

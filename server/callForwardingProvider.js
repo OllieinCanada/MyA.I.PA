@@ -3,6 +3,7 @@ const { normalizeSmsPhone } = require("./smsSuppression");
 const SETUP_VERSION = 3;
 const CARRIERS = new Set(["BELL", "ROGERS", "TELUS", "OTHER", "NOT_SURE"]);
 const LINE_TYPES = new Set(["MOBILE", "LANDLINE", "VOIP", "NOT_SURE"]);
+const mobileNoReplyCommand = number => `*61*${number}#`;
 
 function canonicalChoice(value, allowed, fallback) {
   const key = String(value || "").trim().toUpperCase().replace(/[\s/-]+/g, "_");
@@ -71,7 +72,7 @@ const RULES = Object.freeze([
     lineType: "MOBILE",
     forwardingType: "NO_ANSWER",
     activationMethod: "DIAL_STRING",
-    buildActivation: (number) => `*61*${number}#`,
+    buildActivation: mobileNoReplyCommand,
     deactivationDialString: "##61#",
     humanInstructions: ["Tap the button from the business phone.", "Press Call or Send.", "Return here and test the setup."],
     source: "https://www.rogers.com/support/mobility/use-call-forwarding",
@@ -84,6 +85,23 @@ const RULES = Object.freeze([
       adjustmentCopy: "Rogers voicemail must be off for conditional forwarding to work. If the test fails, contact Rogers before relying on the setup.",
     },
     warnings: ["Rogers says conditional forwarding will not work while Rogers voicemail is active."],
+  },
+  {
+    key: "telus-mobile-no-answer-v1",
+    carrier: "TELUS",
+    lineType: "MOBILE",
+    forwardingType: "NO_ANSWER",
+    activationMethod: "DIAL_STRING",
+    buildActivation: mobileNoReplyCommand,
+    deactivationDialString: "#61#",
+    humanInstructions: ["Open the phone app on your business cellphone.", "Press Call or Send, then wait for confirmation.", "Return here and test the setup. Do not answer the test call."],
+    source: "https://www.telus.com/en/business/support/article/call-forward-mobile",
+    verifiedAt: "2026-10-16",
+    supported: true,
+    timing: { mode: "DEVICE_OR_ACCOUNT_SETTING", exactThreeRingsSupported: false,
+      customerCopy: "Your phone rings first. The delay depends on your phone and account settings.",
+      adjustmentCopy: "Test before relying on it. TELUS says conditional forwarding depends on device compatibility." },
+    warnings: ["TELUS may charge for forwarded minutes or long distance. Check your plan; some devices do not support conditional forwarding."],
   },
   {
     key: "rogers-home-no-answer-v1",
@@ -127,26 +145,6 @@ const RULES = Object.freeze([
   },
 ]);
 
-const MANUAL_RULES = Object.freeze([
-  {
-    carrier: "TELUS",
-    lineType: "MOBILE",
-    source: "https://www.telus.com/en/business/small/mobility/add-ons",
-    humanInstructions: [
-      "Open the Phone or Call settings on the business phone only if they offer a separate unanswered or no-answer option.",
-      "Do not turn on a generic Call Forwarding or Always Forward switch. That can send every call away from your phone.",
-      "Enter the My AI PA number only under unanswered or no-answer calls. If that choice is missing, contact TELUS, then return here to test it.",
-    ],
-    timing: {
-      mode: "DEVICE_OR_ACCOUNT_SETTING",
-      exactThreeRingsSupported: false,
-      customerCopy: "TELUS timing depends on the mobile plan and phone settings.",
-      adjustmentCopy: "My AI PA will not generate an unverified TELUS service code. Use the phone settings or TELUS support, then run the test call.",
-    },
-    warnings: ["TELUS Call Forwarding may need to be added to the mobile plan before unanswered-call forwarding can work."],
-  },
-]);
-
 function resolveForwardingRule({ carrier, lineType, forwardingMode = "NO_ANSWER", destination }) {
   const normalizedCarrier = normalizeCarrier(carrier);
   const normalizedLineType = normalizeLineType(lineType);
@@ -154,7 +152,16 @@ function resolveForwardingRule({ carrier, lineType, forwardingMode = "NO_ANSWER"
   const destinationDigits = digits10(destination);
   const rule = RULES.find((item) => item.carrier === normalizedCarrier && item.lineType === normalizedLineType && item.forwardingType === mode);
   if (!rule) {
-    const manualRule = MANUAL_RULES.find((item) => item.carrier === normalizedCarrier && item.lineType === normalizedLineType);
+    const manualRule = normalizedLineType === 'MOBILE' && mode === 'NO_ANSWER' ? {
+      humanInstructions: [
+        "On your business cellphone, open Phone or Call settings.",
+        "Look for Forward when unanswered or No reply. Leave Always forward turned off.",
+        `If that separate option is available, enter ${destinationDigits} and save.`,
+        "If the option is missing, choose your provider below for different instructions. Do not enable forwarding for every call.",
+        "Return here and press Test My Setup. Do not answer the test call.",
+      ],
+      warnings: ["This can replace your missed-call voicemail destination. Your phone provider may charge for forwarded calls."],
+    } : null;
     return {
       key: `manual-${normalizedCarrier.toLowerCase()}-${normalizedLineType.toLowerCase()}-v${SETUP_VERSION}`,
       carrier: normalizedCarrier,
@@ -172,7 +179,7 @@ function resolveForwardingRule({ carrier, lineType, forwardingMode = "NO_ANSWER"
         "Keep forwarding-all turned off, then return here to test.",
       ],
       source: manualRule?.source || "",
-      verifiedAt: manualRule ? "2026-09-22" : "",
+      verifiedAt: "",
       supported: false,
       timing: manualRule?.timing || {
         mode: "PROVIDER_SPECIFIC",

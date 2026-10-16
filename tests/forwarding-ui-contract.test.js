@@ -12,6 +12,9 @@ test("forwarding reuses saved service choices and asks only when recovery needs 
   assert.match(source, /const needsChoices = status === "carrier_needed" \|\| !forwarding/);
   assert.match(source, /\{needsChoices \? <div className="forwarding-form">/);
   assert.match(source, /Set up your new receptionist/);
+  assert.ok(source.indexOf('Cellphone or landline?')<source.indexOf('Who provides this line?'));
+  assert.match(source,/lineType !== "mobile" \|\| showCarrierHelp/);
+  assert.match(source,/Can’t find that option\? Choose your provider/);
   assert.doesNotMatch(source, /Nothing changes about how you answer your phone/);
 });
 
