@@ -59,6 +59,7 @@
     "test:signup-recovery": "node --test --test-concurrency=1 tests/signup-recovery-hardening.test.js tests/provisioning-state.test.js tests/provider-read.test.js tests/signup-provider-recovery.test.js tests/signup-agent-testing.test.js tests/signup-completion.test.js tests/operational-error-classifier.test.js tests/repair-make-signup-provisioning.test.js",
     "test:vapi-import-request": "node --test tests/vapi-twilio-import-request.test.js tests/provider-failure-detail.test.js tests/provisioning-state.test.js",
     "test:twilio-status-inbox": "node --test --test-concurrency=1 tests/twilio-status-inbox.test.js tests/signup-agent-testing.test.js tests/backend-security.test.js",
+    "test:signup-completion": "node --test --test-concurrency=1 tests/signup-completion-reconciliation.test.js tests/signup-completion.test.js tests/signup-agent-testing.test.js tests/signup-recovery-hardening.test.js tests/twilio-sms.test.js tests/backend-security.test.js",
     "test:signup-recovery:postgres": "node --max-old-space-size=64 scripts/run-signup-postgres-restart-drill.js",
     "test:database:disposable-render": "node scripts/run-disposable-postgres-drill.js --confirm=CREATE_DELETE_FREE_DATABASE",
     "start": "react-scripts start",
