@@ -64,6 +64,7 @@ async function deliverSignupCompletion({
   priorErrors = [],
   sendSms,
   sendEmail,
+  reconcileSms,
 } = {}) {
   const normalizedPriorStatus = String(priorStatus || "").toLowerCase();
   const normalizedPriorChannels = Array.isArray(priorChannels) ? priorChannels.filter(Boolean).sort() : [];
@@ -107,7 +108,7 @@ async function deliverSignupCompletion({
       try {
         const request = { to: ownerPhone, message: content.sms };
         const receipt = prisma
-          ? await dispatchSignupSms({ prisma, identity: dispatchIdentity, purpose: "setup-complete", request, sendSms })
+          ? await dispatchSignupSms({ prisma, identity: dispatchIdentity, purpose: "setup-complete", request, sendSms, reconcileCompleted:reconcileSms })
           : await sendSms(request);
         receipts.sms = { sid: receipt?.sid || "", status: receipt?.status || "accepted", delivered: ["delivered", "read"].includes(receipt?.status) };
         channels.push("sms");

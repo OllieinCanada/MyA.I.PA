@@ -146,7 +146,7 @@ async function sendSmsViaTwilio({
   };
 }
 
-async function fetchSmsStatusViaTwilio({ sid, env = process.env, fetchImpl = global.fetch } = {}) {
+async function fetchSmsStatusViaTwilio({ sid, env = process.env, fetchImpl = global.fetch, includeContent = false } = {}) {
   if (!/^SM[0-9a-f]{32}$/i.test(String(sid || ""))) throw createHttpError("Invalid SMS message reference.", 400);
   const config = getTwilioSmsConfig(env);
   const credentials = getTwilioRestCredentials(config);
@@ -167,10 +167,15 @@ async function fetchSmsStatusViaTwilio({ sid, env = process.env, fetchImpl = glo
   if (payload.sid !== sid || payload.account_sid !== config.accountSid) {
     throw createHttpError("Twilio message identity did not match.", 502, "TWILIO_STATUS_IDENTITY_MISMATCH");
   }
-  return { status: payload.status || "", errorCode: payload.error_code || null };
+  return { status: payload.status || "", errorCode: payload.error_code || null,
+    ...(includeContent ? {sid:payload.sid,accountSid:payload.account_sid,to:payload.to,from:payload.from,body:payload.body,sentAt:payload.date_sent} : {}) };
 }
 
+// Private backend evidence only. Never return body/to/from through public APIs.
+const fetchSmsReceiptViaTwilio = options => fetchSmsStatusViaTwilio({...options,includeContent:true});
+
 module.exports = {
+  fetchSmsReceiptViaTwilio,
   fetchSmsStatusViaTwilio,
   getTwilioSmsConfig,
   getTwilioFailureSignal,

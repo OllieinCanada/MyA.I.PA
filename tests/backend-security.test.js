@@ -40,6 +40,16 @@ const { app, __test } = require("../server/index");
 const { prisma } = require("../server/prisma");
 const { getTwilioSignature } = require("../server/smsSuppression");
 
+test('completion and trial gate require verified contact plus current content, route and both delivered tests',()=>{
+  const {AGENT_TEST_VERSION,buildAgentTestFingerprint,buildAgentRouteFingerprint}=require('../server/signupAgentTesting');
+  const s={identityVerified:true,smsVerified:true,businessId:1,ownerPhone:'+19055550123',twilioPhoneNumber:'+12895550100',vapiPhoneNumberId:'phone',vapiAssistantId:'assistant',agentTestStatus:'passed',agentTestVersion:AGENT_TEST_VERSION,
+    agentContentStatus:'verified',agentContentFingerprint:'content',agentContentVerifiedAt:'now',agentRouteBindingStatus:'verified',agentRouteBindingMode:'direct',agentRouteBindingVerifiedAt:'now',agentTestOwnerAcceptedAt:'now',agentTestCustomerAcceptedAt:'now',agentTestOwnerDeliveredAt:'now',agentTestCustomerDeliveredAt:'now',agentTestOwnerProviderStatus:'delivered',agentTestCustomerProviderStatus:'delivered'};
+  s.agentTestFingerprint=buildAgentTestFingerprint({assistantId:s.vapiAssistantId,aiNumber:s.twilioPhoneNumber,ownerPhone:s.ownerPhone,contentFingerprint:s.agentContentFingerprint});
+  s.agentRouteBindingFingerprint=buildAgentRouteFingerprint({mode:s.agentRouteBindingMode,businessId:s.businessId,phoneNumberId:s.vapiPhoneNumberId,aiNumber:s.twilioPhoneNumber,assistantId:s.vapiAssistantId});
+  assert.equal(__test.signupDeliveryGatePassed(s),true);
+  for(const changed of [{identityVerified:false,smsVerified:false},{agentTestCustomerProviderStatus:'sent'},{agentTestCustomerDeliveredAt:''},{agentTestFingerprint:'stale'},{agentRouteBindingFingerprint:'other'},{agentContentStatus:'failed'}])assert.equal(__test.signupDeliveryGatePassed({...s,...changed}),false);
+});
+
 test("business-scoped Stripe customer and trial keys prevent double billing for simultaneous submissions", async () => {
   const customers = [];
   const subscriptions = [];
@@ -1301,6 +1311,8 @@ test("customer support routes require a signed dashboard session", async () => {
 });
 
 test("support repair actions require an admin session", async () => {
+  const receiptRepair=await request('/api/admin/signups/reconcile-completion-sms',{method:'POST',body:{confirmation:'RECONCILE_DELIVERED_SETUP_SMS',apply:true}});
+  assert.equal(receiptRepair.status,401);
   const routes = [
     ["/api/admin/attention/actions", "POST"],
     ["/api/admin/support-reports/example", "PATCH"],

@@ -1,6 +1,15 @@
 const assert = require("node:assert/strict");
 const { test } = require("node:test");
-const { fetchSmsStatusViaTwilio, getTwilioFailureSignal, normalizeE164, sendSmsViaTwilio } = require("../server/twilioSms");
+const { fetchSmsStatusViaTwilio, fetchSmsReceiptViaTwilio, getTwilioFailureSignal, normalizeE164, sendSmsViaTwilio } = require("../server/twilioSms");
+
+test('private receipt lookup returns content only after account and SID verification',async()=>{
+  const sid='SM'+'b'.repeat(32),env={TWILIO_ACCOUNT_SID:'AC_test',TWILIO_AUTH_TOKEN:'test'};
+  const body={sid,account_sid:'AC_test',status:'delivered',to:'+19055550123',from:'+12895550100',body:'private evidence'};
+  const fetchImpl=async(url,options)=>{assert.equal(options.method,'GET');return {ok:true,json:async()=>body};};
+  assert.equal((await fetchSmsReceiptViaTwilio({sid,env,fetchImpl})).body,body.body);
+  assert.equal((await fetchSmsStatusViaTwilio({sid,env,fetchImpl})).body,undefined);
+  await assert.rejects(fetchSmsReceiptViaTwilio({sid,env,fetchImpl:async()=>({ok:true,json:async()=>({...body,account_sid:'other'})})}),/identity/);
+});
 
 test("status polling uses a read-only account-scoped request and checks message identity", async () => {
   const sid = "SM" + "a".repeat(32);

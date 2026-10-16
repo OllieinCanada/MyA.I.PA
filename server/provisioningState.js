@@ -211,7 +211,7 @@ async function runProvisioningStep({
     // Reconciliation must not create missing paid resources. It runs under
     // the lease, and creation is confined to the first execute attempt.
     const reconciled = typeof reconcile === "function" ? await reconcile() : null;
-    const guardedKind = ["twilio-number", "vapi-assistant", "vapi-import", "signup-sms"].includes(kind);
+    const guardedKind = ["twilio-number", "vapi-assistant", "vapi-import", "signup-sms", "signup-completion-email"].includes(kind);
     // Legacy records without this marker remain ambiguous. Only new records
     // explicitly persisted as not dispatched may restart automatically.
     if (!reconciled && claim.data.attempts > 1 && guardedKind
