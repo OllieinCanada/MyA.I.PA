@@ -90,6 +90,12 @@
       "type": "operational",
       "checkName": "operational_health",
       "firstDetectedAt": "2026-10-16T04:58:28.353Z"
+    },
+    "check:operational_health:public_fb704d24577919f6d089300e98db5793": {
+      "lifecycleId": "public_53fd280ebb8e7f47a26a4717",
+      "type": "check",
+      "checkName": "operational_health",
+      "firstDetectedAt": "2026-10-16T14:20:10.338Z"
     }
   }
 }
