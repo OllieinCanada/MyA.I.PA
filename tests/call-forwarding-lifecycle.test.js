@@ -71,6 +71,17 @@ function memoryPrisma() {
 
 const env = { FORWARDING_SETUP_SECRET: "a-production-sized-test-secret-that-is-long", FORWARDING_SETUP_URL_TTL_SECONDS: "600" };
 
+test('phone type alone enables safe manual instructions but never marks forwarding active',async()=>{
+ const {prisma}=memoryPrisma();
+ let setup=await initializeForwardingSetup({prismaClient:prisma,signupId:'type-first',ownerEmail:'fixture@example.test',existingBusinessNumber:'+19055550123',assignedMyAiPaNumber:'+12895550199',carrier:'not_sure',lineType:'not_sure'});
+ assert.equal(setup.status,'CARRIER_NEEDED');
+ setup=await updateSelections({prismaClient:prisma,setup,carrier:'not_sure',lineType:'mobile'});
+ assert.equal(setup.status,'MANUAL_SETUP_REQUIRED');assert.equal(setup.forwardingVerifiedAt,null);
+ assert.equal(sanitizeSetup(setup).rule.activationDialString,'');
+ const result=await startVerification({prismaClient:prisma,setup,verificationCallerNumber:'+12895550000',statusCallbackUrl:'https://example.test/callback',placeCall:async()=>({sid:'CA-fixture'})});
+ assert.equal(result.setup.status,'VERIFICATION_PENDING');assert.equal(result.setup.forwardingVerifiedAt,null);
+});
+
 test("provisioning, carrier selection, dialer launch, and verification are idempotent", async () => {
   const { prisma, db } = memoryPrisma();
   let setup = await initializeForwardingSetup({ prismaClient: prisma, signupId: "signup-1", ownerEmail: "owner@example.ca", existingBusinessNumber: "+19055550123", assignedMyAiPaNumber: "+12895550199", vapiPhoneNumberId: "vapi-phone-1", carrier: "not_sure", lineType: "not_sure" });

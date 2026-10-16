@@ -45,23 +45,34 @@ test("builds Bell's documented mobile no-answer command with the closest practic
   assert.match(bell.source, /bell\.ca/i);
 });
 
-test("gives product-specific safe guidance for TELUS mobile without inventing a star code", () => {
+test("TELUS and Rogers share verified activation but retain their different disable instructions", () => {
   const telus = resolveForwardingRule({ carrier: "telus", lineType: "mobile", destination: "+19055550123" });
-  assert.equal(telus.activationMethod, "MANUAL");
-  assert.equal(telus.activationDialString, "");
+  const rogers = resolveForwardingRule({ carrier: "rogers", lineType: "mobile", destination: "+19055550123" });
+  assert.equal(telus.activationMethod, "DIAL_STRING");
+  assert.equal(telus.activationDialString, rogers.activationDialString);
+  assert.equal(telus.deactivationDialString, "#61#");
+  assert.equal(rogers.deactivationDialString, "##61#");
   assert.equal(telus.timing.exactThreeRingsSupported, false);
-  assert.match(telus.humanInstructions.join(" "), /unanswered|no-answer/i);
+  assert.match(telus.humanInstructions.join(" "), /test/i);
   assert.match(telus.source, /telus\.com/i);
 });
 
-test("never guesses for TELUS, VoIP, other, or unknown combinations", () => {
-  for (const [carrier, lineType] of [["telus", "mobile"], ["rogers", "voip"], ["other", "landline"], ["not_sure", "not_sure"]]) {
+test("never guesses for VoIP, other, or unknown combinations", () => {
+  for (const [carrier, lineType] of [["telus", "landline"], ["rogers", "voip"], ["other", "landline"], ["not_sure", "not_sure"]]) {
     const rule = resolveForwardingRule({ carrier, lineType, destination: "+19055550123" });
     assert.equal(rule.supported, false);
     assert.equal(rule.activationMethod, "MANUAL");
     assert.equal(rule.activationDialString, "");
     assert.match(rule.warnings.join(" "), /will not guess/i);
   }
+});
+
+test('unknown mobile uses conditional phone settings, never a universal dial command',()=>{
+ const rule=resolveForwardingRule({carrier:'not_sure',lineType:'mobile',destination:'+19055550123'});
+ assert.equal(rule.activationDialString,'');assert.equal(rule.activationTelUri,'');assert.equal(rule.supported,false);
+ assert.match(rule.humanInstructions.join(' '),/Always forward turned off/);
+ assert.match(rule.humanInstructions.join(' '),/choose your provider/);
+ assert.match(rule.humanInstructions.join(' '),/9055550123/);
 });
 
 test("normalizes signup choices and validates the forwarding destination", () => {

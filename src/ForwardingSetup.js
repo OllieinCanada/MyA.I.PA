@@ -4,7 +4,7 @@ import "./ForwardingSetup.css";
 
 const API_BASE = normalizeApiBase(getApiBaseUrl(process.env.REACT_APP_API_BASE_URL));
 const CARRIERS = [["bell", "Bell"], ["rogers", "Rogers"], ["telus", "TELUS"], ["other", "Other"], ["not_sure", "Not sure"]];
-const LINE_TYPES = [["mobile", "Mobile / cell phone"], ["landline", "Business / home landline"], ["voip", "VoIP / cloud phone"], ["not_sure", "Not sure"]];
+const LINE_TYPES = [["mobile", "Cellphone"], ["landline", "Landline"], ["voip", "Office / cloud phone"]];
 
 function tokenFromLocation() {
   const query = String(window.location.hash || "").split("?")[1] || window.location.search.replace(/^\?/, "");
@@ -37,6 +37,7 @@ export default function ForwardingSetup() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [copied, setCopied] = useState(false);
+  const [showCarrierHelp, setShowCarrierHelp] = useState(false);
   const automaticTestStarted = useRef(false);
   const supportsMobileDialer = typeof navigator !== "undefined" && (
     /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || "")
@@ -100,6 +101,11 @@ export default function ForwardingSetup() {
     if (!forwarding?.rule?.activationTelUri) return;
     setBusy(true); setMessage("");
     try {
+      // An older manual-only setup may now have a verified carrier rule.
+      // Refresh its saved state only when the customer chooses activation.
+      if (forwarding.forwardingStatus === "manual_setup_required" && forwarding.rule.supported) {
+        await forwardingRequest("/api/forwarding/setup/selections", token, { method: "PUT", body: JSON.stringify({ carrier, lineType }) });
+      }
       const data = await forwardingRequest("/api/forwarding/setup/activation-opened", token, { method: "POST", body: "{}" });
       setForwarding(data.forwarding);
       try { window.sessionStorage.setItem(`myaipa-forwarding-auto-test:${data.forwarding.id}`, String(Date.now())); } catch {}
@@ -154,25 +160,26 @@ export default function ForwardingSetup() {
             {forwarding ? <div className="forwarding-number"><span>Your My AI PA number</span><strong>{fmtPhone(forwarding.assignedMyAiPaNumber)}</strong></div> : null}
 
             {needsChoices ? <div className="forwarding-form">
-              <p>We need your phone-service details to show the correct instructions. We won’t guess a forwarding code.</p>
-              <label>Who provides your business phone?<select value={carrier} onChange={(event) => setCarrier(event.target.value)}>{CARRIERS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-              <label>What kind of number is it?<select value={lineType} onChange={(event) => setLineType(event.target.value)}>{LINE_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-              <button onClick={saveChoices} disabled={busy || !forwarding}>{busy ? "Saving…" : "Continue"}</button>
+              <fieldset className="forwarding-phone-types"><legend>Cellphone or landline?</legend><div className="forwarding-actions">{LINE_TYPES.map(([value, label]) => <button type="button" key={value} className={lineType === value ? "" : "secondary"} aria-pressed={lineType === value} onClick={() => setLineType(value)} disabled={busy}>{label}</button>)}</div></fieldset>
+              {lineType !== "not_sure" && (lineType !== "mobile" || showCarrierHelp) ? <label>Who provides this line?<select value={carrier} onChange={(event) => setCarrier(event.target.value)}>{CARRIERS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select><small>{lineType === "mobile" ? "We’ll show your provider’s instructions." : "Landline and office-phone instructions vary. Not sure? We’ll show safe guidance."}</small></label> : null}
+              {lineType === "mobile" && !showCarrierHelp ? <p>We’ll use your saved provider or show phone-settings instructions. No carrier code will be guessed.</p> : null}
+              <button onClick={saveChoices} disabled={busy || !forwarding || lineType === "not_sure"}>{busy ? "Saving…" : "Show instructions"}</button>
             </div> : null}
 
             {!needsChoices && forwarding ? <>
               {pending ? <div className="forwarding-alert"><strong>Almost done</strong><span>Do not answer the test call. We’re waiting to see it arrive at My AI PA.</span></div> : null}
               {status === "verification_failed" ? <div className="forwarding-alert is-warning"><strong>We didn’t receive the forwarded call yet.</strong><span>{forwarding.lastFailureReason || "Voicemail may have answered first, or the carrier may need a different setup."}</span></div> : null}
-              {manual ? <div className="forwarding-alert is-warning"><strong>Guided setup required</strong><span>We do not have a verified one-tap command for this phone service, so we will not guess one.</span></div> : null}
+              {manual && !forwarding.rule.supported ? <div className="forwarding-alert"><strong>Set up unanswered calls</strong><span>Use the steps below. We do not have a verified one-tap command for this phone service, so we will not guess one.</span></div> : null}
               <ol className="forwarding-steps">{forwarding.rule.humanInstructions.map((step) => <li key={step}>{step}</li>)}</ol>
               {forwarding.rule.timing ? <div className="forwarding-timing"><strong>When My AI PA answers</strong><span>{forwarding.rule.timing.customerCopy}</span><small>{forwarding.rule.timing.adjustmentCopy}</small></div> : null}
               {forwarding.rule.warnings.map((warning) => <p className="forwarding-warning" key={warning}>{warning}</p>)}
               {forwarding.rule.activationMethod === "DIAL_STRING" && supportsMobileDialer ? <button className="forwarding-primary" onClick={openDialer} disabled={busy}>Open Phone App and Protect My Missed Calls</button> : null}
               {forwarding.rule.activationMethod === "DIAL_STRING" && !supportsMobileDialer ? <div className="forwarding-alert"><strong>Open this link on your business phone</strong><span>Desktop browsers cannot reliably open a mobile carrier command. You can copy the command below instead.</span></div> : null}
               {forwarding.rule.activationDialString ? <div className="forwarding-command"><span>Dial this from your business phone</span><strong>{forwarding.rule.activationDialString}</strong><button className="secondary" onClick={copyCommand}>{copied ? "Copied" : "Copy"}</button></div> : null}
-              {manual ? <div className="forwarding-command"><span>Forward unanswered calls to</span><strong>{fmtPhone(forwarding.assignedMyAiPaNumber)}</strong><button className="secondary" onClick={copyCommand}>{copied ? "Copied" : "Copy"}</button></div> : null}
+              {manual && !forwarding.rule.supported ? <div className="forwarding-command"><span>Forward unanswered calls to</span><strong>{fmtPhone(forwarding.assignedMyAiPaNumber)}</strong><button className="secondary" onClick={copyCommand}>{copied ? "Copied" : "Copy"}</button></div> : null}
               <button className="forwarding-test" onClick={startTest} disabled={busy || pending}>{pending ? "Testing…" : "Test My Setup"}</button>
-              <button className="forwarding-change" onClick={() => setForwarding({ ...forwarding, forwardingStatus: "carrier_needed" })}>Choose Different Carrier or Phone Type</button>
+              {manual && lineType === "mobile" ? <button className="forwarding-change" disabled={busy || pending} onClick={() => { setShowCarrierHelp(true); setForwarding({ ...forwarding, forwardingStatus: "carrier_needed" }); }}>Can’t find that option? Choose your provider</button> : null}
+              <button className="forwarding-change" disabled={busy || pending} onClick={() => { setShowCarrierHelp(false); setForwarding({ ...forwarding, forwardingStatus: "carrier_needed" }); }}>Choose Different Carrier or Phone Type</button>
             </> : null}
           </>
         )}
