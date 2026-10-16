@@ -3,6 +3,7 @@ const { providerFailureDetail } = require('./providerFailureDetail');
 
 const PROVISIONING_STATE_PREFIX = "signup-provisioning:";
 const DEFAULT_LEASE_MS = 5 * 60 * 1000;
+const ASSISTANT_RECOVERY_SETTLE_MS = 30 * 60 * 1000;
 
 function provisioningStateKey(kind, idempotencyKey) {
   const normalizedKind = String(kind || "step")
@@ -101,6 +102,8 @@ async function claimProvisioningStep({
       originalProviderStatus: data.originalProviderStatus || null,
       originalProviderDetail: data.originalProviderDetail || '',
       lastProviderDetail: data.lastProviderDetail || '',
+      guardedRecovery: data.guardedRecovery || null,
+      firstFailedAt: data.firstFailedAt || data.failedAt || null,
       updatedAt: new Date(now).toISOString(),
     };
     await tx.runtimeStore.upsert({
@@ -160,6 +163,7 @@ async function failProvisioningStep({ prisma, key, claimToken, error, now = Date
       ...data,
       status: "failed",
       failedAt: new Date(now).toISOString(),
+      firstFailedAt: data.firstFailedAt || data.failedAt || new Date(now).toISOString(),
       leaseExpiresAt: null,
       lastErrorCode: String(error?.providerCode || error?.cause?.code || error?.code || "PROVISIONING_STEP_FAILED").slice(0, 100),
       lastProviderStatus: Number(error?.providerStatus || error?.statusCode || 0) || null,
@@ -187,6 +191,7 @@ async function runProvisioningStep({
   reconcile,
   execute,
   verifyCompleted,
+  missingAssistantRecovery,
 }) {
   const reuse = (key, result) => ["twilio-number", "vapi-assistant", "vapi-import"].includes(kind) || verifyCompleted
     ? verifyCompletedProvisioningResult({ prisma, key, result, verifyCompleted })
@@ -219,12 +224,24 @@ async function runProvisioningStep({
       // A lost response or expired lease does not prove that the provider did
       // nothing. Reuse provider-confirmed resources, but never blindly create
       // another paid resource when a previous attempt has an unknown outcome.
-      throw provisioningError("The prior provider attempt has no confirmed recovery result. Inspect provider inventory before creating a replacement.", "PROVISIONING_RECONCILIATION_REQUIRED");
+      const priorDispatchAt = Date.parse(existing.data.dispatchStartedAt);
+      const settleFrom = Number.isFinite(priorDispatchAt) ? priorDispatchAt
+        : Date.parse(existing.data.firstFailedAt || existing.data.failedAt);
+      if (kind !== 'vapi-assistant' || existing.data.status !== 'failed'
+        || !Number.isFinite(settleFrom) || Date.now() - settleFrom < ASSISTANT_RECOVERY_SETTLE_MS
+        || existing.data.result || existing.data.guardedRecovery
+        || !/^[a-f0-9]{32}$/.test(missingAssistantRecovery?.actorHash || '')
+        || typeof missingAssistantRecovery?.verifyAbsent !== 'function'
+        || await missingAssistantRecovery.verifyAbsent() !== true) {
+        throw provisioningError("The prior provider attempt has no confirmed recovery result. Inspect provider inventory before creating a replacement.", "PROVISIONING_RECONCILIATION_REQUIRED");
+      }
     }
     const result = reconciled && typeof reconciled === "object"
       ? { reused: true, ...reconciled }
       : await (async () => {
-        await markProvisioningDispatch({ prisma, key: claim.key, claimToken: claim.claimToken });
+        await markProvisioningDispatch({ prisma, key: claim.key, claimToken: claim.claimToken,
+          recoveryActorHash: !reconciled && claim.data.attempts > 1 && guardedKind
+            && existing.data.dispatchStartedAt !== null ? missingAssistantRecovery.actorHash : null });
         return execute();
       })();
     if (!result || typeof result !== "object") {
@@ -238,7 +255,7 @@ async function runProvisioningStep({
   }
 }
 
-async function markProvisioningDispatch({ prisma, key, claimToken }) {
+async function markProvisioningDispatch({ prisma, key, claimToken, recoveryActorHash = null }) {
   return prisma.$transaction(async (tx) => {
     if (typeof tx.$queryRaw === "function") await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))::text AS lock_result`;
     const row = await tx.runtimeStore.findUnique({ where: { key } });
@@ -247,7 +264,13 @@ async function markProvisioningDispatch({ prisma, key, claimToken }) {
       || Number(new Date(data.leaseExpiresAt)) <= Date.now()) {
       throw provisioningError("The provisioning dispatch lease expired.", "PROVISIONING_CLAIM_LOST");
     }
-    const next = { ...data, dispatchStartedAt: new Date().toISOString() };
+    if (recoveryActorHash && (data.kind !== 'vapi-assistant' || data.guardedRecovery)) {
+      throw provisioningError('This guarded recovery has already been consumed.', 'PROVISIONING_RECONCILIATION_REQUIRED');
+    }
+    const next = { ...data, dispatchStartedAt: new Date().toISOString(),
+      ...(recoveryActorHash ? { guardedRecovery: { actorHash: recoveryActorHash,
+        authorizedAt: new Date().toISOString(), priorDispatchStartedAt: data.dispatchStartedAt || 'unknown',
+        reason: 'admin_verified_missing_assistant', inventoryVerified: true } } : {}) };
     await tx.runtimeStore.upsert({ where: { key }, update: { data: next }, create: { key, data: next } });
   });
 }

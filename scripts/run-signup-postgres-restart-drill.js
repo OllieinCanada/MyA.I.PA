@@ -42,6 +42,43 @@ async function main() {
     return { child, exited, call: async (body, endpoint = '/__local-signup-recovery-drill') => (await fetch(`http://127.0.0.1:${port}${endpoint}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(15000) })).json() };
   }
   try {
+    for (const fault of ['normal', 'after-provider']) {
+      const identity = `drill-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
+      const kind = 'vapi-assistant', key = provisioningStateKey(kind, identity), providerKey = `drill-provider:${identity}:${kind}`;
+      keys.add(key); keys.add(providerKey);
+      const first = await start();
+      await first.call({ identity, kind, fault: 'failed-before-provider' });
+      first.child.kill(); await first.exited;
+      assert.equal((await prisma.runtimeStore.findUnique({ where: { key } })).data.status, 'failed');
+      const failedStage = await prisma.runtimeStore.findUnique({ where: { key } });
+      // Simulate the 30-minute provider settling window only for this exact
+      // disposable fixture, never for an application/customer stage.
+      await prisma.runtimeStore.update({ where: { key }, data: { data: { ...failedStage.data,
+        dispatchStartedAt: new Date(Date.now() - 31 * 60000).toISOString() } } });
+      const second = await start(), competitor = await start();
+      try {
+        if (fault === 'after-provider') {
+          await second.call({ identity, kind, recoverMissingAssistant: true, fault }).catch(() => ({}));
+          assert.equal(await second.exited, 86);
+          assert.equal((await competitor.call({ identity, kind, recoverMissingAssistant: true })).code, 'PROVISIONING_ALREADY_IN_PROGRESS');
+          const row = await prisma.runtimeStore.findUnique({ where: { key } });
+          await prisma.runtimeStore.update({ where: { key }, data: { data: { ...row.data, leaseExpiresAt: new Date(0).toISOString() } } });
+        } else {
+          const results = await Promise.all([second.call({ identity, kind, recoverMissingAssistant: true }), competitor.call({ identity, kind, recoverMissingAssistant: true })]);
+          assert.ok(results.some(r => r.id));
+        }
+        const recovered = await competitor.call({ identity, kind, recoverMissingAssistant: true });
+        assert.ok(recovered.id);
+        const stage = (await prisma.runtimeStore.findUnique({ where: { key } })).data;
+        assert.ok(stage.guardedRecovery.inventoryVerified);
+        assert.equal((await prisma.runtimeStore.findUnique({ where: { key: providerKey } })).data.creates, 1);
+        cases.push({ kind: 'guarded-missing-assistant', fault, recovered: true, providerCreates: 1, independentProcesses: 2 });
+        console.log(JSON.stringify({ kind: 'guarded-missing-assistant', fault, passed: true }));
+      } finally {
+        for (const child of [second, competitor]) { if (child.child.exitCode === null && child.child.signalCode === null) child.child.kill(); }
+        await Promise.all([second.exited, competitor.exited]);
+      }
+    }
     for (const kind of ['twilio-number', 'vapi-assistant', 'vapi-import', 'signup-sms', 'stripe-trial', 'crm']) {
       for (const fault of ['before-dispatch', 'after-provider', 'after-commit']) {
         const identity = `drill-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
