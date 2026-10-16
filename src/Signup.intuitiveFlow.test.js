@@ -40,7 +40,7 @@ describe("intuitive signup presentation", () => {
     expect(container.querySelector(".signup-macro-stepper")).toBeNull();
     expect(container.querySelector(".signup-home-row a").getAttribute("href")).toBe("#/");
     expect(container.querySelector(".signup-mobile-offer").textContent).toMatch(/14-day free trial.*No credit card required for the trial.*Cancel anytime/i);
-    expect(container.textContent).toMatch(/Step 1 of 8/i);
+    expect(container.textContent).toMatch(/Step 1 of 7/i);
     expect(container.textContent).toMatch(/Choose your trade/i);
     expect(container.querySelectorAll(".signup-trade-grid button")).toHaveLength(6);
     const topContinue = container.querySelector(".signup-trade-top-continue");
@@ -108,7 +108,7 @@ describe("intuitive signup presentation", () => {
     changeValue("#postal-code-input", "L8P 1A1");
     submit();
 
-    expect(container.textContent).toMatch(/Step 5 of 8/i);
+    expect(container.textContent).toMatch(/Step 5 of 7/i);
     expect(container.textContent).toMatch(/What should your assistant include\?/i);
     const pricingChoices = () => Array.from(container.querySelectorAll('#signup-pricing input[type="checkbox"]'));
     expect(pricingChoices()).toHaveLength(5);
@@ -126,19 +126,19 @@ describe("intuitive signup presentation", () => {
 
     changeValue("#hourly-labour-rate-input", "95");
     submit();
-    expect(container.textContent).toMatch(/Step 6 of 8/i);
-    expect(container.textContent).toMatch(/Check your setup/i);
+    expect(container.textContent).toMatch(/Step 6 of 7/i);
+    expect(container.textContent).not.toMatch(/Check your setup|Continue to final review/i);
     expect(container.textContent).not.toMatch(/Assistant voice|voice preview/i);
-    submit();
-    expect(container.textContent).toMatch(/Step 7 of 8/i);
     expect(container.textContent).toMatch(/Final review/i);
+    expect(container.querySelectorAll(".signup-review-step")).toHaveLength(1);
+    expect(container.querySelector('[aria-label="Secure signup verification"]')).not.toBeNull();
     expect(container.querySelector(".signup-review-step")).not.toBeNull();
     clickButton("Change", container.querySelector(".signup-review-step"));
     expect(container.textContent).toMatch(/Choose your trade/i);
     clickButton("Plumber", container.querySelector(".signup-trade-grid"));
     expect(container.querySelector(".signup-trade-top-continue").textContent).toMatch(/Continue/);
     submit();
-    expect(container.textContent).toMatch(/Step 7 of 8/i);
+    expect(container.textContent).toMatch(/Step 6 of 7/i);
     expect(container.querySelector(".signup-specialization-grid")).toBeNull();
     expect(container.querySelector(".signup-review-step").textContent).toMatch(/Plumber/);
     expect(container.querySelector(".signup-review-step").textContent).toMatch(/Residential/);
@@ -149,13 +149,16 @@ describe("intuitive signup presentation", () => {
     expect(container.querySelector(".signup-review-step")).not.toBeNull();
     clickButton("Change", container.querySelector(".signup-review-step"));
     act(() => container.querySelector(".signup-mobile-back").dispatchEvent(new MouseEvent("click", { bubbles: true })));
-    expect(container.textContent).toMatch(/Step 7 of 8/i);
+    expect(container.textContent).toMatch(/Step 6 of 7/i);
     act(() => container.querySelector(".signup-mobile-back").dispatchEvent(new MouseEvent("click", { bubbles: true })));
-    expect(container.textContent).toMatch(/Step 6 of 8/i);
-    clickButton("Change", container.querySelector(".signup-task-content"));
+    expect(container.textContent).toMatch(/Step 5 of 7/i);
+    expect(container.querySelector(".signup-review-step")).toBeNull();
+    submit();
+    expect(container.textContent).toMatch(/Step 6 of 7/i);
+    clickButton("Change", container.querySelector(".signup-review-step"));
     clickButton("Painter", container.querySelector(".signup-trade-grid"));
     submit();
-    expect(container.textContent).toMatch(/Step 6 of 8/i);
+    expect(container.textContent).toMatch(/Step 6 of 7/i);
     expect(container.querySelector(".signup-specialization-grid")).toBeNull();
     expect(container.textContent).toMatch(/Residential/);
     expect(container.textContent).toMatch(/Arscott Electric/);
@@ -163,7 +166,7 @@ describe("intuitive signup presentation", () => {
 
   test("shows personalized phone verification without welcoming an unfinished setup", () => {
     act(() => root.render(<SignupSuccessPage result={{businessName: "Mcdoober Electrical", verificationRequired: true}} onStartAnother={jest.fn()} onRetry={jest.fn()} />));
-    expect(container.textContent).toMatch(/Step 8 of 8 · Phone verification/i);
+    expect(container.textContent).toMatch(/Step 7 of 7 · Phone verification/i);
     expect(container.textContent).toMatch(/Thanks, Mcdoober Electrical/i);
     expect(container.textContent).toMatch(/Open the verification link in your text messages/i);
     expect(container.textContent).not.toMatch(/Welcome aboard/i);
@@ -187,6 +190,33 @@ describe("intuitive signup presentation", () => {
     expect(window.turnstile.render).toHaveBeenCalledTimes(1);
     expect(onVerify).toHaveBeenCalledWith("verified-browser-token");
     delete window.turnstile;
+  });
+
+  test("dual verification requires independent Google and Cloudflare proofs and clears expired proofs", () => {
+    const onVerify = jest.fn();
+    let cloudflare, google;
+    window.turnstile = { render: jest.fn((_el, options) => { cloudflare = options; return "dual-ts"; }), remove: jest.fn() };
+    window.grecaptcha = { render: jest.fn((_el, options) => { google = options; return 0; }), reset: jest.fn() };
+    act(() => root.render(<HumanVerificationCheck provider="turnstile+recaptcha" siteKey="cloudflare-key" googleSiteKey="google-key" onVerify={onVerify} />));
+    expect(container.querySelector('[data-testid="recaptcha-container"]')).not.toBeNull();
+    expect(google.sitekey).toBe("google-key");
+    act(() => cloudflare.callback("cloudflare-proof"));
+    expect(onVerify).toHaveBeenLastCalledWith({ turnstileToken: "cloudflare-proof", recaptchaToken: "" });
+    act(() => google.callback("google-proof"));
+    expect(onVerify).toHaveBeenLastCalledWith({ turnstileToken: "cloudflare-proof", recaptchaToken: "google-proof" });
+    act(() => google["expired-callback"]());
+    expect(onVerify).toHaveBeenLastCalledWith({ turnstileToken: "cloudflare-proof", recaptchaToken: "" });
+    act(() => cloudflare["expired-callback"]());
+    expect(onVerify).toHaveBeenLastCalledWith({ turnstileToken: "", recaptchaToken: "" });
+    act(() => root.unmount());
+    expect(window.grecaptcha.reset).toHaveBeenCalledWith(0);
+    root = createRoot(container);
+    delete window.turnstile; delete window.grecaptcha;
+  });
+
+  test("dual mode visibly fails closed when the Google site key is missing", () => {
+    act(() => root.render(<HumanVerificationCheck provider="turnstile+recaptcha" siteKey="cloudflare-key" googleSiteKey="" onVerify={jest.fn()} />));
+    expect(container.querySelector('[role="alert"]').textContent).toMatch(/Google verification is unavailable/);
   });
 
   test("loads the Turnstile QA route with stored contact overrides and no manual contact typing", () => {

@@ -45,7 +45,10 @@ async function main() {
       const choices = page.locator('#signup-pricing input[type="checkbox"]');
       assert.equal(await choices.count(), 5);
       for (let i = 0; i < 5; i++) assert.equal(await choices.nth(i).isChecked(), false);
-      await click("Continue to check your setup");
+      await click("Review and confirm");
+      assert.equal(await page.locator('.signup-review-step').count(), 1);
+      assert.equal(await page.getByText('Check your setup', { exact: true }).count(), 0);
+      assert.equal(await page.locator('[data-testid="turnstile-container"]').count(), 1);
       await page.getByText("No pricing announcements selected. Your assistant will still collect service requests.", { exact: true }).filter({ visible: true }).waitFor();
       const reviewRow = page.getByText("Service calls & installations", { exact: true }).locator("..").locator("..");
       await reviewRow.getByRole("button", { name: "Change", exact: true }).click();

@@ -60,7 +60,7 @@ test("signup validation rejects placeholders and malformed contact details", () 
   expect(result.errors.email).toBeTruthy();
 });
 
-test("the signup payload keeps owner, business, pricing, and agent fields aligned", () => {
+test.each(["turnstile", "turnstile+recaptcha"])("the %s signup payload keeps business fields and independent proofs aligned", (provider) => {
   const payload = buildSignupPayload({
     submissionId: "bf618a68-091f-4f3f-8f93-9b0f4544f512",
     details: validDetails,
@@ -81,8 +81,8 @@ test("the signup payload keeps owner, business, pricing, and agent fields aligne
     selectedSpecializationLabels: ["Residential", "Commercial"],
     specializationNotes: "Panel work only.",
     botTrap: "",
-    captchaProvider: "turnstile",
-    captchaToken: "verified-token",
+    captchaProvider: provider,
+    captchaToken: provider === "turnstile+recaptcha" ? { turnstileToken: "verified-token", recaptchaToken: "google-proof" } : "verified-token",
     signupStartedAt: Date.now() - 12_000,
   });
 
@@ -98,6 +98,8 @@ test("the signup payload keeps owner, business, pricing, and agent fields aligne
   expect(payload.setupDetails.offersServiceCalls).toBe(true);
   expect(payload.setupDetails.greetingScript).toContain("Taylor Electrical");
   expect(payload.security.turnstileToken).toBe("verified-token");
+  expect(payload.security.captchaToken).toBe("verified-token");
+  expect(payload.security.recaptchaToken).toBe(provider === "turnstile+recaptcha" ? "google-proof" : "");
 });
 
 test("service-call pricing never inserts silent defaults", () => {
