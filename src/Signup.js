@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Vapi from "@vapi-ai/web";
 import CustomerHelpActions from "./components/CustomerHelpActions";
 import AddressAutocomplete from "./components/AddressAutocomplete";
@@ -13,6 +13,7 @@ import {
   BUSINESS_SLIDE_TABS,
   CANADIAN_PROVINCES,
   CAPTCHA_PROVIDER,
+  RECAPTCHA_SITE_KEY,
   DEFAULT_DETAILS,
   DEFAULT_PRICING,
   OPENING_DIALOGUE_OPTIONS,
@@ -390,7 +391,7 @@ function MobileSignupProgress({ currentStep, businessSlide, tradeSetupPanel }) {
       ? businessSlide === 1
         ? tradeSetupPanel === "trade" ? 1 : 2
         : businessSlide + 1
-      : 7;
+      : 6;
   const title =
     currentStep === 3
         ? "Final review"
@@ -402,16 +403,16 @@ function MobileSignupProgress({ currentStep, businessSlide, tradeSetupPanel }) {
               ? "Business details"
               : businessSlide === 4
                 ? "Service-call details"
-                : "Check your setup";
+                : "Final review";
 
   return (
-    <div className="signup-mobile-progress signup-visible-progress" aria-label={`Step ${stepNumber} of 8: ${title}`}>
+    <div className="signup-mobile-progress signup-visible-progress" aria-label={`Step ${stepNumber} of 7: ${title}`}>
       <div className="signup-mobile-progress-copy">
-        <span>Step {stepNumber} of 8</span>
+        <span>Step {stepNumber} of 7</span>
         <strong>{title}</strong>
       </div>
       <div className="signup-mobile-progress-track" aria-hidden="true">
-        <span style={{ width: `${(stepNumber / 8) * 100}%` }} />
+        <span style={{ width: `${(stepNumber / 7) * 100}%` }} />
       </div>
     </div>
   );
@@ -1221,7 +1222,7 @@ export function VoiceDemoStep({ agent, businessName, trade, areas, standalone = 
   );
 }
 
-function ReviewPanel({ title = "Check your setup", description = "Check your choices before continuing.", trade, areas, specializations, details, pricing, onUpdateDetails, onEditBusinessSlide, getFieldError, onFieldBlur }) {
+function ReviewPanel({ title = "Final review", description = "Confirm your details before continuing.", trade, areas, specializations, details, pricing, onUpdateDetails, onEditBusinessSlide, getFieldError, onFieldBlur }) {
   const businessAddress = formatBusinessAddress(details);
   const pricingScript = pricing ? buildPricingScript(pricing) : "";
   const pricingSummary = pricingScript || "No pricing announcements selected. Your assistant will still collect service requests.";
@@ -1414,7 +1415,68 @@ function TrialButton({ disabled, busy, finalStep = false, label = "Start free tr
   );
 }
 
-export function HumanVerificationCheck({ provider = CAPTCHA_PROVIDER, siteKey = TURNSTILE_SITE_KEY, onVerify }) {
+function GoogleVerificationCheck({ siteKey, onVerify }) {
+  const container = useRef(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    if (!siteKey) return undefined;
+    let cancelled = false;
+    let widget;
+    const clear = () => { if (!cancelled) onVerify?.(""); };
+    const render = () => {
+      if (cancelled || widget != null || !container.current || !window.grecaptcha?.render) return;
+      widget = window.grecaptcha.render(container.current, {
+        sitekey: siteKey, theme: "light", size: "normal",
+        callback: token => { if (!cancelled) { setFailed(false); onVerify?.(String(token || "")); } },
+        "expired-callback": clear,
+        "error-callback": () => { clear(); if (!cancelled) setFailed(true); },
+      });
+    };
+    const ready = () => window.grecaptcha?.ready ? window.grecaptcha.ready(render) : render();
+    const fail = () => { clear(); if (!cancelled) setFailed(true); };
+    let script = document.querySelector('script[data-myaipa-recaptcha="true"]');
+    if (window.grecaptcha?.render) ready();
+    else {
+      if (!script) {
+        script = document.createElement("script");
+        script.src = "https://www.google.com/recaptcha/api.js?render=explicit";
+        script.async = true; script.defer = true; script.dataset.myaipaRecaptcha = "true";
+        document.head.appendChild(script);
+      }
+      script.addEventListener("load", ready);
+      script.addEventListener("error", fail);
+    }
+    return () => {
+      cancelled = true;
+      script?.removeEventListener("load", ready);
+      script?.removeEventListener("error", fail);
+      if (widget != null) window.grecaptcha?.reset?.(widget);
+    };
+  }, [siteKey, onVerify]);
+  return <section className="mx-auto mt-5 max-w-[920px] rounded-2xl border border-blue-100 bg-white p-5 text-center shadow-sm" aria-label="Google signup verification">
+    <p className="mb-3 text-sm font-bold text-slate-700">Complete the Google checkbox too.</p>
+    {!siteKey || failed ? <p role="alert">Google verification is unavailable. Please reload and try again.</p> : null}
+    <div ref={container} className="mx-auto min-h-[78px] w-[304px] max-w-full" data-testid="recaptcha-container" />
+  </section>;
+}
+
+function CombinedVerificationCheck({ siteKey, googleSiteKey, onVerify }) {
+  const proofs = useRef({ turnstileToken: "", recaptchaToken: "" });
+  const cloudflare = useCallback(token => { proofs.current = { ...proofs.current, turnstileToken: token }; onVerify?.(proofs.current); }, [onVerify]);
+  const google = useCallback(token => { proofs.current = { ...proofs.current, recaptchaToken: token }; onVerify?.(proofs.current); }, [onVerify]);
+  return <>
+    <TurnstileVerificationCheck provider="turnstile" siteKey={siteKey} onVerify={cloudflare} />
+    <GoogleVerificationCheck siteKey={googleSiteKey} onVerify={google} />
+  </>;
+}
+
+export function HumanVerificationCheck({ provider = CAPTCHA_PROVIDER, siteKey = TURNSTILE_SITE_KEY, googleSiteKey = RECAPTCHA_SITE_KEY, onVerify }) {
+  if (provider === "turnstile+recaptcha") return <CombinedVerificationCheck siteKey={siteKey} googleSiteKey={googleSiteKey} onVerify={onVerify} />;
+  if (provider === "recaptcha") return <GoogleVerificationCheck siteKey={googleSiteKey} onVerify={onVerify} />;
+  return <TurnstileVerificationCheck provider={provider} siteKey={siteKey} onVerify={onVerify} />;
+}
+
+function TurnstileVerificationCheck({ provider, siteKey, onVerify }) {
   const containerRef = useRef(null);
   const widgetIdRef = useRef(null);
   const normalizedProvider = String(provider || "").trim().toLowerCase();
@@ -1771,7 +1833,7 @@ export function SignupSuccessPage({ result: initialResult, onStartAnother }) {
               <Icon name="check" className="h-8 w-8" />
             </div>
             <p className="mt-5 text-sm font-black uppercase tracking-[0.18em] text-[#9edaff]">
-              {verificationRequired ? "Step 8 of 8 · Phone verification" : assignedNumber && !reviewRequired && !signupClosed ? "Let’s bring your assistant to life!" : "Your setup progress"}
+              {verificationRequired ? "Step 7 of 7 · Phone verification" : assignedNumber && !reviewRequired && !signupClosed ? "Let’s bring your assistant to life!" : "Your setup progress"}
             </p>
             <h1 className="mt-2 text-[clamp(2.1rem,8vw,4.6rem)] font-black leading-tight tracking-[-0.055em]">
               {assignedNumber && !reviewRequired && !verificationRequired && !signupClosed ? `Welcome aboard, ${businessName}!` : `Thanks, ${businessName}.`}
@@ -2140,7 +2202,7 @@ export default function Signup() {
         : businessSlide === 3
           ? "Continue to service call pricing"
           : businessSlide === 4
-            ? "Continue to check your setup"
+            ? "Review and confirm"
             : "Continue to final review";
   const maxBusinessSlide =
     !selectedTradeId || specializationStepDisabled
@@ -2151,8 +2213,10 @@ export default function Signup() {
           ? 3
           : pricingStepDisabled
             ? 4
-            : 5;
-  const securityStepDisabled = Boolean(CAPTCHA_PROVIDER && !captchaToken);
+            : 4;
+  const securityStepDisabled = CAPTCHA_PROVIDER === "turnstile+recaptcha"
+    ? !(captchaToken?.turnstileToken && captchaToken?.recaptchaToken)
+    : Boolean(CAPTCHA_PROVIDER && !captchaToken);
   const mobilePrimaryLabel =
     returnToReviewAfterEdit ? "Continue" : currentStep === 3
         ? "Start my free 14-day trial"
@@ -2163,7 +2227,7 @@ export default function Signup() {
             : businessSlide === 3
               ? "Continue to service call pricing"
               : businessSlide === 4
-                ? "Continue to check your setup"
+                ? "Review and confirm"
                 : "Continue to final review";
   const mobilePrimaryDisabled = currentStep === 1 ? businessSlideDisabled : securityStepDisabled;
 
@@ -2172,12 +2236,13 @@ export default function Signup() {
     if (returnToReviewAfterEdit) {
       setReturnToReviewAfterEdit(false);
       setCurrentStep(reviewReturnStep);
-      setBusinessSlide(5);
+      setBusinessSlide(4);
       return;
     }
     if (currentStep === 3) {
+      setCaptchaToken("");
       setCurrentStep(1);
-      setBusinessSlide(5);
+      setBusinessSlide(4);
       return;
     }
     if (businessSlide > 1) {
@@ -2249,7 +2314,9 @@ export default function Signup() {
   };
 
   const editBusinessSlideFromReview = (slideNumber, panel = "") => {
-    setReviewReturnStep(currentStep);
+    setCaptchaToken("");
+    setReviewReturnStep(3);
+    setCurrentStep(1);
     setReturnToReviewAfterEdit(true);
     setError("");
     if (slideNumber === 1) setTradeSetupPanel(panel || "trade");
@@ -2305,7 +2372,7 @@ export default function Signup() {
           if (returnToReviewAfterEdit) {
             setReturnToReviewAfterEdit(false);
             setCurrentStep(reviewReturnStep);
-            setBusinessSlide(5);
+            setBusinessSlide(4);
             setError("");
             return;
           }
@@ -2319,7 +2386,7 @@ export default function Signup() {
         if (returnToReviewAfterEdit) {
           setReturnToReviewAfterEdit(false);
           setCurrentStep(reviewReturnStep);
-          setBusinessSlide(5);
+          setBusinessSlide(4);
           return;
         }
         setBusinessSlide(2);
@@ -2334,7 +2401,7 @@ export default function Signup() {
         if (returnToReviewAfterEdit) {
           setReturnToReviewAfterEdit(false);
           setCurrentStep(reviewReturnStep);
-          setBusinessSlide(5);
+          setBusinessSlide(4);
           return;
         }
         setBusinessSlide(3);
@@ -2357,7 +2424,7 @@ export default function Signup() {
         if (returnToReviewAfterEdit) {
           setReturnToReviewAfterEdit(false);
           setCurrentStep(reviewReturnStep);
-          setBusinessSlide(5);
+          setBusinessSlide(4);
           return;
         }
         setBusinessSlide(4);
@@ -2378,7 +2445,8 @@ export default function Signup() {
           setReturnToReviewAfterEdit(false);
           setCurrentStep(reviewReturnStep);
         }
-        setBusinessSlide(5);
+        setBusinessSlide(4);
+        setCurrentStep(3);
         return;
       }
       setBusinessStepAttempted(false);
@@ -2388,6 +2456,11 @@ export default function Signup() {
       return;
     }
     if (currentStep !== 3) return;
+
+    if (securityStepDisabled) {
+      setError("Complete the verification above before continuing.");
+      return;
+    }
 
     if (hasTooManyBrowserSignupAttempts()) {
       setError("Too many signup attempts from this browser. Please try again later.");
@@ -3354,7 +3427,7 @@ export default function Signup() {
               {businessSlide === 1 ? (
                 <section className="signup-task-layout grid w-full gap-6 lg:grid-cols-[360px_minmax(0,1fr)] xl:grid-cols-[390px_minmax(0,1fr)] lg:items-stretch">
                   <div className="signup-task-explainer flex flex-col justify-center rounded-3xl border border-blue-100 bg-blue-50/70 p-8">
-                    <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">Step {tradeSetupPanel === "trade" ? "1" : "2"} of 8</p>
+                    <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">Step {tradeSetupPanel === "trade" ? "1" : "2"} of 7</p>
                     <h2 className="mt-2 text-[clamp(2rem,3vw,3.1rem)] font-black leading-tight tracking-[-0.04em] text-slate-950">
                       {tradeSetupPanel === "trade" ? "Choose your trade" : "What types of properties do you work on?"}
                     </h2>
@@ -3525,7 +3598,7 @@ export default function Signup() {
               {businessSlide === 2 ? (
               <section className="signup-task-layout grid min-h-0 w-full gap-6 lg:grid-cols-[360px_minmax(0,1fr)] xl:grid-cols-[390px_minmax(0,1fr)] lg:items-stretch">
                 <div className="signup-task-explainer flex flex-col justify-center rounded-3xl border border-blue-100 bg-blue-50/70 p-8">
-                  <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">Step 3 of 8</p>
+                  <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">Step 3 of 7</p>
                   <h2 className="mt-2 text-[clamp(2rem,3vw,3.1rem)] font-black leading-tight tracking-[-0.04em] text-slate-950">What areas do you cover?</h2>
                   <p className="mt-4 text-lg font-medium leading-8 text-slate-600">Choose a listed area. If yours is not shown, use the separate option below the list.</p>
                 </div>
@@ -3641,7 +3714,7 @@ export default function Signup() {
               {businessSlide === 3 ? (
               <section id="signup-business-details" className="signup-task-layout grid w-full gap-6 lg:grid-cols-[360px_minmax(0,1fr)] xl:grid-cols-[390px_minmax(0,1fr)] lg:items-stretch">
                 <div className="signup-task-explainer flex flex-col justify-center rounded-3xl border border-blue-100 bg-blue-50/70 p-8">
-                  <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">Step 4 of 8</p>
+                  <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">Step 4 of 7</p>
                   <h2 className="mt-2 text-[clamp(2rem,3vw,3.1rem)] font-black leading-tight tracking-[-0.04em] text-slate-950">Business details</h2>
                   <p className="mt-4 text-lg font-medium leading-8 text-slate-600">These details personalize your greeting, alerts, and local service information.</p>
                 </div>
@@ -3765,7 +3838,7 @@ export default function Signup() {
               {businessSlide === 4 ? (
                 <section id="signup-pricing" className="signup-task-layout grid w-full gap-6 lg:grid-cols-[360px_minmax(0,1fr)] xl:grid-cols-[390px_minmax(0,1fr)] lg:items-stretch">
                   <div className="signup-task-explainer flex flex-col justify-center rounded-3xl border border-blue-100 bg-blue-50/70 p-8">
-                    <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">Step 5 of 8</p>
+                    <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">Step 5 of 7</p>
                     <h2 className="mt-2 text-[clamp(2rem,3vw,3.1rem)] font-black leading-tight tracking-[-0.04em] text-slate-950">Service call / repair pricing</h2>
                     <p className="mt-4 text-lg font-medium leading-8 text-slate-600">Tell callers your service-call or repair pricing upfront so they can decide whether they want to continue.</p>
                   </div>
@@ -3800,7 +3873,7 @@ export default function Signup() {
                         ))}
                       </div>
                       <button type="submit" disabled={pricingStepDisabled || busy} className="mt-4 flex min-h-[54px] w-full items-center justify-center rounded-xl bg-blue-600 px-5 font-black text-white disabled:opacity-50">
-                        {returnToReviewAfterEdit ? "Continue" : "Continue to check your setup"}
+                        {returnToReviewAfterEdit ? "Continue" : "Review and confirm"}
                       </button>
                       {!hasValidServiceCallPricing ? <p className="mt-2 text-sm font-semibold text-slate-600">Enter each checked rate, or uncheck it to leave it out.</p> : null}
                     </div>
@@ -3809,34 +3882,6 @@ export default function Signup() {
                 </section>
               ) : null}
 
-              {businessSlide === 5 ? (
-                <section className="signup-task-layout grid w-full gap-6 lg:grid-cols-[360px_minmax(0,1fr)] xl:grid-cols-[390px_minmax(0,1fr)] lg:items-stretch">
-                  <div className="signup-task-explainer flex flex-col justify-center rounded-3xl border border-blue-100 bg-blue-50/70 p-8">
-                    <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">Step 6 of 8</p>
-                    <h2 className="mt-2 text-[clamp(2rem,3vw,3.1rem)] font-black leading-tight tracking-[-0.04em] text-slate-950">Check your setup</h2>
-                    <p className="mt-4 text-lg font-medium leading-8 text-slate-600">Confirm your trade, areas, business details, and pricing before the final review.</p>
-                  </div>
-                  <div className="signup-task-content content-center">
-                    <div className="signup-mobile-task-heading">
-                      <h2>Check your setup</h2>
-                      <p>Check everything below. Then continue to the final review.</p>
-                    </div>
-                    <ReviewPanel
-                      title="Check your setup"
-                      description="Check your choices before continuing to the final review."
-                      trade={selectedTrade}
-                      areas={selectedAreas}
-                      specializations={selectedSpecializationLabels}
-                      details={details}
-                      pricing={pricing}
-                      onUpdateDetails={updateDetails}
-                      onEditBusinessSlide={editBusinessSlideFromReview}
-                      getFieldError={getBusinessFieldError}
-                      onFieldBlur={markDetailTouched}
-                    />
-                  </div>
-                </section>
-              ) : null}
               </div>
 
               {businessSlide > 1 && businessSlide !== 2 && businessSlide !== 3 ? (
@@ -3933,14 +3978,7 @@ export default function Signup() {
               {currentStep > 1 || businessSlide > 1 ? (
                 <button
                   type="button"
-                  onClick={() => {
-                    if (currentStep === 1 && businessSlide > 1) {
-                      setBusinessSlide((slide) => Math.max(1, slide - 1));
-                    } else {
-                      setCurrentStep(1);
-                      setBusinessSlide(5);
-                    }
-                  }}
+                  onClick={goBackFromMobileStep}
                   className="flex min-h-[54px] items-center justify-center rounded-xl border border-slate-200 bg-white px-5 text-base font-bold text-slate-600 transition hover:border-blue-300 hover:text-blue-600"
                 >
                   Back

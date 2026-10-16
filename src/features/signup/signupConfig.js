@@ -29,7 +29,7 @@ export const CAPTCHA_PROVIDER = String(
   process.env.REACT_APP_CAPTCHA_PROVIDER
   || (TURNSTILE_SITE_KEY ? "turnstile" : RECAPTCHA_SITE_KEY ? "recaptcha" : "")
 ).trim().toLowerCase();
-export const RECAPTCHA_MODE = "score";
+export const RECAPTCHA_MODE = "checkbox";
 export const USE_RECAPTCHA_ENTERPRISE = false;
 
 export const TRADE_OPTIONS = [
@@ -191,7 +191,6 @@ export const BUSINESS_SLIDE_TABS = [
   { number: 2, label: "Service areas" },
   { number: 3, label: "Details" },
   { number: 4, label: "Pricing" },
-  { number: 5, label: "Setup summary" },
 ];
 
 export const DEFAULT_DETAILS = {
