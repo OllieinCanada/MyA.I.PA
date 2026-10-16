@@ -110,7 +110,9 @@ jobs:
       - name: Verify single-review signup on mobile and desktop
         env:
           PRICING_QA_BUILD_DIR: docs
-        run: npm run test:signup-pricing-choices
+        run: |
+          npm run test:signup-pricing-choices
+          npm run preview:signup-verification-progress
 
       - name: Save signup browser evidence
         if: always()
@@ -118,7 +120,9 @@ jobs:
         with:
           name: signup-browser-${{ github.event.pull_request.head.sha || github.sha }}
           retention-days: 7
-          path: diagnostics/pricing-choices/
+          path: |
+            diagnostics/pricing-choices/
+            diagnostics/verification-progress/
           if-no-files-found: ignore
 
       - name: Archive verified Pages output
