@@ -141,4 +141,5 @@ jobs:
             docs/404.html
             docs/asset-manifest.json
             docs/proof/index.html
+            docs/illustrations/canadian-flag.png
             docs/static/
