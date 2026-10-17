@@ -1,4 +1,5 @@
 const { card } = require('./providerNotifications');
+const { loginKeyboard } = require('./telegramAdminLogin');
 
 // One visual envelope for operational notices, including older queued messages.
 // Keep full evidence in the incident/outbox, not in the phone-sized caption.
@@ -51,7 +52,7 @@ function noticeRequest(text, { chatId, replyMarkup, provider, severity } = {}) {
   form.append('chat_id', String(chatId));
   form.append('caption', compactNotice(text));
   form.append('photo', new Blob([card(provider || style.provider, severity || style.severity)], { type: 'image/png' }), 'my-ai-pa-alert.png');
-  if (replyMarkup) form.append('reply_markup', JSON.stringify(replyMarkup));
+  if (replyMarkup) form.append('reply_markup', JSON.stringify(loginKeyboard(replyMarkup)));
   return { method: 'POST', body: form, signal: AbortSignal.timeout(7_000) };
 }
 

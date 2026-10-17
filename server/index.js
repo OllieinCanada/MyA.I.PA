@@ -5,6 +5,7 @@ if (process.env.DISABLE_LOCAL_ENV_FILES !== "1") {
 }
 
 const crypto = require("crypto");
+const { registerTelegramAdminLogin } = require('./telegramAdminLogin');
 const { buildTwilioImportRequest } = require('./vapiTwilioImportRequest');
 const { providerFailureDetail } = require("./providerFailureDetail");
 const { configuredCaptchaProvider, verifySignupCaptcha } = require("./signupCaptcha");
@@ -16362,6 +16363,14 @@ app.post("/api/customer/dashboard", (_req, res) => {
 app.post("/api/customer/dashboard/logout", (req, res) => {
   clearCustomerDashboardSessionCookie(res);
   res.status(204).end();
+});
+
+registerTelegramAdminLogin(app, {
+  prisma,
+  rateLimiter: adminLoginProcessRateLimiter,
+  sessionSecret: getAdminSessionSecret,
+  setSession: res => setAdminSessionCookie(res, createAdminSessionToken()),
+  audit: outcome => recordAdminAuditEvent({ prisma, action: 'telegram_admin_login', outcome }),
 });
 
 app.post(
