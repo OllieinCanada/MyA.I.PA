@@ -6,20 +6,22 @@ const test = require("node:test");
 const source = fs.readFileSync(path.join(__dirname, "..", "src", "ForwardingSetup.js"), "utf8");
 const dashboard = fs.readFileSync(path.join(__dirname, "..", "src", "CustomerDashboard.js"), "utf8");
 
-test("forwarding reuses saved service choices and asks only when recovery needs them", () => {
+test("forwarding immediately displays saved instructions and keeps service changes optional", () => {
   assert.match(source, /setCarrier\(data.forwarding.carrier\)/);
   assert.match(source, /setLineType\(data.forwarding.lineType\)/);
-  assert.match(source, /const needsChoices = status === "carrier_needed" \|\| !forwarding/);
-  assert.match(source, /\{needsChoices \? <div className="forwarding-form">/);
+  assert.doesNotMatch(source, /needsChoices|Cellphone or landline\?|LINE_TYPES/);
+  assert.match(source, /\{forwarding\?\.rule \? <>/);
   assert.match(source, /Set up your new receptionist/);
+  assert.match(source, /\{showCarrierHelp \? <div className="forwarding-form">/);
+  assert.match(source,/Need different setup instructions\?/);
   assert.doesNotMatch(source, /Nothing changes about how you answer your phone/);
 });
 
 test("forwarding screen includes every customer-visible state and recovery action", () => {
   for (const text of [
     "carrier_needed", "verification_pending", "active", "verification_failed", "manual_setup_required",
-    "Open Phone App and Protect My Missed Calls", "Test My Setup", "Test Again", "Change Setup", "Turn off / view disable instructions",
-    "We didn’t receive the forwarded call yet", "Choose Different Carrier or Phone Type",
+    "Open Phone App to Set Up Forwarding", "Change Setup", "Turn off / view disable instructions",
+    "Wait for your carrier’s confirmation", "Need different setup instructions?",
   ]) assert.match(source, new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));
 });
 
@@ -43,11 +45,11 @@ test("the UI explains the carrier boundary and never claims silent browser activ
   assert.doesNotMatch(source, /automatically enables forwarding|silent(?:ly)? activate/i);
 });
 
-test("supported mobile setup arms an automatic verification test on return", () => {
-  assert.match(source, /myaipa-forwarding-auto-test/);
-  assert.match(source, /visibilitychange/);
-  assert.match(source, /We’ll test it automatically/);
-  assert.match(source, /Test My Setup/);
+test("opening forwarding never arms or places a callback test", () => {
+  assert.doesNotMatch(source, /myaipa-forwarding-auto-test|startTest|\/setup\/verify|Test My Setup|Test Again|Do not answer the test call/);
+  assert.match(source, /href=\{forwarding.rule.activationTelUri\}/);
+  assert.match(source, /Opening the app does not confirm forwarding is active/);
+  assert.match(source, /iPhones can block carrier-code links/);
 });
 
 test("verified customers can always find safe disable guidance", () => {

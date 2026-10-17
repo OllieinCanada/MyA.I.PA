@@ -165,16 +165,27 @@ describe("resumable signup status and pre-activation support", () => {
     const field = container.querySelector('textarea[aria-label="Describe your signup problem"]');
     const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value").set;
     act(() => {
-      setter.call(field, "I am waiting for my assigned number.");
+      setter.call(field, "test");
       field.dispatchEvent(new Event("input", { bubbles: true }));
     });
+    expect([...container.querySelectorAll('button')].find((button) => button.textContent === 'Send signup support request').disabled).toBe(false);
     await click("Send signup support request");
     expect(global.fetch).toHaveBeenCalledTimes(1);
     const [url, options] = global.fetch.mock.calls[0];
     expect(url).toMatch(/\/api\/signup\/status\/attempt_synthetic\/support$/);
     expect(options.headers["x-signup-status-token"]).toBe("private-status-test-token");
-    expect(JSON.parse(options.body)).toEqual({ description: "I am waiting for my assigned number." });
+    expect(JSON.parse(options.body)).toEqual({ description: "test" });
     expect(container.textContent).toMatch(/Your support request was received/);
+  });
+
+  test("missing support credentials explain how to resume instead of silently doing nothing", async () => {
+    render({ ...pending(), signupStatus: { ...pending().signupStatus, token: '' } });
+    const field = container.querySelector('textarea[aria-label="Describe your signup problem"]');
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
+    act(() => { setter.call(field, 'help'); field.dispatchEvent(new Event('input', { bubbles: true })); });
+    await click('Send signup support request');
+    expect(container.textContent).toMatch(/Reopen your verification link/);
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 
   test("the polling interval stays below the public status limit during a long wait", async () => {

@@ -141,8 +141,12 @@ test("guarded finalization preserves the exact attempt through testing, trial, a
   const callbackStart = source.indexOf('"/api/webhooks/twilio/message-status"');
   const callbackEnd = source.indexOf("app.post(", callbackStart + 1);
   const callback = source.slice(callbackStart, callbackEnd);
-  assert.match(callback, /upsertSignupDashboardRecord\(\{ \.\.\.matchingSignup, \.\.\.update \}\)/);
-  assert.match(callback, /matchingSignup\.signupAttemptId/);
+  assert.match(callback, /await enqueueTwilioStatus/);
+  assert.match(callback, /twilioStatusCallbackProcessRateLimiter/);
+  assert.doesNotMatch(callback, /continueSignupAgentTextTestAfterDelivery|safelyNotifySignupOperations/);
+  const processor = source.slice(source.indexOf('async function processSavedTwilioMessageStatus'), source.indexOf('async function processTwilioStatusInbox'));
+  assert.match(processor, /upsertSignupDashboardRecord\(\{ \.\.\.matchingSignup, \.\.\.update \}\)/);
+  assert.match(processor, /matchingSignup\.signupAttemptId/);
 });
 
 test("test messages visibly separate the owner and customer formats", () => {
@@ -178,6 +182,7 @@ test("final Twilio callbacks update the matching test leg and revoke readiness o
   const completed = getAgentTestDeliveryUpdate({
     signup: {
       agentTestOwnerDeliveredAt: "2026-09-05T12:00:02.000Z",
+      agentTestOwnerProviderStatus: "delivered",
       agentTestCustomerMessageSid: "SM_CUSTOMER",
     },
     messageSid: "SM_CUSTOMER",

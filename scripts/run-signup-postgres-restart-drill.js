@@ -6,6 +6,7 @@ const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const { PrismaClient } = require('@prisma/client');
 const { provisioningStateKey } = require('../server/provisioningState');
+const {receiptKey,WORKER_KEY}=require('../server/twilioStatusInbox');
 const databaseUrl = process.env.SIGNUP_RECOVERY_DRILL_DATABASE_URL;
 const reportPath = path.resolve('diagnostics/signup-failure-recovery-audit/postgres-restart.json');
 
@@ -19,8 +20,8 @@ async function main() {
   await prisma.runtimeStore.count().catch(async error => { await prisma.$disconnect(); throw error; });
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'myaipa-pg-restart-'));
   const children = new Set(), keys = new Set(), cases = [];
-  async function start() {
-    const child = fork(path.resolve('tests/helpers/signup-postgres-restart-worker.js'), [], {
+  async function start(args=[]) {
+    const child = fork(path.resolve('tests/helpers/signup-postgres-restart-worker.js'), args, {
       execArgv: ['--max-old-space-size=96'],
       cwd, stdio: ['ignore', 'ignore', 'pipe', 'ipc'],
       env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, NODE_ENV: 'test', DATABASE_URL: databaseUrl,
@@ -41,6 +42,43 @@ async function main() {
     return { child, exited, call: async (body, endpoint = '/__local-signup-recovery-drill') => (await fetch(`http://127.0.0.1:${port}${endpoint}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(15000) })).json() };
   }
   try {
+    for (const fault of ['normal', 'after-provider']) {
+      const identity = `drill-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
+      const kind = 'vapi-assistant', key = provisioningStateKey(kind, identity), providerKey = `drill-provider:${identity}:${kind}`;
+      keys.add(key); keys.add(providerKey);
+      const first = await start();
+      await first.call({ identity, kind, fault: 'failed-before-provider' });
+      first.child.kill(); await first.exited;
+      assert.equal((await prisma.runtimeStore.findUnique({ where: { key } })).data.status, 'failed');
+      const failedStage = await prisma.runtimeStore.findUnique({ where: { key } });
+      // Simulate the 30-minute provider settling window only for this exact
+      // disposable fixture, never for an application/customer stage.
+      await prisma.runtimeStore.update({ where: { key }, data: { data: { ...failedStage.data,
+        dispatchStartedAt: new Date(Date.now() - 31 * 60000).toISOString() } } });
+      const second = await start(), competitor = await start();
+      try {
+        if (fault === 'after-provider') {
+          await second.call({ identity, kind, recoverMissingAssistant: true, fault }).catch(() => ({}));
+          assert.equal(await second.exited, 86);
+          assert.equal((await competitor.call({ identity, kind, recoverMissingAssistant: true })).code, 'PROVISIONING_ALREADY_IN_PROGRESS');
+          const row = await prisma.runtimeStore.findUnique({ where: { key } });
+          await prisma.runtimeStore.update({ where: { key }, data: { data: { ...row.data, leaseExpiresAt: new Date(0).toISOString() } } });
+        } else {
+          const results = await Promise.all([second.call({ identity, kind, recoverMissingAssistant: true }), competitor.call({ identity, kind, recoverMissingAssistant: true })]);
+          assert.ok(results.some(r => r.id));
+        }
+        const recovered = await competitor.call({ identity, kind, recoverMissingAssistant: true });
+        assert.ok(recovered.id);
+        const stage = (await prisma.runtimeStore.findUnique({ where: { key } })).data;
+        assert.ok(stage.guardedRecovery.inventoryVerified);
+        assert.equal((await prisma.runtimeStore.findUnique({ where: { key: providerKey } })).data.creates, 1);
+        cases.push({ kind: 'guarded-missing-assistant', fault, recovered: true, providerCreates: 1, independentProcesses: 2 });
+        console.log(JSON.stringify({ kind: 'guarded-missing-assistant', fault, passed: true }));
+      } finally {
+        for (const child of [second, competitor]) { if (child.child.exitCode === null && child.child.signalCode === null) child.child.kill(); }
+        await Promise.all([second.exited, competitor.exited]);
+      }
+    }
     for (const kind of ['twilio-number', 'vapi-assistant', 'vapi-import', 'signup-sms', 'stripe-trial', 'crm']) {
       for (const fault of ['before-dispatch', 'after-provider', 'after-commit']) {
         const identity = `drill-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -95,6 +133,39 @@ async function main() {
           console.log(JSON.stringify({ kind: purpose, fault, passed: true }));
         } finally { second.child.kill(); competitor.child.kill(); await Promise.all([second.exited, competitor.exited]); }
       }
+    }
+    for(const fault of ['after-receipt','after-send']){
+      // Earlier full-app cases start the normal inbox worker. A killed child
+      // can leave its empty-queue lease behind; isolate the next fault case
+      // only after every previous child has stopped. This is a disposable DB.
+      assert.equal(children.size,0);
+      keys.add(WORKER_KEY);
+      const priorWorker=await prisma.runtimeStore.findUnique({where:{key:WORKER_KEY}});
+      if(priorWorker)await prisma.runtimeStore.update({where:{key:WORKER_KEY},data:{data:{token:null,leaseExpiresAt:0}}});
+      const sid='SM'+crypto.randomBytes(16).toString('hex'),endpoint='/__local-twilio-receipt-drill';
+      const key=receiptKey({MessageSid:sid,MessageStatus:'delivered'}),providerKey='drill-status-provider:'+sid;
+      const dispatchIdentity=crypto.createHash('sha256').update(JSON.stringify([sid,'status-drill','','+19055550123',''])).digest('hex');
+      keys.add(key);keys.add(WORKER_KEY);keys.add(providerKey);keys.add(provisioningStateKey('signup-sms',dispatchIdentity));
+      const first=await start(['--status-inbox-drill']);
+      if(fault==='after-send')await first.call({sid,action:'enqueue'},endpoint);
+      await first.call({sid,action:fault==='after-receipt'?'enqueue':'drain',fault},endpoint).catch(()=>{});
+      assert.equal(await first.exited,86);
+      if(fault==='after-send'){
+        for(const target of [key,WORKER_KEY]){
+          const row=await prisma.runtimeStore.findUnique({where:{key:target}});
+          await prisma.runtimeStore.update({where:{key:target},data:{data:{...row.data,leaseExpiresAt:0}}});
+        }
+      }
+      const second=await start(['--status-inbox-drill']),competitor=await start(['--status-inbox-drill']);
+      try{
+        await Promise.all([second.call({sid,action:'drain'},endpoint),competitor.call({sid,action:'drain'},endpoint)]);
+        assert.equal((await prisma.runtimeStore.findUnique({where:{key:providerKey}})).data.creates,1);
+        assert.equal((await prisma.runtimeStore.findUnique({where:{key}})).data.status,'completed');
+        await second.call({sid,action:'enqueue'},endpoint);await second.call({sid,action:'drain'},endpoint);
+        assert.equal((await prisma.runtimeStore.findUnique({where:{key:providerKey}})).data.creates,1);
+        cases.push({kind:'twilio-status-inbox',fault,recovered:true,providerCreates:1,independentProcesses:2});
+        console.log(JSON.stringify({kind:'twilio-status-inbox',fault,passed:true}));
+      }finally{second.child.kill();competitor.child.kill();await Promise.all([second.exited,competitor.exited]);}
     }
     return { passed: true, realPostgresLocks: true, fullApplicationProcessRestarts: true, externalProvidersMocked: true, leaseExpirySimulated: true, productionTouched: false, cases };
   } finally {

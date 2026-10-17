@@ -3,6 +3,7 @@ import { TimsElectricalLiveDemo } from "./TimsElectricalDemo";
 import { timsElectricalScenarios } from "./timsElectricalDemoData";
 import heroTranscriptTimings from "./timsElectricalHeroTranscriptTimings.json";
 import "./IntuitiveLandingPage.css";
+import MyAiPaBrand from "./components/MyAiPaBrand";
 
 const coreBenefits = [
   ["phone", "Picks up after three rings."],
@@ -75,26 +76,13 @@ function Icon({ name }) {
     message: <><path d="M4 5h16v11H9l-5 3V5Z" /><path d="M8 9h8M8 12h6" /></>,
     arrow: <><path d="M5 12h14" /><path d="m14 7 5 5-5 5" /></>,
     check: <path d="m5 12 4 4L19 6" />,
+    tools: <><path d="m14.5 6.5 3 3M3 20l7-7M14 10l6.7-6.7a5 5 0 0 1-6.7 6.7L4 20l-2-2 10-10a5 5 0 0 1 6.7-6.7L15 5l1 3" /><path d="m4 3 3 1 1 3 12 12-2 2L6 9 3 8 2 5Z" /></>,
   };
   return <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{paths[name] || paths.check}</svg>;
 }
 
 function Brand() {
-  return (
-    <a className="simple-brand" href="#top" aria-label="My AI PA home">
-      <svg className="simple-brand-mark" viewBox="0 0 72 72" fill="none" aria-hidden="true">
-        <path d="M14 40v-6C14 21.8 23.8 12 36 12s22 9.8 22 22v6" stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
-        <path d="M14 37h7v18h-7a5 5 0 0 1-5-5v-8a5 5 0 0 1 5-5Zm44 0h-7v18h7a5 5 0 0 0 5-5v-8a5 5 0 0 0-5-5Z" fill="currentColor" />
-        <path d="M52 54c0 6.2-5.7 10-13.2 10M36 64h-5.5" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
-        {[21, 26, 31, 36, 41, 46, 51].map((x, index) => {
-          const heights = [15, 22, 28, 32, 28, 22, 15];
-          const height = heights[index];
-          return <rect key={x} x={x} y={36 - height / 2} width="3.6" height={height} rx="1.8" fill="#ff7a00" />;
-        })}
-      </svg>
-      <span>My <strong>AI PA</strong></span>
-    </a>
-  );
+  return <MyAiPaBrand className="simple-brand" markClassName="simple-brand-mark" href="#top" />;
 }
 
 function StartButton({ children = "Start Your Free Trial", className = "" }) {
@@ -113,7 +101,7 @@ function SectionHeading({ number, eyebrow, title, body }) {
 
 function HeroActionFlow() {
   const steps = [
-    { icon: "phone", label: "Answers", detail: "After 3 rings" },
+    { icon: "phone", label: "Answers", detail: "After a few rings" },
     { icon: "chat", label: "Talks naturally", detail: "To get job details" },
     { icon: "message", label: "Follows up", detail: "Texts you and the caller" },
   ];
@@ -426,7 +414,10 @@ export default function IntuitiveLandingPage() {
             </p>
             <HeroActionFlow />
             <div className="simple-canadian-proof" aria-label="Designed for Canadian contractors">
-              <span className="simple-canadian-proof-mark" aria-hidden="true">CA</span>
+              <span className="simple-canadian-proof-mark" aria-hidden="true">
+                <img src={`${process.env.PUBLIC_URL || ""}/illustrations/canadian-flag.png`} alt="" width="52" height="37" />
+                <Icon name="tools" />
+              </span>
               <div>
                 <strong>Designed for Canadian contractors</strong>
                 <p><span>Keep your existing business number.</span><span>Test privately before going live.</span><span>Customize your assistant's responses.</span></p>

@@ -6,6 +6,7 @@ if (process.env.DISABLE_LOCAL_ENV_FILES !== "1") {
 
 const crypto = require("crypto");
 const { registerTelegramAdminLogin } = require('./telegramAdminLogin');
+const { buildTwilioImportRequest } = require('./vapiTwilioImportRequest');
 const { providerFailureDetail } = require("./providerFailureDetail");
 const { configuredCaptchaProvider, verifySignupCaptcha } = require("./signupCaptcha");
 const { hasIndividualPricingChoices, individualPricingPolicy } = require("../src/features/signup/pricingPolicy");
@@ -24,7 +25,7 @@ const { createSignupAttemptStore, deriveSignupStatusAccess } = require("./signup
 const { assertSignupOpen, isClosedSignup, signupBusinessKey } = require("./signupBusinessIdentity");
 const { assertTrialGateOwnership } = require("./trialGateOwnership");
 const { verificationPageClientScript } = require("./signupVerificationPageClient");
-const { verificationProgressScript } = require("./signupVerificationProgress");
+const { verificationProgressScript, verificationProgressMarkup } = require("./signupVerificationProgress");
 const { ensureSignupBusinessBindings, closeSignupBusinessIdentity, upsertOwnedProviderMapping } = require("./signupBusinessRegistry");
 const { buildBackendRootPage } = require("./backendRootPage");
 const {
@@ -49,7 +50,9 @@ const {
   saveOutreachPackage,
   sendStoredOutreachPackage,
 } = require("./outreach");
-const { normalizeE164, sendSmsViaTwilio, fetchSmsStatusViaTwilio } = require("./twilioSms");
+const { normalizeE164, sendSmsViaTwilio, fetchSmsStatusViaTwilio, fetchSmsReceiptViaTwilio } = require("./twilioSms");
+const {verifyDeliveredCompletionReceipt,findStoredCompletionReceipt,reconcileSignupCompletionReceipt,reconciledCompletionDelivery,dispatchCompletionEmail,completionRecordFields,completionDeliveryUpdate}=require('./signupCompletionReconciliation');
+const { enqueueTwilioStatus, drainTwilioStatuses } = require('./twilioStatusInbox');
 const { selectTrialSignup } = require("./trialSignupSelection");
 const { fetchProviderReadText } = require("./providerRead");
 const { dispatchSignupSms } = require("./signupSmsDispatch");
@@ -82,6 +85,7 @@ const {
   selectSignupDashboardRecordForProvisioning,
 } = require("./signupDashboardIdentity");
 const { buildRuntimeIncident } = require("./runtimeAlerts");
+const { createCallSyncMonitor } = require("./callSyncHealth");
 const { assessIncidentSlo } = require("./incidentSlo");
 const {
   createIncidentRemediationPlan,
@@ -160,6 +164,7 @@ const {
   verifySignupProvisioningAuthorization,
 } = require("./signupProvisioning");
 const { buildSignupAssistantConfig } = require("./signupAssistantTemplate");
+const { assertMissingAssistantRecovery } = require('./signupAssistantRecovery');
 const {
   assessSignupAssistantContent,
   assessSignupAssistantContentWithReceipt,
@@ -504,6 +509,14 @@ const twilioStagingWebhookProcessRateLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Too many staging webhook requests." },
+});
+const twilioStatusCallbackProcessRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  // Separate from customer form limits: provider IPs can deliver bursts.
+  limit: 600,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many delivery callbacks. Retry later.' },
 });
 const telegramActionsProcessRateLimiter = rateLimit({
   windowMs: PUBLIC_ROUTE_WINDOW_MS,
@@ -2714,13 +2727,12 @@ async function fetchVapiCallDetail(callId) {
     throw err;
   }
 
-  const response = await fetch(`${VAPI_API_BASE_URL}/call/${encodeURIComponent(id)}`, {
+  const { response, text: rawText } = await fetchProviderReadText(`${VAPI_API_BASE_URL}/call/${encodeURIComponent(id)}`, {
     headers: {
       Authorization: `Bearer ${VAPI_API_KEY}`,
       Accept: "application/json",
     },
   });
-  const rawText = await response.text();
   const data = parseJsonObject(rawText);
 
   if (!response.ok) {
@@ -3136,13 +3148,9 @@ async function importTwilioPhoneNumberToVapi({ twilioPhoneNumber, assistantId, n
   });
   if (existing) return existing;
 
-  const payload = {
-    twilioPhoneNumber: phoneNumber,
-    twilioAccountSid: TWILIO_ACCOUNT_SID,
-    twilioAuthToken: TWILIO_AUTH_TOKEN,
-    name: sanitizeVapiImportName(name, `${phoneNumber} Number`),
-    assistantId: vapiAssistantId,
-  };
+  const payload = buildTwilioImportRequest({ phoneNumber, assistantId:vapiAssistantId,
+    accountSid:TWILIO_ACCOUNT_SID, authToken:TWILIO_AUTH_TOKEN,
+    name:sanitizeVapiImportName(name, `${phoneNumber} Number`) });
 
   const response = await fetch(`${VAPI_API_BASE_URL}/phone-number/import/twilio`, {
     method: "POST",
@@ -3447,6 +3455,18 @@ async function ingestVapiEndOfCallReport(message) {
 }
 
 async function syncVapiCalls(options = {}) {
+  // A limited/manual lookup is not evidence that the scheduled full sync recovered.
+  if (Object.keys(options).length) return performVapiCallSync(options);
+  return monitoredCallSync(() => performVapiCallSync(options));
+}
+
+const monitoredCallSync = createCallSyncMonitor({
+  listIncidents: () => listRuntimeIncidents(runtimeIncidentPath),
+  notifyFailure: (error, context) => safelyNotifyRuntimeFailure(error, context),
+  recoverIncident: (id, transition) => updateRuntimeIncidentRemediation(runtimeIncidentPath, id, transition),
+});
+
+async function performVapiCallSync(options = {}) {
   const calls = await fetchVapiCalls(options);
   const store = readVapiCallSyncStore();
   const results = [];
@@ -3472,7 +3492,9 @@ async function syncVapiCalls(options = {}) {
         };
       }
     } catch (error) {
-      detailErrors.push({ vapiCallId, message: error?.message || "Could not fetch Vapi call detail." });
+      detailErrors.push({ vapiCallId, message: error?.message || "Could not fetch Vapi call detail.",
+        code: String(error?.code || error?.cause?.code || error?.name || '').slice(0, 80),
+        providerStatus: Number(error?.providerStatus || error?.upstreamStatus) || null });
     }
 
     try {
@@ -3607,7 +3629,7 @@ function getTwilioAuthHeader() {
   return `Basic ${Buffer.from(`${TWILIO_REST_AUTH.username}:${TWILIO_REST_AUTH.password}`).toString("base64")}`;
 }
 
-async function fetchTwilioIncomingPhoneNumbers() {
+async function fetchTwilioIncomingPhoneNumbers({ requireComplete = false } = {}) {
   if (!TWILIO_REST_AUTH.configured) {
     const err = new Error(TWILIO_REST_AUTH.warning || "Twilio reporting credentials are not configured.");
     err.statusCode = 503;
@@ -3631,11 +3653,17 @@ async function fetchTwilioIncomingPhoneNumbers() {
     if (!response.ok) {
       throw createProviderHttpError({ provider: "Twilio", operation: "owned phone-number list", status: response.status, data, fallbackCode: "TWILIO_NUMBER_LIST_FAILED" });
     }
+    if (requireComplete && !Array.isArray(data?.incoming_phone_numbers)) {
+      throw signupRecoveryError('Twilio returned an invalid number inventory.', 'TWILIO_INVENTORY_INCOMPLETE');
+    }
 
     records.push(...(Array.isArray(data?.incoming_phone_numbers) ? data.incoming_phone_numbers : []));
     nextUrl = data?.next_page_uri ? new URL(data.next_page_uri, TWILIO_API_BASE_URL) : null;
   }
 
+  if (requireComplete && nextUrl) {
+    throw signupRecoveryError('Twilio number inventory was truncated.', 'TWILIO_INVENTORY_INCOMPLETE');
+  }
   return records;
 }
 
@@ -5356,11 +5384,14 @@ async function safelyNotifySignupOperations(payload, {
   makeAssessment = null,
   providerFailure = null,
   reasonCode = "",
+  supportDescription = "",
+  supportEventKey = "",
+  supportBusinessName = "",
 } = {}) {
-  const eventKey = record?.signupAttemptId || buildMakeSignupEventKey(payload);
+  const eventKey = record?.signupAttemptId || (state === "support_requested" && /^signup_[a-f0-9]{32}$/i.test(supportEventKey) ? supportEventKey : buildMakeSignupEventKey(payload));
   const alertKey = crypto
     .createHash("sha256")
-    .update(`${eventKey}:${String(state || "update")}${state === "verification_sent" ? `:${record?.smsVerificationMessageSid || ""}:${record?.smsVerificationDeliveryStatus || "pending"}` : ""}`)
+    .update(`${eventKey}:${String(state || "update")}${state === "support_requested" ? `:${crypto.createHash("sha256").update(String(supportDescription).replace(/\s+/g, " ").trim()).digest("hex")}` : ""}${state === "verification_sent" ? `:${record?.smsVerificationMessageSid || ""}:${record?.smsVerificationDeliveryStatus || "pending"}` : ""}`)
     .digest("hex")
     .slice(0, 24);
   const current = record || listSignupDashboardRecords().find((item) => item.signupAttemptId === eventKey) || null;
@@ -5381,11 +5412,12 @@ async function safelyNotifySignupOperations(payload, {
     ? `${FRONTEND_APP_URL}/#/admin?tab=attention&incident=${incidentId}`
     : `${FRONTEND_APP_URL}/#/admin?tab=signups`;
   const alertInput = {
-    businessName: payload?.business?.name || payload?.businessProfile?.businessName || current?.businessName,
+    businessName: payload?.business?.name || payload?.businessProfile?.businessName || current?.businessName || supportBusinessName,
     state,
     source: payload?.source?.app || payload?.source?.channel || current?.signupSource || "website",
     eventKey,
     detail,
+    supportDescription,
     reasonCode: reasonCode || current?.phoneProvisioningCode || current?.makeError || "",
     makeFailure: providerFailure || makeAssessment || null,
     payload,
@@ -5429,6 +5461,17 @@ async function safelyNotifySignupOperations(payload, {
       signupTelegramAlertError: "",
     });
   };
+
+  if (state === "support_requested") {
+    // Persist first. The normal outbox worker delivers/retries after this response,
+    // including across a restart; distinct follow-up messages get distinct keys.
+    const queued = await queueTelegramAlertSafely({
+      text: buildSignupTelegramAlert(alertInput), adminUrl,
+      buttonText: "Open customer signup", dedupeKey: `signup:${alertKey}`,
+    });
+    markSignupAlertHandled(queued);
+    return { sent: false, ...queued };
+  }
 
   try {
     const result = await sendSignupTelegramAlert(alertInput, {
@@ -5576,7 +5619,7 @@ async function prepareForwardingSetupForProvisionedSignup(payload, signupRecord,
   const setupUrl = `${FRONTEND_APP_URL}/#/f/${encodeURIComponent(token)}`;
   await recordForwardingEvent(prisma, setup.id, "forwarding_setup_link_created", {}, `${setup.id}:link:${setup.forwardingSetupVersion}`);
   upsertSignupDashboardRecord({
-    ...signupRecord,
+    ...(signupRecord.signupAttemptId ? latestCompletionSignup(signupRecord.signupAttemptId) : signupRecord),
     forwardingSetupId: setup.id,
     forwardingStatus: String(setup.status || "").toLowerCase(),
     forwardingCarrier: String(setup.carrier || "").toLowerCase(),
@@ -5594,6 +5637,43 @@ async function recordForwardingSetupSmsDelivery(forwardingSetup, completionDeliv
     {},
     `${forwardingSetup.setup.id}:sms:${forwardingSetup.setup.forwardingSetupVersion}`
   );
+}
+
+function latestCompletionSignup(attemptId) {
+  const matches=listSignupDashboardRecords().filter(s=>s.signupAttemptId===attemptId&&!isClosedSignup(s));
+  if(!attemptId||matches.length!==1)throw signupRecoveryError('The exact active signup is required for completion.', 'COMPLETION_SIGNUP_AMBIGUOUS');
+  return matches[0];
+}
+function signupDeliveryGatePassed(signup) {
+  return isContactVerified(signup)&&enforceAgentTestReadyStatus({...signup,status:'setup_ready'}).status==='setup_ready';
+}
+function completionReceiptProofOptions(signup) {
+  const env=getVapiVoiceSignupSmsEnvironment();
+  return {signup,frontendUrl:FRONTEND_APP_URL,expectedSender:env.TWILIO_FROM_NUMBER||env.OWNER_SMS_FROM,
+    fetchReceipt:sid=>fetchSmsReceiptViaTwilio({sid,env}),
+    resolveLink:async token=>{
+      const tokenHash=crypto.createHash('sha256').update(token).digest('hex');
+      const link=await prisma.callForwardingSetupLink.findUnique({where:{tokenHash},include:{setup:true}});
+      return link&&link.expiresAt>new Date()?link.setup:null;
+    },
+  };
+}
+async function deliverAndRecordSignupCompletion(options) {
+  const signup=latestCompletionSignup(options.signupAttemptId);
+  if(!signupDeliveryGatePassed(signup))return {status:'pending',skipped:true,reason:'agent_test_pending',channels:[],errors:[]};
+  if(normalizePhoneForMatch(options.assignedPhone)!==normalizePhoneForMatch(signup.twilioPhoneNumber)||normalizePhoneForMatch(options.ownerPhone)!==normalizePhoneForMatch(signup.ownerPhone))throw signupRecoveryError('Completion target does not match the exact signup.', 'COMPLETION_TARGET_CHANGED');
+  const stored=await findStoredCompletionReceipt({prisma,signup});
+  const delivery=stored ? reconciledCompletionDelivery(signup,
+    await verifyDeliveredCompletionReceipt({stored,...completionReceiptProofOptions(signup),requireDelivered:false})) : await deliverSignupCompletion({...options,
+    dispatchIdentity:signup.businessId||signup.signupAttemptId,
+    ownerPhone:signup.ownerPhone,ownerEmail:signup.ownerEmail,ownerName:signup.ownerName,businessName:signup.businessName,assignedPhone:signup.twilioPhoneNumber,
+    priorStatus:signup.setupFollowupStatus,priorChannels:signup.setupFollowupChannels,priorErrors:signup.setupFollowupErrors,
+    reconcileSms:stored=>verifyDeliveredCompletionReceipt({stored,...completionReceiptProofOptions(signup)}),
+    sendEmail:request=>dispatchCompletionEmail({prisma,signup,request,sendEmail:options.sendEmail}),
+  });
+  const latest=latestCompletionSignup(options.signupAttemptId);
+  upsertSignupDashboardRecord({...latest,...completionRecordFields(delivery)});
+  return delivery;
 }
 
 function getUnixMs(value) {
@@ -7118,7 +7198,41 @@ function isStaleSignupArchiveEligible({ signup = {}, diagnostics = {}, now = new
 async function inspectSignupRecoveryState(signup) {
   const pendingSignup = findPendingSignupForDashboardRecord(signup, await readPendingSignupStore());
   const inspectionSignup = { ...signup };
-  const provisioning = pendingSignup?.[1]?.payload?.provisioning;
+  let provisioning = pendingSignup?.[1]?.payload?.provisioning;
+  if (!provisioning?.idempotencyKey && pendingSignup?.[1]?.payload && isContactVerified(signup)
+    && /error|failed|provisioning|agent_testing|setup_started/.test(String(signup.status || ''))) {
+    // Pending records predate signed handoff normalization. Read the registered
+    // context by its exact deterministic key; never infer ownership from email.
+    const candidate = normalizeSignupProvisioningPayload(pendingSignup[1].payload, {
+      signingSecret: getProvisioningSigningSecret(),
+      defaultRegion: process.env.TWILIO_DEFAULT_CANADIAN_REGION || 'ON',
+    });
+    const row = await prisma.runtimeStore.findUnique({where:{key:contextStoreKey(candidate.provisioning.idempotencyKey)}});
+    if (row?.data?.payload) {
+      assertPendingSignupRecoveryIdentity(signup, row.data.payload);
+      if (row.data.payload.provisioning?.idempotencyKey !== candidate.provisioning.idempotencyKey
+        || row.data.contextHash !== row.data.payload.provisioning?.contextHash) {
+        throw signupRecoveryError('Registered diagnostic context does not match this signup.', 'SIGNUP_RECOVERY_CONTEXT_MISMATCH');
+      }
+      provisioning = row.data.payload.provisioning;
+    }
+  }
+  const provisioningStages = {};
+  if (provisioning?.idempotencyKey) {
+    for (const kind of ['twilio-number','vapi-assistant','vapi-import']) {
+      const step = await readProvisioningStep({prisma,kind,idempotencyKey:provisioning.idempotencyKey});
+      if (step.data.contextHash && step.data.contextHash !== provisioning.contextHash) {
+        provisioningStages[kind] = {status:'context_mismatch'};
+        continue;
+      }
+      provisioningStages[kind] = {status:step.data.status || 'not_started',
+        originalErrorCode:String(step.data.originalErrorCode || '').slice(0,100),
+        originalProviderStatus:Number(step.data.originalProviderStatus) || null,
+        originalProviderDetail:providerFailureDetail({message:step.data.originalProviderDetail}),
+        lastErrorCode:String(step.data.lastErrorCode || '').slice(0,100),
+        lastProviderDetail:providerFailureDetail({message:step.data.lastProviderDetail})};
+    }
+  }
   if (!inspectionSignup.twilioPhoneNumber && provisioning?.idempotencyKey && provisioning?.contextHash) {
     const step = await readProvisioningStep({ prisma, kind: "twilio-number", idempotencyKey: provisioning.idempotencyKey });
     if (step.data.contextHash === provisioning.contextHash && step.data.status === "completed") {
@@ -7148,6 +7262,7 @@ async function inspectSignupRecoveryState(signup) {
   });
   return {
     ...diagnostics,
+    provisioningStages,
     partialResourceEvidence: Boolean(!signup.twilioPhoneNumber && inspectionSignup.twilioPhoneNumber),
     providerReconciliationRequired: !inspectionSignup.twilioPhoneNumber,
     staleArchiveEligible: isStaleSignupArchiveEligible({ signup, diagnostics }),
@@ -7421,7 +7536,8 @@ async function recoverSignupByOperationalTarget(targetId, expectedSignupAttemptI
       makeStatus: makeResult.status,
       twilioPhoneNumber: updated.twilioPhoneNumber || "",
     });
-    const completionDelivery = await deliverSignupCompletion({
+    const completionDelivery = await deliverAndRecordSignupCompletion({
+      signupAttemptId:updated.signupAttemptId,
       prisma,
       dispatchIdentity: updated.businessId || updated.signupAttemptId || buildMakeSignupEventKey(pending.payload),
       ownerPhone: updated.ownerPhone || pending.payload?.owner?.phone,
@@ -7534,7 +7650,8 @@ async function recoverSignupByOperationalTarget(targetId, expectedSignupAttemptI
         makeStatus: makeResult.status,
         twilioPhoneNumber,
       });
-      const completionDelivery = await deliverSignupCompletion({
+      const completionDelivery = await deliverAndRecordSignupCompletion({
+        signupAttemptId:updated.signupAttemptId,
         prisma,
         dispatchIdentity: updated.businessId || updated.signupAttemptId || buildMakeSignupEventKey(recoveredPayload),
         ownerPhone: updated.ownerPhone || recoveredPayload?.owner?.phone,
@@ -7798,7 +7915,8 @@ async function finalizeSignupAfterAgentTestByOperationalTarget(targetId, expecte
     String(record.signupAttemptId || "").trim() === attemptId
   )) || canonical;
   const forwardingSetup = await prepareForwardingSetupForProvisionedSignup(attempt.payload, canonical, assignedPhone);
-  const completionDelivery = await deliverSignupCompletion({
+  const completionDelivery = await deliverAndRecordSignupCompletion({
+    signupAttemptId:canonical.signupAttemptId,
     prisma,
     dispatchIdentity: canonical.businessId || canonical.signupAttemptId,
     ownerPhone: canonical.ownerPhone,
@@ -7816,7 +7934,7 @@ async function finalizeSignupAfterAgentTestByOperationalTarget(targetId, expecte
   });
   await recordForwardingSetupSmsDelivery(forwardingSetup, completionDelivery);
   canonical = upsertSignupDashboardRecord({
-    ...canonical,
+    ...latestCompletionSignup(attemptId),
     status: "setup_ready",
     reviewRequired: false,
     reviewReasons: [],
@@ -8284,6 +8402,28 @@ async function testSignupAgentBeforeDelivery({ signup, vapiPhone, smsRouting = n
 }
 
 const agentTextTestContinuationLocks = new Map();
+
+async function pollPendingSignupCompletionMessages() {
+  const pending=listSignupDashboardRecords().filter(s=>!isClosedSignup(s)&&s.signupAttemptId&&s.setupFollowupSmsSid
+    &&['accepted','queued','sending','sent'].includes(s.setupFollowupSmsProviderStatus));
+  pending.sort((a,b)=>String(a.setupFollowupSmsPolledAt||'').localeCompare(String(b.setupFollowupSmsPolledAt||'')));
+  for(const signup of pending.slice(0,10)){
+    upsertSignupDashboardRecord({...signup,setupFollowupSmsPolledAt:new Date().toISOString()});
+    let result;
+    try{result=await fetchSmsStatusViaTwilio({sid:signup.setupFollowupSmsSid,env:getVapiVoiceSignupSmsEnvironment()});}
+    catch(error){
+      // A read outage is not a failed delivery and cannot authorize a resend.
+      // Rotate this record so it cannot starve the rest of the bounded batch.
+      const latest=listSignupDashboardRecords().find(s=>s.signupAttemptId===signup.signupAttemptId&&!isClosedSignup(s));
+      if(latest)upsertSignupDashboardRecord({...latest,setupFollowupSmsLookupError:String(error.code||'TWILIO_STATUS_LOOKUP_UNAVAILABLE').slice(0,100)});
+      continue;
+    }
+    const current=latestCompletionSignup(signup.signupAttemptId);
+    if(current.setupFollowupSmsSid!==signup.setupFollowupSmsSid)continue;
+    const fields=completionDeliveryUpdate(current,{MessageSid:signup.setupFollowupSmsSid,MessageStatus:result.status,ErrorCode:result.errorCode});
+    upsertSignupDashboardRecord({...current,...fields,setupFollowupSmsPolledAt:new Date().toISOString()});
+  }
+}
 
 async function pollPendingSignupAgentTests() {
   const pending = listSignupDashboardRecords().filter((record) => (
@@ -10441,6 +10581,12 @@ async function createBusinessStripeTrial(identity, businessKey, client = stripe)
 }
 
 async function attachNoCardStripeTrialToSignup(payload, extra = {}) {
+  // Original requests and recovery can race the delivery callback. Keep the
+  // trial clock stopped until this exact agent passes both test deliveries.
+  const attemptId=getSignupBillingIdentity(payload,extra).signupAttemptId;
+  const deliverySignup=latestCompletionSignup(attemptId);
+  assertPendingSignupRecoveryIdentity(deliverySignup,payload);
+  if(!signupDeliveryGatePassed(deliverySignup))return {skipped:true,code:'AGENT_TEST_PENDING',subscription:null};
   try {
     const trialResult = await createNoCardStripeTrialForSignup(payload, extra);
     if (!trialResult.subscription) return trialResult;
@@ -11973,17 +12119,13 @@ app.get(
       signups,
       runtimeIncidents,
     });
-    const signupRecovery = new Map();
-    await Promise.all(inbox.items
-      .filter((item) => item.targetType === "signup")
-      .map(async (item) => {
-        const signup = findSignupByOperationalTarget(item.targetId, signups);
-        if (signup) signupRecovery.set(item.targetId, await inspectSignupRecoveryState(signup));
-      }));
+    // Health is a database-backed snapshot, not a synchronous provider audit.
+    // Live provider reconciliation remains available through guarded admin diagnostics.
     res.setHeader("Cache-Control", "no-store, max-age=0");
     res.json({
       ok: inbox.summary.bySeverity.critical === 0,
       service: "my-ai-pa-operations",
+      providerChecks: { liveLookups: false, mode: "separate" },
       generatedAt: inbox.generatedAt,
       attention: inbox.summary,
       incidentSlo: assessIncidentSlo(runtimeIncidents),
@@ -12005,7 +12147,6 @@ app.get(
         ...(item.diagnostics ? {
           diagnostics: {
             ...item.diagnostics,
-            ...(signupRecovery.get(item.targetId) || {}),
           },
         } : {}),
       })),
@@ -12944,27 +13085,21 @@ app.post(
   })
 );
 
-app.post(
-  "/api/webhooks/twilio/message-status",
-  express.urlencoded({ extended: false, limit: "8kb" }),
-  asyncRoute(async (req, res) => {
-    if (!verifyTwilioWebhookRequest(req, process.env, { configuredUrl: TWILIO_STATUS_CALLBACK_URL })) {
-      return res.status(401).json({ error: "Invalid messaging webhook signature." });
+async function processSavedTwilioMessageStatus(body) {
+    const preparedIncident = buildTwilioMessageStatusIncident(body);
+    const messageSid = body.MessageSid;
+    const messageStatus = body.MessageStatus;
+    const completionSignup=listSignupDashboardRecords().find(s=>!isClosedSignup(s)&&s.setupFollowupSmsSid===messageSid);
+    if(completionSignup){
+      const fields=completionDeliveryUpdate(completionSignup,body);
+      if(fields)upsertSignupDashboardRecord({...completionSignup,...fields});
     }
-    const replayClaim = await claimTwilioWebhookRequest(req, "message_status");
-    if (replayClaim.invalid) return res.status(400).json({ error: "Twilio message SID and status are required." });
-    if (replayClaim.duplicate) return res.type("application/xml").send("<Response></Response>");
-    if (!replayClaim.claimed) return res.status(503).json({ error: "Webhook replay protection is unavailable." });
-    try {
-    const preparedIncident = buildTwilioMessageStatusIncident(req.body || {});
-    const messageSid = req.body?.MessageSid || req.body?.SmsSid;
-    const messageStatus = req.body?.MessageStatus || req.body?.SmsStatus;
     const verificationSignup = listSignupDashboardRecords().find((signup) => (
       !isClosedSignup(signup) && signup.smsVerificationMessageSid === String(messageSid || "").trim()
     ));
     if (verificationSignup) {
       const update = verificationDeliveryUpdate(verificationSignup, {
-        sid: messageSid, status: messageStatus, errorCode: req.body?.ErrorCode,
+        sid: messageSid, status: messageStatus, errorCode: body.ErrorCode,
       });
       if (update) {
         const updated = upsertSignupDashboardRecord({ ...verificationSignup, ...update });
@@ -12974,14 +13109,14 @@ app.post(
       }
     }
     const matchingSignup = listSignupDashboardRecords().find((signup) => (
-      messageSid && [signup.agentTestOwnerMessageSid, signup.agentTestCustomerMessageSid].includes(String(messageSid).trim())
+      !isClosedSignup(signup) && messageSid && [signup.agentTestOwnerMessageSid, signup.agentTestCustomerMessageSid].includes(String(messageSid).trim())
     ));
     if (matchingSignup?.ownerEmail) {
       const update = getAgentTestDeliveryUpdate({
         signup: matchingSignup,
         messageSid,
         status: messageStatus,
-        errorCode: req.body?.ErrorCode,
+        errorCode: body.ErrorCode,
       });
       if (update) {
         upsertSignupDashboardRecord({ ...matchingSignup, ...update });
@@ -13006,6 +13141,7 @@ app.post(
               nextAction: "Retry the agent testing station after checking Twilio delivery and the signup record.",
               dedupeFingerprint: `agent-test-continuation:${String(matchingSignup.ownerEmail || "").toLowerCase()}`,
             });
+            throw error; // Keep the durable job retryable, never silently lose it.
           }
         }
       }
@@ -13013,17 +13149,37 @@ app.post(
     if (preparedIncident) {
       safelyNotifyRuntimeFailure(preparedIncident.error, preparedIncident.context);
     }
-    if (!await completeWebhookEvent(replayClaim)) {
-      throw Object.assign(new Error("The Twilio message-status replay claim could not be completed."), {
-        code: "TWILIO_WEBHOOK_REPLAY_COMPLETE_FAILED",
-        status: 503,
+}
+
+async function processTwilioStatusInbox() {
+  return drainTwilioStatuses({ prisma, processReceipt: processSavedTwilioMessageStatus,
+    onFailure: async ({ code, exhausted }) => {
+      if (exhausted) safelyNotifyRuntimeFailure(Object.assign(new Error('Saved SMS delivery processing needs recovery.'), { code }), {
+        area: 'Twilio delivery inbox', operation: 'resume saved signup delivery processing',
+        whatFailed: 'A saved delivery report exhausted its automatic retries',
+        impact: 'The receipt is preserved, but signup continuation may need operator recovery.',
+        nextAction: 'Inspect the saved delivery job and exact signup. Do not resend texts or create another setup.',
       });
+    },
+  });
+}
+
+app.post(
+  "/api/webhooks/twilio/message-status",
+  twilioStatusCallbackProcessRateLimiter,
+  express.urlencoded({ extended: false, limit: "8kb" }),
+  asyncRoute(async (req, res) => {
+    if (!verifyTwilioWebhookRequest(req, process.env, { configuredUrl: TWILIO_STATUS_CALLBACK_URL })) {
+      return res.status(401).json({ error: "Invalid messaging webhook signature." });
     }
-    return res.type("application/xml").send("<Response></Response>");
-    } catch (error) {
-      await releaseWebhookEvent(replayClaim);
-      throw error;
+    // The DB inbox is both the receipt and the replay guard. ACK only after
+    // commit. No provider calls, notifications or continuation on this path.
+    try { await enqueueTwilioStatus({ prisma, body: req.body }); }
+    catch (error) {
+      if (error.code === 'TWILIO_RECEIPT_INVALID') return res.status(400).json({ error: error.message });
+      return res.status(503).json({ error: 'Delivery receipt could not be saved. Retry safely.' });
     }
+    return res.type('application/xml').send('<Response></Response>');
   })
 );
 
@@ -14443,21 +14599,30 @@ app.post(
     const attempt = await signupAttempts.authenticate(req.params.attemptId, token);
     if (!attempt) return res.status(401).json({ error: "This signup status session is invalid or expired." });
     const updated = await signupAttempts.requestSupport(attempt, req.body?.description);
-    const signup = listSignupDashboardRecords().find((item) => item.signupAttemptId === attempt.eventKey) || null;
+    let signup = listSignupDashboardRecords().find((item) => item.signupAttemptId === attempt.eventKey) || null;
     if (signup) {
-      upsertSignupDashboardRecord({
+      signup = upsertSignupDashboardRecord({
         ...signup,
         pilotSupportRequestedAt: new Date().toISOString(),
         pilotSupportDescription: String(req.body?.description || "").replace(/\s+/g, " ").trim().slice(0, 1200),
       });
     }
-    await safelyNotifySignupOperations(attempt.payload, {
+    const notification = await safelyNotifySignupOperations(attempt.payload, {
       state: "support_requested",
       detail: "Customer requested help before setup completed",
       record: signup,
       reasonCode: "SIGNUP_SUPPORT_REQUESTED",
+      supportDescription: updated.supportDescription,
+      supportEventKey: attempt.eventKey,
+      supportBusinessName: attempt.businessName,
     });
-    res.status(202).json({ ok: true, message: "Your support request was received.", signup: signupAttempts.publicAttempt(updated) });
+    res.status(202).json({
+      ok: true,
+      message: notification.queued || notification.duplicate || notification.reason === "already_alerted"
+        ? "Your support request is saved and queued for our team."
+        : "Your request is saved, but our team notification is delayed. You can also call support.",
+      signup: signupAttempts.publicAttempt(updated),
+    });
   })
 );
 
@@ -15020,7 +15185,8 @@ app.post(
       : { skipped: true, error: "Phone provisioning must be ready before trial activation." };
     let completionDelivery = null;
     if (phoneProvisioning.status === "ready") {
-      completionDelivery = await deliverSignupCompletion({
+      completionDelivery = await deliverAndRecordSignupCompletion({
+        signupAttemptId:provisionedRecord.signupAttemptId,
         prisma,
         dispatchIdentity: provisionedRecord.businessId || provisionedRecord.signupAttemptId || buildMakeSignupEventKey(payload),
         ownerPhone: provisionedRecord.ownerPhone || payload?.owner?.phone,
@@ -15038,7 +15204,7 @@ app.post(
       });
       await recordForwardingSetupSmsDelivery(forwardingSetup, completionDelivery);
       upsertSignupDashboardRecord({
-        ...provisionedRecord,
+        ...latestCompletionSignup(provisionedRecord.signupAttemptId),
         setupFollowupStatus: completionDelivery.status,
         setupFollowupChannels: completionDelivery.channels,
         setupFollowupErrors: completionDelivery.errors,
@@ -15122,6 +15288,7 @@ app.all(
               <h1 id="verification-title">${escapeHtml(title)}</h1>
               <p id="verification-description">${escapeHtml(body)}</p>
               <p id="setup-progress" role="status" aria-live="polite" hidden>Verifying your phone and assigning your AI number… Please keep this page open.</p>
+              ${(confirmation || progress) && !setupReady ? verificationProgressMarkup() : ""}
               ${confirmation ? `<form method="post" id="signup-verification-form" action="${escapeHtml(req.path)}">
                 <input type="hidden" name="token" value="${escapeHtml(token)}" />
                 <input type="hidden" name="channel" value="${escapeHtml(verificationChannel)}" />
@@ -15152,6 +15319,7 @@ app.all(
               ${confirmation ? `<a id="verification-support" hidden href="tel:${escapeHtml(CUSTOMER_SUPPORT_PHONE)}">Call signup support</a>` : ""}
               <div class="actions"><a href="${escapeHtml(forwardingSetupUrl || `${FRONTEND_APP_URL}/#/${setupReady ? "dashboard" : "signup"}`)}">${setupReady ? "Continue" : "Return to My AI PA"}</a></div>
             </main>
+            ${(confirmation || progress) && !setupReady ? verificationProgressScript(`/api/signup/verification-progress?${new URLSearchParams({token,channel:verificationChannel,channelProof:createVerificationChannelProof(token,verificationChannel,getAdminSessionSecret())})}`, { awaitConfirmation: confirmation }) : ""}
             ${confirmation ? verificationPageClientScript({ automaticSmsConfirmation }) : ""}
             ${setupReady ? `<script>
               document.getElementById("copy-number").addEventListener("click", async function () {
@@ -15169,7 +15337,6 @@ app.all(
                 this.textContent = "Copied";
               });
             </script>` : ""}
-            ${progress ? verificationProgressScript(`/api/signup/verification-progress?${new URLSearchParams({token,channel:verificationChannel,channelProof:createVerificationChannelProof(token,verificationChannel,getAdminSessionSecret())})}`) : ""}
           </body>
         </html>`);
     }
@@ -15417,7 +15584,8 @@ app.all(
       : null;
     let completionDelivery = null;
     if (phoneProvisioning.status === "ready") {
-      completionDelivery = await deliverSignupCompletion({
+      completionDelivery = await deliverAndRecordSignupCompletion({
+        signupAttemptId:provisionedRecord.signupAttemptId,
         prisma,
         dispatchIdentity: provisionedRecord.businessId || provisionedRecord.signupAttemptId || buildMakeSignupEventKey(payload),
         ownerPhone: provisionedRecord.ownerPhone || payload?.owner?.phone,
@@ -15439,7 +15607,7 @@ app.all(
       });
       await recordForwardingSetupSmsDelivery(forwardingSetup, completionDelivery);
       const deliveryRecord = upsertSignupDashboardRecord({
-        ...provisionedRecord,
+        ...latestCompletionSignup(provisionedRecord.signupAttemptId),
         setupFollowupStatus: completionDelivery.status,
         setupFollowupChannels: completionDelivery.channels,
         setupFollowupErrors: completionDelivery.errors,
@@ -17095,6 +17263,77 @@ app.get(
 );
 
 app.post(
+  '/api/admin/signups/recover-missing-assistant',
+  adminSignupRepairProcessRateLimiter,
+  requireAdmin,
+  requireProvisioningAuthorization,
+  asyncRoute(async (req, res) => {
+    const { signupAttemptId, expectedPhone, confirmation, apply } = req.body || {};
+    if (confirmation !== 'RECOVER_MISSING_ASSISTANT_ONLY' || !/^signup_[a-f0-9]{32}$/.test(signupAttemptId || '')
+      || !/^\+1\d{10}$/.test(expectedPhone || '') || typeof apply !== 'boolean') {
+      return res.status(400).json({ error: 'Exact signup, existing phone, confirmation and explicit apply flag are required.' });
+    }
+    const payload = await loadTrustedProvisioningContext(req);
+    const authorization = req.provisioningAuthorization;
+    const actorHash = getAdminActorHash(req);
+    const verifyAbsent = async () => {
+      await loadTrustedProvisioningContext(req);
+      const [numberStage, assistantStage, importStage] = await Promise.all(
+        ['twilio-number', 'vapi-assistant', 'vapi-import'].map(kind => readProvisioningStep({ prisma, kind,
+          idempotencyKey: authorization.idempotencyKey })));
+      const [twilioNumbers, assistants, vapiPhones] = await Promise.all([
+        fetchTwilioIncomingPhoneNumbers({ requireComplete: true }),
+        fetchVapiCollection('assistant', ['assistants', 'agents'], { requireComplete: true }),
+        fetchVapiCollection('phone-number', ['phoneNumbers', 'phone_numbers'], { requireComplete: true }),
+      ]);
+      return assertMissingAssistantRecovery({ payload, signupAttemptId, expectedPhone,
+        records: listSignupDashboardRecords(), numberStage: numberStage.data, assistantStage: assistantStage.data,
+        importStage: importStage.data, twilioNumbers, assistants, vapiPhones });
+    };
+    // Dry run never releases a lock or calls a provider mutation.
+    await verifyAbsent();
+    if (!apply) return res.json({ ok: true, eligible: true, applied: false, aiNumberLast4: expectedPhone.slice(-4),
+      numbersPurchased: 0, textsSent: 0, callsPlaced: 0, billingChanged: false });
+    await recordAdminAuditEvent({ prisma, action: 'recover_missing_signup_assistant', outcome: 'requested', actorHash,
+      targetType: 'signup', targetId: hashKey(signupAttemptId).slice(0, 24), details: { stage: 'vapi-assistant' } });
+    const resourceName = buildProvisioningResourceName('vapi-assistant', authorization.idempotencyKey);
+    const result = await runProvisioningStep({ prisma, kind: 'vapi-assistant', idempotencyKey: authorization.idempotencyKey,
+      contextHash: authorization.contextHash,
+      verifyCompleted: saved => verifySavedProvisioningResources('vapi-assistant', saved),
+      reconcile: () => createSignupVapiAssistant({ normalizedPayload: payload, assignedPhone: expectedPhone, resourceName, reconcileOnly: true }),
+      execute: () => createSignupVapiAssistant({ normalizedPayload: payload, assignedPhone: expectedPhone, resourceName }),
+      missingAssistantRecovery: { actorHash, verifyAbsent },
+    });
+    await recordAdminAuditEvent({ prisma, action: 'recover_missing_signup_assistant', outcome: 'success', actorHash,
+      targetType: 'signup', targetId: hashKey(signupAttemptId).slice(0, 24), details: { stage: 'vapi-assistant', reused: !!result.reused } });
+    res.json({ ok: true, applied: true, assistantId: result.assistantId, reused: !!result.reused,
+      numbersPurchased: 0, textsSent: 0, callsPlaced: 0, billingChanged: false });
+  })
+);
+
+app.post(
+  '/api/admin/signups/reconcile-completion-sms',
+  adminSignupRepairProcessRateLimiter,
+  requireAdmin,
+  asyncRoute(async(req,res)=>{
+    const {signupAttemptId,expectedMessageSid,confirmation}=req.body||{};
+    if(confirmation!=='RECONCILE_DELIVERED_SETUP_SMS'||!/^signup_[a-f0-9]{32}$/.test(signupAttemptId||'')||!/^SM[a-f0-9]{32}$/i.test(expectedMessageSid||''))return res.status(400).json({error:'The exact signup, saved message ID and reconciliation confirmation are required.'});
+    const signup=latestCompletionSignup(signupAttemptId);
+    if(!signupDeliveryGatePassed(signup))return res.status(409).json({error:'The exact signup has not passed its mandatory agent delivery checks.'});
+    const receipt=await reconcileSignupCompletionReceipt({prisma,expectedSid:expectedMessageSid,...completionReceiptProofOptions(signup)});
+    const delivery=reconciledCompletionDelivery(signup,receipt);
+    const apply=req.body.apply===true;
+    if(apply){
+      const current=latestCompletionSignup(signupAttemptId);
+      if(!signupDeliveryGatePassed(current)||current.businessId!==signup.businessId||current.vapiAssistantId!==signup.vapiAssistantId||current.twilioPhoneNumber!==signup.twilioPhoneNumber||current.vapiPhoneNumberId!==signup.vapiPhoneNumberId||current.ownerPhone!==signup.ownerPhone||current.forwardingSetupId!==signup.forwardingSetupId)throw signupRecoveryError('Signup changed during reconciliation.', 'COMPLETION_TARGET_CHANGED');
+      upsertSignupDashboardRecord({...current,...completionRecordFields(delivery),setupFollowupReconciledAt:new Date().toISOString()});
+      await recordAdminAuditEvent({prisma,action:'reconcile_delivered_setup_sms',outcome:'success',actorHash:getAdminActorHash(req),targetType:'signup',targetId:hashOperationalTarget(signupOperationalIdentity(current)),details:{messageHash:hashKey(expectedMessageSid).slice(0,16),smsDelivered:true}});
+    }
+    res.json({ok:true,applied:apply,status:delivery.status,smsDelivered:true,textsSent:0,billingChanged:false});
+  })
+);
+
+app.post(
   "/api/admin/signups/run-agent-delivery-test",
   adminSignupRepairProcessRateLimiter,
   requireAdmin,
@@ -17633,7 +17872,11 @@ async function runAutomatedRuntimeRemediationInternal(incident, recordedItem) {
 
 async function safelyNotifyRuntimeFailure(error, context = {}) {
   const baseIncident = buildRuntimeIncident(error, context);
-  const remediation = createIncidentRemediationPlan(baseIncident, {
+  const remediation = context.reasonCode === 'VAPI_CALL_SYNC_DELAYED' ? {
+    action: 'none', status: 'verifying', automatic: false, requiresUser: false,
+    proposedSolution: 'Wait for the next scheduled sync; investigate if the delay persists. Only a full successful sync clears this incident.',
+    safetyBoundary: 'Do not replay customer texts, signups, payments, or resource purchases.',
+  } : createIncidentRemediationPlan(baseIncident, {
     safeAutoRepairEnabled: INCIDENT_SAFE_AUTO_REPAIR_ENABLED && !TELEGRAM_GUARDED_ACTIONS_ENABLED,
     codeRepairEnabled: INCIDENT_CODE_REPAIR_ENABLED,
     codeRepairConfigured: Boolean(
@@ -17696,7 +17939,7 @@ async function safelyNotifyRuntimeFailure(error, context = {}) {
       text: buildIncidentTelegramAlert(incidentForDelivery),
       adminUrl: exactAdminUrl,
       buttonText: "Open exact incident",
-      dedupeKey: `initial:${preparedIncident.incidentId}:g${recorded.item?.remediation?.generation || 1}`,
+      dedupeKey: `initial:${preparedIncident.incidentId}:g${recorded.item?.remediation?.generation || 1}${context.reasonCode === 'VAPI_CALL_SYNC_DELAYED' ? `:${preparedIncident.severity}` : ''}`,
       inlineKeyboard: controls.replyMarkup,
     });
     if (!queued?.queued && !queued?.duplicate) return;
@@ -17839,6 +18082,7 @@ function runBackgroundJob(jobName, task, phase = "scheduled") {
     .then(task)
     .catch((err) => {
       console.error(`[${jobName}] ${phase} run failed`, err);
+      if (jobName === 'Vapi call sync' && err.callSyncFailureRecorded) return null;
       safelyNotifyRuntimeFailure(err, {
         area: `${jobName} background job`,
         phase,
@@ -18292,6 +18536,12 @@ async function drainTelegramOutbox(phase = "scheduled") {
 }
 
 function startBackgroundJobs() {
+  runBackgroundJob('signup completion delivery polling',pollPendingSignupCompletionMessages,'initial');
+  setInterval(()=>runBackgroundJob('signup completion delivery polling',pollPendingSignupCompletionMessages),60*1000);
+  runBackgroundJob('saved Twilio delivery reports', processTwilioStatusInbox, 'initial');
+  setInterval(() => {
+    runBackgroundJob('saved Twilio delivery reports', processTwilioStatusInbox);
+  }, 5000);
   runBackgroundJob("signup text delivery polling", pollPendingSignupAgentTests, "initial");
   setInterval(() => {
     runBackgroundJob("signup text delivery polling", pollPendingSignupAgentTests);
@@ -18374,6 +18624,7 @@ module.exports = {
   app,
   startServer,
   __test: {
+    signupDeliveryGatePassed,
     createBusinessStripeTrial,
     upsertSignupDashboardRecord,
     deriveCustomerSetupStep,

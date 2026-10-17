@@ -45,17 +45,20 @@ test("builds Bell's documented mobile no-answer command with the closest practic
   assert.match(bell.source, /bell\.ca/i);
 });
 
-test("gives product-specific safe guidance for TELUS mobile without inventing a star code", () => {
+test("TELUS and Rogers share verified activation but retain their different disable instructions", () => {
   const telus = resolveForwardingRule({ carrier: "telus", lineType: "mobile", destination: "+19055550123" });
-  assert.equal(telus.activationMethod, "MANUAL");
-  assert.equal(telus.activationDialString, "");
+  const rogers = resolveForwardingRule({ carrier: "rogers", lineType: "mobile", destination: "+19055550123" });
+  assert.equal(telus.activationMethod, "DIAL_STRING");
+  assert.equal(telus.activationDialString, rogers.activationDialString);
+  assert.equal(telus.deactivationDialString, "#61#");
+  assert.equal(rogers.deactivationDialString, "##61#");
   assert.equal(telus.timing.exactThreeRingsSupported, false);
-  assert.match(telus.humanInstructions.join(" "), /unanswered|no-answer/i);
+  assert.match(telus.humanInstructions.join(" "), /will not call you automatically/i);
   assert.match(telus.source, /telus\.com/i);
 });
 
-test("never guesses for TELUS, VoIP, other, or unknown combinations", () => {
-  for (const [carrier, lineType] of [["telus", "mobile"], ["rogers", "voip"], ["other", "landline"], ["not_sure", "not_sure"]]) {
+test("never guesses for VoIP, other, or unknown combinations", () => {
+  for (const [carrier, lineType] of [["telus", "landline"], ["rogers", "voip"], ["other", "landline"], ["not_sure", "not_sure"]]) {
     const rule = resolveForwardingRule({ carrier, lineType, destination: "+19055550123" });
     assert.equal(rule.supported, false);
     assert.equal(rule.activationMethod, "MANUAL");
@@ -64,11 +67,32 @@ test("never guesses for TELUS, VoIP, other, or unknown combinations", () => {
   }
 });
 
+test('unknown mobile uses conditional phone settings, never a universal dial command',()=>{
+ const rule=resolveForwardingRule({carrier:'not_sure',lineType:'mobile',destination:'+19055550123'});
+ assert.equal(rule.activationDialString,'');assert.equal(rule.activationTelUri,'');assert.equal(rule.supported,false);
+ assert.match(rule.humanInstructions.join(' '),/Always forward turned off/);
+ assert.match(rule.humanInstructions.join(' '),/choose your provider/);
+ assert.match(rule.humanInstructions.join(' '),/9055550123/);
+});
+
 test("normalizes signup choices and validates the forwarding destination", () => {
   assert.equal(normalizeCarrier("Not sure"), "NOT_SURE");
   assert.equal(normalizeLineType("cloud phone"), "VOIP");
   assert.equal(encodeDialStringToTelUri("##61#"), "tel:%23%2361%23");
   assert.throws(() => resolveForwardingRule({ carrier: "rogers", lineType: "mobile", destination: "123" }), /E\.164/);
+});
+
+test('the requested destination becomes exactly ten digits, with an encoded hash in the phone link',()=>{
+ const rule=resolveForwardingRule({carrier:'rogers',lineType:'mobile',destination:'+1 (289) 312-2922'});
+ assert.equal(rule.activationDialString,'*61*2893122922#');
+ assert.equal(rule.activationTelUri,'tel:*61*2893122922%23');
+ const other=resolveForwardingRule({carrier:'rogers',lineType:'mobile',destination:'+12895550123'});
+ assert.equal(other.activationDialString,'*61*2895550123#');
+ assert.doesNotMatch(other.activationDialString,/3122922/);
+ const fixture=require('../src/forwardingDialerFixture.json');
+ const fixtureRule=resolveForwardingRule({carrier:'rogers',lineType:'mobile',destination:'+12895550199'});
+ assert.equal(fixture.activationDialString,fixtureRule.activationDialString);
+ assert.equal(fixture.activationTelUri,fixtureRule.activationTelUri);
 });
 
 test("carrier service codes remain centralized outside frontend components", () => {

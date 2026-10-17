@@ -3,6 +3,7 @@ const { normalizeSmsPhone } = require("./smsSuppression");
 const SETUP_VERSION = 3;
 const CARRIERS = new Set(["BELL", "ROGERS", "TELUS", "OTHER", "NOT_SURE"]);
 const LINE_TYPES = new Set(["MOBILE", "LANDLINE", "VOIP", "NOT_SURE"]);
+const mobileNoReplyCommand = number => `*61*${number}#`;
 
 function canonicalChoice(value, allowed, fallback) {
   const key = String(value || "").trim().toUpperCase().replace(/[\s/-]+/g, "_");
@@ -49,7 +50,7 @@ const RULES = Object.freeze([
     humanInstructions: [
       "Tap the button from the Bell business phone.",
       "Press Call or Send. Bell should show a status message confirming the change.",
-      "Return here and let My AI PA test the setup automatically.",
+      "Wait for Bell's confirmation. My AI PA will not call you automatically.",
     ],
     source: "https://support.bell.ca/mobility/rate_plans_features/how_to_use_message_centre?step=8",
     verifiedAt: "2026-09-22",
@@ -58,7 +59,7 @@ const RULES = Object.freeze([
       mode: "FIFTEEN_SECONDS",
       exactThreeRingsSupported: false,
       customerCopy: "Bell will wait 15 seconds before forwarding an unanswered call. That is usually about three rings, but ringtone length varies by phone.",
-      adjustmentCopy: "Bell accepts delays in five-second steps. My AI PA uses 15 seconds as the closest practical setting and verifies the result with a real test call.",
+      adjustmentCopy: "Bell accepts delays in five-second steps. This command requests 15 seconds; wait for Bell to confirm the change.",
     },
     warnings: [
       "This replaces Bell's current no-answer destination, which is often voicemail. Bell may charge for forwarded minutes depending on the plan.",
@@ -71,9 +72,9 @@ const RULES = Object.freeze([
     lineType: "MOBILE",
     forwardingType: "NO_ANSWER",
     activationMethod: "DIAL_STRING",
-    buildActivation: (number) => `*61*${number}#`,
+    buildActivation: mobileNoReplyCommand,
     deactivationDialString: "##61#",
-    humanInstructions: ["Tap the button from the business phone.", "Press Call or Send.", "Return here and test the setup."],
+    humanInstructions: ["Open the command from the business phone, or copy it into the keypad.", "Press Call or Send.", "Wait for Rogers to confirm the change. My AI PA will not call you automatically."],
     source: "https://www.rogers.com/support/mobility/use-call-forwarding",
     verifiedAt: "2026-09-06",
     supported: true,
@@ -81,9 +82,26 @@ const RULES = Object.freeze([
       mode: "CARRIER_CONTROLLED",
       exactThreeRingsSupported: false,
       customerCopy: "Your phone rings first. Rogers does not publish a fixed ring count for this mobile command.",
-      adjustmentCopy: "Rogers voicemail must be off for conditional forwarding to work. If the test fails, contact Rogers before relying on the setup.",
+      adjustmentCopy: "Rogers voicemail must be off for conditional forwarding to work. If Rogers rejects the command, contact Rogers before relying on the setup.",
     },
     warnings: ["Rogers says conditional forwarding will not work while Rogers voicemail is active."],
+  },
+  {
+    key: "telus-mobile-no-answer-v1",
+    carrier: "TELUS",
+    lineType: "MOBILE",
+    forwardingType: "NO_ANSWER",
+    activationMethod: "DIAL_STRING",
+    buildActivation: mobileNoReplyCommand,
+    deactivationDialString: "#61#",
+    humanInstructions: ["Open the phone app on your business cellphone.", "Press Call or Send, then wait for confirmation.", "My AI PA will not call you automatically."],
+    source: "https://www.telus.com/en/business/support/article/call-forward-mobile",
+    verifiedAt: "2026-10-16",
+    supported: true,
+    timing: { mode: "DEVICE_OR_ACCOUNT_SETTING", exactThreeRingsSupported: false,
+      customerCopy: "Your phone rings first. The delay depends on your phone and account settings.",
+      adjustmentCopy: "Wait for carrier confirmation. TELUS says conditional forwarding depends on device compatibility." },
+    warnings: ["TELUS may charge for forwarded minutes or long distance. Check your plan; some devices do not support conditional forwarding."],
   },
   {
     key: "rogers-home-no-answer-v1",
@@ -93,7 +111,7 @@ const RULES = Object.freeze([
     activationMethod: "GUIDED_DIAL",
     activationDialString: "*92",
     deactivationDialString: "*93",
-    humanInstructions: ["Dial *92 from the business phone.", "After the tone, enter the My AI PA number shown below.", "Stay on the line for at least five seconds, then return here to test."],
+    humanInstructions: ["Dial *92 from the business phone.", "After the tone, enter the My AI PA number shown below.", "Stay on the line for at least five seconds and wait for carrier confirmation."],
     source: "https://www.rogers.com/support/home-phone/forward-calls-when-no-answer",
     verifiedAt: "2026-09-06",
     supported: true,
@@ -113,7 +131,7 @@ const RULES = Object.freeze([
     activationMethod: "GUIDED_DIAL",
     activationDialString: "*92",
     deactivationDialString: "*93",
-    humanInstructions: ["Dial *92 from the Bell business phone.", "Enter the My AI PA number shown below and wait for two beeps.", "Return here and test before relying on it."],
+    humanInstructions: ["Dial *92 from the Bell business phone.", "Enter the My AI PA number shown below and wait for two beeps.", "Confirm the change with Bell before relying on it."],
     source: "https://business.bell.ca/support/small-business/phone/calling-features/how-to-use-call-forwarding",
     verifiedAt: "2026-09-06",
     supported: true,
@@ -127,26 +145,6 @@ const RULES = Object.freeze([
   },
 ]);
 
-const MANUAL_RULES = Object.freeze([
-  {
-    carrier: "TELUS",
-    lineType: "MOBILE",
-    source: "https://www.telus.com/en/business/small/mobility/add-ons",
-    humanInstructions: [
-      "Open the Phone or Call settings on the business phone only if they offer a separate unanswered or no-answer option.",
-      "Do not turn on a generic Call Forwarding or Always Forward switch. That can send every call away from your phone.",
-      "Enter the My AI PA number only under unanswered or no-answer calls. If that choice is missing, contact TELUS, then return here to test it.",
-    ],
-    timing: {
-      mode: "DEVICE_OR_ACCOUNT_SETTING",
-      exactThreeRingsSupported: false,
-      customerCopy: "TELUS timing depends on the mobile plan and phone settings.",
-      adjustmentCopy: "My AI PA will not generate an unverified TELUS service code. Use the phone settings or TELUS support, then run the test call.",
-    },
-    warnings: ["TELUS Call Forwarding may need to be added to the mobile plan before unanswered-call forwarding can work."],
-  },
-]);
-
 function resolveForwardingRule({ carrier, lineType, forwardingMode = "NO_ANSWER", destination }) {
   const normalizedCarrier = normalizeCarrier(carrier);
   const normalizedLineType = normalizeLineType(lineType);
@@ -154,7 +152,16 @@ function resolveForwardingRule({ carrier, lineType, forwardingMode = "NO_ANSWER"
   const destinationDigits = digits10(destination);
   const rule = RULES.find((item) => item.carrier === normalizedCarrier && item.lineType === normalizedLineType && item.forwardingType === mode);
   if (!rule) {
-    const manualRule = MANUAL_RULES.find((item) => item.carrier === normalizedCarrier && item.lineType === normalizedLineType);
+    const manualRule = normalizedLineType === 'MOBILE' && mode === 'NO_ANSWER' ? {
+      humanInstructions: [
+        "On your business cellphone, open Phone or Call settings.",
+        "Look for Forward when unanswered or No reply. Leave Always forward turned off.",
+        `If that separate option is available, enter ${destinationDigits} and save.`,
+        "If the option is missing, choose your provider below for different instructions. Do not enable forwarding for every call.",
+        "Wait for your phone or provider to confirm the change. My AI PA will not call you automatically.",
+      ],
+      warnings: ["This can replace your missed-call voicemail destination. Your phone provider may charge for forwarded calls."],
+    } : null;
     return {
       key: `manual-${normalizedCarrier.toLowerCase()}-${normalizedLineType.toLowerCase()}-v${SETUP_VERSION}`,
       carrier: normalizedCarrier,
@@ -169,16 +176,16 @@ function resolveForwardingRule({ carrier, lineType, forwardingMode = "NO_ANSWER"
       humanInstructions: manualRule?.humanInstructions || [
         "Contact your phone provider or open your cloud-phone settings.",
         `Ask for unanswered/no-reply calls to forward to ${destinationDigits}.`,
-        "Keep forwarding-all turned off, then return here to test.",
+        "Keep forwarding-all turned off and wait for provider confirmation.",
       ],
       source: manualRule?.source || "",
-      verifiedAt: manualRule ? "2026-09-22" : "",
+      verifiedAt: "",
       supported: false,
       timing: manualRule?.timing || {
         mode: "PROVIDER_SPECIFIC",
         exactThreeRingsSupported: false,
         customerCopy: "The ring delay depends on this provider and phone product.",
-        adjustmentCopy: "Ask the provider for unanswered-call forwarding. My AI PA will verify the result instead of guessing a command.",
+        adjustmentCopy: "Ask the provider for unanswered-call forwarding and confirmation of the change. No carrier command is guessed.",
       },
       warnings: [
         ...(manualRule?.warnings || []),

@@ -34,7 +34,7 @@ const requiredText = {
     "See a Sample Call",
     "Start Your Free Trial",
   ],
-  signup: ["Create your AI phone assistant", "Step 1 of 8", "Choose your trade", "Continue to property types"],
+  signup: ["Create your AI phone assistant", "Step 1 of 7", "Choose your trade", "Continue to property types"],
   dashboard: ["Owner dashboard", "Signup email", "Welcome back"],
   admin: ["Admin Dashboard", "Admin Password", "Unlock Admin"],
 };

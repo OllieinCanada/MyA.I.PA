@@ -193,7 +193,7 @@ function createSignupAttemptStore({ prisma, secret, ttlMs = 7 * 24 * 60 * 60 * 1
 
   async function requestSupport(record, description) {
     const cleaned = String(description || "").replace(/\s+/g, " ").trim().slice(0, 1200);
-    if (cleaned.length < 8) {
+    if (!cleaned) {
       const error = new Error("Briefly describe what is not working.");
       error.statusCode = 400;
       throw error;

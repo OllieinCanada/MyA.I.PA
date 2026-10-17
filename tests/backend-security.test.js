@@ -40,6 +40,16 @@ const { app, __test } = require("../server/index");
 const { prisma } = require("../server/prisma");
 const { getTwilioSignature } = require("../server/smsSuppression");
 
+test('completion and trial gate require verified contact plus current content, route and both delivered tests',()=>{
+  const {AGENT_TEST_VERSION,buildAgentTestFingerprint,buildAgentRouteFingerprint}=require('../server/signupAgentTesting');
+  const s={identityVerified:true,smsVerified:true,businessId:1,ownerPhone:'+19055550123',twilioPhoneNumber:'+12895550100',vapiPhoneNumberId:'phone',vapiAssistantId:'assistant',agentTestStatus:'passed',agentTestVersion:AGENT_TEST_VERSION,
+    agentContentStatus:'verified',agentContentFingerprint:'content',agentContentVerifiedAt:'now',agentRouteBindingStatus:'verified',agentRouteBindingMode:'direct',agentRouteBindingVerifiedAt:'now',agentTestOwnerAcceptedAt:'now',agentTestCustomerAcceptedAt:'now',agentTestOwnerDeliveredAt:'now',agentTestCustomerDeliveredAt:'now',agentTestOwnerProviderStatus:'delivered',agentTestCustomerProviderStatus:'delivered'};
+  s.agentTestFingerprint=buildAgentTestFingerprint({assistantId:s.vapiAssistantId,aiNumber:s.twilioPhoneNumber,ownerPhone:s.ownerPhone,contentFingerprint:s.agentContentFingerprint});
+  s.agentRouteBindingFingerprint=buildAgentRouteFingerprint({mode:s.agentRouteBindingMode,businessId:s.businessId,phoneNumberId:s.vapiPhoneNumberId,aiNumber:s.twilioPhoneNumber,assistantId:s.vapiAssistantId});
+  assert.equal(__test.signupDeliveryGatePassed(s),true);
+  for(const changed of [{identityVerified:false,smsVerified:false},{agentTestCustomerProviderStatus:'sent'},{agentTestCustomerDeliveredAt:''},{agentTestFingerprint:'stale'},{agentRouteBindingFingerprint:'other'},{agentContentStatus:'failed'}])assert.equal(__test.signupDeliveryGatePassed({...s,...changed}),false);
+});
+
 test("business-scoped Stripe customer and trial keys prevent double billing for simultaneous submissions", async () => {
   const customers = [];
   const subscriptions = [];
@@ -115,6 +125,15 @@ async function request(path, options = {}) {
     body: options.body && typeof options.body !== "string" ? JSON.stringify(options.body) : options.body,
   });
 }
+
+test('missing-assistant repair requires admin authentication and a signed provisioning context', async () => {
+  const path='/api/admin/signups/recover-missing-assistant';
+  const body={confirmation:'RECOVER_MISSING_ASSISTANT_ONLY',apply:true,signupAttemptId:'signup_'+'a'.repeat(32),expectedPhone:'+12895550123'};
+  assert.equal((await request(path,{method:'POST',body,headers:{'x-api-key':process.env.INTEGRATION_API_KEY}})).status,401);
+  const response=await request(path,{method:'POST',body,headers:{'x-admin-password':process.env.ADMIN_PASSWORD}});
+  assert.equal(response.status,401);
+  assert.match((await response.json()).error,/signed provisioning/);
+});
 
 test("health endpoint remains public and carries baseline security headers", async () => {
   const response = await request("/api/health");
@@ -1105,10 +1124,15 @@ test("inbound messaging preferences require a valid provider signature", async (
 });
 
 test("Twilio delivery callbacks verify against the exact configured status URL", async () => {
+  const {memoryDb} = require('./helpers/twilio-status-memory-db');
+  const originalTransaction = prisma.$transaction;
+  const db = memoryDb();
+  prisma.$transaction = db.prisma.$transaction;
   const form = {
-    MessageSid: "SM_DELIVERED_TEST",
+    MessageSid: "SM" + '7'.repeat(32),
     MessageStatus: "delivered",
   };
+  try {
   const response = await request("/api/webhooks/twilio/message-status", {
     method: "POST",
     headers: {
@@ -1123,6 +1147,32 @@ test("Twilio delivery callbacks verify against the exact configured status URL",
   });
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") || "", /xml/i);
+  assert.equal(db.rows.size, 1);
+  assert.equal([...db.rows.values()][0].data.status, 'pending');
+  } finally { prisma.$transaction = originalTransaction; }
+});
+
+test('Twilio callback refuses acknowledgment when the receipt DB is unavailable', async () => {
+  const original = prisma.$transaction;
+  prisma.$transaction = async () => { throw new Error('synthetic database outage'); };
+  const form = {MessageSid:'SM'+'8'.repeat(32),MessageStatus:'delivered'};
+  try {
+    const response = await request('/api/webhooks/twilio/message-status', {method:'POST',headers:{
+      'content-type':'application/x-www-form-urlencoded',
+      'x-twilio-signature':getTwilioSignature(process.env.TWILIO_STATUS_CALLBACK_URL,form,process.env.TWILIO_AUTH_TOKEN),
+    },body:new URLSearchParams(form).toString()});
+    assert.equal(response.status,503);
+    assert.doesNotMatch(await response.text(),/synthetic database outage/);
+  } finally {prisma.$transaction=original;}
+});
+
+test('Twilio invalid signatures never enter the durable receipt inbox', async () => {
+  const original = prisma.$transaction; let writes=0;
+  prisma.$transaction = async () => {writes++;throw Error('must not write');};
+  try {
+    const response=await request('/api/webhooks/twilio/message-status',{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded','x-twilio-signature':'forged'},body:new URLSearchParams({MessageSid:'SM'+'9'.repeat(32),MessageStatus:'delivered'}).toString()});
+    assert.equal(response.status,401);assert.equal(writes,0);
+  } finally {prisma.$transaction=original;}
 });
 
 test("Twilio staging OAuth issues a scoped token and requires both bearer and signature", async () => {
@@ -1270,6 +1320,8 @@ test("customer support routes require a signed dashboard session", async () => {
 });
 
 test("support repair actions require an admin session", async () => {
+  const receiptRepair=await request('/api/admin/signups/reconcile-completion-sms',{method:'POST',body:{confirmation:'RECONCILE_DELIVERED_SETUP_SMS',apply:true}});
+  assert.equal(receiptRepair.status,401);
   const routes = [
     ["/api/admin/attention/actions", "POST"],
     ["/api/admin/support-reports/example", "PATCH"],

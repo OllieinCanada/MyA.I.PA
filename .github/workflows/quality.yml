@@ -104,6 +104,33 @@ jobs:
           grep -q 'static/js/main\.' docs/index.html
           grep -q 'static/css/main\.' docs/index.html
 
+      - name: Install browser for offline signup regression
+        run: npx playwright install --with-deps chromium
+
+      - name: Verify single-review signup on mobile and desktop
+        env:
+          PRICING_QA_BUILD_DIR: docs
+        run: |
+          npm run test:signup-pricing-choices
+          npm run test:signup-footer-layout
+          npm run test:homepage-mobile-hero
+          npm run test:forwarding:browser
+          npm run preview:signup-verification-progress
+
+      - name: Save signup browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: signup-browser-${{ github.event.pull_request.head.sha || github.sha }}
+          retention-days: 7
+          path: |
+            diagnostics/pricing-choices/
+            diagnostics/verification-progress/
+            diagnostics/signup-footer/
+            diagnostics/homepage-hero/
+            diagnostics/forwarding-onboarding/
+          if-no-files-found: ignore
+
       - name: Archive verified Pages output
         uses: actions/upload-artifact@v4
         with:
@@ -114,4 +141,5 @@ jobs:
             docs/404.html
             docs/asset-manifest.json
             docs/proof/index.html
+            docs/illustrations/canadian-flag.png
             docs/static/

@@ -41,11 +41,15 @@ describe("intuitive homepage journey", () => {
     expect(text).toMatch(/Missed Calls = Lost Revenue \$\$/i);
     expect(text).toMatch(/When you can't get to the phone, My AI PA:/i);
     expect(text).toMatch(/Designed for Canadian contractors/i);
+    const contractorMark = container.querySelector('.simple-canadian-proof-mark');
+    expect(contractorMark.querySelector('img').getAttribute('src')).toMatch(/\/illustrations\/canadian-flag\.png$/);
+    expect(contractorMark.querySelector('svg')).not.toBeNull();
+    expect(contractorMark.textContent).not.toMatch(/CA/);
     expect(text).toMatch(/Keep your existing business number/i);
     expect(text).toMatch(/Test privately before going live/i);
     expect(text).toMatch(/Three simple steps/i);
     expect(text).toMatch(/Your customer has a problem\. They want to talk to someone now/i);
-    expect(text).toMatch(/AnswersAfter 3 rings/i);
+    expect(text).toMatch(/AnswersAfter a few rings/i);
     expect(text).toMatch(/Talks naturallyTo get job details/i);
     expect(text).toMatch(/Follows upTexts you and the caller/i);
     expect(container.querySelectorAll(".simple-hero-flow-icon")).toHaveLength(3);

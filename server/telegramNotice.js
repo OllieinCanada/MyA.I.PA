@@ -38,10 +38,10 @@ function compactNotice(value) {
 
 function noticeStyle(text) {
   const header = String(text || '').split('\n')[0];
-  const provider = /\bTWILIO\b/i.test(header) ? 'twilio'
+  const provider = /CUSTOMER SUPPORT/i.test(header) ? 'support' : /\bTWILIO\b/i.test(header) ? 'twilio'
     : /\bVAPI\b/i.test(header) ? 'vapi' : /\bMAKE\b/i.test(header) ? 'make'
       : /\bRENDER\b/i.test(header) ? 'render' : /SIGNUP/i.test(header) ? 'signup' : 'ops';
-  const severity = /🔴|CRITICAL|\bHIGH\b/i.test(header) ? 'critical'
+  const severity = /CUSTOMER SUPPORT/i.test(header) ? 'info' : /🔴|CRITICAL|\bHIGH\b/i.test(header) ? 'critical'
     : /✅|VERIFIED FIXED|SERVICE HEALTHY|NO LONGER DETECTED/i.test(header) ? 'info' : 'warning';
   return { provider, severity };
 }
