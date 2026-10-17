@@ -56,6 +56,8 @@
     "test:browser:quality": "node scripts/test-browser-quality.js",
     "test:address-autocomplete": "node scripts/test-address-autocomplete.js",
     "test:signup-pricing-choices": "node scripts/test-signup-pricing-choices.js",
+    "test:signup-footer-layout": "node scripts/test-signup-footer-layout.js",
+    "test:homepage-mobile-hero": "node scripts/test-homepage-mobile-hero.js",
     "test:signup-verification-progress": "node --test --test-concurrency=1 tests/signup-verification-progress.test.js tests/signup-verification-page-client.test.js tests/signup-attempt-store.test.js tests/signup-status-api.test.js tests/signup-sms-verification.test.js",
     "preview:signup-verification-progress": "node scripts/preview-signup-verification-progress.js",
     "test:database": "node --test tests/database-integration.test.js",

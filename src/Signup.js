@@ -3038,6 +3038,17 @@ export default function Signup() {
               text-align: right;
             }
 
+            .signup-mobile-trial-note {
+              grid-column: 1 / -1;
+              margin: 0;
+              color: #64748b;
+              font-size: 0.6875rem;
+              font-weight: 600;
+              line-height: 1.4;
+              text-align: center;
+              text-wrap: balance;
+            }
+
             .signup-voice-step {
               margin-top: 0;
               gap: 0;
@@ -3968,7 +3979,7 @@ export default function Signup() {
             </p>
           ) : null}
           {currentStep === 3 ? (
-            <p className="signup-mobile-disabled-reason">14-day free trial · No credit card required for the trial · Cancel anytime</p>
+            <p className="signup-mobile-trial-note">14 days free · No card needed · Cancel anytime</p>
           ) : null}
         </div>
 

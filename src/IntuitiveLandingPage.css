@@ -405,34 +405,35 @@
   .simple-header .simple-primary { min-height: 44px; padding-inline: 13px; font-size: .72rem; }
   .simple-brand-mark { width: 37px; height: 37px; }
   .simple-brand > span { font-size: 1.2rem; }
-  .simple-hero { padding: 24px 0 40px; }
-  .simple-contractor-burst { box-sizing: border-box; width: calc(100% + 24px); max-width: 390px; min-height: 140px; margin-inline: -12px; margin-bottom: 15px; padding: 20px 18px 22px; }
+  .simple-hero { padding: 0 0 40px; }
+  .simple-hero-copy { padding-top: 0; }
+  .simple-contractor-burst { box-sizing: border-box; width: calc(100% + 24px); max-width: 390px; min-height: 110px; margin-inline: -12px; margin-bottom: 10px; padding: 14px 18px 16px; }
   .simple-contractor-burst span { font-size: .98rem; }
   .simple-contractor-burst strong { white-space: nowrap; font-size: clamp(2.08rem,10.4vw,2.7rem); letter-spacing: .015em; }
   .simple-hero h1 { font-size: clamp(3rem, 14vw, 4.2rem); }
   .simple-intro { width: fit-content; max-width: 100%; grid-template-columns: auto auto; justify-content: initial; margin-top: 15px; margin-inline: auto; column-gap: 6px; }
   .simple-intro span { font-size: .72rem; }
   .simple-intro strong { font-size: 1.48rem; }
-  .simple-intro em { font-size: .85rem; text-align: left; }
-  .simple-loss { gap: 6px; margin-top: 13px; font-size: clamp(1.08rem,5.25vw,1.34rem); }
+  .simple-intro em { font-size: clamp(.65rem,2.8vw,.85rem); text-align: left; }
+  .simple-loss { gap: 6px; margin-top: 13px; font-size: clamp(.95rem,4.7vw,1.2rem); }
   .simple-loss > span { white-space: normal; }
   .simple-loss-arrow { width: 42px; stroke-width: 5.5; }
   .simple-hero-flow { margin-top: 12px; text-align: center; }
-  .simple-hero-flow > p { margin-bottom: 9px; font-size: .96rem; }
+  .simple-hero-flow > p { margin-bottom: 9px; font-size: .84rem; }
   .simple-hero-flow ol { grid-template-columns: minmax(0,1fr) 20px minmax(0,1fr) 20px minmax(0,1fr); gap: 3px; padding: 10px 7px; border-radius: 15px; }
   .simple-hero-flow li:not(.simple-hero-flow-arrow) { grid-template-columns: 1fr; grid-template-rows: auto auto auto; justify-items: center; text-align: center; }
   .simple-hero-flow-icon { width: 38px; height: 38px; grid-row: auto; margin-bottom: 5px; border-radius: 11px; }
   .simple-hero-flow-icon svg { width: 21px; height: 21px; }
-  .simple-hero-flow li > strong { font-size: .9rem; line-height: 1.12; }
+  .simple-hero-flow li > strong { font-size: .8rem; line-height: 1.12; }
   .simple-hero-flow li > small { max-width: 88px; font-size: .72rem; line-height: 1.2; }
   .simple-hero-flow-arrow svg { width: 20px; height: 20px; stroke-width: 3; }
   .simple-number-promise { margin-top: 17px; font-size: .94rem; }
   .simple-canadian-proof { width: 100%; grid-template-columns: 42px minmax(0,1fr); gap: 11px; margin-top: 15px; padding: 12px 12px 12px 9px; }
   .simple-canadian-proof-mark { width: 42px; height: 48px; }
-  .simple-canadian-proof strong { font-size: .84rem; letter-spacing: .075em; }
-  .simple-canadian-proof p { gap: 7px 12px; margin-top: 8px; font-size: .81rem; line-height: 1.42; }
-  .simple-hero-actions { display: grid; grid-template-columns: 1fr; width: 100%; }
-  .simple-hero-actions button { width: 100%; }
+  .simple-canadian-proof strong { font-size: .7rem; letter-spacing: .04em; }
+  .simple-canadian-proof p { gap: 7px 12px; margin-top: 8px; font-size: .75rem; line-height: 1.3; }
+  .simple-hero-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; margin-top: 10px; }
+  .simple-hero-actions button { width: 100%; padding-inline: 8px; font-size: .82rem; }
   .simple-trust { gap: 8px 14px; font-size: .82rem; }
   .simple-hero-proof { padding: 21px 17px; border-radius: 23px; }
   .simple-proof-carousel { padding: 13px; }
