@@ -112,6 +112,8 @@ jobs:
           PRICING_QA_BUILD_DIR: docs
         run: |
           npm run test:signup-pricing-choices
+          npm run test:signup-footer-layout
+          npm run test:homepage-mobile-hero
           npm run preview:signup-verification-progress
 
       - name: Save signup browser evidence
@@ -123,6 +125,8 @@ jobs:
           path: |
             diagnostics/pricing-choices/
             diagnostics/verification-progress/
+            diagnostics/signup-footer/
+            diagnostics/homepage-hero/
           if-no-files-found: ignore
 
       - name: Archive verified Pages output
