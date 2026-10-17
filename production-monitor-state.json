@@ -1,4 +1,17 @@
 {
   "schemaVersion": 2,
-  "incidents": {}
+  "incidents": {
+    "issue:operational_health:public_bdbf9cf39eed59872d7d6fa27d5857b7": {
+      "lifecycleId": "public_4fe07d1d997018a465d9ee26",
+      "type": "operational",
+      "checkName": "operational_health",
+      "firstDetectedAt": "2026-10-17T14:09:18.275Z"
+    },
+    "issue:operational_health:public_d99ae3b54300f1013536f659d2661765": {
+      "lifecycleId": "public_a13d7a661e4cde0b9c2a8a29",
+      "type": "operational",
+      "checkName": "operational_health",
+      "firstDetectedAt": "2026-10-17T14:09:18.275Z"
+    }
+  }
 }
