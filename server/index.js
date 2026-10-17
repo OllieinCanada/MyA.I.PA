@@ -5383,11 +5383,14 @@ async function safelyNotifySignupOperations(payload, {
   makeAssessment = null,
   providerFailure = null,
   reasonCode = "",
+  supportDescription = "",
+  supportEventKey = "",
+  supportBusinessName = "",
 } = {}) {
-  const eventKey = record?.signupAttemptId || buildMakeSignupEventKey(payload);
+  const eventKey = record?.signupAttemptId || (state === "support_requested" && /^signup_[a-f0-9]{32}$/i.test(supportEventKey) ? supportEventKey : buildMakeSignupEventKey(payload));
   const alertKey = crypto
     .createHash("sha256")
-    .update(`${eventKey}:${String(state || "update")}${state === "verification_sent" ? `:${record?.smsVerificationMessageSid || ""}:${record?.smsVerificationDeliveryStatus || "pending"}` : ""}`)
+    .update(`${eventKey}:${String(state || "update")}${state === "support_requested" ? `:${crypto.createHash("sha256").update(String(supportDescription).replace(/\s+/g, " ").trim()).digest("hex")}` : ""}${state === "verification_sent" ? `:${record?.smsVerificationMessageSid || ""}:${record?.smsVerificationDeliveryStatus || "pending"}` : ""}`)
     .digest("hex")
     .slice(0, 24);
   const current = record || listSignupDashboardRecords().find((item) => item.signupAttemptId === eventKey) || null;
@@ -5408,11 +5411,12 @@ async function safelyNotifySignupOperations(payload, {
     ? `${FRONTEND_APP_URL}/#/admin?tab=attention&incident=${incidentId}`
     : `${FRONTEND_APP_URL}/#/admin?tab=signups`;
   const alertInput = {
-    businessName: payload?.business?.name || payload?.businessProfile?.businessName || current?.businessName,
+    businessName: payload?.business?.name || payload?.businessProfile?.businessName || current?.businessName || supportBusinessName,
     state,
     source: payload?.source?.app || payload?.source?.channel || current?.signupSource || "website",
     eventKey,
     detail,
+    supportDescription,
     reasonCode: reasonCode || current?.phoneProvisioningCode || current?.makeError || "",
     makeFailure: providerFailure || makeAssessment || null,
     payload,
@@ -5456,6 +5460,17 @@ async function safelyNotifySignupOperations(payload, {
       signupTelegramAlertError: "",
     });
   };
+
+  if (state === "support_requested") {
+    // Persist first. The normal outbox worker delivers/retries after this response,
+    // including across a restart; distinct follow-up messages get distinct keys.
+    const queued = await queueTelegramAlertSafely({
+      text: buildSignupTelegramAlert(alertInput), adminUrl,
+      buttonText: "Open customer signup", dedupeKey: `signup:${alertKey}`,
+    });
+    markSignupAlertHandled(queued);
+    return { sent: false, ...queued };
+  }
 
   try {
     const result = await sendSignupTelegramAlert(alertInput, {
@@ -14583,21 +14598,30 @@ app.post(
     const attempt = await signupAttempts.authenticate(req.params.attemptId, token);
     if (!attempt) return res.status(401).json({ error: "This signup status session is invalid or expired." });
     const updated = await signupAttempts.requestSupport(attempt, req.body?.description);
-    const signup = listSignupDashboardRecords().find((item) => item.signupAttemptId === attempt.eventKey) || null;
+    let signup = listSignupDashboardRecords().find((item) => item.signupAttemptId === attempt.eventKey) || null;
     if (signup) {
-      upsertSignupDashboardRecord({
+      signup = upsertSignupDashboardRecord({
         ...signup,
         pilotSupportRequestedAt: new Date().toISOString(),
         pilotSupportDescription: String(req.body?.description || "").replace(/\s+/g, " ").trim().slice(0, 1200),
       });
     }
-    await safelyNotifySignupOperations(attempt.payload, {
+    const notification = await safelyNotifySignupOperations(attempt.payload, {
       state: "support_requested",
       detail: "Customer requested help before setup completed",
       record: signup,
       reasonCode: "SIGNUP_SUPPORT_REQUESTED",
+      supportDescription: updated.supportDescription,
+      supportEventKey: attempt.eventKey,
+      supportBusinessName: attempt.businessName,
     });
-    res.status(202).json({ ok: true, message: "Your support request was received.", signup: signupAttempts.publicAttempt(updated) });
+    res.status(202).json({
+      ok: true,
+      message: notification.queued || notification.duplicate || notification.reason === "already_alerted"
+        ? "Your support request is saved and queued for our team."
+        : "Your request is saved, but our team notification is delayed. You can also call support.",
+      signup: signupAttempts.publicAttempt(updated),
+    });
   })
 );
 

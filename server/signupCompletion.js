@@ -27,7 +27,7 @@ function buildSignupCompletionContent({ ownerName, businessName, assignedPhone, 
   }
   const displayPhone = formatAssignedPhone(phone);
   const greeting = ownerName ? `Hi ${String(ownerName).trim()},` : "Hi,";
-  const business = String(businessName || "your business").trim();
+  const business = String(businessName || "").replace(/\s+/g, " ").trim() || "your business";
   const dashboard = String(dashboardUrl || "").trim();
   const forwarding = String(forwardingSetupUrl || "").trim();
   const lines = [
@@ -44,7 +44,7 @@ function buildSignupCompletionContent({ ownerName, businessName, assignedPhone, 
     phone,
     displayPhone,
     subject: `Your My AI PA number for ${business} is ready`,
-    sms: `Your My AI PA number is ready: ${displayPhone}\n\nNow protect the calls you miss. Tap below and we'll set up call forwarding for you:\n\n${forwarding || dashboard}\n\nTakes about 30 seconds.`,
+    sms: `Congratulations ${business},\nYour My AI PA number is ready: ${displayPhone}\n\nNow set up your agent so it can answer your phone calls instead of the voicemail. Tap below and we'll set up call forwarding for you:\n\n${forwarding || dashboard}\n\nTakes about 30 seconds.`,
     text,
   };
 }

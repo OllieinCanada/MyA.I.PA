@@ -18,11 +18,22 @@ test("setup-complete content uses one canonical number in every representation",
   assert.equal(content.phone, "+13433216155");
   assert.equal(content.displayPhone, "+1 (343) 321-6155");
   assert.match(content.sms, /\+1 \(343\) 321-6155/);
+  assert.equal(content.sms, "Congratulations Example Electrical,\nYour My AI PA number is ready: +1 (343) 321-6155\n\nNow set up your agent so it can answer your phone calls instead of the voicemail. Tap below and we'll set up call forwarding for you:\n\nhttps://www.myaipa.ca/#/forwarding-setup?token=signed\n\nTakes about 30 seconds.");
   assert.match(content.text, /protect the calls you miss/i);
   assert.match(content.sms, /Takes about 30 seconds/i);
   assert.match(content.sms, /forwarding-setup\?token=signed/i);
   assert.match(content.text, /https:\/\/www\.myaipa\.ca\/#\/dashboard/);
   assert.equal(formatAssignedPhone("343-321-6155"), "+1 (343) 321-6155");
+});
+
+test("completion text uses each signup's own business, number and private link", () => {
+  const first = buildSignupCompletionContent({ businessName: "  North\nRoofing  ", assignedPhone: '+12895550101', forwardingSetupUrl: 'https://www.myaipa.ca/#/f/fixture-north' });
+  const second = buildSignupCompletionContent({ businessName: 'South Plumbing', assignedPhone: '+12895550102', forwardingSetupUrl: 'https://www.myaipa.ca/#/f/fixture-south' });
+  assert.match(first.sms, /^Congratulations North Roofing,/);
+  assert.match(second.sms, /^Congratulations South Plumbing,/);
+  assert.match(second.sms, /\+1 \(289\) 555-0102/);
+  assert.match(second.sms, /fixture-south/);
+  assert.doesNotMatch(second.sms, /North Roofing|555-0101|fixture-north|312-2922/);
 });
 
 test("setup-complete delivery reports both successful channels", async () => {

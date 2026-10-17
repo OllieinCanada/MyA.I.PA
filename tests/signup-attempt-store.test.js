@@ -144,7 +144,8 @@ test("support is scoped to the authenticated attempt and rejects empty descripti
   // Distinct database IDs reflect the real schema's unique row identities.
   prisma.rows.get(second.record.eventKey).id = "second-row";
   assert.equal(await store.authenticate(second.access.id, first.access.token), null);
-  await assert.rejects(store.requestSupport(first.record, "short"), /Briefly describe/);
+  await assert.rejects(store.requestSupport(first.record, " \n "), /Briefly describe/);
+  assert.equal((await store.requestSupport(first.record, "test")).supportDescription, "test");
   const updated = await store.requestSupport(first.record, `Please\nhelp ${"x".repeat(1300)}`);
   assert.equal(updated.supportDescription.length, 1200);
   assert.doesNotMatch(updated.supportDescription, /\n/);

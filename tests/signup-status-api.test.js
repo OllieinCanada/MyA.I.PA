@@ -185,13 +185,26 @@ test("status endpoint follows saved workflow transitions without creating provid
 test("pre-activation support reaches the saved signup and cannot modify another signup", async () => {
   const denied = await request(first.access, { suffix: "/support", method: "POST", token: second.access.token, body: JSON.stringify({ description: "Help with this signup please." }) });
   assert.equal(denied.status, 401);
-  const invalid = await request(first.access, { suffix: "/support", method: "POST", body: JSON.stringify({ description: "short" }) });
+  const invalid = await request(first.access, { suffix: "/support", method: "POST", body: JSON.stringify({ description: "   " }) });
   assert.equal(invalid.status, 400);
   const accepted = await request(first.access, { suffix: "/support", method: "POST", body: JSON.stringify({ description: "I need help understanding my setup." }) });
   assert.equal(accepted.status, 202);
   assert.equal((await accepted.json()).signup.supportRequested, true);
   assert.equal(rows.get(first.record.eventKey).supportDescription, "I need help understanding my setup.");
   assert.equal(rows.get(second.record.eventKey).supportRequestedAt, undefined);
+  const short = await request(first.access, { suffix: "/support", method: "POST", body: JSON.stringify({ description: "test" }) });
+  assert.equal(short.status, 202);
+  assert.match((await short.json()).message, /saved and queued/);
+  const outboxPath = path.join(temporaryData, 'telegram-outbox.json');
+  const outbox = JSON.parse(fs.readFileSync(outboxPath, 'utf8'));
+  const supportItems = outbox.items.filter((item) => item.text.includes('CUSTOMER SUPPORT'));
+  assert.equal(supportItems.length, 2, 'Different follow-up messages must not be suppressed');
+  assert.ok(supportItems.some((item) => item.text.includes('Message preview: test')));
+  assert.ok(supportItems.every((item) => item.text.includes('Reference: aaaaaaaaaa')));
+  assert.ok(supportItems.every((item) => !item.text.includes('must-not-be-disclosed')));
+  const repeated = await request(first.access, { suffix: "/support", method: "POST", body: JSON.stringify({ description: "test" }) });
+  assert.equal(repeated.status, 202);
+  assert.equal(JSON.parse(fs.readFileSync(outboxPath, 'utf8')).items.filter((item) => item.text.includes('CUSTOMER SUPPORT')).length, 2);
 });
 
 test("expired status credentials are rejected on both status and support endpoints", async () => {

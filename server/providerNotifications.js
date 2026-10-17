@@ -7,6 +7,7 @@ const PROVIDERS = {
   vapi: { name: 'VAPI', icon: '🎙️', color: [26, 184, 152], url: 'https://dashboard.vapi.ai/' },
   render: { name: 'RENDER', icon: '☁️', color: [70, 132, 238], url: 'https://dashboard.render.com/' },
   signup: { name: 'SIGNUP', icon: '📞', color: [26, 184, 152], url: 'https://www.myaipa.ca/#/admin' },
+  support: { name: 'CUSTOMER', icon: '🛟', color: [26, 184, 152], url: 'https://www.myaipa.ca/#/admin' },
   ops: { name: 'MY AI PA', icon: '🔎', color: [52, 124, 246], url: 'https://www.myaipa.ca/#/admin' },
 };
 const EVENTS = {
@@ -77,6 +78,7 @@ const FONT={A:['01110','10001','10001','11111','10001','10001','10001'],E:['1111
 Object.assign(FONT, {G:['01110','10001','10000','10111','10001','10001','01110'],H:['10001','10001','10001','11111','10001','10001','10001'],Y:['10001','10001','01010','00100','00100','00100','00100']});
 function crc32(bytes) {let crc=0xffffffff;for(const b of bytes){crc^=b;for(let i=0;i<8;i++)crc=(crc>>>1)^((crc&1)?0xedb88320:0);}return (crc^0xffffffff)>>>0;}
 function chunk(name,data){const type=Buffer.from(name),size=Buffer.alloc(4),crc=Buffer.alloc(4);size.writeUInt32BE(data.length);crc.writeUInt32BE(crc32(Buffer.concat([type,data])));return Buffer.concat([size,type,data,crc]);}
+FONT.C = ['01111','10000','10000','10000','10000','10000','01111'];
 function card(providerKey,severity='info') {
   const provider=PROVIDERS[providerKey];if(!provider)throw new TypeError('Unknown provider.');
   const width=720,height=280,stride=width*3+1,raw=Buffer.alloc(height*stride);
@@ -86,7 +88,7 @@ function card(providerKey,severity='info') {
   for(let i=0;i<3;i++)rect(65,70+i*24,70-i*12,10,[255,255,255]);
   function text(value,x,y,scale,color){for(const letter of value){const glyph=FONT[letter]||FONT[' '];glyph.forEach((row,yy)=>[...row].forEach((p,xx)=>{if(p==='1')rect(x+xx*scale,y+yy*scale,scale,scale,color);}));x+=(glyph[0].length+1)*scale;}}
   text(provider.name,190,58,9,[245,248,255]);
-  text(severity==='critical'?'NEEDS REVIEW':severity==='warning'?'WARNING':'UPDATE',190,148,4,accent);
+  text(providerKey==='support'?'SUPPORT':severity==='critical'?'NEEDS REVIEW':severity==='warning'?'WARNING':'UPDATE',190,148,4,accent);
   rect(45,219,630,2,[46,57,77]);text('MY AI PA',45,239,3,[153,171,199]);
   const header=Buffer.alloc(13);header.writeUInt32BE(width);header.writeUInt32BE(height,4);header[8]=8;header[9]=2;
   return Buffer.concat([Buffer.from([137,80,78,71,13,10,26,10]),chunk('IHDR',header),chunk('IDAT',zlib.deflateSync(raw)),chunk('IEND',Buffer.alloc(0))]);
