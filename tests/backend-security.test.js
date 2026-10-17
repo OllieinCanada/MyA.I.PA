@@ -135,6 +135,29 @@ test('missing-assistant repair requires admin authentication and a signed provis
   assert.match((await response.json()).error,/signed provisioning/);
 });
 
+test("cached forwarding test requests return Gone without looking up a customer or creating a call attempt", async () => {
+  const oldLookup = prisma.callForwardingSetup.findUnique;
+  const oldCreate = prisma.forwardingVerificationAttempt.create;
+  let touched = 0;
+  const forbidden = async () => { touched += 1; throw new Error("Retired callback route must not touch setup records"); };
+  prisma.callForwardingSetup.findUnique = forbidden;
+  prisma.forwardingVerificationAttempt.create = forbidden;
+  try {
+    for (const headers of [{}, { authorization: "Forwarding stale-customer-token" }]) {
+      const response = await request("/api/forwarding/setup/verify", { method: "POST", body: {}, headers });
+      assert.equal(response.status, 410);
+      const data = await response.json();
+      assert.equal(data.ok, false);
+      assert.equal(data.code, "FORWARDING_TEST_CALLS_DISABLED");
+      assert.match(data.error, /will not call you/);
+    }
+    assert.equal(touched, 0);
+  } finally {
+    prisma.callForwardingSetup.findUnique = oldLookup;
+    prisma.forwardingVerificationAttempt.create = oldCreate;
+  }
+});
+
 test("health endpoint remains public and carries baseline security headers", async () => {
   const response = await request("/api/health");
   assert.equal(response.status, 200);

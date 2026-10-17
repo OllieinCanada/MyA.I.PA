@@ -131,8 +131,6 @@ services:
         sync: false
       - key: TWILIO_FROM_NUMBER
         sync: false
-      - key: FORWARDING_VERIFICATION_CALLER_ID
-        sync: false
       - key: FORWARDING_VERIFICATION_STATUS_CALLBACK_URL
         value: https://api.myaipa.ca/api/webhooks/twilio/forwarding-verification-status
       - key: FORWARDING_SETUP_SECRET

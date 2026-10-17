@@ -78,11 +78,11 @@ test('phone type alone enables safe manual instructions but never marks forwardi
  setup=await updateSelections({prismaClient:prisma,setup,carrier:'not_sure',lineType:'mobile'});
  assert.equal(setup.status,'MANUAL_SETUP_REQUIRED');assert.equal(setup.forwardingVerifiedAt,null);
  assert.equal(sanitizeSetup(setup).rule.activationDialString,'');
- const result=await startVerification({prismaClient:prisma,setup,verificationCallerNumber:'+12895550000',statusCallbackUrl:'https://example.test/callback',placeCall:async()=>({sid:'CA-fixture'})});
- assert.equal(result.setup.status,'VERIFICATION_PENDING');assert.equal(result.setup.forwardingVerifiedAt,null);
+ await assert.rejects(()=>startVerification({prismaClient:prisma,setup,placeCall:async()=>assert.fail('No callback allowed')}),error=>error.code==='FORWARDING_TEST_CALLS_DISABLED');
+ assert.equal(setup.status,'MANUAL_SETUP_REQUIRED');assert.equal(setup.forwardingVerifiedAt,null);
 });
 
-test("provisioning, carrier selection, dialer launch, and verification are idempotent", async () => {
+test("self-service setup stays unverified; historical verification callbacks remain idempotent", async () => {
   const { prisma, db } = memoryPrisma();
   let setup = await initializeForwardingSetup({ prismaClient: prisma, signupId: "signup-1", ownerEmail: "owner@example.ca", existingBusinessNumber: "+19055550123", assignedMyAiPaNumber: "+12895550199", vapiPhoneNumberId: "vapi-phone-1", carrier: "not_sure", lineType: "not_sure" });
   assert.equal(setup.status, "CARRIER_NEEDED");
@@ -93,11 +93,11 @@ test("provisioning, carrier selection, dialer launch, and verification are idemp
   setup = await markDialerOpened({ prismaClient: prisma, setup });
   assert.equal(setup.status, "DIALER_OPENED");
 
-  const placed = [];
-  const first = await startVerification({ prismaClient: prisma, setup, verificationCallerNumber: "+12895550000", statusCallbackUrl: "https://api.example.ca/callback", placeCall: async (input) => { placed.push(input); return { sid: "CA-1" }; } });
-  const second = await startVerification({ prismaClient: prisma, setup: first.setup, verificationCallerNumber: "+12895550000", statusCallbackUrl: "https://api.example.ca/callback", placeCall: async () => { throw new Error("must not run"); } });
-  assert.equal(placed.length, 1);
-  assert.equal(second.duplicate, true);
+  assert.equal(setup.forwardingVerifiedAt, null);
+  assert.equal(db.attempts.length, 0);
+  // Historical rows can still receive delayed callbacks, without starting calls.
+  db.setup.status = "VERIFICATION_PENDING";
+  db.attempts.push({ id: "legacy-attempt", setupId: setup.id, status: "PENDING", startedAt: new Date(), expiresAt: new Date(Date.now() + 60000), verificationCallerNumber: "+12895550000", expectedDestination: "+12895550199", outboundCallSid: "CA-1" });
 
   const answered = await applyVerificationStatusCallback({ prismaClient: prisma, callSid: "CA-1", callStatus: "in-progress", answeredBy: "human" });
   assert.equal(answered.status, "ANSWERED");
@@ -117,17 +117,18 @@ test("verification timeout becomes a useful failure without corrupting the setup
   const token = createSetupToken(db.setup, env);
   const failed = await getSetupFromToken({ prismaClient: prisma, token, env });
   assert.equal(failed.status, "VERIFICATION_FAILED");
-  assert.match(failed.lastFailureReason, /didn't receive/i);
+  assert.match(failed.lastFailureReason, /will not call you/i);
   assert.equal(db.attempts[0].status, "EXPIRED");
 });
 
-test("an answered test call tells the customer to leave the next call unanswered", async () => {
+test("an expired historical test directs the customer to self-service without inviting another callback", async () => {
   const { prisma, db } = memoryPrisma();
   const setup = await initializeForwardingSetup({ prismaClient: prisma, signupId: "signup-answered", ownerEmail: "answered@example.ca", existingBusinessNumber: "+19055550127", assignedMyAiPaNumber: "+12895550195", carrier: "rogers", lineType: "mobile" });
   db.setup.status = "VERIFICATION_PENDING";
   db.attempts.push({ id: "attempt-answered", setupId: setup.id, status: "ANSWERED", startedAt: new Date(Date.now() - 200000), expiresAt: new Date(Date.now() - 1000), verificationCallerNumber: "+12895550000", expectedDestination: "+12895550195" });
   const failed = await getSetupFromToken({ prismaClient: prisma, token: createSetupToken(db.setup, env), env });
-  assert.match(failed.lastFailureReason, /answered before it could forward/i);
+  assert.match(failed.lastFailureReason, /Follow your setup instructions/);
+  assert.doesNotMatch(failed.lastFailureReason, /Try again|next call/i);
   assert.equal(db.events.at(-1).metadata.reason, "answered_before_forwarding");
 });
 
@@ -144,11 +145,14 @@ test("duplicate provisioning preserves a verified setup when the assigned number
   assert.equal(first.signupKey, replay.signupKey);
 });
 
-test("verification call provider failure is recorded and can be retried", async () => {
+test("every setup state refuses new test calls without provider requests or database changes", async () => {
   const { prisma, db } = memoryPrisma();
   const setup = await initializeForwardingSetup({ prismaClient: prisma, signupId: "signup-3", ownerEmail: "three@example.ca", existingBusinessNumber: "+19055550125", assignedMyAiPaNumber: "+12895550197", carrier: "rogers", lineType: "mobile" });
-  await assert.rejects(() => startVerification({ prismaClient: prisma, setup, verificationCallerNumber: "+12895550000", statusCallbackUrl: "https://api.example.ca/callback", placeCall: async () => { throw Object.assign(new Error("Twilio unavailable"), { code: "TWILIO_DOWN" }); } }), /Twilio unavailable/);
-  assert.equal(db.setup.status, "VERIFICATION_FAILED");
-  assert.equal(db.attempts[0].status, "FAILED");
-  assert.equal(db.events.some((event) => event.eventType === "verification_failed"), true);
+  const before = JSON.stringify(db);
+  for (const status of ["NOT_STARTED", "CARRIER_NEEDED", "READY_TO_ACTIVATE", "DIALER_OPENED", "VERIFICATION_PENDING", "ACTIVE", "VERIFICATION_FAILED", "MANUAL_SETUP_REQUIRED"]) {
+    for (let replay = 0; replay < 2; replay += 1) {
+      await assert.rejects(() => startVerification({ prismaClient: prisma, setup: { ...setup, status }, placeCall: async () => assert.fail("Must never call the customer") }), error => error.statusCode === 410 && error.code === "FORWARDING_TEST_CALLS_DISABLED");
+    }
+  }
+  assert.equal(JSON.stringify(db), before);
 });

@@ -1,6 +1,7 @@
 const crypto = require("crypto");
 const jwt = require("jsonwebtoken");
 const { normalizeSmsPhone } = require("./smsSuppression");
+const { forwardingTestCallsDisabledError } = require("./twilioCallVerification");
 const {
   SETUP_VERSION,
   normalizeCarrier,
@@ -185,9 +186,7 @@ async function getSetupFromToken({ prismaClient, token, env = process.env }) {
   if (setup.status === "VERIFICATION_PENDING") {
     const attempt = await prismaClient.forwardingVerificationAttempt.findFirst({ where: { setupId: setup.id, status: { in: ["PENDING", "RINGING", "ANSWERED"] } }, orderBy: { startedAt: "desc" } });
     if (attempt && attempt.expiresAt <= new Date()) {
-      const customerMessage = attempt.status === "ANSWERED"
-        ? "The test call was answered before it could forward. Try again and let the business phone ring without answering."
-        : "We didn't receive the forwarded call yet.";
+      const customerMessage = "The old automatic test has ended. Follow your setup instructions and wait for your carrier’s confirmation. My AI PA will not call you to test forwarding.";
       await prismaClient.forwardingVerificationAttempt.update({ where: { id: attempt.id }, data: { status: "EXPIRED", completedAt: new Date(), resultDetail: "No forwarded call arrived before timeout." } });
       const failed = await prismaClient.callForwardingSetup.update({ where: { id: setup.id }, data: { status: "VERIFICATION_FAILED", lastFailureReason: customerMessage } });
       await recordEvent(prismaClient, setup.id, "verification_failed", { attemptId: attempt.id, reason: attempt.status === "ANSWERED" ? "answered_before_forwarding" : "timeout" }, `${setup.id}:verification_failed:${attempt.id}`);
@@ -218,31 +217,9 @@ async function markDialerOpened({ prismaClient, setup }) {
   return updated;
 }
 
-async function startVerification({ prismaClient, setup, verificationCallerNumber, placeCall, statusCallbackUrl, now = new Date() }) {
-  if (["NOT_STARTED", "CARRIER_NEEDED"].includes(setup.status)) {
-    throw forwardingError("Choose your phone type before testing.", 409, "FORWARDING_SELECTIONS_REQUIRED");
-  }
-  const since = new Date(now.getTime() - 60 * 60 * 1000);
-  const recent = await prismaClient.forwardingVerificationAttempt.count({ where: { setupId: setup.id, startedAt: { gte: since } } });
-  if (recent >= 5) throw forwardingError("Too many test calls were requested. Wait an hour and try again.", 429, "FORWARDING_VERIFY_RATE_LIMIT");
-  const activeAttempt = await prismaClient.forwardingVerificationAttempt.findFirst({ where: { setupId: setup.id, status: { in: ["PENDING", "RINGING", "ANSWERED"] }, expiresAt: { gt: now } }, orderBy: { startedAt: "desc" } });
-  if (activeAttempt) return { setup, attempt: activeAttempt, duplicate: true };
-  const caller = normalizeSmsPhone(verificationCallerNumber, "verificationCallerNumber");
-  const attempt = await prismaClient.forwardingVerificationAttempt.create({ data: { setupId: setup.id, verificationCallerNumber: caller, expectedDestination: setup.assignedMyAiPaNumber, expiresAt: new Date(now.getTime() + 180_000) } });
-  try {
-    const call = await placeCall({ to: setup.existingBusinessNumber, from: caller, statusCallbackUrl, attemptId: attempt.id });
-    const [updatedAttempt, updatedSetup] = await prismaClient.$transaction([
-      prismaClient.forwardingVerificationAttempt.update({ where: { id: attempt.id }, data: { outboundCallSid: call.sid } }),
-      prismaClient.callForwardingSetup.update({ where: { id: setup.id }, data: { status: "VERIFICATION_PENDING", verificationAttempts: { increment: 1 }, lastFailureReason: null } }),
-    ]);
-    await recordEvent(prismaClient, setup.id, "verification_started", { attemptId: attempt.id }, `${setup.id}:verification_started:${attempt.id}`);
-    return { setup: updatedSetup, attempt: updatedAttempt, duplicate: false };
-  } catch (error) {
-    await prismaClient.forwardingVerificationAttempt.update({ where: { id: attempt.id }, data: { status: "FAILED", completedAt: new Date(), resultDetail: String(error.code || error.message).slice(0, 240) } });
-    await prismaClient.callForwardingSetup.update({ where: { id: setup.id }, data: { status: "VERIFICATION_FAILED", lastFailureReason: "The test call could not be started. Try again shortly." } });
-    await recordEvent(prismaClient, setup.id, "verification_failed", { attemptId: attempt.id, reason: "provider_call_failed" }, `${setup.id}:verification_failed:${attempt.id}`);
-    throw error;
-  }
+async function startVerification() {
+  // Compatibility guard for old internal callers. No DB writes or call jobs.
+  throw forwardingTestCallsDisabledError();
 }
 
 async function matchForwardedVerificationCall({ prismaClient, from, destination, phoneNumberId, vapiCallId }) {

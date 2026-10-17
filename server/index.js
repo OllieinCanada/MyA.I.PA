@@ -234,10 +234,9 @@ const {
   matchForwardedVerificationCall,
   recordEvent: recordForwardingEvent,
   sanitizeSetup: sanitizeForwardingSetup,
-  startVerification: startForwardingVerification,
   updateSelections: updateForwardingSelections,
 } = require("./callForwardingService");
-const { placeForwardingVerificationCall } = require("./twilioCallVerification");
+const { FORWARDING_TEST_CALLS_DISABLED } = require("./twilioCallVerification");
 const {
   buildTrialReminderSchedule,
   buildTrialPaymentCheckoutParams,
@@ -611,7 +610,6 @@ const MISSED_CALL_ALERT_ENABLED = isEnabled(process.env.MISSED_CALL_ALERT_ENABLE
 const DAILY_DIGEST_ENABLED = isEnabled(process.env.DAILY_DIGEST_ENABLED);
 const FRONTEND_APP_URL = String(process.env.FRONTEND_APP_URL || "https://www.myaipa.ca").trim().replace(/\/+$/, "");
 const CUSTOMER_SUPPORT_PHONE = normalizePhoneForMatch(process.env.CUSTOMER_SUPPORT_PHONE || "+12495033301") || "+12495033301";
-const FORWARDING_VERIFICATION_CALLER_ID = normalizePhoneForMatch(process.env.FORWARDING_VERIFICATION_CALLER_ID || process.env.TWILIO_FROM_NUMBER || "");
 const FORWARDING_VERIFICATION_STATUS_CALLBACK_URL = String(
   process.env.FORWARDING_VERIFICATION_STATUS_CALLBACK_URL
   || `${String(process.env.PUBLIC_API_BASE_URL || process.env.BACKEND_PUBLIC_URL || process.env.PUBLIC_APP_URL || "").replace(/\/+$/, "")}/api/webhooks/twilio/forwarding-verification-status`
@@ -15718,28 +15716,9 @@ app.post(
 app.post(
   "/api/forwarding/setup/verify",
   enforcePublicRouteRateLimit("forwarding-verification", 10),
-  asyncRoute(async (req, res) => {
-    const { setup } = await requireForwardingSetup(req);
-    if (!FORWARDING_VERIFICATION_CALLER_ID || !/^https:\/\//i.test(FORWARDING_VERIFICATION_STATUS_CALLBACK_URL)) {
-      return res.status(503).json({
-        error: "Automatic testing is not configured yet. Your forwarding settings were not changed. Please use the manual test instructions or contact support.",
-        code: "FORWARDING_VERIFICATION_NOT_CONFIGURED",
-      });
-    }
-    const result = await startForwardingVerification({
-      prismaClient: prisma,
-      setup,
-      verificationCallerNumber: FORWARDING_VERIFICATION_CALLER_ID,
-      statusCallbackUrl: FORWARDING_VERIFICATION_STATUS_CALLBACK_URL,
-      placeCall: (input) => placeForwardingVerificationCall({ ...input }),
-    });
-    res.status(result.duplicate ? 200 : 202).json({
-      ok: true,
-      duplicate: result.duplicate,
-      forwarding: sanitizeForwardingSetup(result.setup),
-      attempt: { id: result.attempt.id, status: String(result.attempt.status).toLowerCase(), expiresAt: result.attempt.expiresAt },
-    });
-  })
+  // Cached clients receive a clear retirement response without accessing setup
+  // records, creating an attempt, or contacting an outbound calling provider.
+  (_req, res) => res.status(410).json(FORWARDING_TEST_CALLS_DISABLED)
 );
 
 app.post(
