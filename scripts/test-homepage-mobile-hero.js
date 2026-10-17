@@ -32,6 +32,7 @@ async function main() {
         };
         return { header: rect('.simple-header'), burst: rect('.simple-contractor-burst'), trial: rect('.simple-hero-actions .simple-primary'), sample: rect('.simple-hero-actions .simple-secondary'), overflow: document.documentElement.scrollWidth > innerWidth };
       });
+      console.log(JSON.stringify({ viewport, layout }));
       assert.equal(layout.overflow, false);
       if (viewport.width === 390) {
         assert.ok(Math.abs(layout.burst.top - layout.header.bottom) < 5, 'Graphic must meet the header');
