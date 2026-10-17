@@ -53,7 +53,7 @@ test("TELUS and Rogers share verified activation but retain their different disa
   assert.equal(telus.deactivationDialString, "#61#");
   assert.equal(rogers.deactivationDialString, "##61#");
   assert.equal(telus.timing.exactThreeRingsSupported, false);
-  assert.match(telus.humanInstructions.join(" "), /test/i);
+  assert.match(telus.humanInstructions.join(" "), /will not call you automatically/i);
   assert.match(telus.source, /telus\.com/i);
 });
 
@@ -80,6 +80,19 @@ test("normalizes signup choices and validates the forwarding destination", () =>
   assert.equal(normalizeLineType("cloud phone"), "VOIP");
   assert.equal(encodeDialStringToTelUri("##61#"), "tel:%23%2361%23");
   assert.throws(() => resolveForwardingRule({ carrier: "rogers", lineType: "mobile", destination: "123" }), /E\.164/);
+});
+
+test('the requested destination becomes exactly ten digits, with an encoded hash in the phone link',()=>{
+ const rule=resolveForwardingRule({carrier:'rogers',lineType:'mobile',destination:'+1 (289) 312-2922'});
+ assert.equal(rule.activationDialString,'*61*2893122922#');
+ assert.equal(rule.activationTelUri,'tel:*61*2893122922%23');
+ const other=resolveForwardingRule({carrier:'rogers',lineType:'mobile',destination:'+12895550123'});
+ assert.equal(other.activationDialString,'*61*2895550123#');
+ assert.doesNotMatch(other.activationDialString,/3122922/);
+ const fixture=require('../src/forwardingDialerFixture.json');
+ const fixtureRule=resolveForwardingRule({carrier:'rogers',lineType:'mobile',destination:'+12895550199'});
+ assert.equal(fixture.activationDialString,fixtureRule.activationDialString);
+ assert.equal(fixture.activationTelUri,fixtureRule.activationTelUri);
 });
 
 test("carrier service codes remain centralized outside frontend components", () => {

@@ -31,6 +31,24 @@ test("signup alert is actionable without customer contact details", () => {
   assert.doesNotMatch(text, /private@example\.com|9055550123/);
 });
 
+test("customer signup support has a distinct card, safe message and exact reference", async () => {
+  const { card } = require('../server/providerNotifications');
+  const input = { state: 'support_requested', businessName: 'Example Electrical', eventKey: `signup_${'a'.repeat(32)}`,
+    supportDescription: 'Please help with setup. token=private-value customer@example.com',
+    adminUrl: 'https://www.myaipa.ca/#/admin?tab=signups' };
+  const text = buildSignupTelegramAlert(input);
+  assert.match(text, /CUSTOMER SUPPORT/);
+  assert.match(text, /Message preview: Please help with setup/);
+  assert.match(text, /Reference: aaaaaaaaaa/);
+  assert.doesNotMatch(text, /private-value|customer@example.com|VERIFICATION TEXT/);
+  await sendSignupTelegramAlert(input, { token: 'fixture', chatId: 'fixture', fetchImpl: async (url, options) => {
+    assert.match(url, /sendPhoto$/);
+    assert.ok(options.body.get('caption').length < 1024);
+    assert.deepEqual(Buffer.from(await options.body.get('photo').arrayBuffer()), card('support'));
+    return new Response(JSON.stringify({ ok: true, result: { message_id: 100 } }));
+  } });
+});
+
 test("signup alert sends one Telegram message through the injected client", async () => {
   const calls = [];
   const result = await sendSignupTelegramAlert({

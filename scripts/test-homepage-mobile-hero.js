@@ -26,11 +26,26 @@ async function main() {
       await page.locator('.simple-contractor-burst').waitFor();
       const readableLabels = await page.evaluate(() => ({
         introducing: parseFloat(getComputedStyle(document.querySelector('.simple-intro span')).fontSize),
+        assistantDescription: parseFloat(getComputedStyle(document.querySelector('.simple-intro em')).fontSize),
         explanation: parseFloat(getComputedStyle(document.querySelector('.simple-hero-flow > p')).fontSize),
+        trialDetails: parseFloat(getComputedStyle(document.querySelector('.simple-trust')).fontSize),
         firstStep: document.querySelector('.simple-hero-flow li').textContent,
       }));
       assert.ok(readableLabels.introducing >= 16, 'Introducing must remain readable');
+      assert.ok(readableLabels.assistantDescription >= 16, 'Assistant description must remain readable');
       assert.ok(readableLabels.explanation >= 16, 'Hero explanation must remain readable');
+      assert.ok(readableLabels.trialDetails >= 16, 'Trial details must remain readable');
+      assert.equal(await page.locator('.simple-trust > span').count(), 3);
+      const contractorMark = page.locator('.simple-canadian-proof-mark');
+      assert.equal(await contractorMark.locator('svg').count(), 1, 'Show contractor tools');
+      assert.ok(await contractorMark.locator('img').evaluate((img) => img.complete && img.naturalWidth > 0), 'Canadian flag must load');
+      const introLayout = await page.locator('.simple-intro').evaluate((intro) => {
+        const brand = intro.querySelector('strong').getBoundingClientRect();
+        const description = intro.querySelector('em').getBoundingClientRect();
+        return { besideBrand: description.left >= brand.right, descriptionOverflow: intro.querySelector('em').scrollWidth > description.width + 1 };
+      });
+      assert.ok(introLayout.besideBrand, 'Keep assistant description beside My AI PA');
+      assert.equal(introLayout.descriptionOverflow, false, 'Assistant description must not overflow');
       assert.match(readableLabels.firstStep, /AnswersAfter a few rings/i);
       await page.screenshot({ path: path.join(output, `${viewport.width}-${viewport.height}.png`), animations: 'disabled' });
       const layout = await page.evaluate(() => {
@@ -52,6 +67,9 @@ async function main() {
         await page.locator('#why-it-matters').screenshot({ path: path.join(output, 'voicemail-desktop.png'), animations: 'disabled' });
       }
       console.log(`PASS ${viewport.width}x${viewport.height}: hero spacing and actions, no overflow.`);
+      await page.locator('.simple-trust').screenshot({ path: path.join(output, `trial-details-${viewport.width}-${viewport.height}.png`), animations: 'disabled' });
+      await page.locator('.simple-intro').screenshot({ path: path.join(output, `introduction-${viewport.width}-${viewport.height}.png`), animations: 'disabled' });
+      await page.locator('.simple-canadian-proof').screenshot({ path: path.join(output, `contractors-${viewport.width}-${viewport.height}.png`), animations: 'disabled' });
       await page.close();
     }
   } finally { await browser.close(); }

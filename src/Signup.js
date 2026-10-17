@@ -1688,7 +1688,11 @@ export function SignupSuccessPage({ result: initialResult, onStartAnother }) {
 
   const requestSignupSupport = async () => {
     const access = result?.signupStatus;
-    if (!access?.id || !access?.token || supportDescription.trim().length < 8) return;
+    if (!supportDescription.trim()) return;
+    if (!access?.id || !access?.token) {
+      setSupportState("Reopen your verification link to send this request, or call support. Your signup is still saved.");
+      return;
+    }
     setSupportState("sending");
     try {
       const response = await fetch(`${API_BASE}${access.pollUrl || `/api/signup/status/${encodeURIComponent(access.id)}`}/support`, {
@@ -2045,7 +2049,7 @@ export function SignupSuccessPage({ result: initialResult, onStartAnother }) {
                   placeholder="Example: I completed signup, but I am not sure what happens next."
                   className="mt-4 min-h-[110px] w-full rounded-2xl border border-amber-200 bg-white p-4 text-base font-semibold text-slate-900 outline-none focus:border-amber-500 focus:ring-4 focus:ring-amber-100"
                 />
-                <button type="button" onClick={requestSignupSupport} disabled={supportDescription.trim().length < 8 || supportState === "sending"} className="mt-3 inline-flex min-h-[48px] items-center justify-center rounded-xl bg-[#07142a] px-5 text-base font-black text-white disabled:opacity-50">
+                <button type="button" onClick={requestSignupSupport} disabled={!supportDescription.trim() || supportState === "sending"} className="mt-3 inline-flex min-h-[48px] items-center justify-center rounded-xl bg-[#07142a] px-5 text-base font-black text-white disabled:opacity-50">
                   {supportState === "sending" ? "Sending…" : "Send signup support request"}
                 </button>
                 {supportState && supportState !== "sending" ? <p className="mt-3 text-sm font-bold text-slate-700" role="status">{supportState}</p> : null}

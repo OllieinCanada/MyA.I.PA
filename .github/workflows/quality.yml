@@ -114,6 +114,7 @@ jobs:
           npm run test:signup-pricing-choices
           npm run test:signup-footer-layout
           npm run test:homepage-mobile-hero
+          npm run test:forwarding:browser
           npm run preview:signup-verification-progress
 
       - name: Save signup browser evidence
@@ -127,6 +128,7 @@ jobs:
             diagnostics/verification-progress/
             diagnostics/signup-footer/
             diagnostics/homepage-hero/
+            diagnostics/forwarding-onboarding/
           if-no-files-found: ignore
 
       - name: Archive verified Pages output

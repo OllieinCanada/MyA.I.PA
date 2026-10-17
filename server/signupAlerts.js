@@ -209,6 +209,16 @@ function buildSignupIncidentInput(input = {}) {
 
 function buildSignupUpdateAlert(input = {}) {
   const context = signupContext(input);
+  if (input.state === "support_requested") {
+    const reference = /^signup_[a-f0-9]{32}$/i.test(String(input.eventKey || "")) ? String(input.eventKey).slice(-10) : "unknown";
+    return [
+      "🛟 MY AI PA — CUSTOMER SUPPORT",
+      `Business: ${safeLabel(context.businessName, "Name unavailable", 100)}`,
+      `Message preview: ${safeLabel(input.supportDescription || input.record?.pilotSupportDescription, "Open the saved signup for the message.", 150)}`,
+      "Next: Open signup support, read the full message and help the customer.",
+      `Reference: ${reference}`,
+    ].join("\n");
+  }
   const delivery = input.record?.smsVerificationDeliveryStatus || "pending";
   const verificationStatus = delivery === "delivered"
     ? context.verified ? "Carrier confirmed delivery. Contact verified."
@@ -276,7 +286,7 @@ async function sendSignupTelegramAlert(input, { token, chatId, fetchImpl = fetch
   const form = new FormData();
   form.append('chat_id', String(chatId).trim());
   form.append('caption', buildSignupUpdateAlert(input));
-  form.append('photo', new Blob([card('signup', input?.record?.reviewRequired || input?.record?.status === 'review_required' || input?.record?.smsVerificationDeliveryStatus === 'failed' ? 'warning' : 'info')], { type: 'image/png' }), 'signup-alert.png');
+  form.append('photo', new Blob([input?.state === 'support_requested' ? card('support') : card('signup', input?.record?.reviewRequired || input?.record?.status === 'review_required' || input?.record?.smsVerificationDeliveryStatus === 'failed' ? 'warning' : 'info')], { type: 'image/png' }), 'signup-alert.png');
   const keyboard = replyMarkup?.inline_keyboard ? replyMarkup : adminUrl ? {
     inline_keyboard: [[{ text: "Open signup dashboard", url: adminUrl }]],
   } : null;

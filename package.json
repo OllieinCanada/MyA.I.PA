@@ -28,6 +28,7 @@
     "backend:check": "node scripts/check-backend-deploy.js",
     "test:forwarding": "node --test tests/call-forwarding-provider.test.js tests/call-forwarding-security.test.js tests/call-forwarding-lifecycle.test.js tests/forwarding-instructions.test.js tests/forwarding-ui-contract.test.js tests/twilio-call-verification.test.js",
     "test:forwarding:ui": "node scripts/test-forwarding-ui.js",
+    "test:forwarding:browser": "node scripts/test-forwarding-onboarding.js",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",

@@ -26,6 +26,16 @@ test('older queued recovery walls become cards without repeating technical parag
   assert.doesNotMatch(text, /Customer work was not retried/); // Not recorded in this fixture.
 });
 
+test('queued customer support retains its dedicated header, message and reference', async () => {
+  const { card } = require('../server/providerNotifications');
+  const text = '🛟 MY AI PA — CUSTOMER SUPPORT\nBusiness: Example Electrical\nMessage preview: test\nNext: Open signup support.\nReference: aaaaaaaaaa';
+  const request = noticeRequest(text, { chatId: 'fixture' });
+  assert.equal(noticeStyle(text).provider, 'support');
+  assert.match(request.body.get('caption'), /Message preview: test/);
+  assert.match(request.body.get('caption'), /Reference: aaaaaaaaaa/);
+  assert.deepEqual(Buffer.from(await request.body.get('photo').arrayBuffer()), card('support'));
+});
+
 test('a long action is never clipped into an incomplete instruction', () => {
   const text = compactNotice(`🔴 MY AI PA — CRITICAL\nNext: ${'Long instruction '.repeat(100)}do not create another number.`);
   assert.match(text, /Next: Open details before retrying or changing live resources\./);
