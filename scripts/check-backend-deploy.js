@@ -108,7 +108,11 @@ expectIncludes("prisma/schema.prisma", "model WebhookReplayClaim");
 expectIncludes("config/backend.env.example", "TWILIO_WEBHOOK_STAGING_ENABLED=false");
 expectIncludes("config/backend.env.example", "TWILIO_WEBHOOK_OAUTH_SIGNING_SECRET=");
 expectIncludes("render.yaml", "FORWARDING_SETUP_SECRET");
-expectIncludes("render.yaml", "FORWARDING_VERIFICATION_CALLER_ID");
+expectIncludes("server/twilioCallVerification.js", 'code: "FORWARDING_TEST_CALLS_DISABLED"');
+expectIncludes("server/index.js", 'res.status(410).json(FORWARDING_TEST_CALLS_DISABLED)');
+if (/Calls\.json|fetchImpl|calls\.create/.test(readText("server/twilioCallVerification.js"))) {
+  fail("The retired forwarding-call adapter must not send outbound calls.");
+}
 expectIncludes("render.yaml", "SIGNUP_STATUS_SECRET");
 expectIncludes("server/index.js", '"/api/forwarding/setup/verify"');
 expectIncludes("server/index.js", '"/api/webhooks/twilio/forwarding-verification-status"');
