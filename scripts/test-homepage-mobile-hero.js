@@ -24,6 +24,14 @@ async function main() {
       });
       await page.goto('http://127.0.0.1:3219/', { waitUntil: 'domcontentloaded' });
       await page.locator('.simple-contractor-burst').waitFor();
+      const readableLabels = await page.evaluate(() => ({
+        introducing: parseFloat(getComputedStyle(document.querySelector('.simple-intro span')).fontSize),
+        explanation: parseFloat(getComputedStyle(document.querySelector('.simple-hero-flow > p')).fontSize),
+        firstStep: document.querySelector('.simple-hero-flow li').textContent,
+      }));
+      assert.ok(readableLabels.introducing >= 16, 'Introducing must remain readable');
+      assert.ok(readableLabels.explanation >= 16, 'Hero explanation must remain readable');
+      assert.match(readableLabels.firstStep, /AnswersAfter a few rings/i);
       await page.screenshot({ path: path.join(output, `${viewport.width}-${viewport.height}.png`), animations: 'disabled' });
       const layout = await page.evaluate(() => {
         const rect = (selector) => {

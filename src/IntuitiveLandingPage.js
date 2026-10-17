@@ -113,7 +113,7 @@ function SectionHeading({ number, eyebrow, title, body }) {
 
 function HeroActionFlow() {
   const steps = [
-    { icon: "phone", label: "Answers", detail: "After 3 rings" },
+    { icon: "phone", label: "Answers", detail: "After a few rings" },
     { icon: "chat", label: "Talks naturally", detail: "To get job details" },
     { icon: "message", label: "Follows up", detail: "Texts you and the caller" },
   ];

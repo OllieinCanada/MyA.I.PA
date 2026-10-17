@@ -45,7 +45,7 @@ describe("intuitive homepage journey", () => {
     expect(text).toMatch(/Test privately before going live/i);
     expect(text).toMatch(/Three simple steps/i);
     expect(text).toMatch(/Your customer has a problem\. They want to talk to someone now/i);
-    expect(text).toMatch(/AnswersAfter 3 rings/i);
+    expect(text).toMatch(/AnswersAfter a few rings/i);
     expect(text).toMatch(/Talks naturallyTo get job details/i);
     expect(text).toMatch(/Follows upTexts you and the caller/i);
     expect(container.querySelectorAll(".simple-hero-flow-icon")).toHaveLength(3);
