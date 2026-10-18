@@ -26,4 +26,17 @@ async function resolveSignupResume({ attempt, records, loadAttempt, verified = f
   return { attempt: canonical, record: target, resumed: true };
 }
 
-module.exports = { resolveSignupResume };
+function resumedSignupStatus(target, state) {
+  if (!target.resumed) return state;
+  const record = target.record;
+  const paused = ['paused','canceled','cancelled','unpaid','incomplete_expired'].includes(String(record.subscriptionStatus || '').toLowerCase());
+  const failed = record.reviewRequired || /error|failed|review/i.test(String(record.status || ''));
+  const incomplete = state.state === 'ready' && (record.twilioPhoneNumber !== state.assignedPhone || !record.vapiAssistantId || !record.vapiPhoneNumberId);
+  if (paused || failed || incomplete) return { ...state, state:'needs_attention', assignedPhone:'', terminal:false,
+    title:paused?'Your existing service is paused.':'Your existing setup needs attention.',
+    message:paused?'Your existing setup is saved. Contact support about service status. No new trial was started.':'Your existing signup is saved, but its setup checks are not complete. Our team needs to check it—do not sign up again.' };
+  return state.state === 'ready' ? { ...state, title:'Welcome back. Your My AI PA number is ready.',
+    message:'We reopened your existing setup. Your number and trial are unchanged; setup texts were not resent.' } : state;
+}
+
+module.exports = { resolveSignupResume, resumedSignupStatus };

@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { resolveSignupResume } = require('../server/signupResume');
+const { resolveSignupResume, resumedSignupStatus } = require('../server/signupResume');
 const sourceId = `signup_${'a'.repeat(32)}`, targetId = `signup_${'b'.repeat(32)}`;
 function fixture() {
   const identity = { businessName: 'Fixture Electrical', ownerEmail: 'owner@example.invalid', ownerPhone: '+19055550123' };
@@ -33,4 +33,15 @@ test('ordinary attempts stay bound to themselves without another-owner lookup', 
   const f=fixture(); delete f.records[0].canonicalSignupAttemptId;
   f.loadAttempt=()=>{throw Error('must not look up');};
   assert.equal((await resolveSignupResume(f)).attempt,f.attempt);
+});
+
+test('resuming cannot turn paused billing, a saved failure or an inconsistent ready record into success', () => {
+  const state={state:'ready',assignedPhone:'+12895550199',terminal:true};
+  const record={status:'setup_ready',subscriptionStatus:'trialing',twilioPhoneNumber:state.assignedPhone,vapiAssistantId:'fixture',vapiPhoneNumberId:'fixture'};
+  assert.match(resumedSignupStatus({resumed:true,record},state).title,/Welcome back/);
+  for(const change of [{subscriptionStatus:'paused'},{status:'setup_error'},{reviewRequired:true},{twilioPhoneNumber:'+12895550198'},{vapiAssistantId:''}]) {
+    const result=resumedSignupStatus({resumed:true,record:{...record,...change}},state);
+    assert.equal(result.state,'needs_attention');assert.equal(result.assignedPhone,'');assert.equal(result.terminal,false);
+  }
+  assert.equal(resumedSignupStatus({resumed:false,record:{}},state),state);
 });

@@ -7,7 +7,7 @@ if (process.env.DISABLE_LOCAL_ENV_FILES !== "1") {
 const crypto = require("crypto");
 const { signupReviewPolicy } = require("./signupReviewPolicy");
 const { buildSignupProgress } = require("./signupProgress");
-const { resolveSignupResume } = require("./signupResume");
+const { resolveSignupResume, resumedSignupStatus } = require("./signupResume");
 const { buildTwilioImportRequest } = require('./vapiTwilioImportRequest');
 const { providerFailureDetail } = require("./providerFailureDetail");
 const { configuredCaptchaProvider, verifySignupCaptcha } = require("./signupCaptcha");
@@ -14657,9 +14657,8 @@ async function readVerificationProgress(pending, channel = "sms") {
     return { state: "needs_attention", title: "We need to check your existing setup.", message: "We could not safely match this link to an open business setup. Contact support—do not sign up again.", terminal: false, assignedPhone: "" };
   }
   attempt = target.attempt;
-  let state=signupAttempts.publicAttempt(attempt);
+  let state=resumedSignupStatus(target, signupAttempts.publicAttempt(attempt));
   const saved=target.record;
-  if (target.resumed && state.state === "ready") state = { ...state, title: "Welcome back. Your My AI PA number is ready.", message: "We reopened your existing setup. No new number, texts or trial were created." };
   const receipts = {};
   if (attempt.ownerEmail && attempt.ownerPhone && attempt.businessName) {
     const key = buildProvisioningAccountKey(attempt.ownerEmail, attempt.ownerPhone, attempt.businessName);
@@ -14714,7 +14713,7 @@ app.get(
       if (error.code !== "SIGNUP_RESUME_OWNERSHIP_UNCONFIRMED") throw error;
       return res.json({ ok: true, signup: { state: "needs_attention", title: "We need to check your existing setup.", message: "Contact support—do not sign up again.", terminal: false, assignedPhone: "" } });
     }
-    res.json({ ok: true, signup: signupAttempts.publicAttempt(target.attempt) });
+    res.json({ ok: true, signup: resumedSignupStatus(target, signupAttempts.publicAttempt(target.attempt)) });
   })
 );
 
