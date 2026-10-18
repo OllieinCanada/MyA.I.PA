@@ -1842,13 +1842,15 @@ export function SignupSuccessPage({ result: initialResult, onStartAnother }) {
             <h1 className="mt-2 text-[clamp(2.1rem,8vw,4.6rem)] font-black leading-tight tracking-[-0.055em]">
               {assignedNumber && !reviewRequired && !verificationRequired && !signupClosed ? `Welcome aboard, ${businessName}!` : `Thanks, ${businessName}.`}
             </h1>
-            <p className="mt-3 max-w-3xl text-base font-medium leading-7 text-blue-50 sm:text-xl sm:leading-8">
+            <p className={verificationRequired && !signupClosed
+              ? "mt-5 max-w-3xl text-[clamp(1.5rem,4vw,2.25rem)] font-black leading-snug text-white"
+              : "mt-3 max-w-3xl text-base font-medium leading-7 text-blue-50 sm:text-xl sm:leading-8"}>
               {signupClosed
                 ? result.signupStatus.message
                 : verificationRequired
-                ? "Open the verification link in your text messages to continue. No text yet? Check delivery below."
+                ? "Open the verification link in your text messages to continue"
                 : reviewRequired
-                ? "Your signup is saved. Final safety checks are underway, and this page checks automatically. You do not need to submit it again."
+                ? "Your signup is saved. Your setup needs attention and our team has been notified. Keep this page to check progress—no need to sign up again."
                 : assignedNumber
                   ? "Your AI phone assistant is ready for testing. Your forwarding number is below."
                   : provisioningFailed
@@ -1857,6 +1859,7 @@ export function SignupSuccessPage({ result: initialResult, onStartAnother }) {
             </p>
           </div>
 
+          {!verificationRequired || signupClosed ? <>
           <div className="grid gap-5 p-5 sm:p-8 lg:grid-cols-[1.18fr_0.82fr]">
             <div className="rounded-3xl border border-blue-200 bg-[linear-gradient(180deg,#f7fbff,#edf5ff)] p-5 shadow-[0_30px_80px_-60px_rgba(37,99,235,0.9)] sm:p-7">
               <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1892,10 +1895,10 @@ export function SignupSuccessPage({ result: initialResult, onStartAnother }) {
               ) : reviewRequired ? (
                 <div className="mt-5">
                   <p className="text-[1.28rem] font-black leading-tight tracking-[-0.03em] text-[#07142a]">
-                    Final safety checks are underway.
+                    Your setup needs attention.
                   </p>
                   <p className="mt-3 text-sm font-semibold leading-6 text-slate-500">
-                    No number has been assigned yet. We will continue this exact signup after approval; submitting it again is not necessary.
+                    We will continue this exact signup once the setup problem is resolved. Submitting it again is not necessary.
                   </p>
                   <button type="button" onClick={() => refreshSignupStatus()} disabled={statusBusy} className="mt-5 inline-flex min-h-[52px] items-center justify-center rounded-xl border border-blue-200 bg-white px-5 text-base font-black text-blue-700 transition hover:border-blue-400 hover:bg-blue-50 disabled:opacity-60">
                     {statusBusy ? "Checking…" : "Check setup status"}
@@ -2075,6 +2078,7 @@ export function SignupSuccessPage({ result: initialResult, onStartAnother }) {
               </button>
             </div>
           </div>
+          </> : null}
         </div>
       </section>
     </main>

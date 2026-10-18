@@ -2,13 +2,15 @@
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
 const {chromium}=require('playwright');
 const {verificationProgressMarkup,verificationProgressScript}=require('../server/signupVerificationProgress');
+const {buildSignupProgress}=require('../server/signupProgress');
 async function main(){
  const bundled='C:/Users/Olive/AppData/Local/ms-playwright/chromium-1234/chrome-win64/chrome.exe';
  const browser=await chromium.launch({headless:true,timeout:20000,executablePath:fs.existsSync(bundled)?bundled:undefined,args:['--disable-gpu','--disable-dev-shm-usage']});
  const out=path.resolve('diagnostics/verification-progress');fs.mkdirSync(out,{recursive:true});
  try{
   for(const width of [390,1440]){
-   let state={state:'processing',title:'Setting up your assistant',message:'Your phone is verified. We are preparing your AI number and assistant.'};
+   const progress = buildSignupProgress({contactVerified:true,receipts:{'twilio-number':{status:'completed',result:{twilioPhoneNumber:'+12895550199'}},'vapi-assistant':{status:'completed',result:{assistantId:'offline-fixture'}}}});
+   let state={state:'processing',title:'We’re setting up your assistant.',message:'Your phone is verified. We’re preparing your assistant and assigning your My AI PA number.',progress};
    const page=await browser.newPage({viewport:{width,height:900},reducedMotion:'reduce'});page.setDefaultTimeout(10000);
    const errors=[];page.on('pageerror',e=>errors.push(e.message));
    await page.route('**/*',route=>{
@@ -18,8 +20,9 @@ async function main(){
     return route.fulfill({contentType:'text/html; charset=utf-8',body:'<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;padding:20px;box-sizing:border-box;background:#f2f7ff;font:18px Arial;color:#07142a}main{max-width:680px;margin:30px auto;background:white;padding:24px;box-sizing:border-box;border-radius:24px}h1{font-size:32px}p{line-height:1.5}</style><main><h1 id="verification-title">Setting up your assistant</h1><p id="verification-description"></p>'+verificationProgressMarkup()+'</main>'+verificationProgressScript('/progress')});
    });
    await page.goto('http://127.0.0.1/preview',{waitUntil:'domcontentloaded'});
-   await page.getByText('Step 2 of 3 · Preparing your assistant',{exact:true}).waitFor();
-   assert.equal(await page.locator('#signup-progress-steps li[data-status="done"]').count(),1);
+   await page.getByText('Checking your assistant’s business answers',{exact:true}).waitFor();
+   assert.equal(await page.locator('#signup-progress-steps li').count(),10);
+   assert.equal(await page.locator('#signup-progress-steps li[data-status="done"]').count(),3);
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
    await page.screenshot({path:path.join(out,'working-'+width+'.png'),fullPage:true});
    state={state:'needs_attention',title:'Setup needs attention',message:'Your signup is saved. Our team has been notified. Do not sign up again.'};

@@ -1516,7 +1516,7 @@ test("browser error intake collapses untrusted routes and types to safe alert gr
   assert.equal(__test.normalizeClientErrorRoute("/attacker/can/vary/this"), "/");
 });
 
-test("voice signup preserves the production manual-approval hold", () => {
+test("legacy voice approval settings remain advisory flags for Telegram, not an approval hold", () => {
   assert.deepEqual(
     __test.getVoiceSignupReviewReasons({ SIGNUP_REQUIRE_MANUAL_APPROVAL: "true" }),
     ["manual_approval_enabled"]

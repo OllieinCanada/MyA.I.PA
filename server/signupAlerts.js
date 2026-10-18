@@ -209,6 +209,18 @@ function buildSignupIncidentInput(input = {}) {
 
 function buildSignupUpdateAlert(input = {}) {
   const context = signupContext(input);
+  if (input.state === "signup_flagged") {
+    const reasons = input.record?.reviewReasons || input.payload?.security?.reviewReasons || [];
+    const labels = { manual_approval_enabled: "Legacy approval setting (no hold)", submitted_too_fast: "Form completed unusually quickly", duplicate_submission: "Repeat submission detected", disposable_email: "Temporary email domain" };
+    return [
+      "⚑ MY AI PA — SIGNUP FLAGGED — SETUP CONTINUES",
+      `Business: ${safeLabel(context.businessName, "Name unavailable", 100)}`,
+      `Flags: ${reasons.map(reason => safeLabel(labels[reason] || reason, "Intake signal", 80)).join(", ") || "Intake signal"}`,
+      "No approval needed. Phone verification and automated setup checks still apply.",
+      "Duplicate protection remains active; a flag does not authorize another number or subscription.",
+      `Reference: ${String(input.eventKey || "").slice(-10) || "unknown"}`,
+    ].join("\n");
+  }
   if (input.state === "support_requested") {
     const reference = /^signup_[a-f0-9]{32}$/i.test(String(input.eventKey || "")) ? String(input.eventKey).slice(-10) : "unknown";
     return [

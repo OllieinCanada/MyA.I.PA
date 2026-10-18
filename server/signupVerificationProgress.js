@@ -1,4 +1,6 @@
+const { buildSignupProgress } = require('./signupProgress');
 function verificationProgressMarkup() {
+  const steps = buildSignupProgress().steps;
   return `<section id="signup-progress-panel" aria-label="Your setup progress">
     <style>
       #signup-progress-panel{margin:24px 0;padding:20px;border:1px solid #bfdbfe;border-radius:20px;background:#eff6ff}
@@ -7,7 +9,7 @@ function verificationProgressMarkup() {
       #signup-progress-fill{height:100%;width:8%;background:#2563eb;border-radius:20px;transition:width .4s ease;position:relative;overflow:hidden}
       #signup-progress-panel[data-active="true"] #signup-progress-fill:after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,#ffffff90,transparent);animation:setup-working 1.6s linear infinite}
       #signup-progress-steps{list-style:none;padding:0;margin:16px 0 0;display:grid;gap:10px}
-      #signup-progress-steps li{display:flex;gap:10px;align-items:center;font-size:15px;color:#475569}
+      #signup-progress-steps li{display:flex;gap:10px;align-items:center;font-size:16px;line-height:1.5;color:#475569}
       #signup-progress-steps li:before{content:"○";font-weight:900;color:#64748b}
       #signup-progress-steps li[data-status="done"]:before{content:"✓";color:#15803d}
       #signup-progress-steps li[data-status="current"]{font-weight:700;color:#1d4ed8}
@@ -17,8 +19,8 @@ function verificationProgressMarkup() {
       @media(prefers-reduced-motion:reduce){#signup-progress-panel *{animation:none!important;transition:none!important}}
     </style>
     <p id="signup-progress-label" role="status" aria-live="polite">Checking your phone verification…</p>
-    <div class="setup-track" role="progressbar" aria-label="Signup setup" aria-valuemin="0" aria-valuemax="3" aria-valuetext="Checking phone verification" id="signup-progress-bar"><div id="signup-progress-fill"></div></div>
-    <ol id="signup-progress-steps"><li data-status="current">Phone verified</li><li>Preparing your assistant</li><li>Your number is ready</li></ol>
+    <div class="setup-track" role="progressbar" aria-label="Signup setup" aria-valuemin="0" aria-valuemax="${steps.length}" aria-valuetext="Checking phone verification" id="signup-progress-bar"><div id="signup-progress-fill"></div></div>
+    <ol id="signup-progress-steps">${steps.map((step, index) => `<li data-status="${index === 0 ? 'current' : 'pending'}">${step.label}</li>`).join('')}</ol>
     <p id="signup-progress-note">This page updates automatically. You can reopen the same text link—no need to sign up again.</p>
   </section>`;
 }
@@ -27,19 +29,28 @@ function verificationProgressMarkup() {
 function verificationProgressScript(url, { awaitConfirmation = false } = {}) {
   return `<script>(()=>{
     const endpoint=${JSON.stringify(url).replace(/</g,'\\u003c')};
+    const initial=${JSON.stringify(buildSignupProgress().steps).replace(/</g,'\\u003c')};
     let busy=false,finished=false,started=${!awaitConfirmation},seenStatus=false,confirmed=${!awaitConfirmation};
+    let lastProgress=null;
     const panel=document.getElementById("signup-progress-panel"),bar=document.getElementById("signup-progress-bar"),fill=document.getElementById("signup-progress-fill"),label=document.getElementById("signup-progress-label");
     function show(s){
       if(!panel)return;
+      const hasProgress=Array.isArray(s.progress?.steps)&&s.progress.steps.length===initial.length;
+      if(hasProgress)lastProgress=s.progress;
       const ready=s.state==="ready"&&/^\\+1\\d{10}$/.test(s.assignedPhone||"");
       const paused=["needs_attention","closed","connection_lost","expired","final_checks"].includes(s.state);
       const verifying=s.state==="verification_required"||s.state==="confirming";
-      const step=ready?3:verifying||!confirmed?0:1;
-      const text=ready?"Your number is ready":s.state==="connection_lost"?"Reconnecting—your signup is saved":s.state==="expired"?"Progress link expired—contact support":s.state==="closed"?"This signup is closed":s.state==="needs_attention"?"Setup needs attention":s.state==="final_checks"?"Waiting for a setup review":verifying?"Checking your phone verification…":"Step 2 of 3 · Preparing your assistant";
-      panel.dataset.active=String(!paused&&!ready);fill.style.width=(ready?100:step===0?8:33)+"%";
+      const progress=hasProgress?s.progress:lastProgress;
+      const steps=progress?.steps||initial.map((item,i)=>({...item,status:ready?"done":confirmed&&!verifying&&i===0?"done":i===(confirmed&&!verifying?1:0)?"current":"pending"}));
+      const done=steps.filter(step=>step.status==="done").length;
+      const current=steps.find(step=>step.status==="current");
+      const text=ready?"Your number is ready":s.state==="connection_lost"?"Reconnecting—your signup is saved":s.state==="expired"?"Progress link expired—contact support":s.state==="closed"?"This signup is closed":s.state==="needs_attention"||s.state==="final_checks"?"Setup needs attention":verifying?"Checking your phone verification…":current?.working||"Preparing your assistant";
+      panel.dataset.active=String(!paused&&!ready);fill.style.width=(ready&&done===steps.length?100:Math.min(99,Math.max(4,100*done/steps.length)))+"%";
       label.textContent=text;bar.setAttribute("aria-valuetext",text);
-      if(ready)bar.setAttribute("aria-valuenow","3");else bar.removeAttribute("aria-valuenow");
-      panel.querySelectorAll("li").forEach((item,i)=>{item.dataset.status=ready||i<step?"done":i===step?"current":"pending";});
+      bar.setAttribute("aria-valuemax",String(steps.length));
+      if(hasProgress||ready)bar.setAttribute("aria-valuenow",String(done));else bar.removeAttribute("aria-valuenow");
+      const list=document.getElementById("signup-progress-steps");
+      list.replaceChildren(...steps.map(step=>{const li=document.createElement("li");li.textContent=String(step.label);li.dataset.status=["done","current","pending"].includes(step.status)?step.status:"pending";if(li.dataset.status==="current")li.setAttribute("aria-current","step");return li;}));
     }
     show({state:started?"processing":"confirming"});
     async function refresh(){

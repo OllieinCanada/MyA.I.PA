@@ -6,6 +6,15 @@ const {
   sendSignupTelegramAlert,
 } = require("../server/signupAlerts");
 
+test('advisory signup flags explicitly continue setup without asking for approval', () => {
+  const text = buildSignupTelegramAlert({ state: 'signup_flagged', businessName: 'Fixture Electrical', eventKey: `signup_${'a'.repeat(32)}`,
+    record: { reviewReasons: ['submitted_too_fast', 'duplicate_submission'] } });
+  assert.match(text, /SIGNUP FLAGGED — SETUP CONTINUES/);
+  assert.match(text, /Form completed unusually quickly/);
+  assert.match(text, /No approval needed/);
+  assert.doesNotMatch(text, /paused|waiting for manual|Approve signup/);
+});
+
 test("signup alert is actionable without customer contact details", () => {
   const text = buildSignupTelegramAlert({
     businessName: "Example Electrical",

@@ -94,15 +94,15 @@ function customerStatus(record = {}) {
   if (record.reviewRequired || /review/i.test(status)) {
     return {
       state: "final_checks",
-      title: "Final safety checks are underway.",
-      message: "You do not need to resubmit anything. We will continue this signup from where it stopped.",
+      title: "Your setup needs attention.",
+      message: "Your signup is saved. Our team has been notified. Keep this link to check progress—do not sign up again.",
       assignedPhone: "",
       terminal: false,
     };
   }
   return {
     state: "processing",
-    title: "We are preparing your assistant.",
+    title: "We’re setting up your assistant.",
     message: "This page checks automatically. Do not submit another signup.",
     assignedPhone: "",
     terminal: false,

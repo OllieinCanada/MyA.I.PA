@@ -12,14 +12,16 @@ Object.assign(process.env, {
   SECURITY_STATE_FORCE_DATABASE: "false",
   SIGNUP_STATUS_SECRET: "local-status-api-test-secret-at-least-32-characters",
   ADMIN_SESSION_SECRET: "local-verification-confirmation-test-secret",
-  SIGNUP_REQUIRE_MANUAL_APPROVAL: "true", SIGNUP_REQUIRE_VERIFICATION: "false",
+  // An obsolete true approval setting must not hold new applications.
+  SIGNUP_REQUIRE_MANUAL_APPROVAL: "true", SIGNUP_REQUIRE_VERIFICATION: "true",
+  SIGNUP_VERIFICATION_BASE_URL: "https://api.myaipa.test",
   CAPTCHA_PROVIDER: "turnstile", TURNSTILE_SECRET_KEY: "synthetic-api-captcha-secret", RECAPTCHA_SECRET_KEY: "",
   CAPTCHA_ALLOWED_HOSTNAMES: "www.myaipa.ca",
   // This file exercises several CAPTCHA rejection cases from one loopback IP.
   // Dedicated rate-limit tests cover production thresholds separately.
   SIGNUP_IP_MAX_REQUESTS: "20",
   TELEGRAM_BOT_TOKEN: "", TELEGRAM_CHAT_ID: "",
-  TWILIO_ACCOUNT_SID: "", TWILIO_AUTH_TOKEN: "", TWILIO_API_KEY_SID: "", TWILIO_API_KEY_SECRET: "",
+  TWILIO_ACCOUNT_SID: "ACsynthetic", TWILIO_AUTH_TOKEN: "synthetic-secret", TWILIO_FROM_NUMBER: "+12895550100", TWILIO_API_KEY_SID: "", TWILIO_API_KEY_SECRET: "",
   VAPI_API_KEY: "", STRIPE_SECRET_KEY: "",
   SMTP_HOST: "", SMTP_USER: "", SMTP_PASS: "",
   TRIAL_REMINDER_DISABLE: "true", VAPI_AUTO_SYNC_ENABLED: "false",
@@ -29,6 +31,7 @@ Object.assign(process.env, {
 const { prisma } = require("../server/prisma");
 const rows = new Map();
 const pendingRows = new Map();
+prisma.smsSuppression.findUnique = async () => null;
 prisma.$transaction = async (callback) => callback(prisma);
 prisma.pendingSignupVerification.create = async ({ data }) => {
   const row = { ...data, usedAt: null, supersededAt: null, claimedAt: null };
@@ -115,6 +118,9 @@ let second;
 before(async () => {
   // Refuse every external request, even if an unexpected credential is present.
   global.fetch = (url, options) => {
+    if (String(url).startsWith('https://api.twilio.com/') && String(url).endsWith('/Messages.json') && options?.method === 'POST') {
+      return Promise.resolve(new Response(JSON.stringify({ sid: `SM${'a'.repeat(32)}`, status: 'delivered' }), { status: 201, headers: { 'content-type': 'application/json' } }));
+    }
     if (["https://challenges.cloudflare.com/turnstile/v0/siteverify", "https://www.google.com/recaptcha/api/siteverify"].includes(String(url))) {
       const google = new URL(url).hostname === "www.google.com";
       assert.equal(options.body.get("secret"), google ? "synthetic-api-google-secret" : "synthetic-api-captcha-secret");
@@ -259,7 +265,8 @@ test("web signup, pending verification, and dashboard share one server-owned ide
   const signup = await postSignup();
   assert.equal(signup.status, 202, await signup.clone().text());
   const result = await signup.json();
-  assert.equal(result.reviewRequired, true);
+  assert.notEqual(result.reviewRequired, true);
+  assert.equal(result.verificationRequired, true);
   const access = { id: result.signupStatus.id, token: result.signupStatus.token };
   const attempt = await store.authenticate(access.id, access.token);
   assert.ok(attempt);
@@ -274,7 +281,9 @@ test("web signup, pending verification, and dashboard share one server-owned ide
   const dashboard = JSON.parse(fs.readFileSync(path.join(temporaryData, "signup-dashboard.json"), "utf8"));
   const records = Array.isArray(dashboard) ? dashboard : dashboard.items || dashboard.records || Object.values(dashboard);
   assert.ok(records.some((row) => row.signupAttemptId === attempt.eventKey));
-  assert.equal((await (await request(access)).json()).signup.state, "final_checks");
+  assert.equal((await (await request(access)).json()).signup.state, "verification_required");
+  assert.equal(attempt.reviewRequired, false);
+  assert.ok(attempt.reviewReasons.includes('manual_approval_enabled'));
 
   const repeatedSignup = await postSignup();
   assert.equal(repeatedSignup.status, 202, await repeatedSignup.clone().text());
@@ -323,7 +332,7 @@ test("link previews are read-only and only explicit confirmation advances a save
   };
   const { buildMakeSignupEventKey } = require("../server/makeSignupWebhook");
   const attempt = await store.register({ eventKey: buildMakeSignupEventKey(payload), payload, status: "pending_email_verification" });
-  const token = await pendingStore.create({ payload, ownerEmail: payload.owner.email, businessName: payload.business.name, reviewReasons: ["manual_approval_enabled"], ttlMs: 3600000 });
+  const token = await pendingStore.create({ payload, ownerEmail: payload.owner.email, businessName: payload.business.name, reviewReasons: ["provider_ownership_conflict"], ttlMs: 3600000 });
   const verificationUrl = `${baseUrl}/api/integrations/verify-signup-contact?token=${encodeURIComponent(token)}`;
   const beforePreview = JSON.stringify([...pendingRows.values()]);
   const beforeAttempt = JSON.stringify(rows.get(attempt.record.eventKey));
@@ -363,7 +372,7 @@ test("link previews are read-only and only explicit confirmation advances a save
   assert.equal(verified.status, 200, await verified.clone().text());
   assert.match(await verified.text(), /Contact verified/);
   const status = (await (await request(attempt.access)).json()).signup;
-  assert.equal(status.state, "final_checks");
+  assert.equal(status.state, "needs_attention");
   assert.equal(status.assignedPhone, "");
   const pending = [...pendingRows.values()].find((row) => row.ownerEmail === payload.owner.email);
   assert.ok(pending.verifiedAt);
@@ -379,7 +388,7 @@ test("a delayed completion cannot reopen an archived signup through its real sta
   assert.equal(status.stage, "closed");
 });
 
-test("SMS confirmation preserves its channel and expired links cannot display a confirm button", async () => {
+test("SMS confirmation continues past routine approval flags, preserves its channel and rejects expired links", async () => {
   const { createPendingSignupVerificationStore } = require("../server/pendingSignupVerifications");
   const { createVerificationChannelProof } = require("../server/signupVerificationChannel");
   const pendingStore = createPendingSignupVerificationStore({ prisma });
@@ -398,11 +407,16 @@ test("SMS confirmation preserves its channel and expired links cannot display a 
   for (const [, name, value] of html.matchAll(/<input type="hidden" name="([^"]+)" value="([^"]*)"/g)) form.set(name, value);
   form.set("confirmation", "VERIFY_AND_CONTINUE");
   const verified = await fetch(`${baseUrl}/api/integrations/verify-signup-contact`, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: form.toString() });
-  assert.equal(verified.status, 200, await verified.clone().text());
-  await verified.text();
+  // This isolated suite has no Make configuration. Continuing must reach the
+  // real provisioning-failure path, not stop at the obsolete approval flag.
+  assert.equal(verified.status, 400, await verified.clone().text());
+  const resultHtml = await verified.text();
+  assert.doesNotMatch(resultHtml, /manual review|Waiting for a setup review/);
   const record = pendingRows.get(pendingStore.tokenHash(token));
   assert.equal(record.payload.verification.smsVerified, true);
   assert.equal(record.payload.verification.emailVerified, false);
+  assert.equal(record.payload.security.reviewRequired, false);
+  assert.deepEqual(record.reviewReasons, ['provisioning_unreachable']);
   record.expiresAt = new Date(Date.now() - 1000);
   const expired = await fetch(url);
   assert.equal(expired.status, 400);
