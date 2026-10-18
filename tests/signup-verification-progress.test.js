@@ -3,6 +3,34 @@ const assert=require('node:assert/strict');
 const {JSDOM}=require('jsdom');
 const {verificationProgressScript,verificationProgressMarkup}=require('../server/signupVerificationProgress');
 const tick=()=>new Promise(r=>setTimeout(r,25));
+
+test('normal polling fits its server budget and 429 backs off, including visibility changes',async()=>{
+  let poll,interval,now=100000,reads=0;
+  const dom=new JSDOM('<main><h1 id="verification-title"></h1><p id="verification-description"></p>'+verificationProgressMarkup()+'</main>'+verificationProgressScript('/progress'),{
+    runScripts:'dangerously',pretendToBeVisual:true,beforeParse(w){
+      w.Date.now=()=>now; w.setInterval=(fn,ms)=>{poll=fn;interval=ms;return 1;};
+      w.fetch=async()=>{reads++;return reads===1?{ok:false,status:429,headers:{get:()=> '60'}}:{ok:true,json:async()=>({signup:{state:'processing',title:'Setting up',message:'Saved progress'}})};};
+    }
+  });
+  try{
+    await tick(); assert.equal(interval,15000); assert.ok(900000/interval<120); assert.equal(reads,1);
+    for(let n=0;n<10;n++){await poll();dom.window.document.dispatchEvent(new dom.window.Event('visibilitychange'));}
+    assert.equal(reads,1); now+=59000; await poll(); assert.equal(reads,1);
+    now+=1000; await poll(); assert.equal(reads,2); assert.equal(dom.window.document.querySelector('#verification-title').textContent,'Setting up');
+  }finally{dom.window.close();}
+});
+
+test('a lost confirmation response keeps GET progress alive without another confirmation POST',async()=>{
+  const {verificationPageClientScript}=require('../server/signupVerificationPageClient');
+  let poll,posts=0,gets=0;
+  const dom=new JSDOM('<main><h1 id="verification-title"></h1><p id="verification-description"></p><p id="setup-progress" hidden></p><form id="signup-verification-form" action="/confirm"><input name="token" value="fixture"><button>Confirm</button></form>'+verificationProgressMarkup()+'</main>'+verificationProgressScript('/progress',{awaitConfirmation:true})+verificationPageClientScript({automaticSmsConfirmation:true}),{
+    url:'https://api.myaipa.test/',runScripts:'dangerously',pretendToBeVisual:true,beforeParse(w){w.setInterval=fn=>{poll=fn;return 1;};w.fetch=async(_url,options)=>{
+      if(options.method==='POST'){posts++;throw Error('lost response');}gets++;return{ok:true,json:async()=>({signup:{state:'processing',title:'Saved setup is continuing',message:'No second signup needed'}})};
+    };}
+  });
+  try{await tick();await poll();assert.equal(posts,1);assert.equal(gets,1);assert.equal(dom.window.document.querySelector('#verification-title').textContent,'Saved setup is continuing');}
+  finally{dom.window.close();}
+});
 test('progress polling is read-only and shows a safe problem without inventing a number',async()=>{
   const calls=[];
   const dom=new JSDOM('<main><h1 id="verification-title"></h1><p id="verification-description"></p></main>'+verificationProgressScript('/api/signup/verification-progress?token=synthetic'),{

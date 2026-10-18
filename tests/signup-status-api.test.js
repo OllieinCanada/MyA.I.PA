@@ -154,6 +154,77 @@ after(async () => {
   fs.rmSync(temporaryData, { recursive: true, force: true });
 });
 
+test('verified duplicate POST and old links reopen the existing setup without replaying providers, billing or texts', async () => {
+  const { createPendingSignupVerificationStore } = require('../server/pendingSignupVerifications');
+  const { createVerificationChannelProof } = require('../server/signupVerificationChannel');
+  const { buildMakeSignupEventKey } = require('../server/makeSignupWebhook');
+  const { normalizeSignupProvisioningPayload } = require('../server/signupProvisioning');
+  const { contextStoreKey } = require('../server/signupProvisioningContext');
+  const { signupBusinessKey } = require('../server/signupBusinessIdentity');
+  const { signupKeyFor } = require('../server/callForwardingService');
+  const oldEnv = { url: process.env.MAKE_SIGNUP_WEBHOOK_URL, signing: process.env.PROVISIONING_SIGNING_SECRET, forwarding: process.env.FORWARDING_SETUP_SECRET };
+  const oldRuntime = prisma.runtimeStore.findUnique, oldSetup = prisma.callForwardingSetup.findUnique, oldQuery = prisma.$queryRaw;
+  prisma.$queryRaw = async () => [];
+  const file = path.join(temporaryData, 'signup-dashboard.json');
+  const originalDashboard = fs.existsSync(file) ? fs.readFileSync(file,'utf8') : '{}';
+  process.env.MAKE_SIGNUP_WEBHOOK_URL = 'https://hook.us1.make.com/never-send-fixture';
+  process.env.PROVISIONING_SIGNING_SECRET = 'synthetic-resume-signing-secret-at-least-32';
+  process.env.FORWARDING_SETUP_SECRET = 'synthetic-forwarding-signing-secret-at-least-32';
+  try {
+    const base = { business: { name: 'Existing Fixture Electric', phone: '+19055550144', address: '1 Test Street, Hamilton, ON' },
+      owner: { email: 'existing-fixture@example.invalid', phone: '+19055550144' }, verification: { smsVerified: true } };
+    const canonicalPayload = normalizeSignupProvisioningPayload({ ...base, signupId: 'canonical-fixture' }, { signingSecret: process.env.PROVISIONING_SIGNING_SECRET });
+    const canonicalId = buildMakeSignupEventKey(canonicalPayload), businessKey = signupBusinessKey(base);
+    const identity = { businessName: base.business.name, ownerEmail: base.owner.email, ownerPhone: base.owner.phone, businessPhone: base.business.phone };
+    const canonical = await store.register({ ...identity, eventKey: canonicalId, payload: canonicalPayload });
+    await store.update(canonicalId, { status:'setup_ready', stage:'ready', assignedPhone:'+12895550199', vapiAssistantId:'fixture-assistant', reviewRequired:false });
+    const sourcePayload = { ...base, signupId: 'new-verified-duplicate-fixture', verification: {} };
+    const sourceId = buildMakeSignupEventKey(sourcePayload);
+    await store.register({ ...identity, eventKey:sourceId, payload:sourcePayload });
+    const saved = { ...identity, signupAttemptId:canonicalId, status:'setup_ready', twilioPhoneNumber:'+12895550199',
+      vapiAssistantId:'fixture-assistant', vapiPhoneNumberId:'fixture-phone', provisioningBusinessKey:businessKey,
+      businessId:25, forwardingSetupId:'fixture-setup', identityVerified:true, smsVerified:true, subscriptionId:'existing-only', subscriptionStatus:'trialing' };
+    fs.writeFileSync(file, JSON.stringify({ ...JSON.parse(originalDashboard), [`attempt:${canonicalId}`]:saved,
+      [`attempt:${sourceId}`]:{...identity, signupAttemptId:sourceId, status:'pending_verification'} }));
+    const contextKey = contextStoreKey(canonicalPayload.provisioning.idempotencyKey);
+    prisma.runtimeStore.findUnique = async ({where}) => where.key === contextKey
+      ? { key:contextKey, data:{ contextHash:canonicalPayload.provisioning.contextHash, payload:canonicalPayload, lockedAt:'now' } } : null;
+    prisma.callForwardingSetup.findUnique = async ({where}) => where.id === 'fixture-setup' ? { id:where.id, businessId:25,
+      assignedMyAiPaNumber:'+12895550199', signupKey:signupKeyFor({signupId:canonicalId,ownerEmail:identity.ownerEmail,existingBusinessNumber:identity.businessPhone}) } : null;
+    const pending = createPendingSignupVerificationStore({prisma});
+    const token = await pending.create({ payload:sourcePayload, ownerEmail:identity.ownerEmail, businessName:identity.businessName });
+    const proof = createVerificationChannelProof(token,'sms',process.env.ADMIN_SESSION_SECRET);
+    const query = new URLSearchParams({token,channel:'sms',channelProof:proof});
+    const url = `${baseUrl}/api/integrations/verify-signup-contact?${query}`;
+    const preview = await (await fetch(url)).text();
+    assert.doesNotMatch(preview,/555-0199/);
+    const form = new URLSearchParams([...preview.matchAll(/<input[^>]+name="([^"]+)"[^>]+value="([^"]*)"/g)].map(m=>[m[1],m[2]]));
+    const response = await fetch(`${baseUrl}/api/integrations/verify-signup-contact`,{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body:form.toString()});
+    const html = await response.text();
+    assert.equal(response.status,200,JSON.stringify(rows.get(sourceId))); assert.match(html,/Welcome back/); assert.match(html,/555-0199/);
+    assert.match(html,/#\/f\//); assert.doesNotMatch(html,/signup-verification-form/);
+    const beforeRows = JSON.stringify([...rows.values()]), beforeDashboard = fs.readFileSync(file,'utf8');
+    for(let n=0;n<2;n++) {
+      const page=await(await fetch(url)).text(); assert.match(page,/555-0199/);
+      const progress=await(await fetch(`${baseUrl}/api/signup/verification-progress?${query}`)).json();
+      assert.equal(progress.signup.state,'ready'); assert.equal(progress.signup.assignedPhone,'+12895550199');
+    }
+    assert.equal(JSON.stringify([...rows.values()]),beforeRows); assert.equal(fs.readFileSync(file,'utf8'),beforeDashboard);
+    assert.equal(rows.get(sourceId).status,'superseded_duplicate'); assert.equal(rows.get(canonicalId).status,'setup_ready');
+    assert.equal(canonical.record.eventKey,canonicalId);
+    for(const status of ['provisioning','setup_error','archived']) {
+      rows.set(canonicalId,{...rows.get(canonicalId),status,assignedPhone:'',stage:status==='setup_error'?'needs_attention':'provisioning'});
+      const progress=await(await fetch(`${baseUrl}/api/signup/verification-progress?${query}`)).json();
+      assert.equal(progress.signup.assignedPhone,''); assert.equal(progress.signup.state,status==='provisioning'?'processing':'needs_attention');
+    }
+  } finally {
+    fs.writeFileSync(file,originalDashboard); prisma.runtimeStore.findUnique=oldRuntime; prisma.callForwardingSetup.findUnique=oldSetup; prisma.$queryRaw=oldQuery;
+    for(const [key,value] of Object.entries({MAKE_SIGNUP_WEBHOOK_URL:oldEnv.url,PROVISIONING_SIGNING_SECRET:oldEnv.signing,FORWARDING_SETUP_SECRET:oldEnv.forwarding})) {
+      if(value===undefined)delete process.env[key]; else process.env[key]=value;
+    }
+  }
+});
+
 function request(access = first.access, options = {}) {
   const { suffix = "", token = access.token, ...rest } = options;
   return fetch(`${baseUrl}/api/signup/status/${access.id}${suffix}`, {

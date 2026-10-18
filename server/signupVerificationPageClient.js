@@ -26,15 +26,15 @@ function verificationPageClientScript({ automaticSmsConfirmation = false } = {})
           if (!(response.headers.get("content-type") || "").includes("text/html")) throw new Error("Setup response unavailable");
           const html = await response.text();
           const result = new DOMParser().parseFromString(html, "text/html");
-          if (!result.querySelector("main")) throw new Error("Setup page unavailable");
+          if (!result.querySelector("main #verification-title")) throw new Error("Setup page unavailable");
           // Server-rendered result, including Call/Copy/Continue, replaces this
           // page at the same URL. No numbers or tokens go into browser storage.
           document.open(); document.write(html); document.close();
         } catch (_) {
           document.dispatchEvent(new Event("signup-verification-problem"));
           progress.hidden = true;
-          document.getElementById("verification-title").textContent = "We couldn’t confirm setup yet";
-          document.getElementById("verification-description").textContent = "Your details are saved. Contact support to check this signup—don’t submit another one.";
+          document.getElementById("verification-title").textContent = "Checking your saved setup";
+          document.getElementById("verification-description").textContent = "The setup response was interrupted. We’re checking saved progress automatically—don’t submit another signup.";
           form.hidden = true;
           const support = document.getElementById("verification-support");
           if (support) support.hidden = false;

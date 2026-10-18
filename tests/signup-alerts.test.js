@@ -6,6 +6,15 @@ const {
   sendSignupTelegramAlert,
 } = require("../server/signupAlerts");
 
+test('missing resources cannot be announced as verified; resumed setups are distinct', () => {
+  const missing = buildSignupTelegramAlert({ state: 'provisioning_ready', record: { smsVerified: true } });
+  assert.doesNotMatch(missing, /SIGNUP SETUP VERIFIED|Phone and assistant checks passed/);
+  assert.match(missing, /STATUS NEEDS CHECKING/);
+  const resumed = buildSignupTelegramAlert({ state: 'existing_setup_resumed', record: { twilioPhoneNumber: '+12895550199', vapiAssistantId: 'fixture', subscriptionId: 'fixture' } });
+  assert.match(resumed, /EXISTING SETUP RESUMED/); assert.match(resumed, /No new resources, texts or trial/);
+  assert.match(resumed, /555-0199/); assert.match(resumed, /Assistant assigned: yes/);
+});
+
 test('advisory signup flags explicitly continue setup without asking for approval', () => {
   const text = buildSignupTelegramAlert({ state: 'signup_flagged', businessName: 'Fixture Electrical', eventKey: `signup_${'a'.repeat(32)}`,
     record: { reviewReasons: ['submitted_too_fast', 'duplicate_submission'] } });

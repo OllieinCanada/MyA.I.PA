@@ -31,7 +31,7 @@ function verificationProgressScript(url, { awaitConfirmation = false } = {}) {
     const endpoint=${JSON.stringify(url).replace(/</g,'\\u003c')};
     const initial=${JSON.stringify(buildSignupProgress().steps).replace(/</g,'\\u003c')};
     let busy=false,finished=false,started=${!awaitConfirmation},seenStatus=false,confirmed=${!awaitConfirmation};
-    let lastProgress=null;
+    let lastProgress=null,nextAllowedAt=0;
     const panel=document.getElementById("signup-progress-panel"),bar=document.getElementById("signup-progress-bar"),fill=document.getElementById("signup-progress-fill"),label=document.getElementById("signup-progress-label");
     function show(s){
       if(!panel)return;
@@ -54,12 +54,12 @@ function verificationProgressScript(url, { awaitConfirmation = false } = {}) {
     }
     show({state:started?"processing":"confirming"});
     async function refresh(){
-      if(!started||busy||finished||document.visibilityState!=="visible")return;
+      if(!started||busy||finished||Date.now()<nextAllowedAt||document.visibilityState!=="visible")return;
       busy=true;
       const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),10000);
       try{
         const r=await fetch(endpoint,{credentials:"same-origin",cache:"no-store",redirect:"error",signal:controller.signal});
-        if(!r.ok){const form=document.querySelector("form");if(r.status===410&&!seenStatus&&form&&!form.hidden)return;if(r.status===401||r.status===410){finished=true;show({state:"expired"});document.getElementById("verification-description").textContent="This link expired. Contact support—do not sign up again.";}else show({state:"connection_lost"});return;}
+        if(!r.ok){const form=document.querySelector("form");if(r.status===410&&!seenStatus&&form&&!form.hidden)return;if(r.status===429){const wait=Number(r.headers?.get("retry-after"));nextAllowedAt=Date.now()+Math.max(15000,Math.min(900000,(Number.isFinite(wait)&&wait>0?wait:60)*1000));show({state:"connection_lost"});document.getElementById("verification-description").textContent="Your signup is saved. Progress checks will resume automatically shortly—do not sign up again.";return;}if(r.status===401||r.status===410){finished=true;show({state:"expired"});document.getElementById("verification-description").textContent="This link expired. Contact support—do not sign up again.";}else show({state:"connection_lost"});return;}
         const data=await r.json(),s=data.signup;
         if(!s)return;
         seenStatus=true;confirmed=s.state!=="verification_required";show(s);
@@ -76,7 +76,8 @@ function verificationProgressScript(url, { awaitConfirmation = false } = {}) {
     document.addEventListener("visibilitychange",refresh);
     document.addEventListener("signup-verification-started",()=>{started=true;setTimeout(refresh,1000);});
     document.addEventListener("signup-verification-problem",()=>show({state:"connection_lost"}));
-    const timer=setInterval(refresh,5000);
+    // At most 60 regular checks per 15-minute window, below the 120 limit.
+    const timer=setInterval(refresh,15000);
     window.addEventListener("pagehide",()=>clearInterval(timer),{once:true});refresh();
   })();</script>`;
 }
