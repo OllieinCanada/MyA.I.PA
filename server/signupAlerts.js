@@ -241,20 +241,27 @@ function buildSignupUpdateAlert(input = {}) {
     received: "NEW SIGNUP RECEIVED",
     verification_sent: delivery === "delivered" ? "VERIFICATION TEXT DELIVERED"
       : delivery === "failed" ? "VERIFICATION TEXT FAILED" : "VERIFICATION TEXT PENDING",
-    provisioning_ready: "SIGNUP SETUP VERIFIED",
+    provisioning_ready: context.phoneAssigned && context.assistantAssigned ? "SIGNUP SETUP VERIFIED" : "SIGNUP STATUS NEEDS CHECKING",
+    existing_setup_resumed: "EXISTING SETUP RESUMED",
   };
   const eventKey = /^signup_[a-f0-9]{32}$/i.test(String(input.eventKey || ""))
     ? String(input.eventKey).slice(-10)
     : "unknown";
-  const status = input.state === "provisioning_ready"
-    ? "Phone and assistant checked. Texts and a call still need testing."
+  const status = input.state === "existing_setup_resumed"
+    ? "Verified repeat signup reopened the existing setup. No new resources, texts or trial were requested."
+    : input.state === "provisioning_ready"
+    ? context.phoneAssigned && context.assistantAssigned
+      ? "Phone and assistant checks passed. Text delivery and trial status must be checked separately."
+      : "The setup update is incomplete: an assigned number or assistant is missing. Do not assume setup succeeded."
     : input.state === "verification_sent"
       ? verificationStatus
       : input.record?.status === 'review_required' || input.record?.reviewRequired
         ? "Signup saved, but setup is paused for review."
         : "Signup saved. Setup is not confirmed ready yet.";
-  const next = input.state === "provisioning_ready"
-    ? "Confirm text delivery, trial activation and a test call."
+  const next = input.state === "existing_setup_resumed"
+    ? "Use the original setup and its saved progress. Do not create another signup."
+    : input.state === "provisioning_ready"
+    ? "Check saved text delivery and trial status. The customer sets up forwarding; no automatic test call."
     : input.state === "verification_sent"
       ? delivery === "delivered" ? "Check Messages or spam; tap Verify to continue."
         : delivery === "failed" ? "Check the delivery error; resend verification only."

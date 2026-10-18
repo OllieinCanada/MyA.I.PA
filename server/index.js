@@ -7,6 +7,7 @@ if (process.env.DISABLE_LOCAL_ENV_FILES !== "1") {
 const crypto = require("crypto");
 const { signupReviewPolicy } = require("./signupReviewPolicy");
 const { buildSignupProgress } = require("./signupProgress");
+const { resolveSignupResume, resumedSignupStatus } = require("./signupResume");
 const { buildTwilioImportRequest } = require('./vapiTwilioImportRequest');
 const { providerFailureDetail } = require("./providerFailureDetail");
 const { configuredCaptchaProvider, verifySignupCaptcha } = require("./signupCaptcha");
@@ -231,6 +232,8 @@ const {
   getSetupFromToken,
   initializeForwardingSetup,
   issueShortSetupToken,
+  createSetupToken,
+  signupKeyFor,
   isForwardingVerificationCall,
   markDialerOpened,
   matchForwardedVerificationCall,
@@ -10795,7 +10798,7 @@ function buildStripeSignupMakePayload(signupPayload, checkoutSession) {
   });
 }
 
-async function sendMakeSignupCompleted(payload) {
+async function sendMakeSignupCompleted(payload, { resumeExistingOnly = false } = {}) {
   const { url, apiKey } = getMakeSignupWebhookConfig();
   if (!url) {
     const err = new Error("MAKE_SIGNUP_WEBHOOK_URL is not configured on the backend.");
@@ -10841,12 +10844,28 @@ async function sendMakeSignupCompleted(payload) {
     assertSignupOpen(canonical || {});
     const closed = await prisma.signupAttempt.findUnique({ where: { eventKey: canonicalEventKey } });
     assertSignupOpen(closed || {});
+    const sourceKey = signupBusinessKey(payload);
+    if (!sourceKey || sourceKey !== signupBusinessKey(normalizedPayload)
+      || sourceKey !== signupBusinessKey(canonical || {}) || sourceKey !== signupBusinessKey(closed || {})
+      || !(payload.verification?.smsVerified || payload.verification?.emailVerified)) {
+      throw Object.assign(new Error("Verify the exact existing business ownership before resuming setup."), { code: "SIGNUP_RESUME_OWNERSHIP_UNCONFIRMED", statusCode: 409, provider: "DATABASE", failedStage: "BACKEND_REQUEST" });
+    }
     await updateSignupAttempt(payload, { status: "superseded_duplicate", stage: "closed", detail: "Resumed the existing business setup without creating another", reviewRequired: false });
     upsertSignupDashboardRecord({
       signupAttemptId: eventKey, businessName: payload.business?.name,
       ownerEmail: payload.owner?.email, ownerPhone: payload.owner?.phone,
       status: "superseded_duplicate", canonicalSignupAttemptId: canonicalEventKey, reviewRequired: false,
     });
+    if (resumeExistingOnly) {
+      // Do not replay Make, samples, completion texts or billing for a duplicate.
+      // Its verified link now reads the canonical job's saved result/progress.
+      await safelyNotifySignupOperations(payload, { state: "existing_setup_resumed", record: canonical });
+      if (/error|failed|review/i.test(String(canonical.status || "")) || canonical.reviewRequired) {
+        await safelyNotifySignupOperations(normalizedPayload, { state: "provisioning_failed", record: canonical,
+          detail: "The verified repeat signup found an existing setup problem. No automatic retry was run.", reasonCode: canonical.makeProviderCode || canonical.phoneProvisioningCode || "EXISTING_SIGNUP_NEEDS_ATTENTION" });
+      }
+      return { existingSignup: true };
+    }
   }
   const headers = buildMakeSignupHeaders({ apiKey, eventKey: canonicalEventKey });
   const { saveRecoveryCopy, recordRecoveryOperation } = require("./intakeRecoveryJournal");
@@ -14628,10 +14647,18 @@ app.post(
 async function readVerificationProgress(pending, channel = "sms") {
   if (!pending || !signupAttempts || (!pending.verifiedAt && !pending.claimedAt)) return null;
   const access = deriveSignupStatusAccess(buildMakeSignupEventKey(pending.payload), SIGNUP_STATUS_SECRET);
-  const attempt = await signupAttempts.authenticate(access.publicId, access.token);
+  let attempt = await signupAttempts.authenticate(access.publicId, access.token);
   if(!attempt) return null;
-  let state=signupAttempts.publicAttempt(attempt);
-  const saved=listSignupDashboardRecords().find(s=>s.signupAttemptId===attempt.eventKey);
+  let target;
+  try { target = await resolveSignupResume({ attempt, records: listSignupDashboardRecords(), verified: Boolean(pending.verifiedAt || pending.claimedAt),
+    loadAttempt: eventKey => prisma.signupAttempt.findUnique({ where: { eventKey } }) }); }
+  catch (error) {
+    if (error.code !== "SIGNUP_RESUME_OWNERSHIP_UNCONFIRMED") throw error;
+    return { state: "needs_attention", title: "We need to check your existing setup.", message: "We could not safely match this link to an open business setup. Contact support—do not sign up again.", terminal: false, assignedPhone: "" };
+  }
+  attempt = target.attempt;
+  let state=resumedSignupStatus(target, signupAttempts.publicAttempt(attempt));
+  const saved=target.record;
   const receipts = {};
   if (attempt.ownerEmail && attempt.ownerPhone && attempt.businessName) {
     const key = buildProvisioningAccountKey(attempt.ownerEmail, attempt.ownerPhone, attempt.businessName);
@@ -14678,7 +14705,15 @@ app.get(
     const token = String(req.headers["x-signup-status-token"] || "").trim();
     const attempt = await signupAttempts.authenticate(req.params.attemptId, token);
     if (!attempt) return res.status(401).json({ error: "This signup status session is invalid or expired." });
-    res.json({ ok: true, signup: signupAttempts.publicAttempt(attempt) });
+    let target;
+    try { target = await resolveSignupResume({ attempt, records: listSignupDashboardRecords(),
+      verified: Boolean(attempt.payload?.verification?.smsVerified || attempt.payload?.verification?.emailVerified),
+      loadAttempt: eventKey => prisma.signupAttempt.findUnique({ where: { eventKey } }) }); }
+    catch (error) {
+      if (error.code !== "SIGNUP_RESUME_OWNERSHIP_UNCONFIRMED") throw error;
+      return res.json({ ok: true, signup: { state: "needs_attention", title: "We need to check your existing setup.", message: "Contact support—do not sign up again.", terminal: false, assignedPhone: "" } });
+    }
+    res.json({ ok: true, signup: resumedSignupStatus(target, signupAttempts.publicAttempt(target.attempt)) });
   })
 );
 
@@ -15322,8 +15357,24 @@ app.all(
     async function renderSavedProgress(pending) {
       const state=await readVerificationProgress(pending, verificationChannel);
       if(!state) return renderVerificationPage({ok:false,title:"Your signup is saved",body:"We cannot load its progress yet. Contact support—do not sign up again."});
+      let forwardingSetupUrl = "";
+      if (state.state === "ready") {
+        const access = deriveSignupStatusAccess(buildMakeSignupEventKey(pending.payload), SIGNUP_STATUS_SECRET);
+        const original = await signupAttempts.authenticate(access.publicId, access.token);
+        const target = await resolveSignupResume({ attempt: original, records: listSignupDashboardRecords(), verified: true,
+          loadAttempt: eventKey => prisma.signupAttempt.findUnique({ where: { eventKey } }) });
+        const signup = target.record;
+        if (signup.forwardingSetupId) {
+          const setup = await prisma.callForwardingSetup.findUnique({ where: { id: signup.forwardingSetupId } });
+          const expectedKey = signupKeyFor({ signupId: signup.signupAttemptId, ownerEmail: signup.ownerEmail, existingBusinessNumber: signup.businessPhone || signup.ownerPhone });
+          if (setup && setup.signupKey === expectedKey && setup.assignedMyAiPaNumber === state.assignedPhone
+            && setup.businessId === signup.businessId) {
+            forwardingSetupUrl = `${FRONTEND_APP_URL}/#/f/${encodeURIComponent(createSetupToken(setup))}`;
+          }
+        }
+      }
       return renderVerificationPage({ok:state.state!=="needs_attention"&&state.state!=="closed",title:state.title,body:state.message,
-        assignedPhone:state.state==="ready"?state.assignedPhone:"",progress:!state.terminal});
+        assignedPhone:state.state==="ready"?state.assignedPhone:"",forwardingSetupUrl,progress:!state.terminal});
     }
 
     const hasChannelClaim = Boolean(input.channel || channelProof);
@@ -15443,7 +15494,7 @@ app.all(
 
     let makeResult;
     try {
-      makeResult = await sendMakeSignupCompleted(payload);
+      makeResult = await sendMakeSignupCompleted(payload, { resumeExistingOnly: true });
     } catch (error) {
       const providerFailure = makeFailureFromError(error);
       await retainPendingSignupRecoveryPayload({ tokenHash, record, payload, reviewReasons: ["provisioning_unreachable"] });
@@ -15476,6 +15527,7 @@ app.all(
       }
       return renderSavedProgress(await pendingSignupVerifications.inspect(token));
     }
+    if (makeResult.existingSignup) return renderSavedProgress(await pendingSignupVerifications.inspect(token));
     const makeData = makeResult.data || {};
     const makeAssessment = classifyMakeSignupResponse(makeResult.body, makeData);
     if (!makeAssessment.complete) {

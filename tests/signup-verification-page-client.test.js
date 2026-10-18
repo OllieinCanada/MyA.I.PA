@@ -9,7 +9,7 @@ function page({ automatic = true, visible = true, fetchImpl }) {
     beforeParse(window) { window.fetch = fetchImpl; },
   });
 }
-const resultHtml = '<!doctype html><main><h1>Your number is assigned</h1><section aria-label="Assigned My AI PA number"><p>+1 (289) 555-0112</p><a href="tel:+12895550112">Call the number</a><button id="copy-number">Copy number</button></section><a href="https://www.myaipa.test/#/forwarding-setup?token=synthetic">Continue</a></main>';
+const resultHtml = '<!doctype html><main><h1 id="verification-title">Your number is assigned</h1><section aria-label="Assigned My AI PA number"><p>+1 (289) 555-0112</p><a href="tel:+12895550112">Call the number</a><button id="copy-number">Copy number</button></section><a href="https://www.myaipa.test/#/forwarding-setup?token=synthetic">Continue</a></main>';
 const response = html => ({ headers: { get: () => "text/html; charset=utf-8" }, text: async () => html });
 
 test("one SMS tap shows progress, then number and actions at the same URL", async () => {
@@ -52,14 +52,14 @@ test("email confirmation stays explicit, then uses the same progress flow", asyn
   } finally { dom.window.close(); }
 });
 test("review/error result is shown instead of inventing a number or redirecting", async () => {
-  const dom = page({ fetchImpl: async () => response('<main><h1>Contact verified, setup needs attention</h1><p>Please contact support.</p></main>') });
+  const dom = page({ fetchImpl: async () => response('<main><h1 id="verification-title">Contact verified, setup needs attention</h1><p>Please contact support.</p></main>') });
   try { await tick(); assert.match(dom.window.document.body.textContent, /needs attention/); assert.equal(dom.window.document.querySelector("#copy-number"), null); }
   finally { dom.window.close(); }
 });
 test("lost response gives a useful message without resending or claiming success", async () => {
   let count = 0;
   const dom = page({ fetchImpl: async () => { count++; throw Error("network timeout"); } });
-  try { await tick(); assert.match(dom.window.document.body.textContent, /couldn’t confirm setup/); assert.match(dom.window.document.body.textContent, /don’t submit another/); assert.equal(count, 1); assert.equal(dom.window.document.querySelector("form").hidden, true); }
+  try { await tick(); assert.match(dom.window.document.body.textContent, /Checking your saved setup/); assert.match(dom.window.document.body.textContent, /checking saved progress automatically/); assert.match(dom.window.document.body.textContent, /don’t submit another/); assert.equal(count, 1); assert.equal(dom.window.document.querySelector("form").hidden, true); }
   finally { dom.window.close(); }
 });
 test("backend stays on the number page and forwarding is an explicit Continue link", () => {
