@@ -17,7 +17,7 @@ const serviceId = (
 ).trim();
 const manualApproval = (
   args.find((arg) => arg.startsWith("--manual-approval="))?.slice("--manual-approval=".length)
-  || "true"
+  || "false"
 ).trim().toLowerCase();
 const confirmationPhrase = "SET_RENDER_SIGNUP_SAFETY";
 const telegramBotToken = String(env.TELEGRAM_BOT_TOKEN || "").trim();

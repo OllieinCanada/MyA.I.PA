@@ -156,9 +156,8 @@ services:
       - key: TURNSTILE_SECRET_KEY
         sync: false
       - key: SIGNUP_REQUIRE_MANUAL_APPROVAL
-        # Keep signups recoverable while automated provisioning is offline.
-        # Set false only after a duplicate-safe end-to-end canary passes.
-        value: true
+        # Routine intake flags notify Telegram without pausing new applications.
+        value: false
       - key: SIGNUP_REQUIRE_VERIFICATION
         value: true
       - key: SIGNUP_IP_WINDOW_MS

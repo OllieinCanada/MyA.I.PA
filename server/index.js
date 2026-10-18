@@ -5,6 +5,8 @@ if (process.env.DISABLE_LOCAL_ENV_FILES !== "1") {
 }
 
 const crypto = require("crypto");
+const { signupReviewPolicy } = require("./signupReviewPolicy");
+const { buildSignupProgress } = require("./signupProgress");
 const { buildTwilioImportRequest } = require('./vapiTwilioImportRequest');
 const { providerFailureDetail } = require("./providerFailureDetail");
 const { configuredCaptchaProvider, verifySignupCaptcha } = require("./signupCaptcha");
@@ -1772,6 +1774,7 @@ async function beginVoiceSignupVerification({ req, parameters, call }) {
   const owner = payload.owner || {};
   const business = payload.business || {};
   const reviewReasons = getVoiceSignupReviewReasons();
+  payload.security = { ...(payload.security || {}), reviewRequired: false, reviewReasons };
   const token = await createPendingSignupVerification({
     payload,
     ownerEmail: owner.email,
@@ -1889,7 +1892,7 @@ async function beginVoiceSignupVerification({ req, parameters, call }) {
     ...(smsResult ? verificationDeliveryFields(smsResult) : {}),
     signupSource: "voice",
     vapiCallId: payload.source?.callId || "",
-    reviewRequired: reviewReasons.length > 0,
+    reviewRequired: false,
     reviewReasons,
   });
   await safelyNotifySignupOperations(payload, {
@@ -1897,6 +1900,7 @@ async function beginVoiceSignupVerification({ req, parameters, call }) {
     detail: `Verification sent by ${emailSent && smsSent ? "email and text" : emailSent ? "email" : "text"}`,
     record: signupRecord,
   });
+  if (reviewReasons.length) await safelyNotifySignupOperations(payload, { state: "signup_flagged", record: signupRecord });
 
   const deliveryChannels = [
     ...(emailSent ? ["email"] : []),
@@ -1912,9 +1916,7 @@ async function beginVoiceSignupVerification({ req, parameters, call }) {
     businessName: business.name,
     verificationRequired: true,
     deliveryChannels,
-    message: reviewReasons.length
-      ? `${deliveryMessage} Once you verify it, our team will review the setup and contact you before your assistant goes live.`
-      : `${deliveryMessage} Once you verify it, we'll finish setup and send your assistant number.`,
+    message: `${deliveryMessage} Once you verify it, we'll finish setup and send your assistant number.`,
   };
 }
 
@@ -10417,7 +10419,7 @@ async function getSignupSecurityDecision(req, body, fields) {
   }
 
   if (!fields.ownerPhone || !fields.businessPhone || !fields.businessAddress) {
-    reviewReasons.push("missing_contact_detail");
+    reasons.push("missing_contact_detail");
   }
 
   if (isEnabled(process.env.SIGNUP_REQUIRE_MANUAL_APPROVAL)) {
@@ -10427,7 +10429,7 @@ async function getSignupSecurityDecision(req, body, fields) {
   return {
     ip,
     blocked: reasons.length > 0,
-    reviewRequired: reviewReasons.length > 0,
+    reviewRequired: false,
     reasons,
     reviewReasons,
     captchaSkipped: Boolean(captcha.skipped),
@@ -14623,16 +14625,34 @@ app.post(
   })
 );
 
-async function readVerificationProgress(pending) {
+async function readVerificationProgress(pending, channel = "sms") {
   if (!pending || !signupAttempts || (!pending.verifiedAt && !pending.claimedAt)) return null;
   const access = deriveSignupStatusAccess(buildMakeSignupEventKey(pending.payload), SIGNUP_STATUS_SECRET);
   const attempt = await signupAttempts.authenticate(access.publicId, access.token);
   if(!attempt) return null;
-  const state=signupAttempts.publicAttempt(attempt);
+  let state=signupAttempts.publicAttempt(attempt);
   const saved=listSignupDashboardRecords().find(s=>s.signupAttemptId===attempt.eventKey);
+  const receipts = {};
+  if (attempt.ownerEmail && attempt.ownerPhone && attempt.businessName) {
+    const key = buildProvisioningAccountKey(attempt.ownerEmail, attempt.ownerPhone, attempt.businessName);
+    // These reads never invoke providers or restart provisioning. A missing
+    // receipt stays unchecked; a read failure must not invent completion.
+    await Promise.all(["twilio-number", "vapi-assistant", "vapi-import"].map(async kind => {
+      try { receipts[kind] = (await readProvisioningStep({ prisma, kind, idempotencyKey: key })).data; } catch (_) {}
+    }));
+  }
+  const contactVerified = state.state !== "verification_required" && Boolean(pending.verifiedAt || pending.claimedAt);
+  const progress = buildSignupProgress({ attempt, signup: saved || {}, receipts, contactVerified, channel, ready: state.state === "ready" });
+  state = { ...state, progress };
+  if (state.state === "processing") state = { ...state, title: "We’re setting up your assistant.",
+    message: channel === "email" ? "Your contact details are verified. We’re preparing your assistant and assigning your My AI PA number." : "Your phone is verified. We’re preparing your assistant and assigning your My AI PA number." };
   if(state.state!=="closed"&&state.state!=="ready"&&saved?.smsRoutingStatus==="failed") {
     return {...state,state:"needs_attention",title:"Your text-message setup needs attention.",
       message:"We could not finish configuring your assistant’s texts. Our team has been notified. Keep this link to check progress—do not sign up again.",assignedPhone:"",terminal:false};
+  }
+  if (state.state !== "closed" && saved?.stripeTrialError) {
+    return { ...state, state: "needs_attention", title: "Your trial setup needs attention.",
+      message: "Your signup is saved. We could not finish activating your trial and our team has been notified. Keep this link to check progress—do not sign up again.", assignedPhone: "", terminal: false };
   }
   return state;
 }
@@ -14643,7 +14663,7 @@ app.get("/api/signup/verification-progress", signupStatusProcessRateLimiter,
     const token=String(req.query.token||""), channel=normalizeVerificationChannel(req.query.channel);
     if(!verifyVerificationChannelProof(token,channel,String(req.query.channelProof||""),getAdminSessionSecret())) return res.status(401).json({error:"Invalid progress link."});
     const pending=await pendingSignupVerifications.inspect(token);
-    const signup=await readVerificationProgress(pending);
+    const signup=await readVerificationProgress(pending, channel);
     if(!signup) return res.status(410).json({error:"Progress link is expired or unavailable. Contact support; do not sign up again."});
     return res.json({ok:true,signup});
   }));
@@ -14883,9 +14903,12 @@ app.post(
     });
     await safelyNotifySignupOperations(payload, {
       state: "received",
-      detail: securityDecision.reviewRequired ? "Security review required" : "Provisioning handoff starting",
+      detail: "Signup saved; phone verification and automated setup follow",
       record: receivedRecord,
     });
+    if (securityDecision.reviewReasons.length) {
+      await safelyNotifySignupOperations(payload, { state: "signup_flagged", record: receivedRecord });
+    }
 
     if (isEnabled(process.env.SIGNUP_REQUIRE_VERIFICATION)) {
       const token = await createPendingSignupVerification({
@@ -14985,48 +15008,6 @@ app.post(
           : verificationDeliveryFields(smsResult).smsVerificationDeliveryStatus === "failed"
             ? "Signup saved, but verification text delivery failed. Setup remains blocked; contact support before retrying."
             : "Signup saved. Verification text delivery is still pending. Do not submit another signup.",
-      });
-    }
-
-    if (securityDecision.reviewRequired) {
-      console.warn("[signup:security] held signup for review", {
-        reviewReasons: securityDecision.reviewReasons,
-        ipHash: hashKey(securityDecision.ip),
-        emailHash: hashKey(ownerEmail),
-      });
-      await createPendingSignupVerification({
-        payload: makePayload,
-        ownerEmail,
-        businessName,
-        reviewReasons: securityDecision.reviewReasons,
-        ipHash: hashKey(securityDecision.ip),
-        purpose: "manual_review_recovery",
-        ttlMs: 7 * 24 * 60 * 60 * 1000,
-      });
-      const reviewRecord = upsertSignupDashboardFromPayload(payload, {
-        status: "review_required",
-        reviewRequired: true,
-        reviewReasons: securityDecision.reviewReasons,
-      });
-      await updateSignupAttempt(makePayload, {
-        status: "review_required",
-        stage: "final_checks",
-        detail: "Waiting for guarded pilot approval",
-        reviewRequired: true,
-        reviewReasons: securityDecision.reviewReasons,
-      });
-      await safelyNotifySignupOperations(payload, {
-        state: "review_required",
-        detail: "Signup held before provisioning",
-        record: reviewRecord,
-      });
-      return res.status(202).json({
-        success: true,
-        ok: true,
-        reviewRequired: true,
-        businessName,
-        signupStatus,
-        message: "Signup received. Final safety checks are underway; you do not need to submit it again.",
       });
     }
 
@@ -15339,7 +15320,7 @@ app.all(
     }
 
     async function renderSavedProgress(pending) {
-      const state=await readVerificationProgress(pending);
+      const state=await readVerificationProgress(pending, verificationChannel);
       if(!state) return renderVerificationPage({ok:false,title:"Your signup is saved",body:"We cannot load its progress yet. Contact support—do not sign up again."});
       return renderVerificationPage({ok:state.state!=="needs_attention"&&state.state!=="closed",title:state.title,body:state.message,
         assignedPhone:state.state==="ready"?state.assignedPhone:"",progress:!state.terminal});
@@ -15400,21 +15381,36 @@ app.all(
       verification: verificationState,
       security: {
         ...((record.payload || {}).security || {}),
+        reviewRequired: signupReviewPolicy(record.reviewReasons).reviewRequired,
+        reviewReasons: record.reviewReasons || [],
         contactVerificationCompleted: true,
         verificationChannel,
         ...(verificationChannel === "email" ? { emailVerificationCompleted: true } : {}),
       },
     });
 
+    const verifiedAttempt = await registerSignupAttempt(payload, { status: "provisioning", stage: "provisioning", reviewRequired: signupReviewPolicy(record.reviewReasons).reviewRequired, reviewReasons: record.reviewReasons || [] });
+    assertSignupOpen(verifiedAttempt?.record || {});
     await updateSignupAttempt(payload, {
-      status: Array.isArray(record.reviewReasons) && record.reviewReasons.length ? "review_required" : "provisioning",
-      stage: Array.isArray(record.reviewReasons) && record.reviewReasons.length ? "final_checks" : "provisioning",
+      status: signupReviewPolicy(record.reviewReasons).reviewRequired ? "review_required" : "provisioning",
+      stage: signupReviewPolicy(record.reviewReasons).reviewRequired ? "needs_attention" : "provisioning",
       detail: "Contact verified; continuing the saved signup",
-      reviewRequired: Boolean(record.reviewReasons?.length),
+      payload,
+      reviewRequired: signupReviewPolicy(record.reviewReasons).reviewRequired,
       reviewReasons: record.reviewReasons || [],
     });
+    if (!signupReviewPolicy(record.reviewReasons).reviewRequired) {
+      const verifiedRecord = upsertSignupDashboardFromPayload(payload, {
+        status: "setup_started", identityVerified: true, identityVerifiedAt: verifiedAt,
+        verificationChannel, emailVerified: verificationState.emailVerified, smsVerified: verificationState.smsVerified,
+        reviewRequired: false, reviewReasons: record.reviewReasons || [],
+      });
+      if (signupReviewPolicy(record.reviewReasons).advisoryReasons.length) {
+        await safelyNotifySignupOperations(payload, { state: "signup_flagged", record: verifiedRecord });
+      }
+    }
 
-    if (Array.isArray(record.reviewReasons) && record.reviewReasons.length) {
+    if (signupReviewPolicy(record.reviewReasons).reviewRequired) {
       await retainPendingSignupRecoveryPayload({ tokenHash, record, payload });
       const reviewRecord = upsertSignupDashboardFromPayload(payload, {
         status: "review_required",
@@ -15440,7 +15436,7 @@ app.all(
       return renderVerificationPage({
         ok: true,
         title: "Contact verified",
-        body: "Your contact details are verified. Your signup needs a quick manual review before the agent setup continues. Do not sign up again.",
+        body: "Your contact details are verified, but we found a setup problem. Our team has been notified. Keep this link to check progress—do not sign up again.",
         progress: true,
       });
     }

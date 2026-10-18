@@ -133,10 +133,25 @@ describe("resumable signup status and pre-activation support", () => {
       signupStatus: { ...pending().signupStatus, state: "verification_required" },
     });
     expect(container.textContent).toMatch(/Open the verification link in your text messages/i);
-    expect(container.textContent).toMatch(/Check delivery below/i);
+    const instruction = [...container.querySelectorAll('p')].find(node => node.textContent === 'Open the verification link in your text messages to continue');
+    expect(instruction).toBeDefined();
+    expect(instruction.className).toContain('font-black');
+    expect(instruction.className).toContain('clamp(1.5rem,4vw,2.25rem)');
+    expect(container.textContent).not.toMatch(/No text yet|Check delivery|Your new My AI PA number|Launch checklist|What happens next|Need help before activation|Start another signup|Open customer dashboard/i);
+    expect(container.querySelector('button, textarea')).toBeNull();
     expect(container.querySelector('a[href="tel:+12895550123"]')).toBeNull();
     expect(container.textContent).not.toMatch(/Your AI phone assistant is ready for testing/i);
     expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  test("the simple phone prompt gives way to setup progress after verification", async () => {
+    global.fetch.mockResolvedValue(response({ signup: { state: 'final_checks', terminal: false, message: 'Phone verified. Setup is continuing.' } }));
+    render({ ...pending(), reviewRequired: false, verificationRequired: true, signupStatus: { ...pending().signupStatus, state: 'verification_required' } });
+    expect(container.querySelector('textarea')).toBeNull();
+    await tick();
+    expect(container.textContent).not.toMatch(/Open the verification link in your text messages/);
+    expect(container.textContent).toMatch(/Your setup needs attention/);
+    expect(container.querySelector('textarea[aria-label="Describe your signup problem"]')).not.toBeNull();
   });
 
   test("a closed signup is clearly explained and is not polled again", async () => {

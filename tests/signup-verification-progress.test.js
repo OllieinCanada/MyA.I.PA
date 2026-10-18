@@ -27,13 +27,33 @@ test('confirmed progress is animated, pauses on review/errors, and never complet
   });
   try{
     await tick();const d=dom.window.document,panel=d.querySelector('#signup-progress-panel'),bar=d.querySelector('[role="progressbar"]');
-    assert.equal(panel.dataset.active,'true');assert.equal(d.querySelector('#signup-progress-fill').style.width,'33%');
+    assert.equal(panel.dataset.active,'true');assert.equal(d.querySelector('#signup-progress-fill').style.width,'10%');
     assert.equal(bar.hasAttribute('aria-valuenow'),false);assert.equal(d.querySelectorAll('li[data-status="done"]').length,1);
-    for(let i=0;i<5;i++)await poll();assert.equal(d.querySelector('#signup-progress-fill').style.width,'33%');
-    state={state:'final_checks',title:'Review',message:'Saved'};await poll();assert.equal(panel.dataset.active,'false');assert.match(bar.getAttribute('aria-valuetext'),/review/);
+    for(let i=0;i<5;i++)await poll();assert.equal(d.querySelector('#signup-progress-fill').style.width,'10%');
+    state={state:'final_checks',title:'Setup problem',message:'Saved'};await poll();assert.equal(panel.dataset.active,'false');assert.match(bar.getAttribute('aria-valuetext'),/attention/);
     state={state:'needs_attention',title:'Problem',message:'Support notified',assignedPhone:'+12895550199'};await poll();assert.equal(panel.dataset.active,'false');assert.match(d.querySelector('#signup-progress-label').textContent,/needs attention/);assert.doesNotMatch(d.body.textContent,/5550199/);
     state={state:'ready',title:'Still checking',message:'No verified number',assignedPhone:''};await poll();assert.notEqual(d.querySelector('#signup-progress-fill').style.width,'100%');
     state={state:'closed',title:'Closed',message:'Contact support'};await poll();const count=reads;await poll();assert.equal(reads,count);assert.equal(panel.dataset.active,'false');
+  }finally{dom.window.close();}
+});
+
+test('real checkpoints tick off individually and survive connection interruptions without advancing',async()=>{
+  const {buildSignupProgress}=require('../server/signupProgress');
+  let poll,offline=false,progress=buildSignupProgress({contactVerified:true});
+  const dom=new JSDOM('<main><h1 id="verification-title"></h1><p id="verification-description"></p>'+verificationProgressMarkup()+'</main>'+verificationProgressScript('/progress'),{
+    runScripts:'dangerously',pretendToBeVisual:true,beforeParse(w){w.setInterval=fn=>{poll=fn;return 1;};w.fetch=async()=>{if(offline)throw Error('offline');return{ok:true,json:async()=>({signup:{state:'processing',title:'Setting up',message:'Your phone is verified.',progress}})};};}
+  });
+  try{
+    await tick();const d=dom.window.document;
+    assert.equal(d.querySelectorAll('li[data-status="done"]').length,1);
+    progress=buildSignupProgress({contactVerified:true,receipts:{'twilio-number':{status:'completed',result:{twilioPhoneNumber:'+12895550199'}}}});
+    await poll();assert.equal(d.querySelectorAll('li[data-status="done"]').length,2);
+    assert.equal(d.querySelector('#signup-progress-label').textContent,'Creating your assistant');
+    assert.equal(d.querySelector('[aria-current="step"]').textContent,'Assistant created');
+    assert.equal(d.querySelector('[role="progressbar"]').getAttribute('aria-valuenow'),'2');
+    offline=true;await poll();assert.equal(d.querySelectorAll('li[data-status="done"]').length,2);
+    assert.equal(d.querySelector('#signup-progress-panel').dataset.active,'false');
+    assert.equal(d.querySelector('#signup-progress-fill').style.width,'20%');
   }finally{dom.window.close();}
 });
 
