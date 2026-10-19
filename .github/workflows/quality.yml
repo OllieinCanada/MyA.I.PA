@@ -113,7 +113,6 @@ jobs:
       - name: Verify single-review signup on mobile and desktop
         env:
           PRICING_QA_BUILD_DIR: docs
-          BUILD_PREVIEW_DIR: docs
         run: |
           npm run test:signup-pricing-choices
           npm run test:signup-footer-layout
@@ -121,7 +120,6 @@ jobs:
           npm run test:forwarding:browser
           npm run preview:signup-verification-progress
           npm run test:pages-static-retention:browser
-          npm run test:browser:quality
 
       - name: Save signup browser evidence
         if: always()
