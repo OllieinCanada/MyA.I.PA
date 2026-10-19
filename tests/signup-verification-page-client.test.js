@@ -68,7 +68,7 @@ test("backend stays on the number page and forwarding is an explicit Continue li
   const route = source.slice(source.indexOf('["/api/integrations/verify-signup-contact"'), source.indexOf('"/api/payments/create-checkout-session"'));
   assert.doesNotMatch(route, /res\.redirect\(303, forwardingSetup\.setupUrl\)/);
   assert.match(route, /assignedPhone: twilioPhoneNumber/);
-  assert.match(route, /setupReady \? "Continue"/);
+  assert.match(route, /id="continue-forwarding"[^>]+>Continue<\/a>/);
   assert.match(route, /verificationPageClientScript\(\{ automaticSmsConfirmation \}\)/);
   assert.match(route, /\$\{!ok \? `<section class="number" aria-label="Need help now">/);
   assert.match(route, /id="verification-support" hidden/);
