@@ -112,7 +112,9 @@ const {createPendingSignupVerificationStore}=require('../../server/pendingSignup
 const {createSignupAttemptStore}=require('../../server/signupAttemptStore');
 const {createVerificationChannelProof}=require('../../server/signupVerificationChannel');
 const {buildMakeSignupEventKey}=require('../../server/makeSignupWebhook');
-app.post('/__local-chain',async(req,res)=>{
+const {rateLimit}=require('express-rate-limit');
+const localDrillLimiter=rateLimit({windowMs:60000,limit:120,standardHeaders:true,legacyHeaders:false});
+app.post('/__local-chain',localDrillLimiter,async(req,res)=>{
   try{
     const {action,fault}=req.body;
     if(action==='fixture'){
