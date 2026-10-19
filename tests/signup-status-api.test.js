@@ -7,11 +7,15 @@ const path = require("node:path");
 const temporaryData = fs.mkdtempSync(path.join(os.tmpdir(), "myaipa-signup-status-api-"));
 Object.assign(process.env, {
   NODE_ENV: "test",
+  DISABLE_LOCAL_ENV_FILES: "1",
+  MAKE_SIGNUP_WEBHOOK_URL: "",
   DATA_DIR: temporaryData,
   DATABASE_URL: "",
   SECURITY_STATE_FORCE_DATABASE: "false",
   SIGNUP_STATUS_SECRET: "local-status-api-test-secret-at-least-32-characters",
   ADMIN_SESSION_SECRET: "local-verification-confirmation-test-secret",
+  PROVISIONING_SIGNING_SECRET: "synthetic-job-signing-secret-at-least-32-characters",
+  SIGNUP_SETUP_WORKER_PAUSED: "true",
   // An obsolete true approval setting must not hold new applications.
   SIGNUP_REQUIRE_MANUAL_APPROVAL: "true", SIGNUP_REQUIRE_VERIFICATION: "true",
   SIGNUP_VERIFICATION_BASE_URL: "https://api.myaipa.test",
@@ -31,6 +35,13 @@ Object.assign(process.env, {
 const { prisma } = require("../server/prisma");
 const rows = new Map();
 const pendingRows = new Map();
+const { memoryDb } = require('./helpers/twilio-status-memory-db');
+const jobDb = memoryDb();
+prisma.runtimeStore.findUnique = jobDb.prisma.runtimeStore.findUnique;
+prisma.runtimeStore.findMany = jobDb.prisma.runtimeStore.findMany;
+prisma.runtimeStore.upsert = jobDb.prisma.runtimeStore.upsert;
+prisma.runtimeStore.deleteMany = jobDb.prisma.runtimeStore.deleteMany;
+prisma.$queryRaw = async () => [];
 prisma.smsSuppression.findUnique = async () => null;
 prisma.$transaction = async (callback) => callback(prisma);
 prisma.pendingSignupVerification.create = async ({ data }) => {
@@ -108,7 +119,7 @@ prisma.signupAttempt.updateMany = async ({ where, data }) => {
 
 const { createSignupAttemptStore } = require("../server/signupAttemptStore");
 const store = createSignupAttemptStore({ prisma, secret: process.env.SIGNUP_STATUS_SECRET });
-const { app } = require("../server/index");
+const { app, __test: { processVerifiedSignupJobs } } = require("../server/index");
 const nativeFetch = global.fetch;
 let server;
 let baseUrl;
@@ -188,7 +199,7 @@ test('verified duplicate POST and old links reopen the existing setup without re
       [`attempt:${sourceId}`]:{...identity, signupAttemptId:sourceId, status:'pending_verification'} }));
     const contextKey = contextStoreKey(canonicalPayload.provisioning.idempotencyKey);
     prisma.runtimeStore.findUnique = async ({where}) => where.key === contextKey
-      ? { key:contextKey, data:{ contextHash:canonicalPayload.provisioning.contextHash, payload:canonicalPayload, lockedAt:'now' } } : null;
+      ? { key:contextKey, data:{ contextHash:canonicalPayload.provisioning.contextHash, payload:canonicalPayload, lockedAt:'now' } } : oldRuntime({where});
     prisma.callForwardingSetup.findUnique = async ({where}) => where.id === 'fixture-setup' ? { id:where.id, businessId:25,
       assignedMyAiPaNumber:'+12895550199', signupKey:signupKeyFor({signupId:canonicalId,ownerEmail:identity.ownerEmail,existingBusinessNumber:identity.businessPhone}) } : null;
     const pending = createPendingSignupVerificationStore({prisma});
@@ -200,7 +211,11 @@ test('verified duplicate POST and old links reopen the existing setup without re
     assert.doesNotMatch(preview,/555-0199/);
     const form = new URLSearchParams([...preview.matchAll(/<input[^>]+name="([^"]+)"[^>]+value="([^"]*)"/g)].map(m=>[m[1],m[2]]));
     const response = await fetch(`${baseUrl}/api/integrations/verify-signup-contact`,{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body:form.toString()});
-    const html = await response.text();
+    const acknowledgment = await response.text();
+    assert.match(acknowledgment,/preparing your assistant/i);
+    assert.equal(jobDb.rows.get('signup-setup-job:v1:'+sourceId).data.status,'pending');
+    await processVerifiedSignupJobs({force:true});
+    const html = await (await fetch(url)).text();
     assert.equal(response.status,200,JSON.stringify(rows.get(sourceId))); assert.match(html,/Welcome back/); assert.match(html,/555-0199/);
     assert.match(html,/#\/f\//); assert.doesNotMatch(html,/signup-verification-form/);
     const beforeRows = JSON.stringify([...rows.values()]), beforeDashboard = fs.readFileSync(file,'utf8');
@@ -441,7 +456,8 @@ test("link previews are read-only and only explicit confirmation advances a save
     method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: form.toString(),
   });
   assert.equal(verified.status, 200, await verified.clone().text());
-  assert.match(await verified.text(), /Contact verified/);
+  assert.match(await verified.text(), /preparing your assistant/i);
+  await processVerifiedSignupJobs({force:true});
   const status = (await (await request(attempt.access)).json()).signup;
   assert.equal(status.state, "needs_attention");
   assert.equal(status.assignedPhone, "");
@@ -480,9 +496,10 @@ test("SMS confirmation continues past routine approval flags, preserves its chan
   const verified = await fetch(`${baseUrl}/api/integrations/verify-signup-contact`, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: form.toString() });
   // This isolated suite has no Make configuration. Continuing must reach the
   // real provisioning-failure path, not stop at the obsolete approval flag.
-  assert.equal(verified.status, 400, await verified.clone().text());
+  assert.equal(verified.status, 200, await verified.clone().text());
   const resultHtml = await verified.text();
   assert.doesNotMatch(resultHtml, /manual review|Waiting for a setup review/);
+  await processVerifiedSignupJobs({force:true});
   const record = pendingRows.get(pendingStore.tokenHash(token));
   assert.equal(record.payload.verification.smsVerified, true);
   assert.equal(record.payload.verification.emailVerified, false);

@@ -126,7 +126,7 @@ function createSignupAttemptStore({ prisma, secret, ttlMs = 7 * 24 * 60 * 60 * 1
   const signingSecret = requireSecret(secret);
   const statusTtlMs = Math.max(60 * 60 * 1000, Number(ttlMs) || 0);
 
-  async function register({ eventKey, payload, businessName, ownerEmail, ownerPhone, status = "signup_received", stage = "received", reviewRequired = false, reviewReasons = [] } = {}) {
+  async function register({ eventKey, payload, businessName, ownerEmail, ownerPhone, status = "signup_received", stage = "received", reviewRequired = false, reviewReasons = [], atomicUpsert = false } = {}) {
     const access = deriveSignupStatusAccess(eventKey, signingSecret);
     const data = {
       publicId: access.publicId,
@@ -146,7 +146,9 @@ function createSignupAttemptStore({ prisma, secret, ttlMs = 7 * 24 * 60 * 60 * 1
     // or send another verification message for the same submission ID.
     let record;
     let reused = false;
-    if (typeof prisma.signupAttempt.create === "function") {
+    // A unique-constraint exception aborts a surrounding PostgreSQL transaction.
+    // Callers already inside one must use conflict-free upsert instead.
+    if (!atomicUpsert && typeof prisma.signupAttempt.create === "function") {
       try {
         record = await prisma.signupAttempt.create({ data: { eventKey, ...data } });
       } catch (error) {
