@@ -35,16 +35,17 @@ test("expired or tampered recovery copies cannot authorize replay/deletion", asy
 });
 test("storage failure stops recovery; audit outcomes cannot be rewritten", async () => {
   await assert.rejects(saveRecoveryCopy({ prisma: {}, secret, payload: payload() }), { code: "INTAKE_DURABLE_STORE_REQUIRED" });
-  const { prisma } = recoveryFakeDatabase();
+  const { prisma, rows } = recoveryFakeDatabase();
   const identity = recoveryIdentity(payload()); const operationId = crypto.randomUUID();
   await recordRecoveryOperation({ prisma, identity, operationId, kind: "handoff", status: "started" });
-  await recordRecoveryOperation({ prisma, identity, operationId, kind: "handoff", status: "uncertain" });
+  await recordRecoveryOperation({ prisma, identity, operationId, kind: "handoff", status: "uncertain", failureCode: "UND_ERR_SOCKET" });
+  assert.equal(rows.get(`${journalKey(identity.eventKey)}:handoff:${operationId}`).failureCode, "UND_ERR_SOCKET");
   await assert.rejects(recordRecoveryOperation({ prisma, identity, operationId, kind: "handoff", status: "verified" }), { code: "INTAKE_AUDIT_STATE_CONFLICT" });
 });
 test("live handoff saves recovery copy and start evidence before sending to Make", () => {
   const source = fs.readFileSync(path.join(__dirname, "../server/index.js"), "utf8");
   const handoff = source.slice(source.indexOf("async function sendMakeSignupCompleted"), source.indexOf("function requireAdmin"));
-  assert.ok(handoff.indexOf("await saveRecoveryCopy") < handoff.indexOf("await fetch(safeUrl"));
-  assert.ok(handoff.indexOf('status: "started"') < handoff.indexOf("await fetch(safeUrl"));
+  assert.ok(handoff.indexOf("await saveRecoveryCopy") < handoff.indexOf("await readMakeSignupHandoff"));
+  assert.ok(handoff.indexOf('status: "started"') < handoff.indexOf("await readMakeSignupHandoff"));
   assert.match(handoff, /status: response.ok \? "accepted" : "uncertain"/);
 });

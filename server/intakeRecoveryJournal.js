@@ -73,14 +73,15 @@ async function readRecoveryCopy({ prisma, eventKey, secret, now = Date.now() }) 
   if (identity.eventKey !== eventKey || identity.businessKey !== row.businessKey || identity.payloadHash !== row.payloadHash) throw fail("INTAKE_RECOVERY_COPY_MISMATCH");
   return { identity, payload };
 }
-async function recordRecoveryOperation({ prisma, identity, operationId, kind, status, now = Date.now() }) {
+async function recordRecoveryOperation({ prisma, identity, operationId, kind, status, failureCode = "", now = Date.now() }) {
   if (!/^[a-f0-9-]{36}$/.test(operationId) || !["handoff", "queue-delete"].includes(kind) || !["started", "accepted", "uncertain", "verified"].includes(status)) throw fail("INTAKE_AUDIT_INPUT_INVALID");
   const key = `${journalKey(identity.eventKey)}:${kind}:${operationId}`;
   return locked(prisma, key, async (tx) => {
     const prior = (await tx.runtimeStore.findUnique({ where: { key } }))?.data;
     if (prior && (prior.businessKey !== identity.businessKey || prior.payloadHash !== identity.payloadHash || prior.status !== "started")) throw fail("INTAKE_AUDIT_STATE_CONFLICT");
     if (!prior && status !== "started") throw fail("INTAKE_AUDIT_START_REQUIRED");
-    const data = { ...identity, operationId, kind, status, startedAt: prior?.startedAt || new Date(now).toISOString(), updatedAt: new Date(now).toISOString() };
+    const safeFailureCode = /^[A-Z][A-Z0-9_]{0,99}$/.test(failureCode) ? failureCode : "";
+    const data = { ...identity, operationId, kind, status, ...(safeFailureCode ? { failureCode: safeFailureCode } : {}), startedAt: prior?.startedAt || new Date(now).toISOString(), updatedAt: new Date(now).toISOString() };
     await tx.runtimeStore.upsert({ where: { key }, create: { key, data }, update: { data } });
   });
 }

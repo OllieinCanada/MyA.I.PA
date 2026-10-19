@@ -125,7 +125,7 @@ function createPendingSignupVerificationStore({ prisma, minimumTtlMs = 24 * 60 *
     return publicRecord(record);
   }
 
-  async function claim(token, now = new Date()) {
+  async function claim(token, now = new Date(), { onClaim } = {}) {
     const digest = tokenHash(token);
     return prisma.$transaction(async (tx) => {
       await tx.pendingSignupVerification.deleteMany({
@@ -138,6 +138,7 @@ function createPendingSignupVerificationStore({ prisma, minimumTtlMs = 24 * 60 *
       const record = await tx.pendingSignupVerification.findUnique({ where: { tokenHash: digest } });
       if (!record) return { status: "missing", tokenHash: digest, record: null };
       if (claimed.count === 0) return { status: "already_claimed", tokenHash: digest, record: publicRecord(record) };
+      if (onClaim) await onClaim(tx, publicRecord(record), digest);
       return { status: "claimed", tokenHash: digest, record: publicRecord(record) };
     });
   }
@@ -192,7 +193,7 @@ function createPendingSignupVerificationStore({ prisma, minimumTtlMs = 24 * 60 *
       where: { expiresAt: { gt: now }, usedAt: null, supersededAt: null },
       orderBy: [{ verifiedAt: "desc" }, { createdAt: "desc" }],
     });
-    return records.filter(record=>record.purpose!=="signup_progress").map(publicRecord);
+    return records.filter(record=>!["signup_progress","signup_setup_job"].includes(record.purpose)).map(publicRecord);
   }
 
   async function consumeMatching(predicate) {

@@ -8,6 +8,8 @@ const crypto = require("crypto");
 const { signupReviewPolicy } = require("./signupReviewPolicy");
 const { buildSignupProgress } = require("./signupProgress");
 const { resolveSignupResume, resumedSignupStatus } = require("./signupResume");
+const { readMakeSignupHandoff } = require("./makeSignupHandoff");
+const { enqueueSignupSetupJob, drainSignupSetupJobs } = require("./signupSetupJobs");
 const { buildTwilioImportRequest } = require('./vapiTwilioImportRequest');
 const { providerFailureDetail } = require("./providerFailureDetail");
 const { configuredCaptchaProvider, verifySignupCaptcha } = require("./signupCaptcha");
@@ -10798,7 +10800,7 @@ function buildStripeSignupMakePayload(signupPayload, checkoutSession) {
   });
 }
 
-async function sendMakeSignupCompleted(payload, { resumeExistingOnly = false } = {}) {
+async function sendMakeSignupCompleted(payload, { resumeExistingOnly = false, beforeDispatch = async () => {} } = {}) {
   const { url, apiKey } = getMakeSignupWebhookConfig();
   if (!url) {
     const err = new Error("MAKE_SIGNUP_WEBHOOK_URL is not configured on the backend.");
@@ -10877,30 +10879,32 @@ async function sendMakeSignupCompleted(payload, { resumeExistingOnly = false } =
   const timeoutMs = parseMakeSignupTimeoutMs(process.env.MAKE_SIGNUP_TIMEOUT_MS);
   const startedAt = Date.now();
 
-  let response;
+  let response, rawText;
   try {
-    response = await fetch(safeUrl, {
+    await beforeDispatch();
+    const handoff = await readMakeSignupHandoff({ url: safeUrl, options: {
       method: "POST",
       headers,
       body: JSON.stringify(normalizedPayload),
       signal: createTimeoutSignal(timeoutMs),
-    });
+    }, onUncertain: ({ code }) => recordRecoveryOperation({ prisma, identity: recoveryIdentity, operationId: recoveryOperationId, kind: "handoff", status: "uncertain", failureCode: code }) });
+    response = handoff.response; rawText = handoff.text;
   } catch (error) {
-    await recordRecoveryOperation({ prisma, identity: recoveryIdentity, operationId: recoveryOperationId, kind: "handoff", status: "uncertain" }).catch(() => {});
     console.error("[make:signup] webhook request failed", {
       eventKey,
       durationMs: Date.now() - startedAt,
       reason: error?.name === "TimeoutError" || error?.name === "AbortError" ? "timeout" : "network_error",
     });
-    const err = new Error("Make webhook could not be reached.");
+    if (error.provider === "MAKE" || error.code === "SIGNUP_JOB_LEASE_LOST") throw error;
+    const err = new Error("Make webhook could not be reached.", { cause: error });
     err.statusCode = 502;
     err.code = error?.name === "TimeoutError" || error?.name === "AbortError"
       ? "MAKE_SIGNUP_TIMEOUT"
       : "MAKE_SIGNUP_UNREACHABLE";
+    err.providerCode = error?.code || error?.cause?.code || err.code;
     throw err;
   }
 
-  const rawText = await response.text();
   // Accepted is not delivered, provisioned, or ready. The existing downstream
   // provider checks still determine completion. A timeout remains uncertain.
   await recordRecoveryOperation({ prisma, identity: recoveryIdentity, operationId: recoveryOperationId, kind: "handoff", status: response.ok ? "accepted" : "uncertain" });
@@ -15406,7 +15410,30 @@ app.all(
     await ensureLegacyPendingSignupMigration();
     const saved=token?await pendingSignupVerifications.inspect(token):null;
     if(saved?.verifiedAt || saved?.claimedAt) return renderSavedProgress(saved);
-    const claim = token ? await pendingSignupVerifications.claim(token) : { status: "missing", record: null };
+    const claim = token ? await pendingSignupVerifications.claim(token, new Date(), { onClaim: async (tx, savedRecord, digest) => {
+      if (getProvisioningSigningSecret().length < 24) throw Object.assign(new Error("Durable signup signing is not configured."), { code: "SIGNUP_JOB_SECRET_REQUIRED", statusCode: 503 });
+      const verifiedAt = new Date().toISOString();
+      const verification = buildVerificationState(verificationChannel, savedRecord.payload?.verification || {}, verifiedAt);
+      const verifiedPayload = { ...savedRecord.payload, verifiedAt, verification, security: {
+        ...(savedRecord.payload?.security || {}), contactVerificationCompleted: true, verificationChannel,
+        reviewRequired: signupReviewPolicy(savedRecord.reviewReasons).reviewRequired,
+        reviewReasons: savedRecord.reviewReasons || [],
+      } };
+      const registration = await createSignupAttemptStore({ prisma: tx, secret: SIGNUP_STATUS_SECRET }).register({
+        eventKey: buildMakeSignupEventKey(verifiedPayload), payload: verifiedPayload,
+        businessName: verifiedPayload.business?.name, ownerEmail: verifiedPayload.owner?.email, ownerPhone: verifiedPayload.owner?.phone,
+        status: "provisioning", stage: "queued", atomicUpsert: true,
+      });
+      assertSignupOpen(registration.record);
+      if (registration.record.status !== "setup_ready") await createSignupAttemptStore({ prisma: tx, secret: SIGNUP_STATUS_SECRET }).update(registration.record.eventKey, {
+        payload: verifiedPayload, status: "provisioning", stage: "queued", reviewRequired: false,
+      });
+      await tx.pendingSignupVerification.update({ where: { tokenHash: digest }, data: {
+        payload: verifiedPayload, verifiedAt: new Date(verifiedAt), purpose: "signup_setup_job",
+        expiresAt: new Date(Math.max(savedRecord.expiresAt || 0, Date.now() + 7 * 24 * 60 * 60 * 1000)),
+      } });
+      await enqueueSignupSetupJob(tx, { eventKey: buildMakeSignupEventKey(verifiedPayload), tokenHash: digest, channel: verificationChannel, businessKey: signupBusinessKey(verifiedPayload) });
+    } }) : { status: "missing", record: null };
     const record = claim.record;
     if (!token || !record || claim.status === "missing") {
       return renderVerificationPage({
@@ -15420,7 +15447,82 @@ app.all(
       return renderSavedProgress(record);
     }
 
-    const verifiedAt = new Date().toISOString();
+    // Database commit above is the acknowledgment boundary. A restart after
+    // this response cannot lose the verified job; GETs never dispatch work.
+    setImmediate(() => runBackgroundJob("verified signup setup", processVerifiedSignupJobs));
+    return renderSavedProgress(await pendingSignupVerifications.inspect(token));
+  })
+);
+
+async function reconcileCompletedMakeSignup(payload) {
+  const businessKey = signupBusinessKey(payload);
+  if (!businessKey) return null;
+  const key = buildProvisioningAccountKey(payload.owner?.email, payload.owner?.phone, payload.business?.name);
+  const context = (await prisma.runtimeStore.findUnique({ where: { key: contextStoreKey(key) } }))?.data;
+  if (!context?.completedAt || !context.result || signupBusinessKey(context.payload) !== businessKey) return null;
+  const canonical = listSignupDashboardRecords().find(item => item.signupAttemptId === buildMakeSignupEventKey(context.payload));
+  if (!canonical || signupBusinessKey(canonical) !== businessKey) return null;
+  assertSignupOpen(canonical || {});
+  const canonicalAttempt = await prisma.signupAttempt.findUnique({ where: { eventKey: buildMakeSignupEventKey(context.payload) } });
+  if (!canonicalAttempt || signupBusinessKey(canonicalAttempt) !== businessKey) return null;
+  assertSignupOpen(canonicalAttempt);
+  const result = context.result;
+  if (!result.twilioPhoneNumber || !result.phoneNumberId || !result.assistantId
+    || !await verifySavedProvisioningResources("vapi-import", result)) return null;
+  const data = { success: true, ok: true, ...result };
+  return { status: 200, body: JSON.stringify(data), data, eventKey: buildMakeSignupEventKey(payload),
+    provisioningIdempotencyKey: key, recoveredFromSavedContext: true };
+}
+
+async function processVerifiedSignupJobs({ force = false } = {}) {
+  if (process.env.NODE_ENV === "test" && process.env.SIGNUP_SETUP_WORKER_PAUSED === "true" && !force) return { paused: true };
+  const secret = getProvisioningSigningSecret();
+  if (secret.length < 24 && process.env.NODE_ENV !== "production") return { configured: false };
+  return drainSignupSetupJobs({ prisma, secret,
+    processJob: async (job, ctl) => {
+      const record = await prisma.pendingSignupVerification.findUnique({ where: { tokenHash: job.tokenHash } });
+      if (!record || record.usedAt || record.supersededAt || new Date(record.expiresAt).getTime() <= Date.now()
+        || !record.verifiedAt || !record.payload?.verification?.[job.channel === "sms" ? "smsVerified" : "emailVerified"]
+        || !job.businessKey || signupBusinessKey(record.payload) !== job.businessKey
+        || buildMakeSignupEventKey(record.payload) !== job.eventKey) {
+        throw Object.assign(new Error("Verified signup job authorization expired or changed."), { code: "SIGNUP_JOB_AUTHORIZATION_INVALID" });
+      }
+      const attempt = await prisma.signupAttempt.findUnique({ where: { eventKey: job.eventKey } });
+      if (signupBusinessKey(attempt?.payload) !== job.businessKey) throw Object.assign(new Error("The queued signup identity changed."), { code: "SIGNUP_JOB_BINDING_CONFLICT" });
+      if (attempt?.status === "superseded_duplicate") return;
+      assertSignupOpen(attempt || {});
+      return processVerifiedSignupSetup({ record, tokenHash: job.tokenHash, verificationChannel: job.channel, job }, ctl);
+    },
+    onFailure: async ({ job, code, uncertain, exhausted }) => {
+      const attempt = await prisma.signupAttempt.findUnique({ where: { eventKey: job.eventKey } });
+      if (!attempt || isClosedSignup(attempt)) return;
+      if (attempt.status === "setup_ready") {
+        if (exhausted) await safelyNotifySignupOperations(attempt.payload, { state: "customer_followup_failed",
+          record: listSignupDashboardRecords().find(item => item.signupAttemptId === job.eventKey), reasonCode: code,
+          detail: "The saved finalization job needs reconciliation. Check existing receipts before resending anything." });
+        return;
+      }
+      if (!exhausted) {
+        await updateSignupAttempt(attempt.payload, { status: "provisioning", stage: uncertain ? "reconciling" : "queued", reviewRequired: false,
+          lastErrorCode: code, detail: "Your signup is saved; checking its existing setup before continuing." });
+        return;
+      }
+      const pending = await prisma.pendingSignupVerification.findUnique({ where: { tokenHash: job.tokenHash } });
+      if (pending?.verifiedAt && !pending.usedAt && !pending.supersededAt && new Date(pending.expiresAt).getTime() > Date.now()) {
+        await retainPendingSignupRecoveryPayload({ tokenHash: job.tokenHash, record: pending, payload: attempt.payload, reviewReasons: [code] });
+      }
+      await updateSignupAttempt(attempt.payload, { status: "setup_error", stage: "needs_attention", reviewRequired: true, lastErrorCode: code });
+      const record = upsertSignupDashboardFromPayload(attempt.payload, { status: "setup_error", reviewRequired: true,
+        makeError: code, identityVerified: true, smsVerified: Boolean(attempt.payload?.verification?.smsVerified), emailVerified: Boolean(attempt.payload?.verification?.emailVerified) });
+      await safelyNotifySignupOperations(attempt.payload, { state: "provisioning_failed", record,
+        reasonCode: code, detail: "The saved signup job could not finish. Its resources must be reconciled before retrying." });
+    },
+  });
+}
+
+async function processVerifiedSignupSetup({ record, tokenHash, verificationChannel, job }, ctl) {
+
+    const verifiedAt = new Date(record.verifiedAt || record.claimedAt || Date.now()).toISOString();
     const verificationState = buildVerificationState(
       verificationChannel,
       (record.payload || {}).verification || {},
@@ -15441,8 +15543,10 @@ app.all(
     });
 
     const verifiedAttempt = await registerSignupAttempt(payload, { status: "provisioning", stage: "provisioning", reviewRequired: signupReviewPolicy(record.reviewReasons).reviewRequired, reviewReasons: record.reviewReasons || [] });
+    if (verifiedAttempt?.record?.status === "superseded_duplicate") return;
     assertSignupOpen(verifiedAttempt?.record || {});
-    await updateSignupAttempt(payload, {
+    if (job.phase === "queued" && verifiedAttempt?.record?.status === "setup_ready") return;
+    if (verifiedAttempt?.record?.status !== "setup_ready") await updateSignupAttempt(payload, {
       status: signupReviewPolicy(record.reviewReasons).reviewRequired ? "review_required" : "provisioning",
       stage: signupReviewPolicy(record.reviewReasons).reviewRequired ? "needs_attention" : "provisioning",
       detail: "Contact verified; continuing the saved signup",
@@ -15450,7 +15554,7 @@ app.all(
       reviewRequired: signupReviewPolicy(record.reviewReasons).reviewRequired,
       reviewReasons: record.reviewReasons || [],
     });
-    if (!signupReviewPolicy(record.reviewReasons).reviewRequired) {
+    if (!signupReviewPolicy(record.reviewReasons).reviewRequired && verifiedAttempt?.record?.status !== "setup_ready") {
       const verifiedRecord = upsertSignupDashboardFromPayload(payload, {
         status: "setup_started", identityVerified: true, identityVerifiedAt: verifiedAt,
         verificationChannel, emailVerified: verificationState.emailVerified, smsVerified: verificationState.smsVerified,
@@ -15484,18 +15588,18 @@ app.all(
         reviewReasons: record.reviewReasons,
         emailHash: hashKey(record.ownerEmail),
       });
-      return renderVerificationPage({
-        ok: true,
-        title: "Contact verified",
-        body: "Your contact details are verified, but we found a setup problem. Our team has been notified. Keep this link to check progress—do not sign up again.",
-        progress: true,
-      });
+      return { state: "needs_attention" };
     }
 
     let makeResult;
     try {
-      makeResult = await sendMakeSignupCompleted(payload, { resumeExistingOnly: true });
+      makeResult = await ctl.handoff(
+        beforeDispatch => sendMakeSignupCompleted(payload, { resumeExistingOnly: true, beforeDispatch }),
+        () => reconcileCompletedMakeSignup(payload)
+      );
     } catch (error) {
+      if (error.code === "SIGNUP_JOB_LEASE_LOST") throw error;
+      if (error.signupHandoffUncertain || error.code === "SIGNUP_HANDOFF_OUTCOME_UNCERTAIN") throw error;
       const providerFailure = makeFailureFromError(error);
       await retainPendingSignupRecoveryPayload({ tokenHash, record, payload, reviewReasons: ["provisioning_unreachable"] });
       const failedRecord = upsertSignupDashboardFromPayload(payload, {
@@ -15525,9 +15629,9 @@ app.all(
       if (telegramAlert?.sent || telegramAlert?.queued || telegramAlert?.duplicate || telegramAlert?.reason === "already_alerted") {
         error.telegramIncidentHandled = true;
       }
-      return renderSavedProgress(await pendingSignupVerifications.inspect(token));
+      return { state: "needs_attention" };
     }
-    if (makeResult.existingSignup) return renderSavedProgress(await pendingSignupVerifications.inspect(token));
+    if (makeResult.existingSignup) return { state: "existing_setup_resumed" };
     const makeData = makeResult.data || {};
     const makeAssessment = classifyMakeSignupResponse(makeResult.body, makeData);
     if (!makeAssessment.complete) {
@@ -15570,7 +15674,7 @@ app.all(
         providerCode: makeAssessment.providerCode || makeAssessment.code || "MAKE_SIGNUP_INCOMPLETE",
         emailHash: hashKey(record.ownerEmail),
       });
-      return renderSavedProgress(await pendingSignupVerifications.inspect(token));
+      return { state: "needs_attention" };
     }
 
     const phoneProvisioning = await inspectSignupPhoneProvisioning(makeData, makeResult.body);
@@ -15622,13 +15726,15 @@ app.all(
       record: provisionedRecord,
     });
     if (phoneProvisioning.status === "ready") {
+      await ctl.assertLease();
       await attachNoCardStripeTrialToSignup(payload, { makeStatus: makeResult.status, twilioPhoneNumber });
     }
     const forwardingSetup = phoneProvisioning.status === "ready"
-      ? await prepareForwardingSetupForProvisionedSignup(payload, provisionedRecord, twilioPhoneNumber)
+      ? await ctl.memoize("forwarding", () => prepareForwardingSetupForProvisionedSignup(payload, provisionedRecord, twilioPhoneNumber))
       : null;
     let completionDelivery = null;
     if (phoneProvisioning.status === "ready") {
+      await ctl.assertLease();
       completionDelivery = await deliverAndRecordSignupCompletion({
         signupAttemptId:provisionedRecord.signupAttemptId,
         prisma,
@@ -15673,7 +15779,7 @@ app.all(
     }
     // Show the assigned number here first. Forwarding is a customer-selected
     // Continue action, not an automatic redirect that bypasses this screen.
-    return renderVerificationPage({
+    return {
       ok: phoneProvisioning.status === "ready",
       title: phoneProvisioning.status === "ready" ? "Your setup is ready" : "Contact verified, number setup needs attention",
       body: phoneProvisioning.status === "ready"
@@ -15681,9 +15787,8 @@ app.all(
         : phoneProvisioning.message,
       assignedPhone: twilioPhoneNumber,
       forwardingSetupUrl: forwardingSetup?.setupUrl || "",
-    });
-  })
-);
+    };
+}
 
 app.post(
   "/api/payments/create-checkout-session",
@@ -18554,6 +18659,8 @@ async function drainTelegramOutbox(phase = "scheduled") {
 }
 
 function startBackgroundJobs() {
+  runBackgroundJob("verified signup setup", processVerifiedSignupJobs, "initial");
+  setInterval(() => runBackgroundJob("verified signup setup", processVerifiedSignupJobs), 15000);
   runBackgroundJob('signup completion delivery polling',pollPendingSignupCompletionMessages,'initial');
   setInterval(()=>runBackgroundJob('signup completion delivery polling',pollPendingSignupCompletionMessages),60*1000);
   runBackgroundJob('saved Twilio delivery reports', processTwilioStatusInbox, 'initial');
@@ -18642,6 +18749,8 @@ module.exports = {
   app,
   startServer,
   __test: {
+    processVerifiedSignupJobs,
+    processTwilioStatusInbox,
     signupDeliveryGatePassed,
     createBusinessStripeTrial,
     upsertSignupDashboardRecord,

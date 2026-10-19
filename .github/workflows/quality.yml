@@ -66,6 +66,7 @@ jobs:
           node -e 'const {Client}=require("pg"); const client=new Client({connectionString:"postgresql://ci:ci@127.0.0.1:5432/ci"}); (async()=>{await client.connect(); try {await client.query("CREATE DATABASE myaipa_recovery_drill_ci");} finally {await client.end();}})().catch(error=>{console.error(error.message);process.exitCode=1;});'
           npx prisma db push --skip-generate
           npm run test:signup-recovery:postgres
+          npm run test:signup-setup:postgres
 
       - name: Save signup recovery evidence
         if: always()
@@ -73,7 +74,9 @@ jobs:
         with:
           name: signup-recovery-${{ github.event.pull_request.head.sha || github.sha }}
           retention-days: 7
-          path: diagnostics/signup-failure-recovery-audit/postgres-restart.json
+          path: |
+            diagnostics/signup-failure-recovery-audit/postgres-restart.json
+            diagnostics/signup-failure-recovery-audit/verified-setup-chain.json
           if-no-files-found: ignore
 
       - name: Validate private legal drafts when present
