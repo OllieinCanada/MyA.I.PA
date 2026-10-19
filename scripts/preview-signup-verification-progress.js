@@ -21,6 +21,8 @@ async function main(){
    });
    await page.goto('http://127.0.0.1/preview',{waitUntil:'domcontentloaded'});
    await page.getByText('Checking your assistant’s business answers',{exact:true}).waitFor();
+   await page.locator('#signup-number-wait').getByText('Your number will appear here once progress bar is completed',{exact:true}).waitFor();
+   assert.equal(await page.evaluate(()=>document.querySelector('#signup-number-wait').getBoundingClientRect().bottom<=document.querySelector('#signup-progress-panel').getBoundingClientRect().top),true);
    assert.equal(await page.locator('#signup-progress-steps li').count(),10);
    assert.equal(await page.locator('#signup-progress-steps li[data-status="done"]').count(),3);
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);

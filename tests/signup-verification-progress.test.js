@@ -2,6 +2,14 @@ const test=require('node:test');
 const assert=require('node:assert/strict');
 const {JSDOM}=require('jsdom');
 const {verificationProgressScript,verificationProgressMarkup}=require('../server/signupVerificationProgress');
+test('pending number message appears before the setup progress panel',()=>{
+  const dom=new JSDOM(verificationProgressMarkup());
+  try{
+    const message=dom.window.document.querySelector('#signup-number-wait');
+    assert.equal(message.textContent.trim(),'Your number will appear here once progress bar is completed');
+    assert.equal(message.nextElementSibling.id,'signup-progress-panel');
+  }finally{dom.window.close();}
+});
 const tick=()=>new Promise(r=>setTimeout(r,25));
 
 test('normal polling fits its server budget and 429 backs off, including visibility changes',async()=>{

@@ -1,7 +1,10 @@
 const { buildSignupProgress } = require('./signupProgress');
 function verificationProgressMarkup() {
   const steps = buildSignupProgress().steps;
-  return `<section id="signup-progress-panel" aria-label="Your setup progress">
+  return `<section id="signup-number-wait" aria-label="Your My AI PA number">
+    <p>Your number will appear here once progress bar is completed</p>
+  </section>
+  <section id="signup-progress-panel" aria-label="Your setup progress">
     <style>
       #signup-progress-panel{margin:24px 0;padding:20px;border:1px solid #bfdbfe;border-radius:20px;background:#eff6ff}
       #signup-progress-label{margin:0 0 12px;font-size:16px;font-weight:700;color:#1e40af}
@@ -15,6 +18,8 @@ function verificationProgressMarkup() {
       #signup-progress-steps li[data-status="current"]{font-weight:700;color:#1d4ed8}
       #signup-progress-steps li[data-status="current"]:before{content:"●";color:#2563eb}
       #signup-progress-note{font-size:14px;line-height:1.5;margin:14px 0 0}
+      #signup-number-wait{margin:24px 0;padding:22px;border:1px solid #bfdbfe;border-radius:20px;background:#eff6ff}
+      #signup-number-wait p{margin:0;color:#07142a;font-size:clamp(22px,5vw,28px);font-weight:900;line-height:1.4}
       @keyframes setup-working{from{transform:translateX(-100%)}to{transform:translateX(100%)}}
       @media(prefers-reduced-motion:reduce){#signup-progress-panel *{animation:none!important;transition:none!important}}
     </style>
