@@ -15323,10 +15323,6 @@ app.all(
                     <button class="action secondary" id="copy-number" type="button" data-phone="${escapeHtml(canonicalPhone)}">Copy number</button>
                   </div>
                 </section>
-                <section class="number" aria-label="Secure billing choice">
-                  <p class="number-label">Optional secure billing</p>
-                  <p style="margin:0;color:#334155;font-size:16px;line-height:1.55">No card was collected for your 14-day trial. If you want service to continue afterward, open your dashboard and choose <strong>Add card securely</strong>. Stripe Checkout handles the card details; My AI PA never asks for them by phone.</p>
-                </section>
               ` : ""}
               ${!ok ? `<section class="number" aria-label="Need help now">
                 <p class="number-label">Need help now?</p>
@@ -15334,7 +15330,11 @@ app.all(
                 <div class="actions"><a href="tel:${escapeHtml(CUSTOMER_SUPPORT_PHONE)}">Call support</a><a class="action secondary" href="sms:${escapeHtml(CUSTOMER_SUPPORT_PHONE)}?&body=${encodeURIComponent("Hi My AI PA, I need help with my signup.")}">Text support</a></div>
               </section>` : ""}
               ${confirmation ? `<a id="verification-support" hidden href="tel:${escapeHtml(CUSTOMER_SUPPORT_PHONE)}">Call signup support</a>` : ""}
-              <div class="actions"><a href="${escapeHtml(forwardingSetupUrl || `${FRONTEND_APP_URL}/#/${setupReady ? "dashboard" : "signup"}`)}">${setupReady ? "Continue" : "Return to My AI PA"}</a></div>
+              <div class="actions">${setupReady
+                ? forwardingSetupUrl
+                  ? `<a id="continue-forwarding" href="${escapeHtml(forwardingSetupUrl)}">Continue</a>`
+                  : `<a href="tel:${escapeHtml(CUSTOMER_SUPPORT_PHONE)}">Call support for forwarding setup</a>`
+                : `<a href="${escapeHtml(`${FRONTEND_APP_URL}/#/signup`)}">Return to My AI PA</a>`}</div>
             </main>
             ${(confirmation || progress) && !setupReady ? verificationProgressScript(`/api/signup/verification-progress?${new URLSearchParams({token,channel:verificationChannel,channelProof:createVerificationChannelProof(token,verificationChannel,getAdminSessionSecret())})}`, { awaitConfirmation: confirmation }) : ""}
             ${confirmation ? verificationPageClientScript({ automaticSmsConfirmation }) : ""}
@@ -15368,9 +15368,9 @@ app.all(
         const target = await resolveSignupResume({ attempt: original, records: listSignupDashboardRecords(), verified: true,
           loadAttempt: eventKey => prisma.signupAttempt.findUnique({ where: { eventKey } }) });
         const signup = target.record;
-        if (signup.forwardingSetupId) {
-          const setup = await prisma.callForwardingSetup.findUnique({ where: { id: signup.forwardingSetupId } });
+        if (signup && normalizePhoneForMatch(signup.businessPhone || signup.ownerPhone)) {
           const expectedKey = signupKeyFor({ signupId: signup.signupAttemptId, ownerEmail: signup.ownerEmail, existingBusinessNumber: signup.businessPhone || signup.ownerPhone });
+          const setup = await prisma.callForwardingSetup.findUnique({ where: signup.forwardingSetupId ? { id: signup.forwardingSetupId } : { signupKey: expectedKey } });
           if (setup && setup.signupKey === expectedKey && setup.assignedMyAiPaNumber === state.assignedPhone
             && setup.businessId === signup.businessId) {
             forwardingSetupUrl = `${FRONTEND_APP_URL}/#/f/${encodeURIComponent(createSetupToken(setup))}`;

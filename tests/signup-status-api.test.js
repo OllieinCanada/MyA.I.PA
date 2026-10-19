@@ -172,7 +172,7 @@ test('verified duplicate POST and old links reopen the existing setup without re
   const { normalizeSignupProvisioningPayload } = require('../server/signupProvisioning');
   const { contextStoreKey } = require('../server/signupProvisioningContext');
   const { signupBusinessKey } = require('../server/signupBusinessIdentity');
-  const { signupKeyFor } = require('../server/callForwardingService');
+  const { signupKeyFor, verifySetupToken } = require('../server/callForwardingService');
   const oldEnv = { url: process.env.MAKE_SIGNUP_WEBHOOK_URL, signing: process.env.PROVISIONING_SIGNING_SECRET, forwarding: process.env.FORWARDING_SETUP_SECRET };
   const oldRuntime = prisma.runtimeStore.findUnique, oldSetup = prisma.callForwardingSetup.findUnique, oldQuery = prisma.$queryRaw;
   prisma.$queryRaw = async () => [];
@@ -200,8 +200,9 @@ test('verified duplicate POST and old links reopen the existing setup without re
     const contextKey = contextStoreKey(canonicalPayload.provisioning.idempotencyKey);
     prisma.runtimeStore.findUnique = async ({where}) => where.key === contextKey
       ? { key:contextKey, data:{ contextHash:canonicalPayload.provisioning.contextHash, payload:canonicalPayload, lockedAt:'now' } } : oldRuntime({where});
-    prisma.callForwardingSetup.findUnique = async ({where}) => where.id === 'fixture-setup' ? { id:where.id, businessId:25,
-      assignedMyAiPaNumber:'+12895550199', signupKey:signupKeyFor({signupId:canonicalId,ownerEmail:identity.ownerEmail,existingBusinessNumber:identity.businessPhone}) } : null;
+    const fixtureSetup = { id:'fixture-setup', businessId:25, assignedMyAiPaNumber:'+12895550199',
+      signupKey:signupKeyFor({signupId:canonicalId,ownerEmail:identity.ownerEmail,existingBusinessNumber:identity.businessPhone}) };
+    prisma.callForwardingSetup.findUnique = async ({where}) => where.id === fixtureSetup.id || where.signupKey === fixtureSetup.signupKey ? fixtureSetup : null;
     const pending = createPendingSignupVerificationStore({prisma});
     const token = await pending.create({ payload:sourcePayload, ownerEmail:identity.ownerEmail, businessName:identity.businessName });
     const proof = createVerificationChannelProof(token,'sms',process.env.ADMIN_SESSION_SECRET);
@@ -221,10 +222,29 @@ test('verified duplicate POST and old links reopen the existing setup without re
     assert.equal(response.status,200,JSON.stringify(rows.get(sourceId))); assert.match(html,/Welcome back/); assert.match(html,/555-0199/);
     assert.doesNotMatch(html,/signup-number-wait|Your number will appear here once progress bar is completed/);
     assert.match(html,/Call the number/); assert.match(html,/Copy number/);
+    assert.doesNotMatch(html,/Secure billing choice|Optional secure billing|No card was collected/);
+    const { JSDOM } = require('jsdom');
+    const document = new JSDOM(html).window.document;
+    const continueLink = document.querySelector('#continue-forwarding');
+    assert.equal(continueLink.textContent,'Continue');
+    const forwardingToken = decodeURIComponent(new URL(continueLink.href).hash.slice('#/f/'.length));
+    assert.equal(verifySetupToken(forwardingToken).sid,fixtureSetup.id);
+    assert.equal(verifySetupToken(forwardingToken).sk,fixtureSetup.signupKey);
+    assert.doesNotMatch(continueLink.href,/#\/dashboard/);
+    const dashboard = JSON.parse(fs.readFileSync(file,'utf8'));
+    delete dashboard[`attempt:${canonicalId}`].forwardingSetupId;
+    fs.writeFileSync(file,JSON.stringify(dashboard));
     assert.match(html,/#\/f\//); assert.doesNotMatch(html,/signup-verification-form/);
     const beforeRows = JSON.stringify([...rows.values()]), beforeDashboard = fs.readFileSync(file,'utf8');
     for(let n=0;n<2;n++) {
+      if(n===1) fixtureSetup.assignedMyAiPaNumber = '+12895550200';
       const page=await(await fetch(url)).text(); assert.match(page,/555-0199/);
+      fixtureSetup.assignedMyAiPaNumber = '+12895550199';
+      if(n===0) assert.match(page,/id="continue-forwarding"/);
+      else {
+        assert.doesNotMatch(page,/id="continue-forwarding"|#\/dashboard|#\/f\//);
+        assert.match(page,/Call support for forwarding setup/);
+      }
       const progress=await(await fetch(`${baseUrl}/api/signup/verification-progress?${query}`)).json();
       assert.equal(progress.signup.state,'ready'); assert.equal(progress.signup.assignedPhone,'+12895550199');
     }
