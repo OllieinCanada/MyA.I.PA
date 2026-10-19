@@ -209,14 +209,18 @@ test('verified duplicate POST and old links reopen the existing setup without re
     const url = `${baseUrl}/api/integrations/verify-signup-contact?${query}`;
     const preview = await (await fetch(url)).text();
     assert.doesNotMatch(preview,/555-0199/);
+    assert.match(preview,/Your number will appear here once progress bar is completed/);
     const form = new URLSearchParams([...preview.matchAll(/<input[^>]+name="([^"]+)"[^>]+value="([^"]*)"/g)].map(m=>[m[1],m[2]]));
     const response = await fetch(`${baseUrl}/api/integrations/verify-signup-contact`,{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body:form.toString()});
     const acknowledgment = await response.text();
     assert.match(acknowledgment,/preparing your assistant/i);
+    assert.match(acknowledgment,/Your number will appear here once progress bar is completed/);
     assert.equal(jobDb.rows.get('signup-setup-job:v1:'+sourceId).data.status,'pending');
     await processVerifiedSignupJobs({force:true});
     const html = await (await fetch(url)).text();
     assert.equal(response.status,200,JSON.stringify(rows.get(sourceId))); assert.match(html,/Welcome back/); assert.match(html,/555-0199/);
+    assert.doesNotMatch(html,/signup-number-wait|Your number will appear here once progress bar is completed/);
+    assert.match(html,/Call the number/); assert.match(html,/Copy number/);
     assert.match(html,/#\/f\//); assert.doesNotMatch(html,/signup-verification-form/);
     const beforeRows = JSON.stringify([...rows.values()]), beforeDashboard = fs.readFileSync(file,'utf8');
     for(let n=0;n<2;n++) {
