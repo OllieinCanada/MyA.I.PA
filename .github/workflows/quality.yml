@@ -113,12 +113,15 @@ jobs:
       - name: Verify single-review signup on mobile and desktop
         env:
           PRICING_QA_BUILD_DIR: docs
+          BUILD_PREVIEW_DIR: docs
         run: |
           npm run test:signup-pricing-choices
           npm run test:signup-footer-layout
           npm run test:homepage-mobile-hero
           npm run test:forwarding:browser
           npm run preview:signup-verification-progress
+          npm run test:pages-static-retention:browser
+          npm run test:browser:quality
 
       - name: Save signup browser evidence
         if: always()
@@ -132,6 +135,7 @@ jobs:
             diagnostics/signup-footer/
             diagnostics/homepage-hero/
             diagnostics/forwarding-onboarding/
+            diagnostics/static-retention/
           if-no-files-found: ignore
 
       - name: Archive verified Pages output
@@ -143,6 +147,7 @@ jobs:
             docs/index.html
             docs/404.html
             docs/asset-manifest.json
+            docs/static-asset-history.json
             docs/proof/index.html
             docs/illustrations/canadian-flag.png
             docs/static/

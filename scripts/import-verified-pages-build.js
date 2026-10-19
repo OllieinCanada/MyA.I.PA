@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const {spawnSync} = require('node:child_process');
 const {copyDir, rootPath} = require('./_helpers');
+const {syncRetainedStaticAssets} = require('./pages-static-retention');
 function main() {
   const sourceArg = process.argv.find(a => a.startsWith('--artifact='))?.slice(11);
   if (!sourceArg || !process.argv.includes('--confirm=IMPORT_VERIFIED_PAGES_BUILD')) throw Error('Verified artifact path and explicit confirmation required.');
@@ -17,14 +18,13 @@ function main() {
     if (!/^static\/(js|css)\/main\.[a-z0-9]+\.(js|css)$/.test(relative) || !fs.existsSync(path.join(source,relative))) throw Error('Missing verified main build assets.');
   }
   for (const relative of ['index.html','404.html','proof/index.html']) if (!fs.existsSync(path.join(source,relative))) throw Error('Incomplete Pages artifact.');
-  const tracked = spawnSync('git', ['ls-files', '-z', 'docs/static'], {encoding:'utf8'});
-  if (tracked.status !== 0) throw Error('Cannot identify old generated files.');
-  const obsolete = tracked.stdout.split('\0').filter(Boolean).map(p => path.resolve(rootPath(),p)).filter(p => {
-    if (!p.startsWith(path.join(docs,'static')+path.sep)) throw Error('Generated target escaped docs/static.');
-    return !fs.existsSync(path.join(source,path.relative(docs,p)));
-  });
-  copyDir(source,docs);
-  for (const target of obsolete) fs.unlinkSync(target); // exact tracked files, never recursive
-  console.log(JSON.stringify({imported:true,obsoleteGeneratedFilesRemoved:obsolete.length,recoverable:'Tracked old files remain available in Git.'}));
+  const retention = syncRetainedStaticAssets({buildDir:source,docsDir:docs});
+  for (const entry of fs.readdirSync(source,{withFileTypes:true})) {
+    if (['static','static-asset-history.json'].includes(entry.name)) continue;
+    if (entry.isDirectory()) copyDir(path.join(source,entry.name),path.join(docs,entry.name));
+    else if (entry.isFile()) fs.copyFileSync(path.join(source,entry.name),path.join(docs,entry.name));
+    else throw Error('Unexpected artifact entry type.');
+  }
+  console.log(JSON.stringify({imported:true,retention}));
 }
 try { main(); } catch(e) { console.error(e.message); process.exitCode=1; }
