@@ -1,6 +1,6 @@
 const { normalizeSmsPhone } = require("./smsSuppression");
 
-const SETUP_VERSION = 3;
+const SETUP_VERSION = 4;
 const CARRIERS = new Set(["BELL", "ROGERS", "TELUS", "OTHER", "NOT_SURE"]);
 const LINE_TYPES = new Set(["MOBILE", "LANDLINE", "VOIP", "NOT_SURE"]);
 const mobileNoReplyCommand = number => `*61*${number}#`;
@@ -147,10 +147,25 @@ const RULES = Object.freeze([
 
 function resolveForwardingRule({ carrier, lineType, forwardingMode = "NO_ANSWER", destination }) {
   const normalizedCarrier = normalizeCarrier(carrier);
-  const normalizedLineType = normalizeLineType(lineType);
+  const choice = normalizeLineType(lineType);
+  const normalizedLineType = choice === 'NOT_SURE' ? 'MOBILE' : choice;
   const mode = String(forwardingMode || "NO_ANSWER").trim().toUpperCase();
   const destinationDigits = digits10(destination);
   const rule = RULES.find((item) => item.carrier === normalizedCarrier && item.lineType === normalizedLineType && item.forwardingType === mode);
+  if (!rule && normalizedLineType === 'MOBILE' && mode === 'NO_ANSWER') {
+    const activationDialString = mobileNoReplyCommand(destinationDigits);
+    return {
+      key: 'standard-mobile-no-answer-v4', carrier: normalizedCarrier, lineType: 'MOBILE', forwardingType: mode,
+      activationMethod: 'DIAL_STRING', activationDialString, activationTelUri: encodeDialStringToTelUri(activationDialString),
+      deactivationDialString: '', deactivationTelUri: '', destinationDigits, supported: true, carrierSpecific: false,
+      humanInstructions: ['Open the Phone app using the button below.', 'Press Call or Send and wait for your phone company to confirm the change.'],
+      source: 'https://www.rogers.com/support/mobility/use-call-forwarding', verifiedAt: '2026-10-20',
+      timing: { mode: 'CARRIER_CONTROLLED', exactThreeRingsSupported: false,
+        customerCopy: 'Your mobile rings first. Calls you do not answer go to your My AI PA number once your carrier confirms forwarding.',
+        adjustmentCopy: 'This is a common mobile no-answer code. If your carrier rejects it, use the help below.' },
+      warnings: ['Your carrier must accept the code. Forwarded-call charges may apply.'],
+    };
+  }
   if (!rule) {
     const manualRule = normalizedLineType === 'MOBILE' && mode === 'NO_ANSWER' ? {
       humanInstructions: [

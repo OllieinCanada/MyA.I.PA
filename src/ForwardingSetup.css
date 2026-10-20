@@ -7,3 +7,22 @@
 .forwarding-activate{display:flex;align-items:center;justify-content:center;min-height:54px;padding:12px 18px;border-radius:14px;background:#ff6200;color:#fff;text-decoration:none;font-weight:900;text-align:center;box-sizing:border-box}
 .forwarding-activate[aria-disabled="true"]{opacity:.55;cursor:wait}
 .forwarding-command strong{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:clamp(1rem,4.4vw,1.5rem);white-space:nowrap;max-width:100%;overflow-x:auto}
+.forwarding-onboarding{box-sizing:border-box;background:#f1f6fd}
+.forwarding-card{width:min(560px,100%);padding:28px}
+.forwarding-card h1{font-size:clamp(2rem,7.5vw,3rem);line-height:1.08}
+.forwarding-card>p:not(.forwarding-eyebrow):not(.forwarding-message):not(.forwarding-warning){font-size:1rem;line-height:1.5;font-weight:500}
+.forwarding-eyebrow{margin-top:24px;font-size:.7rem}
+.forwarding-number{margin:20px 0;padding:18px}
+.forwarding-number strong{font-size:clamp(1.6rem,6.8vw,2.2rem)}
+.forwarding-next-step{margin:0 0 10px!important;font-weight:800!important;font-size:.9rem!important;color:#07142a!important}
+.forwarding-activate{min-height:62px;font-size:1rem;box-shadow:0 7px 18px #ff620024}
+.forwarding-dial-note{margin:10px 0 0!important;font-size:.85rem!important;text-align:center}
+.forwarding-code-row{display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0}
+.forwarding-code-row strong{flex:1;min-width:0;font-size:clamp(.95rem,4vw,1.25rem)}
+.forwarding-code-row button{flex:0 0 auto;min-height:42px;padding:0 12px;font-size:.8rem;width:auto}
+.forwarding-phone-tip{font-size:.8rem!important;margin:0!important;color:#64748b!important;line-height:1.5!important}
+.forwarding-reassurance{display:flex;gap:10px;align-items:flex-start;margin-top:18px;padding:14px;background:#f0fdf4;border-radius:14px;color:#166534}
+.forwarding-reassurance>span{font-weight:900}.forwarding-reassurance p{margin:0;font-size:.85rem;line-height:1.5}
+.forwarding-change{font-size:.85rem!important;margin-top:12px!important;min-height:40px!important}
+.forwarding-dashboard-link{font-size:.8rem;margin-top:12px}
+@media(max-width:560px){.forwarding-card{padding:22px}.forwarding-code-row button{width:auto}.forwarding-onboarding{place-items:start center;padding:12px}}

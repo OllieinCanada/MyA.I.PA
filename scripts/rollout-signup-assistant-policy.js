@@ -9,7 +9,7 @@ const path=require('node:path');
 const {isDeepStrictEqual}=require('node:util');
 const {toolPatch}=require('./refresh-vapi-job-type');
 const {repairPayload,speechSnapshot}=require('./repair-signup-speech');
-const {updateMessages}=require('../server/vapiIsolatedSmsProvisioning');
+const {updateMessages,toolRejectionPlan}=require('../server/vapiIsolatedSmsProvisioning');
 const {inspectSignupSpeech}=require('../server/signupSpeechPolicy');
 const {pricingSummaryOptionsFromAssistant}=require('../src/features/signup/pricingPolicy');
 const {definitionMatches}=require('./vapi-release-evidence');
@@ -32,7 +32,7 @@ function assistantPatch(a,t) {
   patch.model.messages=updateMessages(patch.model.messages,t.function.name).map(m=>m.role==='system'?{...m,content:String(m.content).replace(/\n*## MYAIPA LIVE PRICING POLICY 2026-10-07[\s\S]*?## END MYAIPA LIVE PRICING POLICY/g,'').trimEnd()+(choices?'':'\n\n'+POLICY)}:m);
   return patch;
 }
-function toolSnapshot(t){return {function:t.function,code:t.code};}
+function toolSnapshot(t){return {function:t.function,code:t.code,rejectionPlan:t.rejectionPlan || {conditions:[]}};}
 function toolGuard(t){return {function:t.function,code:t.code,environmentVariables:t.environmentVariables,messages:t.messages,timeoutSeconds:t.timeoutSeconds,rejectionPlan:t.rejectionPlan};}
 function ownership(data,s) {
   if(CLOSED(s)||!s.signupAttemptId||!s.businessName||!s.businessId||!s.provisioningBusinessKey||!s.identityVerified) return 'missing_active_verified_business_identity';
@@ -63,7 +63,7 @@ async function plansFor(data,api) {
     if(consumers.length!==1||consumers[0].id!==assistant.id||!isManagedSummaryTool(tool)||norm(env.DEFAULT_FROM_NUMBER)!==norm(s.twilioPhoneNumber)||norm(env.DEFAULT_OWNER_TO_NUMBER)!==norm(s.ownerPhone||s.businessPhone)) {skipped.push({business:s.businessName,reason:'tool_not_exclusive_or_routing_mismatch'});continue;}
     const context=(assistant.model?.messages||[]).filter(m=>m.role==='system').map(m=>String(m.content)).join('\n');
     if(!context.includes(`- Business name: ${s.businessName}`)||!context.includes('MYAIPA_AGENT_VERSION:')) {skipped.push({business:s.businessName,reason:'business_context_mismatch'});continue;}
-    const payload=assistantPatch(assistant,tool), nextTool=toolPatch(tool);
+    const payload=assistantPatch(assistant,tool), nextTool={...toolPatch(tool),rejectionPlan:toolRejectionPlan()};
     plans.push({signup:s,assistant,tool,phone:data.phones.find(p=>p.id===s.vapiPhoneNumberId),payload,nextTool});
   }
   return {plans,skipped};

@@ -2230,6 +2230,16 @@ test("Vapi lifecycle status updates are handled explicitly before termination", 
   assert.deepEqual(await response.json(), { ok: true, eventType: "status-update", terminal: false });
 });
 
+test("authenticated Vapi informational events are acknowledged without a business lookup or call creation", async () => {
+  for (const type of ['assistant.started', 'conversation-update', 'speech-update', 'transcript', 'model-output']) {
+    const response = await request('/api/webhooks/voice', { method: 'POST', headers: { 'x-vapi-secret': process.env.VAPI_WEBHOOK_SECRET }, body: { message: { type } } });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { ok: true, eventType: type, informational: true });
+  }
+  const unauthenticated = await request('/api/webhooks/voice', { method: 'POST', body: { message: { type: 'speech-update' } } });
+  assert.equal(unauthenticated.status, 401);
+});
+
 test("CORS only reflects configured origins", async () => {
   const allowed = await request("/api/health", { headers: { origin: "https://www.myaipa.ca" } });
   assert.equal(allowed.headers.get("access-control-allow-origin"), "https://www.myaipa.ca");

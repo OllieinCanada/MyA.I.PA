@@ -58,7 +58,7 @@ test("TELUS and Rogers share verified activation but retain their different disa
 });
 
 test("never guesses for VoIP, other, or unknown combinations", () => {
-  for (const [carrier, lineType] of [["telus", "landline"], ["rogers", "voip"], ["other", "landline"], ["not_sure", "not_sure"]]) {
+  for (const [carrier, lineType] of [["telus", "landline"], ["rogers", "voip"], ["other", "landline"]]) {
     const rule = resolveForwardingRule({ carrier, lineType, destination: "+19055550123" });
     assert.equal(rule.supported, false);
     assert.equal(rule.activationMethod, "MANUAL");
@@ -67,12 +67,13 @@ test("never guesses for VoIP, other, or unknown combinations", () => {
   }
 });
 
-test('unknown mobile uses conditional phone settings, never a universal dial command',()=>{
- const rule=resolveForwardingRule({carrier:'not_sure',lineType:'mobile',destination:'+19055550123'});
- assert.equal(rule.activationDialString,'');assert.equal(rule.activationTelUri,'');assert.equal(rule.supported,false);
- assert.match(rule.humanInstructions.join(' '),/Always forward turned off/);
- assert.match(rule.humanInstructions.join(' '),/choose your provider/);
- assert.match(rule.humanInstructions.join(' '),/9055550123/);
+test('unknown service defaults to mobile with the common no-answer code and an explicit carrier acceptance requirement',()=>{
+ for(const lineType of ['mobile','not_sure',undefined]){
+ const rule=resolveForwardingRule({carrier:'not_sure',lineType,destination:'+19055550123'});
+ assert.equal(rule.lineType,'MOBILE');assert.equal(rule.activationDialString,'*61*9055550123#');
+ assert.equal(rule.activationTelUri,'tel:*61*9055550123%23');assert.equal(rule.carrierSpecific,false);
+ assert.match(rule.warnings.join(' '),/carrier must accept/i);
+ }
 });
 
 test("normalizes signup choices and validates the forwarding destination", () => {

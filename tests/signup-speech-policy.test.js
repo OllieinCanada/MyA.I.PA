@@ -5,13 +5,15 @@ const { buildSignupAssistantConfig } = require("../server/signupAssistantTemplat
 const { updateMessages } = require("../server/vapiIsolatedSmsProvisioning");
 const { assessSignupAssistantContent } = require("../server/signupAssistantVerification");
 
-test("legacy opening migrates once, preserves business name, and asks only consent", () => {
+test("legacy opening migrates once, preserves business name, and states recording without a question", () => {
   for (const name of ["Mc dooper electricsl", "Example Electric", "A.B. Services"]) {
     const value = fixedConsentOpening(`For quality and service purposes, this call may be recorded. Thanks for calling ${name}. How are you today?`);
     assert.match(value, new RegExp(`^Thanks for calling ${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\.`));
     assert.equal(fixedConsentOpening(value), value);
     assert.equal((value.match(/recorded/g) || []).length, 1);
     assert.equal((value.match(/\?/g) || []).length, 1);
+    assert.match(value, /How can I help you today\?$/);
+    assert.doesNotMatch(value, /Is that okay/);
     assert.doesNotMatch(value, /How are you|may be recorded/);
   }
 });
@@ -35,5 +37,6 @@ test("legacy instructions no longer demand social response followed by a second 
   const prompt = normalizeConsentPrompt(`Business instructions.\nAfter the caller answers how they are, briefly acknowledge it, then give the exact recording notice.\n- After the opening greeting and the caller's social response, say this call will be recorded.\nKeep pricing consent and SMS tool rules.`);
   assert.doesNotMatch(prompt, /After the caller answers|After the opening greeting/);
   assert.match(prompt, /Keep pricing consent and SMS tool rules/);
-  assert.match(prompt, /social answer such as "I'm fine" is not consent/);
+  assert.match(prompt, /Never claim the caller explicitly consented when they did not/);
+  assert.match(prompt, /Thank you for calling\. Goodbye\./);
 });

@@ -115,12 +115,13 @@ async function initializeForwardingSetup({ prismaClient, signupId, ownerEmail, b
   const assigned = normalizeSmsPhone(assignedMyAiPaNumber, "assignedMyAiPaNumber");
   if (existing === assigned) throw forwardingError("The business number and My AI PA number must be different.", 400, "FORWARDING_SAME_NUMBER");
   const normalizedCarrier = normalizeCarrier(carrier);
-  const normalizedLineType = normalizeLineType(lineType);
+  const requestedLineType = normalizeLineType(lineType);
+  const normalizedLineType = requestedLineType === 'NOT_SURE' ? 'MOBILE' : requestedLineType;
   const signupKey = signupKeyFor({ signupId, ownerEmail, existingBusinessNumber: existing });
   const prior = await prismaClient.callForwardingSetup.findUnique({ where: { signupKey } });
   const sameAssignedNumber = prior?.assignedMyAiPaNumber === assigned;
   const effectiveCarrier = sameAssignedNumber && normalizedCarrier === "NOT_SURE" ? prior.carrier : normalizedCarrier;
-  const effectiveLineType = sameAssignedNumber && normalizedLineType === "NOT_SURE" ? prior.lineType : normalizedLineType;
+  const effectiveLineType = sameAssignedNumber && requestedLineType === "NOT_SURE" && prior.lineType !== "NOT_SURE" ? prior.lineType : normalizedLineType;
   const rule = resolveForwardingRule({ carrier: effectiveCarrier, lineType: effectiveLineType, destination: assigned });
   const status = sameAssignedNumber ? prior.status : inferInitialStatus(effectiveCarrier, effectiveLineType, rule);
   const setup = await prismaClient.callForwardingSetup.upsert({
@@ -198,7 +199,7 @@ async function getSetupFromToken({ prismaClient, token, env = process.env }) {
 
 async function updateSelections({ prismaClient, setup, carrier, lineType }) {
   const normalizedCarrier = normalizeCarrier(carrier);
-  const normalizedLineType = normalizeLineType(lineType);
+  const normalizedLineType = normalizeLineType(lineType) === 'NOT_SURE' ? 'MOBILE' : normalizeLineType(lineType);
   const rule = resolveForwardingRule({ carrier: normalizedCarrier, lineType: normalizedLineType, destination: setup.assignedMyAiPaNumber });
   const nextStatus = inferInitialStatus(normalizedCarrier, normalizedLineType, rule);
   const updated = await prismaClient.callForwardingSetup.update({ where: { id: setup.id }, data: { carrier: normalizedCarrier, lineType: normalizedLineType, status: nextStatus, lastRuleKey: rule.key, lastFailureReason: null } });

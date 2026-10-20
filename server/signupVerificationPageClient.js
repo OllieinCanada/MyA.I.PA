@@ -16,7 +16,7 @@ function verificationPageClientScript({ automaticSmsConfirmation = false } = {})
         progress.hidden = false;
         form.querySelectorAll("button").forEach(button => { button.disabled = true; });
         document.getElementById("verification-title").textContent = "Setting up your assistant";
-        document.getElementById("verification-description").textContent = "Keep this page open. Your AI number will appear here when assignment finishes.";
+        document.getElementById("verification-description").textContent = "Keep this page open. Your AI number will appear above when assignment finishes. This may take a few minutes.";
         try {
           const response = await fetch(form.action, {
             method: "POST", credentials: "same-origin", redirect: "error",

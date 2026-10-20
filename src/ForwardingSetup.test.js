@@ -5,7 +5,7 @@ import dialerFixture from './forwardingDialerFixture.json';
 
 describe('immediate forwarding instructions',()=>{
  let container,root;
- const initial={id:'fixture',carrier:'not_sure',lineType:'not_sure',assignedMyAiPaNumber:'+12895550199',forwardingStatus:'carrier_needed',rule:{humanInstructions:['Open your provider settings and forward unanswered calls only.'],warnings:['We will not guess one.'],supported:false,activationMethod:'MANUAL',destinationDigits:'2895550199'}};
+ const initial={id:'fixture',carrier:'not_sure',lineType:'not_sure',assignedMyAiPaNumber:'+12895550199',forwardingStatus:'carrier_needed',rule:{...dialerFixture,humanInstructions:['Open your provider settings and forward unanswered calls only.'],warnings:[],supported:true,activationMethod:'DIAL_STRING',destinationDigits:'2895550199'}};
  const manual={...initial,lineType:'mobile',forwardingStatus:'manual_setup_required',rule:{humanInstructions:['Use unanswered calls only.'],warnings:[],activationMethod:'MANUAL',destinationDigits:'2895550199'}};
  beforeEach(()=>{
   global.IS_REACT_ACT_ENVIRONMENT=true;window.location.hash='#/f/fixture';
@@ -25,8 +25,8 @@ describe('immediate forwarding instructions',()=>{
  });
  test('unknown service immediately shows the destination and safe setup instructions',async()=>{
   await mount();expect(container.textContent).not.toContain('Cellphone or landline?');expect(container.querySelector('select')).toBeNull();
-  expect(container.textContent).toContain('Forward unanswered calls to');
-  expect(container.textContent).toContain('Open your provider settings');
+  expect(button('Open Phone App to Set Up Forwarding').getAttribute('href')).toBe(dialerFixture.activationTelUri);
+  expect(container.textContent).toContain(dialerFixture.activationDialString);
   expect(global.fetch).toHaveBeenCalledTimes(1);
   act(()=>button('Need different setup instructions?').click());
   const select=container.querySelector('select');
@@ -40,11 +40,13 @@ describe('immediate forwarding instructions',()=>{
  });
  test.each(['mobile','landline','voip'])('%s goes straight to its saved instructions without a type-selection screen',async(lineType)=>{
   global.fetch.mockImplementationOnce(async()=>({ok:true,json:async()=>({forwarding:{...manual,lineType}})}));
-  await mount();expect(container.textContent).toContain('Use unanswered calls only.');
+  await mount();
   expect(container.textContent).toContain('Copy forwarding number');
   expect(container.querySelector('select')).toBeNull();
   expect(container.textContent).not.toContain('Cellphone or landline?');
   expect(global.fetch).toHaveBeenCalledTimes(1);
+  act(()=>button('Need different setup instructions?').click());
+  expect(container.textContent).toContain('Use unanswered calls only.');
  });
  test('saved choices bypass the questions',async()=>{
   global.fetch.mockImplementationOnce(async()=>({ok:true,json:async()=>({forwarding:{...manual,carrier:'rogers'}})}));
@@ -73,14 +75,15 @@ describe('immediate forwarding instructions',()=>{
   expect(global.fetch).toHaveBeenCalledTimes(1);
   expect(container.textContent).not.toMatch(/Test My Setup|Do not answer the test call|You’re protected/);
  });
- test('iPhones receive the exact code to copy instead of a misleading carrier-code link',async()=>{
+ test('iPhones receive the phone button and an exact copy-code fallback',async()=>{
   jest.spyOn(window.navigator,'userAgent','get').mockReturnValue('iPhone');
   const writeText=jest.fn().mockResolvedValue(undefined);
   Object.defineProperty(window.navigator,'clipboard',{configurable:true,value:{writeText}});
   const rule={...manual.rule,...dialerFixture,supported:true,activationMethod:'DIAL_STRING'};
   global.fetch.mockImplementationOnce(async()=>({ok:true,json:async()=>({forwarding:{...manual,rule}})}));
-  await mount();expect(container.querySelector('a[href^="tel:"]')).toBeNull();
-  await act(async()=>button('Copy').click());
+  await mount();expect(container.querySelector('a[href^="tel:"]').getAttribute('href')).toBe(dialerFixture.activationTelUri);
+  expect(container.textContent).toContain('iPhones can block carrier-code links');
+  await act(async()=>button('Copy code').click());
   expect(writeText).toHaveBeenCalledWith(dialerFixture.activationDialString);
   expect(global.fetch).toHaveBeenCalledTimes(1);
  });

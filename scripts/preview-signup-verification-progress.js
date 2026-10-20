@@ -1,7 +1,7 @@
 // Entirely offline fixtures. No signup, provider, message or billing requests.
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
 const {chromium}=require('playwright');
-const {verificationProgressMarkup,verificationProgressScript}=require('../server/signupVerificationProgress');
+const {verificationProgressMarkup,verificationProgressScript,verificationNumberMarkup}=require('../server/signupVerificationProgress');
 const {buildSignupProgress}=require('../server/signupProgress');
 async function main(){
  const bundled='C:/Users/Olive/AppData/Local/ms-playwright/chromium-1234/chrome-win64/chrome.exe';
@@ -17,11 +17,11 @@ async function main(){
     const request=route.request(),url=new URL(request.url());
     assert.equal(request.method(),'GET');assert.equal(url.hostname,'127.0.0.1');
     if(url.pathname==='/progress')return route.fulfill({json:{signup:state}});
-    return route.fulfill({contentType:'text/html; charset=utf-8',body:'<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;padding:20px;box-sizing:border-box;background:#f2f7ff;font:18px Arial;color:#07142a}main{max-width:680px;margin:30px auto;background:white;padding:24px;box-sizing:border-box;border-radius:24px}h1{font-size:32px}p{line-height:1.5}</style><main><h1 id="verification-title">Setting up your assistant</h1><p id="verification-description"></p>'+verificationProgressMarkup()+'</main>'+verificationProgressScript('/progress')});
+    return route.fulfill({contentType:'text/html; charset=utf-8',body:'<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;padding:20px;box-sizing:border-box;background:#f2f7ff;font:18px Arial;color:#07142a}main{max-width:680px;margin:30px auto;background:white;padding:24px;box-sizing:border-box;border-radius:24px}h1{font-size:32px}p{line-height:1.5}</style><main>'+verificationNumberMarkup()+'<h1 id="verification-title">Setting up your assistant</h1><p id="verification-description"></p>'+verificationProgressMarkup({includeNumber:false})+'</main>'+verificationProgressScript('/progress')});
    });
    await page.goto('http://127.0.0.1/preview',{waitUntil:'domcontentloaded'});
    await page.getByText('Checking your assistant’s business answers',{exact:true}).waitFor();
-   await page.locator('#signup-number-wait').getByText('Your number will appear here once progress bar is completed',{exact:true}).waitFor();
+   await page.locator('#signup-number-wait').getByText('AI forwarding number will appear here',{exact:true}).waitFor();
    assert.equal(await page.evaluate(()=>document.querySelector('#signup-number-wait').getBoundingClientRect().bottom<=document.querySelector('#signup-progress-panel').getBoundingClientRect().top),true);
    assert.equal(await page.locator('#signup-progress-steps li').count(),10);
    assert.equal(await page.locator('#signup-progress-steps li[data-status="done"]').count(),3);

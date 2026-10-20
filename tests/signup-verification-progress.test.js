@@ -6,7 +6,7 @@ test('pending number message appears before the setup progress panel',()=>{
   const dom=new JSDOM(verificationProgressMarkup());
   try{
     const message=dom.window.document.querySelector('#signup-number-wait');
-    assert.equal(message.textContent.trim(),'Your number will appear here once progress bar is completed');
+    assert.equal(message.textContent.trim(),'AI forwarding number will appear here');
     assert.equal(message.nextElementSibling.id,'signup-progress-panel');
   }finally{dom.window.close();}
 });
@@ -21,7 +21,7 @@ test('normal polling fits its server budget and 429 backs off, including visibil
     }
   });
   try{
-    await tick(); assert.equal(interval,15000); assert.ok(900000/interval<120); assert.equal(reads,1);
+    await tick(); assert.equal(interval,10000); assert.ok(900000/interval<120); assert.equal(reads,1);
     for(let n=0;n<10;n++){await poll();dom.window.document.dispatchEvent(new dom.window.Event('visibilitychange'));}
     assert.equal(reads,1); now+=59000; await poll(); assert.equal(reads,1);
     now+=1000; await poll(); assert.equal(reads,2); assert.equal(dom.window.document.querySelector('#verification-title').textContent,'Setting up');
@@ -114,7 +114,8 @@ test('confirmation previews neither poll nor mark the phone verified until confi
 test('verification page attaches read-only progress before the confirmation POST script',()=>{
   const fs=require('node:fs'),source=fs.readFileSync(require.resolve('../server/index.js'),'utf8');
   const start=source.indexOf('function renderVerificationPage('),page=source.slice(start,source.indexOf('async function renderSavedProgress',start));
-  assert.match(page,/verificationProgressMarkup\(\)/);
+  assert.match(page,/verificationProgressMarkup\(\{ includeNumber: false \}\)/);
+  assert.ok(page.indexOf('verificationNumberMarkup()') < page.indexOf('<h1 id="verification-title">'));
   assert.ok(page.indexOf('verificationProgressScript(')<page.indexOf('verificationPageClientScript('));
   assert.match(verificationProgressMarkup(),/prefers-reduced-motion/);
 });

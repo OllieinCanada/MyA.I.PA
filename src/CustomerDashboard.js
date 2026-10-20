@@ -330,7 +330,7 @@ function Brand({ auth = false }) {
   );
 }
 
-function LookupForm({ credentials, setCredentials, onSubmit, busy, error, step, code, setCode, destination, devCode, onBack }) {
+function LookupForm({ credentials, setCredentials, onSubmit, busy, error, step, code, setCode, destination, devCode, onBack, onResend, resendReady }) {
   return (
     <main className="customer-dashboard customer-dashboard-login">
       <section className="customer-login-card">
@@ -387,7 +387,7 @@ function LookupForm({ credentials, setCredentials, onSubmit, busy, error, step, 
                     autoFocus
                     aria-invalid={error ? "true" : undefined}
                   />
-                  <p className="customer-login-helper">The code expires in 10 minutes. Never share it with anyone.</p>
+                  <p className="customer-login-helper">The code expires in 10 minutes. Never share it with anyone. If it hasn’t appeared, check your blocked or filtered messages and confirm the phone ending shown above.</p>
                   {devCode ? <p className="customer-dev-code">Local preview code: <strong>{devCode}</strong></p> : null}
                 </>
               ) : (
@@ -432,6 +432,7 @@ function LookupForm({ credentials, setCredentials, onSubmit, busy, error, step, 
                 <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7.5 4.5 5.5 5.5-5.5 5.5M12.5 10H3" /></svg>
               </button>
               {step === "code" ? <button type="button" className="customer-login-back" onClick={onBack} disabled={busy}>Use different details</button> : null}
+              {step === "code" ? <button type="button" className="customer-login-back" onClick={onResend} disabled={busy || !resendReady}>{resendReady ? "Send a new code" : "You can request a new code after one minute"}</button> : null}
             </form>
             <p className="customer-login-trust">
               <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5.8 8V6.2a4.2 4.2 0 0 1 8.4 0V8m-9.4 0h10.4v8H4.8V8Z" /></svg>
@@ -1455,6 +1456,13 @@ export default function CustomerDashboard() {
   const [code, setCode] = useState("");
   const [destination, setDestination] = useState("");
   const [devCode, setDevCode] = useState("");
+  const [resendReady, setResendReady] = useState(false);
+  const [codeRequestedAt, setCodeRequestedAt] = useState(0);
+  useEffect(() => {
+    if (!codeRequestedAt) return undefined;
+    const timer = window.setTimeout(() => setResendReady(true), Math.max(0, codeRequestedAt + 60000 - Date.now()));
+    return () => window.clearTimeout(timer);
+  }, [codeRequestedAt]);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState("");
   const [refreshedAt, setRefreshedAt] = useState("");
@@ -1474,6 +1482,8 @@ export default function CustomerDashboard() {
         const result = await requestDashboardCode(normalizedCredentials);
         setDestination(result.destination || "your registered phone");
         setDevCode(result.devCode || "");
+        setResendReady(false);
+        setCodeRequestedAt(Date.now());
         setCode("");
         setStep("code");
       } else {
@@ -1489,6 +1499,18 @@ export default function CustomerDashboard() {
     } finally {
       setBusy(false);
     }
+  };
+
+  const resendCode = async () => {
+    if (busy || !resendReady) return;
+    setBusy(true); setError("");
+    try {
+      const result = await requestDashboardCode(normalizedCredentials);
+      setDestination(result.destination || "your registered phone");
+      setDevCode(result.devCode || "");
+      setCode(""); setResendReady(false); setCodeRequestedAt(Date.now());
+    } catch (err) { setError(err?.message || "A new code could not be requested."); }
+    finally { setBusy(false); }
   };
 
   useEffect(() => {
@@ -1561,6 +1583,8 @@ export default function CustomerDashboard() {
           setDevCode("");
           setError("");
         }}
+        onResend={resendCode}
+        resendReady={resendReady}
       />
     );
   }
