@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const { copyDir, ensureDir, npmCommand, removeDir, rootPath, run } = require("./_helpers");
+const { syncRetainedStaticAssets } = require('./pages-static-retention');
 
 const buildDirName = "build-pages-output";
 const buildDir = rootPath(buildDirName);
@@ -24,8 +25,8 @@ if (!fs.existsSync(buildDir)) {
 console.log("Syncing build output into docs/ for GitHub Pages...");
 ensureDir(docsDir);
 
-// Only remove generated static assets. Keep extra docs/audio/transcript files intact.
-removeDir(path.join(docsDir, "static"));
+// Keep current plus two previous asset generations so older open tabs still load.
+console.log('Static asset retention:', syncRetainedStaticAssets({ buildDir, docsDir }));
 copyDir(buildDir, docsDir);
 fs.writeFileSync(path.join(docsDir, ".nojekyll"), "");
 fs.copyFileSync(path.join(docsDir, "index.html"), path.join(docsDir, "404.html"));

@@ -394,11 +394,12 @@ async function testSignupJourney(browser, baseUrl, viewport) {
     const screenshotDir = rootPath("diagnostics", "browser-drive");
     fs.mkdirSync(screenshotDir, { recursive: true });
     await page.screenshot({ path: path.join(screenshotDir, `notes-pricing-${viewport.name}.png`), fullPage: true, animations: "disabled" });
-    await clickVisibleByText(page, "Continue to check your setup");
-    await clickVisibleByText(page, "Continue to final review");
+    await clickVisibleByText(page, "Review and confirm");
     await page.locator(".signup-review-step").waitFor({ state: "visible" });
     const finalText = await page.locator("form").innerText();
-    if (!/Step 7 of 8/.test(finalText) || /voice preview|Assistant voice/i.test(finalText)) {
+    if (!/Step 6 of 7/.test(finalText) || /Check your setup|voice preview|Assistant voice/i.test(finalText)
+      || await page.locator('.signup-review-step').count() !== 1
+      || await page.locator('[data-testid="turnstile-container"]').count() !== 1) {
       throw new Error("Signup did not reach final review directly without voice preview");
     }
     await page.locator(".signup-review-step").getByRole("button", { name: "Change", exact: true }).first().click();
@@ -406,15 +407,16 @@ async function testSignupJourney(browser, baseUrl, viewport) {
     await clickVisibleByText(page, "Continue");
     await page.locator(".signup-review-step").waitFor({ state: "visible" });
     const editedText = await page.locator("form").innerText();
-    if (!/Step 7 of 8/.test(editedText) || !/Plumber/.test(editedText)
+    if (!/Step 6 of 7/.test(editedText) || !/Plumber/.test(editedText)
       || !/Residential/.test(editedText) || !/Hamilton/.test(editedText)
       || !/125/.test(editedText) || !/95/.test(editedText)) {
       throw new Error("Trade edit did not return directly to review with saved choices");
     }
     await page.screenshot({ path: path.join(screenshotDir, `notes-final-review-${viewport.name}.png`), fullPage: true, animations: "disabled" });
     await clickVisibleByText(page, "Back");
-    if (!/Step 6 of 8/.test(await page.locator("form").innerText())) {
-      throw new Error("Back from final review did not return to Check your setup");
+    if (!/Step 5 of 7/.test(await page.locator("form").innerText())
+      || !await page.locator('#signup-pricing').isVisible()) {
+      throw new Error("Back from final review did not return to service-call details");
     }
 
     return { engine: "chromium", route: "signup-journey", viewport: viewport.name, accessibilityWarnings: [] };
