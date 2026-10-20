@@ -8,11 +8,11 @@ const dashboard = fs.readFileSync(path.join(__dirname, "..", "src", "CustomerDas
 
 test("forwarding immediately displays saved instructions and keeps service changes optional", () => {
   assert.match(source, /setCarrier\(data.forwarding.carrier\)/);
-  assert.match(source, /setLineType\(data.forwarding.lineType\)/);
+  assert.match(source, /data.forwarding.lineType === "not_sure" \? "mobile"/);
   assert.doesNotMatch(source, /needsChoices|Cellphone or landline\?|LINE_TYPES/);
   assert.match(source, /\{forwarding\?\.rule \? <>/);
-  assert.match(source, /Set up your new receptionist/);
-  assert.match(source, /\{showCarrierHelp \? <div className="forwarding-form">/);
+  assert.match(source, /Replace voicemail with My AI PA/);
+  assert.match(source, /\{showCarrierHelp \? <div className="forwarding-help">/);
   assert.match(source,/Need different setup instructions\?/);
   assert.doesNotMatch(source, /Nothing changes about how you answer your phone/);
 });

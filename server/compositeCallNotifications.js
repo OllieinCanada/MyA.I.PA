@@ -191,7 +191,7 @@ function buildCustomerBody(args) {
 function postSendClosingPrompt() {
   return `${POST_SEND_CLOSING_MARKER}
 This is the highest-priority post-send closing instruction.
-- After the notification tool returns with complete set to true, say exactly: "I've sent your information to the team. Someone will contact you to discuss the request and arrange the next step."
+- After the notification tool returns with complete set to true, say exactly: "I've sent your information to the team. Someone will contact you to discuss the request and arrange the next step. Thank you for calling. Goodbye."
 - Let the entire final sentence finish before calling endCall. Do not add a promise about an appointment, quote, price, technician, or scheduled work.
 - If complete is not true, do not claim both texts were sent. Briefly explain that you could not confirm both messages, tell the caller the team has their request only if the tool result confirms that, and ask whether there is anything else you can help with.
 ## END MYAIPA NATURAL POST-SEND CLOSING`;

@@ -36,7 +36,7 @@ test("builds the current production Vapi assistant with resolved signup values",
   assert.match(prompt, /pricingDiscussed as true/);
 
   assert.equal(config.name, "My AI PA Agent");
-  assert.equal(config.firstMessage, "Thanks for calling Example Electric. This call will be recorded for service quality and accurate follow-up. Is that okay?");
+  assert.equal(config.firstMessage, "Thanks for calling Example Electric. This call will be recorded for service quality and accurate follow-up. How can I help you today?");
   assert.equal(config.model.provider, "openai");
   assert.equal(config.model.model, "gpt-4o");
   assert.equal(config.model.temperature, 0.1);
@@ -73,8 +73,8 @@ test("builds the current production Vapi assistant with resolved signup values",
   assert.match(prompt, /endCall/);
   assert.match(prompt, /What is the address where the work needs to be done\?/);
   assert.match(prompt, /When would you ideally like the work to begin\?/);
-  assert.match(prompt, /fixed first message has already greeted the caller and asked for recording consent/);
-  assert.match(prompt, /Stop and wait for an explicit yes before collecting service, contact, address, or job details/i);
+  assert.match(prompt, /fixed first message has already thanked the caller, stated the recording notice once/);
+  assert.match(prompt, /If the caller objects to recording, politely end/);
   assert.match(prompt, /We handle residential and commercial electrical work\. Are you looking for a new installation, service, or repair today\?/);
   assert.match(prompt, /Safety and priority gate before pricing/i);
   assert.match(prompt, /downed, arcing, or sparking wire/i);

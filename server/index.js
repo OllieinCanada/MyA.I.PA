@@ -29,7 +29,7 @@ const { createSignupAttemptStore, deriveSignupStatusAccess } = require("./signup
 const { assertSignupOpen, isClosedSignup, signupBusinessKey } = require("./signupBusinessIdentity");
 const { assertTrialGateOwnership } = require("./trialGateOwnership");
 const { verificationPageClientScript } = require("./signupVerificationPageClient");
-const { verificationProgressScript, verificationProgressMarkup } = require("./signupVerificationProgress");
+const { verificationProgressScript, verificationProgressMarkup, verificationNumberMarkup } = require("./signupVerificationProgress");
 const { ensureSignupBusinessBindings, closeSignupBusinessIdentity, upsertOwnedProviderMapping } = require("./signupBusinessRegistry");
 const { buildBackendRootPage } = require("./backendRootPage");
 const {
@@ -13666,6 +13666,11 @@ app.post(
     const payload = req.body || {};
     const vapiMessage = payload.message && typeof payload.message === "object" ? payload.message : null;
     const vapiMessageType = String(vapiMessage?.type || "").toLowerCase();
+    // Informational events contain no action request. Acknowledge them before
+    // legacy business lookup; otherwise every speech update becomes a 422.
+    if (["assistant.started", "conversation-update", "speech-update", "transcript", "model-output"].includes(vapiMessageType)) {
+      return res.json({ ok: true, eventType: vapiMessageType, informational: true });
+    }
     if (vapiMessageType === "assistant-request") {
       const call = vapiMessage?.call && typeof vapiMessage.call === "object" ? vapiMessage.call : {};
       const verification = await matchForwardedVerificationCall({
@@ -15302,18 +15307,7 @@ app.all(
           <body>
             <main>
               <span class="badge">${confirmation ? "Confirm your contact" : ok ? "Verified" : "Needs attention"}</span>
-              <h1 id="verification-title">${escapeHtml(title)}</h1>
-              <p id="verification-description">${escapeHtml(body)}</p>
-              <p id="setup-progress" role="status" aria-live="polite" hidden>Verifying your phone and assigning your AI number… Please keep this page open.</p>
-              ${(confirmation || progress) && !setupReady ? verificationProgressMarkup() : ""}
-              ${confirmation ? `<form method="post" id="signup-verification-form" action="${escapeHtml(req.path)}">
-                <input type="hidden" name="token" value="${escapeHtml(token)}" />
-                <input type="hidden" name="channel" value="${escapeHtml(verificationChannel)}" />
-                <input type="hidden" name="channelProof" value="${escapeHtml(createVerificationChannelProof(token, verificationChannel, getAdminSessionSecret()))}" />
-                <input type="hidden" name="confirmationProof" value="${escapeHtml(createVerificationConfirmationProof(token, verificationChannel, getAdminSessionSecret()))}" />
-                <input type="hidden" name="confirmation" value="VERIFY_AND_CONTINUE" />
-                ${automaticSmsConfirmation ? '<noscript><button class="action" type="submit">Verify and continue</button></noscript>' : '<button class="action" type="submit">Verify and continue</button>'}
-              </form>` : ""}
+              ${(confirmation || progress) && !setupReady ? verificationNumberMarkup() : ""}
               ${setupReady ? `
                 <section class="number" aria-label="Assigned My AI PA number">
                   <p class="number-label">Your My AI PA number</p>
@@ -15324,6 +15318,18 @@ app.all(
                   </div>
                 </section>
               ` : ""}
+              <h1 id="verification-title">${escapeHtml(title)}</h1>
+              <p id="verification-description">${escapeHtml(body)}</p>
+              <p id="setup-progress" role="status" aria-live="polite" hidden>Verifying your phone and assigning your AI number… Please keep this page open.</p>
+              ${(confirmation || progress) && !setupReady ? verificationProgressMarkup({ includeNumber: false }) : ""}
+              ${confirmation ? `<form method="post" id="signup-verification-form" action="${escapeHtml(req.path)}">
+                <input type="hidden" name="token" value="${escapeHtml(token)}" />
+                <input type="hidden" name="channel" value="${escapeHtml(verificationChannel)}" />
+                <input type="hidden" name="channelProof" value="${escapeHtml(createVerificationChannelProof(token, verificationChannel, getAdminSessionSecret()))}" />
+                <input type="hidden" name="confirmationProof" value="${escapeHtml(createVerificationConfirmationProof(token, verificationChannel, getAdminSessionSecret()))}" />
+                <input type="hidden" name="confirmation" value="VERIFY_AND_CONTINUE" />
+                ${automaticSmsConfirmation ? '<noscript><button class="action" type="submit">Verify and continue</button></noscript>' : '<button class="action" type="submit">Verify and continue</button>'}
+              </form>` : ""}
               ${!ok ? `<section class="number" aria-label="Need help now">
                 <p class="number-label">Need help now?</p>
                 <p style="margin:0;color:#334155;font-size:16px">Call or text My AI PA support. You do not need to explain everything twice.</p>
@@ -15332,7 +15338,7 @@ app.all(
               ${confirmation ? `<a id="verification-support" hidden href="tel:${escapeHtml(CUSTOMER_SUPPORT_PHONE)}">Call signup support</a>` : ""}
               <div class="actions">${setupReady
                 ? forwardingSetupUrl
-                  ? `<a id="continue-forwarding" href="${escapeHtml(forwardingSetupUrl)}">Continue</a>`
+                  ? `<a id="continue-forwarding" href="${escapeHtml(forwardingSetupUrl)}">Tap Continue to get instant call forwarding</a>`
                   : `<a href="tel:${escapeHtml(CUSTOMER_SUPPORT_PHONE)}">Call support for forwarding setup</a>`
                 : `<a href="${escapeHtml(`${FRONTEND_APP_URL}/#/signup`)}">Return to My AI PA</a>`}</div>
             </main>
@@ -15398,7 +15404,7 @@ app.all(
         ok: true, confirmation: true,
         title: verificationChannel === "sms" ? "Setting up your assistant" : "Verify your contact details",
         body: verificationChannel === "sms"
-          ? "Keep this page open. Your AI phone number will appear here when assignment finishes."
+          ? "Keep this page open. Your AI number will appear above when assignment finishes. This may take a few minutes."
           : "Press Verify and continue to start setup.",
       });
     }
@@ -16365,6 +16371,10 @@ app.post(
       to: destination,
       message: `Your My AI PA dashboard code is ${code}. It expires in 10 minutes. Do not share this code.`,
     });
+    if ((!sms.mocked && (!sms.sid || ["failed", "undelivered", "canceled"].includes(String(sms.status).toLowerCase())))
+      || (sms.mocked && process.env.NODE_ENV === "production")) {
+      return res.status(502).json({ error: "The text provider did not accept your sign-in code. Please contact support before trying again." });
+    }
     res.status(202).json({
       ok: true,
       codeSent: true,

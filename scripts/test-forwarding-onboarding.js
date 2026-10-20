@@ -35,7 +35,7 @@ async function main() {
       assert.equal(await page.locator('.forwarding-brand svg rect').count(), 7);
       if (rule.activationDialString) assert.equal(await page.locator('.forwarding-command strong').innerText(), rule.activationDialString);
       else assert.equal(await page.getByRole('button', { name: 'Copy forwarding number', exact: true }).count(), 1);
-      if (rule.activationMethod === 'DIAL_STRING' && name !== 'iphone') assert.equal(await page.locator('.forwarding-activate').getAttribute('href'), rule.activationTelUri);
+      if (rule.activationMethod === 'DIAL_STRING') assert.equal(await page.locator('.forwarding-activate').getAttribute('href'), rule.activationTelUri);
       else assert.equal(await page.locator('.forwarding-activate').count(), 0);
       await page.evaluate(() => { window.dispatchEvent(new Event('focus')); window.dispatchEvent(new Event('pageshow')); document.dispatchEvent(new Event('visibilitychange')); });
       await page.screenshot({ path: path.join(output, `${name}.png`), fullPage: true, animations: 'disabled' });

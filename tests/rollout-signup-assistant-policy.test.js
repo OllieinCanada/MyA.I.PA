@@ -1,6 +1,6 @@
 const test=require('node:test');
 const assert=require('node:assert/strict');
-const {ownership,assistantPatch,applyPlans,POLICY}=require('../scripts/rollout-signup-assistant-policy');
+const {ownership,assistantPatch,applyPlans,plansFor,POLICY}=require('../scripts/rollout-signup-assistant-policy');
 const {speechSnapshot}=require('../scripts/repair-signup-speech');
 const {checkSummary}=require('../scripts/check-signup-policy-rollout');
 const {getVapiCompositeToolCode}=require('../server/compositeCallNotifications');
@@ -33,7 +33,27 @@ test('prompt migration is idempotent and preserves business facts, model and too
  assert.ok(patch.model.messages[0].content.includes(POLICY));
  assert.deepEqual(patch.model.toolIds,['t']);assert.equal(patch.model.model,'gpt-4o');
  assert.deepEqual(assistantPatch({...f.assistant,...patch},f.tool),patch);
- assert.ok(patch.firstMessage.includes('Is that okay?'));
+ assert.ok(patch.firstMessage.includes('This call will be recorded'));
+ assert.ok(!patch.firstMessage.includes('Is that okay?'));
+});
+
+test('rollout migrates legacy approval rules so Yes, please reaches the SMS tool',async()=>{
+ const f=fixture();
+ f.assistant.name='myaipa-vapi-assistant-example';
+ f.assistant.model.messages[0].content='- Business name: Example Electric\nMYAIPA_AGENT_VERSION: fixture';
+ f.tool.environmentVariables=[{name:'DEFAULT_FROM_NUMBER',value:f.signup.twilioPhoneNumber},{name:'DEFAULT_OWNER_TO_NUMBER',value:f.signup.ownerPhone}];
+ f.tool.rejectionPlan={conditions:[{type:'regex',regex:'^yes$',negate:true,target:{role:'user',position:-1}}]};
+ const data={...f.data,assistants:[f.assistant],tools:[f.tool]};
+ const {plans,skipped}=await plansFor(data,f.api);
+ assert.deepEqual(skipped,[]);assert.equal(plans.length,1);
+ const conditions=plans[0].nextTool.rejectionPlan.conditions[0].conditions;
+ const accepts=new RegExp(conditions[0].regex.replace(/^\(\?i\)/,''),'i');
+ const cancels=new RegExp(conditions[1].regex.replace(/^\(\?i\)/,''),'i');
+ assert.equal(accepts.test('Yes, please.'),true);
+ assert.equal(cancels.test("Yes, don't send it."),true);
+ const result=await applyPlans({io:{api:f.api},plans,recheck:async()=>{},backup:async()=>{}});
+ assert.equal(result[0].verified,true);
+ assert.deepEqual(f.tool.rejectionPlan,plans[0].nextTool.rejectionPlan);
 });
 test('apply saves backup first and only patches exact content',async()=>{
  const f=fixture();let saved=false;

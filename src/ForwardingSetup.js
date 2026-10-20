@@ -33,19 +33,18 @@ export default function ForwardingSetup() {
   const token = useMemo(tokenFromLocation, []);
   const [forwarding, setForwarding] = useState(null);
   const [carrier, setCarrier] = useState("not_sure");
-  const [lineType, setLineType] = useState("not_sure");
+  const [lineType, setLineType] = useState("mobile");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [copied, setCopied] = useState(false);
   const [showCarrierHelp, setShowCarrierHelp] = useState(false);
-  const supportsMobileDialer = typeof navigator !== "undefined" && /Android/i.test(navigator.userAgent || "");
 
   const load = useCallback(async () => {
     if (!token) throw new Error("This secure setup link is incomplete. Open your dashboard for a new one.");
     const data = await forwardingRequest("/api/forwarding/setup", token);
     setForwarding(data.forwarding);
     setCarrier(data.forwarding.carrier);
-    setLineType(data.forwarding.lineType);
+    setLineType(data.forwarding.lineType === "not_sure" ? "mobile" : data.forwarding.lineType);
     return data.forwarding;
   }, [token]);
 
@@ -73,7 +72,7 @@ export default function ForwardingSetup() {
       // An older manual-only setup may now have a verified carrier rule.
       // Refresh its saved state only when the customer chooses activation.
       if (["manual_setup_required", "carrier_needed"].includes(forwarding.forwardingStatus) && forwarding.rule.supported) {
-        await forwardingRequest("/api/forwarding/setup/selections", token, { method: "PUT", body: JSON.stringify({ carrier: forwarding.carrier, lineType: forwarding.lineType }) });
+        await forwardingRequest("/api/forwarding/setup/selections", token, { method: "PUT", body: JSON.stringify({ carrier: forwarding.carrier, lineType: forwarding.lineType === "not_sure" ? "mobile" : forwarding.lineType }) });
       }
       const data = await forwardingRequest("/api/forwarding/setup/activation-opened", token, { method: "POST", body: "{}" });
       setForwarding(data.forwarding);
@@ -120,22 +119,24 @@ export default function ForwardingSetup() {
         ) : (
           <>
             <p className="forwarding-eyebrow">YOUR MY AI PA NUMBER IS READY</p>
-            <h1>Set up your new receptionist.</h1>
-            <p>Pass the calls you don’t answer on to My AI PA.</p>
+            <h1>Replace voicemail with My AI PA.</h1>
+            <p>Keep answering your mobile as usual. Let your new receptionist take the calls you miss.</p>
             {forwarding ? <div className="forwarding-number"><span>Your My AI PA number</span><strong>{fmtPhone(forwarding.assignedMyAiPaNumber)}</strong></div> : null}
 
             {!forwarding ? <p role="status">Loading your saved setup instructions…</p> : null}
             {forwarding?.rule ? <>
-              {forwarding.rule.activationMethod === "DIAL_STRING" && supportsMobileDialer ? <a className="forwarding-activate" role="button" href={forwarding.rule.activationTelUri} onClick={openDialer} aria-disabled={busy}>Open Phone App to Set Up Forwarding</a> : null}
-              {forwarding.rule.activationDialString ? <div className="forwarding-command"><span>Dial this from your business phone</span><strong>{forwarding.rule.activationDialString}</strong><button className="secondary" onClick={copyCommand}>{copied ? "Copied" : "Copy"}</button></div> : <div className="forwarding-command"><span>Forward unanswered calls to</span><strong>{fmtPhone(forwarding.assignedMyAiPaNumber)}</strong><button className="secondary" onClick={copyCommand}>{copied ? "Copied" : "Copy forwarding number"}</button></div>}
+              {forwarding.rule.activationMethod === "DIAL_STRING" ? <>
+                <p className="forwarding-next-step">One quick step on your business mobile</p>
+                <a className="forwarding-activate" role="button" href={forwarding.rule.activationTelUri} onClick={openDialer} aria-disabled={busy}>Open Phone App to Set Up Forwarding</a>
+                <p className="forwarding-dial-note">Then press <strong>Call / Send</strong> and wait for your phone company’s confirmation.</p>
+              </> : null}
+              {forwarding.rule.activationDialString ? <div className="forwarding-command"><span>Your forwarding code</span><div className="forwarding-code-row"><strong>{forwarding.rule.activationDialString}</strong><button className="secondary" onClick={copyCommand}>{copied ? "Copied" : "Copy code"}</button></div></div> : <div className="forwarding-command"><span>Forward unanswered calls to</span><strong>{fmtPhone(forwarding.assignedMyAiPaNumber)}</strong><button className="secondary" onClick={copyCommand}>{copied ? "Copied" : "Copy forwarding number"}</button></div>}
+              {forwarding.rule.activationMethod === "DIAL_STRING" ? <p className="forwarding-phone-tip">Button blocked? Copy the code, open your Phone keypad, paste it and press Call. iPhones can block carrier-code links.</p> : null}
+              <div className="forwarding-reassurance"><span aria-hidden="true">✓</span><p>Your mobile rings first. After your carrier confirms the change, unanswered calls can reach My AI PA instead of voicemail.</p></div>
               {status === "verification_pending" || status === "verification_failed" ? <p className="forwarding-message">Forwarding is not yet confirmed. Wait for your carrier’s confirmation; My AI PA will not call you automatically.</p> : null}
               {manual && !forwarding.rule.supported ? <div className="forwarding-alert"><strong>Set up unanswered calls</strong><span>Use the steps below. We do not have a verified one-tap command for this phone service, so we will not guess one.</span></div> : null}
-              <ol className="forwarding-steps">{forwarding.rule.humanInstructions.map((step) => <li key={step}>{step}</li>)}</ol>
-              {forwarding.rule.timing ? <div className="forwarding-timing"><strong>When My AI PA answers</strong><span>{forwarding.rule.timing.customerCopy}</span><small>{forwarding.rule.timing.adjustmentCopy}</small></div> : null}
-              {forwarding.rule.warnings.map((warning) => <p className="forwarding-warning" key={warning}>{warning}</p>)}
-              {forwarding.rule.activationMethod === "DIAL_STRING" && !supportsMobileDialer ? <div className="forwarding-alert"><strong>Use your business phone’s keypad</strong><span>iPhones can block carrier-code links, and desktop browsers cannot dial them reliably. Copy the full command below, paste it into your business phone’s keypad, then press Call or Send.</span></div> : null}
               <button className="forwarding-change" disabled={busy} aria-expanded={showCarrierHelp} onClick={() => setShowCarrierHelp(!showCarrierHelp)}>Need different setup instructions?</button>
-              {showCarrierHelp ? <div className="forwarding-form"><label>Phone service<select value={`${carrier}:${lineType}`} onChange={(event) => { const [nextCarrier, nextLineType] = event.target.value.split(":"); setCarrier(nextCarrier); setLineType(nextLineType); }}>{PHONE_SERVICES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><small>Optional: choose your service only if the instructions above do not match. Carrier codes are not universal.</small><button onClick={saveChoices} disabled={busy}>{busy ? "Saving…" : "Update instructions"}</button></div> : null}
+              {showCarrierHelp ? <div className="forwarding-help"><ol className="forwarding-steps">{forwarding.rule.humanInstructions.map((step) => <li key={step}>{step}</li>)}</ol>{forwarding.rule.timing ? <div className="forwarding-timing"><strong>When My AI PA answers</strong><span>{forwarding.rule.timing.customerCopy}</span><small>{forwarding.rule.timing.adjustmentCopy}</small></div> : null}{forwarding.rule.warnings.map((warning) => <p className="forwarding-warning" key={warning}>{warning}</p>)}<div className="forwarding-form"><label>Phone service<select value={`${carrier}:${lineType}`} onChange={(event) => { const [nextCarrier, nextLineType] = event.target.value.split(":"); setCarrier(nextCarrier); setLineType(nextLineType); }}>{PHONE_SERVICES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><small>Optional: use this if your phone company rejects the code. We will not guess one for an unsupported landline or cloud service.</small><button onClick={saveChoices} disabled={busy}>{busy ? "Saving…" : "Update instructions"}</button></div></div> : null}
             </> : null}
           </>
         )}

@@ -1,10 +1,12 @@
 const { buildSignupProgress } = require('./signupProgress');
-function verificationProgressMarkup() {
-  const steps = buildSignupProgress().steps;
+function verificationNumberMarkup() {
   return `<section id="signup-number-wait" aria-label="Your My AI PA number">
-    <p>Your number will appear here once progress bar is completed</p>
-  </section>
-  <section id="signup-progress-panel" aria-label="Your setup progress">
+    <p>AI forwarding number will appear here</p>
+  </section>`;
+}
+function verificationProgressMarkup({ includeNumber = true } = {}) {
+  const steps = buildSignupProgress().steps;
+  return `${includeNumber ? verificationNumberMarkup() : ""}<section id="signup-progress-panel" aria-label="Your setup progress">
     <style>
       #signup-progress-panel{margin:24px 0;padding:20px;border:1px solid #bfdbfe;border-radius:20px;background:#eff6ff}
       #signup-progress-label{margin:0 0 12px;font-size:16px;font-weight:700;color:#1e40af}
@@ -26,7 +28,7 @@ function verificationProgressMarkup() {
     <p id="signup-progress-label" role="status" aria-live="polite">Checking your phone verification…</p>
     <div class="setup-track" role="progressbar" aria-label="Signup setup" aria-valuemin="0" aria-valuemax="${steps.length}" aria-valuetext="Checking phone verification" id="signup-progress-bar"><div id="signup-progress-fill"></div></div>
     <ol id="signup-progress-steps">${steps.map((step, index) => `<li data-status="${index === 0 ? 'current' : 'pending'}">${step.label}</li>`).join('')}</ol>
-    <p id="signup-progress-note">This page updates automatically. You can reopen the same text link—no need to sign up again.</p>
+    <p id="signup-progress-note">This may take a few minutes. Keep this page open—it updates automatically. You can reopen the same text link—no need to sign up again.</p>
   </section>`;
 }
 
@@ -81,9 +83,9 @@ function verificationProgressScript(url, { awaitConfirmation = false } = {}) {
     document.addEventListener("visibilitychange",refresh);
     document.addEventListener("signup-verification-started",()=>{started=true;setTimeout(refresh,1000);});
     document.addEventListener("signup-verification-problem",()=>show({state:"connection_lost"}));
-    // At most 60 regular checks per 15-minute window, below the 120 limit.
-    const timer=setInterval(refresh,15000);
+    // At most 90 regular checks per 15-minute window, below the 120 limit.
+    const timer=setInterval(refresh,10000);
     window.addEventListener("pagehide",()=>clearInterval(timer),{once:true});refresh();
   })();</script>`;
 }
-module.exports={verificationProgressScript,verificationProgressMarkup};
+module.exports={verificationProgressScript,verificationProgressMarkup,verificationNumberMarkup};

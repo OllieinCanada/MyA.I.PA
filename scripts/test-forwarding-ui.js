@@ -6,10 +6,12 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const root = path.resolve(__dirname, '..');
 const stage = fs.mkdtempSync(path.join(os.tmpdir(), 'myaipa-forwarding-ui-'));
+const tests = process.argv.slice(2);
+if (tests.some(name => !/^src\/[\w./-]+\.test\.js$/.test(name) || name.includes('..'))) throw Error('Use project-relative src/*.test.js paths.');
 try {
-  for (const name of ['src', 'public', 'package.json']) fs.cpSync(path.join(root, name), path.join(stage, name), { recursive: true });
+  for (const name of ['src', 'public', 'config', 'package.json']) fs.cpSync(path.join(root, name), path.join(stage, name), { recursive: true });
   fs.symlinkSync(fs.realpathSync(path.join(root, 'node_modules')), path.join(stage, 'node_modules'), process.platform === 'win32' ? 'junction' : 'dir');
-  const result = spawnSync(process.execPath, [path.join(root, 'node_modules/react-scripts/bin/react-scripts.js'), 'test', '--env=jsdom', '--watchAll=false', '--runInBand', '--runTestsByPath', 'src/ForwardingSetup.test.js'], {
+  const result = spawnSync(process.execPath, [path.join(root, 'node_modules/react-scripts/bin/react-scripts.js'), 'test', '--env=jsdom', '--watchAll=false', '--runInBand', '--runTestsByPath', ...(tests.length ? tests : ['src/ForwardingSetup.test.js'])], {
     cwd: stage, env: { ...process.env, CI: 'true' }, stdio: 'inherit', timeout: 120000,
   });
   if (result.error) throw result.error;

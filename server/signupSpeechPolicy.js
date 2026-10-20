@@ -1,13 +1,14 @@
 // Shared by initial provisioning and recovery: preserve the owner's selected
 // Jess voice and never prepend a second disclosure to the opening.
-const CONSENT_NOTICE = "This call will be recorded for service quality and accurate follow-up. Is that okay?";
+const CONSENT_NOTICE = "This call will be recorded for service quality and accurate follow-up.";
 const SPEECH_POLICY_MARKER = "## MYAIPA VERIFIED SPEECH OPENING";
 const CONSENT_POLICY = `${SPEECH_POLICY_MARKER}
-The fixed first message has already greeted the caller and asked for recording consent.
-Stop and wait for an explicit yes before collecting service, contact, address, or job details or calling any tool.
-Do not repeat the recording notice or ask how they are before consent. A social answer such as "I'm fine" is not consent; ask only "Is it okay to record this call?" and wait.
-If consent is declined, politely end without collecting details or calling notification tools.
-After consent, acknowledge any social cue briefly and continue the business's existing routing/intake flow.
+The fixed first message has already thanked the caller, stated the recording notice once, and asked how you can help.
+Do not ask "Is that okay?", ask for a yes to recording, or repeat the recording notice. Listen to the caller's request and continue the business's routing/intake flow without repeating an answered question.
+If the caller objects to recording, politely end without collecting details or calling notification tools. Never claim the caller explicitly consented when they did not.
+Acknowledge social cues briefly. Ask one complete question at a time, speak in complete natural sentences, and let the caller finish before responding.
+Silence is not an answer. If the caller needs time, wait; never invent details or send unfinished intake.
+For a completed request, wait for confirmed notification success before saying it was sent. Finish with "Thank you for calling. Goodbye." before invoking endCall; never hang up midway through speech.
 ## END MYAIPA VERIFIED SPEECH OPENING`;
 
 function fixedConsentOpening(firstMessage = "") {
@@ -15,12 +16,14 @@ function fixedConsentOpening(firstMessage = "") {
   if (/^https?:\/\//i.test(source)) throw new Error("An audio opening needs explicit review before speech-policy migration.");
   const match = source.match(/(Thanks for calling .+?\.)(?=\s+(?:How|I'm|Before|This)\b|$)/i);
   const greeting = match?.[1] || "Thanks for calling.";
-  return `${greeting} ${CONSENT_NOTICE}`;
+  return `${greeting} ${CONSENT_NOTICE} How can I help you today?`;
 }
 
 function normalizeConsentPrompt(prompt) {
   const cleaned = String(prompt || "")
     .replace(/\n*## MYAIPA VERIFIED SPEECH OPENING[\s\S]*?## END MYAIPA VERIFIED SPEECH OPENING/g, "")
+    .replace(/After recording consent, say exactly:/g, "After the recording notice, say exactly:")
+    .replace(/again after recording consent|again after consent/g, "again")
     .split("\n")
     .filter(line => !/The opening asks|The first message has already greeted|After the caller answers how they are|Opening sequence: the first message|After the opening greeting and the caller's social response/.test(line))
     .join("\n").trimEnd();

@@ -1,6 +1,7 @@
 const crypto = require("crypto");
 const { pricingSummaryOptionsFromAssistant } = require("../src/features/signup/pricingPolicy");
 const { signupSpeechPatch, normalizeConsentPrompt, inspectSignupSpeech } = require("./signupSpeechPolicy");
+const { confirmationStartSpeakingPlan, CONFIRMATION_RULE } = require('./signupConfirmationTiming');
 const {
   POST_SEND_CLOSING_MARKER,
   callerNumberFallbackPrompt,
@@ -99,15 +100,16 @@ function inspectAssistantSecurity(assistant = {}) {
   };
 }
 
-function assistantTimingPatch() {
+function assistantTimingPatch(assistant = {}) {
   return {
-    startSpeakingPlan: {
+    startSpeakingPlan: confirmationStartSpeakingPlan({
+      ...(assistant.startSpeakingPlan || {}),
       smartEndpointingPlan: {
         provider: "livekit",
         waitFunction: "2000 / (1 + exp(-10 * (x - 0.5)))",
       },
       waitSeconds: 0.4,
-    },
+    }),
     stopSpeakingPlan: {
       numWords: 0,
       voiceSeconds: 0.2,
@@ -124,6 +126,7 @@ function inspectAssistantTiming(assistant) {
     startSpeakingPlanConfigured: Number(start.waitSeconds) === 0.4
       && smart.provider === "livekit"
       && smart.waitFunction === "2000 / (1 + exp(-10 * (x - 0.5)))",
+    confirmationTranscriptWaitConfigured: start.customEndpointingRules?.some(rule => rule.type === CONFIRMATION_RULE.type && rule.regex === CONFIRMATION_RULE.regex && rule.timeoutSeconds >= CONFIRMATION_RULE.timeoutSeconds) === true,
     stopSpeakingPlanConfigured: Number(stop.numWords) === 0
       && Number(stop.voiceSeconds) === 0.2
       && Number(stop.backoffSeconds) === 1,
@@ -420,7 +423,7 @@ async function provisionIsolatedSmsRouting({
     const nextModel = buildIsolatedAssistantModel(assistant, toolId, toolName, managedToolIds);
     await patchAssistant(assistant.id, {
       model: nextModel,
-      ...assistantTimingPatch(),
+      ...assistantTimingPatch(assistant),
       ...assistantSecurityPatch(assistant),
     });
     assistantPatched = true;

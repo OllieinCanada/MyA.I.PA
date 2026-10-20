@@ -257,6 +257,13 @@ async function main() {
   const call = await findLatestCall({ aiPhone, sinceMinutes, limit });
   const report = analyzeVapiSmsCall(call, { aiPhone, ownerPhone, ownerLast4, customerPhone: customerPhone(call) });
   report.speech = await speechLogEvidence(call);
+  if (hasFlag("confirmation-evidence")) {
+    // Only final conversational turns; omit contact digits and all tool payloads.
+    const messages = call.messages || call.artifact?.messages || [];
+    const turns = messages.filter(m => ["user", "bot", "assistant"].includes(m.role) && typeof (m.message || m.content) === "string");
+    report.confirmationTurns = turns.slice(-6).map(m => ({ role: m.role, text: String(m.message || m.content).replace(/\d/g, "•").slice(0, 280) }));
+    console.log(JSON.stringify({ confirmationTurns: report.confirmationTurns }));
+  }
   if (hasFlag("twilio-status")) report.delivery = await reconcileTwilioMessages(call);
   if (hasFlag("json")) console.log(JSON.stringify(report, null, 2));
   else { printHuman(report); console.log(`Speech: ${report.speech.status}. ${report.speech.next || "Audio review still required."}`); }
