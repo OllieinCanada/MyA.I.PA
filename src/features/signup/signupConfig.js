@@ -29,7 +29,7 @@ export const DEFAULT_RECAPTCHA_SITE_KEY = "6LfcUfotAAAAACDoNbnUNMJW-CsckzCr5CSWe
 export const RECAPTCHA_SITE_KEY = String(process.env.REACT_APP_RECAPTCHA_SITE_KEY || DEFAULT_RECAPTCHA_SITE_KEY).trim();
 export const CAPTCHA_PROVIDER = String(
   process.env.REACT_APP_CAPTCHA_PROVIDER
-  || (TURNSTILE_SITE_KEY ? "turnstile" : RECAPTCHA_SITE_KEY ? "recaptcha" : "")
+  || (TURNSTILE_SITE_KEY && RECAPTCHA_SITE_KEY ? "turnstile+recaptcha" : TURNSTILE_SITE_KEY ? "turnstile" : RECAPTCHA_SITE_KEY ? "recaptcha" : "")
 ).trim().toLowerCase();
 export const RECAPTCHA_MODE = "checkbox";
 export const USE_RECAPTCHA_ENTERPRISE = false;

@@ -6,17 +6,23 @@ Both independent proofs are required. Either failure or expiration blocks signup
 
 ## Release configuration
 
-The existing live Cloudflare-only default is deliberately unchanged until a
-coordinated deployment is authorized. Do not change the live backend provider
-while the public frontend still submits Cloudflare-only requests.
+The frontend now selects combined protection by default when both public keys
+are present. This activation release was explicitly requested by the owner.
+Do not change the live backend provider while the public frontend still submits
+Cloudflare-only requests.
 
-Build the frontend with `REACT_APP_CAPTCHA_PROVIDER=turnstile+recaptcha`.
+The frontend default is `turnstile+recaptcha`; an explicit
+`REACT_APP_CAPTCHA_PROVIDER` can override it for a rollback build.
 The public Google site key is supplied in signupConfig.js and may be overridden
 with `REACT_APP_RECAPTCHA_SITE_KEY`. Never put either provider secret in a
 REACT_APP variable, repository, build artifact, or browser.
 
 On Render keep both `TURNSTILE_SECRET_KEY` and `RECAPTCHA_SECRET_KEY`, and select
-`CAPTCHA_PROVIDER=turnstile+recaptcha` as part of the coordinated release.
+`CAPTCHA_PROVIDER=turnstile+recaptcha` immediately after the combined frontend
+artifact is confirmed live. Provider mismatch during the brief deployment
+transition fails closed; do not claim this is an atomic, zero-interruption switch.
+Old tabs must reload. Prepare a Cloudflare-only frontend rollback artifact and
+retain the previous backend setting before changing production configuration.
 The Cloudflare widget must be Managed to allow interaction. Google must be a
 v2 checkbox key authorized for myaipa.ca; v3 score tokens are rejected.
 
