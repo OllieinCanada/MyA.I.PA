@@ -24,7 +24,9 @@ export const DEFAULT_TURNSTILE_SITE_KEY = "0x4AAAAAAFD2gXNJCtKJRRUb";
 export const TURNSTILE_SITE_KEY = String(
   process.env.REACT_APP_TURNSTILE_SITE_KEY || DEFAULT_TURNSTILE_SITE_KEY
 ).trim();
-export const RECAPTCHA_SITE_KEY = String(process.env.REACT_APP_RECAPTCHA_SITE_KEY || "").trim();
+// Public browser key only. The matching secret belongs exclusively on Render.
+export const DEFAULT_RECAPTCHA_SITE_KEY = "6LfcUfotAAAAACDoNbnUNMJW-CsckzCr5CSWeOOP";
+export const RECAPTCHA_SITE_KEY = String(process.env.REACT_APP_RECAPTCHA_SITE_KEY || DEFAULT_RECAPTCHA_SITE_KEY).trim();
 export const CAPTCHA_PROVIDER = String(
   process.env.REACT_APP_CAPTCHA_PROVIDER
   || (TURNSTILE_SITE_KEY ? "turnstile" : RECAPTCHA_SITE_KEY ? "recaptcha" : "")
