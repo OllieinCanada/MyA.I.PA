@@ -12,6 +12,22 @@ const {
   validAdminUrl,
 } = require("../server/incidentAlerts");
 
+test("expected trial expiry Telegram identifies billing follow-up without a critical failure claim", () => {
+  const message = buildIncidentTelegramAlert({ reasonCode: "TRIAL_ENDED_AWAITING_PAYMENT", severity: "warning", affectedCustomer: "Example Electrical", incidentId: "trial-example" });
+  assert.match(message, /TRIAL ENDED · PAYMENT NEEDED/);
+  assert.match(message, /Example Electrical/);
+  assert.match(message, /not a signup or provider failure/);
+  assert.match(message, /confirm active billing/);
+  assert.doesNotMatch(message, /CRITICAL|retry|test call/i);
+});
+
+test("browser resource Telegram keeps safe audio evidence and redacts query secrets", () => {
+  const text = buildIncidentTelegramAlert({ reasonCode: "CLIENT_RESOURCE_ERROR", reason: "audio resource failed to load: /tims-electrical-2.wav?token=private (media=network; code=2)", severity: "warning" });
+  assert.match(text, /tims-electrical-2.wav/);
+  assert.match(text, /media=network/);
+  assert.doesNotMatch(text, /token=private/);
+});
+
 test("known incident reason codes produce plain-language explanations", () => {
   assert.match(humanizeIncidentReason("MAKE_SIGNUP_TIMEOUT"), /signup automation did not answer/i);
   assert.match(humanizeIncidentReason("20003"), /Check Billing and Account status first/i);

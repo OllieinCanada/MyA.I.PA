@@ -2,6 +2,16 @@
   "version": 1,
   "generations": [
     {
+      "id": "ff59575babd008c9424f8d70add8f90e2c48e91975f757e917f265b95b95e16a",
+      "files": [
+        "static/css/main.2ee701e9.css",
+        "static/css/main.2ee701e9.css.map",
+        "static/js/main.a965f56c.js",
+        "static/js/main.a965f56c.js.LICENSE.txt",
+        "static/js/main.a965f56c.js.map"
+      ]
+    },
+    {
       "id": "eeb78b0ab3fae870970f1412352c79feda44a97713ca6fd86c12cde386a86dbb",
       "files": [
         "static/css/main.2ee701e9.css",

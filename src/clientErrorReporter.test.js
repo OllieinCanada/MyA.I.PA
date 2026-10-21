@@ -2,12 +2,33 @@ import {
   buildClientErrorReport,
   getSafeClientRoute,
   getSafeFailedAsset,
+  getSafeMediaFailureDetails,
   redactClientErrorMessage,
   reportClientError,
   resetClientErrorReporterForTests,
 } from "./clientErrorReporter";
 
 beforeEach(() => resetClientErrorReporterForTests());
+
+test("public sample audio diagnostics retain filename but never private paths or queries", () => {
+  const locationValue = { href: "https://www.myaipa.ca/" };
+  expect(getSafeFailedAsset({ currentSrc: "/tims-electrical-2.wav?token=private" }, locationValue)).toBe("/tims-electrical-2.wav");
+  expect(getSafeFailedAsset({ src: "/audio/tims-electrical/repair-request.wav" }, locationValue)).toBe("/audio/tims-electrical/repair-request.wav");
+  for (const src of ["/audio/customer-recording.wav", "https://other.example/tims-electrical-2.wav"]) {
+    expect(getSafeFailedAsset({ src }, locationValue)).toBe("");
+  }
+});
+
+test("media failures include only validated browser codes and states", () => {
+  for (const [code, label] of [[1, "aborted"], [2, "network"], [3, "decode"], [4, "unsupported_source"]]) {
+    const details = getSafeMediaFailureDetails({ tagName: "AUDIO", error: { code, message: "private token" }, readyState: 0, networkState: 3 });
+    expect(details).toContain(`media=${label}`);
+    expect(details).toContain(`code=${code}`);
+    expect(details).not.toContain("private");
+  }
+  expect(getSafeMediaFailureDetails({ tagName: "AUDIO", error: { code: "2" }, readyState: -1, networkState: 99 })).toBe("");
+  expect(getSafeMediaFailureDetails({ tagName: "IMG", error: { code: 2 } })).toBe("");
+});
 
 test("failed asset diagnostics identify public build files without exposing tokens", () => {
   const locationValue = { href: "https://www.myaipa.ca/" };

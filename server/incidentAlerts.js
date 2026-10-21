@@ -231,7 +231,18 @@ function buildIncidentTelegramAlert(input = {}) {
     '20003': 'Twilio denied access. Check account status and credentials.',
   };
   const code = normalizeReasonCode(input.reasonCode);
-  const reason = capText(code === 'INVALID_HEALTH_RESPONSE' && input.reason
+  if (code === "TRIAL_ENDED_AWAITING_PAYMENT") {
+    return [
+      "🟡 MY AI PA — TRIAL ENDED · PAYMENT NEEDED",
+      `Business: ${capText(affectedCustomer(input), 80)}`,
+      "Status: Trial ended. Subscription paused; payment method not confirmed.",
+      "This is billing follow-up, not a signup or provider failure.",
+      "Impact: Paid service cannot continue while paused.",
+      "Next: Help the customer add payment securely, then confirm active billing before restoring service. Archive only abandoned tests; do not delete resources.",
+      `Reference: ${incidentReference(input.incidentId)}`,
+    ].join("\n");
+  }
+  const reason = capText(['INVALID_HEALTH_RESPONSE', 'CLIENT_RESOURCE_ERROR'].includes(code) && input.reason
     ? redactIncidentText(input.reason, { maxLength: 160 })
     : briefReasons[code] || INCIDENT_REASON_CATALOG[code] || 'Cause not confirmed. Open details for the recorded error.', 160);
   const impact = redactIncidentText(input.impact, { multiline: true, maxLength: 300 }) || "The customer or operational impact has not been confirmed yet.";
