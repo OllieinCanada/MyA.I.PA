@@ -1,4 +1,7 @@
 import { getApiBaseUrl, normalizeApiBase } from "./config/apiBase";
+import audioManifest from "./timsElectricalAudioManifest.json";
+
+const publicAudioPaths = new Set(["/tims-electrical-2.wav", ...Object.values(audioManifest).map((entry) => entry.src)]);
 
 const API_BASE = normalizeApiBase(getApiBaseUrl(process.env.REACT_APP_API_BASE_URL));
 const seenErrors = new Set();
@@ -6,13 +9,25 @@ let installed = false;
 
 export function getSafeFailedAsset(target, locationValue = window.location) {
   try {
-    const url = new URL(target?.src || target?.href || "", locationValue.href);
+    const url = new URL(target?.currentSrc || target?.src || target?.href || "", locationValue.href);
     // Only report public build assets, never customer URLs, query strings,
     // forwarding tokens, third-party URLs, or arbitrary resource paths.
     if (url.origin !== new URL(locationValue.href).origin) return "";
-    return /^\/(?:static\/(?:js|css|media)\/[a-z0-9_.-]+|favicon\.ico|manifest\.json)$/i.test(url.pathname)
+    return publicAudioPaths.has(url.pathname) || /^\/(?:static\/(?:js|css|media)\/[a-z0-9_.-]+|favicon\.ico|manifest\.json)$/i.test(url.pathname)
       ? url.pathname : "";
   } catch (_error) { return ""; }
+}
+
+export function getSafeMediaFailureDetails(target) {
+  if (!["audio", "video"].includes(String(target?.tagName || "").toLowerCase())) return "";
+  const labels = { 1: "aborted", 2: "network", 3: "decode", 4: "unsupported_source" };
+  const code = target?.error?.code;
+  const details = Number.isInteger(code) && labels[code] ? [`media=${labels[code]}`, `code=${code}`] : [];
+  for (const [key, max] of [["readyState", 4], ["networkState", 3]]) {
+    const value = target?.[key];
+    if (Number.isInteger(value) && value >= 0 && value <= max) details.push(`${key}=${value}`);
+  }
+  return details.length ? ` (${details.join("; ")})` : "";
 }
 
 export function getSafeClientRoute(locationValue = typeof window !== "undefined" ? window.location : {}) {
@@ -77,7 +92,7 @@ export function installClientErrorReporting() {
     void reportClientError({
       type: resourceTag ? "resource_error" : "uncaught_error",
       message: resourceTag
-        ? `${resourceTag} resource failed to load${asset ? `: ${asset}` : ""}`
+        ? `${resourceTag} resource failed to load${asset ? `: ${asset}` : ""}${getSafeMediaFailureDetails(event.target)}`
         : event?.error?.message || event?.message || "Uncaught browser error",
       component: resourceTag,
     });

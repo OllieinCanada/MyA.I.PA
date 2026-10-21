@@ -4,6 +4,19 @@ const { compactNotice, noticeRequest, noticeStyle } = require('../server/telegra
 const { buildIncidentRemediationUpdate, sendIncidentTelegramAlert } = require('../server/incidentAlerts');
 const { sendTelegramOwnerStatus } = require('../server/telegramBotApi');
 
+test('trial-expiry Telegram card retains the billing header, business, safe action and reference', () => {
+  const { buildIncidentTelegramAlert } = require('../server/incidentAlerts');
+  const text = buildIncidentTelegramAlert({ reasonCode: 'TRIAL_ENDED_AWAITING_PAYMENT', severity: 'warning', affectedCustomer: 'Example Electrical', incidentId: 'abcdef1234567890abcdef12' });
+  const caption = compactNotice(text);
+  assert.equal(noticeStyle(text).severity, 'warning');
+  assert.match(caption, /TRIAL ENDED · PAYMENT NEEDED/);
+  assert.match(caption, /Business: Example Electrical/);
+  assert.match(caption, /not a signup or provider failure/);
+  assert.match(caption, /Next: Help the customer add payment securely/);
+  assert.match(caption, /Reference: INC-ABCDEF12/);
+  assert.ok(caption.length < 950);
+});
+
 test('lifecycle notices remain brief and never confuse disappearance with repair', () => {
   for (const status of ['cleared', 'recovered', 'resolved', 'repair_dispatched', 'repair_ready', 'needs_user', 'failed']) {
     const text = buildIncidentRemediationUpdate({ status, incidentId: 'abcdef1234567890abcdef12',

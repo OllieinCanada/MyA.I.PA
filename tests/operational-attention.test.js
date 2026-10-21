@@ -8,6 +8,20 @@ const {
   summarizeAttention,
 } = require("../server/operationalAttention");
 
+test("proven expired no-card trials are billing warnings; unknown pauses remain critical", () => {
+  const now = new Date("2026-10-21T12:00:00Z");
+  const signup = { attemptId: "trial-example", businessName: "Example", status: "subscription_paused", subscriptionStatus: "paused", subscriptionId: "sub_example", paymentMethodReady: false, trialStartAt: Date.parse("2026-10-01T12:00:00Z"), trialEndAt: Date.parse("2026-10-15T12:00:00Z") };
+  const [notice] = signupAttentionItems([signup], now);
+  assert.equal(notice.severity, "warning");
+  assert.equal(notice.incident.reasonCode, "TRIAL_ENDED_AWAITING_PAYMENT");
+  for (const change of [{ trialStartAt: undefined }, { trialEndAt: undefined }, { subscriptionId: "" }, { paymentMethodReady: undefined }, { paymentMethodReady: true }, { trialEndAt: now.getTime() + 1000 }, { lastPaymentFailedAt: now.toISOString() }, { paymentStatus: "payment_failed" }, { paymentStatus: "past_due" }, { paymentStatus: "unpaid" }]) {
+    const [item] = signupAttentionItems([{ ...signup, ...change }], now);
+    assert.equal(item.severity, "critical", JSON.stringify(change));
+    assert.notEqual(item.incident.reasonCode, "TRIAL_ENDED_AWAITING_PAYMENT");
+  }
+  assert.equal(signupAttentionItems([{ ...signup, status: "abandoned_archived" }], now).length, 0);
+});
+
 test("persisted Twilio failures retain the expanded exact safe reason set", () => {
   for (const code of ["21265", "21266", "21268", "21608", "30034", "63038"]) {
     const result = knownProviderReason(code);

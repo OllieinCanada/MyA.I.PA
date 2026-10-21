@@ -135,7 +135,7 @@ function getSignupBillingStatus(signup = {}, workflowStatus = "") {
     .find((status) => CUSTOMER_BILLING_STATUSES.has(status)) || "";
 }
 
-function signupBillingAttention(signup = {}, workflowStatus = "unknown") {
+function signupBillingAttention(signup = {}, workflowStatus = "unknown", now = new Date()) {
   const billingStatus = getSignupBillingStatus(signup, workflowStatus);
   if (billingStatus === "payment_failed") {
     return {
@@ -174,6 +174,25 @@ function signupBillingAttention(signup = {}, workflowStatus = "unknown") {
     };
   }
   if (billingStatus === "paused") {
+    const start = Number(signup.trialStartAt);
+    const end = Number(signup.trialEndAt);
+    if (signup.subscriptionId && Number.isFinite(start) && start > 0
+      && Number.isFinite(end) && end > start && end <= new Date(now).getTime()
+      && signup.paymentMethodReady === false && !signup.lastPaymentFailedAt
+      && ![signup.paymentStatus, signup.subscriptionStatus].some((value) => ["payment_failed", "past_due", "unpaid"].includes(safeBillingStatus(value)))) {
+      return {
+        kind: "subscription_paused",
+        severity: "warning",
+        title: "Trial ended — payment needed",
+        summary: "Expected end-of-trial billing follow-up, not a signup or provider failure.",
+        reason: "The saved trial has ended, the subscription is paused, and a payment method is not confirmed.",
+        reasonCode: "TRIAL_ENDED_AWAITING_PAYMENT",
+        impact: "Paid service cannot continue while the subscription remains paused.",
+        lastCheckpoint: "Trial ended; subscription paused",
+        nextAction: "Help the customer add payment securely and confirm active billing before restoring service. Archive abandoned tests without deleting resources.",
+        confidence: "high",
+      };
+    }
     return {
       kind: "subscription_paused",
       title: "Customer subscription is paused",
@@ -325,12 +344,12 @@ function signupAttentionItems(signups = [], now = new Date(), stuckMinutes = 60)
     ) continue;
     const updatedAt = signup.updatedAt || signup.signedUpAt || signup.createdAt;
     const age = ageMinutes(updatedAt, now);
-    const billingAttention = signupBillingAttention(signup, status);
+    const billingAttention = signupBillingAttention(signup, status, now);
     if (billingAttention) {
       items.push(attentionItem({
         ...billingAttention,
-        severity: "critical",
-        summary: "A Stripe billing state needs review before the customer can finish or continue service.",
+        severity: billingAttention.severity || "critical",
+        summary: billingAttention.summary || "A Stripe billing state needs review before the customer can finish or continue service.",
         businessName: signup.businessName,
         lastCheckpoint: billingAttention.lastCheckpoint || signupLastCheckpoint(status),
         detectedAt: signup.lastPaymentFailedAt || updatedAt,
