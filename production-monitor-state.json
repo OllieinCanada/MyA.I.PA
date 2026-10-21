@@ -1,47 +1,23 @@
 {
   "schemaVersion": 2,
   "incidents": {
-    "issue:operational_health:public_bdbf9cf39eed59872d7d6fa27d5857b7": {
-      "lifecycleId": "public_4fe07d1d997018a465d9ee26",
-      "type": "operational",
-      "checkName": "operational_health",
-      "firstDetectedAt": "2026-10-17T14:09:18.275Z"
-    },
-    "issue:operational_health:public_d99ae3b54300f1013536f659d2661765": {
-      "lifecycleId": "public_a13d7a661e4cde0b9c2a8a29",
-      "type": "operational",
-      "checkName": "operational_health",
-      "firstDetectedAt": "2026-10-17T14:09:18.275Z"
-    },
-    "issue:operational_health:public_13def250e10781f99b90cf24461acbb9": {
-      "lifecycleId": "public_252a282e1d138448ce3cffbb",
-      "type": "operational",
-      "checkName": "operational_health",
-      "firstDetectedAt": "2026-10-17T19:28:23.507Z"
-    },
     "issue:operational_health:public_2b61478edfe8d3750904dd75f2c84f12": {
       "lifecycleId": "public_0f06308440fe13d75a22cd8c",
       "type": "operational",
       "checkName": "operational_health",
       "firstDetectedAt": "2026-10-18T14:52:37.963Z"
     },
-    "issue:operational_health:public_4edeb851b52eb1fd1d37b1459a76f205": {
-      "lifecycleId": "public_bef88a449db013330213be52",
+    "issue:operational_health:public_d969e1bb0cf6ac097bcfbb77fc16edbf": {
+      "lifecycleId": "public_57b7b7adc344de52a0019f73",
       "type": "operational",
       "checkName": "operational_health",
-      "firstDetectedAt": "2026-10-20T00:39:17.495Z"
+      "firstDetectedAt": "2026-10-21T19:39:11.923Z"
     },
-    "issue:operational_health:public_f7a2e053f7caabda61d4a77658e5824c": {
-      "lifecycleId": "public_c64409afcb42189669e1dffa",
+    "issue:operational_health:public_75a55556c1813cbead342c6351aabf47": {
+      "lifecycleId": "public_79eccf5e5861ad4dd1cf1c02",
       "type": "operational",
       "checkName": "operational_health",
-      "firstDetectedAt": "2026-10-20T19:21:51.279Z"
-    },
-    "issue:operational_health:public_7df3015d516e9576e459300a97ae43ef": {
-      "lifecycleId": "public_a9ce534ff16f77d6b3f43079",
-      "type": "operational",
-      "checkName": "operational_health",
-      "firstDetectedAt": "2026-10-21T05:41:38.048Z"
+      "firstDetectedAt": "2026-10-21T19:39:11.923Z"
     }
   }
 }
