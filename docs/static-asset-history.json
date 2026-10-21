@@ -2,6 +2,16 @@
   "version": 1,
   "generations": [
     {
+      "id": "b13a87c8dbdabfc0d0c8fccb5db08044ca3203c55a57675d7807afa51e179487",
+      "files": [
+        "static/css/main.2ee701e9.css",
+        "static/css/main.2ee701e9.css.map",
+        "static/js/main.54a3cef6.js",
+        "static/js/main.54a3cef6.js.LICENSE.txt",
+        "static/js/main.54a3cef6.js.map"
+      ]
+    },
+    {
       "id": "ff59575babd008c9424f8d70add8f90e2c48e91975f757e917f265b95b95e16a",
       "files": [
         "static/css/main.2ee701e9.css",
@@ -19,16 +29,6 @@
         "static/js/main.d410adb8.js",
         "static/js/main.d410adb8.js.LICENSE.txt",
         "static/js/main.d410adb8.js.map"
-      ]
-    },
-    {
-      "id": "de00751d4f70b406e21366fccf696a29989c4d1c027f2185c7d5e3fa2f488240",
-      "files": [
-        "static/css/main.d415a317.css",
-        "static/css/main.d415a317.css.map",
-        "static/js/main.9e487ba6.js",
-        "static/js/main.9e487ba6.js.LICENSE.txt",
-        "static/js/main.9e487ba6.js.map"
       ]
     }
   ]

@@ -1454,7 +1454,7 @@ function GoogleVerificationCheck({ siteKey, onVerify }) {
     };
   }, [siteKey, onVerify]);
   return <section className="mx-auto mt-5 max-w-[920px] rounded-2xl border border-blue-100 bg-white p-5 text-center shadow-sm" aria-label="Google signup verification">
-    <p className="mb-3 text-sm font-bold text-slate-700">Complete the Google checkbox too.</p>
+    <p className="mb-3 text-sm font-bold text-slate-700">Please confirm you’re a real person.</p>
     {!siteKey || failed ? <p role="alert">Google verification is unavailable. Please reload and try again.</p> : null}
     <div ref={container} className="mx-auto min-h-[78px] w-[304px] max-w-full" data-testid="recaptcha-container" />
   </section>;
@@ -1465,8 +1465,8 @@ function CombinedVerificationCheck({ siteKey, googleSiteKey, onVerify }) {
   const cloudflare = useCallback(token => { proofs.current = { ...proofs.current, turnstileToken: token }; onVerify?.(proofs.current); }, [onVerify]);
   const google = useCallback(token => { proofs.current = { ...proofs.current, recaptchaToken: token }; onVerify?.(proofs.current); }, [onVerify]);
   return <>
-    <TurnstileVerificationCheck provider="turnstile" siteKey={siteKey} onVerify={cloudflare} />
     <GoogleVerificationCheck siteKey={googleSiteKey} onVerify={google} />
+    <TurnstileVerificationCheck provider="turnstile" siteKey={siteKey} onVerify={cloudflare} interactionOnly />
   </>;
 }
 
@@ -1476,14 +1476,17 @@ export function HumanVerificationCheck({ provider = CAPTCHA_PROVIDER, siteKey = 
   return <TurnstileVerificationCheck provider={provider} siteKey={siteKey} onVerify={onVerify} />;
 }
 
-function TurnstileVerificationCheck({ provider, siteKey, onVerify }) {
+function TurnstileVerificationCheck({ provider, siteKey, onVerify, interactionOnly = false }) {
   const containerRef = useRef(null);
   const widgetIdRef = useRef(null);
+  const [needsInteraction, setNeedsInteraction] = useState(false);
+  const [failed, setFailed] = useState(false);
   const normalizedProvider = String(provider || "").trim().toLowerCase();
 
   useEffect(() => {
     if (normalizedProvider !== "turnstile" || !siteKey || !containerRef.current) return undefined;
     let cancelled = false;
+    const fail = () => { if (!cancelled) { setFailed(true); onVerify?.(""); } };
 
     const renderWidget = () => {
       if (cancelled || !containerRef.current || !window.turnstile || widgetIdRef.current != null) return;
@@ -1491,9 +1494,13 @@ function TurnstileVerificationCheck({ provider, siteKey, onVerify }) {
         sitekey: siteKey,
         theme: "light",
         size: "flexible",
-        callback: (token) => onVerify?.(String(token || "")),
+        appearance: interactionOnly ? "interaction-only" : "always",
+        execution: "render",
+        "before-interactive-callback": () => { if (!cancelled) setNeedsInteraction(true); },
+        "after-interactive-callback": () => { if (!cancelled) setNeedsInteraction(false); },
+        callback: (token) => { if (!cancelled) { setFailed(false); setNeedsInteraction(false); onVerify?.(String(token || "")); } },
         "expired-callback": () => onVerify?.(""),
-        "error-callback": () => onVerify?.(""),
+        "error-callback": fail,
       });
     };
 
@@ -1502,6 +1509,7 @@ function TurnstileVerificationCheck({ provider, siteKey, onVerify }) {
       renderWidget();
     } else if (existingScript) {
       existingScript.addEventListener("load", renderWidget, { once: true });
+      existingScript.addEventListener("error", fail);
     } else {
       const script = document.createElement("script");
       script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
@@ -1509,18 +1517,21 @@ function TurnstileVerificationCheck({ provider, siteKey, onVerify }) {
       script.defer = true;
       script.dataset.myaipaTurnstile = "true";
       script.addEventListener("load", renderWidget, { once: true });
+      script.addEventListener("error", fail);
       document.head.appendChild(script);
     }
 
     return () => {
       cancelled = true;
-      if (existingScript) existingScript.removeEventListener("load", renderWidget);
+      const script = document.querySelector('script[data-myaipa-turnstile="true"]');
+      script?.removeEventListener("load", renderWidget);
+      script?.removeEventListener("error", fail);
       if (widgetIdRef.current != null && window.turnstile?.remove) {
         window.turnstile.remove(widgetIdRef.current);
       }
       widgetIdRef.current = null;
     };
-  }, [normalizedProvider, siteKey, onVerify]);
+  }, [normalizedProvider, siteKey, onVerify, interactionOnly]);
 
   if (!normalizedProvider) return null;
   if (normalizedProvider !== "turnstile" || !siteKey) {
@@ -1532,9 +1543,10 @@ function TurnstileVerificationCheck({ provider, siteKey, onVerify }) {
   }
 
   return (
-    <section className="mx-auto mt-5 max-w-[920px] rounded-2xl border border-blue-100 bg-white p-5 text-center shadow-sm" aria-label="Secure signup verification">
-      <p className="mb-3 text-sm font-bold text-slate-700">Please confirm you’re a real person.</p>
-      <div ref={containerRef} className="mx-auto min-h-[65px] max-w-[420px]" data-testid="turnstile-container" />
+    <section className={interactionOnly && !needsInteraction && !failed ? "mx-auto max-w-[920px]" : "mx-auto mt-5 max-w-[920px] rounded-2xl border border-blue-100 bg-white p-5 text-center shadow-sm"} aria-label="Secure signup verification">
+      {(!interactionOnly || needsInteraction) && <p className="mb-3 text-sm font-bold text-slate-700">{interactionOnly ? "Please complete this additional security check." : "Please confirm you’re a real person."}</p>}
+      {failed && <p role="alert">Cloudflare verification is unavailable. Please reload and try again.</p>}
+      <div ref={containerRef} className={`mx-auto max-w-[420px]${interactionOnly ? "" : " min-h-[65px]"}`} data-testid="turnstile-container" />
     </section>
   );
 }

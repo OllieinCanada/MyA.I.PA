@@ -200,6 +200,16 @@ describe("intuitive signup presentation", () => {
     act(() => root.render(<HumanVerificationCheck provider="turnstile+recaptcha" siteKey="cloudflare-key" googleSiteKey="google-key" onVerify={onVerify} />));
     expect(container.querySelector('[data-testid="recaptcha-container"]')).not.toBeNull();
     expect(google.sitekey).toBe("google-key");
+    expect(cloudflare.appearance).toBe("interaction-only");
+    expect(cloudflare.execution).toBe("render");
+    const cloudflareContainer = container.querySelector('[data-testid="turnstile-container"]');
+    expect(cloudflareContainer.className).not.toMatch(/min-h|hidden/);
+    expect(container.textContent).not.toMatch(/additional security check/);
+    expect(container.querySelector('[data-testid="recaptcha-container"]').compareDocumentPosition(cloudflareContainer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    act(() => cloudflare["before-interactive-callback"]());
+    expect(container.textContent).toMatch(/additional security check/);
+    act(() => cloudflare["after-interactive-callback"]());
+    expect(container.textContent).not.toMatch(/additional security check/);
     act(() => cloudflare.callback("cloudflare-proof"));
     expect(onVerify).toHaveBeenLastCalledWith({ turnstileToken: "cloudflare-proof", recaptchaToken: "" });
     act(() => google.callback("google-proof"));
@@ -208,6 +218,11 @@ describe("intuitive signup presentation", () => {
     expect(onVerify).toHaveBeenLastCalledWith({ turnstileToken: "cloudflare-proof", recaptchaToken: "" });
     act(() => cloudflare["expired-callback"]());
     expect(onVerify).toHaveBeenLastCalledWith({ turnstileToken: "", recaptchaToken: "" });
+    act(() => cloudflare["error-callback"]());
+    expect(container.querySelector('[role="alert"]').textContent).toMatch(/Cloudflare verification is unavailable/);
+    expect(onVerify).toHaveBeenLastCalledWith({ turnstileToken: "", recaptchaToken: "" });
+    act(() => cloudflare.callback("renewed-cloudflare-proof"));
+    expect(container.querySelector('[role="alert"]')).toBeNull();
     act(() => root.unmount());
     expect(window.grecaptcha.reset).toHaveBeenCalledWith(0);
     root = createRoot(container);
