@@ -4,6 +4,8 @@ test("signup defaults to two independent CAPTCHA providers when both public keys
   jest.resetModules();
   const config = require("./signupConfig");
   expect(config.CAPTCHA_PROVIDER).toBe("turnstile+recaptcha");
+  expect(config.DEFAULT_RECAPTCHA_SITE_KEY).toBe("6LfcUfotAAAAACDoNbnUNMJW-CsckzCr5CSWe0OP");
+  expect(config.DEFAULT_RECAPTCHA_SITE_KEY.slice(-5).split("")).toEqual(["W", "e", "0", "O", "P"]);
   expect(config.RECAPTCHA_MODE).toBe("checkbox");
   expect(config.USE_RECAPTCHA_ENTERPRISE).toBe(false);
   if (original === undefined) delete process.env.REACT_APP_CAPTCHA_PROVIDER;
