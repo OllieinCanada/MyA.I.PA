@@ -44,6 +44,6 @@ export function canadianAddressFromPlace(place) {
     streetAddress: `${unit ? `${unit}-` : ""}${number} ${route}`,
     city: part("locality") || part("postal_town") || part("sublocality_level_1"),
     province,
-    postalCode: postal.length === 6 ? `${postal.slice(0, 3)} ${postal.slice(3)}` : postal,
+    postalCode: /^[ABCEGHJ-NPRSTVXY]\d[ABCEGHJ-NPRSTV-Z]\d[ABCEGHJ-NPRSTV-Z]\d$/.test(postal) ? `${postal.slice(0, 3)} ${postal.slice(3)}` : "",
   };
 }

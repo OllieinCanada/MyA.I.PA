@@ -2,11 +2,13 @@ const fs = require("fs");
 const path = require("path");
 const { copyDir, ensureDir, npmCommand, removeDir, rootPath, run } = require("./_helpers");
 const { syncRetainedStaticAssets } = require('./pages-static-retention');
+const { resolveGoogleMapsBrowserKey } = require('./google-maps-build-config');
 
 const buildDirName = "build-pages-output";
 const buildDir = rootPath(buildDirName);
 const docsDir = rootPath("docs");
 const productionApiBase = process.env.REACT_APP_API_BASE_URL || "https://api.myaipa.ca";
+const googleMapsBrowserKey = resolveGoogleMapsBrowserKey();
 
 console.log("Building production React app...");
 removeDir(buildDir);
@@ -15,6 +17,7 @@ run(npmCommand(), ["run", "build"], {
     BUILD_PATH: buildDirName,
     REACT_APP_API_BASE_URL: productionApiBase,
     REACT_APP_CHECKOUT_API_BASE_URL: process.env.REACT_APP_CHECKOUT_API_BASE_URL || productionApiBase,
+    REACT_APP_GOOGLE_MAPS_API_KEY: googleMapsBrowserKey,
   },
 });
 
