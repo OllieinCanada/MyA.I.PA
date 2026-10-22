@@ -57,6 +57,16 @@ describe("address autocomplete", () => {
     expect(container.textContent).toContain("Enter your address manually");
     expect(container.querySelector("input").value).toBe("277 Mud");
   });
+  test("a selected address without a postal code clears it and asks for manual entry", async () => {
+    const incomplete = { ...address, addressComponents: address.addressComponents.filter(part => !part.types.includes("postal_code")), fetchFields };
+    fetchSuggestions.mockResolvedValue({ suggestions: [{ placePrediction: {
+      placeId: "missing-postal", text: { toString: () => "277 Mud Street, Hamilton" }, toPlace: () => incomplete,
+    } }] });
+    render(); await type("277 Mud");
+    await act(async () => container.querySelector('[role="option"]').click());
+    expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ postalCode: "" }));
+    expect(container.textContent).toContain("Google did not provide a complete postal code. Enter it manually.");
+  });
   test("late lookup results cannot replace a newer query", async () => {
     let resolveOld;
     fetchSuggestions.mockImplementationOnce(() => new Promise((resolve) => { resolveOld = resolve; }));

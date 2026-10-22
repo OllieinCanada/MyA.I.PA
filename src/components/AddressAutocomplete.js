@@ -53,7 +53,9 @@ export default function AddressAutocomplete({ value, onChange, onSelect, onBlur,
       const address = canadianAddressFromPlace(place);
       selected.current = address.streetAddress;
       onSelect(address);
-      setMessage("Address filled. Check it and add a unit number if needed.");
+      setMessage(address.postalCode
+        ? "Address filled. Check it and add a unit number if needed."
+        : "Address selected. Google did not provide a complete postal code. Enter it manually.");
     } catch (_) {
       if (mounted.current && current === generation.current) setMessage("Could not fill this address. Enter the remaining fields manually.");
     } finally {

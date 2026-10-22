@@ -11,3 +11,9 @@ test("rejects non-Canadian, province-less and street-number-less results", () =>
   expect(() => canadianAddressFromPlace(canadianPlace({ administrative_area_level_1: "" }))).toThrow();
   expect(() => canadianAddressFromPlace(canadianPlace({ street_number: "" }))).toThrow();
 });
+
+test("missing, partial and malformed postal codes are never presented as a full code", () => {
+  for (const postal_code of ["", "L8J", "123456", "D1A1A1", "L8J-3Z6"]) {
+    expect(canadianAddressFromPlace(canadianPlace({ postal_code })).postalCode).toBe("");
+  }
+});
