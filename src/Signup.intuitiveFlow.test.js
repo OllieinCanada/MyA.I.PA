@@ -49,6 +49,19 @@ describe("intuitive signup presentation", () => {
     expect(topContinue.compareDocumentPosition(container.querySelector(".signup-trade-grid")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
+  test("mobile and desktop share the same disabled guidance for trade selection and verification", () => {
+    act(() => root.render(<Signup key="trade-guidance" />));
+    for (const selector of [".signup-mobile-disabled-reason", ".signup-desktop-disabled-reason"]) {
+      expect(container.querySelector(selector).textContent).toBe("Choose one trade to continue.");
+    }
+    window.location.hash = "#/signup?qa=turnstile";
+    window.localStorage.setItem(SIGNUP_QA_PREFILL_STORAGE_KEY, JSON.stringify({ phone: "9057885488", email: "qa-run@myaipa.ca" }));
+    act(() => root.render(<Signup key="verification-guidance" />));
+    for (const selector of [".signup-mobile-disabled-reason", ".signup-desktop-disabled-reason"]) {
+      expect(container.querySelector(selector).textContent).toBe("Complete the verification above to start your trial.");
+    }
+  });
+
   test("continues past service-call pricing after both prices are entered", () => {
     act(() => root.render(<Signup />));
     const form = container.querySelector("form");
