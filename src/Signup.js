@@ -2251,6 +2251,12 @@ export default function Signup() {
                 ? "Review and confirm"
                 : "Continue to final review";
   const mobilePrimaryDisabled = currentStep === 1 ? businessSlideDisabled : securityStepDisabled;
+  const actionDisabledReason = currentStep === 1 && businessSlide === 1
+    ? tradeSetupPanel === "trade" ? "Choose one trade to continue." : "Choose at least one property type to continue."
+    : currentStep === 1 && businessSlide === 2 ? "Choose at least one service area to continue."
+      : currentStep === 1 && businessSlide === 3 ? "Complete the required business details to continue."
+        : currentStep === 1 && businessSlide === 4 ? "Choose service calls and complete any required prices."
+          : "Complete the verification above to start your trial.";
 
   const goBackFromMobileStep = () => {
     setError("");
@@ -2687,7 +2693,19 @@ export default function Signup() {
             display: none;
           }
 
+          .signup-desktop-disabled-reason {
+            width: min(100%, 920px);
+            margin: 10px auto 0;
+            color: #64748b;
+            font-size: .875rem;
+            font-weight: 650;
+            line-height: 1.5;
+            text-align: center;
+            overflow-wrap: anywhere;
+          }
+
           @media (max-width: 639px) {
+            .signup-desktop-disabled-reason { display: none; }
             .signup-mobile-flow {
               min-height: 100dvh;
               padding: 0 16px calc(24px + env(safe-area-inset-bottom));
@@ -3016,7 +3034,7 @@ export default function Signup() {
             }
 
             .signup-mobile-action-bar.is-service-area-step {
-              grid-template-columns: minmax(92px, 140px);
+              grid-template-columns: minmax(92px, 140px) minmax(0, 1fr);
               border: 0;
               background: transparent;
               padding: 0 0 12px;
@@ -3060,7 +3078,8 @@ export default function Signup() {
               font-size: 0.78rem;
               font-weight: 650;
               line-height: 1.3;
-              text-align: right;
+              text-align: center;
+              overflow-wrap: anywhere;
             }
 
             .signup-mobile-trial-note {
@@ -3846,6 +3865,7 @@ export default function Signup() {
                     autoComplete="postal-code"
                     error={getBusinessFieldError("postalCode")}
                   />
+                  <div className="signup-inline-actions col-span-full mt-4 grid grid-cols-[minmax(0,0.36fr)_minmax(0,1fr)] gap-3">
                   <button
                     type="button"
                     onClick={goBackFromMobileStep}
@@ -3857,7 +3877,7 @@ export default function Signup() {
                     type="submit"
                     disabled={businessSlideDisabled || busy}
                     className={
-                      "signup-inline-action mt-auto inline-flex min-h-[54px] items-center justify-center gap-3 rounded-2xl px-6 text-base font-black text-white transition sm:text-lg xl:col-span-2 " +
+                      "signup-inline-action mt-auto inline-flex min-h-[54px] items-center justify-center gap-3 rounded-2xl px-6 text-base font-black text-white transition sm:text-lg " +
                       (businessSlideDisabled || busy
                         ? "cursor-not-allowed bg-slate-300"
                         : "bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 shadow-[0_16px_42px_-28px_rgba(79,70,229,0.95)] hover:-translate-y-0.5 hover:brightness-110")
@@ -3866,6 +3886,8 @@ export default function Signup() {
                     {busy ? "Saving..." : businessSlideLabel}
                     <Icon name="arrow" className="h-5 w-5" />
                   </button>
+                  {businessSlideDisabled ? <p className="signup-desktop-disabled-reason col-span-full">{actionDisabledReason}</p> : null}
+                  </div>
                   </div>
                 </div>
               </section>
@@ -3911,7 +3933,7 @@ export default function Signup() {
                       <button type="submit" disabled={pricingStepDisabled || busy} className="mt-4 flex min-h-[54px] w-full items-center justify-center rounded-xl bg-blue-600 px-5 font-black text-white disabled:opacity-50">
                         {returnToReviewAfterEdit ? "Continue" : "Review and confirm"}
                       </button>
-                      {!hasValidServiceCallPricing ? <p className="mt-2 text-sm font-semibold text-slate-600">Enter each checked rate, or uncheck it to leave it out.</p> : null}
+                      {!hasValidServiceCallPricing ? <p className="mt-2 text-center text-sm font-semibold text-slate-600">Enter each checked rate, or uncheck it to leave it out.</p> : null}
                     </div>
                     </div>
                   </div>
@@ -3990,23 +4012,17 @@ export default function Signup() {
           )}
           {mobilePrimaryDisabled ? (
             <p className="signup-mobile-disabled-reason">
-              {currentStep === 1 && businessSlide === 1
-                ? tradeSetupPanel === "trade"
-                  ? "Choose one trade to continue."
-                  : "Choose at least one property type to continue."
-                : currentStep === 1 && businessSlide === 2
-                  ? "Choose at least one service area to continue."
-                  : currentStep === 1 && businessSlide === 3
-                    ? "Complete the required business details to continue."
-                    : currentStep === 1 && businessSlide === 4
-                      ? "Choose service calls and complete any required prices."
-                    : "Complete the verification above to start your trial."}
+              {actionDisabledReason}
             </p>
           ) : null}
           {currentStep === 3 ? (
             <p className="signup-mobile-trial-note">14 days free · No card needed · Cancel anytime</p>
           ) : null}
         </div>
+
+        {currentStep === 1 && businessSlide !== 3 && mobilePrimaryDisabled ? (
+          <p className="signup-desktop-disabled-reason">{actionDisabledReason}</p>
+        ) : null}
 
         <div className="signup-desktop-action-footer shrink-0 pt-3">
           {currentStep === 1 ? null : (
@@ -4031,6 +4047,10 @@ export default function Signup() {
               />
             </div>
           )}
+
+          {currentStep !== 1 && mobilePrimaryDisabled ? (
+            <p className="signup-desktop-disabled-reason">{actionDisabledReason}</p>
+          ) : null}
 
           <label className="sr-only" aria-hidden="true">
             Company website

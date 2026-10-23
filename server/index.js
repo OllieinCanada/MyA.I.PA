@@ -14675,7 +14675,7 @@ async function readVerificationProgress(pending, channel = "sms") {
   const progress = buildSignupProgress({ attempt, signup: saved || {}, receipts, contactVerified, channel, ready: state.state === "ready" });
   state = { ...state, progress };
   if (state.state === "processing") state = { ...state, title: "We’re setting up your assistant.",
-    message: channel === "email" ? "Your contact details are verified. We’re preparing your assistant and assigning your My AI PA number." : "Your phone is verified. We’re preparing your assistant and assigning your My AI PA number." };
+    message: (channel === "email" ? "Your contact details are verified. We’re preparing your assistant and assigning your My AI PA number." : "Your phone is verified. We’re preparing your assistant and assigning your My AI PA number.") + " This will take less than 3 minutes. Thank you for your patience." };
   if(state.state!=="closed"&&state.state!=="ready"&&saved?.smsRoutingStatus==="failed") {
     return {...state,state:"needs_attention",title:"Your text-message setup needs attention.",
       message:"We could not finish configuring your assistant’s texts. Our team has been notified. Keep this link to check progress—do not sign up again.",assignedPhone:"",terminal:false};
@@ -15401,7 +15401,7 @@ app.all(
         ok: true, confirmation: true,
         title: verificationChannel === "sms" ? "Setting up your assistant" : "Verify your contact details",
         body: verificationChannel === "sms"
-          ? "Keep this page open. Your AI number will appear above when assignment finishes. This may take a few minutes."
+          ? "Keep this page open. Your AI number will appear above when assignment finishes. This may take a few minutes. This will take less than 3 minutes. Thank you for your patience."
           : "Press Verify and continue to start setup.",
       });
     }

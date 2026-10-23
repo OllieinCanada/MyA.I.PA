@@ -4,13 +4,12 @@ const {chromium}=require('playwright');
 const {verificationProgressMarkup,verificationProgressScript,verificationNumberMarkup}=require('../server/signupVerificationProgress');
 const {buildSignupProgress}=require('../server/signupProgress');
 async function main(){
- const bundled='C:/Users/Olive/AppData/Local/ms-playwright/chromium-1234/chrome-win64/chrome.exe';
- const browser=await chromium.launch({headless:true,timeout:20000,executablePath:fs.existsSync(bundled)?bundled:undefined,args:['--disable-gpu','--disable-dev-shm-usage']});
+ const browser=await chromium.launch({headless:true,timeout:20000,executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE||undefined,args:['--disable-gpu','--disable-dev-shm-usage']});
  const out=path.resolve('diagnostics/verification-progress');fs.mkdirSync(out,{recursive:true});
  try{
-  for(const width of [390,1440]){
+  for(const width of [320,393,412,768,820,1180,1440,1920]){
    const progress = buildSignupProgress({contactVerified:true,receipts:{'twilio-number':{status:'completed',result:{twilioPhoneNumber:'+12895550199'}},'vapi-assistant':{status:'completed',result:{assistantId:'offline-fixture'}}}});
-   let state={state:'processing',title:'We’re setting up your assistant.',message:'Your phone is verified. We’re preparing your assistant and assigning your My AI PA number.',progress};
+   let state={state:'processing',title:'We’re setting up your assistant.',message:'Your phone is verified. We’re preparing your assistant and assigning your My AI PA number. This will take less than 3 minutes. Thank you for your patience.',progress};
    const page=await browser.newPage({viewport:{width,height:900},reducedMotion:'reduce'});page.setDefaultTimeout(10000);
    const errors=[];page.on('pageerror',e=>errors.push(e.message));
    await page.route('**/*',route=>{

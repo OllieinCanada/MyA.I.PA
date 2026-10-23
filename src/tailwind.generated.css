@@ -962,6 +962,10 @@ video {
   grid-column: span 2 / span 2;
 }
 
+.col-span-full {
+  grid-column: 1 / -1;
+}
+
 .-mx-1 {
   margin-left: -0.25rem;
   margin-right: -0.25rem;
@@ -2347,6 +2351,10 @@ video {
 
 .grid-cols-\[auto_minmax\(0\2c 1fr\)_auto\] {
   grid-template-columns: auto minmax(0,1fr) auto;
+}
+
+.grid-cols-\[minmax\(0\2c 0\.36fr\)_minmax\(0\2c 1fr\)\] {
+  grid-template-columns: minmax(0,0.36fr) minmax(0,1fr);
 }
 
 .grid-cols-\[minmax\(0\2c 1fr\)_auto\] {
@@ -11262,10 +11270,6 @@ video {
 @media (min-width: 1280px) {
   .xl\:right-32 {
     right: 8rem;
-  }
-
-  .xl\:col-span-2 {
-    grid-column: span 2 / span 2;
   }
 
   .xl\:col-span-4 {

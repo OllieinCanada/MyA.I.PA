@@ -21,6 +21,7 @@ test("one SMS tap shows progress, then number and actions at the same URL", asyn
     assert.equal(requests[0].options.redirect, "error");
     assert.equal(new URLSearchParams(requests[0].options.body).get("confirmation"), "VERIFY_AND_CONTINUE");
     assert.equal(dom.window.document.querySelector("#setup-progress").hidden, false);
+    assert.ok(dom.window.document.querySelector("#verification-description").textContent.endsWith("This will take less than 3 minutes. Thank you for your patience."));
     assert.equal(dom.window.document.querySelector("section"), null, "No assigned number invented during provisioning");
     finish(response(resultHtml)); await tick();
     assert.match(dom.window.document.body.textContent, /289.*555-0112/);
