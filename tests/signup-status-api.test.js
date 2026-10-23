@@ -135,7 +135,9 @@ before(async () => {
     if (["https://challenges.cloudflare.com/turnstile/v0/siteverify", "https://www.google.com/recaptcha/api/siteverify"].includes(String(url))) {
       const google = new URL(url).hostname === "www.google.com";
       assert.equal(options.body.get("secret"), google ? "synthetic-api-google-secret" : "synthetic-api-captcha-secret");
-      const valid = options.body.get("response") === (google ? "synthetic-api-google-proof" : "synthetic-api-proof");
+      const valid = google
+        ? ["synthetic-api-google-proof", "g".repeat(4096)].includes(options.body.get("response"))
+        : options.body.get("response") === "synthetic-api-proof";
       return Promise.resolve(new Response(JSON.stringify({ success: valid, hostname: "www.myaipa.ca", "error-codes": valid ? [] : ["invalid-input-response"] }), {
         status: 200, headers: { "content-type": "application/json" },
       }));
@@ -361,14 +363,12 @@ test("web signup, pending verification, and dashboard share one server-owned ide
   assert.equal((await missingIdentity.json()).code, "SIGNUP_SUBMISSION_ID_REQUIRED");
   const initialAttempts = rows.size;
   const initialPending = pendingRows.size;
-  let rejectedCase = 0;
   for (const security of [{},
     { captchaProvider: "recaptcha", recaptchaToken: "fake", pageUrl: "http://localhost:3000" },
     { captchaProvider: "turnstile", captchaToken: "fake", pageUrl: "http://127.0.0.1:3000" }]) {
-    const denied = await postSignup({ ...requestBody, security,
-      businessProfile: { ...requestBody.businessProfile, businessName: `Synthetic Rejected Captcha ${rejectedCase++}` },
-    });
-    assert.equal(denied.status, 429, await denied.clone().text());
+    const denied = await postSignup({ ...requestBody, security });
+    assert.equal(denied.status, 400, await denied.clone().text());
+    assert.equal((await denied.json()).code, "SIGNUP_CAPTCHA_FAILED");
     assert.equal(rows.size, initialAttempts, "Rejected CAPTCHA must not save a signup attempt");
     assert.equal(pendingRows.size, initialPending, "Rejected CAPTCHA must not begin verification");
   }
@@ -413,17 +413,20 @@ test("dual CAPTCHA is enforced by the real signup endpoint before saving a custo
       security: { captchaProvider: "turnstile+recaptcha", turnstileToken: "synthetic-api-proof", recaptchaToken: "synthetic-api-google-proof", clientElapsedMs: 10000 },
     };
     const initial = { attempts: rows.size, pending: pendingRows.size };
-    let index = 0;
     for (const security of [{ ...payload.security, recaptchaToken: "" },
       { ...payload.security, captchaProvider: "turnstile" }, { ...payload.security, recaptchaToken: "fake" }]) {
       const denied = await fetch(`${baseUrl}/api/integrations/signup-complete`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({
-        ...payload, security, businessProfile: { ...payload.businessProfile, businessName: `Synthetic Dual Denied ${index++}` },
+        ...payload, security,
       }) });
-      assert.equal(denied.status, 429);
+      assert.equal(denied.status, 400);
+      assert.equal((await denied.json()).resetCaptcha, true);
       assert.equal(rows.size, initial.attempts);
       assert.equal(pendingRows.size, initial.pending);
     }
-    const accepted = await fetch(`${baseUrl}/api/integrations/signup-complete`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
+    // Real endpoint regression: Google's proof must not inherit Cloudflare's 2048-character ceiling.
+    const accepted = await fetch(`${baseUrl}/api/integrations/signup-complete`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({
+      ...payload, security: { ...payload.security, recaptchaToken: "g".repeat(4096) },
+    }) });
     assert.equal(accepted.status, 202, await accepted.clone().text());
     assert.equal(pendingRows.size, initial.pending + 1);
   } finally {

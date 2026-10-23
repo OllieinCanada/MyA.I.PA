@@ -13,6 +13,7 @@ const { enqueueSignupSetupJob, drainSignupSetupJobs } = require("./signupSetupJo
 const { buildTwilioImportRequest } = require('./vapiTwilioImportRequest');
 const { providerFailureDetail } = require("./providerFailureDetail");
 const { configuredCaptchaProvider, verifySignupCaptcha } = require("./signupCaptcha");
+const { checkSignupAdmission, signupSecurityResponse } = require("./signupAdmission");
 const { hasIndividualPricingChoices, individualPricingPolicy } = require("../src/features/signup/pricingPolicy");
 const cors = require("cors");
 const express = require("express");
@@ -10377,43 +10378,34 @@ async function getSignupSecurityDecision(req, body, fields) {
   const reasons = [];
   const reviewReasons = [];
 
-  if (String(security.companyWebsite || "").trim()) {
-    reasons.push("bot_trap_filled");
-  }
-
   const elapsedMs = Number(security.clientElapsedMs || 0);
   if (elapsedMs > 0 && elapsedMs < SIGNUP_MIN_ELAPSED_MS) {
     reviewReasons.push("submitted_too_fast");
   }
 
-  const captcha = await verifySignupCaptcha(security, ip);
-  if (!captcha.ok) {
-    reasons.push(captcha.reason || "captcha_failed");
-  }
-
-  const ipLimit = await consumeNamedRateLimit(
-    "signup-ip",
-    ip,
-    SIGNUP_IP_MAX_REQUESTS,
-    SIGNUP_IP_WINDOW_MS
-  );
-  if (!ipLimit.allowed) {
-    reasons.push("ip_rate_limit");
-  }
-
   const identityKey = hashKey([fields.ownerEmail, fields.ownerPhone, fields.businessName].map(normalizeForKey).join("|"));
-  const identityLimit = await consumeNamedRateLimit(
-    "signup-identity",
-    identityKey,
-    SIGNUP_IDENTITY_MAX_REQUESTS,
-    SIGNUP_IDENTITY_WINDOW_MS
-  );
-  if (!identityLimit.allowed) {
-    reasons.push("identity_rate_limit");
-  }
+  const admission = await checkSignupAdmission({ security, ip,
+    contactComplete: Boolean(fields.ownerPhone && fields.businessPhone && fields.businessAddress),
+  }, {
+    verifyCaptcha: verifySignupCaptcha,
+    consumeIp: () => consumeNamedRateLimit(
+      "signup-ip",
+      ip,
+      SIGNUP_IP_MAX_REQUESTS,
+      SIGNUP_IP_WINDOW_MS
+    ),
+    consumeIdentity: () => consumeNamedRateLimit(
+      "signup-identity",
+      identityKey,
+      SIGNUP_IDENTITY_MAX_REQUESTS,
+      SIGNUP_IDENTITY_WINDOW_MS
+    ),
+  });
+  reasons.push(...admission.reasons);
+  const captcha = admission.captcha || {};
 
   const duplicateKey = hashKey([fields.ownerEmail, fields.ownerPhone, fields.businessName, fields.businessPhone].map(normalizeForKey).join("|"));
-  if (rememberDuplicateSignup(duplicateKey) && isEnabled(process.env.SIGNUP_REVIEW_DUPLICATES)) {
+  if (!reasons.length && rememberDuplicateSignup(duplicateKey) && isEnabled(process.env.SIGNUP_REVIEW_DUPLICATES)) {
     reviewReasons.push("duplicate_submission");
   }
 
@@ -10421,10 +10413,6 @@ async function getSignupSecurityDecision(req, body, fields) {
   const emailDomain = normalizeForKey(fields.ownerEmail.split("@")[1] || "");
   if (disposableDomains.has(emailDomain)) {
     reviewReasons.push("disposable_email");
-  }
-
-  if (!fields.ownerPhone || !fields.businessPhone || !fields.businessAddress) {
-    reasons.push("missing_contact_detail");
   }
 
   if (isEnabled(process.env.SIGNUP_REQUIRE_MANUAL_APPROVAL)) {
@@ -10439,6 +10427,12 @@ async function getSignupSecurityDecision(req, body, fields) {
     reviewReasons,
     captchaSkipped: Boolean(captcha.skipped),
     captchaProvider: configuredCaptchaProvider(),
+    captchaDiagnostic: captcha.ok === false ? {
+      provider: captcha.provider || configuredCaptchaProvider(),
+      tokenLength: captcha.tokenLength,
+      maxTokenLength: captcha.maxTokenLength,
+    } : undefined,
+    retryAfterMs: admission.retryAfterMs,
   };
 }
 
@@ -14808,10 +14802,13 @@ app.post(
     if (securityDecision.blocked) {
       console.warn("[signup:security] blocked signup", {
         reasons: securityDecision.reasons,
+        captcha: securityDecision.captchaDiagnostic,
         ipHash: hashKey(securityDecision.ip),
         emailHash: hashKey(ownerEmail),
       });
-      return res.status(429).json({ error: "Signup could not be completed right now. Please try again later." });
+      const rejection = signupSecurityResponse(securityDecision.reasons);
+      if (securityDecision.retryAfterMs) setRetryAfterHeader(res, securityDecision.retryAfterMs);
+      return res.status(rejection.status).json(rejection.body);
     }
 
     const payload = compactObject({

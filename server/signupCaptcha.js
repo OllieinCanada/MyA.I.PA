@@ -2,6 +2,18 @@ const TURNSTILE_VERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/sit
 const RECAPTCHA_VERIFY_URL = "https://www.google.com/recaptcha/api/siteverify";
 const PRODUCTION_HOSTNAMES = ["myaipa.ca", "www.myaipa.ca", "ollieincanada.github.io"];
 const GOOGLE_TEST_SECRET = "6LeIxAcTAAAAAGG-vFI1TnRWxMZNFuojJ4WifJWe";
+// Cloudflare documents 2048 characters. Google's limit here is our own bounded
+// request-safety limit, not Cloudflare's provider-specific restriction.
+const TOKEN_LIMITS = { turnstile: 2048, recaptcha: 16384 };
+
+function validateToken(token, provider) {
+  if (typeof token !== "string" || !token.trim()) return { ok: false, reason: "missing_captcha", provider };
+  if (token.length > TOKEN_LIMITS[provider]) return {
+    ok: false, reason: "captcha_token_too_long", provider,
+    tokenLength: token.length, maxTokenLength: TOKEN_LIMITS[provider],
+  };
+  return null;
+}
 
 function configuredCaptchaProvider(env = process.env) {
   // This is server configuration, never a value supplied by the browser.
@@ -25,8 +37,8 @@ async function verifyProviderCaptcha(security = {}, ip, { env = process.env, fet
   const generic = security?.captchaToken;
   if (specific && generic && specific !== generic) return { ok: false, reason: "captcha_token_mismatch" };
   const token = specific || generic;
-  if (typeof token !== "string" || !token.trim()) return { ok: false, reason: "missing_captcha" };
-  if (token.length > 2048) return { ok: false, reason: "invalid_captcha" };
+  const invalid = validateToken(token, provider);
+  if (invalid) return invalid;
   const body = new URLSearchParams({ secret, response: token.trim() });
   if (ip && ip !== "unknown") body.set("remoteip", ip);
   try {
@@ -68,15 +80,18 @@ async function verifySignupCaptcha(security = {}, ip, options = {}) {
     return { ok: false, reason: "captcha_test_secret_forbidden" };
   }
   const proofs = [security?.turnstileToken, security?.recaptchaToken];
-  if (proofs.some((x) => typeof x !== "string" || !x.trim())) return { ok: false, reason: "missing_captcha" };
-  if (proofs.some((x) => x.length > 2048) || proofs[0] === proofs[1]) return { ok: false, reason: "invalid_captcha" };
+  for (const [index, provider] of ["turnstile", "recaptcha"].entries()) {
+    const invalid = validateToken(proofs[index], provider);
+    if (invalid) return invalid;
+  }
+  if (proofs[0].trim() === proofs[1].trim()) return { ok: false, reason: "captcha_tokens_not_independent" };
   if (security?.captchaToken && security.captchaToken !== proofs[0]) return { ok: false, reason: "captcha_token_mismatch" };
   for (const provider of ["turnstile", "recaptcha"]) {
     const result = await verifyProviderCaptcha({
       captchaProvider: provider,
       ...(provider === "turnstile" ? { turnstileToken: proofs[0] } : { recaptchaToken: proofs[1] }),
     }, ip, { ...options, env: { ...env, CAPTCHA_PROVIDER: provider } });
-    if (!result.ok) return result;
+    if (!result.ok) return { ...result, provider };
   }
   return { ok: true, skipped: false };
 }

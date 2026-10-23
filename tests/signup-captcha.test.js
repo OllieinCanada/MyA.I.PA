@@ -15,6 +15,39 @@ const check = (security, config = env, mock = verifier()) => verifySignupCaptcha
 
 const dualEnv = { ...env, CAPTCHA_PROVIDER: "turnstile+recaptcha", RECAPTCHA_SECRET_KEY: "synthetic-google-secret" };
 const dualProofs = { captchaProvider: "turnstile+recaptcha", turnstileToken: "cloudflare-proof", recaptchaToken: "google-proof" };
+test("Google proofs above Cloudflare's limit are verified unchanged in dual and Google-only modes", async () => {
+  for (const length of [2049, 4096, 16384]) {
+    const proof = "g".repeat(length);
+    for (const config of [dualEnv, { ...dualEnv, CAPTCHA_PROVIDER: "recaptcha" }]) {
+      const mock = verifier();
+      const result = await check({ ...dualProofs, captchaProvider: config.CAPTCHA_PROVIDER, recaptchaToken: proof }, config, mock);
+      assert.equal(result.ok, true);
+      assert.equal(mock.calls.at(-1).options.body.get("response"), proof);
+    }
+  }
+});
+test("provider-specific size limits reject before consuming either proof and log only safe lengths", async () => {
+  for (const [provider, field, length, limit] of [
+    ["turnstile", "turnstileToken", 2049, 2048], ["recaptcha", "recaptchaToken", 16385, 16384],
+  ]) {
+    const mock = verifier();
+    assert.deepEqual(await check({ ...dualProofs, [field]: "x".repeat(length) }, dualEnv, mock), {
+      ok: false, reason: "captcha_token_too_long", provider, tokenLength: length, maxTokenLength: limit,
+    });
+    assert.equal(mock.calls.length, 0);
+  }
+});
+test("a longer Google proof still requires successful Google verification", async () => {
+  const mock = verifier({ success: false, "error-codes": ["timeout-or-duplicate"] });
+  // Let Cloudflare succeed, but make Google reject the long proof.
+  const result = await check({ ...dualProofs, recaptchaToken: "g".repeat(4096) }, dualEnv, {
+    fetchImpl: async (url, options) => url.includes("google") ? mock.fetchImpl(url, options)
+      : { ok: true, json: async () => success },
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.provider, "recaptcha");
+  assert.equal(result.reason, "timeout-or-duplicate");
+});
 test("dual protection requires two separate provider verifications", async () => {
   const mock = verifier();
   assert.deepEqual(await check(dualProofs, dualEnv, mock), { ok: true, skipped: false });
