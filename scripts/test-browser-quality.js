@@ -347,7 +347,8 @@ async function testSignupJourney(browser, baseUrl, viewport) {
   page.setDefaultNavigationTimeout(15_000);
   try {
     await page.goto(`${baseUrl}#/`, { waitUntil: "domcontentloaded" });
-    await page.getByText("Start Your Free Trial", { exact: true }).last().waitFor({ state: "visible" });
+    // Responsive pages include hidden copies of the CTA; wait for a visible one.
+    await page.getByText("Start Your Free Trial", { exact: true }).filter({ visible: true }).first().waitFor({ state: "visible" });
     await clickVisibleByText(page, "Start Your Free Trial");
     await page.waitForURL(/#\/signup$/);
     await page.getByRole("heading", { level: 1, name: /create your ai phone assistant/i }).waitFor({ state: "visible" });

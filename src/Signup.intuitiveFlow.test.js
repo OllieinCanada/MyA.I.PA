@@ -234,6 +234,28 @@ describe("intuitive signup presentation", () => {
     expect(container.querySelector('[role="alert"]').textContent).toMatch(/Google verification is unavailable/);
   });
 
+  test("remounting after a failed submission discards both old proofs and cleans up both widgets", () => {
+    const onVerify = jest.fn();
+    let cloudflare, google;
+    window.turnstile = { render: jest.fn((_el, options) => { cloudflare = options; return "retry-ts"; }), remove: jest.fn() };
+    window.grecaptcha = { render: jest.fn((_el, options) => { google = options; return 0; }), reset: jest.fn() };
+    const renderChecks = (key) => root.render(<HumanVerificationCheck key={key} provider="turnstile+recaptcha"
+      siteKey="cloudflare-key" googleSiteKey="google-key" onVerify={onVerify} />);
+    act(() => renderChecks(0));
+    act(() => { cloudflare.callback("old-cloudflare"); google.callback("old-google"); });
+    expect(onVerify).toHaveBeenLastCalledWith({ turnstileToken: "old-cloudflare", recaptchaToken: "old-google" });
+    act(() => renderChecks(1));
+    expect(window.turnstile.remove).toHaveBeenCalledWith("retry-ts");
+    expect(window.grecaptcha.reset).toHaveBeenCalledWith(0);
+    expect(window.turnstile.render).toHaveBeenCalledTimes(2);
+    expect(window.grecaptcha.render).toHaveBeenCalledTimes(2);
+    act(() => google.callback("new-google"));
+    expect(onVerify).toHaveBeenLastCalledWith({ turnstileToken: "", recaptchaToken: "new-google" });
+    act(() => cloudflare.callback("new-cloudflare"));
+    expect(onVerify).toHaveBeenLastCalledWith({ turnstileToken: "new-cloudflare", recaptchaToken: "new-google" });
+    delete window.turnstile; delete window.grecaptcha;
+  });
+
   test("loads the Turnstile QA route with stored contact overrides and no manual contact typing", () => {
     window.location.hash = "#/signup?qa=turnstile";
     window.localStorage.setItem(SIGNUP_QA_PREFILL_STORAGE_KEY, JSON.stringify({
@@ -249,6 +271,49 @@ describe("intuitive signup presentation", () => {
     expect(container.textContent).toMatch(/qa-run@myaipa.ca/i);
     expect(container.textContent).toMatch(/QA prefill loaded/i);
     expect(container.textContent).not.toMatch(/Enter a real 10-digit business phone number/i);
+  });
+
+  test("a rejected signup preserves details and submission identity but requires two fresh proofs", async () => {
+    const originalFetch = global.fetch;
+    const mockFetch = jest.fn().mockResolvedValue({ ok: false, status: 400,
+      text: async () => JSON.stringify({ error: "Please complete the verification checks again.", resetCaptcha: true }) });
+    let cloudflare, google;
+    window.turnstile = { render: jest.fn((_el, options) => { cloudflare = options; return "submit-ts"; }), remove: jest.fn() };
+    window.grecaptcha = { render: jest.fn((_el, options) => { google = options; return 0; }), reset: jest.fn() };
+    window.location.hash = "#/signup?qa=turnstile";
+    window.localStorage.setItem(SIGNUP_QA_PREFILL_STORAGE_KEY, JSON.stringify({ phone: "9057885488", email: "qa-run@myaipa.ca" }));
+    window.sessionStorage.setItem("myaipa_signup_submission_v1", "e7d7ae2b-6d25-4eec-a6bb-2ce5e012e0da");
+    global.fetch = mockFetch;
+    try {
+      act(() => root.render(<Signup />));
+      act(() => { cloudflare.callback("first-cloudflare"); google.callback("first-google"); });
+      await act(async () => container.querySelector("form").dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(container.textContent).toMatch(/Please complete the verification checks again/);
+      expect(container.textContent).toMatch(/QA Painter Services/);
+      expect(container.textContent).toMatch(/qa-run@myaipa.ca/);
+      expect(window.turnstile.remove).toHaveBeenCalledWith("submit-ts");
+      expect(window.grecaptcha.reset).toHaveBeenCalledWith(0);
+      expect(window.turnstile.render).toHaveBeenCalledTimes(2);
+      expect(window.grecaptcha.render).toHaveBeenCalledTimes(2);
+      // Neither no proof nor just one fresh proof may reuse the old pair.
+      await act(async () => container.querySelector("form").dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+      act(() => google.callback("second-google"));
+      await act(async () => container.querySelector("form").dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      act(() => cloudflare.callback("second-cloudflare"));
+      await act(async () => container.querySelector("form").dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      const first = JSON.parse(mockFetch.mock.calls[0][1].body);
+      const second = JSON.parse(mockFetch.mock.calls[1][1].body);
+      expect(second.submissionId).toBe(first.submissionId);
+      expect(second.security.turnstileToken).toBe("second-cloudflare");
+      expect(second.security.recaptchaToken).toBe("second-google");
+    } finally {
+      global.fetch = originalFetch;
+      window.sessionStorage.removeItem("myaipa_signup_submission_v1");
+      delete window.turnstile; delete window.grecaptcha;
+    }
   });
 
   test.each([

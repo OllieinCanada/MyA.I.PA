@@ -1499,7 +1499,7 @@ function TurnstileVerificationCheck({ provider, siteKey, onVerify, interactionOn
         "before-interactive-callback": () => { if (!cancelled) setNeedsInteraction(true); },
         "after-interactive-callback": () => { if (!cancelled) setNeedsInteraction(false); },
         callback: (token) => { if (!cancelled) { setFailed(false); setNeedsInteraction(false); onVerify?.(String(token || "")); } },
-        "expired-callback": () => onVerify?.(""),
+        "expired-callback": () => { if (!cancelled) onVerify?.(""); },
         "error-callback": fail,
       });
     };
@@ -2118,6 +2118,7 @@ export default function Signup() {
   const [signupResult, setSignupResult] = useState(() => readStoredSignupResult());
   const [botTrap, setBotTrap] = useState("");
   const [captchaToken, setCaptchaToken] = useState("");
+  const [captchaResetKey, setCaptchaResetKey] = useState(0);
   const [businessStepAttempted, setBusinessStepAttempted] = useState(false);
   const [touchedDetails, setTouchedDetails] = useState({});
   const [returnToReviewAfterEdit, setReturnToReviewAfterEdit] = useState(false);
@@ -2574,6 +2575,10 @@ export default function Signup() {
       setBusy(false);
       window.scrollTo?.({ top: 0, behavior: "smooth" });
     } catch (submitError) {
+      // Provider proofs are single-use, including when a later check fails.
+      // Preserve form/submission identity, but require fresh independent proofs.
+      setCaptchaToken("");
+      setCaptchaResetKey((value) => value + 1);
       setBusy(false);
       setError(submitError?.message || "Signup could not be completed right now. Please try again later.");
     }
@@ -3961,7 +3966,7 @@ export default function Signup() {
         ) : null}
 
         {currentStep === 3 ? (
-          <HumanVerificationCheck onVerify={setCaptchaToken} />
+          <HumanVerificationCheck key={captchaResetKey} onVerify={setCaptchaToken} />
         ) : null}
 
         <div
