@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import "./AdminDashboard.css";
 import { getApiBaseUrl, normalizeApiBase } from "./config/apiBase";
+import TwilioReceiptHealthPanel from './TwilioReceiptHealthPanel';
 
 const CONFIGURED_API_BASE = process.env.REACT_APP_API_BASE_URL || "";
 const API_BASE = normalizeApiBase(getApiBaseUrl(CONFIGURED_API_BASE));
@@ -1184,7 +1185,9 @@ function ConceptOverview({
   const criticalCount = attentionSummary.bySeverity?.critical || attentionItems.filter((item) => item.severity === "critical").length;
   const warningCount = attentionSummary.bySeverity?.warning || attentionItems.filter((item) => item.severity === "warning").length;
   const oldClutterCount = attentionItems.filter((item) => getAttentionBucket(item) === "old_clutter").length;
-  const pilotBlocked = criticalCount > 0 || attentionItems.some((item) => getAttentionBucket(item) === "fix_now");
+  const receiptUnconfirmed = !attentionInbox?.twilioReceipts || ['unknown', 'unavailable'].includes(attentionInbox.twilioReceipts.status);
+  const pilotBlocked = criticalCount > 0 || attentionInbox?.twilioReceipts?.status === 'critical'
+    || receiptUnconfirmed || attentionItems.some((item) => getAttentionBucket(item) === "fix_now");
   const pilotMessage = pilotBlocked
     ? "Not pilot-clean yet"
     : warningCount
@@ -1193,11 +1196,12 @@ function ConceptOverview({
 
   return (
     <div className="admin-v2-overview">
+      <TwilioReceiptHealthPanel health={attentionInbox?.twilioReceipts} />
       <section className={`admin-pilot-command ${pilotBlocked ? "is-blocked" : warningCount ? "is-watch" : "is-ready"}`}>
         <div className="admin-pilot-command-copy">
           <span>Pilot readiness</span>
           <h2>{pilotMessage}</h2>
-          <p>{pilotBlocked
+          <p>{receiptUnconfirmed ? "Delivery receipt health must be confirmed before treating operations as pilot-clean." : pilotBlocked
             ? "There are still real blockers or old billing states that should be closed before calling a first pilot customer."
             : warningCount
               ? "The core system is up, but a few review/cleanup items should be handled before you treat it as clean."
@@ -1479,6 +1483,8 @@ function SupportInbox({ reports, integrations, busyAction, message, onRefresh, o
 function AttentionInbox({ inbox, busyAction, message, incidentId, onRefresh, onAction }) {
   const summary = inbox?.summary || { total: 0, bySeverity: {} };
   const items = inbox?.items || [];
+  const receiptUnconfirmed = !inbox?.twilioReceipts || ['unknown', 'unavailable'].includes(inbox.twilioReceipts.status);
+  const criticalPresent = Boolean(summary.bySeverity?.critical || inbox?.twilioReceipts?.status === 'critical');
   const requestedIncidentFound = Boolean(incidentId && items.some((item) => item.id === incidentId));
   const actionLabels = {
     retry_owner_text: "Retry owner text",
@@ -1525,11 +1531,12 @@ function AttentionInbox({ inbox, busyAction, message, incidentId, onRefresh, onA
         <div><span>Operations command center</span><h2>Pilot cleanup board</h2><p>Plain-English buckets for what blocks a pilot, what needs your decision, and what is old clutter.</p></div>
         <button type="button" onClick={onRefresh}>Refresh checks</button>
       </div>
+      <TwilioReceiptHealthPanel health={inbox?.twilioReceipts} />
       <div className="admin-attention-command">
-        <div className={`admin-attention-readiness ${(summary.bySeverity?.critical || 0) ? "is-blocked" : (summary.total || 0) ? "is-watch" : "is-ready"}`}>
-          <span>{(summary.bySeverity?.critical || 0) ? "Not pilot-clean" : (summary.total || 0) ? "Cleanup remaining" : "Pilot-clean"}</span>
+        <div className={`admin-attention-readiness ${criticalPresent ? "is-blocked" : receiptUnconfirmed || (summary.total || 0) ? "is-watch" : "is-ready"}`}>
+          <span>{criticalPresent ? "Not pilot-clean" : receiptUnconfirmed ? "Checks not confirmed" : (summary.total || 0) ? "Cleanup remaining" : "Pilot-clean"}</span>
           <h3>{summary.total || 0} active {summary.total === 1 ? "issue" : "issues"}</h3>
-          <p>{(summary.bySeverity?.critical || 0)
+          <p>{receiptUnconfirmed ? "Receipt-worker health is unavailable or not yet confirmed. Do not treat missing evidence as a healthy queue." : criticalPresent
             ? "Handle the real blockers first. Do not retry old provider/billing records just to make the warning disappear."
             : (summary.total || 0)
               ? "No critical blocker is showing, but cleanup will make the pilot dashboard easier to trust."
@@ -2569,6 +2576,7 @@ export default function AdminDashboard() {
       items: data.items || [],
       auditEvents: data.auditEvents || [],
       generatedAt: data.generatedAt || "",
+      twilioReceipts: data.twilioReceipts || null,
     });
   };
 
@@ -2830,7 +2838,7 @@ export default function AdminDashboard() {
     try {
       if (activeTab === "leads") await loadLeads();
       if (activeTab === "overview") {
-        await Promise.allSettled([loadOpsOverview(), loadCustomerSetup(), loadTrialHealth(), loadStripeTrials(), loadCostAudit(), loadCalls(), loadLeads(), loadSignups(), loadAnalytics(), loadVapiMappings(), loadVapiInventory(), loadSettings(), loadLeadHandoffs()]);
+        await Promise.allSettled([loadOpsOverview(), loadCustomerSetup(), loadTrialHealth(), loadStripeTrials(), loadCostAudit(), loadCalls(), loadLeads(), loadSignups(), loadAnalytics(), loadVapiMappings(), loadVapiInventory(), loadSettings(), loadLeadHandoffs(), loadAttentionInbox()]);
       }
       if (activeTab === "customers") {
         await Promise.allSettled([loadOpsOverview(), loadCustomerSetup(), loadTrialHealth(), loadSignups(), loadCalls(), loadLeads(), loadCostAudit(), loadVapiMappings(), loadVapiInventory()]);
@@ -2891,6 +2899,16 @@ export default function AdminDashboard() {
   useEffect(() => {
     refresh();
   }, [isAuthenticated, activeTab, leadFilters.status, leadFilters.intent, leadFilters.urgency, callFilters.status, callFilters.minDuration, callFilters.outcome, costDays]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !['overview', 'attention'].includes(activeTab)) return undefined;
+    const timer = window.setInterval(() => {
+      loadAttentionInbox().catch(() => setAttentionInbox(current => ({ ...current,
+        twilioReceipts: { status: 'unavailable', checkedAt: new Date().toISOString() },
+      })));
+    }, 30000);
+    return () => window.clearInterval(timer);
+  }, [isAuthenticated, activeTab]);
 
   useEffect(() => {
     if (activeTab !== "customers" || !customerAccounts.length) return;

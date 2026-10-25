@@ -52,6 +52,9 @@ async function main(){
     const env={...process.env,DATABASE_URL:url,SIGNUP_RECOVERY_DRILL_DATABASE_URL:url,DISABLE_LOCAL_ENV_FILES:'1'};
     console.log('Applying the application schema to the new disposable database.');
     run(process.execPath,[path.join(ROOT,'node_modules','prisma','build','index.js'),'db','push','--skip-generate'],env);
+    console.log('Checking receipt contention, replay recovery and health queries against PostgreSQL.');
+    run(process.execPath,['--test',path.join(ROOT,'tests','twilio-status-postgres.test.js')],{...env,RUN_TWILIO_RECEIPT_DATABASE:'1'});
+    if(process.argv.includes('--receipts-only'))return;
     if(!process.argv.includes('--chain-only')){
       console.log('Running the real-database restart and concurrent-worker drill.');
       const result=spawnSync(process.execPath,[path.join(ROOT,'scripts','run-signup-postgres-restart-drill.js')],{cwd:ROOT,env,stdio:'inherit',windowsHide:true,timeout:600000});

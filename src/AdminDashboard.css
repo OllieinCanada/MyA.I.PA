@@ -1828,6 +1828,19 @@
   font-weight: 900;
 }
 
+.myai-admin .admin-receipt-health {
+  color: #102f4f;
+  overflow-wrap: anywhere;
+}
+
+.myai-admin .admin-receipt-health p {
+  color: #40566f;
+}
+
+.admin-receipt-health dd {
+  margin: 0;
+}
+
 .admin-overview-top-grid {
   display: grid;
   grid-template-columns: minmax(24rem, 2.35fr) repeat(3, minmax(10.5rem, 1fr)) minmax(11rem, 1fr);
