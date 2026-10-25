@@ -16,7 +16,7 @@ function runDrill({ args = process.argv.slice(2), execute = spawnSync } = {}) {
   const resources = evidenceFile ? assessIntakeResources(readJson(evidenceFile)) : { pass: false, status: "blocked", reason: "Fresh complete CRM, Twilio, Vapi, billing, charges and delivery evidence required" };
   const report = { generatedAt: new Date().toISOString(), localRegression: { pass: localPass }, environmentParity: parity, resourceEvidence: resources,
     liveDrill: { status: "not_run", reason: "No isolated staging queue or production smoke test is selected automatically" },
-    readyForLiveDrill: localPass && parity.pass, productionHealthyProven: false, liveSideEffects: 0 };
+    readyForLiveDrill: localPass && parity.pass && resources.pass, productionHealthyProven: false, liveSideEffects: 0 };
   const output = path.resolve(arg(args, "out") || "diagnostics/shipping-readiness/intake-recovery-drill.json");
   fs.mkdirSync(path.dirname(output), { recursive: true }); fs.writeFileSync(output, `${JSON.stringify(report, null, 2)}\n`);
   fs.writeFileSync(`${output}.tests.log`, result.stdout || "Local test runner failed before output was available.\n");

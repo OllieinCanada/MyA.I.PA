@@ -68,6 +68,7 @@ jobs:
           npm run test:twilio-receipts:postgres
           npm run test:signup-recovery:postgres
           npm run test:signup-setup:postgres
+          node scripts/run-staging-intake-drill.js
 
       - name: Save signup recovery evidence
         if: always()
@@ -79,6 +80,7 @@ jobs:
             diagnostics/signup-failure-recovery-audit/postgres-restart.json
             diagnostics/signup-failure-recovery-audit/verified-setup-chain.json
             diagnostics/shipping-readiness/twilio-receipt-recovery.json
+            diagnostics/provider-hardening/intake.json
           if-no-files-found: ignore
 
       - name: Validate private legal drafts when present
@@ -132,6 +134,7 @@ jobs:
           npm run preview:signup-verification-progress
           npm run test:pages-static-retention:browser
           npm run test:twilio-receipts:browser
+          npm run test:browser:quality
 
       - name: Save signup browser evidence
         if: always()
@@ -147,6 +150,7 @@ jobs:
             diagnostics/forwarding-onboarding/
             diagnostics/static-retention/
             diagnostics/twilio-receipt-health/
+            diagnostics/shipping-readiness/browser-quality-gate.json
           if-no-files-found: ignore
 
       - name: Archive verified Pages output
