@@ -1,33 +1,42 @@
-name: CodeQL security analysis
+name: Coordinator read-only operational diagnosis
 
+# This execution-only diagnostic exists only on codex/runtime-readonly-evidence-attempt-1.
+# Never merge this branch or replace CodeQL on the default branch.
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
-  schedule:
-    - cron: "23 9 * * 1"
   workflow_dispatch:
 
 permissions:
   contents: read
-  security-events: write
+
+concurrency:
+  group: coordinator-runtime-evidence
+  cancel-in-progress: false
 
 jobs:
-  analyze:
-    name: Analyze JavaScript and TypeScript
+  diagnose:
+    if: github.ref == 'refs/heads/codex/runtime-readonly-evidence-attempt-1'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 3
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
-          languages: javascript-typescript
-
-      - name: Analyze
-        uses: github/codeql-action/analyze@v3
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          category: "/language:javascript-typescript"
+          node-version: 20
+      - name: Test the allowlisted diagnostic offline
+        run: node --test tests/coordinator-runtime-evidence.test.js
+      - name: Read one protected operational snapshot
+        env:
+          MONITOR_API_KEY: ${{ secrets.MONITOR_API_KEY }}
+        run: |
+          set -euo pipefail
+          node scripts/coordinator-runtime-evidence.js | tee "$RUNNER_TEMP/coordinator-runtime-evidence.json"
+      - name: Show only the allowlisted result
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/coordinator-runtime-evidence.json" ]; then
+            cat "$RUNNER_TEMP/coordinator-runtime-evidence.json" >> "$GITHUB_STEP_SUMMARY"
+          fi
