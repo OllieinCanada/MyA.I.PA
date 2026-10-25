@@ -70,7 +70,7 @@ test("unknown records preserve known category results while failing coverage exp
 
 test("bounded GETs use fixed same-origin endpoints and forbid following redirects", async () => {
   let calls = 0;
-  const result = await diagnose({ apiKey: "unit-test-only", fetchImpl: async (url, options) => {
+  const result = await diagnose({ apiKey: "unit-test-only", probeAdminAccess: true, fetchImpl: async (url, options) => {
     calls += 1;
     assert.equal(url, calls === 1 ? ENDPOINT : ADMIN_ENDPOINT);
     assert.equal(options.method, "GET");
@@ -204,10 +204,21 @@ test('operation projection identifies literal routes but never publishes correla
 
 test('admin access probe never reads a response body or follows a redirect', async () => {
  let calls=0;
- const r=await diagnose({apiKey:'unit-test-only',fetchImpl:async(url,options)=>{
+ const r=await diagnose({apiKey:'unit-test-only',probeAdminAccess:true,fetchImpl:async(url,options)=>{
   calls++;if(calls===1)return new Response(JSON.stringify(payload()));
   assert.equal(url,ADMIN_ENDPOINT);assert.equal(options.method,'GET');assert.equal(options.redirect,'error');
   return {status:403, get body(){return {cancel:async()=>{}}},json(){throw Error('must never read')}};
  }});
  assert.equal(calls,2);assert.deepEqual(r.savedStateAccess,{status:403,accessDenied:true,evidenceRead:false});
+});
+
+
+test('background workflow labels and checkpoint are source-backed closed values', () => {
+ const r=projectPayload(payload([issue({snapshot:{Workflow:'verified signup setup background job'},incident:{reasonCode:'PROVIDER_TIMEOUT',lastCheckpoint:'The initial job started but did not finish normally.'}})]));
+ assert.equal(r.criticalDetails[0].workflow,'verified signup setup background job');assert.equal(r.criticalDetails[0].backgroundJobCheckpoint,true);
+});
+
+test('admin authorization probe is opt-in and is not retried in later diagnostic runs', async () => {
+ let calls=0;const r=await diagnose({apiKey:'unit-test-only',fetchImpl:async()=>{calls++;return new Response(JSON.stringify(payload()));}});
+ assert.equal(calls,1);assert.equal(r.savedStateAccess,undefined);
 });

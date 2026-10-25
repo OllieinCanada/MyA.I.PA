@@ -257,7 +257,8 @@ function projectPayload(payload) {
   const providers = new Set(['Render PostgreSQL', 'Vapi', 'Twilio', 'Make.com', 'OpenAI', 'Deepgram', 'email provider', 'Telegram', 'Stripe']);
   const codes = new Set(['P2028', 'P2010', 'P1001', 'ETIMEDOUT', 'ABORT_ERR', 'ABORTERROR', 'TIMEOUTERROR', 'ECONNRESET', 'FETCH_TIMEOUT', 'REQUEST_TIMEOUT', 'MAKE_SIGNUP_TIMEOUT']);
   const statuses = new Set(['queued','running','recovered','resolved','needs_user','failed','not_required','awaiting_review','blocked']);
-  const workflows = new Set(["customer signup", "AI call processing", "text-message handoff", "customer dashboard", "admin workflow", "application request", "Vapi call sync background job","API process crash", "Telegram incident delivery", "Twilio delivery inbox", "admin agent delivery recovery", "agent delivery test", "billing and trial workflow", "customer agent testing station", "incident remediation canary", "legacy new agent delivery test", "new agent delivery test", "production alert verification", "signup SMS routing", "text-message delivery", "voice signup verification delivery", "web signup verification delivery", "website browser"]);
+  const backgroundJobs = ["Vapi call sync", "appointment reminders", "daily owner digest", "lead handoff", "missed-call alert", "saved Twilio delivery reports", "sensitive call-data cleanup", "signup completion delivery polling", "signup text delivery polling", "trial reminders", "trial usage policy", "verified signup setup"];
+  const workflows = new Set([...backgroundJobs.map(name => `${name} background job`),"customer signup", "AI call processing", "text-message handoff", "customer dashboard", "admin workflow", "application request", "Vapi call sync background job","API process crash", "Telegram incident delivery", "Twilio delivery inbox", "admin agent delivery recovery", "agent delivery test", "billing and trial workflow", "customer agent testing station", "incident remediation canary", "legacy new agent delivery test", "new agent delivery test", "production alert verification", "signup SMS routing", "text-message delivery", "voice signup verification delivery", "web signup verification delivery", "website browser"]);
   result.criticalDetails = payload.issues.filter(i => i && i.kind === 'runtime_incident' && i.severity === 'critical').map(i => {
     const s = record(i.snapshot) ? i.snapshot : {};
     const d = record(i.diagnostics) ? i.diagnostics : {};
@@ -274,6 +275,9 @@ function projectPayload(payload) {
       hasReceiptCorrelation: Object.keys(s).some(k => /receipt|message.*sid|dispatch.*key/i.test(k)),
       hasBusinessCorrelation: Object.keys(s).some(k => /business|customer|owner|email/i.test(k)),
       globalRequestCheckpoint: i.incident?.lastCheckpoint === 'The request reached the My AI PA API and failed before a successful response was returned.',
+      backgroundJobCheckpoint: ['initial','scheduled'].some(phase => i.incident?.lastCheckpoint === `The ${phase} job started but did not finish normally.`),
+      hasRecordedMethod: typeof s.Method === 'string' && s.Method.length > 0,
+      hasRecordedRoute: typeof s.Route === 'string' && s.Route.length > 0,
       defaultOperationCheckpoint: i.incident?.lastCheckpoint === 'The operation reached the application but did not complete normally.',
       matchesCurrentCommit: typeof s.Release === 'string' && s.Release.toLowerCase() === '8fb992689d9b66efd5958676b7c3e2bc0b923631',
       firstDetectedBeforeCurrentCommit: before(d.firstDetectedAt || i.detectedAt),
@@ -336,7 +340,7 @@ async function boundedJson(response) {
   }
 }
 
-async function diagnose({ apiKey = process.env.MONITOR_API_KEY, fetchImpl = fetch } = {}) {
+async function diagnose({ apiKey = process.env.MONITOR_API_KEY, fetchImpl = fetch, probeAdminAccess = false } = {}) {
   if (typeof apiKey !== "string" || !apiKey.trim() || apiKey.length > 4096 || /[\r\n]/.test(apiKey)) {
     return { schemaVersion: 1, readOnly: true, authenticatedRead: false, complete: false, error: "monitor_auth_missing_or_invalid" };
   }
@@ -356,6 +360,7 @@ async function diagnose({ apiKey = process.env.MONITOR_API_KEY, fetchImpl = fetc
     const result = projectPayload(await boundedJson(response));
     result.requestMode = 'GET_ONLY';
     result.serverSideReadEffects = 'EXPIRED_INCIDENT_PRUNING_OR_EMPTY_STORE_INITIALIZATION';
+    if (!probeAdminAccess) return result;
     // Verify the existing authorization boundary once, without logging/reading any admin body.
     try {
       const admin = await fetchImpl(ADMIN_ENDPOINT, {
@@ -383,7 +388,7 @@ async function main(options) {
 }
 
 if (require.main === module) {
-  main().then((code) => { process.exitCode = code; }).catch(() => {
+  main({ probeAdminAccess: process.env.PROBE_ADMIN_ACCESS === "true" }).then((code) => { process.exitCode = code; }).catch(() => {
     console.log(JSON.stringify({ schemaVersion: 1, readOnly: true, complete: false, error: "diagnostic_failed" }));
     process.exitCode = 2;
   });
