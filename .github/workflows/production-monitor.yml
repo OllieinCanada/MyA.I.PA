@@ -1,107 +1,22 @@
-name: Production monitor
+name: Coordinator read-only operational diagnosis
 
+# This replacement exists only on codex/monitor-190-diagnosis.
+# It must never replace the production monitor on the default branch.
 on:
-  schedule:
-    - cron: "*/5 * * * *"
   workflow_dispatch:
-    inputs:
-      run_incident_remediation_canary:
-        description: Run one controlled, read-only remediation lifecycle canary
-        required: false
-        default: false
-        type: boolean
 
 permissions:
   contents: read
 
 concurrency:
-  group: production-monitor
+  group: coordinator-operational-diagnosis
   cancel-in-progress: false
 
 jobs:
-  monitor:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    outputs:
-      probe_outcome: ${{ steps.probe.outcome }}
-    steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-        with:
-          ref: ${{ github.sha }}
-          fetch-depth: 1
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: 20
-          cache: npm
-      - name: Restore durable incident lifecycle state
-        id: restore_state
-        run: node scripts/sync-production-monitor-state.js restore
-      - run: npm ci --legacy-peer-deps --ignore-scripts --no-audit --no-fund
-      - name: Check production twice before alerting
-        id: probe
-        continue-on-error: true
-        env:
-          MONITOR_API_KEY: ${{ secrets.MONITOR_API_KEY }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          MONITOR_RECHECK_DELAY_MS: 15000
-          MONITOR_STATE_SYNC_WARNING: ${{ steps.restore_state.outputs.warning }}
-        run: npm run ops:monitor -- --include-operational --confirm-failure --telegram-lifecycle
-      - name: Carry sanitized lifecycle state to the persistence job
-        # Provider alerts keep their delivery state in the production database.
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: production-monitor-state-${{ github.run_id }}-${{ github.run_attempt }}
-          path: diagnostics/operations/production-monitor-state.json
-          if-no-files-found: error
-          retention-days: 1
-      - name: Save redacted monitor report
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: production-monitor-${{ github.run_id }}-${{ github.run_attempt }}
-          path: diagnostics/operations/production-monitor.json
-          if-no-files-found: ignore
-          retention-days: 14
-      - name: Check provider notifications
-        if: always()
-        env:
-          MONITOR_API_KEY: ${{ secrets.MONITOR_API_KEY }}
-        run: npm run notifications:providers
-
-  persist_state:
-    name: Persist sanitized lifecycle state
-    if: always()
-    needs: monitor
+  diagnose:
+    if: github.ref == 'refs/heads/codex/monitor-190-diagnosis'
     runs-on: ubuntu-latest
     timeout-minutes: 3
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-        with:
-          ref: ${{ github.sha }}
-          fetch-depth: 1
-      - name: Download sanitized state only
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          name: production-monitor-state-${{ github.run_id }}-${{ github.run_attempt }}
-          path: diagnostics/operations
-      - name: Persist state on the dedicated non-code branch
-        run: node scripts/sync-production-monitor-state.js persist
-      - name: Preserve the production monitor result
-        if: needs.monitor.outputs.probe_outcome != 'success'
-        run: exit 1
-
-  incident_canary:
-    name: Run the confirmed incident-remediation canary
-    if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.run_incident_remediation_canary == true }}
-    needs: persist_state
-    runs-on: ubuntu-latest
-    timeout-minutes: 3
-    permissions:
-      contents: read
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
@@ -111,7 +26,17 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 20
-      - name: Prove one controlled receipt-backed two-message lifecycle
+      - name: Test the allowlisted diagnostic offline
+        run: node --test tests/coordinator-operational-diagnosis.test.js
+      - name: Read one protected operational snapshot
         env:
           MONITOR_API_KEY: ${{ secrets.MONITOR_API_KEY }}
-        run: node scripts/test-production-incident-remediation.js --apply --confirm=RUN_INCIDENT_REMEDIATION_CANARY
+        run: |
+          set -euo pipefail
+          node scripts/coordinator-operational-diagnosis.js | tee "$RUNNER_TEMP/coordinator-operational-diagnosis.json"
+      - name: Show only the allowlisted result
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/coordinator-operational-diagnosis.json" ]; then
+            cat "$RUNNER_TEMP/coordinator-operational-diagnosis.json" >> "$GITHUB_STEP_SUMMARY"
+          fi
