@@ -60,6 +60,7 @@ const {
 const { normalizeE164, sendSmsViaTwilio, fetchSmsStatusViaTwilio, fetchSmsReceiptViaTwilio } = require("./twilioSms");
 const {verifyDeliveredCompletionReceipt,findStoredCompletionReceipt,reconcileSignupCompletionReceipt,reconciledCompletionDelivery,dispatchCompletionEmail,completionRecordFields,completionDeliveryUpdate}=require('./signupCompletionReconciliation');
 const { enqueueTwilioStatus, drainTwilioStatuses } = require('./twilioStatusInbox');
+const { readTwilioReceiptHealth, withTwilioReceiptAttention } = require('./twilioReceiptHealth');
 const { selectTrialSignup } = require("./trialSignupSelection");
 const { fetchProviderReadText } = require("./providerRead");
 const { dispatchSignupSms } = require("./signupSmsDispatch");
@@ -12142,20 +12143,22 @@ app.get(
   asyncRoute(async (_req, res) => {
     const signups = listSignupDashboardRecords();
     const runtimeIncidents = await listRuntimeIncidents(runtimeIncidentPath);
-    const inbox = await getOperationalAttentionInbox({
+    const [attention, receiptHealth] = await Promise.all([getOperationalAttentionInbox({
       prisma,
       signups,
       runtimeIncidents,
-    });
+    }), readTwilioReceiptHealth({ prisma })]);
+    const inbox = withTwilioReceiptAttention(attention, receiptHealth);
     // Health is a database-backed snapshot, not a synchronous provider audit.
     // Live provider reconciliation remains available through guarded admin diagnostics.
     res.setHeader("Cache-Control", "no-store, max-age=0");
     res.json({
-      ok: inbox.summary.bySeverity.critical === 0,
+      ok: inbox.summary.bySeverity.critical === 0 && receiptHealth.status === 'healthy',
       service: "my-ai-pa-operations",
       providerChecks: { liveLookups: false, mode: "separate" },
       generatedAt: inbox.generatedAt,
       attention: inbox.summary,
+      twilioReceipts: receiptHealth,
       incidentSlo: assessIncidentSlo(runtimeIncidents),
       issues: inbox.items.map((item) => ({
         id: item.id,
@@ -16685,14 +16688,16 @@ app.get(
   requireAdmin,
   asyncRoute(async (_req, res) => {
     const runtimeIncidents = await listRuntimeIncidents(runtimeIncidentPath);
-    const [inbox, auditEvents] = await Promise.all([
+    const [attention, auditEvents, receiptHealth] = await Promise.all([
       getOperationalAttentionInbox({
         prisma,
         signups: listSignupDashboardRecords(),
         runtimeIncidents,
       }),
       listAdminAuditEvents({ prisma, limit: 50 }),
+      readTwilioReceiptHealth({ prisma }),
     ]);
+    const inbox = withTwilioReceiptAttention(attention, receiptHealth);
     res.json({ ok: true, ...inbox, auditEvents });
   })
 );

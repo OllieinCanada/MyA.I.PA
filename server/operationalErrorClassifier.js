@@ -238,9 +238,20 @@ function classifyOperationalError(error = {}, context = {}) {
     });
   }
 
+  if (provider === 'DATABASE' && code === 'P2028') {
+    return result(details, 'database_transaction_timeout', {
+      reasonCode: 'DATABASE_TRANSACTION_TIMEOUT',
+      reason: 'A database transaction exceeded its safe time limit or was already closed. This is not proof that a text failed to send.',
+      retryable: true,
+      whatFailed: 'The database transaction did not complete within its time limit',
+      impact: 'Saved delivery processing may be delayed. A provider action must be reconciled before any resend.',
+      nextAction: 'Check receipt backlog, worker leases and database latency; retry only database work and verify provider receipts before replaying any external action.',
+    });
+  }
+
   if (
     provider === "DATABASE"
-    && /FAILED TO DESERIALIZE COLUMN OF TYPE ['\"]?VOID|PG_ADVISORY_XACT_LOCK|PRISMA\.\$QUERYRAW/i.test(source)
+    && /FAILED TO DESERIALIZE COLUMN OF TYPE ['\"]?VOID/i.test(source)
   ) {
     return result(details, "database_implementation", {
       reasonCode: "DATABASE_QUERY_IMPLEMENTATION_FAILED",

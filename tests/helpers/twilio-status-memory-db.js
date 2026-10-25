@@ -3,6 +3,7 @@ function memoryDb() {
   const rows = new Map(); let tail = Promise.resolve();
   const match = (row, where = {}) => {
     if (where.key?.startsWith && !row.key.startsWith(where.key.startsWith)) return false;
+    if (where.key?.in && !where.key.in.includes(row.key)) return false;
     if (where.AND && !where.AND.every(w => match(row, w))) return false;
     if (where.OR && !where.OR.some(w => match(row, w))) return false;
     if (where.data) {

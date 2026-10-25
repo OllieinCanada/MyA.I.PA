@@ -24,7 +24,7 @@ Escalation: Privacy Officer for privacy/security events; business owner for cust
 
 `npm run ops:monitor -- --include-operational --confirm-failure --telegram-on-failure` also checks the protected operational queue and repeats failed checks before alerting. It requires `MONITOR_API_KEY`; the endpoint returns counts only and never exposes customer details.
 
-The GitHub Actions workflow `.github/workflows/production-monitor.yml` runs this check every five minutes. Add repository secrets named `MONITOR_API_KEY`, `TELEGRAM_BOT_TOKEN`, and `TELEGRAM_CHAT_ID`. The monitor key must match the Render environment value.
+The GitHub Actions workflow `.github/workflows/production-monitor.yml` is scheduled every five minutes, but scheduler delays mean that is not a guaranteed checking interval. Add repository secrets named `MONITOR_API_KEY`, `TELEGRAM_BOT_TOKEN`, and `TELEGRAM_CHAT_ID`. The monitor key must match the Render environment value. Independent external uptime/heartbeat activation remains deferred at the owner's request; do not represent it as active coverage.
 
 Use `npm run ops:monitor -- --telegram-on-failure` only from a trusted scheduler with the Telegram secrets available. The Telegram bot token must be rotated before production because an earlier token appeared in diagnostic output.
 
@@ -35,6 +35,18 @@ Schedule this monitor outside the production web service so a full Render outage
 The admin `Needs Attention` page combines failed or stuck signups, payment failures, failed owner/customer text actions, completed leads without a recorded owner handoff, stuck call actions, routing gaps, and high-priority support reports. Recovery buttons are deliberately allowlisted: retry an owner text, resync calls, resend a still-valid signup verification, or reopen a failed signup for manual review. Every recovery attempt is written to the protected admin audit trail with contact information and secrets redacted.
 
 The call-text check confirms that the protected call action recorded successful provider acceptance for both expected recipients. Final carrier delivery receipts remain provider evidence and should still be reviewed when a message was accepted but never reached a handset.
+
+## Durable Twilio receipt recovery
+
+The authenticated operations health response and admin Overview/Needs Attention pages include `twilioReceipts`: pending, processing, completed-retained, failed and expired-lease counts, oldest waiting age, last successful worker run and a sanitized error code. The admin snapshot refreshes every 30 seconds. These views do not reveal message bodies, phone numbers or message SIDs and offer no one-click resend/replay action. Unknown or unavailable evidence must never be treated as an empty, healthy queue.
+
+Warning thresholds are a pending receipt or successful-worker-run age of two minutes, an expired lease, or missing pending timestamps. Ten minutes or any exhausted job is critical. A worker's successful empty scan does not remove failed-job warnings, dismiss historical incidents, or prove that a customer read a text.
+
+The receipt worker uses a cross-process database lease plus process-local overlap protection. Short database-only transactions have a one-second lock timeout and bounded jittered retries for transient database failures; provider calls remain outside transactions. Completed retention cleanup is bounded to 100 rows per pass and never deletes failed or pending work. `P2028` means an expired transaction, not an unsupported advisory-lock result type.
+
+After deployment, inspect the protected snapshot, the oldest saved job and the exact logs before any recovery. Reconcile uncertain downstream outcomes using the existing durable signup/SMS records; never blindly resend a message, buy another number, or create another assistant. Exhausted jobs require a separately reviewed exact-target repair. Keep the original alerts until backlog reconciliation and a full 24-hour observation confirm recovery. A passing homepage or unit test is not sufficient.
+
+Local evidence: `npm run test:twilio-receipts` and `node scripts/run-local-signup-postgres-drill.js --receipts-only` exercise bounded retries, duplicate receipts, competing workers, expired leases and real PostgreSQL health aggregation without contacting providers. CI also requires `npm run test:twilio-receipts:postgres` against its fresh isolated drill database. These tests are not evidence of production backlog recovery.
 
 ## Alert content
 

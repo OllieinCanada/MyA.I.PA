@@ -70,3 +70,64 @@ test('late sent/owner callbacks cannot regress delivered or passed test state',(
  assert.equal(getAgentTestDeliveryUpdate({signup,messageSid:receipt.MessageSid,status:'failed'}).agentTestStatus,'failed');
  const replay=getAgentTestDeliveryUpdate({signup,messageSid:receipt.MessageSid,status:'delivered'});assert.equal(replay.agentTestStatus,'passed');assert.equal(replay.agentTestOwnerDeliveredAt,'saved');
 });
+
+test('temporary transaction failures retry database work but never duplicate provider processing', async () => {
+ const { prisma, rows } = memoryDb();
+ const transaction = prisma.$transaction.bind(prisma);
+ let starts = 0, optionsSeen;
+ prisma.$transaction = (work, options) => {
+   optionsSeen = options;
+   if (++starts === 1) return Promise.reject(Object.assign(Error('expired transaction'), { code: 'P2028' }));
+   return transaction(work);
+ };
+ await enqueueTwilioStatus({ prisma, body: receipt, now: 100 });
+ assert.equal(starts, 2);
+ assert.equal(optionsSeen.timeout, 10000);
+ let sends = 0;
+ await drainTwilioStatuses({ prisma, now: () => 100, processReceipt: async () => { sends++; } });
+ assert.equal(sends, 1);
+ assert.equal(rows.get(WORKER_KEY).data.lastSuccessfulRunAt, 100);
+ assert.equal(rows.get(receiptKey(receipt)).data.status, 'completed');
+});
+
+test('database retries are bounded and implementation errors are not retried', async () => {
+ let attempts = 0;
+ await assert.rejects(enqueueTwilioStatus({ prisma: { $transaction: async () => {
+   attempts++; throw Object.assign(Error('timeout'), { code: 'P2028' });
+ } }, body: receipt }), { code: 'P2028' });
+ assert.equal(attempts, 3);
+ attempts = 0;
+ await assert.rejects(enqueueTwilioStatus({ prisma: { $transaction: async () => {
+   attempts++; throw Object.assign(Error('invalid query'), { code: 'P2010', meta: { code: '42P01' } });
+ } }, body: receipt }));
+ assert.equal(attempts, 1);
+});
+
+test('process-local overlapping runs skip before another database lease attempt', async () => {
+ const { prisma } = memoryDb();
+ await enqueueTwilioStatus({ prisma, body: receipt });
+ let release, entered;
+ const barrier = new Promise(resolve => { entered = resolve; });
+ const waiting = new Promise(resolve => { release = resolve; });
+ const first = drainTwilioStatuses({ prisma, processReceipt: async () => { entered(); await waiting; } });
+ await barrier;
+ assert.deepEqual(await drainTwilioStatuses({ prisma, processReceipt: async () => assert.fail('duplicate') }),
+   { processed: 0, busy: true, local: true });
+ release(); await first;
+});
+
+test('hourly cleanup is bounded and never removes pending or failed receipts', async () => {
+ const { prisma, rows } = memoryDb();
+ const now = 9 * 86400000;
+ for (let index = 0; index < 150; index++) rows.set('twilio-status-inbox:old-' + index, {
+   key: 'twilio-status-inbox:old-' + index,
+   data: { status: 'completed', completedAt: 1, attempts: 1 }, updatedAt: new Date(1),
+ });
+ rows.set('twilio-status-inbox:failed', { key: 'twilio-status-inbox:failed', data: { status: 'failed' }, updatedAt: new Date(1) });
+ await drainTwilioStatuses({ prisma, now: () => now, processReceipt: async () => {} });
+ assert.equal([...rows.values()].filter(r => r.data.status === 'completed').length, 50);
+ assert.ok(rows.has('twilio-status-inbox:failed'));
+ await drainTwilioStatuses({ prisma, now: () => now + 1, processReceipt: async () => {} });
+ assert.equal([...rows.values()].filter(r => r.data.status === 'completed').length, 0);
+ assert.ok(rows.get(WORKER_KEY).data.lastCleanupAt);
+});

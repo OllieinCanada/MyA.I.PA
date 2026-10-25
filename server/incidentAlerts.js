@@ -47,6 +47,7 @@ const INCIDENT_REASON_CATALOG = Object.freeze({
   CALL_TOOL_EXECUTION_STUCK: "A call-side action remained in progress beyond the safety window.",
   DATABASE_UNAVAILABLE: "The application could not reach its production database.",
   DATABASE_QUERY_IMPLEMENTATION_FAILED: "A database query could not be processed safely by the application, so the protected operation stopped.",
+  DATABASE_TRANSACTION_TIMEOUT: 'A database transaction exceeded its safe time limit. Check saved work before repeating any provider action.',
   AGENT_TEST_SETUP_INCOMPLETE: "The pre-delivery test received a signup record that did not contain the exact owner, AI number, and assistant pairing.",
   AGENT_TEST_SIGNUP_ATTEMPT_MISSING: "The pre-delivery test could not find the exact signup attempt and refused to use another record with the same email.",
   SIGNUP_RECOVERY_VAPI_BINDING_MISMATCH: "The guarded recovery could not prove that the live Vapi route belongs to the expected phone, assistant, and business.",

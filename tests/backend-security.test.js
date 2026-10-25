@@ -148,6 +148,30 @@ test('real provider routes reject encoded bodies before parsing or authenticatio
   assert.equal((await request('/api/health')).status, 200);
 });
 
+test('receipt queue aggregates require operations auth and unconfirmed health never reports success', async () => {
+  assert.equal((await request('/api/internal/operations/health')).status, 401);
+  assert.equal((await request('/api/admin/attention')).status, 401);
+  const originals = [];
+  const stub = (object, key, value) => { originals.push(() => { object[key] = value; }); object[key] = value; };
+  for (const name of ['leadHandoff', 'call', 'business', 'vapiToolExecution', 'supportReport']) {
+    stub(prisma[name], 'findMany', async () => []);
+  }
+  stub(prisma.runtimeStore, 'findUnique', async () => null);
+  stub(prisma, '$queryRaw', async () => [{ pending: 0, processing: 0, completed: 0, failed: 0 }]);
+  try {
+    const response = await request('/api/internal/operations/health', { headers: { 'x-monitor-api-key': process.env.MONITOR_API_KEY } });
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get('cache-control'), /no-store/);
+    const report = await response.json();
+    assert.equal(report.ok, false);
+    assert.equal(report.twilioReceipts.status, 'unknown');
+    const issue = report.issues.find(item => item.kind === 'twilio_receipt_worker');
+    assert.ok(issue);
+    assert.deepEqual(issue.actions, []);
+    assert.doesNotMatch(JSON.stringify(report.twilioReceipts), /MessageSid|test-monitor-api-key/);
+  } finally { originals.reverse().forEach(restore => restore()); }
+});
+
 test('missing-assistant repair requires admin authentication and a signed provisioning context', async () => {
   const path='/api/admin/signups/recover-missing-assistant';
   const body={confirmation:'RECOVER_MISSING_ASSISTANT_ONLY',apply:true,signupAttemptId:'signup_'+'a'.repeat(32),expectedPhone:'+12895550123'};

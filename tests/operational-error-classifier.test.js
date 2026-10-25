@@ -4,6 +4,15 @@ const test = require("node:test");
 const { classifyOperationalError } = require("../server/operationalErrorClassifier");
 const { buildRuntimeIncident } = require("../server/runtimeAlerts");
 
+test('expired transactions are not mislabeled as an unsupported advisory-lock value', () => {
+  const error = Object.assign(new Error('Invalid prisma.$queryRaw invocation: Transaction already closed after 4000 ms; pg_advisory_xact_lock'), { code: 'P2028' });
+  const classified = classifyOperationalError(error, { provider: 'database', operation: 'saved Twilio delivery reports' });
+  assert.equal(classified.reasonCode, 'DATABASE_TRANSACTION_TIMEOUT');
+  assert.equal(classified.retryable, true);
+  assert.doesNotMatch(classified.reason, /deserialize|unsupported.*value/i);
+  assert.match(classified.reason, /not proof that a text failed/);
+});
+
 test("a reset hidden in fetch's cause is classified as a network failure", () => {
   const error = new TypeError("terminated", { cause: Object.assign(new Error("read ECONNRESET"), { code: "ECONNRESET" }) });
   assert.equal(classifyOperationalError(error, { provider: "Vapi" }).reasonCode, "PROVIDER_CONNECTION_FAILED");
