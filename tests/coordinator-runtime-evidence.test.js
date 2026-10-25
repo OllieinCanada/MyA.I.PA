@@ -131,7 +131,7 @@ test("branch workflow has no recurring, messaging, mutation, or production-state
   assert.match(workflow, /workflow_dispatch:/);
   assert.match(workflow, /contents: read/);
   assert.match(workflow, /persist-credentials: false/);
-  assert.match(workflow, /github\.ref == 'refs\/heads\/codex\/runtime-readonly-evidence-attempt-1'/);
+  assert.match(workflow, /github\.ref == 'refs\/heads\/codex\/unknown-warning-evidence-attempt-1'/);
   assert.doesNotMatch(workflow, /schedule:|cron:|contents: write|TELEGRAM_|notifications:providers|sync-production-monitor-state|incident_canary|--apply/);
 });
 
@@ -156,4 +156,23 @@ test('critical details distinguish historical database failures using finite met
  }]});
  assert.equal(report.criticalDetails[0].providerCode,'P2028');
  assert.equal(report.criticalDetails[0].lastDetectedBeforeCurrentCommit,true);
+});
+
+test('warning projection recognizes source-defined reasons and never echoes unknown metadata', () => {
+ const privateText='person@example.com PRIVATE_TOKEN_123456';
+ const payload={service:'my-ai-pa-operations',ok:false,issues:[{kind:'runtime_incident',severity:'warning',incident:{reasonCode:'VAPI_CALL_SYNC_FAILED'},snapshot:{Provider:privateText,Workflow:privateText,'Provider code':privateText,'Failure code':privateText},diagnostics:{occurrences:999999},remediation:{status:privateText}}]};
+ const report=projectPayload(payload);
+ assert.equal(report.warningDetails[0].reasonCode,'VAPI_CALL_SYNC_FAILED');
+ assert.equal(report.warningDetails[0].occurrences,10000);
+ assert.doesNotMatch(JSON.stringify(report),/person@example|PRIVATE_TOKEN/);
+ payload.issues[0].incident.reasonCode='PRIVATE_TOKEN_123456';
+ assert.equal(projectPayload(payload).complete,false);
+ assert.doesNotMatch(JSON.stringify(projectPayload(payload)),/PRIVATE_TOKEN/);
+});
+
+test('legacy raw Prisma warning and source-defined receipt reason remain finite enums', () => {
+ const report=projectPayload({service:'my-ai-pa-operations',ok:false,issues:[{kind:'runtime_incident',severity:'warning',incident:{reasonCode:'P2028'},snapshot:{Provider:'Render PostgreSQL','Provider code':'P2028'}},{kind:'twilio_receipt_worker',severity:'warning',incident:{reasonCode:'TWILIO_RECEIPT_WORKER_UNHEALTHY'}}]});
+ assert.equal(report.complete,true);
+ assert.equal(report.warningDetails[0].providerCode,'P2028');
+ assert.equal(report.counts.warning,2);
 });

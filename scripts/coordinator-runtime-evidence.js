@@ -14,13 +14,15 @@ const KINDS = new Set([
   "signup_stuck", "signup_review_required", "signup_duplicate",
   "owner_text_failed", "call_missing_handoff", "business_mapping_incomplete",
   "call_text_incomplete", "call_tool_failed", "call_tool_stuck",
-  "high_priority_support", "runtime_incident",
+  "high_priority_support", "runtime_incident", "twilio_receipt_worker",
 ]);
 const SEVERITIES = new Set(["critical", "warning", "info"]);
 // This application catalog is a static allowlist, not response-controlled data.
 // Extras come from operationalAttention's non-runtime issue builders.
 const REASONS = new Set([
   ...Object.keys(INCIDENT_REASON_CATALOG),
+  // Static source-defined reasons and legacy finite error enums; never response-controlled.
+  ...["ABORTERROR", "ABORT_ERR", "CONTROLLED_READINESS_REMEDIATION_TEST", "CONTROLLED_TELEGRAM_TEST", "CUSTOMER_PAYMENT_FAILED", "DATABASE_QUERY_IMPLEMENTATION_FAILED", "DATABASE_TRANSACTION_TIMEOUT", "DATABASE_UNAVAILABLE", "DUPLICATE_OR_STATE_CONFLICT", "DUPLICATE_SIGNUP_IDENTITY", "ECONNREFUSED", "ECONNRESET", "ETIMEDOUT", "HIGH_PRIORITY_SUPPORT_OPEN", "HTTP_400", "HTTP_401", "HTTP_403", "HTTP_404", "HTTP_408", "HTTP_409", "HTTP_422", "HTTP_429", "HTTP_500", "HTTP_502", "HTTP_503", "HTTP_504", "LEAD_HANDOFF_MISSING", "MAKE_SIGNUP_REJECTED", "MAKE_SIGNUP_RESPONSE_EMPTY", "MAKE_SIGNUP_RESPONSE_INCOMPLETE", "MANUAL_REVIEW_REQUIRED", "MESSAGE_DELIVERY_FAILED", "P1001", "P1002", "P1017", "P2002", "P2003", "P2010", "P2025", "P2028", "PAYMENT_FAILED", "PROVIDER_ACCOUNT_FUNDING_REQUIRED", "PROVIDER_AUTHENTICATION_FAILED", "PROVIDER_CONFIGURATION_INVALID", "PROVIDER_CONNECTION_FAILED", "PROVIDER_INVENTORY_UNAVAILABLE", "PROVIDER_PERMISSION_OR_COMPLIANCE_BLOCK", "PROVIDER_RATE_LIMITED", "PROVIDER_TIMEOUT", "PROVIDER_UNAVAILABLE", "PROVISIONING_NOT_READY", "SIGNUP_SETUP_FAILED", "SIGNUP_SUPPORT_REQUESTED", "SMS_ROUTING_FAILED", "STRIPE_TRIAL_CREATION_FAILED", "SUBSCRIPTION_PAST_DUE", "SUBSCRIPTION_PAUSED", "SUBSCRIPTION_UNPAID", "TELEGRAM_OUTBOX_CAPACITY_EXCEEDED", "TELEGRAM_OUTBOX_DRAIN_FAILED", "TRIAL_ENDED_AWAITING_PAYMENT", "TWILIO_ACCOUNT_ACCESS_REJECTED", "TWILIO_RECEIPT_WORKER_UNHEALTHY", "UNKNOWN_OPERATIONAL_FAILURE", "VAPI_CALL_SYNC_DELAYED", "VAPI_CALL_SYNC_FAILED"],
   "SUBSCRIPTION_PAST_DUE", "SUBSCRIPTION_UNPAID", "SUBSCRIPTION_PAUSED",
   "TRIAL_ENDED_AWAITING_PAYMENT", "STRIPE_TRIAL_CREATION_FAILED",
   "PHONE_VALIDATION_FAILED", "PROVISIONED_NUMBER_NOT_READY", "SIGNUP_SETUP_FAILED",
@@ -111,7 +113,7 @@ function projectPayload(payload) {
   const providers = new Set(['Render PostgreSQL', 'Vapi', 'Twilio', 'Make.com', 'OpenAI', 'Deepgram', 'email provider', 'Telegram', 'Stripe']);
   const codes = new Set(['P2028', 'P2010', 'P1001', 'ETIMEDOUT', 'ABORT_ERR', 'ABORTERROR', 'TIMEOUTERROR', 'ECONNRESET', 'FETCH_TIMEOUT', 'REQUEST_TIMEOUT', 'MAKE_SIGNUP_TIMEOUT']);
   const statuses = new Set(['queued','running','recovered','resolved','needs_user','failed','not_required','awaiting_review','blocked']);
-  const workflows = new Set(["API process crash", "Telegram incident delivery", "Twilio delivery inbox", "admin agent delivery recovery", "agent delivery test", "billing and trial workflow", "customer agent testing station", "incident remediation canary", "legacy new agent delivery test", "new agent delivery test", "production alert verification", "signup SMS routing", "text-message delivery", "voice signup verification delivery", "web signup verification delivery", "website browser"]);
+  const workflows = new Set(["Vapi call sync background job","API process crash", "Telegram incident delivery", "Twilio delivery inbox", "admin agent delivery recovery", "agent delivery test", "billing and trial workflow", "customer agent testing station", "incident remediation canary", "legacy new agent delivery test", "new agent delivery test", "production alert verification", "signup SMS routing", "text-message delivery", "voice signup verification delivery", "web signup verification delivery", "website browser"]);
   result.criticalDetails = payload.issues.filter(i => i && i.kind === 'runtime_incident' && i.severity === 'critical').map(i => {
     const s = record(i.snapshot) ? i.snapshot : {};
     const d = record(i.diagnostics) ? i.diagnostics : {};
@@ -126,6 +128,23 @@ function projectPayload(payload) {
       lastDetectedBeforeCurrentCommit: before(d.lastDetectedAt || i.detectedAt),
       occurrences: Number.isSafeInteger(d.occurrences) && d.occurrences >= 0 ? Math.min(d.occurrences, 10000) : null,
       remediation: statuses.has(i.remediation?.status) ? i.remediation.status : 'UNKNOWN_STATUS',
+    };
+  });
+  result.warningDetails = payload.issues.filter(i => i && i.kind === 'runtime_incident' && i.severity === 'warning').map(i => {
+    const s = record(i.snapshot) ? i.snapshot : {};
+    const d = record(i.diagnostics) ? i.diagnostics : {};
+    const raw = i.incident?.reasonCode;
+    const failureCodes = new Set(['P1001','P1002','P1017','P2002','P2003','P2010','P2025','P2028','VAPI_API_KEY_MISSING','VAPI_CALL_SYNC_PARTIAL','ECONNRESET','ECONNREFUSED','ETIMEDOUT','ABORT_ERR','AbortError','TIMEOUTERROR','TypeError','Error','FETCH_TIMEOUT','REQUEST_TIMEOUT','MAKE_SIGNUP_TIMEOUT']);
+    return {
+      reasonCode: REASONS.has(raw) ? raw : 'UNKNOWN_REASON_CODE',
+      provider: providers.has(s.Provider) ? s.Provider : 'UNKNOWN_PROVIDER',
+      providerCode: failureCodes.has(s['Provider code']) ? s['Provider code'] : 'UNKNOWN_CODE',
+      failureCode: failureCodes.has(s['Failure code']) ? s['Failure code'] : 'UNKNOWN_CODE',
+      workflow: workflows.has(s.Workflow) ? s.Workflow : 'UNKNOWN_WORKFLOW',
+      occurrences: Number.isSafeInteger(d.occurrences) && d.occurrences >= 0 ? Math.min(d.occurrences,10000) : null,
+      remediation: statuses.has(i.remediation?.status) ? i.remediation.status : 'UNKNOWN_STATUS',
+      // Only compare to the known source commit time; do not publish customer timestamps.
+      lastDetectedBeforeCurrentCommit: Number.isFinite(Date.parse(d.lastDetectedAt || i.detectedAt)) ? Date.parse(d.lastDetectedAt || i.detectedAt) < Date.parse('2026-10-25T04:55:12Z') : null,
     };
   });
   return result;

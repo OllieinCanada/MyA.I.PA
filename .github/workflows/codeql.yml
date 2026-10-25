@@ -1,6 +1,6 @@
 name: Coordinator read-only operational diagnosis
 
-# This execution-only diagnostic exists only on codex/runtime-readonly-evidence-attempt-1.
+# This execution-only diagnostic exists only on codex/unknown-warning-evidence-attempt-1.
 # Never merge this branch or replace CodeQL on the default branch.
 on:
   workflow_dispatch:
@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   diagnose:
-    if: github.ref == 'refs/heads/codex/runtime-readonly-evidence-attempt-1'
+    if: github.ref == 'refs/heads/codex/unknown-warning-evidence-attempt-1'
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
