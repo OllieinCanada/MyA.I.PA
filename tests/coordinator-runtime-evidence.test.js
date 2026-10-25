@@ -176,3 +176,14 @@ test('legacy raw Prisma warning and source-defined receipt reason remain finite 
  assert.equal(report.warningDetails[0].providerCode,'P2028');
  assert.equal(report.counts.warning,2);
 });
+
+test('browser warning projection exports only normalized page/type/tag and finite media labels', () => {
+ const p=payload([issue({severity:'warning',incident:{reasonCode:'CLIENT_RESOURCE_ERROR',reason:'audio resource failed to load: /tims-electrical-2.wav (media=unsupported_source; code=4) token=PRIVATE'},snapshot:{Workflow:'website browser',Page:'/signup','Error type':'resource_error',Component:'audio'}})]);
+ const r=projectPayload(p);assert.equal(r.complete,true);
+ assert.equal(r.warningDetails[0].browserResourceTag,'audio');
+ assert.equal(r.warningDetails[0].reportedMediaFailure,'unsupported_source');
+ assert.equal(r.warningDetails[0].publicAssetLabels.length,1);
+ assert.doesNotMatch(JSON.stringify(r),/PRIVATE|tims-electrical/);
+ p.issues[0].snapshot.Page='/private/person@example.com';p.issues[0].snapshot.Component='PRIVATE_TOKEN';p.issues[0].snapshot['Error type']='PRIVATE_TOKEN';
+ const q=projectPayload(p);assert.equal(q.warningDetails[0].browserPage,'UNKNOWN_PAGE');assert.doesNotMatch(JSON.stringify(q),/PRIVATE_TOKEN|person@example/);
+});

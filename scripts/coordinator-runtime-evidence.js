@@ -21,6 +21,7 @@ const SEVERITIES = new Set(["critical", "warning", "info"]);
 // Extras come from operationalAttention's non-runtime issue builders.
 const REASONS = new Set([
   ...Object.keys(INCIDENT_REASON_CATALOG),
+  "CLIENT_UNCAUGHT_ERROR", "CLIENT_UNHANDLED_REJECTION", "CLIENT_RESOURCE_ERROR", "CLIENT_REACT_ERROR", "CLIENT_BROWSER_ERROR",
   // Static source-defined reasons and legacy finite error enums; never response-controlled.
   ...["ABORTERROR", "ABORT_ERR", "CONTROLLED_READINESS_REMEDIATION_TEST", "CONTROLLED_TELEGRAM_TEST", "CUSTOMER_PAYMENT_FAILED", "DATABASE_QUERY_IMPLEMENTATION_FAILED", "DATABASE_TRANSACTION_TIMEOUT", "DATABASE_UNAVAILABLE", "DUPLICATE_OR_STATE_CONFLICT", "DUPLICATE_SIGNUP_IDENTITY", "ECONNREFUSED", "ECONNRESET", "ETIMEDOUT", "HIGH_PRIORITY_SUPPORT_OPEN", "HTTP_400", "HTTP_401", "HTTP_403", "HTTP_404", "HTTP_408", "HTTP_409", "HTTP_422", "HTTP_429", "HTTP_500", "HTTP_502", "HTTP_503", "HTTP_504", "LEAD_HANDOFF_MISSING", "MAKE_SIGNUP_REJECTED", "MAKE_SIGNUP_RESPONSE_EMPTY", "MAKE_SIGNUP_RESPONSE_INCOMPLETE", "MANUAL_REVIEW_REQUIRED", "MESSAGE_DELIVERY_FAILED", "P1001", "P1002", "P1017", "P2002", "P2003", "P2010", "P2025", "P2028", "PAYMENT_FAILED", "PROVIDER_ACCOUNT_FUNDING_REQUIRED", "PROVIDER_AUTHENTICATION_FAILED", "PROVIDER_CONFIGURATION_INVALID", "PROVIDER_CONNECTION_FAILED", "PROVIDER_INVENTORY_UNAVAILABLE", "PROVIDER_PERMISSION_OR_COMPLIANCE_BLOCK", "PROVIDER_RATE_LIMITED", "PROVIDER_TIMEOUT", "PROVIDER_UNAVAILABLE", "PROVISIONING_NOT_READY", "SIGNUP_SETUP_FAILED", "SIGNUP_SUPPORT_REQUESTED", "SMS_ROUTING_FAILED", "STRIPE_TRIAL_CREATION_FAILED", "SUBSCRIPTION_PAST_DUE", "SUBSCRIPTION_PAUSED", "SUBSCRIPTION_UNPAID", "TELEGRAM_OUTBOX_CAPACITY_EXCEEDED", "TELEGRAM_OUTBOX_DRAIN_FAILED", "TRIAL_ENDED_AWAITING_PAYMENT", "TWILIO_ACCOUNT_ACCESS_REJECTED", "TWILIO_RECEIPT_WORKER_UNHEALTHY", "UNKNOWN_OPERATIONAL_FAILURE", "VAPI_CALL_SYNC_DELAYED", "VAPI_CALL_SYNC_FAILED"],
   "SUBSCRIPTION_PAST_DUE", "SUBSCRIPTION_UNPAID", "SUBSCRIPTION_PAUSED",
@@ -130,6 +131,7 @@ function projectPayload(payload) {
       remediation: statuses.has(i.remediation?.status) ? i.remediation.status : 'UNKNOWN_STATUS',
     };
   });
+  const publicAssets = [{"label": "PUBLIC_ASSET_000", "path": "/audio/tims-electrical/hero-new-installation.wav"}, {"label": "PUBLIC_ASSET_001", "path": "/audio/tims-electrical/maintenance.wav"}, {"label": "PUBLIC_ASSET_002", "path": "/audio/tims-electrical/new-installation.wav"}, {"label": "PUBLIC_ASSET_003", "path": "/audio/tims-electrical/repair-request.wav"}, {"label": "PUBLIC_ASSET_004", "path": "/audio/tims-electrical/safety-redirect.wav"}, {"label": "PUBLIC_ASSET_005", "path": "/audio/tims-electrical/unresolved-concern.wav"}, {"label": "PUBLIC_ASSET_006", "path": "/audio/tims-electrical/urgent-outage.wav"}, {"label": "PUBLIC_ASSET_007", "path": "/favicon.ico"}, {"label": "PUBLIC_ASSET_008", "path": "/manifest.json"}, {"label": "PUBLIC_ASSET_009", "path": "/static/css/main.2ee701e9.css"}, {"label": "PUBLIC_ASSET_010", "path": "/static/css/main.46a22195.css"}, {"label": "PUBLIC_ASSET_011", "path": "/static/css/main.55281923.css"}, {"label": "PUBLIC_ASSET_012", "path": "/static/js/main.30310c39.js"}, {"label": "PUBLIC_ASSET_013", "path": "/static/js/main.65b91c2f.js"}, {"label": "PUBLIC_ASSET_014", "path": "/static/js/main.c794121f.js"}, {"label": "PUBLIC_ASSET_015", "path": "/tims-electrical-2.wav"}];
   result.warningDetails = payload.issues.filter(i => i && i.kind === 'runtime_incident' && i.severity === 'warning').map(i => {
     const s = record(i.snapshot) ? i.snapshot : {};
     const d = record(i.diagnostics) ? i.diagnostics : {};
@@ -137,6 +139,11 @@ function projectPayload(payload) {
     const failureCodes = new Set(['P1001','P1002','P1017','P2002','P2003','P2010','P2025','P2028','VAPI_API_KEY_MISSING','VAPI_CALL_SYNC_PARTIAL','ECONNRESET','ECONNREFUSED','ETIMEDOUT','ABORT_ERR','AbortError','TIMEOUTERROR','TypeError','Error','FETCH_TIMEOUT','REQUEST_TIMEOUT','MAKE_SIGNUP_TIMEOUT']);
     return {
       reasonCode: REASONS.has(raw) ? raw : 'UNKNOWN_REASON_CODE',
+      browserPage: ['/','/signup','/admin','/dashboard','/privacy','/terms','/links','/try-demo','/demo','/trades'].includes(s.Page) ? s.Page : 'UNKNOWN_PAGE',
+      browserErrorType: ['uncaught_error','unhandled_rejection','resource_error','react_error','browser_error'].includes(s['Error type']) ? s['Error type'] : 'UNKNOWN_TYPE',
+      browserResourceTag: ['audio','video','script','link','img','iframe','source','resource'].includes(s.Component) ? s.Component : 'UNKNOWN_TAG',
+      publicAssetLabels: typeof i.incident?.reason === 'string' ? publicAssets.filter(a => i.incident.reason.includes(': '+a.path) || i.incident.reason.includes('load '+a.path)).map(a => a.label) : [],
+      reportedMediaFailure: typeof i.incident?.reason === 'string' ? (i.incident.reason.match(/media=(aborted|network|decode|unsupported_source)\b/)?.[1] || 'NOT_REPORTED') : 'NOT_REPORTED',
       provider: providers.has(s.Provider) ? s.Provider : 'UNKNOWN_PROVIDER',
       providerCode: failureCodes.has(s['Provider code']) ? s['Provider code'] : 'UNKNOWN_CODE',
       failureCode: failureCodes.has(s['Failure code']) ? s['Failure code'] : 'UNKNOWN_CODE',
