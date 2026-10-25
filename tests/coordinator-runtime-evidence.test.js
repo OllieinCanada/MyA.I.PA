@@ -222,3 +222,16 @@ test('admin authorization probe is opt-in and is not retried in later diagnostic
  let calls=0;const r=await diagnose({apiKey:'unit-test-only',fetchImpl:async()=>{calls++;return new Response(JSON.stringify(payload()));}});
  assert.equal(calls,1);assert.equal(r.savedStateAccess,undefined);
 });
+
+
+test('receipt worker aggregate evidence does not prove the original operations', () => {
+ const p=payload([issue({detectedAt:'2026-10-20T00:00:00Z'})]);
+ p.twilioReceipts={status:'healthy',counts:{pending:0,processing:0,completed:5,failed:0,expiredLeases:0},lastSuccessfulRunAt:'2026-10-25T00:00:00Z'};
+ const r=projectPayload(p).receiptWorker;
+ assert.equal(r.status,'healthy');assert.equal(r.counts.completed,5);assert.equal(r.successAfterHistoricalCriticals,true);assert.equal(r.historicalOperationOutcomesVerified,false);
+});
+
+test('missing or malformed worker data remains unknown without echoing private values', () => {
+ const p=payload();p.twilioReceipts={status:'PRIVATE_TOKEN',counts:{pending:'PRIVATE_TOKEN',failed:-1},lastSuccessfulRunAt:'PRIVATE_TOKEN'};
+ const r=projectPayload(p).receiptWorker;assert.equal(r.status,'unknown');assert.equal(r.counts.pending,null);assert.equal(r.counts.failed,null);assert.equal(r.successAfterHistoricalCriticals,null);assert.doesNotMatch(JSON.stringify(r),/PRIVATE_TOKEN/);
+});

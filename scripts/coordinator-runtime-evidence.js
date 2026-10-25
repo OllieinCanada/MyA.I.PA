@@ -259,6 +259,19 @@ function projectPayload(payload) {
   const statuses = new Set(['queued','running','recovered','resolved','needs_user','failed','not_required','awaiting_review','blocked']);
   const backgroundJobs = ["Vapi call sync", "appointment reminders", "daily owner digest", "lead handoff", "missed-call alert", "saved Twilio delivery reports", "sensitive call-data cleanup", "signup completion delivery polling", "signup text delivery polling", "trial reminders", "trial usage policy", "verified signup setup"];
   const workflows = new Set([...backgroundJobs.map(name => `${name} background job`),"customer signup", "AI call processing", "text-message handoff", "customer dashboard", "admin workflow", "application request", "Vapi call sync background job","API process crash", "Telegram incident delivery", "Twilio delivery inbox", "admin agent delivery recovery", "agent delivery test", "billing and trial workflow", "customer agent testing station", "incident remediation canary", "legacy new agent delivery test", "new agent delivery test", "production alert verification", "signup SMS routing", "text-message delivery", "voice signup verification delivery", "web signup verification delivery", "website browser"]);
+  const receipts = record(payload.twilioReceipts) ? payload.twilioReceipts : {};
+  const receiptCounts = record(receipts.counts) ? receipts.counts : {};
+  const lastSuccess = Date.parse(receipts.lastSuccessfulRunAt);
+  const criticalTimes = payload.issues.filter(i => i?.kind === 'runtime_incident' && i.severity === 'critical')
+    .map(i => Date.parse(i.diagnostics?.lastDetectedAt || i.detectedAt));
+  result.receiptWorker = {
+    status: ['healthy','warning','critical','unknown','unavailable'].includes(receipts.status) ? receipts.status : 'unknown',
+    counts: Object.fromEntries(['pending','processing','completed','failed','expiredLeases'].map(key => [key,
+      Number.isSafeInteger(receiptCounts[key]) && receiptCounts[key] >= 0 ? Math.min(receiptCounts[key],1000000) : null])),
+    successAfterHistoricalCriticals: Number.isFinite(lastSuccess) && criticalTimes.length > 0 && criticalTimes.every(Number.isFinite)
+      ? criticalTimes.every(t => lastSuccess > t) : null,
+    historicalOperationOutcomesVerified: false,
+  };
   result.criticalDetails = payload.issues.filter(i => i && i.kind === 'runtime_incident' && i.severity === 'critical').map(i => {
     const s = record(i.snapshot) ? i.snapshot : {};
     const d = record(i.diagnostics) ? i.diagnostics : {};
