@@ -16,7 +16,7 @@ services:
     plan: starter
     region: ohio
     branch: main
-    buildCommand: npm install --include=dev --legacy-peer-deps && npm run backend:prepare
+    buildCommand: npm ci --include=dev --legacy-peer-deps && npm run backend:prepare
     preDeployCommand: npm run db:push
     startCommand: npm run server:prod
     healthCheckPath: /api/health/ready

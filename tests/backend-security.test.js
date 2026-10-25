@@ -126,6 +126,28 @@ async function request(path, options = {}) {
   });
 }
 
+test('runtime security versions are only available to authenticated operations checks', async () => {
+  const endpoint = '/api/internal/operations/security-readiness';
+  assert.equal((await request(endpoint)).status, 401);
+  const response = await request(endpoint, { headers: { 'x-monitor-api-key': process.env.MONITOR_API_KEY } });
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('cache-control'), 'no-store');
+  const report = await response.json();
+  assert.equal(report.ok, true);
+  assert.equal(report.versions.bodyParser, '1.20.9');
+  assert.equal(report.versions.nodemailer, '10.1.4');
+  assert.doesNotMatch(JSON.stringify(report), /test-monitor-api-key|test-twilio-auth-token/);
+});
+
+test('real provider routes reject encoded bodies before parsing or authentication', async () => {
+  for (const route of ['/api/payments/stripe-webhook', '/api/webhooks/twilio/message-status', '/api/webhooks/voice']) {
+    const response = await request(route, { method: 'POST', headers: { 'content-encoding': 'gzip' }, body: 'not-a-compressed-frame' });
+    assert.equal(response.status, 415);
+    assert.equal((await response.json()).code, 'REQUEST_CONTENT_ENCODING_UNSUPPORTED');
+  }
+  assert.equal((await request('/api/health')).status, 200);
+});
+
 test('missing-assistant repair requires admin authentication and a signed provisioning context', async () => {
   const path='/api/admin/signups/recover-missing-assistant';
   const body={confirmation:'RECOVER_MISSING_ASSISTANT_ONLY',apply:true,signupAttemptId:'signup_'+'a'.repeat(32),expectedPhone:'+12895550123'};

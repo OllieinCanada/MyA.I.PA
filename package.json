@@ -9,10 +9,10 @@
     "@vapi-ai/web": "^2.7.0",
     "cors": "^2.8.6",
     "dotenv": "^16.4.5",
-    "express": "^4.19.2",
+    "express": "4.22.2",
     "express-rate-limit": "^8.6.2",
     "jsonwebtoken": "^9.0.3",
-    "nodemailer": "^10.0.12",
+    "nodemailer": "10.1.4",
     "pg": "^8.22.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
@@ -53,6 +53,9 @@
     "decommission:signup-canary": "node scripts/decommission-signup-canary.js",
     "oauth:validate": "node scripts/validate-calendar-oauth-readiness.js",
     "security:scan-secrets": "node scripts/scan-secrets.js",
+    "security:audit-production": "node scripts/audit-production-dependencies.js",
+    "security:verify-release": "node scripts/verify-backend-security-release.js",
+    "test:request-security": "node --test tests/request-security.test.js tests/runtime-dependency-security.test.js",
     "test:release": "node scripts/release-gate.js",
     "test:browser:quality": "node scripts/test-browser-quality.js",
     "test:address-autocomplete": "node scripts/test-address-autocomplete.js",
@@ -265,6 +268,9 @@
     "tailwindcss": "^3.4.19"
   },
   "overrides": {
+    "express": {
+      "body-parser": "1.20.9"
+    },
     "browserslist": "4.28.9",
     "fast-uri": "3.1.6",
     "ip-address": "10.7.4",
