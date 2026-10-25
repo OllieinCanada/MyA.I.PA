@@ -5,6 +5,8 @@ if (process.env.DISABLE_LOCAL_ENV_FILES !== "1") {
 }
 
 const crypto = require("crypto");
+const { rejectCompressedRequests } = require('./requestSecurity');
+const { runtimeDependencySecurity } = require('./runtimeDependencySecurity');
 const { signupReviewPolicy } = require("./signupReviewPolicy");
 const { buildSignupProgress } = require("./signupProgress");
 const { resolveSignupResume, resumedSignupStatus } = require("./signupResume");
@@ -749,6 +751,7 @@ app.use(
 
 app.use(applySecurityHeaders);
 app.use(noStoreSensitiveApiResponses);
+app.use(rejectCompressedRequests);
 
 app.post("/api/payments/stripe-webhook", express.raw({ type: "application/json" }), asyncRoute(async (req, res) => {
   if (!stripe || !STRIPE_WEBHOOK_SECRET) {
@@ -12096,6 +12099,15 @@ app.post(
     res.status(204).end();
   }
 );
+
+app.get('/api/internal/operations/security-readiness', requireMonitorKey, (_req, res) => {
+  const security = runtimeDependencySecurity();
+  res.setHeader('Cache-Control', 'no-store');
+  return res.status(security.ok ? 200 : 503).json({
+    ...security,
+    releaseCommit: String(process.env.RENDER_GIT_COMMIT || process.env.GITHUB_SHA || 'unknown').slice(0, 40),
+  });
+});
 
 app.get("/api/health/ready", async (_req, res) => {
   const startedAt = Date.now();

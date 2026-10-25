@@ -95,7 +95,16 @@ jobs:
           npx prisma validate
 
       - name: Audit production dependencies
-        run: npm audit --omit=dev
+        run: npm run security:audit-production
+
+      - name: Save production dependency audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-dependencies-${{ github.event.pull_request.head.sha || github.sha }}
+          retention-days: 14
+          path: diagnostics/shipping-readiness/production-dependencies.json
+          if-no-files-found: ignore
 
       - name: Build GitHub Pages output
         run: npm run build:pages
