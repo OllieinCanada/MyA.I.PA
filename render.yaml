@@ -29,6 +29,10 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: APP_ENV
+        value: production
+      - key: INTAKE_LEDGER_MODE
+        value: "off"
       - key: OPERATIONAL_STATE_BACKEND
         value: database
       - key: DATA_DIR

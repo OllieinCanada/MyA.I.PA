@@ -1,4 +1,4 @@
-require("dotenv").config({
+if (require.main === module) require("dotenv").config({
   path: process.env.OPERATIONS_ENV_FILE || ".env.local",
 });
 
@@ -6,6 +6,7 @@ const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
+const { privateDirectory, removePrivateDirectory } = require('./backup-safety');
 
 const root = path.resolve(__dirname, "..");
 const args = new Set(process.argv.slice(2));
@@ -14,13 +15,14 @@ const readinessOutput = process.argv.find((arg) => arg.startsWith("--out="))?.sl
 const encryptionSecret = String(process.env.BACKUP_ENCRYPTION_KEY || "").trim();
 const outputDir = path.resolve(
   root,
-  process.env.BACKUP_OUTPUT_DIR || "private-backups/postgres"
+  process.env.BACKUP_OUTPUT_DIR || path.join(process.env.LOCALAPPDATA || require('os').homedir(), 'MyAIPA', 'Backups')
 );
 
 function run(command, commandArgs, options = {}) {
   return spawnSync(command, commandArgs, {
     encoding: "utf8",
     windowsHide: true,
+    timeout: 600000,
     ...options,
   });
 }
@@ -62,16 +64,16 @@ function timestamp() {
   return new Date().toISOString().replace(/[:.]/g, "-");
 }
 
-function encryptBackup(sourcePath) {
-  if (!encryptionSecret) throw new Error("BACKUP_ENCRYPTION_KEY is required before creating a backup.");
+function encryptBackup(sourcePath, secret = encryptionSecret) {
+  if (secret.length < 24) throw new Error("A 24+ character BACKUP_ENCRYPTION_KEY is required before creating a backup.");
   const salt = crypto.randomBytes(16);
   const iv = crypto.randomBytes(12);
-  const key = crypto.scryptSync(encryptionSecret, salt, 32);
+  const key = crypto.scryptSync(secret, salt, 32);
   const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
   const encrypted = Buffer.concat([cipher.update(fs.readFileSync(sourcePath)), cipher.final()]);
   const tag = cipher.getAuthTag();
   const encryptedPath = `${sourcePath}.enc`;
-  fs.writeFileSync(encryptedPath, encrypted);
+  fs.writeFileSync(encryptedPath, encrypted, { flag: 'wx', mode: 0o600 });
   fs.rmSync(sourcePath, { force: true });
   return {
     encryptedPath,
@@ -94,8 +96,8 @@ function main() {
     databaseUrlConfigured: Boolean(databaseUrl),
     pgDumpVersion,
     pgRestoreVersion,
-    encryptionConfigured: Boolean(encryptionSecret),
-    ready: Boolean(databaseUrl && pgDumpVersion && pgRestoreVersion && encryptionSecret),
+    encryptionConfigured: encryptionSecret.length >= 24,
+    ready: Boolean(databaseUrl && pgDumpVersion && pgRestoreVersion && encryptionSecret.length >= 24),
   };
 
   if (checkOnly) {
@@ -112,11 +114,16 @@ function main() {
   if (!pgDumpVersion || !pgRestoreVersion) {
     throw new Error("pg_dump and pg_restore must be installed before creating a verified backup.");
   }
-  if (!encryptionSecret) throw new Error("BACKUP_ENCRYPTION_KEY is required. Unencrypted production backups are refused.");
+  if (encryptionSecret.length < 24) throw new Error("A 24+ character BACKUP_ENCRYPTION_KEY is required. Unencrypted production backups are refused.");
+  const syncedRoots = [root, process.env.OneDrive, process.env.OneDriveConsumer, process.env.OneDriveCommercial].filter(Boolean).map(p => path.resolve(p).toLowerCase());
+  if (syncedRoots.some(p => outputDir.toLowerCase() === p || outputDir.toLowerCase().startsWith(p + path.sep))) throw new Error('Keep backup output outside the repository and OneDrive.');
 
   const pgEnv = databaseEnvironment(databaseUrl);
   fs.mkdirSync(outputDir, { recursive: true });
-  const backupPath = path.join(outputDir, `myaipa-${timestamp()}.dump`);
+  const privateWork = privateDirectory('myaipa-backup-drill-');
+  const snapshotStartedAt = new Date().toISOString();
+  const backupPath = path.join(privateWork, `myaipa-${timestamp()}.dump`);
+  try {
   const result = run(
     "pg_dump",
     [
@@ -126,7 +133,7 @@ function main() {
       "--file",
       backupPath,
     ],
-    { env: { ...process.env, ...pgEnv } }
+    { env: { ...process.env, ...pgEnv, PGCONNECT_TIMEOUT: '10', PGOPTIONS: '-c default_transaction_read_only=on -c lock_timeout=5000' } }
   );
   if (result.status !== 0) {
     if (fs.existsSync(backupPath)) fs.rmSync(backupPath, { force: true });
@@ -139,10 +146,15 @@ function main() {
   }
 
   const encrypted = encryptBackup(backupPath);
+  const finalPath = path.join(outputDir, path.basename(encrypted.encryptedPath));
+  fs.copyFileSync(encrypted.encryptedPath, finalPath, fs.constants.COPYFILE_EXCL);
+  encrypted.encryptedPath = finalPath;
 
   const manifest = {
     schemaVersion: 1,
     createdAt: new Date().toISOString(),
+    snapshotCreatedAt: snapshotStartedAt,
+    archiveFormat: 'postgres-custom',
     file: path.basename(encrypted.encryptedPath),
     bytes: fs.statSync(encrypted.encryptedPath).size,
     sha256: sha256(encrypted.encryptedPath),
@@ -157,11 +169,13 @@ function main() {
   const manifestPath = `${encrypted.encryptedPath}.manifest.json`;
   fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
   console.log(JSON.stringify({ ...manifest, backupPath: encrypted.encryptedPath, manifestPath }, null, 2));
+  } finally { removePrivateDirectory(privateWork); }
 }
 
-try {
+if (require.main === module) try {
   main();
 } catch (error) {
   console.error(`Database backup failed safely: ${String(error?.message || error).slice(0, 600)}`);
   process.exitCode = 1;
 }
+module.exports = { databaseEnvironment, encryptBackup, main };

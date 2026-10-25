@@ -39,7 +39,17 @@ async function main() {
       child.once('error', error => { clearTimeout(timer); reject(error); });
       child.once('exit', () => { clearTimeout(timer); reject(Error(`Full application exited before readiness: ${startupError}`)); });
     });
-    return { child, exited, call: async (body, endpoint = '/__local-signup-recovery-drill') => (await fetch(`http://127.0.0.1:${port}${endpoint}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(15000) })).json() };
+    return { child, exited, call: async (body, endpoint = '/__local-signup-recovery-drill') => {
+      try {
+        return await (await fetch(`http://127.0.0.1:${port}${endpoint}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(15000) })).json();
+      } catch (error) {
+        // Preserve failure evidence; never retry a potentially accepted POST.
+        const diagnostic = { kind: body.kind || body.purpose || 'receipt', fault: body.fault || 'replay',
+          endpoint, port, cause: error.cause?.code || error.code || error.name,
+          childExitCode: child.exitCode, childSignal: child.signalCode, stderrTail: startupError };
+        throw Error('Isolated worker request failed: ' + JSON.stringify(diagnostic), { cause: error });
+      }
+    } };
   }
   try {
     for (const fault of ['normal', 'after-provider']) {
@@ -125,8 +135,9 @@ async function main() {
         const second = await start(), competitor = await start();
         try {
           const results = await Promise.all([second.call({ identity, purpose }, endpoint), competitor.call({ identity, purpose }, endpoint)]);
-          if (fault === 'after-provider') assert.ok(results.every(result => ['PROVISIONING_RECONCILIATION_REQUIRED', 'PROVISIONING_ALREADY_IN_PROGRESS'].includes(result.code)));
-          else assert.ok(results.every(result => result.sid === 'SMisolated'));
+          const diagnostic = JSON.stringify({ purpose, fault, results });
+          if (fault === 'after-provider') assert.ok(results.every(result => ['PROVISIONING_RECONCILIATION_REQUIRED', 'PROVISIONING_ALREADY_IN_PROGRESS'].includes(result.code)), diagnostic);
+          else assert.ok(results.every(result => result.sid === 'SMisolated'), diagnostic);
           assert.equal((await prisma.runtimeStore.findUnique({ where: { key: providerKey } })).data.creates, 1);
           cases.push({ kind: purpose, actualSmsDispatchHelper: true, fault, providerCreates: 1, independentProcesses: 2,
             outcome: fault === 'after-provider' ? 'safe_reconciliation_hold_no_resend' : 'saved_receipt_reused' });

@@ -421,6 +421,9 @@ async function processDueLeadHandoffs() {
     where: {
       acknowledgedAt: null,
       nextActionAt: { lte: now },
+      // Staging intake has its own durable dispatch/reconciliation owner.
+      // A second worker must never resend its uncertain provider acceptance.
+      AND: [{ OR: [{ sourceEventId: null }, { NOT: { sourceEventId: { startsWith: 'staging-intake:' } } }] }],
       OR: [
         { status: { in: ["RETRY_DUE", "ESCALATION_DUE"] } },
         { acknowledgementRequired: true, status: { in: ["SENT", "DELIVERED"] } },

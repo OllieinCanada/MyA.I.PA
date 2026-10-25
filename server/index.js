@@ -14,6 +14,7 @@ const { readMakeSignupHandoff } = require("./makeSignupHandoff");
 const { enqueueSignupSetupJob, drainSignupSetupJobs } = require("./signupSetupJobs");
 const { buildTwilioImportRequest } = require('./vapiTwilioImportRequest');
 const { providerFailureDetail } = require("./providerFailureDetail");
+const { TOOL_NAME: STAGING_INTAKE_TOOL, handleStagingIntakeTool } = require('./stagingIntake');
 const { configuredCaptchaProvider, verifySignupCaptcha } = require("./signupCaptcha");
 const { checkSignupAdmission, signupSecurityResponse } = require("./signupAdmission");
 const { hasIndividualPricingChoices, individualPricingPolicy } = require("../src/features/signup/pricingPolicy");
@@ -10980,6 +10981,7 @@ function requireVapiWebhookKey(req, res, next) {
   if (!hasValidVapiWebhookKey(req)) {
     return res.status(401).json({ error: "Invalid Vapi webhook secret." });
   }
+  req.vapiWebhookAuthenticated = true;
   return next();
 }
 
@@ -13749,7 +13751,12 @@ app.post(
         const toolCall = normalizeVapiToolCall(rawToolCall);
         const toolName = String(toolCall.name || "").toLowerCase();
         const parameters = toolCall.parameters;
-        if (isVapiNotificationTool(toolName)) {
+        if (toolName === STAGING_INTAKE_TOOL) {
+          const routedBusinessId = await resolveBusinessIdForVapiCall(vapiMessage.call || {});
+          const result = await handleStagingIntakeTool({ prisma, authenticated: req.vapiWebhookAuthenticated === true,
+            businessId: routedBusinessId, call: vapiMessage.call || {}, toolCall });
+          results.push({ name: toolCall.name, toolCallId: toolCall.id, result: JSON.stringify({ ok: true, ...result }) });
+        } else if (isVapiNotificationTool(toolName)) {
           const routedBusinessId = await resolveBusinessIdForVapiCall(vapiMessage.call || vapiMessage);
           const claim = await claimVapiToolExecution({
             prisma,
