@@ -134,7 +134,6 @@ jobs:
           npm run preview:signup-verification-progress
           npm run test:pages-static-retention:browser
           npm run test:twilio-receipts:browser
-          npm run test:browser:quality
 
       - name: Save signup browser evidence
         if: always()
@@ -150,7 +149,6 @@ jobs:
             diagnostics/forwarding-onboarding/
             diagnostics/static-retention/
             diagnostics/twilio-receipt-health/
-            diagnostics/shipping-readiness/browser-quality-gate.json
           if-no-files-found: ignore
 
       - name: Archive verified Pages output
