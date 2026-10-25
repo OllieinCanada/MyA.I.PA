@@ -1,6 +1,6 @@
 name: Coordinator read-only operational diagnosis
 
-# This execution-only diagnostic exists only on codex/unknown-warning-evidence-attempt-1.
+# This execution-only diagnostic exists only on codex/timeout-reconcile-evidence-attempt-1.
 # Never merge this branch or replace CodeQL on the default branch.
 on:
   workflow_dispatch:
@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   diagnose:
-    if: github.ref == 'refs/heads/codex/unknown-warning-evidence-attempt-1'
+    if: github.ref == 'refs/heads/codex/timeout-reconcile-evidence-attempt-1'
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
@@ -28,7 +28,7 @@ jobs:
           node-version: 20
       - name: Test the allowlisted diagnostic offline
         run: node --test tests/coordinator-runtime-evidence.test.js
-      - name: Read one protected operational snapshot
+      - name: Read protected snapshot and verify saved-state access
         env:
           MONITOR_API_KEY: ${{ secrets.MONITOR_API_KEY }}
         run: |

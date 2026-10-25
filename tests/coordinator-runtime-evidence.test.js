@@ -2,7 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
-const { ENDPOINT, diagnose, projectPayload } = require("../scripts/coordinator-runtime-evidence");
+const { ADMIN_ENDPOINT, ENDPOINT, diagnose, projectPayload } = require("../scripts/coordinator-runtime-evidence");
 
 function issue(changes = {}) {
   return { kind: "runtime_incident", severity: "critical",
@@ -68,18 +68,19 @@ test("unknown records preserve known category results while failing coverage exp
   assert.equal(JSON.stringify(result).includes("PRIVATE_TOKEN"), false);
 });
 
-test("one GET uses the fixed endpoint and forbids following redirects", async () => {
+test("bounded GETs use fixed same-origin endpoints and forbid following redirects", async () => {
   let calls = 0;
   const result = await diagnose({ apiKey: "unit-test-only", fetchImpl: async (url, options) => {
     calls += 1;
-    assert.equal(url, ENDPOINT);
+    assert.equal(url, calls === 1 ? ENDPOINT : ADMIN_ENDPOINT);
     assert.equal(options.method, "GET");
     assert.equal(options.redirect, "error");
     assert.equal(options.headers.Authorization, "Bearer unit-test-only");
     assert.equal(options.body, undefined);
-    return new Response(JSON.stringify(payload()));
+    return calls === 1 ? new Response(JSON.stringify(payload())) : new Response(null, {status:401});
   } });
-  assert.equal(calls, 1);
+  assert.equal(calls, 2);
+  assert.deepEqual(result.savedStateAccess, {status:401, accessDenied:true, evidenceRead:false});
   assert.equal(result.complete, true);
   assert.equal(result.operationalOk, false);
 });
@@ -131,7 +132,7 @@ test("branch workflow has no recurring, messaging, mutation, or production-state
   assert.match(workflow, /workflow_dispatch:/);
   assert.match(workflow, /contents: read/);
   assert.match(workflow, /persist-credentials: false/);
-  assert.match(workflow, /github\.ref == 'refs\/heads\/codex\/unknown-warning-evidence-attempt-1'/);
+  assert.match(workflow, /github\.ref == 'refs\/heads\/codex\/timeout-reconcile-evidence-attempt-1'/);
   assert.doesNotMatch(workflow, /schedule:|cron:|contents: write|TELEGRAM_|notifications:providers|sync-production-monitor-state|incident_canary|--apply/);
 });
 
@@ -186,4 +187,27 @@ test('browser warning projection exports only normalized page/type/tag and finit
  assert.doesNotMatch(JSON.stringify(r),/PRIVATE|tims-electrical/);
  p.issues[0].snapshot.Page='/private/person@example.com';p.issues[0].snapshot.Component='PRIVATE_TOKEN';p.issues[0].snapshot['Error type']='PRIVATE_TOKEN';
  const q=projectPayload(p);assert.equal(q.warningDetails[0].browserPage,'UNKNOWN_PAGE');assert.doesNotMatch(JSON.stringify(q),/PRIVATE_TOKEN|person@example/);
+});
+
+
+test('operation projection identifies literal routes but never publishes correlation values', () => {
+ const secret='PRIVATE_customer@example.com';
+ const r=projectPayload(payload([issue({snapshot:{Workflow:'customer signup',Method:'POST',Route:'/api/signup','Signup attempt ID':secret,'Message SID':secret,Business:secret},incident:{reasonCode:'PROVIDER_TIMEOUT',lastCheckpoint:'The request reached the My AI PA API and failed before a successful response was returned.'}})]));
+ const d=r.criticalDetails[0];
+ assert.equal(d.workflow,'customer signup');assert.equal(d.method,'POST');
+ assert.equal(d.hasAttemptCorrelation,true);assert.equal(d.hasReceiptCorrelation,true);assert.equal(d.hasBusinessCorrelation,true);assert.equal(d.globalRequestCheckpoint,true);
+ assert.doesNotMatch(JSON.stringify(r),/PRIVATE|customer@example/);
+ const q=projectPayload(payload([issue({snapshot:{Route:'/api/private/'+secret,Method:secret,Workflow:secret}})]));
+ assert.equal(q.criticalDetails[0].route,'UNKNOWN_ROUTE');assert.equal(q.criticalDetails[0].method,'UNKNOWN_METHOD');
+ assert.equal(q.criticalDetails[0].hasAttemptCorrelation,false);assert.doesNotMatch(JSON.stringify(q),/PRIVATE|customer@example/);
+});
+
+test('admin access probe never reads a response body or follows a redirect', async () => {
+ let calls=0;
+ const r=await diagnose({apiKey:'unit-test-only',fetchImpl:async(url,options)=>{
+  calls++;if(calls===1)return new Response(JSON.stringify(payload()));
+  assert.equal(url,ADMIN_ENDPOINT);assert.equal(options.method,'GET');assert.equal(options.redirect,'error');
+  return {status:403, get body(){return {cancel:async()=>{}}},json(){throw Error('must never read')}};
+ }});
+ assert.equal(calls,2);assert.deepEqual(r.savedStateAccess,{status:403,accessDenied:true,evidenceRead:false});
 });

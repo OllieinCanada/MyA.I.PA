@@ -1,10 +1,153 @@
 "use strict";
 
-// No dotenv, provider clients, incident actions, or state persistence. Exactly
-// one GET to the fixed operational-health endpoint is permitted.
+// No dotenv, provider clients, incident actions, or state persistence. Only GETs to fixed same-origin health/admin-auth endpoints are permitted.
+// The health handler may prune expired incidents or initialize missing local stores.
 const { INCIDENT_REASON_CATALOG } = require("../server/incidentAlerts");
 
 const ENDPOINT = "https://api.myaipa.ca/api/internal/operations/health";
+const ADMIN_ENDPOINT = "https://api.myaipa.ca/api/admin/signups";
+// Literal route templates from the pinned application source; never response-controlled.
+const ROUTES = new Set([
+  "/",
+  "/api/admin/attention",
+  "/api/admin/attention/actions",
+  "/api/admin/audit-events",
+  "/api/admin/businesses",
+  "/api/admin/call-tasks/:id",
+  "/api/admin/calls",
+  "/api/admin/calls/:id",
+  "/api/admin/calls/:id/notes",
+  "/api/admin/calls/:id/tasks",
+  "/api/admin/calls/analytics",
+  "/api/admin/calls/search",
+  "/api/admin/cost-audit",
+  "/api/admin/cost-sync",
+  "/api/admin/customer-setup",
+  "/api/admin/customer-setup/:customerId/steps/:stepKey",
+  "/api/admin/daily-digest",
+  "/api/admin/daily-digest/send",
+  "/api/admin/faqs",
+  "/api/admin/faqs/:id",
+  "/api/admin/forwarding-funnel",
+  "/api/admin/lead-handoffs",
+  "/api/admin/leads",
+  "/api/admin/login",
+  "/api/admin/logout",
+  "/api/admin/ops-overview",
+  "/api/admin/outreach/generate",
+  "/api/admin/outreach/import",
+  "/api/admin/outreach/send-test",
+  "/api/admin/session",
+  "/api/admin/settings",
+  "/api/admin/signups",
+  "/api/admin/signups/reconcile-completion-sms",
+  "/api/admin/signups/recover-missing-assistant",
+  "/api/admin/signups/repair-dashboard-login",
+  "/api/admin/signups/run-agent-delivery-test",
+  "/api/admin/stripe-trials",
+  "/api/admin/support-reports",
+  "/api/admin/support-reports/:id",
+  "/api/admin/support-reports/:id/codex-task",
+  "/api/admin/support-reports/:id/github-issue",
+  "/api/admin/trial-health",
+  "/api/admin/trial-usage",
+  "/api/admin/trial-usage/reconcile",
+  "/api/admin/twilio/numbers",
+  "/api/admin/vapi/inventory",
+  "/api/admin/vapi/mappings",
+  "/api/admin/vapi/mappings/:id",
+  "/api/admin/vapi/sync-calls",
+  "/api/appointments/:id/calendar",
+  "/api/appointments/:id/customer-response",
+  "/api/appointments/:id/manage",
+  "/api/appointments/:id/proposal",
+  "/api/appointments/request",
+  "/api/assistant",
+  "/api/assistant/transcribe",
+  "/api/business/enrich",
+  "/api/calls/log",
+  "/api/client-errors",
+  "/api/customer/dashboard",
+  "/api/customer/dashboard/agent-test",
+  "/api/customer/dashboard/appointments/:id/respond",
+  "/api/customer/dashboard/billing/cancel-continuation",
+  "/api/customer/dashboard/billing/setup",
+  "/api/customer/dashboard/calendar/connect/:provider",
+  "/api/customer/dashboard/calendar/connections/:id",
+  "/api/customer/dashboard/calls/:callId/recording",
+  "/api/customer/dashboard/forwarding/setup-link",
+  "/api/customer/dashboard/integrations/jobber/connect",
+  "/api/customer/dashboard/integrations/jobber/disconnect",
+  "/api/customer/dashboard/integrations/jobber/leads/:leadId/sync",
+  "/api/customer/dashboard/leads/:leadId/outcome",
+  "/api/customer/dashboard/logout",
+  "/api/customer/dashboard/request-code",
+  "/api/customer/dashboard/scheduling",
+  "/api/customer/dashboard/staff",
+  "/api/customer/dashboard/staff/:id",
+  "/api/customer/dashboard/support/reports",
+  "/api/customer/dashboard/support/suggest",
+  "/api/customer/dashboard/verify-code",
+  "/api/faqs/search",
+  "/api/forwarding/setup",
+  "/api/forwarding/setup/activation-opened",
+  "/api/forwarding/setup/selections",
+  "/api/forwarding/setup/verify",
+  "/api/health",
+  "/api/health/ready",
+  "/api/integrations/jobber/oauth/callback",
+  "/api/integrations/provisioning/audit-latest-call",
+  "/api/integrations/provisioning/complete-existing",
+  "/api/integrations/signup-complete",
+  "/api/integrations/sms/suppression/check",
+  "/api/integrations/twilio/purchase-number",
+  "/api/integrations/twilio/webhook-oauth/token",
+  "/api/integrations/vapi/create-signup-assistant",
+  "/api/integrations/vapi/import-twilio-number",
+  "/api/integrations/vapi/lead-handoffs/events",
+  "/api/integrations/vapi/owner-sms-results",
+  "/api/integrations/vapi/repair-sms-routing",
+  "/api/integrations/vapi/sync-now",
+  "/api/internal/operations/decommission-signup-set",
+  "/api/internal/operations/finalize-signup-after-agent-test",
+  "/api/internal/operations/health",
+  "/api/internal/operations/incident-remediation-canary",
+  "/api/internal/operations/incident-remediation-canary/status",
+  "/api/internal/operations/incident-repair-result",
+  "/api/internal/operations/pr-landing-result",
+  "/api/internal/operations/provisioning-canary",
+  "/api/internal/operations/rebuild-test-contact-preserving-numbers",
+  "/api/internal/operations/recover-signup",
+  "/api/internal/operations/rollback-failed-superdaves-rebuild",
+  "/api/internal/operations/security-readiness",
+  "/api/internal/operations/supersede-signup",
+  "/api/internal/operations/telegram-test",
+  "/api/leads/acknowledge",
+  "/api/leads/create",
+  "/api/notify/owner-sms",
+  "/api/outreach/audio/:filename",
+  "/api/payments/create-checkout-session",
+  "/api/payments/stripe-webhook",
+  "/api/public/signup-network-stats",
+  "/api/public/vapi-preview-config",
+  "/api/public/vapi-preview-session",
+  "/api/public/vapi-preview-session/release",
+  "/api/signup/status/:attemptId",
+  "/api/signup/status/:attemptId/support",
+  "/api/signup/verification-progress",
+  "/api/webhooks/sms",
+  "/api/webhooks/telegram/actions",
+  "/api/webhooks/twilio/forwarding-verification-status",
+  "/api/webhooks/twilio/message-status",
+  "/api/webhooks/twilio/staging/call-status",
+  "/api/webhooks/twilio/staging/connectivity",
+  "/api/webhooks/voice",
+  "/stripe-sandbox-test",
+  "/stripe-sandbox-test/advance",
+  "/stripe-sandbox-test/checkout",
+  "/stripe-sandbox-test/login",
+  "/stripe-sandbox-test/start"
+]);
 const MAX_BYTES = 2 * 1024 * 1024;
 const CATEGORY_PATTERN = /^[a-z][a-z0-9_]{0,79}$/;
 const REASON_PATTERN = /^(?:[A-Z][A-Z0-9_]{0,79}|[0-9]{5})$/;
@@ -114,7 +257,7 @@ function projectPayload(payload) {
   const providers = new Set(['Render PostgreSQL', 'Vapi', 'Twilio', 'Make.com', 'OpenAI', 'Deepgram', 'email provider', 'Telegram', 'Stripe']);
   const codes = new Set(['P2028', 'P2010', 'P1001', 'ETIMEDOUT', 'ABORT_ERR', 'ABORTERROR', 'TIMEOUTERROR', 'ECONNRESET', 'FETCH_TIMEOUT', 'REQUEST_TIMEOUT', 'MAKE_SIGNUP_TIMEOUT']);
   const statuses = new Set(['queued','running','recovered','resolved','needs_user','failed','not_required','awaiting_review','blocked']);
-  const workflows = new Set(["Vapi call sync background job","API process crash", "Telegram incident delivery", "Twilio delivery inbox", "admin agent delivery recovery", "agent delivery test", "billing and trial workflow", "customer agent testing station", "incident remediation canary", "legacy new agent delivery test", "new agent delivery test", "production alert verification", "signup SMS routing", "text-message delivery", "voice signup verification delivery", "web signup verification delivery", "website browser"]);
+  const workflows = new Set(["customer signup", "AI call processing", "text-message handoff", "customer dashboard", "admin workflow", "application request", "Vapi call sync background job","API process crash", "Telegram incident delivery", "Twilio delivery inbox", "admin agent delivery recovery", "agent delivery test", "billing and trial workflow", "customer agent testing station", "incident remediation canary", "legacy new agent delivery test", "new agent delivery test", "production alert verification", "signup SMS routing", "text-message delivery", "voice signup verification delivery", "web signup verification delivery", "website browser"]);
   result.criticalDetails = payload.issues.filter(i => i && i.kind === 'runtime_incident' && i.severity === 'critical').map(i => {
     const s = record(i.snapshot) ? i.snapshot : {};
     const d = record(i.diagnostics) ? i.diagnostics : {};
@@ -124,6 +267,14 @@ function projectPayload(payload) {
       provider: providers.has(s.Provider) ? s.Provider : 'UNKNOWN_PROVIDER',
       providerCode: codes.has(s['Provider code']) ? s['Provider code'] : 'UNKNOWN_CODE',
       workflow: workflows.has(s.Workflow) ? s.Workflow : 'UNKNOWN_WORKFLOW',
+      method: ['GET','POST','PUT','PATCH','DELETE'].includes(s.Method) ? s.Method : 'UNKNOWN_METHOD',
+      route: ROUTES.has(s.Route) ? s.Route : 'UNKNOWN_ROUTE',
+      snapshotFieldCount: Math.min(Object.keys(s).length, 100),
+      hasAttemptCorrelation: Object.keys(s).some(k => /signup.*attempt|attempt.*id|event.*key|idempotency.*key/i.test(k)),
+      hasReceiptCorrelation: Object.keys(s).some(k => /receipt|message.*sid|dispatch.*key/i.test(k)),
+      hasBusinessCorrelation: Object.keys(s).some(k => /business|customer|owner|email/i.test(k)),
+      globalRequestCheckpoint: i.incident?.lastCheckpoint === 'The request reached the My AI PA API and failed before a successful response was returned.',
+      defaultOperationCheckpoint: i.incident?.lastCheckpoint === 'The operation reached the application but did not complete normally.',
       matchesCurrentCommit: typeof s.Release === 'string' && s.Release.toLowerCase() === '8fb992689d9b66efd5958676b7c3e2bc0b923631',
       firstDetectedBeforeCurrentCommit: before(d.firstDetectedAt || i.detectedAt),
       lastDetectedBeforeCurrentCommit: before(d.lastDetectedAt || i.detectedAt),
@@ -202,7 +353,23 @@ async function diagnose({ apiKey = process.env.MONITOR_API_KEY, fetchImpl = fetc
       return { schemaVersion: 1, readOnly: true, authenticatedRead: false, complete: false,
         error: "operational_http_error", status };
     }
-    return projectPayload(await boundedJson(response));
+    const result = projectPayload(await boundedJson(response));
+    result.requestMode = 'GET_ONLY';
+    result.serverSideReadEffects = 'EXPIRED_INCIDENT_PRUNING_OR_EMPTY_STORE_INITIALIZATION';
+    // Verify the existing authorization boundary once, without logging/reading any admin body.
+    try {
+      const admin = await fetchImpl(ADMIN_ENDPOINT, {
+        method: 'GET', redirect: 'error',
+        headers: { Authorization: `Bearer ${apiKey.trim()}`, Accept: 'application/json', 'Cache-Control': 'no-store' },
+        signal: AbortSignal.timeout(15000),
+      });
+      result.savedStateAccess = { status: Number.isInteger(admin.status) && admin.status >= 100 && admin.status <= 599 ? admin.status : null,
+        accessDenied: [401,403].includes(admin.status), evidenceRead: false };
+      if (admin.body?.cancel) await admin.body.cancel();
+    } catch (_) {
+      result.savedStateAccess = { status: null, accessDenied: null, evidenceRead: false, error: 'admin_access_probe_failed' };
+    }
+    return result;
   } catch (error) {
     return { schemaVersion: 1, readOnly: true, authenticatedRead: false, complete: false,
       error: error instanceof DiagnosisError ? error.code : "operational_request_failed" };
@@ -222,4 +389,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { ENDPOINT, diagnose, projectPayload };
+module.exports = { ADMIN_ENDPOINT, ENDPOINT, diagnose, projectPayload };
