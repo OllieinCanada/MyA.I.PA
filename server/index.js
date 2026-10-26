@@ -8608,13 +8608,17 @@ async function getTrialUsageSnapshot(signup, businessId) {
 async function writeTrialGateConfiguration(config) {
   const keys = getTrialGateRuntimeKeys(config);
   if (!keys.length) throw new Error("Trial gate configuration requires a Vapi phone number id or phone number.");
-  for (const key of keys) {
-    await prisma.runtimeStore.upsert({
-      where: { key },
-      update: { data: config },
-      create: { key, data: config },
-    });
-  }
+  // Readers now require both aliases to agree. Publish them atomically so a
+  // normal refresh cannot expose a half-prepared / half-active route.
+  await prisma.$transaction(async (tx) => {
+    for (const key of keys) {
+      await tx.runtimeStore.upsert({
+        where: { key },
+        update: { data: config },
+        create: { key, data: config },
+      });
+    }
+  }, { maxWait: 500, timeout: 3000 });
   return config;
 }
 
@@ -18904,6 +18908,7 @@ module.exports = {
     handleTrialAssistantRequest,
     reserveTrialCall,
     readTrialGateConfiguration,
+    writeTrialGateConfiguration,
     processVerifiedSignupJobs,
     processTwilioStatusInbox,
     signupDeliveryGatePassed,

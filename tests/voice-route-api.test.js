@@ -9,7 +9,7 @@ Object.assign(process.env, { NODE_ENV:'test', DISABLE_LOCAL_ENV_FILES:'1', DATAB
   TELEGRAM_BOT_TOKEN:'', TELEGRAM_CHAT_ID:'', STRIPE_SECRET_KEY:'', TWILIO_ACCOUNT_SID:'', TWILIO_AUTH_TOKEN:'',
   SMTP_HOST:'', MAKE_SIGNUP_WEBHOOK_URL:'', TRIAL_REMINDER_DISABLE:'true', VAPI_AUTO_SYNC_ENABLED:'false',
   MISSED_CALL_ALERT_ENABLED:'false', DAILY_DIGEST_ENABLED:'false', SIGNUP_SETUP_WORKER_PAUSED:'true', TRIAL_USAGE_LIMIT_ENABLED:'true' });
-const rows = new Map(); let usedSeconds=0, transactions=0, delayGate=false, releaseGate;
+const rows = new Map(); let usedSeconds=0, transactions=0, delayGate=false, releaseGate, failWriteKey;
 const clone = value => structuredClone(value);
 const db = {
   runtimeStore: {
@@ -19,13 +19,18 @@ const db = {
     },
     findUnique: async ({where}) => rows.has(where.key)?{key:where.key,data:clone(rows.get(where.key))}:null,
     upsert: async ({where,create,update}) => {
+      if (where.key === failWriteKey) throw Error('Synthetic alias write failure');
       const data=rows.has(where.key)?(update.data ?? rows.get(where.key)):create.data;
       rows.set(where.key,clone(data));return{key:where.key,data:clone(data)};
     },
   },
   call: { aggregate:async()=>({_sum:{durationSec:usedSeconds},_count:{_all:0}}) },
   $queryRaw:async(strings)=>strings.join('?').includes('pg_try_advisory_xact_lock')?[{acquired:true}]:[],
-  $transaction:async(fn)=>{transactions++;return fn(db);},
+  $transaction:async(fn)=>{
+    transactions++;const before=clone([...rows]);
+    try { return await fn(db); }
+    catch(error){ rows.clear();for(const [key,value] of before)rows.set(key,value);throw error; }
+  },
 };
 global.__myAiPaPrisma=new Proxy(db,{get(target,key){
   if(key in target)return target[key];
@@ -44,7 +49,7 @@ const keys=['trial-voice-gate:phone-id:voice-phone','trial-voice-gate:number:+15
 let server, base;
 before(async()=>{server=app.listen(0,'127.0.0.1');await new Promise(resolve=>server.once('listening',resolve));base=`http://127.0.0.1:${server.address().port}`;});
 beforeEach(()=>{
-  rows.clear();usedSeconds=0;transactions=0;delayGate=false;releaseGate=null;
+  rows.clear();usedSeconds=0;transactions=0;delayGate=false;releaseGate=null;failWriteKey=null;
   for(const key of keys)rows.set(key,clone(gate));
   __test.upsertSignupDashboardRecord({...signup});
 });
@@ -72,6 +77,13 @@ test('two conflicting route aliases fail closed before any allowance or provider
 test('one paused route alias cannot be bypassed using the active phone-ID alias',async()=>{
   rows.set(keys[1],{...gate,status:'paused'});
   const response=await call();assert.ok((await response.json()).error);assert.equal(transactions,0);
+});
+
+test('a failed second alias write rolls back the entire route publication',async()=>{
+  failWriteKey=keys[1];
+  await assert.rejects(__test.writeTrialGateConfiguration({...gate,assistantId:'next-assistant'}), /Synthetic alias write failure/);
+  assert.deepEqual(rows.get(keys[0]),gate);assert.deepEqual(rows.get(keys[1]),gate);
+  assert.equal(transactions,1);
 });
 test('a trial-limit hold never transfers back to the forwarding owner and keeps its policy explanation',async()=>{
   usedSeconds=3300;const response=await call('blocked-call');const body=await response.json();
