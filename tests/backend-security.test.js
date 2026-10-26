@@ -126,6 +126,35 @@ async function request(path, options = {}) {
   });
 }
 
+test('saved receipt inspection requires admin authentication and never accepts the monitor key', async () => {
+  const ref = 'b'.repeat(64), endpoint = '/api/admin/twilio/receipt-state?jobRef=' + ref;
+  const original = prisma.runtimeStore.findUnique;
+  let reads = 0;
+  prisma.runtimeStore.findUnique = async ({ where }) => {
+    reads++;
+    assert.equal(where.key, 'twilio-status-inbox:' + ref);
+    return { key: where.key, createdAt: new Date('2026-10-20T00:00:00Z'), updatedAt: new Date('2026-10-20T00:01:00Z'),
+      data: { status: 'completed', attempts: 1, receivedAt: 1792454400000,
+        receipt: { MessageStatus: 'delivered', MessageSid: 'PRIVATE_MESSAGE_SID' }, token: 'PRIVATE_WORKER_TOKEN' } };
+  };
+  try {
+    assert.equal((await request(endpoint)).status, 401);
+    assert.equal((await request(endpoint, { headers: { Authorization: 'Bearer ' + process.env.MONITOR_API_KEY } })).status, 401);
+    assert.equal((await request(endpoint, { headers: { 'x-monitor-api-key': process.env.MONITOR_API_KEY } })).status, 401);
+    assert.equal(reads, 0, 'Denied requests must not query saved receipt state');
+    const response = await request(endpoint, { headers: { 'x-admin-password': process.env.ADMIN_PASSWORD } });
+    assert.equal(response.status, 200);assert.equal(response.headers.get('cache-control'), 'no-store');
+    const result = await response.json();
+    assert.equal(result.jobs[0].jobState, 'completed');assert.equal(result.originalOperationOutcome, 'unknown');
+    assert.equal(result.providerDeliveryVerified, false);assert.doesNotMatch(JSON.stringify(result), /PRIVATE|MessageSid|token/);
+    assert.equal(reads, 1);
+    assert.equal((await request('/api/admin/twilio/receipt-state?jobRef=' + ref + '&apply=true',
+      { headers: { 'x-admin-password': process.env.ADMIN_PASSWORD } })).status, 400);
+    assert.equal((await request(endpoint, { method: 'POST', headers: { 'x-admin-password': process.env.ADMIN_PASSWORD } })).status, 404);
+    assert.equal(reads, 1);
+  } finally { prisma.runtimeStore.findUnique = original; }
+});
+
 test('runtime security versions are only available to authenticated operations checks', async () => {
   const endpoint = '/api/internal/operations/security-readiness';
   assert.equal((await request(endpoint)).status, 401);
