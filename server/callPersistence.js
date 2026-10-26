@@ -69,9 +69,12 @@ async function persistCall({ db, identity, createData, updateData }) {
   const alternatives = callAlternatives(identity);
   if (!Number.isSafeInteger(Number(identity.callerId)) || Number(identity.callerId) <= 0) throw identityError();
   for (let attempt = 0; attempt < 2; attempt += 1) {
+    let configuring = false;
     try {
       return await db.$transaction(async (tx) => {
+        configuring = true;
         await tx.$queryRaw`SELECT set_config('lock_timeout', '800ms', true), set_config('statement_timeout', '1500ms', true)`;
+        configuring = false;
         const existing = await resolveCallRecord(tx, identity);
         if (!existing) return tx.call.create({ data: createData, include: { caller: true, business: true } });
         // Serialize merges on the canonical row, not across all calls or the
@@ -84,9 +87,14 @@ async function persistCall({ db, identity, createData, updateData }) {
         return tx.call.update({ where: { id: current.id }, data: updateData(current), include: { caller: true, business: true } });
       }, { maxWait: 500, timeout: 3000 });
     } catch (error) {
-      // A unique-key exception aborts a PostgreSQL transaction. Reconcile in a
-      // NEW transaction, once, rather than querying inside the aborted one.
-      if (attempt || !alternatives.length || !isUniqueFailure(error, 'Call')) throw error;
+      // A transaction can expire before its first configuration query executes.
+      // Only that pre-Call-work expiry is safe to retry; never replay a timed-out
+      // read/write or an uncertain commit. Share the existing one-retry budget
+      // with unique-key recovery, always using a NEW transaction.
+      const startupExpired = configuring && error?.code === 'P2028'
+        && /expired transaction/i.test(String(error.meta?.error || error.message || ''));
+      const uniqueRace = alternatives.length && isUniqueFailure(error, 'Call');
+      if (attempt || (!startupExpired && !uniqueRace)) throw error;
     }
   }
 }
