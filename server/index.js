@@ -246,7 +246,6 @@ const {
   signupKeyFor,
   isForwardingVerificationCall,
   markDialerOpened,
-  matchForwardedVerificationCall,
   recordEvent: recordForwardingEvent,
   sanitizeSetup: sanitizeForwardingSetup,
   updateSelections: updateForwardingSelections,
@@ -342,6 +341,8 @@ const {
   syncLeadToJobber,
 } = require("./jobberIntegration");
 const { resolveVapiWebhookSecret } = require("./vapiWebhookAuth");
+const { mapCallStatus, runAssistantRequest, shouldReportCallSetupFailure, withCallSetupFailureHook } = require("./voiceCallReliability");
+const { reserveCall } = require("./trialCallReservation");
 const {
   buildVoiceSignupPayload,
   isVapiVoiceSignupTool,
@@ -2533,14 +2534,8 @@ function getVapiVoiceSignupSmsEnvironment(env = process.env) {
   };
 }
 
-function mapVapiStatus(value) {
-  const normalized = String(value || "").trim().toLowerCase();
-  if (normalized.includes("failed") || normalized.includes("error")) return "FAILED";
-  if (normalized.includes("missed") || normalized.includes("no-answer") || normalized.includes("no_answer")) return "MISSED";
-  if (["abandoned", "canceled", "cancelled"].includes(normalized)) return "ABANDONED";
-  if (normalized.includes("ended") || normalized.includes("hangup")) return "COMPLETED";
-  if (["ended", "completed", "complete", "success", "successful"].includes(normalized)) return "COMPLETED";
-  return "STARTED";
+function mapVapiStatus(value, endedReason = "") {
+  return mapCallStatus(value, endedReason);
 }
 
 function getVapiDurationSeconds(call) {
@@ -3393,7 +3388,7 @@ async function upsertVapiCall(fullCall, store) {
   const artifactMessages = getVapiCustomerSafeMessages(fullCall);
   const artifactBasis = endedAt || startedAt || Date.now();
   const nextDurationSec = getVapiDurationSeconds(fullCall);
-  const nextStatus = mapVapiStatus(fullCall.status || fullCall.endedReason || "ended");
+  const nextStatus = mapVapiStatus(fullCall.status || "ended", fullCall.endedReason || fullCall.ended_reason);
   const usageChanged = !existingCall
     || Number(existingCall.durationSec || 0) !== Number(nextDurationSec || 0)
     || String(existingCall.status || "") !== String(nextStatus || "");
@@ -3452,6 +3447,7 @@ async function upsertVapiCall(fullCall, store) {
     vapiCallId,
     localCallId: localCall.id,
     businessId,
+    businessName: localCall.business?.name || "",
     durationSec: localCall.durationSec,
     transcriptAvailable: Boolean(transcript),
     recordingAvailable: Boolean(recordingUrl),
@@ -3462,7 +3458,25 @@ async function upsertVapiCall(fullCall, store) {
 async function ingestVapiEndOfCallReport(message) {
   const fullCall = mergeVapiEndOfCallReport(message);
   const store = readVapiCallSyncStore();
-  const result = await upsertVapiCall(fullCall, store);
+  const setupFailed = /^(?:assistant-request-|call\.ending\.hook-executed-)/.test(String(fullCall.endedReason || ""));
+  const policy = setupFailed && fullCall.id
+    ? await prisma.runtimeStore.findUnique({ where: { key: `voice-call-policy:${fullCall.id}` } }).catch(() => null)
+    : null;
+  const reportSetupFailure = (business = {}) => {
+    if (!shouldReportCallSetupFailure({ endedReason: fullCall.endedReason, callId: fullCall.id,
+      businessId: business.businessId, policy: policy?.data })) return;
+    void safelyNotifyRuntimeFailure(Object.assign(new Error("The call did not reach an AI conversation."), {
+      code: "VOICE_ASSISTANT_SELECTION_FAILED", provider: "Vapi",
+    }), { area: "AI call setup", provider: "Vapi", route: "/api/webhooks/voice", method: "POST",
+      businessName: business.businessName || "", severity: "critical",
+      dedupeFingerprint: `${fullCall.id}:assistant-selection`,
+      snapshot: { "Call ID": fullCall.id, "Business ID": business.businessId || "unconfirmed", "Ended reason": fullCall.endedReason },
+    });
+  };
+  let result;
+  try { result = await upsertVapiCall(fullCall, store); }
+  catch (error) { reportSetupFailure(error); throw error; }
+  reportSetupFailure(result);
   writeVapiCallSyncStore(store);
   if (result.usageChanged) await reconcileTrialUsageAfterCall(result);
   return result;
@@ -8580,7 +8594,10 @@ async function getTrialUsageSnapshot(signup, businessId) {
       ? Number((callUsage.averageCallSeconds / 60).toFixed(1))
       : 1.6,
     estimatedCallsRemaining,
-    fallbackRoutingReady: Boolean(getTrialFallbackPhone(signup, signup.twilioPhoneNumber)),
+    fallbackRoutingReady: Boolean(buildTrialFallbackDestination({
+      fallbackPhone: getTrialFallbackPhone(signup, signup.twilioPhoneNumber), aiPhone: signup.twilioPhoneNumber,
+      blockedNumbers: [signup.ownerPhone, signup.businessPhone],
+    })),
     warningSentAt: state?.data?.warningSentAt || null,
     fifteenRemainingSentAt: state?.data?.fifteenRemainingSentAt || null,
     fiveRemainingSentAt: state?.data?.fiveRemainingSentAt || null,
@@ -8607,8 +8624,22 @@ async function readTrialGateConfiguration(call = {}) {
     phoneNumber: call.phoneNumber?.number || call.phoneNumber?.twilioPhoneNumber || call.destination?.number || call.to,
   });
   if (!keys.length) return null;
-  const row = await prisma.runtimeStore.findFirst({ where: { key: { in: keys } } });
-  return row?.data && typeof row.data === "object" ? row.data : null;
+  const rows = await prisma.runtimeStore.findMany({ where: { key: { in: keys } } });
+  if (!rows.length) return null;
+  const phoneId = String(call.phoneNumberId || call.phoneNumber?.id || "");
+  const number = normalizePhoneForMatch(call.phoneNumber?.number || call.phoneNumber?.twilioPhoneNumber || call.destination?.number || call.to);
+  const identity = (data) => JSON.stringify([data.status, data.businessId, data.assistantId, data.phoneNumberId,
+    normalizePhoneForMatch(data.phoneNumber), data.subscriptionId || "", data.signupAttemptId || "", data.businessKey || ""]);
+  const first = rows[0].data;
+  const aliases = first ? getTrialGateRuntimeKeys(first) : [];
+  const missing = aliases.filter(key => !rows.some(row => row.key === key));
+  if (missing.length) rows.push(...await prisma.runtimeStore.findMany({ where: { key: { in: missing } } }));
+  if (!first || aliases.some(key => !rows.some(row => row.key === key)) || rows.some(({ data }) => !data || identity(data) !== identity(first)
+    || (phoneId && String(data.phoneNumberId) !== phoneId)
+    || (number && normalizePhoneForMatch(data.phoneNumber) !== number))) {
+    throw Object.assign(new Error("Saved voice route aliases do not agree on one exact phone and assistant."), { code: "VOICE_ROUTE_IDENTITY_UNPROVEN" });
+  }
+  return first;
 }
 
 async function configureTrialGateForSignup(signup, phoneInventory = null) {
@@ -8635,7 +8666,9 @@ async function configureTrialGateForSignup(signup, phoneInventory = null) {
       assistantId: existingConfig.assistantId,
     });
     const currentServerUrl = getVapiNestedString(phone, ["server.url", "serverUrl"]);
-    if (currentServerUrl !== TRIAL_USAGE_GATE_WEBHOOK_URL) {
+    const protectedHooks = withCallSetupFailureHook(phone.hooks);
+    const hooksChanged = JSON.stringify(protectedHooks) !== JSON.stringify(phone.hooks || []);
+    if (currentServerUrl !== TRIAL_USAGE_GATE_WEBHOOK_URL || hooksChanged) {
       await requestVapiResource(`phone-number/${encodeURIComponent(String(phone.id))}`, {
         method: "PATCH",
         body: {
@@ -8645,6 +8678,7 @@ async function configureTrialGateForSignup(signup, phoneInventory = null) {
             url: TRIAL_USAGE_GATE_WEBHOOK_URL,
             secret: getVapiWebhookSecret(),
           },
+          ...(hooksChanged ? { hooks: protectedHooks } : {}),
         },
       });
     }
@@ -8719,6 +8753,7 @@ async function configureTrialGateForSignup(signup, phoneInventory = null) {
     body: {
       assistantId: null,
       squadId: null,
+      hooks: withCallSetupFailureHook(phone.hooks),
       server: {
         url: TRIAL_USAGE_GATE_WEBHOOK_URL,
         secret: webhookSecret,
@@ -8954,70 +8989,14 @@ async function getTrialUsageDashboard() {
   };
 }
 
-async function reserveTrialCall({ signup, config, callId }) {
-  const businessId = Number(config.businessId || 0);
-  const key = getTrialReservationKey(signup, businessId);
-  const callIndexKey = getTrialCallIndexKey(callId);
-  return prisma.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))::text AS lock_result`;
-    const [reservationRow, usedSeconds] = await Promise.all([
-      tx.runtimeStore.findUnique({ where: { key } }),
-      getTrialUsedSeconds(signup, businessId, tx),
-    ]);
-    const reservationData = reservationRow?.data && typeof reservationRow.data === "object" ? reservationRow.data : {};
-    const now = Date.now();
-    const reservations = Object.fromEntries(
-      Object.entries(reservationData.reservations || {}).filter(([, record]) => Number(record?.expiresAt || 0) > now)
-    );
-    if (reservations[callId]) {
-      const allowanceSeconds = Number(reservations[callId].allowanceSeconds || 0);
-      return {
-        action: allowanceSeconds < Number(config.assistantMaxSeconds || DEFAULT_MAX_CALL_SECONDS)
-          ? "allow-transient"
-          : "allow-saved",
-        allowanceSeconds,
-        duplicateReservation: true,
-      };
-    }
-    const reservedSeconds = Object.values(reservations).reduce(
-      (sum, record) => sum + Math.max(0, Number(record?.allowanceSeconds || 0)),
-      0
-    );
-    const lifecycle = getTrialLifecycle(signup);
-    const decision = decideTrialCall({
-      lifecycle,
-      usedSeconds,
-      reservedSeconds,
-      assistantMaxSeconds: config.assistantMaxSeconds || DEFAULT_MAX_CALL_SECONDS,
-      warningSeconds: TRIAL_USAGE_WARNING_SECONDS,
-      limitSeconds: TRIAL_USAGE_LIMIT_SECONDS,
-      completionReserveSeconds: TRIAL_USAGE_COMPLETION_RESERVE_SECONDS,
-      minCallSeconds: TRIAL_USAGE_MIN_CALL_SECONDS,
-    });
-    if (!decision.action.startsWith("allow") || lifecycle.state === "paid") return decision;
-
-    reservations[callId] = {
-      allowanceSeconds: decision.allowanceSeconds,
-      createdAt: new Date(now).toISOString(),
-      expiresAt: now + (decision.allowanceSeconds + TRIAL_USAGE_RESERVATION_GRACE_SECONDS) * 1000,
-    };
-    const next = {
-      ...reservationData,
-      reservations,
-      updatedAt: new Date().toISOString(),
-    };
-    await tx.runtimeStore.upsert({
-      where: { key },
-      update: { data: next },
-      create: { key, data: next },
-    });
-    await tx.runtimeStore.upsert({
-      where: { key: callIndexKey },
-      update: { data: { reservationKey: key, callId, businessId } },
-      create: { key: callIndexKey, data: { reservationKey: key, callId, businessId } },
-    });
-    return decision;
-  });
+async function reserveTrialCall({ signup, config, callId, guard }) {
+  return reserveCall({ db: prisma, signup, config, callId,
+    key: getTrialReservationKey(signup, Number(config.businessId)), callIndexKey: getTrialCallIndexKey(callId),
+    getUsedSeconds: getTrialUsedSeconds, getLifecycle: getTrialLifecycle, decide: decideTrialCall,
+    guard,
+    limits: { maxCallSeconds: DEFAULT_MAX_CALL_SECONDS, warningSeconds: TRIAL_USAGE_WARNING_SECONDS,
+      limitSeconds: TRIAL_USAGE_LIMIT_SECONDS, completionReserveSeconds: TRIAL_USAGE_COMPLETION_RESERVE_SECONDS,
+      minCallSeconds: TRIAL_USAGE_MIN_CALL_SECONDS, reservationGraceSeconds: TRIAL_USAGE_RESERVATION_GRACE_SECONDS } });
 }
 
 async function releaseTrialCallReservation(callId) {
@@ -9027,6 +9006,7 @@ async function releaseTrialCallReservation(callId) {
   const reservationKey = String(index?.data?.reservationKey || "");
   if (!reservationKey) return;
   await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT set_config('statement_timeout', '700ms', true), set_config('lock_timeout', '200ms', true)`;
     await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${reservationKey}))::text AS lock_result`;
     const row = await tx.runtimeStore.findUnique({ where: { key: reservationKey } });
     const data = row?.data && typeof row.data === "object" ? row.data : {};
@@ -9037,31 +9017,49 @@ async function releaseTrialCallReservation(callId) {
       update: { data: { ...data, reservations, updatedAt: new Date().toISOString() } },
       create: { key: reservationKey, data: { reservations, updatedAt: new Date().toISOString() } },
     });
-    await tx.runtimeStore.delete({ where: { key: callIndexKey } }).catch(() => {});
-  });
+    // Repeated terminal events are normal. deleteMany is idempotent and does
+    // not poison a PostgreSQL transaction with a caught missing-row error.
+    await tx.runtimeStore.deleteMany({ where: { key: callIndexKey } });
+  }, { maxWait: 300, timeout: 1800 });
 }
 
-async function handleTrialAssistantRequest(message) {
+async function handleTrialAssistantRequest(message, guard) {
   if (!TRIAL_USAGE_LIMIT_ENABLED) {
     return { error: "This phone assistant is not available right now. Please try again later." };
   }
-  const call = message?.call && typeof message.call === "object" ? message.call : {};
-  const config = await readTrialGateConfiguration(call);
-  if (!config?.assistantId || !config?.businessId) {
-    return { error: "This phone assistant is temporarily unavailable. Please try again later." };
+  const originalCall = message?.call && typeof message.call === "object" ? message.call : {};
+  const call = { ...originalCall, phoneNumber: originalCall.phoneNumber || message?.phoneNumber };
+  const config = guard ? await guard.stage("gateLookup", () => readTrialGateConfiguration(call)) : await readTrialGateConfiguration(call);
+  if (!config?.assistantId || !config?.businessId || config.status !== "active") {
+    throw Object.assign(new Error("No proven assistant route is configured for this phone."), { code: "VOICE_ROUTE_IDENTITY_UNPROVEN" });
   }
   const signups = listSignupDashboardRecords();
   const signup = selectTrialSignup(signups, config);
   if (!signup) {
     console.warn("[trial-usage] route selection blocked", { code: "TRIAL_SIGNUP_ROUTE_IDENTITY_UNPROVEN", businessId: config.businessId });
-    return { error: "This phone assistant is temporarily unavailable. Please try again later." };
+    throw Object.assign(new Error("The phone route does not select exactly one open signup."), { code: "VOICE_ROUTE_IDENTITY_UNPROVEN" });
   }
 
+  if (guard) { guard.businessId = config.businessId; guard.businessName = signup.businessName; guard.check(); }
   const lifecycle = getTrialLifecycle(signup);
   if (lifecycle.state === "paid") return { assistantId: config.assistantId };
   const callId = String(call.id || call.callId || "").trim();
   if (!callId) return { error: "This phone assistant is temporarily unavailable. Please try again later." };
-  const decision = await reserveTrialCall({ signup, config, callId });
+  let decision;
+  try {
+    decision = guard
+      ? await guard.stage("trialReservation", () => reserveTrialCall({ signup, config, callId, guard }))
+      : await reserveTrialCall({ signup, config, callId });
+  } catch (error) {
+    // A commit and an HTTP disconnect/deadline can cross. Reconcile the exact
+    // call lease after the bounded transaction settles, never authorize late.
+    if (guard && error?.code === "VOICE_ASSISTANT_REQUEST_DEADLINE") {
+      setImmediate(() => releaseTrialCallReservation(callId).catch((releaseError) => {
+        console.warn("[voice:late-reservation-release]", JSON.stringify({ callId, code: releaseError.code || "RELEASE_FAILED" }));
+      }));
+    }
+    throw error;
+  }
   console.info("[trial-usage] call route decision", { callId, businessId: config.businessId, action: decision.action, reason: decision.reason || "", lifecycle: lifecycle.state });
   if (decision.action === "block") {
     setImmediate(() => {
@@ -9072,6 +9070,7 @@ async function handleTrialAssistantRequest(message) {
     const fallback = buildTrialFallbackDestination({
       fallbackPhone: config.fallbackPhone || getTrialFallbackPhone(signup, config.phoneNumber),
       aiPhone: config.phoneNumber,
+      blockedNumbers: [signup.ownerPhone, signup.businessPhone, call.transport?.forwardedFrom, call.forwardedFrom],
     });
     if (fallback) return fallback;
     return { error: "The team is unavailable right now. Please try again shortly." };
@@ -13697,32 +13696,33 @@ app.post(
     }
     if (vapiMessageType === "assistant-request") {
       const call = vapiMessage?.call && typeof vapiMessage.call === "object" ? vapiMessage.call : {};
-      const verification = await matchForwardedVerificationCall({
-        prismaClient: prisma,
-        from: call?.customer?.number || call?.customer?.phoneNumber || call?.from || call?.fromNumber,
-        destination: call?.phoneNumber?.number || call?.phoneNumber?.twilioPhoneNumber || call?.destination?.number || call?.to,
-        phoneNumberId: call?.phoneNumberId || call?.phoneNumber?.id,
-        vapiCallId: call?.id || call?.callId,
+      const callId = String(call.id || call.callId || "").slice(0, 120);
+      // Automatic forwarding-test calls are disabled. Do not spend two DB
+      // lookups checking obsolete verification attempts before every real call.
+      const response = await runAssistantRequest({
+        resolve: (guard) => {
+          res.once("close", () => { if (!res.writableFinished) guard.expire(); });
+          res.once("finish", () => console.info("[voice:assistant-response]", JSON.stringify({
+            callId, businessId: guard.businessId || null, status: res.statusCode,
+            elapsedMs: guard.elapsedMs(), stages: guard.stages,
+          })));
+          return handleTrialAssistantRequest(vapiMessage, guard);
+        },
+        onFailure: (error, guard) => {
+          console.warn("[voice:assistant-failure]", JSON.stringify({ callId, code: error.code || "UNKNOWN", elapsedMs: guard.elapsedMs(), stages: guard.stages }));
+          const voiceError = /^VOICE_/.test(error.code || "") ? error : Object.assign(new Error("Assistant selection failed during a protected setup stage."), {
+            code: "VOICE_ASSISTANT_SELECTION_FAILED", provider: "Vapi", providerSignal: error.code || "UNKNOWN",
+          });
+          return safelyNotifyRuntimeFailure(voiceError, {
+          area: "AI call setup", provider: "Vapi", route: "/api/webhooks/voice", method: "POST",
+          whatFailed: "The AI receptionist could not be selected in time for this call",
+          businessName: guard.businessName || "", severity: "critical",
+          reasonCode: "VOICE_ASSISTANT_SELECTION_FAILED", dedupeFingerprint: `${callId}:assistant-selection`,
+          snapshot: { "Call ID": callId, "Business ID": guard.businessId || "unconfirmed", "Elapsed ms": guard.elapsedMs(), "Underlying code": error.code || "UNKNOWN" },
+        }); },
       });
-      if (verification) {
-        return res.json({
-          assistant: {
-            name: "My AI PA forwarding verification",
-            firstMessage: "Your My AI PA forwarding test was received. You are protected. You can hang up now.",
-            firstMessageMode: "assistant-speaks-first",
-            model: {
-              provider: "openai",
-              model: "gpt-4o-mini",
-              messages: [{ role: "system", content: "This is an automated forwarding verification call. Say only that the forwarding test was received, then end the call. Never collect lead details and never use tools." }],
-              tools: [],
-            },
-            voice: { provider: "vapi", voiceId: "Elliot" },
-            maxDurationSeconds: 15,
-            endCallMessage: "Forwarding verification complete.",
-          },
-        });
-      }
-      return res.json(await handleTrialAssistantRequest(vapiMessage));
+      if (res.destroyed) return;
+      return res.json(response);
     }
     if (vapiMessageType === "end-of-call-report") {
       const reportCallId = String(vapiMessage?.call?.id || vapiMessage?.callId || vapiMessage?.id || "").trim();
@@ -18308,7 +18308,7 @@ async function reportPreviousFatalIncident() {
 app.use((err, req, res, _next) => {
   const status = err.statusCode || 500;
   const message = err.message || "Internal server error";
-  if (status >= 500) {
+  if (status >= 500 || err.code === "CALL_RECORD_IDENTITY_CONFLICT") {
     console.error(err);
     if (!err.telegramIncidentHandled) {
       const route = typeof req?.route?.path === "string" ? req.route.path : req?.path || "";
@@ -18319,6 +18319,12 @@ app.use((err, req, res, _next) => {
         route,
         status,
         upstreamStatus: err.upstreamStatus,
+        businessName: err.businessName || "",
+        snapshot: {
+          "Business ID": err.businessId || "unconfirmed",
+          ...((req.vapiWebhookAuthenticated && req.body?.message?.call?.id)
+            ? { "Call ID": String(req.body.message.call.id).slice(0, 120) } : {}),
+        },
         whatFailed: `${String(req?.method || "REQUEST").toUpperCase()} ${route || "application route"} returned an error`,
         impact: area === "customer signup"
           ? "A customer could not complete signup or phone-agent setup from this request. No success should be assumed."
@@ -18895,6 +18901,9 @@ module.exports = {
   app,
   startServer,
   __test: {
+    handleTrialAssistantRequest,
+    reserveTrialCall,
+    readTrialGateConfiguration,
     processVerifiedSignupJobs,
     processTwilioStatusInbox,
     signupDeliveryGatePassed,

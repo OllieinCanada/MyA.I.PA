@@ -47,6 +47,7 @@ function safeSnapshot(input) {
 }
 
 function incidentWhatFailed(context = {}, classification = {}) {
+  if (["voice_call_setup", "call_record_conflict"].includes(classification.category)) return classification.whatFailed;
   const contextWhatFailed = String(context.whatFailed || "").trim();
   const combined = [
     contextWhatFailed,

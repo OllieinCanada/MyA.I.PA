@@ -5,6 +5,81 @@ const { createPendingSignupVerificationStore } = require("../server/pendingSignu
 
 const enabled = process.env.RUN_DATABASE_INTEGRATION === "1";
 
+test("PostgreSQL reconciles concurrent voice receipts without losing terminal detail", { skip: !enabled, timeout: 20000 }, async () => {
+  const { PrismaClient } = require("@prisma/client");
+  const { persistCall, persistCaller, mergeCallData } = require("../server/callPersistence");
+  const prisma = new PrismaClient();
+  const suffix = crypto.randomUUID();
+  let business;
+  let caller;
+  try {
+    business = await prisma.business.create({ data: { name: `CI voice ${suffix}`, phone: `ci-business-${suffix}`, timezone: "America/Toronto" } });
+    const callers = await Promise.all([0, 1].map(() => persistCaller(prisma, { phone: `ci-caller-${suffix}`, name: "Synthetic caller" })));
+    caller = callers[0];
+    assert.equal(callers[0].id, callers[1].id);
+    const identity = { businessId: business.id, callerId: caller.id, externalProvider: "vapi", externalId: `ci-voice-${suffix}`, twilioCallSid: `CA${suffix.replaceAll("-", "")}` };
+    const terminal = { ...identity, startedAt: new Date(), endedAt: new Date(), status: "FAILED", durationSec: 0, endedReason: "assistant-request-returned-error", aiSummary: "Synthetic setup failure" };
+    const write = data => persistCall({ db: prisma, identity, createData: data, updateData: existing => mergeCallData(existing, data) });
+    const records = await Promise.all([write(terminal), write(terminal)]);
+    assert.equal(records[0].id, records[1].id);
+    assert.equal(await prisma.call.count({ where: { twilioCallSid: identity.twilioCallSid } }), 1);
+    const replay = await write({ ...identity, startedAt: terminal.startedAt, status: "STARTED", durationSec: null, endedReason: null, aiSummary: "" });
+    assert.equal(replay.status, "FAILED");
+    assert.equal(replay.endedReason, terminal.endedReason);
+    assert.equal(replay.aiSummary, terminal.aiSummary);
+    await assert.rejects(persistCall({ db: prisma, identity: { ...identity, callerId: caller.id + 1000000 }, createData: terminal, updateData: () => terminal }), { code: "CALL_RECORD_IDENTITY_CONFLICT" });
+  } finally {
+    if (business) await prisma.business.delete({ where: { id: business.id } });
+    if (caller) await prisma.caller.delete({ where: { id: caller.id } });
+    await prisma.$disconnect();
+  }
+});
+
+test("PostgreSQL voice reservation is replay-safe and refuses a busy advisory lock promptly", { skip: !enabled, timeout: 20000 }, async () => {
+  const { PrismaClient } = require("@prisma/client");
+  const { Client } = require("pg");
+  const { reserveCall } = require("../server/trialCallReservation");
+  const { createAssistantRequestGuard } = require("../server/voiceCallReliability");
+  const { decideTrialCall, getTrialLifecycle } = require("../server/trialUsagePolicy");
+  const prisma = new PrismaClient();
+  const blocker = new Client({ connectionString: process.env.DATABASE_URL });
+  const suffix = crypto.randomUUID();
+  const key = `ci-voice-reservation:${suffix}`;
+  const callId = `ci-voice-call:${suffix}`;
+  const callIndexKey = `ci-voice-index:${suffix}`;
+  const cleanupKeys = [key, callIndexKey, `voice-call-policy:${callId}`];
+  let connected = false;
+  try {
+    const params = { db: prisma, signup: { subscriptionStatus: "trialing", trialStartAt: Date.now() - 60000, trialEndAt: Date.now() + 86400000 },
+      config: { businessId: 37, assistantMaxSeconds: 300 }, key, callId, callIndexKey,
+      getUsedSeconds: async (_signup, _businessId, tx) => { await tx.$queryRaw`SELECT 1`; return 0; },
+      getLifecycle: getTrialLifecycle, decide: decideTrialCall,
+      limits: { maxCallSeconds: 300, warningSeconds: 1200, limitSeconds: 3600, completionReserveSeconds: 300, minCallSeconds: 30, reservationGraceSeconds: 60 } };
+    const reserve = overrides => reserveCall({ ...params, guard: createAssistantRequestGuard(), ...overrides });
+    assert.equal((await reserve()).action, "allow-saved");
+    assert.equal((await reserve()).duplicateReservation, true);
+    const row = await prisma.runtimeStore.findUnique({ where: { key } });
+    assert.equal(Object.keys(row.data.reservations).length, 1);
+    assert.equal(row.data.reservations[callId].allowanceSeconds, 300);
+    await blocker.connect();
+    connected = true;
+    await blocker.query("BEGIN");
+    await blocker.query("SELECT pg_advisory_xact_lock(hashtext($1))", [key]);
+    const started = Date.now();
+    await assert.rejects(reserve(), { code: "VOICE_TRIAL_RESERVATION_BUSY" });
+    assert.ok(Date.now() - started < 2500, "a busy quota lock must not consume the Vapi answering deadline");
+    await blocker.query("ROLLBACK");
+    assert.equal((await reserve({ signup: { ...params.signup, trialEndAt: Date.now() - 1000 } })).action, "block");
+    const policy = await prisma.runtimeStore.findUnique({ where: { key: `voice-call-policy:${callId}` } });
+    assert.equal(policy.data.decision, "block");
+    assert.equal(policy.data.callId, callId);
+  } finally {
+    if (connected) { await blocker.query("ROLLBACK").catch(() => {}); await blocker.end(); }
+    await prisma.runtimeStore.deleteMany({ where: { key: { in: cleanupKeys } } });
+    await prisma.$disconnect();
+  }
+});
+
 test("PostgreSQL enforces idempotency, uniqueness, and cascade behavior", { skip: !enabled }, async () => {
   const { PrismaClient } = require("@prisma/client");
   const prisma = new PrismaClient();
