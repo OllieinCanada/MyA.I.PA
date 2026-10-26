@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const { persistCallRecord, resolveCallRecord } = require('../server/callRecordIdentity');
+const { persistCall, resolveCallRecord } = require('../server/callPersistence');
 
 // Execute the actual ingestion function without loading the Express server,
 // provider clients, background jobs, environment bindings, or production data.
@@ -25,6 +25,7 @@ function fixture(overrides = {}, cost = 0.2) {
   };
   const logged = [], writes = [], store = {};
   const prisma = { call: {
+    async findMany({ where }) { return where.OR.some(clause => Object.entries(clause).every(([key, value]) => row[key] === value)) ? [structuredClone(row)] : []; },
     async findUnique({ where }) {
       const match = where.externalProvider_externalId
         ? Object.entries(where.externalProvider_externalId).every(([key, value]) => row[key] === value)
@@ -39,9 +40,10 @@ function fixture(overrides = {}, cost = 0.2) {
     },
     async create() { assert.fail('existing SID must not create a second call'); },
   } };
+  prisma.$transaction = async callback => callback({ call: prisma.call, $queryRaw: async () => [] });
   const context = {
     require(name) {
-      assert.equal(name, './callRecordIdentity');
+      assert.equal(name, './callPersistence');
       return { resolveCallRecord };
     },
     prisma,
@@ -58,11 +60,11 @@ function fixture(overrides = {}, cost = 0.2) {
     mapVapiStatus: () => 'COMPLETED', getVapiCostBreakdown: () => undefined,
     async logCall(payload) {
       logged.push(structuredClone(payload));
-      return persistCallRecord({ prisma, businessId: payload.businessId,
-        localCallId: payload.callId, externalProvider: payload.externalProvider,
-        externalId: payload.externalId, twilioCallSid: payload.twilioCallSid,
-        createData: () => assert.fail('existing SID must not create a caller'),
-        updateData: existing => ({ durationSec: payload.durationSec, status: payload.status,
+      return persistCall({ db: prisma, identity: { businessId: payload.businessId,
+        callerId: row.callerId, callId: payload.callId, externalProvider: payload.externalProvider,
+        externalId: payload.externalId, twilioCallSid: payload.twilioCallSid },
+        createData: {}, updateData: existing => ({ durationSec: payload.durationSec, status: payload.status,
+          externalProvider: payload.externalProvider, externalId: payload.externalId,
           vapiCost: payload.vapiCost ?? existing.vapiCost,
           totalInternalCost: payload.totalInternalCost ?? existing.totalInternalCost }),
       });
@@ -105,7 +107,7 @@ test('missing Vapi cost preserves existing combined cost instead of zeroing it',
 
 for (const [label, binding] of [
   ['same-provider conflicting external ID', { externalProvider: 'vapi', externalId: 'different-vapi-call' }],
-  ['different nonempty provider binding', { externalProvider: 'twilio', externalId: 'CA-synthetic' }],
+  ['unproven carrier binding', { externalProvider: 'twilio', externalId: 'CA-other' }],
   ['different business', { businessId: 8 }],
 ]) test(`ingestion rejects ${label} before logging or mutating calls`, async () => {
   const f = fixture(binding);
@@ -115,4 +117,14 @@ for (const [label, binding] of [
   assert.equal(f.writes.length, 0);
   assert.deepEqual(f.row(), original);
   assert.deepEqual(f.store, {});
+});
+
+test('an exact Twilio carrier record is promoted without replacing caller or losing carrier cost', async () => {
+  const f = fixture({ externalProvider: 'twilio', externalId: 'CA-synthetic' });
+  const result = await f.run();
+  assert.equal(result.localCallId, 72);
+  assert.equal(result.usageChanged, true);
+  assert.equal(f.row().callerId, 44);
+  assert.equal(f.row().externalProvider, 'vapi');
+  assert.ok(Math.abs(f.row().totalInternalCost - 0.23) < 1e-10);
 });

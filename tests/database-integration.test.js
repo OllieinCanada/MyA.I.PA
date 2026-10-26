@@ -5,6 +5,81 @@ const { createPendingSignupVerificationStore } = require("../server/pendingSignu
 
 const enabled = process.env.RUN_DATABASE_INTEGRATION === "1";
 
+test("PostgreSQL reconciles concurrent voice receipts without losing terminal detail", { skip: !enabled, timeout: 20000 }, async () => {
+  const { PrismaClient } = require("@prisma/client");
+  const { persistCall, persistCaller, mergeCallData } = require("../server/callPersistence");
+  const prisma = new PrismaClient();
+  const suffix = crypto.randomUUID();
+  let business;
+  let caller;
+  try {
+    business = await prisma.business.create({ data: { name: `CI voice ${suffix}`, phone: `ci-business-${suffix}`, timezone: "America/Toronto" } });
+    const callers = await Promise.all([0, 1].map(() => persistCaller(prisma, { phone: `ci-caller-${suffix}`, name: "Synthetic caller" })));
+    caller = callers[0];
+    assert.equal(callers[0].id, callers[1].id);
+    const identity = { businessId: business.id, callerId: caller.id, externalProvider: "vapi", externalId: `ci-voice-${suffix}`, twilioCallSid: `CA${suffix.replaceAll("-", "")}` };
+    const terminal = { ...identity, startedAt: new Date(), endedAt: new Date(), status: "FAILED", durationSec: 0, endedReason: "assistant-request-returned-error", aiSummary: "Synthetic setup failure" };
+    const write = data => persistCall({ db: prisma, identity, createData: data, updateData: existing => mergeCallData(existing, data) });
+    const records = await Promise.all([write(terminal), write(terminal)]);
+    assert.equal(records[0].id, records[1].id);
+    assert.equal(await prisma.call.count({ where: { twilioCallSid: identity.twilioCallSid } }), 1);
+    const replay = await write({ ...identity, startedAt: terminal.startedAt, status: "STARTED", durationSec: null, endedReason: null, aiSummary: "" });
+    assert.equal(replay.status, "FAILED");
+    assert.equal(replay.endedReason, terminal.endedReason);
+    assert.equal(replay.aiSummary, terminal.aiSummary);
+    await assert.rejects(persistCall({ db: prisma, identity: { ...identity, callerId: caller.id + 1000000 }, createData: terminal, updateData: () => terminal }), { code: "CALL_RECORD_IDENTITY_CONFLICT" });
+  } finally {
+    if (business) await prisma.business.delete({ where: { id: business.id } });
+    if (caller) await prisma.caller.delete({ where: { id: caller.id } });
+    await prisma.$disconnect();
+  }
+});
+
+test("PostgreSQL voice reservation is replay-safe and refuses a busy advisory lock promptly", { skip: !enabled, timeout: 20000 }, async () => {
+  const { PrismaClient } = require("@prisma/client");
+  const { Client } = require("pg");
+  const { reserveCall } = require("../server/trialCallReservation");
+  const { createAssistantRequestGuard } = require("../server/voiceCallReliability");
+  const { decideTrialCall, getTrialLifecycle } = require("../server/trialUsagePolicy");
+  const prisma = new PrismaClient();
+  const blocker = new Client({ connectionString: process.env.DATABASE_URL });
+  const suffix = crypto.randomUUID();
+  const key = `ci-voice-reservation:${suffix}`;
+  const callId = `ci-voice-call:${suffix}`;
+  const callIndexKey = `ci-voice-index:${suffix}`;
+  const cleanupKeys = [key, callIndexKey, `voice-call-policy:${callId}`];
+  let connected = false;
+  try {
+    const params = { db: prisma, signup: { subscriptionStatus: "trialing", trialStartAt: Date.now() - 60000, trialEndAt: Date.now() + 86400000 },
+      config: { businessId: 37, assistantMaxSeconds: 300 }, key, callId, callIndexKey,
+      getUsedSeconds: async (_signup, _businessId, tx) => { await tx.$queryRaw`SELECT 1`; return 0; },
+      getLifecycle: getTrialLifecycle, decide: decideTrialCall,
+      limits: { maxCallSeconds: 300, warningSeconds: 1200, limitSeconds: 3600, completionReserveSeconds: 300, minCallSeconds: 30, reservationGraceSeconds: 60 } };
+    const reserve = overrides => reserveCall({ ...params, guard: createAssistantRequestGuard(), ...overrides });
+    assert.equal((await reserve()).action, "allow-saved");
+    assert.equal((await reserve()).duplicateReservation, true);
+    const row = await prisma.runtimeStore.findUnique({ where: { key } });
+    assert.equal(Object.keys(row.data.reservations).length, 1);
+    assert.equal(row.data.reservations[callId].allowanceSeconds, 300);
+    await blocker.connect();
+    connected = true;
+    await blocker.query("BEGIN");
+    await blocker.query("SELECT pg_advisory_xact_lock(hashtext($1))", [key]);
+    const started = Date.now();
+    await assert.rejects(reserve(), { code: "VOICE_TRIAL_RESERVATION_BUSY" });
+    assert.ok(Date.now() - started < 2500, "a busy quota lock must not consume the Vapi answering deadline");
+    await blocker.query("ROLLBACK");
+    assert.equal((await reserve({ signup: { ...params.signup, trialEndAt: Date.now() - 1000 } })).action, "block");
+    const policy = await prisma.runtimeStore.findUnique({ where: { key: `voice-call-policy:${callId}` } });
+    assert.equal(policy.data.decision, "block");
+    assert.equal(policy.data.callId, callId);
+  } finally {
+    if (connected) { await blocker.query("ROLLBACK").catch(() => {}); await blocker.end(); }
+    await prisma.runtimeStore.deleteMany({ where: { key: { in: cleanupKeys } } });
+    await prisma.$disconnect();
+  }
+});
+
 test("PostgreSQL enforces idempotency, uniqueness, and cascade behavior", { skip: !enabled }, async () => {
   const { PrismaClient } = require("@prisma/client");
   const prisma = new PrismaClient();
@@ -93,81 +168,41 @@ test("PostgreSQL enforces idempotency, uniqueness, and cascade behavior", { skip
   }
 });
 
-test("PostgreSQL reconciles owned call identities and rejects conflicting bindings", { skip: !enabled, timeout: 30_000 }, async () => {
+
+test("PostgreSQL forced call insertion race recovers once and canonical SID lookup preserves ownership", { skip: !enabled, timeout: 20000 }, async () => {
   const { PrismaClient } = require("@prisma/client");
-  const { persistCallRecord } = require("../server/callRecordIdentity");
+  const { persistCall, resolveCallRecord, mergeCallData } = require("../server/callPersistence");
   const prisma = new PrismaClient();
   const suffix = crypto.randomUUID();
-  const businessIds = [], callerIds = [];
-  const conflict = error => error?.code === "CALL_RECORD_IDENTITY_CONFLICT" && error.statusCode === 409;
-  const sid = label => `CA-ci-${label}-${suffix}`;
-  const external = label => `ci-${label}-${suffix}`;
+  let business, caller, arrivals = 0, uniqueFailures = 0, release;
+  const barrier = new Promise(resolve => { release = resolve; });
   try {
-    for (let index = 0; index < 2; index += 1) {
-      const business = await prisma.business.create({ data: {
-        name: `Call Identity CI ${index} ${suffix}`, phone: "+19995550101", timezone: "America/Toronto",
-      } });
-      businessIds.push(business.id);
-      const caller = await prisma.caller.create({ data: { phone: `ci-call-identity-${index}-${suffix}` } });
-      callerIds.push(caller.id);
-    }
-    const create = (changes = {}) => prisma.call.create({ data: {
-      businessId: businessIds[0], callerId: callerIds[0], startedAt: new Date(), status: "STARTED", ...changes,
-    } });
-    const input = (externalId, twilioCallSid, changes = {}) => ({
-      prisma, businessId: businessIds[0], externalProvider: "vapi", externalId, twilioCallSid,
-      createData: { callerId: callerIds[1], startedAt: new Date(), status: "COMPLETED", durationSec: 42 },
-      updateData: () => ({ status: "COMPLETED", durationSec: 42 }), ...changes,
-    });
-
-    const unbound = await create({ twilioCallSid: sid("unbound") });
-    const bound = await persistCallRecord(input(external("bound"), unbound.twilioCallSid));
-    assert.equal(bound.id, unbound.id);
-    assert.equal(bound.businessId, businessIds[0]);
-    assert.equal(bound.callerId, callerIds[0], "SID reconciliation must retain the existing caller");
-    assert.equal(bound.externalProvider, "vapi");
-    assert.equal(bound.externalId, external("bound"));
-    assert.equal(bound.durationSec, 42);
-
-    // Both requests finish their initial lookups before either INSERT reaches PostgreSQL.
-    let release, arrivals = 0, uniqueConflicts = 0;
-    const gate = new Promise(resolve => { release = resolve; });
-    const racePrisma = { call: {
-      findUnique: args => prisma.call.findUnique(args),
-      update: args => prisma.call.update(args),
-      create: async args => {
-        arrivals += 1;
-        if (arrivals === 2) release();
-        await gate;
-        try { return await prisma.call.create(args); }
-        catch (error) { if (error.code === "P2002") uniqueConflicts += 1; throw error; }
+    business = await prisma.business.create({ data: { name: `CI identity ${suffix}`, phone: `ci-${suffix}`, timezone: "America/Toronto" } });
+    caller = await prisma.caller.create({ data: { phone: `ci-identity-${suffix}` } });
+    const identity = { businessId: business.id, callerId: caller.id, externalProvider: "vapi", externalId: suffix, twilioCallSid: `CA${suffix}` };
+    const data = { ...identity, startedAt: new Date(), status: "COMPLETED", durationSec: 42 };
+    const db = { $transaction: (fn, options) => prisma.$transaction(tx => fn({
+      $queryRaw: tx.$queryRaw.bind(tx), call: {
+        findMany: tx.call.findMany.bind(tx.call), findUnique: tx.call.findUnique.bind(tx.call), update: tx.call.update.bind(tx.call),
+        create: async args => {
+          arrivals++; if (arrivals === 2) release();
+          await barrier;
+          try { return await tx.call.create(args); }
+          catch (error) { if (error.code === "P2002") uniqueFailures++; throw error; }
+        },
       },
-    } };
-    const raceInput = input(external("race"), sid("race"), { prisma: racePrisma });
-    const [first, second] = await Promise.all([persistCallRecord(raceInput), persistCallRecord(raceInput)]);
-    assert.equal(arrivals, 2);
-    assert.equal(uniqueConflicts, 1, "the real unique-constraint race must execute recovery");
-    assert.equal(first.id, second.id);
-    assert.equal(first.callerId, callerIds[1]);
-    assert.equal(await prisma.call.count({ where: { twilioCallSid: sid("race") } }), 1);
-    assert.equal(await prisma.call.count({ where: { externalProvider: "vapi", externalId: external("race") } }), 1);
-
-    const foreign = await create({ businessId: businessIds[1], callerId: callerIds[1],
-      externalProvider: "vapi", externalId: external("foreign"), twilioCallSid: sid("foreign") });
-    await assert.rejects(persistCallRecord(input(external("foreign-incoming"), foreign.twilioCallSid)), conflict);
-    assert.deepEqual(await prisma.call.findUnique({ where: { id: foreign.id } }), foreign);
-
-    const a = await create({ externalProvider: "vapi", externalId: external("ambiguous-a"), twilioCallSid: sid("ambiguous-a") });
-    const b = await create({ externalProvider: "vapi", externalId: external("ambiguous-b"), twilioCallSid: sid("ambiguous-b") });
-    await assert.rejects(persistCallRecord(input(a.externalId, b.twilioCallSid)), conflict);
-    assert.deepEqual(await prisma.call.findMany({ where: { id: { in: [a.id, b.id] } }, orderBy: { id: "asc" } }), [a, b]);
-
-    const before = await prisma.call.findUnique({ where: { id: bound.id } });
-    await assert.rejects(persistCallRecord(input(external("different-vapi-call"), bound.twilioCallSid)), conflict);
-    assert.deepEqual(await prisma.call.findUnique({ where: { id: bound.id } }), before);
+    }), options) };
+    const write = () => persistCall({ db, identity, createData: data, updateData: row => mergeCallData(row, data) });
+    const [a, b] = await Promise.all([write(), write()]);
+    assert.equal(a.id, b.id); assert.equal(uniqueFailures, 1);
+    assert.equal(await prisma.call.count({ where: { businessId: business.id } }), 1);
+    const found = await resolveCallRecord(prisma, { ...identity, callerId: undefined });
+    assert.equal(found.callerId, caller.id);
+    await assert.rejects(resolveCallRecord(prisma, { ...identity, businessId: business.id + 1000000 }), { code: "CALL_RECORD_IDENTITY_CONFLICT" });
   } finally {
-    if (businessIds.length) await prisma.business.deleteMany({ where: { id: { in: businessIds } } });
-    if (callerIds.length) await prisma.caller.deleteMany({ where: { id: { in: callerIds } } });
+    release();
+    if (business) await prisma.business.delete({ where: { id: business.id } });
+    if (caller) await prisma.caller.delete({ where: { id: caller.id } });
     await prisma.$disconnect();
   }
 });
