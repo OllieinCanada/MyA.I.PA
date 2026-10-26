@@ -127,12 +127,14 @@ async function request(path, options = {}) {
 }
 
 test('exact saved-call inspection requires monitor authentication and remains read-only', async () => {
-  const endpoint = '/api/internal/operations/call-record-verification?callId=12345678-1234-7000-8000-123456789abc&businessId=37';
+  const { makeReferences } = require('../server/callRecordVerification');
+  const refs = makeReferences('12345678-1234-7000-8000-123456789abc', 37);
+  const endpoint = '/api/internal/operations/call-record-verification?' + new URLSearchParams(refs);
   const original = prisma.$transaction; let transactions = 0;
   prisma.$transaction = async fn => {
     transactions++;
     return fn({ $executeRawUnsafe: async sql => assert.match(sql, /^SET (TRANSACTION READ ONLY|LOCAL statement_timeout)/),
-      call: { findMany: async () => [{ id: 4, businessId: 37, callerId: 8, status: 'COMPLETED', durationSec: 10,
+      call: { findMany: async () => [{ externalId: '12345678-1234-7000-8000-123456789abc', id: 4, businessId: 37, callerId: 8, status: 'COMPLETED', durationSec: 10,
         startedAt: new Date('2026-10-26T17:00:00Z'), endedAt: new Date('2026-10-26T17:00:10Z'),
         endedReason: 'customer-ended-call', twilioCallSid: 'CA' + '3'.repeat(32), transcript: 'PRIVATE_TRANSCRIPT' }],
       count: async () => 1 } });
@@ -147,7 +149,7 @@ test('exact saved-call inspection requires monitor authentication and remains re
     const response = await request(endpoint, { headers }); assert.equal(response.status, 200);
     const report = await response.json(); assert.equal(report.savedRecordVerified, true); assert.equal(report.liveProviderVerified, false);
     assert.doesNotMatch(JSON.stringify(report), /PRIVATE|CA3333|12345678/); assert.equal(transactions, 1);
-    for (const suffix of ['&apply=true', '&callId=12345678-1234-7000-8000-123456789abc']) {
+    for (const suffix of ['&apply=true', '&callRef=' + refs.callRef]) {
       assert.equal((await request(endpoint + suffix, { headers })).status, 400);
     }
     assert.equal((await request(endpoint, { headers, method: 'POST' })).status, 404);
