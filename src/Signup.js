@@ -3,6 +3,8 @@ import Vapi from "@vapi-ai/web";
 import CustomerHelpActions from "./components/CustomerHelpActions";
 import AddressAutocomplete from "./components/AddressAutocomplete";
 import ForwardingSetupGuide from "./components/ForwardingSetupGuide";
+import OnboardingWizard from "./features/onboarding/OnboardingWizard";
+import { canonicalPhone, readWizardLocation } from "./features/onboarding/onboardingApi";
 import "./components/CustomerSetupActions.css";
 
 import {
@@ -1628,8 +1630,9 @@ function storeSignupResult(result) {
   }
 }
 
-function mergeSignupStatus(current, status) {
-  const ready = status.state === "ready" && Boolean(status.assignedPhone);
+export function mergeSignupStatus(current, status) {
+  const currentAssigned = canonicalPhone(status.assignedPhone);
+  const ready = status.state === "ready" && Boolean(currentAssigned);
   return {
     ...current,
     businessName: status.businessName || current.businessName,
@@ -1637,11 +1640,15 @@ function mergeSignupStatus(current, status) {
     verificationRequired: status.state === "verification_required",
     smsVerificationRequired: status.state === "verification_required",
     setupNeedsAttention: status.state === "needs_attention",
-    twilioPhoneNumber: ready ? status.assignedPhone : "",
+    twilioPhoneNumber: ready ? currentAssigned : "",
+    ...(ready ? { stripeTrialSkipped: false, stripeTrialError: "" } : {}),
+    forwardingSetupUrl: ready ? status.forwardingSetupUrl || current.forwardingSetupUrl || "" : "",
+    forwarding: ready ? status.forwarding || current.forwarding || null : null,
+    forwardingStatus: ready ? status.forwardingStatus || current.forwardingStatus || "" : "",
     phoneProvisioning: {
       ...(current.phoneProvisioning || {}),
       status: ready ? "ready" : status.state === "needs_attention" ? "failed" : "pending",
-      e164: ready ? status.assignedPhone : "",
+      e164: ready ? currentAssigned : "",
     },
     signupStatus: { ...current.signupStatus, ...status },
   };
@@ -1791,19 +1798,19 @@ export function SignupSuccessPage({ result: initialResult, onStartAnother }) {
     };
   }, [numberMissing]);
 
-  useEffect(() => {
-    const setupUrl = String(result?.forwardingSetupUrl || "").trim();
-    if (!assignedNumber || reviewRequired || verificationRequired || !setupUrl) return undefined;
-    const timer = window.setTimeout(() => { window.location.href = setupUrl; }, 1400);
-    return () => window.clearTimeout(timer);
-  }, [assignedNumber, result?.forwardingSetupUrl, reviewRequired, verificationRequired]);
-
   const copyAssignedNumber = async () => {
     if (!assignedNumber || typeof navigator === "undefined" || !navigator.clipboard) return;
     await navigator.clipboard.writeText(assignedNumber);
     setCopiedNumber(true);
     window.setTimeout(() => setCopiedNumber(false), 1800);
   };
+
+  // Keep the signed-number page in front of the customer. Do not redirect them
+  // past the practice section or require a call before continuing.
+  if (assignedNumber && !reviewRequired && !verificationRequired && !signupClosed && !provisioningFailed && !stripeTrialRejected) {
+    const location = readWizardLocation();
+    return <OnboardingWizard assignedNumber={assignedNumber} setupUrl={result?.forwardingSetupUrl || ""} forwarding={result?.forwarding || null} initialStep={location.step} initialEdit={location.edit} />;
+  }
 
   const launchSteps = [
     { label: "Signup received", detail: "Business details saved for setup.", done: true },

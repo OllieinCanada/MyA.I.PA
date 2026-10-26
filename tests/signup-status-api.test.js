@@ -203,6 +203,7 @@ test('verified duplicate POST and old links reopen the existing setup without re
     prisma.runtimeStore.findUnique = async ({where}) => where.key === contextKey
       ? { key:contextKey, data:{ contextHash:canonicalPayload.provisioning.contextHash, payload:canonicalPayload, lockedAt:'now' } } : oldRuntime({where});
     const fixtureSetup = { id:'fixture-setup', businessId:25, assignedMyAiPaNumber:'+12895550199',
+      vapiPhoneNumberId:'fixture-phone', existingBusinessNumber:identity.businessPhone,
       signupKey:signupKeyFor({signupId:canonicalId,ownerEmail:identity.ownerEmail,existingBusinessNumber:identity.businessPhone}) };
     prisma.callForwardingSetup.findUnique = async ({where}) => where.id === fixtureSetup.id || where.signupKey === fixtureSetup.signupKey ? fixtureSetup : null;
     const pending = createPendingSignupVerificationStore({prisma});
@@ -221,18 +222,23 @@ test('verified duplicate POST and old links reopen the existing setup without re
     assert.equal(jobDb.rows.get('signup-setup-job:v1:'+sourceId).data.status,'pending');
     await processVerifiedSignupJobs({force:true});
     const html = await (await fetch(url)).text();
-    assert.equal(response.status,200,JSON.stringify(rows.get(sourceId))); assert.match(html,/Welcome back/); assert.match(html,/555-0199/);
+    assert.equal(response.status,200,JSON.stringify(rows.get(sourceId))); assert.match(html,/Your My AI PA number is ready/); assert.match(html,/555-0199/);
     assert.doesNotMatch(html,/signup-number-wait|AI forwarding number will appear here/);
-    assert.match(html,/Call the number/); assert.match(html,/Copy number/);
+    assert.match(html,/Call my receptionist/); assert.match(html,/Copy number/);
     assert.doesNotMatch(html,/Secure billing choice|Optional secure billing|No card was collected/);
     const { JSDOM } = require('jsdom');
     const document = new JSDOM(html).window.document;
-    const continueLink = document.querySelector('#continue-forwarding');
-    assert.equal(continueLink.textContent,'Tap Continue to get instant call forwarding');
-    const forwardingToken = decodeURIComponent(new URL(continueLink.href).hash.slice('#/f/'.length));
+    const continueLink = document.querySelector('a.onboarding-forward-cta');
+    assert.equal(continueLink.textContent,'Click here to forward your missed calls to your assistant after 4 rings');
+    const forwardingToken = decodeURIComponent(new URL(continueLink.href).hash.split('?')[0].slice('#/f/'.length));
     assert.equal(verifySetupToken(forwardingToken).sid,fixtureSetup.id);
     assert.equal(verifySetupToken(forwardingToken).sk,fixtureSetup.signupKey);
     assert.doesNotMatch(continueLink.href,/#\/dashboard/);
+    fixtureSetup.status = 'ACTIVE';
+    const activeHtml = await (await fetch(url)).text();
+    assert.doesNotMatch(activeHtml,/You are in test mode - nothing is connected/);
+    assert.match(activeHtml,/Changed can be made by pressing edit business details/);
+    delete fixtureSetup.status;
     const dashboard = JSON.parse(fs.readFileSync(file,'utf8'));
     delete dashboard[`attempt:${canonicalId}`].forwardingSetupId;
     fs.writeFileSync(file,JSON.stringify(dashboard));
@@ -242,10 +248,10 @@ test('verified duplicate POST and old links reopen the existing setup without re
       if(n===1) fixtureSetup.assignedMyAiPaNumber = '+12895550200';
       const page=await(await fetch(url)).text(); assert.match(page,/555-0199/);
       fixtureSetup.assignedMyAiPaNumber = '+12895550199';
-      if(n===0) assert.match(page,/id="continue-forwarding"/);
+      if(n===0) assert.match(page,/<a class="onboarding-primary onboarding-forward-cta" href=/);
       else {
-        assert.doesNotMatch(page,/id="continue-forwarding"|#\/dashboard|#\/f\//);
-        assert.match(page,/Call support for forwarding setup/);
+        assert.doesNotMatch(page,/<a class="onboarding-primary onboarding-forward-cta"|#\/dashboard|#\/f\//);
+        assert.match(page,/Your secure setup link is unavailable/);
       }
       const progress=await(await fetch(`${baseUrl}/api/signup/verification-progress?${query}`)).json();
       assert.equal(progress.signup.state,'ready'); assert.equal(progress.signup.assignedPhone,'+12895550199');

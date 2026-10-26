@@ -105,7 +105,8 @@ test("carrier service codes remain centralized outside frontend components", () 
     for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
       const absolute = path.join(current, entry.name);
       if (entry.isDirectory()) stack.push(absolute);
-      else if (/\.(js|jsx|ts|tsx)$/.test(entry.name)) files.push(absolute);
+      // Test fixtures may contain sample carrier codes; shipped components may not.
+      else if (/\.(js|jsx|ts|tsx)$/.test(entry.name) && !/\.(test|spec)\.(js|jsx|ts|tsx)$/.test(entry.name)) files.push(absolute);
     }
   }
   const frontend = files.map((file) => fs.readFileSync(file, "utf8")).join("\n");

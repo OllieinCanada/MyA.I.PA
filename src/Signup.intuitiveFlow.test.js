@@ -352,7 +352,7 @@ describe("intuitive signup presentation", () => {
     expect(container.textContent).toMatch(/Stripe did not confirm a trial/i);
   });
 
-  test("shows the free trial as active only after Stripe confirms a trialing subscription", () => {
+  test("a confirmed trial opens the approved number-and-practice wizard without obsolete billing noise", () => {
     act(() => root.render(
       <SignupSuccessPage
         result={{
@@ -369,8 +369,10 @@ describe("intuitive signup presentation", () => {
       />
     ));
 
-    expect(container.textContent).toMatch(/Free trial active/i);
-    expect(container.textContent).toMatch(/Your 14-day trial has started/i);
+    expect(container.textContent).toContain("Your My AI PA number is ready");
+    expect(container.textContent).toContain("Test your receptionist now");
+    expect(container.querySelector('a[href="tel:+12895550123"]')).not.toBeNull();
+    expect(container.textContent).not.toMatch(/Optional secure billing|Launch checklist/i);
     expect(container.textContent).not.toMatch(/Trial activation needs attention/i);
   });
 });
