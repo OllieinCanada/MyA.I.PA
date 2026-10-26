@@ -5,6 +5,33 @@ const { createPendingSignupVerificationStore } = require("../server/pendingSignu
 
 const enabled = process.env.RUN_DATABASE_INTEGRATION === "1";
 
+test("Saved-call inspection uses a real PostgreSQL read-only transaction and exact ownership", { skip: !enabled, timeout: 15000 }, async () => {
+  const { PrismaClient } = require("@prisma/client");
+  const { inspectCallRecord } = require("../server/callRecordVerification");
+  const prisma = new PrismaClient(); const callId = crypto.randomUUID(); let business, caller;
+  try {
+    business = await prisma.business.create({ data: { name: `CI inspection ${callId}`, phone: `ci-${callId}`, timezone: "America/Toronto" } });
+    caller = await prisma.caller.create({ data: { phone: `ci-inspection-${callId}` } });
+    await prisma.call.create({ data: { businessId: business.id, callerId: caller.id, externalProvider: "vapi", externalId: callId,
+      status: "COMPLETED", durationSec: 10, startedAt: new Date('2026-10-26T17:00:00Z'), endedAt: new Date('2026-10-26T17:00:10Z'),
+      endedReason: "customer-ended-call", twilioCallSid: 'CA' + callId.replaceAll('-', '') } });
+    const db = { $transaction: (fn, options) => prisma.$transaction(async tx => {
+      const result = await fn(tx);
+      const [state] = await tx.$queryRaw`SELECT current_setting('transaction_read_only') AS mode, current_setting('transaction_isolation') AS isolation`;
+      assert.equal(state.mode, 'on'); assert.equal(state.isolation, 'repeatable read'); return result;
+    }, options) };
+    const query = { callId, businessId: String(business.id) };
+    assert.equal((await inspectCallRecord({ prisma: db, query })).savedRecordVerified, true);
+    const mismatch = await inspectCallRecord({ prisma: db, query: { ...query, businessId: String(business.id + 1000000) } });
+    assert.equal(mismatch.checks.businessOwnership, "mismatch"); assert.equal(mismatch.record, null);
+    assert.equal(await prisma.call.count({ where: { businessId: business.id } }), 1);
+  } finally {
+    if (business) await prisma.business.delete({ where: { id: business.id } });
+    if (caller) await prisma.caller.delete({ where: { id: caller.id } });
+    await prisma.$disconnect();
+  }
+});
+
 test("PostgreSQL reconciles concurrent voice receipts without losing terminal detail", { skip: !enabled, timeout: 20000 }, async () => {
   const { PrismaClient } = require("@prisma/client");
   const { persistCall, persistCaller, mergeCallData } = require("../server/callPersistence");
@@ -164,34 +191,6 @@ test("PostgreSQL enforces idempotency, uniqueness, and cascade behavior", { skip
     await prisma.webhookReplayClaim.deleteMany({ where: { key: `ci-replay-${suffix}` } }).catch(() => {});
     if (businessId) await prisma.business.delete({ where: { id: businessId } }).catch(() => {});
     if (callerId) await prisma.caller.delete({ where: { id: callerId } }).catch(() => {});
-    await prisma.$disconnect();
-  }
-});
-
-
-test("Saved-call inspection uses a real PostgreSQL read-only transaction and exact ownership", { skip: !enabled, timeout: 15000 }, async () => {
-  const { PrismaClient } = require("@prisma/client");
-  const { inspectCallRecord } = require("../server/callRecordVerification");
-  const prisma = new PrismaClient(); const callId = crypto.randomUUID(); let business, caller;
-  try {
-    business = await prisma.business.create({ data: { name: `CI inspection ${callId}`, phone: `ci-${callId}`, timezone: "America/Toronto" } });
-    caller = await prisma.caller.create({ data: { phone: `ci-inspection-${callId}` } });
-    await prisma.call.create({ data: { businessId: business.id, callerId: caller.id, externalProvider: "vapi", externalId: callId,
-      status: "COMPLETED", durationSec: 10, startedAt: new Date('2026-10-26T17:00:00Z'), endedAt: new Date('2026-10-26T17:00:10Z'),
-      endedReason: "customer-ended-call", twilioCallSid: 'CA' + callId.replaceAll('-', '') } });
-    const db = { $transaction: (fn, options) => prisma.$transaction(async tx => {
-      const result = await fn(tx);
-      const [state] = await tx.$queryRaw`SELECT current_setting('transaction_read_only') AS mode, current_setting('transaction_isolation') AS isolation`;
-      assert.equal(state.mode, 'on'); assert.equal(state.isolation, 'repeatable read'); return result;
-    }, options) };
-    const query = { callId, businessId: String(business.id) };
-    assert.equal((await inspectCallRecord({ prisma: db, query })).savedRecordVerified, true);
-    const mismatch = await inspectCallRecord({ prisma: db, query: { ...query, businessId: String(business.id + 1000000) } });
-    assert.equal(mismatch.checks.businessOwnership, "mismatch"); assert.equal(mismatch.record, null);
-    assert.equal(await prisma.call.count({ where: { businessId: business.id } }), 1);
-  } finally {
-    if (business) await prisma.business.delete({ where: { id: business.id } });
-    if (caller) await prisma.caller.delete({ where: { id: caller.id } });
     await prisma.$disconnect();
   }
 });
