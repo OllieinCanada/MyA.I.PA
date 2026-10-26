@@ -18,6 +18,7 @@ const rows = new Map(), clone = value => JSON.parse(JSON.stringify(value));
 prisma.$transaction = async callback => callback(prisma);
 prisma.$queryRaw = async () => [];
 prisma.runtimeStore.findUnique = async ({ where }) => rows.has(where.key) ? { key: where.key, data: clone(rows.get(where.key)) } : null;
+prisma.runtimeStore.findMany = async ({ where }) => (where?.key?.in || []).filter(key => rows.has(key)).map(key => ({ key, data: clone(rows.get(key)) }));
 prisma.runtimeStore.findFirst = async ({ where }) => {
   const key = (where?.key?.in || []).find(item => rows.has(item));
   return key ? { key, data: clone(rows.get(key)) } : null;

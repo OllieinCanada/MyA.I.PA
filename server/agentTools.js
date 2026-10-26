@@ -1,6 +1,7 @@
 const { prisma } = require("./prisma");
 const { sendSmsViaTwilio } = require("./twilioSms");
 const { createAppointmentRequest } = require("./appointmentRequests");
+const { mergeCallData, persistCall, persistCaller } = require("./callPersistence");
 
 const STORE_CALL_TRANSCRIPTS = /^(1|true|yes|on)$/i.test(String(process.env.STORE_CALL_TRANSCRIPTS || ""));
 const STORE_CALL_RECORDING_URLS = /^(1|true|yes|on)$/i.test(String(process.env.STORE_CALL_RECORDING_URLS || ""));
@@ -84,14 +85,7 @@ async function ensureBusiness(businessId) {
 
 async function upsertCaller({ phone, name }) {
   const normalizedPhone = assertString(phone, "caller phone");
-  return prisma.caller.upsert({
-    where: { phone: normalizedPhone },
-    update: name ? { name: optionalString(name, 120) } : {},
-    create: {
-      phone: normalizedPhone,
-      name: optionalString(name, 120),
-    },
-  });
+  return persistCaller(prisma, { phone: normalizedPhone, name: optionalString(name, 120) });
 }
 
 function callArtifactData(payload, existing = {}) {
@@ -119,10 +113,9 @@ function callArtifactData(payload, existing = {}) {
 
 async function logCall(payload) {
   const business = await ensureBusiness(payload.businessId);
-  const caller = await upsertCaller({
-    phone: payload.callerPhone || payload.phone,
-    name: payload.callerName || payload.name,
-  });
+  let caller;
+  try { caller = await upsertCaller({ phone: payload.callerPhone || payload.phone, name: payload.callerName || payload.name }); }
+  catch (error) { error.businessId = business.id; error.businessName = business.name; throw error; }
 
   const status = toEnum(payload.status, ["STARTED", "COMPLETED", "MISSED", "ABANDONED", "FAILED"], "STARTED", "status");
   const outcome = toEnum(payload.outcome, ["UNREVIEWED", "BOOKED", "QUOTE_NEEDED", "EMERGENCY", "SPAM", "FOLLOW_UP", "NOT_A_LEAD"], "UNREVIEWED", "outcome");
@@ -138,78 +131,7 @@ async function logCall(payload) {
     throw err;
   }
 
-  if (payload.callId) {
-    const id = Number(payload.callId);
-    const existing = await prisma.call.findUnique({ where: { id } });
-    if (existing) {
-      const updated = await prisma.call.update({
-        where: { id },
-        data: {
-          status,
-          startedAt,
-          endedAt,
-          durationSec: payload.durationSec == null ? existing.durationSec : Number(payload.durationSec),
-          transcript: payload.transcript == null ? existing.transcript : sanitizeTranscript(payload.transcript),
-          recordingUrl: payload.recordingUrl == null ? existing.recordingUrl : sanitizeRecordingUrl(payload.recordingUrl),
-          externalProvider: externalProvider == null ? existing.externalProvider : externalProvider,
-          externalId: externalId == null ? existing.externalId : externalId,
-          outcome,
-          qualityScore,
-          aiSummary: payload.aiSummary == null ? existing.aiSummary : optionalString(payload.aiSummary, 2000),
-          followUpNeeded: Boolean(payload.followUpNeeded ?? existing.followUpNeeded),
-          twilioCallSid: payload.twilioCallSid == null ? existing.twilioCallSid : optionalString(payload.twilioCallSid, 120),
-          twilioPrice: payload.twilioPrice == null ? existing.twilioPrice : Number(payload.twilioPrice),
-          twilioPriceUnit: payload.twilioPriceUnit == null ? existing.twilioPriceUnit : optionalString(payload.twilioPriceUnit, 16),
-          vapiCost: payload.vapiCost == null ? existing.vapiCost : Number(payload.vapiCost),
-          vapiCostBreakdown: payload.vapiCostBreakdown == null ? existing.vapiCostBreakdown : payload.vapiCostBreakdown,
-          totalInternalCost: payload.totalInternalCost == null ? existing.totalInternalCost : Number(payload.totalInternalCost),
-          costSyncedAt: payload.costSyncedAt == null ? existing.costSyncedAt : new Date(payload.costSyncedAt),
-          ...callArtifactData(payload, existing),
-          callerId: caller.id,
-          businessId: business.id,
-        },
-        include: { caller: true, business: true },
-      });
-      return updated;
-    }
-  }
-
-  if (externalProvider && externalId) {
-    const existingExternal = await prisma.call.findUnique({
-      where: { externalProvider_externalId: { externalProvider, externalId } },
-    });
-    if (existingExternal) {
-      return prisma.call.update({
-        where: { id: existingExternal.id },
-        data: {
-          businessId: business.id,
-          callerId: caller.id,
-          startedAt,
-          endedAt,
-          durationSec: payload.durationSec == null ? existingExternal.durationSec : Number(payload.durationSec),
-          status,
-          transcript: payload.transcript == null ? existingExternal.transcript : sanitizeTranscript(payload.transcript),
-          recordingUrl: payload.recordingUrl == null ? existingExternal.recordingUrl : sanitizeRecordingUrl(payload.recordingUrl),
-          outcome,
-          qualityScore,
-          aiSummary: payload.aiSummary == null ? existingExternal.aiSummary : optionalString(payload.aiSummary, 2000),
-          followUpNeeded: Boolean(payload.followUpNeeded ?? existingExternal.followUpNeeded),
-          twilioCallSid: payload.twilioCallSid == null ? existingExternal.twilioCallSid : optionalString(payload.twilioCallSid, 120),
-          twilioPrice: payload.twilioPrice == null ? existingExternal.twilioPrice : Number(payload.twilioPrice),
-          twilioPriceUnit: payload.twilioPriceUnit == null ? existingExternal.twilioPriceUnit : optionalString(payload.twilioPriceUnit, 16),
-          vapiCost: payload.vapiCost == null ? existingExternal.vapiCost : Number(payload.vapiCost),
-          vapiCostBreakdown: payload.vapiCostBreakdown == null ? existingExternal.vapiCostBreakdown : payload.vapiCostBreakdown,
-          totalInternalCost: payload.totalInternalCost == null ? existingExternal.totalInternalCost : Number(payload.totalInternalCost),
-          costSyncedAt: payload.costSyncedAt == null ? existingExternal.costSyncedAt : new Date(payload.costSyncedAt),
-          ...callArtifactData(payload, existingExternal),
-        },
-        include: { caller: true, business: true },
-      });
-    }
-  }
-
-  const created = await prisma.call.create({
-    data: {
+  const data = {
       businessId: business.id,
       callerId: caller.id,
       startedAt,
@@ -232,11 +154,25 @@ async function logCall(payload) {
       totalInternalCost: payload.totalInternalCost == null ? null : Number(payload.totalInternalCost),
       costSyncedAt: payload.costSyncedAt ? new Date(payload.costSyncedAt) : null,
       ...callArtifactData(payload),
-    },
-    include: { caller: true, business: true },
-  });
-
-  return created;
+  };
+  try {
+    return await persistCall({ db: prisma,
+      identity: { callId: payload.callId, businessId: business.id, callerId: caller.id,
+        externalProvider, externalId, twilioCallSid: data.twilioCallSid },
+      createData: data,
+      updateData: (existing) => mergeCallData(existing, {
+        ...data,
+        startedAt: payload.startedAt ? startedAt : existing.startedAt,
+        followUpNeeded: payload.followUpNeeded == null ? existing.followUpNeeded : data.followUpNeeded,
+        qualityScore: payload.qualityScore != null || payload.transcript || payload.aiSummary ? qualityScore : existing.qualityScore,
+        ...callArtifactData(payload, existing),
+      }),
+    });
+  } catch (error) {
+    error.businessId = business.id;
+    error.businessName = business.name;
+    throw error;
+  }
 }
 
 async function createLead(payload) {

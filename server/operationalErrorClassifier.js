@@ -212,6 +212,39 @@ function classifyOperationalError(error = {}, context = {}) {
   const label = providerName(provider);
   const exactTwilio = provider === "TWILIO" ? TWILIO_CODE_GUIDANCE[code] : null;
 
+  if (/^VOICE_(?:ASSISTANT_REQUEST_DEADLINE|TRIAL_RESERVATION_BUSY|ASSISTANT_SELECTION_FAILED|ROUTE_IDENTITY_UNPROVEN)$/.test(code)) {
+    const timedOut = code === 'VOICE_ASSISTANT_REQUEST_DEADLINE';
+    return result(details, 'voice_call_setup', {
+      reasonCode: code,
+      reason: timedOut
+        ? 'The assistant-selection request exceeded the application call-setup time budget. This is not a duplicate signup or proof of insufficient credits.'
+        : code === 'VOICE_TRIAL_RESERVATION_BUSY'
+          ? 'The call could not reserve trial allowance promptly because its database reservation was busy. No late authorization was issued.'
+          : code === 'VOICE_ROUTE_IDENTITY_UNPROVEN'
+            ? 'The incoming phone route could not be matched to exactly one active business and assistant. The call was not authorized for an unproven identity.'
+            : 'Vapi reported that assistant selection failed before an AI conversation began. The original webhook response and timing are needed to establish the precise cause.',
+      retryable: false,
+      whatFailed: 'The AI receptionist could not answer this call',
+      impact: 'This caller did not reach the AI receptionist. Website health and a completed carrier leg do not prove successful answering.',
+      nextAction: 'Open this call’s Vapi webhook response and Render stage timings. Repair the failed stage, then test once. Do not recreate the signup or buy another number.',
+      signInDestination: 'Vapi → Logs → Webhooks → exact call; Render → API logs',
+    });
+  }
+
+  if (code === 'CALL_RECORD_IDENTITY_CONFLICT'
+    || (code === 'P2002' && (['Call', 'Caller'].includes(error?.meta?.modelName)
+      || /twilioCallSid|externalProvider|externalId/.test(String(error?.meta?.target || ''))))) {
+    return result(details, 'call_record_conflict', {
+      reasonCode: code === 'CALL_RECORD_IDENTITY_CONFLICT' ? code : 'CALL_RECORD_DUPLICATE_WRITE_FAILED',
+      reason: 'Call/caller persistence could not reconcile the saved identifiers safely. This is a call-record problem, not evidence of duplicate customer signup or the cause of an earlier answering failure.',
+      retryable: false,
+      whatFailed: 'A call record could not be saved safely',
+      impact: 'Call history or usage reconciliation may be incomplete. Answering must be checked separately using the provider call result.',
+      nextAction: 'Match the Vapi ID, Twilio SID, business and caller, then reconcile database-only ingestion. Do not archive a signup, replace its assistant or resend texts.',
+      signInDestination: 'My AI PA Admin → exact call; Render → PostgreSQL and API logs',
+    });
+  }
+
   if (["AGENT_TEST_SETUP_INCOMPLETE", "AGENT_TEST_SIGNUP_ATTEMPT_MISSING"].includes(code)) {
     return result(details, "signup_identity_defect", {
       reasonCode: code,

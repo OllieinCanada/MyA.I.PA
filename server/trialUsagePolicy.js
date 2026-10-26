@@ -185,12 +185,14 @@ function normalizeE164(value) {
 function buildTrialFallbackDestination({
   fallbackPhone,
   aiPhone,
+  blockedNumbers = [],
   connectingMessage = "Please hold while we connect you to the business.",
   unavailableMessage = "The team is unavailable right now. Please try again shortly.",
 } = {}) {
   const number = normalizeE164(fallbackPhone);
   const aiNumber = normalizeE164(aiPhone);
-  if (!number || (aiNumber && number === aiNumber)) return null;
+  const blocked = new Set([aiNumber, ...blockedNumbers.map(normalizeE164)].filter(Boolean));
+  if (!number || blocked.has(number)) return null;
   return {
     destination: {
       type: "number",
