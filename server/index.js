@@ -62,6 +62,7 @@ const { normalizeE164, sendSmsViaTwilio, fetchSmsStatusViaTwilio, fetchSmsReceip
 const {verifyDeliveredCompletionReceipt,findStoredCompletionReceipt,reconcileSignupCompletionReceipt,reconciledCompletionDelivery,dispatchCompletionEmail,completionRecordFields,completionDeliveryUpdate}=require('./signupCompletionReconciliation');
 const { enqueueTwilioStatus, drainTwilioStatuses } = require('./twilioStatusInbox');
 const { readTwilioReceiptHealth, withTwilioReceiptAttention } = require('./twilioReceiptHealth');
+const { receiptInspectionHandler } = require('./twilioReceiptInspection');
 const { selectTrialSignup } = require("./trialSignupSelection");
 const { fetchProviderReadText } = require("./providerRead");
 const { dispatchSignupSms } = require("./signupSmsDispatch");
@@ -17407,6 +17408,8 @@ app.delete(
     res.json({ ok: true });
   })
 );
+
+app.get('/api/admin/twilio/receipt-state', requireAdmin, receiptInspectionHandler({ prisma }));
 
 app.get(
   "/api/admin/signups",

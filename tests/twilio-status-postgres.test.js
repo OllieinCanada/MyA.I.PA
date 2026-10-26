@@ -14,6 +14,7 @@ test('isolated PostgreSQL receipt recovery survives contention, duplicate callba
   const { PrismaClient } = require('@prisma/client');
   const { enqueueTwilioStatus, drainTwilioStatuses, receiptKey, WORKER_KEY } = require('../server/twilioStatusInbox');
   const { readTwilioReceiptHealth } = require('../server/twilioReceiptHealth');
+  const { inspectReceiptState } = require('../server/twilioReceiptInspection');
   const createClient = () => new PrismaClient({ datasources: { db: { url: url.toString() } },
     __internal: { configOverride: config => ({ ...config, relativeEnvPaths: {} }) } });
   const prisma = createClient(), competitor = createClient();
@@ -49,6 +50,23 @@ test('isolated PostgreSQL receipt recovery survives contention, duplicate callba
     let health = await readTwilioReceiptHealth({ prisma });
     assert.equal(health.status, 'healthy', JSON.stringify(health));
     assert.equal(health.counts.completed, 1);
+    // PostgreSQL itself forbids writes during both inspection modes. The
+    // synthetic fixture remains byte-for-byte unchanged after inspection.
+    const beforeInspection = await prisma.runtimeStore.findUnique({ where: { key } });
+    await prisma.$transaction(async tx => {
+      await tx.$executeRaw`SET TRANSACTION READ ONLY`;
+      const exact = await inspectReceiptState({ prisma: tx, query: { jobRef: key.split(':')[1] } });
+      assert.equal(exact.jobs[0].jobState, 'completed');
+      assert.equal(exact.originalOperationOutcome, 'unknown');
+      assert.equal(exact.providerDeliveryVerified, false);
+      assert.doesNotMatch(JSON.stringify(exact), /MessageSid|token/);
+      const window = await inspectReceiptState({ prisma: tx, query: {
+        from: new Date(Date.now() - 60_000).toISOString(), to: new Date(Date.now() + 60_000).toISOString(),
+      } });
+      assert.equal(window.jobs.length, 1);
+      assert.equal(window.jobs[0].jobRef, key.split(':')[1]);
+    });
+    assert.deepEqual(await prisma.runtimeStore.findUnique({ where: { key } }), beforeInspection);
     // Simulate the exact durable state left by a process dying after claiming work.
     const stored = await prisma.runtimeStore.findUnique({ where: { key } });
     await prisma.runtimeStore.update({ where: { key }, data: { data: {
@@ -69,7 +87,7 @@ test('isolated PostgreSQL receipt recovery survives contention, duplicate callba
     assert.equal(health.counts.failed, 1);
     const report = { passed: true, realDatabase: true, productionTouched: false, externalProviderCalls: 0,
       lockTimeoutRecovered: true, duplicateCallbacks: 8, concurrentWorkersProtected: true,
-      expiredLeaseRecovered: true, failedJobVisible: true, healthQueryValidated: true };
+      expiredLeaseRecovered: true, failedJobVisible: true, healthQueryValidated: true, readOnlyInspectionVerified: true };
     const reportPath = path.resolve(__dirname, '../diagnostics/shipping-readiness/twilio-receipt-recovery.json');
     fs.mkdirSync(path.dirname(reportPath), { recursive: true });
     fs.writeFileSync(reportPath, JSON.stringify(report, null, 2) + '\n');
