@@ -3361,11 +3361,11 @@ async function upsertVapiCall(fullCall, store) {
   }
 
   const existingStore = store[vapiCallId] || {};
-  const existingCall = await prisma.call.findUnique({
-    where: { externalProvider_externalId: { externalProvider: "vapi", externalId: vapiCallId } },
-    include: { caller: true },
-  });
   const businessId = await resolveBusinessIdForVapiCall(fullCall);
+  const { resolveCallRecord } = require("./callRecordIdentity");
+  const existingCall = await resolveCallRecord({ prisma, businessId,
+    localCallId: existingStore.localCallId, externalProvider: "vapi", externalId: vapiCallId,
+    twilioCallSid: getVapiTwilioCallSid(fullCall) || null });
   const callerPhone =
     getVapiNestedString(fullCall, ["customer.number", "customer.phoneNumber", "caller.number", "from", "fromNumber"]) ||
     existingCall?.caller?.phone ||
@@ -3394,7 +3394,7 @@ async function upsertVapiCall(fullCall, store) {
   const artifactBasis = endedAt || startedAt || Date.now();
   const nextDurationSec = getVapiDurationSeconds(fullCall);
   const nextStatus = mapVapiStatus(fullCall.status || fullCall.endedReason || "ended");
-  const usageChanged = !existingCall
+  const usageChanged = !existingCall || existingCall.externalProvider !== "vapi"
     || Number(existingCall.durationSec || 0) !== Number(nextDurationSec || 0)
     || String(existingCall.status || "") !== String(nextStatus || "");
   const localCall = await logCall({
@@ -3427,7 +3427,8 @@ async function upsertVapiCall(fullCall, store) {
     twilioCallSid,
     vapiCost,
     vapiCostBreakdown: getVapiCostBreakdown(fullCall),
-    totalInternalCost: vapiCost,
+    totalInternalCost: vapiCost == null ? existingCall?.totalInternalCost ?? null
+      : Number(existingCall?.twilioPrice || 0) + Number(vapiCost),
     costSyncedAt: vapiCost != null || twilioCallSid ? new Date().toISOString() : null,
     followUpNeeded: /follow|quote|estimate|book|schedule|urgent|emergency/i.test(
       [summary, transcript, fullCall.endedReason].filter(Boolean).join(" ")
