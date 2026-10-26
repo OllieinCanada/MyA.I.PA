@@ -126,6 +126,37 @@ async function request(path, options = {}) {
   });
 }
 
+test('exact saved-call inspection requires monitor authentication and remains read-only', async () => {
+  const { makeReferences } = require('../server/callRecordVerification');
+  const refs = makeReferences('12345678-1234-7000-8000-123456789abc', 37);
+  const endpoint = '/api/internal/operations/call-record-verification?' + new URLSearchParams(refs);
+  const original = prisma.$transaction; let transactions = 0;
+  prisma.$transaction = async fn => {
+    transactions++;
+    return fn({ $executeRawUnsafe: async sql => assert.match(sql, /^SET (TRANSACTION READ ONLY|LOCAL statement_timeout)/),
+      call: { findMany: async () => [{ externalId: '12345678-1234-7000-8000-123456789abc', id: 4, businessId: 37, callerId: 8, status: 'COMPLETED', durationSec: 10,
+        startedAt: new Date('2026-10-26T17:00:00Z'), endedAt: new Date('2026-10-26T17:00:10Z'),
+        endedReason: 'customer-ended-call', twilioCallSid: 'CA' + '3'.repeat(32), transcript: 'PRIVATE_TRANSCRIPT' }],
+      count: async () => 1 } });
+  };
+  try {
+    for (const headers of [{}, { Authorization: 'Bearer wrong-key' }, { 'x-admin-password': process.env.ADMIN_PASSWORD }]) {
+      const response = await request(endpoint, { headers }); assert.equal(response.status, 401);
+      assert.equal(response.headers.get('cache-control'), 'no-store');
+    }
+    assert.equal(transactions, 0);
+    const headers = { Authorization: 'Bearer ' + process.env.MONITOR_API_KEY };
+    const response = await request(endpoint, { headers }); assert.equal(response.status, 200);
+    const report = await response.json(); assert.equal(report.savedRecordVerified, true); assert.equal(report.liveProviderVerified, false);
+    assert.doesNotMatch(JSON.stringify(report), /PRIVATE|CA3333|12345678/); assert.equal(transactions, 1);
+    for (const suffix of ['&apply=true', '&callRef=' + refs.callRef]) {
+      assert.equal((await request(endpoint + suffix, { headers })).status, 400);
+    }
+    assert.equal((await request(endpoint, { headers, method: 'POST' })).status, 404);
+    assert.equal(transactions, 1);
+  } finally { prisma.$transaction = original; }
+});
+
 test('saved receipt inspection requires admin authentication and never accepts the monitor key', async () => {
   const ref = 'b'.repeat(64), endpoint = '/api/admin/twilio/receipt-state?jobRef=' + ref;
   const original = prisma.runtimeStore.findUnique;

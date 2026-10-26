@@ -1,0 +1,32 @@
+name: Verify one saved call record
+on:
+  workflow_dispatch:
+    inputs:
+      call_ref:
+        description: Opaque SHA-256 call reference prepared in the private task
+        required: true
+        type: string
+      business_ref:
+        description: Opaque call-bound business reference prepared in the private task
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  inspect:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Verify read-only query and privacy safeguards
+        run: node --test tests/call-record-verification.test.js tests/call-record-verification-runner.test.js
+      - name: Inspect one exact saved call
+        env:
+          CALL_REF: ${{ inputs.call_ref }}
+          BUSINESS_REF: ${{ inputs.business_ref }}
+          MONITOR_API_KEY: ${{ secrets.MONITOR_API_KEY }}
+        run: node scripts/verify-saved-call-record.js
