@@ -1,0 +1,32 @@
+name: Verify one saved call record
+on:
+  workflow_dispatch:
+    inputs:
+      call_id:
+        description: Exact Vapi call UUID from the private call evidence
+        required: true
+        type: string
+      business_id:
+        description: Expected business ID from trusted routing evidence
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  inspect:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Verify read-only query and privacy safeguards
+        run: node --test tests/call-record-verification.test.js tests/call-record-verification-runner.test.js
+      - name: Inspect one exact saved call
+        env:
+          CALL_ID: ${{ inputs.call_id }}
+          BUSINESS_ID: ${{ inputs.business_id }}
+          MONITOR_API_KEY: ${{ secrets.MONITOR_API_KEY }}
+        run: node scripts/verify-saved-call-record.js

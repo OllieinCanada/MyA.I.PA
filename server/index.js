@@ -12156,6 +12156,15 @@ app.get("/api/health/ready", async (_req, res) => {
 });
 
 app.get(
+  "/api/internal/operations/call-record-verification",
+  (_req, res, next) => { res.setHeader("Cache-Control", "no-store"); next(); },
+  requireMonitorKey,
+  enforcePublicRouteRateLimit("call-record-verification", 20),
+  require("./callRecordVerification").verificationHandler({ prisma,
+    getRelease: () => process.env.RENDER_GIT_COMMIT || process.env.GITHUB_SHA || "unknown" }),
+);
+
+app.get(
   "/api/internal/operations/health",
   requireMonitorKey,
   asyncRoute(async (_req, res) => {
