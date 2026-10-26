@@ -32,6 +32,8 @@ const { createPendingSignupVerificationStore, tokenHash: hashPendingSignupToken 
 const { createSignupAttemptStore, deriveSignupStatusAccess } = require("./signupAttemptStore");
 const { assertSignupOpen, isClosedSignup, signupBusinessKey } = require("./signupBusinessIdentity");
 const { assertTrialGateOwnership } = require("./trialGateOwnership");
+const { identityFor: businessEditorIdentity, ownedReadyForwardingSetupUrl, publishedBusinessRevision, readBusinessDetails, readinessSignupForRevision, updateBusinessDetails } = require('./customerBusinessDetails');
+const { renderOnboardingReadyPage } = require('./onboardingReadyPage');
 const { verificationPageClientScript } = require("./signupVerificationPageClient");
 const { verificationProgressScript, verificationProgressMarkup, verificationNumberMarkup } = require("./signupVerificationProgress");
 const { ensureSignupBusinessBindings, closeSignupBusinessIdentity, upsertOwnedProviderMapping } = require("./signupBusinessRegistry");
@@ -2827,7 +2829,7 @@ async function fetchVapiCollection(resourcePath, collectionKeys = [], { requireC
   return [];
 }
 
-async function requestVapiResource(resourcePath, { method = "GET", body } = {}) {
+async function requestVapiResource(resourcePath, { method = "GET", body, signal, readRetries = true } = {}) {
   if (!VAPI_API_KEY) {
     const err = new Error("VAPI_API_KEY is not configured.");
     err.statusCode = 503;
@@ -2842,8 +2844,9 @@ async function requestVapiResource(resourcePath, { method = "GET", body } = {}) 
       ...(body ? { "Content-Type": "application/json" } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
+    ...(signal ? { signal } : {}),
   };
-  const { response, text: rawText } = String(method).toUpperCase() === "GET"
+  const { response, text: rawText } = String(method).toUpperCase() === "GET" && readRetries
     ? await fetchProviderReadText(url, options)
     : await (async () => {
       const response = await fetch(url, options);
@@ -8266,12 +8269,17 @@ async function testSignupAgentBeforeDelivery({ signup, vapiPhone, smsRouting = n
     } catch (_error) {
       durableReceipt = null;
     }
-    const content = assessSignupAssistantContentWithReceipt({
+    let content = assessSignupAssistantContentWithReceipt({
       expectedConfig,
       liveAssistant,
       durableReceipt,
       assistantId,
     });
+    const publishedDetails = await publishedBusinessRevision({ prisma, signup: storedSignup });
+    if (publishedDetails) {
+      content = { ...content, passed: !publishedDetails.pending && publishedDetails.contentFingerprint === fingerprintAssistantContent(liveAssistant),
+        liveFingerprint: fingerprintAssistantContent(liveAssistant), verificationSource: 'verified_business_details_revision' };
+    }
     if (!content.passed) {
       const error = new Error("The live assistant script does not match the customer's saved signup answers.");
       error.statusCode = 409;
@@ -9345,11 +9353,13 @@ async function getCustomerDashboard({ email, phone }) {
   const ownerTextSuppression = ownerTextPhone ? await getSmsSuppression(ownerTextPhone) : null;
   const ownerTextsPaused = Boolean(ownerTextSuppression?.suppressed);
   const billingChecklist = getBillingReadinessForSignup(signup);
+  const publishedDetails = await publishedBusinessRevision({ prisma, signup });
+  const currentContentSignup = readinessSignupForRevision(signup, publishedDetails);
   const setupChecklist = [
     ...billingChecklist,
     { key: "owner-phone", label: "Owner phone added", done: Boolean(business?.settings?.ownerPhone || signup.ownerPhone) },
     { key: "ai-number", label: "AI number mapped", done: Boolean(signup.twilioPhoneNumber || business?.vapiMappings?.length) },
-    { key: "agent-test", label: "Owner and customer sample texts passed", done: buildAgentReadiness({ signup, business }).passed },
+    { key: "agent-test", label: publishedDetails ? "Current receptionist revision checked" : "Owner and customer sample texts passed", done: buildAgentReadiness({ signup: currentContentSignup, business }).passed },
     { key: "faq", label: "Starter FAQs added", done: Boolean(business?.faqs?.length) },
   ];
   const trialUsage = await getTrialUsageSnapshot(signup, business?.id || null);
@@ -9374,7 +9384,7 @@ async function getCustomerDashboard({ email, phone }) {
   return {
     businessId: business?.id || null,
     signup: {
-      businessName: signup.businessName || business?.name || "Your business",
+      businessName: publishedDetails?.details?.businessName || signup.businessName || business?.name || "Your business",
       ownerName: signup.ownerName || "",
       ownerEmail: signup.dashboardLoginEmail || signup.ownerEmail || "",
       ownerPhone: signup.ownerPhone || business?.settings?.ownerPhone || "",
@@ -9434,7 +9444,9 @@ async function getCustomerDashboard({ email, phone }) {
     },
     forwarding: forwardingSetup ? sanitizeForwardingSetup(forwardingSetup) : null,
     forwardingInstructions: forwardingSetup ? [] : buildForwardingInstructions(signup.twilioPhoneNumber),
-    agentTesting: buildAgentReadiness({ signup, business }),
+    agentTesting: { ...buildAgentReadiness({ signup: currentContentSignup, business }),
+      historicalRoutingTestPassed: Boolean(publishedDetails && signup.agentTestStatus === 'passed'),
+      currentContentRevision: publishedDetails?.revision || 0 },
     trialUsage,
     stats: {
       totalCalls: calls.length,
@@ -14707,6 +14719,12 @@ async function readVerificationProgress(pending, channel = "sms") {
     return { ...state, state: "needs_attention", title: "Your trial setup needs attention.",
       message: "Your signup is saved. We could not finish activating your trial and our team has been notified. Keep this link to check progress—do not sign up again.", assignedPhone: "", terminal: false };
   }
+  if (state.state === 'ready') {
+    let forwardingStatus = '';
+    const forwardingSetupUrl = await ownedReadyForwardingSetupUrl({ prisma, signup: saved, assignedPhone: state.assignedPhone, frontendAppUrl: FRONTEND_APP_URL,
+      onBoundSetup: bound => { forwardingStatus = bound.forwardingStatus; } });
+    if (forwardingSetupUrl) state = { ...state, forwardingSetupUrl, forwardingStatus };
+  }
   return state;
 }
 
@@ -14739,7 +14757,14 @@ app.get(
       if (error.code !== "SIGNUP_RESUME_OWNERSHIP_UNCONFIRMED") throw error;
       return res.json({ ok: true, signup: { state: "needs_attention", title: "We need to check your existing setup.", message: "Contact support—do not sign up again.", terminal: false, assignedPhone: "" } });
     }
-    res.json({ ok: true, signup: resumedSignupStatus(target, signupAttempts.publicAttempt(target.attempt)) });
+    let signup = resumedSignupStatus(target, signupAttempts.publicAttempt(target.attempt));
+    if (signup.state === 'ready') {
+      let forwardingStatus = '';
+      const forwardingSetupUrl = await ownedReadyForwardingSetupUrl({ prisma, signup: target.record, assignedPhone: signup.assignedPhone, frontendAppUrl: FRONTEND_APP_URL,
+        onBoundSetup: bound => { forwardingStatus = bound.forwardingStatus; } });
+      if (forwardingSetupUrl) signup = { ...signup, forwardingSetupUrl, forwardingStatus };
+    }
+    res.json({ ok: true, signup });
   })
 );
 
@@ -15297,10 +15322,11 @@ app.all(
     const channelProof = String(input.channelProof || "").trim();
     const tokenHash = hashPendingSignupToken(token);
 
-    function renderVerificationPage({ title, body, ok, assignedPhone = "", forwardingSetupUrl = "", confirmation = false, progress = false }) {
+    function renderVerificationPage({ title, body, ok, assignedPhone = "", forwardingSetupUrl = "", forwardingStatus = "", confirmation = false, progress = false }) {
       const canonicalPhone = normalizePhoneForMatch(assignedPhone);
       const displayPhone = formatAssignedPhone(canonicalPhone);
       const setupReady = ok && Boolean(canonicalPhone && displayPhone);
+      if (setupReady) return res.status(200).send(renderOnboardingReadyPage({ assignedPhone: canonicalPhone, forwardingSetupUrl, forwardingStatus, frontendAppUrl: FRONTEND_APP_URL }));
       const automaticSmsConfirmation = confirmation && verificationChannel === "sms" && req.method === "GET";
       res.status(ok ? 200 : 400).send(`<!doctype html>
         <html lang="en">
@@ -15387,24 +15413,13 @@ app.all(
     async function renderSavedProgress(pending) {
       const state=await readVerificationProgress(pending, verificationChannel);
       if(!state) return renderVerificationPage({ok:false,title:"Your signup is saved",body:"We cannot load its progress yet. Contact support—do not sign up again."});
-      let forwardingSetupUrl = "";
-      if (state.state === "ready") {
-        const access = deriveSignupStatusAccess(buildMakeSignupEventKey(pending.payload), SIGNUP_STATUS_SECRET);
-        const original = await signupAttempts.authenticate(access.publicId, access.token);
-        const target = await resolveSignupResume({ attempt: original, records: listSignupDashboardRecords(), verified: true,
-          loadAttempt: eventKey => prisma.signupAttempt.findUnique({ where: { eventKey } }) });
-        const signup = target.record;
-        if (signup && normalizePhoneForMatch(signup.businessPhone || signup.ownerPhone)) {
-          const expectedKey = signupKeyFor({ signupId: signup.signupAttemptId, ownerEmail: signup.ownerEmail, existingBusinessNumber: signup.businessPhone || signup.ownerPhone });
-          const setup = await prisma.callForwardingSetup.findUnique({ where: signup.forwardingSetupId ? { id: signup.forwardingSetupId } : { signupKey: expectedKey } });
-          if (setup && setup.signupKey === expectedKey && setup.assignedMyAiPaNumber === state.assignedPhone
-            && setup.businessId === signup.businessId) {
-            forwardingSetupUrl = `${FRONTEND_APP_URL}/#/f/${encodeURIComponent(createSetupToken(setup))}`;
-          }
-        }
-      }
+      // readVerificationProgress already resolved the original signup and bound
+      // the exact setup once. Reuse its capability/status; never infer active
+      // forwarding from a number or perform a second setup lookup here.
+      const forwardingSetupUrl = state.state === 'ready' ? state.forwardingSetupUrl || '' : '';
+      const forwardingStatus = state.state === 'ready' ? state.forwardingStatus || '' : '';
       return renderVerificationPage({ok:state.state!=="needs_attention"&&state.state!=="closed",title:state.title,body:state.message,
-        assignedPhone:state.state==="ready"?state.assignedPhone:"",forwardingSetupUrl,progress:!state.terminal});
+        assignedPhone:state.state==="ready"?state.assignedPhone:"",forwardingSetupUrl,forwardingStatus,progress:!state.terminal});
     }
 
     const hasChannelClaim = Boolean(input.channel || channelProof);
@@ -15861,6 +15876,103 @@ async function requireForwardingSetup(req) {
   }
   return { token, setup: await getSetupFromToken({ prismaClient: prisma, token }) };
 }
+
+// Editing requires two independent, exact scopes: registered-owner login AND
+// possession of this business's forwarding link. Neither alone grants edits.
+async function requireBusinessEditor(req) {
+  const lookupHash = getCustomerDashboardSessionLookupHash(req);
+  const match = lookupHash ? findCustomerDashboardSignupByLookupHash(lookupHash) : null;
+  if (!match) throw Object.assign(new Error('Verify your registered owner phone before editing business details.'), { statusCode: 401, code: 'BUSINESS_EDITOR_LOGIN_REQUIRED' });
+  const { setup } = await requireForwardingSetup(req);
+  const signup = match.signup;
+  const identity = businessEditorIdentity(signup, setup);
+  const attempt = await prisma.signupAttempt.findUnique({ where: { eventKey: signup.signupAttemptId } });
+  if (!attempt?.payload || isClosedSignup(attempt) || String(attempt.ownerEmail || '').toLowerCase() !== String(signup.ownerEmail || '').toLowerCase()) {
+    throw Object.assign(new Error('The saved verified business answers need support.'), { statusCode: 409, code: 'BUSINESS_EDITOR_SOURCE_UNAVAILABLE' });
+  }
+  const expected = [
+    { matchType: 'assistantId', matchValue: identity.assistantId.toLowerCase() },
+    { matchType: 'phoneNumberId', matchValue: identity.phoneNumberId.toLowerCase() },
+    { matchType: 'phoneNumber', matchValue: normalizePhoneForMatch(identity.aiNumber) },
+  ];
+  const mappings = await prisma.vapiBusinessMapping.findMany({ where: { matchValue: { in: expected.map(item => item.matchValue) } } });
+  if (expected.some(item => !mappings.some(mapping => mapping.businessId === identity.businessId && mapping.matchType === item.matchType && mapping.matchValue === item.matchValue))
+    || mappings.some(mapping => mapping.businessId !== identity.businessId)
+    || listSignupDashboardRecords().some(other => !isClosedSignup(other) && other.signupAttemptId !== signup.signupAttemptId
+      && (other.vapiAssistantId === identity.assistantId || other.vapiPhoneNumberId === identity.phoneNumberId || normalizePhoneForMatch(other.twilioPhoneNumber || '') === normalizePhoneForMatch(identity.aiNumber)))) {
+    throw Object.assign(new Error('This receptionist has conflicting business ownership. Contact support.'), { statusCode: 409, code: 'BUSINESS_EDITOR_IDENTITY_CONFLICT' });
+  }
+  return { signup, setup, payload: attempt.payload };
+}
+
+function assertBusinessEditorRequest(req) {
+  if (!req.headers.origin || !isAllowedOrigin(String(req.headers.origin)) || req.headers['x-myaipa-editor'] !== '1'
+    || !/^application\/json(?:\s*;|$)/i.test(String(req.headers['content-type'] || ''))) {
+    throw Object.assign(new Error('Reload the secure editor before saving.'), { statusCode: 403, code: 'BUSINESS_EDITOR_ORIGIN_REQUIRED' });
+  }
+}
+
+async function assertBusinessEditorLifecycle(signup) {
+  const fresh = listSignupDashboardRecords().find(row => row.signupAttemptId === signup.signupAttemptId && row.businessId === signup.businessId);
+  const attempt = await prisma.signupAttempt.findUnique({ where: { eventKey: signup.signupAttemptId } });
+  if (!fresh || isClosedSignup(fresh) || !attempt || isClosedSignup(attempt)
+    || fresh.vapiAssistantId !== signup.vapiAssistantId || fresh.vapiPhoneNumberId !== signup.vapiPhoneNumberId
+    || normalizePhoneForMatch(fresh.twilioPhoneNumber) !== normalizePhoneForMatch(signup.twilioPhoneNumber)
+    || !['trial', 'paid'].includes(getTrialLifecycle(fresh).state)) {
+    throw Object.assign(new Error('This business is not currently available for receptionist updates. Contact support.'), { statusCode: 409, code: 'BUSINESS_EDITOR_LIFECYCLE_BLOCKED' });
+  }
+  return fresh;
+}
+
+async function publishBusinessEditorGate({ signup, gate, assistant, identity }) {
+  if (!gate) return;
+  const fresh = await assertBusinessEditorLifecycle(signup);
+  assertTrialGateOwnership(fresh, gate, listSignupDashboardRecords());
+  if (gate.status !== 'active' || gate.assistantId !== identity.assistantId || gate.businessId !== identity.businessId) {
+    throw Object.assign(new Error('The protected phone route changed. Contact support.'), { statusCode: 409, code: 'BUSINESS_EDITOR_GATE_CONFLICT' });
+  }
+  const snapshot = sanitizeTransientAssistant(assistant, { maxDurationSeconds: gate.assistantMaxSeconds || DEFAULT_MAX_CALL_SECONDS });
+  if (snapshot.server && typeof snapshot.server === 'object') delete snapshot.server.secret;
+  const fingerprint = fingerprintAssistantContent(assistant);
+  const next = { ...gate, assistantSnapshot: snapshot, assistantContentFingerprint: fingerprint, assistantSnapshotVerifiedAt: new Date().toISOString() };
+  const keys = getTrialGateRuntimeKeys(gate);
+  await prisma.$transaction(async tx => {
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`business-editor-gate:${identity.businessId}`}))::text AS lock_result`;
+    const attempt = await tx.signupAttempt.findUnique({ where: { eventKey: identity.signupAttemptId } });
+    if (!attempt || isClosedSignup(attempt)) throw Object.assign(new Error('The signup closed during editing.'), { statusCode: 409, code: 'BUSINESS_EDITOR_LIFECYCLE_BLOCKED' });
+    for (const key of keys) {
+      const row = await tx.runtimeStore.findUnique({ where: { key } });
+      if (!row || JSON.stringify(row.data) !== JSON.stringify(gate)) throw Object.assign(new Error('The protected call route changed while saving. Nothing was replaced.'), { statusCode: 409, code: 'BUSINESS_EDITOR_GATE_CONCURRENT_CHANGE' });
+    }
+    for (const key of keys) await tx.runtimeStore.update({ where: { key }, data: { data: next } });
+  }, { timeout: 5000 });
+  const verified = await readTrialGateConfiguration({ phoneNumberId: identity.phoneNumberId, phoneNumber: { number: identity.aiNumber } });
+  if (verified?.assistantContentFingerprint !== fingerprint || fingerprintAssistantContent(verified?.assistantSnapshot || {}) !== fingerprint) {
+    throw Object.assign(new Error('The protected route update could not be confirmed.'), { statusCode: 502, code: 'BUSINESS_EDITOR_GATE_READBACK_FAILED' });
+  }
+}
+
+app.get('/api/customer/dashboard/business-details', enforcePublicRouteRateLimit('business-details-view', 30), asyncRoute(async (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  const context = await requireBusinessEditor(req);
+  res.json(await readBusinessDetails({ prisma, ...context }));
+}));
+
+app.patch('/api/customer/dashboard/business-details', enforcePublicRouteRateLimit('business-details-save', 10), asyncRoute(async (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  assertBusinessEditorRequest(req);
+  const context = await requireBusinessEditor(req);
+  const result = await updateBusinessDetails({ prisma, ...context, input: req.body,
+    api: (resource, options) => requestVapiResource(resource, { ...options, readRetries: false }),
+    gateWebhookUrl: TRIAL_USAGE_GATE_WEBHOOK_URL,
+    assertLifecycle: () => assertBusinessEditorLifecycle(context.signup),
+    readGate: () => readTrialGateConfiguration({ phoneNumberId: context.signup.vapiPhoneNumberId, phoneNumber: { number: context.signup.twilioPhoneNumber } }),
+    publishGate: values => publishBusinessEditorGate({ ...values, signup: context.signup }),
+    // Do not rewrite the original signup identity or transfer old sample-text
+    // proof to new content. The separately verified revision is authoritative.
+  });
+  res.json(result);
+}));
 
 app.get(
   "/api/forwarding/setup",

@@ -1,6 +1,6 @@
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
-import Signup, { SignupSuccessPage } from "./Signup";
+import Signup, { SignupSuccessPage, mergeSignupStatus } from "./Signup";
 
 jest.mock("@vapi-ai/web", () => jest.fn().mockImplementation(() => ({
   on: jest.fn(), off: jest.fn(), start: jest.fn(), stop: jest.fn(),
@@ -105,7 +105,8 @@ describe("resumable signup status and pre-activation support", () => {
     await tick(5000);
     expect(global.fetch).toHaveBeenCalledTimes(1);
     expect(container.querySelector('a[href="tel:+12895550456"]')).not.toBeNull();
-    expect(container.textContent).toContain("Current Verified Business");
+    expect(container.textContent).toContain("Your My AI PA number is ready");
+    expect(container.textContent).not.toContain("Synthetic Pilot Electric");
     expect(window.sessionStorage.getItem(SESSION_KEY)).not.toContain("+12895550456");
   });
 
@@ -208,5 +209,20 @@ describe("resumable signup status and pre-activation support", () => {
     render();
     for (let i = 0; i < 60; i += 1) await tick();
     expect(global.fetch).toHaveBeenCalledTimes(60);
+  });
+
+  test("only authoritative ready status with a current valid number clears provisional trial failures", () => {
+    const old = { ...pending(), stripeTrialSkipped: true, stripeTrialError: "Old provisional failure." };
+    const recovered = mergeSignupStatus(old, { state: "ready", assignedPhone: "+12895550199", forwardingSetupUrl: "https://www.myaipa.ca/#/f/current", forwardingStatus: "active" });
+    expect(recovered.stripeTrialSkipped).toBe(false);
+    expect(recovered.stripeTrialError).toBe("");
+    expect(recovered.forwardingSetupUrl).toBe("https://www.myaipa.ca/#/f/current");
+    expect(recovered.forwardingStatus).toBe("active");
+    for (const status of [{ state: "needs_attention", assignedPhone: "+12895550199" }, { state: "ready", assignedPhone: "" }, { state: "ready", assignedPhone: "invalid" }]) {
+      const stillBlocked = mergeSignupStatus(old, status);
+      expect(stillBlocked.stripeTrialSkipped).toBe(true);
+      expect(stillBlocked.stripeTrialError).toBe("Old provisional failure.");
+      expect(stillBlocked.twilioPhoneNumber).toBe("");
+    }
   });
 });
