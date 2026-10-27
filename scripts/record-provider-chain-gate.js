@@ -8,7 +8,7 @@ function recordChain() {
   assertFreshHealth(manifest);
   if (manifest.gates.restore?.status !== 'PASS') throw Error('Passing restore evidence is required');
   const sources = ['server/index.js', 'server/provisioningState.js', 'server/twilioStatusInbox.js', 'server/signupSmsDispatch.js',
-    'server/intakeLedger.js', 'server/stagingIntake.js', 'server/leadHandoffs.js'].filter(file => fs.existsSync(path.join(root, file)));
+    'server/intakeLedger.js', 'server/stagingIntake.js', 'server/stagingIntakeWorker.js', 'server/leadHandoffs.js'].filter(file => fs.existsSync(path.join(root, file)));
   // A previous success cannot stand in for the chain rerun required after a
   // new restore check, even when application source files did not change.
   const changedAt = Math.max(Date.parse(manifest.gates.restore.checkedAt), ...sources.map(file => fs.statSync(path.join(root, file)).mtimeMs));

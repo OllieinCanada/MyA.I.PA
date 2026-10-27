@@ -2,11 +2,11 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { assertFreshHealth, fingerprintFiles, recordGate, writeManifest } = require('./provider-hardening-evidence');
 const CHAIN_SOURCES = ['server/index.js', 'server/provisioningState.js', 'server/twilioStatusInbox.js', 'server/signupSmsDispatch.js',
-  'server/intakeLedger.js', 'server/stagingIntake.js', 'server/leadHandoffs.js'];
+  'server/intakeLedger.js', 'server/stagingIntake.js', 'server/stagingIntakeWorker.js', 'server/leadHandoffs.js'];
 const RESTORE_SOURCES = ['scripts/backup-safety.js', 'scripts/restore-backup-drill.js', 'scripts/run-local-signup-postgres-drill.js', 'scripts/prepare-postgres-client-tools.js'];
 function assertIntakeEvidence(report, changedAt) {
   const required = ['passed', 'concurrency', 'processRestart', 'latestConfirmedValuesOnly', 'crossTenantRejected', 'authenticationRequired',
-    'staleAndLateUpdatesRejected', 'transactionRollbackVerified', 'legacyRetryOwnerSeparated'];
+    'staleAndLateUpdatesRejected', 'transactionRollbackVerified', 'legacyRetryOwnerSeparated', 'stagingQueueOwned', 'productionWorkerDenied'];
   if (required.some(key => report[key] !== true) || report.productionTouched !== false || report.realProviderRequests !== 0
     || report.canonicalRecordsForCompletedCall !== 1 || report.leadsForCompletedCall !== 1 || report.notificationHandoffs !== 1 || report.fakeProviderAcceptances !== 1
     || !Number.isFinite(changedAt) || !Number.isFinite(Date.parse(report.checkedAt)) || Date.parse(report.checkedAt) < changedAt) throw Error('Missing, stale or non-isolated intake evidence');
