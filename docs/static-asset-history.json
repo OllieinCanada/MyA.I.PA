@@ -2,13 +2,13 @@
   "version": 1,
   "generations": [
     {
-      "id": "6b91084dd233496f35a2db9360416a791cd3100496980722ee402e6e7517ea6a",
+      "id": "7d8687962024f18bd41d7f1e3ceb3129a003d0960c3e9d036096a6fc83169315",
       "files": [
         "static/css/main.7d6777d2.css",
         "static/css/main.7d6777d2.css.map",
-        "static/js/main.e95198ca.js",
-        "static/js/main.e95198ca.js.LICENSE.txt",
-        "static/js/main.e95198ca.js.map"
+        "static/js/main.99f515d2.js",
+        "static/js/main.99f515d2.js.LICENSE.txt",
+        "static/js/main.99f515d2.js.map"
       ]
     },
     {

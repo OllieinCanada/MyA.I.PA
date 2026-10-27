@@ -24,6 +24,9 @@ export default function usePublicDemoAudio(audioRef, fallbackSource) {
     state.current.generation++;
     state.current.requested = false;
     state.current.pending = false;
+    // Some engines leave paused=false after a sink/decoder error. Stop the
+    // failed element so the next tap retries instead of only pausing it.
+    audio.pause();
     setPlaying(false); setLoading(false);
     const blocked = failure?.name === 'NotAllowedError';
     setError(blocked

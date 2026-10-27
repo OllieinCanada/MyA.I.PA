@@ -92,6 +92,8 @@ async function scenario(browser, engine, viewport, mode, fixture) {
       await page.waitForFunction(() => document.querySelector('.simple-carousel-header button').textContent.includes('Hear Live Call'));
       assert.deepEqual([...new Set(requests)], ['mp3', 'wav']);
       assert.equal(reports.length, 1, 'one terminal audio report, not one for each recovered source');
+      assert.equal(await element.evaluate(audio => audio.paused), true,
+        'a terminal failure stops the element so one tap can retry');
       await page.locator('.simple-proof-carousel').screenshot({ path: path.join(output, `${engine}-phone-retry.png`) });
       broken = false;
       await control.click();

@@ -43,9 +43,14 @@ describe('public demo playback recovery', () => {
     expect(button.textContent).toBe('Pause'); expect(reportClientError).not.toHaveBeenCalled();
   });
   test('two failed formats show retry guidance and emit only one redacted failure report', async () => {
-    audio.play.mockRejectedValue(new DOMException('private URL must not be reported', 'NotSupportedError'));
+    audio.play.mockImplementation(async () => {
+      Object.defineProperty(audio, 'paused', { configurable: true, value: false });
+      throw new DOMException('private URL must not be reported', 'NotSupportedError');
+    });
+    audio.pause.mockImplementation(() => Object.defineProperty(audio, 'paused', { configurable: true, value: true }));
     await click();
     expect(audio.play).toHaveBeenCalledTimes(2); expect(reportClientError).toHaveBeenCalledTimes(1);
+    expect(audio.pause).toHaveBeenCalledTimes(1);
     expect(container.textContent).toMatch(/could not play.*retry/i);
     expect(JSON.stringify(reportClientError.mock.calls)).not.toContain('private URL');
     audio.play.mockResolvedValueOnce(undefined);
