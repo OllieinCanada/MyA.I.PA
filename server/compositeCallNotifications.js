@@ -249,7 +249,14 @@ The tool receives trusted caller ID automatically. Do not ask the caller to repe
 If the caller says "use the number I am calling from," "call me back on this number," or words with the same meaning, acknowledge naturally: "Absolutely — I'll use the number you're calling from." Do not claim you can see or recite the digits, and do not ask for the digits during intake. Continue collecting the remaining details; the silent tool will verify caller-ID availability when it runs.
 Pass businessName, requestType, name, jobDetails, streetAddress, city, preferredStartDate, bestCallbackTime, and message when applicable.
 If and only if the tool result says needsCustomerNumber is true, explain that caller ID was unavailable, ask for the best mobile number, repeat the full number back for confirmation, and call ${name} exactly one more time with that confirmed number as rawPhoneNumber.
-If needsCustomerNumber is false, never call the tool again during that call. The tool's configured request-start message may say "Got it." Do not add model-generated waiting language such as "one moment," "hold on," or "this will just take a sec" before, during, or after the tool call.
+After confirming a fallback number, read back the request and ask "Should I send this request to the team now?" again before that single retry.
+SAFE RECOVERY — BEFORE EXECUTION ONLY:
+- If the result is exactly "Tool call rejected based on configured rejection plan", the notification code did not execute. Do not blame the caller or mention tools. Say: "I couldn't submit that request. Let me confirm the details once more." Read back the current request and ask exactly "Should I send this request to the team now?" Wait for a fresh clear answer. Allow at most ONE confirmation-recovery attempt during this call; never count the earlier approval as permission for the retry.
+- Natural complete approvals include "Perfect. Yes.", "Yes, please" and "Okay, go ahead" after the send question. Corrections, uncertainty, cancellation or silence are not approval. If the caller changes any detail, correct it before a new read-back and permission question.
+- If needsIntakeDetails is true, no notification was attempted: ask only for the returned missing fields, confirm the corrected request, and ask the send question before one retry. Never fabricate a city or set workDetailsConfirmed without that read-back.
+- If the tool executed and reports a transport error, timeout, partial success, missing result or any uncertain send outcome, DO NOT retry. Do not resend a successful leg. Explain that submission could not be verified and offer the configured support/contact path without promising the team received anything.
+If needsCustomerNumber is false, never call the tool again during that call except for the explicitly confirmed BEFORE EXECUTION cases above. The tool's configured request-start message may say "Got it." Do not add model-generated waiting language such as "one moment," "hold on," or "this will just take a sec" before, during, or after the tool call.
+Pass workDetailsConfirmed and pricingDiscussed explicitly with the collected structured fields. Never set either merely to satisfy a tool schema.
 Never promise that a confirmation was sent unless complete is true.
 
 ${postSendClosingPrompt()}`;
@@ -360,6 +367,8 @@ async function sendTwilioMessage({ to, from, body, notificationKey, env, fetchIm
         notificationKey,
       };
     }
+    if (!payload?.sid) return { attempted: true, sent: false, status: 'unknown',
+      errorCode: 'provider_response_incomplete', notificationKey };
     return {
       attempted: true,
       sent: true,
@@ -391,6 +400,20 @@ async function executeCompositeNotifications({ args, env, fetchImpl, btoaImpl, U
   const ownerNumber = normalizeE164(settings.DEFAULT_OWNER_TO_NUMBER);
   const customerNumber = normalizeE164(settings.CALLER_NUMBER) || normalizeE164(input.rawPhoneNumber || input.callbackNumber);
   const keys = buildNotificationKeys(settings.CALL_ID || input.notificationId || "missing-call-id");
+  const workRequest = ['installation', 'new installation', 'new_installation', 'service', 'repair', 'maintenance', 'quote'].includes(String(input.requestType || '').toLowerCase());
+  const missingFields = [];
+  if (typeof input.pricingDiscussed !== 'boolean') missingFields.push('pricingDiscussed');
+  if (workRequest && input.safetyConcern !== 'reported_hazard') {
+    for (const field of ['jobDetails', 'streetAddress', 'city', 'preferredStartDate', 'bestCallbackTime']) {
+      if (!cleanText(input[field], 500)) missingFields.push(field);
+    }
+    if (input.workDetailsConfirmed !== true) missingFields.push('workDetailsConfirmed');
+  }
+  if (missingFields.length) {
+    const leg = { attempted: false, sent: false, skipped: true, status: 'waiting_for_intake', errorCode: 'intake_confirmation_required' };
+    return { ok: false, complete: false, needsIntakeDetails: true, missingFields, executionOrder: [],
+      owner: { ...leg, notificationKey: keys.owner }, customer: { ...leg, notificationKey: keys.customer }, requiresReconciliation: false };
+  }
   if (!customerNumber) {
     return {
       ok: false,
@@ -506,9 +529,10 @@ function compositeToolParameters() {
       urgency: { type: "string", description: "Caller-stated urgency. Capture it without diagnosing or promising dispatch." },
       safetyConcern: { type: "string", enum: ["none", "reported_hazard"], description: "Use reported_hazard only for a caller-reported current safety hazard. Use none for ordinary requests, denied danger, or past/resolved hazards. Not a diagnosis." },
       pricingDiscussed: { type: "boolean", description: "True only when an owner-approved repair/service pricing statement (selected rate, assessment policy, or parts policy) was actually discussed. False for installations, messages, hazard calls, or no pricing discussion. Never implies a quote was approved." },
+      workDetailsConfirmed: { type: 'boolean', description: 'For ordinary work requests, true only after job details, street AND city, full start timing and callback preference were read back and confirmed. Missing/uncertain fields require clarification, not a guessed city or an automatic true.' },
       message: { type: "string", description: "Message content when requestType is message." },
     },
-    required: ["businessName", "requestType", "name"],
+    required: ["businessName", "requestType", "name", "pricingDiscussed"],
   };
 }
 

@@ -73,7 +73,7 @@ test("isolated tool payload keeps all routing outside model parameters", () => {
   assert.equal(payload.environmentVariables.find((item) => item.name === "CALLER_NUMBER").value, "{{ customer.number }}");
   assert.equal(payload.environmentVariables.find((item) => item.name === "SMS_SUPPRESSION_CHECK_URL").value, suppression.suppressionCheckUrl);
   assert.equal(payload.environmentVariables.find((item) => item.name === "SMS_SUPPRESSION_API_KEY").value, suppression.suppressionApiKey);
-  assert.deepEqual(payload.function.parameters.required, ["businessName", "requestType", "name"]);
+  assert.deepEqual(payload.function.parameters.required, ["businessName", "requestType", "name", "pricingDiscussed"]);
   assert.deepEqual(payload.messages, [{ type: "request-start", content: TOOL_REQUEST_START_MESSAGE, blocking: false }]);
   assert.deepEqual(payload.rejectionPlan, toolRejectionPlan());
 });

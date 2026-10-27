@@ -49,6 +49,8 @@ async function runMessageRoutingGate({ count = 50 } = {}) {
           businessName: `Shipping Gate Business ${index}`,
           requestType: index % 3 === 0 ? "repair" : index % 3 === 1 ? "installation" : "message",
           name: `Synthetic Caller ${index}`,
+          pricingDiscussed: false,
+          workDetailsConfirmed: true,
           rawPhoneNumber: customer,
           jobDetails: `Synthetic routing verification ${index}`,
           streetAddress: `${index} Test Street`,

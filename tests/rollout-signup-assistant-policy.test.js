@@ -2,7 +2,7 @@ const test=require('node:test');
 const assert=require('node:assert/strict');
 const {ownership,assistantPatch,applyPlans,plansFor,POLICY}=require('../scripts/rollout-signup-assistant-policy');
 const {speechSnapshot}=require('../scripts/repair-signup-speech');
-const {checkSummary}=require('../scripts/check-signup-policy-rollout');
+const {checkSummary,checkPublishedConfiguration}=require('../scripts/check-signup-policy-rollout');
 const {getVapiCompositeToolCode}=require('../server/compositeCallNotifications');
 function fixture(){
  const signup={businessName:'Example Electric',signupAttemptId:'attempt-one',businessId:1,provisioningBusinessKey:'business-one',identityVerified:true,vapiAssistantId:'a',vapiPhoneNumberId:'p',twilioPhoneNumber:'+19055550123',ownerPhone:'+19055550124',status:'agent_testing'};
@@ -20,6 +20,21 @@ test('requires active verified business and exact mapping',()=>{
  assert.equal(ownership(f.data,{...f.signup,archivedAt:'now'}),'missing_active_verified_business_identity');
  assert.equal(ownership(f.data,{...f.signup,businessId:2}),'crm_ownership_mismatch');
  f.data.signups.push({...f.signup,signupAttemptId:'other',businessId:2});assert.equal(ownership(f.data,f.signup),'shared_active_signup_resource');
+});
+
+test('a scoped rollout retains the full ownership inventory and cannot ignore conflicting signups',async()=>{
+ const f=fixture();f.data.assistants=[f.assistant];f.data.tools=[f.tool];
+ const unrelated=await plansFor(f.data,f.api,{businessId:999});assert.equal(unrelated.plans.length,0);
+ f.data.signups.push({...f.signup,signupAttemptId:'conflict',businessId:999});
+ const scoped=await plansFor(f.data,f.api,{businessId:1});assert.equal(scoped.plans.length,0);
+ assert.equal(scoped.skipped[0].reason,'shared_active_signup_resource');
+});
+
+test('trial snapshots refresh only after provider readback and are reconciled after a failed refresh',async()=>{
+ const f=fixture();const published=[];
+ const result=await applyPlans({io:{api:f.api},plans:[f.plan],recheck:async()=>{},backup:async()=>{},refreshGate:async(_p,a)=>{published.push(a.model.messages);if(published.length===1)throw Error('snapshot failed');}});
+ assert.equal(result[0].verified,false);assert.equal(published.length,2);
+ assert.deepEqual(published[1],f.plan.assistant.model.messages);
 });
 test('trial-gated pairing requires exact server and saved gate evidence',()=>{
  const f=fixture();delete f.data.phones[0].assistantId;
@@ -97,4 +112,16 @@ test('published summary smoke respects all individual reminder choices with fake
 });
 test('summary smoke refuses unexpected remote code before execution',async()=>{
  await assert.rejects(checkSummary({code:'throw Error("must not run")'},{requestType:'repair'}),/audited local definition/);
+});
+
+test('published readback refuses an old confirmation plan even when tool code is current',()=>{
+ const f=fixture();const {toolPatch}=require('../scripts/refresh-vapi-job-type');
+ const {toolRejectionPlan}=require('../server/callConfirmation');
+ const tool={...f.tool,...toolPatch(f.tool),rejectionPlan:toolRejectionPlan()};
+ tool.environmentVariables.push({name:'TWILIO_STATUS_CALLBACK_URL',value:'https://api.myaipa.ca/api/webhooks/twilio/message-status'},{name:'CALLER_NUMBER',value:'{{ customer.number }}'});
+ const assistant={...f.assistant,...assistantPatch(f.assistant,tool)};
+ assert.ok(Object.values(checkPublishedConfiguration(assistant,tool)).every(Boolean));
+ tool.rejectionPlan={conditions:[]};assert.equal(checkPublishedConfiguration(assistant,tool).confirmationPlan,false);
+ tool.environmentVariables=tool.environmentVariables.filter(v=>v.name!=='TWILIO_STATUS_CALLBACK_URL');
+ assert.equal(checkPublishedConfiguration(assistant,tool).statusReceipts,false);
 });

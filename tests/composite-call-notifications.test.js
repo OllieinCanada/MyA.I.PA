@@ -120,6 +120,8 @@ for (const requestType of ["tenant_maintenance", "tenant_complaint"]) {
 }
 
 const args = {
+  pricingDiscussed: false,
+  workDetailsConfirmed: true,
   businessName: "Example Electrical",
   requestType: "installation",
   name: "Test Caller",
@@ -201,6 +203,21 @@ test("invalid saved pricing policy fails before sending any texts", async () => 
   const result = await execute(mock.fetchImpl, { env: { PRICING_SUMMARY_OPTIONS: "bad json" } });
   assert.equal(result.errorCode, "pricing_policy_invalid");
   assert.equal(mock.calls.length, 0);
+});
+
+test('missing or unconfirmed work fields pause before any SMS or suppression request', async()=>{
+  for(const changed of [{city:''},{streetAddress:''},{workDetailsConfirmed:false},{pricingDiscussed:undefined}]){
+    const mock=makeFetch([]);const result=await execute(mock.fetchImpl,{args:changed});
+    assert.equal(result.needsIntakeDetails,true);assert.equal(result.owner.attempted,false);
+    assert.equal(result.requiresReconciliation,false);assert.equal(mock.calls.length,0);assert.equal(mock.checks.length,0);
+  }
+});
+
+test('a provider response without a message ID is an unknown outcome, never a successful confirmation',async()=>{
+  const mock=makeFetch([{ok:true,status:201,payload:{status:'queued'}}]);
+  const result=await execute(mock.fetchImpl);
+  assert.equal(result.owner.sent,false);assert.equal(result.owner.errorCode,'provider_response_incomplete');
+  assert.equal(result.complete,false);assert.equal(result.requiresReconciliation,true);assert.equal(mock.calls.length,2);
 });
 
 test("composite tool sends owner first and customer second", async () => {
@@ -421,7 +438,7 @@ test("generated Vapi code tool is self-contained and uses one structured call", 
   const code = getVapiCompositeToolCode();
   assert.equal(definition.type, "code");
   assert.equal(definition.function.name, "send_call_summaries_dynamic");
-  assert.deepEqual(definition.function.parameters.required, ["businessName", "requestType", "name"]);
+  assert.deepEqual(definition.function.parameters.required, ["businessName", "requestType", "name", "pricingDiscussed"]);
   assert.doesNotMatch(JSON.stringify(definition.function.parameters), /fromNumber|toNumber/);
   assert.match(code, /executeCompositeNotifications/);
   assert.match(code, /DEFAULT_OWNER_TO_NUMBER/);

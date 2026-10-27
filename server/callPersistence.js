@@ -1,3 +1,5 @@
+const { mergeToolSummaries } = require('./callNotificationEvidence');
+
 function identityError() {
   return Object.assign(new Error('Saved call identifiers do not agree on one business and caller.'), {
     code: 'CALL_RECORD_IDENTITY_CONFLICT', statusCode: 409,
@@ -86,6 +88,7 @@ function mergeCallData(existing, next) {
   }
   // Empty provider event summaries must not wipe a more informative tool log.
   if (next.toolCallSummary && !next.toolCallSummary.count && existing.toolCallSummary?.count) merged.toolCallSummary = existing.toolCallSummary;
+  else if (next.toolCallSummary) merged.toolCallSummary = mergeToolSummaries(existing.toolCallSummary, next.toolCallSummary);
   return merged;
 }
 

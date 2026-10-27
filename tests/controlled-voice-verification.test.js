@@ -31,3 +31,16 @@ test('helper rejects any apply flag before network access and has no call-creati
   const source=fs.readFileSync(require.resolve('../scripts/verify-controlled-voice-call'),'utf8');
   assert.doesNotMatch(source,/api\.twilio\.com|Calls\.json|Twiml|method:\s*['"]PATCH/);
 });
+
+test('notification verification cannot pass on queued SMS, wrong recipients or duplicate provider IDs',()=>{
+  const input=fixture();input.requireNotifications=true;
+  Object.assign(input.signup,{ownerPhone:'+15555550100',twilioPhoneNumber:'+15555550101'});input.call.customer={number:'+15555550102'};
+  const result={name:'send_call_summaries_test',owner:{messageId:'SM'+'1'.repeat(32),toLast4:'0100',fromLast4:'0101'},customer:{messageId:'SM'+'2'.repeat(32),toLast4:'0102',fromLast4:'0101'}};
+  Object.assign(input.savedCalls[0],{notificationEvidence:{available:true,owner:{accepted:true,delivered:false},customer:{accepted:true,delivered:false}},toolCallSummary:{results:[result]}});
+  assert.equal(assess(input).verified,false);
+  input.savedCalls[0].notificationEvidence.owner.delivered=true;input.savedCalls[0].notificationEvidence.customer.delivered=true;
+  assert.equal(assess(input).verified,true);
+  result.customer.toLast4='9999';assert.equal(assess(input).verified,false);result.customer.toLast4='0102';
+  input.savedCalls[0].toolCallSummary.results.push({...result,customer:{...result.customer,messageId:'SM'+'3'.repeat(32)}});
+  assert.equal(assess(input).verified,false);
+});

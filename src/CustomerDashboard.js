@@ -880,10 +880,11 @@ function CallDetails({ call, onReport }) {
         </section>
         <section>
           <h3>Text delivery</h3>
+          {call.notificationEvidence?.available ? <p>{call.notificationEvidence.submissionLabel}. {call.notificationEvidence.summary}</p> : null}
           {call.notifications?.length ? (
             <ul className="customer-notification-list">
               {call.notifications.map((item, index) => (
-                <li key={`${item.recipient}-${index}`}><strong>{readableKey(item.recipient || "message")}</strong><span>{item.problem || statusLabel(item.status)}</span></li>
+                <li key={`${item.recipient}-${index}`}><strong>{readableKey(item.recipient || "message")}</strong><span>{item.label || item.problem || statusLabel(item.status)}</span></li>
               ))}
             </ul>
           ) : <p>No owner or customer text delivery events are linked yet.</p>}

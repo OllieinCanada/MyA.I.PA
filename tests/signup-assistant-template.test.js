@@ -66,10 +66,10 @@ test("builds the current production Vapi assistant with resolved signup values",
   assert.match(prompt, /Signup repair visit fee: 89 dollars/);
   assert.match(prompt, /Signup repair hourly rate: 129 dollars per hour/);
   assert.match(prompt, /Legacy fallback repair visit fee: 79 dollars/);
-  assert.match(prompt, /Assigned AI\/Twilio sender number: \+12895550123/);
-  assert.match(prompt, /Owner notification number: \+19055550199/);
-  assert.match(prompt, /send_customer_sms_dynamic/);
-  assert.match(prompt, /send_owner_sms_dynamic/);
+  assert.match(prompt, /MYAIPA CONFIRMED SERVICE INTAKE/);
+  assert.doesNotMatch(prompt, /send_customer_sms_dynamic|send_owner_sms_dynamic|Owner notification number:/);
+  assert.match(prompt, /Which city or town is that in/);
+  assert.match(prompt, /workDetailsConfirmed true only/);
   assert.match(prompt, /endCall/);
   assert.match(prompt, /What is the address where the work needs to be done\?/);
   assert.match(prompt, /When would you ideally like the work to begin\?/);
@@ -88,13 +88,7 @@ test("builds the current production Vapi assistant with resolved signup values",
   assert.match(prompt, /caller-stated urgency/i);
   assert.match(prompt, /Reuse information the caller already supplied/i);
   assert.match(prompt, /ask only for missing details/i);
-  assert.match(prompt, /NEW INSTALLATION or REPAIR REQUEST/);
-  assert.match(prompt, /- Job:/);
-  assert.match(prompt, /- Location:/);
-  assert.match(prompt, /- Preferred start date:/);
-  assert.match(prompt, /- Preferred callback:/);
-  assert.match(prompt, /- Next action:/);
-  assert.match(prompt, /I've sent your information to the team\. Someone will contact you to discuss the request and arrange the next step\./);
+  assert.match(prompt, /request, wait for confirmed notification success/);
   assert.doesNotMatch(prompt, /collect card|card number|banking information/i);
   assert.doesNotMatch(JSON.stringify(config), /\{\{[^}]*\}\}/);
 });
@@ -125,7 +119,7 @@ test("accepts the canonical business, owner, and aiAssistant payload shape", () 
   });
 
   assert.match(config.firstMessage, /Canonical Electric/);
-  assert.match(config.model.messages[0].content, /Owner notification number: \+14165550144/);
+  assert.match(config.model.messages[0].content, /protected notification tool verifies caller ID/);
   assert.doesNotMatch(config.model.messages[0].content, /:\s+dollars/);
   assert.doesNotMatch(JSON.stringify(config), /\{\{[^}]*\}\}/);
 });
@@ -142,7 +136,7 @@ test("uses a general intake playbook for non-contractor businesses", () => {
   assert.match(prompt, /Personal chatbot setup and support/);
   assert.doesNotMatch(prompt, /new installation, a repair, maintenance/i);
   assert.doesNotMatch(prompt, /repair visit fee|dollars per hour/i);
-  assert.match(prompt, /call endCall/i);
+  assert.match(prompt, /invoking endCall/i);
 });
 
 test("does not quote service or repair prices when the business does not offer service calls", () => {
