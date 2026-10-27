@@ -56,3 +56,14 @@ test("production monitor installs the legacy frontend dependency tree determinis
   const workflow = fs.readFileSync(path.join(root, ".github", "workflows", "production-monitor.yml"), "utf8");
   assert.match(workflow, /npm ci --legacy-peer-deps --ignore-scripts --no-audit --no-fund/);
 });
+
+test("audio regression uses a real clocked output without bypassing playback assertions", () => {
+  const workflow = fs.readFileSync(path.join(root, ".github", "workflows", "quality.yml"), "utf8");
+  const audioGate = fs.readFileSync(path.join(root, "scripts", "test-public-demo-audio.js"), "utf8");
+  assert.match(workflow, /pactl load-module module-null-sink sink_name=myaipa_ci/);
+  assert.match(workflow, /pactl set-default-sink myaipa_ci/);
+  assert.match(workflow, /npm run test:public-demo-audio/);
+  assert.match(audioGate, /assert\.equal\(playback\.error, null\)/);
+  assert.match(audioGate, /audio\.currentTime > 0\.2/);
+  assert.match(audioGate, /'chromium,firefox,webkit'/);
+});

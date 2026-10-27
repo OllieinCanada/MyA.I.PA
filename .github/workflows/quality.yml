@@ -124,6 +124,18 @@ jobs:
           grep -q 'static/js/main\.' docs/index.html
           grep -q 'static/css/main\.' docs/index.html
 
+      # Firefox reports OnMediaSinkAudioError without an audio output on the
+      # headless runner. A local, clocked sink exercises real decoding and
+      # playback without needing speakers or changing browser assertions.
+      - name: Provide an audio output for isolated browser tests
+        run: |
+          sudo apt-get install --yes pulseaudio pulseaudio-utils
+          pulseaudio --start --exit-idle-time=-1
+          pactl load-module module-null-sink sink_name=myaipa_ci rate=44100 channels=2
+          pactl set-default-sink myaipa_ci
+          pactl info
+          pactl list short sinks
+
       - name: Verify demo playback, format fallback and retry in all browser engines
         run: npm run test:public-demo-audio
 
