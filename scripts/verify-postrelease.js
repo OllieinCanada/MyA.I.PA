@@ -1,4 +1,5 @@
 // Fixed GET only. No env-file loading, provider clients, workers or incident actions.
+const { projectEvidence } = require('../server/runtimeReceiptEvidence');
 function project(r) {
   const statuses = ['unknown', 'previous_release', 'stale', 'empty_result', 'verified', 'unresolved_failure'];
   const workers = ['healthy', 'warning', 'critical', 'unknown', 'unavailable'];
@@ -21,6 +22,7 @@ function project(r) {
   }
   return { schemaVersion: 1, readOnly: true, releaseCommit: r.releaseCommit, scope: r.scope,
     sync, runtime: { activeCriticalCount: r.runtime.activeCriticalCount },
+    ...(r.investigation ? { investigation: projectEvidence(r.investigation) } : {}),
     sms: { workerStatus: r.sms.workerStatus, counts, historicalIncidentCount: r.sms.historicalIncidentCount,
       originalOperationOutcomes: 'unknown', providerDeliveryVerified: false, incidentClosurePermitted: false } };
 }

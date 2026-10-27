@@ -162,7 +162,8 @@ test('aggregate post-release inspection requires monitor auth and rejects action
   const original = prisma.$transaction; let reads = 0;
   prisma.$transaction = async fn => { reads++; return fn({ $executeRawUnsafe: async () => {},
     runtimeStore: { findUnique: async () => null },
-    $queryRaw: async () => [{ pending: 0, processing: 0, completed: 0, failed: 0, expiredLeases: 0 }],
+    $queryRaw: async sql => String(sql).includes('RuntimeIncidentRecord') ? []
+      : [{ pending: 0, processing: 0, completed: 0, failed: 0, expiredLeases: 0 }],
     runtimeIncidentRecord: { count: async () => 0 },
   }); };
   const previousRelease = process.env.RENDER_GIT_COMMIT; process.env.RENDER_GIT_COMMIT = 'd'.repeat(40);
@@ -172,6 +173,7 @@ test('aggregate post-release inspection requires monitor auth and rejects action
     const response = await request(endpoint, { headers }); assert.equal(response.status, 200);
     assert.equal(response.headers.get('cache-control'), 'no-store'); const r = await response.json();
     assert.equal(r.sync.completedOnRelease, false); assert.equal(r.sms.originalOperationOutcomes, 'unknown');
+    assert.equal(r.investigation.readOnly, true); assert.equal(r.investigation.providerDeliveryVerified, false);
     assert.equal(r.sms.incidentClosurePermitted, false); assert.equal(reads, 1);
     assert.equal((await request(endpoint + '?apply=true', { headers })).status, 400);
     assert.equal((await request(endpoint, { method: 'POST', headers })).status, 404); assert.equal(reads, 1);

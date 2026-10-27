@@ -1,5 +1,6 @@
 const { KEY, inspectCompletion } = require('./callSyncReceipt');
 const { readTwilioReceiptHealth } = require('./twilioReceiptHealth');
+const { inspectEvidence } = require('./runtimeReceiptEvidence');
 const ACTIVE = { notIn: ['resolved', 'recovered', 'not_required'] };
 async function inspectPostRelease({ prisma, releaseCommit, now = Date.now() }) {
   if (!/^[a-f0-9]{40}$/.test(releaseCommit || '') || !Number.isFinite(now)) throw Error('Release unknown');
@@ -21,8 +22,9 @@ async function inspectPostRelease({ prisma, releaseCommit, now = Date.now() }) {
     } });
     const critical = await tx.runtimeIncidentRecord.count({ where: { severity: 'critical', remediation: ACTIVE } });
     if (![critical, historicalCount].every(n => Number.isSafeInteger(n) && n >= 0)) throw Error('Unknown counts');
+    const investigation = await inspectEvidence(tx);
     return { schemaVersion: 1, readOnly: true, releaseCommit, scope: 'runtime_and_saved_callbacks',
-      sync, runtime: { activeCriticalCount: critical },
+      sync, runtime: { activeCriticalCount: critical }, investigation,
       sms: { workerStatus: health.status, ...(health.counts ? { counts: health.counts } : {}),
         historicalIncidentCount: historicalCount, originalOperationOutcomes: 'unknown',
         providerDeliveryVerified: false, incidentClosurePermitted: false } };
