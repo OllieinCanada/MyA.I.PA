@@ -33,10 +33,10 @@ test('detailed output is authenticated encrypted data decryptable only by the in
   assert.equal(decoded.investigation.providerDeliveryVerified, false);
   sealed.encryptedEvidence.authTag = Buffer.alloc(16).toString('base64'); assert.throws(() => open(sealed));
 });
-test('invalid, oversized, non-RSA and weak public keys fail without a plaintext fallback', () => {
-  const weak = crypto.generateKeyPairSync('rsa', { modulusLength: 1024 }).publicKey.export({ type: 'spki', format: 'pem' });
+test('invalid, oversized, non-RSA and below-policy public keys fail without a plaintext fallback', () => {
+  const belowPolicy = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 }).publicKey.export({ type: 'spki', format: 'pem' });
   const ec = crypto.generateKeyPairSync('ec', { namedCurve: 'prime256v1' }).publicKey.export({ type: 'spki', format: 'pem' });
   const privatePem = keys.privateKey.export({ type: 'pkcs8', format: 'pem' });
-  for (const key of ['INVALID', 'x'.repeat(2001), weak, ec, privatePem]) assert.throws(() => output(report(), { INSPECTION_PUBLIC_KEY: key }));
+  for (const key of ['INVALID', 'x'.repeat(2001), belowPolicy, ec, privatePem]) assert.throws(() => output(report(), { INSPECTION_PUBLIC_KEY: key }));
   assert.throws(() => sealEvidence(report(), keys.privateKey));
 });
