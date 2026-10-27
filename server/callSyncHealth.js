@@ -34,7 +34,7 @@ function completeSync(result) {
     && result.synced + result.routingErrors.length === result.fetched;
 }
 
-function createCallSyncMonitor({ listIncidents, notifyFailure, recoverIncident, now = Date.now, log = console.error }) {
+function createCallSyncMonitor({ listIncidents, notifyFailure, recoverIncident, recordCompletion = async () => {}, now = Date.now, log = console.error }) {
   let running = null;
   return function run(task) {
     // Coalesce overlapping scheduled ticks; never start an extra retry loop.
@@ -66,6 +66,10 @@ function createCallSyncMonitor({ listIncidents, notifyFailure, recoverIncident, 
         if (failure) throw failure;
         return result;
       }
+      try {
+        await recordCompletion({ startedAt: new Date(startedAt).toISOString(), completedAt: new Date(now()).toISOString(),
+          fetched: result.fetched, synced: result.synced, skippedUnmapped: result.routingErrors.length });
+      } catch (_) { log('[vapi:sync] completion evidence unavailable', { code: 'SYNC_COMPLETION_EVIDENCE_UNAVAILABLE' }); }
       for (const item of (previous || []).filter(item => isSyncIncident(item) && isActive(item))) {
         try {
           await recoverIncident(item.id, {

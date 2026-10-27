@@ -85,7 +85,7 @@
     "test:homepage-mobile-hero": "node scripts/test-homepage-mobile-hero.js",
     "test:signup-verification-progress": "node --test --test-concurrency=1 tests/signup-verification-progress.test.js tests/signup-verification-page-client.test.js tests/signup-attempt-store.test.js tests/signup-status-api.test.js tests/signup-sms-verification.test.js",
     "preview:signup-verification-progress": "node scripts/preview-signup-verification-progress.js",
-    "test:database": "node --test tests/database-integration.test.js tests/call-persistence-startup-postgres.test.js",
+    "test:database": "node --test tests/database-integration.test.js tests/call-persistence-startup-postgres.test.js tests/postrelease-verification-postgres.test.js",
     "test:signup-recovery": "node --test --test-concurrency=1 tests/signup-recovery-hardening.test.js tests/provisioning-state.test.js tests/provider-read.test.js tests/signup-provider-recovery.test.js tests/signup-agent-testing.test.js tests/signup-completion.test.js tests/operational-error-classifier.test.js tests/repair-make-signup-provisioning.test.js",
     "test:vapi-import-request": "node --test tests/vapi-twilio-import-request.test.js tests/provider-failure-detail.test.js tests/provisioning-state.test.js",
     "test:twilio-status-inbox": "node --test --test-concurrency=1 tests/twilio-status-inbox.test.js tests/signup-agent-testing.test.js tests/backend-security.test.js",
