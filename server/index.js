@@ -3494,6 +3494,8 @@ const monitoredCallSync = createCallSyncMonitor({
   listIncidents: () => listRuntimeIncidents(runtimeIncidentPath),
   notifyFailure: (error, context) => safelyNotifyRuntimeFailure(error, context),
   recoverIncident: (id, transition) => updateRuntimeIncidentRemediation(runtimeIncidentPath, id, transition),
+  recordCompletion: completion => require('./callSyncReceipt').saveCompletion({ prisma, ...completion,
+    releaseCommit: process.env.RENDER_GIT_COMMIT || process.env.GITHUB_SHA || 'unknown' }),
 });
 
 async function performVapiCallSync(options = {}) {
@@ -12175,6 +12177,15 @@ app.get(
   enforcePublicRouteRateLimit("call-record-verification", 20),
   require("./callRecordVerification").verificationHandler({ prisma,
     getRelease: () => process.env.RENDER_GIT_COMMIT || process.env.GITHUB_SHA || "unknown" }),
+);
+
+app.get(
+  '/api/internal/operations/postrelease-verification',
+  (_req, res, next) => { res.setHeader('Cache-Control', 'no-store'); next(); },
+  requireMonitorKey,
+  enforcePublicRouteRateLimit('postrelease-verification', 20),
+  require('./postReleaseVerification').handler({ prisma,
+    getRelease: () => process.env.RENDER_GIT_COMMIT || process.env.GITHUB_SHA || 'unknown' }),
 );
 
 app.get(
