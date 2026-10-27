@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { assertCallIdentity, mergeCallData, persistCall, persistCaller } = require('../server/callPersistence');
+const { resolveCallRecord, isUniqueFailure, assertCallIdentity, mergeCallData, persistCall, persistCaller } = require('../server/callPersistence');
 const identity = { businessId: 37, callerId: 4, externalProvider: 'vapi', externalId: 'test-call', twilioCallSid: 'CA-test' };
 const data = { ...identity, status: 'COMPLETED', durationSec: 90, endedReason: 'customer-ended-call' };
 const unique = modelName => Object.assign(Error('synthetic unique collision'), { code: 'P2002', meta: { modelName, target: modelName === 'Caller' ? ['phone'] : ['twilioCallSid'] } });
@@ -82,4 +82,39 @@ test('a generic completed event with no conversation cannot erase a failed setup
 test('a database outage is not retried as if it were a duplicate event', async () => {
   let attempts=0;const db={$transaction:async()=>{attempts++;throw Error('offline');}};
   await assert.rejects(write(db), /offline/);assert.equal(attempts,1);
+});
+
+for (const [label, change] of [
+  ['partial provider identity', { externalId: null }],
+  ['partial external identity', { externalProvider: null }],
+  ['invalid business', { businessId: 0 }],
+  ['invalid local id', { callId: 'not-a-number' }],
+]) test(`invalid ${label} fails before database work`, async () => {
+  const fake = fakeDatabase();
+  await assert.rejects(write(fake.db, data, { ...identity, ...change }), { code: 'CALL_RECORD_IDENTITY_CONFLICT' });
+  assert.equal(fake.transactions(), 0);
+  assert.equal(fake.rows.size, 0);
+});
+test('partial saved provider binding cannot be silently overwritten through its carrier SID', async () => {
+  const fake = fakeDatabase([{ id: 1, ...data, externalId: null }]);
+  await assert.rejects(write(fake.db), { code: 'CALL_RECORD_IDENTITY_CONFLICT' });
+  assert.equal(fake.rows.get(1).externalId, null);
+});
+test('local id and provider identity naming different rows is an ambiguity, not an update preference', async () => {
+  const fake = fakeDatabase([{ id: 1, ...data }, { id: 2, ...data, externalId: 'other', twilioCallSid: 'CA-other' }]);
+  await assert.rejects(resolveCallRecord(fake.db, { ...identity, callId: 2 }), { code: 'CALL_RECORD_IDENTITY_CONFLICT' });
+});
+test('read-only carrier lookup preserves canonical caller before a sparse Vapi event is enriched', async () => {
+  const fake = fakeDatabase([{ id: 1, ...data, externalProvider: null, externalId: null, caller: { phone: '+15555550100' } }]);
+  const found = await resolveCallRecord(fake.db, { ...identity, callerId: undefined });
+  assert.equal(found.callerId, 4);
+  assert.equal(found.caller.phone, '+15555550100');
+  assert.equal(fake.transactions(), 0);
+});
+test('only recognized identity unique constraints qualify for race recovery', () => {
+  assert.equal(isUniqueFailure(unique('Call'), 'Call'), true);
+  assert.equal(isUniqueFailure({ code: 'P2002', meta: { target: 'Call_externalProvider_externalId_key' } }, 'Call'), true);
+  for (const target of [undefined, ['id'], ['externalProvider'], ['twilioCallSid', 'other'], 'unrelated_twilioCallSid_index']) {
+    assert.equal(isUniqueFailure({ code: 'P2002', meta: { modelName: 'Call', target } }, 'Call'), false);
+  }
 });

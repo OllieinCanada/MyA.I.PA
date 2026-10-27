@@ -81,7 +81,7 @@
     "test:homepage-mobile-hero": "node scripts/test-homepage-mobile-hero.js",
     "test:signup-verification-progress": "node --test --test-concurrency=1 tests/signup-verification-progress.test.js tests/signup-verification-page-client.test.js tests/signup-attempt-store.test.js tests/signup-status-api.test.js tests/signup-sms-verification.test.js",
     "preview:signup-verification-progress": "node scripts/preview-signup-verification-progress.js",
-    "test:database": "node --test tests/database-integration.test.js",
+    "test:database": "node --test tests/database-integration.test.js tests/call-persistence-startup-postgres.test.js",
     "test:signup-recovery": "node --test --test-concurrency=1 tests/signup-recovery-hardening.test.js tests/provisioning-state.test.js tests/provider-read.test.js tests/signup-provider-recovery.test.js tests/signup-agent-testing.test.js tests/signup-completion.test.js tests/operational-error-classifier.test.js tests/repair-make-signup-provisioning.test.js",
     "test:vapi-import-request": "node --test tests/vapi-twilio-import-request.test.js tests/provider-failure-detail.test.js tests/provisioning-state.test.js",
     "test:twilio-status-inbox": "node --test --test-concurrency=1 tests/twilio-status-inbox.test.js tests/signup-agent-testing.test.js tests/backend-security.test.js",
@@ -271,7 +271,8 @@
     "audit:twilio-2026-readiness:render-env": "node scripts/run-with-render-env.js --keys=TWILIO_ACCOUNT_SID,TWILIO_AUTH_TOKEN --optional-keys=TWILIO_API_KEY_SID,TWILIO_API_KEY_SECRET,VAPI_API_KEY -- node scripts/audit-twilio-2026-readiness.js --out=diagnostics/shipping-readiness/twilio-readiness.json",
     "ops:monitor:render-env": "node scripts/run-with-render-env.js --keys=MONITOR_API_KEY -- node scripts/monitor-production.js --include-operational --confirm-failure",
     "ops:alert-drill:render-env": "node scripts/run-with-render-env.js --keys=MONITOR_API_KEY -- node scripts/test-production-incident-remediation.js --apply --confirm=RUN_INCIDENT_REMEDIATION_CANARY",
-    "evals:vapi:render-env": "node scripts/run-with-render-env.js --keys=VAPI_API_KEY -- node scripts/setup-vapi-evals.js --sync --run-safe --repeat=5 --minimum-pass-rate=0.95 --out=diagnostics/shipping-readiness/vapi-call-gate.json"
+    "evals:vapi:render-env": "node scripts/run-with-render-env.js --keys=VAPI_API_KEY -- node scripts/setup-vapi-evals.js --sync --run-safe --repeat=5 --minimum-pass-rate=0.95 --out=diagnostics/shipping-readiness/vapi-call-gate.json",
+    "verify:saved-call": "node scripts/verify-saved-call-record.js"
   },
   "devDependencies": {
     "axe-core": "^4.10.0",
