@@ -135,7 +135,9 @@ describe("intuitive homepage journey", () => {
     expect(container.querySelector(".simple-message-phone.customer .simple-message-heading").textContent).toBe("TIM'S ELECTRICAL");
     expect(container.querySelector(".simple-message-phone.customer .closing").textContent).toMatch(/Thanks for calling Tim's Electrical\. Have a great day!/i);
     expect(container.querySelector('.simple-hero-worker img[src*="reference-contractor-hero-864.jpg"]')).not.toBeNull();
-    expect(container.querySelector('audio[src*="tims-electrical-2.wav"]')).not.toBeNull();
+    expect(container.querySelector('audio[data-public-demo-source*="tims-electrical-2.mp3"]')).not.toBeNull();
+    expect(container.querySelector('audio').hasAttribute('src')).toBe(false);
+    expect(container.querySelector('audio').getAttribute('preload')).toBe('none');
     expect(window.HTMLMediaElement.prototype.play).not.toHaveBeenCalled();
 
     await act(async () => hearCall.dispatchEvent(new MouseEvent("click", { bubbles: true })));

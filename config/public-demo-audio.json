@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "source": "/tims-electrical-2.wav",
+  "sourceSha256": "8ed9d2671ae2b54739fb29fe9e009aa6bdf8b60fa59e858cd269d6a234f1ff23",
+  "output": "/tims-electrical-2.mp3",
+  "outputSha256": "090d100cfbf761d033f8fc09886184186928820a8e6dfd98590e2b68d0a726b1",
+  "bytes": 1596857,
+  "durationSeconds": 133,
+  "encoding": "MPEG-1 Layer III, mono, 44100 Hz, 96 kbit/s",
+  "dialogueChanged": false,
+  "originalPreserved": true
+}

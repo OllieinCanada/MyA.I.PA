@@ -20,7 +20,10 @@
   },
   "scripts": {
     "build:tailwind": "tailwindcss -i src/tailwind.css -o src/tailwind.generated.css",
-    "prebuild": "npm run build:tailwind",
+    "prebuild": "npm run audio:check-demo && npm run build:tailwind",
+    "audio:check-demo": "node scripts/prepare-public-demo-audio.js --check",
+    "test:public-demo-audio": "node scripts/test-public-demo-audio.js",
+    "test:call-persistence:postgres": "node scripts/run-local-signup-postgres-drill.js --call-persistence-only",
     "dev": "concurrently -k \"npm run server\" \"npm start\"",
     "server": "node server/index.js",
     "server:prod": "node server/index.js",

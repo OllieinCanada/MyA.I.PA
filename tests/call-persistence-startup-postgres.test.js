@@ -22,8 +22,10 @@ test('PostgreSQL recovers first-query expiry without repeating a Call write', { 
       assert.deepEqual(options, { maxWait: 500, timeout: 3000 });
       return prisma.$transaction(async tx => {
         if (attempt === 1) await delay(3250);
-        return fn({ $queryRaw: tx.$queryRaw.bind(tx), call: {
-          findMany: (...args) => { reads++; return tx.call.findMany(...args); },
+        return fn({ $queryRaw: (...args) => {
+          if ((args[0].strings || args[0]).join('').includes('FOR UPDATE')) reads++;
+          return tx.$queryRaw(...args);
+        }, call: {
           create: (...args) => { writes++; return tx.call.create(...args); },
         } });
       }, options).catch(error => { failures.push(error); throw error; });

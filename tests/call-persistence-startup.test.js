@@ -14,9 +14,12 @@ function database(fail) {
     const attempt = ++seen.attempts;
     assert.deepEqual(options, { maxWait: 500, timeout: 3000 });
     const result = await fn({
-      $queryRaw: async () => { seen.configurations++; fail('configure', attempt); return []; },
+      $queryRaw: async query => {
+        if ((query.strings || query).join('').includes('FOR UPDATE')) { seen.reads++; fail('read', attempt); }
+        else { seen.configurations++; fail('configure', attempt); }
+        return [];
+      },
       call: {
-        findMany: async () => { seen.reads++; fail('read', attempt); return []; },
         create: async ({ data }) => { seen.writes++; fail('write', attempt); return { id: 3, ...data }; },
       },
     });

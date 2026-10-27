@@ -17,7 +17,7 @@ async function main(){
   if(process.platform!=='win32')throw Error('This fallback is Windows-only; use the existing PostgreSQL/Docker drill on other platforms.');
   const restoreFixture=process.argv.includes('--restore-fixture');
   let restoreBackup=process.argv.find(arg=>arg.startsWith('--restore-backup='))?.slice('--restore-backup='.length)||(restoreFixture?'fixture':'');
-  const fullTools=Boolean(restoreBackup||process.argv.includes('--intake-only')||process.argv.includes('--intake-ledger'));
+  const fullTools=Boolean(restoreBackup||process.argv.includes('--intake-only')||process.argv.includes('--intake-ledger')||process.argv.includes('--call-persistence-only'));
   const temporary=restoreBackup?privateDirectory('myaipa-backup-drill-'):fs.mkdtempSync(path.join(os.tmpdir(),'myaipa-isolated-postgres-'));
   const bin=path.join(temporary,'package','native','bin');
   const data=path.join(temporary,'data');
@@ -29,6 +29,7 @@ async function main(){
     // spawnSync waiting after pg_ctl exited. Its dedicated -l logfile suffices.
     const result=spawnSync(command,args,{cwd:ROOT,env,encoding:'utf8',stdio:path.basename(command)==='pg_ctl.exe'?'ignore':'pipe',windowsHide:true,timeout:600000});
     if(result.error||result.status!==0)throw Error(`${path.basename(command)} failed: ${String(result.stderr||result.stdout||result.error).replaceAll(password,'[redacted]').slice(-2500)}`);
+    return result;
   }
   try{
     if(!fullTools){
@@ -100,6 +101,12 @@ async function main(){
     const env={...process.env,DATABASE_URL:url,SIGNUP_RECOVERY_DRILL_DATABASE_URL:url,DISABLE_LOCAL_ENV_FILES:'1'};
     console.log('Applying the application schema to the new disposable database.');
     run(process.execPath,[path.join(ROOT,'node_modules','prisma','build','index.js'),'db','push','--skip-generate'],env);
+    if(process.argv.includes('--call-persistence-only')){
+      console.log('Checking canonical call persistence, contention and transaction expiry against isolated PostgreSQL.');
+      const tested=run(process.execPath,['--test','--test-concurrency=1',path.join(ROOT,'tests','database-integration.test.js'),path.join(ROOT,'tests','call-persistence-startup-postgres.test.js'),path.join(ROOT,'tests','call-persistence-budget-postgres.test.js')],{...env,RUN_DATABASE_INTEGRATION:'1'});
+      console.log(tested.stdout.replaceAll(password,'[redacted]'));
+      return;
+    }
     console.log('Checking receipt contention, replay recovery and health queries against PostgreSQL.');
     run(process.execPath,['--test',path.join(ROOT,'tests','twilio-status-postgres.test.js')],{...env,RUN_TWILIO_RECEIPT_DATABASE:'1'});
     if(process.argv.includes('--intake-only')){
