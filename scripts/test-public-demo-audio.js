@@ -150,6 +150,7 @@ async function main() {
     }
   } catch (error) {
     failure = { message: error.message, ...(error.audioDiagnostic || {}) };
+    console.error(JSON.stringify({ fixtureFailure: failure }));
     throw error;
   } finally {
     fixture.server.closeAllConnections();
