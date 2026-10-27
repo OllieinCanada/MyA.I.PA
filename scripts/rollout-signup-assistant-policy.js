@@ -12,6 +12,8 @@ const {repairPayload,speechSnapshot}=require('./repair-signup-speech');
 const {updateMessages,toolRejectionPlan}=require('../server/vapiIsolatedSmsProvisioning');
 const {inspectSignupSpeech}=require('../server/signupSpeechPolicy');
 const {pricingSummaryOptionsFromAssistant}=require('../src/features/signup/pricingPolicy');
+const {fingerprintAssistantContent}=require('../server/signupAssistantVerification');
+const {promptHash}=require('../server/trialSnapshotPublication');
 const {definitionMatches}=require('./vapi-release-evidence');
 const hash=v=>crypto.createHash('sha256').update(JSON.stringify(v)).digest('hex');
 const norm=v=>String(v||'').replace(/\D/g,'');
@@ -48,9 +50,10 @@ function ownership(data,s) {
   if(data.phones.some(p=>p.id!==phone.id&&(p.assistantId===s.vapiAssistantId||p.assistant?.id===s.vapiAssistantId))) return 'multiple_phone_bindings';
   return '';
 }
-async function plansFor(data,api) {
+async function plansFor(data,api,{businessId}={}) {
   const plans=[],skipped=[];
   for(const s of data.signups.filter(s=>!CLOSED(s)&&s.vapiAssistantId)) {
+    if(businessId && Number(s.businessId)!==businessId) continue;
     let reason=ownership(data,s);
     if(reason){skipped.push({business:s.businessName,reason});continue;}
     const assistant=await api(`/assistant/${s.vapiAssistantId}`);
@@ -76,7 +79,7 @@ function encryptedBackup(plans,key,destination) {
   fs.mkdirSync(path.dirname(destination),{recursive:true});
   fs.writeFileSync(destination,JSON.stringify({format:'aes-256-gcm-v1',nonce:nonce.toString('base64'),tag:cipher.getAuthTag().toString('base64'),data:encrypted.toString('base64')}),{flag:'wx'});
 }
-async function applyPlans({io,plans,recheck,backup}) {
+async function applyPlans({io,plans,recheck,backup,refreshGate=async()=>{}}) {
   await backup(); // Fail closed if durable rollback snapshot cannot be saved.
   const results=[];
   for(const p of plans) {
@@ -94,6 +97,7 @@ async function applyPlans({io,plans,recheck,backup}) {
       if(a.latestVersion&&after.latestVersion===a.latestVersion) throw new Error('Published assistant version did not advance.');
       if(t.latestVersion&&tool.latestVersion===t.latestVersion) throw new Error('Published tool version did not advance.');
       await recheck(p);
+      await refreshGate(p,after);
       results.push({business:p.signup.businessName,numberLast4:p.signup.twilioPhoneNumber.slice(-4),verified:true,assistantVersion:after.latestVersion,toolVersion:tool.latestVersion});
     }catch(error){
       const rollback=[];
@@ -102,6 +106,10 @@ async function applyPlans({io,plans,recheck,backup}) {
         if(now&&isDeepStrictEqual(snapshot(now),change.original)){rollback.push('already_original');continue;}
         if(!now||!definitionMatches(change.patch,snapshot(now))){rollback.push('concurrent_edit_or_uncertain_keep');continue;}
         try{await io.api(change.endpoint,{method:'PATCH',body:change.original});const restored=await io.api(change.endpoint);rollback.push(definitionMatches(change.original,snapshot(restored))?'restored':'restore_unconfirmed');}catch{rollback.push('restore_failed');}
+      }
+      const restoredAssistant=await io.api(`/assistant/${p.assistant.id}`).catch(()=>null);
+      if(restoredAssistant&&isDeepStrictEqual(speechSnapshot(restoredAssistant),speechSnapshot(p.assistant))) {
+        await refreshGate(p,restoredAssistant).catch(()=>rollback.push('snapshot_needs_review'));
       }
       results.push({business:p.signup.businessName,verified:false,error:error.message,rollback});
       break; // No further businesses are changed after any uncertain failure.
@@ -120,7 +128,7 @@ async function clients(env) {
     if(!r.ok) throw new Error(`${method} ${endpoint.split('/')[1]} HTTP ${r.status}.`);
     return r.json();
   }
-  return { admin:p=>request('https://api.myaipa.ca',p,{cookie}), api:(p,o)=>request('https://api.vapi.ai',p,{Authorization:`Bearer ${env.VAPI_API_KEY}`},o) };
+  return { admin:(p,o)=>request('https://api.myaipa.ca',p,{cookie,Origin:'https://www.myaipa.ca','x-myaipa-editor':'1'},o), api:(p,o)=>request('https://api.vapi.ai',p,{Authorization:`Bearer ${env.VAPI_API_KEY}`},o) };
 }
 async function inventory({admin,api}) {
   const [s,m,c,p,a,t]=await Promise.all([admin('/api/admin/signups'),admin('/api/admin/vapi/mappings'),admin('/api/admin/customer-setup'),api('/phone-number?limit=1000'),api('/assistant?limit=1000'),api('/tool?limit=1000')]);
@@ -133,9 +141,15 @@ async function main() {
   const env=loadProjectEnv();
   if(!env.ADMIN_PASSWORD||!env.VAPI_API_KEY) throw new Error('Admin and Vapi credentials required.');
   const io=await clients(env), data=await inventory(io);
-  const {plans,skipped}=await plansFor(data,io.api),digest=planDigest(plans),apply=process.argv.includes('--apply');
+  const businessArg=process.argv.find(a=>a.startsWith('--business-id='))?.slice(14);
+  if(businessArg!==undefined&&!/^[1-9]\d*$/.test(businessArg))throw Error('An exact positive --business-id is required.');
+  const businessId=businessArg?Number(businessArg):undefined;
+  const {plans,skipped}=await plansFor(data,io.api,{businessId}),digest=planDigest(plans),apply=process.argv.includes('--apply');
   const report={mode:apply?'apply':'read-only',digest,counts:Object.fromEntries(Object.entries(data).map(([k,v])=>[k,v.length])),eligible:plans.map(p=>({business:p.signup.businessName,numberLast4:p.signup.twilioPhoneNumber.slice(-4),assistantVersion:p.assistant.latestVersion,toolVersion:p.tool.latestVersion})),skipped,numbersCreated:0,billingChanged:false,routingChanged:false,liveAudioTest:'not performed',results:[]};
   if(apply){
+    const release=process.argv.find(a=>a.startsWith('--release='))?.slice(10);
+    const health=await io.admin('/api/health/ready');
+    if(!/^[a-f0-9]{40}$/.test(release||'')||health.ok!==true||health.releaseCommit!==release)throw Error('The exact repaired backend release must be live before provider publication.');
     if(!plans.length||!process.argv.includes(`--digest=${digest}`)) throw new Error('Exact dry-run digest required; inventory/configuration changed or no eligible assistants.');
     const recheck=async p=>{
       const fresh=await inventory(io),reason=ownership(fresh,p.signup),live=fresh.signups.find(s=>s.signupAttemptId===p.signup.signupAttemptId);
@@ -148,7 +162,14 @@ async function main() {
     };
     const backupPath=path.resolve('diagnostics',`vapi-policy-backup-${Date.now()}.encrypted.json`);
     report.backup=backupPath;
-    report.results=await applyPlans({io,plans,recheck,backup:()=>encryptedBackup(plans,env.VAPI_API_KEY,backupPath)});
+    const refreshGate=async(p,assistant)=>{
+      if(p.phone.assistantId)return;
+      const result=await io.admin('/api/admin/vapi/refresh-trial-snapshot',{method:'POST',body:{businessId:p.signup.businessId,
+        signupAttemptId:p.signup.signupAttemptId,assistantId:p.assistant.id,phoneNumberId:p.phone.id,
+        expectedFingerprint:fingerprintAssistantContent(assistant),expectedPromptHash:promptHash(assistant),apply:true}});
+      if(result.ok!==true||result.refreshed!==true)throw Error('Protected trial snapshot publication did not verify.');
+    };
+    report.results=await applyPlans({io,plans,recheck,refreshGate,backup:()=>encryptedBackup(plans,env.VAPI_API_KEY,backupPath)});
     if(report.results.length!==plans.length||report.results.some(r=>!r.verified)) process.exitCode=2;
   }
   const out=process.argv.find(a=>a.startsWith('--out='))?.slice(6);

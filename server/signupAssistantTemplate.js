@@ -5,6 +5,7 @@ const SIGNUP_ASSISTANT_TOOL_IDS = Object.freeze([
 ]);
 const { classifySignupAssistantPlaybook } = require("./signupVoiceQuality");
 const { signupSpeechPatch, normalizeConsentPrompt } = require("./signupSpeechPolicy");
+const { consolidateServicePrompt } = require('./serviceIntakePrompt');
 const { CHOICE_KEYS, hasIndividualPricingChoices, individualPricingPolicy } = require("../src/features/signup/pricingPolicy");
 
 function templateError(message, field, code = "SIGNUP_ASSISTANT_CONFIG_INVALID") {
@@ -420,7 +421,7 @@ function buildSignupAssistantConfig(normalizedPayload, options) {
       messages: [
         {
           role: "system",
-          content: normalizeConsentPrompt(buildIndustryAwarePrompt(values)),
+          content: normalizeConsentPrompt(consolidateServicePrompt(buildIndustryAwarePrompt(values))),
         },
       ],
     },

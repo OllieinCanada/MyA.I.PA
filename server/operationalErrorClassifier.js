@@ -211,6 +211,16 @@ function classifyOperationalError(error = {}, context = {}) {
   const { code, provider, source, status } = details;
   const label = providerName(provider);
   const exactTwilio = provider === "TWILIO" ? TWILIO_CODE_GUIDANCE[code] : null;
+  if (['SMS_CONFIRMATION_REJECTED', 'CALL_NOTIFICATION_UNCONFIRMED'].includes(code)) return result(details, 'call_notification_failure', {
+    reasonCode: code, retryable: false,
+    reason: code === 'SMS_CONFIRMATION_REJECTED'
+      ? 'Vapi rejected the confirmation before notification execution. Neither message was submitted by this attempt.'
+      : 'The conversation ended, but notification submission was not fully confirmed. A transport failure can leave an unknown outcome.',
+    whatFailed: 'The call request did not complete its notification handoff',
+    impact: 'A completed phone call does not prove the owner received the request or the customer received a text.',
+    nextAction: 'Inspect this call’s unique tool results and Twilio message IDs. Only recover a proven pre-execution rejection after fresh consent; never blindly resend.',
+    signInDestination: 'My AI PA Admin → exact call; Vapi → call tool results',
+  });
 
   if (/^VOICE_(?:ASSISTANT_REQUEST_DEADLINE|TRIAL_RESERVATION_BUSY|ASSISTANT_SELECTION_FAILED|ROUTE_IDENTITY_UNPROVEN)$/.test(code)) {
     const timedOut = code === 'VOICE_ASSISTANT_REQUEST_DEADLINE';

@@ -3649,10 +3649,15 @@ export default function AdminDashboard() {
                       <span>{dt(selectedCall.startedAt)} · {callDurationText(selectedCall.durationSec)}</span>
                       <p>{selectedCall.aiSummary || "No call summary yet. Choose Check for New Calls after the call has ended."}</p>
                       <div className="admin-call-detail-meta">
+                        <div><span>Request handoff</span><strong>{selectedCall.notificationEvidence?.submissionLabel || "Not verified"}</strong></div>
+                        <div><span>Owner text</span><strong>{selectedCall.notificationEvidence?.owner?.label || "Not verified"}</strong></div>
+                        <div><span>Customer text</span><strong>{selectedCall.notificationEvidence?.customer?.label || "Not verified"}</strong></div>
+                        <div><span>Unique tool invocations</span><strong>{selectedCall.notificationEvidence?.countIsExact ? selectedCall.notificationEvidence.uniqueToolCalls : "Not fully verified"}</strong></div>
                         <div><span>Provider call ID</span><strong>{selectedCall.externalProvider === "vapi" ? selectedCall.externalId || "—" : "Not linked"}</strong></div>
                         <div><span>Transcript</span><strong>{selectedCall.transcriptAvailable ? selectedCall.transcript ? "Visible" : "Stored privately" : "Missing"}</strong></div>
                         <div><span>Recording</span><strong>{selectedCall.recordingAvailable ? selectedCall.recordingUrl ? "Visible" : "Stored privately" : "Missing"}</strong></div>
                       </div>
+                      <p>Phone-call completion does not confirm request handoff or text delivery.</p>
                       {selectedCall.recordingUrl ? <a className="admin-call-recording-link" href={selectedCall.recordingUrl} target="_blank" rel="noreferrer">Open recording</a> : null}
                       {selectedCall.transcript ? (
                         <pre className="admin-call-transcript">{selectedCall.transcript}</pre>
