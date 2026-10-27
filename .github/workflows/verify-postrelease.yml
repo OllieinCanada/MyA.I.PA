@@ -1,6 +1,11 @@
 name: Read post-release verification evidence
 on:
   workflow_dispatch:
+    inputs:
+      inspection_public_key:
+        description: Optional RSA3072/4096 public key; detailed evidence is encrypted for its owner
+        required: false
+        type: string
 permissions:
   contents: read
 jobs:
@@ -14,8 +19,9 @@ jobs:
         with:
           node-version: 20
       - name: Test privacy and read-only boundaries
-        run: node --test tests/postrelease-verification.test.js
+        run: node --test tests/postrelease-verification.test.js tests/postrelease-evidence-encryption.test.js
       - name: Read aggregate evidence without alerts or retries
         env:
           MONITOR_API_KEY: ${{ secrets.MONITOR_API_KEY }}
+          INSPECTION_PUBLIC_KEY: ${{ inputs.inspection_public_key }}
         run: node scripts/verify-postrelease.js

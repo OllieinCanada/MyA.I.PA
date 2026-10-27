@@ -1,5 +1,6 @@
 // Fixed GET only. No env-file loading, provider clients, workers or incident actions.
 const { projectEvidence } = require('../server/runtimeReceiptEvidence');
+const { sealEvidence } = require('./postrelease-evidence-envelope');
 function project(r) {
   const statuses = ['unknown', 'previous_release', 'stale', 'empty_result', 'verified', 'unresolved_failure'];
   const workers = ['healthy', 'warning', 'critical', 'unknown', 'unavailable'];
@@ -34,8 +35,15 @@ async function run({ env = process.env, fetchImpl = fetch } = {}) {
   if (!response.ok) throw Error('Evidence unavailable');
   return project(await response.json());
 }
-if (require.main === module) run().then(r => { console.log(JSON.stringify(r, null, 2));
+function output(report, env = process.env) {
+  const filtered = project(report);
+  if (env.INSPECTION_PUBLIC_KEY) return sealEvidence(filtered, env.INSPECTION_PUBLIC_KEY);
+  // This repository is public. Detailed private evidence must never enter cleartext CI logs.
+  const { investigation, ...summary } = filtered;
+  return summary;
+}
+if (require.main === module) run().then(r => { console.log(JSON.stringify(output(r), null, 2));
   // Historical original outcomes remain unknown even when the worker is healthy.
   process.exitCode = 2;
 }).catch(() => { console.error(JSON.stringify({ readOnly: true, error: 'postrelease_evidence_unavailable' })); process.exitCode = 1; });
-module.exports = { run, project };
+module.exports = { run, project, output };
