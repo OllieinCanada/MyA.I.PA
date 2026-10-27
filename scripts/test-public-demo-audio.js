@@ -75,6 +75,14 @@ async function scenario(browser, engine, viewport, mode, fixture) {
     const control = page.locator('.simple-carousel-header button');
     await control.waitFor();
     const element = page.locator('.simple-proof-carousel audio');
+    await element.evaluate(audio => {
+      window.__fixtureMediaErrors = [];
+      audio.addEventListener('error', () => window.__fixtureMediaErrors.push({
+        code: audio.error?.code || null,
+        message: audio.error?.message || '',
+        source: audio.currentSrc ? new URL(audio.currentSrc).pathname : '',
+      }));
+    });
     assert.equal(await element.getAttribute('preload'), 'none');
     assert.equal(await element.evaluate(audio => audio.paused), true);
     assert.equal(requests.length, 0, 'no media download before user interaction');
@@ -118,6 +126,8 @@ async function scenario(browser, engine, viewport, mode, fixture) {
           duration: Number.isFinite(audio.duration) ? audio.duration : null,
           readyState: audio.readyState, networkState: audio.networkState,
           errorCode: audio.error?.code || null,
+          errorMessage: audio.error?.message || '',
+          sourceErrors: window.__fixtureMediaErrors || [],
           source: audio.currentSrc ? new URL(audio.currentSrc).pathname : '' } : null;
       }).catch(() => null),
     };

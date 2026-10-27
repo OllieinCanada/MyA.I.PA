@@ -5,7 +5,7 @@ const { runtimeDependencySecurity, atLeast } = require('../server/runtimeDepende
 test('actual Express parser and mailer are the reviewed patched versions', () => {
   const result = runtimeDependencySecurity();
   assert.equal(result.ok, true);
-  assert.equal(result.versions.express, '4.22.2');
+  assert.equal(result.versions.express, '4.22.3');
   assert.equal(result.versions.bodyParser, '1.20.9');
   assert.equal(result.versions.nodemailer, '10.1.4');
 });
