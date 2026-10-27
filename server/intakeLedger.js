@@ -64,6 +64,7 @@ async function applyIntakeDecision({ prisma, input, trusted }) {
       const lead = await tx.lead.upsert({ where: { callId: call.id }, create: { ...fields, callId: call.id, intent: 'GENERAL', urgency: 'MEDIUM' }, update: fields });
       leadId = lead.id; outboxKey = 'staging:intake-outbox:v1:' + hash(key);
       const data = { schemaVersion: 1, status: 'pending', businessId: call.businessId, callDbId: call.id,
+        assistantId: trusted.assistantId || '',
         ledgerKey: key, ledgerVersion: version, leadId, purpose: 'owner-intake', values,
         sourceEventId: 'staging-intake:' + hash(key), createdAt: new Date().toISOString() };
       await tx.runtimeStore.upsert({ where: { key: outboxKey }, create: { key: outboxKey, data }, update: { data } });

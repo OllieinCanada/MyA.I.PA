@@ -8,13 +8,13 @@ const commit = 'a'.repeat(40);
 test('handoff refuses stale, duplicated or real-provider intake evidence', () => {
   const report = { checkedAt: new Date().toISOString(), passed: true, concurrency: true, processRestart: true,
     latestConfirmedValuesOnly: true, crossTenantRejected: true, authenticationRequired: true,
-    staleAndLateUpdatesRejected: true, transactionRollbackVerified: true, legacyRetryOwnerSeparated: true,
+    staleAndLateUpdatesRejected: true, transactionRollbackVerified: true, legacyRetryOwnerSeparated: true, stagingQueueOwned:true,productionWorkerDenied:true,
     productionTouched: false, realProviderRequests: 0, canonicalRecordsForCompletedCall: 1,
     leadsForCompletedCall: 1, notificationHandoffs: 1, fakeProviderAcceptances: 1 };
   assert.doesNotThrow(() => assertIntakeEvidence(report, 0));
   assert.throws(() => assertIntakeEvidence(report, Date.now() + 1000));
   assert.throws(() => assertIntakeEvidence(report, Number.NaN));
-  for (const change of [{ leadsForCompletedCall: 2 }, { realProviderRequests: 1 }, { productionTouched: true }, { legacyRetryOwnerSeparated: false }]) {
+  for (const change of [{ leadsForCompletedCall: 2 }, { realProviderRequests: 1 }, { productionTouched: true }, { legacyRetryOwnerSeparated: false },{stagingQueueOwned:false},{productionWorkerDenied:false}]) {
     assert.throws(() => assertIntakeEvidence({ ...report, ...change }, 0));
   }
 });

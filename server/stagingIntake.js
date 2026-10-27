@@ -30,6 +30,6 @@ async function handleStagingIntakeTool({ prisma, authenticated, businessId, call
   }, { maxWait: 5000, timeout: 10000 });
   const callId = 'staging-' + crypto.createHash('sha256').update(call.id).digest('hex').slice(0, 40);
   return applyIntakeDecision({ prisma, input: { ...parameters, businessId: String(businessId), callId, eventId: toolCall.id },
-    trusted: { businessId, callId, callDbId: savedCall.id, providerCallId: call.id } });
+    trusted: { businessId, callId, callDbId: savedCall.id, providerCallId: call.id, assistantId: env.STAGING_INTAKE_ASSISTANT_ID } });
 }
 module.exports = { TOOL_NAME, authorizeStagingIntake, handleStagingIntakeTool };
