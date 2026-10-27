@@ -343,6 +343,8 @@ const {
 const { resolveVapiWebhookSecret } = require("./vapiWebhookAuth");
 const { mapCallStatus, runAssistantRequest, shouldReportCallSetupFailure, withCallSetupFailureHook } = require("./voiceCallReliability");
 const { reserveCall } = require("./trialCallReservation");
+const { parseToolResult, notificationEvidence, enrichNotificationEvidence } = require('./callNotificationEvidence');
+const { publishTrialSnapshot } = require('./trialSnapshotPublication');
 const {
   buildVoiceSignupPayload,
   isVapiVoiceSignupTool,
@@ -2251,8 +2253,15 @@ function formatVapiTranscriptValue(value) {
 }
 
 function summarizeVapiToolCalls(call) {
-  const names = [];
+  const identified = new Map();
+  const anonymous = new Set();
   const visited = new Set();
+  function add(toolCall) {
+    const name = getVapiNestedString(toolCall, ["function.name", "name"]);
+    const id = String(toolCall?.id || toolCall?.toolCallId || toolCall?.tool_call_id || '').trim();
+    if (name && id) identified.set(id, name);
+    else if (name) anonymous.add(name);
+  }
 
   function visit(value) {
     if (!value || typeof value !== "object" || visited.has(value)) return;
@@ -2266,24 +2275,22 @@ function summarizeVapiToolCalls(call) {
     for (const key of ["toolCallList", "toolCalls", "tool_calls"]) {
       const calls = Array.isArray(value[key]) ? value[key] : [];
       for (const toolCall of calls) {
-        const name = getVapiNestedString(toolCall, ["function.name", "name"]);
-        if (name) names.push(name);
+        add(toolCall);
         visit(toolCall);
       }
     }
 
     const eventType = String(value.type || value.role || "").trim().toLowerCase();
-    if (/tool[-_ ]?call/.test(eventType)) {
-      const name = getVapiNestedString(value, ["function.name", "name"]);
-      if (name) names.push(name);
+    if (/tool[-_ ]?call/.test(eventType) && !/result/.test(eventType)) {
+      add(value);
     }
 
     for (const nested of Object.values(value)) visit(nested);
   }
 
   visit(call);
-  const toolNames = [...new Set(names)];
-  return { count: names.length, toolNames };
+  const toolNames = [...new Set([...identified.values(), ...anonymous])];
+  return { count: identified.size, countIsExact: anonymous.size === 0, toolCallIds: [...identified.keys()], toolNames };
 }
 
 function summarizeVapiToolEnvironmentVariables(tool) {
@@ -2339,30 +2346,7 @@ function summarizeVapiToolResults(call) {
   const visited = new Set();
 
   function safeResult(value) {
-    let parsed = value;
-    if (typeof value === "string") parsed = parseJsonObject(value);
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
-    return {
-      ok: typeof parsed.ok === "boolean" ? parsed.ok : null,
-      sent: typeof parsed.sent === "boolean" ? parsed.sent : null,
-      skipped: typeof parsed.skipped === "boolean" ? parsed.skipped : null,
-      status: String(parsed.status || "").trim().slice(0, 80),
-      error: String(parsed.error || parsed.message || "").trim().slice(0, 240),
-      owner: parsed.owner && typeof parsed.owner === "object" ? {
-        sent: parsed.owner.sent === true,
-        status: String(parsed.owner.status || "").trim().slice(0, 80),
-        errorCode: String(parsed.owner.errorCode || "").trim().slice(0, 80),
-        toLast4: String(parsed.owner.toLast4 || "").replace(/\D/g, "").slice(-4),
-        fromLast4: String(parsed.owner.fromLast4 || "").replace(/\D/g, "").slice(-4),
-      } : null,
-      customer: parsed.customer && typeof parsed.customer === "object" ? {
-        sent: parsed.customer.sent === true,
-        status: String(parsed.customer.status || "").trim().slice(0, 80),
-        errorCode: String(parsed.customer.errorCode || "").trim().slice(0, 80),
-        toLast4: String(parsed.customer.toLast4 || "").replace(/\D/g, "").slice(-4),
-        fromLast4: String(parsed.customer.fromLast4 || "").replace(/\D/g, "").slice(-4),
-      } : null,
-    };
+    return parseToolResult(value);
   }
 
   function visit(value) {
@@ -2389,6 +2373,7 @@ function summarizeVapiToolResults(call) {
       const result = safeResult(rawResult);
       if (result) {
         results.push({
+          toolCallId,
           name: getVapiNestedString(value, ["name", "function.name"]) || callNames.get(toolCallId) || "unknown",
           ...result,
         });
@@ -2399,14 +2384,14 @@ function summarizeVapiToolResults(call) {
   }
 
   visit(call);
-  return results.filter(
+  return results.map(result => ({ ...result, name: result.name === 'unknown' ? callNames.get(result.toolCallId) || 'unknown' : result.name })).filter(
     (result, index, items) =>
       index === items.findIndex((item) => JSON.stringify(item) === JSON.stringify(result))
   );
 }
 
 function summarizeCompositeNotificationHealth({ toolResults = [], aiNumber, ownerNumber, customerNumber } = {}) {
-  const result = toolResults.find((item) => /^send_call_summaries_/i.test(String(item?.name || "")));
+  const result = toolResults.filter((item) => /^send_call_summaries_/i.test(String(item?.name || ""))).at(-1);
   if (!result) {
     return {
       status: "critical",
@@ -2414,6 +2399,8 @@ function summarizeCompositeNotificationHealth({ toolResults = [], aiNumber, owne
       summary: "No combined owner/customer notification result was recorded.",
     };
   }
+  if (result.rejectedBeforeExecution) return { status: 'critical', code: 'SMS_CONFIRMATION_REJECTED',
+    summary: 'The confirmation gate rejected the notification before execution. Neither text was submitted.' };
   const expectedAi = normalizePhoneForMatch(aiNumber).slice(-4);
   const expectedOwner = normalizePhoneForMatch(ownerNumber).slice(-4);
   const expectedCustomer = normalizePhoneForMatch(customerNumber).slice(-4);
@@ -3449,6 +3436,7 @@ async function upsertVapiCall(fullCall, store) {
     localCallId: localCall.id,
     businessId,
     businessName: localCall.business?.name || "",
+    notificationEvidence: notificationEvidence(localCall.toolCallSummary),
     durationSec: localCall.durationSec,
     transcriptAvailable: Boolean(transcript),
     recordingAvailable: Boolean(recordingUrl),
@@ -3478,6 +3466,18 @@ async function ingestVapiEndOfCallReport(message) {
   try { result = await upsertVapiCall(fullCall, store); }
   catch (error) { reportSetupFailure(error); throw error; }
   reportSetupFailure(result);
+  const notification = result.notificationEvidence;
+  if (notification?.available && (notification.rejectedBeforeExecution || ['unconfirmed', 'not_submitted', 'failed'].includes(notification.customer.state)
+    || ['unconfirmed', 'not_submitted', 'failed'].includes(notification.owner.state))) {
+    const code = notification.rejectedBeforeExecution ? 'SMS_CONFIRMATION_REJECTED' : 'CALL_NOTIFICATION_UNCONFIRMED';
+    void safelyNotifyRuntimeFailure(Object.assign(new Error('Call notifications did not complete with verified submission evidence.'), { code, provider: 'Vapi' }), {
+      area: 'call notifications', provider: 'Vapi', businessName: result.businessName,
+      route: '/api/webhooks/voice', method: 'POST', severity: 'critical',
+      dedupeFingerprint: `${fullCall.id}:call-notifications`,
+      snapshot: { 'Call ID': fullCall.id, 'Business ID': result.businessId,
+        'Request handoff': notification.submission, 'Owner text': notification.owner.state, 'Customer text': notification.customer.state },
+    });
+  }
   writeVapiCallSyncStore(store);
   if (result.usageChanged) await reconcileTrialUsageAfterCall(result);
   return result;
@@ -9151,6 +9151,15 @@ function sanitizeCustomerStructuredData(value, depth = 0) {
 }
 
 function getCustomerNotificationSummary(call) {
+  const evidence = call.notificationEvidence || notificationEvidence(call.toolCallSummary);
+  if (evidence.available) return ['owner', 'customer'].map(recipient => {
+    const leg = evidence[recipient];
+    return { recipient, status: leg.state, label: leg.label,
+      requestedAt: call.endedAt || call.startedAt, sentAt: null,
+      deliveredAt: leg.delivered ? leg.receiptAt : null,
+      failedAt: leg.state === 'failed' ? leg.receiptAt : null,
+      problem: ['failed', 'not_submitted', 'unconfirmed'].includes(leg.state) ? leg.label : '' };
+  });
   const attempts = (call.leadHandoffs || []).flatMap((handoff) => handoff.attempts || []);
   return attempts.map((attempt) => ({
     recipient: String(attempt.recipientRole || "").toLowerCase(),
@@ -9166,11 +9175,11 @@ function getCustomerNotificationSummary(call) {
 function buildCustomerCallTimeline(call, notifications) {
   const events = [
     { type: "call_started", label: "Call received", at: call.startedAt },
-    call.endedAt ? { type: "call_ended", label: "Call completed", at: call.endedAt } : null,
+    call.endedAt ? { type: "call_ended", label: "Phone call ended", at: call.endedAt } : null,
     call.aiSummary || call.transcript ? { type: "summary_ready", label: "Call summary ready", at: call.endedAt || call.startedAt } : null,
     ...notifications.map((item) => ({
       type: `${item.recipient || "message"}_text_${item.status || "updated"}`,
-      label: `${item.recipient === "owner" ? "Owner" : item.recipient === "customer" ? "Customer" : "Backup"} text ${item.failedAt ? "needs attention" : item.deliveredAt ? "delivered" : item.sentAt ? "sent" : "requested"}`,
+      label: `${item.recipient === "owner" ? "Owner" : item.recipient === "customer" ? "Customer" : "Backup"} text: ${item.label || (item.failedAt ? "needs attention" : item.deliveredAt ? "carrier reported delivered" : item.sentAt ? "accepted — delivery unconfirmed" : "requested")}`,
       at: item.deliveredAt || item.failedAt || item.sentAt || item.requestedAt,
     })),
   ].filter(Boolean);
@@ -9223,6 +9232,7 @@ function sanitizeCustomerCall(call) {
       metrics: sanitizeCustomerStructuredData(call.artifactMetrics || {}),
     },
     notifications,
+    notificationEvidence: call.notificationEvidence || notificationEvidence(call.toolCallSummary),
     timeline: buildCustomerCallTimeline(call, notifications),
     caller: {
       phone: call.caller?.phone || "",
@@ -9341,7 +9351,7 @@ async function getCustomerDashboard({ email, phone }) {
     },
   });
 
-  const calls = business?.calls || [];
+  const calls = await enrichNotificationEvidence(prisma, business?.calls || []);
   const completedCalls = calls.filter((call) => call.status === "COMPLETED").length;
   const missedCalls = calls.filter((call) => ["MISSED", "ABANDONED", "FAILED"].includes(call.status)).length;
   const followUps = calls.filter((call) => call.followUpNeeded || ["FOLLOW_UP", "QUOTE_NEEDED", "EMERGENCY"].includes(call.outcome)).length;
@@ -11208,6 +11218,7 @@ function sanitizeAdminCall(call) {
   const recordingUrl = typeof call.recordingUrl === "string" ? call.recordingUrl : null;
   return {
     ...call,
+    notificationEvidence: call.notificationEvidence || notificationEvidence(call.toolCallSummary),
     transcript: EXPOSE_CALL_TRANSCRIPTS_IN_ADMIN ? transcript : null,
     transcriptAvailable: Boolean(transcript),
     transcriptProtected: Boolean(transcript) && !EXPOSE_CALL_TRANSCRIPTS_IN_ADMIN,
@@ -15966,6 +15977,21 @@ async function publishBusinessEditorGate({ signup, gate, assistant, identity }) 
   }
 }
 
+app.post('/api/admin/vapi/refresh-trial-snapshot', requireAdmin, asyncRoute(async (req, res) => {
+  assertBusinessEditorRequest(req); // Trusted origin, JSON and a non-simple anti-CSRF header.
+  const result = await publishTrialSnapshot({ input: req.body, signups: listSignupDashboardRecords(),
+    getAssistant: id => requestVapiResource(`assistant/${encodeURIComponent(id)}`),
+    getPhone: id => requestVapiResource(`phone-number/${encodeURIComponent(id)}`),
+    getCalls: async id => {
+      const payload = await requestVapiResource(`call?assistantId=${encodeURIComponent(id)}&limit=1000`);
+      if (payload?.hasMore || payload?.nextCursor || payload?.pagination?.nextCursor) return null;
+      return Array.isArray(payload) ? payload : payload?.calls || payload?.results || payload?.data;
+    },
+    assertLifecycle: assertBusinessEditorLifecycle, readGate: readTrialGateConfiguration,
+    publishGate: publishBusinessEditorGate, fingerprint: fingerprintAssistantContent });
+  res.setHeader('Cache-Control', 'no-store');res.json(result);
+}));
+
 app.get('/api/customer/dashboard/business-details', enforcePublicRouteRateLimit('business-details-view', 30), asyncRoute(async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   const context = await requireBusinessEditor(req);
@@ -17175,7 +17201,7 @@ app.get(
       orderBy: { startedAt: "desc" },
       take: 200,
     });
-    res.json({ ok: true, calls: calls.map(sanitizeAdminCall) });
+    res.json({ ok: true, calls: (await enrichNotificationEvidence(prisma, calls)).map(sanitizeAdminCall) });
   })
 );
 
@@ -17210,7 +17236,7 @@ app.get(
       include: { caller: true, business: true, notes: { orderBy: { createdAt: "desc" } }, tasks: { orderBy: { createdAt: "desc" } } },
     });
     if (!call) return res.status(404).json({ error: "Call not found." });
-    res.json({ ok: true, call: sanitizeAdminCall(call) });
+    res.json({ ok: true, call: sanitizeAdminCall((await enrichNotificationEvidence(prisma, [call]))[0]) });
   })
 );
 
@@ -18915,6 +18941,9 @@ module.exports = {
   app,
   startServer,
   __test: {
+    summarizeVapiToolCalls,
+    summarizeVapiToolResults,
+    summarizeCompositeNotificationHealth,
     handleTrialAssistantRequest,
     reserveTrialCall,
     readTrialGateConfiguration,

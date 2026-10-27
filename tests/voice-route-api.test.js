@@ -9,6 +9,7 @@ Object.assign(process.env, { NODE_ENV:'test', DISABLE_LOCAL_ENV_FILES:'1', DATAB
   TELEGRAM_BOT_TOKEN:'', TELEGRAM_CHAT_ID:'', STRIPE_SECRET_KEY:'', TWILIO_ACCOUNT_SID:'', TWILIO_AUTH_TOKEN:'',
   SMTP_HOST:'', MAKE_SIGNUP_WEBHOOK_URL:'', TRIAL_REMINDER_DISABLE:'true', VAPI_AUTO_SYNC_ENABLED:'false',
   MISSED_CALL_ALERT_ENABLED:'false', DAILY_DIGEST_ENABLED:'false', SIGNUP_SETUP_WORKER_PAUSED:'true', TRIAL_USAGE_LIMIT_ENABLED:'true' });
+Object.assign(process.env,{ADMIN_PASSWORD:'synthetic-admin-route-secret',ADMIN_TOTP_SECRET:''});
 const rows = new Map(); let usedSeconds=0, transactions=0, delayGate=false, releaseGate, failWriteKey;
 const clone = value => structuredClone(value);
 const db = {
@@ -68,6 +69,27 @@ test('real HTTP assistant-request authorizes the exact saved assistant and reser
   const replay=await call();assert.deepEqual(await replay.json(),{assistantId:'voice-assistant'});
   const reservations=[...rows.values()].find(row=>row.reservations);
   assert.equal(Object.keys(reservations.reservations).length,1);assert.equal(transactions,2);
+});
+
+test('repeated artifact representations count two unique invocations and retain the rejected notification',()=>{
+  const messages=[{role:'tool_calls',toolCalls:[{id:'notify',function:{name:'send_call_summaries_test',arguments:'{}'}}]},
+    {role:'tool_call_result',toolCallId:'notify',result:'Tool call rejected based on configured rejection plan'},
+    {role:'tool_calls',toolCalls:[{id:'end',function:{name:'endCall',arguments:'{}'}}]},
+    {role:'tool_call_result',toolCallId:'end',result:'Success.'}];
+  const call={messages,artifact:{messages:clone(messages),messagesOpenAIFormatted:clone(messages)}};
+  const calls=__test.summarizeVapiToolCalls(call),results=__test.summarizeVapiToolResults(call);
+  assert.equal(calls.count,2);assert.equal(calls.countIsExact,true);assert.equal(results.length,2);
+  assert.equal(results.find(r=>r.name==='send_call_summaries_test').errorCode,'SMS_CONFIRMATION_REJECTED');
+  assert.equal(__test.summarizeCompositeNotificationHealth({toolResults:results}).code,'SMS_CONFIRMATION_REJECTED');
+});
+
+test('snapshot publication requires admin authentication and same-origin JSON editor protections before any provider access',async()=>{
+  const send = headers => fetch(`${base}/api/admin/vapi/refresh-trial-snapshot`,{method:'POST',headers:{'content-type':'application/json',...headers},body:'{}'});
+  assert.equal((await send({})).status,401);
+  assert.equal((await send({'x-admin-password':'synthetic-admin-route-secret'})).status,403);
+  assert.equal((await send({'x-admin-password':'synthetic-admin-route-secret',origin:'https://evil.example','x-myaipa-editor':'1'})).status,403);
+  assert.equal((await send({'x-admin-password':'synthetic-admin-route-secret',origin:'https://www.myaipa.ca','x-myaipa-editor':'1'})).status,400);
+  assert.equal(transactions,0);
 });
 test('two conflicting route aliases fail closed before any allowance or provider action',async()=>{
   rows.set(keys[1],{...gate,assistantId:'other-business-assistant'});

@@ -2,6 +2,8 @@ const crypto = require("crypto");
 const { pricingSummaryOptionsFromAssistant } = require("../src/features/signup/pricingPolicy");
 const { signupSpeechPatch, normalizeConsentPrompt, inspectSignupSpeech } = require("./signupSpeechPolicy");
 const { confirmationStartSpeakingPlan, CONFIRMATION_RULE } = require('./signupConfirmationTiming');
+const { toolRejectionPlan } = require('./callConfirmation');
+const { consolidateServicePrompt } = require('./serviceIntakePrompt');
 const {
   POST_SEND_CLOSING_MARKER,
   callerNumberFallbackPrompt,
@@ -17,29 +19,6 @@ const LEGACY_PILOT_PROMPT_MARKER = "## PILOT OVERRIDE: isolated deterministic SM
 const TOOL_REQUEST_START_MESSAGE = "Got it.";
 const RECORDING_NOTICE = "For quality and service purposes, this call may be recorded.";
 const MAX_CALL_DURATION_SECONDS = 300;
-
-function toolRejectionPlan() {
-  const target = { position: -1, role: "user" };
-  return {
-    conditions: [{
-      type: "group",
-      operator: "OR",
-      conditions: [
-        {
-          type: "regex",
-          regex: "(?i)(?:^\\s*(?:(?:uh+|um+|erm|hmm|well|alright)[,.]?\\s*)?(?:yes|yeah|yep|sure|perfect|absolutely|okay|ok)[,.]?(?:\\s+(?:please|thanks?|go ahead))?\\s*[.!]?\\s*$|\\b(?:correct|confirmed|send (?:it|that)|please do|go ahead|looks good|that(?:'s| is) right|sounds good)\\b)",
-          target,
-          negate: true,
-        },
-        {
-          type: "regex",
-          regex: "(?i)\\b(cancel|stop|never\\s*mind|do\\s+not\\s+send|don't\\s+send|withdraw)\\b",
-          target,
-        },
-      ],
-    }],
-  };
-}
 
 function assistantSecurityPatch(assistant = {}) {
   const artifactPlan = assistant.artifactPlan && typeof assistant.artifactPlan === "object"
@@ -242,10 +221,10 @@ function updateMessages(messages, toolName) {
   const output = (messages || []).map((message) => {
     if (updatedSystem || message?.role !== "system") return message;
     updatedSystem = true;
-    const content = removeLegacyAbruptClosingInstructions(String(message.content || "")
+    const content = consolidateServicePrompt(removeLegacyAbruptClosingInstructions(String(message.content || "")
       .replace(new RegExp(`\\n*${start}[\\s\\S]*?${end}`, "g"), "")
       .replace(new RegExp(`\\n*${legacyPilotStart}[\\s\\S]*$`, "g"), ""))
-      .trimEnd();
+      .trimEnd());
     return { ...message, content: normalizeConsentPrompt(`${content}\n\n${promptOverride(toolName)}`) };
   });
   if (!updatedSystem) throw new Error("The Vapi assistant has no system prompt to update.");

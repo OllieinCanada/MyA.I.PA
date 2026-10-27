@@ -28,6 +28,8 @@
     "backend:check": "node scripts/check-backend-deploy.js",
     "test:voice-reliability": "node --test tests/voice-call-reliability.test.js tests/voice-route-api.test.js tests/call-persistence.test.js tests/trial-call-reservation.test.js tests/controlled-voice-verification.test.js tests/trial-usage-policy.test.js tests/trial-signup-selection.test.js tests/trial-gate-ownership.test.js tests/operational-error-classifier.test.js tests/incident-alerts.test.js",
     "verify:voice-call": "node scripts/verify-controlled-voice-call.js",
+    "verify:voice-notifications": "node scripts/verify-controlled-voice-call.js --require-notifications=true",
+    "test:call-notifications": "node --test tests/call-confirmation.test.js tests/call-notification-evidence.test.js tests/service-intake-prompt.test.js tests/trial-snapshot-publication.test.js tests/controlled-voice-verification.test.js tests/composite-call-notifications.test.js tests/vapi-isolated-sms-provisioning.test.js tests/rollout-signup-assistant-policy.test.js tests/vapi-call-diagnostics.test.js tests/voice-route-api.test.js",
     "test:forwarding": "node --test tests/call-forwarding-provider.test.js tests/call-forwarding-security.test.js tests/call-forwarding-lifecycle.test.js tests/forwarding-instructions.test.js tests/forwarding-ui-contract.test.js tests/twilio-call-verification.test.js",
     "test:forwarding:ui": "node scripts/test-forwarding-ui.js",
     "test:forwarding:browser": "node scripts/test-forwarding-onboarding.js",

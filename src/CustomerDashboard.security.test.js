@@ -1,6 +1,13 @@
 import fs from "fs";
 import path from "path";
 
+test("text delivery uses evidence labels rather than treating a completed call as delivery", () => {
+  const source = fs.readFileSync(path.join(__dirname, "CustomerDashboard.js"), "utf8");
+  expect(source).toContain("call.notificationEvidence.submissionLabel");
+  expect(source).toContain("call.notificationEvidence.summary");
+  expect(source).toContain("item.label || item.problem || statusLabel(item.status)");
+});
+
 test("the customer dashboard uses one-time-code sessions and provider-neutral wording", () => {
   const source = fs.readFileSync(path.join(__dirname, "CustomerDashboard.js"), "utf8");
 

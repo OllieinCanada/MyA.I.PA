@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const { persistCall, resolveCallRecord } = require('../server/callPersistence');
+const { notificationEvidence } = require('../server/callNotificationEvidence');
 
 // Execute the actual ingestion function without loading the Express server,
 // provider clients, background jobs, environment bindings, or production data.
@@ -47,6 +48,7 @@ function fixture(overrides = {}, cost = 0.2) {
       return { resolveCallRecord };
     },
     prisma,
+    notificationEvidence,
     resolveBusinessIdForVapiCall: async () => 7,
     getVapiNestedString: () => '',
     getVapiNestedValue: () => undefined,
@@ -81,6 +83,7 @@ test('canonical unbound SID is promoted once; replay retains call, caller and ac
   assert.equal(first.duplicate, true);
   assert.equal(first.usageChanged, true, 'new Vapi binding must enter Vapi-filtered trial accounting');
   assert.equal(first.localCallId, 72);
+  assert.equal(first.notificationEvidence.available, false, 'missing notification proof remains unverified');
   assert.equal(f.logged[0].callerPhone, '+19055550123');
   assert.equal(f.logged[0].callerName, 'Canonical caller');
   assert.equal(f.logged[0].callId, 72);

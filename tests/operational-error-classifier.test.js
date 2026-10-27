@@ -4,6 +4,20 @@ const test = require("node:test");
 const { classifyOperationalError } = require("../server/operationalErrorClassifier");
 const { buildRuntimeIncident } = require("../server/runtimeAlerts");
 
+test('notification rejection alerts identify the exact call and never blame signup duplicates or funding',()=>{
+  for(const code of ['SMS_CONFIRMATION_REJECTED','CALL_NOTIFICATION_UNCONFIRMED']){
+    const incident=buildRuntimeIncident(Object.assign(new Error('notification failed'),{code}),{
+      provider:'Vapi',businessName:'Synthetic Electric',area:'call notifications',method:'POST',route:'/api/webhooks/voice',
+      snapshot:{'Call ID':'synthetic-call','Business ID':37}});
+    assert.equal(incident.reasonCode,code);assert.equal(incident.snapshot['Failure category'],'call_notification_failure');
+    assert.equal(incident.snapshot.Business,'Synthetic Electric');assert.equal(incident.snapshot['Call ID'],'synthetic-call');
+    assert.match(incident.whatFailed,/notification handoff/);assert.match(incident.nextAction,/never blindly resend/);
+    assert.doesNotMatch(incident.reason+' '+incident.nextAction,/duplicate signup|archive|add funds|billing/i);
+    if(code==='SMS_CONFIRMATION_REJECTED')assert.match(incident.reason,/Neither message was submitted/);
+    else assert.match(incident.reason,/unknown outcome/);
+  }
+});
+
 test('expired transactions are not mislabeled as an unsupported advisory-lock value', () => {
   const error = Object.assign(new Error('Invalid prisma.$queryRaw invocation: Transaction already closed after 4000 ms; pg_advisory_xact_lock'), { code: 'P2028' });
   const classified = classifyOperationalError(error, { provider: 'database', operation: 'saved Twilio delivery reports' });
