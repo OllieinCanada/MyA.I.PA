@@ -15,6 +15,7 @@ const { enqueueSignupSetupJob, drainSignupSetupJobs } = require("./signupSetupJo
 const { buildTwilioImportRequest } = require('./vapiTwilioImportRequest');
 const { providerFailureDetail } = require("./providerFailureDetail");
 const { TOOL_NAME: STAGING_INTAKE_TOOL, handleStagingIntakeTool } = require('./stagingIntake');
+const { stagingWorkerEnabled, drainStagingIntakeQueue } = require('./stagingIntakeWorker');
 const { configuredCaptchaProvider, verifySignupCaptcha } = require("./signupCaptcha");
 const { checkSignupAdmission, signupSecurityResponse } = require("./signupAdmission");
 const { hasIndividualPricingChoices, individualPricingPolicy } = require("../src/features/signup/pricingPolicy");
@@ -18862,6 +18863,16 @@ async function drainTelegramOutbox(phase = "scheduled") {
 }
 
 function startBackgroundJobs() {
+  // Explicit staging-only opt-in. The production service is denied even if a
+  // configuration mistake sets every staging flag. No production route change.
+  if (stagingWorkerEnabled(process.env)) {
+    const processStagingIntake = () => drainStagingIntakeQueue({ prisma, sendHandoff:async item=>{
+      const lead = await prisma.lead.findUnique({ where:{id:item.leadId} });
+      return createAndDispatchLeadHandoff({lead,businessId:item.businessId,callId:item.callDbId,sourceEventId:item.sourceEventId});
+    } });
+    runBackgroundJob('staging confirmed intake delivery',processStagingIntake,'initial');
+    setInterval(()=>runBackgroundJob('staging confirmed intake delivery',processStagingIntake),15000);
+  }
   runBackgroundJob("verified signup setup", processVerifiedSignupJobs, "initial");
   setInterval(() => runBackgroundJob("verified signup setup", processVerifiedSignupJobs), 15000);
   runBackgroundJob('signup completion delivery polling',pollPendingSignupCompletionMessages,'initial');

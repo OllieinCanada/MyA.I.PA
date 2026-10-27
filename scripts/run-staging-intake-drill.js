@@ -5,7 +5,8 @@ const os = require('node:os');
 const path = require('node:path');
 const { fork } = require('node:child_process');
 const { PrismaClient } = require('@prisma/client');
-const { ledgerKey, dispatchStagingIntakeNotification } = require('../server/intakeLedger');
+const { ledgerKey } = require('../server/intakeLedger');
+const { drainStagingIntakeQueue } = require('../server/stagingIntakeWorker');
 async function main() {
   const url = new URL(process.env.SIGNUP_RECOVERY_DRILL_DATABASE_URL || '');
   if (url.hostname !== '127.0.0.1' || !/^\/myaipa_recovery_drill_[a-z0-9_]+$/.test(url.pathname)) throw Error('Disposable loopback database required');
@@ -82,9 +83,13 @@ async function main() {
         sends++; assert.equal(request.to, '+19055550123');
         return { id: 'synthetic-owner-message', status: 'queued', mocked: false };
       } });
-    const dispatches = await Promise.allSettled(Array.from({ length: 3 }, () => dispatchStagingIntakeNotification({ prisma, key: state.outboxKey, sendHandoff })));
-    assert.ok(dispatches.some(x => x.status === 'fulfilled'));
-    await dispatchStagingIntakeNotification({ prisma, key: state.outboxKey, sendHandoff });
+    const workerEnv={APP_ENV:'staging',INTAKE_LEDGER_MODE:'staging',STAGING_INTAKE_WORKER_ENABLED:'true',
+      STAGING_INTAKE_BUSINESS_ID:String(business.id),STAGING_INTAKE_ASSISTANT_ID:assistantId};
+    const dispatches = await Promise.all(Array.from({ length: 3 }, () => drainStagingIntakeQueue({ prisma, env:workerEnv,sendHandoff })));
+    assert.ok(dispatches.some(x => x.submitted===1));
+    await drainStagingIntakeQueue({ prisma, env:workerEnv,sendHandoff });
+    const denied=await drainStagingIntakeQueue({prisma,env:{...workerEnv,RENDER_SERVICE_ID:'srv-d92503a8qa3s73crdpog'},sendHandoff});
+    assert.equal(denied.enabled,false,'Production can never activate the staging queue');
     assert.equal(sends, 1);
     assert.equal(await prisma.leadHandoff.count({ where: { businessId: business.id } }), 1);
     const handoff = await prisma.leadHandoff.findUnique({ where: { leadId: lead.id } });
@@ -110,7 +115,8 @@ async function main() {
     }
     const report = { checkedAt: new Date().toISOString(), passed: true, mode: 'full-app-http-real-postgres-fake-delivery',
       concurrency: true, processRestart: true, latestConfirmedValuesOnly: true, crossTenantRejected: true, authenticationRequired: true,
-      staleAndLateUpdatesRejected: true, transactionRollbackVerified: true, legacyRetryOwnerSeparated: true, canonicalRecordsForCompletedCall: 1,
+      staleAndLateUpdatesRejected: true, transactionRollbackVerified: true, legacyRetryOwnerSeparated: true, stagingQueueOwned:true,
+      productionWorkerDenied:true, canonicalRecordsForCompletedCall: 1,
       leadsForCompletedCall: 1, notificationHandoffs: 1, fakeProviderAcceptances: sends, realProviderRequests: 0, productionTouched: false,
       limitations: ['Caller confirmation is a tool assertion; real voice behavior has not been tested.', 'No real SMS delivery or carrier forwarding was performed.'] };
     const output = path.resolve('diagnostics/provider-hardening/intake.json'); fs.mkdirSync(path.dirname(output), { recursive: true }); fs.writeFileSync(output, JSON.stringify(report, null, 2) + '\n');
