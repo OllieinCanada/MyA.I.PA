@@ -157,6 +157,28 @@ test('exact saved-call inspection requires monitor authentication and remains re
   } finally { prisma.$transaction = original; }
 });
 
+test('aggregate post-release inspection requires monitor auth and rejects action-shaped requests', async () => {
+  const endpoint = '/api/internal/operations/postrelease-verification';
+  const original = prisma.$transaction; let reads = 0;
+  prisma.$transaction = async fn => { reads++; return fn({ $executeRawUnsafe: async () => {},
+    runtimeStore: { findUnique: async () => null },
+    $queryRaw: async () => [{ pending: 0, processing: 0, completed: 0, failed: 0, expiredLeases: 0 }],
+    runtimeIncidentRecord: { count: async () => 0 },
+  }); };
+  const previousRelease = process.env.RENDER_GIT_COMMIT; process.env.RENDER_GIT_COMMIT = 'd'.repeat(40);
+  try {
+    assert.equal((await request(endpoint)).status, 401); assert.equal(reads, 0);
+    const headers = { Authorization: 'Bearer ' + process.env.MONITOR_API_KEY };
+    const response = await request(endpoint, { headers }); assert.equal(response.status, 200);
+    assert.equal(response.headers.get('cache-control'), 'no-store'); const r = await response.json();
+    assert.equal(r.sync.completedOnRelease, false); assert.equal(r.sms.originalOperationOutcomes, 'unknown');
+    assert.equal(r.sms.incidentClosurePermitted, false); assert.equal(reads, 1);
+    assert.equal((await request(endpoint + '?apply=true', { headers })).status, 400);
+    assert.equal((await request(endpoint, { method: 'POST', headers })).status, 404); assert.equal(reads, 1);
+  } finally { prisma.$transaction = original; if (previousRelease === undefined) delete process.env.RENDER_GIT_COMMIT;
+    else process.env.RENDER_GIT_COMMIT = previousRelease; }
+});
+
 test('saved receipt inspection requires admin authentication and never accepts the monitor key', async () => {
   const ref = 'b'.repeat(64), endpoint = '/api/admin/twilio/receipt-state?jobRef=' + ref;
   const original = prisma.runtimeStore.findUnique;
