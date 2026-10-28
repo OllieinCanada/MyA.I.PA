@@ -6,6 +6,7 @@ if (process.env.DISABLE_LOCAL_ENV_FILES !== "1") {
 
 const crypto = require("crypto");
 const { rejectCompressedRequests } = require('./requestSecurity');
+const { createFinanceService, registerFinanceRoutes } = require('./providerFinance');
 const { runtimeDependencySecurity } = require('./runtimeDependencySecurity');
 const { signupReviewPolicy } = require("./signupReviewPolicy");
 const { buildSignupProgress } = require("./signupProgress");
@@ -17450,6 +17451,8 @@ app.get(
     res.json({ ok: true, inventory: await getVapiAccountInventory() });
   })
 );
+
+registerFinanceRoutes({ app, requireAdmin, isAllowedOrigin, service: createFinanceService({ prisma }) });
 
 app.get(
   "/api/admin/cost-audit",

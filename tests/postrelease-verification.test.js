@@ -53,7 +53,8 @@ function database({ data = receipt(), failures = 0, historical = 2, healthError 
   return { commands, prisma: { $transaction: async (fn, options) => {
     assert.equal(options.isolationLevel, 'RepeatableRead');
     return fn({ $executeRawUnsafe: async command => commands.push(command),
-      $queryRaw: async () => { if (healthError) throw Error('SECRET'); return [{ pending: 0, processing: 0, completed: 3, failed: 0, expiredLeases: 0 }]; },
+      $queryRaw: async sql => { if (String(sql).includes('RuntimeIncidentRecord')) return [];
+        if (healthError) throw Error('SECRET'); return [{ pending: 0, processing: 0, completed: 3, failed: 0, expiredLeases: 0 }]; },
       runtimeStore: { findUnique: async ({ where }) => where.key === KEY ? { data } : { data: { lastSuccessfulRunAt: now } } },
       runtimeIncidentRecord: { count: async ({ where }) => where.reasonCode ? historical : where.payload ? failures : 4 },
     });

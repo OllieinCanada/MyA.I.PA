@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import "./AdminDashboard.css";
 import { getApiBaseUrl, normalizeApiBase } from "./config/apiBase";
 import TwilioReceiptHealthPanel from './TwilioReceiptHealthPanel';
+import ProviderFinancePanel from './ProviderFinancePanel';
 
 const CONFIGURED_API_BASE = process.env.REACT_APP_API_BASE_URL || "";
 const API_BASE = normalizeApiBase(getApiBaseUrl(CONFIGURED_API_BASE));
@@ -4211,11 +4212,12 @@ export default function AdminDashboard() {
 
         {activeTab === "costs" ? (
           <div className="admin-money-page">
+            <ProviderFinancePanel apiBase={API_BASE} />
             <div className="admin-money-header">
               <div>
                 <div className="admin-money-eyebrow">Money Dashboard</div>
                 <h2>Paying customers, spend, and profit</h2>
-                <p>Revenue uses the live $79/month plan unless Stripe sends a specific amount. Provider spend is normalized from the selected cost window.</p>
+                <p>Planning estimates, not Stripe cash collected or reconciled profit. Revenue uses the $79/month plan unless Stripe sends a specific amount. Spend is normalized from the selected cost window; Vapi estimates may overlap Twilio charges.</p>
               </div>
               <div className="admin-money-actions">
                 <Labeled label="Days">
@@ -4240,12 +4242,12 @@ export default function AdminDashboard() {
                 <em>{customerFinancialRows.totals.trialing} trialing</em>
               </div>
               <div className="admin-money-kpi admin-money-kpi-green">
-                <span>Monthly Revenue</span>
+                <span>Estimated Monthly Revenue</span>
                 <strong>{moneyDashboard(customerFinancialRows.totals.revenueMonthly)}</strong>
                 <em>{moneyDashboard(customerFinancialRows.totals.projectedTrialRevenue)} trial pipeline</em>
               </div>
               <div className="admin-money-kpi admin-money-kpi-amber">
-                <span>Provider Spend / Mo</span>
+                <span>Estimated Provider Spend / Mo</span>
                 <strong>{moneyDashboard(customerFinancialRows.totals.providerMonthlySpend)}</strong>
                 <em>{moneyDashboard(customerFinancialRows.totals.providerWindowSpend)} in {customerFinancialRows.days}d</em>
               </div>
