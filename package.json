@@ -19,6 +19,8 @@
     "stripe": "^22.3.2"
   },
   "scripts": {
+    "test:finance": "node --test tests/provider-finance.test.js",
+    "test:finance:browser": "node scripts/test-provider-finance-browser.js",
     "build:tailwind": "tailwindcss -i src/tailwind.css -o src/tailwind.generated.css",
     "prebuild": "npm run build:tailwind",
     "dev": "concurrently -k \"npm run server\" \"npm start\"",
@@ -300,6 +302,12 @@
     "qs": "6.16.1",
     "underscore": "1.13.8",
     "websocket-driver": "0.7.5"
+  },
+  "jest": {
+    "testMatch": [
+      "**/src/**/__tests__/**/*.[jt]s?(x)",
+      "**/src/**/?(*.)+(spec|test).[jt]s?(x)"
+    ]
   },
   "prisma": {
     "seed": "node prisma/seed.js"

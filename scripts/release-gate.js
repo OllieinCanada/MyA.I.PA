@@ -8,7 +8,7 @@ const reportPath = rootPath("diagnostics", "shipping-readiness", "release-gate.j
 
 const steps = [
   ["Backend security and provider tests", npmCommand, ["run", "test:backend"]],
-  ["Frontend security and signup regression tests", npmCommand, ["test", "--", "--watchAll=false"]],
+  ["Frontend security and signup regression tests", npmCommand, ["test", "--", "--watchAll=false", "--runInBand", "--cacheDirectory", rootPath("diagnostics", "release-jest-cache")]],
   ["Public transparency validation", npmCommand, ["run", "transparency:validate"]],
   ["Legal draft package validation", nodeCommand(), [path.join("scripts", "validate-legal-drafts.js")]],
   ["Operational readiness validation", nodeCommand(), [path.join("scripts", "validate-operational-readiness.js")]],
@@ -33,6 +33,7 @@ const steps = [
     ? [
         ["Production Pages build", nodeCommand(), [path.join("scripts", "build-pages.js")]],
         ["Browser journeys, accessibility, and responsive layout checks", npmCommand, ["run", "test:browser:quality"], { env: { BUILD_PREVIEW_DIR: rootPath("docs") } }],
+        ["Provider finance responsive and failure-state checks", npmCommand, ["run", "test:finance:browser"], { env: { BUILD_PREVIEW_DIR: rootPath("docs") } }],
       ]
     : []),
 ];
