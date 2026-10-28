@@ -123,6 +123,20 @@ test('partial collector failures preserve old per-provider observations rather t
   assert.equal(result.providers[0].metrics.balance.observedAt, at);
   assert.equal(result.providers[0].metrics.balance.stale, true);
 });
+test('credential-derived namespaces use a slow KDF and never reuse a different Vapi account namespace', async () => {
+  const source = require('node:fs').readFileSync(require('node:path').join(__dirname, '../server/providerFinance.js'), 'utf8');
+  assert.match(source, /scryptSync/); assert.doesNotMatch(source, /createHash/);
+  const db = memoryDb();
+  const collect = async () => ({ updates: {}, errors: {}, attemptedAt: at });
+  const original = createFinanceService({ prisma: db, env, clock: () => NOW, collect });
+  await original.save({ provider: 'vapi', field: 'balance', value: 12, currency: 'USD', observedAt: at });
+  const switched = createFinanceService({ prisma: db, env: { ...env, VAPI_API_KEY: 'different-synthetic-vapi-key' }, clock: () => NOW, collect });
+  const result = await switched.read(); await switched.waitForRefresh();
+  assert.equal(result.providers[1].metrics.balance, undefined);
+  const persisted = JSON.stringify([...db.rows]);
+  assert.ok(!persisted.includes('different-synthetic-vapi-key'));
+  assert.ok(!persisted.includes(env.VAPI_API_KEY));
+});
 test('actual HTTP routes enforce admin access and reject cross-origin submissions', async () => {
   const express = require('express'), app = express(); app.use(express.json());
   const db = memoryDb(), service = createFinanceService({ prisma: db, env, collect: async () => ({ updates: {}, errors: {}, attemptedAt: new Date().toISOString() }) });

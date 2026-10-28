@@ -1,5 +1,5 @@
 'use strict';
-const { createHash } = require('node:crypto');
+const { scryptSync } = require('node:crypto');
 
 // This module never changes a provider account, buys credits or sends messages.
 // Keep it off the voice path. RuntimeStore holds only allowlisted financial facts.
@@ -149,9 +149,12 @@ function decorate(snapshot, verified, now = Date.now()) {
 function createFinanceService({ prisma, env = process.env, fetchImpl, clock = () => Date.now(), collect = collectFinance, timeoutMs = 4500 }) {
   let snapshot = null, inFlight = null, lastAttempt = 0, persistenceWarning = null;
   // Never reuse another account's balances after a provider-account/configuration switch.
-  // Hashes stay server-side; raw credentials are never written into financial snapshots.
-  const scope = createHash('sha256').update(JSON.stringify([env.TWILIO_ACCOUNT_SID || '', env.VAPI_API_KEY || '',
-    env.FINANCE_MAKE_ORGANIZATION_ID || '', env.FINANCE_MAKE_ZONE || '', env.RENDER_SERVICE_ID || ''])).digest('hex').slice(0, 20);
+  // Derive the opaque namespace once at startup, never on the call or refresh path.
+  // Use a dedicated slow KDF even for high-entropy API credentials; no raw key or
+  // fast credential hash is persisted. This is not an authentication verifier.
+  const scope = scryptSync(JSON.stringify([env.TWILIO_ACCOUNT_SID || '', env.VAPI_API_KEY || '',
+    env.FINANCE_MAKE_ORGANIZATION_ID || '', env.FINANCE_MAKE_ZONE || '', env.RENDER_SERVICE_ID || '']),
+  'myaipa-provider-finance-cache-scope:v1', 20, { N: 16384, r: 8, p: 1 }).toString('hex');
   const scopedKey = key => `${key}:${scope}`;
   const bounded = async promise => {
     let timer;
