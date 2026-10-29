@@ -1,4 +1,5 @@
 const { mergeToolSummaries } = require('./callNotificationEvidence');
+const { Prisma } = require('@prisma/client');
 
 function identityError() {
   return Object.assign(new Error('Saved call identifiers do not agree on one business and caller.'), {
@@ -70,6 +71,11 @@ async function persistCaller(db, { phone, name }) {
 async function persistCall({ db, identity, createData, updateData }) {
   const alternatives = callAlternatives(identity);
   if (!Number.isSafeInteger(Number(identity.callerId)) || Number(identity.callerId) <= 0) throw identityError();
+  const filters = alternatives.map(clause => {
+    if (clause.id != null) return Prisma.sql`c.id = ${clause.id}`;
+    if (clause.twilioCallSid) return Prisma.sql`c."twilioCallSid" = ${clause.twilioCallSid}`;
+    return Prisma.sql`(c."externalProvider" = ${clause.externalProvider} AND c."externalId" = ${clause.externalId})`;
+  });
   for (let attempt = 0; attempt < 2; attempt += 1) {
     let configuring = false;
     try {
@@ -77,16 +83,21 @@ async function persistCall({ db, identity, createData, updateData }) {
         configuring = true;
         await tx.$queryRaw`SELECT set_config('lock_timeout', '800ms', true), set_config('statement_timeout', '1500ms', true)`;
         configuring = false;
-        const existing = await resolveCallRecord(tx, identity);
-        if (!existing) return tx.call.create({ data: createData, include: { caller: true, business: true } });
-        // Serialize merges on the canonical row, not across all calls or the
-        // trial gate. Re-read after the lock so sparse events cannot erase a
-        // richer terminal report written by another worker.
-        await tx.$queryRaw`SELECT id FROM "Call" WHERE id = ${existing.id} FOR UPDATE`;
-        const current = await tx.call.findUnique({ where: { id: existing.id }, include: { caller: true } });
-        if (!current) throw identityError();
+        // Read and lock the canonical row in ONE round trip. The old path
+        // fetched relations, acquired a lock, re-read, and fetched relations
+        // again while the three-second transaction clock kept running.
+        // Stable lock order also keeps ambiguous multi-row identities safe.
+        const rows = filters.length ? await tx.$queryRaw(Prisma.sql`
+          SELECT c.*, json_build_object('phone', p.phone) AS caller
+          FROM "Call" c JOIN "Caller" p ON p.id = c."callerId"
+          WHERE ${Prisma.join(filters, ' OR ')}
+          ORDER BY c.id FOR UPDATE OF c
+        `) : [];
+        if (rows.length > 1) throw identityError();
+        const current = rows[0];
+        if (!current) return tx.call.create({ data: createData });
         assertCallIdentity(current, identity);
-        return tx.call.update({ where: { id: current.id }, data: updateData(current), include: { caller: true, business: true } });
+        return tx.call.update({ where: { id: current.id }, data: updateData(current) });
       }, { maxWait: 500, timeout: 3000 });
     } catch (error) {
       // A transaction can expire before its first configuration query executes.

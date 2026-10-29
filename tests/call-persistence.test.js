@@ -11,15 +11,24 @@ function fakeDatabase(initial = []) {
   const call = {
     findMany: async ({ where }) => [...rows.values()].filter(r => where.OR.some(clause => Object.entries(clause).every(([k,v]) => r[k] === v))).map(r => ({ ...r })),
     findUnique: async ({ where }) => rows.has(where.id) ? { ...rows.get(where.id) } : null,
-    create: async ({ data: input }) => {
+    create: async ({ data: input, include }) => {
+      assert.equal(include, undefined, 'relation fetching belongs outside the locked transaction');
       if ([...rows.values()].some(r => r.twilioCallSid === input.twilioCallSid || (r.externalId === input.externalId && r.externalProvider === input.externalProvider))) throw unique('Call');
       const row = { id: rows.size + 1, ...input }; rows.set(row.id, row); return { ...row };
     },
-    update: async ({ where, data: input }) => { const row = { ...rows.get(where.id), ...input }; rows.set(where.id, row); return { ...row }; },
+    update: async ({ where, data: input, include }) => { assert.equal(include, undefined); const row = { ...rows.get(where.id), ...input }; rows.set(where.id, row); return { ...row }; },
   };
   const db = { call, $transaction: async (fn, options) => {
     transactions++; assert.ok(options.timeout <= 3000); assert.ok(options.maxWait <= 500);
-    return fn({ call, $queryRaw: async (strings) => { queries.push(strings.join('?')); return []; } });
+    return fn({ call, $queryRaw: async (query) => {
+      const sql = (query.strings || query).join('?'); queries.push(sql);
+      if (!sql.includes('FOR UPDATE')) return [];
+      const values = [...query.values], clauses = [];
+      if (sql.includes('c.id =')) clauses.push({ id: values.shift() });
+      if (sql.includes('c."externalProvider" =')) clauses.push({ externalProvider: values.shift(), externalId: values.shift() });
+      if (sql.includes('c."twilioCallSid" =')) clauses.push({ twilioCallSid: values.shift() });
+      return call.findMany({ where: { OR: clauses } });
+    } });
   } };
   return { db, rows, queries, transactions: () => transactions };
 }
@@ -32,6 +41,24 @@ test('concurrent call receipts reconcile a unique-key race in a new transaction'
   assert.equal(results[0].id, results[1].id);
   assert.equal(fake.transactions(), 3);
   assert.ok(fake.queries.some(q => q.includes('FOR UPDATE')));
+});
+
+test('updates use only configuration, one locked identity read and one scalar write', async () => {
+  const fake = fakeDatabase([{ id: 1, ...data }]);
+  fake.db.call.findUnique = async () => assert.fail('no redundant relation re-read inside transaction');
+  const saved = await write(fake.db);
+  assert.equal(saved.id, 1);
+  assert.equal(fake.transactions(), 1);
+  assert.equal(fake.queries.length, 2);
+  assert.match(fake.queries[1], /ORDER BY c.id FOR UPDATE OF c/);
+});
+
+test('provider identifiers remain bound values, not interpolated SQL', async () => {
+  const externalId = "call-' OR 1=1 --";
+  const fake = fakeDatabase([{ id: 1, ...data, externalId }]);
+  await write(fake.db, { ...data, externalId }, { ...identity, externalId });
+  assert.equal(fake.rows.size, 1);
+  assert.ok(fake.queries.every(sql => !sql.includes(externalId)));
 });
 test('a first-time caller upsert race reuses the exact existing phone', async () => {
   const caller = { id: 4, phone: '+15555550100', name: null };

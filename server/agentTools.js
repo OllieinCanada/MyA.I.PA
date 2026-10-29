@@ -156,7 +156,7 @@ async function logCall(payload) {
       ...callArtifactData(payload),
   };
   try {
-    return await persistCall({ db: prisma,
+    const saved = await persistCall({ db: prisma,
       identity: { callId: payload.callId, businessId: business.id, callerId: caller.id,
         externalProvider, externalId, twilioCallSid: data.twilioCallSid },
       createData: data,
@@ -168,6 +168,9 @@ async function logCall(payload) {
         ...callArtifactData(payload, existing),
       }),
     });
+    // These relations were already verified before the transaction. Do not
+    // re-fetch them while holding the call-row lock.
+    return { ...saved, business, caller };
   } catch (error) {
     error.businessId = business.id;
     error.businessName = business.name;

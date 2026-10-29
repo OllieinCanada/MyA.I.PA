@@ -3,12 +3,23 @@ import {
   getSafeClientRoute,
   getSafeFailedAsset,
   getSafeMediaFailureDetails,
+  isManagedPublicDemoAudio,
   redactClientErrorMessage,
   reportClientError,
   resetClientErrorReporterForTests,
 } from "./clientErrorReporter";
 
 beforeEach(() => resetClientErrorReporterForTests());
+
+test('only a known public demo can manage its own fallback reporting', () => {
+  const media = document.createElement('audio'); media.src = '/tims-electrical-2.mp3?token=hidden';
+  media.dataset.publicDemoAudio = 'managed';
+  expect(isManagedPublicDemoAudio(media)).toBe(true);
+  expect(getSafeFailedAsset(media)).toBe('/tims-electrical-2.mp3');
+  media.src = '/private/customer.wav'; expect(isManagedPublicDemoAudio(media)).toBe(false);
+  media.src = '/tims-electrical-2.wav'; delete media.dataset.publicDemoAudio;
+  expect(isManagedPublicDemoAudio(media)).toBe(false);
+});
 
 test("public sample audio diagnostics retain filename but never private paths or queries", () => {
   const locationValue = { href: "https://www.myaipa.ca/" };

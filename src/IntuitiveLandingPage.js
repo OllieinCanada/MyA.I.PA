@@ -4,6 +4,7 @@ import { timsElectricalScenarios } from "./timsElectricalDemoData";
 import heroTranscriptTimings from "./timsElectricalHeroTranscriptTimings.json";
 import "./IntuitiveLandingPage.css";
 import MyAiPaBrand from "./components/MyAiPaBrand";
+import usePublicDemoAudio from "./usePublicDemoAudio";
 
 const coreBenefits = [
   ["phone", "Picks up after three rings."],
@@ -189,13 +190,15 @@ function ScrollJourneyNav() {
   );
 }
 
-const heroAudioSource = `${process.env.PUBLIC_URL || ""}/tims-electrical-2.wav?v=20260817-original-tims`;
+const heroAudioSource = `${process.env.PUBLIC_URL || ""}/tims-electrical-2.mp3?v=20261027-compatible-demo`;
+const heroAudioFallback = `${process.env.PUBLIC_URL || ""}/tims-electrical-2.wav?v=20260817-original-tims`;
 const heroAudioDurationSeconds = 133;
 
 function AnimatedHeroProof({ onSampleCall, onStartTrial }) {
   const audioRef = useRef(null);
   const [activeSlide, setActiveSlide] = useState(0);
-  const [audioPlaying, setAudioPlaying] = useState(false);
+  const audio = usePublicDemoAudio(audioRef, heroAudioFallback);
+  const audioPlaying = audio.playing;
   const [audioProgress, setAudioProgress] = useState(0);
   const [manualChange, setManualChange] = useState(0);
 
@@ -211,22 +214,7 @@ function AnimatedHeroProof({ onSampleCall, onStartTrial }) {
     setManualChange((value) => value + 1);
   };
 
-  const toggleAudio = async () => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    if (!audio.paused) {
-      audio.pause();
-      setAudioPlaying(false);
-      return;
-    }
-    try {
-      await audio.play();
-      setAudioPlaying(true);
-      setActiveSlide(0);
-    } catch (_error) {
-      setAudioPlaying(false);
-    }
-  };
+  const toggleAudio = () => { setActiveSlide(0); audio.toggle(); };
 
   const slides = [
     {
@@ -300,12 +288,13 @@ function AnimatedHeroProof({ onSampleCall, onStartTrial }) {
       </picture>
       <div className="simple-carousel-header">
         <div><span className="simple-live-dot" /><strong>See the missed call become a lead</strong></div>
-        <button type="button" className={audioPlaying ? "playing" : ""} onClick={toggleAudio} aria-pressed={audioPlaying}>
+        <button type="button" className={audioPlaying ? "playing" : ""} onClick={toggleAudio} aria-pressed={audioPlaying} aria-describedby={audio.error ? "hero-audio-feedback" : undefined}>
           <span className="simple-audio-trigger-icon" aria-hidden="true">{audioPlaying ? "Ⅱ" : "▶"}</span>
-          <span className="simple-audio-trigger-label">{audioPlaying ? "Pause Call" : "Hear Live Call"}</span>
+          <span className="simple-audio-trigger-label">{audio.loading ? "Cancel loading" : audioPlaying ? "Pause Call" : "Hear Live Call"}</span>
           <span className="simple-audio-trigger-waves" aria-hidden="true"><i /><i /><i /><i /></span>
         </button>
       </div>
+      {audio.error ? <p id="hero-audio-feedback" role="alert" className="simple-audio-feedback">{audio.error}</p> : null}
       <div className="simple-carousel-stage">
         {slides.map((slide, index) => (
           <section key={slide.label} className={`${index === activeSlide ? "active" : ""}${slide.className ? ` ${slide.className}` : ""}`} aria-hidden={index !== activeSlide}>
@@ -331,11 +320,13 @@ function AnimatedHeroProof({ onSampleCall, onStartTrial }) {
       </div>
       <audio
         ref={audioRef}
-        src={heroAudioSource}
-        preload="metadata"
-        onPause={() => setAudioPlaying(false)}
-        onPlay={() => setAudioPlaying(true)}
-        onEnded={() => { setAudioPlaying(false); setAudioProgress(0); }}
+        data-public-demo-source={heroAudioSource}
+        preload="none"
+        data-public-demo-audio="managed"
+        onError={audio.onError}
+        onPlaying={audio.onPlaying}
+        onPause={audio.onPause}
+        onEnded={() => { audio.onEnded(); setAudioProgress(0); }}
         onTimeUpdate={(event) => {
           const duration = Number(event.currentTarget.duration || heroAudioDurationSeconds || heroTranscriptTimings.durationSeconds);
           const current = Number(event.currentTarget.currentTime || 0);

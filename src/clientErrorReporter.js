@@ -1,7 +1,12 @@
 import { getApiBaseUrl, normalizeApiBase } from "./config/apiBase";
 import audioManifest from "./timsElectricalAudioManifest.json";
 
-const publicAudioPaths = new Set(["/tims-electrical-2.wav", ...Object.values(audioManifest).map((entry) => entry.src)]);
+const publicAudioPaths = new Set(["/tims-electrical-2.wav", "/tims-electrical-2.mp3", ...Object.values(audioManifest).map((entry) => entry.src)]);
+
+export function isManagedPublicDemoAudio(target) {
+  return String(target?.tagName || '').toLowerCase() === 'audio'
+    && target?.dataset?.publicDemoAudio === 'managed' && Boolean(getSafeFailedAsset(target));
+}
 
 const API_BASE = normalizeApiBase(getApiBaseUrl(process.env.REACT_APP_API_BASE_URL));
 const seenErrors = new Set();
@@ -85,6 +90,9 @@ export function installClientErrorReporting() {
   if (installed || typeof window === "undefined" || process.env.NODE_ENV !== "production") return;
   installed = true;
   window.addEventListener("error", (event) => {
+    // The managed demo reports only a terminal failure after trying its
+    // alternate public format, not an error it successfully recovered from.
+    if (isManagedPublicDemoAudio(event?.target)) return;
     const resourceTag = event?.target && event.target !== window
       ? String(event.target.tagName || "resource").toLowerCase()
       : "";
