@@ -1,5 +1,6 @@
 'use strict';
-const { scryptSync } = require('node:crypto');
+const { decorate, torontoDay } = require('./providerFinanceView');
+const { createFinanceStore } = require('./providerFinanceStore');
 
 // This module never changes a provider account, buys credits or sends messages.
 // Keep it off the voice path. RuntimeStore holds only allowlisted financial facts.
@@ -12,19 +13,18 @@ const MANUAL_FIELDS = {
   render: ['monthlyEstimate', 'budgetMonth', 'nextBillAt'],
 };
 const CURRENCIES = ['USD', 'CAD', 'EUR', 'GBP'];
-const TTL = 5 * 60 * 1000;
 const metric = (value, observedAt, source, extra = {}) => ({ value, observedAt, source, ...extra });
 const numeric = value => ['number', 'string'].includes(typeof value) && String(value).trim() !== ''
   && Number.isFinite(Number(value)) ? Number(value) : null;
 const validDate = value => typeof value === 'string' && Number.isFinite(Date.parse(value));
-const manualKey = (provider, field) => `provider-finance:v1:verified:${provider}:${field}`;
 
 function validateVerified(body, now = Date.now()) {
   if (!body || typeof body !== 'object' || Array.isArray(body)
-    || Object.keys(body).some(key => !['provider', 'field', 'value', 'currency', 'observedAt'].includes(key))
+    || Object.keys(body).some(key => !['provider', 'field', 'value', 'currency', 'observedAt', 'billingMonth'].includes(key))
     || !Object.hasOwn(MANUAL_FIELDS, body.provider) || !MANUAL_FIELDS[body.provider].includes(body.field)) throw new Error('Choose a supported provider and field.');
   if (!validDate(body.observedAt) || Date.parse(body.observedAt) > now + 60000) throw new Error('Enter when you actually checked it; future checks are not allowed.');
   const observedAt = new Date(body.observedAt).toISOString();
+  if (body.billingMonth != null && (body.field !== 'monthlyEstimate' || !/^\d{4}-(0[1-9]|1[0-2])$/.test(body.billingMonth))) throw new Error('Choose the month this estimate covers.');
   if (body.field === 'nextBillAt') {
     if (!validDate(body.value) || body.currency) throw new Error('Enter a billing date, without a currency.');
     return { provider: body.provider, field: body.field, ...metric(new Date(body.value).toISOString(), observedAt, 'dashboard_verified', { kind: 'date' }) };
@@ -33,7 +33,7 @@ function validateVerified(body, now = Date.now()) {
   const currency = String(body.currency || '').toUpperCase();
   if (value == null || value < 0 || value > 1000000 || !CURRENCIES.includes(currency)) throw new Error('Enter a non-negative amount and supported currency.');
   return { provider: body.provider, field: body.field, ...metric(value, observedAt, 'dashboard_verified', { currency,
-    estimated: body.field === 'monthlyEstimate' }) };
+    estimated: body.field === 'monthlyEstimate', ...(body.field === 'monthlyEstimate' ? { billingMonth: body.billingMonth || torontoDay(observedAt).slice(0, 7) } : {}) }) };
 }
 
 function usageMetric(body, at) {
@@ -121,83 +121,8 @@ async function collectFinance({ prisma, env, fetchImpl = fetch, now = new Date()
   return { updates, errors, attemptedAt: at, day, month };
 }
 
-function decorate(snapshot, verified, now = Date.now()) {
-  const day = new Date(now).toISOString().slice(0, 10), month = `${day.slice(0, 7)}-01`;
-  return PROVIDERS.map(id => {
-    const metrics = { ...(snapshot?.providers?.[id] || {}) }, warnings = [...(snapshot?.errors?.[id] || [])];
-    for (const entry of verified.filter(row => row.provider === id)) {
-      // API-reported billing dates win; do not replace them silently with manual dates.
-      if (!metrics[entry.field]) metrics[entry.field] = entry;
-      else if (metrics[entry.field].source === 'dashboard_verified') metrics[entry.field] = entry;
-    }
-    for (const [field, value] of Object.entries(metrics)) {
-      const maxAge = value.source === 'dashboard_verified' ? (field === 'balance' ? 86400000 : 30 * 86400000) : TTL * 3;
-      metrics[field] = { ...value, stale: Boolean(snapshot?.errors?.[id]?.length) || !value.observedAt || !validDate(value.observedAt) || now - Date.parse(value.observedAt) > maxAge || Date.parse(value.observedAt) > now + 60000,
-        previousPeriod: (field === 'spendToday' && value.periodStart !== day) || (field === 'spendMonth' && value.periodStart !== month) };
-    }
-    const balance = metrics.balance, reserve = metrics.reserve || metrics.reloadThreshold;
-    if (balance && reserve && balance.currency === reserve.currency && balance.value <= reserve.value) warnings.push('Balance is at or below the recorded reserve/trigger. Check the provider; this page cannot buy credits.');
-    const spend = metrics.spendMonth || metrics.monthlyEstimate, budget = metrics.budgetMonth;
-    if (spend && budget && !spend.previousPeriod && spend.currency === budget.currency && spend.value != null && spend.value >= budget.value) warnings.push(`${metrics.spendMonth ? 'Recorded month-to-date usage' : 'The monthly estimate'} has reached the budget. This warning never stops calls.`);
-    if (id === 'vapi') warnings.push('Saved call costs are estimates, not a complete Vapi invoice. They may include costs billed by Twilio or other providers; do not add them to Twilio totals.');
-    if (id === 'make') warnings.push('30-day credits are not the billing-cycle remaining balance. Plan price is not the final taxed invoice.');
-    if (id === 'render') warnings.push('Render billing is dashboard-verified, not live. Record the monthly estimate and next billing date after checking Render.');
-    return { id, name: { twilio: 'Twilio', vapi: 'Vapi', make: 'Make', render: 'Render' }[id], metrics, warnings };
-  });
-}
-
-function createFinanceService({ prisma, env = process.env, fetchImpl, clock = () => Date.now(), collect = collectFinance, timeoutMs = 4500 }) {
-  let snapshot = null, inFlight = null, lastAttempt = 0, persistenceWarning = null;
-  // Never reuse another account's balances after a provider-account/configuration switch.
-  // Derive the opaque namespace once at startup, never on the call or refresh path.
-  // Use a dedicated slow KDF even for high-entropy API credentials; no raw key or
-  // fast credential hash is persisted. This is not an authentication verifier.
-  const scope = scryptSync(JSON.stringify([env.TWILIO_ACCOUNT_SID || '', env.VAPI_API_KEY || '',
-    env.FINANCE_MAKE_ORGANIZATION_ID || '', env.FINANCE_MAKE_ZONE || '', env.RENDER_SERVICE_ID || '']),
-  'myaipa-provider-finance-cache-scope:v1', 20, { N: 16384, r: 8, p: 1 }).toString('hex');
-  const scopedKey = key => `${key}:${scope}`;
-  const bounded = async promise => {
-    let timer;
-    try { return await Promise.race([promise, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('finance_storage_timeout')), timeoutMs); })]); }
-    finally { clearTimeout(timer); }
-  };
-  async function refresh() {
-    if (inFlight || clock() - lastAttempt < TTL) return inFlight;
-    lastAttempt = clock();
-    inFlight = (async () => {
-      const result = await bounded(collect({ prisma, env, fetchImpl, now: new Date(clock()) }));
-      const providers = { ...(snapshot?.providers || {}) };
-      for (const id of PROVIDERS) providers[id] = { ...providers[id], ...result.updates[id] };
-      snapshot = { providers, errors: result.errors, attemptedAt: result.attemptedAt };
-      try {
-        const key = scopedKey(SNAPSHOT_KEY);
-        await bounded(prisma.runtimeStore.upsert({ where: { key }, create: { key, data: snapshot }, update: { data: snapshot } }));
-        persistenceWarning = null;
-      } catch (_) { persistenceWarning = 'The latest snapshot could not be confirmed saved. It may not survive a server restart.'; }
-    })().catch(() => { persistenceWarning = 'Finance refresh failed. Previous values are retained; missing values are unknown.'; }).finally(() => { inFlight = null; });
-    return inFlight;
-  }
-  return {
-    async read() {
-      const keys = PROVIDERS.flatMap(id => MANUAL_FIELDS[id].map(field => scopedKey(manualKey(id, field))));
-      const rows = await bounded(prisma.runtimeStore.findMany({ where: { key: { in: [scopedKey(SNAPSHOT_KEY), ...keys] } } }));
-      if (!snapshot) snapshot = rows.find(row => row.key === scopedKey(SNAPSHOT_KEY))?.data || null;
-      if (!lastAttempt && snapshot?.attemptedAt) lastAttempt = Date.parse(snapshot.attemptedAt) || 0;
-      void refresh(); // Return last-known data immediately; never wait for provider APIs here.
-      const verified = rows.filter(row => row.key !== scopedKey(SNAPSHOT_KEY)).map(row => row.data);
-      return { checkedAt: new Date(clock()).toISOString(), refreshing: Boolean(inFlight), refreshEverySeconds: TTL / 1000,
-        persistenceWarning, providers: decorate(snapshot, verified, clock()), manualFields: MANUAL_FIELDS,
-        billingDayTimezone: 'UTC', snapshotAt: snapshot?.attemptedAt || null };
-    },
-    async save(body) {
-      const entry = validateVerified(body, clock());
-      const key = scopedKey(manualKey(entry.provider, entry.field));
-      await bounded(prisma.runtimeStore.upsert({ where: { key }, create: { key, data: entry }, update: { data: entry } }));
-      return entry;
-    },
-    // For deterministic tests/shutdown only; not exposed as a production write endpoint.
-    waitForRefresh: () => inFlight,
-  };
+function createFinanceService(options) {
+  return createFinanceStore({ ...options, collect: options.collect || collectFinance, validateVerified, manualFields: MANUAL_FIELDS });
 }
 
 function registerFinanceRoutes({ app, requireAdmin, isAllowedOrigin, service }) {
@@ -212,8 +137,14 @@ function registerFinanceRoutes({ app, requireAdmin, isAllowedOrigin, service }) 
     if (!req.headers.origin || !isAllowedOrigin(req.headers.origin) || req.headers['x-myaipa-finance'] !== '1') return res.status(403).json({ error: 'Open the signed-in admin page to record a verified fact.' });
     try { validateVerified(req.body); }
     catch (error) { return res.status(400).json({ error: error.message }); }
-    try { await service.save(req.body); res.json({ ok: true }); }
+    try { res.json({ ok: true, entry: await service.save(req.body) }); }
     catch (_) { res.status(503).json({ error: 'The verified fact was not confirmed saved. Reload before trying again.' }); }
+  });
+  app.get('/api/admin/finances/history', requireAdmin, async (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    if (!PROVIDERS.includes(req.query.provider)) return res.status(400).json({ error: 'Choose a supported provider.' });
+    try { res.json({ ok: true, history: await service.history(req.query.provider), limit: 50 }); }
+    catch (_) { res.status(503).json({ error: 'Finance history is unavailable. Current figures are not a substitute for missing history.' }); }
   });
 }
 

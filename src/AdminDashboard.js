@@ -4212,7 +4212,7 @@ export default function AdminDashboard() {
 
         {activeTab === "costs" ? (
           <div className="admin-money-page">
-            <ProviderFinancePanel apiBase={API_BASE} />
+            <ProviderFinancePanel apiBase={API_BASE} phoneBilling={costAudit?.twilioPhoneBilling} />
             <div className="admin-money-header">
               <div>
                 <div className="admin-money-eyebrow">Money Dashboard</div>

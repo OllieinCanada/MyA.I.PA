@@ -16,11 +16,18 @@ beforeEach(() => {
 });
 afterEach(() => { act(() => root.unmount()); container.remove(); jest.useRealTimers(); delete global.fetch; });
 async function render() { await act(async () => { root.render(<ProviderFinancePanel apiBase="https://api.example.invalid" />); }); }
+function button(text) { return Array.from(container.querySelectorAll('button')).find(element => element.textContent === text); }
+async function change(label, value) {
+  const element = container.querySelector('[aria-label="' + label + '"]');
+  const prototype = element.tagName === 'SELECT' ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
+  await act(async () => { Object.getOwnPropertyDescriptor(prototype, 'value').set.call(element, value); element.dispatchEvent(new Event(element.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true })); });
+}
 test('zero, unknown, estimates and verified stale amounts remain distinguishable', async () => {
   await render();
   expect(container.textContent).toContain('USD 0.00');
   expect(container.textContent).toContain('Not confirmed');
-  expect(container.textContent).toContain('Manually verified · Stale / recheck');
+  expect(container.textContent).toContain('Outdated / recheck');
+  expect(container.textContent).toContain('Provider dashboard check');
   expect(container.textContent).toContain('No combined total');
   expect(container.textContent).toContain('Priced: 0 / 3');
   expect(fetch.mock.calls[0][1].credentials).toBe('include');
@@ -55,4 +62,60 @@ test('verified-fact editor has stable accessible labels and cannot submit an emp
   expect(container.querySelector('[aria-label="Fact"]').value).toBe('balance');
   const amount = container.querySelector('[aria-label="Amount"]');
   expect(amount.required).toBe(true); expect(amount.validity.valueMissing).toBe(true);
+});
+test('checked-just-now refreshes the actual editor time, rather than keeping page-load time', async () => {
+  jest.setSystemTime(new Date('2026-10-28T15:00:00Z'));
+  await render();
+  await act(async () => { jest.advanceTimersByTime(180000); button('Record a dashboard-verified fact').click(); });
+  const input = container.querySelector('[aria-label="Actually checked at (your local time)"]');
+  const opened = input.value;
+  await act(async () => { jest.advanceTimersByTime(120000); button('Checked just now').click(); });
+  expect(input.value).not.toBe(opened);
+  expect(container.querySelector('.finance-save-preview').textContent).toContain('Toronto');
+});
+test('manual estimate editor previews currency, coverage month and the acknowledged saved values', async () => {
+  const finances = { ...fixture, providers: [...fixture.providers, { id: 'render', name: 'Render', metrics: {}, warnings: [] }], manualFields: { ...fixture.manualFields, render: ['monthlyEstimate', 'nextBillAt'] } };
+  fetch.mockResolvedValue({ ok: true, json: async () => ({ finances }) });
+  await render(); act(() => button('Record a dashboard-verified fact').click());
+  await change('Provider', 'render'); await change('Amount', '17.75'); await change('Currency', 'CAD'); await change('Estimate covers month', '2026-10');
+  expect(container.querySelector('.finance-save-preview').textContent).toContain('CAD 17.75 for 2026-10');
+  fetch.mockImplementation(async (_url, options) => options.method === 'POST'
+    ? { ok: true, json: async () => ({ ok: true, entry: { ...JSON.parse(options.body), source: 'dashboard_verified' } }) }
+    : { ok: true, json: async () => ({ finances }) });
+  await act(async () => { container.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); });
+  const submission = fetch.mock.calls.find(([, options]) => options.method === 'POST');
+  expect(JSON.parse(submission[1].body).billingMonth).toBe('2026-10');
+  expect(submission[1].headers['X-MyAIPA-Finance']).toBe('1');
+  expect(container.querySelector('.finance-save-result').textContent).toContain('Saved Monthly cost estimate: CAD 17.75 for 2026-10');
+  expect(container.querySelector('.finance-save-result').textContent).toContain('Previous values remain in history');
+});
+test('uncertain saves are not reported successful or automatically retried', async () => {
+  await render(); act(() => button('Record a dashboard-verified fact').click()); await change('Amount', '12');
+  fetch.mockRejectedValueOnce(Error('connection lost'));
+  await act(async () => { container.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); });
+  expect(container.querySelector('.finance-save-result').textContent).toContain('Save not confirmed');
+  await act(async () => { jest.advanceTimersByTime(120000); });
+  expect(fetch.mock.calls.filter(([, options]) => options.method === 'POST')).toHaveLength(1);
+});
+test('history is read-only, preserves before/after timestamps, and failures do not erase current values', async () => {
+  await render();
+  fetch.mockResolvedValueOnce({ ok: true, json: async () => ({ history: [{ type: 'verification', field: 'balance', recordedAt: at,
+    value: { value: 12, currency: 'USD', observedAt: at }, previous: { value: 11, currency: 'USD', observedAt: '2026-10-27T12:00:00Z' } }] }) });
+  await act(async () => { button('View Vapi history').click(); });
+  expect(container.querySelector('.finance-history').textContent).toContain('Previous: USD 11.00');
+  expect(fetch.mock.calls.at(-1)[0]).toContain('/history?provider=vapi');
+  expect(fetch.mock.calls.at(-1)[1].method).toBeUndefined();
+  act(() => button('Close history').click()); fetch.mockRejectedValueOnce(Error('unavailable'));
+  await act(async () => { button('View Vapi history').click(); });
+  expect(container.querySelector('.finance-history [role=alert]').textContent).toContain('History could not be confirmed');
+  expect(container.textContent).toContain('USD 0.00');
+});
+test('overview does not treat stale wallet credit as confirmed funding or invent an overall cost', async () => {
+  const finances = { ...fixture, overview: { actions: [{ id: 'vapi:balance', provider: 'vapi', field: 'balance', title: 'Recheck Vapi funding', detail: 'The balance is outdated.' }], planTotals: [{ currency: 'CAD', value: 10 }, { currency: 'USD', value: 17.75 }], planCoverage: '2 of 2 monthly plan sources', renewals: [] } };
+  fetch.mockResolvedValue({ ok: true, json: async () => ({ finances }) }); await render();
+  expect(container.querySelector('.finance-summary').textContent).toContain('1 item');
+  expect(container.querySelector('.finance-summary').textContent).not.toContain('USD 0.00');
+  expect(container.querySelector('.finance-summary').textContent).toContain('CAD 10.00');
+  expect(container.querySelector('.finance-summary').textContent).toContain('USD 17.75');
+  expect(container.querySelector('.finance-summary').textContent).toContain('not total operating cost');
 });
