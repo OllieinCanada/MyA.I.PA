@@ -41,7 +41,8 @@ function fixture(overrides = {}, cost = 0.2) {
     },
     async create() { assert.fail('existing SID must not create a second call'); },
   } };
-  prisma.$transaction = async callback => callback({ call: prisma.call, $queryRaw: async () => [] });
+  prisma.$transaction = async callback => callback({ call: prisma.call,
+    $queryRaw: async query => (query.strings || query).join('').includes('FOR UPDATE') ? [structuredClone(row)] : [] });
   const context = {
     require(name) {
       assert.equal(name, './callPersistence');

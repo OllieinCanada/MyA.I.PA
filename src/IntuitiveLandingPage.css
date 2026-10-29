@@ -543,3 +543,13 @@
 @media (prefers-reduced-motion: reduce) {
   .simple-site *, .simple-site *::before, .simple-site *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+.simple-audio-feedback {
+  margin: 0.5rem 1rem;
+  padding: 0.65rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.75rem;
+  background: #fff;
+  color: #9f1239;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
