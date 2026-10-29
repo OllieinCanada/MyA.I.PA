@@ -25,7 +25,7 @@ describe('public demo playback recovery', () => {
     container = document.createElement('div'); document.body.appendChild(container); root = createRoot(container);
     act(() => root.render(<Fixture />)); audio = container.querySelector('audio'); button = container.querySelector('button');
   });
-  afterEach(() => { act(() => root.unmount()); container.remove(); });
+  afterEach(() => { act(() => root.unmount()); container.remove(); jest.useRealTimers(); });
 
   test('does not autoplay or preload the large recording', () => {
     expect(audio.preload).toBe('none'); expect(audio.hasAttribute('src')).toBe(false);
@@ -85,5 +85,65 @@ describe('public demo playback recovery', () => {
   test('a browser pause updates the control and permits a new deliberate play', async () => {
     await click(); act(() => audio.dispatchEvent(new Event('pause')));
     expect(button.textContent).toBe('Play'); await click(); expect(audio.play).toHaveBeenCalledTimes(2);
+  });
+  test('a queued pause event from an earlier source cannot cancel audio that is now playing', async () => {
+    await click();
+    Object.defineProperty(audio, 'paused', { configurable: true, value: false });
+    act(() => audio.dispatchEvent(new Event('pause')));
+    expect(button.textContent).toBe('Pause');
+    act(() => audio.dispatchEvent(new Event('playing')));
+    expect(audio.pause).not.toHaveBeenCalled();
+  });
+  test('a stalled preferred download tries the backup format and clears loading after recovery', async () => {
+    jest.useFakeTimers();
+    audio.play.mockImplementationOnce(() => new Promise(() => {})).mockResolvedValueOnce(undefined);
+    await click();
+    expect(button.textContent).toBe('Cancel loading');
+    await act(async () => jest.advanceTimersByTime(15000));
+    expect(audio.src).toMatch(/\.wav$/);
+    expect(audio.play).toHaveBeenCalledTimes(2);
+    expect(button.textContent).toBe('Pause');
+    expect(reportClientError).not.toHaveBeenCalled();
+    await act(async () => jest.advanceTimersByTime(30000));
+    expect(audio.play).toHaveBeenCalledTimes(2);
+  });
+  test('two stalled downloads stop loading, report once and allow a fresh one-tap retry', async () => {
+    jest.useFakeTimers();
+    audio.play.mockImplementation(() => new Promise(() => {}));
+    await click();
+    await act(async () => jest.advanceTimersByTime(15000));
+    await act(async () => jest.advanceTimersByTime(15000));
+    expect(button.textContent).toBe('Play');
+    expect(container.textContent).toMatch(/could not play.*retry/i);
+    expect(reportClientError).toHaveBeenCalledTimes(1);
+    audio.play.mockResolvedValueOnce(undefined);
+    await click();
+    expect(audio.src).toMatch(/\.mp3$/);
+    expect(button.textContent).toBe('Pause');
+  });
+  test('cancelled loading cannot resume from a late playing event or timeout', async () => {
+    jest.useFakeTimers();
+    audio.play.mockImplementationOnce(() => new Promise(() => {}));
+    audio.pause.mockImplementation(() => Object.defineProperty(audio, 'paused', { configurable: true, value: true }));
+    await click();
+    await click();
+    Object.defineProperty(audio, 'paused', { configurable: true, value: false });
+    act(() => audio.dispatchEvent(new Event('playing')));
+    expect(audio.paused).toBe(true);
+    await act(async () => jest.advanceTimersByTime(30000));
+    expect(audio.play).toHaveBeenCalledTimes(1);
+    expect(button.textContent).toBe('Play');
+    expect(reportClientError).not.toHaveBeenCalled();
+  });
+  test('leaving the page cancels a pending start without fallback or error reporting', async () => {
+    jest.useFakeTimers();
+    let resolve;
+    audio.play.mockImplementationOnce(() => new Promise(done => { resolve = done; }));
+    await click();
+    act(() => root.render(null));
+    await act(async () => { jest.advanceTimersByTime(30000); resolve(); });
+    expect(audio.pause).toHaveBeenCalledTimes(1);
+    expect(audio.play).toHaveBeenCalledTimes(1);
+    expect(reportClientError).not.toHaveBeenCalled();
   });
 });

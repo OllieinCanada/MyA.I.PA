@@ -1,12 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
 import { getSafeFailedAsset, getSafeMediaFailureDetails, reportClientError } from './clientErrorReporter';
 
+const PLAYBACK_START_TIMEOUT_MS = 15000;
+
 // Only public, pre-recorded demo audio. Never opens a microphone or a live call.
 export default function usePublicDemoAudio(audioRef, fallbackSource) {
   const [playing, setPlaying] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const state = useRef({ alive: true, generation: 0, requested: false, pending: false, fallback: false, reported: false, primary: '' });
+  const state = useRef({ alive: true, generation: 0, requested: false, pending: false, fallback: false, reported: false, primary: '', startupTimer: null });
+
+  const clearStartupTimer = () => {
+    clearTimeout(state.current.startupTimer);
+    state.current.startupTimer = null;
+  };
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -15,12 +22,14 @@ export default function usePublicDemoAudio(audioRef, fallbackSource) {
       state.current.alive = false;
       state.current.generation++;
       state.current.requested = false;
+      clearTimeout(state.current.startupTimer);
       audio?.pause();
     };
   }, [audioRef]);
 
   const fail = (audio, failure) => {
     if (!state.current.alive) return;
+    clearStartupTimer();
     state.current.generation++;
     state.current.requested = false;
     state.current.pending = false;
@@ -42,13 +51,24 @@ export default function usePublicDemoAudio(audioRef, fallbackSource) {
   };
 
   const start = async (audio) => {
+    clearStartupTimer();
     const generation = ++state.current.generation;
     state.current.requested = true;
     state.current.pending = true;
     setError(''); setLoading(true);
+    // A media request can stall without rejecting play() or emitting an error.
+    // Bound each format attempt and keep cancellation effective while waiting.
+    state.current.startupTimer = setTimeout(() => {
+      if (!state.current.alive || !state.current.requested || !state.current.pending
+        || generation !== state.current.generation) return;
+      audio.pause();
+      if (!state.current.fallback && fallbackSource) playFallback(audio);
+      else fail(audio, { name: 'TimeoutError' });
+    }, PLAYBACK_START_TIMEOUT_MS);
     try {
       await audio.play();
       if (state.current.alive && state.current.requested && generation === state.current.generation) {
+        clearStartupTimer();
         state.current.pending = false;
         setPlaying(true); setLoading(false);
       }
@@ -76,6 +96,7 @@ export default function usePublicDemoAudio(audioRef, fallbackSource) {
       state.current.generation++;
       state.current.requested = false;
       state.current.pending = false;
+      clearStartupTimer();
       audio.pause(); setPlaying(false); setLoading(false);
       return;
     }
@@ -97,8 +118,20 @@ export default function usePublicDemoAudio(audioRef, fallbackSource) {
     if (state.current.requested && !state.current.fallback && fallbackSource) playFallback(audio);
     else fail(audio, audio.error);
   };
-  const onPlaying = () => { if (state.current.alive && state.current.requested) { state.current.pending = false; setError(''); setPlaying(true); setLoading(false); } };
-  const onPause = () => { if (state.current.alive && !state.current.pending) { state.current.requested = false; setPlaying(false); } };
-  const onEnded = () => { state.current.requested = false; state.current.pending = false; setPlaying(false); setLoading(false); };
+  const onPlaying = () => {
+    // Late media events must not undo a deliberate cancellation or unmount.
+    if (!state.current.alive || !state.current.requested) {
+      audioRef.current?.pause();
+      return;
+    }
+    clearStartupTimer();
+    state.current.pending = false; setError(''); setPlaying(true); setLoading(false);
+  };
+  const onPause = () => {
+    // A queued event may describe the previous source after a new one starts.
+    if (!state.current.alive || state.current.pending || audioRef.current?.paused === false) return;
+    state.current.requested = false; setPlaying(false);
+  };
+  const onEnded = () => { clearStartupTimer(); state.current.requested = false; state.current.pending = false; setPlaying(false); setLoading(false); };
   return { playing, loading, error, toggle, onError, onPlaying, onPause, onEnded };
 }

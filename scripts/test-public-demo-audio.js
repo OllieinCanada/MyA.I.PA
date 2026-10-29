@@ -27,6 +27,9 @@ async function startMediaFixture() {
     current.requests.push(extension);
     const headers = { 'Content-Type': extension === 'mp3' ? 'audio/mpeg' : 'audio/wav',
       'Accept-Ranges': 'bytes', 'Cache-Control': 'no-store' };
+    // Leave the primary request pending: recovery must also work when the
+    // network never supplies bytes and the browser emits no media error.
+    if (current.broken && current.mode === 'stalled' && extension === 'mp3') return;
     if (current.broken && (current.mode === 'exhausted' || extension === 'mp3')) {
       res.writeHead(200, headers).end('deliberately invalid synthetic audio'); return;
     }
@@ -86,6 +89,7 @@ async function scenario(browser, engine, viewport, mode, fixture) {
     assert.equal(await element.getAttribute('preload'), 'none');
     assert.equal(await element.evaluate(audio => audio.paused), true);
     assert.equal(requests.length, 0, 'no media download before user interaction');
+    const playbackStartedAt = Date.now();
     await control.click();
     if (mode === 'exhausted') {
       await page.locator('#hero-audio-feedback').waitFor();
@@ -104,7 +108,11 @@ async function scenario(browser, engine, viewport, mode, fixture) {
       duration: audio.duration, error: audio.error?.code || null, readyState: audio.readyState }));
     assert.equal(playback.error, null);
     assert.ok(Math.abs(playback.duration - 133) < 0.15, 'the original call duration is preserved');
-    assert.match(playback.currentSrc, mode === 'fallback' ? /\.wav$/ : /\.mp3$/);
+    assert.match(playback.currentSrc, ['fallback', 'stalled'].includes(mode) ? /\.wav$/ : /\.mp3$/);
+    if (mode === 'stalled') {
+      assert.ok(Date.now() - playbackStartedAt >= 14000, 'the primary really stalled before bounded fallback');
+      assert.deepEqual([...new Set(requests)], ['mp3', 'wav']);
+    }
     if (mode !== 'exhausted') assert.equal(reports.length, 0, 'a successful fallback is not an outage');
     await element.evaluate(audio => { audio.currentTime = 64; });
     await page.waitForFunction(() => document.querySelector('.simple-proof-carousel audio').currentTime > 64.1);
@@ -145,10 +153,10 @@ async function main() {
   const fixture = await startMediaFixture();
   try {
     const selectedEngines = (process.argv.find(arg => arg.startsWith('--engines='))?.slice(10) || 'chromium,firefox,webkit').split(',');
-    const selectedModes = (process.argv.find(arg => arg.startsWith('--modes='))?.slice(8) || 'normal,fallback,exhausted').split(',');
+    const selectedModes = (process.argv.find(arg => arg.startsWith('--modes='))?.slice(8) || 'normal,fallback,exhausted,stalled').split(',');
     const selectedSizes = (process.argv.find(arg => arg.startsWith('--sizes='))?.slice(8) || 'phone,tablet,desktop').split(',');
     assert.ok(selectedEngines.every(engine => Object.hasOwn(engines, engine)));
-    assert.ok(selectedModes.every(mode => ['normal', 'fallback', 'exhausted'].includes(mode)));
+    assert.ok(selectedModes.every(mode => ['normal', 'fallback', 'exhausted', 'stalled'].includes(mode)));
     assert.ok(selectedSizes.every(size => sizes.some(item => item.name === size)));
     for (const engine of selectedEngines) {
       const type = engines[engine];
