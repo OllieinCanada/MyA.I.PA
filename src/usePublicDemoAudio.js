@@ -4,7 +4,7 @@ import { getSafeFailedAsset, getSafeMediaFailureDetails, reportClientError } fro
 const PLAYBACK_START_TIMEOUT_MS = 15000;
 
 // Only public, pre-recorded demo audio. Never opens a microphone or a live call.
-export default function usePublicDemoAudio(audioRef, fallbackSource) {
+export default function usePublicDemoAudio(audioRef, fallbackSource, messages = {}) {
   const [playing, setPlaying] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -39,8 +39,8 @@ export default function usePublicDemoAudio(audioRef, fallbackSource) {
     setPlaying(false); setLoading(false);
     const blocked = failure?.name === 'NotAllowedError';
     setError(blocked
-      ? 'Your browser blocked playback. Tap Hear Live Call to try again.'
-      : 'The sample could not play. Tap Hear Live Call to retry, or choose See the Full Demo to read it.');
+      ? messages.blocked || 'Your browser blocked playback. Tap Hear Live Call to try again.'
+      : messages.failed || 'The sample could not play. Tap Hear Live Call to retry, or choose See the Full Demo to read it.');
     // A denied autoplay permission is not a broken audio asset. Only report
     // terminal media failures, after the alternate format was also attempted.
     if (!blocked && !state.current.reported) {

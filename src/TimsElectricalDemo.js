@@ -8,6 +8,7 @@ import {
   timsElectricalScenarios,
 } from "./timsElectricalDemoData";
 import timsElectricalAudioManifest from "./timsElectricalAudioManifest.json";
+import usePublicDemoAudio from "./usePublicDemoAudio";
 import { getScenarioProgress } from "./firstClassRentalsLogic";
 import "./FirstClassRentalsDemo.css";
 import "./TimsElectricalDemo.css";
@@ -100,14 +101,19 @@ function ScenarioRecording({ scenario, onTranscriptPosition }) {
   const available = recording?.status === "available" && recording?.src;
   const visualOnly = recording?.status === "visual-only";
   const audioRef = useRef(null);
-  const [isPlaying, setIsPlaying] = useState(false);
+  const playback = usePublicDemoAudio(audioRef, recording?.fallbackSrc ? `${process.env.PUBLIC_URL || ""}${recording.fallbackSrc}` : "", {
+    blocked: "Your browser blocked playback. Press Play recorded scenario call to try again.",
+    failed: "This recording could not play. Press Retry recorded scenario call, or read the transcript below.",
+  });
+  const isPlaying = playback.playing;
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(recording?.durationSeconds || 0);
+  const [metadataReady, setMetadataReady] = useState(false);
 
   useEffect(() => {
-    setIsPlaying(false);
     setCurrentTime(0);
     setDuration(recording?.durationSeconds || 0);
+    setMetadataReady(false);
     onTranscriptPosition?.(null);
   }, [recording?.durationSeconds, recording?.src, onTranscriptPosition]);
 
@@ -116,28 +122,21 @@ function ScenarioRecording({ scenario, onTranscriptPosition }) {
     onTranscriptPosition?.(nextTime);
   };
 
-  const togglePlayback = async () => {
+  const togglePlayback = () => {
     const audio = audioRef.current;
     if (!audio) return;
-    if (!audio.paused) {
-      audio.pause();
-      return;
-    }
-    if (audio.ended || audio.currentTime >= (audio.duration || duration)) {
-      audio.currentTime = 0;
+    if (audio.ended) {
       updatePosition(0);
     }
-    try {
-      onTranscriptPosition?.(audio.currentTime || 0);
-      await audio.play();
-    } catch (_) {
-      setIsPlaying(false);
-    }
+    playback.toggle();
   };
 
   const seekRecording = (event) => {
-    const nextTime = Number(event.target.value);
-    if (audioRef.current) audioRef.current.currentTime = nextTime;
+    const audio = audioRef.current;
+    if (!metadataReady || !audio || !Number.isFinite(audio.duration) || audio.duration <= 0) return;
+    const nextTime = Math.max(0, Math.min(Number(event.target.value), audio.duration));
+    if (!Number.isFinite(nextTime)) return;
+    try { audio.currentTime = nextTime; } catch (_) { return; }
     updatePosition(nextTime);
   };
 
@@ -157,7 +156,9 @@ function ScenarioRecording({ scenario, onTranscriptPosition }) {
       {available ? (
         <>
           <div className="tims-recording-controls">
-            <button type="button" onClick={togglePlayback} aria-label={isPlaying ? "Pause recorded scenario call" : "Play recorded scenario call"}>
+            <button type="button" onClick={togglePlayback}
+              aria-label={playback.loading ? "Cancel loading recorded scenario call" : isPlaying ? "Pause recorded scenario call" : playback.error ? "Retry recorded scenario call" : "Play recorded scenario call"}
+              aria-describedby={playback.error || playback.loading ? `recording-feedback-${scenario.id}` : undefined}>
               <Icon name={isPlaying ? "pause" : "play"} size={17} />
             </button>
             <span>{formatAudioTime(currentTime)}</span>
@@ -168,23 +169,34 @@ function ScenarioRecording({ scenario, onTranscriptPosition }) {
               step="0.1"
               value={Math.min(currentTime, Math.max(duration, 1))}
               onChange={seekRecording}
+              disabled={!metadataReady || playback.loading}
               aria-label="Recorded call position"
               style={{ "--tims-audio-progress": `${duration ? (currentTime / duration) * 100 : 0}%` }}
             />
             <span>{formatAudioTime(duration)}</span>
           </div>
+          {(playback.error || playback.loading) && <p className="tims-recording-feedback" id={`recording-feedback-${scenario.id}`} role="status">
+            {playback.error || "Loading recording… Press the play button again to cancel."}
+          </p>}
           <small className="tims-recording-disclosure">Recorded demonstration · no real customer information</small>
           <audio
             className="tims-recording-audio"
             key={`${scenario.id}-${recording.src}`}
             ref={audioRef}
-            preload="metadata"
-            src={`${process.env.PUBLIC_URL || ""}${recording.src}`}
-            onLoadedMetadata={(event) => setDuration(Number.isFinite(event.currentTarget.duration) ? event.currentTarget.duration : recording.durationSeconds)}
+            preload="none"
+            data-public-demo-source={`${process.env.PUBLIC_URL || ""}${recording.src}`}
+            data-public-demo-audio="managed"
+            onLoadedMetadata={(event) => {
+              const seconds = event.currentTarget.duration;
+              setMetadataReady(Number.isFinite(seconds) && seconds > 0);
+              setDuration(Number.isFinite(seconds) && seconds > 0 ? seconds : recording.durationSeconds);
+            }}
+            onEmptied={() => setMetadataReady(false)}
             onTimeUpdate={(event) => updatePosition(event.currentTarget.currentTime)}
-            onPlay={() => setIsPlaying(true)}
-            onPause={() => setIsPlaying(false)}
-            onEnded={() => setIsPlaying(false)}
+            onError={playback.onError}
+            onPlaying={() => { playback.onPlaying(); updatePosition(audioRef.current?.currentTime || 0); }}
+            onPause={playback.onPause}
+            onEnded={playback.onEnded}
           >
             Your browser does not support audio playback.
           </audio>
@@ -229,7 +241,7 @@ function DemoPhone({ scenario, visibleLines, complete }) {
         <span>{customerDetail?.value || "Caller details being gathered"}</span>
         <strong>{callbackDetail?.value || "Phone context appears when confirmed"}</strong>
       </div>
-      <ScenarioRecording scenario={scenario} onTranscriptPosition={setRecordingTime} />
+      <ScenarioRecording key={scenario.id} scenario={scenario} onTranscriptPosition={setRecordingTime} />
       <div className={`fcr-phone-transcript ${recordingTime !== null ? "is-audio-following" : ""}`} ref={transcriptRef} tabIndex={0} role="region" aria-label="Demo call transcript" aria-live="polite">
         {displayedLineCount === 0 ? (
           <div className="fcr-phone-empty"><Icon name="phone" size={30} /><strong>Loading the selected call…</strong><span>No real call or text will be sent.</span></div>

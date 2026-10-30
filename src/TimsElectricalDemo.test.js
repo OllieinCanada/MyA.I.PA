@@ -5,6 +5,8 @@ import {
   getActiveTranscriptIndex,
   TimsElectricalLiveDemo,
 } from "./TimsElectricalDemo";
+import { reportClientError } from "./clientErrorReporter";
+jest.mock('./clientErrorReporter', () => ({ ...jest.requireActual('./clientErrorReporter'), reportClientError: jest.fn() }));
 
 describe("Tim's Electrical preloaded landing-page demo", () => {
   let container;
@@ -14,6 +16,10 @@ describe("Tim's Electrical preloaded landing-page demo", () => {
     jest.useFakeTimers();
     global.IS_REACT_ACT_ENVIRONMENT = true;
     HTMLElement.prototype.scrollTo = jest.fn();
+    HTMLMediaElement.prototype.play = jest.fn().mockResolvedValue(undefined);
+    HTMLMediaElement.prototype.pause = jest.fn();
+    HTMLMediaElement.prototype.load = jest.fn();
+    jest.clearAllMocks();
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
@@ -93,7 +99,10 @@ describe("Tim's Electrical preloaded landing-page demo", () => {
     expect(container.textContent).toMatch(/Recorded scenario call/i);
     expect(container.textContent).toMatch(/no real customer information/i);
     expect(audio).not.toBeNull();
-    expect(audio.getAttribute("src")).toMatch(/audio\/tims-electrical\/new-installation\.wav/i);
+    expect(audio.hasAttribute("src")).toBe(false);
+    expect(audio.preload).toBe("none");
+    expect(audio.dataset.publicDemoSource).toMatch(/audio\/tims-electrical\/new-installation\.mp3/i);
+    expect(audio.play).not.toHaveBeenCalled();
     expect(phone.querySelector(".tims-voice-visualizer")).not.toBeNull();
     expect(phone.querySelector('button[aria-label="Play recorded scenario call"]')).not.toBeNull();
     expect(container.querySelector(".fcr-call-console > .tims-scenario-recording")).toBeNull();
@@ -104,8 +113,9 @@ describe("Tim's Electrical preloaded landing-page demo", () => {
     act(() => repairButton.dispatchEvent(new MouseEvent("click", { bubbles: true })));
 
     expect(container.textContent).toMatch(/Hear the repair request conversation/i);
-    expect(container.querySelector(".tims-scenario-recording audio")?.getAttribute("src"))
-      .toMatch(/audio\/tims-electrical\/repair-request\.wav/i);
+    expect(container.querySelector(".tims-scenario-recording audio")?.dataset.publicDemoSource)
+      .toMatch(/audio\/tims-electrical\/repair-request\.mp3/i);
+    expect(container.querySelector(".tims-scenario-recording audio")?.hasAttribute("src")).toBe(false);
   });
 
   test("maps recording progress to a natural transcript flow", () => {
@@ -152,6 +162,9 @@ describe("Tim's Electrical preloaded landing-page demo", () => {
   });
 
   test("moves the active caption at the recorded speaker-change time", () => {
+    const audio = container.querySelector('audio');
+    Object.defineProperty(audio, 'duration', {configurable:true, value:85});
+    act(() => audio.dispatchEvent(new Event('loadedmetadata')));
     const position = container.querySelector('input[aria-label="Recorded call position"]');
     const setRangeValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
     act(() => {
@@ -162,5 +175,84 @@ describe("Tim's Electrical preloaded landing-page demo", () => {
     const activeTurn = container.querySelector('.tims-call-turn[data-active="true"]');
     expect(activeTurn?.textContent).toMatch(/CALLER/i);
     expect(activeTurn?.textContent).toMatch(/licensed electrician to wire a newly installed hot tub/i);
+  });
+
+  const clickPlay = async () => act(async () => container.querySelector('.tims-recording-controls button')
+    .dispatchEvent(new MouseEvent('click', {bubbles:true})));
+
+  test('loads the MP3 only after Play and keeps seeking disabled until metadata exists', async () => {
+    const audio = container.querySelector('audio');
+    const range = container.querySelector('input[aria-label="Recorded call position"]');
+    expect(range.disabled).toBe(true);
+    await clickPlay();
+    expect(audio.src).toMatch(/new-installation\.mp3$/);
+    expect(audio.play).toHaveBeenCalledTimes(1);
+    Object.defineProperty(audio, 'duration', {configurable:true, value:85});
+    act(() => audio.dispatchEvent(new Event('loadedmetadata')));
+    expect(range.disabled).toBe(false);
+  });
+
+  test('recovers from an unsupported MP3 using the original scenario WAV without a false alert', async () => {
+    const audio = container.querySelector('audio');
+    audio.play.mockRejectedValueOnce(new DOMException('unsupported','NotSupportedError')).mockResolvedValueOnce(undefined);
+    await clickPlay();
+    expect(audio.src).toMatch(/new-installation\.wav$/);
+    expect(audio.play).toHaveBeenCalledTimes(2);
+    expect(container.querySelector('[aria-label="Pause recorded scenario call"]')).not.toBeNull();
+    expect(reportClientError).not.toHaveBeenCalled();
+  });
+
+  test('shows scenario-specific retry guidance after both formats fail and retries in one click', async () => {
+    const audio = container.querySelector('audio');
+    audio.play.mockRejectedValue(new DOMException('unsupported','NotSupportedError'));
+    await clickPlay();
+    expect(container.textContent).toMatch(/Retry recorded scenario call.*transcript below/);
+    expect(container.textContent).not.toMatch(/Tap Hear Live Call/);
+    expect(reportClientError).toHaveBeenCalledTimes(1);
+    expect(audio.pause).toHaveBeenCalled();
+    audio.play.mockResolvedValue(undefined);
+    await clickPlay();
+    expect(audio.src).toMatch(/new-installation\.mp3$/);
+    expect(container.querySelector('[aria-label="Pause recorded scenario call"]')).not.toBeNull();
+  });
+
+  test('a denied play stays retryable without reporting a broken recording', async () => {
+    const audio = container.querySelector('audio');
+    audio.play.mockRejectedValueOnce(new DOMException('blocked','NotAllowedError'));
+    await clickPlay();
+    expect(container.textContent).toMatch(/browser blocked playback.*Play recorded scenario call/);
+    expect(audio.play).toHaveBeenCalledTimes(1);
+    expect(reportClientError).not.toHaveBeenCalled();
+  });
+
+  test('loading can be cancelled and a late rejection cannot restart the scenario', async () => {
+    const audio = container.querySelector('audio');
+    let reject;
+    audio.play.mockImplementationOnce(() => new Promise((_yes,no) => {reject=no;}));
+    await clickPlay();
+    expect(container.querySelector('[aria-label="Cancel loading recorded scenario call"]')).not.toBeNull();
+    await clickPlay();
+    await act(async () => reject(new DOMException('cancelled','AbortError')));
+    act(() => jest.advanceTimersByTime(31000));
+    expect(audio.play).toHaveBeenCalledTimes(1);
+    expect(container.querySelector('[aria-label="Play recorded scenario call"]')).not.toBeNull();
+    expect(reportClientError).not.toHaveBeenCalled();
+  });
+
+  test('switching scenarios pauses and cancels the old player without preloading the next', async () => {
+    const oldAudio = container.querySelector('audio');
+    let reject;
+    oldAudio.play.mockImplementationOnce(() => new Promise((_yes,no) => {reject=no;}));
+    await clickPlay();
+    const repair = [...container.querySelectorAll('[role="tab"]')].find(button => button.textContent.trim()==='Repair request');
+    act(() => repair.dispatchEvent(new MouseEvent('click',{bubbles:true})));
+    const next = container.querySelector('audio');
+    expect(next).not.toBe(oldAudio);
+    expect(oldAudio.pause).toHaveBeenCalled();
+    expect(next.hasAttribute('src')).toBe(false);
+    await act(async () => reject(new DOMException('old source','NotSupportedError')));
+    act(() => jest.advanceTimersByTime(31000));
+    expect(oldAudio.play).toHaveBeenCalledTimes(1);
+    expect(reportClientError).not.toHaveBeenCalled();
   });
 });

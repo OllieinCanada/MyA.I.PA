@@ -31,6 +31,7 @@ jobs:
       DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/ci
       REACT_APP_API_BASE_URL: https://api.myaipa.ca
       REACT_APP_GOOGLE_MAPS_API_KEY: ${{ vars.GOOGLE_MAPS_BROWSER_KEY }}
+      REACT_APP_RELEASE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
 
     steps:
       - name: Check out repository
@@ -137,7 +138,22 @@ jobs:
           pactl list short sinks
 
       - name: Verify demo playback, format fallback and retry in all browser engines
-        run: npm run test:public-demo-audio
+        run: |
+          npm run test:public-demo-audio
+          npm run test:scenario-demo-audio
+
+      - name: Save isolated audio playback evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: demo-audio-${{ github.event.pull_request.head.sha || github.sha }}
+          retention-days: 7
+          path: |
+            diagnostics/call-sync-audio-repair/browser.json
+            diagnostics/call-sync-audio-repair/scenario-browser.json
+            diagnostics/call-sync-audio-repair/*-player.png
+            diagnostics/call-sync-audio-repair/*-retry.png
+          if-no-files-found: ignore
 
       - name: Verify single-review signup on mobile and desktop
         env:

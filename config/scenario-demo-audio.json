@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "encoding": "MPEG-1 Layer III, mono, 44100 Hz, 96 kbit/s",
+  "recordings": {
+    "new-installation": {
+      "sourceSha256": "386be90fcd478e68e7d2768ae544632d61426cd1454133b29cb564da5af03427",
+      "outputSha256": "b6f8a27b32af8118dc425da346545fd81b29b25a8ffb979740312f9f2407df80",
+      "bytes": 1023521,
+      "decodedDurationSeconds": 85.22,
+      "dialogueChanged": false,
+      "originalPreserved": true
+    },
+    "repair-request": {
+      "sourceSha256": "7e76c9f5a4c73321b4f5c85e8cc34f3fdff756efc46121ec85d95668840c38b9",
+      "outputSha256": "e53de9572e04df319ac88b44df86be3aedc14fa06fa37ef27d4986c8adf5d434",
+      "bytes": 644850,
+      "decodedDurationSeconds": 53.660272,
+      "dialogueChanged": false,
+      "originalPreserved": true
+    },
+    "maintenance": {
+      "sourceSha256": "d1a7e51085244c58d036a302a733fac8fe4c246abfd1c24c4d4036305708de33",
+      "outputSha256": "6f84a084ae34689535f8c1d935c1f6481965ae4946cde79d08bc110205d41d5a",
+      "bytes": 630117,
+      "decodedDurationSeconds": 52.440454,
+      "dialogueChanged": false,
+      "originalPreserved": true
+    },
+    "unresolved-concern": {
+      "sourceSha256": "27575d76322e0b481fb891273bcf1549bc65e90ae8531643b34a0fc857e9b361",
+      "outputSha256": "746685f28d27546ecc693a18a396502fdc605915e8eff1f4b784936f1d3335cc",
+      "bytes": 747355,
+      "decodedDurationSeconds": 62.220204,
+      "dialogueChanged": false,
+      "originalPreserved": true
+    },
+    "hero-new-installation": {
+      "sourceSha256": "21769c6f2e425a702391d63dc2e53ddfd11dc3c7edb46bde64c36235450807d3",
+      "outputSha256": "b9692a052cf01e27eb5f3d5da79fc2f9d8bf12e27e2a74640166cbc28e5d0394",
+      "bytes": 871175,
+      "decodedDurationSeconds": 72.54,
+      "dialogueChanged": false,
+      "originalPreserved": true
+    }
+  }
+}
