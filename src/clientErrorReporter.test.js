@@ -25,6 +25,7 @@ test("public sample audio diagnostics retain filename but never private paths or
   const locationValue = { href: "https://www.myaipa.ca/" };
   expect(getSafeFailedAsset({ currentSrc: "/tims-electrical-2.wav?token=private" }, locationValue)).toBe("/tims-electrical-2.wav");
   expect(getSafeFailedAsset({ src: "/audio/tims-electrical/repair-request.wav" }, locationValue)).toBe("/audio/tims-electrical/repair-request.wav");
+  expect(getSafeFailedAsset({ src: "/audio/tims-electrical/new-installation.mp3?token=hidden" }, locationValue)).toBe("/audio/tims-electrical/new-installation.mp3");
   for (const src of ["/audio/customer-recording.wav", "https://other.example/tims-electrical-2.wav"]) {
     expect(getSafeFailedAsset({ src }, locationValue)).toBe("");
   }

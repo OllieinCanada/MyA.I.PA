@@ -1,15 +1,16 @@
 {
   "new-installation": {
     "status": "available",
-    "src": "/audio/tims-electrical/new-installation.wav",
+    "src": "/audio/tims-electrical/new-installation.mp3",
     "durationSeconds": 85,
     "source": "synthetic-vapi-agents",
     "recordedAt": "2026-08-12T08:25:04.387Z",
-    "disclosure": "Synthetic demonstration call recorded between two Vapi agents; no real customer information."
+    "disclosure": "Synthetic demonstration call recorded between two Vapi agents; no real customer information.",
+    "fallbackSrc": "/audio/tims-electrical/new-installation.wav"
   },
   "repair-request": {
     "status": "available",
-    "src": "/audio/tims-electrical/repair-request.wav",
+    "src": "/audio/tims-electrical/repair-request.mp3",
     "durationSeconds": 53.66,
     "source": "synthetic-vapi-agents",
     "callerVoiceId": "Emma",
@@ -17,11 +18,12 @@
     "recordedAt": "2026-08-17T07:02:23.760Z",
     "disclosure": "Synthetic demonstration call recorded between two Vapi agents; no real customer information.",
     "preparedAt": "2026-08-17T07:23:03.397Z",
-    "timingSource": "vapi-message-boundaries"
+    "timingSource": "vapi-message-boundaries",
+    "fallbackSrc": "/audio/tims-electrical/repair-request.wav"
   },
   "maintenance": {
     "status": "available",
-    "src": "/audio/tims-electrical/maintenance.wav",
+    "src": "/audio/tims-electrical/maintenance.mp3",
     "durationSeconds": 52.44,
     "source": "synthetic-vapi-agents",
     "callerVoiceId": "Kai",
@@ -29,11 +31,12 @@
     "recordedAt": "2026-08-17T07:04:54.014Z",
     "disclosure": "Synthetic demonstration call recorded between two Vapi agents; no real customer information.",
     "preparedAt": "2026-08-17T07:23:04.000Z",
-    "timingSource": "vapi-message-boundaries"
+    "timingSource": "vapi-message-boundaries",
+    "fallbackSrc": "/audio/tims-electrical/maintenance.wav"
   },
   "unresolved-concern": {
     "status": "available",
-    "src": "/audio/tims-electrical/unresolved-concern.wav",
+    "src": "/audio/tims-electrical/unresolved-concern.mp3",
     "durationSeconds": 62.22,
     "source": "synthetic-vapi-agents",
     "callerVoiceId": "Naina",
@@ -41,7 +44,8 @@
     "recordedAt": "2026-08-17T07:07:21.313Z",
     "disclosure": "Synthetic demonstration call recorded between two Vapi agents; no real customer information.",
     "preparedAt": "2026-08-17T07:23:04.271Z",
-    "timingSource": "vapi-message-boundaries"
+    "timingSource": "vapi-message-boundaries",
+    "fallbackSrc": "/audio/tims-electrical/unresolved-concern.wav"
   },
   "urgent-outage": {
     "status": "visual-only",
@@ -67,10 +71,11 @@
   },
   "hero-new-installation": {
     "status": "available",
-    "src": "/audio/tims-electrical/hero-new-installation.wav",
+    "src": "/audio/tims-electrical/hero-new-installation.mp3",
     "durationSeconds": 73,
     "source": "synthetic-vapi-agents",
     "recordedAt": "2026-08-14T07:31:57.213Z",
-    "disclosure": "Synthetic demonstration call recorded between two Vapi agents; no real customer information."
+    "disclosure": "Synthetic demonstration call recorded between two Vapi agents; no real customer information.",
+    "fallbackSrc": "/audio/tims-electrical/hero-new-installation.wav"
   }
 }

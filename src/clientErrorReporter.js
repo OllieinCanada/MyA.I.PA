@@ -1,7 +1,7 @@
 import { getApiBaseUrl, normalizeApiBase } from "./config/apiBase";
 import audioManifest from "./timsElectricalAudioManifest.json";
 
-const publicAudioPaths = new Set(["/tims-electrical-2.wav", "/tims-electrical-2.mp3", ...Object.values(audioManifest).map((entry) => entry.src)]);
+const publicAudioPaths = new Set(["/tims-electrical-2.wav", "/tims-electrical-2.mp3", ...Object.values(audioManifest).flatMap((entry) => [entry.src, entry.fallbackSrc].filter(Boolean))]);
 
 export function isManagedPublicDemoAudio(target) {
   return String(target?.tagName || '').toLowerCase() === 'audio'

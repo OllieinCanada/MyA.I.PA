@@ -6,7 +6,16 @@ const path = require('node:path');
 const assert = require('node:assert/strict');
 const { chromium, firefox, webkit } = require('playwright');
 const root = path.resolve(__dirname, '..');
-const build = path.join(root, 'docs');
+const build = path.resolve(root, process.env.DEMO_AUDIO_BUILD_DIR || 'docs');
+const player = process.argv.find(arg => arg.startsWith('--player='))?.slice(9) || 'hero';
+assert.ok(['hero', 'scenario'].includes(player));
+const selectors = player === 'scenario' ? {
+  control: '#tims-homepage-demo .tims-recording-controls button', element: '#tims-homepage-demo audio.tims-recording-audio',
+  panel: '#tims-homepage-demo .tims-scenario-recording', feedback: '#recording-feedback-new-installation', duration:85.22, seek:40,
+} : {
+  control: '.simple-carousel-header button', element: '.simple-proof-carousel audio',
+  panel: '.simple-proof-carousel', feedback: '#hero-audio-feedback', duration:133, seek:64,
+};
 const output = path.join(root, 'diagnostics/call-sync-audio-repair');
 let origin;
 const engines = { chromium, firefox, webkit };
@@ -19,7 +28,7 @@ async function startMediaFixture() {
   // range responses and intentional failures, without external traffic.
   const server = http.createServer((req, res) => {
     const pathname = new URL(req.url, 'http://127.0.0.1').pathname;
-    const match = /^\/tims-electrical-2\.(mp3|wav)$/.exec(pathname);
+    const match = /^\/(?:tims-electrical-2|audio\/tims-electrical\/new-installation)\.(mp3|wav)$/.exec(pathname);
     if (req.method !== 'GET' || !match || !fixture.current) {
       res.writeHead(404).end(); return;
     }
@@ -33,7 +42,7 @@ async function startMediaFixture() {
     if (current.broken && (current.mode === 'exhausted' || extension === 'mp3')) {
       res.writeHead(200, headers).end('deliberately invalid synthetic audio'); return;
     }
-    const bytes = fs.readFileSync(path.join(build, `tims-electrical-2.${extension}`));
+    const bytes = fs.readFileSync(path.join(build, pathname));
     const range = /^bytes=(\d+)-(\d*)$/.exec(req.headers.range || '');
     if (range) {
       const start = Number(range[1]);
@@ -69,15 +78,15 @@ async function scenario(browser, engine, viewport, mode, fixture) {
       if (url.origin !== origin || request.method() !== 'GET') { blocked++; return route.abort(); }
       const file = path.resolve(build, url.pathname === '/' ? 'index.html' : decodeURIComponent(url.pathname).replace(/^\//, ''));
       if (!file.startsWith(build + path.sep) || !fs.existsSync(file) || !fs.statSync(file).isFile()) return route.fulfill({ status: 404, body: 'Not found' });
-      const audio = /\/tims-electrical-2\.(mp3|wav)$/.exec(url.pathname);
+      const audio = /\/(?:tims-electrical-2|audio\/tims-electrical\/new-installation)\.(mp3|wav)$/.exec(url.pathname);
       if (audio) return route.continue();
       return route.fulfill({ path: file });
     });
     await page.goto(origin, { waitUntil: 'domcontentloaded' });
     console.log(JSON.stringify({ engine, mode, stage: 'homepage loaded' }));
-    const control = page.locator('.simple-carousel-header button');
+    const control = page.locator(selectors.control);
     await control.waitFor();
-    const element = page.locator('.simple-proof-carousel audio');
+    const element = page.locator(selectors.element);
     await element.evaluate(audio => {
       window.__fixtureMediaErrors = [];
       audio.addEventListener('error', () => window.__fixtureMediaErrors.push({
@@ -89,38 +98,50 @@ async function scenario(browser, engine, viewport, mode, fixture) {
     assert.equal(await element.getAttribute('preload'), 'none');
     assert.equal(await element.evaluate(audio => audio.paused), true);
     assert.equal(requests.length, 0, 'no media download before user interaction');
+    // React can show retry feedback before the asynchronous report reaches
+    // the route handler. Await the mocked delivery, not just the UI render.
+    const terminalReport = mode === 'exhausted' ? page.waitForResponse(response =>
+      new URL(response.url()).pathname === '/api/client-errors'
+      && response.request().method() === 'POST' && response.status() === 200)
+      .then(() => null, error => error) : null;
     const playbackStartedAt = Date.now();
     await control.click();
     if (mode === 'exhausted') {
-      await page.locator('#hero-audio-feedback').waitFor();
-      await page.waitForFunction(() => document.querySelector('.simple-carousel-header button').textContent.includes('Hear Live Call'));
+      await page.locator(selectors.feedback).waitFor();
+      await page.waitForFunction(selector => {
+        const button = document.querySelector(selector);
+        return /Hear Live Call|Retry recorded scenario call/.test(button.getAttribute('aria-label') || button.textContent);
+      }, selectors.control);
+      const reportFailure = await terminalReport;
+      if (reportFailure) throw reportFailure;
       assert.deepEqual([...new Set(requests)], ['mp3', 'wav']);
       assert.equal(reports.length, 1, 'one terminal audio report, not one for each recovered source');
       assert.equal(await element.evaluate(audio => audio.paused), true,
         'a terminal failure stops the element so one tap can retry');
-      await page.locator('.simple-proof-carousel').screenshot({ path: path.join(output, `${engine}-phone-retry.png`) });
+      await page.locator(selectors.panel).screenshot({ path: path.join(output, `${player}-${engine}-phone-retry.png`) });
       broken = false;
       await control.click();
     }
-    await page.waitForFunction(() => { const audio = document.querySelector('.simple-proof-carousel audio'); return !audio.paused && audio.currentTime > 0.2; });
+    await page.waitForFunction(selector => { const audio = document.querySelector(selector); return !audio.paused && audio.currentTime > 0.2; }, selectors.element);
     console.log(JSON.stringify({ engine, mode, stage: 'audio advancing' }));
     const playback = await element.evaluate(audio => ({ currentSrc: new URL(audio.currentSrc).pathname, currentTime: audio.currentTime,
       duration: audio.duration, error: audio.error?.code || null, readyState: audio.readyState }));
     assert.equal(playback.error, null);
-    assert.ok(Math.abs(playback.duration - 133) < 0.15, 'the original call duration is preserved');
+    assert.ok(Math.abs(playback.duration - selectors.duration) < 0.15, 'the original call duration is preserved');
     assert.match(playback.currentSrc, ['fallback', 'stalled'].includes(mode) ? /\.wav$/ : /\.mp3$/);
     if (mode === 'stalled') {
       assert.ok(Date.now() - playbackStartedAt >= 14000, 'the primary really stalled before bounded fallback');
       assert.deepEqual([...new Set(requests)], ['mp3', 'wav']);
     }
     if (mode !== 'exhausted') assert.equal(reports.length, 0, 'a successful fallback is not an outage');
-    await element.evaluate(audio => { audio.currentTime = 64; });
-    await page.waitForFunction(() => document.querySelector('.simple-proof-carousel audio').currentTime > 64.1);
+    await element.evaluate((audio, seconds) => { audio.currentTime = seconds; }, selectors.seek);
+    await page.waitForFunction(({selector,seconds}) => document.querySelector(selector).currentTime > seconds + 0.1,
+      {selector:selectors.element, seconds:selectors.seek});
     await control.click();
     assert.equal(await element.evaluate(audio => audio.paused), true);
-    assert.ok(await control.textContent().then(text => text.includes('Hear Live Call')));
+    assert.match((await control.getAttribute('aria-label')) || (await control.textContent()), /Hear Live Call|Play recorded scenario call/);
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
-    if (mode === 'normal') await page.locator('.simple-proof-carousel').screenshot({ path: path.join(output, `${engine}-${viewport.name}-player.png`) });
+    if (mode === 'normal') await page.locator(selectors.panel).screenshot({ path: path.join(output, `${player}-${engine}-${viewport.name}-player.png`) });
     console.log(JSON.stringify({ engine, viewport: viewport.name, mode, stage: 'passed' }));
     return { engine, viewport: viewport.name, mode, playback, audioRequests: requests, mockAudioReports: reports.length,
       externalRequestsBlocked: blocked, physicalDevice: false, passed: true };
@@ -130,8 +151,8 @@ async function scenario(browser, engine, viewport, mode, fixture) {
     error.audioDiagnostic = {
       engine, viewport: viewport.name, mode, audioRequests: requests,
       mockAudioReports: reports.length,
-      media: await page.evaluate(() => {
-        const audio = document.querySelector('.simple-proof-carousel audio');
+      media: await page.evaluate(selector => {
+        const audio = document.querySelector(selector);
         return audio ? { paused: audio.paused, currentTime: audio.currentTime,
           duration: Number.isFinite(audio.duration) ? audio.duration : null,
           readyState: audio.readyState, networkState: audio.networkState,
@@ -139,7 +160,7 @@ async function scenario(browser, engine, viewport, mode, fixture) {
           errorMessage: audio.error?.message || '',
           sourceErrors: window.__fixtureMediaErrors || [],
           source: audio.currentSrc ? new URL(audio.currentSrc).pathname : '' } : null;
-      }).catch(() => null),
+      }, selectors.element).catch(() => null),
     };
     throw error;
   } finally { await page.close(); }
@@ -147,6 +168,7 @@ async function scenario(browser, engine, viewport, mode, fixture) {
 
 async function main() {
   require('./prepare-public-demo-audio').check();
+  require('./prepare-scenario-demo-audio').check();
   fs.mkdirSync(output, { recursive: true });
   const results = [];
   let failure = null;
@@ -175,9 +197,9 @@ async function main() {
   } finally {
     fixture.server.closeAllConnections();
     await new Promise(resolve => fixture.server.close(resolve));
-    const suffix = (process.argv.find(arg => arg.startsWith('--report='))?.slice(9) || 'browser').replace(/[^a-z0-9_-]/gi, '');
+    const suffix = (process.argv.find(arg => arg.startsWith('--report='))?.slice(9) || (player === 'hero' ? 'browser' : 'scenario-browser')).replace(/[^a-z0-9_-]/gi, '');
     fs.writeFileSync(path.join(output, suffix + '.json'), JSON.stringify({ checkedAt: new Date().toISOString(),
-      productionWrites: 0, physicalDeviceProof: false, passed: failure === null,
+      productionWrites: 0, player, physicalDeviceProof: false, passed: failure === null,
       failure, results }, null, 2) + '\n');
   }
   console.log(JSON.stringify({ passed: results.length, results, productionWrites: 0, physicalDeviceProof: false }, null, 2));

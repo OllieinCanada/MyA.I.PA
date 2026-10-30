@@ -83,7 +83,8 @@ describe("Tim's Electrical recorded scenario scripts", () => {
     const audio = audioManifest[id];
     const captions = recordedCaptions[id];
     expect(audio.status).toBe("available");
-    expect(audio.src).toBe(`/audio/tims-electrical/${id}.wav`);
+    expect(audio.src).toBe(`/audio/tims-electrical/${id}.mp3`);
+    expect(audio.fallbackSrc).toBe(`/audio/tims-electrical/${id}.wav`);
     expect(audio.callerVoiceId).toBe(scenario.callerVoiceId);
     expect(audio.durationSeconds).toBeGreaterThan(20);
     expect(audio.durationSeconds).toBeLessThan(70);
