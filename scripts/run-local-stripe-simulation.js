@@ -5,6 +5,7 @@ const {
   buildTrialPaymentCheckoutParams,
   completeTrialPaymentSetup,
   getTrialPaymentState,
+  scheduleTrialCancellation,
 } = require("../server/stripeTrialBilling");
 
 const countArgument = process.argv.find((value) => value.startsWith("--cycles="));
@@ -31,17 +32,17 @@ async function runCycle(index) {
   }
 
   const actions = [];
-  let resumed = false;
+  let subscription = { id: subscriptionId, customer: customerId, status: "paused", cancel_at_period_end: false };
   const stripe = {
     setupIntents: { retrieve: async () => ({ id: `seti_mock_${index}`, status: "succeeded", customer: customerId, payment_method: `pm_mock_${index}` }) },
     customers: { update: async (...args) => { actions.push(["customer", ...args]); } },
     subscriptions: {
-      retrieve: async () => ({ id: subscriptionId, customer: customerId, status: resumed ? "active" : "paused" }),
-      update: async (...args) => { actions.push(["subscription", ...args]); return { id: subscriptionId, customer: customerId, status: "paused" }; },
+      retrieve: async () => ({ ...subscription }),
+      update: async (...args) => { actions.push(["subscription", ...args]); subscription = { ...subscription, ...args[1] }; return { ...subscription }; },
       resume: async (...args) => {
         actions.push(["resume", ...args]);
-        resumed = true;
-        return { id: subscriptionId, customer: customerId, status: "active", default_payment_method: `pm_mock_${index}` };
+        subscription = { ...subscription, status: "active" };
+        return { ...subscription };
       },
     },
   };
@@ -53,7 +54,21 @@ async function runCycle(index) {
   const decline = getTrialPaymentState({ status: "past_due", default_payment_method: "pm_declined" });
   if (!decline.paymentFailed || decline.paymentReady) throw new Error(`Cycle ${index}: declined card looked healthy.`);
   if (actions.map(([name]) => name).join(",") !== "customer,subscription,resume") throw new Error(`Cycle ${index}: unexpected activation action order.`);
-  return { cycle: index, trialing: true, pausedAtDay14: true, checkoutScoped: true, activeAfterCard: true, declineRejected: true, cancellationSupported: true };
+  const canceled = await scheduleTrialCancellation({ stripe, customerId, subscriptionId });
+  if (canceled.cancel_at_period_end !== true || actions.length !== 4) throw new Error(`Cycle ${index}: cancellation was not scheduled.`);
+  await scheduleTrialCancellation({ stripe, customerId, subscriptionId });
+  if (actions.length !== 4) throw new Error(`Cycle ${index}: cancellation replay wrote again.`);
+  subscription = { ...subscription, status: "canceled" };
+  if (getTrialPaymentState(subscription).paymentReady) throw new Error(`Cycle ${index}: canceled service looked payment-ready.`);
+  let lateCheckoutRejected = false;
+  try {
+    await completeTrialPaymentSetup({ stripe, session: { mode: "setup", customer: customerId,
+      setup_intent: `seti_mock_${index}`, metadata: { purpose: "trial-payment-method", subscriptionId } } });
+  } catch (_) { lateCheckoutRejected = true; }
+  if (!lateCheckoutRejected || actions.length !== 4) throw new Error(`Cycle ${index}: a late checkout modified canceled service.`);
+  return { cycle: index, trialing: true, pausedAtDay14: true, checkoutScoped: true, activeAfterCard: true,
+    declineRejected: true, cancellationScheduledVerified: true, cancellationReplayNoMutation: true,
+    canceledServiceNotPaymentReady: true, lateCheckoutRejected: true };
 }
 
 async function main() {
@@ -75,7 +90,8 @@ async function main() {
   console.log(JSON.stringify(report, null, 2));
 }
 
-main().catch((error) => {
+if (require.main === module) main().catch((error) => {
   console.error(error?.stack || error?.message || error);
   process.exitCode = 1;
 });
+module.exports = { runCycle };

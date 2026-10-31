@@ -258,8 +258,12 @@ const {
   buildTrialPaymentCheckoutParams,
   completeTrialPaymentSetup,
   getTrialPaymentState,
+  getStoredTrialPaymentState,
+  hasActiveStoredSubscription,
   hasPaymentMethod,
+  isSubscriptionEnding,
   isTrialPaymentSetupSession,
+  scheduleTrialCancellation,
 } = require("./stripeTrialBilling");
 const {
   hasCompletedSignupForCall,
@@ -813,7 +817,7 @@ app.post("/api/payments/stripe-webhook", express.raw({ type: "application/json" 
         try {
           const paymentSetup = await completeTrialPaymentSetup({ stripe, session: object });
           upsertSignupDashboardFromSubscription(paymentSetup.subscription, {
-            paymentMethodReady: true,
+            paymentMethodReady: paymentSetup.paymentReady,
             paymentMethodAddedAt: new Date().toISOString(),
             paymentStatus: "payment_method_ready",
           });
@@ -4784,7 +4788,7 @@ function getBillingReadinessForSignup(signup) {
     { key: "email", label: "Contact verified", done: Boolean(isContactVerified(signup) || !contactVerificationRequired) },
     { key: "setup", label: "Agent setup started", done: ["setup_started", "checkout_started", "checkout_completed", "subscription_trialing", "subscription_active"].includes(String(signup.status || "")) },
     { key: "checkout", label: "Free trial started", done: Boolean(signup.subscriptionId) },
-    { key: "subscription", label: "Subscription/trial active", done: Boolean(signup.subscriptionId || signup.subscriptionStatus === "trialing" || signup.subscriptionStatus === "active") },
+    { key: "subscription", label: "Subscription/trial active", done: hasActiveStoredSubscription(signup) },
   ];
 }
 
@@ -9381,12 +9385,7 @@ async function getCustomerDashboard({ email, phone }) {
     { key: "faq", label: "Starter FAQs added", done: Boolean(business?.faqs?.length) },
   ];
   const trialUsage = await getTrialUsageSnapshot(signup, business?.id || null);
-  const storedSubscriptionState = {
-    status: signup.subscriptionStatus || "",
-    default_payment_method: signup.paymentMethodReady ? "stored" : "",
-    trial_end: signup.trialEndAt ? Math.floor(Number(signup.trialEndAt) / 1000) : 0,
-  };
-  const billingState = getTrialPaymentState(storedSubscriptionState);
+  const billingState = getStoredTrialPaymentState(signup);
   const forwardingMatches = [
     ...(business?.id ? [{ businessId: business.id }] : []),
     ...(signup.twilioPhoneNumber ? [{ assignedMyAiPaNumber: normalizePhoneForMatch(signup.twilioPhoneNumber) }] : []),
@@ -9443,7 +9442,7 @@ async function getCustomerDashboard({ email, phone }) {
     },
     billing: {
       status: billingState.status || signup.paymentStatus || "not_ready",
-      paymentReady: Boolean(signup.paymentMethodReady && signup.paymentStatus !== "payment_failed"),
+      paymentReady: Boolean(billingState.paymentReady && signup.paymentStatus !== "payment_failed"),
       paymentFailed: Boolean(billingState.paymentFailed || signup.paymentStatus === "payment_failed"),
       paused: billingState.paused,
       trialEnded: billingState.trialEnded,
@@ -16195,11 +16194,14 @@ app.post(
       error.statusCode = 409;
       throw error;
     }
-    if (hasPaymentMethod(subscription) && signup.paymentStatus !== "payment_failed") {
+    if (isSubscriptionEnding(subscription)) {
+      return res.status(409).json({ error: "This subscription is set to end. Contact My AI PA before adding a card.", code: "SUBSCRIPTION_ENDING" });
+    }
+    const billingState = getTrialPaymentState(subscription);
+    if (billingState.paymentReady && signup.paymentStatus !== "payment_failed") {
       upsertSignupDashboardFromSubscription(subscription, { paymentMethodReady: true });
       return res.json({ ok: true, alreadyReady: true });
     }
-    const billingState = getTrialPaymentState(subscription);
     if (!billingState.checkoutAvailable) {
       const trialEndAt = Number(subscription.trial_end || 0) * 1000;
       return res.status(409).json({
@@ -16208,10 +16210,6 @@ app.post(
         trialEndAt: trialEndAt ? new Date(trialEndAt).toISOString() : null,
       });
     }
-    if (subscription.cancel_at_period_end || ["canceled", "incomplete_expired"].includes(String(subscription.status || ""))) {
-      return res.status(409).json({ error: "This subscription is set to end. Contact My AI PA before adding a card." });
-    }
-
     const session = await stripe.checkout.sessions.create(buildTrialPaymentCheckoutParams({
       customerId,
       subscriptionId,
@@ -16239,20 +16237,14 @@ app.post(
     const customerId = String(signup.customerId || "").trim();
     if (!subscriptionId || !customerId) return res.status(409).json({ error: "No active trial subscription was found." });
 
-    const existing = await stripe.subscriptions.retrieve(subscriptionId);
-    if ((typeof existing.customer === "string" ? existing.customer : existing.customer?.id) !== customerId) {
-      const error = new Error("Stripe subscription ownership validation failed.");
-      error.statusCode = 409;
-      throw error;
-    }
-    const subscription = existing.cancel_at_period_end
-      ? existing
-      : await stripe.subscriptions.update(subscriptionId, { cancel_at_period_end: true });
+    const subscription = await scheduleTrialCancellation({ stripe, subscriptionId, customerId });
     upsertSignupDashboardFromSubscription(subscription, {
-      cancelAtPeriodEnd: true,
-      status: "subscription_cancel_scheduled",
+      cancelAtPeriodEnd: Boolean(subscription.cancel_at_period_end),
+      status: ["canceled", "incomplete_expired"].includes(String(subscription.status || "").toLowerCase())
+        ? `subscription_${subscription.status}` : "subscription_cancel_scheduled",
     });
-    res.json({ ok: true, cancelAtPeriodEnd: true });
+    res.json({ ok: true, cancelAtPeriodEnd: Boolean(subscription.cancel_at_period_end),
+      alreadyEnded: ["canceled", "incomplete_expired"].includes(String(subscription.status || "").toLowerCase()) });
   })
 );
 
