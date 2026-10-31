@@ -1,13 +1,14 @@
 const crypto = require("crypto");
 const fs = require("fs");
 const { normalizeE164 } = require("../server/compositeCallNotifications");
+const { requirePilotPhone } = require("./pilot-phone-target");
 
 const args = process.argv.slice(2);
 const apply = args.includes("--apply");
 const confirmation = valueFor("confirm");
-const confirmationPhrase = "ATTACH_CALENDAR_TOOL_2588";
+const confirmationPhrase = `ATTACH_CALENDAR_TOOL_${valueFor("phone").replace(/\D/g, "").slice(-4)}`;
 const envFile = valueFor("env-file");
-const targetPhone = normalizeE164(valueFor("phone") || "+12494682588");
+const targetPhone = requirePilotPhone(valueFor("phone"), { readOnly: !apply });
 const apiBase = String(process.env.VAPI_API_BASE_URL || "https://api.vapi.ai").replace(/\/+$/, "");
 const apiKeyNames = ["VAPI_API_KEY", "VAPI_KEY", "VAPI_TOKEN"];
 const apiKey = String(

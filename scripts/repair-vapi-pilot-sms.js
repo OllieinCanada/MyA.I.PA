@@ -135,7 +135,7 @@ function createToolPayload({
 async function main() {
   if (!apiKey) throw new Error("VAPI_API_KEY is not configured in .env.local.");
   const apply = hasFlag("apply");
-  const aiPhone = normalizeE164(argument("phone", "+12494682588"));
+  const aiPhone = require("./pilot-phone-target").requirePilotPhone(argument("phone", ""), { readOnly: !apply });
   const ownerPhone = normalizeE164(argument("owner-phone", env.MYAIPA_TEST_OWNER_PHONE || ""));
   const suppressionCheckUrl = String(env.SMS_SUPPRESSION_CHECK_URL || "https://api.myaipa.ca/api/integrations/sms/suppression/check").trim();
   const suppressionApiKey = String(env.SMS_SUPPRESSION_API_KEY || "").trim();

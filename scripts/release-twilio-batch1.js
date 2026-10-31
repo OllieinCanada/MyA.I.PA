@@ -55,7 +55,8 @@ const approvalCutoff = approvalCutoffs[batchNumber];
 
 const protectedNumbers = new Set([
   "+12495033301", // public landing page/demo
-  "+12494682588", // live repair pilot
+  "+12494441086", // retired Make test held pending separate release approval
+  "+12494682588", // retired QA pilot held pending separate release approval
   "+12498000318", // live call-quality pilot
   "+12498005417", // Oliver's Electrical/evaluation
   "+12494213161", // Arscott Plumbing and Heating

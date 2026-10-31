@@ -249,7 +249,7 @@ async function main() {
   if (!apiKey) {
     throw new Error("VAPI_API_KEY is not set. Add it to .env.local (do not paste it into chat) and rerun this command.");
   }
-  const aiPhone = normalizePhone(argument("phone", env.MYAIPA_TEST_AI_PHONE || "+12494682588"));
+  const aiPhone = require("./pilot-phone-target").requirePilotPhone(argument("phone", env.MYAIPA_TEST_AI_PHONE || ""), { readOnly: true });
   const ownerPhone = normalizePhone(argument("owner-phone", env.MYAIPA_TEST_OWNER_PHONE || ""));
   const ownerLast4 = argument("owner-last4", "").replace(/\D/g, "").slice(-4);
   const sinceMinutes = Math.max(5, Math.min(18720, Number(argument("since-minutes", "180")) || 180));
