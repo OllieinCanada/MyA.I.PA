@@ -69,9 +69,13 @@ function encryptBackup(sourcePath, secret = encryptionSecret) {
   const salt = crypto.randomBytes(16);
   const iv = crypto.randomBytes(12);
   const key = crypto.scryptSync(secret, salt, 32);
-  const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
-  const encrypted = Buffer.concat([cipher.update(fs.readFileSync(sourcePath)), cipher.final()]);
-  const tag = cipher.getAuthTag();
+  const plaintext = fs.readFileSync(sourcePath);
+  let encrypted, tag;
+  try {
+    const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
+    encrypted = Buffer.concat([cipher.update(plaintext), cipher.final()]);
+    tag = cipher.getAuthTag();
+  } finally { key.fill(0); plaintext.fill(0); }
   const encryptedPath = `${sourcePath}.enc`;
   fs.writeFileSync(encryptedPath, encrypted, { flag: 'wx', mode: 0o600 });
   fs.rmSync(sourcePath, { force: true });

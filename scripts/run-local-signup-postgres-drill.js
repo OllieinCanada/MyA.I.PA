@@ -66,6 +66,7 @@ async function main(){
     }finally{await client.$disconnect();}
     if(restoreBackup){
       let restoreSecret=process.env.BACKUP_ENCRYPTION_KEY;
+      let schemaReviewTicket=process.env.RESTORE_SCHEMA_REVIEW_TICKET;
       if(restoreFixture){
         restoreSecret=crypto.randomBytes(32).toString('hex');
         const fixtureDatabase='myaipa_backup_fixture_'+crypto.randomBytes(6).toString('hex');
@@ -76,11 +77,20 @@ async function main(){
         const raw=path.join(temporary,'synthetic.dump');
         run(path.join(runtimeBin,'pg_dump.exe'),['--format=custom','--no-owner','--no-privileges','--file',raw],{
           ...process.env,PGHOST:'127.0.0.1',PGPORT:String(port),PGUSER:'drill',PGPASSWORD:password,PGDATABASE:fixtureDatabase,PGSSLMODE:'disable'});
+        // This archive was generated here from the fixed synthetic SQL above.
+        // Never auto-approve schema SQL for a supplied production archive.
+        const fixtureSchema=run(path.join(runtimeBin,'pg_restore.exe'),['--schema-only','--no-owner','--no-privileges','--file=-',raw]).stdout;
         const encrypted=require('./database-backup').encryptBackup(raw,restoreSecret);
         restoreBackup=encrypted.encryptedPath;
         fs.writeFileSync(restoreBackup+'.manifest.json',JSON.stringify({schemaVersion:1,createdAt:new Date().toISOString(),
           encrypted:true,encryption:encrypted.encryption,archiveFormat:'postgres-custom',
           sha256:crypto.createHash('sha256').update(fs.readFileSync(restoreBackup)).digest('hex')}),{flag:'wx',mode:0o600});
+        schemaReviewTicket=path.join(temporary,'known-fixture-schema-review.json');
+        fs.writeFileSync(schemaReviewTicket,JSON.stringify({scope:'exact-logical-archive-schema',decision:'approved',
+          reviewReference:'locally-generated-fixed-synthetic-schema',reviewedAt:new Date().toISOString(),
+          schemaDigestFormat:'pg-schema-without-generated-restrict-wrapper-v1',
+          artifactSha256:crypto.createHash('sha256').update(fs.readFileSync(restoreBackup)).digest('hex'),
+          schemaSqlSha256:require('./backup-safety').schemaSqlDigest(fixtureSchema)}),{flag:'wx',mode:0o600});
       }
       const ticket=path.join(temporary,'target-ticket.json');
       fs.writeFileSync(ticket,JSON.stringify({host:'127.0.0.1',port:String(port),database,systemIdentifier,dataDirectory:data,createdAt:new Date().toISOString()}),{flag:'wx',mode:0o600});
@@ -88,13 +98,15 @@ async function main(){
         LOCALAPPDATA:process.env.LOCALAPPDATA,USERDOMAIN:process.env.USERDOMAIN,USERNAME:process.env.USERNAME,
         DISABLE_LOCAL_ENV_FILES:'1',RESTORE_BACKUP_PATH:path.resolve(restoreBackup),RESTORE_DATABASE_URL:url,
         RESTORE_TARGET_TICKET:ticket,RESTORE_DRILL_CONFIRM:'RESTORE_TO_DISPOSABLE_DATABASE',
+        RESTORE_SCHEMA_REVIEW_TICKET:schemaReviewTicket||'',
         BACKUP_ENCRYPTION_KEY:restoreSecret};
       const restored=spawnSync(process.execPath,[path.join(ROOT,'scripts','restore-backup-drill.js'),'--restore'],{cwd:ROOT,env,encoding:'utf8',windowsHide:true,timeout:600000,maxBuffer:4*1024*1024});
       if(restored.error||restored.status!==0)throw Error('Guarded restore failed: '+String(restored.stderr||'archive/target validation failure').slice(-1200));
       const report=JSON.parse(restored.stdout);
       report.backupMode=restoreFixture?'synthetic-backup-fixture':'production-logical-export';
-      const output=path.join(ROOT,'diagnostics','provider-hardening',restoreFixture?'restore-fixture.json':'restore.json');
-      fs.mkdirSync(path.dirname(output),{recursive:true});fs.writeFileSync(output,JSON.stringify(report,null,2)+'\n');
+      const selectedOutput=process.argv.find(arg=>arg.startsWith('--restore-report='))?.slice('--restore-report='.length);
+      const output=selectedOutput?path.resolve(selectedOutput):path.join(ROOT,'diagnostics','provider-hardening',restoreFixture?'restore-fixture.json':'restore.json');
+      fs.mkdirSync(path.dirname(output),{recursive:true});fs.writeFileSync(output,JSON.stringify(report,null,2)+'\n',selectedOutput?{flag:'wx',mode:0o600}:undefined);
       console.log(JSON.stringify(report,null,2));
       return;
     }

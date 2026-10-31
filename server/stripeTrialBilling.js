@@ -9,22 +9,43 @@ function hasPaymentMethod(subscription) {
   return Boolean(idOf(subscription?.default_payment_method) || idOf(subscription?.default_source));
 }
 
+function isSubscriptionEnding(subscription) {
+  return Boolean(subscription?.cancel_at_period_end) || Number(subscription?.cancel_at || 0) > 0
+    || ["canceled", "incomplete_expired"].includes(String(subscription?.status || "").toLowerCase());
+}
+
 function getTrialPaymentState(subscription, { now = Date.now() } = {}) {
   const status = String(subscription?.status || "").toLowerCase();
   const paymentFailed = ["past_due", "unpaid", "incomplete", "incomplete_expired"].includes(status);
-  const paymentReady = hasPaymentMethod(subscription) && !paymentFailed;
+  const paymentReady = hasPaymentMethod(subscription) && ["active", "trialing"].includes(status);
   const trialEndAt = Number(subscription?.trial_end || 0) * 1000;
   const trialEnded = Boolean(trialEndAt && trialEndAt <= Number(now));
   const requiresPayment = ["paused", "past_due", "unpaid", "incomplete"].includes(status);
+  const checkoutAvailable = !paymentReady && !isSubscriptionEnding(subscription)
+    && (trialEnded || requiresPayment) && ["trialing", "active", "paused", "past_due", "unpaid", "incomplete"].includes(status);
   return {
     status,
     paymentReady,
     trialEnded,
-    checkoutAvailable: !paymentReady && (trialEnded || requiresPayment),
+    checkoutAvailable,
     paused: status === "paused",
     paymentFailed,
-    canAddPaymentMethod: !paymentReady && (trialEnded || requiresPayment),
+    canAddPaymentMethod: checkoutAvailable,
   };
+}
+
+function getStoredTrialPaymentState(signup, options) {
+  return getTrialPaymentState({
+    status: signup.subscriptionStatus || "",
+    default_payment_method: signup.paymentMethodReady ? "stored" : "",
+    trial_end: signup.trialEndAt ? Math.floor(Number(signup.trialEndAt) / 1000) : 0,
+    cancel_at_period_end: Boolean(signup.cancelAtPeriodEnd),
+    cancel_at: signup.cancelAt ? Math.floor(Number(signup.cancelAt) / 1000) : 0,
+  }, options);
+}
+function hasActiveStoredSubscription(signup) {
+  return Boolean(String(signup?.subscriptionId || '').trim())
+    && ['active', 'trialing'].includes(String(signup?.subscriptionStatus || '').toLowerCase());
 }
 
 function buildTrialReminderSchedule(trialEndAt, existing = {}) {
@@ -86,6 +107,10 @@ async function completeTrialPaymentSetup({ stripe, session }) {
 
   let subscription = await stripe.subscriptions.retrieve(subscriptionId);
   if (idOf(subscription.customer) !== customerId) throw new Error("Stripe subscription does not belong to this customer.");
+  if (isSubscriptionEnding(subscription)) throw new Error("This subscription has ended or is scheduled to cancel; payment setup was not applied.");
+  if (!["active", "trialing", "paused", "past_due", "unpaid", "incomplete"].includes(String(subscription.status || "").toLowerCase())) {
+    throw new Error("Stripe has not confirmed an eligible subscription state.");
+  }
 
   await stripe.customers.update(customerId, {
     invoice_settings: { default_payment_method: paymentMethodId },
@@ -93,9 +118,11 @@ async function completeTrialPaymentSetup({ stripe, session }) {
   subscription = await stripe.subscriptions.update(subscriptionId, {
     default_payment_method: paymentMethodId,
   });
+  if (isSubscriptionEnding(subscription)) throw new Error("Cancellation was scheduled during payment setup; service was not resumed.");
 
   if (String(subscription.status || "").toLowerCase() === "paused") {
     subscription = await stripe.subscriptions.resume(subscriptionId, { billing_cycle_anchor: "now" });
+    if (isSubscriptionEnding(subscription)) throw new Error("Cancellation was scheduled during resumption; no invoice payment was attempted.");
 
     // Stripe can create a resumption invoice without attempting payment in the
     // resume request. Pay it explicitly so a successfully saved card actually
@@ -111,6 +138,10 @@ async function completeTrialPaymentSetup({ stripe, session }) {
     }
   }
 
+  if (idOf(subscription.customer) !== customerId || isSubscriptionEnding(subscription)
+    || !["active", "trialing"].includes(String(subscription.status || "").toLowerCase())) {
+    throw new Error("Stripe has not confirmed active or trialing service after payment setup.");
+  }
   return {
     customerId,
     subscriptionId,
@@ -121,12 +152,34 @@ async function completeTrialPaymentSetup({ stripe, session }) {
   };
 }
 
+async function scheduleTrialCancellation({ stripe, subscriptionId, customerId }) {
+  if (!stripe || !subscriptionId || !customerId) throw new Error("An existing Stripe customer and subscription are required.");
+  const existing = await stripe.subscriptions.retrieve(subscriptionId);
+  if (idOf(existing.customer) !== customerId) {
+    const error = new Error("Stripe subscription ownership validation failed.");
+    error.statusCode = 409;
+    throw error;
+  }
+  // Preserve an already scheduled/finished cancellation; retries must not
+  // change its date or attempt to update a terminal Stripe subscription.
+  if (isSubscriptionEnding(existing)) return existing;
+  const subscription = await stripe.subscriptions.update(subscriptionId, { cancel_at_period_end: true });
+  if (idOf(subscription.customer) !== customerId || !isSubscriptionEnding(subscription)) {
+    throw new Error("Stripe did not confirm the subscription cancellation.");
+  }
+  return subscription;
+}
+
 module.exports = {
   TRIAL_PAYMENT_PURPOSE,
   buildTrialReminderSchedule,
   buildTrialPaymentCheckoutParams,
   completeTrialPaymentSetup,
   getTrialPaymentState,
+  getStoredTrialPaymentState,
+  hasActiveStoredSubscription,
   hasPaymentMethod,
+  isSubscriptionEnding,
   isTrialPaymentSetupSession,
+  scheduleTrialCancellation,
 };

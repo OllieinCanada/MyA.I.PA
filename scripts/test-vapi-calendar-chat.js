@@ -4,10 +4,10 @@ const { normalizeE164 } = require("../server/compositeCallNotifications");
 
 const args = process.argv.slice(2);
 const apply = args.includes("--apply");
-const confirmationPhrase = "CREATE_TEST_BOOKING_2588";
+const confirmationPhrase = `CREATE_TEST_BOOKING_${valueFor("phone").replace(/\D/g, "").slice(-4)}`;
 const confirmation = valueFor("confirm");
 const envFile = valueFor("env-file");
-const targetPhone = normalizeE164(valueFor("phone") || "+12494682588");
+const targetPhone = require("./pilot-phone-target").requirePilotPhone(valueFor("phone"));
 const expectedCustomerLast4 = String(valueFor("customer-last4") || "5488").replace(/\D/g, "").slice(-4);
 const requestedStart = valueFor("start") || "2026-07-27T10:00:00-04:00";
 const durationMinutes = Math.max(15, Math.min(480, Number(valueFor("duration") || 60) || 60));

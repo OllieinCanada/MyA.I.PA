@@ -1,6 +1,7 @@
 const crypto = require("crypto");
 const fs = require("fs");
 const { normalizeE164 } = require("../server/compositeCallNotifications");
+const { requirePilotPhone } = require("./pilot-phone-target");
 
 const args = process.argv.slice(2);
 const envFileArg = args.find((value) => value.startsWith("--env-file="));
@@ -27,7 +28,7 @@ const apiKey = String(
 ).trim();
 const apiBase = String(process.env.VAPI_API_BASE_URL || "https://api.vapi.ai").replace(/\/+$/, "");
 const targetPhoneArg = args.find((value) => !value.startsWith("--"));
-const targetPhone = normalizeE164(targetPhoneArg || "+12494682588");
+const targetPhone = requirePilotPhone(targetPhoneArg, { readOnly: true });
 
 function listFrom(value, keys = []) {
   if (Array.isArray(value)) return value;
