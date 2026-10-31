@@ -99,7 +99,12 @@ function runDrill() {
   });
 
   const report = {
-    schemaVersion: 1,
+    schemaVersion: 2,
+    scope: "synthetic-policy-model-only",
+    applicationHandlersExercised: false,
+    applicationPrivacyProven: false,
+    limitations: ["Standalone synthetic arrays only; no application routes, provider deletion, legal holds or real backup were exercised.",
+      "The suppression-removal model is not a production erasure policy; retained opt-out protection requires separate application proof."],
     exercise: "synthetic access, correction, consent-withdrawal, deletion, and restore-replay drill",
     completedAt: new Date().toISOString(),
     productionDataUsed: false,

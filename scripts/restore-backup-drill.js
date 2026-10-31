@@ -3,7 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const { Client } = require('pg');
-const { privateDirectory, removePrivateDirectory, validateTargetUrl, verifyDisposableTarget } = require('./backup-safety');
+const { privateDirectory, removePrivateDirectory, validateTargetUrl, verifyDisposableTarget, assertSafeArchiveToc, verifySchemaReview, schemaSqlDigest } = require('./backup-safety');
 const TAR = process.platform === 'win32' ? 'tar.exe' : 'tar';
 function run(command, args, options = {}) {
   return spawnSync(command, args, { encoding: 'utf8', windowsHide: true, timeout: 600000, maxBuffer: 128 * 1024 * 1024, ...options });
@@ -79,14 +79,32 @@ async function restoreDrill({ env = process.env, applyRestore = false, backupPat
     const archive = path.join(directory, 'restore.archive'); fs.writeFileSync(archive, decrypted, { mode: 0o600, flag: 'wx' });
     decrypted.fill(0); decrypted = null;
     const input = manifest.archiveFormat === 'render-directory-tar' ? unpackDirectoryArchive(archive, directory) : archive;
-    assertSuccess(run('pg_restore', ['--list', input]), 'Archive readability check');
+    const toc = assertSuccess(run('pg_restore', ['--list', input]), 'Archive readability check');
+    assertSafeArchiveToc(toc);
+    const schemaSql = assertSuccess(run('pg_restore', ['--schema-only', '--no-owner', '--no-privileges', '--file=-', input]), 'Schema inspection');
+    const schemaSqlSha256 = schemaSqlDigest(schemaSql);
+    if (applyRestore) {
+      if (!env.RESTORE_SCHEMA_REVIEW_TICKET) throw Error('A separate exact-archive schema SQL review ticket is required before restoration');
+      verifySchemaReview(schemaSql, manifest.sha256, JSON.parse(fs.readFileSync(env.RESTORE_SCHEMA_REVIEW_TICKET, 'utf8')));
+    }
+    let schemaReviewDirectory = null;
+    if (!applyRestore && env.RESTORE_SCHEMA_INSPECT_CONFIRM === 'WRITE_PRIVATE_SCHEMA_FOR_REVIEW') {
+      schemaReviewDirectory = privateDirectory('myaipa-backup-drill-');
+      fs.writeFileSync(path.join(schemaReviewDirectory, 'schema.sql'), schemaSql, { flag: 'wx', mode: 0o600 });
+      fs.writeFileSync(path.join(schemaReviewDirectory, 'schema-review.json'), JSON.stringify({
+        scope: 'exact-logical-archive-schema', decision: 'pending', reviewReference: '', reviewedAt: null,
+        schemaDigestFormat: 'pg-schema-without-generated-restrict-wrapper-v1',
+        artifactSha256: manifest.sha256, schemaSqlSha256,
+      }, null, 2) + '\n', { flag: 'wx', mode: 0o600 });
+    }
     const expected = copyCounts(assertSuccess(run('pg_restore', ['--data-only', '--no-owner', '--no-privileges', '--file=-', input]), 'Archive data validation'));
     if (!Object.keys(expected).length) throw Error('Archive contains no verifiable COPY table data');
     const actual = {};
     if (applyRestore) {
       const url = new URL(env.RESTORE_DATABASE_URL);
       const pgEnv = { ...env, PGHOST: url.hostname, PGPORT: url.port || '5432', PGDATABASE: ticket.database,
-        PGUSER: decodeURIComponent(url.username), PGPASSWORD: decodeURIComponent(url.password), PGSSLMODE: 'disable' };
+        PGUSER: decodeURIComponent(url.username), PGPASSWORD: decodeURIComponent(url.password), PGSSLMODE: 'disable',
+        PGOPTIONS: '-c statement_timeout=60000 -c lock_timeout=5000' };
       assertSuccess(run('pg_restore', ['--exit-on-error', '--single-transaction', '--no-owner', '--no-privileges', '--dbname', ticket.database, input], { env: pgEnv }), 'Disposable restore');
       for (const [table, count] of Object.entries(expected)) {
         if (!/^[A-Za-z0-9_]+$/.test(table)) throw Error('Unexpected archive table identity');
@@ -98,7 +116,10 @@ async function restoreDrill({ env = process.env, applyRestore = false, backupPat
     }
     const snapshot = manifest.snapshotCreatedAt || manifest.createdAt;
     return { ok: true, testedAt: new Date().toISOString(), checksumVerified: true, archiveReadable: true,
-      restored: applyRestore, restoreElapsedMs: Date.now() - startedAt, snapshotCreatedAt: snapshot,
+      artifactSha256: manifest.sha256, executionId: manifest.executionId || null, releaseCommit: manifest.releaseCommit || null,
+      restored: applyRestore, archiveTocScreenPassed: true, schemaSqlReviewed: applyRestore, schemaSqlSha256,
+      ...(schemaReviewDirectory ? { schemaReviewDirectory, schemaReviewDecision: 'pending' } : {}),
+      archiveObjectPolicyPassed: applyRestore, restoreElapsedMs: Date.now() - startedAt, snapshotCreatedAt: snapshot,
       snapshotAgeSeconds: Math.floor((Date.now() - Date.parse(snapshot)) / 1000),
       tableCounts: actual, tablesVerified: Object.keys(actual).length, constraintsValidated: applyRestore,
       productionDatabaseModified: false, applicationWorkersStarted: false, providerDispatches: 0,
@@ -112,7 +133,8 @@ async function restoreDrill({ env = process.env, applyRestore = false, backupPat
 async function main() {
   if (process.env.DISABLE_LOCAL_ENV_FILES !== '1') require('dotenv').config({ path: process.env.OPERATIONS_ENV_FILE || '.env.local' });
   const backupPath = process.env.RESTORE_BACKUP_PATH || process.argv.slice(2).find(arg => !arg.startsWith('--'));
-  const result = await restoreDrill({ backupPath, manifestPath: process.env.RESTORE_MANIFEST_PATH || backupPath + '.manifest.json', applyRestore: process.argv.includes('--restore') });
+  const env = process.argv.includes('--inspect-schema') ? { ...process.env, RESTORE_SCHEMA_INSPECT_CONFIRM: 'WRITE_PRIVATE_SCHEMA_FOR_REVIEW' } : process.env;
+  const result = await restoreDrill({ env, backupPath, manifestPath: process.env.RESTORE_MANIFEST_PATH || backupPath + '.manifest.json', applyRestore: process.argv.includes('--restore') });
   console.log(JSON.stringify(result, null, 2));
 }
 if (require.main === module) main().catch(error => { console.error('Restore drill failed safely: ' + error.message); process.exitCode = 1; });

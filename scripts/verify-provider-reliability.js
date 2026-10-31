@@ -85,7 +85,7 @@ async function main() {
   const env = await fetchRenderEnv({ credentials, serviceId: SERVICE, keys: ['MONITOR_API_KEY'] });
   const report = await collectReliability({ credentials, token: env.MONITOR_API_KEY, commit,
     onSample: s => console.log(JSON.stringify({ sampleAt: s.checkedAt, workerStatus: s.worker?.status, failed: s.worker?.counts?.failed, pending: s.worker?.counts?.pending })) });
-  const directory = path.resolve(__dirname, '../diagnostics/provider-hardening');
+  const directory = path.resolve(process.argv.find(arg => arg.startsWith('--directory='))?.slice(12) || path.resolve(__dirname, '../diagnostics/provider-hardening'));
   const evidence = path.join(directory, 'reliability.json');
   writeManifest(evidence, report);
   const manifestPath = path.join(directory, 'execution.json');
@@ -99,7 +99,7 @@ async function main() {
   if (!report.currentHealthPassed) process.exitCode = 2;
 }
 if (require.main === module) main().catch(error => {
-  const directory = path.resolve(__dirname, '../diagnostics/provider-hardening');
+  const directory = path.resolve(process.argv.find(arg => arg.startsWith('--directory='))?.slice(12) || path.resolve(__dirname, '../diagnostics/provider-hardening'));
   const manifestPath = path.join(directory, 'execution.json');
   if (fs.existsSync(manifestPath)) {
     const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));

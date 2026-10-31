@@ -52,7 +52,8 @@ artifacts/
 /linkedin-outreach-tracker/
 /requirements-job-application.txt
 /tests/job_application/
-/ops/
+/ops/*
+!/ops/LAUNCH_EVIDENCE_RUNBOOK.md
 
 # Local job-package generators and document delivery helpers
 /scripts/build-august*.py

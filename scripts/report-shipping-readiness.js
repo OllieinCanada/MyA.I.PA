@@ -1,13 +1,18 @@
 const fs = require("fs");
 const path = require("path");
 const { rootPath } = require("./_helpers");
+const { spawnSync } = require("node:child_process");
+const proof = require("./launch-evidence");
+const expectedRelease = process.env.READINESS_RELEASE_COMMIT || String(spawnSync("git", ["rev-parse", "HEAD"], {
+  cwd: rootPath(), encoding: "utf8", windowsHide: true, timeout: 10000,
+}).stdout || "").trim();
 
 const strict = process.argv.includes("--strict");
 const evidenceDir = rootPath("diagnostics", "shipping-readiness");
 const outputPath = path.join(evidenceDir, "shipping-readiness.json");
 
 function readEvidence(name) {
-  const filePath = path.join(evidenceDir, name);
+  const filePath = path.resolve(evidenceDir, name);
   if (!fs.existsSync(filePath)) return { filePath, value: null };
   try {
     return { filePath, value: JSON.parse(fs.readFileSync(filePath, "utf8")) };
@@ -83,18 +88,51 @@ const gates = [
     limitation: "A controlled alert-delivery exercise is still required before relying on incident notifications.",
   }),
   makeGate({
-    id: "privacy",
-    title: "Tenant privacy and deletion drill",
+    id: "privacy_model",
+    title: "Synthetic privacy policy model (not application proof)",
     evidence: "../operations/privacy-request-drill.json",
-    pass: (value) => value.passed === true && value.productionDataUsed === false && value.externalProvidersMutated === false,
-    requirement: "Synthetic access, correction, consent withdrawal, deletion, tenant isolation, and restore replay checks pass.",
+    pass: proof.privacyModelPassed,
+    requirement: "Synthetic policy-model checks pass without claiming actual application or provider deletion.",
+    limitation: "Standalone arrays do not exercise application handlers, provider retention, legal holds or real backup replay.",
   }),
   makeGate({
-    id: "backup",
-    title: "Backup and restore readiness",
+    id: "privacy", title: "Isolated application privacy and deletion proof",
+    evidence: "privacy-application-gate.json",
+    pass: value => proof.privacyApplicationPassed(value, expectedRelease),
+    requirement: "Exact-release application handlers prove tenant scope, correction, withdrawal, erasure, suppression retention, holds, redaction and restore replay on synthetic data.",
+  }),
+  makeGate({
+    id: "legal_approval", title: "Owner and counsel launch approval",
+    evidence: "legal-approval-gate.json", pass: value => proof.legalApprovalPassed(value, expectedRelease),
+    requirement: "Owner and counsel approve identity/contact, privacy officer, retention, processor dispositions, procedures and disclosures with zero unresolved placeholders.",
+    maxAgeHours: 720,
+  }),
+  makeGate({
+    id: "alert_delivery", title: "Controlled alert receipt and duplicate protection",
+    evidence: "alert-delivery-gate.json", pass: value => proof.alertDeliveryPassed(value, expectedRelease),
+    requirement: "One authorized private incident exercise proves notification acceptance, recipient-confirmed receipt, duplicate protection and no customer impact.",
+  }),
+  makeGate({
+    id: "backup_prerequisites",
+    title: "Backup tooling and encryption prerequisites only",
     evidence: "backup-readiness.json",
     pass: (value) => value.ready === true && value.databaseUrlConfigured === true && value.encryptionConfigured === true && Boolean(value.pgDumpVersion) && Boolean(value.pgRestoreVersion),
-    requirement: "Encrypted database backup prerequisites pass, followed by an isolated restore drill.",
+    requirement: "Database URL, encryption and PostgreSQL tools are configured; this does not prove any backup or restoration.",
+    maxAgeHours: 168,
+  }),
+  makeGate({
+    id: "logical_restore", title: "Exact-release isolated logical database restoration",
+    evidence: process.env.READINESS_RECOVERY_DIRECTORY
+      ? path.resolve(process.env.READINESS_RECOVERY_DIRECTORY, "restore.json") : "../provider-hardening/restore.json",
+    pass: value => proof.logicalRestorePassed(value, expectedRelease),
+    requirement: "One encrypted production logical export is restored to an execution-owned empty loopback database with checksums, table counts, constraints and no dispatch.",
+    limitation: "Database-only restoration is not disk/key recovery, PITR failover or complete service recovery.",
+    maxAgeHours: 168,
+  }),
+  makeGate({
+    id: "backup", title: "Complete database, disk and key recovery rehearsal",
+    evidence: "full-recovery-gate.json", pass: value => proof.fullRecoveryPassed(value, expectedRelease),
+    requirement: "Owner-approved data-loss and recovery-time objectives are measured with coherent database/disk state, key custody, deletion replay and a sealed cutover rehearsal.",
     maxAgeHours: 168,
   }),
   makeGate({
@@ -183,15 +221,22 @@ const gates = [
     id: "stripe",
     title: "Trial-to-paid Stripe lifecycle",
     evidence: "stripe-trial-gate.json",
-    pass: (value) => value.ready === true && value.consecutivePasses >= 5,
-    requirement: "Five consecutive Stripe test-clock cycles prove trial, pause, secure card handoff, activation, decline, and cancellation.",
+    pass: value => proof.stripeProviderPassed(value, expectedRelease),
+    requirement: "Five exact-release test-mode provider clock cycles prove pause, activation, paid renewal, decline and actual period-end cancellation; temporary test-object cleanup is confirmed.",
+    limitation: "Direct Stripe API calls are not proof of hosted Checkout or application webhook handling.",
+  }),
+  makeGate({
+    id: "stripe_checkout", title: "Hosted test Checkout and application webhook lifecycle",
+    evidence: "stripe-checkout-gate.json", pass: value => proof.stripeCheckoutPassed(value, expectedRelease),
+    requirement: "An isolated test Checkout exercises signed application webhooks, ownership, duplicate/late events, invoice failures and cancellation without real payments.",
   }),
   makeGate({
     id: "stripe_local_simulation",
     title: "Local Stripe trial-to-payment simulation",
     evidence: "stripe-local-simulation.json",
-    pass: (value) => value.ready === true && value.consecutivePasses >= 5 && value.externalStripeObjectsCreated === 0 && value.realPaymentsAttempted === 0,
-    requirement: "Five no-network simulations prove trial, day-14 pause, customer-scoped secure Checkout, activation, decline handling, and cancellation behavior.",
+    pass: proof.localStripePassed,
+    requirement: "Five no-network helper simulations execute pause, scoped Checkout parameters, activation, decline, cancellation/replay and late-canceled-setup rejection.",
+    limitation: "Mock SDK responses do not prove real provider behavior, hosted Checkout or signed webhook delivery.",
   }),
   makeGate({
     id: "human_pilot",
@@ -214,7 +259,8 @@ const overallColor = colouredGates.some((gate) => gate.color === "red")
     : "green";
 
 const report = {
-  schemaVersion: 2,
+  schemaVersion: 3,
+  releaseCommit: /^[a-f0-9]{40}$/.test(expectedRelease) ? expectedRelease : null,
   checkedAt: new Date().toISOString(),
   readiness: overallColor,
   readyToShip: overallColor === "green",

@@ -83,7 +83,8 @@ This checklist separates controls implemented in the repository from facts and a
 - [ ] Verify provider-side deletion for Vapi, Twilio, OpenAI, Make, Render logs, Stripe, email, and any monitoring service.
 - [x] Activate the production messaging webhook and complete one authorized live `STOP`/`START` exercise using `ops/SMS_CONSENT_RUNBOOK.md` (controlled provider-path exercise completed July 24, 2026; all nine active routes read back successfully and the test number finished active).
 - [ ] Complete a privacy incident tabletop exercise and retain its signed report.
-- [x] Complete one privacy access/correction/deletion exercise using synthetic data (`npm run ops:privacy:drill`; local evidence excludes personal information).
+- [x] Run the standalone synthetic privacy policy model (`npm run ops:privacy:drill`; local evidence excludes personal information). This does not exercise application handlers or provider deletion.
+- [ ] Prove application access/correction/deletion, retained opt-out protection, legal holds, audit redaction and restore replay in an isolated synthetic environment.
 - [ ] Configure Turnstile and test valid, missing, expired, and replayed challenges before public signup promotion.
 - [ ] Confirm or decommission seven Vapi phone/assistant pairs that currently have no provable customer mapping. Do not infer ownership from assistant names.
 - [x] Complete a review-only production signup with no external telephone, agent, customer, subscription, or checkout resource created.
