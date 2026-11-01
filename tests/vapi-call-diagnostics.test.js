@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { analyzeVapiSmsCall } = require("../server/vapiCallDiagnostics");
+const { analyzeVapiSmsCall, CUSTOMER_SMS_TOOL, OWNER_SMS_TOOL } = require("../server/vapiCallDiagnostics");
 
 function toolResult(toolCallId, name, result) {
   return { role: "tool", toolCallId, name, result: JSON.stringify(result) };
@@ -195,6 +195,70 @@ test("diagnostic explains a Vapi confirmation-gate rejection before Twilio is ca
   assert.equal(report.owner.failed, true);
   assert.equal(report.customer.failed, true);
   assert.equal(report.finding.code, "SMS_CONFIRMATION_REJECTED");
-  assert.match(report.finding.summary, /before Twilio was called/i);
+  assert.match(report.finding.summary, /before notification execution/i);
+  assert.equal(report.finding.causeConfirmed, false);
+  assert.equal(report.finding.stage, "pre_execution_guard");
+  assert.equal(report.finding.rejectedInvocationCount, 1);
+  assert.equal(report.finding.otherOrUnknownInvocationCount, 0);
+  assert.doesNotMatch(JSON.stringify(report), /because the caller's confirmation did not match/i);
+  assert.match(report.finding.nextAction, /Do not blame the caller.*automatically resend/i);
   assert.doesNotMatch(JSON.stringify(report), /call-confirmation-rejected|Test Caller/);
+});
+
+test("a rejected attempt preserves another combined attempt's reported submission", () => {
+  const call = { artifact: { messages: [
+    { role: "assistant", toolCallList: [
+      { id: "reported", name: "send_call_summaries_test" },
+      { id: "rejected", name: "send_call_summaries_test" },
+    ] },
+    { role: "tool", toolCallId: "reported", result: JSON.stringify({ complete: true,
+      owner: { sent: true, sid: "SM_PRIVATE_OWNER" }, customer: { sent: true, sid: "SM_PRIVATE_CUSTOMER" } }) },
+    { role: "tool", toolCallId: "rejected", result: "Tool call rejected based on configured rejection plan" },
+  ] } };
+  const report = analyzeVapiSmsCall(call);
+  assert.equal(report.finding.code, "SMS_CONFIRMATION_REJECTED");
+  assert.equal(report.finding.rejectedInvocationCount, 1);
+  assert.equal(report.finding.otherOrUnknownInvocationCount, 1);
+  assert.equal(report.owner.successful, true);
+  assert.equal(report.customer.successful, true);
+  assert.match(report.finding.summary, /reconciled separately/);
+  assert.doesNotMatch(report.finding.summary, /neither text|Twilio was not called|no SMS was sent/i);
+  assert.doesNotMatch(JSON.stringify(report), /SM_PRIVATE_OWNER|SM_PRIVATE_CUSTOMER/);
+});
+
+for (const role of ["customer", "owner"]) for (const reported of [true, false]) {
+  test(`a rejected combined attempt retains a legacy ${role} attempt with ${reported ? "reported submission" : "unknown outcome"}`, () => {
+    const legacyName = role === "customer" ? CUSTOMER_SMS_TOOL : OWNER_SMS_TOOL;
+    const messages = [
+      { role: "assistant", toolCallList: [{ id: "combined", name: "send_call_summaries_test" }, { id: "legacy", name: legacyName }] },
+      { role: "tool", toolCallId: "combined", result: "Tool call rejected based on configured rejection plan" },
+    ];
+    if (reported) messages.push({ role: "tool", toolCallId: "legacy", result: JSON.stringify({ sent: true, sid: "SM_LEGACY_PRIVATE" }) });
+    const report = analyzeVapiSmsCall({ artifact: { messages } });
+    assert.equal(report.notificationAttempts.rejectedInvocationCount, 1);
+    assert.equal(report.notificationAttempts.otherOrUnknownInvocationCount, 1);
+    assert.equal(report[role].invocationCount, 2);
+    assert.equal(report[role].successful, reported);
+    assert.match(report.finding.summary, /reconciled separately/);
+    assert.doesNotMatch(JSON.stringify(report), /SM_LEGACY_PRIVATE/);
+  });
+}
+
+test("repeated copies of one rejection do not become additional notification attempts", () => {
+  const result = { role: "tool", toolCallId: "same", result: "Tool call rejected based on configured rejection plan" };
+  const report = analyzeVapiSmsCall({ artifact: { messages: [
+    { role: "assistant", toolCallList: [{ id: "same", name: "send_call_summaries_test" }] }, result, { ...result },
+  ] } });
+  assert.equal(report.notificationAttempts.rejectedInvocationCount, 1);
+  assert.equal(report.notificationAttempts.otherOrUnknownInvocationCount, 0);
+});
+
+test("a legacy guard rejection has neutral cause and stage reporting", () => {
+  const report = analyzeVapiSmsCall({ artifact: { messages: [
+    { role: "assistant", toolCallList: [{ id: "legacy-rejected", name: OWNER_SMS_TOOL }] },
+    { role: "tool", toolCallId: "legacy-rejected", result: "Tool call rejected based on configured rejection plan" },
+  ] } });
+  assert.equal(report.finding.code, "SMS_CONFIRMATION_REJECTED");
+  assert.equal(report.finding.causeConfirmed, false);
+  assert.equal(report.finding.rejectedInvocationCount, 1);
 });

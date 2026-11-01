@@ -98,7 +98,7 @@ function safeToolResult(value) {
     status: String(parsed.status || "").trim().slice(0, 80),
     errorCode: String(parsed.errorCode || parsed.code || error?.code || (rejectedByPlan ? "TOOL_CALL_REJECTED" : "")).trim().slice(0, 80),
     error: (rejectedByPlan
-      ? "Vapi rejected the SMS tool before execution because the caller's confirmation did not match the configured approval rule."
+      ? "The configured confirmation guard rejected this attempt before notification execution. The matched condition is not available."
       : errorMessage).slice(0, 240),
     messageIdSet: Boolean(parsed.sid || parsed.messageSid || parsed.messageId || parsed.requestId),
     fromLast4: String(parsed.fromLast4 || "").replace(/\D/g, "").slice(-4) || last4(parsed.from || parsed.fromNumber),
@@ -249,6 +249,30 @@ function summarizeTool(name, evidence) {
   };
 }
 
+function summarizeNotificationRole(role, evidence) {
+  const legacyName = role === "customer" ? CUSTOMER_SMS_TOOL : OWNER_SMS_TOOL;
+  const summaries = [summarizeCompositeRole(role, evidence), summarizeTool(legacyName, evidence)];
+  return {
+    invoked: summaries.some((item) => item.invoked),
+    invocationCount: summaries.reduce((count, item) => count + item.invocationCount, 0),
+    resultCount: summaries.reduce((count, item) => count + item.resultCount, 0),
+    successful: summaries.some((item) => item.successful),
+    failed: summaries.some((item) => item.failed),
+    calls: summaries.flatMap((item) => item.calls),
+  };
+}
+
+function summarizeNotificationRejections(evidence) {
+  const rejected = (result) => result.toolRejected === true || result.errorCode === "TOOL_CALL_REJECTED";
+  return {
+    // Include both combined and legacy notification tools. Conflicting results
+    // for one invocation can place it in both counts and require reconciliation.
+    rejectedInvocationCount: evidence.filter((item) => item.results.some(rejected)).length,
+    otherOrUnknownInvocationCount: evidence.filter((item) => !item.results.length
+      || item.results.some((result) => !rejected(result))).length,
+  };
+}
+
 function determineFinding(customer, owner) {
   if (customer.successful && !owner.invoked) {
     return {
@@ -293,8 +317,9 @@ function determineFinding(customer, owner) {
 function analyzeVapiSmsCall(call, options = {}) {
   const evidence = collectSmsToolEvidence(call);
   const composite = summarizeComposite(evidence);
-  const customer = composite.invoked ? summarizeCompositeRole("customer", evidence) : summarizeTool(CUSTOMER_SMS_TOOL, evidence);
-  const owner = composite.invoked ? summarizeCompositeRole("owner", evidence) : summarizeTool(OWNER_SMS_TOOL, evidence);
+  const customer = summarizeNotificationRole("customer", evidence);
+  const owner = summarizeNotificationRole("owner", evidence);
+  const notificationAttempts = summarizeNotificationRejections(evidence);
   const expectedCustomerLast4 = last4(options.customerPhone);
   const expectedOwnerLast4 = String(options.ownerLast4 || "").replace(/\D/g, "").slice(-4) || last4(options.ownerPhone);
   const expectedAiLast4 = last4(options.aiPhone);
@@ -324,12 +349,17 @@ function analyzeVapiSmsCall(call, options = {}) {
     ownerSenderMismatch: Boolean(expectedAiLast4 && ownerSenders.some((value) => value !== expectedAiLast4)),
   };
   let finding = determineFinding(customer, owner);
-  if (composite.toolRejected) {
+  if (notificationAttempts.rejectedInvocationCount > 0) {
     finding = {
       code: "SMS_CONFIRMATION_REJECTED",
       severity: "critical",
-      summary: "Vapi blocked the SMS tool before Twilio was called because the caller's confirmation did not match the approval rule.",
-      nextAction: "Update and retest the confirmation rule with natural phrases such as 'Yes, please.'",
+      summary: notificationAttempts.otherOrUnknownInvocationCount
+        ? "The configured confirmation guard rejected at least one attempt before notification execution. Other attempts have results or unknown outcomes and must be reconciled separately."
+        : "The recorded rejection(s) happened before notification execution. The matched condition is not available; this does not establish that the caller refused or answered incorrectly.",
+      causeConfirmed: false,
+      stage: "pre_execution_guard",
+      ...notificationAttempts,
+      nextAction: "Inspect the exact guard and message-history shape, including empty tool-call entries. Do not blame the caller, bypass consent or automatically resend; reconcile every other attempt before an approved new test.",
     };
   } else if (routing.customerDestinationMismatch) {
     finding = {
@@ -381,6 +411,7 @@ function analyzeVapiSmsCall(call, options = {}) {
     customer,
     owner,
     composite,
+    notificationAttempts,
     routing,
     finding,
   };

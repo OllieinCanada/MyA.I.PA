@@ -32,3 +32,11 @@ test('fresh provisioning and an isolated SMS migration retain the same verified 
   assert.match(migrated.model.messages[0].content, /BEFORE EXECUTION ONLY/);
   assert.match(migrated.model.messages[0].content, /DO NOT retry/);
 });
+
+test('work-start and callback timing stay separate and availability questions do not create ASAP preferences', () => {
+  assert.match(INTAKE_POLICY, /Never copy one answer into both fields/);
+  assert.match(INTAKE_POLICY, /business availability; it does not establish an ASAP start or callback preference/);
+  const { callerNumberFallbackPrompt } = require('../server/compositeCallNotifications');
+  assert.match(callerNumberFallbackPrompt('send_call_summaries_test'), /Never copy a work-start answer into callback timing/);
+  assert.match(callerNumberFallbackPrompt('send_call_summaries_test'), /not requesting an ASAP start or callback/);
+});
