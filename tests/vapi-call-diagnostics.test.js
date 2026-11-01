@@ -262,3 +262,42 @@ test("a legacy guard rejection has neutral cause and stage reporting", () => {
   assert.equal(report.finding.causeConfirmed, false);
   assert.equal(report.finding.rejectedInvocationCount, 1);
 });
+
+for (const role of ["owner", "customer"]) for (const includeSid of [true, false]) {
+  test(`a structured legacy rejection label cannot erase ${role} submission evidence (${includeSid ? "SID" : "sent flag"})`, () => {
+    const name = role === "owner" ? OWNER_SMS_TOOL : CUSTOMER_SMS_TOOL;
+    const report = analyzeVapiSmsCall({ artifact: { messages: [
+      { role: "assistant", toolCallList: [{ id: "conflict", name }] },
+      { role: "tool", toolCallId: "conflict", result: JSON.stringify({
+        errorCode: "TOOL_CALL_REJECTED", rejectedBeforeExecution: true,
+        ...(includeSid ? { sid: "SM_CONFLICT_PRIVATE" } : { sent: true }),
+      }) },
+    ] } });
+    assert.equal(report.notificationAttempts.rejectedInvocationCount, 0);
+    assert.equal(report.notificationAttempts.otherOrUnknownInvocationCount, 1);
+    assert.equal(report.finding.code, "CALL_NOTIFICATION_UNCONFIRMED");
+    assert.notEqual(report.finding.stage, "pre_execution_guard");
+    assert.equal(report[role].calls[0].results[0].rejectedBeforeExecution, false);
+    assert.equal(report[role].calls[0].results[0].messageIdSet, includeSid);
+    assert.doesNotMatch(JSON.stringify(report), /SM_CONFLICT_PRIVATE/);
+  });
+}
+
+test("a structured composite rejection label preserves nested receipts and forces reconciliation", () => {
+  const report = analyzeVapiSmsCall({ artifact: { messages: [
+    { role: "assistant", toolCallList: [{ id: "combined-conflict", name: "send_call_summaries_test" }] },
+    { role: "tool", toolCallId: "combined-conflict", result: JSON.stringify({
+      errorCode: "TOOL_CALL_REJECTED", message: "Tool call rejected based on configured rejection plan",
+      complete: true, owner: { sent: true, sid: "SM_NESTED_OWNER" }, customer: { sent: true, sid: "SM_NESTED_CUSTOMER" },
+    }) },
+  ] } });
+  assert.equal(report.composite.toolRejected, false);
+  assert.equal(report.owner.successful, true);
+  assert.equal(report.customer.successful, true);
+  assert.equal(report.owner.calls[0].results[0].messageIdSet, true);
+  assert.equal(report.customer.calls[0].results[0].messageIdSet, true);
+  assert.equal(report.notificationAttempts.rejectedInvocationCount, 0);
+  assert.equal(report.finding.code, "CALL_NOTIFICATION_UNCONFIRMED");
+  assert.notEqual(report.finding.stage, "pre_execution_guard");
+  assert.doesNotMatch(JSON.stringify(report), /SM_NESTED_OWNER|SM_NESTED_CUSTOMER/);
+});

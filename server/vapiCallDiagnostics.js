@@ -85,13 +85,18 @@ function safeToolArguments(value) {
 function safeToolResult(value) {
   const parsed = parseObject(value);
   const rawText = typeof value === "string" ? value.trim() : "";
-  const rejectedByPlan = /rejected based on configured rejection plan/i.test(rawText);
+  const rejectedByPlan = /^Tool call rejected based on configured rejection plan[.!]?$/i.test(rawText);
   const error = parsed.error;
   const errorMessage =
     typeof error === "string"
       ? error
       : String(error?.message || parsed.errorMessage || parsed.message || "").trim();
   return {
+    // This flag is derived only from the canonical raw guard marker, never a
+    // model/body flag or generic error-code label.
+    rejectedBeforeExecution: rejectedByPlan,
+    requiresReconciliation: !rejectedByPlan && (parsed.requiresReconciliation === true
+      || String(parsed.errorCode || parsed.code || error?.code || "").trim().toUpperCase() === "TOOL_CALL_REJECTED"),
     ok: typeof parsed.ok === "boolean" ? parsed.ok : (rejectedByPlan ? false : null),
     sent: typeof parsed.sent === "boolean" ? parsed.sent : (rejectedByPlan ? false : null),
     skipped: typeof parsed.skipped === "boolean" ? parsed.skipped : null,
@@ -110,15 +115,19 @@ function safeToolResult(value) {
 function safeCompositeResult(value) {
   const parsed = parseObject(value);
   const directFailure = safeToolResult(value);
-  const rejectedByPlan = directFailure.errorCode === "TOOL_CALL_REJECTED";
+  const rejectedByPlan = directFailure.rejectedBeforeExecution === true;
+  const owner = rejectedByPlan ? directFailure : safeToolResult(parsed.owner);
+  const customer = rejectedByPlan ? directFailure : safeToolResult(parsed.customer);
   return {
     ok: typeof parsed.ok === "boolean" ? parsed.ok : (rejectedByPlan ? false : null),
     complete: typeof parsed.complete === "boolean" ? parsed.complete : (rejectedByPlan ? false : null),
     partialSuccess: typeof parsed.partialSuccess === "boolean" ? parsed.partialSuccess : null,
-    requiresReconciliation: typeof parsed.requiresReconciliation === "boolean" ? parsed.requiresReconciliation : null,
+    requiresReconciliation: directFailure.requiresReconciliation === true
+      || owner.requiresReconciliation === true || customer.requiresReconciliation === true
+      || (typeof parsed.requiresReconciliation === "boolean" ? parsed.requiresReconciliation : null),
     toolRejected: rejectedByPlan,
-    owner: rejectedByPlan ? directFailure : safeToolResult(parsed.owner),
-    customer: rejectedByPlan ? directFailure : safeToolResult(parsed.customer),
+    owner,
+    customer,
   };
 }
 
@@ -263,7 +272,7 @@ function summarizeNotificationRole(role, evidence) {
 }
 
 function summarizeNotificationRejections(evidence) {
-  const rejected = (result) => result.toolRejected === true || result.errorCode === "TOOL_CALL_REJECTED";
+  const rejected = (result) => result.toolRejected === true || result.rejectedBeforeExecution === true;
   return {
     // Include both combined and legacy notification tools. Conflicting results
     // for one invocation can place it in both counts and require reconciliation.
@@ -388,6 +397,16 @@ function analyzeVapiSmsCall(call, options = {}) {
       severity: "critical",
       summary: "The owner SMS tool was given a sender that does not match the assigned AI number.",
       nextAction: "Correct the live assistant's sender-number injection before another real call.",
+    };
+  } else if (composite.requiresReconciliation || [...customer.calls, ...owner.calls]
+    .some((item) => item.results.some((result) => result.requiresReconciliation === true))) {
+    finding = {
+      code: "CALL_NOTIFICATION_UNCONFIRMED",
+      severity: "critical",
+      summary: "The notification results contain an uncertain or conflicting outcome. Reported submissions and message-ID evidence are preserved, not treated as a pre-execution rejection.",
+      causeConfirmed: false,
+      stage: "submission_or_result_unconfirmed",
+      nextAction: "Hold the affected notifications for provider-result reconciliation. Do not automatically resend or treat an error-code label as proof that no submission occurred.",
     };
   } else if (composite.invoked && owner.successful && customer.successful && composite.complete) {
     finding = {
