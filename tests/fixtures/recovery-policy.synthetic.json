@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "scope": "synthetic-test-only",
+  "approval": { "fixtureOnly": true, "realApproval": false, "productionRehearsalApproved": false },
+  "mode": "synthetic-manual-preparation-only",
+  "objectives": { "maximumDataLossSeconds": 900, "maximumServiceRecoverySeconds": 3600, "measuredProductionObjectivesPassed": false },
+  "capture": {
+    "intervalMinutes": 10, "maximumConcurrentExecutions": 1,
+    "requireAllWritersFenced": true, "requireInFlightDrain": true,
+    "requireDatabaseFileBoundary": true, "requirePrivacyReplay": true,
+    "enabled": false, "automaticCadenceApproved": false
+  },
+  "retention": {
+    "storage": "private-github-release-attachments", "independentKeyVault": true,
+    "maxSyntheticReleases": 3, "maxBundleBytes": 2097152, "maxTotalSyntheticAssetBytes": 6291456,
+    "automaticDeletionEnabled": false, "realDataRetentionApproved": false,
+    "retainKeyVersionsUntilAssociatedObjectsConfirmedDeleted": true,
+    "retainKeyVersionsUntilLiveCiphertextNoLongerRequiresThem": true
+  },
+  "custody": {
+    "passwordManager": "fixture-vault", "offlineExportFormat": "fixture-encrypted-export",
+    "vaultSetupComplete": false, "emergencyRecoveryContact": null,
+    "independentRecoveryAccessTested": false, "offlineExportRestored": false
+  },
+  "staging": {
+    "data": "synthetic-only", "productionBackupAllowed": false,
+    "workersEnabled": false, "externalProviderTrafficAllowed": false,
+    "osNetworkBoundaryVerified": false, "strictFileReadsEnabledByDefault": false
+  },
+  "rehearsal": { "productionChangesAllowed": false, "callFallbackAndWebhookBufferingVerified": false, "selectedWindow": null },
+  "monitor": {
+    "intervalMinutes": 5, "backupWarningAgeMinutes": 10, "backupCriticalAgeMinutes": 20,
+    "diskWarningFraction": 0.6, "diskCriticalFraction": 0.8, "enabled": false
+  },
+  "notifications": { "backupEmail": null, "receiptTestApproved": false, "recipientReceiptProven": false, "messagesSent": 0 },
+  "productionSource": { "serviceId": "fixture-service", "databaseId": "fixture-database" },
+  "reviewedApplicationRelease": "ffffffffffffffffffffffffffffffffffffffff",
+  "github": {
+    "repository": "fixture-owner/fixture-recovery", "repositoryId": 12345,
+    "privateRequired": true, "actionsMustStayDisabled": true,
+    "freshMetadataVerified": false, "selectedStorageHasIndependentOfflineCopy": false
+  }
+}

@@ -395,6 +395,7 @@ const PORT = Number(process.env.PORT || 8787);
 const dataDir = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.join(__dirname, "..", "data");
 const signupDuplicateSubmissions = new Map();
 const legacyPendingSignupPath = path.join(dataDir, "pending-signup-verifications.json");
+const { readRecoveryFileStore } = require("./recoveryFileStore");
 const pendingStripeSignupPath = path.join(dataDir, "pending-stripe-signups.json");
 const trialReminderPath = path.join(dataDir, "trial-reminders.json");
 const signupDashboardPath = path.join(dataDir, "signup-dashboard.json");
@@ -1590,6 +1591,7 @@ function ensurePendingStripeSignupStore() {
 }
 
 function readPendingStripeSignupStore() {
+  if (process.env.RECOVERY_STRICT_FILE_READS === "true") return readRecoveryFileStore(pendingStripeSignupPath);
   ensurePendingStripeSignupStore();
   try {
     const data = JSON.parse(fs.readFileSync(pendingStripeSignupPath, "utf8"));
@@ -1951,6 +1953,7 @@ function ensureTrialReminderStore() {
 }
 
 function readTrialReminderStore() {
+  if (process.env.RECOVERY_STRICT_FILE_READS === "true") return readRecoveryFileStore(trialReminderPath);
   ensureTrialReminderStore();
   try {
     const data = JSON.parse(fs.readFileSync(trialReminderPath, "utf8"));
@@ -1973,6 +1976,7 @@ function ensureSignupDashboardStore() {
 }
 
 function readSignupDashboardStore() {
+  if (process.env.RECOVERY_STRICT_FILE_READS === "true") return readRecoveryFileStore(signupDashboardPath);
   ensureSignupDashboardStore();
   try {
     const data = JSON.parse(fs.readFileSync(signupDashboardPath, "utf8"));
@@ -1995,6 +1999,7 @@ function ensureVapiCallSyncStore() {
 }
 
 function readVapiCallSyncStore() {
+  if (process.env.RECOVERY_STRICT_FILE_READS === "true") return readRecoveryFileStore(vapiCallSyncPath);
   ensureVapiCallSyncStore();
   try {
     const data = JSON.parse(fs.readFileSync(vapiCallSyncPath, "utf8"));
