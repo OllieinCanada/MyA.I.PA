@@ -304,7 +304,7 @@
       "body-parser": "1.20.9"
     },
     "browserslist": "4.28.9",
-    "fast-uri": "3.1.6",
+    "fast-uri": "3.1.9",
     "ip-address": "10.7.4",
     "nanoid": "3.3.18",
     "qs": "6.16.1",
