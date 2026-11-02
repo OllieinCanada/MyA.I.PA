@@ -3,7 +3,7 @@ const fs = require("node:fs");
 const http = require("node:http");
 const path = require("node:path");
 const test = require("node:test");
-const { chromium } = require("playwright");
+const { chromium } = require("../scripts/playwright-runtime");
 
 const root = path.resolve(__dirname, "..");
 const publicDir = path.join(root, "public");

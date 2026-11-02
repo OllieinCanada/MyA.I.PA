@@ -1,6 +1,6 @@
 const fs = require("fs");
 const path = require("path");
-const { chromium } = require("playwright");
+const { chromium } = require("./playwright-runtime");
 const { nodeCommand, rootPath, run } = require("./_helpers");
 
 const screenshotName = "telegram-admin-customers-tab.png";

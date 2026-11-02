@@ -4,10 +4,13 @@ const fs = require('node:fs');
 const http = require('node:http');
 const path = require('node:path');
 const assert = require('node:assert/strict');
-const { chromium, firefox, webkit } = require('playwright');
+const { spawnSync } = require('node:child_process');
+const plan = require('./public-demo-audio-plan');
+const { chromium, firefox, webkit } = require('./playwright-runtime');
 const root = path.resolve(__dirname, '..');
 const build = path.resolve(root, process.env.DEMO_AUDIO_BUILD_DIR || 'docs');
 const player = process.argv.find(arg => arg.startsWith('--player='))?.slice(9) || 'hero';
+const traceMedia = process.argv.includes('--trace-media');
 assert.ok(['hero', 'scenario'].includes(player));
 const selectors = player === 'scenario' ? {
   control: '#tims-homepage-demo .tims-recording-controls button', element: '#tims-homepage-demo audio.tims-recording-audio',
@@ -17,12 +20,27 @@ const selectors = player === 'scenario' ? {
   panel: '.simple-proof-carousel', feedback: '#hero-audio-feedback', duration:133, seek:64,
 };
 const output = path.join(root, 'diagnostics/call-sync-audio-repair');
+const suffix = (process.argv.find(arg => arg.startsWith('--report='))?.slice(9) || (player === 'hero' ? 'browser' : 'scenario-browser')).replace(/[^a-z0-9_-]/gi, '');
+assert.ok(suffix, 'A nonempty report name is required');
+const selectedEngines = plan.selection(process.argv.find(arg => arg.startsWith('--engines='))?.slice(10), plan.engines);
+const selectedModes = plan.selection(process.argv.find(arg => arg.startsWith('--modes='))?.slice(8), plan.modes);
+const selectedSizes = plan.selection(process.argv.find(arg => arg.startsWith('--sizes='))?.slice(8), plan.sizes);
+const worker = process.argv.includes('--engine-worker');
+const expectedCases = selectedEngines.flatMap(engine => plan.casesFor(engine, selectedModes, selectedSizes));
+function writeReport(report) {
+  fs.mkdirSync(output, { recursive: true });
+  const filename = path.join(output, suffix + '.json'), temporary = filename + '.tmp';
+  fs.writeFileSync(temporary, JSON.stringify({ checkedAt: new Date().toISOString(), productionWrites: 0,
+    player, physicalDeviceProof: false, ...report }, null, 2) + '\n');
+  fs.renameSync(temporary, filename);
+}
 let origin;
 const engines = { chromium, firefox, webkit };
 const sizes = [{ name: 'phone', width: 412, height: 915 }, { name: 'tablet', width: 820, height: 1180 }, { name: 'desktop', width: 1365, height: 900 }];
 
 async function startMediaFixture() {
   const fixture = { current: null };
+  const mediaBytes = new Map();
   // WebKit's native media loader can bypass Playwright's page routes. Serve
   // audio on a real loopback socket so every engine tests the same bytes,
   // range responses and intentional failures, without external traffic.
@@ -33,6 +51,7 @@ async function startMediaFixture() {
       res.writeHead(404).end(); return;
     }
     const extension = match[1], current = fixture.current;
+    if (traceMedia) console.log(JSON.stringify({ stage: 'media request', extension, range: req.headers.range || '', at: Date.now() }));
     current.requests.push(extension);
     const headers = { 'Content-Type': extension === 'mp3' ? 'audio/mpeg' : 'audio/wav',
       'Accept-Ranges': 'bytes', 'Cache-Control': 'no-store' };
@@ -42,7 +61,8 @@ async function startMediaFixture() {
     if (current.broken && (current.mode === 'exhausted' || extension === 'mp3')) {
       res.writeHead(200, headers).end('deliberately invalid synthetic audio'); return;
     }
-    const bytes = fs.readFileSync(path.join(build, pathname));
+    if (!mediaBytes.has(pathname)) mediaBytes.set(pathname, fs.readFileSync(path.join(build, pathname)));
+    const bytes = mediaBytes.get(pathname);
     const range = /^bytes=(\d+)-(\d*)$/.exec(req.headers.range || '');
     if (range) {
       const start = Number(range[1]);
@@ -68,6 +88,18 @@ async function scenario(browser, engine, viewport, mode, fixture) {
   const requests = [], reports = [];
   fixture.setCurrent({ mode, requests, get broken() { return broken; } });
   try {
+    if (traceMedia) {
+      page.on('console', message => { if (message.text().startsWith('media-trace ')) console.log(message.text()); });
+      page.on('crash', () => console.log(JSON.stringify({ engine, mode, stage: 'page crashed', at: Date.now() })));
+      page.on('close', () => console.log(JSON.stringify({ engine, mode, stage: 'page closed', at: Date.now() })));
+      await page.addInitScript(() => {
+        for (const name of ['loadstart','emptied','abort','error','pause','play','playing','waiting','stalled','loadedmetadata','canplay']) document.addEventListener(name, event => {
+          const audio = event.target;
+          if (audio.tagName !== 'AUDIO') return;
+          console.log('media-trace ' + JSON.stringify({ event: name, at: Date.now(), source: audio.currentSrc, paused: audio.paused, time: audio.currentTime, ready: audio.readyState, network: audio.networkState, error: audio.error?.code || null }));
+        }, true);
+      });
+    }
     await page.route('**/*', async route => {
       const request = route.request(), url = new URL(request.url());
       if (url.pathname === '/api/client-errors' && request.method() === 'POST') {
@@ -118,10 +150,14 @@ async function scenario(browser, engine, viewport, mode, fixture) {
       assert.equal(reports.length, 1, 'one terminal audio report, not one for each recovered source');
       assert.equal(await element.evaluate(audio => audio.paused), true,
         'a terminal failure stops the element so one tap can retry');
-      await page.locator(selectors.panel).screenshot({ path: path.join(output, `${player}-${engine}-phone-retry.png`) });
+      await page.locator(selectors.panel).screenshot({ path: path.join(output, `${suffix}-${player}-${engine}-phone-retry.png`) });
       broken = false;
       await control.click();
     }
+    // The primary is deliberately held for the player's unchanged 15-second
+    // bound. Do not charge that wait against the fallback's playback check.
+    // Both stages remain bounded and real decoding/time advancement is required.
+    if (mode === 'stalled') await page.waitForFunction(selector => /\.wav(?:\?|$)/.test(document.querySelector(selector).currentSrc), selectors.element);
     await page.waitForFunction(selector => { const audio = document.querySelector(selector); return !audio.paused && audio.currentTime > 0.2; }, selectors.element);
     console.log(JSON.stringify({ engine, mode, stage: 'audio advancing' }));
     const playback = await element.evaluate(audio => ({ currentSrc: new URL(audio.currentSrc).pathname, currentTime: audio.currentTime,
@@ -141,7 +177,7 @@ async function scenario(browser, engine, viewport, mode, fixture) {
     assert.equal(await element.evaluate(audio => audio.paused), true);
     assert.match((await control.getAttribute('aria-label')) || (await control.textContent()), /Hear Live Call|Play recorded scenario call/);
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
-    if (mode === 'normal') await page.locator(selectors.panel).screenshot({ path: path.join(output, `${player}-${engine}-${viewport.name}-player.png`) });
+    if (mode === 'normal') await page.locator(selectors.panel).screenshot({ path: path.join(output, `${suffix}-${player}-${engine}-${viewport.name}-player.png`) });
     console.log(JSON.stringify({ engine, viewport: viewport.name, mode, stage: 'passed' }));
     return { engine, viewport: viewport.name, mode, playback, audioRequests: requests, mockAudioReports: reports.length,
       externalRequestsBlocked: blocked, physicalDevice: false, passed: true };
@@ -163,48 +199,79 @@ async function scenario(browser, engine, viewport, mode, fixture) {
       }, selectors.element).catch(() => null),
     };
     throw error;
-  } finally { await page.close(); }
+  } finally { await page.close().catch(() => {}); }
 }
 
-async function main() {
+async function runEngine() {
   require('./prepare-public-demo-audio').check();
   require('./prepare-scenario-demo-audio').check();
   fs.mkdirSync(output, { recursive: true });
   const results = [];
   let failure = null;
+  let activeBrowser = null, activeCase = null;
+  const save = passed => writeReport({ passed, failure, results, expectedCases, activeCase, engineTimeoutMs: plan.ENGINE_TIMEOUT_MS });
+  save(false);
   const fixture = await startMediaFixture();
+  const deadline = setTimeout(() => {
+    failure = { message: 'Audio engine exceeded its 180-second bound; not a pass.', ...activeCase };
+    save(false);
+    fixture.server.closeAllConnections();
+    const hardStop = setTimeout(() => process.exit(124), plan.WORKER_CLEANUP_MS - 1000);
+    Promise.resolve(activeBrowser?.close()).catch(() => {}).finally(() => { clearTimeout(hardStop); process.exit(124); });
+  }, plan.ENGINE_TIMEOUT_MS);
   try {
-    const selectedEngines = (process.argv.find(arg => arg.startsWith('--engines='))?.slice(10) || 'chromium,firefox,webkit').split(',');
-    const selectedModes = (process.argv.find(arg => arg.startsWith('--modes='))?.slice(8) || 'normal,fallback,exhausted,stalled').split(',');
-    const selectedSizes = (process.argv.find(arg => arg.startsWith('--sizes='))?.slice(8) || 'phone,tablet,desktop').split(',');
-    assert.ok(selectedEngines.every(engine => Object.hasOwn(engines, engine)));
-    assert.ok(selectedModes.every(mode => ['normal', 'fallback', 'exhausted', 'stalled'].includes(mode)));
-    assert.ok(selectedSizes.every(size => sizes.some(item => item.name === size)));
-    for (const engine of selectedEngines) {
+    assert.equal(selectedEngines.length, 1, 'One bounded engine per worker');
+    for (const testCase of expectedCases) {
+      activeCase = testCase; save(false);
+      const { engine, mode, viewport } = testCase;
       const type = engines[engine];
       console.log(JSON.stringify({ engine, stage: 'launching' }));
+      // Native Windows WebKit media state can survive page close after a
+      // corrupt resource. Fresh processes keep failure cases independent.
       const browser = await type.launch({ headless: true, timeout: 15000,
         executablePath: engine === 'chromium' ? process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE || undefined : undefined });
+      activeBrowser = browser;
       try {
-        if (selectedModes.includes('normal')) for (const viewport of sizes.filter(item => selectedSizes.includes(item.name))) results.push(await scenario(browser, engine, viewport, 'normal', fixture));
-        for (const mode of selectedModes.filter(item => item !== 'normal')) results.push(await scenario(browser, engine, sizes[0], mode, fixture));
-      } finally { await browser.close(); }
+        results.push(await scenario(browser, engine, sizes.find(size => size.name === viewport), mode, fixture));
+        activeCase = null; save(false);
+      } finally { await browser.close(); activeBrowser = null; fixture.server.closeAllConnections(); }
     }
+    plan.verifyCoverage({ player, passed: true, productionWrites: 0, physicalDeviceProof: false, failure: null, results }, expectedCases, player, 0);
   } catch (error) {
     failure = { message: error.message, ...(error.audioDiagnostic || {}) };
     console.error(JSON.stringify({ fixtureFailure: failure }));
     throw error;
   } finally {
+    clearTimeout(deadline);
+    save(failure === null && results.length === expectedCases.length);
     fixture.server.closeAllConnections();
     await new Promise(resolve => fixture.server.close(resolve));
-    const suffix = (process.argv.find(arg => arg.startsWith('--report='))?.slice(9) || (player === 'hero' ? 'browser' : 'scenario-browser')).replace(/[^a-z0-9_-]/gi, '');
-    fs.writeFileSync(path.join(output, suffix + '.json'), JSON.stringify({ checkedAt: new Date().toISOString(),
-      productionWrites: 0, player, physicalDeviceProof: false, passed: failure === null,
-      failure, results }, null, 2) + '\n');
   }
   console.log(JSON.stringify({ passed: results.length, results, productionWrites: 0, physicalDeviceProof: false }, null, 2));
 }
+function runMatrix() {
+  const results = [], failures = [], workers = [];
+  writeReport({ passed: false, failure: null, results, expectedCases, workers });
+  for (const engine of selectedEngines) {
+    const childSuffix = suffix + '-' + engine;
+    const args = [__filename, '--engine-worker', '--player=' + player, '--engines=' + engine,
+      '--modes=' + selectedModes.join(','), '--sizes=' + selectedSizes.join(','), '--report=' + childSuffix];
+    if (traceMedia) args.push('--trace-media');
+    const run = spawnSync(process.execPath, args, { cwd: root, env: process.env, windowsHide: true, stdio: 'inherit', timeout: plan.ENGINE_TIMEOUT_MS + plan.WORKER_CLEANUP_MS });
+    let child = null;
+    try {
+      child = JSON.parse(fs.readFileSync(path.join(output, childSuffix + '.json'), 'utf8'));
+      plan.verifyCoverage(child, plan.casesFor(engine, selectedModes, selectedSizes), player, run.status);
+    } catch (error) { failures.push({ engine, message: error.message, workerFailure: child?.failure || null, processError: run.error?.code || null }); }
+    if (child?.results) results.push(...child.results);
+    workers.push({ engine, exitCode: run.status, report: childSuffix + '.json', processError: run.error?.code || null });
+    writeReport({ passed: false, failure: failures.length ? failures : null, results, expectedCases, workers });
+  }
+  if (failures.length) throw Error('Audio matrix has failed or incomplete engines; see retained reports');
+  plan.verifyCoverage({ player, passed: true, productionWrites: 0, physicalDeviceProof: false, failure: null, results }, expectedCases, player, 0);
+  writeReport({ passed: true, failure: null, results, expectedCases, workers });
+  console.log(JSON.stringify({ passed: results.length, player, productionWrites: 0, physicalDeviceProof: false }));
+}
 if (require.main === module) {
-  const deadline = setTimeout(() => { console.error('Audio browser test exceeded its 180-second bound; not a pass.'); process.exit(124); }, 180000);
-  main().catch(error => { console.error(error.stack); process.exitCode = 1; }).finally(() => clearTimeout(deadline));
+  Promise.resolve().then(() => worker ? runEngine() : runMatrix()).catch(error => { console.error(error.stack); process.exitCode = 1; });
 }

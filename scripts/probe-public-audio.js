@@ -1,7 +1,7 @@
 // Disposable browser, one public demo asset, GET/HEAD only. Does not load the
 // application or its error reporter, and cannot submit production incidents.
 const path=require('node:path');
-const {chromium}=require('playwright');
+const {chromium}=require('./playwright-runtime');
 const {writeManifest}=require('./provider-hardening-evidence');
 async function main(){
   const browser=await chromium.launch({headless:true,executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE||undefined});

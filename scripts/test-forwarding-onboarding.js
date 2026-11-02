@@ -3,7 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const assert = require('node:assert/strict');
-const { chromium } = require('playwright');
+const { chromium } = require('./playwright-runtime');
 const { resolveForwardingRule } = require('../server/callForwardingProvider');
 const { renderOnboardingReadyPage } = require('../server/onboardingReadyPage');
 const copy = require('../src/features/onboarding/onboardingCopy');

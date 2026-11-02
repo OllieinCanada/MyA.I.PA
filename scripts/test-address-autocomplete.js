@@ -1,7 +1,7 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
-const { chromium } = require("playwright");
+const { chromium } = require("./playwright-runtime");
 
 function isGoogleApiUrl(value) {
   try {

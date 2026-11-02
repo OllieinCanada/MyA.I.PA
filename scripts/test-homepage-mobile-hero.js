@@ -2,7 +2,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const assert = require('node:assert/strict');
-const { chromium } = require('playwright');
+const { chromium } = require('./playwright-runtime');
 
 async function main() {
   const root = path.resolve(process.env.PRICING_QA_BUILD_DIR || 'docs');

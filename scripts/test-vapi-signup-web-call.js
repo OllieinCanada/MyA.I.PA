@@ -1,5 +1,5 @@
 const path = require("path");
-const { chromium } = require("playwright");
+const { chromium } = require("./playwright-runtime");
 const { ensureDir, rootPath } = require("./_helpers");
 
 const url = process.argv.find((arg) => arg.startsWith("--url="))?.slice(6) || "http://127.0.0.1:3000/#/signup";

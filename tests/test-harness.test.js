@@ -65,5 +65,6 @@ test("audio regression uses a real clocked output without bypassing playback ass
   assert.match(workflow, /npm run test:public-demo-audio/);
   assert.match(audioGate, /assert\.equal\(playback\.error, null\)/);
   assert.match(audioGate, /audio\.currentTime > 0\.2/);
-  assert.match(audioGate, /'chromium,firefox,webkit'/);
+  assert.deepEqual(require('../scripts/public-demo-audio-plan').engines, ['chromium', 'firefox', 'webkit']);
+  assert.match(audioGate, /plan.verifyCoverage/);
 });

@@ -1,6 +1,6 @@
 // Offline browser regression: never contacts providers, verifies a customer,
 // buys a number, or submits the final signup form.
-const { chromium } = require("playwright");
+const { chromium } = require("./playwright-runtime");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");

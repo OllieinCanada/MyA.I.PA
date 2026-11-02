@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 const http = require('node:http');
-const { chromium } = require('playwright');
+const { chromium } = require('./playwright-runtime');
 const { syncRetainedStaticAssets } = require('./pages-static-retention');
 
 async function main() {
