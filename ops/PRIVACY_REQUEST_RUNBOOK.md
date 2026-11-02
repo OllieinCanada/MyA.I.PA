@@ -44,6 +44,6 @@ Assign an impartial reviewer, preserve evidence, investigate the relevant privac
 
 ## Synthetic exercise
 
-Run `npm run ops:privacy:drill` after material privacy-workflow changes and before a release review. The drill uses no production data and verifies tenant-scoped access, correction, consent withdrawal, active-data deletion, preservation of another tenant, and replay of the deletion ledger after a simulated restore. Keep the generated local report with release evidence; it is not a substitute for provider-side deletion proof or accountable approval.
+Run `npm run ops:privacy:drill` after material privacy-workflow changes and before a release review. This is a standalone synthetic-array policy model: it illustrates tenant scoping, correction, withdrawal, deletion and restore replay, but does not exercise application handlers or prove application/provider erasure. Its suppression-removal example is not an approved production erasure policy; retained opt-out/no-resend protection, legal holds, actual access authority, audit redaction and application restore replay require separate isolated proof. Keep the generated model report with its original scope and timestamp. It cannot close the application privacy gate or replace provider-side completion evidence or accountable approval.
 
 Official reference: https://www.priv.gc.ca/media/2038/guide_org_e.pdf
