@@ -1,7 +1,7 @@
 // Render the real verification-page template and compiled forwarding screen with
 // an offline fixture. Clicking Continue is tested; no carrier command is dialled.
 const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),assert=require('node:assert/strict');
-const {chromium}=require('playwright');
+const {chromium}=require('./playwright-runtime');
 const {resolveForwardingRule}=require('../server/callForwardingProvider');
 const NUMBER='+12896723342',ORIGIN='http://127.0.0.1:3219';
 function numberReadyHtml(){

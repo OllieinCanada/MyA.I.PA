@@ -1,7 +1,7 @@
 const fs = require("fs");
 const http = require("http");
 const path = require("path");
-const { chromium } = require("playwright");
+const { chromium } = require("./playwright-runtime");
 const { nodeCommand, npmCommand, rootPath, run } = require("./_helpers");
 
 function hasFlag(name) {

@@ -1,6 +1,6 @@
 // Entirely offline fixtures. No signup, provider, message or billing requests.
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
-const {chromium}=require('playwright');
+const {chromium}=require('./playwright-runtime');
 const {verificationProgressMarkup,verificationProgressScript,verificationNumberMarkup}=require('../server/signupVerificationProgress');
 const {buildSignupProgress}=require('../server/signupProgress');
 async function main(){

@@ -2,7 +2,7 @@ const fs = require("fs");
 const { spawn } = require("child_process");
 const net = require("net");
 const path = require("path");
-const { chromium, firefox, webkit } = require("playwright");
+const { chromium, firefox, webkit } = require("./playwright-runtime");
 const { rootPath } = require("./_helpers");
 const reportPath = rootPath("diagnostics", "shipping-readiness", "browser-quality-gate.json");
 

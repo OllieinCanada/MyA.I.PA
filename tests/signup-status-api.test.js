@@ -32,6 +32,10 @@ Object.assign(process.env, {
   MISSED_CALL_ALERT_ENABLED: "false", DAILY_DIGEST_ENABLED: "false",
 });
 
+// Load the parser before opening the loopback server. A cold synchronous import
+// on a slow Windows volume can otherwise stall past an idle keep-alive timeout.
+const { JSDOM } = require('jsdom');
+
 const { prisma } = require("../server/prisma");
 const rows = new Map();
 const pendingRows = new Map();
@@ -226,7 +230,6 @@ test('verified duplicate POST and old links reopen the existing setup without re
     assert.doesNotMatch(html,/signup-number-wait|AI forwarding number will appear here/);
     assert.match(html,/Call my receptionist/); assert.match(html,/Copy number/);
     assert.doesNotMatch(html,/Secure billing choice|Optional secure billing|No card was collected/);
-    const { JSDOM } = require('jsdom');
     const document = new JSDOM(html).window.document;
     const continueLink = document.querySelector('a.onboarding-forward-cta');
     assert.equal(continueLink.textContent,'Click here to forward your missed calls to your assistant after 4 rings');
