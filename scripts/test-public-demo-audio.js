@@ -4,7 +4,6 @@ const fs = require('node:fs');
 const http = require('node:http');
 const path = require('node:path');
 const assert = require('node:assert/strict');
-const { spawnSync } = require('node:child_process');
 const plan = require('./public-demo-audio-plan');
 const { chromium, firefox, webkit } = require('./playwright-runtime');
 const root = path.resolve(__dirname, '..');
@@ -257,7 +256,7 @@ function runMatrix() {
     const args = [__filename, '--engine-worker', '--player=' + player, '--engines=' + engine,
       '--modes=' + selectedModes.join(','), '--sizes=' + selectedSizes.join(','), '--report=' + childSuffix];
     if (traceMedia) args.push('--trace-media');
-    const run = spawnSync(process.execPath, args, { cwd: root, env: process.env, windowsHide: true, stdio: 'inherit', timeout: plan.ENGINE_TIMEOUT_MS + plan.WORKER_CLEANUP_MS });
+    const run = plan.runWorker(args, { cwd: root, env: process.env });
     let child = null;
     try {
       child = JSON.parse(fs.readFileSync(path.join(output, childSuffix + '.json'), 'utf8'));

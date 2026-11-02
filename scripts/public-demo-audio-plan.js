@@ -1,5 +1,6 @@
 'use strict';
 const assert = require('node:assert/strict');
+const { spawnSync } = require('node:child_process');
 const ENGINE_TIMEOUT_MS = 180000;
 const WORKER_CLEANUP_MS = 15000;
 const engines = ['chromium', 'firefox', 'webkit'];
@@ -16,6 +17,13 @@ function casesFor(engine, selectedModes, selectedSizes) {
   return selectedModes.flatMap(mode => (mode === 'normal' ? selectedSizes : ['phone']).map(viewport => ({ engine, mode, viewport })));
 }
 const caseKey = value => [value.engine, value.viewport, value.mode].join('|');
+function runWorker(args, { cwd, env, stdio = 'inherit', timeoutMs = ENGINE_TIMEOUT_MS + WORKER_CLEANUP_MS } = {}) {
+  assert.ok(Number.isSafeInteger(timeoutMs) && timeoutMs > 0, 'A positive worker timeout is required');
+  // The worker gets its ordinary graceful-close interval first. This final
+  // cutoff must not be caught by Playwright's POSIX SIGTERM handler: spawnSync
+  // otherwise waits indefinitely for a hung worker/handler to exit.
+  return spawnSync(process.execPath, args, { cwd, env, stdio, windowsHide: true, timeout: timeoutMs, killSignal: 'SIGKILL' });
+}
 function verifyCoverage(report, expected, player, status) {
   assert.equal(status, 0, 'Audio worker did not exit successfully');
   assert.equal(report.player, player);
@@ -27,4 +35,4 @@ function verifyCoverage(report, expected, player, status) {
   assert.ok(report.results.every(result => result.passed === true));
   assert.deepEqual(report.results.map(caseKey).sort(), expected.map(caseKey).sort(), 'Audio worker coverage does not match the requested matrix');
 }
-module.exports = { ENGINE_TIMEOUT_MS, WORKER_CLEANUP_MS, engines, modes, sizes, selection, casesFor, caseKey, verifyCoverage };
+module.exports = { ENGINE_TIMEOUT_MS, WORKER_CLEANUP_MS, engines, modes, sizes, selection, casesFor, caseKey, verifyCoverage, runWorker };
