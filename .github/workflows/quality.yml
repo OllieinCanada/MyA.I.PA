@@ -32,10 +32,13 @@ jobs:
       REACT_APP_API_BASE_URL: https://api.myaipa.ca
       REACT_APP_GOOGLE_MAPS_API_KEY: ${{ vars.GOOGLE_MAPS_BROWSER_KEY }}
       REACT_APP_RELEASE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      DEPENDENCY_EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -43,8 +46,26 @@ jobs:
           node-version: 20
           cache: npm
 
+      - name: Reproduce committed URI dependency lock in a disposable CI copy
+        run: node scripts/verify-development-dependency-ci.js lock
+
       - name: Install dependencies
-        run: npm ci --legacy-peer-deps
+        run: npm ci --include=dev --legacy-peer-deps
+
+      - name: Report the full development tree and strict production dependency audits
+        run: node scripts/verify-development-dependency-ci.js audit
+
+      - name: Verify all URI security and AJV compatibility cases
+        run: node --test tests/development-uri-security.test.js
+
+      - name: Save exact-head dependency validation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: development-dependencies-${{ github.event.pull_request.head.sha || github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          retention-days: 14
+          path: diagnostics/development-dependency-ci/*.json
+          if-no-files-found: error
 
       - name: Install isolated regression browsers
         run: npx playwright install --with-deps chromium firefox webkit
