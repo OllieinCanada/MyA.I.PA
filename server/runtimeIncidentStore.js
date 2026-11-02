@@ -183,9 +183,7 @@ function listRuntimeIncidents(filePath, { now = new Date(), ttlMs = DEFAULT_TTL_
     ...item,
     ageMinutes: Math.max(0, Math.floor((nowMs - new Date(item.detectedAt).getTime()) / 60_000)),
   }));
-  if (active.length !== all.length) {
-    try { writeStore(filePath, active); } catch (_error) { /* keep serving the safe in-memory result */ }
-  }
+  // TTL filters the active view; reading must not rewrite stored history.
   return active;
 }
 

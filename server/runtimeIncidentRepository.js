@@ -57,7 +57,7 @@ async function recordRuntimeIncidentDb(prismaClient, incident) {
 async function listRuntimeIncidentsDb(prismaClient, { now = new Date(), ttlMs = DEFAULT_TTL_MS } = {}) {
   const current = now instanceof Date ? now : new Date(now);
   const cutoff = new Date(current.getTime() - Number(ttlMs || DEFAULT_TTL_MS));
-  await prismaClient.runtimeIncidentRecord.deleteMany({ where: { lastDetectedAt: { lt: cutoff }, NOT: protectedSync } });
+  // TTL filters the active view; reading must not delete stored history.
   const rows = await prismaClient.runtimeIncidentRecord.findMany({
     where: { lastDetectedAt: { gte: cutoff } },
     orderBy: { lastDetectedAt: "desc" },
