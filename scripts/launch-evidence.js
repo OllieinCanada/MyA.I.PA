@@ -5,20 +5,28 @@ const PRIVACY_CHECKS = ['access_is_tenant_scoped', 'correction_propagates_to_sub
   'consent_withdrawal_creates_suppression', 'deletion_removes_active_subject_data',
   'other_tenant_data_is_preserved', 'restore_replay_prevents_deleted_data_from_returning'];
 function checksPass(value, names) {
-  return Array.isArray(value?.checks) && names.every(name => {
+  const record = item => item !== null && typeof item === 'object' && !Array.isArray(item);
+  return Array.isArray(names) && names.length > 0 && new Set(names).size === names.length
+    && names.every(name => typeof name === 'string' && name.length > 0)
+    && Array.isArray(value?.checks)
+    && value.checks.every(check => record(check) && typeof check.name === 'string' && check.name.length > 0 && check.passed === true)
+    && new Set(value.checks.map(check => check.name)).size === value.checks.length
+    && names.every(name => {
     const matches = value.checks.filter(check => check.name === name);
     return matches.length === 1 && matches[0].passed === true;
   });
 }
 function boundToRelease(value, expected, scope) {
-  return /^[a-f0-9]{40}$/.test(expected || '') && value?.releaseCommit === expected && value.scope === scope;
+  return typeof expected === 'string' && /^[a-f0-9]{40}$/.test(expected)
+    && typeof value?.releaseCommit === 'string' && value.releaseCommit === expected && value.scope === scope;
 }
 function localStripePassed(value) {
   return value?.ready === true && value.mode === 'local-mocked-stripe-no-network'
     && value.externalStripeObjectsCreated === 0 && value.realPaymentsAttempted === 0
     && Array.isArray(value.results) && value.results.length >= 5
     && value.consecutivePasses === value.results.length
-    && value.results.every((cycle, index) => cycle.cycle === index + 1 && STRIPE_CHECKS.every(name => cycle[name] === true));
+    && value.results.every((cycle, index) => cycle !== null && typeof cycle === 'object' && !Array.isArray(cycle)
+      && cycle.cycle === index + 1 && STRIPE_CHECKS.every(name => cycle[name] === true));
 }
 function privacyModelPassed(value) {
   return value?.scope === 'synthetic-policy-model-only' && value.passed === true
@@ -32,7 +40,11 @@ function privacyApplicationPassed(value, commit) {
     && checksPass(value, [...PRIVACY_CHECKS, 'suppression_survives_erasure', 'legal_hold_enforced', 'audit_redaction']);
 }
 function logicalRestorePassed(value, commit) {
-  const counts = Object.values(value?.tableCounts || {});
+  const tables = value?.tableCounts;
+  if (tables === null || typeof tables !== 'object' || Array.isArray(tables)
+    || ![Object.prototype, null].includes(Object.getPrototypeOf(tables))
+    || Object.keys(tables).length === 0 || Object.keys(tables).some(name => !name.trim() || name.length > 256)) return false;
+  const counts = Object.values(tables);
   return boundToRelease(value, commit, 'logical-database-only') && value.ready === true
     && /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(value.executionId || '') && /^[a-f0-9]{64}$/.test(value.artifactSha256 || '')
     && value.backupMode === 'production-logical-export' && value.ok === true && value.restored === true
@@ -69,7 +81,7 @@ function stripeProviderPassed(value, commit) {
   return boundToRelease(value, commit, 'provider-api-test-only') && value.ready === true && value.mode === 'stripe-test-clocks'
     && value.liveMode === false && value.realPaymentsAttempted === 0
     && Array.isArray(value.results) && value.results.length >= 5 && value.consecutivePasses === value.results.length
-    && value.results.every((cycle, index) => cycle.cycle === index + 1
+    && value.results.every((cycle, index) => cycle !== null && typeof cycle === 'object' && !Array.isArray(cycle) && cycle.cycle === index + 1
       && cycle.afterTrial === 'paused' && cycle.afterCard === 'active' && cycle.renewalPaid === true
       && cycle.cancellation === true && cycle.afterCancellation === 'canceled')
     && value.declinedCardRejected === true && value.cleanupConfirmed === true;
