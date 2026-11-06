@@ -118,10 +118,12 @@ test('published readback refuses an old confirmation plan even when tool code is
  const f=fixture();const {toolPatch}=require('../scripts/refresh-vapi-job-type');
  const {toolRejectionPlan}=require('../server/callConfirmation');
  const tool={...f.tool,...toolPatch(f.tool),rejectionPlan:toolRejectionPlan()};
- tool.environmentVariables.push({name:'TWILIO_STATUS_CALLBACK_URL',value:'https://api.myaipa.ca/api/webhooks/twilio/message-status'},{name:'CALLER_NUMBER',value:'{{ customer.number }}'});
+ tool.environmentVariables.push({name:'TWILIO_STATUS_CALLBACK_URL',value:'https://api.myaipa.ca/api/webhooks/twilio/message-status'},{name:'CALLER_NUMBER',value:'{{ customer.number }}'},{name:'SMS_NOTIFICATION_DISPATCH_URL',value:'https://api.myaipa.ca/api/integrations/sms/dispatch'});
  const assistant={...f.assistant,...assistantPatch(f.assistant,tool)};
  assert.ok(Object.values(checkPublishedConfiguration(assistant,tool)).every(Boolean));
  tool.rejectionPlan={conditions:[]};assert.equal(checkPublishedConfiguration(assistant,tool).confirmationPlan,false);
  tool.environmentVariables=tool.environmentVariables.filter(v=>v.name!=='TWILIO_STATUS_CALLBACK_URL');
  assert.equal(checkPublishedConfiguration(assistant,tool).statusReceipts,false);
+ tool.environmentVariables=tool.environmentVariables.filter(v=>v.name!=='SMS_NOTIFICATION_DISPATCH_URL');
+ assert.equal(checkPublishedConfiguration(assistant,tool).durableDispatchConfigured,false);
 });

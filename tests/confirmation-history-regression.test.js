@@ -1,0 +1,48 @@
+'use strict';
+const test=require('node:test'),assert=require('node:assert/strict');
+const {buildIsolatedToolPayload}=require('../server/vapiIsolatedSmsProvisioning');
+const {assessConfirmationHistory,toolRejectionPlan}=require('../server/callConfirmation');
+const {evaluateGeneratedPlan,renderSubset}=require('./support/generated-plan-offline.cjs');
+const {updateMessages}=require('../server/vapiIsolatedSmsProvisioning');
+const a=content=>({role:'assistant',content}),u=content=>({role:'user',content});
+const q='Your request is a repair in Example City next week. Should I send this request to the team now?';
+const q2='Your corrected request is a repair tomorrow. Is all of that correct, and do you want me to submit it now?';
+const pending={role:'assistant',tool_calls:[{id:'synthetic-tool',function:{name:'send_call_summaries_test'}}]};
+const plan=buildIsolatedToolPayload({aiNumber:'+19055550100',ownerNumber:'+19055550101',twilioAccountSid:'AC_TEST_ONLY',twilioAuthToken:'INERT_TEST_ONLY',suppressionCheckUrl:'https://stub.invalid/check',suppressionApiKey:'INERT_TEST_ONLY'}).rejectionPlan;
+const cases=[];const add=(name,messages,allowed)=>cases.push({name,messages:[...messages,pending],allowed});
+for(const phrase of ['Yes, please.','Perfect. Yes.','Yes, please send it now.','You bet, send it.','No problem, go ahead.','Yes, you can send it.','Yeah, go ahead and send that to them.','No worries, send it.','I confirm, send the request.'])for(const [i,question]of [q,q2].entries())add(`approval ${i+1} ${phrase}`,[a(question),u(phrase)],true);
+for(const content of [undefined,null,'','   '])add('contentless pending '+String(content),[a(q),u('Yes.'),a(content)],true);
+for(const ack of ['Got it.','Great, thank you.','Just a sec','One moment.'])add('bounded acknowledgement '+ack,[a(q),u('Yes.'),a(ack)],true);
+add('question paraphrase',[a('Your request is for a repair. Can I send this request to the team now?'),u('Yes.')],true);
+add('question with courtesy',[a(q+' Please let me know.'),u('Yes.')],true);
+for(const phrase of ['No.','Wait.','Cancel.','Stop.','Yes, but change the city.','Yes, do not send it.','No problem, do not send it.','Yes?','Maybe.','Thanks.','No problem.','He said yes.','"Yes."','If I say yes, will you send it?','I said yes earlier.','Yes, if the price is lower.',''])add('denial '+phrase,[a(q),u(phrase)],false);
+for(const question of ['Would you like to continue?','Is the address correct?',q+' What is your name?'])add('not send approval '+question,[a(question),u('Yes.')],false);
+add('genuine intervening question',[a(q),u('Yes.'),a('Which city did you mean?')],false);
+add('genuine intervening statement',[a(q),u('Yes.'),a('Great, but the address still needs confirmation.')],false);
+add('approval missing after new question',[a(q),u('Yes.'),a(q2)],false);
+add('later available no',[a(q),u('Yes.'),u('No.')],false);
+add('later available correction',[a(q),u('Yes.'),u('Change the address.')],false);
+add('segmented courtesy requires clarification not arbitrary merging',[a(q),u('Yes.'),u('Please.')],false);
+add('segmented refusal cannot be erased by courtesy',[a(q),u('No.'),u('Please.')],false);
+add('benign wording without send approval',[a(q),u('No worries.')],false);
+add('benign wording with later withdrawal',[a(q),u('No worries, do not send it.')],false);
+add('old yes cannot survive revision',[a(q),u('Yes.'),u('Change the address.'),a('Got it.'),u('Yes.')],false);
+add('correction and repeated yes need new recap',[a(q),u('Change the address.'),u('Yes.')],false);
+add('correction then fresh recap and yes',[a(q),u('Change the address.'),a(q2),u('Perfect. Yes.')],true);
+add('same request with fresh later approval',[a(q),u('Wait.'),a(q2),u('Yes, please.')],true);
+add('orphan approval',[u('Yes.')],false);
+add('orphan question',[a(q)],false);
+add('tool output cannot create a send question',[{role:'tool',content:q},u('Yes.')],false);
+add('unknown role cannot preserve old yes',[a(q),u('Yes.'),{role:'unrecognized',content:'metadata'}],false);
+for(const c of cases)test('generated guard '+c.name,()=>assert.equal(evaluateGeneratedPlan(plan,c.messages),c.allowed));
+test('pure local decisions agree with generated source plan',()=>{for(const c of cases){const result=assessConfirmationHistory(c.messages);assert.equal(result.allowed,c.allowed,c.name);assert.equal(result.needsClarification,!c.allowed,c.name);}});
+test('generated provider payload uses the owned source plan',()=>assert.deepEqual(plan,toolRejectionPlan()));
+test('installed prompt requests clarification and protects uncertain outcomes',()=>{const prompt=updateMessages([{role:'system',content:'Business facts stay unchanged.'}],'synthetic_sender')[0].content;for(const s of ['Business facts stay unchanged.','CURRENT SEND CONSENT AND CLARIFICATION','definite pre-execution confirmation rejection','wait for fresh approval','Do not retry automatically','Never use that clarification path to resend an accepted','last-second speech can arrive too late'])assert.ok(prompt.includes(s),s);});
+test('historical old guard reproduces exact phrase defect separately',()=>{const historical=require('./fixtures/historical-call-confirmation-plan.json');assert.equal(evaluateGeneratedPlan(historical,[a(q),u('Yes, please.'),pending]),true);assert.equal(evaluateGeneratedPlan(historical,[a(q),u('Perfect. Yes.'),pending]),false);assert.equal(evaluateGeneratedPlan(plan,[a(q),u('Perfect. Yes.'),pending]),true);});
+let Liquid;
+try { ({Liquid}=require(process.env.MYAIPA_LIQUID_EVALUATOR || 'liquidjs')); } catch (error) { if (process.env.MYAIPA_LIQUID_EVALUATOR) throw error; }
+test('actual LiquidJS renders the generated plan and agrees across the regression corpus',{skip:!Liquid && 'No LiquidJS evaluator available; provider phone semantics remain separate.'},()=>{
+ const engine=new Liquid();
+ const render=(template,messages)=>{const output=engine.parseAndRenderSync(template,{messages});assert.ok(['true','false'].includes(output),'Exact boolean output required');return output;};
+ for(const c of cases){for(const condition of plan.conditions[0].conditions.filter(v=>v.type==='liquid'))assert.equal(render(condition.liquid,c.messages),renderSubset(condition.liquid,c.messages),c.name);assert.equal(evaluateGeneratedPlan(plan,c.messages,render),c.allowed,c.name);}
+});

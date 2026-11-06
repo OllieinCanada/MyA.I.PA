@@ -314,7 +314,7 @@ async function checkSmsPermission({ to, env, fetchImpl }) {
   }
 }
 
-async function sendTwilioMessage({ to, from, body, notificationKey, env, fetchImpl, btoaImpl, URLSearchParamsImpl }) {
+async function submitTwilioMessage({ to, from, body, notificationKey, env, fetchImpl, btoaImpl, URLSearchParamsImpl }) {
   const accountSid = cleanText(env.TWILIO_ACCOUNT_SID, 80);
   const authToken = String(env.TWILIO_AUTH_TOKEN || "").trim();
   const apiKeySid = cleanText(env.TWILIO_API_KEY_SID, 80);
@@ -368,7 +368,7 @@ async function sendTwilioMessage({ to, from, body, notificationKey, env, fetchIm
         notificationKey,
       };
     }
-    if (!payload?.sid) return { attempted: true, sent: false, status: 'unknown',
+    if (!/^(?:SM|MM)[a-f0-9]{32}$/i.test(String(payload?.sid || ''))) return { attempted: true, sent: false, status: 'unknown',
       errorCode: 'provider_response_incomplete', notificationKey };
     return {
       attempted: true,
@@ -391,6 +391,42 @@ async function sendTwilioMessage({ to, from, body, notificationKey, env, fetchIm
       notificationKey,
     };
   }
+}
+
+// At-most-once admission is held server-side, not in a Vapi execution's memory.
+// Missing configuration, lost claims and unknown outcomes never fall back to an
+// unguarded Twilio POST. A new call/manual reconciliation is needed to recover.
+async function sendTwilioMessage(options) {
+  const { to, from, body, notificationKey, env, fetchImpl, leg } = options;
+  const callId = String(env.CALL_ID || '').trim();
+  const endpoint = String(env.SMS_NOTIFICATION_DISPATCH_URL || '').trim();
+  const key = String(env.SMS_SUPPRESSION_API_KEY || '').trim();
+  const unavailable = code => ({ attempted: false, sent: false, status: 'not_configured', errorCode: code, notificationKey });
+  if (!key) return { attempted: false, sent: false, status: 'suppression_check_unavailable', errorCode: 'suppression_check_not_configured', notificationKey };
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9:_-]{1,179}$/.test(callId)) return unavailable('notification_call_id_required');
+  if (!/^https:\/\//i.test(endpoint) || !['owner','customer'].includes(leg)) return unavailable('notification_dispatch_not_configured');
+  const context = { callId, from: normalizeE164(from), to: normalizeE164(to), leg, body: String(body || '').slice(0, 1600) };
+  const uncertain = code => ({ attempted: true, sent: false, status: 'unknown', errorCode: code, notificationKey, requiresReconciliation: true });
+  const request = async payload => {
+    const response = await fetchImpl(endpoint, { method: 'POST', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    const result = await response.json().catch(() => ({}));
+    return { response, result };
+  };
+  let claim;
+  try { const reply = await request({ action: 'claim', ...context });
+    if (!reply.response.ok || reply.result.schemaVersion !== 1) return uncertain('notification_dispatch_unavailable');
+    claim = reply.result;
+  } catch { return uncertain('notification_dispatch_unreachable'); }
+  if (claim.granted !== true) {
+    if (claim.state === 'completed' && claim.result && typeof claim.result.sent === 'boolean' && typeof claim.result.attempted === 'boolean') return { ...claim.result, replayed: true, dispatchReceiptStored: true };
+    return uncertain(claim.state === 'context_conflict' ? 'notification_dispatch_context_conflict' : 'notification_submission_unconfirmed');
+  }
+  if (!/^[a-f0-9-]{36}$/i.test(String(claim.claimToken || ''))) return uncertain('notification_dispatch_claim_invalid');
+  const result = await submitTwilioMessage(options);
+  try { const reply = await request({ action: 'complete', ...context, claimToken: claim.claimToken, result });
+    if (reply.response.ok && reply.result.schemaVersion === 1 && reply.result.stored === true) return { ...result, dispatchReceiptStored: true };
+  } catch { /* Keep the durable claim. Never resubmit an accepted/unknown send. */ }
+  return { ...result, dispatchReceiptStored: false, requiresReconciliation: true };
 }
 
 async function executeCompositeNotifications({ args, env, fetchImpl, btoaImpl, URLSearchParamsImpl }) {
@@ -476,6 +512,7 @@ async function executeCompositeNotifications({ args, env, fetchImpl, btoaImpl, U
   if (ownerSmsEnabled) {
     order.push("owner");
     owner = await sendTwilioMessage({
+      leg: 'owner',
       to: ownerNumber,
       from: fromNumber,
       body: buildOwnerBody(trustedInput),
@@ -489,6 +526,7 @@ async function executeCompositeNotifications({ args, env, fetchImpl, btoaImpl, U
 
   order.push("customer");
   const customer = await sendTwilioMessage({
+    leg: 'customer',
     to: customerNumber,
     from: fromNumber,
     body: buildCustomerBody(trustedInput),
@@ -499,16 +537,17 @@ async function executeCompositeNotifications({ args, env, fetchImpl, btoaImpl, U
     URLSearchParamsImpl,
   });
 
+  const confirmed = Boolean((!ownerSmsEnabled || (owner.sent && owner.dispatchReceiptStored)) && customer.sent && customer.dispatchReceiptStored);
   return {
-    ok: Boolean((!ownerSmsEnabled || owner.sent) && customer.sent),
-    complete: Boolean((!ownerSmsEnabled || owner.sent) && customer.sent),
+    ok: confirmed,
+    complete: confirmed,
     partialSuccess: ownerSmsEnabled ? Boolean(owner.sent) !== Boolean(customer.sent) : false,
     needsCustomerNumber: false,
     executionOrder: order,
     owner,
     customer,
     bodyBuiltByTool: true,
-    requiresReconciliation: !customer.sent || (ownerSmsEnabled && !owner.sent),
+    requiresReconciliation: !customer.sent || (ownerSmsEnabled && !owner.sent) || owner.requiresReconciliation === true || customer.requiresReconciliation === true,
     ownerSmsEnabled,
   };
 }
@@ -552,6 +591,7 @@ function getVapiCompositeToolCode() {
     buildCustomerBody,
     safeProviderError,
     checkSmsPermission,
+    submitTwilioMessage,
     sendTwilioMessage,
     executeCompositeNotifications,
   ].map((fn) => fn.toString()).join("\n\n") +
@@ -581,6 +621,7 @@ function getVapiCompositeToolDefinition() {
       "TWILIO_STATUS_CALLBACK_URL",
       "SMS_SUPPRESSION_CHECK_URL",
       "SMS_SUPPRESSION_API_KEY",
+      "SMS_NOTIFICATION_DISPATCH_URL",
     ],
   };
 }

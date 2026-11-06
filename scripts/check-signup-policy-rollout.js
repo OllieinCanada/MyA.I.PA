@@ -1,6 +1,7 @@
 // Checks fetched published configuration and executes fetched summary code with
 // fake credentials and a stub transport only. Never contacts SMS recipients.
 const fs=require('node:fs');
+const {createDispatchStub}=require('./stub-notification-dispatch');
 const {loadProjectEnv}=require('./_helpers');
 const {clients,inventory,plansFor,assistantPatch}=require('./rollout-signup-assistant-policy');
 const {speechSnapshot}=require('./repair-signup-speech');
@@ -14,6 +15,7 @@ function checkPublishedConfiguration(assistant,tool){
   statusReceipts:(tool.environmentVariables||[]).some(v=>v.name==='TWILIO_STATUS_CALLBACK_URL'&&v.value==='https://api.myaipa.ca/api/webhooks/twilio/message-status'),
   trustedCallerId:(tool.environmentVariables||[]).some(v=>v.name==='CALLER_NUMBER'&&v.value==='{{ customer.number }}'),
   confirmationPlan:isDeepStrictEqual(tool.rejectionPlan,toolRejectionPlan()),
+  durableDispatchConfigured:(tool.environmentVariables||[]).some(v=>v.name==='SMS_NOTIFICATION_DISPATCH_URL'&&v.value==='https://api.myaipa.ca/api/integrations/sms/dispatch'),
   confirmationRegression:acceptsConfirmation('Perfect. Yes.','Should I send this request to the team now?')
    &&!acceptsConfirmation('Yes, but change the city.','Should I send this request to the team now?')
    &&!acceptsConfirmation('Yes.','Would you like to continue?')};
@@ -25,12 +27,14 @@ async function checkSummary(tool,args){
  const fakeFetch=async(url,options)=>{
    if(String(options.headers?.['Content-Type']||'').includes('application/json')) return {ok:true,status:200,json:async()=>({allowed:true,suppressed:false})};
    const form=new URLSearchParams(String(options.body||''));messages.push({body:form.get('Body'),to:form.get('To'),from:form.get('From')});
-   return {ok:true,status:201,json:async()=>({sid:`SM_FAKE_${messages.length}`,status:'queued'})};
+   return {ok:true,status:201,json:async()=>({sid:'SM'+String(messages.length).repeat(32),status:'queued'})};
  };
  const env={TWILIO_ACCOUNT_SID:'AC_FAKE',TWILIO_AUTH_TOKEN:'FAKE',TWILIO_API_KEY_SID:'SK_FAKE',TWILIO_API_KEY_SECRET:'FAKE',DEFAULT_FROM_NUMBER:'+19055550100',DEFAULT_OWNER_TO_NUMBER:'+19055550101',SMS_SUPPRESSION_CHECK_URL:'https://stub.invalid/check',SMS_SUPPRESSION_API_KEY:'FAKE',CALL_ID:'stub-'+args.requestType,OWNER_SMS_ENABLED:'true'};
  env.PRICING_SUMMARY_OPTIONS=(tool.environmentVariables||[]).find(v=>v.name==='PRICING_SUMMARY_OPTIONS')?.value||'';
+ env.SMS_NOTIFICATION_DISPATCH_URL='https://stub.invalid/dispatch';
  const runner=new Function('args','env','fetch','btoa','URLSearchParams',`return (async()=>{${tool.code}\n})()`);
- const result=await runner({pricingDiscussed:false,...args,workDetailsConfirmed:true,businessName:'QA Business',name:'Test caller',rawPhoneNumber:'+19055550102',jobDetails:'QA request',message:'QA message',streetAddress:'1 Test St',city:'Test City',preferredStartDate:'Next week',bestCallbackTime:'After 2 PM'},env,fakeFetch,v=>Buffer.from(String(v)).toString('base64'),URLSearchParams);
+ const result=await runner({pricingDiscussed:false,...args,workDetailsConfirmed:true,businessName:'QA Business',name:'Test caller',rawPhoneNumber:'+19055550102',jobDetails:'QA request',message:'QA message',streetAddress:'1 Test St',city:'Test City',preferredStartDate:'Next week',bestCallbackTime:'After 2 PM'},env,createDispatchStub().wrap(fakeFetch),v=>Buffer.from(String(v)).toString('base64'),URLSearchParams);
+ if(result.requiresReconciliation||!result.owner.dispatchReceiptStored||!result.customer.dispatchReceiptStored)throw Error('Fake dispatch receipts were not verified.');
  if(!result.complete||messages.length!==2||messages[0].to!==env.DEFAULT_OWNER_TO_NUMBER||messages[1].to!=='+19055550102'||messages.some(m=>m.from!==env.DEFAULT_FROM_NUMBER))throw Error('Fake summary routing failed.');
  if(messages.some(m=>!m.body.includes('Job type:')))throw Error('Summary job type missing.');
  const choices=env.PRICING_SUMMARY_OPTIONS?JSON.parse(env.PRICING_SUMMARY_OPTIONS):{includePartsExtra:true,includeAssessment:true};

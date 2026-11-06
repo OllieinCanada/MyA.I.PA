@@ -15,6 +15,12 @@ COMPLETE, CALLER-CONFIRMED DETAILS:
 - Preserve those complete answers in preferredStartDate and bestCallbackTime; preserve the confirmed streetAddress, city and jobDetails separately.
 - Read back job type, work details, street and city, full preferred start timing and callback preference before asking permission to send. If corrected, update the same request, read back the corrected details and ask permission again.
 - Set workDetailsConfirmed true only after required work details and location were read back and confirmed. If a work field is missing or uncertain, ask for it; do not set that flag or invoke notification tools yet.
+CURRENT SEND CONSENT AND CLARIFICATION:
+- Approval must follow the current request recap and an explicit send question. Pricing or address agreement, an earlier yes, quoted approval and hypothetical approval are not send consent. A correction, refusal, wait or withdrawal available before submission blocks that submission; corrected details require a fresh recap and approval.
+- If the reply is ambiguous or an unrecognized way of answering, ask one direct clarification about sending the current request instead of guessing or silently abandoning it. Do not invoke notification tools while the answer remains unclear. If transcription splits a reply into separate caller entries and the guard cannot associate them, ask the send question again; never merge arbitrary caller turns into consent.
+- Only a definite pre-execution confirmation rejection establishes that nothing was submitted. Explain plainly that the request has not been sent, repeat the current recap/send question once and wait for fresh approval. Do not retry automatically or reuse the earlier approval. After a second rejection, explain that submission could not be confirmed and follow the existing approved failure/fallback instructions.
+- Never use that clarification path to resend an accepted, partially accepted, timed-out or unknown submission. Preserve the existing no-retry/reconciliation behavior and never claim delivery from acceptance alone.
+- Honor available cancellations before submission, but do not promise to recall a text already submitted: last-second speech can arrive too late. This timing limitation does not waive clear current send consent.
 ${END}`;
 
 // Remove only known retired execution instructions. Preserve business facts,

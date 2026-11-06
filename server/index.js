@@ -6,6 +6,7 @@ if (process.env.DISABLE_LOCAL_ENV_FILES !== "1") {
 
 const crypto = require("crypto");
 const { rejectCompressedRequests } = require('./requestSecurity');
+const { dispatchHandler: notificationDispatchHandler } = require('./smsNotificationDispatch');
 const { createFinanceService, registerFinanceRoutes } = require('./providerFinance');
 const { runtimeDependencySecurity } = require('./runtimeDependencySecurity');
 const { signupReviewPolicy } = require("./signupReviewPolicy");
@@ -13379,6 +13380,11 @@ app.post(
       throw error;
     }
   })
+);
+
+app.post('/api/integrations/sms/dispatch',
+  enforcePublicRouteRateLimit('sms-notification-dispatch', 120),
+  notificationDispatchHandler({ prisma, env: process.env, authenticate: req => hasValidSuppressionApiKey(req) })
 );
 
 app.post(

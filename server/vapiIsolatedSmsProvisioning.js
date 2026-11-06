@@ -179,6 +179,7 @@ function buildIsolatedToolPayload({
       { name: "TWILIO_STATUS_CALLBACK_URL", value: /^https:\/\//i.test(String(statusCallbackUrl || "")) ? String(statusCallbackUrl).trim() : "" },
       { name: "SMS_SUPPRESSION_CHECK_URL", value: String(suppressionCheckUrl).trim() },
       { name: "SMS_SUPPRESSION_API_KEY", value: String(suppressionApiKey).trim() },
+      { name: "SMS_NOTIFICATION_DISPATCH_URL", value: String(suppressionCheckUrl).trim().replace(/\/suppression\/check\/?$/, '/dispatch') === String(suppressionCheckUrl).trim() ? String(suppressionCheckUrl).trim().replace(/\/$/, '') + '/dispatch' : String(suppressionCheckUrl).trim().replace(/\/suppression\/check\/?$/, '/dispatch') },
     ],
     messages: [
       { type: "request-start", content: TOOL_REQUEST_START_MESSAGE, blocking: false },
@@ -277,6 +278,10 @@ function inspectIsolatedConfiguration({ assistant, tool, aiNumber, ownerNumber }
       && Boolean(env.SMS_SUPPRESSION_API_KEY)
       && code.includes("checkSmsPermission")
       && code.includes("suppression_check_unavailable"),
+    durableDispatchProtected: /^https:\/\//i.test(env.SMS_NOTIFICATION_DISPATCH_URL)
+      && env.SMS_NOTIFICATION_DISPATCH_URL === String(env.SMS_SUPPRESSION_CHECK_URL || '').replace(/\/suppression\/check\/?$/, '/dispatch')
+      && code.includes('notification_dispatch_claim_invalid')
+      && code.includes('dispatchReceiptStored'),
     callerFallbackSchema: !required.includes("rawPhoneNumber"),
     callerFallbackCode: code.includes("needsCustomerNumber") && code.includes("waiting_for_customer_number"),
     promptInstalled: Boolean(toolName && prompt.includes(PROMPT_MARKER) && prompt.includes(toolName)),
