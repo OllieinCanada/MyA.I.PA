@@ -2,6 +2,10 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { acceptsConfirmation, toolRejectionPlan } = require('../server/callConfirmation');
 const { evaluateGeneratedPlan } = require('./support/generated-plan-offline.cjs');
+test('Liquid literals escape backslashes before quotes', () => {
+  const {liquidLiteral}=require('../server/callConfirmation');
+  assert.deepEqual([...liquidLiteral("a\\b'c")], ["'",'a','\\','\\','b','\\',"'",'c',"'"]);
+});
 const question = 'Your request is for electrical work next week. Should I send this request to the team now?';
 const approvals = ['Yes.', 'Perfect. Yes.', 'Perfect.Yes.', 'Perfect, yes please.', 'Yes. Please.', 'Yes, please.', 'Yes, go ahead.',
   'Sure, send it.', 'Okay. Yes.', 'Absolutely!', 'Yeah, please do.', 'Yep.', 'Yup', 'Sounds good.', 'Go ahead.',

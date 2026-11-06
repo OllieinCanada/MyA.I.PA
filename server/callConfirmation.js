@@ -32,8 +32,11 @@ function assessConfirmationHistory(messages) {
   if (!ready || !matches(APPROVAL_REGEX, latestUser)) return { allowed: false, reason: 'FRESH_SEND_CONFIRMATION_REQUIRED', needsClarification: true };
   return { allowed: true, reason: 'CURRENT_CONVERSATIONAL_PAIR', needsClarification: false };
 }
+function liquidLiteral(value) {
+  return "'" + String(value).replace(/\\/g, '\\\\').replace(/'/g, "\\'") + "'";
+}
 function conversationCondition() {
-  const literal = value => "'" + value.replace(/'/g, "\\'") + "'";
+  const literal = liquidLiteral;
   const acknowledgements = ACKNOWLEDGEMENTS.map(s => `{% if spoken == ${literal(s)} %}{% assign acknowledgement = true %}{% endif %}`).join('');
   const questions = QUESTION_SUFFIXES.map(s => `{% assign ending = spoken | slice: -${s.length}, ${s.length} %}{% if ending == ${literal(s)} %}{% assign waiting = true %}{% endif %}`).join('');
   return "{% assign waiting = false %}{% assign ready = false %}" +
@@ -57,4 +60,4 @@ function toolRejectionPlan() {
 function acceptsConfirmation(user, assistant) {
   return assessConfirmationHistory([{ role: 'assistant', content: assistant }, { role: 'user', content: user }]).allowed;
 }
-module.exports = { APPROVAL_REGEX, WITHDRAWAL_REGEX, SEND_QUESTION_REGEX, acceptsConfirmation, toolRejectionPlan, assessConfirmationHistory };
+module.exports = { APPROVAL_REGEX, WITHDRAWAL_REGEX, SEND_QUESTION_REGEX, acceptsConfirmation, toolRejectionPlan, assessConfirmationHistory, liquidLiteral };
