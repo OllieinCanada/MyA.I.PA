@@ -79,7 +79,6 @@ test("PostgreSQL voice reservation is replay-safe and refuses a busy advisory lo
   try {
     const params = { db: prisma, signup: { subscriptionStatus: "trialing", trialStartAt: Date.now() - 60000, trialEndAt: Date.now() + 86400000 },
       config: { businessId: 37, assistantMaxSeconds: 300 }, key, callId, callIndexKey,
-      getUsedSeconds: async (_signup, _businessId, tx) => { await tx.$queryRaw`SELECT 1`; return 0; },
       getLifecycle: getTrialLifecycle, decide: decideTrialCall,
       limits: { maxCallSeconds: 300, warningSeconds: 1200, limitSeconds: 3600, completionReserveSeconds: 300, minCallSeconds: 30, reservationGraceSeconds: 60 } };
     const reserve = overrides => reserveCall({ ...params, guard: createAssistantRequestGuard(), ...overrides });

@@ -45,6 +45,16 @@ test('stage timings and an explicit expiration are observable without personal d
   assert.deepEqual(guard.stages, { gate: 25 });
   guard.expire(); assert.throws(() => guard.check(), { code: 'VOICE_ASSISTANT_REQUEST_DEADLINE' });
 });
+
+test('HTTP success cannot be mistaken for successful assistant selection in diagnostics',async()=>{
+  for(const [response,outcome] of [[{assistantId:'saved'},'assistant'],[{assistant:{}},'assistant'],
+    [{error:CALL_SETUP_FAILURE_MESSAGE},'application_error'],[{destination:{type:'number'}},'transfer']]){
+    let observed;await runAssistantRequest({resolve:async()=>response,onComplete:guard=>{observed=guard.responseOutcome;}});
+    assert.equal(observed,outcome);
+  }
+  let observed;await runAssistantRequest({resolve:async()=>{throw Error('synthetic');},onComplete:guard=>{observed=guard.responseOutcome;}});
+  assert.equal(observed,'application_error');
+});
 test('call setup failure hook speaks without transferring to any forwarding line', () => {
   const ringing = { on: 'call.ringing', do: [{ type: 'say', exact: 'Welcome' }] };
   const hooks = withCallSetupFailureHook([ringing]);

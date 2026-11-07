@@ -9020,7 +9020,7 @@ async function getTrialUsageDashboard() {
 async function reserveTrialCall({ signup, config, callId, guard }) {
   return reserveCall({ db: prisma, signup, config, callId,
     key: getTrialReservationKey(signup, Number(config.businessId)), callIndexKey: getTrialCallIndexKey(callId),
-    getUsedSeconds: getTrialUsedSeconds, getLifecycle: getTrialLifecycle, decide: decideTrialCall,
+    getLifecycle: getTrialLifecycle, decide: decideTrialCall,
     guard,
     limits: { maxCallSeconds: DEFAULT_MAX_CALL_SECONDS, warningSeconds: TRIAL_USAGE_WARNING_SECONDS,
       limitSeconds: TRIAL_USAGE_LIMIT_SECONDS, completionReserveSeconds: TRIAL_USAGE_COMPLETION_RESERVE_SECONDS,
@@ -9061,8 +9061,9 @@ async function handleTrialAssistantRequest(message, guard) {
   if (!config?.assistantId || !config?.businessId || config.status !== "active") {
     throw Object.assign(new Error("No proven assistant route is configured for this phone."), { code: "VOICE_ROUTE_IDENTITY_UNPROVEN" });
   }
-  const signups = listSignupDashboardRecords();
-  const signup = selectTrialSignup(signups, config);
+  const signup = guard
+    ? await guard.stage("signupLookup", async () => selectTrialSignup(listSignupDashboardRecords(), config))
+    : selectTrialSignup(listSignupDashboardRecords(), config);
   if (!signup) {
     console.warn("[trial-usage] route selection blocked", { code: "TRIAL_SIGNUP_ROUTE_IDENTITY_UNPROVEN", businessId: config.businessId });
     throw Object.assign(new Error("The phone route does not select exactly one open signup."), { code: "VOICE_ROUTE_IDENTITY_UNPROVEN" });
@@ -13769,11 +13770,13 @@ app.post(
           res.once("finish", () => console.info("[voice:assistant-response]", JSON.stringify({
             callId, businessId: guard.businessId || null, status: res.statusCode,
             elapsedMs: guard.elapsedMs(), stages: guard.stages,
+            outcome: guard.responseOutcome || "unknown",
           })));
           return handleTrialAssistantRequest(vapiMessage, guard);
         },
         onFailure: (error, guard) => {
-          console.warn("[voice:assistant-failure]", JSON.stringify({ callId, code: error.code || "UNKNOWN", elapsedMs: guard.elapsedMs(), stages: guard.stages }));
+          console.warn("[voice:assistant-failure]", JSON.stringify({ callId, code: error.code || "UNKNOWN", elapsedMs: guard.elapsedMs(), stages: guard.stages,
+            ...(error.reservationDiagnostic ? { reservation: error.reservationDiagnostic } : {}) }));
           const voiceError = /^VOICE_/.test(error.code || "") ? error : Object.assign(new Error("Assistant selection failed during a protected setup stage."), {
             code: "VOICE_ASSISTANT_SELECTION_FAILED", provider: "Vapi", providerSignal: error.code || "UNKNOWN",
           });

@@ -41,14 +41,20 @@ async function runAssistantRequest({ resolve, budgetMs = ASSISTANT_REQUEST_BUDGE
   const guard = createAssistantRequestGuard({ budgetMs });
   let timer;
   try {
-    return await Promise.race([
+    const response = await Promise.race([
       Promise.resolve().then(() => resolve(guard)),
       new Promise((_, reject) => {
         timer = setTimeout(() => { guard.expire(); reject(setupError('VOICE_ASSISTANT_REQUEST_DEADLINE')); }, budgetMs);
       }),
     ]);
+    guard.check();
+    guard.responseOutcome = response?.error ? 'application_error'
+      : response?.destination ? 'transfer'
+        : response?.assistantId || response?.assistant ? 'assistant' : 'unknown';
+    return response;
   } catch (error) {
     guard.expire();
+    guard.responseOutcome = 'application_error';
     // Reporting is not allowed to hold up answering or throw another failure.
     setImmediate(() => { try { Promise.resolve(onFailure(error, guard)).catch(() => {}); } catch {} });
     return { error: CALL_SETUP_FAILURE_MESSAGE };
