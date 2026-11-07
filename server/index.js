@@ -18403,7 +18403,11 @@ app.use((err, req, res, _next) => {
           ...((req.vapiWebhookAuthenticated && req.body?.message?.call?.id)
             ? { "Call ID": String(req.body.message.call.id).slice(0, 120) } : {}),
         },
-        ...(err.callPersistenceFailure === true ? { reasonCode: 'CALL_RECORD_SAVE_FAILED' } : {}),
+        ...(err.callPersistenceFailure === true ? {
+          reasonCode: 'CALL_RECORD_SAVE_FAILED',
+          ...((req.vapiWebhookAuthenticated && req.body?.message?.call?.id)
+            ? { dedupeFingerprint: `${String(req.body.message.call.id).slice(0, 120)}:call-record-save` } : {}),
+        } : {}),
         whatFailed: err.callPersistenceFailure === true ? 'The post-call record could not be saved'
           : `${String(req?.method || "REQUEST").toUpperCase()} ${route || "application route"} returned an error`,
         impact: err.callPersistenceFailure === true
