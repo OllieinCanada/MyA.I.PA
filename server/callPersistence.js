@@ -79,7 +79,7 @@ async function persistCall({ db, identity, createData, updateData, postCall = fa
   // Only terminal Vapi ingestion may spend the longer budget. This is NOT
   // assistant selection and cannot authorize a call, send an SMS or buy a resource.
   const recoverablePostCall = postCall === true && identity.externalProvider === 'vapi'
-    && Boolean(identity.externalId) && Boolean(createData.endedAt);
+    && Boolean(identity.externalId) && ['COMPLETED', 'FAILED', 'MISSED', 'ABANDONED'].includes(createData.status);
   const timeout = recoverablePostCall ? 8000 : 3000;
   for (let attempt = 0; attempt < 2; attempt += 1) {
     let configuring = false;

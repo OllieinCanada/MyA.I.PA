@@ -38,9 +38,9 @@ const writePostCall = (db, onDiagnostic) => persistCall({ db, identity, createDa
   updateData: existing => mergeCallData(existing, postData), postCall: true, onDiagnostic });
 const expired = () => Object.assign(Error('Transaction already closed: expired transaction'), { code: 'P2028' });
 
-test('only an ended, uniquely identified Vapi call uses the longer post-call budget', async () => {
-  for (const [postCall, input, id, timeout] of [[false, postData, identity, 3000], [true, data, identity, 3000],
-    [true, postData, { ...identity, externalProvider: 'other' }, 3000], [true, postData, identity, 8000]]) {
+test('terminal Vapi events use the post-call budget even before the final endedAt arrives', async () => {
+  for (const [postCall, input, id, timeout] of [[false, postData, identity, 3000], [true, { ...data, status: 'STARTED' }, identity, 3000],
+    [true, postData, { ...identity, externalProvider: 'other' }, 3000], [true, postData, identity, 8000], [true, data, identity, 8000]]) {
     const db = { $transaction: async (fn, options) => { assert.equal(options.timeout, timeout);
       return fn({ $queryRaw: async () => [], call: { create: async () => ({ id: 1, ...input }) } }); } };
     await persistCall({ db, identity: id, createData: input, updateData: x => x, postCall });

@@ -85,11 +85,13 @@ test('isolated PostgreSQL terminal-call save and no-send webhook drill', {skip:!
         startedAt:s.data.startedAt.toISOString(),endedAt:s.data.endedAt.toISOString(),endedReason:'assistant-ended-call'};
       const send=async type=>{const r=await fetch('http://127.0.0.1:'+server.address().port+'/api/webhooks/voice',{
         method:'POST',headers:{'content-type':'application/json','x-vapi-secret':'synthetic-postcall-drill-secret'},
-        body:JSON.stringify({message:{type,status:'ended',call,...(type==='end-of-call-report'?{analysis:{summary:'Synthetic final report'}}:{})}}),signal:AbortSignal.timeout(20000)});
+        body:JSON.stringify({message:{type,status:'ended',call:type==='status-update'?{...call,endedAt:undefined,endedReason:undefined}:call,
+          ...(type==='end-of-call-report'?{analysis:{summary:'Synthetic final report'}}:{})}}),signal:AbortSignal.timeout(20000)});
         const body=await r.json();assert.ok([200,201].includes(r.status),JSON.stringify(body));return body;};
       const responses=await Promise.all([send('status-update'),send('end-of-call-report')]);assert.equal(responses[0].localCallId,responses[1].localCallId);
       const rows=await prisma.call.findMany({where:{externalId:s.identity.externalId}});assert.equal(rows.length,1);assert.equal(rows[0].status,'COMPLETED');
-      assert.equal(rows[0].aiSummary,'Synthetic final report');assert.equal(await prisma.vapiToolExecution.count(),0);
+      assert.equal(rows[0].aiSummary,'Synthetic final report');assert.equal(rows[0].endedAt.toISOString(),s.data.endedAt.toISOString());
+      assert.equal(rows[0].durationSec,60);assert.equal(await prisma.vapiToolExecution.count(),0);
     });
     assert.equal(externalRequests,0);assert.ok(diagnostics.some(d=>d.outcome==='database_retry'));t.diagnostic(JSON.stringify({externalRequests,realCalls:0,realTexts:0,syntheticFixtures:fixture}));
   }finally{

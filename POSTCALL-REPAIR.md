@@ -8,8 +8,9 @@ assistant-selection or confirmation rejection.
 
 ## Scoped change
 
-- Only terminal Vapi ingestion with an exact provider ID and ended timestamp gets
-  an8000ms transaction budget. The answering guard/allowance limits are unchanged.
+- Only terminal Vapi ingestion with an exact provider ID gets an 8000ms
+  transaction budget. Sparse ended-status events need not contain endedAt yet;
+  the final report enriches the same row. The answering limits are unchanged.
 - Database query/lock limits remain1500ms/800ms and acquisition remains500ms.
 - One fresh identity-checked transaction may reconcile an expired terminal write.
   It first resolves/locks the existing unique call, including an uncertain previous
