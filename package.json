@@ -19,6 +19,9 @@
     "stripe": "^22.3.2"
   },
   "scripts": {
+    "test:signup-tracker": "node --test tests/admin-signup-tracker.test.js tests/admin-signup-tracker-api.test.js",
+    "test:signup-tracker:browser": "node scripts/preview-admin-signup-tracker.js --test",
+    "preview:signup-tracker": "node scripts/preview-admin-signup-tracker.js",
     "test:finance": "node --test tests/provider-finance.test.js",
     "test:finance:browser": "node scripts/test-provider-finance-browser.js",
     "build:tailwind": "tailwindcss -i src/tailwind.css -o src/tailwind.generated.css",

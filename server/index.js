@@ -8,6 +8,7 @@ const crypto = require("crypto");
 const { rejectCompressedRequests } = require('./requestSecurity');
 const { dispatchHandler: notificationDispatchHandler, dispatchReadinessHandler } = require('./smsNotificationDispatch');
 const { createFinanceService, registerFinanceRoutes } = require('./providerFinance');
+const { trackProgress: trackAdminSignupProgress, registerTrackerRoutes, createStallProcessor, createTrackerBatchSaver } = require('./adminSignupTracker');
 const { runtimeDependencySecurity } = require('./runtimeDependencySecurity');
 const { signupReviewPolicy } = require("./signupReviewPolicy");
 const { buildSignupProgress } = require("./signupProgress");
@@ -5360,6 +5361,10 @@ function upsertSignupDashboardRecord(record) {
   }));
   if (record.makeError === "") delete merged.makeError;
   if (record.smsRoutingStatus === "healthy") delete merged.smsRoutingError;
+
+  // Only changed setup checkpoints reset this clock. Polls, admin profile edits
+  // and notification bookkeeping must not hide a genuinely stuck signup.
+  merged.onboardingTracker = trackAdminSignupProgress(existing, merged);
 
   store[existingKey] = merged;
   for (const alias of aliases) {
@@ -17475,6 +17480,15 @@ app.get(
 );
 
 registerFinanceRoutes({ app, requireAdmin, isAllowedOrigin, service: createFinanceService({ prisma }) });
+registerTrackerRoutes({ app, requireAdmin, isAllowedOrigin, list: listSignupDashboardRecords, save: upsertSignupDashboardRecord,
+  audit: event => recordAdminAuditEvent({ prisma, ...event }), actorHash: getAdminActorHash });
+
+// Merge only tracker metadata into the freshest canonical store: one read/write
+// per tick, preserving provider progress that changed while alerts were queued.
+const saveAdminSignupTrackerChanges = createTrackerBatchSaver({ read: readSignupDashboardStore, write: writeSignupDashboardStore,
+  findKey: findSignupDashboardExistingKey, normalize: enforceAgentTestReadyStatus });
+const processAdminSignupStalls = createStallProcessor({ list: listSignupDashboardRecords, saveMany: saveAdminSignupTrackerChanges,
+  enqueue: queueTelegramAlertSafely, frontendUrl: FRONTEND_APP_URL });
 
 app.get(
   "/api/admin/cost-audit",
@@ -18907,6 +18921,8 @@ function startBackgroundJobs() {
     runBackgroundJob('saved Twilio delivery reports', processTwilioStatusInbox);
   }, 5000);
   runBackgroundJob("signup text delivery polling", pollPendingSignupAgentTests, "initial");
+  runBackgroundJob('signup progress alerts', processAdminSignupStalls, 'initial');
+  setInterval(() => runBackgroundJob('signup progress alerts', processAdminSignupStalls), 60 * 1000);
   setInterval(() => {
     runBackgroundJob("signup text delivery polling", pollPendingSignupAgentTests);
   }, 60 * 1000);

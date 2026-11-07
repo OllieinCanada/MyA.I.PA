@@ -3,6 +3,7 @@ import "./AdminDashboard.css";
 import { getApiBaseUrl, normalizeApiBase } from "./config/apiBase";
 import TwilioReceiptHealthPanel from './TwilioReceiptHealthPanel';
 import ProviderFinancePanel from './ProviderFinancePanel';
+import AdminSignupTracker from './AdminSignupTracker';
 
 const CONFIGURED_API_BASE = process.env.REACT_APP_API_BASE_URL || "";
 const API_BASE = normalizeApiBase(getApiBaseUrl(CONFIGURED_API_BASE));
@@ -4500,6 +4501,8 @@ export default function AdminDashboard() {
 
         {activeTab === "signups" ? (
           <div className="mt-4">
+            <AdminSignupTracker apiBase={API_BASE} />
+            <details className="mt-6"><summary className="cursor-pointer py-3 text-sm font-bold text-white/70">Trial dates and billing history</summary>
             <div className="mb-4 grid gap-3 sm:grid-cols-3">
               <div className="rounded-2xl border border-emerald-300/20 bg-emerald-300/10 p-4">
                 <div className="text-xs font-black uppercase tracking-[0.18em] text-emerald-100">Green</div>
@@ -4567,6 +4570,7 @@ export default function AdminDashboard() {
                 </tbody>
               </table>
             </div>
+            </details>
           </div>
         ) : null}
 
