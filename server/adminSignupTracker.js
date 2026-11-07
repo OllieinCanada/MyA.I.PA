@@ -3,6 +3,7 @@ const { isClosedSignup } = require('./signupBusinessIdentity');
 const { buildSignupProgress } = require('./signupProgress');
 const { redactIncidentText } = require('./incidentAlerts');
 const { isContactVerified } = require('./signupVerificationChannel');
+const { formObservationLines } = require('./signupFormObservation');
 
 const STALL_MS = 10 * 60 * 1000;
 const EDIT_FIELDS = Object.freeze({ serviceSummary: 400, serviceArea: 160, businessWebsite: 300, businessAddress: 400, specializationNotes: 2000 });
@@ -159,7 +160,7 @@ function createTrackerBatchSaver({ read, write, findKey, normalize = record => r
     return { changed };
   };
 }
-function createStallProcessor({ list, saveMany, enqueue, frontendUrl, now = () => Date.now(), yieldControl = () => new Promise(resolve => setImmediate(resolve)) }) {
+function createStallProcessor({ list, saveMany, enqueue, frontendUrl, describeObservation = async () => null, now = () => Date.now(), yieldControl = () => new Promise(resolve => setImmediate(resolve)) }) {
   let running = false;
   return async function processSignupStalls() {
     if (running) return { skipped: true, reason: 'already_running' };
@@ -186,7 +187,8 @@ function createStallProcessor({ list, saveMany, enqueue, frontendUrl, now = () =
         if (!row.stalled || record.onboardingStallAlertEpisode === episode) continue;
         const detectedAt = new Date(now()).toISOString();
         await yieldControl();
-        const result = await enqueue({ text: stallMessage(row, detectedAt),
+        let observation = null; try { observation = await describeObservation(record.signupAttemptId); } catch (_) { /* Unknown coverage is not blank. */ }
+        const result = await enqueue({ text: stallMessage(row, detectedAt) + '\n' + formObservationLines(observation).join('\n'),
           adminUrl: `${String(frontendUrl).replace(/\/$/, '')}/#/admin?tab=signups`, buttonText: 'Open signup tracker',
           dedupeKey: `signup-stall:${record.signupAttemptId}:${episode}` });
         await yieldControl();
@@ -203,11 +205,20 @@ function createStallProcessor({ list, saveMany, enqueue, frontendUrl, now = () =
     } finally { running = false; }
   };
 }
-function registerTrackerRoutes({ app, requireAdmin, isAllowedOrigin, list, save, audit, actorHash }) {
+function registerTrackerRoutes({ app, requireAdmin, isAllowedOrigin, list, save, audit, actorHash, observations }) {
   const safelyAudit = async event => { try { return await audit(event) !== null; } catch { return false; } };
-  app.get('/api/admin/signup-tracker', requireAdmin, (req, res) => {
+  app.get('/api/admin/signup-tracker', requireAdmin, async (req, res) => {
     res.set('Cache-Control', 'no-store');
-    res.json({ ok: true, ...dashboard(list()) });
+    try {
+      const result = dashboard(list());
+      if (observations) {
+        try {
+          result.formObservations = await observations();
+          result.rows = result.rows.map(row => ({ ...row, formObservation: result.formObservations.rows.find(item => item.linkedAttemptId === row.attemptId) || null }));
+        } catch (_) { result.formObservations = { rows: [], coverage: { unavailable: true } }; }
+      }
+      res.json({ ok: true, ...result });
+    } catch (_) { res.status(503).json({ error: 'Signup tracker is unavailable; coverage is unknown.' }); }
   });
   app.patch('/api/admin/signups/:attemptId/business-info', requireAdmin, async (req, res) => {
     res.set('Cache-Control', 'no-store');

@@ -6,6 +6,7 @@ import ForwardingSetupGuide from "./components/ForwardingSetupGuide";
 import OnboardingWizard from "./features/onboarding/OnboardingWizard";
 import { canonicalPhone, readWizardLocation } from "./features/onboarding/onboardingApi";
 import "./components/CustomerSetupActions.css";
+import { createFormObservationClient, observedBusinessFields, observedSignupStep } from './features/signup/formObservationClient';
 
 import {
   AREA_GROUPS,
@@ -2131,6 +2132,13 @@ export default function Signup() {
   const [returnToReviewAfterEdit, setReturnToReviewAfterEdit] = useState(false);
   const [reviewReturnStep, setReviewReturnStep] = useState(1);
   const [details, setDetails] = useState(() => ({ ...DEFAULT_DETAILS }));
+  const [observationEngaged, setObservationEngaged] = useState(false);
+  const [observationTouched, setObservationTouched] = useState({});
+  const observationRef = useRef(null);
+  if (!observationRef.current) {
+    let storage; try { storage = window.sessionStorage; } catch (_) { /* memory-only */ }
+    observationRef.current = createFormObservationClient({ apiBase: API_BASE, storage });
+  }
   const [pricing, setPricing] = useState(() => ({ ...DEFAULT_PRICING }));
   const isSignupQaTurnstileMode = qaModeRef.current === "turnstile";
   const paymentReturnStatus = useMemo(() => getPaymentReturnStatus(), []);
@@ -2207,6 +2215,21 @@ export default function Signup() {
   );
   const selectedAgent = ASSISTANT_AGENT;
   const businessValidation = useMemo(() => validateBusinessDetails(details), [details]);
+  useEffect(() => {
+    if (!observationEngaged || signupResult || isSignupQaTurnstileMode) return undefined;
+    const step = observedSignupStep(currentStep, businessSlide, tradeSetupPanel);
+    const snapshot = { currentStep: step, attemptedAdvance: step === 'business_details' && businessStepAttempted,
+      fields: step === 'business_details' ? observedBusinessFields({ details, validation: businessValidation, touched: observationTouched, attemptedAdvance: businessStepAttempted }) : [] };
+    const timer = setTimeout(() => { void observationRef.current.observe(snapshot, true); }, 800);
+    return () => clearTimeout(timer);
+  }, [observationEngaged, signupResult, isSignupQaTurnstileMode, currentStep, businessSlide, tradeSetupPanel, details, businessValidation, observationTouched, businessStepAttempted]);
+  useEffect(() => {
+    if (!signupResult?.signupStatus?.id || !signupResult?.signupStatus?.token) return;
+    // Link only by both capabilities, never by the name, email or telephone.
+    let active = true;
+    void observationRef.current.settled().then(() => active && observationRef.current.link(signupResult.signupStatus));
+    return () => { active = false; };
+  }, [signupResult]);
 
   const tradeStepDisabled = !selectedTradeId;
   const specializationStepDisabled = selectedSpecializationIds.length === 0;
@@ -2288,6 +2311,8 @@ export default function Signup() {
   };
 
   const updateDetails = (field) => (event) => {
+    setObservationEngaged(true);
+    setObservationTouched(previous => ({ ...previous, [field]: true }));
     setDetails((prev) => ({ ...prev, [field]: event.target.value }));
     setStatus("");
     setError("");
@@ -2301,6 +2326,8 @@ export default function Signup() {
   };
 
   const markDetailTouched = (field) => () => {
+    setObservationEngaged(true);
+    setObservationTouched(previous => ({ ...previous, [field]: true }));
     setTouchedDetails((prev) => ({ ...prev, [field]: true }));
   };
 
@@ -2365,6 +2392,9 @@ export default function Signup() {
   };
 
   const resetSignup = () => {
+    observationRef.current.reset();
+    setObservationEngaged(false);
+    setObservationTouched({});
     setCurrentStep(1);
     setBusinessSlide(1);
     setTradeSetupPanel("trade");
@@ -2603,6 +2633,7 @@ export default function Signup() {
 
   return (
     <main className="min-h-screen bg-[linear-gradient(135deg,#f8fbff_0%,#ffffff_45%,#edf4ff_100%)] text-slate-950">
+      <p className="mx-auto max-w-6xl px-5 pt-3 text-xs leading-5 text-slate-600" data-signup-observation-disclosure>To help with a stuck signup, we record which setup step you reach and whether fields are complete or invalid—not what you type. Unsubmitted progress records expire after 24 hours.</p>
       <style>
         {`
           @keyframes businessSlideIn {
@@ -3837,6 +3868,8 @@ export default function Signup() {
                     onChange={updateDetails("streetAddress")}
                     onBlur={markDetailTouched("streetAddress")}
                     onSelect={(address) => {
+                      setObservationEngaged(true);
+                      setObservationTouched(previous => ({ ...previous, streetAddress: true, city: true, province: true, postalCode: true }));
                       setDetails((prev) => ({ ...prev, ...address }));
                       setStatus(""); setError("");
                     }}

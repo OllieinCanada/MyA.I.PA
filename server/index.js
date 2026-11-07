@@ -9,6 +9,7 @@ const { rejectCompressedRequests } = require('./requestSecurity');
 const { dispatchHandler: notificationDispatchHandler, dispatchReadinessHandler } = require('./smsNotificationDispatch');
 const { createFinanceService, registerFinanceRoutes } = require('./providerFinance');
 const { trackProgress: trackAdminSignupProgress, registerTrackerRoutes, createStallProcessor, createTrackerBatchSaver } = require('./adminSignupTracker');
+const { createPrismaObservationStore, createObservationService, registerObservationRoutes, observationBodyGuard } = require('./signupFormObservation');
 const { runtimeDependencySecurity } = require('./runtimeDependencySecurity');
 const { signupReviewPolicy } = require("./signupReviewPolicy");
 const { buildSignupProgress } = require("./signupProgress");
@@ -425,6 +426,10 @@ const adminLoginProcessRateLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: "Too many login attempts. Wait a few minutes and try again." },
 });
+const formObservationCreateLimiter = rateLimit({ windowMs: PUBLIC_ROUTE_WINDOW_MS, limit: 12, standardHeaders: true, legacyHeaders: false,
+  message: { code: 'FORM_OBSERVATION_RATE_LIMITED', coverage: 'unavailable' } });
+const formObservationUpdateLimiter = rateLimit({ windowMs: PUBLIC_ROUTE_WINDOW_MS, limit: 240, standardHeaders: true, legacyHeaders: false,
+  message: { code: 'FORM_OBSERVATION_RATE_LIMITED', coverage: 'unavailable' } });
 const stripeSandboxLoginRateLimiter = rateLimit({
   windowMs: PUBLIC_ROUTE_WINDOW_MS,
   limit: 10,
@@ -1023,6 +1028,8 @@ app.post("/api/payments/stripe-webhook", express.raw({ type: "application/json" 
   }
 }));
 
+app.use('/api/signup/form-observation', observationBodyGuard({ jsonParser: express.json({ limit: '8kb' }), isAllowedOrigin,
+  createLimiter: formObservationCreateLimiter, updateLimiter: formObservationUpdateLimiter }));
 app.use(express.json({ limit: JSON_BODY_LIMIT }));
 
 function normalizeClientErrorType(value) {
@@ -17482,14 +17489,23 @@ app.get(
 
 registerFinanceRoutes({ app, requireAdmin, isAllowedOrigin, service: createFinanceService({ prisma }) });
 registerTrackerRoutes({ app, requireAdmin, isAllowedOrigin, list: listSignupDashboardRecords, save: upsertSignupDashboardRecord,
-  audit: event => recordAdminAuditEvent({ prisma, ...event }), actorHash: getAdminActorHash });
+  audit: event => recordAdminAuditEvent({ prisma, ...event }), actorHash: getAdminActorHash, observations: () => signupFormObservations.listAdmin() });
+const signupFormObservations = createObservationService({ store: createPrismaObservationStore(prisma),
+  authenticateAttempt: (id, token) => signupAttempts ? signupAttempts.authenticate(id, token) : null });
+registerObservationRoutes({ app, service: signupFormObservations, isAllowedOrigin, requireAdmin,
+  createLimiter: (_req, _res, next) => next(), updateLimiter: (_req, _res, next) => next() });
 
 // Merge only tracker metadata into the freshest canonical store: one read/write
 // per tick, preserving provider progress that changed while alerts were queued.
 const saveAdminSignupTrackerChanges = createTrackerBatchSaver({ read: readSignupDashboardStore, write: writeSignupDashboardStore,
   findKey: findSignupDashboardExistingKey, normalize: enforceAgentTestReadyStatus });
 const processAdminSignupStalls = createStallProcessor({ list: listSignupDashboardRecords, saveMany: saveAdminSignupTrackerChanges,
-  enqueue: queueTelegramAlertSafely, frontendUrl: FRONTEND_APP_URL });
+  enqueue: queueTelegramAlertSafely, frontendUrl: FRONTEND_APP_URL, describeObservation: id => signupFormObservations.describeAttempt(id) });
+async function processSignupProgressAlerts() {
+  const submitted = await processAdminSignupStalls();
+  const drafts = await signupFormObservations.processStalls({ enqueue: queueTelegramAlertSafely, frontendUrl: FRONTEND_APP_URL });
+  return { submitted, drafts };
+}
 
 app.get(
   "/api/admin/cost-audit",
@@ -18930,8 +18946,8 @@ function startBackgroundJobs() {
     runBackgroundJob('saved Twilio delivery reports', processTwilioStatusInbox);
   }, 5000);
   runBackgroundJob("signup text delivery polling", pollPendingSignupAgentTests, "initial");
-  runBackgroundJob('signup progress alerts', processAdminSignupStalls, 'initial');
-  setInterval(() => runBackgroundJob('signup progress alerts', processAdminSignupStalls), 60 * 1000);
+  runBackgroundJob('signup progress alerts', processSignupProgressAlerts, 'initial');
+  setInterval(() => runBackgroundJob('signup progress alerts', processSignupProgressAlerts), 60 * 1000);
   setInterval(() => {
     runBackgroundJob("signup text delivery polling", pollPendingSignupAgentTests);
   }, 60 * 1000);
