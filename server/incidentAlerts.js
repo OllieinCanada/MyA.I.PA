@@ -229,6 +229,7 @@ function buildIncidentTelegramAlert(input = {}) {
     VOICE_ROUTE_IDENTITY_UNPROVEN: 'The phone route could not be proven for exactly one business and assistant.',
     CALL_RECORD_IDENTITY_CONFLICT: 'Saved call identifiers conflict. This is not a duplicate-signup diagnosis.',
     CALL_RECORD_DUPLICATE_WRITE_FAILED: 'Saving a repeated call/caller event failed. This does not prove the earlier call failed for the same reason.',
+    CALL_RECORD_SAVE_FAILED: 'Saving the post-call record failed. The conversation and texts may already have succeeded; do not resend.',
     SMS_CONFIRMATION_REJECTED: 'Confirmation was rejected before the notification ran. Neither text was submitted by this attempt.',
     CALL_NOTIFICATION_UNCONFIRMED: 'Notification submission is not fully confirmed. Inspect provider evidence before any resend.',
     SIGNUP_RECOVERY_VAPI_BINDING_MISMATCH: 'The AI number could not be matched to this business’s assistant.',

@@ -3401,6 +3401,7 @@ async function upsertVapiCall(fullCall, store) {
     || Number(existingCall.durationSec || 0) !== Number(nextDurationSec || 0)
     || String(existingCall.status || "") !== String(nextStatus || "");
   const localCall = await logCall({
+    persistenceMode: 'post_call',
     callId: existingStore.localCallId || existingCall?.id,
     businessId,
     callerPhone,
@@ -18402,8 +18403,16 @@ app.use((err, req, res, _next) => {
           ...((req.vapiWebhookAuthenticated && req.body?.message?.call?.id)
             ? { "Call ID": String(req.body.message.call.id).slice(0, 120) } : {}),
         },
-        whatFailed: `${String(req?.method || "REQUEST").toUpperCase()} ${route || "application route"} returned an error`,
-        impact: area === "customer signup"
+        ...(err.callPersistenceFailure === true ? {
+          reasonCode: 'CALL_RECORD_SAVE_FAILED',
+          ...((req.vapiWebhookAuthenticated && req.body?.message?.call?.id)
+            ? { dedupeFingerprint: `${String(req.body.message.call.id).slice(0, 120)}:call-record-save` } : {}),
+        } : {}),
+        whatFailed: err.callPersistenceFailure === true ? 'The post-call record could not be saved'
+          : `${String(req?.method || "REQUEST").toUpperCase()} ${route || "application route"} returned an error`,
+        impact: err.callPersistenceFailure === true
+          ? 'Call history and trial-usage reconciliation may be incomplete. This does not prove the conversation or texts failed.'
+          : area === "customer signup"
           ? "A customer could not complete signup or phone-agent setup from this request. No success should be assumed."
           : "The affected My AI PA request did not finish for the person using it.",
         lastCheckpoint: "The request reached the My AI PA API and failed before a successful response was returned.",
