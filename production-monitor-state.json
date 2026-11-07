@@ -186,6 +186,18 @@
       "type": "operational",
       "checkName": "operational_health",
       "firstDetectedAt": "2026-11-07T01:15:51.739Z"
+    },
+    "issue:operational_health:public_4d9a7bc3275fbc95611974b7efd5d28b": {
+      "lifecycleId": "public_b8688938047821ebe0ff6dea",
+      "type": "operational",
+      "checkName": "operational_health",
+      "firstDetectedAt": "2026-11-07T07:20:32.736Z"
+    },
+    "issue:operational_health:public_a5b01dcfd35332e941889ec7aedc8a36": {
+      "lifecycleId": "public_54fc55b485723b18d8f06855",
+      "type": "operational",
+      "checkName": "operational_health",
+      "firstDetectedAt": "2026-11-07T07:20:32.736Z"
     }
   }
 }
