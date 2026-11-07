@@ -19,17 +19,19 @@ async function main(){
   const prisma=new PrismaClient({datasources:{db:{url}},__internal:{configOverride:c=>({...c,relativeEnvPaths:{}})}});
   const control=new Client({connectionString:url,connectionTimeoutMillis:5000,query_timeout:10000});
   let server,directory,delayMs=0,mode='',caseNumber=0,connected=false;
-  const responses=new Map();
-  const originalFetch=global.fetch,originalInfo=console.info;
-  function wrap(target){return new Proxy(target,{get(t,k){
-    if(k==='$transaction')return(fn,options)=>t.$transaction(tx=>fn(wrap(tx)),options);
+  const responses=new Map(),failures=new Map();
+  const originalFetch=global.fetch,originalInfo=console.info,originalWarn=console.warn;
+  function wrap(target,inTransaction=false){return new Proxy(target,{get(t,k){
+    if(k==='$transaction')return(fn,options)=>t.$transaction(tx=>fn(wrap(tx,true)),options);
     const value=t[k];
     if(typeof value==='function')return async(...args)=>{
       if(mode==='statement-timeout'&&k==='$queryRaw'&&args[0]?.join?.('?').includes('AS "usedSeconds"'))
         return t.$queryRaw`SELECT pg_sleep(1)::text`;
-      const result=await value.apply(t,args);if(delayMs)await sleep(delayMs);return result;
+      const result=await value.apply(t,args);
+      const responseDelay=mode==='transaction-timeout'?(inTransaction?1100:0):delayMs;
+      if(responseDelay)await sleep(responseDelay);return result;
     };
-    if(value&&typeof value==='object')return wrap(value);
+    if(value&&typeof value==='object')return wrap(value,inTransaction);
     return value;
   }});}
   try{
@@ -60,6 +62,10 @@ async function main(){
       if(args[0]==='[voice:assistant-response]'){try{const row=JSON.parse(args[1]);responses.set(row.callId,row);}catch{}}
       originalInfo(...args);
     };
+    console.warn=(...args)=>{
+      if(args[0]==='[voice:assistant-failure]'){try{const row=JSON.parse(args[1]);failures.set(row.callId,row);}catch{}}
+      originalWarn(...args);
+    };
     const {app,__test}=require('../server/index');
     server=app.listen(0,'127.0.0.1');await new Promise(resolve=>server.once('listening',resolve));
     const base='http://127.0.0.1:'+server.address().port;
@@ -86,7 +92,7 @@ async function main(){
           call:{id,phoneNumberId:signup.vapiPhoneNumberId,customer:{number:'+15555550102'},transport:{forwardedFrom:signup.ownerPhone}}}}),
         signal:AbortSignal.timeout(7000)});
       assert.equal(r.status,200);const body=await r.json();await new Promise(resolve=>setImmediate(resolve));
-      return{body,elapsedMs:Date.now()-started,diagnostic:responses.get(id)};
+      return{body,elapsedMs:Date.now()-started,diagnostic:responses.get(id),failure:failures.get(id)};
     }
     async function leases(id){return(await control.query('SELECT key,data FROM "RuntimeStore" WHERE data->\'reservations\' ? $1',[id])).rows;}
     async function indexes(id){return(await control.query('SELECT key,data FROM "RuntimeStore" WHERE data->>\'callId\'=$1 AND data ? \'reservationKey\'',[id])).rows;}
@@ -126,9 +132,16 @@ async function main(){
       const s=await seed();mode='statement-timeout';const r=await request(s,'statement-timeout');assert.ok(r.body.error);
       assert.equal((await indexes('statement-timeout')).length,0);assert.equal((await leases('statement-timeout')).length,0);
     });
-    await check('transaction_expiration_returns_error_without_committing_allowance',async()=>{
-      const s=await seed();delayMs=1700;const r=await request(s,'transaction-expired');assert.ok(r.body.error);assert.ok(r.elapsedMs<6500);
-      delayMs=0;await sleep(100);assert.equal((await indexes('transaction-expired')).length,0);assert.equal((await leases('transaction-expired')).length,0);
+    await check('actual_P2028_transaction_expiration_never_commits_allowance',async()=>{
+      const s=await seed();mode='transaction-timeout';const r=await request(s,'transaction-expired');assert.ok(r.body.error);assert.ok(r.elapsedMs<4500);
+      assert.equal(r.failure.reservation.databaseCode,'P2028');assert.equal(r.failure.reservation.category,'transaction_api_error');
+      mode='';assert.equal((await indexes('transaction-expired')).length,0);assert.equal((await leases('transaction-expired')).length,0);
+      return{requestMs:r.elapsedMs,databaseCode:r.failure.reservation.databaseCode};
+    });
+    await check('whole_answering_deadline_never_authorizes_a_late_callback',async()=>{
+      const s=await seed();delayMs=1700;const r=await request(s,'answering-expired');assert.ok(r.body.error);assert.ok(r.elapsedMs<6500);
+      assert.equal(r.failure.code,'VOICE_ASSISTANT_REQUEST_DEADLINE');
+      delayMs=0;await sleep(1000);assert.equal((await indexes('answering-expired')).length,0);assert.equal((await leases('answering-expired')).length,0);
     });
     await check('atomic_index_failure_cannot_leave_orphan_reservation',async()=>{
       const s=await seed();const r=await request(s,'reject-index-one');assert.ok(r.body.error);
@@ -146,10 +159,10 @@ async function main(){
         [s.businessId+10000,new Date(),s.businessId,new Date(s.trialStartAt-1000)]);
       assert.deepEqual((await request(s,'scoped-usage')).body,{assistantId:s.vapiAssistantId});
     });
-    assert.equal(report.cases.length,10);report.passed=true;delete report.currentCase;
+    assert.equal(report.cases.length,11);report.passed=true;delete report.currentCase;
   }catch(error){report.failureCode=/^[A-Z0-9_]+$/.test(String(error.code||''))?error.code:'trial_drill_failed';throw error;}
   finally{
-    delayMs=0;mode='';global.fetch=originalFetch;console.info=originalInfo;
+    delayMs=0;mode='';global.fetch=originalFetch;console.info=originalInfo;console.warn=originalWarn;
     if(server){server.closeAllConnections?.();await new Promise(resolve=>server.close(resolve));}
     if(connected)await control.end();await prisma.$disconnect();
     if(directory){assert.equal(path.dirname(directory),os.tmpdir());assert.ok(path.basename(directory).startsWith('myaipa-trial-reservation-drill-'));fs.rmSync(directory,{recursive:true,force:true});}
