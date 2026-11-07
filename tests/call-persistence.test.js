@@ -19,7 +19,7 @@ function fakeDatabase(initial = []) {
     update: async ({ where, data: input, include }) => { assert.equal(include, undefined); const row = { ...rows.get(where.id), ...input }; rows.set(where.id, row); return { ...row }; },
   };
   const db = { call, $transaction: async (fn, options) => {
-    transactions++; assert.ok(options.timeout <= 3000); assert.ok(options.maxWait <= 500);
+    transactions++; assert.ok([3000, 8000].includes(options.timeout)); assert.ok(options.maxWait <= 500);
     return fn({ call, $queryRaw: async (query) => {
       const sql = (query.strings || query).join('?'); queries.push(sql);
       if (!sql.includes('FOR UPDATE')) return [];
@@ -33,6 +33,57 @@ function fakeDatabase(initial = []) {
   return { db, rows, queries, transactions: () => transactions };
 }
 const write = (db, input = data, id = identity) => persistCall({ db, identity: id, createData: input, updateData: existing => mergeCallData(existing, input) });
+const postData = { ...data, endedAt: new Date('2026-11-07T04:00:52Z') };
+const writePostCall = (db, onDiagnostic) => persistCall({ db, identity, createData: postData,
+  updateData: existing => mergeCallData(existing, postData), postCall: true, onDiagnostic });
+const expired = () => Object.assign(Error('Transaction already closed: expired transaction'), { code: 'P2028' });
+
+test('terminal Vapi events use the post-call budget even before the final endedAt arrives', async () => {
+  for (const [postCall, input, id, timeout] of [[false, postData, identity, 3000], [true, { ...data, status: 'STARTED' }, identity, 3000],
+    [true, postData, { ...identity, externalProvider: 'other' }, 3000], [true, postData, identity, 8000], [true, data, identity, 8000]]) {
+    const db = { $transaction: async (fn, options) => { assert.equal(options.timeout, timeout);
+      return fn({ $queryRaw: async () => [], call: { create: async () => ({ id: 1, ...input }) } }); } };
+    await persistCall({ db, identity: id, createData: input, updateData: x => x, postCall });
+  }
+});
+
+test('a terminal write expiry is reconciled once in a fresh identity-checked transaction', async () => {
+  const fake = fakeDatabase(), diagnostics = []; let writes = 0;
+  const create = fake.db.call.create;
+  fake.db.call.create = args => { if (++writes === 1) throw expired(); return create(args); };
+  const saved = await writePostCall(fake.db, value => diagnostics.push(value));
+  assert.equal(saved.status, 'COMPLETED'); assert.equal(fake.transactions(), 2); assert.equal(fake.rows.size, 1);
+  assert.deepEqual(diagnostics.map(x => x.outcome), ['database_retry', 'saved']);
+  assert.equal(diagnostics[0].stage, 'create');
+});
+
+test('lost commit acknowledgement recovers the same unique row without a second insert', async () => {
+  const fake = fakeDatabase(); const transaction = fake.db.$transaction; let attempts = 0;
+  fake.db.$transaction = async (...args) => { const row = await transaction(...args);
+    if (++attempts === 1) throw expired(); return row; };
+  const saved = await writePostCall(fake.db);
+  assert.equal(saved.id, 1); assert.equal(fake.rows.size, 1); assert.equal(attempts, 2);
+});
+
+test('two post-call failures stop after one recovery and carry truthful stage evidence', async () => {
+  const fake = fakeDatabase(); fake.db.call.create = async () => { throw expired(); };
+  await assert.rejects(writePostCall(fake.db), e => e.code === 'P2028' && e.callPersistenceFailure === true && e.callPersistenceStage === 'create');
+  assert.equal(fake.transactions(), 2); assert.equal(fake.rows.size, 0);
+});
+
+test('ordinary calls never gain the terminal-write retry and diagnostic callbacks cannot break persistence', async () => {
+  const fake = fakeDatabase(); fake.db.call.create = async () => { throw expired(); };
+  await assert.rejects(write(fake.db), { code: 'P2028' }); assert.equal(fake.transactions(), 1);
+  const other = fakeDatabase(); assert.equal((await writePostCall(other.db, () => { throw Error('logger unavailable'); })).id, 1);
+});
+
+test('post-call recovery does not retry identity conflicts or unrelated failures', async () => {
+  const conflict = fakeDatabase([{ id: 1, ...postData, businessId: 999 }]);
+  await assert.rejects(writePostCall(conflict.db), { code: 'CALL_RECORD_IDENTITY_CONFLICT' });
+  assert.equal(conflict.transactions(), 1);
+  const offline = fakeDatabase(); offline.db.call.create = async () => { throw Error('offline'); };
+  await assert.rejects(writePostCall(offline.db), /offline/); assert.equal(offline.transactions(), 1);
+});
 
 test('concurrent call receipts reconcile a unique-key race in a new transaction', async () => {
   const fake = fakeDatabase();

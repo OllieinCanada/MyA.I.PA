@@ -4,6 +4,33 @@ const test = require("node:test");
 const { classifyOperationalError } = require("../server/operationalErrorClassifier");
 const { buildRuntimeIncident } = require("../server/runtimeAlerts");
 
+test('post-call save failures distinguish CRM persistence from conversation and SMS delivery', () => {
+  const error = Object.assign(new Error('expired transaction'), { code: 'P2028', callPersistenceFailure: true });
+  const classified = classifyOperationalError(error);
+  assert.equal(classified.reasonCode, 'CALL_RECORD_SAVE_FAILED');
+  assert.match(classified.impact, /does not prove the conversation or texts failed/i);
+  assert.match(classified.nextAction, /database-only/);
+  const incident = buildRuntimeIncident(error, { reasonCode: 'CALL_RECORD_SAVE_FAILED',
+    whatFailed: 'POST /api/webhooks/voice returned an error', impact: classified.impact });
+  const { buildIncidentTelegramAlert } = require('../server/incidentAlerts');
+  const alert = buildIncidentTelegramAlert(incident);
+  assert.match(alert, /post-call record/i);
+  assert.match(alert, /may already have succeeded/i);
+  assert.doesNotMatch(alert, /request did not finish for the person|receptionist could not answer/i);
+});
+
+test('terminal and final-report save failures correlate to one call, not their changing timeout text', () => {
+  const context = { reasonCode: 'CALL_RECORD_SAVE_FAILED', area: 'voice webhook', route: '/api/webhooks/voice',
+    dedupeFingerprint: 'synthetic-same-call:call-record-save' };
+  const make = elapsed => buildRuntimeIncident(Object.assign(new Error('expired transaction after '+elapsed+' ms'),
+    { code: 'P2028', callPersistenceFailure: true }), context);
+  assert.equal(make(5907).incidentId, make(4968).incidentId);
+  assert.notEqual(make(5907).incidentId, buildRuntimeIncident(Object.assign(new Error('expired'),
+    { code: 'P2028', callPersistenceFailure: true }), { ...context, dedupeFingerprint: 'other-call:call-record-save' }).incidentId);
+  const fs = require('node:fs'), path = require('node:path');
+  assert.match(fs.readFileSync(path.join(__dirname, '../server/index.js'), 'utf8'), /dedupeFingerprint: `\$\{String\(req\.body\.message\.call\.id\)\.slice\(0, 120\)\}:call-record-save`/);
+});
+
 test('notification rejection alerts identify the exact call and never blame signup duplicates or funding',()=>{
   for(const code of ['SMS_CONFIRMATION_REJECTED','CALL_NOTIFICATION_UNCONFIRMED']){
     const incident=buildRuntimeIncident(Object.assign(new Error('notification failed'),{code}),{

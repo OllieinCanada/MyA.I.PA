@@ -200,6 +200,16 @@ function result(details, category, overrides = {}) {
 
 function classifyOperationalError(error = {}, context = {}) {
   const details = providerDetails(error, context);
+  if (context.reasonCode === 'CALL_RECORD_SAVE_FAILED' || error.callPersistenceFailure === true) {
+    return result(details, 'call_record_persistence', {
+      reasonCode: 'CALL_RECORD_SAVE_FAILED', retryable: true,
+      reason: 'The post-call database record could not be saved within the bounded recovery attempt. Conversation and SMS outcomes must be checked separately.',
+      whatFailed: 'The post-call record could not be saved',
+      impact: 'Call history and trial-usage reconciliation may be incomplete. This does not prove the conversation or texts failed.',
+      nextAction: 'Match this exact Vapi call and provider receipts, then recover database-only ingestion. Do not resend texts, place another call or recreate signup.',
+      signInDestination: 'My AI PA Admin → exact call; Render → API persistence timings; Vapi → exact call',
+    });
+  }
   if (context.reasonCode === 'VAPI_CALL_SYNC_DELAYED' && context.area === 'Vapi call sync background job') {
     return result(details, 'call_sync_delay', {
       reasonCode: 'VAPI_CALL_SYNC_DELAYED',

@@ -160,6 +160,13 @@ async function logCall(payload) {
       identity: { callId: payload.callId, businessId: business.id, callerId: caller.id,
         externalProvider, externalId, twilioCallSid: data.twilioCallSid },
       createData: data,
+      postCall: payload.persistenceMode === 'post_call',
+      onDiagnostic: diagnostic => {
+        if (payload.persistenceMode === 'post_call') console.info('[call:persistence]', JSON.stringify({
+          businessId: business.id, provider: externalProvider,
+          callId: /^[a-zA-Z0-9-]{1,120}$/.test(externalId || '') ? externalId : 'redacted', ...diagnostic,
+        }));
+      },
       updateData: (existing) => mergeCallData(existing, {
         ...data,
         startedAt: payload.startedAt ? startedAt : existing.startedAt,

@@ -31,6 +31,8 @@
     "test:public-demo-audio": "node scripts/test-public-demo-audio.js",
     "test:scenario-demo-audio": "node scripts/test-public-demo-audio.js --player=scenario",
     "test:call-persistence:postgres": "node scripts/run-local-signup-postgres-drill.js --call-persistence-only",
+    "test:postcall": "node --test tests/call-persistence.test.js tests/postcall-drill-safety.test.js tests/operational-error-classifier.test.js tests/incident-alerts.test.js",
+    "test:postcall:postgres": "node --test --test-reporter=tap tests/postcall-persistence-postgres.test.js",
     "dev": "concurrently -k \"npm run server\" \"npm start\"",
     "server": "node server/index.js",
     "server:prod": "node server/index.js",
