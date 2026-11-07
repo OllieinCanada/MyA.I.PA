@@ -18,6 +18,7 @@ Object.assign(process.env,inherited,{
   VAPI_API_KEY:'synthetic-vapi-only',TWILIO_ACCOUNT_SID:'AC'+'a'.repeat(32),TWILIO_AUTH_TOKEN:'b'.repeat(32),
   TWILIO_FROM_NUMBER:'+12895550100',VAPI_VOICE_SIGNUP_SMS_FROM:'+12895550100',
   SMS_SUPPRESSION_API_KEY:'isolated-chain-suppression-key',SMS_SUPPRESSION_CHECK_URL:'https://api.myaipa.test/api/integrations/sms/suppression/check',
+  SMS_NOTIFICATION_DISPATCH_ENABLED:'true',
   TWILIO_STATUS_CALLBACK_URL:'https://api.myaipa.test/api/webhooks/twilio/message-status',
   STRIPE_SECRET_KEY:'sk_test_isolated_fake_only',STRIPE_PRICE_ID:'price_isolated',TRIAL_USAGE_LIMIT_ENABLED:'false',
   VAPI_AUTO_SYNC_ENABLED:'false',TRIAL_REMINDER_DISABLE:'true',MISSED_CALL_ALERT_ENABLED:'false',DAILY_DIGEST_ENABLED:'false',
@@ -50,6 +51,11 @@ let baseUrl;
 global.fetch=async(url,options={})=>{
   const uri=new URL(url),method=options.method||'GET';
   if(uri.hostname==='127.0.0.1')return nativeFetch(url,options);
+  // Exercise the real authenticated readiness handler and disposable PostgreSQL
+  // table through loopback. Never send this synthetic check to a live backend.
+  if(uri.hostname==='api.myaipa.test'&&uri.pathname==='/api/integrations/sms/dispatch/readiness'&&method==='GET'){
+    return nativeFetch(baseUrl+uri.pathname,options);
+  }
   if(uri.hostname==='hook.us1.make.com'){
     await count('make');
     const payload=JSON.parse(options.body);

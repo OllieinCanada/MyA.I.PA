@@ -104,3 +104,10 @@ test('unknown notification result has an explicit no-success/no-retry instructio
  const {callerNumberFallbackPrompt}=require('../server/compositeCallNotifications');
  const prompt=callerNumberFallbackPrompt('synthetic_tool');assert.match(prompt,/missing, malformed or absent complete/);assert.match(prompt,/A completed tool call is not completed submission/);assert.match(prompt,/unverified result[\s\S]*Do not retry/);
 });
+test('isolated full signup fixture checks real readiness only through its local server',()=>{
+ const source=fs.readFileSync(path.join(__dirname,'helpers/signup-setup-chain-worker.js'),'utf8');
+ assert.match(source,/SMS_NOTIFICATION_DISPATCH_ENABLED:'true'/);
+ assert.match(source,/uri\.hostname==='api\.myaipa\.test'&&uri\.pathname==='\/api\/integrations\/sms\/dispatch\/readiness'&&method==='GET'/);
+ assert.match(source,/return nativeFetch\(baseUrl\+uri\.pathname,options\)/);
+ assert.match(source,/External traffic forbidden/);
+});
