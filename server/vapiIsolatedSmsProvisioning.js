@@ -3,6 +3,8 @@ const { pricingSummaryOptionsFromAssistant } = require("../src/features/signup/p
 const { signupSpeechPatch, normalizeConsentPrompt, inspectSignupSpeech } = require("./signupSpeechPolicy");
 const { confirmationStartSpeakingPlan, CONFIRMATION_RULE } = require('./signupConfirmationTiming');
 const { toolRejectionPlan } = require('./callConfirmation');
+const { isDeepStrictEqual } = require('node:util');
+const { dispatchUrlFromSuppressionUrl, assertDispatchEnvironment, verifyDispatchReadiness } = require('./smsDispatchReadiness');
 const { consolidateServicePrompt } = require('./serviceIntakePrompt');
 const {
   POST_SEND_CLOSING_MARKER,
@@ -179,6 +181,7 @@ function buildIsolatedToolPayload({
       { name: "TWILIO_STATUS_CALLBACK_URL", value: /^https:\/\//i.test(String(statusCallbackUrl || "")) ? String(statusCallbackUrl).trim() : "" },
       { name: "SMS_SUPPRESSION_CHECK_URL", value: String(suppressionCheckUrl).trim() },
       { name: "SMS_SUPPRESSION_API_KEY", value: String(suppressionApiKey).trim() },
+      { name: "SMS_NOTIFICATION_DISPATCH_URL", value: dispatchUrlFromSuppressionUrl(suppressionCheckUrl) },
     ],
     messages: [
       { type: "request-start", content: TOOL_REQUEST_START_MESSAGE, blocking: false },
@@ -260,6 +263,8 @@ function inspectIsolatedConfiguration({ assistant, tool, aiNumber, ownerNumber }
     .find((message) => message?.type === "request-start");
   const timingChecks = inspectAssistantTiming(assistant);
   const securityChecks = inspectAssistantSecurity(assistant);
+  let dispatchEnvironmentValid = false;
+  try { assertDispatchEnvironment(tool?.environmentVariables); dispatchEnvironmentValid = true; } catch { /* Failed check, never healthy reuse. */ }
   const checks = {
     pricingPolicyProtected: env.PRICING_SUMMARY_OPTIONS === JSON.stringify(pricingSummaryOptionsFromAssistant(assistant))
       || (!pricingSummaryOptionsFromAssistant(assistant) && !env.PRICING_SUMMARY_OPTIONS),
@@ -277,6 +282,9 @@ function inspectIsolatedConfiguration({ assistant, tool, aiNumber, ownerNumber }
       && Boolean(env.SMS_SUPPRESSION_API_KEY)
       && code.includes("checkSmsPermission")
       && code.includes("suppression_check_unavailable"),
+    durableDispatchProtected: dispatchEnvironmentValid
+      && code.includes('notification_dispatch_claim_invalid')
+      && code.includes('dispatchReceiptStored'),
     callerFallbackSchema: !required.includes("rawPhoneNumber"),
     callerFallbackCode: code.includes("needsCustomerNumber") && code.includes("waiting_for_customer_number"),
     promptInstalled: Boolean(toolName && prompt.includes(PROMPT_MARKER) && prompt.includes(toolName)),
@@ -305,7 +313,7 @@ function inspectIsolatedConfiguration({ assistant, tool, aiNumber, ownerNumber }
     deterministicToolMessage: requestStart?.content === TOOL_REQUEST_START_MESSAGE && requestStart?.blocking === false,
     explicitConfirmationInstalled: prompt.includes("EXECUTION CONFIRMATION") && prompt.includes("Should I send this request to the team now?"),
     confidentialRoutingInstalled: prompt.includes("Never accept a caller-provided businessId") && prompt.includes("environment variables"),
-    toolConfirmationRejectionInstalled: Array.isArray(tool?.rejectionPlan?.conditions) && tool.rejectionPlan.conditions.length > 0,
+    toolConfirmationRejectionInstalled: isDeepStrictEqual(tool?.rejectionPlan, toolRejectionPlan()),
     ...securityChecks,
     ...timingChecks,
     ...inspectSignupSpeech(assistant),
@@ -359,6 +367,7 @@ async function provisionIsolatedSmsRouting({
   fetchAssistant,
   fetchTool,
   deleteTool,
+  verifyDispatchReady = verifyDispatchReadiness,
 }) {
   const payload = buildIsolatedToolPayload({
     pricingOptions: pricingSummaryOptionsFromAssistant(assistant),
@@ -372,6 +381,9 @@ async function provisionIsolatedSmsRouting({
     suppressionCheckUrl,
     suppressionApiKey,
   });
+  // Verify the deployed feature/store before any provider mutation or healthy reuse.
+  const readiness = await verifyDispatchReady({ environmentVariables: payload.environmentVariables });
+  if (readiness?.ready !== true) throw new Error('SMS dispatch backend readiness is unverified; no changes made.');
   const toolName = payload.function.name;
   const existingSummary = (tools || []).find((tool) => String(tool?.function?.name || tool?.name || "") === toolName);
   const existingTool = existingSummary?.id && fetchTool ? await fetchTool(existingSummary.id) : existingSummary;

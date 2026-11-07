@@ -22,6 +22,7 @@ const ownerNumber = "+19055555488";
 const suppression = {
   suppressionCheckUrl: "https://api.example.test/api/integrations/sms/suppression/check",
   suppressionApiKey: "suppression-test-key",
+  verifyDispatchReady: async () => ({ ready: true }),
 };
 
 test("summary policy is server-owned and stale policy cannot pass configuration inspection", () => {
@@ -73,6 +74,7 @@ test("isolated tool payload keeps all routing outside model parameters", () => {
   assert.equal(payload.environmentVariables.find((item) => item.name === "CALLER_NUMBER").value, "{{ customer.number }}");
   assert.equal(payload.environmentVariables.find((item) => item.name === "SMS_SUPPRESSION_CHECK_URL").value, suppression.suppressionCheckUrl);
   assert.equal(payload.environmentVariables.find((item) => item.name === "SMS_SUPPRESSION_API_KEY").value, suppression.suppressionApiKey);
+  assert.equal(payload.environmentVariables.find((item) => item.name === "SMS_NOTIFICATION_DISPATCH_URL").value, 'https://api.example.test/api/integrations/sms/dispatch');
   assert.deepEqual(payload.function.parameters.required, ["businessName", "requestType", "name", "pricingDiscussed"]);
   assert.deepEqual(payload.messages, [{ type: "request-start", content: TOOL_REQUEST_START_MESSAGE, blocking: false }]);
   assert.deepEqual(payload.rejectionPlan, toolRejectionPlan());
@@ -92,6 +94,15 @@ test("isolated tool payload can use a scoped Twilio API key without a REST Auth 
   assert.equal(environment.TWILIO_API_KEY_SID, "SK_TEST");
   assert.equal(environment.TWILIO_API_KEY_SECRET, "API_SECRET");
   assert.match(payload.code, /TWILIO_API_KEY_SID/);
+});
+
+test('configuration inspection rejects absent or wrong duplicate-dispatch protection',()=>{
+ const tool=hydratedTool(),value=assistant();
+ assert.equal(inspectIsolatedConfiguration({assistant:value,tool,aiNumber,ownerNumber}).checks.durableDispatchProtected,true);
+ tool.environmentVariables.find(v=>v.name==='SMS_NOTIFICATION_DISPATCH_URL').value='https://other.example.test/dispatch';
+ assert.equal(inspectIsolatedConfiguration({assistant:value,tool,aiNumber,ownerNumber}).checks.durableDispatchProtected,false);
+ tool.environmentVariables=tool.environmentVariables.filter(v=>v.name!=='SMS_NOTIFICATION_DISPATCH_URL');
+ assert.equal(inspectIsolatedConfiguration({assistant:value,tool,aiNumber,ownerNumber}).checks.durableDispatchProtected,false);
 });
 
 test("tool confirmation accepts natural approval without accepting ambiguity", () => {

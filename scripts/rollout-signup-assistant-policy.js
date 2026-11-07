@@ -8,6 +8,7 @@ const fs=require('node:fs');
 const path=require('node:path');
 const {isDeepStrictEqual}=require('node:util');
 const {toolPatch}=require('./refresh-vapi-job-type');
+const {assertDispatchEnvironment,verifyDispatchReadiness}=require('../server/smsDispatchReadiness');
 const {repairPayload,speechSnapshot}=require('./repair-signup-speech');
 const {updateMessages,toolRejectionPlan}=require('../server/vapiIsolatedSmsProvisioning');
 const {inspectSignupSpeech}=require('../server/signupSpeechPolicy');
@@ -79,7 +80,13 @@ function encryptedBackup(plans,key,destination) {
   fs.mkdirSync(path.dirname(destination),{recursive:true});
   fs.writeFileSync(destination,JSON.stringify({format:'aes-256-gcm-v1',nonce:nonce.toString('base64'),tag:cipher.getAuthTag().toString('base64'),data:encrypted.toString('base64')}),{flag:'wx'});
 }
-async function applyPlans({io,plans,recheck,backup,refreshGate=async()=>{}}) {
+async function applyPlans({io,plans,recheck,backup,refreshGate=async()=>{},verifyDispatchReady=verifyDispatchReadiness}) {
+  for(const p of plans){
+    const environmentVariables=p.nextTool.environmentVariables||p.tool.environmentVariables;
+    assertDispatchEnvironment(environmentVariables);
+    const readiness=await verifyDispatchReady({environmentVariables});
+    if(readiness?.ready!==true)throw Error('SMS dispatch backend readiness is unverified; no changes made.');
+  }
   await backup(); // Fail closed if durable rollback snapshot cannot be saved.
   const results=[];
   for(const p of plans) {

@@ -385,6 +385,15 @@ async function main() {
   console.log(JSON.stringify(preview, null, 2));
   if (!apply) return;
 
+  // Check the existing backend before buying/importing a number or creating an assistant.
+  const readinessPayload = buildIsolatedToolPayload({
+    aiNumber: normalizeE164(twilioNumber?.phone_number || available?.phone_number),
+    ownerNumber: ownerPhone, twilioAccountSid: routing.accountSid, twilioAuthToken: localTwilioToken,
+    statusCallbackUrl: routing.statusCallbackUrl, suppressionCheckUrl: routing.suppressionCheckUrl,
+    suppressionApiKey: routing.suppressionApiKey,
+  });
+  await require('../server/smsDispatchReadiness').verifyDispatchReadiness({ environmentVariables: readinessPayload.environmentVariables });
+
   const endCallTool = await findSilentEndCallTool(tools);
   if (!endCallTool?.id) throw new Error("A silent Vapi end-call tool is unavailable.");
   if (!assistant) {

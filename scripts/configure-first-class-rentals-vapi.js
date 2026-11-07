@@ -96,6 +96,7 @@ function isManagedSummaryTool(tool) {
 }
 
 function mutableToolPayload(tool, environmentVariables) {
+  require('../server/smsDispatchReadiness').assertDispatchEnvironment(environmentVariables);
   const latestDefinition = getVapiCompositeToolDefinition();
   return {
     type: tool.type,
@@ -354,6 +355,8 @@ async function main() {
     CALLER_NUMBER: "{{ customer.number }}",
   });
   const { tools: _expandedTools, ...modelWithoutExpandedTools } = assistant.model || {};
+  const nextToolPayload = mutableToolPayload(summaryTool, nextEnvironment);
+  await require('../server/smsDispatchReadiness').verifyDispatchReadiness({ environmentVariables: nextEnvironment });
   await request(`/assistant/${encodeURIComponent(assistantId)}`, {
     method: "PATCH",
     body: {
@@ -370,7 +373,7 @@ async function main() {
   });
   await request(`/tool/${encodeURIComponent(summaryTool.id)}`, {
     method: "PATCH",
-    body: mutableToolPayload(summaryTool, nextEnvironment),
+    body: nextToolPayload,
   });
   await request(`/tool/${encodeURIComponent(endCallTool.id)}`, {
     method: "PATCH",

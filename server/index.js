@@ -6,6 +6,7 @@ if (process.env.DISABLE_LOCAL_ENV_FILES !== "1") {
 
 const crypto = require("crypto");
 const { rejectCompressedRequests } = require('./requestSecurity');
+const { dispatchHandler: notificationDispatchHandler, dispatchReadinessHandler } = require('./smsNotificationDispatch');
 const { createFinanceService, registerFinanceRoutes } = require('./providerFinance');
 const { runtimeDependencySecurity } = require('./runtimeDependencySecurity');
 const { signupReviewPolicy } = require("./signupReviewPolicy");
@@ -407,6 +408,15 @@ const PUBLIC_ROUTE_WINDOW_MS = parsePositiveInt(process.env.PUBLIC_ROUTE_WINDOW_
 const BUSINESS_ENRICH_IP_MAX_REQUESTS = parsePositiveInt(process.env.BUSINESS_ENRICH_IP_MAX_REQUESTS, 10);
 const STRIPE_CHECKOUT_IP_MAX_REQUESTS = parsePositiveInt(process.env.STRIPE_CHECKOUT_IP_MAX_REQUESTS, 5);
 const ADMIN_LOGIN_IP_MAX_REQUESTS = parsePositiveInt(process.env.ADMIN_LOGIN_IP_MAX_REQUESTS, 10);
+// Cheap process-level ceiling before auth/DB work; the existing shared 120-hit
+// limiter below remains authoritative across instances. No endpoint is enabled.
+const smsNotificationDispatchProcessRateLimiter = rateLimit({
+  windowMs: PUBLIC_ROUTE_WINDOW_MS,
+  limit: 240,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many notification-dispatch requests. Try again later." },
+});
 const adminLoginProcessRateLimiter = rateLimit({
   windowMs: PUBLIC_ROUTE_WINDOW_MS,
   limit: ADMIN_LOGIN_IP_MAX_REQUESTS,
@@ -13379,6 +13389,18 @@ app.post(
       throw error;
     }
   })
+);
+
+app.get('/api/integrations/sms/dispatch/readiness',
+  smsNotificationDispatchProcessRateLimiter,
+  enforcePublicRouteRateLimit('sms-notification-dispatch', 120),
+  dispatchReadinessHandler({ prisma, env: process.env, authenticate: req => hasValidSuppressionApiKey(req) })
+);
+
+app.post('/api/integrations/sms/dispatch',
+  smsNotificationDispatchProcessRateLimiter,
+  enforcePublicRouteRateLimit('sms-notification-dispatch', 120),
+  notificationDispatchHandler({ prisma, env: process.env, authenticate: req => hasValidSuppressionApiKey(req) })
 );
 
 app.post(

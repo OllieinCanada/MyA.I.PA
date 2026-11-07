@@ -115,6 +115,7 @@ function createToolPayload({
     { name: "TWILIO_STATUS_CALLBACK_URL", value: /^https:\/\//i.test(statusCallback || "") ? statusCallback : "" },
     { name: "SMS_SUPPRESSION_CHECK_URL", value: suppressionCheckUrl },
     { name: "SMS_SUPPRESSION_API_KEY", value: suppressionApiKey },
+    { name: "SMS_NOTIFICATION_DISPATCH_URL", value: require('../server/smsDispatchReadiness').dispatchUrlFromSuppressionUrl(suppressionCheckUrl) },
   ];
   return {
     type: "code",
@@ -124,6 +125,7 @@ function createToolPayload({
       parameters: definition.function.parameters,
     },
     code: definition.code,
+    rejectionPlan: require('../server/callConfirmation').toolRejectionPlan(),
     environmentVariables,
     messages: [
       { type: "request-start", content: TOOL_REQUEST_START_MESSAGE, blocking: false },
@@ -217,6 +219,7 @@ async function main() {
       suppressionApiKey,
     });
     const originalModel = assistant.model;
+    await require('../server/smsDispatchReadiness').verifyDispatchReadiness({ environmentVariables: toolPayload.environmentVariables });
     const { tools: _expandedTools, ...modelWithoutExpandedTools } = originalModel || {};
     const nextModel = {
       ...modelWithoutExpandedTools,
@@ -294,6 +297,7 @@ async function main() {
             type: originalTool.type,
             function: originalTool.function,
             code: originalTool.code,
+            rejectionPlan: originalTool.rejectionPlan || { conditions: [] },
             environmentVariables: originalTool.environmentVariables,
             messages: originalTool.messages,
             timeoutSeconds: originalTool.timeoutSeconds,
@@ -316,6 +320,7 @@ async function main() {
     suppressionApiKey,
   });
   let createdTool = null;
+  await require('../server/smsDispatchReadiness').verifyDispatchReadiness({ environmentVariables: toolPayload.environmentVariables });
   let assistantPatched = false;
   const originalModel = assistant.model;
   try {

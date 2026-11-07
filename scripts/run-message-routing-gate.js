@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const { executeCompositeNotifications } = require("../server/compositeCallNotifications");
+const { createDispatchStub } = require('./stub-notification-dispatch');
 const { rootPath } = require("./_helpers");
 
 function option(name, fallback = "") {
@@ -40,7 +41,7 @@ async function runMessageRoutingGate({ count = 50 } = {}) {
         from: body.get("From"),
         body: body.get("Body"),
       });
-      return providerResponse(true, { sid: `SM_SHIPPING_${index}_${providerCalls.length}`, status: "queued" });
+      return providerResponse(true, { sid: 'SM'+index.toString(16).padStart(30,'0')+providerCalls.length.toString(16).padStart(2,'0'), status: "queued" });
     };
 
     try {
@@ -66,14 +67,18 @@ async function runMessageRoutingGate({ count = 50 } = {}) {
           CALL_ID: `shipping-message-${index}`,
           SMS_SUPPRESSION_CHECK_URL: "https://api.example.test/sms/suppression/check",
           SMS_SUPPRESSION_API_KEY: "shipping-gate-only",
+          SMS_NOTIFICATION_DISPATCH_URL: 'https://api.example.test/sms/dispatch',
         },
-        fetchImpl,
+        fetchImpl: createDispatchStub().wrap(fetchImpl),
         btoaImpl: (value) => Buffer.from(String(value), "utf8").toString("base64"),
         URLSearchParamsImpl: URLSearchParams,
       });
 
       const destinations = providerCalls.map((call) => call.to);
       const safe = result.complete === true
+        && result.requiresReconciliation === false
+        && result.owner?.dispatchReceiptStored === true
+        && result.customer?.dispatchReceiptStored === true
         && result.owner?.sent === true
         && result.customer?.sent === true
         && result.executionOrder?.join(",") === "owner,customer"

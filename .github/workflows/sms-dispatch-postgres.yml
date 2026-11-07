@@ -1,0 +1,65 @@
+name: SMS dispatch PostgreSQL drill
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sms-dispatch-postgres-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sms-dispatch-postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: sms_drill
+          POSTGRES_PASSWORD: synthetic-ci-only
+          POSTGRES_DB: myaipa_sms_dispatch_drill_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      CI: "true"
+      DISABLE_LOCAL_ENV_FILES: "1"
+      RUN_SMS_DISPATCH_POSTGRES_DRILL: "1"
+      SMS_DISPATCH_DRILL_DATABASE_URL: postgresql://sms_drill:synthetic-ci-only@127.0.0.1:5432/myaipa_sms_dispatch_drill_ci?connection_limit=2
+      DATABASE_URL: postgresql://sms_drill:synthetic-ci-only@127.0.0.1:5432/myaipa_sms_dispatch_drill_ci?connection_limit=2
+      SMS_DISPATCH_DRILL_EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - name: Check out the exact candidate
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install the committed dependencies
+        run: npm ci --include=dev --legacy-peer-deps
+      - name: Generate the existing Prisma client
+        run: npm run backend:prepare
+      - name: Check drill safety boundaries
+        run: node --test tests/sms-dispatch-postgres-safety.test.js
+      - name: Exercise real transactions and process loss with fake SMS
+        run: npm run test:sms-dispatch:postgres
+      - name: Save exact-head synthetic evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sms-dispatch-postgres-${{ github.event.pull_request.head.sha || github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          retention-days: 7
+          if-no-files-found: error
+          path: diagnostics/sms-dispatch-postgres/**/report.json

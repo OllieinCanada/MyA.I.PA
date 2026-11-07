@@ -1,5 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const { createDispatchStub } = require('../scripts/stub-notification-dispatch');
 const {
   buildCustomerBody,
   buildNotificationKeys,
@@ -141,6 +142,7 @@ const env = {
   CALL_ID: "call-test-123",
   SMS_SUPPRESSION_CHECK_URL: "https://api.example.test/api/integrations/sms/suppression/check",
   SMS_SUPPRESSION_API_KEY: "suppression-test-key",
+  SMS_NOTIFICATION_DISPATCH_URL: 'https://api.example.test/api/integrations/sms/dispatch',
 };
 
 function makeFetch(outcomes, { suppressed = [] } = {}) {
@@ -165,7 +167,7 @@ function makeFetch(outcomes, { suppressed = [] } = {}) {
       statusCallback: params.get("StatusCallback"),
       authorization: options.headers?.Authorization,
     });
-    const outcome = outcomes[calls.length - 1] || { ok: true, status: 201, payload: { sid: `SM${calls.length}`, status: "queued" } };
+    const outcome = outcomes[calls.length - 1] || { ok: true, status: 201, payload: { sid: 'SM'+String(calls.length).repeat(32), status: "queued" } };
     return { ok: outcome.ok, status: outcome.status, json: async () => outcome.payload };
   };
   return { calls, checks, fetchImpl };
@@ -175,7 +177,7 @@ function execute(fetchImpl, overrides = {}) {
   return executeCompositeNotifications({
     args: { ...args, ...(overrides.args || {}) },
     env: { ...env, ...(overrides.env || {}) },
-    fetchImpl,
+    fetchImpl: createDispatchStub().wrap(fetchImpl),
     btoaImpl: (value) => Buffer.from(String(value), "utf8").toString("base64"),
     URLSearchParamsImpl: URLSearchParams,
   });
@@ -222,8 +224,8 @@ test('a provider response without a message ID is an unknown outcome, never a su
 
 test("composite tool sends owner first and customer second", async () => {
   const mock = makeFetch([
-    { ok: true, status: 201, payload: { sid: "SM_OWNER", status: "queued" } },
-    { ok: true, status: 201, payload: { sid: "SM_CUSTOMER", status: "queued" } },
+    { ok: true, status: 201, payload: { sid: "SM11111111111111111111111111111111", status: "queued" } },
+    { ok: true, status: 201, payload: { sid: "SM22222222222222222222222222222222", status: "queued" } },
   ]);
   const result = await execute(mock.fetchImpl);
   assert.deepEqual(result.executionOrder, ["owner", "customer"]);
@@ -266,7 +268,7 @@ test("composite tool prefers API-key REST auth and requests delivery callbacks",
 test("owner failure does not prevent the customer confirmation", async () => {
   const mock = makeFetch([
     { ok: false, status: 400, payload: { code: 21610 } },
-    { ok: true, status: 201, payload: { sid: "SM_CUSTOMER", status: "queued" } },
+    { ok: true, status: 201, payload: { sid: "SM22222222222222222222222222222222", status: "queued" } },
   ]);
   const result = await execute(mock.fetchImpl);
   assert.equal(mock.calls.length, 2);
@@ -288,7 +290,7 @@ test("an owner transport outage is isolated and the customer confirmation still 
     calls.push(params.get("To"));
     providerAttempt += 1;
     if (providerAttempt === 1) throw Object.assign(new Error("socket reset"), { code: "ECONNRESET" });
-    return { ok: true, status: 201, json: async () => ({ sid: "SM_CUSTOMER", status: "queued" }) };
+    return { ok: true, status: 201, json: async () => ({ sid: "SM22222222222222222222222222222222", status: "queued" }) };
   };
 
   const result = await execute(fetchImpl);
@@ -303,7 +305,7 @@ test("an owner transport outage is isolated and the customer confirmation still 
 
 test("owner SMS can be disabled while customer confirmation remains successful", async () => {
   const mock = makeFetch([
-    { ok: true, status: 201, payload: { sid: "SM_CUSTOMER", status: "queued" } },
+    { ok: true, status: 201, payload: { sid: "SM22222222222222222222222222222222", status: "queued" } },
   ]);
   const result = await execute(mock.fetchImpl, { env: { OWNER_SMS_ENABLED: "false" } });
   assert.deepEqual(result.executionOrder, ["customer"]);
@@ -319,7 +321,7 @@ test("owner SMS can be disabled while customer confirmation remains successful",
 
 test("customer failure preserves the successful owner result", async () => {
   const mock = makeFetch([
-    { ok: true, status: 201, payload: { sid: "SM_OWNER", status: "queued" } },
+    { ok: true, status: 201, payload: { sid: "SM11111111111111111111111111111111", status: "queued" } },
     { ok: false, status: 400, payload: { code: 30007 } },
   ]);
   const result = await execute(mock.fetchImpl);
@@ -458,7 +460,7 @@ test("generated code executes inside the Vapi code-tool runtime shape", async ()
     }
     const params = new URLSearchParams(String(options.body || ""));
     calls.push(params.get("To"));
-    return { ok: true, status: 201, json: async () => ({ sid: `SM${calls.length}`, status: "queued" }) };
+    return { ok: true, status: 201, json: async () => ({ sid: 'SM'+String(calls.length).repeat(32), status: "queued" }) };
   };
   const runner = new Function(
     "args",
@@ -471,7 +473,7 @@ test("generated code executes inside the Vapi code-tool runtime shape", async ()
   const result = await runner(
     args,
     env,
-    fakeFetch,
+    createDispatchStub().wrap(fakeFetch),
     (value) => Buffer.from(String(value), "utf8").toString("base64"),
     URLSearchParams
   );

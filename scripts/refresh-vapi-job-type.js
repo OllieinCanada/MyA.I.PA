@@ -1,11 +1,14 @@
 const { loadProjectEnv } = require("./_helpers");
 const { isDeepStrictEqual } = require("node:util");
 const { getVapiCompositeToolDefinition } = require("../server/compositeCallNotifications");
+const { assertDispatchEnvironment, verifyDispatchReadiness } = require('../server/smsDispatchReadiness');
+const { toolRejectionPlan } = require('../server/callConfirmation');
 const { updateMessages } = require("../server/vapiIsolatedSmsProvisioning");
 const { assistantReferences, auditToolPinning, isManagedSummaryTool, listFrom, shortHash } = require("./audit-vapi-sms-tool-pinning");
 
 // Content-only migration: never create/delete resources or rewrite routing secrets.
 function toolPatch(tool) {
+  assertDispatchEnvironment(tool.environmentVariables);
   const definition = getVapiCompositeToolDefinition();
   const envNames = new Set((tool.environmentVariables || []).map((entry) => entry.name));
   // Older tools use Auth Token credentials. Do not add/replace credentials or
@@ -15,7 +18,7 @@ function toolPatch(tool) {
     if (!envNames.has(name)) code = code.replaceAll(`env.${name}`, '""');
   }
   return { function: { ...tool.function, description: definition.function.description,
-    parameters: definition.function.parameters }, code };
+    parameters: definition.function.parameters }, code, rejectionPlan: toolRejectionPlan() };
 }
 
 function modelPatch(assistant, tool) {
@@ -24,7 +27,7 @@ function modelPatch(assistant, tool) {
   return { ...model, messages: updateMessages(model.messages, tool.function.name) };
 }
 
-async function refreshJobTypes({ request, apply = false }) {
+async function refreshJobTypes({ request, apply = false, verifyDispatchReady = verifyDispatchReadiness }) {
   const [toolPayload, assistantPayload] = await Promise.all([request("/tool?limit=1000"), request("/assistant?limit=1000")]);
   const pinning = auditToolPinning({ toolPayload, assistantPayload });
   if (!pinning.safeToPublishWithoutAssistantVersionChanges) throw new Error("Pinned managed tool versions require a separate release; no changes made.");
@@ -45,12 +48,18 @@ async function refreshJobTypes({ request, apply = false }) {
   const report = { mode: apply ? "apply" : "read-only", assistants: plans.length, tools: new Set(plans.map((plan) => plan.tool.id)).size,
     numbersCreated: 0, billingChanged: false, routingChanged: false, results: [] };
   if (!apply) return report;
+
+  // All tools must pass before the first mutation, not partway through a batch.
+  for (const plan of plans) {
+    const readiness = await verifyDispatchReady({ environmentVariables: plan.tool.environmentVariables });
+    if (readiness?.ready !== true) throw new Error('SMS dispatch backend readiness is unverified; no changes made.');
+  }
   const originals = new Map();
   const touchedAssistants = [];
   try {
     for (const plan of plans) {
       if (!originals.has(plan.tool.id)) {
-        originals.set(plan.tool.id, { function: plan.tool.function, code: plan.tool.code });
+        originals.set(plan.tool.id, { function: plan.tool.function, code: plan.tool.code, rejectionPlan: plan.tool.rejectionPlan || { conditions: [] } });
         await request(`/tool/${plan.tool.id}`, { method: "PATCH", body: plan.toolPatch });
       }
       touchedAssistants.push(plan.assistant);
@@ -59,6 +68,7 @@ async function refreshJobTypes({ request, apply = false }) {
       const references = assistantReferences(assistant);
       const checks = { code: tool.code === plan.toolPatch.code,
         schema: isDeepStrictEqual(tool.function.parameters, plan.toolPatch.function.parameters),
+        confirmationPlan: isDeepStrictEqual(tool.rejectionPlan, plan.toolPatch.rejectionPlan),
         prompt: isDeepStrictEqual(assistant.model.messages, plan.model.messages),
         reference: references.some((reference) => reference.toolId === plan.tool.id && reference.kind === "latest") };
       if (!Object.values(checks).every(Boolean)) {

@@ -3,7 +3,11 @@ const assert = require("node:assert/strict");
 const { refreshJobTypes } = require("../scripts/refresh-vapi-job-type");
 
 function fixture({ pinned = false, fail = false } = {}) {
-  const tool = { id: "tool-one", type: "code", function: { name: "send_call_summaries_0123_12345678_v2", parameters: {} }, code: "old-code", environmentVariables: [{ name: "DEFAULT_OWNER_TO_NUMBER", value: "+19055550123" }] };
+  const tool = { id: "tool-one", type: "code", function: { name: "send_call_summaries_0123_12345678_v2", parameters: {} }, code: "old-code", environmentVariables: [{ name: "DEFAULT_OWNER_TO_NUMBER", value: "+19055550123" },
+    { name: 'CALL_ID', value: '{{ call.id }}' },
+    { name: 'SMS_SUPPRESSION_CHECK_URL', value: 'https://api.example.test/api/integrations/sms/suppression/check' },
+    { name: 'SMS_NOTIFICATION_DISPATCH_URL', value: 'https://api.example.test/api/integrations/sms/dispatch' },
+    { name: 'SMS_SUPPRESSION_API_KEY', value: 'synthetic-key' }] };
   const assistant = { id: "assistant-one", model: { provider: "openai", model: "unchanged-model", messages: [{ role: "system", content: "Keep business pricing and context." }], ...(pinned ? { toolRefs: [{ toolId: tool.id, version: "3" }] } : { toolIds: [tool.id] }) } };
   const writes = [];
   let failed = false;
@@ -15,7 +19,7 @@ function fixture({ pinned = false, fail = false } = {}) {
     }
     return structuredClone(path.startsWith("/tool?") ? [tool] : path.startsWith("/assistant?") ? [assistant] : path.startsWith("/tool/") ? tool : assistant);
   };
-  return { request, writes, tool, assistant };
+  return { request, writes, tool, assistant, verifyDispatchReady: async () => ({ ready: true }) };
 }
 test("job-type refresh is read-only by default", async () => {
   const input = fixture();
@@ -27,7 +31,8 @@ test("refresh updates existing content only and verifies both code and prompt", 
   const report = await refreshJobTypes({ ...input, apply: true });
   assert.equal(report.results[0].verified, true);
   assert.ok(input.writes.every((write) => write.method === "PATCH"));
-  assert.deepEqual(Object.keys(input.writes[0].body).sort(), ["code", "function"]);
+  assert.deepEqual(Object.keys(input.writes[0].body).sort(), ["code", "function", "rejectionPlan"]);
+  assert.deepEqual(input.tool.rejectionPlan, require('../server/callConfirmation').toolRejectionPlan());
   assert.equal(input.tool.environmentVariables[0].value, "+19055550123");
   assert.match(input.tool.code, /Job type:/);
   assert.doesNotMatch(input.tool.code, /env\.TWILIO_API_KEY_SID|env\.TWILIO_API_KEY_SECRET|env\.OWNER_SMS_ENABLED/);
