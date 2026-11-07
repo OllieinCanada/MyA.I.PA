@@ -21,6 +21,7 @@
   "scripts": {
     "test:signup-form-observation": "node --test --test-concurrency=1 tests/signup-form-observation.test.js tests/signup-form-observation-api.test.js tests/signup-form-observation-client.test.js",
     "test:signup-form-observation:browser": "node scripts/test-signup-form-observation-browser.js",
+    "test:signup-form-observation:postgres": "node --test tests/signup-form-observation-postgres.test.js",
     "test:signup-tracker": "node --test tests/admin-signup-tracker.test.js tests/admin-signup-tracker-api.test.js",
     "test:signup-tracker:browser": "node scripts/preview-admin-signup-tracker.js --test",
     "preview:signup-tracker": "node scripts/preview-admin-signup-tracker.js",

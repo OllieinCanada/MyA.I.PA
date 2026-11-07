@@ -4,7 +4,9 @@ const express = require('express');
 const { rateLimit } = require('express-rate-limit');
 const { createObservationService, registerObservationRoutes, observationBodyGuard } = require('../server/signupFormObservation');
 const memory = require('./helpers/form-observation-memory');
-const store = memory(), service = createObservationService({ store, authenticateAttempt: async () => null });
+const { registerTrackerRoutes } = require('../server/adminSignupTracker');
+const exactAttempt = 'signup_'+'a'.repeat(32);
+const store = memory(), service = createObservationService({ store, authenticateAttempt: async (id,token) => id==='attempt_'+'a'.repeat(20)&&token==='synthetic-status-capability' ? {eventKey:exactAttempt,status:'pending_verification',expiresAt:new Date(Date.now()+60000)} : null });
 let server, base, access, leakedErrors = 0;
 before(async () => {
   const app = express(), pass = (_req,_res,next) => next();
@@ -13,6 +15,8 @@ before(async () => {
   app.use(express.json());
   registerObservationRoutes({ app, service, isAllowedOrigin:o=>o==='https://www.myaipa.test', createLimiter:pass, updateLimiter:pass,
     requireAdmin:(req,res,next)=>req.headers['x-test-admin']==='yes'?next():res.status(401).json({error:'unauthorized'}) });
+  registerTrackerRoutes({app,isAllowedOrigin:()=>true,requireAdmin:(req,res,next)=>req.headers['x-test-admin']==='yes'?next():res.status(401).json({error:'unauthorized'}),
+    list:()=>[{signupAttemptId:exactAttempt,status:'pending_verification',businessName:'Synthetic canonical business'},{signupAttemptId:'signup_'+'b'.repeat(32),status:'pending_verification',businessName:'Unrelated canonical business'}],save:()=>{throw Error('No edits');},audit:async()=>null,actorHash:()=>'',observations:()=>service.listAdmin()});
   app.use((err,_req,res,_next)=>{ leakedErrors++;res.status(500).json({error:'Unexpected generic handler'}); });
   server=await new Promise(resolve=>{const s=app.listen(0,'127.0.0.1',()=>resolve(s));});base=`http://127.0.0.1:${server.address().port}`;
 });
@@ -42,4 +46,14 @@ test('the standard process limiter bounds anonymous creation without evicting ex
   await fetch(base+'/api/signup/form-observation',{method:'POST',headers:headers(),body:'{"schemaVersion":1}'});
   const limited=await fetch(base+'/api/signup/form-observation',{method:'POST',headers:headers(),body:'{"schemaVersion":1}'});assert.equal(limited.status,429);
   assert.ok(store.rows.size<=2);assert.equal((await service.read(access.id,access.token)).revision,1);
+});
+test('HTTP linkage requires both capabilities and the admin report joins only the exact canonical attempt',async()=>{
+ const input={attemptId:'attempt_'+'a'.repeat(20),attemptToken:'synthetic-status-capability'},url=base+'/api/signup/form-observation/'+access.id+'/link';
+ assert.equal((await fetch(url,{method:'POST',headers:headers(),body:JSON.stringify(input)})).status,401);
+ assert.equal((await fetch(url,{method:'POST',headers:headers({Authorization:'SignupDraft '+access.token}),body:JSON.stringify({...input,attemptToken:'wrong'})})).status,401);
+ assert.equal((await fetch(url,{method:'POST',headers:headers({Authorization:'SignupDraft '+access.token}),body:JSON.stringify(input)})).status,200);
+ const response=await fetch(base+'/api/admin/signup-tracker',{headers:{'x-test-admin':'yes'}}),report=await response.json();assert.equal(response.status,200);
+ assert.equal(report.rows.find(r=>r.attemptId===exactAttempt).formObservation.id,access.id);assert.ok(!report.rows.find(r=>r.attemptId==='signup_'+'b'.repeat(32)).formObservation);
+ assert.doesNotMatch(JSON.stringify(report),new RegExp(access.token+'|synthetic-status-capability|tokenHash'));
+ const cursor=await(await fetch(base+'/api/signup/form-observation/'+access.id,{headers:{Authorization:'SignupDraft '+access.token}})).json();assert.ok(!cursor.fields&&!cursor.linkedAttemptId&&!cursor.rows);
 });

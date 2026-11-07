@@ -5,9 +5,9 @@ const MAX_SLOTS = 2000;
 const MAX_BYTES = 8192;
 const PREFIX = 'signup-form-observation:v1:';
 const BUSINESS_FIELDS = Object.freeze({ owner_name: 'Owner name', business_name: 'Business name', business_phone: 'Business phone', business_email: 'Business email', street_address: 'Street address', city: 'City', province: 'Province', postal_code: 'Postal code' });
-const FIELDS = BUSINESS_FIELDS;
-const STEPS = Object.freeze({ trade: { label: 'Trade', fields: [] }, property_types: { label: 'Property types', fields: [] }, service_areas: { label: 'Service areas', fields: [] },
-  business_details: { label: 'Business details', fields: Object.keys(BUSINESS_FIELDS) }, pricing: { label: 'Service-call pricing', fields: [] }, final_review: { label: 'Final review', fields: [] } });
+const FIELDS = Object.freeze({ ...BUSINESS_FIELDS, trade_choice: 'Trade selection', property_types: 'Property types', service_areas: 'Service areas', pricing_choices: 'Optional pricing announcements', visit_fee: 'Minimum service-visit fee', hourly_rate: 'Hourly labour rate', human_verification: 'Human verification' });
+const STEPS = Object.freeze({ trade: { label: 'Trade', fields: ['trade_choice'] }, property_types: { label: 'Property types', fields: ['property_types'] }, service_areas: { label: 'Service areas', fields: ['service_areas'] },
+  business_details: { label: 'Business details', fields: Object.keys(BUSINESS_FIELDS) }, pricing: { label: 'Service-call pricing', fields: ['pricing_choices', 'visit_fee', 'hourly_rate'] }, final_review: { label: 'Final review', fields: [...Object.keys(BUSINESS_FIELDS), 'human_verification'] } });
 const REASONS = Object.freeze({ none: 'No validation issue observed', not_observed: 'Reason unknown / validation not observed', required_missing: 'Required field is blank', validation_failed: 'Does not pass this form’s validation' });
 const digest = value => crypto.createHash('sha256').update(String(value)).digest('hex');
 const fail = (code, status = 400) => Object.assign(new Error('Signup progress observation is unavailable.'), { code, statusCode: status });
@@ -29,7 +29,8 @@ function validateSnapshot(input) {
       || typeof field.required !== 'boolean' || typeof field.interacted !== 'boolean' || !['not_observed', 'valid', 'invalid'].includes(field.validation)
       || !Object.hasOwn(REASONS, field.reason)) throw fail('FORM_OBSERVATION_INVALID');
     seen.add(field.id);
-    if (!field.required) throw fail('FORM_OBSERVATION_INVALID');
+    const required = field.id === 'pricing_choices' ? false : ['visit_fee', 'hourly_rate'].includes(field.id) ? field.visible === 'visible' : true;
+    if (field.required !== required) throw fail('FORM_OBSERVATION_INVALID');
     if (field.visible !== 'visible' && (field.presence !== 'unknown' || field.validation !== 'not_observed' || field.reason !== 'not_observed')) throw fail('FORM_OBSERVATION_INVALID');
     if (!field.interacted && (field.validation !== 'not_observed' || field.reason !== 'not_observed')) throw fail('FORM_OBSERVATION_INVALID');
     if (field.validation === 'invalid' && (!field.interacted || field.presence === 'unknown' || !['required_missing', 'validation_failed'].includes(field.reason))) throw fail('FORM_OBSERVATION_INVALID');
@@ -40,10 +41,16 @@ function validateSnapshot(input) {
   return input;
 }
 function projectObservation(record, now = Date.now()) {
-  const step = record?.steps?.[record.currentStep];
   const fields = Object.entries(FIELDS).map(([id, label]) => {
-    let found, foundStep;
-    for (const [stepId, value] of Object.entries(record.steps || {})) { const f = value.fields?.find(item => item.id === id); if (f) { found = f; foundStep = stepId; } }
+    let found, foundStep, foundSnapshot;
+    for (const [stepId, value] of Object.entries(record.steps || {})) {
+      const f = value.fields?.find(item => item.id === id);
+      // Final review repeats the business fields. Object insertion order must
+      // not let an older review overwrite a later correction/back navigation.
+      const newer = !foundSnapshot || (Number.isSafeInteger(value.revision) && Number.isSafeInteger(foundSnapshot.revision)
+        ? value.revision > foundSnapshot.revision : value.observedAt > foundSnapshot.observedAt || (value.observedAt === foundSnapshot.observedAt && stepId === record.currentStep));
+      if (f && newer) { found = f; foundStep = stepId; foundSnapshot = value; }
+    }
     const observedAt = found ? record.steps[foundStep].observedAt : null;
     return { id, label, presence: found?.presence || 'unknown', visibleAtObservation: found?.visible || 'unknown', currentStepVisible: foundStep === record.currentStep && found?.visible === 'visible',
       required: found?.required ?? null, interacted: found?.interacted ?? false, validation: found?.validation || 'not_observed', reason: found?.reason || 'not_observed', reasonLabel: REASONS[found?.reason] || REASONS.not_observed,
@@ -54,14 +61,15 @@ function projectObservation(record, now = Date.now()) {
     currentStep: record.currentStep, currentStepLabel: STEPS[record.currentStep]?.label || 'Not observed', revision: record.revision,
     engaged: Boolean(record.engaged), createdAt: record.createdAt, expiresAt: record.expiresAt, lastObservedAt: record.lastObservedAt || null,
     lastProgressAt: record.lastProgressAt || null, observedAgeMs: record.lastObservedAt ? Math.max(0, now - record.lastObservedAt) : null,
-    coverage: { source: 'client_reported_metadata', instrumentedSteps: ['business_details'], observedFields: fields.filter(f => f.observedAt).length, totalFields: fields.length, notObservedIsNotBlank: true },
+    coverage: { source: 'client_reported_metadata', instrumentedSteps: Object.keys(STEPS), observedFields: fields.filter(f => f.observedAt).length, totalFields: fields.length, notObservedIsNotBlank: true,
+      termsAgreement: 'not_collected_by_this_form', checkout: 'not_observed_use_trusted_backend_receipts', verificationCodes: 'never_collected', setupCheckpoints: 'trusted_backend_evidence_only' },
     fields, blockers, blockerLabels: blockers.map(f => `${f.label}: ${f.reasonLabel}`),
     stalled: Boolean(record.engaged && !record.completed && !record.linkedAttemptId && now - (record.lastProgressAt || record.createdAt) >= 600000),
     alertQueuedAt: record.alertedRevision === record.progressRevision ? record.alertQueuedAt || null : null };
 }
 function formObservationLines(row) {
   if (!row?.engaged) return ['Field-level coverage: not observed.'];
-  const visible = row.fields.filter(f => f.currentStepVisible && (f.presence === 'blank' || f.validation === 'invalid'));
+  const visible = row.fields.filter(f => f.currentStepVisible && f.required === true && (f.presence === 'blank' || f.validation === 'invalid'));
   const lines = visible.slice(0, 8).map(f => `${f.label}: ${f.presence === 'blank' ? 'visible blank' : 'invalid'}; ${f.interacted ? f.reasonLabel : 'untouched; reason unknown'}.`);
   return [...lines, `Field snapshot age: ${row.observedAgeMs == null ? 'unknown' : Math.floor(row.observedAgeMs / 60000) + ' min'}; ${row.coverage.observedFields}/${row.coverage.totalFields} instrumented fields observed. Unvisited/hidden fields are not assumed blank.`];
 }
@@ -112,7 +120,7 @@ function createObservationService({ store, authenticateAttempt, now = () => Date
     const at = now(), next = { ...previous, sequence: input.sequence, revision: previous.revision + 1, engaged,
       currentStep: input.currentStep, lastObservedAt: at, signature,
       lastProgressAt: meaningful ? at : previous.lastProgressAt, progressRevision: meaningful ? previous.progressRevision + 1 : previous.progressRevision,
-      steps: { ...previous.steps, [input.currentStep]: { observedAt: at, attemptedAdvance: input.attemptedAdvance, fields: input.fields } } };
+      steps: { ...previous.steps, [input.currentStep]: { observedAt: at, revision: previous.revision + 1, attemptedAdvance: input.attemptedAdvance, fields: input.fields } } };
     if (Buffer.byteLength(JSON.stringify(next)) > MAX_BYTES) throw fail('FORM_OBSERVATION_INVALID');
     if (!await store.compareSwap(keyFor(id, slots), previous, next)) throw fail('FORM_OBSERVATION_STALE', 409);
     return { revision: next.revision, sequence: next.sequence, expiresAt: next.expiresAt };

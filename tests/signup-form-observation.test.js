@@ -114,3 +114,17 @@ test('Prisma adapter enforces namespace/cap/TTL and filtered exact-attempt query
   await store.listByAttempt('signup_'+'a'.repeat(32),1800000000000);await store.purgeExpired(1800000000000);
   assert.deepEqual(calls[0][1].where.data,{path:['linkedAttemptId'],equals:'signup_'+'a'.repeat(32)});assert.equal(calls[0][1].take,2);assert.equal(calls[1][1].where.key.startsWith,PREFIX);
 });
+test('remaining-step field IDs enforce conditional requiredness and never accept OTP, terms or payment payloads',async()=>{
+ const f=fixture(),a=await f.service.create();
+ await f.service.observe(a.id,a.token,event({currentStep:'pricing',attemptedAdvance:true,fields:[field({id:'pricing_choices',required:false,presence:'blank',validation:'valid',reason:'none'}),field({id:'visit_fee',required:false,presence:'unknown',visible:'hidden',interacted:false,validation:'not_observed',reason:'not_observed'})]}));
+ const row=(await f.service.listAdmin()).rows[0];assert.equal(row.blockers.length,0);const {formObservationLines}=require('../server/signupFormObservation');assert.equal(formObservationLines(row).length,1,'Optional blanks are not Telegram blocker lines');
+ for(const input of [event({currentStep:'pricing',fields:[field({id:'visit_fee',required:false})]}),event({currentStep:'final_review',fields:[field({id:'verification_code'})]}),event({currentStep:'final_review',fields:[field({id:'terms_accepted'})]}),event({currentStep:'final_review',fields:[field({id:'card_number'})]})])await assert.rejects(f.service.observe(a.id,a.token,{...input,sequence:2,expectedRevision:1}),{code:'FORM_OBSERVATION_INVALID'});
+});
+test('a newer business correction overrides an older final-review snapshot, even within the same millisecond',async()=>{
+ const f=fixture(),a=await f.service.create();await f.service.observe(a.id,a.token,event());
+ await f.service.observe(a.id,a.token,event({currentStep:'final_review',sequence:2,expectedRevision:1,fields:[field({presence:'present',validation:'valid',reason:'none'})]}));
+ await f.service.observe(a.id,a.token,event({sequence:3,expectedRevision:2}));
+ let row=(await f.service.listAdmin()).rows[0];assert.equal(row.fields.find(x=>x.id==='business_name').presence,'blank');assert.equal(row.blockers[0].id,'business_name');
+ f.advance(1000);await f.service.observe(a.id,a.token,event({currentStep:'service_areas',sequence:4,expectedRevision:3,fields:[]}));
+ row=(await f.service.listAdmin()).rows[0];assert.equal(row.fields.find(x=>x.id==='business_name').presence,'blank');assert.equal(row.blockers.length,0);
+});
