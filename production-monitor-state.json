@@ -174,6 +174,18 @@
       "type": "operational",
       "checkName": "operational_health",
       "firstDetectedAt": "2026-11-05T21:26:13.760Z"
+    },
+    "issue:operational_health:public_61847a14d27fe9661976ad056e671f4a": {
+      "lifecycleId": "public_e9099a00f45f38d292da773f",
+      "type": "operational",
+      "checkName": "operational_health",
+      "firstDetectedAt": "2026-11-07T01:15:51.739Z"
+    },
+    "issue:operational_health:public_38be864e5bbd2acb22ac1e36d28e1fce": {
+      "lifecycleId": "public_73fa7b6939a7cb7dbe91c03f",
+      "type": "operational",
+      "checkName": "operational_health",
+      "firstDetectedAt": "2026-11-07T01:15:51.739Z"
     }
   }
 }
