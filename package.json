@@ -87,6 +87,7 @@
     "test:twilio-receipts": "node --test tests/twilio-status-inbox.test.js tests/twilio-receipt-health.test.js tests/operational-error-classifier.test.js",
     "test:twilio-receipts:postgres": "cross-env RUN_TWILIO_RECEIPT_DATABASE=1 node --test tests/twilio-status-postgres.test.js",
     "test:sms-dispatch:postgres": "node --max-old-space-size=128 scripts/run-sms-dispatch-postgres-drill.js",
+    "test:trial-reservation:postgres": "node --max-old-space-size=128 scripts/run-trial-reservation-postgres-drill.js",
     "test:twilio-receipts:browser": "node scripts/test-receipt-health-browser.js",
     "test:release": "node scripts/release-gate.js",
     "test:browser:quality": "node scripts/test-browser-quality.js",

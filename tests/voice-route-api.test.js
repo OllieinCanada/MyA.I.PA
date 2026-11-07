@@ -26,7 +26,11 @@ const db = {
     },
   },
   call: { aggregate:async()=>({_sum:{durationSec:usedSeconds},_count:{_all:0}}) },
-  $queryRaw:async(strings)=>strings.join('?').includes('pg_try_advisory_xact_lock')?[{acquired:true}]:[],
+  $queryRaw:async(strings,...values)=>strings.join('?').includes('AS "usedSeconds"')
+    ?[{data:rows.get(values[0])?clone(rows.get(values[0])):null,usedSeconds:String(usedSeconds)}]:[],
+  $executeRaw:async(strings,...values)=>{for(let i=0;i<values.length;i+=2){
+    if(!strings.join('?').includes('DO NOTHING')||!rows.has(values[i]))rows.set(values[i],JSON.parse(values[i+1]));
+  }return values.length/2;},
   $transaction:async(fn)=>{
     transactions++;const before=clone([...rows]);
     try { return await fn(db); }
