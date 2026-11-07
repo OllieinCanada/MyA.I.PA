@@ -22,6 +22,7 @@ const ownerNumber = "+19055555488";
 const suppression = {
   suppressionCheckUrl: "https://api.example.test/api/integrations/sms/suppression/check",
   suppressionApiKey: "suppression-test-key",
+  verifyDispatchReady: async () => ({ ready: true }),
 };
 
 test("summary policy is server-owned and stale policy cannot pass configuration inspection", () => {

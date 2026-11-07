@@ -191,9 +191,11 @@ function buildCustomerBody(args) {
 function postSendClosingPrompt() {
   return `${POST_SEND_CLOSING_MARKER}
 This is the highest-priority post-send closing instruction.
-- After the notification tool returns with complete set to true, say exactly: "I've sent your information to the team. Someone will contact you to discuss the request and arrange the next step. Thank you for calling. Goodbye."
+- After the notification tool returns with complete set to true AND an explicit successful owner receipt, say exactly: "I've sent your information to the team. Someone will contact you to discuss the request and arrange the next step. Thank you for calling. Goodbye."
+- A successful owner receipt requires owner.sent true, a valid owner.messageId and owner.dispatchReceiptStored true. An intentionally disabled/skipped owner channel is not proof that the team received the request, even if complete is true. Never claim handset delivery from provider acceptance.
 - Let the entire final sentence finish before calling endCall. Do not add a promise about an appointment, quote, price, technician, or scheduled work.
 - If complete is not true, do not claim both texts were sent. Briefly explain that you could not confirm both messages, tell the caller the team has their request only if the tool result confirms that, and ask whether there is anything else you can help with.
+- Treat missing, malformed or absent complete, complete false, and any unrecognized result as unverified submission. A completed tool call is not completed submission. Never say "I've sent your information" or that the team has it without an explicit successful owner receipt. For an unverified result, say "I couldn't confirm that your request was sent to the team." Do not retry or infer success from the tool name, a marker or the absence of an error.
 ## END MYAIPA NATURAL POST-SEND CLOSING`;
 }
 

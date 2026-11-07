@@ -45,4 +45,14 @@ function dispatchHandler({prisma,env=process.env,authenticate}){return async(req
  try{const action=req.body?.action;if(!['claim','complete'].includes(action))throw error('notification_dispatch_action_invalid',400);const result=await(action==='claim'?claimNotificationDispatch:completeNotificationDispatch)({prisma,input:req.body});return res.json(result);}
  catch(e){return res.status(e.statusCode||503).json({schemaVersion:1,errorCode:e.statusCode?e.code:'notification_dispatch_store_unavailable'});}
 };}
-module.exports={claimNotificationDispatch,completeNotificationDispatch,dispatchHandler};
+function dispatchReadinessHandler({prisma,env=process.env,authenticate}){return async(req,res)=>{
+ if(typeof authenticate!=='function'||!authenticate(req))return res.status(401).json({schemaVersion:1,ready:false});
+ if(env.SMS_NOTIFICATION_DISPATCH_ENABLED!=='true')return res.status(503).json({schemaVersion:1,ready:false});
+ try{
+  if(!prisma?.runtimeStore||typeof prisma.$transaction!=='function')throw Error('unavailable');
+  // Read an impossible claim key to check table access without creating/pruning rows.
+  await prisma.runtimeStore.findUnique({where:{key:'sms-dispatch-readiness:v1'}});
+  return res.json({schemaVersion:1,ready:true,durableStore:true});
+ }catch{return res.status(503).json({schemaVersion:1,ready:false});}
+};}
+module.exports={claimNotificationDispatch,completeNotificationDispatch,dispatchHandler,dispatchReadinessHandler};

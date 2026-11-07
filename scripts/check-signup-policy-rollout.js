@@ -10,8 +10,10 @@ const {toolPatch}=require('./refresh-vapi-job-type');
 const {toolRejectionPlan,acceptsConfirmation}=require('../server/callConfirmation');
 const {isDeepStrictEqual}=require('node:util');
 function checkPublishedConfiguration(assistant,tool){
+ let toolMatches=false;
+ try{toolMatches=definitionMatches(toolPatch(tool),{function:tool.function,code:tool.code,rejectionPlan:tool.rejectionPlan});}catch{/* Unsafe legacy configuration is a failed readback, not a healthy tool. */}
  return {assistant:definitionMatches(assistantPatch(assistant,tool),speechSnapshot(assistant)),
-  tool:definitionMatches(toolPatch(tool),{function:tool.function,code:tool.code}),
+  tool:toolMatches,
   statusReceipts:(tool.environmentVariables||[]).some(v=>v.name==='TWILIO_STATUS_CALLBACK_URL'&&v.value==='https://api.myaipa.ca/api/webhooks/twilio/message-status'),
   trustedCallerId:(tool.environmentVariables||[]).some(v=>v.name==='CALLER_NUMBER'&&v.value==='{{ customer.number }}'),
   confirmationPlan:isDeepStrictEqual(tool.rejectionPlan,toolRejectionPlan()),
@@ -22,7 +24,9 @@ function checkPublishedConfiguration(assistant,tool){
 }
 async function checkSummary(tool,args){
  // Never execute arbitrary provider-returned code, even with a fake fetch.
- if(tool.code!==toolPatch(tool).code)throw Error('Summary code does not match the audited local definition.');
+ let expectedCode;
+ try{expectedCode=toolPatch(tool).code;}catch{throw Error('Summary code does not match the audited local definition or safe dispatch configuration.');}
+ if(tool.code!==expectedCode)throw Error('Summary code does not match the audited local definition.');
  const messages=[];
  const fakeFetch=async(url,options)=>{
    if(String(options.headers?.['Content-Type']||'').includes('application/json')) return {ok:true,status:200,json:async()=>({allowed:true,suppressed:false})};

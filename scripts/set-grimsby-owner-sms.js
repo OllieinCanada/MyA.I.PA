@@ -104,6 +104,7 @@ function mutableToolPayload(tool) {
     type: tool.type,
     function: tool.function,
     code: tool.code,
+    rejectionPlan: tool.rejectionPlan || { conditions: [] },
     environmentVariables: tool.environmentVariables,
     messages: tool.messages,
     timeoutSeconds: tool.timeoutSeconds,
@@ -182,11 +183,13 @@ async function main() {
       parameters: definition.function.parameters,
     },
     code: definition.code,
+    rejectionPlan: require('../server/callConfirmation').toolRejectionPlan(),
     environmentVariables: upsertEnvironment(tool.environmentVariables, "OWNER_SMS_ENABLED", ownerSmsEnabled ? "true" : "false"),
     messages: tool.messages,
     timeoutSeconds: tool.timeoutSeconds,
   };
   const { tools: _expandedTools, ...modelWithoutExpandedTools } = assistant.model || {};
+  await require('../server/smsDispatchReadiness').verifyDispatchReadiness({ environmentVariables: nextTool.environmentVariables });
   const nextModel = { ...modelWithoutExpandedTools, toolIds: currentToolIds, messages: updateMessages(assistant?.model?.messages || []) };
   const rollbackModel = { ...modelWithoutExpandedTools, toolIds: currentToolIds, messages: assistant?.model?.messages || [] };
   let toolPatched = false;
