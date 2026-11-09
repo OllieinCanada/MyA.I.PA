@@ -84,9 +84,12 @@ jobs:
           npm run test:database
           RUN_SIGNUP_OBSERVATION_POSTGRES=1 npm run test:signup-form-observation:postgres
           RUN_ADMIN_OWNER_LINKS_POSTGRES=1 npm run test:admin-owner-links:postgres
+          RUN_ADMIN_TELEGRAM_POSTGRES=1 npm run test:admin-telegram-login:postgres
 
       - name: Verify private one-use owner sign-in in all browser engines
-        run: npm run test:admin-owner-links:browser
+        run: |
+          npm run test:admin-owner-links:browser
+          npm run test:admin-telegram-login:browser
 
       - name: Save private owner sign-in test evidence (synthetic credentials only)
         if: always()
@@ -94,7 +97,9 @@ jobs:
         with:
           name: owner-signin-${{ github.event.pull_request.head.sha || github.sha }}
           retention-days: 7
-          path: diagnostics/admin-owner-links/
+          path: |
+            diagnostics/admin-owner-links/
+            diagnostics/admin-telegram-login/
           if-no-files-found: error
 
       - name: Exercise isolated signup restart and concurrent-replay recovery

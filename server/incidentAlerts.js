@@ -353,7 +353,7 @@ async function sendIncidentNotice(input, text, { token, chatId, fetchImpl = fetc
     } : {}),
   };
   const response = await fetchImpl(`https://api.telegram.org/bot${safeToken}/sendPhoto`, noticeRequest(body.text, {
-    chatId: safeChatId, replyMarkup: body.reply_markup,
+    chatId: safeChatId, replyMarkup: body.reply_markup, botToken: safeToken,
   }));
   const data = await response.json().catch(() => ({}));
   if (!response.ok || data?.ok !== true || !Number.isSafeInteger(data?.result?.message_id) || data.result.message_id <= 0) {

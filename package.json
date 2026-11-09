@@ -19,6 +19,9 @@
     "stripe": "^22.3.2"
   },
   "scripts": {
+    "test:admin-telegram-login": "node --test tests/admin-telegram-login.test.js tests/admin-telegram-login-api.test.js",
+    "test:admin-telegram-login:browser": "node scripts/test-admin-telegram-login-browser.js",
+    "test:admin-telegram-login:postgres": "node --test tests/admin-telegram-login-postgres.test.js",
     "admin:owner-link": "node scripts/create-admin-owner-link.js",
     "test:admin-owner-links": "node --test tests/admin-owner-links.test.js tests/admin-owner-links-api.test.js",
     "test:admin-owner-links:postgres": "node --test tests/admin-owner-links-postgres.test.js",

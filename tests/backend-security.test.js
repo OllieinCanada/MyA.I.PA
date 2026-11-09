@@ -2664,6 +2664,41 @@ test('owner link issues the existing production session once without weakening n
   }
 });
 
+test('Telegram sign-in uses the real admin session only for signed pinned-owner proof', async () => {
+  const crypto = require('crypto');
+  const { PATH, POST_PATH, COOKIE, PREFIX } = require('../server/adminTelegramLogin');
+  const values = { TELEGRAM_OWNER_LOGIN_ENABLED: 'true', TELEGRAM_BOT_TOKEN: 'fixture-telegram-only', TELEGRAM_ADMIN_USER_ID: '1234567', TELEGRAM_CHAT_ID: '1234567', ADMIN_SESSION_SECRET: 'fixture-owner-session-secret-more-than-32-characters', ADMIN_TOTP_SECRET: '' };
+  const old = Object.fromEntries(Object.keys(values).map(k => [k, process.env[k]]));
+  const create = prisma.runtimeStore.create, used = new Set();
+  try {
+    Object.assign(process.env, values);
+    prisma.runtimeStore.create = async ({ data }) => {
+      if (data.key.startsWith(PREFIX)) {
+        if (used.has(data.key)) throw Object.assign(Error('unique'), { code: 'P2002' }); used.add(data.key);
+      } else assert.ok(data.key.startsWith('admin-audit:'));
+      return data;
+    };
+    const landing = await request(PATH); assert.equal(landing.status, 200);
+    const cookie = landing.headers.get('set-cookie').split(';')[0];
+    const p = { id: '1234567', first_name: 'Fixture', auth_date: String(Math.floor(Date.now() / 1000)) };
+    p.hash = crypto.createHmac('sha256', crypto.createHash('sha256').update(values.TELEGRAM_BOT_TOKEN).digest())
+      .update(Object.keys(p).sort().map(k => k + '=' + p[k]).join('\n')).digest('hex');
+    const body = { proof: p, challenge: cookie.slice(COOKIE.length + 1), target: { tab: 'attention', incident: 'b'.repeat(24) } };
+    const headers = { cookie, origin: 'https://api.myaipa.ca', 'x-myaipa-telegram': '1', 'x-forwarded-for': '198.51.100.89' };
+    const response = await request(POST_PATH, { method: 'POST', headers, body }); assert.equal(response.status, 200);
+    const session = response.headers.get('set-cookie'); assert.match(session, /^myaipa_admin_session=/); assert.match(session, /HttpOnly/);
+    assert.equal((await request('/api/admin/session', { headers: { cookie: session.split(';')[0] } })).status, 200);
+    assert.deepEqual((await response.json()).target, body.target);
+    assert.equal((await request(POST_PATH, { method: 'POST', headers, body })).status, 401);
+    assert.equal((await request('/api/admin/session')).status, 401);
+    const invalid = await request(POST_PATH, { method: 'POST', headers: { ...headers, 'content-type': 'application/json' }, body: '{"proof":"PRIVATE_TELEGRAM_CANARY"' });
+    assert.equal(invalid.status, 400); assert.doesNotMatch(await invalid.text(), /PRIVATE_TELEGRAM_CANARY/);
+  } finally {
+    prisma.runtimeStore.create = create;
+    for (const [key, value] of Object.entries(old)) if (value === undefined) delete process.env[key]; else process.env[key] = value;
+  }
+});
+
 test("admin routes do not accept the master password from an arbitrary request body", async () => {
   const response = await request("/api/admin/settings", {
     method: "PUT",
