@@ -2627,6 +2627,43 @@ test("admin sessions use an HttpOnly, Secure, SameSite=Lax cookie in production"
   }
 });
 
+test('owner link issues the existing production session once without weakening normal auth', async () => {
+  const { issueOwnerLink, REDEEM_PATH, RECEIPT_PREFIX } = require('../server/adminOwnerLinks');
+  const originalCreate = prisma.runtimeStore.create;
+  const oldSecret = process.env.ADMIN_SESSION_SECRET, oldMode = process.env.NODE_ENV;
+  process.env.ADMIN_SESSION_SECRET = 'fixture-owner-session-secret-more-than-32-characters'; process.env.NODE_ENV = 'production';
+  const used = new Set(); let audits = 0;
+  prisma.runtimeStore.create = async ({ data }) => {
+    if (data.key.startsWith(RECEIPT_PREFIX)) {
+      if (used.has(data.key)) throw Object.assign(new Error('unique'), { code: 'P2002' });
+      used.add(data.key);
+    } else if (data.key.startsWith('admin-audit:')) audits++;
+    else throw new Error('Unexpected persistence from isolated login test');
+    return data;
+  };
+  try {
+    const privateUrl = issueOwnerLink({ config: { adminPassword: process.env.ADMIN_PASSWORD, sessionSecret: process.env.ADMIN_SESSION_SECRET } });
+    const headers = { Origin: 'https://api.myaipa.ca', 'X-MyAIPA-Owner-Link': '1', 'x-forwarded-for': '198.51.100.88' };
+    const body = { token: new URL(privateUrl.url).hash.slice(1) };
+    assert.equal((await request('/api/admin/session')).status, 401);
+    const response = await request(REDEEM_PATH, { method: 'POST', headers, body }); assert.equal(response.status, 200);
+    const cookie = response.headers.get('set-cookie');
+    assert.match(cookie, /^myaipa_admin_session=/); assert.match(cookie, /HttpOnly/); assert.match(cookie, /Secure/);
+    assert.match(cookie, /SameSite=Lax/); assert.match(cookie, /Max-Age=43200/);
+    assert.equal((await request('/api/admin/session', { headers: { cookie: cookie.split(';')[0] } })).status, 200);
+    const replay = await request(REDEEM_PATH, { method: 'POST', headers, body });
+    assert.equal(replay.status, 401); assert.equal(replay.headers.get('set-cookie'), null); assert.equal(used.size, 1); assert.equal(audits, 1);
+    assert.equal((await request('/api/admin/session')).status, 401, 'Unrelated browsers remain locked');
+    for (const raw of ['{"token":"PRIVATE_PARSER_CANARY"', JSON.stringify({ token: 'PRIVATE_PARSER_CANARY'.repeat(200) })]) {
+      const rejected = await request(REDEEM_PATH, { method: 'POST', headers: { ...headers, 'content-type': 'application/json' }, body: raw });
+      assert.ok([400, 413].includes(rejected.status)); assert.doesNotMatch(await rejected.text(), /PRIVATE_PARSER_CANARY/);
+      assert.match(rejected.headers.get('cache-control'), /no-store/);
+    }
+  } finally {
+    prisma.runtimeStore.create = originalCreate; process.env.ADMIN_SESSION_SECRET = oldSecret; process.env.NODE_ENV = oldMode;
+  }
+});
+
 test("admin routes do not accept the master password from an arbitrary request body", async () => {
   const response = await request("/api/admin/settings", {
     method: "PUT",

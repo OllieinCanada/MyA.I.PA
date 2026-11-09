@@ -83,6 +83,19 @@ jobs:
           npx prisma db push --skip-generate
           npm run test:database
           RUN_SIGNUP_OBSERVATION_POSTGRES=1 npm run test:signup-form-observation:postgres
+          RUN_ADMIN_OWNER_LINKS_POSTGRES=1 npm run test:admin-owner-links:postgres
+
+      - name: Verify private one-use owner sign-in in all browser engines
+        run: npm run test:admin-owner-links:browser
+
+      - name: Save private owner sign-in test evidence (synthetic credentials only)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: owner-signin-${{ github.event.pull_request.head.sha || github.sha }}
+          retention-days: 7
+          path: diagnostics/admin-owner-links/
+          if-no-files-found: error
 
       - name: Exercise isolated signup restart and concurrent-replay recovery
         env:
