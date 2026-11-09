@@ -19,6 +19,10 @@
     "stripe": "^22.3.2"
   },
   "scripts": {
+    "admin:owner-link": "node scripts/create-admin-owner-link.js",
+    "test:admin-owner-links": "node --test tests/admin-owner-links.test.js tests/admin-owner-links-api.test.js",
+    "test:admin-owner-links:postgres": "node --test tests/admin-owner-links-postgres.test.js",
+    "test:admin-owner-links:browser": "node scripts/test-admin-owner-links-browser.js",
     "test:signup-form-observation": "node --test --test-concurrency=1 tests/signup-form-observation.test.js tests/signup-form-observation-api.test.js tests/signup-form-observation-client.test.js",
     "test:signup-form-observation:browser": "node scripts/test-signup-form-observation-browser.js",
     "test:signup-form-observation:postgres": "node --test tests/signup-form-observation-postgres.test.js",

@@ -399,6 +399,7 @@ const dataDir = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path
 const signupDuplicateSubmissions = new Map();
 const legacyPendingSignupPath = path.join(dataDir, "pending-signup-verifications.json");
 const { readRecoveryFileStore } = require("./recoveryFileStore");
+const { registerOwnerLinkRoutes } = require("./adminOwnerLinks");
 const pendingStripeSignupPath = path.join(dataDir, "pending-stripe-signups.json");
 const trialReminderPath = path.join(dataDir, "trial-reminders.json");
 const signupDashboardPath = path.join(dataDir, "signup-dashboard.json");
@@ -1030,6 +1031,17 @@ app.post("/api/payments/stripe-webhook", express.raw({ type: "application/json" 
 
 app.use('/api/signup/form-observation', observationBodyGuard({ jsonParser: express.json({ limit: '8kb' }), isAllowedOrigin,
   createLimiter: formObservationCreateLimiter, updateLimiter: formObservationUpdateLimiter }));
+// Owner sign-in accepts only a short signed credential, not the general API's
+// larger body allowance. Register this before the shared JSON parser.
+app.use('/api/admin/owner-sign-in', (req, res, next) => {
+  express.json({ limit: '2kb' })(req, res, error => {
+    // Parser errors can contain pieces of their input. Never echo/log a private
+    // sign-in credential through the shared error/incident handler.
+    if (error) return res.status(error.type === 'entity.too.large' ? 413 : 400)
+      .json({ error: 'Invalid private sign-in request.' });
+    return next();
+  });
+});
 app.use(express.json({ limit: JSON_BODY_LIMIT }));
 
 function normalizeClientErrorType(value) {
@@ -16724,6 +16736,16 @@ app.post("/api/customer/dashboard", (_req, res) => {
 app.post("/api/customer/dashboard/logout", (req, res) => {
   clearCustomerDashboardSessionCookie(res);
   res.status(204).end();
+});
+
+registerOwnerLinkRoutes({
+  app, prisma,
+  getConfig: () => ({ adminPassword: getAdminPassword(), sessionSecret: process.env.ADMIN_SESSION_SECRET,
+    totpEnabled: Boolean(ADMIN_TOTP_SECRET) }),
+  setSession: res => setAdminSessionCookie(res, createAdminSessionToken()),
+  rateLimiters: [adminLoginProcessRateLimiter, enforcePublicRouteRateLimit("admin-owner-signin", ADMIN_LOGIN_IP_MAX_REQUESTS)],
+  audit: req => recordAdminAuditEvent({ prisma, action: "admin_owner_link_login", outcome: "success",
+    actorHash: getAdminActorHash(req), details: { method: "one_use_link" } }),
 });
 
 app.post(
