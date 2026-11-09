@@ -57,7 +57,7 @@ function projectObservation(record, now = Date.now()) {
       observedAt, ageMs: observedAt ? Math.max(0, now - observedAt) : null };
   });
   const blockers = fields.filter(f => f.currentStepVisible && f.required && f.interacted && f.validation === 'invalid');
-  return { id: record.id, linkedAttemptId: record.linkedAttemptId || null, identity: record.linkedAttemptId ? 'exact_attempt_link' : 'unsubmitted_visitor_unknown_identity',
+  return { id: record.id, linkedAttemptId: record.linkedAttemptId || null, identity: record.linkedAttemptId ? 'exact_attempt_link' : 'unlinked_visitor_unknown_identity',
     currentStep: record.currentStep, currentStepLabel: STEPS[record.currentStep]?.label || 'Not observed', revision: record.revision,
     engaged: Boolean(record.engaged), createdAt: record.createdAt, expiresAt: record.expiresAt, lastObservedAt: record.lastObservedAt || null,
     lastProgressAt: record.lastProgressAt || null, observedAgeMs: record.lastObservedAt ? Math.max(0, now - record.lastObservedAt) : null,
@@ -162,7 +162,8 @@ function createObservationService({ store, authenticateAttempt, now = () => Date
       if (!record || record.id !== candidate.id || !record.engaged || record.linkedAttemptId || record.expiresAt <= now()
         || record.progressRevision !== candidate.progressRevision || record.alertedRevision === record.progressRevision) continue;
       const row = projectObservation(record, now()); if (!row.stalled) continue;
-      const result = await enqueue({ text: ['MY AI PA — UNSUBMITTED SIGNUP NEEDS ATTENTION', 'Identity: unknown; no business name or contact value collected.',
+      const result = await enqueue({ text: ['MY AI PA — UNLINKED SIGNUP PROGRESS NEEDS ATTENTION', 'Identity: unknown; no business name or contact value collected.',
+        'Submission link is unconfirmed; this is not proof that signup failed or was never submitted.',
         `Reference: ${record.id.slice(-8)}`, `Step: ${row.currentStepLabel}`, 'No observed progress for at least 10 minutes.', ...formObservationLines(row), 'No signup, text, payment or provider action was retried.'].join('\n'),
         adminUrl: `${String(frontendUrl).replace(/\/$/, '')}/#/admin?tab=signups`, buttonText: 'Open signup tracker', dedupeKey: `signup-form-stall:${record.id}:${record.progressRevision}` });
       if (!(result?.queued || result?.duplicate)) continue;

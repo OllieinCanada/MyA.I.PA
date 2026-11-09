@@ -30,7 +30,7 @@ test('visible blank, untouched and not-visited fields stay distinct, and no psyc
   const f = fixture(), a = await f.service.create();
   await f.service.observe(a.id,a.token,event({ fields: [field(), field({ id:'street_address',interacted:false,validation:'not_observed',reason:'not_observed' })] }));
   const row=(await f.service.listAdmin()).rows[0];
-  assert.equal(row.identity,'unsubmitted_visitor_unknown_identity'); assert.deepEqual(row.blockerLabels,['Business name: Required field is blank']);
+  assert.equal(row.identity,'unlinked_visitor_unknown_identity'); assert.deepEqual(row.blockerLabels,['Business name: Required field is blank']);
   assert.equal(row.fields.find(v=>v.id==='street_address').presence,'blank'); assert.equal(row.fields.find(v=>v.id==='street_address').reason,'not_observed');
   assert.equal(row.fields.find(v=>v.id==='postal_code').presence,'unknown'); assert.equal(row.fields.find(v=>v.id==='postal_code').observedAt,null);
   assert.doesNotMatch(JSON.stringify(row),/confused|gave up|did not want|abandoned/i);
@@ -85,6 +85,7 @@ test('stall tick sends only fixed metadata once per progress episode and survive
   const entries=[],enqueue=async item=>{entries.push(item);return {queued:true};};
   assert.equal((await f.service.processStalls({enqueue,frontendUrl:'https://example.invalid'})).queued,1);
   assert.match(entries[0].text,/Business name: visible blank; Required field is blank/);assert.match(entries[0].text,/Identity: unknown/);
+  assert.match(entries[0].text,/not proof that signup failed or was never submitted/);
   assert.ok(!JSON.stringify(entries).includes(a.token));assert.ok(!JSON.stringify(entries).includes('tokenHash'));
   const restarted=createObservationService({store:f.store,authenticateAttempt:async()=>null,now:f.now});
   assert.equal((await restarted.processStalls({enqueue,frontendUrl:'https://example.invalid'})).queued,0);

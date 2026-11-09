@@ -39,7 +39,7 @@ export function observedSignupStep(currentStep, businessSlide, tradePanel) {
 }
 function pointerValid(value) { return value && /^fd_[0-9a-f-]{36}$/.test(value.id || '') && /^[A-Za-z0-9_-]{43}$/.test(value.token || '')
   && Number.isSafeInteger(value.revision) && value.revision >= 0 && Number.isSafeInteger(value.sequence) && value.sequence >= 0 && Number.isFinite(value.expiresAt); }
-export function createFormObservationClient({ apiBase, storage, fetchImpl = (...args) => globalThis.fetch(...args), now = () => Date.now() }) {
+export function createFormObservationClient({ apiBase, storage, fetchImpl = (...args) => globalThis.fetch(...args), now = () => Date.now(), waitImpl = ms => new Promise(resolve => setTimeout(resolve, ms)) }) {
   let pointer = null, pending = null, running = false, needsSync = true, lastSignature = '', retryAfter = 0, generation = 0;
   try { const saved = JSON.parse(storage?.getItem(STORAGE_KEY) || 'null'); if (pointerValid(saved) && saved.expiresAt > now()) pointer = saved; } catch (_) { /* Coverage remains unknown; no identity fallback. */ }
   const persist = () => { try { if (pointer) storage?.setItem(STORAGE_KEY, JSON.stringify({ id: pointer.id, token: pointer.token, revision: pointer.revision, sequence: pointer.sequence, expiresAt: pointer.expiresAt })); else storage?.removeItem(STORAGE_KEY); } catch (_) { /* Memory-only capability is allowed. */ } };
@@ -96,7 +96,21 @@ export function createFormObservationClient({ apiBase, storage, fetchImpl = (...
     observe(snapshot, engaged) { if (!engaged) return Promise.resolve(); pending = snapshot; return flush(); },
     async link(access) {
       if (!pointer || !access?.id || !access?.token) return false;
-      try { const { response } = await request('/api/signup/form-observation/' + pointer.id + '/link', { method: 'POST', body: JSON.stringify({ attemptId: access.id, attemptToken: access.token }) }); return response.ok; } catch (_) { return false; }
+      const currentGeneration = generation, draftId = pointer.id;
+      const association = JSON.stringify({ attemptId: access.id, attemptToken: access.token });
+      // This endpoint only associates existing metadata using both capabilities.
+      // Replaying this exact association cannot submit signup, payment or SMS.
+      for (let attempt = 0; attempt < 2; attempt++) {
+        if (currentGeneration !== generation || pointer?.id !== draftId || pointer.expiresAt <= now()) return false;
+        try {
+          const { response, body } = await request('/api/signup/form-observation/' + draftId + '/link', { method: 'POST', body: association });
+          if (currentGeneration !== generation || pointer?.id !== draftId) return false;
+          if (response.ok) return body.linked === true;
+          if (![409, 500, 502, 503, 504].includes(response.status)) return false;
+        } catch (_) { /* A lost metadata acknowledgement is safe to retry once. */ }
+        if (attempt === 0 && currentGeneration === generation && pointer?.id === draftId) await waitImpl(500);
+      }
+      return false;
     },
     reset() { generation++; pending = null; pointer = null; lastSignature = ''; needsSync = true; persist(); },
     async settled() { while (running) await new Promise(resolve => setTimeout(resolve, 5)); },

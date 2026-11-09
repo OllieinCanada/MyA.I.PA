@@ -33,7 +33,7 @@ async function main(){
   let panel=await businessForm();console.log('Phase B: business form reached after genuine trade/property/area interactions.');
   let name=panel.getByPlaceholder('e.g., Smith Electrical Services');await name.focus();await name.press('Tab');
   await wait(async()=> (await row())?.blockerLabels.includes('Business name: Required field is blank'));
-  let current=await row();assert.equal(current.fields.find(f=>f.id==='street_address').reason,'not_observed');assert.equal(current.identity,'unsubmitted_visitor_unknown_identity');
+  let current=await row();assert.equal(current.fields.find(f=>f.id==='street_address').reason,'not_observed');assert.equal(current.identity,'unlinked_visitor_unknown_identity');
   await panel.getByPlaceholder('Start typing your address').fill('x');await panel.getByPlaceholder('Start typing your address').press('Tab');
   await wait(async()=> (await row()).fields.find(f=>f.id==='street_address').reason==='validation_failed');
   const rawName='North Harbour Private Works',rawAddress='92 Beacon Private Place',rawPostal='PRIVATE_BAD_POSTAL';
@@ -59,7 +59,7 @@ async function main(){
   await page.setViewportSize({width:1440,height:1100});await wait(async()=> (await row()).fields.find(f=>f.id==='business_name').visibleAtObservation==='visible');
   for(const marker of [rawName,rawAddress,rawPostal,synthetic.owner,synthetic.phone,synthetic.email,synthetic.city,synthetic.postal,synthetic.amount,'Electrician','Residential']){assert.ok(!JSON.stringify(payloads).includes(marker));assert.ok(!JSON.stringify([...store.rows.values()]).includes(marker));}
   console.log('Phase B: pricing conditional fields and final-review/mobile visibility passed.');
-  await page.getByRole('button',{name:'Open admin report',exact:true}).click();const report=page.getByRole('region',{name:'Unsubmitted signup observations'});await report.getByRole('button',{name:'View field status'}).click();await report.getByText('Business name',{exact:true}).waitFor();
+  await page.getByRole('button',{name:'Open admin report',exact:true}).click();const report=page.getByRole('region',{name:'Unlinked signup observations'});await report.getByRole('button',{name:'View field status'}).click();await report.getByText('Business name',{exact:true}).waitFor();assert.ok((await report.textContent()).includes('not proof that signup failed or was never submitted'));
   for(const marker of [rawName,rawAddress,rawPostal,synthetic.owner,synthetic.phone,synthetic.email,synthetic.amount])assert.ok(!(await report.textContent()).includes(marker));assert.ok((await report.textContent()).includes('Human verification'));assert.ok((await page.locator('.signup-tracker-policy').textContent()).includes('not proof of agreement'));
   await report.screenshot({path:path.join(output,'1440-phase-b-field-report.png')});
   await page.setViewportSize({width:390,height:1000});await report.screenshot({path:path.join(output,'390-phase-b-field-report.png')});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
