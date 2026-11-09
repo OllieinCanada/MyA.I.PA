@@ -224,6 +224,7 @@ jobs:
             docs/404.html
             docs/asset-manifest.json
             docs/static-asset-history.json
+            docs/cookies.html
             docs/proof/index.html
             docs/illustrations/canadian-flag.png
             docs/static/
