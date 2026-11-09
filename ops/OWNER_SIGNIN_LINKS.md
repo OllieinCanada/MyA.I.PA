@@ -57,9 +57,11 @@ supplying its current credentials. Do not issue a real link while testing.
 Run `npm run test:admin-owner-links`, the existing backend security suite,
 `RUN_ADMIN_OWNER_LINKS_POSTGRES=1 npm run test:admin-owner-links:postgres` only on
 the guarded loopback disposable database, and
-`npm run test:admin-owner-links:browser`. The browser harness intercepts all
-requests into an isolated fixture: it does not contact the real API, frontend,
-Vapi, Twilio or Telegram. It tests Chromium, Firefox and WebKit at two widths.
+`npm run test:admin-owner-links:browser` (OpenSSL required for an ephemeral test
+certificate). The browser harness uses real HTTPS through an allowlisted
+loopback-only proxy, never a public DNS/upstream connection. It does not contact
+the real API, frontend, Vapi, Twilio or Telegram, and never mocks session cookies.
+It tests Chromium, Firefox and WebKit at two widths.
 This is not physical Safari sign-off. CI still runs the normal full gates.
 
 Request fresh exact-head merge approval. This backend-only change needs no new
