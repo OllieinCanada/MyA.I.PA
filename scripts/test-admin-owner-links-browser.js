@@ -37,12 +37,17 @@ async function main() {
       try {
         for (const width of [390, 1280]) {
           const context = await browser.newContext({ viewport: { width, height: 900 } });
-          const errors = [], forbidden = []; let posts = 0;
+          const errors = [], forbidden = [], sessionReads = []; let posts = 0;
           await context.route('**/*', async route => {
             const req = route.request(), url = new URL(req.url());
             if (url.origin === API_ORIGIN && [PAGE_PATH, REDEEM_PATH, '/api/admin/session'].includes(url.pathname)) {
               if (req.method() === 'POST') posts++;
-              const response = await fetch(local + url.pathname + url.search, { method: req.method(), headers: req.headers(),
+              // headers() may omit security-sensitive Cookie headers (notably
+              // WebKit). Forward the browser's actual complete request, never
+              // synthesize a cookie or weaken the session assertion.
+              const completeHeaders = await req.allHeaders();
+              if (url.pathname === '/api/admin/session') sessionReads.push({ hasBrowserCookie: /fixture-owner-session=/.test(completeHeaders.cookie || '') });
+              const response = await fetch(local + url.pathname + url.search, { method: req.method(), headers: completeHeaders,
                 body: ['GET', 'HEAD'].includes(req.method()) ? undefined : req.postData() });
               await route.fulfill({ status: response.status, headers: Object.fromEntries(response.headers), body: Buffer.from(await response.arrayBuffer()) });
             } else if (url.origin === FRONTEND_ORIGIN && url.pathname === '/') {
@@ -51,6 +56,7 @@ async function main() {
             } else { forbidden.push(url.origin + url.pathname); await route.abort(); }
           });
           const page = await context.newPage(); page.on('pageerror', err => errors.push(err.message));
+          report.activeCase = { engine, width, sessionReads };
           const link = issueOwnerLink({ config, now: clock, tab: 'signups' });
           await page.goto(link.url); await page.getByRole('button', { name: 'Open my admin' }).waitFor();
           await page.waitForFunction(() => !document.getElementById('open').disabled);
@@ -61,7 +67,9 @@ async function main() {
           await page.screenshot({ path: path.join(out, `${engine}-${width}-owner-link.png`), fullPage: true });
           await page.getByRole('button', { name: 'Open my admin' }).click();
           await page.waitForURL(FRONTEND_ORIGIN + '/#/admin?tab=signups');
-          await page.getByText('Admin unlocked', { exact: true }).waitFor(); assert.equal(posts, 1);
+          await page.getByText(/^(Admin unlocked|Password required)$/).waitFor();
+          assert.equal(await page.locator('#state').textContent(), 'Admin unlocked', 'Cross-subdomain fetch must receive the browser session cookie');
+          assert.equal(posts, 1); assert.equal(sessionReads[0]?.hasBrowserCookie, true);
           const cookie = (await context.cookies()).find(item => item.name === 'fixture-owner-session');
           assert.ok(cookie?.httpOnly && cookie.secure && cookie.sameSite === 'Lax');
           assert.equal(await page.evaluate(() => document.cookie), '', 'No JS-readable session credential');
@@ -80,6 +88,7 @@ async function main() {
           report.cases.push({ engine, width, passed: true, outcomes: ['fragment_erased', 'get_does_not_redeem', 'no_overflow',
             'tap_sets_secure_cookie', 'cross_subdomain_session', 'replay_denied', 'expired_denied', 'bad_link_denied', 'password_fallback'] });
           await context.close();
+          delete report.activeCase;
         }
       } finally { await browser.close(); }
     }
