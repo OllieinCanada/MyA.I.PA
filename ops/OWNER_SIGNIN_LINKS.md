@@ -46,7 +46,7 @@ supplying its current credentials. Do not issue a real link while testing.
   closed without a cookie or automatic retry. Request a fresh private link;
   a five-second response deadline does not cancel an in-flight database write.
   A late claim can still consume the link, but can never issue a late session.
-  never turn the feature into a reusable query-string secret. Used markers are
+  Never turn the feature into a reusable query-string secret. Used markers are
   retained; do not delete them while a signed link could still be valid.
 - Signing out clears the existing admin session. This does not remotely revoke
   other sessions; it is not a new account/device-management system. Do not claim

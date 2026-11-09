@@ -76,6 +76,10 @@ function ownerLinkPage(nonce) {
 (() => {
   let token = location.hash.slice(1);
   history.replaceState(null, '', location.pathname);
+  // A second private link may open in this same in-app-browser tab as a hash
+  // navigation, not a new document. Reload to reset the single-use UI safely;
+  // history.replaceState itself does not emit hashchange or consume the link.
+  addEventListener('hashchange', () => { if (location.hash) location.reload(); });
   const button = document.getElementById('open');
   const status = document.getElementById('status');
   if (!/^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]{43}$/.test(token) || token.length > 1024) {
