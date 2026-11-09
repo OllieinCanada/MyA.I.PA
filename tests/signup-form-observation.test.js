@@ -99,6 +99,23 @@ test('linked and untouched drafts do not alert; exact lookup uses bounded async 
   assert.equal((await f.service.describeAttempt('signup_'+'a'.repeat(32))).linkedAttemptId,'signup_'+'a'.repeat(32));
   assert.equal(await f.service.describeAttempt('untrusted raw contact'),null);assert.equal((await f.service.read(b.id,b.token)).revision,0);
 });
+test('a stale stall snapshot cannot alert after progress, linking, expiry or slot replacement', async()=>{
+  for (const change of ['progress', 'link', 'expiry', 'replacement']) {
+    const f=fixture({slots:1}),a=await f.service.create();
+    await f.service.observe(a.id,a.token,event());f.advance(600001);
+    const list=f.store.list;
+    f.store.list=async(...args)=>{
+      const snapshot=await list(...args);
+      if(change==='progress')await f.service.observe(a.id,a.token,event({sequence:2,expectedRevision:1,fields:[field({presence:'present',validation:'valid',reason:'none'})]}));
+      else if(change==='link')await f.service.link(a.id,a.token,{attemptId:'attempt_'+'a'.repeat(20),attemptToken:'synthetic-attempt-capability'});
+      else {f.advance(TTL_MS);if(change==='replacement')await f.service.create();}
+      return snapshot;
+    };
+    let calls=0;
+    assert.equal((await f.service.processStalls({enqueue:async()=>{calls++;return{queued:true};},frontendUrl:'https://example.invalid'})).queued,0,change);
+    assert.equal(calls,0,change);
+  }
+});
 test('overlapping stall ticks do not enqueue twice and release the guard after errors', async()=>{
   const f=fixture(),a=await f.service.create();await f.service.observe(a.id,a.token,event());f.advance(600001);
   let resolveEntered,release;const entered=new Promise(r=>{resolveEntered=r;}),wait=new Promise(r=>{release=r;});let calls=0;

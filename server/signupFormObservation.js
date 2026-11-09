@@ -151,11 +151,17 @@ function createObservationService({ store, authenticateAttempt, now = () => Date
     try {
     await store.purgeExpired(now() - TTL_MS);
     const records = await store.list(now() - TTL_MS, MAX_SLOTS); let queued = 0;
-    for (const record of records) {
+    for (const candidate of records) {
       if (queued >= 5) break;
-      if (!record.engaged || record.linkedAttemptId || record.expiresAt <= now() || record.alertedRevision === record.progressRevision) continue;
-      const row = projectObservation(record, now()); if (!row.stalled) continue;
+      if (!candidate.engaged || candidate.linkedAttemptId || candidate.expiresAt <= now() || candidate.alertedRevision === candidate.progressRevision) continue;
+      if (!projectObservation(candidate, now()).stalled) continue;
       await new Promise(resolve => setImmediate(resolve));
+      // A visitor may resume, submit, or expire after the bounded list read.
+      // Recheck just this slot, not the entire namespace, before queueing.
+      const record = await store.get(keyFor(candidate.id, slots));
+      if (!record || record.id !== candidate.id || !record.engaged || record.linkedAttemptId || record.expiresAt <= now()
+        || record.progressRevision !== candidate.progressRevision || record.alertedRevision === record.progressRevision) continue;
+      const row = projectObservation(record, now()); if (!row.stalled) continue;
       const result = await enqueue({ text: ['MY AI PA — UNSUBMITTED SIGNUP NEEDS ATTENTION', 'Identity: unknown; no business name or contact value collected.',
         `Reference: ${record.id.slice(-8)}`, `Step: ${row.currentStepLabel}`, 'No observed progress for at least 10 minutes.', ...formObservationLines(row), 'No signup, text, payment or provider action was retried.'].join('\n'),
         adminUrl: `${String(frontendUrl).replace(/\/$/, '')}/#/admin?tab=signups`, buttonText: 'Open signup tracker', dedupeKey: `signup-form-stall:${record.id}:${record.progressRevision}` });

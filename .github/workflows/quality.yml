@@ -82,6 +82,7 @@ jobs:
         run: |
           npx prisma db push --skip-generate
           npm run test:database
+          RUN_SIGNUP_OBSERVATION_POSTGRES=1 npm run test:signup-form-observation:postgres
 
       - name: Exercise isolated signup restart and concurrent-replay recovery
         env:
@@ -188,6 +189,8 @@ jobs:
           npm run test:pages-static-retention:browser
           npm run test:twilio-receipts:browser
           npm run test:finance:browser
+          npm run test:signup-tracker:browser
+          npm run test:signup-form-observation:browser
 
       - name: Save signup browser evidence
         if: always()
@@ -205,6 +208,10 @@ jobs:
             diagnostics/twilio-receipt-health/
             diagnostics/finance-meter/*-finance.png
             diagnostics/finance-meter/browser-report.json
+            diagnostics/signup-tracker-preview/*.png
+            diagnostics/signup-tracker-preview/browser-report.json
+            diagnostics/signup-form-observation-phase-b/*.png
+            diagnostics/signup-form-observation-phase-b/phase-b-browser-report.json
           if-no-files-found: ignore
 
       - name: Archive verified Pages output
