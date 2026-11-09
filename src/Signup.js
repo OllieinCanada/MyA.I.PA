@@ -6,6 +6,7 @@ import ForwardingSetupGuide from "./components/ForwardingSetupGuide";
 import OnboardingWizard from "./features/onboarding/OnboardingWizard";
 import { canonicalPhone, readWizardLocation } from "./features/onboarding/onboardingApi";
 import "./components/CustomerSetupActions.css";
+import { createFormObservationClient, observedFormSnapshot, observedSignupStep } from './features/signup/formObservationClient';
 
 import {
   AREA_GROUPS,
@@ -2131,6 +2132,15 @@ export default function Signup() {
   const [returnToReviewAfterEdit, setReturnToReviewAfterEdit] = useState(false);
   const [reviewReturnStep, setReviewReturnStep] = useState(1);
   const [details, setDetails] = useState(() => ({ ...DEFAULT_DETAILS }));
+  const [observationEngaged, setObservationEngaged] = useState(false);
+  const [observationTouched, setObservationTouched] = useState({});
+  const [observationAttempted, setObservationAttempted] = useState({});
+  const [observationWide, setObservationWide] = useState(() => typeof window === 'undefined' || !window.matchMedia || window.matchMedia('(min-width: 640px)').matches);
+  const observationRef = useRef(null);
+  if (!observationRef.current) {
+    let storage; try { storage = window.sessionStorage; } catch (_) { /* memory-only */ }
+    observationRef.current = createFormObservationClient({ apiBase: API_BASE, storage });
+  }
   const [pricing, setPricing] = useState(() => ({ ...DEFAULT_PRICING }));
   const isSignupQaTurnstileMode = qaModeRef.current === "turnstile";
   const paymentReturnStatus = useMemo(() => getPaymentReturnStatus(), []);
@@ -2207,6 +2217,30 @@ export default function Signup() {
   );
   const selectedAgent = ASSISTANT_AGENT;
   const businessValidation = useMemo(() => validateBusinessDetails(details), [details]);
+  useEffect(() => {
+    if (!window.matchMedia) return undefined;
+    const media = window.matchMedia('(min-width: 640px)'), read = () => setObservationWide(media.matches);
+    media.addEventListener('change', read); return () => media.removeEventListener('change', read);
+  }, []);
+  const observationSnapshot = useCallback((attempted = false) => {
+    const step = observedSignupStep(currentStep, businessSlide, tradeSetupPanel);
+    const humanVerified = CAPTCHA_PROVIDER === 'turnstile+recaptcha' ? Boolean(captchaToken?.turnstileToken && captchaToken?.recaptchaToken) : Boolean(!CAPTCHA_PROVIDER || captchaToken);
+    return observedFormSnapshot({ step, details, validation: businessValidation, touched: observationTouched,
+      attemptedAdvance: attempted || Boolean(observationAttempted[step]) || (step === 'business_details' && businessStepAttempted), selectedTradeId, selectedSpecializationIds, selectedAreas, pricing, humanVerified, wide: observationWide });
+  }, [currentStep, businessSlide, tradeSetupPanel, captchaToken, details, businessValidation, observationTouched, observationAttempted, businessStepAttempted, selectedTradeId, selectedSpecializationIds, selectedAreas, pricing, observationWide]);
+  useEffect(() => {
+    if (!observationEngaged || signupResult || isSignupQaTurnstileMode) return undefined;
+    const snapshot = observationSnapshot();
+    const timer = setTimeout(() => { void observationRef.current.observe(snapshot, true); }, 800);
+    return () => clearTimeout(timer);
+  }, [observationEngaged, signupResult, isSignupQaTurnstileMode, observationSnapshot]);
+  useEffect(() => {
+    if (!signupResult?.signupStatus?.id || !signupResult?.signupStatus?.token) return;
+    // Link only by both capabilities, never by the name, email or telephone.
+    let active = true;
+    void observationRef.current.settled().then(() => active && observationRef.current.link(signupResult.signupStatus));
+    return () => { active = false; };
+  }, [signupResult]);
 
   const tradeStepDisabled = !selectedTradeId;
   const specializationStepDisabled = selectedSpecializationIds.length === 0;
@@ -2288,19 +2322,30 @@ export default function Signup() {
   };
 
   const updateDetails = (field) => (event) => {
+    setObservationEngaged(true);
+    setObservationTouched(previous => ({ ...previous, [field]: true }));
     setDetails((prev) => ({ ...prev, [field]: event.target.value }));
     setStatus("");
     setError("");
   };
 
   const updatePricing = (field) => (event) => {
+    setObservationEngaged(true);
+    setObservationTouched(previous => ({ ...previous, [field]: true }));
     const value = event.target.type === "checkbox" ? event.target.checked : event.target.value;
     setPricing((prev) => ({ ...prev, [field]: value }));
     setStatus("");
     setError("");
   };
+  const handleHumanVerification = useCallback(proof => {
+    setCaptchaToken(proof);
+    const present = typeof proof === 'object' && proof !== null ? Boolean(proof.turnstileToken || proof.recaptchaToken) : Boolean(proof);
+    if (present) { setObservationEngaged(true); setObservationTouched(previous => ({ ...previous, human_verification: true })); }
+  }, []);
 
   const markDetailTouched = (field) => () => {
+    setObservationEngaged(true);
+    setObservationTouched(previous => ({ ...previous, [field]: true }));
     setTouchedDetails((prev) => ({ ...prev, [field]: true }));
   };
 
@@ -2310,6 +2355,7 @@ export default function Signup() {
   };
 
   const toggleArea = (area) => {
+    setObservationEngaged(true); setObservationTouched(previous => ({ ...previous, service_areas: true }));
     setSelectedAreas((prev) => {
       if (prev.includes(area)) {
         return prev.filter((item) => item !== area);
@@ -2319,6 +2365,7 @@ export default function Signup() {
   };
 
   const addCustomArea = () => {
+    setObservationEngaged(true); setObservationTouched(previous => ({ ...previous, service_areas: true }));
     const nextArea = customArea.trim().replace(/\s+/g, " ");
     if (nextArea.length < 2) {
       setError("Enter a city or service area, then tap Add area.");
@@ -2343,6 +2390,7 @@ export default function Signup() {
   };
 
   const selectTrade = (tradeId) => {
+    setObservationEngaged(true); setObservationTouched(previous => ({ ...previous, trade_choice: true }));
     setSelectedTradeId(tradeId);
     setError("");
   };
@@ -2358,6 +2406,7 @@ export default function Signup() {
   };
 
   const toggleSpecialization = (id) => {
+    setObservationEngaged(true); setObservationTouched(previous => ({ ...previous, property_types: true }));
     setSelectedSpecializationIds((prev) => {
       if (prev.includes(id)) return prev.filter((item) => item !== id);
       return [...prev, id];
@@ -2365,12 +2414,15 @@ export default function Signup() {
   };
 
   const resetSignup = () => {
+    observationRef.current.reset();
+    setObservationEngaged(false);
+    setObservationTouched({});
+    setObservationAttempted({});
     setCurrentStep(1);
     setBusinessSlide(1);
     setTradeSetupPanel("trade");
     setSelectedTradeId("");
     setSelectedAreas([]);
-    setAreaSearch("");
     setCustomArea("");
     setSelectedSpecializationIds([]);
     setSelectedDialogueId("help-today");
@@ -2396,6 +2448,11 @@ export default function Signup() {
   const submitSignup = async (event) => {
     event.preventDefault();
     if (busy) return;
+    if (!isSignupQaTurnstileMode && !signupResult) {
+      const snapshot = observationSnapshot(true);
+      setObservationEngaged(true); setObservationAttempted(previous => ({ ...previous, [snapshot.currentStep]: true }));
+      void observationRef.current.observe(snapshot, true);
+    }
     if (currentStep === 1) {
       if (businessSlide === 1) {
         if (tradeSetupPanel === "trade") {
@@ -2603,6 +2660,7 @@ export default function Signup() {
 
   return (
     <main className="min-h-screen bg-[linear-gradient(135deg,#f8fbff_0%,#ffffff_45%,#edf4ff_100%)] text-slate-950">
+      <p className="mx-auto max-w-6xl px-5 pt-3 text-xs leading-5 text-slate-600" data-signup-observation-disclosure>To help with a stuck signup, we record which setup step you reach and whether fields are complete or invalid—not what you type. Unsubmitted progress records expire after 24 hours.</p>
       <style>
         {`
           @keyframes businessSlideIn {
@@ -3837,6 +3895,8 @@ export default function Signup() {
                     onChange={updateDetails("streetAddress")}
                     onBlur={markDetailTouched("streetAddress")}
                     onSelect={(address) => {
+                      setObservationEngaged(true);
+                      setObservationTouched(previous => ({ ...previous, streetAddress: true, city: true, province: true, postalCode: true }));
                       setDetails((prev) => ({ ...prev, ...address }));
                       setStatus(""); setError("");
                     }}
@@ -3995,7 +4055,7 @@ export default function Signup() {
         ) : null}
 
         {currentStep === 3 ? (
-          <HumanVerificationCheck key={captchaResetKey} onVerify={setCaptchaToken} />
+          <HumanVerificationCheck key={captchaResetKey} onVerify={handleHumanVerification} />
         ) : null}
 
         <div
