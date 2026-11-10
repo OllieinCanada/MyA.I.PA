@@ -1,4 +1,5 @@
 const crypto = require("crypto");
+const { regionalAreaCodes, allowedAreaCodes } = require('./numberAreaPolicy');
 const { signupBusinessKey } = require("./signupBusinessIdentity");
 const { hasIndividualPricingChoices, individualPricingPolicy } = require("../src/features/signup/pricingPolicy");
 
@@ -259,6 +260,7 @@ function provisioningAuthorizationProjection(payload) {
     idempotencyKey: provisioning.idempotencyKey,
     preferredAreaCode: provisioning.preferredAreaCode,
     preferredRegion: provisioning.preferredRegion,
+    ...(provisioning.allowedAreaCodes !== undefined ? { allowedAreaCodes: provisioning.allowedAreaCodes } : {}),
     resourceMarker: provisioning.resourceMarker,
     resources: provisioning.resources,
     business: payload?.business,
@@ -301,6 +303,7 @@ function verifySignupProvisioningAuthorization(payload, signingSecret) {
   try {
     const provisioning = payload?.provisioning;
     if (!provisioning || provisioning.authorizationVersion !== AUTHORIZATION_VERSION) return false;
+    allowedAreaCodes(provisioning.preferredAreaCode, provisioning.preferredRegion, provisioning.allowedAreaCodes);
     const values = selectSignupValues(payload);
     const expectedAccountKey = buildProvisioningAccountKey(values.ownerEmail, values.ownerPhone, provisioning.businessKey ? values.businessName : undefined);
     if (provisioning.businessKey && !constantTimeTextEqual(provisioning.businessKey, expectedAccountKey)) return false;
@@ -327,11 +330,18 @@ function verifyProvisioningContextToken(contextHash, accountKey, authorizationTo
 function normalizeSignupProvisioningPayload(input, options = {}) {
   const signingSecret = requireSigningSecret(options.signingSecret);
   const values = selectSignupValues(input);
-  const legacyAuthorized = !input?.provisioning?.businessKey && verifySignupProvisioningAuthorization(input, signingSecret);
+  const authorizedInput = verifySignupProvisioningAuthorization(input, signingSecret);
+  const legacyAuthorized = !input?.provisioning?.businessKey && authorizedInput;
   const accountKey = buildProvisioningAccountKey(values.ownerEmail, values.ownerPhone, legacyAuthorized ? undefined : values.businessName);
   const preferredAreaCode = inferOntarioLocalAreaCode(values)
     || inferPreferredCanadianAreaCode(values.ownerPhone, values.businessPhone);
   const preferredRegion = normalizeProvisioningRegion(values.province, options.defaultRegion);
+  // Never broaden a previously signed request, including Dooley's locked 289
+  // context. Only newly normalized unsigned requests can opt into this policy.
+  const alternatives = authorizedInput
+    ? input.provisioning.allowedAreaCodes
+    : options.allowRegionalFallback === true && preferredAreaCode
+      ? regionalAreaCodes(preferredAreaCode, preferredRegion) : undefined;
   const resourceMarker = buildProvisioningResourceMarker(accountKey);
   const canonicalBusiness = {
     ...values.canonicalBusiness,
@@ -449,6 +459,7 @@ function normalizeSignupProvisioningPayload(input, options = {}) {
       idempotencyKey: accountKey,
       preferredAreaCode,
       preferredRegion,
+      allowedAreaCodes: alternatives,
       resourceMarker,
       resources: {
         twilioNumber: buildProvisioningResourceName("twilio-number", accountKey),

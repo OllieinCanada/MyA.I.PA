@@ -3771,7 +3771,7 @@ function normalizeTwilioProvisioningVoiceUrl(value) {
   return url.toString();
 }
 
-async function purchaseTwilioPhoneNumber({ areaCode = "", region = "ON", voiceUrl, voiceMethod = "POST", friendlyName } = {}, { fetchImpl = fetch } = {}) {
+async function purchaseTwilioPhoneNumber({ areaCode = "", region = "ON", allowedAreaCodes: alternatives, voiceUrl, voiceMethod = "POST", friendlyName } = {}, { fetchImpl = fetch } = {}) {
   if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN) {
     const err = new Error("Twilio credentials are not configured.");
     err.statusCode = 503;
@@ -3779,6 +3779,7 @@ async function purchaseTwilioPhoneNumber({ areaCode = "", region = "ON", voiceUr
   }
 
   const normalizedAreaCode = normalizeTwilioProvisioningAreaCode(areaCode);
+  const areaCandidates = require('./numberAreaPolicy').allowedAreaCodes(normalizedAreaCode, region, alternatives);
   const normalizedVoiceUrl = normalizeTwilioProvisioningVoiceUrl(voiceUrl);
   const normalizedFriendlyName = String(friendlyName || "").trim().replace(/\s+/g, " ").slice(0, 64);
   if (!/^myaipa-twilio-number-[a-f0-9]{20}$/i.test(normalizedFriendlyName)) {
@@ -3815,7 +3816,7 @@ async function purchaseTwilioPhoneNumber({ areaCode = "", region = "ON", voiceUr
   if (existingNumber) {
     const phoneNumber = validateProvisionedCanadianNumber(existingNumber);
     const existingAreaCode = inspectCanadianNumber(phoneNumber).areaCode;
-    if (normalizedAreaCode && existingAreaCode !== normalizedAreaCode) {
+      if (normalizedAreaCode && !areaCandidates.includes(existingAreaCode)) {
       const err = new Error(`The previously provisioned number is not in the requested ${normalizedAreaCode} area code and requires an approved replacement.`);
       err.statusCode = 409;
       err.code = "PROVISIONED_NUMBER_AREA_CODE_MISMATCH";
@@ -3845,7 +3846,7 @@ async function purchaseTwilioPhoneNumber({ areaCode = "", region = "ON", voiceUr
     ? String(region).trim().toUpperCase()
     : "ON";
   const searchPlans = normalizedAreaCode
-    ? [{ label: `area code ${normalizedAreaCode}`, AreaCode: normalizedAreaCode }]
+    ? areaCandidates.map(code => ({ label: `area code ${code}`, AreaCode: code }))
     : [
       { label: `${normalizedRegion} regional inventory`, InRegion: normalizedRegion },
       { label: "Canada-wide local inventory" },
@@ -3870,7 +3871,8 @@ async function purchaseTwilioPhoneNumber({ areaCode = "", region = "ON", voiceUr
       throw createProviderHttpError({ provider: "Twilio", operation: "Canadian number inventory search", status: availableResponse.status, data: availableData, fallbackCode: "TWILIO_NUMBER_SEARCH_FAILED" });
     }
     const candidate = availableData?.available_phone_numbers?.[0]?.phone_number;
-    if (inspectCanadianNumber(candidate).valid) {
+    if (inspectCanadianNumber(candidate).valid
+      && (!plan.AreaCode || inspectCanadianNumber(candidate).areaCode === plan.AreaCode)) {
       availableNumber = inspectCanadianNumber(candidate).e164;
       inventorySource = plan.label;
       break;
@@ -3921,6 +3923,12 @@ async function purchaseTwilioPhoneNumber({ areaCode = "", region = "ON", voiceUr
     inventorySource,
   };
   const phoneNumber = validateProvisionedCanadianNumber(provisionedRecord, { expectedVoiceUrl: normalizedVoiceUrl });
+  if (normalizedAreaCode && !areaCandidates.includes(inspectCanadianNumber(phoneNumber).areaCode)) {
+    // A mismatched acknowledgement is uncertain paid work, not permission to
+    // try another purchase. Existing durable provisioning guards retain it.
+    throw Object.assign(new Error('The purchased number did not match the signed area-code policy.'),
+      { code: 'PROVISIONED_NUMBER_AREA_CODE_MISMATCH', statusCode: 502 });
+  }
   return {
     ...provisionedRecord,
     sid: provisionedRecord.sid,
@@ -10898,6 +10906,7 @@ async function sendMakeSignupCompleted(payload, { resumeExistingOnly = false, be
   const proposedPayload = normalizeSignupProvisioningPayload(payload, {
     signingSecret,
     defaultRegion: process.env.TWILIO_DEFAULT_CANADIAN_REGION || "ON",
+    allowRegionalFallback: process.env.SIGNUP_REGIONAL_AREA_FALLBACK_ENABLED === 'true',
   });
   const normalizedPayload = await registerSignupProvisioningContext({
     prisma,
@@ -14536,6 +14545,7 @@ app.post(
       execute: () => purchaseTwilioPhoneNumber({
         areaCode: preferredAreaCode,
         region: preferredRegion,
+        allowedAreaCodes: trustedPayload.provisioning?.allowedAreaCodes,
         voiceUrl: input.voiceUrl,
         voiceMethod: input.voiceMethod,
         friendlyName,
