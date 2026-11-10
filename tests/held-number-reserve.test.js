@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { purchaseHeldReserve, CONFIRM } = require('../scripts/purchase-held-number-reserve');
+const { purchaseHeldReserve, assertHeld, CONFIRM } = require('../scripts/purchase-held-number-reserve');
 function fixture(options = {}) {
   let journal = null, purchases = 0; const numbers = [];
   const api = {
@@ -40,4 +40,13 @@ test('unexpected routing or assistant attachment stops before a second purchase'
 });
 test('exact approval is required before any provider operation', async () => {
   await assert.rejects(purchaseHeldReserve({ approved: 'yes' }), /EXACT_APPROVAL/);
+});
+
+test('all routing paths, including SIP trunks and application/service bindings, are rejected', () => {
+  const clean = { phone_number: '+13655550123', capabilities: { voice: true, sms: true } };
+  assert.doesNotThrow(() => assertHeld(clean));
+  for (const key of ['voice_url', 'sms_url', 'voice_fallback_url', 'sms_fallback_url', 'status_callback',
+    'voice_application_sid', 'sms_application_sid', 'messaging_service_sid', 'trunk_sid']) {
+    assert.throws(() => assertHeld({ ...clean, [key]: 'fixture-binding' }), /NOT_VERIFIED_UNROUTED/);
+  }
 });

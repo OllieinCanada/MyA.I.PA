@@ -8,7 +8,7 @@ function assertHeld(number) {
   if (!number || !/^\+1365\d{7}$/.test(number.phone_number || '')
     || number.capabilities?.voice !== true || (number.capabilities?.sms ?? number.capabilities?.SMS) !== true
     || ['voice_url', 'sms_url', 'voice_fallback_url', 'sms_fallback_url', 'status_callback',
-      'voice_application_sid', 'sms_application_sid', 'messaging_service_sid'].some(k => number[k])) {
+      'voice_application_sid', 'sms_application_sid', 'messaging_service_sid', 'trunk_sid'].some(k => number[k])) {
     throw Error('RESERVE_NOT_VERIFIED_UNROUTED');
   }
 }
