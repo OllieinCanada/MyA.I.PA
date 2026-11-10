@@ -3,9 +3,11 @@ const { loadProjectEnv } = require("./_helpers");
 
 const env = loadProjectEnv();
 const baseUrl = String(env.MAKE_API_BASE_URL || "https://us2.make.com/api/v2").replace(/\/+$/, "");
-const token = String(env.MAKE_API_TOKEN || env.MAKE_TOKEN || env.MAKE_API_KEY || "").trim();
+const token = String(env.MAKE_API_TOKEN || env.MAKE_TOKEN || env.MAKE_API_KEY
+  || (!process.argv.includes('--apply') ? env.MAKE_AUDIT_API_TOKEN : '') || "").trim();
 const scenarioId = String(env.MAKE_SCENARIO_ID || "3530157").trim();
 const shouldApply = process.argv.includes("--apply");
+const reportingOnly = process.argv.includes("--reporting-only");
 const confirmation = String(
   process.argv.find((argument) => argument.startsWith("--confirm="))?.split("=")[1] || ""
 ).trim();
@@ -160,7 +162,7 @@ function mutateBlueprint(current) {
     // Never resume with fabricated provider identifiers or reach the success receipt.
     module.onerror = [{
       id: nextId++, module: "gateway:WebhookRespond", version: 1, parameters: {},
-      mapper: { status: "200", body: JSON.stringify({ ok: false, success: false,
+      mapper: { status: "200", body: failureResponseTemplate({ ok: false, success: false,
         error: "Signup provisioning stopped at a provider request.",
         code: "MAKE_PROVISIONING_STAGE_FAILED", stage,
         failedStage: { number_purchase: "TWILIO_NUMBER_PURCHASE", assistant_creation: "VAPI_ASSISTANT_CREATE", number_binding: "VAPI_NUMBER_IMPORT" }[stage],
@@ -215,6 +217,41 @@ function buildSafeFailureCodeMapping(moduleId) {
   return `{{${expression}}}`;
 }
 
+// Make evaluates IML before delivering the response. JSON.stringify must not
+// backslash-escape the quotes INSIDE that expression: those are IML syntax,
+// not response data. Only allowlisted constants can be substituted here.
+function failureResponseTemplate(envelope) {
+  const marker = '__MYAIPA_SAFE_PROVIDER_CODE__';
+  return JSON.stringify({ ...envelope, providerCode: marker })
+    .replace(marker, envelope.providerCode);
+}
+
+function inspectFailureTemplate(template) {
+  const expressions = String(template || '').match(/\{\{[\s\S]*?\}\}/g) || [];
+  if (expressions.length !== 1 || expressions[0].includes('\\"')) return null;
+  try { return JSON.parse(template.replace(expressions[0], 'PROVIDER_REQUEST_FAILED')); }
+  catch { return null; }
+}
+
+function repairFailureReporting(blueprint) {
+  const result = clone(blueprint);
+  for (const id of [9, 25, 28]) {
+    const module = findModule(result, id);
+    if (module.module !== 'http:ActionSendData' || module.onerror?.length !== 1
+      || module.onerror[0].module !== 'gateway:WebhookRespond') throw Error('Unexpected failure handler; no reporting changes applied.');
+    const handler = module.onerror[0];
+    if (inspectFailureTemplate(handler.mapper?.body)) continue;
+    let envelope;
+    try { envelope = JSON.parse(handler.mapper.body); } catch { throw Error('Unknown failure response template; manual review required.'); }
+    if (envelope.success !== false || envelope.ok !== false || envelope.retryable !== false
+      || envelope.code !== 'MAKE_PROVISIONING_STAGE_FAILED'
+      || envelope.providerCode !== buildSafeFailureCodeMapping(id)) throw Error('Unknown failure envelope; refusing to rewrite.');
+    // Preserve every other module, credential, route, preference and scenario setting.
+    handler.mapper.body = failureResponseTemplate(envelope);
+  }
+  return result;
+}
+
 function verifyBlueprint(blueprint) {
   const purchase = findModule(blueprint, 9);
   const assistant = findModule(blueprint, 25);
@@ -258,7 +295,7 @@ function verifyBlueprint(blueprint) {
       module.parameters?.handleErrors === true && module.onerror?.length === 1
         && module.onerror[0].module === "gateway:WebhookRespond"
         && String(module.onerror[0].mapper?.status) === "200"
-        && JSON.parse(module.onerror[0].mapper.body).success === false),
+        && inspectFailureTemplate(module.onerror[0].mapper.body)?.success === false),
   };
 }
 
@@ -266,12 +303,13 @@ async function main() {
   if (!token) throw new Error("MAKE_API_TOKEN is not configured.");
   const before = getBlueprint(await request(`/scenarios/${encodeURIComponent(scenarioId)}/blueprint`));
   const beforeChecksum = checksum(before);
-  const repaired = mutateBlueprint(before);
+  const repaired = reportingOnly ? repairFailureReporting(before) : mutateBlueprint(before);
   const checks = verifyBlueprint(repaired);
   if (!Object.values(checks).every(Boolean)) throw new Error("The repaired Make blueprint failed its local safety checks.");
 
   console.log(JSON.stringify({
     mode: shouldApply ? "apply" : "dry-run",
+    reportingOnly,
     scenarioId,
     beforeChecksum,
     proposedChecksum: checksum(repaired),
@@ -285,6 +323,9 @@ async function main() {
   if (confirmation !== EXPECTED_CONFIRMATION) {
     throw new Error(`Refusing to modify Make without --confirm=${EXPECTED_CONFIRMATION}.`);
   }
+
+  const fresh = getBlueprint(await request(`/scenarios/${encodeURIComponent(scenarioId)}/blueprint`));
+  if (checksum(fresh) !== beforeChecksum) throw Error('Scenario changed during validation; no update sent.');
 
   await request(`/scenarios/${encodeURIComponent(scenarioId)}`, {
     method: "PATCH",
@@ -308,4 +349,8 @@ if (require.main === module) {
 module.exports = {
   mutateBlueprint,
   verifyBlueprint,
+  buildSafeFailureCodeMapping,
+  failureResponseTemplate,
+  inspectFailureTemplate,
+  repairFailureReporting,
 };
