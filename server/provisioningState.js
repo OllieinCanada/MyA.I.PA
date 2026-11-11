@@ -103,6 +103,7 @@ async function claimProvisioningStep({
       originalProviderDetail: data.originalProviderDetail || '',
       lastProviderDetail: data.lastProviderDetail || '',
       guardedRecovery: data.guardedRecovery || null,
+      ...(data.fallbackRecovery ? { fallbackRecovery: data.fallbackRecovery } : {}),
       firstFailedAt: data.firstFailedAt || data.failedAt || null,
       updatedAt: new Date(now).toISOString(),
     };
