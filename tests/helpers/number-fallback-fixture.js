@@ -18,9 +18,10 @@ function memoryPrisma() {
 }
 async function fixture(prisma=memoryPrisma()) {
   const suffix=crypto.randomUUID(), now=Date.now();
-  const payload=normalizeSignupProvisioningPayload({submissionId:suffix,businessName:'Fixture Electrical '+suffix,
+  // Match the JSON storage boundary, including removal of undefined properties.
+  const payload=JSON.parse(JSON.stringify(normalizeSignupProvisioningPayload({submissionId:suffix,businessName:'Fixture Electrical '+suffix,
     ownerEmail:suffix+'@example.test',ownerPhone:'+19055550198',businessPhone:'+19055550199',
-    businessAddress:'23 Robb Street, Hamilton, ON L8L 1A1'}, {signingSecret:secret});
+    businessAddress:'23 Robb Street, Hamilton, ON L8L 1A1'}, {signingSecret:secret})));
   const key=payload.provisioning.idempotencyKey, hash=payload.provisioning.contextHash;
   const record={signupAttemptId:buildMakeSignupEventKey(payload),businessName:payload.businessName,
     ownerEmail:payload.ownerEmail,ownerPhone:payload.ownerPhone,status:'setup_error',smsVerified:true};
