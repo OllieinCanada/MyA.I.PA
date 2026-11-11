@@ -36,7 +36,7 @@ test('only explicitly opted-in new contexts gain signed alternatives; old signat
   assert.equal(forged.provisioning.allowedAreaCodes, undefined);
 });
 
-function purchaseFixture({ available = '365', failPurchase = false, owned = [], failSearch = false } = {}) {
+function purchaseFixture({ available = '365', failPurchase = false, owned = [], failSearch = false, pages, malformed = false } = {}) {
   const source = fs.readFileSync(require.resolve('../server/index'), 'utf8');
   const start = source.indexOf('async function purchaseTwilioPhoneNumber(');
   const end = source.indexOf('\nasync function ', start + 1);
@@ -61,6 +61,8 @@ function purchaseFixture({ available = '365', failPurchase = false, owned = [], 
       return new Response(JSON.stringify({ available_phone_numbers: url.searchParams.get('AreaCode') === available
         ? [{ phone_number: '+1' + available + '5550123' }] : [] }));
     }
+    if (malformed) return new Response('{}');
+    if (pages) return new Response(JSON.stringify(pages[Number(url.searchParams.get('Page') || 0)]));
     return new Response(JSON.stringify({ incoming_phone_numbers: owned }));
   };
   return { calls, run: (alternatives, onProgress) => context.subject({ areaCode: '289', region: 'ON',
@@ -99,4 +101,20 @@ test('uncertain purchase or search failure never triggers another purchase or br
   await assert.rejects(unavailable.run(['289', '905', '365', '742']), { code: 'TWILIO_NUMBER_SEARCH_FAILED' });
   assert.equal(unavailable.calls.length, 2);
   assert.equal(unavailable.calls.filter(x => x.method === 'POST').length, 0);
+});
+
+test('existing purchase on later inventory page is reused without buying a duplicate',async()=>{
+ const next='/2010-04-01/Accounts/fixture/IncomingPhoneNumbers.json?Page=1';
+ const row={friendly_name:'myaipa-twilio-number-'+'a'.repeat(20),phone_number:'+13655550123',voice_url:'https://fixture.invalid/voice',capabilities:{voice:true,sms:true}};
+ const f=purchaseFixture({pages:[{incoming_phone_numbers:[],next_page_uri:next},{incoming_phone_numbers:[row]}]});
+ assert.equal((await f.run(['289','905','365','742'])).reused,true);assert.equal(f.calls.filter(c=>c.method==='POST').length,0);
+});
+test('duplicate markers, malformed, hostile or truncated inventory stop all purchases',async()=>{
+ const name='myaipa-twilio-number-'+'a'.repeat(20);
+ for(const f of [purchaseFixture({malformed:true}),purchaseFixture({owned:[{friendly_name:name}]}),
+   purchaseFixture({owned:[{friendly_name:name},{friendly_name:name}]}),
+   purchaseFixture({pages:[{incoming_phone_numbers:[],next_page_uri:'https://evil.example/collect'}]}),
+   purchaseFixture({pages:[{incoming_phone_numbers:[],next_page_uri:'/2010-04-01/Accounts/fixture/IncomingPhoneNumbers.json?Page=0'}]})]) {
+  await assert.rejects(f.run(['289','905','365','742']));assert.equal(f.calls.filter(c=>c.method==='POST').length,0);
+ }
 });

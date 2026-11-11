@@ -72,6 +72,7 @@ const {verifyDeliveredCompletionReceipt,findStoredCompletionReceipt,reconcileSig
 const { enqueueTwilioStatus, drainTwilioStatuses } = require('./twilioStatusInbox');
 const { readTwilioReceiptHealth, withTwilioReceiptAttention } = require('./twilioReceiptHealth');
 const { receiptInspectionHandler } = require('./twilioReceiptInspection');
+const { prepareNumberFallbackRecovery } = require('./signupNumberFallbackRecovery');
 const { selectTrialSignup } = require("./trialSignupSelection");
 const { fetchProviderReadText } = require("./providerRead");
 const { dispatchSignupSms } = require("./signupSmsDispatch");
@@ -3802,15 +3803,27 @@ async function purchaseTwilioPhoneNumber({ areaCode = "", region = "ON", allowed
     `${TWILIO_API_BASE_URL}/2010-04-01/Accounts/${encodeURIComponent(TWILIO_ACCOUNT_SID)}/IncomingPhoneNumbers.json`
   );
   ownedNumbersUrl.searchParams.set("PageSize", "1000");
-  const ownedNumbersResponse = await fetchImpl(ownedNumbersUrl, {
-    headers: { Authorization: getTwilioAuthHeader(), Accept: "application/json" },
-  });
-  const ownedNumbersData = parseJsonObject(await ownedNumbersResponse.text());
-  if (!ownedNumbersResponse.ok) {
-    throw createProviderHttpError({ provider: "Twilio", operation: "owned phone-number lookup", status: ownedNumbersResponse.status, data: ownedNumbersData, fallbackCode: "TWILIO_NUMBER_LOOKUP_FAILED" });
+  const owned = [];
+  let ownedPage = ownedNumbersUrl;
+  for (let page = 0; ownedPage && page < 10; page++) {
+    const response = await fetchImpl(ownedPage, {headers:{Authorization:getTwilioAuthHeader(),Accept:'application/json'}});
+    const data = parseJsonObject(await response.text());
+    if (!response.ok) throw createProviderHttpError({provider:'Twilio',operation:'owned phone-number lookup',status:response.status,data,fallbackCode:'TWILIO_NUMBER_LOOKUP_FAILED'});
+    if (!Array.isArray(data?.incoming_phone_numbers)) throw Object.assign(Error('Owned inventory is incomplete.'),{code:'TWILIO_INVENTORY_INCOMPLETE',statusCode:503});
+    owned.push(...data.incoming_phone_numbers);
+    ownedPage = data.next_page_uri ? new URL(data.next_page_uri,TWILIO_API_BASE_URL) : null;
+    if (ownedPage && (ownedPage.origin !== ownedNumbersUrl.origin || ownedPage.pathname !== ownedNumbersUrl.pathname)) {
+      throw Object.assign(Error('Owned inventory pagination is invalid.'),{code:'TWILIO_INVENTORY_INCOMPLETE',statusCode:503});
+    }
+  }
+  if (ownedPage) throw Object.assign(Error('Owned inventory was truncated.'),{code:'TWILIO_INVENTORY_INCOMPLETE',statusCode:503});
+  const matchingOwned = owned.filter(record => String(record?.friendly_name || '').trim() === normalizedFriendlyName);
+  if (matchingOwned.length > 1 || matchingOwned.some(record => !inspectCanadianNumber(record.phone_number).valid
+    || record.capabilities?.voice === false || record.capabilities?.sms === false)) {
+    throw Object.assign(Error('Existing purchase requires reconciliation.'),{code:'PROVISIONING_RECONCILIATION_REQUIRED',statusCode:409});
   }
 
-  const existingNumber = (ownedNumbersData?.incoming_phone_numbers || []).find((record) => {
+  const existingNumber = owned.find((record) => {
     return String(record?.friendly_name || "").trim() === normalizedFriendlyName
       && inspectCanadianNumber(record?.phone_number).valid
       && record?.capabilities?.voice !== false
@@ -17675,6 +17688,49 @@ app.delete(
 );
 
 app.get('/api/admin/twilio/receipt-state', requireAdmin, receiptInspectionHandler({ prisma }));
+
+app.post(
+  '/api/admin/signups/prepare-number-fallback-recovery',
+  adminSignupRepairProcessRateLimiter,
+  requireAdmin,
+  asyncRoute(async (req, res) => {
+    res.setHeader('Cache-Control','no-store');
+    if (!req.headers.origin || !isAllowedOrigin(req.headers.origin)
+      || req.headers['x-myaipa-number-recovery'] !== '1'
+      || !/^application\/json(?:\s*;|$)/i.test(String(req.headers['content-type'] || ''))) {
+      return res.status(403).json({error:'Trusted admin origin, JSON and number-recovery header are required.'});
+    }
+    const {signupAttemptId, expectedContextHash, apply, confirmation} = req.body || {};
+    if (!/^signup_[a-f0-9]{32}$/.test(signupAttemptId || '') || typeof apply !== 'boolean'
+      || confirmation !== 'PREPARE_NUMBER_FALLBACK_RECOVERY'
+      || (apply && !/^[a-f0-9]{64}$/.test(expectedContextHash || ''))) {
+      return res.status(400).json({error:'Exact signup, confirmation, apply flag and apply-time context hash are required.'});
+    }
+    const getRecord = id => {
+      const matches = listSignupDashboardRecords().filter(r => r.signupAttemptId === id);
+      if(matches.length !== 1) throw signupRecoveryError('Exact signup is not unique.', 'SIGNUP_RECOVERY_TARGET_INVALID');
+      return matches[0];
+    };
+    const record = getRecord(signupAttemptId);
+    const accountKey = require('./signupProvisioning').buildProvisioningAccountKey(record.ownerEmail,record.ownerPhone,record.businessName);
+    const context = (await prisma.runtimeStore.findUnique({where:{key:contextStoreKey(accountKey)}}))?.data;
+    const result = await prepareNumberFallbackRecovery({prisma,getRecord,signupAttemptId,
+      expectedContextHash:apply ? expectedContextHash : context?.contextHash,
+      actorHash:getAdminActorHash(req),signingSecret:getProvisioningSigningSecret(),
+      enabled:process.env.SIGNUP_REGIONAL_AREA_FALLBACK_ENABLED === 'true',apply,
+      readInventory:async()=>{
+        const [twilioNumbers,vapiAssistants,vapiPhones] = await Promise.all([
+          fetchTwilioIncomingPhoneNumbers({requireComplete:true}),
+          fetchVapiCollection('assistant',['assistants','agents'],{requireComplete:true}),
+          fetchVapiCollection('phone-number',['phoneNumbers','phone_numbers'],{requireComplete:true}),
+        ]);
+        return {complete:true,twilioNumbers,vapiAssistants,vapiPhones};
+      },
+    });
+    res.setHeader('Cache-Control','no-store');
+    res.json(result);
+  })
+);
 
 app.get(
   "/api/admin/signups",
