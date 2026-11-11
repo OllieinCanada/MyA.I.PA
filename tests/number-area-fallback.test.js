@@ -63,9 +63,9 @@ function purchaseFixture({ available = '365', failPurchase = false, owned = [], 
     }
     return new Response(JSON.stringify({ incoming_phone_numbers: owned }));
   };
-  return { calls, run: alternatives => context.subject({ areaCode: '289', region: 'ON',
+  return { calls, run: (alternatives, onProgress) => context.subject({ areaCode: '289', region: 'ON',
     allowedAreaCodes: alternatives, friendlyName: 'myaipa-twilio-number-' + 'a'.repeat(20),
-    voiceUrl: 'https://fixture.invalid/voice' }, { fetchImpl }) };
+    voiceUrl: 'https://fixture.invalid/voice' }, { fetchImpl, onProgress }) };
 }
 
 test('actual purchase function searches ordered approved overlays and makes exactly one purchase; held reserve is ignored', async () => {
@@ -84,6 +84,11 @@ test('old strict request never expands, and all-empty inventory never purchases'
   const empty = purchaseFixture({ available: '' });
   await assert.rejects(empty.run(['289', '905', '365', '742']), { code: 'LOCAL_CANADIAN_NUMBER_INVENTORY_UNAVAILABLE' });
   assert.equal(empty.calls.filter(x => x.method === 'POST').length, 0);
+});
+test('live area-code observations do not change ordered searches or duplicate purchase behavior', async()=>{
+ const events=[],fixture=purchaseFixture();await fixture.run(['289','905','365','742'],event=>events.push(`${event.phase}:${event.areaCode}`));
+ assert.deepEqual(events,['searching:289','empty:289','searching:905','empty:905','searching:365','candidate_found:365','purchase_dispatching:365','completed:365']);
+ const throwing=purchaseFixture();await throwing.run(['289','905','365','742'],()=>{throw Error('diagnostics unavailable');});assert.equal(throwing.calls.filter(c=>c.method==='POST').length,1);
 });
 
 test('uncertain purchase or search failure never triggers another purchase or broad search', async () => {

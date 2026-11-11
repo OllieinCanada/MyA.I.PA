@@ -30,6 +30,14 @@ test('tracker reads require admin and are non-mutating, private and non-cacheabl
   assert.equal(data.rows.length, 2); assert.equal(data.summary.stalled, 1);
   assert.equal(JSON.stringify(rows), snapshot); assert.doesNotMatch(JSON.stringify(data), /private@example|5550101|billing-do-not-change/);
 });
+test('detailed setup analysis is admin-only, no-store and performs no saved-state mutations',async()=>{
+ const url=base+'/api/admin/signup-tracker/'+id+'/setup',before=JSON.stringify(rows);
+ assert.equal((await fetch(url)).status,401);const r=await fetch(url,{headers:headers()}),body=await r.json();
+ assert.equal(r.status,200);assert.equal(r.headers.get('cache-control'),'no-store');assert.equal(body.setup.readOnly,true);assert.equal(body.setup.groups.length,4);assert.equal(JSON.stringify(rows),before);
+ assert.doesNotMatch(JSON.stringify(body),/private@example|5550101|billing-do-not-change/);
+ assert.equal((await fetch(base+'/api/admin/signup-tracker/not-valid/setup',{headers:headers()})).status,400);
+ assert.equal((await fetch(base+'/api/admin/signup-tracker/signup_'+'f'.repeat(32)+'/setup',{headers:headers()})).status,409);
+});
 test('business edits require authentication plus trusted origin and anti-CSRF header', async () => {
   const body = { expectedRevision: infoRevision(rows[0]), details: businessInfo(rows[0]) };
   assert.equal((await patch(body, { 'x-test-admin': 'no' })).status, 401);

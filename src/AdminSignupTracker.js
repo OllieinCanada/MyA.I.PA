@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './AdminSignupTracker.css';
+import SignupControlRoom from './SignupControlRoom';
 
 const FIELDS = { serviceSummary: ['Services', 400], serviceArea: ['Service area', 160], businessWebsite: ['Business website', 300], businessAddress: ['Business address', 400], specializationNotes: ['Business notes', 2000] };
 const time = value => value && Number.isFinite(new Date(value).getTime()) ? new Date(value).toLocaleString('en-CA', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/Toronto', timeZoneName: 'short' }) : 'Not recorded';
@@ -15,6 +16,7 @@ export function FormObservationReport({ observation }) {
 export default function AdminSignupTracker({ apiBase = '' }) {
   const [data, setData] = useState(null), [error, setError] = useState(''), [busy, setBusy] = useState(false);
   const [filter, setFilter] = useState('active'), [search, setSearch] = useState(''), [expanded, setExpanded] = useState(''), [draftExpanded, setDraftExpanded] = useState('');
+  const [focused, setFocused] = useState('');
   const [editor, setEditor] = useState(null), [saving, setSaving] = useState(false), [saveError, setSaveError] = useState(''), [message, setMessage] = useState('');
   const reading = useRef(null), writing = useRef(null), editorSection = useRef(null), readGeneration = useRef(0);
   const load = useCallback(async () => {
@@ -63,7 +65,7 @@ export default function AdminSignupTracker({ apiBase = '' }) {
   };
   return <section className="signup-tracker" aria-label="Signup progress tracker" aria-busy={busy}>
     <header className="signup-tracker-header">
-      <div><span className="signup-tracker-eyebrow">From signup to ready</span><h2>Every signup. One clear view.</h2><p>See the next unfinished step, spot a delay, and update saved business information.</p></div>
+      <div><span className="signup-tracker-eyebrow">My AI PA · Admin</span><h2>Signup control room</h2><p>One clear journey. Every recorded check. The exact step that needs you.</p></div>
       <div className="signup-tracker-refresh"><button type="button" disabled={busy} onClick={load}>{busy ? 'Checking…' : 'Refresh signups'}</button><small>Last checked {time(data?.generatedAt)}</small></div>
     </header>
     {error ? <p role="alert" className="signup-tracker-error">{error}</p> : null}
@@ -71,16 +73,17 @@ export default function AdminSignupTracker({ apiBase = '' }) {
     <div className="signup-tracker-kpis">
       {[['Active setup', data?.summary?.active, 'People still onboarding'], ['Needs attention', data?.summary?.stalled, '10+ minutes with no progress'], ['Waiting on customer', data?.summary?.waitingCustomer, 'Verification still needed'], ['Setup ready', data?.summary?.ready, 'No stuck-signup alerts']].map(([label, value, note]) => <div key={label}><span>{label}</span><strong>{value ?? '—'}</strong><small>{note}</small></div>)}
     </div>
-    <div className="signup-tracker-policy"><strong>A 10-minute heads-up, not an automatic retry.</strong><span>Admin + Telegram alerts once per stalled setup episode. Paused, closed and ready accounts are excluded. Waiting for customer verification is not proof of a technical failure.</span><span>Submitted verification, trial and setup checkpoints use saved backend evidence. A checkout return URL is not payment proof; external checkout is not observed by this form tracker. This form has no separate terms-agreement checkbox, and showing a notice is not proof of agreement.</span></div>
+    <details className="signup-tracker-policy"><summary>How to read this dashboard · evidence, alerts and safety</summary><span>A 10-minute heads-up, not an automatic retry. Admin + Telegram alerts once per stalled setup episode. Paused, closed and ready accounts are excluded. Waiting for customer verification is not proof of a technical failure.</span><span>Submitted verification, trial and setup checkpoints use saved backend evidence. A checkout return URL is not payment proof; external checkout is not observed by this form tracker. This form has no separate terms-agreement checkbox, and showing a notice is not proof of agreement.</span></details>
     <div className="signup-tracker-toolbar"><label>Search signups<input type="search" value={search} placeholder="Business, owner or setup step" onChange={e => setSearch(e.target.value)} /></label><label>Show<select aria-label="Show signups" value={filter} onChange={e => setFilter(e.target.value)}><option value="active">Active setup</option><option value="stalled">Needs attention</option><option value="waiting_customer">Waiting for customer</option><option value="ready">Ready</option><option value="paused">Paused</option><option value="all">All records</option></select></label><span>{rows.length} {rows.length === 1 ? 'signup' : 'signups'}</span></div>
     <div className="signup-tracker-rows">
-      {rows.map(row => <article key={row.attemptId || row.businessName} className={'signup-tracker-row ' + (row.stalled ? 'is-stalled' : '')}>
+      {rows.map(row => <article key={row.attemptId || row.businessName} className={'signup-tracker-row ' + (row.stalled ? 'is-stalled ' : '') + (row.attemptId === (rows.some(r=>r.attemptId===focused)?focused:rows[0]?.attemptId) ? 'is-focused' : '')}>
         <div className="signup-tracker-row-main">
-          <div className="signup-tracker-business"><span className={'signup-tracker-badge is-' + (row.stalled ? 'stalled' : row.mode)}>{modeLabel(row)}</span><h3>{row.businessName}</h3><p>{row.ownerName || 'Owner not recorded'} · Started {time(row.signedUpAt)}</p></div>
+          <div className="signup-tracker-business"><span className={'signup-tracker-badge is-' + (row.stalled ? 'stalled' : row.mode)}>{modeLabel(row)}</span><h3>{row.businessName}</h3><p>{row.ownerName || 'Owner not recorded'} · Started {time(row.signedUpAt)}</p><button className="control-open-signup" type="button" aria-pressed={row.attemptId === (rows.some(r=>r.attemptId===focused)?focused:rows[0]?.attemptId)} onClick={()=>setFocused(row.attemptId)}>Inspect {row.businessName}</button></div>
           <div className="signup-tracker-step"><span>Current step</span><strong>{row.currentStep}</strong><div className="signup-tracker-progress" aria-label={`${row.completedSteps} of ${row.totalSteps} setup checkpoints complete`}>{row.steps.map(step => <span key={step.key} className={'is-' + step.status} title={`${step.label}: ${step.status}`} />)}</div><small>{row.completedSteps} / {row.totalSteps} checkpoints verified</small></div>
           <div className="signup-tracker-time"><strong>{elapsedLabel(row.elapsedMs)}</strong><small>{row.timeBasis === 'tracking_started' ? 'Timed from tracking start; earlier progress time unknown' : `Last observed progress ${time(row.lastProgressAt)}`}</small>{row.alertQueuedAt ? <span>Telegram alert queued {time(row.alertQueuedAt)}</span> : row.stalled ? <span>Alert awaits the background check</span> : null}</div>
         </div>
         <div className="signup-tracker-row-actions"><p><strong>Next:</strong> {row.nextAction}</p><button type="button" aria-expanded={expanded === row.attemptId} onClick={() => setExpanded(expanded === row.attemptId ? '' : row.attemptId)}>{expanded === row.attemptId ? 'Hide checkpoints' : 'View checkpoints'}</button><button type="button" disabled={!row.editable || saving} onClick={() => openEditor(row)}>Edit business info</button></div>
+        {row.attemptId === (rows.some(r=>r.attemptId===focused)?focused:rows[0]?.attemptId) ? <SignupControlRoom row={row} apiBase={apiBase} /> : null}
         {expanded === row.attemptId ? <div className="signup-tracker-checkpoints"><ol>{row.steps.map(step => <li key={step.key} className={'is-' + step.status}><span>{step.status === 'done' ? '✓' : step.status === 'current' ? '→' : '·'}</span>{step.label}<small>{step.status === 'done' ? 'Verified' : step.status === 'current' ? 'Next incomplete' : 'Pending'}</small></li>)}</ol><p>Recorded state: {row.status}{row.blockerCode ? ` · ${row.blockerCode}` : ''}. Checkpoints reflect saved evidence, not a live test or a promise that the phone is ready.</p><FormObservationReport observation={row.formObservation} /></div> : null}
       </article>)}
       {!rows.length ? <div className="signup-tracker-empty">{data ? 'No signups match this view.' : 'Loading saved signup progress…'}</div> : null}
