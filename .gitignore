@@ -55,6 +55,7 @@ artifacts/
 /ops/*
 !/ops/LAUNCH_EVIDENCE_RUNBOOK.md
 !/ops/OWNER_SIGNIN_LINKS.md
+!/ops/TELEGRAM_OWNER_SIGNIN.md
 
 # Local job-package generators and document delivery helpers
 /scripts/build-august*.py

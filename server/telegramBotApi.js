@@ -11,7 +11,7 @@ async function telegramBotRequest(method, payload, { token, fetchImpl = fetch } 
   if (!botToken) return { ok: false, skipped: true, reason: "telegram_not_configured" };
   const response = await fetchImpl(`https://api.telegram.org/bot${botToken}/${method}`, {
     method: "POST",
-    ...(method === 'sendPhoto' ? noticeRequest(payload.text, { chatId: payload.chat_id, replyMarkup: payload.reply_markup })
+    ...(method === 'sendPhoto' ? noticeRequest(payload.text, { chatId: payload.chat_id, replyMarkup: payload.reply_markup, botToken })
       : { headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload || {}) }),
     signal: typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function"
       ? AbortSignal.timeout(REQUEST_TIMEOUT_MS)

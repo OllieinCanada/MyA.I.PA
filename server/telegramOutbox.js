@@ -316,7 +316,7 @@ async function postTelegramItem(item, { token, chatId, fetchImpl }) {
   let data = {};
   try {
     response = await fetchImpl(`https://api.telegram.org/bot${token}/sendPhoto`, noticeRequest(body.text, {
-      chatId, replyMarkup: body.reply_markup,
+      chatId, replyMarkup: body.reply_markup, botToken: token,
     }));
     data = await response.json().catch(() => ({}));
   } catch (error) {

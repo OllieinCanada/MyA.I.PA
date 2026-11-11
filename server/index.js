@@ -400,6 +400,7 @@ const signupDuplicateSubmissions = new Map();
 const legacyPendingSignupPath = path.join(dataDir, "pending-signup-verifications.json");
 const { readRecoveryFileStore } = require("./recoveryFileStore");
 const { registerOwnerLinkRoutes } = require("./adminOwnerLinks");
+const { registerTelegramLogin, configFromEnv: telegramLoginConfig } = require("./adminTelegramLogin");
 const pendingStripeSignupPath = path.join(dataDir, "pending-stripe-signups.json");
 const trialReminderPath = path.join(dataDir, "trial-reminders.json");
 const signupDashboardPath = path.join(dataDir, "signup-dashboard.json");
@@ -1033,8 +1034,8 @@ app.use('/api/signup/form-observation', observationBodyGuard({ jsonParser: expre
   createLimiter: formObservationCreateLimiter, updateLimiter: formObservationUpdateLimiter }));
 // Owner sign-in accepts only a short signed credential, not the general API's
 // larger body allowance. Register this before the shared JSON parser.
-app.use('/api/admin/owner-sign-in', (req, res, next) => {
-  express.json({ limit: '2kb' })(req, res, error => {
+app.use(['/api/admin/owner-sign-in', '/api/admin/telegram-sign-in'], (req, res, next) => {
+  express.json({ limit: req.baseUrl === '/api/admin/telegram-sign-in' ? '4kb' : '2kb' })(req, res, error => {
     // Parser errors can contain pieces of their input. Never echo/log a private
     // sign-in credential through the shared error/incident handler.
     if (error) return res.status(error.type === 'entity.too.large' ? 413 : 400)
@@ -16746,6 +16747,12 @@ app.post("/api/customer/dashboard", (_req, res) => {
 app.post("/api/customer/dashboard/logout", (req, res) => {
   clearCustomerDashboardSessionCookie(res);
   res.status(204).end();
+});
+
+registerTelegramLogin({ app, prisma, getConfig: () => telegramLoginConfig(process.env),
+  setSession: res => setAdminSessionCookie(res, createAdminSessionToken()),
+  rateLimiters: [adminLoginProcessRateLimiter, enforcePublicRouteRateLimit("admin-telegram-login", ADMIN_LOGIN_IP_MAX_REQUESTS)],
+  audit: req => recordAdminAuditEvent({ prisma, action: "admin_telegram_login", outcome: "success", actorHash: getAdminActorHash(req), details: { method: "telegram_owner" } }),
 });
 
 registerOwnerLinkRoutes({
