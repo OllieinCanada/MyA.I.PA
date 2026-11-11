@@ -4,6 +4,7 @@ const { buildSignupProgress } = require('./signupProgress');
 const { redactIncidentText } = require('./incidentAlerts');
 const { isContactVerified } = require('./signupVerificationChannel');
 const { formObservationLines } = require('./signupFormObservation');
+const { projectSetup } = require('./adminSignupSetup');
 
 const STALL_MS = 10 * 60 * 1000;
 const EDIT_FIELDS = Object.freeze({ serviceSummary: 400, serviceArea: 160, businessWebsite: 300, businessAddress: 400, specializationNotes: 2000 });
@@ -86,7 +87,7 @@ function trackerRow(record, now = Date.now()) {
     stalled: active && elapsedMs != null && elapsedMs >= STALL_MS,
     alertQueuedAt: validTracking(tracking) && record.onboardingStallAlertEpisode === episodeKey(tracking) ? iso(record.onboardingStallAlertQueuedAt) : null,
     editable: validAttempt(record.signupAttemptId) && !['closed', 'inactive'].includes(c.mode),
-    info: businessInfo(record), infoRevision: infoRevision(record),
+    info: businessInfo(record), infoRevision: infoRevision(record), setup: projectSetup(record),
     publishing: 'admin_record_only', identityProtected: true };
 }
 function dashboard(records = [], now = Date.now()) {
@@ -205,7 +206,7 @@ function createStallProcessor({ list, saveMany, enqueue, frontendUrl, describeOb
     } finally { running = false; }
   };
 }
-function registerTrackerRoutes({ app, requireAdmin, isAllowedOrigin, list, save, audit, actorHash, observations }) {
+function registerTrackerRoutes({ app, requireAdmin, isAllowedOrigin, list, save, audit, actorHash, observations, setupEvidence }) {
   const safelyAudit = async event => { try { return await audit(event) !== null; } catch { return false; } };
   app.get('/api/admin/signup-tracker', requireAdmin, async (req, res) => {
     res.set('Cache-Control', 'no-store');
@@ -219,6 +220,14 @@ function registerTrackerRoutes({ app, requireAdmin, isAllowedOrigin, list, save,
       }
       res.json({ ok: true, ...result });
     } catch (_) { res.status(503).json({ error: 'Signup tracker is unavailable; coverage is unknown.' }); }
+  });
+  app.get('/api/admin/signup-tracker/:attemptId/setup', requireAdmin, async (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    if (!validAttempt(req.params.attemptId)) return res.status(400).json({ error: 'Invalid signup reference.' });
+    const matches = list().filter(r => r.signupAttemptId === req.params.attemptId);
+    if (matches.length !== 1) return res.status(409).json({ error: 'Exactly one saved signup must match.' });
+    try { res.json({ ok: true, setup: setupEvidence ? await setupEvidence(matches[0]) : projectSetup(matches[0]) }); }
+    catch (_) { res.status(503).json({ error: 'Detailed setup evidence is unavailable. No setup action was run.' }); }
   });
   app.patch('/api/admin/signups/:attemptId/business-info', requireAdmin, async (req, res) => {
     res.set('Cache-Control', 'no-store');

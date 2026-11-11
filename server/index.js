@@ -9,6 +9,8 @@ const { rejectCompressedRequests } = require('./requestSecurity');
 const { dispatchHandler: notificationDispatchHandler, dispatchReadinessHandler } = require('./smsNotificationDispatch');
 const { createFinanceService, registerFinanceRoutes } = require('./providerFinance');
 const { trackProgress: trackAdminSignupProgress, registerTrackerRoutes, createStallProcessor, createTrackerBatchSaver } = require('./adminSignupTracker');
+const { readSetupEvidence, createNumberSearchTracker } = require('./adminSignupSetup');
+const signupNumberSearchTracker = createNumberSearchTracker();
 const { createPrismaObservationStore, createObservationService, registerObservationRoutes, observationBodyGuard } = require('./signupFormObservation');
 const { runtimeDependencySecurity } = require('./runtimeDependencySecurity');
 const { signupReviewPolicy } = require("./signupReviewPolicy");
@@ -3771,7 +3773,8 @@ function normalizeTwilioProvisioningVoiceUrl(value) {
   return url.toString();
 }
 
-async function purchaseTwilioPhoneNumber({ areaCode = "", region = "ON", allowedAreaCodes: alternatives, voiceUrl, voiceMethod = "POST", friendlyName } = {}, { fetchImpl = fetch } = {}) {
+async function purchaseTwilioPhoneNumber({ areaCode = "", region = "ON", allowedAreaCodes: alternatives, voiceUrl, voiceMethod = "POST", friendlyName } = {}, { fetchImpl = fetch, onProgress = () => {} } = {}) {
+  const observe = event => { try { onProgress(event); } catch (_) { /* Diagnostics cannot change a paid action's result. */ } };
   if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN) {
     const err = new Error("Twilio credentials are not configured.");
     err.statusCode = 503;
@@ -3828,6 +3831,7 @@ async function purchaseTwilioPhoneNumber({ areaCode = "", region = "ON", allowed
       err.code = "PROVISIONED_NUMBER_NOT_READY";
       throw err;
     }
+    observe({ phase: 'completed', areaCode: existingAreaCode });
     return {
       sid: String(existingNumber.sid || "").trim(),
       twilioSid: String(existingNumber.sid || "").trim(),
@@ -3854,6 +3858,7 @@ async function purchaseTwilioPhoneNumber({ areaCode = "", region = "ON", allowed
   let availableNumber = "";
   let inventorySource = "";
   for (const plan of searchPlans) {
+    observe({ phase: 'searching', areaCode: plan.AreaCode || null });
     const availableUrl = new URL(
       `${TWILIO_API_BASE_URL}/2010-04-01/Accounts/${encodeURIComponent(TWILIO_ACCOUNT_SID)}/AvailablePhoneNumbers/CA/Local.json`
     );
@@ -3875,8 +3880,10 @@ async function purchaseTwilioPhoneNumber({ areaCode = "", region = "ON", allowed
       && (!plan.AreaCode || inspectCanadianNumber(candidate).areaCode === plan.AreaCode)) {
       availableNumber = inspectCanadianNumber(candidate).e164;
       inventorySource = plan.label;
+      observe({ phase: 'candidate_found', areaCode: inspectCanadianNumber(candidate).areaCode });
       break;
     }
+    observe({ phase: 'empty', areaCode: plan.AreaCode || null });
   }
   if (!availableNumber) {
     const err = new Error(normalizedAreaCode
@@ -3898,6 +3905,7 @@ async function purchaseTwilioPhoneNumber({ areaCode = "", region = "ON", allowed
     VoiceUrl: normalizedVoiceUrl,
     VoiceMethod: normalizedVoiceMethod,
   });
+  observe({ phase: 'purchase_dispatching', areaCode: inspectCanadianNumber(availableNumber).areaCode });
   const purchaseResponse = await fetchImpl(purchaseUrl, {
     method: "POST",
     headers: {
@@ -3929,6 +3937,7 @@ async function purchaseTwilioPhoneNumber({ areaCode = "", region = "ON", allowed
     throw Object.assign(new Error('The purchased number did not match the signed area-code policy.'),
       { code: 'PROVISIONED_NUMBER_AREA_CODE_MISMATCH', statusCode: 502 });
   }
+  observe({ phase: 'completed', areaCode: inspectCanadianNumber(phoneNumber).areaCode });
   return {
     ...provisionedRecord,
     sid: provisionedRecord.sid,
@@ -14549,6 +14558,9 @@ app.post(
         voiceUrl: input.voiceUrl,
         voiceMethod: input.voiceMethod,
         friendlyName,
+      }, { onProgress: event => signupNumberSearchTracker.record(authorization.idempotencyKey, authorization.contextHash, event) }).catch(error => {
+        try { signupNumberSearchTracker.record(authorization.idempotencyKey, authorization.contextHash, { phase: 'failed' }); } catch (_) { /* Preserve the original provider failure. */ }
+        throw error;
       }),
     });
 
@@ -17521,7 +17533,8 @@ app.get(
 
 registerFinanceRoutes({ app, requireAdmin, isAllowedOrigin, service: createFinanceService({ prisma }) });
 registerTrackerRoutes({ app, requireAdmin, isAllowedOrigin, list: listSignupDashboardRecords, save: upsertSignupDashboardRecord,
-  audit: event => recordAdminAuditEvent({ prisma, ...event }), actorHash: getAdminActorHash, observations: () => signupFormObservations.listAdmin() });
+  audit: event => recordAdminAuditEvent({ prisma, ...event }), actorHash: getAdminActorHash, observations: () => signupFormObservations.listAdmin(),
+  setupEvidence: record => readSetupEvidence({ prisma, record, searchTracker: signupNumberSearchTracker }) });
 const signupFormObservations = createObservationService({ store: createPrismaObservationStore(prisma),
   authenticateAttempt: (id, token) => signupAttempts ? signupAttempts.authenticate(id, token) : null });
 registerObservationRoutes({ app, service: signupFormObservations, isAllowedOrigin, requireAdmin,
