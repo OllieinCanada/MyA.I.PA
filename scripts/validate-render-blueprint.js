@@ -79,6 +79,7 @@ if (!service) {
   expectEqual("startCommand", service.startCommand, "npm run server:prod");
   expectEqual("healthCheckPath", service.healthCheckPath, "/api/health/ready");
   expectEnvValue(service, "OPERATIONAL_STATE_BACKEND", "database");
+  expectUniqueEnvValue(service, "NODE_VERSION", "24.22.3");
 
   expectEqual("disk name", service.disk && service.disk.name, "myaipa-data");
   expectEqual("disk mountPath", service.disk && service.disk.mountPath, "/data");

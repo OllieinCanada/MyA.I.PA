@@ -31,7 +31,7 @@ jobs:
           fetch-depth: 1
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 20
+          node-version: "24.22.3"
           cache: npm
       - name: Restore durable incident lifecycle state
         id: restore_state
@@ -88,6 +88,9 @@ jobs:
         with:
           name: production-monitor-state-${{ github.run_id }}-${{ github.run_attempt }}
           path: diagnostics/operations
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "24.22.3"
       - name: Persist state on the dedicated non-code branch
         run: node scripts/sync-production-monitor-state.js persist
       - name: Preserve the production monitor result
@@ -110,7 +113,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 20
+          node-version: "24.22.3"
       - name: Prove one controlled receipt-backed two-message lifecycle
         env:
           MONITOR_API_KEY: ${{ secrets.MONITOR_API_KEY }}
