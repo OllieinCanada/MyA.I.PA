@@ -7,6 +7,7 @@ const {
   registerSignupProvisioningContext,
   registerSignupProvisioningContextForAttempt,
   registeredSignupEventKey,
+  loadSignupProvisioningContextForAttempt,
 } = require("../server/signupProvisioningContext");
 const { buildMakeSignupEventKey } = require('../server/makeSignupWebhook');
 const { normalizeSignupProvisioningPayload } = require('../server/signupProvisioning');
@@ -104,10 +105,15 @@ test('legacy payload without an explicit ID retains its original attempt through
   const raw = verifiedLegacyPayload(), eventKey = buildMakeSignupEventKey(raw), normalized = normalize(raw);
   // This is the production failure: enrichment changes the payload-derived hash.
   assert.notEqual(buildMakeSignupEventKey(normalized), eventKey);
-  const bound = await registerSignupProvisioningContextForAttempt({ prisma: fakePrisma(), payload: normalized, eventKey });
+  const prisma = fakePrisma();
+  const bound = await registerSignupProvisioningContextForAttempt({ prisma, payload: normalized, eventKey });
   assert.equal(bound.eventKey, eventKey);
   assert.deepEqual(bound.payload, normalized);
   assert.equal(bound.payload.signupEventKey, undefined); // no client-controlled identity field
+  const loaded = await loadSignupProvisioningContextForAttempt({ prisma,
+    idempotencyKey: normalized.provisioning.idempotencyKey, contextHash: normalized.provisioning.contextHash });
+  assert.equal(loaded.eventKey, eventKey);
+  assert.deepEqual(loaded.payload, normalized);
 });
 
 test('unstarted legacy context can acquire a binding without changing signed provider authorization', async () => {

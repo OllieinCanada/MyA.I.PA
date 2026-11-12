@@ -102,7 +102,7 @@ async function registerSignupProvisioningContextForAttempt(options) {
   return { payload: record.payload, eventKey: registeredSignupEventKey(record) };
 }
 
-async function loadSignupProvisioningContext({ prisma, idempotencyKey, contextHash, lock = true }) {
+async function loadContext({ prisma, idempotencyKey, contextHash, lock = true }) {
   const key = contextStoreKey(idempotencyKey);
   const expectedHash = String(contextHash || "").trim().toLowerCase();
   return withContextLock(prisma, key, async (tx) => {
@@ -122,9 +122,19 @@ async function loadSignupProvisioningContext({ prisma, idempotencyKey, contextHa
         update: { data: next },
         create: { key, data: next },
       });
+      return next;
     }
-    return current.payload;
+    return current;
   });
+}
+
+async function loadSignupProvisioningContext(options) {
+  return (await loadContext(options)).payload;
+}
+
+async function loadSignupProvisioningContextForAttempt(options) {
+  const record = await loadContext(options);
+  return { payload: record.payload, eventKey: registeredSignupEventKey(record) };
 }
 
 async function completeSignupProvisioningContext({ prisma, idempotencyKey, contextHash, result }) {
@@ -152,6 +162,7 @@ async function completeSignupProvisioningContext({ prisma, idempotencyKey, conte
 }
 
 module.exports = {
+  loadSignupProvisioningContextForAttempt,
   registerSignupProvisioningContextForAttempt,
   registeredSignupEventKey,
   CONTEXT_PREFIX,

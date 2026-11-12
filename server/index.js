@@ -222,7 +222,7 @@ const {
 const {
   completeSignupProvisioningContext,
   contextStoreKey,
-  loadSignupProvisioningContext,
+  loadSignupProvisioningContextForAttempt,
   registerSignupProvisioningContextForAttempt,
   registeredSignupEventKey,
 } = require("./signupProvisioningContext");
@@ -11160,19 +11160,20 @@ function requireProvisioningAuthorization(req, res, next) {
 
 async function loadTrustedProvisioningContext(req) {
   const authorization = req.provisioningAuthorization || getProvisioningAuthorizationInput(req);
-  const payload = await loadSignupProvisioningContext({
+  const registered = await loadSignupProvisioningContextForAttempt({
     prisma,
     idempotencyKey: authorization.idempotencyKey,
     contextHash: authorization.contextHash,
     lock: true,
   });
+  const payload = registered.payload;
   if (!verifySignupProvisioningAuthorization(payload, getProvisioningSigningSecret())) {
     const error = new Error("The registered provisioning context failed authorization.");
     error.statusCode = 401;
     error.code = "PROVISIONING_CONTEXT_AUTHORIZATION_FAILED";
     throw error;
   }
-  const attemptId = buildMakeSignupEventKey(payload);
+  const attemptId = registered.eventKey;
   const attempt = await prisma.signupAttempt.findUnique({ where: { eventKey: attemptId } });
   assertSignupOpen(attempt || {});
   const record = listSignupDashboardRecords().find((item) => item.signupAttemptId === attemptId);

@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const { normalizeSignupProvisioningPayload } = require('../server/signupProvisioning');
 const { buildMakeSignupEventKey } = require('../server/makeSignupWebhook');
-const { registerSignupProvisioningContextForAttempt, loadSignupProvisioningContext, contextStoreKey } = require('../server/signupProvisioningContext');
+const { registerSignupProvisioningContextForAttempt, loadSignupProvisioningContextForAttempt, contextStoreKey } = require('../server/signupProvisioningContext');
 const { runProvisioningStep, provisioningStateKey } = require('../server/provisioningState');
 
 test('real PostgreSQL binds concurrent legacy requests without duplicate or uncertain replay',
@@ -22,7 +22,7 @@ test('real PostgreSQL binds concurrent legacy requests without duplicate or unce
       const results = await Promise.all(Array.from({ length: 8 }, () => registerSignupProvisioningContextForAttempt({ prisma, payload, eventKey })));
       assert.ok(results.every(r => r.eventKey === eventKey));
       assert.notEqual(eventKey, buildMakeSignupEventKey(payload));
-      await loadSignupProvisioningContext({ prisma, idempotencyKey, contextHash });
+      assert.equal((await loadSignupProvisioningContextForAttempt({ prisma, idempotencyKey, contextHash })).eventKey, eventKey);
       const retry = await registerSignupProvisioningContextForAttempt({ prisma, payload, eventKey: `signup_${'a'.repeat(32)}` });
       assert.equal(retry.eventKey, eventKey);
       let submissions = 0;
