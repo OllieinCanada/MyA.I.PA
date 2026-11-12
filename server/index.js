@@ -329,6 +329,7 @@ const {
 const {
   buildVapiAppointmentExecutionResult,
   normalizeVapiToolCall,
+  validateVapiToolArguments,
 } = require("./vapiToolCalls");
 const {
   recordLeadOutcome,
@@ -13889,6 +13890,15 @@ app.post(
         const toolCall = normalizeVapiToolCall(rawToolCall);
         const toolName = String(toolCall.name || "").toLowerCase();
         const parameters = toolCall.parameters;
+        const admission = validateVapiToolArguments(rawToolCall);
+        if (!admission.ok) {
+          // No execution ID is consumed and no provider work has started.
+          // This describes this invocation only, not any earlier attempt. A
+          // corrected request can still use the ID; completed/uncertain claims
+          // continue through the existing non-replaying durable workflow.
+          results.push({ name: toolCall.name, toolCallId: toolCall.id, result: JSON.stringify(admission) });
+          continue;
+        }
         if (toolName === STAGING_INTAKE_TOOL) {
           const routedBusinessId = await resolveBusinessIdForVapiCall(vapiMessage.call || {});
           const result = await handleStagingIntakeTool({ prisma, authenticated: req.vapiWebhookAuthenticated === true,
