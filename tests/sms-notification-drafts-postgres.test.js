@@ -78,6 +78,29 @@ test('manual notification approval uses real PostgreSQL transactions', { skip: p
       await assert.rejects(dispatchConfirmedNotification({ ...options, authorize: () => true }), /already_admitted/);
       assert.equal(await f.count(), 0);
     });
+    await check('live-webhook-shaped confirmation admits one provider request per leg across concurrent workers', async () => {
+      const { handleAutomaticNotificationTool } = require('../server/automaticCallNotifications');
+      const { AUTOMATIC_NOTIFICATION_TOOL } = require('../server/compositeCallNotifications');
+      const callId = crypto.randomUUID();
+      const message = { type: 'tool-calls', call: { id: callId, assistantId: 'synthetic-assistant' },
+        phoneNumber: { number: '+19055550100' }, customer: { number: '+19055550102' },
+        artifact: { messagesOpenAIFormatted: [{ role: 'assistant', content: 'Should I send this request to the team now?' }, { role: 'user', content: 'Perfect. Yes.' }] } };
+      const rawToolCall = { id: 'synthetic-tool', function: { name: AUTOMATIC_NOTIFICATION_TOOL,
+        arguments: { businessName: 'Synthetic', requestType: 'message', name: 'Test', message: 'Please call.', pricingDiscussed: false } } };
+      const run = () => handleAutomaticNotificationTool({ message, rawToolCall, authenticated: true, prisma: db,
+        env: { ...env, SMS_AUTOMATIC_DISPATCH_ENABLED: 'true' }, suppressionChecker: async () => false,
+        loadRoute: async () => ({ assistantId: 'synthetic-assistant', from: '+19055550100', owner: '+19055550101', businessName: 'Synthetic',
+          ownerEnabled: true, pricingOptions: { includePartsExtra: true, includeAssessment: true } }),
+        fetchImpl: async (_url, request) => {
+          const form = new URLSearchParams(request.body), leg = form.get('To') === '+19055550101' ? 'owner' : 'customer';
+          await db.$executeRaw`INSERT INTO "SmsDispatchDrillTransport" ("caseId", "leg", "bodyHash") VALUES (${callId}, ${leg}, 'webhook-no-send')`;
+          return { ok: true, status: 201, json: async () => ({ sid: 'SM' + (leg === 'owner' ? '4' : '5').repeat(32), status: 'queued' }) };
+        } });
+      await Promise.all([run(), run(), run()]);
+      assert.equal((await run()).complete, true);
+      const counts = await db.$queryRaw`SELECT "leg", count(*) AS n FROM "SmsDispatchDrillTransport" WHERE "caseId"=${callId} GROUP BY "leg"`;
+      assert.equal(counts.length, 2); assert.ok(counts.every(row => Number(row.n) === 1));
+    });
     await check('expired draft content is redacted without deleting admission records', async () => {
       const before = Number((await db.$queryRaw`SELECT count(*) AS n FROM "RuntimeStore" WHERE key LIKE 'call-notification-dispatch:v1:%'`)[0].n);
       assert.ok(await redactExpiredNotificationDrafts({ prisma: db, now: Date.now() + 86400001 }) > 0);
@@ -89,6 +112,6 @@ test('manual notification approval uses real PostgreSQL transactions', { skip: p
     const fs = require('node:fs'), path = require('node:path');
     const directory = path.join(__dirname, '../diagnostics/sms-dispatch-postgres/manual-approval'); fs.mkdirSync(directory, { recursive: true });
     fs.writeFileSync(path.join(directory, 'report.json'), JSON.stringify({ commit: process.env.SMS_DISPATCH_DRILL_EXPECTED_HEAD,
-      realPostgreSQL: true, realSms: 0, casesPassed: passed.length, requiredCases: 9, cases: passed, passed: passed.length === 9 }, null, 2) + '\n');
+      realPostgreSQL: true, realSms: 0, casesPassed: passed.length, requiredCases: 10, cases: passed, passed: passed.length === 10 }, null, 2) + '\n');
   }
 });

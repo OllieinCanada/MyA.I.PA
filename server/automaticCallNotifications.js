@@ -1,139 +1,114 @@
 'use strict';
-// Automatic candidate: caller approval, not admin approval. No provider/tool
-// credentials or model-provided approval flags are accepted as consent proof.
+// Function-tool webhooks carry live context; never poll GET /call to authorize.
 const { assessConfirmationHistory } = require('./callConfirmation');
+const { normalizeVapiToolCall, validateVapiToolArguments } = require('./vapiToolCalls');
 const { prepareNotificationDraft, dispatchConfirmedNotification } = require('./smsNotificationDrafts');
-const { buildOwnerBody, buildCustomerBody, normalizeE164, executeCompositeNotifications } = require('./compositeCallNotifications');
+const { buildOwnerBody, buildCustomerBody, normalizeE164, notificationIntakeMissingFields,
+  getAutomaticVapiCompositeToolDefinition, AUTOMATIC_NOTIFICATION_TOOL } = require('./compositeCallNotifications');
 const { dispatchContext } = require('./smsNotificationDispatch');
 const fail = code => Object.assign(new Error(code), { code, statusCode: 409 });
-const fields = ['businessName', 'requestType', 'name', 'rawPhoneNumber', 'callbackNumber', 'jobDetails', 'streetAddress',
-  'city', 'preferredStartDate', 'bestCallbackTime', 'urgency', 'safetyConcern', 'pricingDiscussed', 'workDetailsConfirmed', 'message'];
-const canonical = args => JSON.stringify(fields.map(key => [key, args?.[key] ?? null]));
 
-function validateAutomaticArguments(leg, args) {
-  if (!['owner', 'customer'].includes(leg) || !args || typeof args !== 'object' || Array.isArray(args)
-    || Object.keys(args).some(key => !fields.includes(key))) throw fail('automatic_notification_input_invalid');
-  const definition = require('./compositeCallNotifications').getAutomaticVapiCompositeToolDefinition().function.parameters;
+function validateAutomaticArguments(args) {
+  const definition = getAutomaticVapiCompositeToolDefinition().function.parameters;
+  if (!args || typeof args !== 'object' || Array.isArray(args)) throw fail('automatic_notification_input_invalid');
   for (const [key, value] of Object.entries(args)) {
     const rule = definition.properties[key];
     if (!rule || typeof value !== rule.type || rule.type === 'string' && value.length > 1600
       || rule.enum && !rule.enum.includes(value)) throw fail('automatic_notification_input_invalid');
   }
   if (definition.required.some(key => args[key] == null)) throw fail('automatic_notification_input_invalid');
+  if (notificationIntakeMissingFields(args).length) throw fail('automatic_notification_intake_required');
 }
-function confirmedInput({ call, route, callId, leg, args, now = Date.now() }) {
-  validateAutomaticArguments(leg, args);
-  if (call?.id !== callId || !['in-progress', 'ended'].includes(call.status)
-    || !Number.isFinite(Date.parse(call.startedAt)) || now - Date.parse(call.startedAt) < 0
-    || now - Date.parse(call.startedAt) > 30 * 60 * 1000
-    || call.status === 'ended' && (!Number.isFinite(Date.parse(call.endedAt)) || now - Date.parse(call.endedAt) > 120000)) {
-    throw fail('automatic_notification_call_unverified');
+function confirmWebhook({ message, rawToolCall, route }) {
+  const admission = validateVapiToolArguments(rawToolCall);
+  if (!admission.ok) throw fail(admission.errorCode);
+  const tool = normalizeVapiToolCall(rawToolCall), args = tool.parameters;
+  if (message?.type !== 'tool-calls' || tool.name !== AUTOMATIC_NOTIFICATION_TOOL || !tool.id) throw fail('automatic_notification_invocation_invalid');
+  validateAutomaticArguments(args);
+  const call = message.call;
+  if (!/^[a-f0-9-]{36}$/i.test(String(call?.id || ''))) throw fail('automatic_notification_call_unverified');
+  // Only the live message artifact is accepted. call.artifact can be stale.
+  const histories = [];
+  if (Array.isArray(message.artifact?.messagesOpenAIFormatted)) histories.push(message.artifact.messagesOpenAIFormatted);
+  if (Array.isArray(message.artifact?.messages)) histories.push(message.artifact.messages.map(m =>
+    m && ({ ...m, role: m.role === 'bot' ? 'assistant' : m.role, content: m.message ?? m.content })));
+  if (!histories.length) throw fail('automatic_notification_history_unverified');
+  for (const messages of histories) {
+    if (messages.length > 1000 || messages.some(m => !m
+      || !['system', 'user', 'assistant', 'tool', 'tool_call_result', 'tool_calls'].includes(m.role)
+      || m.role === 'user' && (typeof m.content !== 'string' || m.final === false || m.transcriptType === 'partial'))) {
+      throw fail('automatic_notification_history_unverified');
+    }
+    const permission = assessConfirmationHistory(messages, { allowDraftQuestion: false });
+    if (!permission.allowed) throw fail(permission.reason);
   }
-  const from = normalizeE164(route?.from), owner = normalizeE164(route?.owner), customer = normalizeE164(call.customer?.number);
-  if (!from || !owner || !customer || route.assistantId !== call.assistantId
-    || normalizeE164(call.phoneNumber?.number) !== from || route.ownerEnabled !== true && leg === 'owner'
-    || !route.businessName || args.businessName !== route.businessName
+  const numbers = [message.phoneNumber?.number, call.phoneNumber?.number].filter(Boolean).map(normalizeE164);
+  const callers = [message.customer?.number, call.customer?.number].filter(Boolean).map(normalizeE164);
+  const assistants = [call.assistantId, message.assistant?.id].filter(Boolean);
+  const from = normalizeE164(route?.from), owner = normalizeE164(route?.owner);
+  if (!from || !owner || !numbers.length || numbers.some(n => n !== from)
+    || !callers.length || !callers[0] || callers.some(n => n !== callers[0])
+    || !route.assistantId || assistants.some(id => id !== route.assistantId)
+    || typeof route.ownerEnabled !== 'boolean' || args.businessName !== route.businessName
     || typeof route.pricingOptions?.includePartsExtra !== 'boolean'
     || typeof route.pricingOptions?.includeAssessment !== 'boolean') throw fail('automatic_notification_route_unverified');
-  // Require one exact provider-read history representation, not a transcript or
-  // a history/boolean supplied by the caller of our integration endpoint.
-  const messages = call.artifact?.messagesOpenAIFormatted;
-  if (!Array.isArray(messages) || messages.length > 1000 || messages.some(m =>
-    !m || !['system', 'user', 'assistant', 'tool', 'tool_call_result', 'tool_calls'].includes(m.role)
-    || m.role === 'user' && (typeof m.content !== 'string' || m.final === false || m.transcriptType === 'partial'))) {
-    throw fail('automatic_notification_history_unverified');
-  }
-  const permission = assessConfirmationHistory(messages, { allowDraftQuestion: false });
-  if (!permission.allowed) throw fail(permission.reason);
-  const invocations = messages.flatMap(m => m.tool_calls || []).filter(t => /^send_call_summaries_/i.test(t?.function?.name || ''));
-  const last = invocations.at(-1);
-  let observedArgs;
-  try { observedArgs = typeof last?.function?.arguments === 'string' ? JSON.parse(last.function.arguments) : last?.function?.arguments; }
-  catch { throw fail('automatic_notification_arguments_unverified'); }
-  if (!observedArgs || canonical(observedArgs) !== canonical(args)) throw fail('automatic_notification_arguments_unverified');
-  const summary = { ...args, ...route.pricingOptions, rawPhoneNumber: customer, businessName: route.businessName };
-  return { callId, from, to: leg === 'owner' ? owner : customer, leg,
-    body: leg === 'owner' ? buildOwnerBody(summary) : buildCustomerBody(summary) };
+  const summary = { ...args, ...route.pricingOptions, rawPhoneNumber: callers[0], businessName: route.businessName };
+  return { tool, inputs: [
+    ...(route.ownerEnabled ? [{ callId: call.id, from, to: owner, leg: 'owner', body: buildOwnerBody(summary) }] : []),
+    { callId: call.id, from, to: callers[0], leg: 'customer', body: buildCustomerBody(summary) }
+  ] };
 }
-
-function automaticNotificationHandler({ prisma, env = process.env, authenticate, loadEvidence, suppressionChecker, fetchImpl }) {
-  return async (req, res) => {
-    res.set('Cache-Control', 'no-store');
-    if (typeof authenticate !== 'function' || !authenticate(req)) return res.status(401).json({ schemaVersion: 1, errorCode: 'notification_dispatch_unauthorized' });
-    if (env.SMS_AUTOMATIC_DISPATCH_ENABLED !== 'true') return res.status(503).json({ schemaVersion: 1, errorCode: 'automatic_notification_dispatch_disabled' });
+async function handleAutomaticNotificationTool({ message, rawToolCall, authenticated, prisma, loadRoute,
+  env = process.env, suppressionChecker, fetchImpl }) {
+  if (authenticated !== true) throw fail('automatic_notification_unauthorized');
+  if (env.SMS_AUTOMATIC_DISPATCH_ENABLED !== 'true') throw fail('automatic_notification_dispatch_disabled');
+  const admission = validateVapiToolArguments(rawToolCall);
+  if (!admission.ok) throw fail(admission.errorCode);
+  validateAutomaticArguments(normalizeVapiToolCall(rawToolCall).parameters);
+  const route = await loadRoute(message);
+  const { inputs } = confirmWebhook({ message, rawToolCall, route });
+  const result = { owner: { attempted: false, sent: false, skipped: true, status: 'disabled_by_policy' } };
+  for (const input of inputs) {
     try {
-      const { callId, leg, args } = req.body || {};
-      if (req.body?.action !== 'send-confirmed' || !/^[a-f0-9-]{36}$/i.test(String(callId || '')) || Object.keys(req.body || {}).some(k => !['action', 'callId', 'leg', 'args'].includes(k))) {
-        throw fail('automatic_notification_input_invalid');
-      }
-      validateAutomaticArguments(leg, args);
-      // A bounded authenticated provider GET, not a retrying mutation. Missing
-      // active-call artifacts fail closed and must be checked before rollout.
-      const { call, route } = await loadEvidence(callId);
-      const input = confirmedInput({ call, route, callId, leg, args });
-      // Reuse the existing deterministic intake checks before storing/admitting.
-      // This local adapter performs no network calls and cannot submit anything.
-      const intake = await executeCompositeNotifications({ args, env: { CALLER_NUMBER: input.to,
-        OWNER_SMS_ENABLED: 'false', PRICING_SUMMARY_OPTIONS: JSON.stringify(route.pricingOptions) },
-        fetchImpl: async () => { throw fail('intake_must_not_send'); } });
-      if (intake.needsIntakeDetails || intake.needsCustomerNumber) throw fail('automatic_notification_intake_required');
       const draft = await prepareNotificationDraft({ prisma, input });
       const { contextHash } = dispatchContext(input);
       const sent = await dispatchConfirmedNotification({ prisma, id: draft.draftId,
         expectedRevision: draft.revision, expectedHash: contextHash, env, suppressionChecker, fetchImpl,
         authorize: data => data.contextHash === contextHash });
-      const receipt = sent.result;
-      return res.json({ schemaVersion: 1, ...(receipt || { attempted: false, sent: false, status: 'held', requiresReconciliation: true }),
-        dispatchReceiptStored: sent.state === 'completed', requiresApproval: false });
-    } catch (e) {
-      return res.status(e.statusCode || 503).json({ schemaVersion: 1, sent: false,
-        errorCode: e.statusCode ? e.code : 'automatic_notification_evidence_unavailable', requiresReconciliation: true });
+      result[input.leg] = { ...(sent.result || { attempted: false, sent: false, status: 'held', requiresReconciliation: true }),
+        dispatchReceiptStored: sent.state === 'completed' };
+    } catch {
+      // An earlier request may have completed; never retry or claim no attempt.
+      result[input.leg] = { attempted: null, sent: false, status: 'unconfirmed', requiresReconciliation: true };
     }
-  };
+  }
+  const accepted = r => r?.sent === true && /^(?:SM|MM)[a-f0-9]{32}$/i.test(r.messageId || '') && r.dispatchReceiptStored === true;
+  const complete = accepted(result.customer) && (!route.ownerEnabled || accepted(result.owner));
+  return { ...result, ok: complete, complete, requiresApproval: false, ownerSmsEnabled: route.ownerEnabled,
+    requiresReconciliation: !complete, status: complete ? 'submitted' : 'unconfirmed' };
 }
 
-function createVapiAutomaticEvidenceReader({ prisma, env = process.env, listEligibleSignups, fetchImpl = global.fetch }) {
-  return async callId => {
-    const signal = AbortSignal.timeout(8000); // Whole read budget; never retry.
-    async function get(resource, id) {
-      if (!env.VAPI_API_KEY || !/^[a-zA-Z0-9-]{1,100}$/.test(String(id || ''))) throw fail('automatic_notification_evidence_unavailable');
-      const response = await fetchImpl(`https://api.vapi.ai/${resource}/${encodeURIComponent(id)}`, {
-        headers: { Authorization: `Bearer ${env.VAPI_API_KEY}`, Accept: 'application/json' }, redirect: 'error', signal });
-      if (!response.ok) throw fail('automatic_notification_evidence_unavailable');
-      return response.json();
-    }
-    const call = await get('call', callId);
+// Select the existing server-owned voice-route snapshot, not a fallback business
+// or model metadata. The one-time policy is prepared at reviewed migration.
+function createAutomaticWebhookRouteLoader({ prisma, readGate, selectSignup, env = process.env }) {
+  return async message => {
+    const call = message.call || {}, phone = message.phoneNumber || call.phoneNumber;
+    const phoneIds = [message.phoneNumber?.id, call.phoneNumberId, call.phoneNumber?.id].filter(Boolean);
+    if (new Set(phoneIds).size > 1) throw fail('automatic_notification_route_unverified');
+    const gate = await readGate({ ...call, phoneNumber: phone });
     const allowed = String(env.SMS_AUTOMATIC_ASSISTANT_IDS || '').split(',').map(s => s.trim()).filter(Boolean);
-    if (!allowed.includes(call.assistantId)) throw fail('automatic_notification_assistant_not_enabled');
-    const signups = listEligibleSignups().filter(s => s.vapiAssistantId === call.assistantId
-      && normalizeE164(s.twilioPhoneNumber) === normalizeE164(call.phoneNumber?.number));
-    if (signups.length !== 1 || !signups[0].businessId) throw fail('automatic_notification_route_unverified');
-    const signup = signups[0];
-    const business = await prisma.business.findUnique({ where: { id: Number(signup.businessId) }, include: { settings: true } });
-    if (!business || normalizeE164(business.settings?.ownerPhone) !== normalizeE164(signup.ownerPhone)) throw fail('automatic_notification_route_unverified');
-    const assistant = await get('assistant', call.assistantId);
-    const toolIds = assistant.model?.toolIds;
-    if (!Array.isArray(toolIds) || !toolIds.length || toolIds.length > 4 || !assistant.model.messages?.some(m =>
-      m.role === 'system' && String(m.content).includes('AUTOMATIC CALLER CONFIRMATION'))) throw fail('automatic_notification_configuration_unverified');
-    const tools = await Promise.all(toolIds.map(id => get('tool', id)));
-    const name = (call.artifact?.messagesOpenAIFormatted || []).flatMap(m => m.tool_calls || [])
-      .filter(t => /^send_call_summaries_/i.test(t?.function?.name || '')).at(-1)?.function?.name;
-    const matches = tools.filter(t => t.function?.name === name);
-    if (matches.length !== 1) throw fail('automatic_notification_configuration_unverified');
-    const tool = matches[0], entries = tool.environmentVariables || [];
-    if (new Set(entries.map(e => e.name)).size !== entries.length) throw fail('automatic_notification_configuration_unverified');
-    const settings = Object.fromEntries(entries.map(e => [e.name, e.value]));
-    const { getAutomaticVapiCompositeToolDefinition } = require('./compositeCallNotifications');
-    require('./smsDispatchReadiness').assertDispatchEnvironment(entries);
-    if (tool.code !== getAutomaticVapiCompositeToolDefinition().code
-      || settings.CALLER_NUMBER !== '{{ customer.number }}'
-      || normalizeE164(settings.DEFAULT_FROM_NUMBER) !== normalizeE164(signup.twilioPhoneNumber)
-      || normalizeE164(settings.DEFAULT_OWNER_TO_NUMBER) !== normalizeE164(signup.ownerPhone)) throw fail('automatic_notification_configuration_unverified');
-    const pricingOptions = require('../src/features/signup/pricingPolicy').pricingSummaryOptionsFromAssistant(assistant)
+    if (!gate || gate.status !== 'active' || !allowed.includes(gate.assistantId)
+      || gate.automaticSms?.version !== 1 || typeof gate.automaticSms.ownerEnabled !== 'boolean') throw fail('automatic_notification_route_unverified');
+    const signup = await selectSignup(gate);
+    if (!signup || Number(signup.businessId) !== Number(gate.businessId)
+      || signup.vapiAssistantId !== gate.assistantId || normalizeE164(signup.twilioPhoneNumber) !== normalizeE164(gate.phoneNumber)) throw fail('automatic_notification_route_unverified');
+    const business = await prisma.business.findUnique({ where: { id: Number(gate.businessId) }, include: { settings: true } });
+    if (!business || !normalizeE164(signup.ownerPhone)
+      || normalizeE164(business.settings?.ownerPhone) !== normalizeE164(signup.ownerPhone)) throw fail('automatic_notification_route_unverified');
+    const pricingOptions = require('../src/features/signup/pricingPolicy').pricingSummaryOptionsFromAssistant(gate.assistantSnapshot)
       || { includePartsExtra: true, includeAssessment: true };
-    return { call, route: { assistantId: call.assistantId, from: settings.DEFAULT_FROM_NUMBER,
-      owner: settings.DEFAULT_OWNER_TO_NUMBER, businessName: business.name,
-      ownerEnabled: String(settings.OWNER_SMS_ENABLED ?? 'true') !== 'false', pricingOptions } };
+    return { assistantId: gate.assistantId, from: gate.phoneNumber, owner: signup.ownerPhone,
+      businessName: business.name, ownerEnabled: gate.automaticSms.ownerEnabled, pricingOptions };
   };
 }
-module.exports = { automaticNotificationHandler, confirmedInput, createVapiAutomaticEvidenceReader };
+module.exports = { handleAutomaticNotificationTool, confirmWebhook, createAutomaticWebhookRouteLoader };

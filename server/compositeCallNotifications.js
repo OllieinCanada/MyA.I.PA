@@ -1,4 +1,5 @@
 const COMPOSITE_TOOL_NAME = "send_call_summaries_dynamic";
+const AUTOMATIC_NOTIFICATION_TOOL = 'confirm_call_request';
 const POST_SEND_CLOSING_MARKER = "## MYAIPA NATURAL POST-SEND CLOSING";
 
 function cleanText(value, maxLength = 500) {
@@ -404,15 +405,7 @@ async function executeCompositeNotifications({ args, env, fetchImpl, btoaImpl, U
   const ownerNumber = normalizeE164(settings.DEFAULT_OWNER_TO_NUMBER);
   const customerNumber = normalizeE164(settings.CALLER_NUMBER) || normalizeE164(input.rawPhoneNumber || input.callbackNumber);
   const keys = buildNotificationKeys(settings.CALL_ID || input.notificationId || "missing-call-id");
-  const workRequest = ['installation', 'new installation', 'new_installation', 'service', 'repair', 'maintenance', 'quote'].includes(String(input.requestType || '').toLowerCase());
-  const missingFields = [];
-  if (typeof input.pricingDiscussed !== 'boolean') missingFields.push('pricingDiscussed');
-  if (workRequest && input.safetyConcern !== 'reported_hazard') {
-    for (const field of ['jobDetails', 'streetAddress', 'city', 'preferredStartDate', 'bestCallbackTime']) {
-      if (!cleanText(input[field], 500)) missingFields.push(field);
-    }
-    if (input.workDetailsConfirmed !== true) missingFields.push('workDetailsConfirmed');
-  }
+  const missingFields = notificationIntakeMissingFields(input);
   if (missingFields.length) {
     const leg = { attempted: false, sent: false, skipped: true, status: 'waiting_for_intake', errorCode: 'intake_confirmation_required' };
     return { ok: false, complete: false, needsIntakeDetails: true, missingFields, executionOrder: [],
@@ -543,7 +536,20 @@ function compositeToolParameters() {
   };
 }
 
-function getVapiCompositeToolCode({ automatic = false } = {}) {
+function notificationIntakeMissingFields(input) {
+  const missing = [];
+  if (typeof input.pricingDiscussed !== 'boolean') missing.push('pricingDiscussed');
+  const work = ['installation', 'new installation', 'new_installation', 'service', 'repair', 'maintenance', 'quote'].includes(String(input.requestType || '').toLowerCase());
+  if (work && input.safetyConcern !== 'reported_hazard') {
+    for (const field of ['jobDetails', 'streetAddress', 'city', 'preferredStartDate', 'bestCallbackTime']) {
+      if (!cleanText(input[field], 500)) missing.push(field);
+    }
+    if (input.workDetailsConfirmed !== true) missing.push('workDetailsConfirmed');
+  }
+  return missing;
+}
+
+function getVapiCompositeToolCode() {
   return [
     cleanText,
     normalizeE164,
@@ -556,40 +562,23 @@ function getVapiCompositeToolCode({ automatic = false } = {}) {
     discussedPricingReminder,
     buildOwnerBody,
     buildCustomerBody,
+    notificationIntakeMissingFields,
     executeCompositeNotifications,
   ].map((fn) => fn.toString()).join("\n\n") + '\n' +
-    (automatic ? sendConfirmedPhoneNotification : preparePhoneNotificationDraft).toString().replace(/function (?:preparePhoneNotificationDraft|sendConfirmedPhoneNotification)\(/, 'function sendTwilioMessage(') +
-    "\nconst result = await executeCompositeNotifications({ args, env: { ...env, CONFIRMATION_ARGS: args }, fetchImpl: fetch, btoaImpl: btoa, URLSearchParamsImpl: URLSearchParams });" +
-    (automatic ? '\nreturn { ...result, requiresApproval: false };' :
+    preparePhoneNotificationDraft.toString().replace('function preparePhoneNotificationDraft(', 'function sendTwilioMessage(') +
+    "\nconst result = await executeCompositeNotifications({ args, env, fetchImpl: fetch, btoaImpl: btoa, URLSearchParamsImpl: URLSearchParams });" +
     "\nconst draftStored = Boolean((result.owner?.draftStored || result.owner?.status === 'disabled_by_policy') && result.customer?.draftStored);" +
-    "\nreturn { ...result, ok: draftStored, complete: false, draftStored, requiresApproval: draftStored, requiresReconciliation: false, status: draftStored ? 'awaiting_manual_approval' : 'draft_not_saved' };");
-}
-
-// Backend credentials stay on the backend. Never fall back to the legacy claim
-// route or retry after a timeout. The server independently checks call evidence.
-async function sendConfirmedPhoneNotification({ env, fetchImpl, leg, notificationKey }) {
-  const pending = { attempted: false, sent: false, status: 'unconfirmed', notificationKey, requiresReconciliation: true };
-  const endpoint = String(env.SMS_NOTIFICATION_DISPATCH_URL || '').trim();
-  const key = String(env.SMS_SUPPRESSION_API_KEY || '').trim();
-  if (!/^https:\/\//i.test(endpoint) || !key) return pending;
-  try {
-    const response = await fetchImpl(endpoint + '/confirmed', { method: 'POST', redirect: 'error',
-      signal: AbortSignal.timeout(25000), headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'send-confirmed', callId: env.CALL_ID, leg, args: env.CONFIRMATION_ARGS }) });
-    const result = await response.json();
-    if (!response.ok || result.schemaVersion !== 1 || typeof result.sent !== 'boolean' || typeof result.attempted !== 'boolean'
-      || result.sent && (!/^(?:SM|MM)[a-f0-9]{32}$/i.test(result.messageId || '') || result.dispatchReceiptStored !== true)) return pending;
-    return { ...result, notificationKey };
-  } catch { return pending; }
+    "\nreturn { ...result, ok: draftStored, complete: false, draftStored, requiresApproval: draftStored, requiresReconciliation: false, status: draftStored ? 'awaiting_manual_approval' : 'draft_not_saved' };";
 }
 
 function getAutomaticVapiCompositeToolDefinition() {
-  const definition = getVapiCompositeToolDefinition();
-  return { ...definition, timeoutSeconds: 60, rejectionPlan: require('./callConfirmation').toolRejectionPlan(), code: getVapiCompositeToolCode({ automatic: true }),
-    function: { ...definition.function, description: 'After a fresh clear approval, request the owner summary and customer confirmation once. The backend independently verifies caller confirmation and routing. Never retry an uncertain result.' } };
+  return { type: 'function', async: false, timeoutSeconds: 30,
+    rejectionPlan: require('./callConfirmation').toolRejectionPlan(),
+    function: { name: AUTOMATIC_NOTIFICATION_TOOL, parameters: compositeToolParameters(),
+      description: 'After a fresh clear approval, submit the owner summary and customer confirmation once through the authenticated server webhook. Never retry an uncertain result.' } };
 }
 
-function automaticConfirmationPrompt(toolName = COMPOSITE_TOOL_NAME) {
+function automaticConfirmationPrompt(toolName = AUTOMATIC_NOTIFICATION_TOOL) {
   return `AUTOMATIC CALLER CONFIRMATION — replaces draft-only/manual-review instructions.
 Read back the complete current request. Ask exactly "Should I send this request to the team now?" Wait for clear approval before calling ${toolName} once.
 Never use "Should I save this request for review?" as permission to send. Refusal, uncertainty, a correction, or a request to wait means do not send; clarify and obtain fresh approval after corrected details.
@@ -643,6 +632,7 @@ function getVapiCompositeToolDefinition() {
 
 module.exports = {
   COMPOSITE_TOOL_NAME,
+  AUTOMATIC_NOTIFICATION_TOOL,
   POST_SEND_CLOSING_MARKER,
   buildCustomerBody,
   buildNextAction,
@@ -656,6 +646,7 @@ module.exports = {
   getVapiCompositeToolCode,
   getVapiCompositeToolDefinition,
   getAutomaticVapiCompositeToolDefinition,
+  notificationIntakeMissingFields,
   automaticConfirmationPrompt,
   normalizeE164,
   postSendClosingPrompt,

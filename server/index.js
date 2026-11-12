@@ -13463,19 +13463,6 @@ app.post('/api/integrations/sms/dispatch',
   notificationDispatchHandler({ prisma, env: process.env, authenticate: req => hasValidSuppressionApiKey(req) })
 );
 
-// New, explicitly scoped automatic mode. Legacy claim routes remain blocked;
-// deploying this code cannot enable sending or change a live Vapi tool.
-app.post('/api/integrations/sms/dispatch/confirmed',
-  smsNotificationDispatchProcessRateLimiter,
-  enforcePublicRouteRateLimit('sms-notification-dispatch', 120),
-  require('./automaticCallNotifications').automaticNotificationHandler({
-    prisma, env: process.env, authenticate: req => hasValidSuppressionApiKey(req),
-    loadEvidence: require('./automaticCallNotifications').createVapiAutomaticEvidenceReader({ prisma,
-      listEligibleSignups: () => listSignupDashboardRecords().filter(s => !isClosedSignup(s)) }),
-    suppressionChecker: phone => isSmsSuppressed(phone),
-  })
-);
-
 app.post(
   "/api/integrations/sms/suppression/check",
   asyncRoute(async (req, res) => {
@@ -13909,10 +13896,27 @@ app.post(
           // This describes this invocation only, not any earlier attempt. A
           // corrected request can still use the ID; completed/uncertain claims
           // continue through the existing non-replaying durable workflow.
-          results.push({ name: toolCall.name, toolCallId: toolCall.id, result: JSON.stringify(admission) });
+          results.push(toolName === require('./compositeCallNotifications').AUTOMATIC_NOTIFICATION_TOOL
+            ? { toolCallId: toolCall.id, error: admission.errorCode }
+            : { name: toolCall.name, toolCallId: toolCall.id, result: JSON.stringify(admission) });
           continue;
         }
-        if (toolName === STAGING_INTAKE_TOOL) {
+        if (toolName === require('./compositeCallNotifications').AUTOMATIC_NOTIFICATION_TOOL) {
+          // Use the live authenticated message artifact and explicit invocation,
+          // never poll the call API or fall through to legacy lead handoffs.
+          try {
+            const result = await require('./automaticCallNotifications').handleAutomaticNotificationTool({
+              message: vapiMessage, rawToolCall, authenticated: req.vapiWebhookAuthenticated === true, prisma,
+              loadRoute: require('./automaticCallNotifications').createAutomaticWebhookRouteLoader({ prisma,
+                readGate: readTrialGateConfiguration,
+                selectSignup: gate => selectTrialSignup(listSignupDashboardRecords(), gate) }),
+              suppressionChecker: phone => isSmsSuppressed(phone),
+            });
+            results.push({ toolCallId: toolCall.id, result: JSON.stringify(result) });
+          } catch (error) {
+            results.push({ toolCallId: toolCall.id, error: error.statusCode ? error.code : 'automatic_notification_unavailable' });
+          }
+        } else if (toolName === STAGING_INTAKE_TOOL) {
           const routedBusinessId = await resolveBusinessIdForVapiCall(vapiMessage.call || {});
           const result = await handleStagingIntakeTool({ prisma, authenticated: req.vapiWebhookAuthenticated === true,
             businessId: routedBusinessId, call: vapiMessage.call || {}, toolCall });
