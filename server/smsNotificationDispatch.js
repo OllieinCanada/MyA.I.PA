@@ -40,19 +40,24 @@ async function completeNotificationDispatch({prisma,input,now=Date.now()}){
  });
 }
 function dispatchHandler({prisma,env=process.env,authenticate}){return async(req,res)=>{
- if(env.SMS_NOTIFICATION_DISPATCH_ENABLED!=='true')return res.status(503).json({schemaVersion:1,errorCode:'notification_dispatch_disabled'});
  if(typeof authenticate!=='function'||!authenticate(req))return res.status(401).json({schemaVersion:1,errorCode:'notification_dispatch_unauthorized'});
- try{const action=req.body?.action;if(!['claim','complete'].includes(action))throw error('notification_dispatch_action_invalid',400);const result=await(action==='claim'?claimNotificationDispatch:completeNotificationDispatch)({prisma,input:req.body});return res.json(result);}
+ // A provider/tool credential can save drafts, never authorize a provider POST.
+ // Keep completion available to record receipts from old, already-admitted work.
+ try{const action=req.body?.action;
+  if(action==='claim')return res.status(403).json({schemaVersion:1,granted:false,errorCode:'manual_notification_approval_required'});
+  if(action==='draft')return res.json(await require('./smsNotificationDrafts').prepareNotificationDraft({prisma,input:req.body}));
+  if(action!=='complete')throw error('notification_dispatch_action_invalid',400);
+  if(env.SMS_NOTIFICATION_DISPATCH_ENABLED!=='true')return res.status(503).json({schemaVersion:1,errorCode:'notification_dispatch_disabled'});
+  return res.json(await completeNotificationDispatch({prisma,input:req.body}));}
  catch(e){return res.status(e.statusCode||503).json({schemaVersion:1,errorCode:e.statusCode?e.code:'notification_dispatch_store_unavailable'});}
 };}
 function dispatchReadinessHandler({prisma,env=process.env,authenticate}){return async(req,res)=>{
  if(typeof authenticate!=='function'||!authenticate(req))return res.status(401).json({schemaVersion:1,ready:false});
- if(env.SMS_NOTIFICATION_DISPATCH_ENABLED!=='true')return res.status(503).json({schemaVersion:1,ready:false});
  try{
   if(!prisma?.runtimeStore||typeof prisma.$transaction!=='function')throw Error('unavailable');
   // Read an impossible claim key to check table access without creating/pruning rows.
   await prisma.runtimeStore.findUnique({where:{key:'sms-dispatch-readiness:v1'}});
-  return res.json({schemaVersion:1,ready:true,durableStore:true});
+  return res.json({schemaVersion:1,ready:true,durableStore:true,mode:'draft_only'});
  }catch{return res.status(503).json({schemaVersion:1,ready:false});}
 };}
-module.exports={claimNotificationDispatch,completeNotificationDispatch,dispatchHandler,dispatchReadinessHandler};
+module.exports={claimNotificationDispatch,completeNotificationDispatch,dispatchHandler,dispatchReadinessHandler,dispatchContext:context,withDispatchLock:locked};

@@ -23,7 +23,7 @@ async function main() {
   fs.mkdirSync(reportDir, { recursive: true });
   const report = { schemaVersion: 1, startedAt: new Date().toISOString(), commit: expected,
     realPostgreSQL: true, realWorkerProcesses: true, productionTouched: false, realSms: 0, realCalls: 0,
-    fakeTransport: 'Disposable PostgreSQL ledger only; no provider request or provider credential',
+    fakeTransport: 'Low-level admission helper only, not production phone authorization. Disposable PostgreSQL ledger; no provider requests or credentials',
     passed: false, cases: [], sourceFiles: ['server/smsNotificationDispatch.js', 'server/compositeCallNotifications.js',
       'scripts/sms-dispatch-postgres-safety.js', 'scripts/sms-dispatch-postgres-worker.js', 'scripts/run-sms-dispatch-postgres-drill.js']
       .map(name => ({ name, sha256: digest(fs.readFileSync(path.join(ROOT, name))) })) };

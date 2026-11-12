@@ -11314,6 +11314,8 @@ function sanitizeAdminLead(lead) {
 async function cleanupSensitiveCallData() {
   const jobs = [];
   const now = Date.now();
+  jobs.push(require('./smsNotificationDrafts').redactExpiredNotificationDrafts({ prisma, now })
+    .then(count => ({ key: 'notificationDrafts', count })));
 
   if (CALL_TRANSCRIPT_RETENTION_DAYS > 0) {
     const cutoff = new Date(now - CALL_TRANSCRIPT_RETENTION_DAYS * 24 * 60 * 60 * 1000);
@@ -17545,6 +17547,8 @@ app.get(
 );
 
 registerFinanceRoutes({ app, requireAdmin, isAllowedOrigin, service: createFinanceService({ prisma }) });
+require('./smsNotificationDrafts').registerNotificationDraftRoutes({ app, prisma, requireAdmin, isAllowedOrigin,
+  actorHash: getAdminActorHash, suppressionChecker: phone => isSmsSuppressed(phone) });
 registerTrackerRoutes({ app, requireAdmin, isAllowedOrigin, list: listSignupDashboardRecords, save: upsertSignupDashboardRecord,
   audit: event => recordAdminAuditEvent({ prisma, ...event }), actorHash: getAdminActorHash, observations: () => signupFormObservations.listAdmin(),
   setupEvidence: record => readSetupEvidence({ prisma, record, searchTracker: signupNumberSearchTracker }) });

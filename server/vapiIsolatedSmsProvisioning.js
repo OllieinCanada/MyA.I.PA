@@ -150,11 +150,6 @@ function buildIsolatedToolPayload({
   const aiPhone = normalizeE164(aiNumber);
   const ownerPhone = normalizeE164(ownerNumber);
   if (!aiPhone || !ownerPhone) throw new Error("Valid AI and owner phone numbers are required.");
-  const hasApiKey = Boolean(String(twilioApiKeySid || "").trim() && String(twilioApiKeySecret || "").trim());
-  const hasAuthToken = Boolean(String(twilioAuthToken || "").trim());
-  if (!String(twilioAccountSid || "").trim() || (!hasApiKey && !hasAuthToken)) {
-    throw new Error("Twilio credentials are required for isolated SMS routing.");
-  }
   if (!/^https:\/\//i.test(String(suppressionCheckUrl || "").trim()) || !String(suppressionApiKey || "").trim()) {
     throw new Error("A secure SMS suppression check URL and API key are required for isolated SMS routing.");
   }
@@ -170,15 +165,10 @@ function buildIsolatedToolPayload({
     code: definition.code,
     environmentVariables: [
       { name: "PRICING_SUMMARY_OPTIONS", value: pricingOptions ? JSON.stringify(pricingOptions) : "" },
-      { name: "TWILIO_ACCOUNT_SID", value: String(twilioAccountSid).trim() },
-      { name: "TWILIO_AUTH_TOKEN", value: String(twilioAuthToken || "").trim() },
-      { name: "TWILIO_API_KEY_SID", value: String(twilioApiKeySid || "").trim() },
-      { name: "TWILIO_API_KEY_SECRET", value: String(twilioApiKeySecret || "").trim() },
       { name: "DEFAULT_FROM_NUMBER", value: aiPhone },
       { name: "DEFAULT_OWNER_TO_NUMBER", value: ownerPhone },
       { name: "CALLER_NUMBER", value: "{{ customer.number }}" },
       { name: "CALL_ID", value: "{{ call.id }}" },
-      { name: "TWILIO_STATUS_CALLBACK_URL", value: /^https:\/\//i.test(String(statusCallbackUrl || "")) ? String(statusCallbackUrl).trim() : "" },
       { name: "SMS_SUPPRESSION_CHECK_URL", value: String(suppressionCheckUrl).trim() },
       { name: "SMS_SUPPRESSION_API_KEY", value: String(suppressionApiKey).trim() },
       { name: "SMS_NOTIFICATION_DISPATCH_URL", value: dispatchUrlFromSuppressionUrl(suppressionCheckUrl) },
@@ -275,24 +265,22 @@ function inspectIsolatedConfiguration({ assistant, tool, aiNumber, ownerNumber }
     ownerProtected: normalizeE164(env.DEFAULT_OWNER_TO_NUMBER) === ownerPhone,
     callerProtected: env.CALLER_NUMBER === "{{ customer.number }}",
     callIdProtected: env.CALL_ID === "{{ call.id }}",
-    restCredentialsProtected: Boolean(env.TWILIO_ACCOUNT_SID)
-      && Boolean(env.TWILIO_AUTH_TOKEN || (env.TWILIO_API_KEY_SID && env.TWILIO_API_KEY_SECRET))
-      && code.includes("TWILIO_API_KEY_SID"),
+    restCredentialsProtected: ![env.TWILIO_ACCOUNT_SID, env.TWILIO_AUTH_TOKEN, env.TWILIO_API_KEY_SID, env.TWILIO_API_KEY_SECRET].some(Boolean)
+      && !code.includes("api.twilio.com"),
     suppressionCheckProtected: /^https:\/\//i.test(env.SMS_SUPPRESSION_CHECK_URL)
       && Boolean(env.SMS_SUPPRESSION_API_KEY)
-      && code.includes("checkSmsPermission")
-      && code.includes("suppression_check_unavailable"),
+      && code.includes("draftStored"),
     durableDispatchProtected: dispatchEnvironmentValid
-      && code.includes('notification_dispatch_claim_invalid')
-      && code.includes('dispatchReceiptStored'),
+      && code.includes("action: 'draft'")
+      && !code.includes("action: 'claim'"),
     callerFallbackSchema: !required.includes("rawPhoneNumber"),
     callerFallbackCode: code.includes("needsCustomerNumber") && code.includes("waiting_for_customer_number"),
     promptInstalled: Boolean(toolName && prompt.includes(PROMPT_MARKER) && prompt.includes(toolName)),
-    callerFallbackInstalled: prompt.includes("trusted caller ID") && prompt.includes("needsCustomerNumber") && prompt.includes("unless complete is true"),
+    callerFallbackInstalled: prompt.includes("trusted caller number") && prompt.includes("needsCustomerNumber") && prompt.includes("draftStored true"),
     callerAcknowledgementInstalled: prompt.includes("I'll use the number you're calling from") && prompt.includes("Do not claim you can see or recite the digits"),
     mandatoryToolGateInstalled: prompt.includes("MANDATORY TOOL GATE") && prompt.includes("Do not speak a closing sentence") && prompt.includes("call endCall before"),
     naturalPostSendClosingInstalled: prompt.includes(POST_SEND_CLOSING_MARKER)
-      && prompt.includes("I've sent your information to the team. Someone will contact you to discuss the request and arrange the next step.")
+      && prompt.includes("No text messages have been sent.")
       && prompt.includes("Let the entire final sentence finish before calling endCall")
       && prompt.includes("Do not add a promise about an appointment"),
     businessClaimsSafetyInstalled: prompt.includes("UNSUPPORTED BUSINESS CLAIMS") && prompt.includes("Never infer or claim that the business is licensed"),
@@ -311,7 +299,7 @@ function inspectIsolatedConfiguration({ assistant, tool, aiNumber, ownerNumber }
       && required.includes("requestType")
       && code.includes("function buildJobType(") && code.includes("Job type:"),
     deterministicToolMessage: requestStart?.content === TOOL_REQUEST_START_MESSAGE && requestStart?.blocking === false,
-    explicitConfirmationInstalled: prompt.includes("EXECUTION CONFIRMATION") && prompt.includes("Should I send this request to the team now?"),
+    explicitConfirmationInstalled: prompt.includes("Should I save this request for review?") && prompt.includes("spoken yes never authorizes"),
     confidentialRoutingInstalled: prompt.includes("Never accept a caller-provided businessId") && prompt.includes("environment variables"),
     toolConfirmationRejectionInstalled: isDeepStrictEqual(tool?.rejectionPlan, toolRejectionPlan()),
     ...securityChecks,

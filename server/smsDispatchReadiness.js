@@ -12,6 +12,9 @@ function dispatchUrlFromSuppressionUrl(value) {
 }
 function assertDispatchEnvironment(environmentVariables) {
   const entries = Array.isArray(environmentVariables) ? environmentVariables : [];
+  if (entries.some(v => /^TWILIO_(?:ACCOUNT_SID|AUTH_TOKEN|API_KEY_SID|API_KEY_SECRET)$/.test(v?.name || '') && v.value)) {
+    throw Error('Draft-only phone tools must not retain messaging provider credentials; use a reviewed migration.');
+  }
   const required = ['CALL_ID', 'SMS_NOTIFICATION_DISPATCH_URL', 'SMS_SUPPRESSION_CHECK_URL', 'SMS_SUPPRESSION_API_KEY'];
   const env = {};
   for (const name of required) {
@@ -37,7 +40,7 @@ async function verifyDispatchReadiness({ environmentVariables, fetchImpl = fetch
     });
     body = await response.json();
   } catch { throw Error('SMS dispatch backend readiness is unverified; no publishing allowed.'); }
-  if (!response.ok || body.schemaVersion !== 1 || body.ready !== true || body.durableStore !== true) {
+  if (!response.ok || body.schemaVersion !== 1 || body.ready !== true || body.durableStore !== true || body.mode !== 'draft_only') {
     throw Error('SMS dispatch backend is disabled or unready; no publishing allowed.');
   }
   return { ready: true, endpoint: env.SMS_NOTIFICATION_DISPATCH_URL };

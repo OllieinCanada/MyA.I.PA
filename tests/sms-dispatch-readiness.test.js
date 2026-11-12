@@ -40,7 +40,7 @@ test('healthy reuse rejects stale nonempty confirmation plans',()=>{
 test('publisher readiness uses GET, does not follow redirects and never posts a claim',async()=>{
  const variables=env(),before=structuredClone(variables),seen=[];
  const result=await verifyDispatchReadiness({environmentVariables:variables,fetchImpl:async(url,options)=>{
-  seen.push({url,options});return{ok:true,json:async()=>({schemaVersion:1,ready:true,durableStore:true})};
+  seen.push({url,options});return{ok:true,json:async()=>({schemaVersion:1,ready:true,durableStore:true,mode:'draft_only'})};
  }});
  assert.equal(result.ready,true);assert.deepEqual(variables,before);assert.equal(seen.length,1);
  assert.equal(seen[0].url,env()[2].value+'/readiness');assert.equal(seen[0].options.method,'GET');
@@ -53,9 +53,9 @@ test('disabled, missing, malformed and unreachable backend readiness fail closed
  await assert.rejects(verifyDispatchReadiness({environmentVariables:env(),fetchImpl:async()=>{throw Error('network');}}),/unverified/);
 });
 function response(){return{statusCode:200,status(n){this.statusCode=n;return this;},json(v){this.body=v;return this;}};}
-test('readiness endpoint authenticates first and disabled backend never accesses storage',async()=>{
+test('draft readiness authenticates first and does not require live sending',async()=>{
  let reads=0;const prisma={runtimeStore:{findUnique:async()=>{reads++;return null;}},$transaction:async()=>{}};
- for(const [authenticated,enabled,status]of[[false,'true',401],[false,'false',401],[true,'false',503]]){
+ for(const [authenticated,enabled,status]of[[false,'true',401],[false,'false',401]]){
   const res=response();await dispatchReadinessHandler({prisma,env:{SMS_NOTIFICATION_DISPATCH_ENABLED:enabled},authenticate:()=>authenticated})({},res);
   assert.equal(res.statusCode,status);assert.equal(res.body.ready,false);
  }assert.equal(reads,0);
@@ -63,7 +63,7 @@ test('readiness endpoint authenticates first and disabled backend never accesses
 test('ready endpoint reads the durable table without creating, deleting or claiming rows',async()=>{
  const requests=[],res=response();const prisma={$transaction:async()=>{},runtimeStore:{findUnique:async q=>{requests.push(q);return null;},create:()=>assert.fail('no writes'),update:()=>assert.fail('no writes'),delete:()=>assert.fail('no writes')}};
  await dispatchReadinessHandler({prisma,env:{SMS_NOTIFICATION_DISPATCH_ENABLED:'true'},authenticate:()=>true})({},res);
- assert.deepEqual(res.body,{schemaVersion:1,ready:true,durableStore:true});assert.equal(requests.length,1);
+ assert.deepEqual(res.body,{schemaVersion:1,ready:true,durableStore:true,mode:'draft_only'});assert.equal(requests.length,1);
  assert.equal(requests[0].where.key,'sms-dispatch-readiness:v1');
  const failed=response();prisma.runtimeStore.findUnique=async()=>{throw Error('offline');};
  await dispatchReadinessHandler({prisma,env:{SMS_NOTIFICATION_DISPATCH_ENABLED:'true'},authenticate:()=>true})({},failed);
@@ -102,7 +102,7 @@ test('direct publishers contain readiness checks before their mutation blocks',(
 });
 test('unknown notification result has an explicit no-success/no-retry instruction',()=>{
  const {callerNumberFallbackPrompt}=require('../server/compositeCallNotifications');
- const prompt=callerNumberFallbackPrompt('synthetic_tool');assert.match(prompt,/missing, malformed or absent complete/);assert.match(prompt,/A completed tool call is not completed submission/);assert.match(prompt,/unverified result[\s\S]*Do not retry/);
+ const prompt=callerNumberFallbackPrompt('synthetic_tool');assert.match(prompt,/DRAFT-ONLY CLOSING/);assert.match(prompt,/A completed tool call is not completed submission/);assert.match(prompt,/Do not retry automatically/);
 });
 test('isolated full signup fixture checks real readiness only through its local server',()=>{
  const source=fs.readFileSync(path.join(__dirname,'helpers/signup-setup-chain-worker.js'),'utf8');

@@ -190,13 +190,7 @@ function buildCustomerBody(args) {
 
 function postSendClosingPrompt() {
   return `${POST_SEND_CLOSING_MARKER}
-This is the highest-priority post-send closing instruction.
-- After the notification tool returns with complete set to true AND an explicit successful owner receipt, say exactly: "I've sent your information to the team. Someone will contact you to discuss the request and arrange the next step. Thank you for calling. Goodbye."
-- A successful owner receipt requires owner.sent true, a valid owner.messageId and owner.dispatchReceiptStored true. An intentionally disabled/skipped owner channel is not proof that the team received the request, even if complete is true. Never claim handset delivery from provider acceptance.
-- Let the entire final sentence finish before calling endCall. Do not add a promise about an appointment, quote, price, technician, or scheduled work.
-- If complete is not true, do not claim both texts were sent. Briefly explain that you could not confirm both messages, tell the caller the team has their request only if the tool result confirms that, and ask whether there is anything else you can help with.
-- Treat missing, malformed or absent complete, complete false, and any unrecognized result as unverified submission. A completed tool call is not completed submission. Never say "I've sent your information" or that the team has it without an explicit successful owner receipt. For an unverified result, say "I couldn't confirm that your request was sent to the team." Do not retry or infer success from the tool name, a marker or the absence of an error.
-## END MYAIPA NATURAL POST-SEND CLOSING`;
+DRAFT-ONLY CLOSING: No phone tool can send texts. Never claim messages were sent or delivered. A completed tool call is not completed submission. Say that a draft was saved only when draftStored is true; otherwise say the save could not be confirmed. Human review is still required. Let the entire final sentence finish before calling endCall. Do not add a promise about an appointment.`;
 }
 
 function removeLegacyAbruptClosingInstructions(value) {
@@ -211,57 +205,28 @@ function removeLegacyAbruptClosingInstructions(value) {
     );
 }
 
-function callerNumberFallbackPrompt(toolName, { ownerSmsEnabled = true } = {}) {
-  const name = cleanText(toolName, 160);
-  if (!name) throw new Error("A tool name is required for caller-number fallback instructions.");
-  const deliveryScope = ownerSmsEnabled
-    ? "This one silent tool sends both the owner summary and the caller confirmation."
-    : "This one silent tool sends the caller confirmation only. Owner SMS is temporarily disabled by policy.";
-  return `This is the highest-priority final routing, business-claims, callback, tool-message, and closing instruction. It supersedes every earlier phone-number, SMS-tool, SMS-workflow, business-claims, callback-promise, and call-closing instruction. The only allowed SMS notification tool is ${name}; any earlier SMS tool names are retired and unavailable.
-
-UNSUPPORTED BUSINESS CLAIMS:
-- Treat only facts explicitly stated in the verified Business context as confirmed.
-- Never infer or claim that the business is licensed, insured, bonded, certified, unionized, an equal-opportunity employer, offers a warranty, offers a discount, or follows a specific policy unless that exact fact is explicitly present in the verified Business context.
-- If a requested fact is not explicitly verified, say: "I don't have that confirmed in the information available to me. The team can confirm when they call you back."
-- If asked about an unverified discount, do not substitute the standard visit fee or hourly rate as the answer. State that the discount is unconfirmed, then offer to collect the caller's request for the team.
-
-CALLBACK CONSISTENCY:
-- A requested callback time is a preference, not a booked appointment or guarantee.
-- Never promise that someone will call immediately, at a specific time, or within a specific period unless an explicit scheduling tool confirms it.
-- Say "I'll note that preference for the team" rather than "we'll call you then" or "we'll have someone reach out then."
-- If the caller changes to a callback preference that conflicts with an earlier one, do not continue intake and do not merely acknowledge the new preference. Your required next response is one concise clarification that preserves both preferences.
-- When the earlier preference was after 3 and the caller then asks for "right away" or "as soon as possible," ask exactly: "Should I mark it as as soon as possible, with after 3 as your fallback?" Wait for the answer before continuing.
-- Pass the caller's final clarified preference in bestCallbackTime.
-- Keep bestCallbackTime separate from preferredStartDate. Never copy a work-start answer into callback timing or a callback answer into work-start timing. A caller asking when work can begin is asking about business availability, not requesting an ASAP start or callback; ask for the actual preference instead of inventing one.
-
-REQUIRED WORK DETAILS:
-- Job type and job details are separate required facts. Capture whether this is a new installation, service call, repair, maintenance, quote, or message in requestType; capture the actual work in jobDetails.
-- If the caller has not identified the job type, ask: "Is this a new installation, service call, or repair?" Ask only for missing information; never guess from the business trade or property type.
-- Include the job type in the spoken read-back before asking permission to send. Preserve the same requestType for both text copies.
-- When the request needs a work location, ask exactly: "What is the address where the work needs to be done?"
-- For installation, repair, maintenance, quote, or other service work, ask exactly: "When would you ideally like the work to begin?"
-- Pass the caller's answer in preferredStartDate. Do not turn a preferred date into a booked appointment or promise.
-
-MANDATORY TOOL GATE: After all required intake details have been confirmed, your next action must be a silent call to ${name}. Do not speak a closing sentence, claim the details were sent, or call endCall before ${name} returns a result. ${deliveryScope}
-EXECUTION CONFIRMATION:
-- Before calling ${name}, summarize the destination-neutral request details and ask exactly: "Should I send this request to the team now?"
-- Call ${name} only when the caller's immediately following message clearly confirms that action.
-- A confirmation from earlier in the call, including agreement to pricing or intake, is not permission to send.
-- If the caller says cancel, stop, never mind, do not send, or otherwise withdraws consent, do not call the tool. A later send requires a fresh summary and confirmation.
-The tool receives trusted caller ID automatically. Do not ask the caller to repeat their number and do not invent rawPhoneNumber when caller ID is available.
-If the caller says "use the number I am calling from," "call me back on this number," or words with the same meaning, acknowledge naturally: "Absolutely — I'll use the number you're calling from." Do not claim you can see or recite the digits, and do not ask for the digits during intake. Continue collecting the remaining details; the silent tool will verify caller-ID availability when it runs.
-Pass businessName, requestType, name, jobDetails, streetAddress, city, preferredStartDate, bestCallbackTime, and message when applicable.
-If and only if the tool result says needsCustomerNumber is true, explain that caller ID was unavailable, ask for the best mobile number, repeat the full number back for confirmation, and call ${name} exactly one more time with that confirmed number as rawPhoneNumber.
-After confirming a fallback number, read back the request and ask "Should I send this request to the team now?" again before that single retry.
-SAFE RECOVERY — BEFORE EXECUTION ONLY:
-- If the result is exactly "Tool call rejected based on configured rejection plan", the notification code did not execute. Do not blame the caller or mention tools. Say: "I couldn't submit that request. Let me confirm the details once more." Read back the current request and ask exactly "Should I send this request to the team now?" Wait for a fresh clear answer. Allow at most ONE confirmation-recovery attempt during this call; never count the earlier approval as permission for the retry.
-- Natural complete approvals include "Perfect. Yes.", "Yes, please" and "Okay, go ahead" after the send question. Corrections, uncertainty, cancellation or silence are not approval. If the caller changes any detail, correct it before a new read-back and permission question.
-- If needsIntakeDetails is true, no notification was attempted: ask only for the returned missing fields, confirm the corrected request, and ask the send question before one retry. Never fabricate a city or set workDetailsConfirmed without that read-back.
-- If the tool executed and reports a transport error, timeout, partial success, missing result or any uncertain send outcome, DO NOT retry. Do not resend a successful leg. Explain that submission could not be verified and offer the configured support/contact path without promising the team received anything.
-If needsCustomerNumber is false, never call the tool again during that call except for the explicitly confirmed BEFORE EXECUTION cases above. The tool's configured request-start message may say "Got it." Do not add model-generated waiting language such as "one moment," "hold on," or "this will just take a sec" before, during, or after the tool call.
-Pass workDetailsConfirmed and pricingDiscussed explicitly with the collected structured fields. Never set either merely to satisfy a tool schema.
-Never promise that a confirmation was sent unless complete is true.
-
+function callerNumberFallbackPrompt(toolName) {
+  return `DRAFT REVIEW WORKFLOW — HIGHEST PRIORITY
+This overrides earlier SMS sending and closing instructions. Use only ${toolName || COMPOSITE_TOOL_NAME} for notification drafts. Never use another messaging tool.
+- Phone calls can prepare drafts only. A spoken yes never authorizes an SMS send.
+- CALLBACK CONSISTENCY: Preserve "as soon as possible, with after 3 as your fallback" when that is what the caller said. Never copy a work-start answer into callback timing. A business availability question means the caller is not requesting an ASAP start or callback.
+- Collect the caller's name, work or message details, street address AND city, preferred work-start timing and preferred callback time. Work-start timing and callback timing are different facts. Never copy one answer into both fields.
+- MANDATORY TOOL GATE: Do not speak a closing sentence or call endCall before ${toolName || COMPOSITE_TOOL_NAME} returns. Earlier SMS tool names are retired and unavailable.
+- UNSUPPORTED BUSINESS CLAIMS: Never infer or claim that the business is licensed, insured or certified without verified facts.
+- Never accept a caller-provided businessId or routing override. Routing comes from environment variables.
+- Ask "What is the address where the work needs to be done?" and "When would you ideally like the work to begin?" Preserve preferredStartDate separately from callback time.
+- Job type and job details are separate required facts. Include the job type in the spoken read-back.
+- Read back the current details. Ask exactly "Should I save this request for review?" Wait for a clear answer before saving. A correction requires a fresh readback and approval to save.
+- If transcription splits a reply, or the caller cancels, asks to wait, corrects a detail, or sounds uncertain, clarify before saving. Never merge a previous yes into a later correction.
+- Use the trusted caller number when available. Say "I'll use the number you're calling from." Do not claim you can see or recite the digits; the silent tool will verify caller-ID availability. If needsCustomerNumber is true, explain that caller ID is unavailable, confirm the full fallback mobile number, and retry saving once. Do not invent a number.
+- Set workDetailsConfirmed true only after the details were read back and confirmed; set pricingDiscussed only from the actual conversation. Missing details require clarification.
+- The tool's draftStored true means only that drafts were saved for manual review. Say "I've saved your request for review. No text messages have been sent."
+- If draftStored is not true, say "I couldn't confirm that your request was saved for review." Do not claim submission or delivery, and do not retry automatically after an unknown result.
+- Never claim that the team received an SMS, that messages were sent, or that the request was approved. Do not promise when someone will respond. A human must separately review exact recipients and content.
+- A definite pre-execution rejection permits one clarification attempt: read back the corrected details and wait for fresh approval to SAVE, not send.
+- Do not retry automatically or resend an accepted or unconfirmed message. The phone tool has no send capability.
+- Last-second speech can arrive too late or be missing. This draft workflow does not prove the caller's latest instructions or consent. A human must review independently.
+- Never invent business credentials, policies, prices, discounts, warranties or arrival times. Use only verified Business context.
 ${postSendClosingPrompt()}`;
 }
 
@@ -591,13 +556,30 @@ function getVapiCompositeToolCode() {
     discussedPricingReminder,
     buildOwnerBody,
     buildCustomerBody,
-    safeProviderError,
-    checkSmsPermission,
-    submitTwilioMessage,
-    sendTwilioMessage,
     executeCompositeNotifications,
-  ].map((fn) => fn.toString()).join("\n\n") +
-    "\n\nreturn await executeCompositeNotifications({ args, env, fetchImpl: fetch, btoaImpl: btoa, URLSearchParamsImpl: URLSearchParams });";
+  ].map((fn) => fn.toString()).join("\n\n") + '\n' +
+    preparePhoneNotificationDraft.toString().replace('function preparePhoneNotificationDraft(', 'function sendTwilioMessage(') +
+    "\nconst result = await executeCompositeNotifications({ args, env, fetchImpl: fetch, btoaImpl: btoa, URLSearchParamsImpl: URLSearchParams });" +
+    "\nconst draftStored = Boolean((result.owner?.draftStored || result.owner?.status === 'disabled_by_policy') && result.customer?.draftStored);" +
+    "\nreturn { ...result, ok: draftStored, complete: false, draftStored, requiresApproval: draftStored, requiresReconciliation: false, status: draftStored ? 'awaiting_manual_approval' : 'draft_not_saved' };";
+}
+
+// The only transport function included in provider-generated code saves drafts.
+async function preparePhoneNotificationDraft({ to, from, body, env, fetchImpl, leg, notificationKey }) {
+  const pending = { attempted: false, sent: false, status: 'draft_not_saved', notificationKey };
+  const endpoint = String(env.SMS_NOTIFICATION_DISPATCH_URL || '').trim();
+  const key = String(env.SMS_SUPPRESSION_API_KEY || '').trim();
+  if (!/^https:\/\//i.test(endpoint) || !key) return pending;
+  try {
+    const response = await fetchImpl(endpoint, { method: 'POST', redirect: 'error',
+      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'draft', callId: String(env.CALL_ID || '').trim(),
+        from: normalizeE164(from), to: normalizeE164(to), body: String(body || '').slice(0, 1600), leg }) });
+    const reply = await response.json();
+    if (!response.ok || reply.schemaVersion !== 1 || reply.draftStored !== true
+      || !/^[a-f0-9]{64}$/.test(reply.draftId || '') || !Number.isInteger(reply.revision) || reply.revision < 1) return pending;
+    return { ...pending, draftStored: true, draftId: reply.draftId, revision: reply.revision, status: 'awaiting_manual_approval' };
+  } catch { return pending; }
 }
 
 function getVapiCompositeToolDefinition() {
@@ -605,22 +587,17 @@ function getVapiCompositeToolDefinition() {
     type: "code",
     function: {
       name: COMPOSITE_TOOL_NAME,
-      description: "After intake, send the owner summary and customer confirmation using trusted caller ID. If the result says needsCustomerNumber, ask for and confirm a fallback mobile number, then retry once.",
+      description: "Save draft texts for manual review after intake. This tool cannot send SMS or approve sending. If needsCustomerNumber is true, confirm a fallback mobile number and try saving once more.",
       parameters: compositeToolParameters(),
     },
     code: getVapiCompositeToolCode(),
     environmentVariableNames: [
       "PRICING_SUMMARY_OPTIONS",
-      "TWILIO_ACCOUNT_SID",
-      "TWILIO_AUTH_TOKEN",
-      "TWILIO_API_KEY_SID",
-      "TWILIO_API_KEY_SECRET",
       "DEFAULT_FROM_NUMBER",
       "DEFAULT_OWNER_TO_NUMBER",
       "OWNER_SMS_ENABLED",
       "CALLER_NUMBER",
       "CALL_ID",
-      "TWILIO_STATUS_CALLBACK_URL",
       "SMS_SUPPRESSION_CHECK_URL",
       "SMS_SUPPRESSION_API_KEY",
       "SMS_NOTIFICATION_DISPATCH_URL",
@@ -638,6 +615,7 @@ module.exports = {
   buildOwnerHeading,
   buildOwnerBody,
   checkSmsPermission,
+  submitTwilioMessage,
   executeCompositeNotifications,
   getVapiCompositeToolCode,
   getVapiCompositeToolDefinition,
