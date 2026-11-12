@@ -1,19 +1,19 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import './NotificationDraftsPanel.css';
 
 export default function NotificationDraftsPanel({ api }) {
   const [data, setData] = useState(null), [error, setError] = useState(''), [busy, setBusy] = useState(false);
   const [reviewed, setReviewed] = useState({});
   const inFlight = useRef(false);
-  const load = async () => {
+  const load = useCallback(async () => {
     if (inFlight.current) return;
     inFlight.current = true; setBusy(true); setReviewed({});
     try { setData(await api('/api/admin/notification-drafts')); setError(''); }
     catch (_) { setData(null); setError('Drafts could not be loaded. Reload before taking any action.'); }
     finally { inFlight.current = false; setBusy(false); }
-  };
+  }, [api]);
   // This view never polls or automatically submits a mutation.
-  useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); }, [load]);
   const change = async (draft, action) => {
     if (inFlight.current) return;
     inFlight.current = true; setBusy(true); setError(''); setReviewed({});

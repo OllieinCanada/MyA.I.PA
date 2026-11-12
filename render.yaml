@@ -27,6 +27,8 @@ services:
     domains:
       - api.myaipa.ca
     envVars:
+      - key: NODE_VERSION
+        value: "24.22.3"
       - key: NODE_ENV
         value: production
       - key: APP_ENV

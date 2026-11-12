@@ -265,8 +265,8 @@ function inspectIsolatedConfiguration({ assistant, tool, aiNumber, ownerNumber }
     ownerProtected: normalizeE164(env.DEFAULT_OWNER_TO_NUMBER) === ownerPhone,
     callerProtected: env.CALLER_NUMBER === "{{ customer.number }}",
     callIdProtected: env.CALL_ID === "{{ call.id }}",
-    restCredentialsProtected: ![env.TWILIO_ACCOUNT_SID, env.TWILIO_AUTH_TOKEN, env.TWILIO_API_KEY_SID, env.TWILIO_API_KEY_SECRET].some(Boolean)
-      && !code.includes("api.twilio.com"),
+    restCredentialsProtected: ![env.TWILIO_ACCOUNT_SID, env.TWILIO_AUTH_TOKEN, env.TWILIO_API_KEY_SID, env.TWILIO_API_KEY_SECRET].some(Boolean),
+    ownedDraftCodeInstalled: code === getVapiCompositeToolDefinition().code,
     suppressionCheckProtected: /^https:\/\//i.test(env.SMS_SUPPRESSION_CHECK_URL)
       && Boolean(env.SMS_SUPPRESSION_API_KEY)
       && code.includes("draftStored"),
