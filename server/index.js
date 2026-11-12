@@ -1502,30 +1502,7 @@ function hasValidVapiWebhookKey(req) {
 }
 
 function getPublicBaseUrl(req) {
-  const configured = String(process.env.PUBLIC_APP_URL || process.env.APP_URL || "").trim().replace(/\/+$/, "");
-  if (configured) {
-    const parsed = new URL(configured);
-    if (String(process.env.NODE_ENV || "").toLowerCase() === "production"
-      && (parsed.protocol !== "https:" || /^(localhost|127\.0\.0\.1)$/i.test(parsed.hostname))) {
-      const error = new Error("PUBLIC_APP_URL must be a public HTTPS URL in production.");
-      error.statusCode = 503;
-      throw error;
-    }
-    return configured;
-  }
-
-  const proto = String(req.headers["x-forwarded-proto"] || req.protocol || "http").split(",")[0].trim();
-  const host = String(req.headers["x-forwarded-host"] || req.headers.host || "").split(",")[0].trim();
-  const inferred = host ? `${proto}://${host}` : "http://localhost:3000";
-  if (String(process.env.NODE_ENV || "").toLowerCase() === "production") {
-    const parsed = new URL(inferred);
-    if (parsed.protocol !== "https:" || /^(localhost|127\.0\.0\.1)$/i.test(parsed.hostname)) {
-      const error = new Error("A public HTTPS application URL is required in production.");
-      error.statusCode = 503;
-      throw error;
-    }
-  }
-  return inferred;
+  return require('./publicLinkOrigin').publicLinkBase(req);
 }
 
 function getStripeReturnUrls(req) {
@@ -1537,8 +1514,7 @@ function getStripeReturnUrls(req) {
 }
 
 function getSignupVerificationUrl(req, token, channel = "email") {
-  const configured = String(process.env.SIGNUP_VERIFICATION_BASE_URL || "").trim().replace(/\/+$/, "");
-  const baseUrl = configured || getPublicBaseUrl(req);
+  const baseUrl = require('./publicLinkOrigin').verificationLinkBase(req);
   const normalizedChannel = normalizeVerificationChannel(channel);
   const channelProof = createVerificationChannelProof(token, normalizedChannel, getAdminSessionSecret());
   return `${baseUrl}/api/integrations/verify-signup-contact?token=${encodeURIComponent(token)}&channel=${encodeURIComponent(normalizedChannel)}&channelProof=${encodeURIComponent(channelProof)}`;
@@ -1740,12 +1716,12 @@ async function sendSignupVerificationEmail({ req, ownerEmail, ownerName, busines
       <p>Hi ${escapeHtml(safeOwnerName)},</p>
       <p>Please verify your email before we create your My AI PA agent for <strong>${escapeHtml(businessName || "your business")}</strong>.</p>
       <p>
-        <a href="${verificationUrl}" style="display:inline-block;background:#07142a;color:#fff;text-decoration:none;font-weight:700;padding:14px 18px;border-radius:10px">
+        <a href="${escapeHtml(verificationUrl)}" style="display:inline-block;background:#07142a;color:#fff;text-decoration:none;font-weight:700;padding:14px 18px;border-radius:10px">
           Verify email and continue setup
         </a>
       </p>
       <p style="font-size:14px;color:#475569">This link expires in 24 hours. If the button does not work, copy and paste this URL into your browser:</p>
-      <p style="font-size:14px;word-break:break-all;color:#2563eb">${verificationUrl}</p>
+      <p style="font-size:14px;word-break:break-all;color:#2563eb">${escapeHtml(verificationUrl)}</p>
     </div>
   `;
 
