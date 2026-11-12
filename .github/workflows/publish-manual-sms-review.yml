@@ -1,0 +1,78 @@
+name: Publish approved manual SMS review screen
+
+# One release, explicitly authorized with PR #229. No provider settings, SMS,
+# or dispatch flags are read or changed by this job.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-manual-sms-review-229
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: startsWith(github.event.head_commit.message, 'Require manual approval before call notification SMS (#229)')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      pages: write
+    env:
+      CI: "true"
+      REACT_APP_API_BASE_URL: https://api.myaipa.ca
+      REACT_APP_RELEASE_SHA: ${{ github.sha }}
+      REACT_APP_GOOGLE_MAPS_API_KEY: ${{ vars.GOOGLE_MAPS_BROWSER_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: npm ci --include=dev --legacy-peer-deps
+      - name: Build with the existing Pages script
+        run: npm run build:pages
+      - name: Verify the review screen is in the built assets
+        run: |
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const files = fs.readdirSync('docs/static/js').filter(f => /^main\.[a-f0-9]+\.js$/.test(f));
+          if (!files.some(f => fs.readFileSync('docs/static/js/' + f, 'utf8').includes('Text approvals'))) throw Error('Missing approval screen');
+          NODE
+      - name: Publish only generated docs and request the existing Pages build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/pages" > /tmp/manual-review-pages.json
+          jq -e '.build_type == "legacy" and .source.branch == "main" and .source.path == "/docs"' /tmp/manual-review-pages.json
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = "$GITHUB_SHA"
+          git add -- docs
+          if ! git diff --cached --quiet; then
+            git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m '[skip render] Publish manual SMS approval screen'
+            git push origin HEAD:main
+          fi
+          published_sha="$(git rev-parse HEAD)"
+          echo "Published docs commit: $published_sha"
+          gh api --method POST "repos/$GITHUB_REPOSITORY/pages/builds" > /tmp/manual-review-build.json
+          for attempt in $(seq 1 40); do
+            gh api "repos/$GITHUB_REPOSITORY/pages/builds/latest" > /tmp/manual-review-build.json
+            if jq -e --arg sha "$published_sha" '.commit == $sha and .status == "built"' /tmp/manual-review-build.json; then
+              echo "Verified Pages build for $published_sha"
+              exit 0
+            fi
+            if jq -e --arg sha "$published_sha" '.commit == $sha and .status == "errored"' /tmp/manual-review-build.json; then
+              echo 'Pages build failed'
+              exit 1
+            fi
+            sleep 10
+          done
+          echo 'Pages deployment was not verified within the observation window'
+          exit 1
