@@ -19,6 +19,34 @@ Before starting a task, check whether this project already has an automation scr
    - `npm run audio:update-tims` for updating Tim's Electrical audio assets.
    - `npm run transcript:tim` for refreshing transcript text from an existing transcript file.
 
-Do not push to GitHub unless the user explicitly asks for live deployment.
+## Authorization and release rules
+
+Treat authorization as current task state, not reusable boilerplate.
+
+- Never copy merge/deployment/approval language from an older PR without revalidating it against the user's latest instructions and current `main`.
+- Authorization does not automatically carry forward from one PR to another.
+- Likewise, an old requirement for "fresh exact-head approval" does not remain in force unless it is still present in current project instructions or the user explicitly requires it for the current task.
+- Before writing a PR's release/authorization section, inspect current `AGENTS.md`, current `main`, and any immediately preceding related merged PRs that changed the release workflow.
+- If the working branch was created before a relevant policy/workflow PR merged, refresh against current `main` before deciding what authorization rules apply.
+- Do not invent safety gates merely because previous PRs used them.
+
+Treat these as independent actions unless the user explicitly combines them:
+
+1. modify local files
+2. commit
+3. push
+4. open or update a PR
+5. merge
+6. deploy
+7. enable a production feature or configuration
+8. initiate real calls, messages, or provider actions
+9. initiate paid tests or purchases
+
+Record only the permissions the user has actually granted.
+
+When the user explicitly says something such as "merge and deploy it," that authorization controls the current requested release workflow. Do not subsequently reintroduce a superseded "exact-head approval required" gate unless the user asks for it or current project policy independently requires it.
+
+Before merge or deployment, re-read the current PR description and current project instructions. If the PR description contains an authorization statement inconsistent with the user's latest instruction, correct the description instead of blindly enforcing stale text.
+
 
 For homepage visual/layout fixes, do not rely only on automated "no obvious visual issues" output. Inspect the exact section screenshot the user cares about, and send the local Telegram screenshot before calling the fix done.

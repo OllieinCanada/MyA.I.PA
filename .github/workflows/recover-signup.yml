@@ -31,6 +31,9 @@ jobs:
         run: |
           [[ "$TARGET_ID" =~ ^[a-f0-9]{24}$ ]] || { echo "Invalid redacted target ID."; exit 1; }
           [[ "$CONFIRMATION" == "RECOVER_SIGNUP" ]] || { echo "Explicit confirmation is required."; exit 1; }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "24.22.3"
       - name: Run redacted signup recovery
         env:
           MONITOR_API_KEY: ${{ secrets.MONITOR_API_KEY }}

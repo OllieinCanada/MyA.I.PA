@@ -65,7 +65,7 @@ test('collector uses GET only, paginates evidence, and keeps 24-hour observation
     let body;
     if (url.pathname.endsWith('/deploys')) body = [{ deploy: { status: 'live', commit: { id: commit }, finishedAt: deployedAt } }];
     else if (url.pathname.endsWith('/security-readiness')) body = { ok: true, releaseCommit: commit,
-      versions: { bodyParser: '1.20.9', nodemailer: '10.1.4' }, requestCompression: 'rejected-before-body-parsing' };
+      versions: { node: '24.22.3', bodyParser: '1.20.9', nodemailer: '10.1.4' }, requestCompression: 'rejected-before-body-parsing' };
     else if (url.pathname.endsWith('/ready')) body = { ok: true, releaseCommit: commit };
     else if (url.pathname.endsWith('/operations/health')) body = { issues: [], twilioReceipts: { status: 'healthy',
       lastSuccessfulRunAt: new Date(++successes * 60000).toISOString(), workerAgeSeconds: 1,

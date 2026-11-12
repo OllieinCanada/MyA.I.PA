@@ -46,6 +46,10 @@ jobs:
       authorized: ${{ steps.gate.outputs.authorized }}
       pages_required: ${{ steps.gate.outputs.pages_required }}
     steps:
+      - name: Select reviewed Node runtime
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "24.22.3"
       - name: Validate the signed, recent, exact-head approval
         id: gate
         env:
@@ -147,6 +151,10 @@ jobs:
       render_status: ${{ steps.verify.outputs.render_status }}
       pages_status: ${{ steps.verify.outputs.pages_status }}
     steps:
+      - name: Select reviewed Node runtime
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "24.22.3"
       - name: Wait for the exact merge commit to become live
         id: verify
         env:
@@ -187,6 +195,10 @@ jobs:
     timeout-minutes: 5
     permissions: {}
     steps:
+      - name: Select reviewed Node runtime
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "24.22.3"
       - name: Send the bounded result to the production Telegram outbox
         env:
           MONITOR_API_KEY: ${{ secrets.MONITOR_API_KEY }}

@@ -2,6 +2,9 @@
   "name": "myaipa-website",
   "version": "0.0.0",
   "private": true,
+  "engines": {
+    "node": ">=24.22.3 <25"
+  },
   "homepage": ".",
   "proxy": "http://localhost:8787",
   "dependencies": {
@@ -300,7 +303,9 @@
     "ops:monitor:render-env": "node scripts/run-with-render-env.js --keys=MONITOR_API_KEY -- node scripts/monitor-production.js --include-operational --confirm-failure",
     "ops:alert-drill:render-env": "node scripts/run-with-render-env.js --keys=MONITOR_API_KEY -- node scripts/test-production-incident-remediation.js --apply --confirm=RUN_INCIDENT_REMEDIATION_CANARY",
     "evals:vapi:render-env": "node scripts/run-with-render-env.js --keys=VAPI_API_KEY -- node scripts/setup-vapi-evals.js --sync --run-safe --repeat=5 --minimum-pass-rate=0.95 --out=diagnostics/shipping-readiness/vapi-call-gate.json",
-    "verify:saved-call": "node scripts/verify-saved-call-record.js"
+    "verify:saved-call": "node scripts/verify-saved-call-record.js",
+    "test:sms-approvals": "node --test tests/sms-notification-drafts.test.js tests/sms-ordering-audit.test.js tests/confirmation-no-send-integration.test.js",
+    "test:sms-approvals:ui": "react-scripts test --env=jsdom --watchAll=false --runInBand --runTestsByPath src/NotificationDraftsPanel.test.js"
   },
   "devDependencies": {
     "axe-core": "^4.10.0",

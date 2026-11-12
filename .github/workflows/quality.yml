@@ -43,7 +43,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: "24.22.3"
           cache: npm
 
       - name: Reproduce committed URI dependency lock in a disposable CI copy
@@ -84,6 +84,7 @@ jobs:
           npm run test:database
           RUN_SIGNUP_OBSERVATION_POSTGRES=1 npm run test:signup-form-observation:postgres
           RUN_ADMIN_OWNER_LINKS_POSTGRES=1 npm run test:admin-owner-links:postgres
+          RUN_NUMBER_FALLBACK_POSTGRES=1 node --test tests/signup-number-fallback-recovery-postgres.test.js
 
       - name: Verify private one-use owner sign-in in all browser engines
         run: npm run test:admin-owner-links:browser

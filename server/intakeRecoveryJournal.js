@@ -85,4 +85,16 @@ async function recordRecoveryOperation({ prisma, identity, operationId, kind, st
     await tx.runtimeStore.upsert({ where: { key }, create: { key, data }, update: { data } });
   });
 }
-module.exports = { PREFIX, RETENTION_MS, canonical, recoveryIdentity, journalKey, saveRecoveryCopy, readRecoveryCopy, recordRecoveryOperation };
+// Caller must hold the intake/context/stage locks and archive the prior row in
+// the same transaction. Normal intake retries still cannot replace a payload.
+function amendedRecoveryCopy(row, priorPayload, payload, secret, now = Date.now()) {
+  const before = recoveryIdentity(priorPayload), after = recoveryIdentity(payload);
+  if (!row || row.businessKey !== before.businessKey || row.eventKey !== before.eventKey
+    || row.payloadHash !== before.payloadHash || after.eventKey !== before.eventKey
+    || after.businessKey !== before.businessKey || !Number.isFinite(Date.parse(row.expiresAt))
+    || Date.parse(row.expiresAt) <= now || recoveryIdentity(open(row, secret)).payloadHash !== before.payloadHash) {
+    throw fail('INTAKE_RECOVERY_COPY_MISMATCH');
+  }
+  return {...row,...after,sealed:seal(payload,secret,after),amendedAt:new Date(now).toISOString()};
+}
+module.exports = { PREFIX, RETENTION_MS, canonical, recoveryIdentity, journalKey, saveRecoveryCopy, readRecoveryCopy, recordRecoveryOperation, amendedRecoveryCopy };

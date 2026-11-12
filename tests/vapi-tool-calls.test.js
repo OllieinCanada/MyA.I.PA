@@ -5,6 +5,7 @@ const {
   normalizeVapiToolCall,
   parseObject,
   summarizeVapiCalendarSync,
+  validateVapiToolArguments,
 } = require("../server/vapiToolCalls");
 const { getVapiToolExecutionIdentity } = require("../server/vapiToolSecurity");
 
@@ -87,12 +88,43 @@ test("normalized calls retain idempotent execution identity", () => {
   assert.equal(identity.businessId, 7);
 });
 
-test("invalid serialized tool arguments safely become an empty object", () => {
+test("historical normalization stays tolerant while execution admission rejects malformed arguments", () => {
   assert.deepEqual(parseObject("{not-json"), {});
   assert.deepEqual(normalizeVapiToolCall({
     id: "invalid-call",
     function: { name: "request_appointment", arguments: "{not-json" },
   }).parameters, {});
+  assert.equal(validateVapiToolArguments({ arguments: '{not-json' }).ok, false);
+});
+
+test('execution admission rejects malformed JSON and non-object values without exposing input', () => {
+  for (const args of ['{private-json', '[]', 'null', 'true', '42', '"private-scalar"', [], 42, true]) {
+    const result = validateVapiToolArguments({ function: { arguments: args } });
+    assert.deepEqual(result, { ok: false, errorCode: 'VAPI_TOOL_ARGUMENTS_INVALID',
+      executionState: 'not_started', actionAttempted: false, priorExecution: 'not_checked', requiresCorrection: true });
+    assert.doesNotMatch(JSON.stringify(result), /private|SyntaxError|position/);
+  }
+  for (const args of [undefined, null, '', '   ']) {
+    assert.equal(validateVapiToolArguments({ arguments: args }).errorCode, 'VAPI_TOOL_ARGUMENTS_REQUIRED');
+  }
+});
+
+test('execution admission preserves all supported Vapi argument representations and placeholders', () => {
+  for (const toolCall of [
+    { parameters: booking }, { arguments: JSON.stringify(booking) },
+    { function: { parameters: booking } }, { function: { arguments: JSON.stringify(booking) } },
+    { toolCall: { parameters: booking } }, { toolCall: { arguments: booking } },
+    { toolCall: { function: { parameters: booking } } }, { toolCall: { function: { arguments: JSON.stringify(booking) } } },
+    { functionCall: { parameters: booking } }, { functionCall: { arguments: booking } },
+    { parameters: {}, arguments: booking }, { parameters: null, arguments: booking },
+    { parameters: '', arguments: booking }, { arguments: '{}' },
+  ]) assert.deepEqual(validateVapiToolArguments(toolCall), { ok: true });
+});
+
+test('conflicting aliases cannot silently override malformed or different arguments', () => {
+  assert.equal(validateVapiToolArguments({ parameters: '{private-broken', arguments: booking }).errorCode, 'VAPI_TOOL_ARGUMENTS_INVALID');
+  assert.equal(validateVapiToolArguments({ parameters: booking, arguments: { ...booking, customerPhone: '+15555550199' } }).errorCode, 'VAPI_TOOL_ARGUMENTS_CONFLICT');
+  assert.deepEqual(validateVapiToolArguments({ parameters: booking, arguments: JSON.stringify(Object.fromEntries(Object.entries(booking).reverse())) }), { ok: true });
 });
 
 test("confirmed Vapi bookings expose sanitized Google sync proof", () => {

@@ -404,29 +404,10 @@ test("a confirmed spoken fallback number is used when caller ID is unavailable",
   assert.equal(result.complete, true);
 });
 
-test("caller-number prompt acknowledges the calling number without exposing digits", () => {
-  const prompt = callerNumberFallbackPrompt("send_call_summaries_test");
-  assert.match(prompt, /I'll use the number you're calling from/);
-  assert.match(prompt, /Do not claim you can see or recite the digits/);
-  assert.match(prompt, /silent tool will verify caller-ID availability/);
-  assert.match(prompt, /needsCustomerNumber is true/);
-  assert.match(prompt, /MANDATORY TOOL GATE/);
-  assert.match(prompt, /Do not speak a closing sentence/);
-  assert.match(prompt, /call endCall before send_call_summaries_test returns/);
-  assert.match(prompt, /earlier SMS tool names are retired and unavailable/);
-  assert.match(prompt, /MYAIPA NATURAL POST-SEND CLOSING/);
-  assert.match(prompt, /I've sent your information to the team\. Someone will contact you to discuss the request and arrange the next step\./);
-  assert.match(prompt, /Do not add a promise about an appointment/);
-  assert.match(prompt, /Let the entire final sentence finish before calling endCall/);
-  assert.match(prompt, /before calling endCall/);
-  assert.doesNotMatch(prompt, /Then call endCall immediately/);
-});
-
-test("caller-number prompt describes customer-only delivery when owner SMS is disabled", () => {
-  const prompt = callerNumberFallbackPrompt("send_call_summaries_test", { ownerSmsEnabled: false });
-  assert.match(prompt, /caller confirmation only/);
-  assert.match(prompt, /Owner SMS is temporarily disabled by policy/);
-  assert.doesNotMatch(prompt, /sends both the owner summary and the caller confirmation/);
+test("draft prompt acknowledges caller ID without promising sending", () => {
+ const prompt = callerNumberFallbackPrompt("send_call_summaries_test");
+ for(const phrase of ["I'll use the number you're calling from", "Do not claim you can see or recite the digits", "needsCustomerNumber is true", "Should I save this request for review?", "No text messages have been sent."]) assert.ok(prompt.includes(phrase), phrase);
+ assert.doesNotMatch(prompt, /I've sent your information to the team/);
 });
 
 test("recipient notification keys are stable and distinct", () => {
@@ -444,12 +425,12 @@ test("generated Vapi code tool is self-contained and uses one structured call", 
   assert.doesNotMatch(JSON.stringify(definition.function.parameters), /fromNumber|toNumber/);
   assert.match(code, /executeCompositeNotifications/);
   assert.match(code, /DEFAULT_OWNER_TO_NUMBER/);
-  assert.match(code, /checkSmsPermission/);
-  assert.match(code, /suppression_check_unavailable/);
-  assert.match(code, /TWILIO_API_KEY_SID/);
-  assert.match(code, /return await executeCompositeNotifications/);
-  assert.ok(definition.environmentVariableNames.includes("TWILIO_API_KEY_SID"));
-  assert.ok(definition.environmentVariableNames.includes("TWILIO_API_KEY_SECRET"));
+  assert.match(code, /draftStored/);
+  assert.match(code, /awaiting_manual_approval/);
+  assert.doesNotMatch(code, /TWILIO_API_KEY_SID|api\.twilio\.com/);
+  assert.match(code, /const result = await executeCompositeNotifications/);
+  assert.ok(!definition.environmentVariableNames.includes("TWILIO_API_KEY_SID"));
+  assert.ok(!definition.environmentVariableNames.includes("TWILIO_API_KEY_SECRET"));
 });
 
 test("generated code executes inside the Vapi code-tool runtime shape", async () => {
@@ -477,6 +458,7 @@ test("generated code executes inside the Vapi code-tool runtime shape", async ()
     (value) => Buffer.from(String(value), "utf8").toString("base64"),
     URLSearchParams
   );
-  assert.deepEqual(calls, [env.DEFAULT_OWNER_TO_NUMBER, args.rawPhoneNumber]);
-  assert.equal(result.complete, true);
+  assert.deepEqual(calls, []);
+  assert.equal(result.complete, false);
+  assert.equal(result.draftStored, true);
 });

@@ -2,6 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { rootPath } = require('./_helpers');
 const { readRenderCredentials } = require('./run-with-render-env');
+const { nodeRuntimePatched } = require('../server/runtimeDependencySecurity');
 
 async function verifyRelease({ commit, token, fetchImpl = fetch, renderCredentials }) {
   if (!/^[a-f0-9]{40}$/i.test(String(commit || '')) || !token) {
@@ -23,6 +24,7 @@ async function verifyRelease({ commit, token, fetchImpl = fetch, renderCredentia
     ready: ready.status === 200 && ready.body.ok === true,
     releaseMatches: ready.body.releaseCommit === commit && security.body.releaseCommit === commit,
     securityReady: security.status === 200 && security.body.ok === true,
+    nodePatched: nodeRuntimePatched(security.body.versions?.node),
     parserPatched: security.body.versions?.bodyParser === '1.20.9',
     mailerPatched: security.body.versions?.nodemailer === '10.1.4',
     compressionRejected: security.body.requestCompression === 'rejected-before-body-parsing',

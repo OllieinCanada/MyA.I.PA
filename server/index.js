@@ -9,6 +9,8 @@ const { rejectCompressedRequests } = require('./requestSecurity');
 const { dispatchHandler: notificationDispatchHandler, dispatchReadinessHandler } = require('./smsNotificationDispatch');
 const { createFinanceService, registerFinanceRoutes } = require('./providerFinance');
 const { trackProgress: trackAdminSignupProgress, registerTrackerRoutes, createStallProcessor, createTrackerBatchSaver } = require('./adminSignupTracker');
+const { readSetupEvidence, createNumberSearchTracker } = require('./adminSignupSetup');
+const signupNumberSearchTracker = createNumberSearchTracker();
 const { createPrismaObservationStore, createObservationService, registerObservationRoutes, observationBodyGuard } = require('./signupFormObservation');
 const { runtimeDependencySecurity } = require('./runtimeDependencySecurity');
 const { signupReviewPolicy } = require("./signupReviewPolicy");
@@ -70,6 +72,7 @@ const {verifyDeliveredCompletionReceipt,findStoredCompletionReceipt,reconcileSig
 const { enqueueTwilioStatus, drainTwilioStatuses } = require('./twilioStatusInbox');
 const { readTwilioReceiptHealth, withTwilioReceiptAttention } = require('./twilioReceiptHealth');
 const { receiptInspectionHandler } = require('./twilioReceiptInspection');
+const { prepareNumberFallbackRecovery } = require('./signupNumberFallbackRecovery');
 const { selectTrialSignup } = require("./trialSignupSelection");
 const { fetchProviderReadText } = require("./providerRead");
 const { dispatchSignupSms } = require("./signupSmsDispatch");
@@ -326,6 +329,7 @@ const {
 const {
   buildVapiAppointmentExecutionResult,
   normalizeVapiToolCall,
+  validateVapiToolArguments,
 } = require("./vapiToolCalls");
 const {
   recordLeadOutcome,
@@ -3771,7 +3775,8 @@ function normalizeTwilioProvisioningVoiceUrl(value) {
   return url.toString();
 }
 
-async function purchaseTwilioPhoneNumber({ areaCode = "", region = "ON", voiceUrl, voiceMethod = "POST", friendlyName } = {}, { fetchImpl = fetch } = {}) {
+async function purchaseTwilioPhoneNumber({ areaCode = "", region = "ON", allowedAreaCodes: alternatives, voiceUrl, voiceMethod = "POST", friendlyName } = {}, { fetchImpl = fetch, onProgress = () => {} } = {}) {
+  const observe = event => { try { onProgress(event); } catch (_) { /* Diagnostics cannot change a paid action's result. */ } };
   if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN) {
     const err = new Error("Twilio credentials are not configured.");
     err.statusCode = 503;
@@ -3779,6 +3784,7 @@ async function purchaseTwilioPhoneNumber({ areaCode = "", region = "ON", voiceUr
   }
 
   const normalizedAreaCode = normalizeTwilioProvisioningAreaCode(areaCode);
+  const areaCandidates = require('./numberAreaPolicy').allowedAreaCodes(normalizedAreaCode, region, alternatives);
   const normalizedVoiceUrl = normalizeTwilioProvisioningVoiceUrl(voiceUrl);
   const normalizedFriendlyName = String(friendlyName || "").trim().replace(/\s+/g, " ").slice(0, 64);
   if (!/^myaipa-twilio-number-[a-f0-9]{20}$/i.test(normalizedFriendlyName)) {
@@ -3798,15 +3804,27 @@ async function purchaseTwilioPhoneNumber({ areaCode = "", region = "ON", voiceUr
     `${TWILIO_API_BASE_URL}/2010-04-01/Accounts/${encodeURIComponent(TWILIO_ACCOUNT_SID)}/IncomingPhoneNumbers.json`
   );
   ownedNumbersUrl.searchParams.set("PageSize", "1000");
-  const ownedNumbersResponse = await fetchImpl(ownedNumbersUrl, {
-    headers: { Authorization: getTwilioAuthHeader(), Accept: "application/json" },
-  });
-  const ownedNumbersData = parseJsonObject(await ownedNumbersResponse.text());
-  if (!ownedNumbersResponse.ok) {
-    throw createProviderHttpError({ provider: "Twilio", operation: "owned phone-number lookup", status: ownedNumbersResponse.status, data: ownedNumbersData, fallbackCode: "TWILIO_NUMBER_LOOKUP_FAILED" });
+  const owned = [];
+  let ownedPage = ownedNumbersUrl;
+  for (let page = 0; ownedPage && page < 10; page++) {
+    const response = await fetchImpl(ownedPage, {headers:{Authorization:getTwilioAuthHeader(),Accept:'application/json'}});
+    const data = parseJsonObject(await response.text());
+    if (!response.ok) throw createProviderHttpError({provider:'Twilio',operation:'owned phone-number lookup',status:response.status,data,fallbackCode:'TWILIO_NUMBER_LOOKUP_FAILED'});
+    if (!Array.isArray(data?.incoming_phone_numbers)) throw Object.assign(Error('Owned inventory is incomplete.'),{code:'TWILIO_INVENTORY_INCOMPLETE',statusCode:503});
+    owned.push(...data.incoming_phone_numbers);
+    ownedPage = data.next_page_uri ? new URL(data.next_page_uri,TWILIO_API_BASE_URL) : null;
+    if (ownedPage && (ownedPage.origin !== ownedNumbersUrl.origin || ownedPage.pathname !== ownedNumbersUrl.pathname)) {
+      throw Object.assign(Error('Owned inventory pagination is invalid.'),{code:'TWILIO_INVENTORY_INCOMPLETE',statusCode:503});
+    }
+  }
+  if (ownedPage) throw Object.assign(Error('Owned inventory was truncated.'),{code:'TWILIO_INVENTORY_INCOMPLETE',statusCode:503});
+  const matchingOwned = owned.filter(record => String(record?.friendly_name || '').trim() === normalizedFriendlyName);
+  if (matchingOwned.length > 1 || matchingOwned.some(record => !inspectCanadianNumber(record.phone_number).valid
+    || record.capabilities?.voice === false || record.capabilities?.sms === false)) {
+    throw Object.assign(Error('Existing purchase requires reconciliation.'),{code:'PROVISIONING_RECONCILIATION_REQUIRED',statusCode:409});
   }
 
-  const existingNumber = (ownedNumbersData?.incoming_phone_numbers || []).find((record) => {
+  const existingNumber = owned.find((record) => {
     return String(record?.friendly_name || "").trim() === normalizedFriendlyName
       && inspectCanadianNumber(record?.phone_number).valid
       && record?.capabilities?.voice !== false
@@ -3815,7 +3833,7 @@ async function purchaseTwilioPhoneNumber({ areaCode = "", region = "ON", voiceUr
   if (existingNumber) {
     const phoneNumber = validateProvisionedCanadianNumber(existingNumber);
     const existingAreaCode = inspectCanadianNumber(phoneNumber).areaCode;
-    if (normalizedAreaCode && existingAreaCode !== normalizedAreaCode) {
+      if (normalizedAreaCode && !areaCandidates.includes(existingAreaCode)) {
       const err = new Error(`The previously provisioned number is not in the requested ${normalizedAreaCode} area code and requires an approved replacement.`);
       err.statusCode = 409;
       err.code = "PROVISIONED_NUMBER_AREA_CODE_MISMATCH";
@@ -3827,6 +3845,7 @@ async function purchaseTwilioPhoneNumber({ areaCode = "", region = "ON", voiceUr
       err.code = "PROVISIONED_NUMBER_NOT_READY";
       throw err;
     }
+    observe({ phase: 'completed', areaCode: existingAreaCode });
     return {
       sid: String(existingNumber.sid || "").trim(),
       twilioSid: String(existingNumber.sid || "").trim(),
@@ -3845,7 +3864,7 @@ async function purchaseTwilioPhoneNumber({ areaCode = "", region = "ON", voiceUr
     ? String(region).trim().toUpperCase()
     : "ON";
   const searchPlans = normalizedAreaCode
-    ? [{ label: `area code ${normalizedAreaCode}`, AreaCode: normalizedAreaCode }]
+    ? areaCandidates.map(code => ({ label: `area code ${code}`, AreaCode: code }))
     : [
       { label: `${normalizedRegion} regional inventory`, InRegion: normalizedRegion },
       { label: "Canada-wide local inventory" },
@@ -3853,6 +3872,7 @@ async function purchaseTwilioPhoneNumber({ areaCode = "", region = "ON", voiceUr
   let availableNumber = "";
   let inventorySource = "";
   for (const plan of searchPlans) {
+    observe({ phase: 'searching', areaCode: plan.AreaCode || null });
     const availableUrl = new URL(
       `${TWILIO_API_BASE_URL}/2010-04-01/Accounts/${encodeURIComponent(TWILIO_ACCOUNT_SID)}/AvailablePhoneNumbers/CA/Local.json`
     );
@@ -3870,11 +3890,14 @@ async function purchaseTwilioPhoneNumber({ areaCode = "", region = "ON", voiceUr
       throw createProviderHttpError({ provider: "Twilio", operation: "Canadian number inventory search", status: availableResponse.status, data: availableData, fallbackCode: "TWILIO_NUMBER_SEARCH_FAILED" });
     }
     const candidate = availableData?.available_phone_numbers?.[0]?.phone_number;
-    if (inspectCanadianNumber(candidate).valid) {
+    if (inspectCanadianNumber(candidate).valid
+      && (!plan.AreaCode || inspectCanadianNumber(candidate).areaCode === plan.AreaCode)) {
       availableNumber = inspectCanadianNumber(candidate).e164;
       inventorySource = plan.label;
+      observe({ phase: 'candidate_found', areaCode: inspectCanadianNumber(candidate).areaCode });
       break;
     }
+    observe({ phase: 'empty', areaCode: plan.AreaCode || null });
   }
   if (!availableNumber) {
     const err = new Error(normalizedAreaCode
@@ -3896,6 +3919,7 @@ async function purchaseTwilioPhoneNumber({ areaCode = "", region = "ON", voiceUr
     VoiceUrl: normalizedVoiceUrl,
     VoiceMethod: normalizedVoiceMethod,
   });
+  observe({ phase: 'purchase_dispatching', areaCode: inspectCanadianNumber(availableNumber).areaCode });
   const purchaseResponse = await fetchImpl(purchaseUrl, {
     method: "POST",
     headers: {
@@ -3921,6 +3945,13 @@ async function purchaseTwilioPhoneNumber({ areaCode = "", region = "ON", voiceUr
     inventorySource,
   };
   const phoneNumber = validateProvisionedCanadianNumber(provisionedRecord, { expectedVoiceUrl: normalizedVoiceUrl });
+  if (normalizedAreaCode && !areaCandidates.includes(inspectCanadianNumber(phoneNumber).areaCode)) {
+    // A mismatched acknowledgement is uncertain paid work, not permission to
+    // try another purchase. Existing durable provisioning guards retain it.
+    throw Object.assign(new Error('The purchased number did not match the signed area-code policy.'),
+      { code: 'PROVISIONED_NUMBER_AREA_CODE_MISMATCH', statusCode: 502 });
+  }
+  observe({ phase: 'completed', areaCode: inspectCanadianNumber(phoneNumber).areaCode });
   return {
     ...provisionedRecord,
     sid: provisionedRecord.sid,
@@ -10898,6 +10929,7 @@ async function sendMakeSignupCompleted(payload, { resumeExistingOnly = false, be
   const proposedPayload = normalizeSignupProvisioningPayload(payload, {
     signingSecret,
     defaultRegion: process.env.TWILIO_DEFAULT_CANADIAN_REGION || "ON",
+    allowRegionalFallback: process.env.SIGNUP_REGIONAL_AREA_FALLBACK_ENABLED === 'true',
   });
   const normalizedPayload = await registerSignupProvisioningContext({
     prisma,
@@ -11283,6 +11315,8 @@ function sanitizeAdminLead(lead) {
 async function cleanupSensitiveCallData() {
   const jobs = [];
   const now = Date.now();
+  jobs.push(require('./smsNotificationDrafts').redactExpiredNotificationDrafts({ prisma, now })
+    .then(count => ({ key: 'notificationDrafts', count })));
 
   if (CALL_TRANSCRIPT_RETENTION_DAYS > 0) {
     const cutoff = new Date(now - CALL_TRANSCRIPT_RETENTION_DAYS * 24 * 60 * 60 * 1000);
@@ -13856,6 +13890,15 @@ app.post(
         const toolCall = normalizeVapiToolCall(rawToolCall);
         const toolName = String(toolCall.name || "").toLowerCase();
         const parameters = toolCall.parameters;
+        const admission = validateVapiToolArguments(rawToolCall);
+        if (!admission.ok) {
+          // No execution ID is consumed and no provider work has started.
+          // This describes this invocation only, not any earlier attempt. A
+          // corrected request can still use the ID; completed/uncertain claims
+          // continue through the existing non-replaying durable workflow.
+          results.push({ name: toolCall.name, toolCallId: toolCall.id, result: JSON.stringify(admission) });
+          continue;
+        }
         if (toolName === STAGING_INTAKE_TOOL) {
           const routedBusinessId = await resolveBusinessIdForVapiCall(vapiMessage.call || {});
           const result = await handleStagingIntakeTool({ prisma, authenticated: req.vapiWebhookAuthenticated === true,
@@ -14536,9 +14579,13 @@ app.post(
       execute: () => purchaseTwilioPhoneNumber({
         areaCode: preferredAreaCode,
         region: preferredRegion,
+        allowedAreaCodes: trustedPayload.provisioning?.allowedAreaCodes,
         voiceUrl: input.voiceUrl,
         voiceMethod: input.voiceMethod,
         friendlyName,
+      }, { onProgress: event => signupNumberSearchTracker.record(authorization.idempotencyKey, authorization.contextHash, event) }).catch(error => {
+        try { signupNumberSearchTracker.record(authorization.idempotencyKey, authorization.contextHash, { phase: 'failed' }); } catch (_) { /* Preserve the original provider failure. */ }
+        throw error;
       }),
     });
 
@@ -17510,8 +17557,11 @@ app.get(
 );
 
 registerFinanceRoutes({ app, requireAdmin, isAllowedOrigin, service: createFinanceService({ prisma }) });
+require('./smsNotificationDrafts').registerNotificationDraftRoutes({ app, prisma, requireAdmin, isAllowedOrigin,
+  actorHash: getAdminActorHash, suppressionChecker: phone => isSmsSuppressed(phone) });
 registerTrackerRoutes({ app, requireAdmin, isAllowedOrigin, list: listSignupDashboardRecords, save: upsertSignupDashboardRecord,
-  audit: event => recordAdminAuditEvent({ prisma, ...event }), actorHash: getAdminActorHash, observations: () => signupFormObservations.listAdmin() });
+  audit: event => recordAdminAuditEvent({ prisma, ...event }), actorHash: getAdminActorHash, observations: () => signupFormObservations.listAdmin(),
+  setupEvidence: record => readSetupEvidence({ prisma, record, searchTracker: signupNumberSearchTracker }) });
 const signupFormObservations = createObservationService({ store: createPrismaObservationStore(prisma),
   authenticateAttempt: (id, token) => signupAttempts ? signupAttempts.authenticate(id, token) : null });
 registerObservationRoutes({ app, service: signupFormObservations, isAllowedOrigin, requireAdmin,
@@ -17652,6 +17702,49 @@ app.delete(
 );
 
 app.get('/api/admin/twilio/receipt-state', requireAdmin, receiptInspectionHandler({ prisma }));
+
+app.post(
+  '/api/admin/signups/prepare-number-fallback-recovery',
+  adminSignupRepairProcessRateLimiter,
+  requireAdmin,
+  asyncRoute(async (req, res) => {
+    res.setHeader('Cache-Control','no-store');
+    if (!req.headers.origin || !isAllowedOrigin(req.headers.origin)
+      || req.headers['x-myaipa-number-recovery'] !== '1'
+      || !/^application\/json(?:\s*;|$)/i.test(String(req.headers['content-type'] || ''))) {
+      return res.status(403).json({error:'Trusted admin origin, JSON and number-recovery header are required.'});
+    }
+    const {signupAttemptId, expectedContextHash, apply, confirmation} = req.body || {};
+    if (!/^signup_[a-f0-9]{32}$/.test(signupAttemptId || '') || typeof apply !== 'boolean'
+      || confirmation !== 'PREPARE_NUMBER_FALLBACK_RECOVERY'
+      || (apply && !/^[a-f0-9]{64}$/.test(expectedContextHash || ''))) {
+      return res.status(400).json({error:'Exact signup, confirmation, apply flag and apply-time context hash are required.'});
+    }
+    const getRecord = id => {
+      const matches = listSignupDashboardRecords().filter(r => r.signupAttemptId === id);
+      if(matches.length !== 1) throw signupRecoveryError('Exact signup is not unique.', 'SIGNUP_RECOVERY_TARGET_INVALID');
+      return matches[0];
+    };
+    const record = getRecord(signupAttemptId);
+    const accountKey = require('./signupProvisioning').buildProvisioningAccountKey(record.ownerEmail,record.ownerPhone,record.businessName);
+    const context = (await prisma.runtimeStore.findUnique({where:{key:contextStoreKey(accountKey)}}))?.data;
+    const result = await prepareNumberFallbackRecovery({prisma,getRecord,signupAttemptId,
+      expectedContextHash:apply ? expectedContextHash : context?.contextHash,
+      actorHash:getAdminActorHash(req),signingSecret:getProvisioningSigningSecret(),
+      enabled:process.env.SIGNUP_REGIONAL_AREA_FALLBACK_ENABLED === 'true',apply,
+      readInventory:async()=>{
+        const [twilioNumbers,vapiAssistants,vapiPhones] = await Promise.all([
+          fetchTwilioIncomingPhoneNumbers({requireComplete:true}),
+          fetchVapiCollection('assistant',['assistants','agents'],{requireComplete:true}),
+          fetchVapiCollection('phone-number',['phoneNumbers','phone_numbers'],{requireComplete:true}),
+        ]);
+        return {complete:true,twilioNumbers,vapiAssistants,vapiPhones};
+      },
+    });
+    res.setHeader('Cache-Control','no-store');
+    res.json(result);
+  })
+);
 
 app.get(
   "/api/admin/signups",
