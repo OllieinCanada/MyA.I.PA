@@ -1,0 +1,14 @@
+.notification-drafts { max-width: 960px; margin: 24px auto; color: #eef6f4; }
+.notification-drafts header { display: flex; gap: 20px; align-items: flex-start; justify-content: space-between; }
+.notification-drafts h1 { font-size: 28px; font-weight: 800; }
+.notification-drafts h2 { font-size: 20px; font-weight: 700; }
+.notification-drafts p { margin: 12px 0; line-height: 1.5; }
+.notification-drafts article { border: 1px solid #54716c; background: #102825; border-radius: 16px; margin-top: 20px; padding: 24px; }
+.notification-drafts dl { display: grid; grid-template-columns: 55px 1fr; gap: 6px 14px; margin: 16px 0; overflow-wrap: anywhere; }
+.notification-drafts dt { color: #a3c9c0; }
+.notification-drafts pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; line-height: 1.6; padding: 18px; background: #081b18; border-radius: 10px; }
+.notification-drafts button { padding: 10px 16px; border: 1px solid #9bc6b7; border-radius: 8px; background: #224f42; font-weight: 700; }
+.notification-drafts button:disabled { opacity: .45; cursor: not-allowed; }
+.notification-drafts input { margin-right: 8px; }
+.notification-draft-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 16px; }
+@media (max-width: 600px) { .notification-drafts header { flex-direction: column; } .notification-drafts article { padding: 16px; } }

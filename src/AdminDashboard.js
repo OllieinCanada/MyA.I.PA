@@ -4,14 +4,15 @@ import { getApiBaseUrl, normalizeApiBase } from "./config/apiBase";
 import TwilioReceiptHealthPanel from './TwilioReceiptHealthPanel';
 import ProviderFinancePanel from './ProviderFinancePanel';
 import AdminSignupTracker from './AdminSignupTracker';
+import NotificationDraftsPanel from './NotificationDraftsPanel';
 
 const CONFIGURED_API_BASE = process.env.REACT_APP_API_BASE_URL || "";
 const API_BASE = normalizeApiBase(getApiBaseUrl(CONFIGURED_API_BASE));
 const API_SOURCE_LABEL = /localhost|127\.0\.0\.1/i.test(API_BASE) ? "Local API" : "Live Render API";
 const ADMIN_API_TIMEOUT_MS = 6500;
 
-async function api(path, { method = "GET", body, timeoutMs = ADMIN_API_TIMEOUT_MS } = {}) {
-  const headers = { "Content-Type": "application/json" };
+async function api(path, { method = "GET", body, headers: extraHeaders = {}, timeoutMs = ADMIN_API_TIMEOUT_MS } = {}) {
+  const headers = { "Content-Type": "application/json", ...extraHeaders };
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -2508,6 +2509,7 @@ export default function AdminDashboard() {
         items: [
           ["customers", "Businesses", "See every business and its next action"],
           ["calls", "Leads & Calls", "Review calls and move leads forward"],
+          ["text-approvals", "Text approvals", "Review exact recipients and message content"],
           ["attention", "Needs Attention", "Fix failed signups, texts, and call handoffs"],
           ["support", "Support inbox", "Resolve customer-reported problems"],
         ],
@@ -3225,6 +3227,8 @@ export default function AdminDashboard() {
             onSyncCalls={syncVapiCalls}
           />
         ) : null}
+
+        {activeTab === 'text-approvals' ? <NotificationDraftsPanel api={api} /> : null}
 
         {activeTab === "support" ? (
           <SupportInbox

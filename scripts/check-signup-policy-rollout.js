@@ -27,7 +27,7 @@ async function checkSummary(tool,args){
  let expectedCode;
  try{expectedCode=toolPatch(tool).code;}catch{throw Error('Summary code does not match the audited local definition or safe dispatch configuration.');}
  if(tool.code!==expectedCode)throw Error('Summary code does not match the audited local definition.');
- const messages=[];
+ const messages=[]; const gate=createDispatchStub();
  const fakeFetch=async(url,options)=>{
    if(String(options.headers?.['Content-Type']||'').includes('application/json')) return {ok:true,status:200,json:async()=>({allowed:true,suppressed:false})};
    const form=new URLSearchParams(String(options.body||''));messages.push({body:form.get('Body'),to:form.get('To'),from:form.get('From')});
@@ -37,9 +37,10 @@ async function checkSummary(tool,args){
  env.PRICING_SUMMARY_OPTIONS=(tool.environmentVariables||[]).find(v=>v.name==='PRICING_SUMMARY_OPTIONS')?.value||'';
  env.SMS_NOTIFICATION_DISPATCH_URL='https://stub.invalid/dispatch';
  const runner=new Function('args','env','fetch','btoa','URLSearchParams',`return (async()=>{${tool.code}\n})()`);
- const result=await runner({pricingDiscussed:false,...args,workDetailsConfirmed:true,businessName:'QA Business',name:'Test caller',rawPhoneNumber:'+19055550102',jobDetails:'QA request',message:'QA message',streetAddress:'1 Test St',city:'Test City',preferredStartDate:'Next week',bestCallbackTime:'After 2 PM'},env,createDispatchStub().wrap(fakeFetch),v=>Buffer.from(String(v)).toString('base64'),URLSearchParams);
- if(result.requiresReconciliation||!result.owner.dispatchReceiptStored||!result.customer.dispatchReceiptStored)throw Error('Fake dispatch receipts were not verified.');
- if(!result.complete||messages.length!==2||messages[0].to!==env.DEFAULT_OWNER_TO_NUMBER||messages[1].to!=='+19055550102'||messages.some(m=>m.from!==env.DEFAULT_FROM_NUMBER))throw Error('Fake summary routing failed.');
+ const result=await runner({pricingDiscussed:false,...args,workDetailsConfirmed:true,businessName:'QA Business',name:'Test caller',rawPhoneNumber:'+19055550102',jobDetails:'QA request',message:'QA message',streetAddress:'1 Test St',city:'Test City',preferredStartDate:'Next week',bestCallbackTime:'After 2 PM'},env,gate.wrap(fakeFetch),v=>Buffer.from(String(v)).toString('base64'),URLSearchParams);
+ if(result.complete || !result.draftStored || messages.length)throw Error('Phone execution must save drafts without provider submissions.');
+ for(const row of gate.rows.values())if(row.data?.input)messages.push(row.data.input);
+ if(messages.length!==2||messages[0].to!==env.DEFAULT_OWNER_TO_NUMBER||messages[1].to!=='+19055550102'||messages.some(m=>m.from!==env.DEFAULT_FROM_NUMBER))throw Error('Fake draft routing failed.');
  if(messages.some(m=>!m.body.includes('Job type:')))throw Error('Summary job type missing.');
  const choices=env.PRICING_SUMMARY_OPTIONS?JSON.parse(env.PRICING_SUMMARY_OPTIONS):{includePartsExtra:true,includeAssessment:true};
  const discussed=args.pricingDiscussed===true&&args.safetyConcern!=='reported_hazard';

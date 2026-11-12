@@ -55,6 +55,10 @@ jobs:
         run: node --test tests/sms-dispatch-postgres-safety.test.js
       - name: Exercise real transactions and process loss with fake SMS
         run: npm run test:sms-dispatch:postgres
+      - name: Verify draft approval and cancellation on the disposable database
+        env:
+          RUN_SMS_MANUAL_APPROVAL_POSTGRES: "1"
+        run: node --test tests/sms-notification-drafts-postgres.test.js
       - name: Save exact-head synthetic evidence
         if: always()
         uses: actions/upload-artifact@v4

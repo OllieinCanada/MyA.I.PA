@@ -7,8 +7,8 @@ async function main() {
   if (typeof process.send !== 'function') throw Error('sms_drill_ipc_required');
   // Dependencies are loaded only after the exact disposable target is validated.
   const { PrismaClient } = require('@prisma/client');
-  const { dispatchHandler } = require('../server/smsNotificationDispatch');
-  const { getVapiCompositeToolCode } = require('../server/compositeCallNotifications');
+  const { claimNotificationDispatch, completeNotificationDispatch } = require('../server/smsNotificationDispatch');
+  const { executeCompositeNotifications } = require('../server/compositeCallNotifications');
   const db = new PrismaClient({ datasources: { db: { url } },
     __internal: { configOverride: config => ({ ...config, relativeEnvPaths: {} }) } });
   const send = message => new Promise((resolve, reject) => process.send(message, e => e ? reject(e) : resolve()));
@@ -24,8 +24,13 @@ async function main() {
       'complete_unavailable', 'unknown_provider', 'unauthorized'];
     if (!modes.includes(task?.mode)) throw Error('sms_drill_mode_invalid');
     const { args, env } = syntheticInput(task.callId, task.changed === true);
-    const handler = dispatchHandler({ prisma: db, env: { SMS_NOTIFICATION_DISPATCH_ENABLED: 'true' },
-      authenticate: req => task.mode !== 'unauthorized' && req.headers.authorization === 'Bearer INERT' });
+    // Synthetic low-level admission drill ONLY. The production phone route now
+    // rejects claims; this private adapter is never used by application routes.
+    const handler = async (req, res) => {
+      if (task.mode === 'unauthorized' || req.headers.authorization !== 'Bearer INERT') return res.status(401).json({});
+      try { return res.json(await (req.body.action === 'claim' ? claimNotificationDispatch : completeNotificationDispatch)({ prisma: db, input: req.body })); }
+      catch (e) { return res.status(e.statusCode || 503).json({ errorCode: e.code || 'synthetic_store_unavailable' }); }
+    };
     const fakeFetch = async (endpoint, options) => {
       if (endpoint === env.SMS_NOTIFICATION_DISPATCH_URL) {
         const body = JSON.parse(options.body);
@@ -59,9 +64,8 @@ async function main() {
       if (leg === 'owner' && task.mode === 'unknown_provider') throw Error('synthetic_provider_response_lost');
       return { ok: true, status: 201, json: async () => ({ sid: 'SM'+crypto.randomBytes(16).toString('hex'), status: 'queued' }) };
     };
-    const compiled = new Function('args', 'env', 'fetch', 'btoa', 'URLSearchParams',
-      `return (async()=>{${getVapiCompositeToolCode()}\n})()`);
-    const result = await compiled(args, env, fakeFetch, v => Buffer.from(v).toString('base64'), URLSearchParams);
+    const result = await executeCompositeNotifications({ args, env, fetchImpl: fakeFetch,
+      btoaImpl: v => Buffer.from(v).toString('base64'), URLSearchParamsImpl: URLSearchParams });
     await send({ type: 'result', result });
   } finally { await db.$disconnect(); }
 }

@@ -6,7 +6,7 @@ const positive = `(?:yes|yeah|yep|yup|sure|perfect|absolutely|certainly|okay|ok|
 const separator = '[\\s,.;:!?—-]+(?:and[\\s,.;:!?—-]+)?';
 const APPROVAL_REGEX = `(?i)^\\s*(?:(?:uh+|um+|erm|hmm|well|alright)${separator})*${positive}(?:${separator}(?:${positive}|please|thanks|thank you))*[\\s,.!?]*$`;
 const WITHDRAWAL_REGEX = "(?i)(?:\\b(?:no(?!\\s+(?:problem|worries)\\b)|not|cancel|stop|wait|hold|never\\s*mind|do\\s+not|don't|don’t|withdraw|wrong|incorrect|change|except|but|unless|maybe|perhaps|if)\\b|\\?)";
-const QUESTIONS = Object.freeze(['Should I send this request to the team now?', 'Is all of that correct, and do you want me to submit it now?', 'Can I send this request to the team now?', 'May I send this request to the team now?', 'Would you like me to send this request to the team now?']);
+const QUESTIONS = Object.freeze(['Should I save this request for review?', 'Should I send this request to the team now?', 'Is all of that correct, and do you want me to submit it now?', 'Can I send this request to the team now?', 'May I send this request to the team now?', 'Would you like me to send this request to the team now?']);
 const TRAILERS = Object.freeze(['', ' Please let me know.', ' Please let me know', ' Please confirm.', ' Please confirm']);
 const QUESTION_SUFFIXES = Object.freeze(QUESTIONS.flatMap(q => TRAILERS.map(t => (q + t).toLowerCase())));
 const ACKNOWLEDGEMENTS = Object.freeze(['got it', 'great', 'great, thank you', 'thank you', 'thanks', 'okay', 'ok', 'just a sec', 'one moment'].flatMap(s => [s, s + '.', s + '!']));
