@@ -1,3 +1,5 @@
+const { isDeepStrictEqual } = require('node:util');
+
 function parseObject(value) {
   if (value && typeof value === "object" && !Array.isArray(value)) return value;
   if (typeof value !== "string" || !value.trim()) return {};
@@ -15,6 +17,39 @@ function firstObject(...values) {
     if (Object.keys(parsed).length) return parsed;
   }
   return {};
+}
+
+function toolArgumentValues(source) {
+  const wrapped = source?.toolCall;
+  return [source?.parameters, source?.arguments, source?.function?.parameters, source?.function?.arguments,
+    wrapped?.parameters, wrapped?.arguments, wrapped?.function?.parameters, wrapped?.function?.arguments,
+    source?.functionCall?.parameters, source?.functionCall?.arguments];
+}
+
+// Wire-format admission only. Domain validation, trusted tenant routing and
+// authorization remain separate requirements. Never include arguments or JSON
+// parser diagnostics in this result: they can contain caller data and secrets.
+function validateVapiToolArguments(source) {
+  const invalid = errorCode => ({ ok: false, errorCode, executionState: 'not_started',
+    actionAttempted: false, priorExecution: 'not_checked', requiresCorrection: true });
+  const objects = [];
+  for (const value of toolArgumentValues(source)) {
+    // Preserve empty alias placeholders used alongside real Vapi arguments.
+    if (value == null || typeof value === 'string' && !value.trim()) continue;
+    let parsed = value;
+    if (typeof value === 'string') {
+      try { parsed = JSON.parse(value); } catch { return invalid('VAPI_TOOL_ARGUMENTS_INVALID'); }
+    }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)
+      || ![Object.prototype, null].includes(Object.getPrototypeOf(parsed))) return invalid('VAPI_TOOL_ARGUMENTS_INVALID');
+    objects.push(parsed);
+  }
+  if (!objects.length) return invalid('VAPI_TOOL_ARGUMENTS_REQUIRED');
+  // Empty objects retain the historical placeholder semantics, but conflicting
+  // nonempty aliases must not silently choose a recipient, time or request.
+  const nonempty = objects.filter(value => Object.keys(value).length);
+  if (nonempty.some(value => !isDeepStrictEqual(value, nonempty[0]))) return invalid('VAPI_TOOL_ARGUMENTS_CONFLICT');
+  return { ok: true };
 }
 
 function normalizeVapiToolCall(value = {}) {
@@ -40,18 +75,7 @@ function normalizeVapiToolCall(value = {}) {
       || functionCall.name
       || ""
   ).trim();
-  const parameters = firstObject(
-    source.parameters,
-    source.arguments,
-    sourceFunction.parameters,
-    sourceFunction.arguments,
-    wrapped.parameters,
-    wrapped.arguments,
-    wrappedFunction.parameters,
-    wrappedFunction.arguments,
-    functionCall.parameters,
-    functionCall.arguments
-  );
+  const parameters = firstObject(...toolArgumentValues(source));
 
   return {
     ...source,
@@ -141,4 +165,5 @@ module.exports = {
   normalizeVapiToolCall,
   parseObject,
   summarizeVapiCalendarSync,
+  validateVapiToolArguments,
 };
