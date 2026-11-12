@@ -223,7 +223,8 @@ const {
   completeSignupProvisioningContext,
   contextStoreKey,
   loadSignupProvisioningContext,
-  registerSignupProvisioningContext,
+  registerSignupProvisioningContextForAttempt,
+  registeredSignupEventKey,
 } = require("./signupProvisioningContext");
 const {
   classifySmsPreference,
@@ -10931,12 +10932,14 @@ async function sendMakeSignupCompleted(payload, { resumeExistingOnly = false, be
     defaultRegion: process.env.TWILIO_DEFAULT_CANADIAN_REGION || "ON",
     allowRegionalFallback: process.env.SIGNUP_REGIONAL_AREA_FALLBACK_ENABLED === 'true',
   });
-  const normalizedPayload = await registerSignupProvisioningContext({
+  const eventKey = buildMakeSignupEventKey(payload);
+  const registered = await registerSignupProvisioningContextForAttempt({
     prisma,
     payload: proposedPayload,
+    eventKey,
   });
-  const eventKey = buildMakeSignupEventKey(payload);
-  const canonicalEventKey = buildMakeSignupEventKey(normalizedPayload);
+  const normalizedPayload = registered.payload;
+  const canonicalEventKey = registered.eventKey;
   // Surface legacy/archived resource conflicts before Make's error handler can
   // replace the actual backend reason with a generic provisioning rejection.
   await assertSignupLegacyResourcesSafe(normalizedPayload, canonicalEventKey);
@@ -15640,10 +15643,11 @@ async function reconcileCompletedMakeSignup(payload) {
   const key = buildProvisioningAccountKey(payload.owner?.email, payload.owner?.phone, payload.business?.name);
   const context = (await prisma.runtimeStore.findUnique({ where: { key: contextStoreKey(key) } }))?.data;
   if (!context?.completedAt || !context.result || signupBusinessKey(context.payload) !== businessKey) return null;
-  const canonical = listSignupDashboardRecords().find(item => item.signupAttemptId === buildMakeSignupEventKey(context.payload));
+  const canonicalEventKey = registeredSignupEventKey(context);
+  const canonical = listSignupDashboardRecords().find(item => item.signupAttemptId === canonicalEventKey);
   if (!canonical || signupBusinessKey(canonical) !== businessKey) return null;
   assertSignupOpen(canonical || {});
-  const canonicalAttempt = await prisma.signupAttempt.findUnique({ where: { eventKey: buildMakeSignupEventKey(context.payload) } });
+  const canonicalAttempt = await prisma.signupAttempt.findUnique({ where: { eventKey: canonicalEventKey } });
   if (!canonicalAttempt || signupBusinessKey(canonicalAttempt) !== businessKey) return null;
   assertSignupOpen(canonicalAttempt);
   const result = context.result;

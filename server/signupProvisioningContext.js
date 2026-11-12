@@ -1,4 +1,5 @@
 const crypto = require("crypto");
+const { buildMakeSignupEventKey } = require('./makeSignupWebhook');
 
 const CONTEXT_PREFIX = "signup-provisioning-context:";
 
@@ -39,7 +40,21 @@ async function withContextLock(prisma, key, callback) {
   });
 }
 
-async function registerSignupProvisioningContext({ prisma, payload }) {
+function registeredSignupEventKey(record) {
+  if (record?.signupEventKey !== undefined) {
+    if (!/^signup_[a-f0-9]{32}$/.test(record.signupEventKey)) {
+      throw contextError('The saved signup binding is invalid.', 'PROVISIONING_ATTEMPT_BINDING_INVALID');
+    }
+    return record.signupEventKey;
+  }
+  // Locked historical contexts are never silently rebound to another attempt.
+  return buildMakeSignupEventKey(record?.payload);
+}
+
+async function registerContext({ prisma, payload, eventKey }) {
+  if (eventKey !== undefined && !/^signup_[a-f0-9]{32}$/.test(eventKey)) {
+    throw contextError('A server-derived signup event key is required.', 'PROVISIONING_ATTEMPT_BINDING_INVALID');
+  }
   const idempotencyKey = String(payload?.provisioning?.idempotencyKey || "").trim().toLowerCase();
   const contextHash = String(payload?.provisioning?.contextHash || "").trim().toLowerCase();
   const key = contextStoreKey(idempotencyKey);
@@ -49,11 +64,12 @@ async function registerSignupProvisioningContext({ prisma, payload }) {
   return withContextLock(prisma, key, async (tx) => {
     const row = await tx.runtimeStore.findUnique({ where: { key } });
     const current = rowData(row);
-    if (current.contextHash === contextHash && current.payload) return current.payload;
+    if (current.contextHash === contextHash && current.payload
+      && (!eventKey || current.signupEventKey !== undefined || current.lockedAt || current.completedAt)) return current;
     if ((current.lockedAt || current.completedAt) && current.payload) {
       // Once a paid provider step starts, retries must use the exact canonical
       // context that owns those resources instead of creating a second setup.
-      return current.payload;
+      return current;
     }
     const now = new Date().toISOString();
     const next = {
@@ -61,6 +77,7 @@ async function registerSignupProvisioningContext({ prisma, payload }) {
       idempotencyKey,
       contextHash,
       payload,
+      ...(eventKey ? { signupEventKey: eventKey } : {}),
       registeredAt: current.registeredAt || now,
       updatedAt: now,
     };
@@ -69,8 +86,20 @@ async function registerSignupProvisioningContext({ prisma, payload }) {
       update: { data: next },
       create: { key, data: next },
     });
-    return payload;
+    return next;
   });
+}
+
+async function registerSignupProvisioningContext(options) {
+  return (await registerContext(options)).payload;
+}
+
+// The binding is server-owned context metadata, not a client payload field.
+// Keep it under the same advisory lock as the immutable provider context.
+async function registerSignupProvisioningContextForAttempt(options) {
+  if (!options.eventKey) throw contextError('Signup binding is required.', 'PROVISIONING_ATTEMPT_BINDING_INVALID');
+  const record = await registerContext(options);
+  return { payload: record.payload, eventKey: registeredSignupEventKey(record) };
 }
 
 async function loadSignupProvisioningContext({ prisma, idempotencyKey, contextHash, lock = true }) {
@@ -123,6 +152,8 @@ async function completeSignupProvisioningContext({ prisma, idempotencyKey, conte
 }
 
 module.exports = {
+  registerSignupProvisioningContextForAttempt,
+  registeredSignupEventKey,
   CONTEXT_PREFIX,
   completeSignupProvisioningContext,
   contextStoreKey,

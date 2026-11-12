@@ -5,7 +5,11 @@ const {
   completeSignupProvisioningContext,
   loadSignupProvisioningContext,
   registerSignupProvisioningContext,
+  registerSignupProvisioningContextForAttempt,
+  registeredSignupEventKey,
 } = require("../server/signupProvisioningContext");
+const { buildMakeSignupEventKey } = require('../server/makeSignupWebhook');
+const { normalizeSignupProvisioningPayload } = require('../server/signupProvisioning');
 
 function fakePrisma() {
   const rows = new Map();
@@ -87,4 +91,84 @@ test("completion is stored against the exact locked context", async () => {
     result: { phoneNumberId: "phone-1" },
   });
   assert.equal(result.phoneNumberId, "phone-1");
+});
+
+function verifiedLegacyPayload() {
+  return { event: 'signup.completed', business: { name: 'Fixture Electrical', phone: '+12895550123' },
+    owner: { name: 'Fixture', email: 'fixture@example.invalid', phone: '+19055550123' },
+    verification: { smsVerified: true, emailVerified: false }, aiAssistant: { serviceArea: 'Niagara region' } };
+}
+const normalize = input => normalizeSignupProvisioningPayload(input, { signingSecret: 'isolated-test-secret-never-a-live-key' });
+
+test('legacy payload without an explicit ID retains its original attempt through normalization', async () => {
+  const raw = verifiedLegacyPayload(), eventKey = buildMakeSignupEventKey(raw), normalized = normalize(raw);
+  // This is the production failure: enrichment changes the payload-derived hash.
+  assert.notEqual(buildMakeSignupEventKey(normalized), eventKey);
+  const bound = await registerSignupProvisioningContextForAttempt({ prisma: fakePrisma(), payload: normalized, eventKey });
+  assert.equal(bound.eventKey, eventKey);
+  assert.deepEqual(bound.payload, normalized);
+  assert.equal(bound.payload.signupEventKey, undefined); // no client-controlled identity field
+});
+
+test('unstarted legacy context can acquire a binding without changing signed provider authorization', async () => {
+  const prisma = fakePrisma(), raw = verifiedLegacyPayload(), normalized = normalize(raw);
+  await registerSignupProvisioningContext({ prisma, payload: normalized });
+  const bound = await registerSignupProvisioningContextForAttempt({ prisma, payload: normalized, eventKey: buildMakeSignupEventKey(raw) });
+  assert.equal(bound.eventKey, buildMakeSignupEventKey(raw));
+  assert.equal(bound.payload.provisioning.authorizationToken, normalized.provisioning.authorizationToken);
+});
+
+test('same-context repeat deliveries retain the first binding rather than inventing another attempt', async () => {
+  const prisma = fakePrisma(), raw = verifiedLegacyPayload(), normalized = normalize(raw);
+  const first = await registerSignupProvisioningContextForAttempt({ prisma, payload: normalized, eventKey: buildMakeSignupEventKey(raw) });
+  const second = await registerSignupProvisioningContextForAttempt({ prisma, payload: normalized, eventKey: `signup_${'c'.repeat(32)}` });
+  assert.equal(second.eventKey, first.eventKey);
+});
+
+test('paid-stage locks preserve both the original context and binding across changed requests', async () => {
+  const prisma = fakePrisma(), raw = verifiedLegacyPayload(), normalized = normalize(raw);
+  const first = await registerSignupProvisioningContextForAttempt({ prisma, payload: normalized, eventKey: buildMakeSignupEventKey(raw) });
+  await loadSignupProvisioningContext({ prisma, idempotencyKey: normalized.provisioning.idempotencyKey, contextHash: normalized.provisioning.contextHash });
+  const changed = normalize({ ...raw, aiAssistant: { serviceArea: 'Hamilton' } });
+  const next = await registerSignupProvisioningContextForAttempt({ prisma, payload: changed, eventKey: buildMakeSignupEventKey({ ...raw, changed: true }) });
+  assert.equal(next.eventKey, first.eventKey);
+  assert.deepEqual(next.payload, first.payload);
+});
+
+test('historical locked context without a binding is not silently reassigned', async () => {
+  const prisma = fakePrisma(), raw = verifiedLegacyPayload(), normalized = normalize(raw);
+  await registerSignupProvisioningContext({ prisma, payload: normalized });
+  await loadSignupProvisioningContext({ prisma, idempotencyKey: normalized.provisioning.idempotencyKey, contextHash: normalized.provisioning.contextHash });
+  const result = await registerSignupProvisioningContextForAttempt({ prisma, payload: normalized, eventKey: buildMakeSignupEventKey(raw) });
+  assert.equal(result.eventKey, buildMakeSignupEventKey(normalized));
+  assert.notEqual(result.eventKey, buildMakeSignupEventKey(raw));
+});
+
+test('completed contexts replay their saved binding and result without registration replacing them', async () => {
+  const prisma = fakePrisma(), raw = verifiedLegacyPayload(), normalized = normalize(raw), eventKey = buildMakeSignupEventKey(raw);
+  await registerSignupProvisioningContextForAttempt({ prisma, payload: normalized, eventKey });
+  await completeSignupProvisioningContext({ prisma, idempotencyKey: normalized.provisioning.idempotencyKey,
+    contextHash: normalized.provisioning.contextHash, result: { phoneNumberId: 'inert-receipt' } });
+  const next = await registerSignupProvisioningContextForAttempt({ prisma, payload: normalize({ ...raw, changed: true }), eventKey: `signup_${'d'.repeat(32)}` });
+  assert.equal(next.eventKey, eventKey);
+});
+
+test('different email, phone or business name cannot share a context binding', async () => {
+  const prisma = fakePrisma(), raw = verifiedLegacyPayload();
+  const first = await registerSignupProvisioningContextForAttempt({ prisma, payload: normalize(raw), eventKey: buildMakeSignupEventKey(raw) });
+  for (const changed of [{ ...raw, owner: { ...raw.owner, email: 'other@example.invalid' } },
+    { ...raw, owner: { ...raw.owner, phone: '+19055550999' } }, { ...raw, business: { ...raw.business, name: 'Other Electrical' } }]) {
+    const result = await registerSignupProvisioningContextForAttempt({ prisma, payload: normalize(changed), eventKey: buildMakeSignupEventKey(changed) });
+    assert.notEqual(result.eventKey, first.eventKey);
+    assert.notEqual(result.payload.provisioning.idempotencyKey, first.payload.provisioning.idempotencyKey);
+  }
+});
+
+test('invalid/missing server bindings are rejected before accessing storage', async () => {
+  for (const eventKey of [undefined, '', 'attacker', 'signup_' + 'z'.repeat(32)]) {
+    await assert.rejects(registerSignupProvisioningContextForAttempt({ payload: normalize(verifiedLegacyPayload()), eventKey }),
+      { code: 'PROVISIONING_ATTEMPT_BINDING_INVALID' });
+  }
+  assert.throws(() => registeredSignupEventKey({ signupEventKey: 'bad', payload: verifiedLegacyPayload() }),
+    { code: 'PROVISIONING_ATTEMPT_BINDING_INVALID' });
 });
