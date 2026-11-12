@@ -3,7 +3,7 @@
 // loopback DB only. No provider requests; each fake POST appends one ledger row.
 const test = require('node:test'), assert = require('node:assert/strict'), crypto = require('node:crypto');
 const { validateDrillTarget } = require('../scripts/sms-dispatch-postgres-safety');
-const { prepareNotificationDraft: prepare, reviewNotificationDraft: review, dispatchReviewedNotification: send } = require('../server/smsNotificationDrafts');
+const { prepareNotificationDraft: prepare, reviewNotificationDraft: review, dispatchReviewedNotification: send, dispatchConfirmedNotification } = require('../server/smsNotificationDrafts');
 const { redactExpiredNotificationDrafts } = require('../server/smsNotificationDrafts');
 test('manual notification approval uses real PostgreSQL transactions', { skip: process.env.RUN_SMS_MANUAL_APPROVAL_POSTGRES !== '1' && 'Requires the isolated SMS PostgreSQL CI service' }, async t => {
   const url = validateDrillTarget(process.env);
@@ -56,6 +56,28 @@ test('manual notification approval uses real PostgreSQL transactions', { skip: p
       const f = await fixture(); await f.approve(); await assert.rejects(f.send({ env: { ...env, SMS_MANUAL_DISPATCH_ENABLED: 'false', SMS_NOTIFICATION_DISPATCH_ENABLED: 'true' } }), /dispatch_disabled/);
       assert.equal(await f.count(), 0);
     });
+    await check('automatic caller-confirmed admission needs no admin approval and sends once across clients', async () => {
+      const f = await fixture();
+      const other = new PrismaClient({ datasources: { db: { url } }, __internal: { configOverride: config => ({ ...config, relativeEnvPaths: {} }) } });
+      const automatic = prisma => dispatchConfirmedNotification({ ...f.options, prisma,
+        env: { ...env, SMS_MANUAL_DISPATCH_ENABLED: 'false', SMS_AUTOMATIC_DISPATCH_ENABLED: 'true' },
+        authorize: data => data.contextHash === f.options.expectedHash, suppressionChecker: async () => false,
+        fetchImpl: async () => {
+          await db.$executeRaw`INSERT INTO "SmsDispatchDrillTransport" ("caseId", "leg", "bodyHash") VALUES (${f.input.callId}, 'owner', 'automatic-confirmed')`;
+          return { ok: true, status: 201, json: async () => ({ sid: 'SM' + '3'.repeat(32), status: 'queued' }) };
+        } });
+      try { await Promise.allSettled([automatic(db), automatic(other), automatic(db)]); assert.equal(await f.count(), 1); }
+      finally { await other.$disconnect(); }
+    });
+    await check('automatic admission respects a committed cancellation and rejects missing authorization', async () => {
+      const f = await fixture();
+      const options = { ...f.options, env: { ...env, SMS_AUTOMATIC_DISPATCH_ENABLED: 'true' },
+        suppressionChecker: async () => false, fetchImpl: () => assert.fail('must not send') };
+      await assert.rejects(dispatchConfirmedNotification(options), /caller_confirmation_required/);
+      await review({ ...f.options, action: 'cancel', actor });
+      await assert.rejects(dispatchConfirmedNotification({ ...options, authorize: () => true }), /already_admitted/);
+      assert.equal(await f.count(), 0);
+    });
     await check('expired draft content is redacted without deleting admission records', async () => {
       const before = Number((await db.$queryRaw`SELECT count(*) AS n FROM "RuntimeStore" WHERE key LIKE 'call-notification-dispatch:v1:%'`)[0].n);
       assert.ok(await redactExpiredNotificationDrafts({ prisma: db, now: Date.now() + 86400001 }) > 0);
@@ -67,6 +89,6 @@ test('manual notification approval uses real PostgreSQL transactions', { skip: p
     const fs = require('node:fs'), path = require('node:path');
     const directory = path.join(__dirname, '../diagnostics/sms-dispatch-postgres/manual-approval'); fs.mkdirSync(directory, { recursive: true });
     fs.writeFileSync(path.join(directory, 'report.json'), JSON.stringify({ commit: process.env.SMS_DISPATCH_DRILL_EXPECTED_HEAD,
-      realPostgreSQL: true, realSms: 0, casesPassed: passed.length, requiredCases: 7, cases: passed, passed: passed.length === 7 }, null, 2) + '\n');
+      realPostgreSQL: true, realSms: 0, casesPassed: passed.length, requiredCases: 9, cases: passed, passed: passed.length === 9 }, null, 2) + '\n');
   }
 });

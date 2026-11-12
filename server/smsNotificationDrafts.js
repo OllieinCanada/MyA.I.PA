@@ -1,5 +1,6 @@
 'use strict';
-// Only authenticated admin routes approve/admit. Phone tools can only prepare.
+// Manual review remains optional. Automatic admission needs independently
+// checked caller confirmation; a tool-supplied boolean cannot authorize it.
 const { dispatchContext, withDispatchLock, claimNotificationDispatch, completeNotificationDispatch } = require('./smsNotificationDispatch');
 const { submitTwilioMessage } = require('./compositeCallNotifications');
 const PREFIX = 'call-notification-draft:v1:';
@@ -75,22 +76,32 @@ async function reviewNotificationDraft(options) {
     return view(next);
   });
 }
-async function dispatchReviewedNotification(options) {
+async function dispatchDraftNotification(options, automatic = false) {
   const { prisma, env = process.env, fetchImpl = global.fetch, suppressionChecker } = options;
-  if (env.SMS_MANUAL_DISPATCH_ENABLED !== 'true') throw fail('manual_notification_dispatch_disabled', 503);
+  if (automatic ? env.SMS_AUTOMATIC_DISPATCH_ENABLED !== 'true' : env.SMS_MANUAL_DISPATCH_ENABLED !== 'true') {
+    throw fail(automatic ? 'automatic_notification_dispatch_disabled' : 'manual_notification_dispatch_disabled', 503);
+  }
   if (typeof suppressionChecker !== 'function') throw fail('notification_suppression_unavailable', 503);
   // Same draft lock serializes cancellation, edits, and send admission. The
   // nested adapter uses this transaction, never a second DB transaction.
   const admission = await withReviewedDraft(options, async (tx, key, data) => {
     if (data.state === 'completed') return { replay: view(data) };
-    if (data.state !== 'approved') throw fail('manual_notification_approval_required');
+    if (automatic) {
+      if (!['pending', 'approved'].includes(data.state)) throw fail('notification_submission_already_admitted');
+      // The trusted server adapter binds approval to this exact draft revision.
+      // It must not perform network I/O while this transaction holds locks.
+      if (typeof options.authorize !== 'function' || options.authorize(data) !== true) {
+        throw fail('caller_confirmation_required');
+      }
+    } else if (data.state !== 'approved') throw fail('manual_notification_approval_required');
     const claim = await claimNotificationDispatch({ prisma: { runtimeStore: tx.runtimeStore, $transaction: fn => fn(tx) }, input: data.input });
     if (claim.granted !== true) {
       const held = { ...data, state: 'held' };
       await tx.runtimeStore.update({ where: { key }, data: { data: held } });
       return { replay: view(held) };
     }
-    const claimed = { ...data, state: 'claimed', admittedAt: new Date().toISOString() };
+    const claimed = { ...data, state: 'claimed', admittedAt: new Date().toISOString(),
+      authorizationBasis: automatic ? 'caller_confirmation_snapshot' : 'admin_review' };
     await tx.runtimeStore.update({ where: { key }, data: { data: claimed } });
     return { key, data: claimed, token: claim.claimToken };
   });
@@ -123,6 +134,8 @@ async function dispatchReviewedNotification(options) {
     });
   } catch { throw fail('notification_completion_unconfirmed_do_not_retry', 503); }
 }
+async function dispatchReviewedNotification(options) { return dispatchDraftNotification(options); }
+async function dispatchConfirmedNotification(options) { return dispatchDraftNotification(options, true); }
 function registerNotificationDraftRoutes({ app, prisma, requireAdmin, isAllowedOrigin, actorHash, env = process.env, fetchImpl, suppressionChecker }) {
   const handle = fn => async (req, res) => {
     res.set('Cache-Control', 'no-store');
@@ -148,4 +161,4 @@ function registerNotificationDraftRoutes({ app, prisma, requireAdmin, isAllowedO
       : reviewNotificationDraft({ ...options, action: req.params.action, actor: actorHash(req) });
   }));
 }
-module.exports = { prepareNotificationDraft, reviewNotificationDraft, dispatchReviewedNotification, registerNotificationDraftRoutes, redactExpiredNotificationDrafts };
+module.exports = { prepareNotificationDraft, reviewNotificationDraft, dispatchReviewedNotification, dispatchConfirmedNotification, registerNotificationDraftRoutes, redactExpiredNotificationDrafts };

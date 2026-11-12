@@ -17,7 +17,7 @@ const textOf = message => typeof message?.content === 'string' ? message.content
 
 // A second caller turn consumes the old question; acknowledgements cannot
 // revive it. Only an exact short post-answer acknowledgement preserves a pair.
-function assessConfirmationHistory(messages) {
+function assessConfirmationHistory(messages, { allowDraftQuestion = true } = {}) {
   if (!Array.isArray(messages) || !messages.length || messages.length > 1000) return { allowed: false, reason: 'FRESH_SEND_CONFIRMATION_REQUIRED', needsClarification: true };
   let waiting = false, ready = false, latestUser = '';
   for (const message of messages) {
@@ -25,7 +25,7 @@ function assessConfirmationHistory(messages) {
     if (message?.role === 'user') { ready = waiting; waiting = false; latestUser = text; }
     else if (message?.role === 'assistant') {
       if (!text || ready && ACKNOWLEDGEMENTS.includes(text)) continue;
-      ready = false; waiting = QUESTION_SUFFIXES.some(q => text.endsWith(q));
+      ready = false; waiting = QUESTION_SUFFIXES.some(q => (allowDraftQuestion || !q.startsWith('should i save this request for review?')) && text.endsWith(q));
     } else if (!['system', 'tool', 'tool_call_result', 'tool_calls'].includes(message?.role)) { ready = false; waiting = false; }
   }
   if (matches(WITHDRAWAL_REGEX, latestUser)) return { allowed: false, reason: 'REFUSAL_CORRECTION_OR_UNCERTAINTY', needsClarification: true };

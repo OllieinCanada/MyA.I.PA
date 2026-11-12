@@ -1,5 +1,43 @@
 # Manual review before notification texts
 
+## Local automatic-confirmation candidate (not released)
+
+The owner has clarified that ordinary confirmation texts must not require admin
+approval. `automaticCallNotifications.js` and
+`getAutomaticVapiCompositeToolDefinition()` prepare that replacement. The existing
+manual tool builder remains unchanged for an explicit, separately verified
+migration; deploying backend code alone must not silently rewrite live tools.
+
+The new `/api/integrations/sms/dispatch/confirmed` route requires both
+`SMS_AUTOMATIC_DISPATCH_ENABLED=true` and an exact assistant allowlist in
+`SMS_AUTOMATIC_ASSISTANT_IDS`. Both default inactive. It reads the authenticated
+provider call/assistant/tool configuration with an eight-second read budget,
+verifies exact saved signup/business routing, checks current observed clear
+approval and matching provider-observed tool arguments, reconstructs the message
+server-side, and uses the existing locked draft/admission/receipt storage. It
+does not require an admin approval or enable the separate manual-send gate.
+
+Observed refusals, missing evidence, mismatched arguments, missing intake,
+opt-outs and cancelled drafts block admission. Unknown provider outcomes remain
+held without resubmission. A provider read failure must not trigger manual review
+as a hidden fallback, nor cause a direct provider request from phone code.
+
+Before release: run fresh CI including the extended real-PostgreSQL cases and
+verify that Vapi exposes the required current-call OpenAI-formatted messages and
+tool invocation while the tool is executing. This has not been demonstrated by
+offline fixtures. Review the exact assistant migration, prompt replacement,
+backend sender account and rollback before enabling the allowlist. Unknown caller
+ID and configurations with more than four attached tools currently fail closed;
+alternate-number confirmation needs separate evidence-backed support.
+
+This is not a provider guarantee of complete or correctly ordered speech. A
+withdrawal absent from the observed snapshot, or received after admission, may be
+too late. Approval of this candidate is not permission to claim that limitation
+is eliminated. No live settings, calls or real texts are changed by local tests.
+
+The remainder below describes the currently deployed manual-review release,
+not a requirement for the replacement automatic workflow.
+
 Classic Vapi calls cannot certify that the latest caller speech has reached the
 backend. A spoken approval now saves draft texts; it cannot grant send admission.
 For example, a delayed “wait” after a spoken “yes” may still leave a draft, but

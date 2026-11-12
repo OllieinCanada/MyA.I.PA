@@ -543,7 +543,7 @@ function compositeToolParameters() {
   };
 }
 
-function getVapiCompositeToolCode() {
+function getVapiCompositeToolCode({ automatic = false } = {}) {
   return [
     cleanText,
     normalizeE164,
@@ -558,10 +558,46 @@ function getVapiCompositeToolCode() {
     buildCustomerBody,
     executeCompositeNotifications,
   ].map((fn) => fn.toString()).join("\n\n") + '\n' +
-    preparePhoneNotificationDraft.toString().replace('function preparePhoneNotificationDraft(', 'function sendTwilioMessage(') +
-    "\nconst result = await executeCompositeNotifications({ args, env, fetchImpl: fetch, btoaImpl: btoa, URLSearchParamsImpl: URLSearchParams });" +
+    (automatic ? sendConfirmedPhoneNotification : preparePhoneNotificationDraft).toString().replace(/function (?:preparePhoneNotificationDraft|sendConfirmedPhoneNotification)\(/, 'function sendTwilioMessage(') +
+    "\nconst result = await executeCompositeNotifications({ args, env: { ...env, CONFIRMATION_ARGS: args }, fetchImpl: fetch, btoaImpl: btoa, URLSearchParamsImpl: URLSearchParams });" +
+    (automatic ? '\nreturn { ...result, requiresApproval: false };' :
     "\nconst draftStored = Boolean((result.owner?.draftStored || result.owner?.status === 'disabled_by_policy') && result.customer?.draftStored);" +
-    "\nreturn { ...result, ok: draftStored, complete: false, draftStored, requiresApproval: draftStored, requiresReconciliation: false, status: draftStored ? 'awaiting_manual_approval' : 'draft_not_saved' };";
+    "\nreturn { ...result, ok: draftStored, complete: false, draftStored, requiresApproval: draftStored, requiresReconciliation: false, status: draftStored ? 'awaiting_manual_approval' : 'draft_not_saved' };");
+}
+
+// Backend credentials stay on the backend. Never fall back to the legacy claim
+// route or retry after a timeout. The server independently checks call evidence.
+async function sendConfirmedPhoneNotification({ env, fetchImpl, leg, notificationKey }) {
+  const pending = { attempted: false, sent: false, status: 'unconfirmed', notificationKey, requiresReconciliation: true };
+  const endpoint = String(env.SMS_NOTIFICATION_DISPATCH_URL || '').trim();
+  const key = String(env.SMS_SUPPRESSION_API_KEY || '').trim();
+  if (!/^https:\/\//i.test(endpoint) || !key) return pending;
+  try {
+    const response = await fetchImpl(endpoint + '/confirmed', { method: 'POST', redirect: 'error',
+      signal: AbortSignal.timeout(25000), headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'send-confirmed', callId: env.CALL_ID, leg, args: env.CONFIRMATION_ARGS }) });
+    const result = await response.json();
+    if (!response.ok || result.schemaVersion !== 1 || typeof result.sent !== 'boolean' || typeof result.attempted !== 'boolean'
+      || result.sent && (!/^(?:SM|MM)[a-f0-9]{32}$/i.test(result.messageId || '') || result.dispatchReceiptStored !== true)) return pending;
+    return { ...result, notificationKey };
+  } catch { return pending; }
+}
+
+function getAutomaticVapiCompositeToolDefinition() {
+  const definition = getVapiCompositeToolDefinition();
+  return { ...definition, timeoutSeconds: 60, rejectionPlan: require('./callConfirmation').toolRejectionPlan(), code: getVapiCompositeToolCode({ automatic: true }),
+    function: { ...definition.function, description: 'After a fresh clear approval, request the owner summary and customer confirmation once. The backend independently verifies caller confirmation and routing. Never retry an uncertain result.' } };
+}
+
+function automaticConfirmationPrompt(toolName = COMPOSITE_TOOL_NAME) {
+  return `AUTOMATIC CALLER CONFIRMATION — replaces draft-only/manual-review instructions.
+Read back the complete current request. Ask exactly "Should I send this request to the team now?" Wait for clear approval before calling ${toolName} once.
+Never use "Should I save this request for review?" as permission to send. Refusal, uncertainty, a correction, or a request to wait means do not send; clarify and obtain fresh approval after corrected details.
+Keep work-start timing separate from callback timing. Never invent missing fields, prices, credentials, a city or a phone number. Preserve the established intake and business policies.
+Use trusted caller ID. If it is unavailable, explain that automatic confirmation cannot be verified; do not invent or silently substitute a recipient.
+Do not close or call endCall until the tool returns. Say a text was submitted only for a leg with sent true, a valid messageId and dispatchReceiptStored true. Provider acceptance is not handset delivery.
+If the result is missing, held, failed or uncertain, explain that sending could not be confirmed. Never retry automatically or claim success from a completed tool call.
+Clear caller approval authorizes automatic sending; no admin approval is required. A refusal not received before submission cannot recall a submitted text.`;
 }
 
 // The only transport function included in provider-generated code saves drafts.
@@ -619,6 +655,8 @@ module.exports = {
   executeCompositeNotifications,
   getVapiCompositeToolCode,
   getVapiCompositeToolDefinition,
+  getAutomaticVapiCompositeToolDefinition,
+  automaticConfirmationPrompt,
   normalizeE164,
   postSendClosingPrompt,
   removeLegacyAbruptClosingInstructions,

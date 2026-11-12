@@ -13463,6 +13463,19 @@ app.post('/api/integrations/sms/dispatch',
   notificationDispatchHandler({ prisma, env: process.env, authenticate: req => hasValidSuppressionApiKey(req) })
 );
 
+// New, explicitly scoped automatic mode. Legacy claim routes remain blocked;
+// deploying this code cannot enable sending or change a live Vapi tool.
+app.post('/api/integrations/sms/dispatch/confirmed',
+  smsNotificationDispatchProcessRateLimiter,
+  enforcePublicRouteRateLimit('sms-notification-dispatch', 120),
+  require('./automaticCallNotifications').automaticNotificationHandler({
+    prisma, env: process.env, authenticate: req => hasValidSuppressionApiKey(req),
+    loadEvidence: require('./automaticCallNotifications').createVapiAutomaticEvidenceReader({ prisma,
+      listEligibleSignups: () => listSignupDashboardRecords().filter(s => !isClosedSignup(s)) }),
+    suppressionChecker: phone => isSmsSuppressed(phone),
+  })
+);
+
 app.post(
   "/api/integrations/sms/suppression/check",
   asyncRoute(async (req, res) => {

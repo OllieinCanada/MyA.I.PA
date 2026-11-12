@@ -304,6 +304,7 @@
     "ops:alert-drill:render-env": "node scripts/run-with-render-env.js --keys=MONITOR_API_KEY -- node scripts/test-production-incident-remediation.js --apply --confirm=RUN_INCIDENT_REMEDIATION_CANARY",
     "evals:vapi:render-env": "node scripts/run-with-render-env.js --keys=VAPI_API_KEY -- node scripts/setup-vapi-evals.js --sync --run-safe --repeat=5 --minimum-pass-rate=0.95 --out=diagnostics/shipping-readiness/vapi-call-gate.json",
     "verify:saved-call": "node scripts/verify-saved-call-record.js",
+    "test:sms-automatic": "node --test tests/automatic-call-notifications.test.js tests/sms-notification-drafts.test.js tests/sms-notification-dispatch.test.js tests/call-confirmation.test.js",
     "test:sms-approvals": "node --test tests/sms-notification-drafts.test.js tests/sms-ordering-audit.test.js tests/confirmation-no-send-integration.test.js",
     "test:sms-approvals:ui": "react-scripts test --env=jsdom --watchAll=false --runInBand --runTestsByPath src/NotificationDraftsPanel.test.js"
   },
