@@ -34,7 +34,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: "24.22.3"
           cache: npm
       - run: npm ci --include=dev --legacy-peer-deps
       - run: npm run backend:prepare

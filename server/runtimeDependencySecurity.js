@@ -13,11 +13,17 @@ function atLeast(value, minimum) {
   return true;
 }
 
-function runtimeDependencySecurity(read = require) {
+// Keep the application on the reviewed LTS major; prereleases fail closed.
+function nodeRuntimePatched(version) {
+  return versionParts(version)?.[0] === 24 && atLeast(version, '24.22.3');
+}
+
+function runtimeDependencySecurity(read = require, nodeVersion = process.versions.node) {
   try {
     // Resolve the parser actually loaded by Express, not an unrelated hoisted copy.
     const expressRequire = read === require ? createRequire(require.resolve('express')) : read;
     const versions = {
+      node: nodeVersion,
       express: read('express/package.json').version,
       bodyParser: expressRequire('body-parser/package.json').version,
       nodemailer: read('nodemailer/package.json').version,
@@ -25,11 +31,11 @@ function runtimeDependencySecurity(read = require) {
     const parts = versionParts(versions.bodyParser);
     const parserPatched = parts?.[0] === 1 ? atLeast(versions.bodyParser, '1.20.9')
       : parts?.[0] === 2 && atLeast(versions.bodyParser, '2.4.0');
-    return { ok: Boolean(parserPatched && atLeast(versions.nodemailer, '10.1.4')), versions,
+    return { ok: Boolean(nodeRuntimePatched(nodeVersion) && parserPatched && atLeast(versions.nodemailer, '10.1.4')), versions,
       requestCompression: 'rejected-before-body-parsing' };
   } catch (_) {
     return { ok: false, versions: null, reason: 'dependency_version_unavailable' };
   }
 }
 
-module.exports = { runtimeDependencySecurity, atLeast };
+module.exports = { runtimeDependencySecurity, atLeast, nodeRuntimePatched };
