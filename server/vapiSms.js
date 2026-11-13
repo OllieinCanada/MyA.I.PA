@@ -39,7 +39,7 @@ async function sendSmsViaVapi({ to, message, env = process.env, fetchImpl = glob
 
   if (!configured) {
     if (String(env.NODE_ENV || "").toLowerCase() === "production") {
-      throw createHttpError("Vapi SMS is not configured.", 503, { providerCode: "VAPI_SMS_NOT_CONFIGURED" });
+      throw createHttpError("Vapi SMS is not configured.", 503, { providerCode: "VAPI_SMS_NOT_CONFIGURED", providerActionAttempted: false });
     }
     return {
       mocked: true,
@@ -53,25 +53,35 @@ async function sendSmsViaVapi({ to, message, env = process.env, fetchImpl = glob
   }
 
   if (typeof fetchImpl !== "function") {
-    throw createHttpError("Vapi SMS transport is unavailable.", 503, { providerCode: "VAPI_FETCH_UNAVAILABLE" });
+    throw createHttpError("Vapi SMS transport is unavailable.", 503, { providerCode: "VAPI_FETCH_UNAVAILABLE", providerActionAttempted: false });
   }
 
-  const requestBody = buildVapiSmsRequest({ to, message, config });
-  const response = await fetchImpl(`${config.apiBaseUrl}/chat`, {
+  let requestBody;
+  try { requestBody = buildVapiSmsRequest({ to, message, config }); }
+  catch (error) { error.providerActionAttempted = false; throw error; }
+  let response;
+  try { response = await fetchImpl(`${config.apiBaseUrl}/chat`, {
     method: "POST",
     headers: {
       authorization: `Bearer ${config.apiKey}`,
       "content-type": "application/json",
     },
     body: JSON.stringify(requestBody),
-  });
+  }); } catch (error) {
+    // Once fetch is invoked, a timeout/socket failure does not prove rejection.
+    throw createHttpError("Vapi SMS outcome needs inspection.", 502, { providerCode: "VAPI_SMS_OUTCOME_UNCERTAIN", providerActionAttempted: true });
+  }
 
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
     throw createHttpError("Vapi could not accept the SMS request.", 502, {
       providerStatus: response.status,
       providerCode: payload?.code || payload?.error?.code || "VAPI_SMS_REJECTED",
+      providerActionAttempted: true,
     });
+  }
+  if (!payload?.id && !payload?.chatId && !payload?.message?.id && !payload?.messageId) {
+    throw createHttpError("Vapi SMS acceptance identifier is missing.", 502, { providerCode: "VAPI_SMS_OUTCOME_UNCERTAIN", providerActionAttempted: true });
   }
 
   return {

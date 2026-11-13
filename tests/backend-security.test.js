@@ -1565,12 +1565,14 @@ test("Vapi X-Vapi-Secret authentication is accepted", async () => {
   const response = await request("/api/webhooks/voice", {
     method: "POST",
     headers: { "x-vapi-secret": process.env.VAPI_WEBHOOK_SECRET },
-    body: { eventType: "test.noop" },
+    // Authenticated informational events do not ask for tenant-scoped work.
+    body: { message: { type: "speech-update" } },
   });
   assert.equal(response.status, 200);
   const payload = await response.json();
   assert.equal(payload.ok, true);
-  assert.equal(payload.eventType, "test.noop");
+  assert.equal(payload.eventType, "speech-update");
+  assert.equal(payload.informational, true);
 });
 
 test("Vapi webhook does not accept the broader integration credential", async () => {
@@ -1586,9 +1588,18 @@ test("Vapi webhook accepts its dedicated bearer credential", async () => {
   const response = await request("/api/webhooks/voice", {
     method: "POST",
     headers: { authorization: `Bearer ${process.env.VAPI_WEBHOOK_SECRET}` },
-    body: { eventType: "test.noop" },
+    body: { message: { type: "speech-update" } },
   });
   assert.equal(response.status, 200);
+  assert.equal((await response.json()).informational, true);
+});
+
+test("valid Vapi channel credentials do not authorize unmatched tenant work", async () => {
+  for (const headers of [{ "x-vapi-secret": process.env.VAPI_WEBHOOK_SECRET }, { authorization: `Bearer ${process.env.VAPI_WEBHOOK_SECRET}` }]) {
+    const response = await request("/api/webhooks/voice", { method: "POST", headers, body: { eventType: "test.noop" } });
+    assert.equal(response.status, 422);
+    assert.match((await response.json()).error, /No trusted business mapping/);
+  }
 });
 
 test("voice signup bypasses customer mapping only for the dedicated signup route", () => {
