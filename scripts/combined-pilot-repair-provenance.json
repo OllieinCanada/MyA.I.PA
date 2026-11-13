@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "base": "8f218834361f5ec22de23c5cedd6690897d40f99",
+  "node": "24.22.3",
+  "dependencies": {
+    "235": "f452de511657c41b3ced081aed07b49379656cf3",
+    "237": "96c6752e8b857ce291212c04ab875f7b280798e9",
+    "238": "7efebcba8c33c9651c8c1ddbe36a8a7ab00f5be0",
+    "239": "932346e199636732d19ccb8bb73c80059447530e",
+    "240": "0765667d0226db61eec81ec08f8de373922987b9",
+    "241": "842aac6dfc9772bae1a1d50a3b189e808ffe8e8f",
+    "242": "ae4e47fb0694e08dd90e6ba1924bf46a3c5e7e61",
+    "250": "b7180d6e7529d408fbcf56d135e0f4ed217dff1b"
+  },
+  "runtimeSha256": {
+    "server/signupAssociationRepair.js": "118feb9b7ecfbecc08f0fabfa7394be4a7ba3254feb1e9f3b06517d807b05a40",
+    "server/boundedBusinessMappingAdapters.js": "69cc5596edc20e8a2e689ff826bb2e424e4beaff8f41fa970ee40efa4aed3744",
+    "server/boundedBusinessMappingWriter.js": "c8b129211d807e780d55600695362cbcb813c29ac784a147dbed1b9ca746db6a",
+    "server/boundedMappingControl.js": "6bdf571cea3fc1d2a52c20e8bc89a49d10ffbe069a7d2fd463eaadb25354b36a",
+    "server/index.js": "bfb4515b5ad5ba401732c65fa584ab2b81f5f23306613d457da4f4110ce68749"
+  },
+  "scope": "Actual combined runtime, not reconstructed historical code. Synthetic CI only. No release, activation or production correction authorized."
+}

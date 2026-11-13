@@ -21,7 +21,7 @@ const db = {
     create:async({data})=>{const value={id:501,...data};calls.set(data.externalId,value);return copy(value);}},
   lead:{findUnique:async({where})=>copy(where.id?[...leads.values()].find(v=>v.id===where.id):leads.get(where.callId))||null,
     upsert:async({where,create,update})=>{const value=leads.has(where.callId)?{...leads.get(where.callId),...update}:{id:901,...create};leads.set(where.callId,value);return copy(value);}},
-  vapiBusinessMapping:{findFirst:async({where})=>where.matchValue.in.includes('fixture-isolation-assistant')?{businessId:701}:null},
+  vapiBusinessMapping:{findMany:async({where})=>where.matchValue.in.includes('fixture-isolation-assistant')?[{businessId:701,matchValue:'fixture-isolation-assistant'}]:[]},
   $queryRaw:async()=>[],
   $transaction(work){const job=tail.then(async()=>{const before=copy(snapshot());try{const value=await work(db);persist();return value;}catch(error){for(const [map,name]of[[runtime,'runtime'],[calls,'calls'],[callers,'callers'],[leads,'leads']]){map.clear();for(const item of before[name])map.set(...item);}throw error;}});tail=job.catch(()=>{});return job;},
 };

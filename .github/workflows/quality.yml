@@ -86,6 +86,7 @@ jobs:
           RUN_ADMIN_OWNER_LINKS_POSTGRES=1 npm run test:admin-owner-links:postgres
           RUN_NUMBER_FALLBACK_POSTGRES=1 node --test tests/signup-number-fallback-recovery-postgres.test.js
           RUN_SIGNUP_CONTEXT_POSTGRES=1 node --test tests/signup-context-identity-postgres.test.js
+          RUN_SIGNUP_ASSOCIATION_POSTGRES=1 node --test tests/signup-association-repair-postgres.test.js
 
       - name: Verify private one-use owner sign-in in all browser engines
         run: npm run test:admin-owner-links:browser

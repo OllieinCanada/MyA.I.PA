@@ -1,0 +1,75 @@
+diff --git a/server/index.js b/server/index.js
+--- a/server/index.js
++++ b/server/index.js
+@@ -11229,8 +11229,10 @@
+   const twilio = matches[0];
+   return { ...evidence,
+     provider: { twilio: { sid: twilio.sid, number: twilio.phone_number, name: twilio.friendly_name },
++      phone: { id: phone.id, number: getVapiPhoneNumber(phone), assistantId: getVapiAssistantId(phone), status: phone.status,
++        businessId: phone.businessId, metadata: { businessId: phone.metadata?.businessId } },
++      assistant: { id: assistant.id, contentFingerprint: fingerprintAssistantContent(assistant),
++        businessId: assistant.businessId, metadata: { businessId: assistant.metadata?.businessId } } },
+-      phone: { id: phone.id, number: getVapiPhoneNumber(phone), assistantId: getVapiAssistantId(phone), status: phone.status },
+-      assistant: { id: assistant.id, contentFingerprint: fingerprintAssistantContent(assistant) } },
+     reserveNumbers: numbers.filter(n => /^myaipa-reserve-held-20261110-[1-5]$/.test(n.friendly_name || '')).map(n => n.phone_number),
+   };
+ }
+diff --git a/server/boundedBusinessMappingWriter.js b/server/boundedBusinessMappingWriter.js
+--- a/server/boundedBusinessMappingWriter.js
++++ b/server/boundedBusinessMappingWriter.js
+@@ -116,5 +116,5 @@
+ function createBoundedBusinessMappingWriter({ prisma, policy, readEvidence, readOverrides,
++  withAssociationLease, enabled = () => false, singleWriter = () => false, now = () => Date.now(), assertAdmission = () => true }) {
+-  withAssociationLease, enabled = () => false, singleWriter = () => false, now = () => Date.now() }) {
+   const p = clone(policy); validatePolicy(p);
+   // A new release/policy/actor must not generate a fresh key around an unresolved
+   // attempt on this provider resource. Policy revision is evidence, not a reset.
+@@ -174,6 +174,12 @@
+     if (!enabled() || !singleWriter()) fail('MAPPING_APPLY_DISABLED');
+     if (uncertain.has(operationId)) fail('MAPPING_UNCERTAIN_INSPECT_FIRST');
+     if (!/^[a-f0-9]{64}$/.test(actorHash || '') || !plans.has(planDigest)) fail('MAPPING_PLAN_REQUIRED');
++    // Synchronous server-owned authorization, after lock waits and before each
++    // dispatch; check again after awaited mutations so expiry rolls back.
++    const admit = () => {
++      if (!enabled() || !singleWriter()) fail('MAPPING_APPLY_DISABLED');
++      if (assertAdmission({ planDigest, actorHash }) !== true) fail('MAPPING_ADMISSION_REQUIRED');
++    };
+     let gateAttempted = false, gateConfirmed = false, attempted = false;
+     try {
+       return await leased(async lease => {
+@@ -182,7 +188,7 @@
+         // This persisted fence, not the instance-local cache, governs restarts
+         // and other service instances, including already-prepared plans.
+         if (saved && saved.phase !== 'completed') fail('MAPPING_UNCERTAIN_INSPECT_FIRST');
++        const s = await state(tx); admit();
+-        const s = await state(tx);
+         if (saved) {
+           if (saved.operationId !== operationId || saved.policyDigest !== policyDigest || saved.planDigest !== planDigest || saved.basis !== s.basis
+             || saved.phase !== 'completed' || digest(sorted(saved.inserted)) !== digest(sorted(s.targets))) fail('MAPPING_JOURNAL_CONFLICT');
+@@ -207,9 +213,11 @@
+           || saved.actorHash !== actorHash) fail('MAPPING_UNCERTAIN_INSPECT_FIRST');
+         const s = await state(tx), plan = plans.get(planDigest);
+         if (s.targets.length || saved.basis !== s.basis || plan.basis !== s.basis) fail('MAPPING_CHANGED_EVIDENCE');
++        lease.assertHeld(); admit();
+-        lease.assertHeld();
+         attempted = true;
++        for (const row of expectedRows(p)) {
++          admit(); await tx.vapiBusinessMapping.create({ data: row }); admit();
++        }
+-        for (const row of expectedRows(p)) await tx.vapiBusinessMapping.create({ data: row });
+         const after = sorted(await tx.vapiBusinessMapping.findMany());
+         const inserted = relevantMappings(after, p);
+         if (inserted.length !== 3 || digest(after.filter(r => !inserted.includes(r))) !== digest(plan.before)
+@@ -217,10 +225,11 @@
+         if (digest(await readEvidence(tx, p)) !== digest(s.evidence)
+           || digest(assessTargetOverrides(await readOverrides(), p)) !== digest(s.overrides)
+           || digest(await tx.business.findUnique({ where: { id: p.businessId }, include: { settings: true } })) !== digest(s.business)) fail('MAPPING_CHANGED_EVIDENCE');
++        lease.assertHeld(); admit();
+-        lease.assertHeld();
+         const completed = await tx.runtimeStore.updateMany({ where: { key, data: { equals: saved } },
+           data: { data: clone({ ...saved, phase: 'completed', inserted, completedAt: new Date(now()).toISOString() }) } });
+         if (completed.count !== 1) fail('MAPPING_JOURNAL_CONFLICT');
++        admit();
+         return { operationId, applied: true, replayed: false, readinessGranted: false };
+         });
+       });

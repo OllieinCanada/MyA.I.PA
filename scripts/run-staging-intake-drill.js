@@ -81,7 +81,8 @@ async function main() {
     const sendHandoff = async item => createAndDispatchLeadHandoff({ lead, businessId: business.id, callId: lead.callId, sourceEventId: item.sourceEventId,
       env: { NODE_ENV: 'test', LEAD_ACK_SECRET: 'synthetic-intake-handoff-secret-at-least-32' }, sendSms: async request => {
         sends++; assert.equal(request.to, '+19055550123');
-        return { id: 'synthetic-owner-message', status: 'queued', mocked: false };
+        // Match sendSmsViaVapi's domain result, not the raw provider JSON.
+        return { requestId: 'synthetic-owner-request', messageId: 'synthetic-owner-message', status: 'accepted', mocked: false };
       } });
     const workerEnv={APP_ENV:'staging',INTAKE_LEDGER_MODE:'staging',STAGING_INTAKE_WORKER_ENABLED:'true',
       STAGING_INTAKE_BUSINESS_ID:String(business.id),STAGING_INTAKE_ASSISTANT_ID:assistantId};

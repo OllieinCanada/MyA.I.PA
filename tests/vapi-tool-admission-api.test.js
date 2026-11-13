@@ -26,7 +26,7 @@ global.fetch = (url, options) => {
 };
 let claims, bookings, mappingReads, mappedBusiness, mode, entered, release;
 const db = {
-  vapiBusinessMapping: { findFirst: async () => { mappingReads++; return mappedBusiness ? { businessId: 7 } : null; } },
+  vapiBusinessMapping: { findMany: async ({where}) => { mappingReads++; return mappedBusiness ? where.matchValue.in.map(matchValue=>({ businessId: 7, matchValue })) : []; } },
   business: { findUnique: async () => ({ id: 7, name: 'Synthetic Electric', phone: '+15555550101', settings: {} }) },
   vapiToolExecution: {
     create: async ({ data }) => {
