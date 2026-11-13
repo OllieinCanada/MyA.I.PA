@@ -1,5 +1,5 @@
 const test=require('node:test'),assert=require('node:assert/strict'),path=require('node:path');
-const {FILES,REGRESSIONS,validatePins,baselineComplete,strictTap,workflowPlan}=require('../scripts/compose-expanded-release');
+const {FILES,REGRESSIONS,validatePins,baselineComplete,strictTap,workflowPlan,workflowPlanFromBytes,launchNode,publicBuildEnvironment}=require('../scripts/compose-expanded-release');
 const pins=require('../scripts/expanded-release-pins.json');
 test('only four public composition files and unchanged exact dependency provenance are published',()=>{
   validatePins(pins);assert.equal(FILES.length,4);assert.equal(new Set(FILES).size,4);
@@ -31,10 +31,30 @@ test('required focused regression TAP fails closed for absent, failed, cancelled
   assert.ok(REGRESSIONS.includes('tests/vapi-mapping-failclosed.test.js'));
 });
 test('canonical full quality/browser plans retain every applicable run gate, delegating only identical setup',()=>{
-  const root=path.resolve(__dirname,'..'),quality=workflowPlan(root,'quality',pins),browser=workflowPlan(root,'public-browser-quality',pins);
+  const fs=require('node:fs'),crypto=require('node:crypto'),root=path.resolve(__dirname,'..');
+  let bytes=fs.readFileSync(path.join(root,'.github/workflows/quality.yml'),'utf8').replace(/\r\n/g,'\n');
+  if(crypto.createHash('sha256').update(bytes).digest('hex')!==pins.workflowHashes.quality){
+    // Standalone publication is main-based. Reproduce exactly235's one-line
+    // workflow fixture delta; the reviewed hash still must match, never waive it.
+    assert.throws(()=>workflowPlanFromBytes(bytes,'quality',pins),/Canonical workflow changed/);
+    const anchor='          RUN_SIGNUP_CONTEXT_POSTGRES=1 node --test tests/signup-context-identity-postgres.test.js\n';
+    assert.ok(bytes.includes(anchor));bytes=bytes.replace(anchor,anchor+'          RUN_SIGNUP_ASSOCIATION_POSTGRES=1 node --test tests/signup-association-repair-postgres.test.js\n');
+  }
+  const quality=workflowPlanFromBytes(bytes,'quality',pins),browser=workflowPlan(root,'public-browser-quality',pins);
   assert.equal(quality.steps.length,18);assert.equal(browser.steps.length,4);
   assert.ok(quality.steps.some(s=>s.run==='npm run test:backend'));
   assert.ok(quality.steps.some(s=>s.name==='Exercise the real PostgreSQL schema and constraints'));
+  assert.ok(quality.steps.some(s=>s.run.includes('RUN_SIGNUP_ASSOCIATION_POSTGRES=1')));
   assert.ok(quality.steps.some(s=>s.run.includes('test:public-demo-audio')));
   assert.ok(browser.steps.some(s=>s.env?.BROWSER_ENGINES==='chromium,firefox,webkit'));
+});
+test('only the approved public browser build configuration crosses the narrow environment boundary',()=>{
+  assert.deepEqual(publicBuildEnvironment({REACT_APP_GOOGLE_MAPS_API_KEY:'synthetic-public-browser-value',VAPI_API_KEY:'do-not-copy',ADMIN_PASSWORD:'do-not-copy'}),
+    {REACT_APP_GOOGLE_MAPS_API_KEY:'synthetic-public-browser-value'});
+  assert.deepEqual(publicBuildEnvironment({}),{REACT_APP_GOOGLE_MAPS_API_KEY:''});
+});
+test('native Node dispatch preserves spaces and shell metacharacters as literal arguments',()=>{
+  const value=path.join(require('node:os').tmpdir(),"fixture space;$(never-run)&'quote");
+  const r=launchNode(['-e','process.stdout.write(process.argv[1])',value],{encoding:'utf8',timeout:10000});
+  assert.equal(r.status,0,r.stderr);assert.equal(r.stdout,value);
 });

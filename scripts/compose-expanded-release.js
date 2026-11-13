@@ -10,6 +10,11 @@ const REGRESSIONS=['tests/recovery-notification-receipt-retry.test.js','tests/va
 const DELEGATED={quality:['Install dependencies','Install isolated regression browsers'],
   'public-browser-quality':['Restore unchanged locked dependencies','Install isolated regression browsers']};
 const hash=x=>crypto.createHash('sha256').update(x).digest('hex');
+// Literal executable, argument arrays, explicit no-shell mode. Do not funnel
+// runtime executable paths and shell scripts through a generic argv[0] sink.
+const launchNode=(args,options)=>spawnSync(process.execPath,args,{...options,shell:false});
+const launchCanonical=(script,options)=>spawnSync('bash',['--noprofile','--norc','-e','-o','pipefail','-c',script],{...options,shell:false});
+const publicBuildEnvironment=source=>({REACT_APP_GOOGLE_MAPS_API_KEY:String(source.REACT_APP_GOOGLE_MAPS_API_KEY||'')});
 function validatePins(p){
   if(p?.schemaVersion!==1||p.repository!=='OllieinCanada/MyA.I.PA'||p.node!=='24.22.3'||p.entry?.pr!==241
     ||JSON.stringify(p.dependencies?.map(d=>d.pr))!==JSON.stringify([235,239,240,237,238])
@@ -23,21 +28,26 @@ function baselineComplete(r,required){
       &&(!id.startsWith('ownership_')||x.code==='REPRO_PROVIDER_CONFLICT_ACCEPTED')
       &&(!id.startsWith('wait_')||x.code==='REPRO_REVOKED_ADMISSION_DISPATCHED')));
 }
+function tapSummary(text){
+  const metric=n=>Number(new RegExp('^# '+n+' (\\d+)$','m').exec(text)?.[1]??NaN);
+  return Object.fromEntries(['tests','pass','fail','cancelled','skipped'].map(k=>[k,metric(k)]));
+}
 function strictTap(text){
   // Required focused regressions may not silently skip or return an empty run.
-  const metric=n=>Number(new RegExp('^# '+n+' (\\d+)$','m').exec(text)?.[1]??NaN);
-  return metric('tests')>0&&metric('pass')===metric('tests')&&metric('fail')===0&&metric('cancelled')===0&&metric('skipped')===0;
+  const r=tapSummary(text);return r.tests>0&&r.pass===r.tests&&r.fail===0&&r.cancelled===0&&r.skipped===0;
 }
-function workflowPlan(workspace,name,pins){
-  const bytes=fs.readFileSync(path.join(workspace,'.github/workflows',name+'.yml'),'utf8');
+function workflowPlanFromBytes(bytes,name,pins){
   if(hash(bytes.replace(/\r\n/g,'\n'))!==pins.workflowHashes[name])throw Error('Canonical workflow changed');
   const yaml=require('js-yaml'),job=Object.values(yaml.load(bytes).jobs)[0];
   const runs=job.steps.filter(s=>s.run);
   if(runs.length!==(name==='quality'?20:6)||runs.some(s=>!s.name||s.if||/\$\{\{/.test(JSON.stringify(s.env||{}))))throw Error('Unreviewed workflow control flow');
   const delegated=DELEGATED[name];
   if(delegated.some(n=>!runs.some(s=>s.name===n)))throw Error('Required setup delegation missing');
+  if(name==='quality'&&!runs.some(s=>s.run.includes('RUN_SIGNUP_ASSOCIATION_POSTGRES=1 node --test tests/signup-association-repair-postgres.test.js')))
+    throw Error('Required235 association SQL gate missing');
   return {delegated,steps:runs.filter(s=>!delegated.includes(s.name))};
 }
+function workflowPlan(workspace,name,pins){return workflowPlanFromBytes(fs.readFileSync(path.join(workspace,'.github/workflows',name+'.yml'),'utf8'),name,pins);}
 function compose({root=path.resolve(__dirname,'..'),phase='compose'}={}){
   if(!['compose','sql','quality','browser'].includes(phase))throw Error('Unknown expanded phase');
   const run=(cmd,args,options={})=>{const r=spawnSync(cmd,args,{cwd:root,encoding:'utf8',windowsHide:true,timeout:180000,maxBuffer:32*1024*1024,...options});
@@ -89,12 +99,18 @@ function compose({root=path.resolve(__dirname,'..'),phase='compose'}={}){
       'GITHUB_EVENT_NAME','GITHUB_RUN_ID','GITHUB_RUN_ATTEMPT','GITHUB_SHA'].filter(k=>process.env[k]).map(k=>[k,process.env[k]]));
     Object.assign(env,{CI:'true',GITHUB_ACTIONS:'true',DISABLE_LOCAL_ENV_FILES:'1',DATABASE_URL:process.env.DATABASE_URL,
       GITHUB_WORKSPACE:workspace,DEPENDENCY_EXPECTED_HEAD:report.composedHead,REACT_APP_API_BASE_URL:'https://api.myaipa.ca',REACT_APP_RELEASE_SHA:report.composedHead});
-    const execute=(label,args,extra={},timeout=180000)=>{
-      const r=spawnSync(args[0],args.slice(1),{cwd:workspace,env:{...env,...extra},encoding:'utf8',timeout,maxBuffer:64*1024*1024});
+    // This is the existing approved public browser build key, not a provider
+    // credential. Only presence, never its value, enters preparation reports.
+    Object.assign(env,publicBuildEnvironment(process.env));
+    report.publicBuildConfig={googleMapsBrowserKeyPresent:!!env.REACT_APP_GOOGLE_MAPS_API_KEY};
+    const record=(label,r)=>{
       fs.writeFileSync(path.join(out,label+'.stdout.log'),r.stdout||'');fs.writeFileSync(path.join(out,label+'.stderr.log'),r.stderr||'');
       if(r.error||r.status!==0)throw Error('Expanded step failed: '+label);report.completed.push(label);return r.stdout||'';
     };
-    execute('installed-lock',[process.execPath,'scripts/verify-installed-lock.js']);
+    const options=(extra,timeout)=>({cwd:workspace,env:{...env,...extra},encoding:'utf8',timeout,maxBuffer:64*1024*1024});
+    const executeNode=(label,args,extra={},timeout=180000)=>record(label,launchNode(args,options(extra,timeout)));
+    const executeCanonical=(label,script,extra={})=>record(label,launchCanonical(script,options(extra,900000)));
+    executeNode('installed-lock',['scripts/verify-installed-lock.js']);
     if(phase==='sql'){
       const {SQL_CASES,validCoverage}=require(path.join(workspace,'scripts/compose-bounded-mapping-entry'));
       apply('bounded-mapping-entry-safety.patch',true);
@@ -105,21 +121,21 @@ function compose({root=path.resolve(__dirname,'..'),phase='compose'}={}){
       if(baseline.error||baseline.status===0||!baselineComplete(JSON.parse(fs.readFileSync(baselineFile)),SQL_CASES))throw Error('Expanded baseline proof incomplete');
       report.baselineUnsafeOutcomes=14;apply('bounded-mapping-entry-safety.patch');checkBytes();
       const entryFile=path.join(out,'entry-sql.json');
-      const entryTap=execute('entry',[process.execPath,'--test','--test-reporter=tap','tests/bounded-mapping-control.integration.cjs','tests/bounded-mapping-control-postgres.integration.cjs'],
+      const entryTap=executeNode('entry',['--test','--test-reporter=tap','tests/bounded-mapping-control.integration.cjs','tests/bounded-mapping-control-postgres.integration.cjs'],
         {RUN_BOUNDED_MAPPING_CONTROL_POSTGRES:'1',MAPPING_CONTROL_SQL_REPORT:entryFile});
-      if(!strictTap(entryTap)||!validCoverage(JSON.parse(fs.readFileSync(entryFile))))throw Error('Expanded22-case SQL/session proof incomplete');report.entrySqlCases=22;
+      if(!strictTap(entryTap)||!validCoverage(JSON.parse(fs.readFileSync(entryFile))))throw Error('Expanded22-case SQL/session proof incomplete');report.entrySqlCases=22;report.entryTestCounts=tapSummary(entryTap);
       const readerFile=path.join(out,'reader-sql.json');
-      const readerTap=execute('reader',[process.execPath,'--test','--test-reporter=tap','tests/bounded-business-mapping-integration.test.js'],
+      const readerTap=executeNode('reader',['--test','--test-reporter=tap','tests/bounded-business-mapping-integration.test.js'],
         {RUN_BOUNDED_MAPPING_INTEGRATION:'1',MAPPING_INTEGRATION_REPORT:readerFile});
-      const reader=JSON.parse(fs.readFileSync(readerFile));if(!strictTap(readerTap)||!validateCoverage(reader)||!reader.disposableDatabaseRemoved)throw Error('Expanded19-case reader proof incomplete');report.readerSqlCases=19;
-      const focused=execute('receipt-mapping-lifecycle',[process.execPath,'--test','--test-reporter=tap','--test-concurrency=1',...REGRESSIONS]);
-      if(!strictTap(focused))throw Error('Focused regression proof missing/skipped');report.focusedRegressionsComplete=true;
+      const reader=JSON.parse(fs.readFileSync(readerFile));if(!strictTap(readerTap)||!validateCoverage(reader)||!reader.disposableDatabaseRemoved)throw Error('Expanded19-case reader proof incomplete');report.readerSqlCases=19;report.readerTestCounts=tapSummary(readerTap);
+      const focused=executeNode('receipt-mapping-lifecycle',['--test','--test-reporter=tap','--test-concurrency=1',...REGRESSIONS]);
+      if(!strictTap(focused))throw Error('Focused regression proof missing/skipped');report.focusedRegressionsComplete=true;report.focusedTestCounts=tapSummary(focused);
     }else{
       const name=phase==='quality'?'quality':'public-browser-quality',plan=workflowPlan(workspace,name,pins);
       report.canonicalWorkflow=name;report.delegatedSetup=plan.delegated;
       for(let i=0;i<plan.steps.length;i++){
         const s=plan.steps[i];console.log('Expanded canonical gate: '+s.name);
-        execute(name+'-'+String(i+1).padStart(2,'0'),['bash','--noprofile','--norc','-e','-o','pipefail','-c',s.run],s.env||{},900000);
+        executeCanonical(name+'-'+String(i+1).padStart(2,'0'),s.run,s.env||{});
         report.completedCanonicalSteps=(report.completedCanonicalSteps||[]).concat(s.name);
       }
       if(report.completedCanonicalSteps.length!==(phase==='quality'?18:4))throw Error('Incomplete canonical gates');
@@ -141,4 +157,4 @@ function compose({root=path.resolve(__dirname,'..'),phase='compose'}={}){
   }
 }
 if(require.main===module){try{const phase=process.argv.find(x=>x.startsWith('--phase='))?.slice(8)||'compose';console.log(JSON.stringify(compose({phase}),null,2));}catch(e){console.error(e.message);process.exitCode=1;}}
-module.exports={FILES,REGRESSIONS,validatePins,baselineComplete,strictTap,workflowPlan,compose};
+module.exports={FILES,REGRESSIONS,validatePins,baselineComplete,strictTap,workflowPlan,workflowPlanFromBytes,launchNode,publicBuildEnvironment,compose};

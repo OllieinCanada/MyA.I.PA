@@ -30,6 +30,7 @@ jobs:
       DISABLE_LOCAL_ENV_FILES: '1'
       DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/ci
       EXPANDED_EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+      REACT_APP_GOOGLE_MAPS_API_KEY: ${{ vars.GOOGLE_MAPS_BROWSER_KEY }}
     steps:
       - uses: actions/checkout@v4
         with:

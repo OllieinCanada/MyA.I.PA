@@ -20,7 +20,7 @@
     "scripts/bounded-mapping-entry-index.patch":"e82a90a925ef4f103373c8edf31bcfff74d7db75c4173e6143e766d3415099e8"
   },
   "workflowHashes":{
-    "quality":"18fa206f082d0e9a25ef4a8ac63e729de5cab37efb5ca72de2836e32c88d98df",
+    "quality":"a460b936de81acfdbe6993a1abce1638cb19b5eae455a66084d57c638d5fd0e6",
     "public-browser-quality":"20c5c1fa0615f16fb6c27ac4d90e2da678d82238aefa4492df9a78fc7f43d5dc"
   },
   "meaning":"Preparation only. Five unchanged dependency PRs plus exact241 entry corrections. Expanded index bytes differ from241 three-dependency CI; corrected writer/control/safety bytes must remain identical. No merge, release or live readiness implied."
