@@ -6,7 +6,7 @@ function coversCatalog(requested, required) {
 const ENGINES = ['chromium', 'firefox', 'webkit'];
 const ROUTES = ['home', 'signup', 'trades', 'electricians', 'plumbers', 'hvac', 'general-contractors', 'roofers', 'painters'];
 const VIEWPORTS = ['desktop', 'tablet', 'mobile'];
-const key = row => `${row.engine}/${row.route}/${row.viewport}`;
+const key = row => row && typeof row === 'object' ? `${row.engine}/${row.route}/${row.viewport}` : 'invalid';
 function requiredMatrix() {
   return [
     ...ENGINES.flatMap(engine => [...ROUTES, 'signup-journey'].flatMap(route => VIEWPORTS.map(viewport => ({ engine, route, viewport })))),
@@ -30,4 +30,7 @@ function browserQualityPassed(value) {
     && Array.isArray(value.networkIsolation?.unexpectedWrites) && value.networkIsolation.unexpectedWrites.length === 0
     && !value.networkIsolation.clientErrors?.some(row => !row.expectedNegativeTest);
 }
-module.exports = { coversCatalog, ENGINES, ROUTES, VIEWPORTS, requiredMatrix, assessCoverage, browserQualityPassed };
+function requireCompleteBrowserEvidence(value) {
+  if (!browserQualityPassed(value)) throw Error('Complete browser matrix evidence is required; focused or failed checks cannot pass the release gate');
+}
+module.exports = { coversCatalog, ENGINES, ROUTES, VIEWPORTS, requiredMatrix, assessCoverage, browserQualityPassed, requireCompleteBrowserEvidence };

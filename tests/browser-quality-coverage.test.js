@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { coversCatalog } = require('../scripts/browser-quality-coverage');
-const { ENGINES, ROUTES, requiredMatrix, assessCoverage, browserQualityPassed } = require('../scripts/browser-quality-coverage');
+const { ENGINES, ROUTES, requiredMatrix, assessCoverage, browserQualityPassed, requireCompleteBrowserEvidence } = require('../scripts/browser-quality-coverage');
 const full = () => ({ ready: true, requestedEngines: ENGINES, requestedRoutes: ROUTES,
   checks: requiredMatrix(), completedChecks: requiredMatrix().length, warningCount: 0, failure: '', networkIsolation: { unexpectedWrites: [] } });
 test('focused passes cannot satisfy complete route coverage', () => {
@@ -20,6 +20,15 @@ test('readiness requires every engine, page viewport and signup journey exactly 
   assert.equal(assessCoverage({ ...value, requestedEngines: ['chromium'] }).complete, false);
   assert.equal(browserQualityPassed({ ...value, checks: [...value.checks, value.checks[0]], completedChecks: 94 }), false);
   assert.equal(browserQualityPassed({ ...value, networkIsolation: { unexpectedWrites: [{}] } }), false);
+  assert.equal(browserQualityPassed({ ...value, checks: [null, ...value.checks.slice(1)] }), false);
+  assert.throws(() => requireCompleteBrowserEvidence({ ...value, requestedEngines: ['chromium'], checks: chromium, completedChecks: 33 }), /Complete browser matrix/);
+  assert.doesNotThrow(() => requireCompleteBrowserEvidence(value));
+});
+test('canonical release gate consumes matrix evidence rather than a focused process exit alone', () => {
+  const fs = require('node:fs'), path = require('node:path');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'scripts', 'release-gate.js'), 'utf8');
+  assert.match(source, /requireCompleteBrowserEvidence\(JSON\.parse\(fs\.readFileSync/);
+  assert.match(source, /browser-quality-gate\.json/);
 });
 test('shipping reporter rejects a forged-ready Chromium-only artifact and accepts only complete evidence', () => {
   const fs = require('node:fs'), path = require('node:path'), os = require('node:os');

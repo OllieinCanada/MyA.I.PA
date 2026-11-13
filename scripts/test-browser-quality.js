@@ -6,7 +6,7 @@ const { chromium, firefox, webkit } = require("./playwright-runtime");
 const { rootPath } = require("./_helpers");
 const { captureFocusSurfaces, assessKeyboardFocus } = require('./keyboard-focus-evidence');
 const { installNetworkIsolation, installSlowImageDelay } = require('./browser-quality-network');
-const { assessCoverage } = require('./browser-quality-coverage');
+const { assessCoverage, ENGINES } = require('./browser-quality-coverage');
 const networkEvidence = { unexpectedWrites: [], blockedSockets: 0 };
 const reportPath = process.env.BROWSER_QUALITY_REPORT_PATH
   ? path.resolve(process.env.BROWSER_QUALITY_REPORT_PATH)
@@ -21,7 +21,7 @@ const buildDir = process.env.BUILD_PREVIEW_DIR
   : pagesBuildDir;
 const axePath = require.resolve("axe-core/axe.min.js");
 const browserTypes = { chromium, firefox, webkit };
-const requestedEngines = String(process.env.BROWSER_ENGINES || "chromium")
+const requestedEngines = String(process.env.BROWSER_ENGINES || ENGINES.join(','))
   .split(",")
   .map((name) => name.trim().toLowerCase())
   .filter(Boolean);

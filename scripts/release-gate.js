@@ -1,4 +1,5 @@
 const fs = require("fs");
+const { requireCompleteBrowserEvidence } = require('./browser-quality-coverage');
 const path = require("path");
 const { nodeCommand, rootPath, run } = require("./_helpers");
 
@@ -51,6 +52,9 @@ for (const [label, command, args, options = {}] of steps) {
   console.log(`\n[release-gate] ${label}`);
   try {
     run(command, args, { cwd: rootPath(), ...options });
+    if (label === 'Browser journeys, accessibility, and responsive layout checks') {
+      requireCompleteBrowserEvidence(JSON.parse(fs.readFileSync(rootPath('diagnostics', 'shipping-readiness', 'browser-quality-gate.json'), 'utf8')));
+    }
     report.completedSteps.push(label);
   } catch (error) {
     report.failedStep = label;
