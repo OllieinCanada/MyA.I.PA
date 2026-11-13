@@ -5,7 +5,11 @@ const {spawnSync}=require('node:child_process');
 const ROOT=path.resolve(__dirname,'..'),provenance=require('./combined-pilot-repair-provenance.json');
 const {validCoverage}=require('./compose-bounded-mapping-entry');
 const {validateSqlTarget,validateCoverage}=require('./compose-bounded-mapping-integration');
-const {strictTap,tapSummary,REGRESSIONS}=require('./compose-expanded-release');
+const {strictTap,REGRESSIONS}=require('./compose-expanded-release');
+function tapSummary(text){
+  const count=k=>Number(new RegExp('^# '+k+' (\\d+)$','m').exec(text)?.[1]??NaN);
+  return Object.fromEntries(['tests','pass','fail','cancelled','skipped'].map(k=>[k,count(k)]));
+}
 const PHASES=['entry','reader','focused'];
 const TESTS={entry:['tests/bounded-mapping-control.integration.cjs','tests/bounded-mapping-control-postgres.integration.cjs'],
   reader:['tests/bounded-business-mapping-integration.test.js'],
@@ -82,4 +86,4 @@ if(require.main===module){try{const phase=process.argv[2];
     if(!valid(r,policy(process.env.COMBINED_EXPECTED_HEAD),phase))throw Error('COMBINED_EVIDENCE_REFUSED');
   }else run(phase);
 }catch(e){console.error(/^[A-Z_]+$/.test(e.message)?e.message:'COMBINED_CHECK_FAILED');process.exitCode=1;}}
-module.exports={policy,valid,PHASES,TESTS,SOURCES,run};
+module.exports={policy,valid,PHASES,TESTS,SOURCES,run,tapSummary};

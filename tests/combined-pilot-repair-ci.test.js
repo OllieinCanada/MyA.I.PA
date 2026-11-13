@@ -1,9 +1,13 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict');
-const {policy,valid,TESTS,SOURCES,run}=require('../scripts/run-combined-pilot-repair-ci');
+const {policy,valid,TESTS,SOURCES,run,tapSummary}=require('../scripts/run-combined-pilot-repair-ci');
 const {SQL_CASES}=require('../scripts/compose-bounded-mapping-entry');
 const {REQUIRED_CASES}=require('../scripts/compose-bounded-mapping-integration');
 const head='a'.repeat(40),expected=policy(head);
+test('actual TAP result parsing is callable and preserves failure and skip counts',()=>{
+  assert.deepEqual(tapSummary('# tests 3\n# pass 1\n# fail 1\n# cancelled 0\n# skipped 1\n'),{tests:3,pass:1,fail:1,cancelled:0,skipped:1});
+  assert.ok(Number.isNaN(tapSummary('').tests));
+});
 function fixture(phase){return {schemaVersion:1,...structuredClone(expected),phase,passed:true,scope:'synthetic-actual-combined-runtime',actualPublishedRuntime:true,
   ready:false,applyAllowed:false,providerMode:'synthetic-no-send',productionActions:0,osSandboxProven:false,testFiles:TESTS[phase],
   tap:{tests:phase==='entry'?41:phase==='reader'?20:150,pass:phase==='entry'?41:phase==='reader'?20:150,fail:0,skipped:0,cancelled:0},
