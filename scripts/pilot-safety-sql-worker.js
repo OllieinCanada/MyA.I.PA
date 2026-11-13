@@ -21,13 +21,13 @@ Object.assign(process.env,keep,{NODE_ENV:'test',CI:'true',DISABLE_LOCAL_ENV_FILE
  STORE_CALL_TRANSCRIPTS:'false',STORE_CALL_RECORDING_URLS:'false'});
 const {PrismaClient}=require('@prisma/client');
 const prisma=new PrismaClient({datasources:{db:{url:'postgresql://pilot_fixture:synthetic-ci-only@127.0.0.1:5432/'+dbName+'?connection_limit=3'}},__internal:{configOverride:c=>({...c,relativeEnvPaths:{}})}});
-let mode='',remaining=0,server,guard;
+let mode='',remaining=0,server,guard,releaseReceiptRead;
 const wrapped=new Proxy(prisma,{get(target,key){
  if(key==='leadNotificationAttempt')return new Proxy(target[key],{get(model,method){if(method==='update')return async arg=>{
   if(mode==='permanent')throw Error('FIXTURE_RECEIPT_PERSISTENCE');
-  if(arg.data.status==='ACCEPTED'&&remaining>0){remaining--;if(mode==='ack-lost')await model.update(arg);throw Error('FIXTURE_RECEIPT_PERSISTENCE');}
+  if(['once','ack-lost'].includes(mode)&&arg.data.status==='ACCEPTED'&&remaining>0){remaining--;if(mode==='ack-lost')await model.update(arg);throw Error('FIXTURE_RECEIPT_PERSISTENCE');}
   return model.update(arg);
- };const v=model[method];return typeof v==='function'?v.bind(model):v;}});
+ };if(method==='findUnique')return async arg=>{const row=await model.findUnique(arg);if(mode==='pause-receipt-read'){mode='';process.send({type:'receipt-read-paused'});await new Promise(resolve=>{releaseReceiptRead=resolve;});}return row;};const v=model[method];return typeof v==='function'?v.bind(model):v;}});
  const value=target[key];return typeof value==='function'?value.bind(target):value;
 }});
 global.__myAiPaPrisma=wrapped;
@@ -39,7 +39,8 @@ async function main(){
  process.send({type:'ready',port:server.address().port});
  process.on('message',async message=>{try{
   let result;
-  if(message.type==='mode'){assert.ok(['','once','ack-lost','permanent'].includes(message.mode));mode=message.mode;remaining=mode?1:0;result={ok:true};}
+  if(message.type==='mode'){assert.ok(['','once','ack-lost','permanent','pause-receipt-read'].includes(message.mode));mode=message.mode;remaining=mode?1:0;result={ok:true};}
+  else if(message.type==='release-receipt-read'){releaseReceiptRead?.();result={ok:true};}
   else if(message.type==='dispatch'){assert.match(message.handoffId||'',/^c[a-z0-9]+$/);result=await require('../server/leadHandoffs').dispatchLeadHandoff(message.handoffId,message.role==='BACKUP'?'BACKUP':'OWNER');}
   else if(message.type==='due')result=await require('../server/leadHandoffs').processDueLeadHandoffs();
   else if(message.type==='receipt')result=await require('../server/leadHandoffs').applyProviderEvent(message.payload);

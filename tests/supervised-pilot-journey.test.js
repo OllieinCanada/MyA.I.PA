@@ -18,7 +18,7 @@ const pilotEvidence={scope:'actual-http-inmemory-loopback',happyPath:false,concu
 let seq=0,revision=0,failLead=false,failReceipt=0,failAllAttemptWrites=false,admissionHook,fallbackBusinesses=[],providerMode='accept',providerPosts=[],providerEntered,providerRelease;
 const copy=x=>x==null?x:structuredClone(x),find=(name,where)=>[...tables[name].values()].find(r=>Object.entries(where).every(([k,v])=>r[k]===v));
 const matches=(row,where)=>Object.entries(where).every(([key,value])=>key==='OR'?value.some(w=>matches(row,w)):key==='AND'?value.every(w=>matches(row,w)):key==='NOT'?!matches(row,value):
- value&&typeof value==='object'&&!Array.isArray(value)?Object.entries(value).every(([op,arg])=>op==='in'?arg.includes(row[key]):op==='lte'?row[key]!=null&&row[key]<=arg:op==='startsWith'?String(row[key]||'').startsWith(arg):false):row[key]===value);
+ value&&typeof value==='object'&&!Array.isArray(value)?Object.entries(value).every(([op,arg])=>op==='in'?arg.includes(row[key]):op==='notIn'?!arg.includes(row[key]):op==='not'?row[key]!==arg:op==='lte'?row[key]!=null&&row[key]<=arg:op==='startsWith'?String(row[key]||'').startsWith(arg):false):row[key]===value);
 const db={};
 for(const name of Object.keys(tables))db[name]={
  findUnique:async({where,include})=>{const row=copy(find(name,where));if(row&&include&&name==='leadHandoff'){
@@ -30,7 +30,7 @@ for(const name of Object.keys(tables))db[name]={
   if(unique&&data[unique]&&find(name,{[unique]:data[unique]}))throw Object.assign(Error('Fixture unique collision'),{code:'P2002'});
   if(name==='leadNotificationAttempt'&&find(name,{handoffId:data.handoffId,recipientRole:data.recipientRole,attemptNumber:data.attemptNumber}))throw Object.assign(Error('Fixture attempt unique collision'),{code:'P2002'});
   const id=['caller','call','lead'].includes(name)?++seq:'fixture-'+name+'-'+(++seq);
-  const row={id,retryCount:0,maxRetries:2,updatedAt:++revision,...(name==='leadHandoff'?{status:'PENDING',acknowledgedAt:null,nextActionAt:null,lastErrorCode:null}:{}),...copy(data)};tables[name].set(row.id,row);return copy(row);},
+  const row={id,retryCount:0,maxRetries:2,updatedAt:++revision,...(name==='leadNotificationAttempt'?{errorCode:null}:{}),...(name==='leadHandoff'?{status:'PENDING',acknowledgedAt:null,nextActionAt:null,lastErrorCode:null}:{}),...copy(data)};tables[name].set(row.id,row);return copy(row);},
  update:async({where,data})=>{if(name==='leadNotificationAttempt'&&(failAllAttemptWrites||data.status==='ACCEPTED'&&failReceipt-->0))throw Error('Fixture accepted-receipt persistence failure');const row=find(name,where);assert.ok(row);Object.assign(row,copy(data),{updatedAt:++revision});return copy(row);},
  updateMany:async({where,data})=>{if(admissionHook){const hook=admissionHook;admissionHook=null;await hook();}let count=0;for(const row of tables[name].values())if(matches(row,where)){Object.assign(row,copy(data),{updatedAt:++revision});count++;}return{count};},
  upsert:async({where,create,update})=>{let row=find(name,where);if(row)Object.assign(row,copy(update));else{row={id:++seq,...copy(create)};tables[name].set(row.id,row);}return copy(row);},
@@ -126,6 +126,18 @@ test('direct concurrent owner and backup dispatchers share one durable handoff a
 test('late failed receipt cannot remove uncertain hold or re-enable worker replay',async()=>{failReceipt=1;await tools();const attempt=[...tables.leadNotificationAttempt.values()][0],helpers=require('../server/leadHandoffs');
  await helpers.applyProviderEvent({eventId:'fixture-late-failed',attemptId:attempt.id,status:'FAILED',errorCode:'fixture-failure'});
  assert.equal(tables.leadNotificationAttempt.get(attempt.id).errorCode,'OWNER_NOTIFICATION_UNCERTAIN');assert.equal((await helpers.processDueLeadHandoffs()).checked,0);assert.equal((await helpers.dispatchLeadHandoff(attempt.handoffId)).requiresInspection,true);assert.equal(providerPosts.length,1);
+});
+test('stale receipt read cannot clear a hold committed before its writes',async()=>{
+ await tools();const attempt=[...tables.leadNotificationAttempt.values()][0],helpers=require('../server/leadHandoffs');
+ const original=db.leadNotificationAttempt.findUnique;let read,release;const entered=new Promise(r=>read=r),resume=new Promise(r=>release=r);
+ db.leadNotificationAttempt.findUnique=async q=>{const snapshot=await original(q);read();await resume;return snapshot;};
+ let receipt;try{receipt=helpers.applyProviderEvent({eventId:'fixture-stale-failed',attemptId:attempt.id,status:'FAILED',errorCode:'fixture-late-error'});await entered;
+  await db.leadNotificationAttempt.update({where:{id:attempt.id},data:{errorCode:'OWNER_NOTIFICATION_UNCERTAIN'}});
+  await db.leadHandoff.update({where:{id:attempt.handoffId},data:{status:'FAILED',nextActionAt:null,lastErrorCode:'OWNER_NOTIFICATION_UNCERTAIN'}});
+  release();await receipt;assert.equal(tables.leadNotificationAttempt.get(attempt.id).errorCode,'OWNER_NOTIFICATION_UNCERTAIN');
+  assert.equal(tables.leadHandoff.get(attempt.handoffId).lastErrorCode,'OWNER_NOTIFICATION_UNCERTAIN');assert.equal((await helpers.processDueLeadHandoffs()).checked,0);
+  assert.equal((await helpers.dispatchLeadHandoff(attempt.handoffId)).requiresInspection,true);assert.equal(providerPosts.length,1);
+ }finally{release?.();if(receipt)await receipt.catch(()=>{});db.leadNotificationAttempt.findUnique=original;}
 });
 test('contradictory assistant/phone routes refuse before claims, leads or transport, regardless of row order',async()=>{
  mappings[1].businessId=38;for(const reverse of [false,true]){if(reverse)mappings.reverse();const r=await tools();assert.equal(r.status,422);assert.equal(tables.vapiToolExecution.size,0);assert.equal(tables.lead.size,0);assert.equal(providerPosts.length,0);}

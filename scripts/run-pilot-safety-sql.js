@@ -5,13 +5,15 @@ const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),cryp
 const {spawnSync,fork}=require('node:child_process');
 const ROOT=path.resolve(__dirname,'..');
 const SOURCES=['server/index.js','server/leadHandoffs.js','server/vapiSms.js','server/vapiToolSecurity.js','server/callPersistence.js','scripts/local-staging-egress.js',
- 'scripts/run-pilot-safety-sql.js','scripts/pilot-safety-sql-worker.js','tests/supervised-pilot-journey.test.js','tests/pilot-safety-sql-contract.test.js','.github/workflows/pilot-safety.yml','prisma/schema.prisma','package-lock.json'];
+ 'scripts/run-pilot-safety-sql.js','scripts/pilot-safety-sql-worker.js','tests/supervised-pilot-journey.test.js','tests/pilot-safety-sql-contract.test.js','.github/workflows/pilot-safety.yml','prisma/schema.prisma','package-lock.json',
+ 'scripts/run-supervised-pilot-local.js','scripts/supervised-pilot-checklist.js','tests/supervised-pilot-checklist.test.js','tests/helpers/synthetic-isolation-worker.js',
+ 'tests/vapi-sms.test.js','tests/vapi-tool-admission-api.test.js','tests/backend-security.test.js','scripts/run-staging-intake-drill.js','package.json'];
 const CHECKS=['owned-pg18-target','same-tenant-automatic-owner-and-call-capture','cross-process-tool-duplicate',
  'conflicting-route-zero-writes','missing-assistant-routes-phone','missing-phone-routes-assistant','known-plus-unknown-refuses',
  'no-match-refuses','both-ids-absent-called-number-fallback','ambiguous-called-number-refuses','override-db-conflict-refuses',
  'receipt-write-failure-holds','accepted-write-ack-loss-holds','permanent-receipt-failure-holds','late-receipt-preserves-hold',
  'cross-process-owner-backup-cas','held-row-lock-stale-binding-refuses','crash-restart-no-replay','legacy-optional-no-match-refuses',
- 'malformed-provider-identifiers-refuse','transport-and-live-gate-limits'];
+ 'malformed-provider-identifiers-refuse','stale-receipt-write-preserves-hold','transport-and-live-gate-limits'];
 const sha=b=>crypto.createHash('sha256').update(b).digest('hex');
 function policy(head){return{head,sourceSha256:Object.fromEntries(SOURCES.map(p=>[p,sha(fs.readFileSync(path.join(ROOT,p)))]))};}
 function validate(env){
@@ -76,7 +78,7 @@ async function run(){
   provider=require('node:http').createServer(async(req,res)=>{let raw='';for await(const b of req)raw+=b;assert.equal(req.url,'/chat');posts.push(JSON.parse(raw));
    if(providerMode==='wait')await new Promise(resolve=>{release=resolve;entered?.();});
    res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify({id:'fixture-request-'+posts.length,messageId:'fixture-message-'+posts.length}));});
-  provider.listen(0,'127.0.0.1');await new Promise(r=>provider.once('listening',r));const a=await boot(),b=await boot();report.actualHttp=true;
+  provider.listen(0,'127.0.0.1');await new Promise(r=>provider.once('listening',r));let a=await boot();const b=await boot();report.actualHttp=true;
   await check(CHECKS[1],async()=>{const c=call();assert.deepEqual((await http(a,{type:'assistant-request',call:c})).body,{assistantId:'fixture-sql-assistant'});const r=await tool(a,c);assert.equal(result(r).ok,true);assert.equal(posts.at(-1).transport.customer.number,'+15555550100');
    const claim=await prisma.vapiToolExecution.findFirst({where:{callExternalId:c.id}});const lead=await prisma.lead.findUnique({where:{id:claim.result.leadId}});assert.equal(lead.businessId,37);
    const ended={...c,status:'ended',startedAt:new Date(Date.now()-60000).toISOString(),endedAt:new Date().toISOString(),endedReason:'customer-ended-call'};
@@ -112,11 +114,19 @@ async function run(){
   }finally{await locker.query('ROLLBACK').catch(()=>{});await locker.end();if(sending)await sending.catch(()=>{});}});
   await check(CHECKS[17],async()=>{const c=call(),id=crypto.randomUUID(),before=posts.length;providerMode='wait';const waiting=new Promise(r=>entered=r),sending=tool(a,c,id).catch(()=>null);await waiting;
    const exited=new Promise(r=>a.child.once('exit',r));a.child.kill('SIGKILL');await exited;a.stopped=true;await sending;release();providerMode='accept';
-   const restarted=await boot();const replay=result(await tool(restarted,c,id));assert.equal(replay.duplicate,true);assert.equal(replay.status,'PROCESSING');const claim=await prisma.vapiToolExecution.findFirst({where:{toolCallId:id}});const h=await prisma.leadHandoff.findUnique({where:{sourceEventId:'vapi-tool:'+claim.idempotencyKey}});assert.equal(h.status,'SEND_REQUESTED');assert.equal((await restarted.command({type:'dispatch',handoffId:h.id})).requiresInspection,true);assert.equal(posts.length-before,1);
+   const restarted=await boot();a=restarted;const replay=result(await tool(restarted,c,id));assert.equal(replay.duplicate,true);assert.equal(replay.status,'PROCESSING');const claim=await prisma.vapiToolExecution.findFirst({where:{toolCallId:id}});const h=await prisma.leadHandoff.findUnique({where:{sourceEventId:'vapi-tool:'+claim.idempotencyKey}});assert.equal(h.status,'SEND_REQUESTED');assert.equal((await restarted.command({type:'dispatch',handoffId:h.id})).requiresInspection,true);assert.equal(posts.length-before,1);
   });
   await check(CHECKS[18],async()=>{const optional=await boot(false),before=await counts();for(const c of [{id:crypto.randomUUID(),customer:call().customer},{...call(),assistantId:'unknown-assistant',phoneNumberId:'unknown-phone'}])assert.equal((await tool(optional,c)).status,422);assert.deepEqual(await counts(),before);await optional.stop();});
   await check(CHECKS[19],async()=>{for(const field of ['assistantId','phoneNumberId'])for(const value of [0,false,[],{},42])await refuse({...call(),[field]:value});});
-  await check(CHECKS[20],async()=>{assert.ok(posts.every(p=>p.transport.customer.number==='+15555550100'||p.transport.customer.number==='+15555550199'));for(const name of ['privacyApplicationPassed','logicalRestorePassed','fullRecoveryPassed'])assert.equal(require('./launch-evidence')[name](report,expected.head),false);});
+  await check(CHECKS[20],async()=>{const id=crypto.randomUUID();await tool(b,call(),id);const execution=await prisma.vapiToolExecution.findFirst({where:{toolCallId:id}}),h=await prisma.leadHandoff.findUnique({where:{sourceEventId:'vapi-tool:'+execution.idempotencyKey},include:{attempts:true}}),attempt=h.attempts[0];
+   await b.command({type:'mode',mode:'pause-receipt-read'});const paused=new Promise(resolve=>{const listener=m=>{if(m.type==='receipt-read-paused'){b.child.off('message',listener);resolve();}};b.child.on('message',listener);});
+   const receipt=b.command({type:'receipt',payload:{eventId:'fixture-stale-failed',attemptId:attempt.id,status:'FAILED',errorCode:'fixture-stale-error'}});await paused;
+   try{await prisma.leadNotificationAttempt.update({where:{id:attempt.id},data:{errorCode:'OWNER_NOTIFICATION_UNCERTAIN'}});await prisma.leadHandoff.update({where:{id:h.id},data:{status:'FAILED',nextActionAt:null,lastErrorCode:'OWNER_NOTIFICATION_UNCERTAIN'}});
+    await b.command({type:'release-receipt-read'});await receipt;assert.equal((await prisma.leadNotificationAttempt.findUnique({where:{id:attempt.id}})).errorCode,'OWNER_NOTIFICATION_UNCERTAIN');assert.equal((await prisma.leadHandoff.findUnique({where:{id:h.id}})).nextActionAt,null);
+    const before=posts.length;assert.equal((await b.command({type:'dispatch',handoffId:h.id})).requiresInspection,true);assert.equal(posts.length,before);
+   }finally{await b.command({type:'release-receipt-read'});await receipt.catch(()=>{});}
+  });
+  await check(CHECKS[21],async()=>{assert.ok(posts.every(p=>p.transport.customer.number==='+15555550100'||p.transport.customer.number==='+15555550199'));for(const name of ['privacyApplicationPassed','logicalRestorePassed','fullRecoveryPassed'])assert.equal(require('./launch-evidence')[name](report,expected.head),false);});
   success=true;
  }catch(error){report.failureCode=error.code==='PILOT_SQL_EXPECTED_ABORT'?error.code:'PILOT_SQL_CHECK_FAILED';report.failedCheck=report.checks.find(c=>!c.passed)?.name||null;}
  finally{

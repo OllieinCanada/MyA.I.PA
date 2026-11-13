@@ -139,7 +139,7 @@ async function dispatchLeadHandoff(handoffId, recipientRole = "OWNER", options =
   const role = recipientRole === "BACKUP" ? "BACKUP" : "OWNER";
   // This durable attempt gate also applies to later worker calls/module reloads.
   // A REQUESTED attempt may have reached the provider before its receipt saved.
-  const uncertain = handoff.status === "SEND_REQUESTED" || handoff.lastErrorCode === "OWNER_NOTIFICATION_UNCERTAIN"
+  const uncertain = handoff.status === "SEND_REQUESTED" || ["OWNER_NOTIFICATION_DISPATCH_HELD", "OWNER_NOTIFICATION_UNCERTAIN"].includes(handoff.lastErrorCode)
     || handoff.attempts.some(item => item.status === "REQUESTED" || item.errorCode === "OWNER_NOTIFICATION_UNCERTAIN");
   const accepted = handoff.attempts.some(item => item.recipientRole === role && ["ACCEPTED", "SENT", "DELIVERED"].includes(item.status));
   if (uncertain || accepted) return { handoffId: handoff.id, status: uncertain ? "UNCONFIRMED" : handoff.status,
@@ -170,7 +170,8 @@ async function dispatchLeadHandoff(handoffId, recipientRole = "OWNER", options =
   // reopen an attempt whose provider outcome is unknown after a crash.
   const admission = await prisma.leadHandoff.updateMany({ where: { id: handoff.id, status: handoff.status, updatedAt: handoff.updatedAt,
     businessId: handoff.businessId, leadId: handoff.leadId, ownerPhone: handoff.ownerPhone, backupPhone: handoff.backupPhone },
-    data: { status: "SEND_REQUESTED", nextActionAt: null } });
+    data: { status: "SEND_REQUESTED", nextActionAt: null, lastErrorCode: "OWNER_NOTIFICATION_DISPATCH_HELD",
+      lastErrorMessage: "Dispatch is admitted; its completion must be saved before further action." } });
   if (admission.count !== 1) return { handoffId: handoff.id, status: "UNCONFIRMED", accepted: false,
     outcomeUncertain: true, requiresInspection: true, duplicate: true, actionAttempted: false };
   let attempt;
@@ -539,8 +540,22 @@ async function applyProviderEvent(payload = {}) {
     handoffData.lastErrorCode = "OWNER_NOTIFICATION_UNCERTAIN";
     if (status === "FAILED") handoffData.status = "FAILED";
   }
-  await prisma.leadNotificationAttempt.update({ where: { id: attempt.id }, data: attemptData });
-  if (Object.keys(handoffData).length) await prisma.leadHandoff.update({ where: { id: attempt.handoffId }, data: handoffData });
+  // Recheck at the SQL write, not only against the earlier receipt snapshot.
+  // A stale receipt must not erase a newer uncertainty marker or reopen an
+  // admitted-but-unfinished send. Status evidence is still retained.
+  const changed = await prisma.leadNotificationAttempt.updateMany({ where: { id: attempt.id,
+    OR: [{ errorCode: null }, { errorCode: { not: "OWNER_NOTIFICATION_UNCERTAIN" } }] }, data: attemptData });
+  if (!changed.count) {
+    const receiptOnly = { ...attemptData }; delete receiptOnly.errorCode; delete receiptOnly.errorMessage;
+    await prisma.leadNotificationAttempt.updateMany({ where: { id: attempt.id, errorCode: "OWNER_NOTIFICATION_UNCERTAIN" }, data: receiptOnly });
+  }
+  if (Object.keys(handoffData).length) {
+    const changedHandoff = await prisma.leadHandoff.updateMany({ where: { id: attempt.handoffId, status: { not: "SEND_REQUESTED" },
+      OR: [{ lastErrorCode: null }, { lastErrorCode: { notIn: ["OWNER_NOTIFICATION_DISPATCH_HELD", "OWNER_NOTIFICATION_UNCERTAIN"] } }] }, data: handoffData });
+    if (!changedHandoff.count && handoffData.deliveredAt) {
+      await prisma.leadHandoff.update({ where: { id: attempt.handoffId }, data: { deliveredAt: handoffData.deliveredAt } });
+    }
+  }
   const event = await recordEvent({ handoffId: attempt.handoffId, attemptId: attempt.id, providerEventId, status: `PROVIDER_${status}`, source: "VAPI_WEBHOOK", details: { errorCode: attemptData.errorCode || null }, occurredAt });
   return { duplicate: false, event };
 }
