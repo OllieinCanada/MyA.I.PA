@@ -4,7 +4,7 @@ const {NAMES,readRecoveryFileStore}=require('./recoveryFileStore');
 const fail=code=>{throw Object.assign(new Error(code),{code});};
 function requiredSurfaces(schema){const models=[...schema.matchAll(/^model\s+(\w+)\s*\{/gm)].map(m=>'database:'+m[1]);
  if(!models.length||new Set(models).size!==models.length)fail('PRIVACY_SCHEMA_REQUIRED');return [...models,...NAMES.map(n=>'file:'+n)];}
-function createReadOnlyInventoryReader({prisma,directory,discoverLinked=false}){
+function createReadOnlyInventoryReader({prisma,directory,discoverLinked=false,discoverOptional=false}){
  const fileSnapshot=()=>Object.fromEntries(NAMES.map(name=>{const data=readRecoveryFileStore(path.join(directory,name));return [name,crypto.createHash('sha256').update(JSON.stringify(data)).digest('hex')];}));
  return async target=>{
   const before=fileSnapshot();
@@ -23,10 +23,12 @@ function createReadOnlyInventoryReader({prisma,directory,discoverLinked=false}){
    if([calls,leads,foreignCalls,foreignLeads].some(rows=>rows.length>1000))fail('PRIVACY_INVENTORY_TRUNCATED');
    // Caller and suppression are shared/global. They are candidates, never disposable tenant-owned rows.
    const linked=discoverLinked?await require('./privacyLinkedInventory').discoverSubjectLinks({tx,target,calls,leads,syncStore:readRecoveryFileStore(path.join(directory,'vapi-call-sync.json'))}):{records:[],coveredSurfaces:[],unresolvedSurfaces:[]};
+   const optional=discoverOptional?await require('./privacyOptionalInventory').discoverOptionalLinks({tx,target,calls,leads}):{records:[],partialRecords:[],coveredSurfaces:[],unresolvedSurfaces:[]};
    return {identity:{...target,exact:true},foreignTenantCount:new Set([...foreignCalls,...foreignLeads].map(r=>r.businessId)).size,
-    coveredSurfaces:['database:Caller','database:Call','database:Lead','database:SmsSuppression',...linked.coveredSurfaces],unresolvedSurfaces:linked.unresolvedSurfaces,
+    coveredSurfaces:['database:Caller','database:Call','database:Lead','database:SmsSuppression',...linked.coveredSurfaces,...optional.coveredSurfaces],
+    unresolvedSurfaces:[...linked.unresolvedSurfaces,...optional.unresolvedSurfaces],partialRecords:optional.partialRecords,
     records:[{surface:'database:Caller',id:caller.id,...target},...calls.map(r=>({...r,surface:'database:Call'})),...leads.map(r=>({...r,surface:'database:Lead'})),
-     ...(suppression?[{surface:'database:SmsSuppression',id:suppression.id,...target}]:[]),...linked.records]};
+     ...(suppression?[{surface:'database:SmsSuppression',id:suppression.id,...target}]:[]),...linked.records,...optional.records]};
   },{isolationLevel:'RepeatableRead',maxWait:1000,timeout:5000});
   if(JSON.stringify(fileSnapshot())!==JSON.stringify(before))fail('PRIVACY_FILE_SNAPSHOT_CHANGED');
   // Four files were strictly read and canonical values compared, NOT subject-complete discovery.
