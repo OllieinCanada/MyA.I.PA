@@ -126,6 +126,19 @@ async function request(path, options = {}) {
   });
 }
 
+test('record-only reconciliation requires admin auth and explicit origin/confirmation, with apply disabled by default', async () => {
+  const endpoint = '/api/admin/signups/reconcile-resource-associations';
+  const body = { action: 'apply', sourceId: 'signup_' + 'a'.repeat(32), phantomId: 'signup_' + 'b'.repeat(32),
+    number: '+13655550123', twilioSid: 'PN' + 'c'.repeat(32), assistantId: 'fixture-assistant', phoneId: 'fixture-phone',
+    confirmation: 'RECONCILE_EXISTING_SIGNUP_RECORDS_ONLY', planDigest: 'd'.repeat(64) };
+  assert.equal((await request(endpoint, { method: 'POST', body })).status, 401);
+  const headers = { 'x-admin-password': process.env.ADMIN_PASSWORD, origin: 'https://www.myaipa.ca', 'x-myaipa-record-repair': '1' };
+  const response = await request(endpoint, { method: 'POST', headers, body });
+  assert.equal(response.status, 403); assert.equal((await response.json()).code, 'ASSOCIATION_APPLY_DISABLED');
+  const suppliedProof = await request(endpoint, { method: 'POST', headers, body: { ...body, provider: { verified: true } } });
+  assert.equal(suppliedProof.status, 409); assert.equal((await suppliedProof.json()).code, 'ASSOCIATION_SCOPE_INVALID');
+});
+
 test('exact saved-call inspection requires monitor authentication and remains read-only', async () => {
   const { makeReferences } = require('../server/callRecordVerification');
   const refs = makeReferences('12345678-1234-7000-8000-123456789abc', 37);
