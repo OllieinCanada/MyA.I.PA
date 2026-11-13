@@ -4,6 +4,23 @@ const { performance } = require('node:perf_hooks');
 const { validatePolicy } = require('./approved-recovery-policy');
 const model = require('./recovery-notification-model');
 const { isNotificationStore } = require('./recovery-notification-store');
+// Retry only a lock refusal that occurs before the receipt transaction starts.
+// Never replay transport, steal locks, or retry an ambiguous write/commit error.
+async function persistOutcome(transaction) {
+  const deadline = performance.now() + 1000;
+  let lastBusy;
+  for (let attempt = 0; attempt < 20; attempt++) {
+    if (attempt && performance.now() >= deadline) throw lastBusy;
+    try { return transaction(); }
+    catch (error) {
+      if (error?.code !== 'RECOVERY_NOTIFICATION_LOCKED_REQUIRES_REVIEW_OR_LATER_SAMPLE') throw error;
+      lastBusy = error;
+      const remaining = deadline - performance.now();
+      if (attempt === 19 || remaining <= 0) throw error;
+      await new Promise(resolve => setTimeout(resolve, Math.min(25, remaining)));
+    }
+  }
+}
 async function dispatchPrepared(report, { state = {}, store, transports = {}, approvedActivation = false, preparationPolicy, transportTimeoutMs = 10000 } = {}) {
   model.normalizeReport(report);
   if (approvedActivation !== true) return { ...model.notificationPlan(report, state), attempts: [], networkRequests: 0, activated: false };
@@ -50,12 +67,12 @@ async function dispatchPrepared(report, { state = {}, store, transports = {}, ap
       outcome = !timedOut && definitelyRejected ? 'rejected_requires_review' : 'outcome_unconfirmed';
     }
     finally { clearTimeout(timer); }
-    store.transaction((saved, commit) => {
+    await persistOutcome(() => store.transaction((saved, commit) => {
       const event = saved.events.find(item => item.id === claim.event.id), attempt = event?.attempts[channel];
       if (!attempt || attempt.token !== claim.token || attempt.status !== 'started_outcome_unconfirmed') model.fail('RECOVERY_NOTIFICATION_ATTEMPT_OWNERSHIP_LOST');
       event.attempts[channel] = { ...attempt, status: outcome, completedAt: new Date().toISOString() };
       commit(saved, saved.revision);
-    });
+    }));
     results.push({ channel, status: outcome });
   }
   return { ...plan, attempts: results, state: store.readState(), activated: true, recipientReceiptProven: false };
