@@ -61,7 +61,8 @@ test('pinned real reader/writer/fence SQL integration (not an injected-evidence 
         if (kind === 'context') saved.payload.provisioning.authorizationToken = 'tampered'; else saved.status = 'uncertain';
         await prisma.runtimeStore.update({ where: { key }, data: { data: saved } });
       }
-      await assert.rejects(w.apply(plan.planDigest, f.actor)); assert.equal(await count(), 3);
+      await assert.rejects(w.apply(plan.planDigest, f.actor), { code: kind === 'source' ? 'MAPPING_IDENTITY_UNPROVEN'
+        : kind === 'context' ? 'MAPPING_CONTEXT_SIGNATURE_INVALID' : 'MAPPING_RECEIPTS_UNPROVEN' }); assert.equal(await count(), 3);
     });
     for (const kind of ['source_update', 'source_insert', 'context_update', 'receipt_update']) await run(kind + '_during', async f => {
       let checked = false;
@@ -85,7 +86,7 @@ test('pinned real reader/writer/fence SQL integration (not an injected-evidence 
           if (kind === 'source') await c.query('UPDATE "SignupAttempt" SET status=$1 WHERE "eventKey"=$2', ['decommissioned', f.policy.sourceId]);
           else { const changed = structuredClone(f.context); changed.payload.provisioning.authorizationToken = 'tampered';
             await c.query('UPDATE "RuntimeStore" SET data=$1::jsonb WHERE key=$2', [JSON.stringify(changed), f.contextKey]); }
-          const rejected = assert.rejects(w.apply(plan.planDigest, f.actor));
+          const rejected = assert.rejects(w.apply(plan.planDigest, f.actor), { code: kind === 'source' ? 'MAPPING_IDENTITY_UNPROVEN' : 'MAPPING_CONTEXT_SIGNATURE_INVALID' });
           let blocked = false;
           for (let n=0;n<100;n++) { blocked = (await admin.query("SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=$1 AND wait_event_type='Lock') AS blocked", [database])).rows[0].blocked;
             if(blocked)break; await new Promise(resolve=>setTimeout(resolve,20)); }
@@ -117,6 +118,27 @@ test('pinned real reader/writer/fence SQL integration (not an injected-evidence 
       await assert.rejects(f.writer(prisma).prepare(),{code:'MAPPING_UNCERTAIN_INSPECT_FIRST'});
       await assert.rejects(other.apply(otherPlan.planDigest,f.actor),{code:'MAPPING_UNCERTAIN_INSPECT_FIRST'});
       assert.equal((await w.inspectOutcome()).state,'attempt_started_unresolved');
+      // A fresh process has neither the writer's local Set nor the old fence.
+      // It must still refuse using only the retained SQL intent and fresh code.
+      const request=path.join(directory,'synthetic-restart-request.json');
+      fs.writeFileSync(request,JSON.stringify({policy:f.policy,snapshot:f.snapshot,file:f.file}),{mode:0o600});
+      const child=spawnSync(process.execPath,['-e',`
+        const fs=require('node:fs'),assert=require('node:assert/strict');
+        const {PrismaClient}=require('@prisma/client');
+        const {createAssociationFence}=require('./server/signupAssociationRepair');
+        const {createBoundedBusinessMappingWriter}=require('./server/boundedBusinessMappingWriter');
+        const {createBoundedMappingLease,createBoundedMappingEvidenceReader}=require('./server/boundedBusinessMappingAdapters');
+        const r=JSON.parse(fs.readFileSync(process.env.MAPPING_RESTART_REQUEST));
+        const readStore=()=>JSON.parse(fs.readFileSync(r.file));
+        const db=new PrismaClient({datasources:{db:{url:process.env.DATABASE_URL}},__internal:{configOverride:c=>({...c,relativeEnvPaths:{}})}});
+        const lease=createBoundedMappingLease({fence:createAssociationFence(),readStore,policy:r.policy,singleProcess:()=>true});
+        const reader=createBoundedMappingEvidenceReader({readStore,getProviderSnapshot:()=>r.snapshot,getSigningSecret:()=> 'synthetic-integration-signing-secret',getRelease:()=>r.policy.release});
+        const writer=createBoundedBusinessMappingWriter({prisma:db,policy:r.policy,readEvidence:reader,readOverrides:()=>'',withAssociationLease:lease});
+        (async()=>{try{await assert.rejects(writer.prepare(),{code:'MAPPING_UNCERTAIN_INSPECT_FIRST'});console.log('fresh-process durable refusal verified');}
+        finally{await db.$disconnect();}})().catch(()=>{process.exitCode=1;});
+      `],{cwd:path.resolve(__dirname,'..'),env:{...process.env,DATABASE_URL:url.toString(),MAPPING_RESTART_REQUEST:request},encoding:'utf8',timeout:8000});
+      assert.equal(child.status,0,'fresh process must refuse on persisted intent');
+      assert.match(child.stdout,/fresh-process durable refusal verified/);assert.equal(await count(),3);
     });
     await run('uncertain_commit', async f => {
       let lost=false;const db=instrument(prisma,{afterCommit:async({creates})=>{if(creates&&!lost){lost=true;throw Error('synthetic lost acknowledgement');}}});
