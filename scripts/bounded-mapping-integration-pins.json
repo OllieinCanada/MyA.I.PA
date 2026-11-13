@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "repository": "OllieinCanada/MyA.I.PA",
+  "base": "8f218834361f5ec22de23c5cedd6690897d40f99",
+  "dependencies": {
+    "association": {"pr":235,"head":"f452de511657c41b3ced081aed07b49379656cf3"},
+    "writer": {"pr":239,"head":"932346e199636732d19ccb8bb73c80059447530e"}
+  },
+  "combinedTree": "bb021dfa7c09a6f8b0c2b21c5f8ec9ce6c3f8328",
+  "node": "24.22.3",
+  "meaning": "Immutable CI composition only. Neither dependency PR is merged or modified, and this PR wires no production route. A green result proves only this exact combined code plus synthetic provider state, not live signup/delivery readiness."
+}
