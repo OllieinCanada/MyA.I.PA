@@ -4,6 +4,7 @@ const { registeredSignupEventKey } = require('./signupProvisioningContext');
 const { buildMakeSignupEventKey } = require('./makeSignupWebhook');
 const { buildProvisioningResourceName } = require('./signupProvisioning');
 const { normalizeNorthAmericanE164 } = require('./canadianPhoneNumber');
+const { hashOperationalTarget, removeSignupTargetsFromStore } = require('./signupDecommission');
 
 const PREFIX = 'signup-association-repair:v1:';
 const ASSOCIATIONS = ['twilioPhoneNumber', 'vapiAssistantId', 'vapiPhoneNumberId'];
@@ -26,9 +27,27 @@ const databaseEvidence = evidence => Object.fromEntries(['sourceAttempt', 'phant
 // repair. Synchronous compare/commit has no await window in the Node process.
 function createAssociationFence() {
   const held = new Set();
+  const removals = new Set();
   return {
-    hold(ids) { if (ids.some(id => held.has(id))) fail('ASSOCIATION_REPAIR_BUSY'); ids.forEach(id => held.add(id)); },
+    hold(ids) {
+      if (ids.some(id => held.has(id) || removals.has(hashOperationalTarget({ signupAttemptId: id })))) fail('ASSOCIATION_REPAIR_BUSY');
+      ids.forEach(id => held.add(id));
+    },
     release(ids) { ids.forEach(id => held.delete(id)); },
+    assertRemovalAllowed(current, targetIds) {
+      // Use the exact deletion projection, including operational IDs for legacy
+      // rows. Never discover a protected history restriction after provider work.
+      this.check(current, removeSignupTargetsFromStore(current, targetIds).store);
+    },
+    async withRemovalGuard(readStore, targetIds, operation) {
+      if (targetIds.some(id => removals.has(id))) fail('ASSOCIATION_REPAIR_BUSY');
+      this.assertRemovalAllowed(readStore(), targetIds);
+      // No await between fresh validation and reservation. A repair's hold()
+      // checks these reservations for its entire file/SQL workflow.
+      targetIds.forEach(id => removals.add(id));
+      try { return await operation(); }
+      finally { targetIds.forEach(id => removals.delete(id)); }
+    },
     check(current, next) {
       for (const id of held) if (digest(selected(current, [id])) !== digest(selected(next, [id]))) fail('ASSOCIATION_REPAIR_BUSY');
       for (const [key, row] of Object.entries(current)) {

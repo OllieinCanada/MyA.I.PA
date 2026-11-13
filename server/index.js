@@ -6507,6 +6507,7 @@ async function inspectSignupSetForDecommission({
     error.code = "SIGNUP_DECOMMISSION_TARGET_NOT_FOUND";
     throw error;
   }
+  signupAssociationFence.assertRemovalAllowed(JSON.parse(fs.readFileSync(signupDashboardPath, 'utf8')), targetIds);
   const identity = assertSharedSignupIdentity(targets);
   const targetIdSet = new Set(targetIds);
   const ownerEmails = new Set(identity.ownerEmails);
@@ -6679,6 +6680,8 @@ async function decommissionSignupSetAndRebuild({
     };
   }
 
+  return signupAssociationFence.withRemovalGuard(
+    () => JSON.parse(fs.readFileSync(signupDashboardPath, 'utf8')), inspection.targetIds, async () => {
   const billingResults = { subscriptions: [], checkoutSessions: [], customers: [] };
   for (const subscriptionId of inspection.subscriptionIds) {
     billingResults.subscriptions.push(await cancelStripeSubscriptionIfPresent(subscriptionId));
@@ -6813,6 +6816,7 @@ async function decommissionSignupSetAndRebuild({
     },
     recovery,
   };
+  });
 }
 
 async function inspectFailedSuperdavesRebuildRollback({ targetId, expectedBusinessName }) {
@@ -6824,6 +6828,7 @@ async function inspectFailedSuperdavesRebuildRollback({ targetId, expectedBusine
     error.code = "FAILED_REBUILD_TARGET_NOT_FOUND";
     throw error;
   }
+  signupAssociationFence.assertRemovalAllowed(JSON.parse(fs.readFileSync(signupDashboardPath, 'utf8')), [targetId]);
   if (String(target.businessName || "").trim() !== expectedBusinessName) {
     const error = new Error("The failed rebuild business name does not match the exact rollback target.");
     error.statusCode = 409;
@@ -6928,6 +6933,8 @@ async function rollbackFailedSuperdavesRebuild({ targetId, expectedBusinessName,
   const inspection = await inspectFailedSuperdavesRebuildRollback({ targetId, expectedBusinessName });
   if (!apply) return { ok: true, action: "dry_run", summary: inspection.summary };
 
+  return signupAssociationFence.withRemovalGuard(
+    () => JSON.parse(fs.readFileSync(signupDashboardPath, 'utf8')), [inspection.targetId], async () => {
   const billingResults = { subscriptions: [], checkoutSessions: [], customers: [] };
   for (const subscriptionId of inspection.subscriptionIds) {
     billingResults.subscriptions.push(await cancelStripeSubscriptionIfPresent(subscriptionId));
@@ -6982,6 +6989,7 @@ async function rollbackFailedSuperdavesRebuild({ targetId, expectedBusinessName,
     removedSignupRecords: removed.removed,
     providerResults: { billing: billingResults, vapi: vapiResults, twilio: twilioResults },
   };
+  });
 }
 
 function getSignupProviderRecoveryDiagnostics({ signup = {}, pendingSignup = null, vapiNumbers = [], twilioNumbers = [], providerLookup = "not_needed" } = {}) {
