@@ -11,7 +11,7 @@ const CHECKS=['owned-pg18-target','same-tenant-automatic-owner-and-call-capture'
  'no-match-refuses','both-ids-absent-called-number-fallback','ambiguous-called-number-refuses','override-db-conflict-refuses',
  'receipt-write-failure-holds','accepted-write-ack-loss-holds','permanent-receipt-failure-holds','late-receipt-preserves-hold',
  'cross-process-owner-backup-cas','held-row-lock-stale-binding-refuses','crash-restart-no-replay','legacy-optional-no-match-refuses',
- 'transport-and-live-gate-limits'];
+ 'malformed-provider-identifiers-refuse','transport-and-live-gate-limits'];
 const sha=b=>crypto.createHash('sha256').update(b).digest('hex');
 function policy(head){return{head,sourceSha256:Object.fromEntries(SOURCES.map(p=>[p,sha(fs.readFileSync(path.join(ROOT,p)))]))};}
 function validate(env){
@@ -115,7 +115,8 @@ async function run(){
    const restarted=await boot();const replay=result(await tool(restarted,c,id));assert.equal(replay.duplicate,true);assert.equal(replay.status,'PROCESSING');const claim=await prisma.vapiToolExecution.findFirst({where:{toolCallId:id}});const h=await prisma.leadHandoff.findUnique({where:{sourceEventId:'vapi-tool:'+claim.idempotencyKey}});assert.equal(h.status,'SEND_REQUESTED');assert.equal((await restarted.command({type:'dispatch',handoffId:h.id})).requiresInspection,true);assert.equal(posts.length-before,1);
   });
   await check(CHECKS[18],async()=>{const optional=await boot(false),before=await counts();for(const c of [{id:crypto.randomUUID(),customer:call().customer},{...call(),assistantId:'unknown-assistant',phoneNumberId:'unknown-phone'}])assert.equal((await tool(optional,c)).status,422);assert.deepEqual(await counts(),before);await optional.stop();});
-  await check(CHECKS[19],async()=>{assert.ok(posts.every(p=>p.transport.customer.number==='+15555550100'||p.transport.customer.number==='+15555550199'));for(const name of ['privacyApplicationPassed','logicalRestorePassed','fullRecoveryPassed'])assert.equal(require('./launch-evidence')[name](report,expected.head),false);});
+  await check(CHECKS[19],async()=>{for(const field of ['assistantId','phoneNumberId'])for(const value of [0,false,[],{},42])await refuse({...call(),[field]:value});});
+  await check(CHECKS[20],async()=>{assert.ok(posts.every(p=>p.transport.customer.number==='+15555550100'||p.transport.customer.number==='+15555550199'));for(const name of ['privacyApplicationPassed','logicalRestorePassed','fullRecoveryPassed'])assert.equal(require('./launch-evidence')[name](report,expected.head),false);});
   success=true;
  }catch(error){report.failureCode=error.code==='PILOT_SQL_EXPECTED_ABORT'?error.code:'PILOT_SQL_CHECK_FAILED';report.failedCheck=report.checks.find(c=>!c.passed)?.name||null;}
  finally{

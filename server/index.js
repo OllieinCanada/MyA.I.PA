@@ -2491,7 +2491,11 @@ async function resolveBusinessIdForVapiCall(call) {
   // Server-owned mappings/overrides supply tenant authority; this resolver
   // does not fetch fresh provider inventory or prove a compromised sender safe.
   const businessMap = parseVapiBusinessMap();
-  const providerIds = [call.assistantId, call.assistant?.id, call.phoneNumberId, call.phoneNumber?.id]
+  const suppliedIds = [call.assistantId, call.assistant?.id, call.phoneNumberId, call.phoneNumber?.id];
+  if (suppliedIds.some(value => value != null && typeof value !== "string")) {
+    throw Object.assign(new Error("Provider identifiers must be strings."), { statusCode: 422, code: "VAPI_BUSINESS_ROUTE_INVALID_IDENTIFIER" });
+  }
+  const providerIds = suppliedIds
     .map(value => String(value || "").trim().toLowerCase()).filter(Boolean);
   const keys = [
     call.assistantId,

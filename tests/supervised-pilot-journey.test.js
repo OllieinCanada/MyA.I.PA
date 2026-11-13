@@ -147,6 +147,11 @@ test('unchanged called-number fallback still works with both IDs absent, but dup
  fallbackBusinesses=[{id:37,phone:'+15555550101'}];const route={id:call.id,to:'+15555550101',customer:call.customer};assert.equal(output(await tools('fixture-fallback',args,route)).ok,true);
  fallbackBusinesses.push({id:38,phone:'+15555550101'});const r=await tools('fixture-fallback-conflict',args,route);assert.equal(r.status,422);assert.equal(providerPosts.length,1);assert.equal(tables.lead.size,1);
 });
+test('supplied malformed provider IDs cannot masquerade as absent optional fields',async()=>{for(const field of ['assistantId','phoneNumberId'])for(const value of [0,false,[],{},42])assert.equal((await tools('fixture-malformed',args,{...call,[field]:value})).status,422);assert.equal(tables.vapiToolExecution.size,0);assert.equal(providerPosts.length,0);});
+test('unknown supplied ID cannot use called-number fallback; caller metadata alone supplies no tenant authority',async()=>{
+ fallbackBusinesses=[{id:37,phone:'+15555550101'}];assert.equal((await tools('fixture-unknown-fallback',args,{id:call.id,assistantId:'unknown',to:'+15555550101',customer:call.customer})).status,422);
+ assert.equal((await tools('fixture-metadata',args,{id:call.id,metadata:{businessId:37},customer:call.customer})).status,422);assert.equal(tables.lead.size,0);assert.equal(providerPosts.length,0);
+});
 test('changed handoff ownership after read invalidates dispatch CAS before transport',async()=>{
  const lead=await db.lead.create({data:{businessId:37,name:'Fictitious tester',callbackNumber:'+15555550102',summary:'Fictitious request'}});
  const handoff=await db.leadHandoff.create({data:{leadId:lead.id,businessId:37,ownerPhone:'+15555550100',acknowledgementKey:'fixture-ack'}});
