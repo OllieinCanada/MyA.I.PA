@@ -67,7 +67,12 @@ test('disabled maintenance entry point with actual reader/writer/fence and dispo
         RENDER_GIT_COMMIT:x.f.policy.release,TWILIO_ACCOUNT_SID:'AC'+'a'.repeat(32),TWILIO_AUTH_TOKEN:'synthetic-no-send',VAPI_API_KEY:'synthetic-no-send',
         SIGNUP_ASSOCIATION_REPAIR_SINGLE_WRITER_CONFIRMED:'true',WEB_CONCURRENCY:'1',TRIAL_REMINDER_DISABLE:'true',VAPI_AUTO_SYNC_ENABLED:'false'});
       delete process.env.BOUNDED_MAPPING_CONTROL_ENABLED;delete process.env.BOUNDED_MAPPING_APPLY_ENABLED;
-      global.__myAiPaPrisma=db;let providerReads=0,forbidden=0,server;
+      const repair=require('../server/signupAssociationRepair'),makeFence=repair.createAssociationFence;
+      let runningFence,fenceCreations=0,actualExclusions=0;
+      repair.createAssociationFence=(...args)=>{fenceCreations++;return runningFence=makeFence(...args);};
+      global.__myAiPaPrisma=instrument(db,{onCreate:async()=>{
+        assert.throws(()=>runningFence.hold([x.f.policy.sourceId,x.f.policy.phantomId]),{code:'ASSOCIATION_REPAIR_BUSY'});actualExclusions++;
+      }});let providerReads=0,forbidden=0,server;
       global.fetch=async(input,options={})=>{
         const u=new URL(String(input));
         if(u.hostname==='127.0.0.1')return nativeFetch(input,options);
@@ -82,7 +87,9 @@ test('disabled maintenance entry point with actual reader/writer/fence and dispo
         providerReads++;return new Response(JSON.stringify(body),{status:200,headers:{'content-type':'application/json'}});
       };
       try{
-        const {app}=require('../server/index');server=app.listen(0,'127.0.0.1');await require('node:events').once(server,'listening');
+        const {app}=require('../server/index');assert.equal(fenceCreations,1,'actual app creates precisely one shared fence');
+        repair.createAssociationFence=makeFence;
+        server=app.listen(0,'127.0.0.1');await require('node:events').once(server,'listening');
         const base=`http://127.0.0.1:${server.address().port}`,route='/api/admin/signups/bounded-business-mapping';
         const headers={origin:'https://www.myaipa.ca','content-type':'application/json','x-myaipa-mapping-correction':'1'};
         const post=async(url,body,cookie='',extra={})=>{const r=await nativeFetch(base+url,{method:'POST',headers:{...headers,...(cookie?{cookie}:{}),...extra},body:JSON.stringify(body)});return{status:r.status,body:await r.json(),cookie:r.headers.get('set-cookie')};};
@@ -107,6 +114,9 @@ test('disabled maintenance entry point with actual reader/writer/fence and dispo
         fs.writeFileSync(policyFile,JSON.stringify({...policy,operatorSessionHash:'3'.repeat(64)}));
         assert.equal((await post(route,dryBody,cookie)).status,403);assert.equal(providerReads,0);
         fs.writeFileSync(policyFile,JSON.stringify(policy));
+        runningFence.hold([x.f.policy.sourceId,x.f.policy.phantomId]);
+        try{assert.equal((await post(route,dryBody,cookie)).status,503);assert.equal(await db.vapiBusinessMapping.count(),3);}
+        finally{runningFence.release([x.f.policy.sourceId,x.f.policy.phantomId]);}
         const before=digest({rows:await db.vapiBusinessMapping.findMany(),records:await db.runtimeStore.findMany(),source:await db.signupAttempt.findMany(),store:x.f.readStore()});
         const dry=await post(route,dryBody,cookie);assert.equal(dry.status,200,JSON.stringify(dry.body));assert.equal(dry.body.databaseWrites,0);
         assert.equal(digest({rows:await db.vapiBusinessMapping.findMany(),records:await db.runtimeStore.findMany(),source:await db.signupAttempt.findMany(),store:x.f.readStore()}),before);
@@ -116,8 +126,9 @@ test('disabled maintenance entry point with actual reader/writer/fence and dispo
         const applied=await post(route,apply,cookie);assert.equal(applied.status,200,JSON.stringify(applied.body));assert.equal(applied.body.applied,true);assert.equal(await db.vapiBusinessMapping.count(),6);
         assert.equal((await post(route,apply,cookie)).body.code,'MAPPING_CONTROL_INSPECT_FIRST');
         assert.equal((await post(route,{action:'inspect',policyId:policy.policyId},cookie)).body.state,'committed_exact');
-        assert.equal(forbidden,0);assert.equal(providerReads,6);
+        assert.equal(forbidden,0);assert.equal(providerReads,9);assert.equal(actualExclusions,3,'actual HTTP apply holds the actual running fence throughout all mapping inserts');
       }finally{if(server){server.closeAllConnections();await new Promise(r=>server.close(r));}global.fetch=nativeFetch;delete global.__myAiPaPrisma;
+        repair.createAssociationFence=makeFence;
         delete process.env.BOUNDED_MAPPING_CONTROL_ENABLED;delete process.env.BOUNDED_MAPPING_APPLY_ENABLED;}
     });
     assert.equal(outcomes.length,8);assert.ok(outcomes.every(x=>x.status==='passed'));
