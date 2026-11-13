@@ -2,7 +2,7 @@
 // provider clients or private runtime values; no automatic collection or sends.
 const fs=require('node:fs'),path=require('node:path');
 const {configuredCaptchaProvider}=require('../server/signupCaptcha');
-const MAX_AGE_MS=60*60*1000;
+const {CREDENTIAL_MAX_AGE_MS:MAX_AGE_MS,credentialExpectedScopeValid:validExpected,credentialReportDigest,credentialConfigurationPassed}=require('./launch-evidence');
 const MODES=['turnstile','recaptcha','turnstile+recaptcha'];
 const PRESENCE_KEYS=['TURNSTILE_SECRET_KEY','RECAPTCHA_SECRET_KEY','GOOGLE_RECAPTCHA_SECRET_KEY',
   'SMTP_HOST','SMTP_USER','SMTP_PASS','EMAIL_FROM','SMTP_FROM','ADMIN_TOTP_SECRET','BACKUP_ENCRYPTION_KEY'];
@@ -14,8 +14,6 @@ const stamp=x=>typeof x==='string'&&/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}
 const fresh=(x,now)=>stamp(x)&&now-Date.parse(x)>=0&&now-Date.parse(x)<=MAX_AGE_MS;
 function origin(x){try{const u=new URL(x);return u.protocol==='https:'&&!u.username&&!u.password&&!u.search&&!u.hash&&u.pathname==='/'?u.origin:null;}catch{return null;}}
 const mode=x=>MODES.includes(x)||x==='unsupported';
-function validExpected(e){return exact(e,['releaseCommit','serviceId','frontendOrigin','publicArtifactSha256'])&&release(e.releaseCommit)
-  &&/^srv-[a-z0-9]{10,64}$/.test(e.serviceId)&&origin(e.frontendOrigin)===e.frontendOrigin&&sha(e.publicArtifactSha256);}
 function validRuntime(r){return exact(r,['schemaVersion','source','presence','settings','effective'])&&r.schemaVersion===1
   &&exact(r.source,['kind','serviceId','releaseCommit','checkedAt'])&&r.source.kind==='server-runtime-presence'
   &&/^srv-[a-z0-9]{10,64}$/.test(r.source.serviceId)&&release(r.source.releaseCommit)&&stamp(r.source.checkedAt)
@@ -89,43 +87,36 @@ function evaluateCredentialReadiness({runtimeEvidence:r,publicEvidence:p,expecte
   report.defaultsApplied=Object.entries(s).filter(([k,v])=>k!=='configuredCaptchaProvider'&&v===null).map(([k])=>k);
   return report;
 }
-function credentialConfigurationPassed(r,expectedRelease,now=Date.now()){
-  const c=r?.signupControls,b=r?.evidence;
-  return r?.schemaVersion===2&&r.scope==='configuration-presence-only'&&release(expectedRelease)&&r.releaseCommit===expectedRelease
-    &&r.evidenceStatus==='source-bound-presence-attestation'&&r.secretValuesCollected===false&&r.secretValuesPrinted===false
-    &&Array.isArray(r.issues)&&r.issues.length===0&&c?.configurationReady===true&&c.captchaConfigured===true
-    &&c.captchaProviderSelected===true&&c.smtpConfigured===true&&c.signupVerificationEnabled===true&&c.manualApprovalEnabled===false
-    &&c.adminMfaEnabled===true&&c.adminTotpConfigured===true&&c.backupEncryptionConfigured===true
-    &&validExpected(b?.expected)&&b.expected.releaseCommit===expectedRelease
-    &&b.runtime?.kind==='server-runtime-presence'&&b.runtime.serviceId===b.expected.serviceId&&b.runtime.releaseCommit===expectedRelease
-    &&b.deployedPublic?.kind==='deployed-public-configuration'&&b.deployedPublic.origin===b.expected.frontendOrigin
-    &&b.deployedPublic.releaseCommit===expectedRelease&&b.deployedPublic.artifactSha256===b.expected.publicArtifactSha256
-    &&fresh(r.checkedAt,now)&&fresh(b.runtime.checkedAt,now)&&fresh(b.deployedPublic.checkedAt,now);
-}
 function readEvidenceFile(file){
   const stat=fs.lstatSync(file);if(!stat.isFile()||stat.isSymbolicLink()||stat.size>65536)throw Error('CREDENTIAL_EVIDENCE_FILE_INVALID');
   try{return JSON.parse(fs.readFileSync(file,'utf8'));}catch{throw Error('CREDENTIAL_EVIDENCE_JSON_INVALID');}
 }
 function main(argv=process.argv.slice(2)){
   if(argv.length===1&&argv[0]==='--help'){console.log('Offline presence-only audit: --runtime-presence=FILE --deployed-public=FILE --release=SHA --service=ID --origin=HTTPS_ORIGIN --public-artifact-sha256=SHA256 [--out=FILE]. No collection or provider validation.');return;}
+  // This receipt is independently consumed from the canonical location by the
+  // shipping gate. Start BEFORE argument validation; early failures must fence
+  // out a prior green report without destroying its historical contents.
+  const attemptPath=path.resolve(__dirname,'../diagnostics/security/credential-readiness-status.json');
+  const attempt={schemaVersion:1,kind:'credential-audit-attempt',attemptId:require('node:crypto').randomUUID(),state:'started',checkedAt:new Date().toISOString(),reportSha256:null};
+  fs.mkdirSync(path.dirname(attemptPath),{recursive:true});
+  if(fs.existsSync(attemptPath)){const stat=fs.lstatSync(attemptPath);if(!stat.isFile()||stat.isSymbolicLink()||stat.nlink>1)throw Error('CREDENTIAL_AUDIT_STATUS_INVALID');}
+  fs.writeFileSync(attemptPath,JSON.stringify(attempt,null,2)+'\n');
   const keys=['runtime-presence','deployed-public','release','service','origin','public-artifact-sha256','out'],options={};
   for(const arg of argv){const m=/^--([a-z0-9-]+)=(.+)$/.exec(arg);if(!m||!keys.includes(m[1])||Object.hasOwn(options,m[1]))throw Error('CREDENTIAL_AUDIT_ARGUMENTS_INVALID');options[m[1]]=m[2];}
   if(keys.slice(0,6).some(k=>!options[k]))throw Error('CREDENTIAL_AUDIT_EVIDENCE_REQUIRED');
   const out=path.resolve(options.out||path.join(__dirname,'../diagnostics/security/credential-readiness-latest.json'));
+  const canonical=file=>{const resolved=fs.existsSync(file)?fs.realpathSync(file):path.resolve(file);return process.platform==='win32'?resolved.toLowerCase():resolved;};
   if(!/^credential-readiness(?:-[a-z0-9]+)*\.json$/i.test(path.basename(out))
-    ||[options['runtime-presence'],options['deployed-public']].some(input=>path.resolve(input)===out))throw Error('CREDENTIAL_AUDIT_OUTPUT_INVALID');
+    ||canonical(out)===canonical(attemptPath)||[options['runtime-presence'],options['deployed-public']].some(input=>canonical(input)===canonical(out)))throw Error('CREDENTIAL_AUDIT_OUTPUT_INVALID');
   if(fs.existsSync(out)){const stat=fs.lstatSync(out);if(!stat.isFile()||stat.isSymbolicLink()||stat.nlink>1)throw Error('CREDENTIAL_AUDIT_OUTPUT_INVALID');}
   const expected={releaseCommit:options.release,serviceId:options.service,frontendOrigin:options.origin,publicArtifactSha256:options['public-artifact-sha256']};
-  const failed=evaluateCredentialReadiness({expected});failed.issues=['AUDIT_INPUT_NOT_YET_VALIDATED'];
-  fs.mkdirSync(path.dirname(out),{recursive:true});
-  // Invalidate a previous latest green before reading new inputs. A failed
-  // collection/parse must not silently preserve old success as this run's result.
-  fs.writeFileSync(out,JSON.stringify(failed,null,2)+'\n');
-  let report;
-  try{report=evaluateCredentialReadiness({runtimeEvidence:readEvidenceFile(options['runtime-presence']),publicEvidence:readEvidenceFile(options['deployed-public']),expected});}
-  catch(error){failed.issues=[/^CREDENTIAL_[A-Z_]+$/.test(error.message||'')?error.message:'CREDENTIAL_AUDIT_INPUT_UNAVAILABLE'];
-    fs.writeFileSync(out,JSON.stringify(failed,null,2)+'\n');throw Error(failed.issues[0]);}
+  const report=evaluateCredentialReadiness({runtimeEvidence:readEvidenceFile(options['runtime-presence']),publicEvidence:readEvidenceFile(options['deployed-public']),expected});
+  report.auditAttemptId=attempt.attemptId;fs.mkdirSync(path.dirname(out),{recursive:true});
   fs.writeFileSync(out,JSON.stringify(report,null,2)+'\n');
+  // Complete only this immutable attempt, never replace the selected-current
+  // pointer. A late earlier process cannot resurrect success after a later fail.
+  const completedPath=path.join(path.dirname(attemptPath),`credential-readiness-attempt-${attempt.attemptId}.json`);
+  fs.writeFileSync(completedPath,JSON.stringify({...attempt,state:'completed',checkedAt:new Date().toISOString(),reportSha256:credentialReportDigest(report)},null,2)+'\n',{flag:'wx'});
   console.log(JSON.stringify(report,null,2));if(!report.signupControls.configurationReady)process.exitCode=2;
 }
 if(require.main===module){try{main();}catch(error){console.error(/^CREDENTIAL_[A-Z_]+$/.test(error.message||'')?error.message:'CREDENTIAL_AUDIT_INPUT_UNAVAILABLE');process.exitCode=1;}}
