@@ -258,6 +258,12 @@
       "type": "operational",
       "checkName": "operational_health",
       "firstDetectedAt": "2026-11-12T22:54:02.169Z"
+    },
+    "issue:operational_health:public_67271daf0c68f2dcde2c92e97b75ca9b": {
+      "lifecycleId": "public_5cc02f3278802a6fb5fd9536",
+      "type": "operational",
+      "checkName": "operational_health",
+      "firstDetectedAt": "2026-11-13T18:36:01.148Z"
     }
   }
 }
