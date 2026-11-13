@@ -14,7 +14,7 @@ const CHECKS=['owned-pg18-identities-and-select-only-role','actual-shared-tenant
  'unordered-current-journal-refused','stale-current-attestation-refused','untrusted-key-refused','authority-change-across-read-refused','missing-file-refused',
  'model-file-row-fingerprints-unchanged','provider-transport-probes-refused','live-gates-refuse-partial-proof'];
 const sha=b=>crypto.createHash('sha256').update(b).digest('hex');
-function expected(head){return {head,base:BASE,sourceSha256:Object.fromEntries(SOURCES.map(f=>[f,sha(fs.readFileSync(path.join(ROOT,f)))]))};}
+function expected(head){return {head,base:BASE,models:[...fs.readFileSync(path.join(ROOT,'prisma/schema.prisma'),'utf8').matchAll(/^model\s+(\w+)\s*\{/gm)].map(m=>m[1]),sourceSha256:Object.fromEntries(SOURCES.map(f=>[f,sha(fs.readFileSync(path.join(ROOT,f)))]))};}
 function validateEnvironment(env){
  if(process.platform!=='linux'||env.CI!=='true'||env.GITHUB_ACTIONS!=='true'||env.RUN_PRIVACY_INVENTORY_CI!=='1'||!/^[a-f0-9]{40}$/.test(env.PRIVACY_INVENTORY_HEAD||''))throw Error('PRIVACY_CI_CONTEXT_REQUIRED');
  if(Object.keys(env).some(k=>env[k]&&(/^(DATABASE_URL|RESTORE_|BACKUP_|PGHOST|PGPORT|PGUSER|PGPASSWORD|PGDATABASE|NODE_OPTIONS|OPERATIONS_ENV_FILE)$/.test(k)||/^(TWILIO_|VAPI_|STRIPE_|MAKE_|TELEGRAM_|SMTP_|RENDER_|OPENAI_|BACKUP_|RESTORE_)/.test(k))))throw Error('PRIVACY_FOREIGN_CONFIGURATION');
@@ -23,6 +23,9 @@ function validateEnvironment(env){
 function verifyReport(r,p){return /^[a-f0-9]{40}$/.test(p?.head||'')&&r?.head===p.head&&r.base===BASE&&r.scope==='synthetic-readonly-privacy-inventory-ci'
  &&r.passed===true&&r.modelsFingerprinted===36&&r.adapterModels===4&&r.missingSurfaces===36&&r.fileStores===4&&r.ownedDatabases===2
  &&r.sourceSha256&&Object.keys(r.sourceSha256).length===SOURCES.length&&SOURCES.every(f=>r.sourceSha256[f]===p.sourceSha256[f])
+ &&Array.isArray(p.models)&&p.models.length===36&&Array.isArray(r.modelHashes)&&r.modelHashes.length===p.models.length&&new Set(r.modelHashes.map(m=>m.model)).size===p.models.length
+ &&p.models.every(n=>r.modelHashes.some(m=>m.model===n&&Number.isSafeInteger(m.rows)&&m.rows>=0&&/^[a-f0-9]{64}$/.test(m.sourceSha256)&&m.sourceSha256===m.targetSha256))
+ &&Array.isArray(r.fileHashes)&&r.fileHashes.length===4&&new Set(r.fileHashes.map(f=>f.name)).size===4&&require('../server/recoveryFileStore').NAMES.every(n=>r.fileHashes.some(f=>f.name===n&&/^[a-f0-9]{64}$/.test(f.sourceSha256)&&f.sourceSha256===f.targetSha256))
  &&Array.isArray(r.checks)&&r.checks.length===CHECKS.length&&new Set(r.checks.map(c=>c.name)).size===CHECKS.length&&CHECKS.every(n=>r.checks.some(c=>c.name===n&&c.passed===true))
  &&r.cleanup?.databasesRemoved===true&&r.cleanup.roleRemoved===true&&r.cleanup.filesRemoved===true&&r.cleanup.unrelatedDatabasesUnchanged===true
  &&r.productionDataUsed===false&&r.providerCallsOrMessages===0&&r.previewMutationQueries===0&&r.workersStarted===false&&r.authorityDatabaseIndependent===true
@@ -92,7 +95,8 @@ async function run(){
    await check('untrusted-key-refused',async()=>{const other=crypto.generateKeyPairSync('ed25519');await assert.rejects(preview({publicKey:other.publicKey.export({type:'spki',format:'pem'})})(target),e=>e.code==='PRIVACY_AUTHORITY_UNTRUSTED');});
    await check('authority-change-across-read-refused',async()=>{await assert.rejects(preview({readInventory:async t=>{const r=await readInventory(t);const v=structuredClone(baseline);v.revision=2;v.holds.forEach(h=>h.revision=2);await setAuthority(v);return r;}})(target),e=>e.code==='PRIVACY_AUTHORITY_CHANGED');await setAuthority(baseline);});
    await check('missing-file-refused',async()=>{const file=path.join(root,NAMES[0]),saved=fs.readFileSync(file);fs.unlinkSync(file);try{await assert.rejects(preview()(target),e=>e.code==='RECOVERY_STORE_MISSING');}finally{fs.writeFileSync(file,saved,{flag:'wx',mode:0o600});}});
-   await check('model-file-row-fingerprints-unchanged',async()=>{assert.deepEqual(await fp(),before);assert.deepEqual(fileFp(),beforeFiles);assert.equal(queryWrites,0);report.previewMutationQueries=queryWrites;report.modelHashes=before;});
+   await check('model-file-row-fingerprints-unchanged',async()=>{const after=await fp(),afterFiles=fileFp();assert.deepEqual(after,before);assert.deepEqual(afterFiles,beforeFiles);assert.equal(queryWrites,0);report.previewMutationQueries=queryWrites;
+    report.modelHashes=before.map((m,i)=>({model:m.model,rows:m.rows,sourceSha256:m.sha256,targetSha256:after[i].sha256}));report.fileHashes=NAMES.map(name=>({name,sourceSha256:beforeFiles[name],targetSha256:afterFiles[name]}));});
    await check('provider-transport-probes-refused',async()=>{assert.equal(guard.status().unexpectedOutboundAttempts,0);assert.equal((await guard.probes()).rejected,6);assert.ok(!require.cache[path.join(ROOT,'server/index.js')]);});
    await check('live-gates-refuse-partial-proof',async()=>{const r=await preview()(target),g=require('./launch-evidence');for(const f of ['privacyApplicationPassed','logicalRestorePassed','fullRecoveryPassed'])assert.equal(g[f](r,policy.head),false);});
    success=true;

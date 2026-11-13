@@ -1,6 +1,7 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
 const ci=require('../scripts/run-privacy-inventory-ci');
 function fixture(){const p=ci.expected('a'.repeat(40));return {p,r:{...p,scope:'synthetic-readonly-privacy-inventory-ci',passed:true,modelsFingerprinted:36,adapterModels:4,missingSurfaces:36,fileStores:4,ownedDatabases:2,
+ modelHashes:p.models.map(model=>({model,rows:0,sourceSha256:'1'.repeat(64),targetSha256:'1'.repeat(64)})),fileHashes:require('../server/recoveryFileStore').NAMES.map(name=>({name,sourceSha256:'2'.repeat(64),targetSha256:'2'.repeat(64)})),
  checks:ci.CHECKS.map(name=>({name,passed:true})),cleanup:{databasesRemoved:true,roleRemoved:true,filesRemoved:true,unrelatedDatabasesUnchanged:true},productionDataUsed:false,providerCallsOrMessages:0,previewMutationQueries:0,
  workersStarted:false,authorityDatabaseIndependent:true,livePrivacyProven:false,liveRecoveryProven:false,productionAuthorityAdapterImplemented:false,osSandboxProven:false}};}
 test('complete bounded CI contract is accepted, missing or corrupted proof refused',()=>{
@@ -8,6 +9,7 @@ test('complete bounded CI contract is accepted, missing or corrupted proof refus
  for(const key of Object.keys(r)){const v=structuredClone(r);delete v[key];assert.ok(!ci.verifyReport(v,p),key);}
  for(const name of ci.CHECKS){const v=structuredClone(r);v.checks=v.checks.filter(c=>c.name!==name);assert.equal(ci.verifyReport(v,p),false);}
  for(const file of Object.keys(p.sourceSha256)){const v=structuredClone(r);v.sourceSha256[file]='0'.repeat(64);assert.equal(ci.verifyReport(v,p),false);}
+ for(const collection of ['modelHashes','fileHashes']){const v=structuredClone(r);v[collection][0].targetSha256='0'.repeat(64);assert.equal(ci.verifyReport(v,p),false);}
  for(const key of ['livePrivacyProven','liveRecoveryProven','productionAuthorityAdapterImplemented','osSandboxProven']){const v=structuredClone(r);v[key]=true;assert.equal(ci.verifyReport(v,p),false);}
 });
 test('partial SQL inventory proof never clears live privacy/recovery',()=>{
