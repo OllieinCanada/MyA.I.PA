@@ -1,0 +1,72 @@
+name: Synthetic linked privacy inventory
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: privacy-linked-inventory-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  privacy-linked-inventory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container:
+      image: postgres:18
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: backup_fixture
+          POSTGRES_PASSWORD: synthetic-ci-only
+          POSTGRES_DB: myaipa_backup_control_ci
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.22.3'
+          cache: npm
+      - run: npm ci --include=dev --legacy-peer-deps --ignore-scripts
+      - name: Generate unchanged-schema client for disposable CI only
+        env:
+          DATABASE_URL: postgresql://backup_fixture:synthetic-ci-only@postgres:5432/myaipa_backup_control_ci
+        run: npm run backend:prepare
+      - name: Require local preview trust and refusal contracts
+        run: node --test tests/privacy-inventory-preview.test.js tests/privacy-inventory-ci.test.js tests/privacy-linked-inventory.test.js tests/privacy-linked-ci.test.js
+      - name: Actual SQL preview with a separate current-authority database
+        env:
+          CI: 'true'
+          RUN_PRIVACY_INVENTORY_CI: '1'
+          PRIVACY_INVENTORY_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: node scripts/run-privacy-linked-ci.js
+      - name: Require exact-head partial synthetic evidence
+        env:
+          PRIVACY_INVENTORY_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: node scripts/run-privacy-linked-ci.js --verify-evidence
+      - name: Deliberate failure after role admission must preserve cleanup
+        env:
+          CI: 'true'
+          RUN_PRIVACY_INVENTORY_CI: '1'
+          PRIVACY_INVENTORY_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+          PRIVACY_LINKED_EXPECTED_ABORT: '1'
+        run: |
+          if node scripts/run-privacy-linked-ci.js; then
+            echo 'Expected synthetic abort did not occur'
+            exit 1
+          fi
+          node scripts/run-privacy-linked-ci.js --verify-evidence --aborted
+      - name: Preserve sanitized summary only, no rows keys or raw records
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: privacy-linked-inventory-${{ github.event.pull_request.head.sha || github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            diagnostics/privacy-linked-ci/result.json
+            diagnostics/privacy-linked-ci/expected-abort.json
+          if-no-files-found: error
+          retention-days: 14
