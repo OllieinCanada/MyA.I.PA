@@ -1,0 +1,49 @@
+name: Pinned mapping entry-point PostgreSQL and session integration
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: mapping-entry-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  mapping-entry-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: synthetic-ci-only
+          POSTGRES_DB: ci
+        ports: [5432:5432]
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      CI: 'true'
+      DISABLE_LOCAL_ENV_FILES: '1'
+      DATABASE_URL: postgresql://ci:synthetic-ci-only@127.0.0.1:5432/ci
+      ENTRY_EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.22.3'
+          cache: npm
+      - name: Fetch immutable public dependency heads
+        run: git fetch --no-tags --depth=64 origin f452de511657c41b3ced081aed07b49379656cf3 932346e199636732d19ccb8bb73c80059447530e 0765667d0226db61eec81ec08f8de373922987b9 8f218834361f5ec22de23c5cedd6690897d40f99
+      - run: npm ci --include=dev --legacy-peer-deps
+      - run: node --test tests/bounded-mapping-entry-composition.test.js
+      - name: Execute exact wired entry point in sealed disposable PostgreSQL composition
+        run: node scripts/compose-bounded-mapping-entry.js
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mapping-entry-${{ github.event.pull_request.head.sha || github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: diagnostics/bounded-mapping-entry/
+          if-no-files-found: error
+          retention-days: 14
