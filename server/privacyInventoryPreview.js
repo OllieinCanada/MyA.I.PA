@@ -43,13 +43,19 @@ function createPrivacyInventoryPreview({readInventory,readAuthority,authorityId,
   }
   const after=await current(scopeRef);if(before.digest!==after.digest)fail('PRIVACY_AUTHORITY_CHANGED');
   const unresolved=inventory.unresolvedSurfaces||[];
-  if(!Array.isArray(unresolved)||unresolved.some(r=>!requiredSurfaces.includes(r?.surface)||!['NO_CANONICAL_CALLER_LINK','UNRESOLVED_ROW_LINK'].includes(r?.reason)
+  if(!Array.isArray(unresolved)||unresolved.some(r=>!requiredSurfaces.includes(r?.surface)||!['NO_CANONICAL_CALLER_LINK','UNRESOLVED_ROW_LINK','NULLABLE_OR_UNRESOLVED_PARENT'].includes(r?.reason)
    ||inventory.coveredSurfaces.includes(r.surface))||new Set(unresolved.map(r=>r.surface)).size!==unresolved.length)fail('PRIVACY_INVENTORY_INCOMPLETE');
+  const partial=inventory.partialRecords||[];
+  if(!Array.isArray(partial)||partial.length>1000)fail('PRIVACY_INVENTORY_INCOMPLETE');
+  for(const row of partial){if(!unresolved.some(r=>r.surface===row?.surface)||row.businessId!==target.businessId||row.callerId!==target.callerId
+   ||!['string','number'].includes(typeof row.id)||String(row.id).length<1||String(row.id).length>200)fail('PRIVACY_RECORD_CONFLICT');
+   const id=reference({surface:row.surface,id:row.id});if(seen.has(id))fail('PRIVACY_RECORD_CONFLICT');seen.add(id);}
   const missing=requiredSurfaces.filter(v=>!inventory.coveredSurfaces.includes(v));
   return {scope:'synthetic-privacy-inventory-preview-only',ready:false,applyAllowed:false,livePrivacyProven:false,liveRecoveryProven:false,
    scopeRef,authority:{verified:true,revision:after.revision,throughSequence:after.throughSequence},
    sharedIdentity:inventory.foreignTenantCount>0,foreignTenantCount:inventory.foreignTenantCount,
    inventory:inventory.records.map(row=>({surface:row.surface,reference:reference({surface:row.surface,id:row.id})})),
+   partialInventory:partial.map(row=>({surface:row.surface,reference:reference({surface:row.surface,id:row.id}),candidateOnly:true})),
    coverage:{complete:missing.length===0,covered:[...inventory.coveredSurfaces],missing,unresolved},
    blockers:[...(missing.length?['MISSING_SURFACE_ADAPTERS']:[]),...(inventory.foreignTenantCount?['SHARED_IDENTITY_DISPOSITION_UNDECIDED']:[]),'NO_REQUESTER_OR_DISPOSITION_POLICY','NO_PRODUCTION_AUTHORITY_ADAPTER','NO_ERASURE_IMPLEMENTATION'],
    limitation:'Selected read snapshot only; not a production-wide capture fence, requester authorization, legal decision or erase receipt'};

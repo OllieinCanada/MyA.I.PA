@@ -1,0 +1,15 @@
+{
+  "reviewedHead": "d00b734a729d987813054dea9315a6dc322bfa28",
+  "sha256": {
+    "scripts/run-privacy-linked-ci.js": "4e23586c17ee39d695b583adb874c0a380dd1523ee6554614da794e33605d3ec",
+    "scripts/privacy-linked-sql-fixture.js": "e5b120480674c3fae3059f8d49ef21e337ac87b5d7a561b12ce932a70cd70bca",
+    "scripts/privacy-linked-pins.json": "0cf194da788e6e24350c5336dd0fd5af238410d32ed67d9d2e2018bee97ce314",
+    "scripts/privacy-preview-loopback-relay.js": "948380af82a88da9c1fc4ef128147e6eb70b96e223f5123fa3c504d74a69de4b",
+    "server/privacyLinkedInventory.js": "312cf65c3017246d1fa3f5a4a841ed2a57bf877d7b62ecab997f5df3b4f9e6f8",
+    "tests/privacy-linked-inventory.test.js": "244a5b411cc0ccfbcc0fd7844f88ac6c528f6b11099916ca8cdd63dfaa40e7f7",
+    "tests/privacy-linked-ci.test.js": "989fc45b6e06f25431c4df774b09b050ef590ee2808e074a80148fe17af17c1f",
+    ".github/workflows/privacy-linked-inventory.yml": "af92368471060f8f14c80646cd5ea8195ade799b846c2ed36cb5b5f4871ebe02",
+    "prisma/schema.prisma": "6a19cd2039bf9113bf55d237a0d5aa47f7e3ef9adb1221f1a662c3d419c62973",
+    "package-lock.json": "9af219e3a768c83a1fd5bfb4d6a61ca0deffe716dac978df550d4009716a7f6f"
+  }
+}

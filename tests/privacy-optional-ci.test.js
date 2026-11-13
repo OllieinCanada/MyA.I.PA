@@ -1,0 +1,36 @@
+const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
+const ci=require('../scripts/run-privacy-optional-ci');
+function fixture(){const p=ci.expected('a'.repeat(40));return {p,r:{...p,scope:'synthetic-readonly-privacy-optional-inventory-ci',passed:true,modelsFingerprinted:36,adapterModels:13,missingSurfaces:26,fileAdapters:1,fileStores:4,ownedDatabases:2,
+ modelHashes:p.models.map(model=>({model,rows:0,sourceSha256:'1'.repeat(64),targetSha256:'1'.repeat(64)})),fileHashes:require('../server/recoveryFileStore').NAMES.map(name=>({name,sourceSha256:'2'.repeat(64),targetSha256:'2'.repeat(64)})),
+ checks:ci.CHECKS.map(name=>({name,passed:true})),cleanup:{databasesRemoved:true,roleRemoved:true,filesRemoved:true,unrelatedDatabasesUnchanged:true},productionDataUsed:false,providerCallsOrMessages:0,previewMutationQueries:0,
+ workersStarted:false,authorityDatabaseIndependent:true,livePrivacyProven:false,liveRecoveryProven:false,productionAuthorityAdapterImplemented:false,osSandboxProven:false}};}
+test('complete bounded CI contract is accepted, missing or corrupted proof refused',()=>{
+ const {p,r}=fixture();assert.equal(ci.verifyReport(r,p),true);
+ for(const key of Object.keys(r)){const v=structuredClone(r);delete v[key];assert.ok(!ci.verifyReport(v,p),key);}
+ for(const name of ci.CHECKS){const v=structuredClone(r);v.checks=v.checks.filter(c=>c.name!==name);assert.equal(ci.verifyReport(v,p),false);}
+ for(const file of Object.keys(p.sourceSha256)){const v=structuredClone(r);v.sourceSha256[file]='0'.repeat(64);assert.equal(ci.verifyReport(v,p),false);}
+ for(const collection of ['modelHashes','fileHashes']){const v=structuredClone(r);v[collection][0].targetSha256='0'.repeat(64);assert.equal(ci.verifyReport(v,p),false);}
+ for(const key of ['livePrivacyProven','liveRecoveryProven','productionAuthorityAdapterImplemented','osSandboxProven']){const v=structuredClone(r);v[key]=true;assert.equal(ci.verifyReport(v,p),false);}
+});
+test('partial SQL inventory proof never clears live privacy/recovery',()=>{
+ const {p,r}=fixture(),g=require('../scripts/launch-evidence');for(const f of ['privacyApplicationPassed','logicalRestorePassed','fullRecoveryPassed'])assert.equal(g[f](r,p.head),false);
+});
+test('CI runner does not admit arbitrary database URLs or local invocation',()=>{
+ assert.throws(()=>ci.validateEnvironment({}),/CI_CONTEXT/);
+ const source=fs.readFileSync(path.join(__dirname,'../scripts/run-privacy-optional-ci.js'),'utf8');assert.ok(source.includes('PRIVACY_FOREIGN_CONFIGURATION'));assert.ok(source.includes('NOSUPERUSER NOCREATEDB NOCREATEROLE'));assert.ok(!source.includes('require(\'../server/index\')'));
+});
+test('service workflow is exact-head PG18, no secrets, no deploy and summary-only',()=>{
+ const s=fs.readFileSync(path.join(__dirname,'../.github/workflows/privacy-optional-inventory.yml'),'utf8');for(const v of ['image: postgres:18',"node-version: '24.22.3'",'persist-credentials: false','--verify-evidence','diagnostics/privacy-optional-ci/result.json','diagnostics/privacy-optional-ci/expected-abort.json'])assert.ok(s.includes(v),v);
+ for(const v of ['secrets.','continue-on-error','deploy:pages'])assert.ok(!s.includes(v));
+});
+test('expected-abort proof cannot promote failure into success',()=>{
+ const {p,r}=fixture(),v={...r,passed:false,failureCode:'PRIVACY_OPTIONAL_EXPECTED_ABORT',checks:r.checks.slice(0,1)};
+ assert.equal(ci.verifyReport(v,p,true),true);assert.equal(ci.verifyReport(v,p),false);
+ assert.equal(ci.verifyReport({...v,failureCode:'OTHER'},p,true),false);
+ for(const name of Object.keys(v.cleanup)){const broken=structuredClone(v);broken.cleanup[name]=false;assert.equal(ci.verifyReport(broken,p,true),false);}
+});
+test('exact #248 immutable dependencies remain pinned; Windows conversion is not canonical proof',()=>{
+ const pins=require('../scripts/privacy-optional-pins.json'),crypto=require('node:crypto');
+ assert.equal(pins.reviewedHead,'d00b734a729d987813054dea9315a6dc322bfa28');
+ for(const [name,hash]of Object.entries(pins.sha256))assert.equal(crypto.createHash('sha256').update(fs.readFileSync(path.join(__dirname,'..',name),'utf8').replace(/\r\n/g,'\n')).digest('hex'),hash,name);
+});
