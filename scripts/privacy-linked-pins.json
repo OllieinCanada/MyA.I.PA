@@ -1,0 +1,12 @@
+{
+  "reviewedHead": "544289336f2f07fa4dbe241009c89a1dfaa9dfac",
+  "sha256": {
+    "scripts/run-privacy-inventory-ci.js": "3699557b713e71d073302286343cb3f6c7fe8be6b7a79b8f15739664a615e6cb",
+    "scripts/privacy-preview-loopback-relay.js": "948380af82a88da9c1fc4ef128147e6eb70b96e223f5123fa3c504d74a69de4b",
+    "tests/privacy-inventory-preview.test.js": "2416e2843bac18366acbe2367c95435cf58579c60006181368bda038ab203513",
+    "tests/privacy-inventory-ci.test.js": "58bd6f87da6cf38f2c3e71bdaded91acbeb287781952582ad191207576151eed",
+    ".github/workflows/privacy-inventory.yml": "3bd3bc9cf51cebf85225ebabbfd4cbec986e1a1bd0658507bcac6d1412fb3746",
+    "prisma/schema.prisma": "6a19cd2039bf9113bf55d237a0d5aa47f7e3ef9adb1221f1a662c3d419c62973",
+    "package-lock.json": "9af219e3a768c83a1fd5bfb4d6a61ca0deffe716dac978df550d4009716a7f6f"
+  }
+}

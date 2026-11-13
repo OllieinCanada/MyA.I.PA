@@ -42,12 +42,15 @@ function createPrivacyInventoryPreview({readInventory,readAuthority,authorityId,
    const id=reference({surface:row.surface,id:row.id});if(seen.has(id))fail('PRIVACY_RECORD_CONFLICT');seen.add(id);
   }
   const after=await current(scopeRef);if(before.digest!==after.digest)fail('PRIVACY_AUTHORITY_CHANGED');
+  const unresolved=inventory.unresolvedSurfaces||[];
+  if(!Array.isArray(unresolved)||unresolved.some(r=>!requiredSurfaces.includes(r?.surface)||!['NO_CANONICAL_CALLER_LINK','UNRESOLVED_ROW_LINK'].includes(r?.reason)
+   ||inventory.coveredSurfaces.includes(r.surface))||new Set(unresolved.map(r=>r.surface)).size!==unresolved.length)fail('PRIVACY_INVENTORY_INCOMPLETE');
   const missing=requiredSurfaces.filter(v=>!inventory.coveredSurfaces.includes(v));
   return {scope:'synthetic-privacy-inventory-preview-only',ready:false,applyAllowed:false,livePrivacyProven:false,liveRecoveryProven:false,
    scopeRef,authority:{verified:true,revision:after.revision,throughSequence:after.throughSequence},
    sharedIdentity:inventory.foreignTenantCount>0,foreignTenantCount:inventory.foreignTenantCount,
    inventory:inventory.records.map(row=>({surface:row.surface,reference:reference({surface:row.surface,id:row.id})})),
-   coverage:{complete:missing.length===0,covered:[...inventory.coveredSurfaces],missing},
+   coverage:{complete:missing.length===0,covered:[...inventory.coveredSurfaces],missing,unresolved},
    blockers:[...(missing.length?['MISSING_SURFACE_ADAPTERS']:[]),...(inventory.foreignTenantCount?['SHARED_IDENTITY_DISPOSITION_UNDECIDED']:[]),'NO_REQUESTER_OR_DISPOSITION_POLICY','NO_PRODUCTION_AUTHORITY_ADAPTER','NO_ERASURE_IMPLEMENTATION'],
    limitation:'Selected read snapshot only; not a production-wide capture fence, requester authorization, legal decision or erase receipt'};
  };
