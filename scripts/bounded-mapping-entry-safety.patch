@@ -17,9 +17,7 @@ diff --git a/server/index.js b/server/index.js
 diff --git a/server/boundedBusinessMappingWriter.js b/server/boundedBusinessMappingWriter.js
 --- a/server/boundedBusinessMappingWriter.js
 +++ b/server/boundedBusinessMappingWriter.js
-@@ -114,7 +114,7 @@
- }
- 
+@@ -116,5 +116,5 @@
  function createBoundedBusinessMappingWriter({ prisma, policy, readEvidence, readOverrides,
 +  withAssociationLease, enabled = () => false, singleWriter = () => false, now = () => Date.now(), assertAdmission = () => true }) {
 -  withAssociationLease, enabled = () => false, singleWriter = () => false, now = () => Date.now() }) {
