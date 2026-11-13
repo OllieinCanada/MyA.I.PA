@@ -73,6 +73,16 @@ function compose({root=path.resolve(__dirname,'..'),composeOnly=false}={}){
     fs.writeFileSync(path.join(out,'tests.tap'),r.stdout||'');fs.writeFileSync(path.join(out,'tests.stderr.log'),r.stderr||'');
     if(r.error||r.status!==0)throw Error('Entry-point tests failed; preserved TAP/stderr');
     if(!validCoverage(JSON.parse(fs.readFileSync(env.MAPPING_CONTROL_SQL_REPORT))))throw Error('Incomplete entry SQL coverage/cleanup');
+    // The admission hook patches the native writer. Re-run the existing full
+    // reader/lifecycle SQL matrix too; prior PR240 evidence is not this code.
+    const adapterReport=path.join(out,'adapter-regression-sql.json');
+    const regression=spawnSync(process.execPath,['--test','--test-reporter=tap','tests/bounded-business-mapping-integration.test.js'],
+      {cwd:workspace,env:{...env,RUN_BOUNDED_MAPPING_INTEGRATION:'1',MAPPING_INTEGRATION_REPORT:adapterReport},encoding:'utf8',timeout:180000,maxBuffer:32*1024*1024});
+    fs.writeFileSync(path.join(out,'adapter-regression.tap'),regression.stdout||'');fs.writeFileSync(path.join(out,'adapter-regression.stderr.log'),regression.stderr||'');
+    const prior=JSON.parse(fs.readFileSync(adapterReport));
+    if(regression.error||regression.status!==0||prior.disposableDatabaseRemoved!==true
+      ||!require(path.join(workspace,'scripts/compose-bounded-mapping-integration')).validateCoverage(prior))throw Error('Full reader/lifecycle SQL regression incomplete');
+    report.adapterRegressionCases=prior.cases.length;
     report.ready=true;return report;
   }catch(error){report.error=error.message;throw error;}
   finally{fs.writeFileSync(path.join(out,'provenance.json'),JSON.stringify(report,null,2));console.log(`Entry evidence: ${out}`);}
