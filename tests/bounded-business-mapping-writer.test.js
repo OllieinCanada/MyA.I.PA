@@ -236,3 +236,120 @@ test('module has no app/transport registration or rollback executor and is not w
   assert.equal(/require\(['"](?:\.\/index|@prisma\/client|twilio)|fetch\(|\.deleteMany\(|\.delete\(/.test(body), false);
   assert.equal(fs.readFileSync(require.resolve('../server/index'), 'utf8').includes('boundedBusinessMappingWriter'), false);
 });
+
+// The existing Quality workflow supplies an owned, ephemeral loopback PostgreSQL
+// service. Never load .env, use a provider DB or mutate its shared /ci schema.
+test('real PostgreSQL bounded mapping transactions in a newly created disposable CI database', {
+  skip: !(process.env.GITHUB_ACTIONS === 'true' && process.env.CI === 'true' && process.env.DATABASE_URL), timeout: 120000,
+}, async t => {
+  const url = new URL(process.env.DATABASE_URL);
+  assert.ok(['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname));
+  assert.equal(url.pathname, '/ci'); assert.equal(url.username, 'ci');
+  const { Client } = require('pg'), { PrismaClient } = require('@prisma/client');
+  const path = require('node:path'), { spawnSync } = require('node:child_process');
+  const database = 'myaipa_mapping_drill_' + crypto.randomBytes(10).toString('hex');
+  assert.match(database, /^myaipa_mapping_drill_[a-f0-9]{20}$/);
+  const admin = new Client({ connectionString: url.toString() });
+  let prisma, created = false;
+  await admin.connect();
+  try {
+    const identity = await admin.query('SELECT current_database() AS db, current_user AS usr');
+    assert.deepEqual(identity.rows[0], { db: 'ci', usr: 'ci' });
+    await admin.query(`CREATE DATABASE "${database}"`); created = true;
+    url.pathname = '/' + database; url.search = '?connection_limit=4';
+    const cli = path.join(path.dirname(require.resolve('prisma/package.json')), 'build', 'index.js');
+    const pushed = spawnSync(process.execPath, [cli, 'db', 'push', '--skip-generate', '--schema', path.resolve(__dirname, '../prisma/schema.prisma')], {
+      cwd: path.resolve(__dirname, '..'), encoding: 'utf8', windowsHide: true, timeout: 60000,
+      env: { PATH: process.env.PATH, HOME: process.env.HOME, SystemRoot: process.env.SystemRoot,
+        DATABASE_URL: url.toString(), DISABLE_LOCAL_ENV_FILES: '1', PRISMA_HIDE_UPDATE_MESSAGE: '1' },
+    });
+    assert.equal(pushed.status, 0, 'schema initialization must pass in the generated disposable database');
+    prisma = new PrismaClient({ datasources: { db: { url: url.toString() } },
+      __internal: { configOverride: config => ({ ...config, relativeEnvPaths: {} }) } });
+    async function seed() {
+      const f = fixture();
+      // All rows in this database are owned synthetic fixtures, never user data.
+      await prisma.runtimeStore.deleteMany(); await prisma.vapiBusinessMapping.deleteMany();
+      await prisma.settings.deleteMany(); await prisma.business.deleteMany();
+      await prisma.business.create({ data: { id: 7, name: f.business.name, phone: f.business.phone, timezone: 'America/Toronto',
+        settings: { create: { ownerPhone: f.business.settings.ownerPhone } } } });
+      await prisma.vapiBusinessMapping.createMany({ data: f.policy.preservedMappings });
+      return f;
+    }
+    const writer = (f, db = prisma) => createBoundedBusinessMappingWriter({ ...f.options, prisma: db });
+    const preservation = async () => {
+      const rows = await prisma.vapiBusinessMapping.findMany({ where: { id: { in: [24991, 24992, 24993] } }, orderBy: { id: 'asc' } });
+      return rows.map(({ id, businessId, matchType, matchValue }) => ({ id, businessId, matchType, matchValue }));
+    };
+    await t.test('real commit, JSON audit receipt, exact replay and unique key', async () => {
+      const f = await seed(), w = writer(f), plan = await w.prepare();
+      assert.equal((await w.apply(plan.planDigest, f.actor)).applied, true);
+      assert.equal((await w.apply(plan.planDigest, f.actor)).replayed, true);
+      assert.equal(await prisma.vapiBusinessMapping.count(), 6); assert.equal(await prisma.runtimeStore.count(), 1);
+      assert.deepEqual(await preservation(), f.policy.preservedMappings);
+      await assert.rejects(prisma.vapiBusinessMapping.create({ data: { businessId: 7, matchType: 'assistantId', matchValue: f.policy.assistantId } }), { code: 'P2002' });
+      assert.equal((await w.inspectOutcome()).state, 'committed_exact');
+    });
+    await t.test('second insert exception rolls back real rows and receipt atomically', async () => {
+      const f = await seed(); let inserts = 0;
+      const injected = { $transaction: (fn, options) => prisma.$transaction(tx => fn({
+        business: tx.business, runtimeStore: tx.runtimeStore, $queryRaw: (...args) => tx.$queryRaw(...args),
+        vapiBusinessMapping: { findMany: (...args) => tx.vapiBusinessMapping.findMany(...args), create: (...args) => {
+          if (++inserts === 2) throw Error('synthetic precommit failure'); return tx.vapiBusinessMapping.create(...args);
+        } },
+      }), options) };
+      const w = writer(f, injected), plan = await w.prepare();
+      await assert.rejects(w.apply(plan.planDigest, f.actor), { code: 'MAPPING_UNCERTAIN_INSPECT_FIRST' });
+      assert.equal(await prisma.vapiBusinessMapping.count(), 3); assert.equal(await prisma.runtimeStore.count(), 0);
+      assert.deepEqual(await preservation(), f.policy.preservedMappings);
+      assert.equal((await w.inspectOutcome()).state, 'absent_at_read_only_snapshot');
+    });
+    await t.test('lost real commit acknowledgement is inspected, not retried', async () => {
+      const f = await seed(); let transactions = 0;
+      const injected = { $transaction: async (fn, options) => { const result = await prisma.$transaction(fn, options);
+        if (++transactions === 2) throw Error('synthetic acknowledgement loss after real commit'); return result; } };
+      const w = writer(f, injected), plan = await w.prepare();
+      await assert.rejects(w.apply(plan.planDigest, f.actor), { code: 'MAPPING_UNCERTAIN_INSPECT_FIRST' });
+      assert.equal((await w.inspectOutcome()).state, 'committed_exact');
+      await assert.rejects(w.apply(plan.planDigest, f.actor), { code: 'MAPPING_UNCERTAIN_INSPECT_FIRST' });
+      assert.equal(await prisma.vapiBusinessMapping.count(), 6); assert.equal(await prisma.runtimeStore.count(), 1);
+    });
+    await t.test('real database serializes competing services without duplicate bindings', async () => {
+      const f = await seed(), first = writer(f), second = writer(f);
+      const a = await first.prepare(), b = await second.prepare();
+      const results = await Promise.allSettled([first.apply(a.planDigest, f.actor), second.apply(b.planDigest, f.actor)]);
+      assert.ok(results.some(r => r.status === 'fulfilled'));
+      assert.equal(await prisma.vapiBusinessMapping.count(), 6); assert.equal(await prisma.runtimeStore.count(), 1);
+      assert.deepEqual(await preservation(), f.policy.preservedMappings);
+    });
+    await t.test('shared advisory lock excludes an independent SQL lifecycle writer', async () => {
+      const f = await seed(), w = writer(f), plan = await w.prepare();
+      let release, acquired; const held = new Promise(resolve => { acquired = resolve; });
+      const blocker = prisma.$transaction(async tx => {
+        await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${'signup-business-bindings:v1'}))::text AS lock_result`;
+        acquired(); await new Promise(resolve => { release = resolve; });
+        await tx.vapiBusinessMapping.update({ where: { id: 24991 }, data: { label: 'concurrent synthetic lifecycle change' } });
+      });
+      await held;
+      let settled = false; const pending = w.apply(plan.planDigest, f.actor).finally(() => { settled = true; });
+      try { await new Promise(resolve => setTimeout(resolve, 100)); assert.equal(settled, false); }
+      finally { release(); }
+      await blocker;
+      await assert.rejects(pending);
+      assert.equal(await prisma.vapiBusinessMapping.count(), 3); assert.equal(await prisma.runtimeStore.count(), 0);
+    });
+    await t.test('other-tenant conflict refuses before adding any real rows', async () => {
+      const f = await seed();
+      await prisma.business.create({ data: { id: 8, name: 'Other synthetic tenant', phone: '+19055550199', timezone: 'UTC' } });
+      await prisma.vapiBusinessMapping.create({ data: { businessId: 8, matchType: 'assistantId', matchValue: f.policy.assistantId } });
+      await assert.rejects(writer(f).prepare(), { code: 'MAPPING_TARGET_CONFLICT' });
+      assert.equal(await prisma.vapiBusinessMapping.count(), 4); assert.equal(await prisma.runtimeStore.count(), 0);
+    });
+  } finally {
+    if (prisma) await prisma.$disconnect();
+    // Generated name is validated above. Never drop /ci, a configured external DB
+    // or any database not created by this exact test invocation.
+    if (created) await admin.query(`DROP DATABASE "${database}"`);
+    await admin.end();
+  }
+});
