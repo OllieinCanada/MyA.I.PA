@@ -28,3 +28,10 @@ test('canonical Git archive preserves blob bytes even when Windows autocrlf is e
   assert.equal(archived.status,0);const size=parseInt(archived.stdout.subarray(124,136).toString().replace(/\0/g,'').trim(),8);
   assert.equal(archived.stdout.subarray(512,512+size).toString(),bytes);
 });
+test('commit acknowledgement loss hook counts real creates even without an onCreate hook', async () => {
+  const { instrument } = require('./helpers/boundedMappingIntegrationFixture');let commits=0,creates=0;
+  const prisma={$transaction:async fn=>{const result=await fn({vapiBusinessMapping:{create:async()=>({id:++creates})}});commits++;return result;}};
+  const wrapped=instrument(prisma,{afterCommit:async({creates:count})=>{assert.equal(count,1);throw Object.assign(Error('synthetic acknowledgement loss'),{code:'SYNTHETIC_ACK_LOST'});}});
+  await assert.rejects(wrapped.$transaction(async tx=>{await tx.vapiBusinessMapping.create({data:{}});}),{code:'SYNTHETIC_ACK_LOST'});
+  assert.equal(commits,1);assert.equal(creates,1);
+});

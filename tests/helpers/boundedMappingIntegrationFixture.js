@@ -4,13 +4,13 @@ const { buildMakeSignupEventKey } = require('../../server/makeSignupWebhook');
 const { contextStoreKey } = require('../../server/signupProvisioningContext');
 const { provisioningStateKey } = require('../../server/provisioningState');
 const { signupBusinessKey } = require('../../server/signupBusinessIdentity');
-const { createAssociationFence, atomicCommitAssociationFile } = require('../../server/signupAssociationRepair');
-const { createBoundedBusinessMappingWriter } = require('../../server/boundedBusinessMappingWriter');
 const { createBoundedMappingLease, createBoundedMappingEvidenceReader } = require('../../server/boundedBusinessMappingAdapters');
 function stable(x) { if (x instanceof Date) return x.toISOString(); if (Array.isArray(x)) return x.map(stable);
   return x && typeof x === 'object' ? Object.fromEntries(Object.keys(x).sort().map(k => [k, stable(x[k])])) : x; }
 const digest = x => crypto.createHash('sha256').update(JSON.stringify(stable(x))).digest('hex');
 function createFixture(directory) {
+  const { createAssociationFence, atomicCommitAssociationFile } = require('../../server/signupAssociationRepair');
+  const { createBoundedBusinessMappingWriter } = require('../../server/boundedBusinessMappingWriter');
   const secret = 'synthetic-integration-signing-secret', raw = { event: 'signup.completed', business: { name: 'Synthetic Integration Electrical' },
     owner: { email: 'fixture@example.invalid', phone: '+19055550123' }, verification: { smsVerified: true } };
   const payload = normalizeSignupProvisioningPayload(raw, { signingSecret: secret });
@@ -60,7 +60,7 @@ function instrument(prisma, { onCreate, afterCommit } = {}) {
     const result = await prisma.$transaction(tx => fn({ business: tx.business, signupAttempt: tx.signupAttempt, runtimeStore: tx.runtimeStore,
       $queryRaw: (...args) => tx.$queryRaw(...args), $executeRaw: (...args) => tx.$executeRaw(...args),
       vapiBusinessMapping: { findMany: (...args) => tx.vapiBusinessMapping.findMany(...args), create: async (...args) => {
-        const row = await tx.vapiBusinessMapping.create(...args); await onCreate?.({ tx, index: ++creates }); return row;
+        const row = await tx.vapiBusinessMapping.create(...args); creates++; await onCreate?.({ tx, index: creates }); return row;
       } },
     }), options);
     await afterCommit?.({ creates }); return result;
