@@ -1,5 +1,5 @@
 const test = require('node:test'), assert = require('node:assert/strict');
-const { OVERLAYS, REQUIRED_CASES, validatePins, validateSqlTarget, validateCoverage } = require('../scripts/compose-bounded-mapping-integration');
+const { OVERLAYS, REQUIRED_CASES, archiveArgs, validatePins, validateSqlTarget, validateCoverage } = require('../scripts/compose-bounded-mapping-integration');
 const pins = require('../scripts/bounded-mapping-integration-pins.json');
 test('immutable dependency provenance is valid and only public integration source is allowlisted', () => {
   validatePins(pins); assert.equal(OVERLAYS.length, 7); assert.equal(new Set(OVERLAYS).size, 7);
@@ -17,4 +17,14 @@ test('all real-reader SQL cases are required, no subset or injected-evidence rep
   assert.equal(validateCoverage(good), true);
   for (const bad of [{ ...good, cases: good.cases.slice(1) }, { ...good, sqlMode: 'synthetic' }, { ...good, ready: false },
     { ...good, cases: [...good.cases.slice(1), good.cases[1]] }, { ...good, cases: good.cases.map((c, i) => i ? c : { ...c, status: 'skipped' }) }]) assert.equal(validateCoverage(bad), false);
+});
+test('canonical Git archive preserves blob bytes even when Windows autocrlf is enabled', () => {
+  const fs=require('node:fs'),os=require('node:os'),path=require('node:path'),{spawnSync}=require('node:child_process');
+  const cwd=fs.mkdtempSync(path.join(os.tmpdir(),'myaipa-canonical-archive-'));
+  const run=(args,input)=>{const r=spawnSync('git',args,{cwd,input,encoding:'utf8',windowsHide:true});assert.equal(r.status,0,r.stderr);return r.stdout.trim();};
+  run(['init','--quiet']);const bytes='canonical\nfixture\n';const blob=run(['hash-object','-w','--stdin'],bytes);
+  const tree=run(['mktree'],`100644 blob ${blob}\tfixture.txt\n`);
+  const archived=spawnSync('git',['-c','core.autocrlf=true',...archiveArgs(tree)],{cwd,windowsHide:true});
+  assert.equal(archived.status,0);const size=parseInt(archived.stdout.subarray(124,136).toString().replace(/\0/g,'').trim(),8);
+  assert.equal(archived.stdout.subarray(512,512+size).toString(),bytes);
 });

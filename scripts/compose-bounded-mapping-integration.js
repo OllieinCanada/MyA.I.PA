@@ -13,6 +13,7 @@ const REQUIRED_CASES = ['commit_identity_readiness', 'source_changed_before', 'c
   'context_lock_wait', 'source_lock_wait', 'lifecycle_before_external', 'file_mutation_during',
   'atomicity_restart', 'uncertain_commit', 'conflict_refusal', 'override_refusal'];
 const hash = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
+const archiveArgs = (tree, output) => ['-c', 'core.autocrlf=false', 'archive', '--format=tar', ...(output ? ['--output', output] : []), tree];
 function validatePins(p) {
   if (p?.schemaVersion !== 1 || p.repository !== 'OllieinCanada/MyA.I.PA' || p.dependencies?.association?.pr !== 235
     || p.dependencies?.writer?.pr !== 239 || p.node !== '24.22.3'
@@ -54,7 +55,7 @@ function compose({ root = path.resolve(__dirname, '..'), composeOnly = false } =
   const provenance = { schemaVersion: 1, head, pins, tree, composeOnly, workspace, overlayHashes: {}, dependencyHashes: {}, ready: false };
   try {
     const archive = path.join(workspace, 'dependency-tree.tar');
-    run('git', ['archive', '--format=tar', '--output', archive, tree]);
+    run('git', archiveArgs(tree, archive));
     run(process.platform === 'win32' ? 'tar.exe' : 'tar', ['-xf', archive, '-C', workspace]);
     for (const p of OVERLAYS) {
       // Committed blobs only: no dirty files/private evidence can enter the run.
@@ -92,4 +93,4 @@ if (require.main === module) {
   try { const result = compose({ composeOnly: process.argv.includes('--compose-only') }); console.log(JSON.stringify(result, null, 2)); }
   catch (error) { console.error(error.message); process.exitCode = 1; }
 }
-module.exports = { OVERLAYS, REQUIRED_CASES, validatePins, validateSqlTarget, validateCoverage, compose };
+module.exports = { OVERLAYS, REQUIRED_CASES, archiveArgs, validatePins, validateSqlTarget, validateCoverage, compose };
