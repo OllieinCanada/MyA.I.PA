@@ -2813,7 +2813,7 @@ async function patchVapiAssistant(assistantId, patch) {
   return data && typeof data === "object" ? data : null;
 }
 
-async function fetchVapiCollection(resourcePath, collectionKeys = [], { requireComplete = false } = {}) {
+async function fetchVapiCollection(resourcePath, collectionKeys = [], { requireComplete = false, auditEvidence = false } = {}) {
   if (!VAPI_API_KEY) {
     const err = new Error("VAPI_API_KEY is not configured.");
     err.statusCode = 503;
@@ -2835,6 +2835,7 @@ async function fetchVapiCollection(resourcePath, collectionKeys = [], { requireC
     throw createProviderHttpError({ provider: "Vapi", operation: `${resourcePath} collection`, status: response.status, data, fallbackCode: "VAPI_COLLECTION_FAILED" });
   }
 
+  if (auditEvidence) return require('./vapiInventoryCoverage').completeInventoryRead(data, collectionKeys);
   const checkedCollection = (records) => {
     if (requireComplete && (records.length >= 1000 || data?.hasMore || data?.has_more || data?.nextCursor || data?.nextPage || data?.pagination?.nextCursor)) {
       const err = new Error("Vapi inventory completeness could not be established. No replacement may be created.");
@@ -3282,17 +3283,18 @@ function findVapiInventoryMapping(record, mappings, type) {
 
 async function getVapiAccountInventory() {
   const warnings = [];
-  const [phoneResult, assistantResult, mappings] = await Promise.all([
-    fetchVapiCollection("phone-number", ["phoneNumbers", "phone_numbers"]).catch((error) => {
+  const [phoneRead, assistantRead, mappings] = await Promise.all([
+    fetchVapiCollection("phone-number", ["phoneNumbers", "phone_numbers"], { auditEvidence: true }).catch((error) => {
       warnings.push(`Could not load Vapi phone numbers: ${error.message}`);
-      return [];
+      return { records: [], evidence: { successful: false, complete: false, count: 0 } };
     }),
-    fetchVapiCollection("assistant", ["assistants", "agents"]).catch((error) => {
+    fetchVapiCollection("assistant", ["assistants", "agents"], { auditEvidence: true }).catch((error) => {
       warnings.push(`Could not load Vapi agents: ${error.message}`);
-      return [];
+      return { records: [], evidence: { successful: false, complete: false, count: 0 } };
     }),
     prisma.vapiBusinessMapping.findMany({ include: { business: true }, orderBy: { updatedAt: "desc" }, take: 500 }),
   ]);
+  const phoneResult = phoneRead.records, assistantResult = assistantRead.records;
 
   const assistantsById = new Map(
     assistantResult
@@ -3319,6 +3321,7 @@ async function getVapiAccountInventory() {
       provider: phone.provider || phone.providerName || phone.type || "",
       status: phone.status || phone.state || "",
       assistantId,
+      providerBusinessId: phone.businessId ?? phone.metadata?.businessId ?? null,
       assistantName: getVapiAssistantName(assistant || phone),
       routeMode,
       createdAt: phone.createdAt || phone.created_at || "",
@@ -3334,6 +3337,7 @@ async function getVapiAccountInventory() {
     return {
       id,
       name: getVapiAssistantName(assistant) || id || "Unnamed agent",
+      providerBusinessId: assistant.businessId ?? assistant.metadata?.businessId ?? null,
       model: getVapiNestedString(assistant, ["model.model", "model.provider", "model.name"]) || "",
       voice: getVapiNestedString(assistant, ["voice.voiceId", "voice.provider", "voice.name"]) || "",
       firstMessage: getVapiNestedString(assistant, ["firstMessage"]) || "",
@@ -3348,6 +3352,7 @@ async function getVapiAccountInventory() {
   return {
     phoneNumbers,
     assistants,
+    collectionReads: { phoneNumbers: phoneRead.evidence, assistants: assistantRead.evidence },
     warnings,
     totals: {
       phoneNumbers: phoneNumbers.length,

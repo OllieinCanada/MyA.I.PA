@@ -2,9 +2,14 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const {
-  buildMappingReadinessReport,
+  buildMappingReadinessReport: buildReport,
   classifyInventoryPurpose,
 } = require("../scripts/audit-vapi-business-mappings");
+// These fixtures explicitly model two successful, complete provider reads.
+const buildMappingReadinessReport = input => buildReport({ ...input, inventoryEvidence: {
+  phoneNumbers: { successful: true, complete: true, count: (input.phones || []).length },
+  assistants: { successful: true, complete: true, count: (input.assistants || []).length },
+} });
 
 test("classifies explicit canaries and demos separately from customer inventory", () => {
   assert.equal(
@@ -18,7 +23,7 @@ test("classifies explicit canaries and demos separately from customer inventory"
   assert.equal(classifyInventoryPurpose("Arscott Plumbing and Heating Inc.AI"), "customer_or_unknown");
 });
 
-test("synthetic unmapped inventory is visible but does not fail customer readiness", () => {
+test("synthetic unmapped inventory is visible without claiming customer readiness", () => {
   const report = buildMappingReadinessReport({
     phones: [{
       id: "phone-canary-123456",
@@ -34,7 +39,9 @@ test("synthetic unmapped inventory is visible but does not fail customer readine
     }],
   });
 
-  assert.equal(report.ready, true);
+  assert.equal(report.ready, false);
+  assert.equal(report.applicability, 'no_customer_routes');
+  assert.equal(report.inventoryComplete, true);
   assert.equal(report.summary.unmappedCustomerPhones, 0);
   assert.equal(report.summary.unmappedNonCustomerPhones, 1);
   assert.equal(report.nonCustomerUnmappedPhones[0].phone, "•••0420");
