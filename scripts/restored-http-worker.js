@@ -20,6 +20,7 @@ async function main(){
  // ACL proof: SELECT-only role has no table write privileges, independent of JS instrumentation.
  const privileges=await db.$queryRawUnsafe("SELECT tablename,has_table_privilege(current_user,quote_ident(schemaname)||'.'||quote_ident(tablename),'INSERT,UPDATE,DELETE,TRUNCATE') AS writes FROM pg_tables WHERE schemaname='public'");
  assert.equal(privileges.length,36);assert.ok(privileges.every(r=>!r.writes));
+ await assert.rejects(db.$executeRawUnsafe('UPDATE "Business" SET name=name'),e=>e.code==='P2010'&&e.meta?.code==='42501');
  let databaseMutationAttempts=0,receiptReads=0;
  db.$on('query',e=>{if(/^\s*(INSERT|UPDATE|DELETE|MERGE|CREATE|ALTER|DROP|TRUNCATE|COPY|GRANT|REVOKE)\b/i.test(e.query))databaseMutationAttempts++;});
  const guarded=db.$extends({query:{$allModels:{$allOperations:async({model,operation,args,query})=>{
@@ -28,7 +29,10 @@ async function main(){
   if(mode==='refusal'&&model==='Business'&&operation==='findUnique')throw Error('SYNTHETIC_READ_FAILURE');
   return query(args);
  }}}});
- global.__myAiPaPrisma=guarded;
+ global.__myAiPaPrisma=new Proxy(guarded,{get(target,key){
+  if(['$executeRaw','$executeRawUnsafe'].includes(key))return ()=>{databaseMutationAttempts++;throw Error('HTTP_DATABASE_WRITE_REFUSED');};
+  const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;
+ }});
  const guard=require('./local-staging-egress').install({ports:[Number(url.port)]});
  const writes=[];const deny=(op)=>{writes.push(op);throw Object.assign(Error('HTTP_FILE_WRITE_REFUSED'),{code:'HTTP_FILE_WRITE_REFUSED'});};
  for(const name of ['writeFile','appendFile','rename','unlink','mkdir','rm','rmdir','truncate','copyFile','chmod','chown','link','symlink','utimes','write','writev','ftruncate']){
@@ -38,7 +42,11 @@ async function main(){
   if(typeof flags==='number'?(flags&(fs.constants.O_WRONLY|fs.constants.O_RDWR|fs.constants.O_CREAT|fs.constants.O_TRUNC|fs.constants.O_APPEND))!==0:flags!=='r')return deny('openSync-write');return nativeOpen(file,flags,...args);
  };
  const open=fs.open;fs.open=(file,flags,...args)=>{if(flags!=='r')return deny('open-write');return open(file,flags,...args);};
- const promiseOpen=fs.promises.open;fs.promises.open=async(file,flags,...args)=>{if(flags!=='r')return deny('promise:open-write');return promiseOpen.call(fs.promises,file,flags,...args);};
+ const promiseOpen=fs.promises.open;fs.promises.open=async(file,flags,...args)=>{
+  if(flags!=='r')return deny('promise:open-write');const handle=await promiseOpen.call(fs.promises,file,flags,...args);
+  return new Proxy(handle,{get(target,key){if(['write','writeFile','appendFile','writev','truncate','chmod','chown','utimes','createWriteStream'].includes(key))return ()=>deny('handle:'+key);
+   const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}});
+ };
  fs.createWriteStream=()=>deny('createWriteStream');
  const intervals=[],nativeInterval=global.setInterval;
  global.setInterval=(...args)=>{const caller=new Error().stack.split('\n')[2]||'';if(!/at MemoryStore\.init .*express-rate-limit[\\/]dist[\\/]index\.cjs:/.test(caller))throw Error('HTTP_BACKGROUND_WORKER_REFUSED');const h=Reflect.apply(nativeInterval,global,args);intervals.push(h);return h;};
@@ -66,7 +74,13 @@ async function main(){
   }else{assert.equal((await get(token)).status,500);forcedReadFailure=true;assert.ok(writes.length>0,'Error-path incident write must be detected');}
   await new Promise(resolve=>setTimeout(resolve,100));assert.equal(databaseMutationAttempts,0);assert.equal(guard.status().unexpectedOutboundAttempts,0);
   const probes=await guard.probes();assert.equal(probes.rejected,6);
-  return {mode,passed:true,authenticatedTenants,authRefusals,receiptDelivered,suppressionPreserved,forcedReadFailure,databaseMutationAttempts,fileMutationAttempts:writes.length,fileWritesPrevented:true,receiptReads};
+  const actualFileAttempts=writes.length,probePath=path.join(root,'must-not-exist');let fileProbeRefusals=0;
+  for(const probe of [()=>fs.writeFileSync(probePath,'fake'),()=>fs.promises.writeFile(probePath,'fake'),()=>fs.promises.open(probePath,'w'),()=>fs.createWriteStream(probePath)]){
+   try{await probe();assert.fail('FILE_PROBE_NOT_REFUSED');}catch(e){assert.equal(e.code,'HTTP_FILE_WRITE_REFUSED');fileProbeRefusals++;}
+  }
+  assert.equal(fileProbeRefusals,4);assert.equal(writes.length-actualFileAttempts,4);assert.equal(fs.existsSync(probePath),false);
+  return {mode,passed:true,authenticatedTenants,authRefusals,receiptDelivered,suppressionPreserved,forcedReadFailure,databaseMutationAttempts,fileMutationAttempts:actualFileAttempts,fileWritesPrevented:true,receiptReads,
+   fileProbeRefusals,sqlWritePrivilegeProbeRefused:true};
  }finally{server.closeAllConnections();await new Promise(resolve=>server.close(resolve));for(const timer of intervals)clearInterval(timer);await db.$disconnect();}
 }
 main().then(r=>process.stdout.write(JSON.stringify(r))).catch(()=>{process.stderr.write('RESTORED_HTTP_CHILD_REFUSED\n');process.exitCode=1;});

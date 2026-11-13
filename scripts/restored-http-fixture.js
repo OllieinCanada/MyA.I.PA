@@ -18,8 +18,10 @@ async function seedHttp(client,records){
 function verifyHttp(value){return value?.scope==='restored-disposable-http-read-only'&&value.passed===true&&value.realSql===true&&value.sourceDependency===BASE_HEAD
  &&value.success?.authenticatedTenants===2&&value.success.receiptDelivered===true&&value.success.suppressionPreserved===true
  &&value.success.authRefusals===4&&value.success.databaseMutationAttempts===0&&value.success.fileMutationAttempts===0
+ &&value.success.receiptReads>0&&value.success.fileProbeRefusals===4&&value.success.sqlWritePrivilegeProbeRefused===true
  &&value.refusal?.forcedReadFailure===true&&value.refusal.databaseMutationAttempts===0&&value.refusal.fileMutationAttempts>0
  &&value.refusal.fileWritesPrevented===true&&value.databaseFingerprintsUnchanged===true&&value.filesUnchanged===true&&value.roleRemoved===true
+ &&value.refusal.fileProbeRefusals===4&&value.refusal.sqlWritePrivilegeProbeRefused===true
  &&value.providerCallsOrMessages===0&&value.liveRecoveryProven===false&&value.osSandboxProven===false&&value.allPathsNaturallyReadOnly===false;}
 async function exerciseHttp({nativeSpawn,admin,use,config,target,restoredFiles,root,clean,identity,httpContext,head,fingerprints,before}){
  const role='http_fixture_'+crypto.randomBytes(6).toString('hex'),password=crypto.randomBytes(24).toString('hex');

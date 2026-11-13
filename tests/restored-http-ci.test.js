@@ -1,8 +1,8 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
 const {verifyHttp,BASE_HEAD}=require('../scripts/restored-http-fixture');
 function proof(){return {scope:'restored-disposable-http-read-only',passed:true,realSql:true,sourceDependency:BASE_HEAD,
- success:{authenticatedTenants:2,receiptDelivered:true,suppressionPreserved:true,authRefusals:4,databaseMutationAttempts:0,fileMutationAttempts:0},
- refusal:{forcedReadFailure:true,databaseMutationAttempts:0,fileMutationAttempts:1,fileWritesPrevented:true},
+ success:{authenticatedTenants:2,receiptDelivered:true,suppressionPreserved:true,authRefusals:4,databaseMutationAttempts:0,fileMutationAttempts:0,receiptReads:1,fileProbeRefusals:4,sqlWritePrivilegeProbeRefused:true},
+ refusal:{forcedReadFailure:true,databaseMutationAttempts:0,fileMutationAttempts:1,fileWritesPrevented:true,fileProbeRefusals:4,sqlWritePrivilegeProbeRefused:true},
  databaseFingerprintsUnchanged:true,filesUnchanged:true,roleRemoved:true,providerCallsOrMessages:0,liveRecoveryProven:false,osSandboxProven:false,allPathsNaturallyReadOnly:false};}
 test('complete bounded HTTP evidence accepted but every missing/changed claim refused',()=>{
  assert.equal(verifyHttp(proof()),true);
