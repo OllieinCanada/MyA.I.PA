@@ -47,9 +47,15 @@ test('invented-policy preview never clears full/live privacy or recovery gates',
  const r=await fixture().preview()(target),p=require('../scripts/launch-evidence');for(const name of ['privacyApplicationPassed','logicalRestorePassed','fullRecoveryPassed'])assert.equal(p[name](r,'8f218834361f5ec22de23c5cedd6690897d40f99'),false);
 });
 module.exports={fixture};
-function readerFixture(){
+function readerFixture(t,{failAfterFirstFile=false}={}){
  const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),{NAMES}=require('../server/recoveryFileStore');
- const directory=fs.mkdtempSync(path.join(os.tmpdir(),'myaipa-privacy-reader-'));for(const n of NAMES)fs.writeFileSync(path.join(directory,n),'{}');
+ const directory=fs.mkdtempSync(path.join(os.tmpdir(),'myaipa-privacy-reader-'));
+ t.after(()=>{
+  const resolved=fs.realpathSync(directory);assert.equal(path.dirname(resolved),fs.realpathSync(os.tmpdir()));assert.match(path.basename(resolved),/^myaipa-privacy-reader-/);
+  for(const name of fs.readdirSync(resolved)){assert.ok(NAMES.includes(name));assert.equal(fs.lstatSync(path.join(resolved,name)).isFile(),true);fs.unlinkSync(path.join(resolved,name));}
+  fs.rmdirSync(resolved);assert.equal(fs.existsSync(directory),false);
+ });
+ for(const [i,n]of NAMES.entries()){fs.writeFileSync(path.join(directory,n),'{}');if(failAfterFirstFile&&i===0)throw Error('FIXTURE_SETUP_EXPECTED_FAILURE');}
  const state={calls:[{id:1,...target}],foreign:[],changeFile:false},commands=[];
  const tx={business:{findUnique:async()=>({id:target.businessId})},caller:{findUnique:async()=>({id:target.callerId,phone:'+15555550100'})},
   call:{findMany:async({where})=>typeof where.businessId==='object'?state.foreign:state.calls},lead:{findMany:async()=>[]},smsSuppression:{findUnique:async()=>null},
@@ -57,6 +63,12 @@ function readerFixture(){
  const prisma={$transaction:async(work,options)=>{assert.equal(options.isolationLevel,'RepeatableRead');const result=await work(tx);if(state.changeFile)fs.writeFileSync(path.join(directory,NAMES[0]),'{"changed":true}');return result;}};
  const read=require('../server/privacyInventoryReader').createReadOnlyInventoryReader({prisma,directory});return {read,state,commands,directory};
 }
-test('actual reader uses read-only repeatable-read and retains explicit missing file adapters',async()=>{const f=readerFixture(),r=await f.read(target);assert.deepEqual(f.commands,['SET TRANSACTION READ ONLY']);assert.equal(r.coveredSurfaces.length,4);assert.ok(!r.coveredSurfaces.some(x=>x.startsWith('file:')));});
-test('actual reader rejects empty identity binding and truncated inventories',async()=>{for(const rows of [[],Array.from({length:1001},(_,i)=>({id:i,...target}))]){const f=readerFixture();f.state.calls=rows;await assert.rejects(f.read(target),e=>['PRIVACY_TARGET_NOT_OWNED','PRIVACY_INVENTORY_TRUNCATED'].includes(e.code));}});
-test('actual reader refuses changed file values across SQL snapshot',async()=>{const f=readerFixture();f.state.changeFile=true;await assert.rejects(f.read(target),e=>e.code==='PRIVACY_FILE_SNAPSHOT_CHANGED');});
+test('actual reader uses read-only repeatable-read and retains explicit missing file adapters',async t=>{const f=readerFixture(t),r=await f.read(target);assert.deepEqual(f.commands,['SET TRANSACTION READ ONLY']);assert.equal(r.coveredSurfaces.length,4);assert.ok(!r.coveredSurfaces.some(x=>x.startsWith('file:')));});
+test('actual reader rejects empty identity binding and truncated inventories',async t=>{for(const rows of [[],Array.from({length:1001},(_,i)=>({id:i,...target}))]){const f=readerFixture(t);f.state.calls=rows;await assert.rejects(f.read(target),e=>['PRIVACY_TARGET_NOT_OWNED','PRIVACY_INVENTORY_TRUNCATED'].includes(e.code));}});
+test('actual reader refuses changed file values across SQL snapshot',async t=>{const f=readerFixture(t);f.state.changeFile=true;await assert.rejects(f.read(target),e=>e.code==='PRIVACY_FILE_SNAPSHOT_CHANGED');});
+test('unit fixture cleanup runs after partial setup and body failures',()=>{
+ const fs=require('node:fs'),os=require('node:os'),path=require('node:path');
+ const inventory=()=>fs.readdirSync(os.tmpdir()).filter(n=>n.startsWith('myaipa-privacy-reader-')).sort(),before=inventory();
+ for(const partial of [true,false]){const callbacks=[];try{assert.throws(()=>{readerFixture({after:fn=>callbacks.push(fn)},{failAfterFirstFile:partial});throw Error('FIXTURE_BODY_EXPECTED_FAILURE');},/FIXTURE_(SETUP|BODY)_EXPECTED_FAILURE/);}finally{for(const cleanup of callbacks)cleanup();}}
+ assert.deepEqual(inventory(),before);
+});
