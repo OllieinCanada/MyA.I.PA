@@ -45,12 +45,13 @@ function fixture() {
   const business = { id: 7, name: raw.business.name, phone: raw.owner.phone, settings: { ownerPhone: raw.owner.phone, mode: 'unchanged' } };
   const control = { enabled: true, singleWriter: true, writes: 0, creates: 0, transactions: 0, lockKeys: [], evidenceReads: 0, rawOverride: '', now: time };
   const prisma = { async $transaction(fn, options) {
-    assert.equal(options.isolationLevel, 'Serializable');
+    assert.equal(options.isolationLevel, 'ReadCommitted');
     const previous = queue; let release; queue = new Promise(resolve => { release = resolve; }); await previous;
     const nextRows = copy(rows), nextJournal = new Map(copy([...journal]));
     const transactionNumber = ++control.transactions;
     try {
       const tx = { $queryRaw: async (_, key) => { control.lockKeys.push(key); return []; },
+        $executeRaw: async ([sql]) => { assert.match(sql, /LOCK TABLE "VapiBusinessMapping" IN SHARE ROW EXCLUSIVE MODE/); return 0; },
         business: { findUnique: async () => copy(control.missingBusiness ? null : business) },
         vapiBusinessMapping: { findMany: async () => copy(nextRows), create: async ({ data }) => {
           assert.equal(held, true); assert.ok(control.lockKeys.includes('signup-business-bindings:v1'));
@@ -63,8 +64,13 @@ function fixture() {
         } }, runtimeStore: {
           findUnique: async ({ where }) => nextJournal.has(where.key) ? { data: copy(nextJournal.get(where.key)) } : null,
           create: async ({ data }) => { assert.equal(nextJournal.has(data.key), false); nextJournal.set(data.key, copy(data.data)); },
+          updateMany: async ({ where, data }) => {
+            if (JSON.stringify(nextJournal.get(where.key)) !== JSON.stringify(where.data.equals)) return { count: 0 };
+            nextJournal.set(where.key, copy(data.data)); return { count: 1 };
+          },
         } };
       const result = await fn(tx);
+      if (control.loseMappingCommit && nextRows.length > rows.length) { control.loseMappingCommit = false; throw Error('synthetic mapping commit response lost before commit'); }
       if (control.rejectCommit === transactionNumber) throw Error('synthetic commit rejection');
       if (control.loseBeforeCommit === transactionNumber) throw Error('synthetic connection loss before commit');
       if (JSON.stringify(rows) !== JSON.stringify(nextRows)) control.writes++;
@@ -155,25 +161,56 @@ test('disabled defaults, missing lease and missing server-owned plan refuse befo
 });
 test('failure at each insert rolls back all three bindings and leaves preserved rows exact', async () => {
   for (const failInsert of [1, 2, 3]) { const f = fixture(), before = copy(f.rows); f.control.failInsert = failInsert;
-    await assert.rejects(f.apply(), { code: 'MAPPING_UNCERTAIN_INSPECT_FIRST' }); assert.deepEqual(f.rows, before); assert.equal(f.journal.size, 0);
-    assert.equal((await f.writer.inspectOutcome()).state, 'absent_at_read_only_snapshot'); }
+    await assert.rejects(f.apply(), { code: 'MAPPING_UNCERTAIN_INSPECT_FIRST' }); assert.deepEqual(f.rows, before); assert.equal(f.journal.size, 1);
+    assert.equal((await f.writer.inspectOutcome()).state, 'attempt_started_unresolved'); }
 });
 test('lost commit acknowledgement is inspectable and never causes automatic retry', async () => {
-  const f = fixture(), plan = await f.writer.prepare(); f.control.loseAcknowledgement = 2;
+  const f = fixture(), plan = await f.writer.prepare(); f.control.loseAcknowledgement = 3;
   await assert.rejects(f.writer.apply(plan.planDigest, f.actor), { code: 'MAPPING_UNCERTAIN_INSPECT_FIRST' });
   const result = await f.writer.inspectOutcome(); assert.equal(result.state, 'committed_exact'); assert.equal(result.retryAuthorized, false);
   await assert.rejects(f.writer.apply(plan.planDigest, f.actor), { code: 'MAPPING_UNCERTAIN_INSPECT_FIRST' }); assert.equal(f.control.creates, 3);
 });
 test('unknown before-commit failure stays absent but does not authorize replay', async () => {
-  const f = fixture(), plan = await f.writer.prepare(); f.control.loseBeforeCommit = 2;
+  const f = fixture(), plan = await f.writer.prepare(); f.control.loseBeforeCommit = 3;
   await assert.rejects(f.writer.apply(plan.planDigest, f.actor), { code: 'MAPPING_UNCERTAIN_INSPECT_FIRST' });
-  assert.equal((await f.writer.inspectOutcome()).state, 'absent_at_read_only_snapshot');
+  assert.equal((await f.writer.inspectOutcome()).state, 'attempt_started_unresolved');
   await assert.rejects(f.writer.apply(plan.planDigest, f.actor), { code: 'MAPPING_UNCERTAIN_INSPECT_FIRST' }); assert.equal(f.rows.length, 3);
+});
+for (const mode of ['restart', 'already-prepared-second-instance']) test(`durable uncertainty blocks ${mode} after an uncommitted mapping attempt`, async () => {
+  const f = fixture(), firstPlan = await f.writer.prepare();
+  const second = createBoundedBusinessMappingWriter(f.options);
+  const secondPlan = mode === 'already-prepared-second-instance' ? await second.prepare() : null;
+  f.control.loseMappingCommit = true;
+  await assert.rejects(f.writer.apply(firstPlan.planDigest, f.actor), { code: 'MAPPING_UNCERTAIN_INSPECT_FIRST' });
+  const rowsAfterUncertainty = copy(f.rows);
+  let outcome;
+  try { const plan = secondPlan || await second.prepare(); await second.apply(plan.planDigest, f.actor); outcome = 'applied_without_inspection'; }
+  catch (error) { outcome = error.code; }
+  assert.equal(outcome, 'MAPPING_UNCERTAIN_INSPECT_FIRST');
+  assert.deepEqual(f.rows, rowsAfterUncertainty);
+});
+test('release or policy revision cannot evade the stable provider-resource uncertainty fence', async () => {
+  const f = fixture(); f.control.loseMappingCommit = true;
+  await assert.rejects(f.apply(), { code: 'MAPPING_UNCERTAIN_INSPECT_FIRST' });
+  for (const policy of [{ ...f.policy, release: 'c'.repeat(40) }, { ...f.policy, preservedMappings: f.policy.preservedMappings.map(r => ({ ...r, label: 'new policy' })) }]) {
+    const restarted = createBoundedBusinessMappingWriter({ ...f.options, policy });
+    await assert.rejects(restarted.prepare(), { code: 'MAPPING_UNCERTAIN_INSPECT_FIRST' });
+  }
+  assert.equal(f.rows.length, 3);
+});
+test('unconfirmed intent acknowledgement dispatches no mapping request and does not retry', async () => {
+  for (const lost of ['loseBeforeCommit', 'loseAcknowledgement']) {
+    const f = fixture(), plan = await f.writer.prepare(); f.control[lost] = 2;
+    await assert.rejects(f.writer.apply(plan.planDigest, f.actor), { code: 'MAPPING_ATTEMPT_GATE_UNCONFIRMED_NO_MAPPING_DISPATCH' });
+    assert.equal(f.control.creates, 0); assert.equal(f.rows.length, 3);
+    await assert.rejects(f.writer.apply(plan.planDigest, f.actor), { code: 'MAPPING_UNCERTAIN_INSPECT_FIRST' });
+    assert.equal((await f.writer.inspectOutcome()).retryAuthorized, false);
+  }
 });
 test('changed evidence or lost lifecycle lease during insert aborts the full transaction', async () => {
   for (const change of [f => { f.evidence.source.status = 'decommissioned'; }, f => { f.control.leaseLost = true; }, f => { f.control.rawOverride = JSON.stringify({ [f.policy.phoneId]: 8 }); }]) {
     const f = fixture(); f.control.onInsert = () => change(f);
-    await assert.rejects(f.apply(), { code: 'MAPPING_UNCERTAIN_INSPECT_FIRST' }); assert.equal(f.rows.length, 3); assert.equal(f.journal.size, 0);
+    await assert.rejects(f.apply(), { code: 'MAPPING_UNCERTAIN_INSPECT_FIRST' }); assert.equal(f.rows.length, 3); assert.equal(f.journal.size, 1);
   }
 });
 test('50 repeated concurrent pairs permit one transaction to insert, with no duplicates', async () => {
@@ -196,9 +233,9 @@ test('independent service instances share lifecycle exclusion and restart inspec
   await assert.rejects(restarted.prepare(), { code: 'MAPPING_INSPECT_EXISTING_OPERATION' }); assert.equal(f.control.creates, 3);
 });
 test('DB commit rejection does not report success or authorize automatic retry', async () => {
-  const f = fixture(), plan = await f.writer.prepare(); f.control.rejectCommit = 2;
+  const f = fixture(), plan = await f.writer.prepare(); f.control.rejectCommit = 3;
   await assert.rejects(f.writer.apply(plan.planDigest, f.actor), { code: 'MAPPING_UNCERTAIN_INSPECT_FIRST' });
-  assert.equal(f.rows.length, 3); assert.equal(f.journal.size, 0);
+  assert.equal(f.rows.length, 3); assert.equal(f.journal.size, 1);
 });
 test('mutation of preserved mapping full contents after dry run refuses application', async () => {
   const f = fixture(), plan = await f.writer.prepare(); f.rows[0].label = 'new label';
@@ -290,24 +327,27 @@ test('real PostgreSQL bounded mapping transactions in a newly created disposable
       await assert.rejects(prisma.vapiBusinessMapping.create({ data: { businessId: 7, matchType: 'assistantId', matchValue: f.policy.assistantId } }), { code: 'P2002' });
       assert.equal((await w.inspectOutcome()).state, 'committed_exact');
     });
-    await t.test('second insert exception rolls back real rows and receipt atomically', async () => {
+    await t.test('second insert exception rolls back real mapping rows but retains the durable attempt fence', async () => {
       const f = await seed(); let inserts = 0;
       const injected = { $transaction: (fn, options) => prisma.$transaction(tx => fn({
-        business: tx.business, runtimeStore: tx.runtimeStore, $queryRaw: (...args) => tx.$queryRaw(...args),
+        business: tx.business, runtimeStore: tx.runtimeStore, $queryRaw: (...args) => tx.$queryRaw(...args), $executeRaw: (...args) => tx.$executeRaw(...args),
         vapiBusinessMapping: { findMany: (...args) => tx.vapiBusinessMapping.findMany(...args), create: (...args) => {
           if (++inserts === 2) throw Error('synthetic precommit failure'); return tx.vapiBusinessMapping.create(...args);
         } },
       }), options) };
-      const w = writer(f, injected), plan = await w.prepare();
+      const w = writer(f, injected), plan = await w.prepare(), alreadyPrepared = writer(f), otherPlan = await alreadyPrepared.prepare();
       await assert.rejects(w.apply(plan.planDigest, f.actor), { code: 'MAPPING_UNCERTAIN_INSPECT_FIRST' });
-      assert.equal(await prisma.vapiBusinessMapping.count(), 3); assert.equal(await prisma.runtimeStore.count(), 0);
+      assert.equal(await prisma.vapiBusinessMapping.count(), 3); assert.equal(await prisma.runtimeStore.count(), 1);
       assert.deepEqual(await preservation(), f.policy.preservedMappings);
-      assert.equal((await w.inspectOutcome()).state, 'absent_at_read_only_snapshot');
+      assert.equal((await w.inspectOutcome()).state, 'attempt_started_unresolved');
+      await assert.rejects(writer(f).prepare(), { code: 'MAPPING_UNCERTAIN_INSPECT_FIRST' });
+      await assert.rejects(alreadyPrepared.apply(otherPlan.planDigest, f.actor), { code: 'MAPPING_UNCERTAIN_INSPECT_FIRST' });
+      assert.equal(await prisma.vapiBusinessMapping.count(), 3);
     });
     await t.test('lost real commit acknowledgement is inspected, not retried', async () => {
       const f = await seed(); let transactions = 0;
       const injected = { $transaction: async (fn, options) => { const result = await prisma.$transaction(fn, options);
-        if (++transactions === 2) throw Error('synthetic acknowledgement loss after real commit'); return result; } };
+        if (++transactions === 3) throw Error('synthetic acknowledgement loss after real commit'); return result; } };
       const w = writer(f, injected), plan = await w.prepare();
       await assert.rejects(w.apply(plan.planDigest, f.actor), { code: 'MAPPING_UNCERTAIN_INSPECT_FIRST' });
       assert.equal((await w.inspectOutcome()).state, 'committed_exact');

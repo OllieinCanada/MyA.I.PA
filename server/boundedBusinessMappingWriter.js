@@ -116,7 +116,10 @@ function relevantMappings(rows, p) {
 function createBoundedBusinessMappingWriter({ prisma, policy, readEvidence, readOverrides,
   withAssociationLease, enabled = () => false, singleWriter = () => false, now = () => Date.now() }) {
   const p = clone(policy); validatePolicy(p);
-  const operationId = digest(p), key = PREFIX + operationId, plans = new Map(), uncertain = new Set();
+  // A new release/policy/actor must not generate a fresh key around an unresolved
+  // attempt on this provider resource. Policy revision is evidence, not a reset.
+  const operationId = digest({ version: 1, phoneId: p.phoneId }), policyDigest = digest(p);
+  const key = PREFIX + operationId, plans = new Map(), uncertain = new Set();
   async function leased(fn) {
     if (typeof withAssociationLease !== 'function') fail('MAPPING_LIFECYCLE_LEASE_REQUIRED');
     return withAssociationLease([p.sourceId, p.phantomId], async lease => {
@@ -129,8 +132,16 @@ function createBoundedBusinessMappingWriter({ prisma, policy, readEvidence, read
     return prisma.$transaction(async tx => {
       await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${'signup-business-bindings:v1'}))::text AS lock_result`;
       await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`bounded-business:${p.businessId}`}))::text AS lock_result`;
+      // A Serializable snapshot taken by the advisory-lock SELECT can predate
+      // that lock's acquisition. ReadCommitted plus explicit write exclusion
+      // makes the subsequent evidence reads fresh AND stable until commit.
+      // Reads remain available; this rare bounded correction excludes mapping
+      // mutations, including callers that do not participate in advisory locks.
+      await tx.$executeRaw`LOCK TABLE "VapiBusinessMapping" IN SHARE ROW EXCLUSIVE MODE`;
+      await tx.$queryRaw`SELECT id FROM "Business" WHERE id = ${p.businessId} FOR UPDATE`;
+      await tx.$queryRaw`SELECT id FROM "Settings" WHERE "businessId" = ${p.businessId} FOR UPDATE`;
       return fn(tx);
-    }, { isolationLevel: 'Serializable', maxWait: 5000, timeout: 10000 });
+    }, { isolationLevel: 'ReadCommitted', maxWait: 5000, timeout: 10000 });
   }
   async function state(tx) {
     const business = await tx.business.findUnique({ where: { id: p.businessId }, include: { settings: true } });
@@ -150,10 +161,11 @@ function createBoundedBusinessMappingWriter({ prisma, policy, readEvidence, read
   }
   async function prepare() {
     return leased(lease => transaction(async tx => {
-      const s = await state(tx); lease.assertHeld();
       const journal = (await tx.runtimeStore.findUnique({ where: { key } }))?.data;
+      if (journal && journal.phase !== 'completed') fail('MAPPING_UNCERTAIN_INSPECT_FIRST');
+      const s = await state(tx); lease.assertHeld();
       if (journal || s.targets.length) fail('MAPPING_INSPECT_EXISTING_OPERATION');
-      const planDigest = digest({ operationId, basis: s.basis });
+      const planDigest = digest({ operationId, policyDigest, basis: s.basis });
       plans.set(planDigest, clone({ basis: s.basis, before: s.rows }));
       return { operationId, planDigest, action: 'add_three_mapping_rows', readinessGranted: false };
     }));
@@ -162,17 +174,39 @@ function createBoundedBusinessMappingWriter({ prisma, policy, readEvidence, read
     if (!enabled() || !singleWriter()) fail('MAPPING_APPLY_DISABLED');
     if (uncertain.has(operationId)) fail('MAPPING_UNCERTAIN_INSPECT_FIRST');
     if (!/^[a-f0-9]{64}$/.test(actorHash || '') || !plans.has(planDigest)) fail('MAPPING_PLAN_REQUIRED');
-    let attempted = false;
+    let gateAttempted = false, gateConfirmed = false, attempted = false;
     try {
-      return await leased(lease => transaction(async tx => {
-        const s = await state(tx), saved = (await tx.runtimeStore.findUnique({ where: { key } }))?.data;
+      return await leased(async lease => {
+        const gate = await transaction(async tx => {
+        const saved = (await tx.runtimeStore.findUnique({ where: { key } }))?.data;
+        // This persisted fence, not the instance-local cache, governs restarts
+        // and other service instances, including already-prepared plans.
+        if (saved && saved.phase !== 'completed') fail('MAPPING_UNCERTAIN_INSPECT_FIRST');
+        const s = await state(tx);
         if (saved) {
-          if (saved.operationId !== operationId || saved.planDigest !== planDigest || saved.basis !== s.basis
+          if (saved.operationId !== operationId || saved.policyDigest !== policyDigest || saved.planDigest !== planDigest || saved.basis !== s.basis
             || saved.phase !== 'completed' || digest(sorted(saved.inserted)) !== digest(sorted(s.targets))) fail('MAPPING_JOURNAL_CONFLICT');
           return { operationId, applied: true, replayed: true, readinessGranted: false };
         }
         const plan = plans.get(planDigest);
         if (s.targets.length || plan.basis !== s.basis) fail('MAPPING_CHANGED_EVIDENCE');
+        lease.assertHeld();
+        gateAttempted = true;
+        await tx.runtimeStore.create({ data: { key, data: clone({ operationId, policyDigest, phase: 'attempt_started', planDigest,
+          basis: s.basis, before: plan.before, actorHash, startedAt: new Date(now()).toISOString() }) } });
+        return { replayed: false };
+        });
+        if (gate.replayed) return gate;
+        // No mapping request may be dispatched until the separate intent
+        // transaction is acknowledged committed. An unconfirmed intent commit
+        // is NOT a mapping attempt; inspect it before any explicit new action.
+        gateConfirmed = true;
+        return transaction(async tx => {
+        const saved = (await tx.runtimeStore.findUnique({ where: { key } }))?.data;
+        if (saved?.phase !== 'attempt_started' || saved.operationId !== operationId || saved.policyDigest !== policyDigest || saved.planDigest !== planDigest
+          || saved.actorHash !== actorHash) fail('MAPPING_UNCERTAIN_INSPECT_FIRST');
+        const s = await state(tx), plan = plans.get(planDigest);
+        if (s.targets.length || saved.basis !== s.basis || plan.basis !== s.basis) fail('MAPPING_CHANGED_EVIDENCE');
         lease.assertHeld();
         attempted = true;
         for (const row of expectedRows(p)) await tx.vapiBusinessMapping.create({ data: row });
@@ -184,12 +218,18 @@ function createBoundedBusinessMappingWriter({ prisma, policy, readEvidence, read
           || digest(assessTargetOverrides(await readOverrides(), p)) !== digest(s.overrides)
           || digest(await tx.business.findUnique({ where: { id: p.businessId }, include: { settings: true } })) !== digest(s.business)) fail('MAPPING_CHANGED_EVIDENCE');
         lease.assertHeld();
-        await tx.runtimeStore.create({ data: { key, data: clone({ operationId, phase: 'completed', planDigest,
-          basis: s.basis, inserted, before: plan.before, actorHash, completedAt: new Date(now()).toISOString() }) } });
+        const completed = await tx.runtimeStore.updateMany({ where: { key, data: { equals: saved } },
+          data: { data: clone({ ...saved, phase: 'completed', inserted, completedAt: new Date(now()).toISOString() }) } });
+        if (completed.count !== 1) fail('MAPPING_JOURNAL_CONFLICT');
         return { operationId, applied: true, replayed: false, readinessGranted: false };
-      }));
+        });
+      });
     } catch (error) {
-      if (attempted) { uncertain.add(operationId); fail('MAPPING_UNCERTAIN_INSPECT_FIRST'); }
+      if (attempted || gateConfirmed) { uncertain.add(operationId); fail('MAPPING_UNCERTAIN_INSPECT_FIRST'); }
+      if (gateAttempted) {
+        uncertain.add(operationId);
+        fail('MAPPING_ATTEMPT_GATE_UNCONFIRMED_NO_MAPPING_DISPATCH');
+      }
       if (!String(error.code || '').startsWith('MAPPING_')) fail('MAPPING_EVIDENCE_UNAVAILABLE');
       throw error;
     }
@@ -200,10 +240,11 @@ function createBoundedBusinessMappingWriter({ prisma, policy, readEvidence, read
       const rows = sorted(await tx.vapiBusinessMapping.findMany());
       const journal = (await tx.runtimeStore.findUnique({ where: { key } }))?.data;
       const targets = relevantMappings(rows, p);
-      const completed = journal?.operationId === operationId && journal.phase === 'completed'
+      const completed = journal?.operationId === operationId && journal.policyDigest === policyDigest && journal.phase === 'completed'
         && digest(sorted(journal.inserted)) === digest(sorted(targets))
         && digest(rows.filter(r => !targets.includes(r))) === digest(journal.before);
-      return { operationId, state: completed ? 'committed_exact' : !journal && !targets.length ? 'absent_at_read_only_snapshot' : 'conflict_or_partial',
+      return { operationId, state: completed ? 'committed_exact' : journal?.phase === 'attempt_started' ? 'attempt_started_unresolved'
+        : !journal && !targets.length ? 'absent_at_read_only_snapshot' : 'conflict_or_partial',
         insertedIds: completed ? targets.map(r => r.id) : [], retryAuthorized: false, readinessGranted: false };
     });
   }
@@ -211,7 +252,7 @@ function createBoundedBusinessMappingWriter({ prisma, policy, readEvidence, read
   async function planRollback(readActivity) {
     return leased(lease => transaction(async tx => {
       const rows = sorted(await tx.vapiBusinessMapping.findMany()), saved = (await tx.runtimeStore.findUnique({ where: { key } }))?.data;
-      if (!saved || saved.operationId !== operationId || saved.phase !== 'completed'
+      if (!saved || saved.operationId !== operationId || saved.policyDigest !== policyDigest || saved.phase !== 'completed'
         || !Number.isFinite(Date.parse(saved.completedAt)) || Date.parse(saved.completedAt) > now()) fail('MAPPING_ROLLBACK_RECEIPT_REQUIRED');
       const targets = relevantMappings(rows, p);
       if (targets.length !== 3 || digest(sorted(targets)) !== digest(sorted(saved.inserted))
