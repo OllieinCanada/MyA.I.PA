@@ -25,6 +25,16 @@ function readEvidence(name) {
 function evidenceTimestamp(value) {
   return value?.checkedAt || value?.completedAt || value?.generatedAt || value?.createdAt || "";
 }
+function credentialGatePassed(value){
+  const name='../security/credential-readiness-status.json',current=readEvidence(name).value;
+  if(!/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(current?.attemptId||''))return false;
+  const completed=readEvidence(`../security/credential-readiness-attempt-${current.attemptId}.json`).value;
+  if(JSON.stringify(readEvidence(name).value)!==JSON.stringify(current))return false;
+  return proof.credentialConfigurationPassed(value,{
+    releaseCommit:expectedRelease,serviceId:process.env.READINESS_CREDENTIAL_SERVICE_ID||'',
+    frontendOrigin:process.env.READINESS_FRONTEND_ORIGIN||'',publicArtifactSha256:process.env.READINESS_PUBLIC_ARTIFACT_SHA256||'',
+  },{current,completed});
+}
 
 function makeGate({ id, title, evidence, pass, requirement, limitation = "", maxAgeHours = 24 }) {
   const loaded = readEvidence(evidence);
@@ -69,8 +79,9 @@ const gates = [
     id: "signup_security",
     title: "Public signup security configuration",
     evidence: "../security/credential-readiness-latest.json",
-    pass: (value) => value.signupControls?.publicSelfServiceReady === true,
-    requirement: "Turnstile, SMTP, email verification, admin TOTP, encrypted backups, and automatic self-service mode are all explicitly configured.",
+    pass: credentialGatePassed,
+    requirement: "Selected CAPTCHA providers, SMTP transport, general contact verification, admin TOTP, backup encryption key and automatic mode have fresh matching runtime/deployed-public configuration evidence.",
+    limitation: "Presence-only configuration evidence does not prove a successful CAPTCHA challenge, SMS/email delivery, MFA challenge or backup restore.",
   }),
   makeGate({
     id: "operations",
