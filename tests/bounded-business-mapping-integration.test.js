@@ -28,7 +28,7 @@ test('pinned real reader/writer/fence SQL integration (not an injected-evidence 
       assert.equal((await prisma.$queryRaw`SELECT current_database() AS db`)[0].db, database);
       await prisma.runtimeStore.deleteMany(); await prisma.signupAttempt.deleteMany(); await prisma.vapiBusinessMapping.deleteMany();
       await prisma.settings.deleteMany(); await prisma.business.deleteMany();
-      const dir = path.join(directory, name); fs.mkdirSync(dir); const f = createFixture(dir);
+      const dir = path.join(directory, name); fs.mkdirSync(dir); const f = createFixture(dir,{unreconciled:name==='inverse_cleanup_order'});
       await prisma.business.create({ data: { id: 7, name: f.source.businessName, phone: f.source.ownerPhone, timezone: 'America/Toronto',
         settings: { create: { ownerPhone: f.source.ownerPhone } } } });
       await prisma.vapiBusinessMapping.createMany({ data: f.policy.preservedMappings });
@@ -78,15 +78,19 @@ test('pinned real reader/writer/fence SQL integration (not an injected-evidence 
       const w = f.writer(db), plan = await w.prepare(); await w.apply(plan.planDigest, f.actor);
       assert.equal(checked, true); assert.equal(await count(), 6); assert.equal((await w.inspectOutcome()).state, 'committed_exact');
     });
-    for (const kind of ['context', 'source']) await run(kind + '_lock_wait', async f => {
+    for (const kind of ['context', 'source', 'registry', 'journal']) await run(kind + '_lock_wait', async f => {
       const w = f.writer(prisma), plan = await w.prepare();
       await editor(async c => {
         await c.query('BEGIN');
         try {
           if (kind === 'source') await c.query('UPDATE "SignupAttempt" SET status=$1 WHERE "eventKey"=$2', ['decommissioned', f.policy.sourceId]);
-          else { const changed = structuredClone(f.context); changed.payload.provisioning.authorizationToken = 'tampered';
-            await c.query('UPDATE "RuntimeStore" SET data=$1::jsonb WHERE key=$2', [JSON.stringify(changed), f.contextKey]); }
-          const rejected = assert.rejects(w.apply(plan.planDigest, f.actor), { code: kind === 'source' ? 'MAPPING_IDENTITY_UNPROVEN' : 'MAPPING_CONTEXT_SIGNATURE_INVALID' });
+          else { const key=kind==='context'?f.contextKey:kind==='registry'?f.registryKey:f.journalKey;
+            const changed=structuredClone(f.records.get(key));
+            if(kind==='context')changed.payload.provisioning.authorizationToken='tampered';
+            else if(kind==='registry')changed.closed=true;else changed.phase='prepared';
+            await c.query('UPDATE "RuntimeStore" SET data=$1::jsonb WHERE key=$2', [JSON.stringify(changed), key]); }
+          const codes={source:'MAPPING_IDENTITY_UNPROVEN',context:'MAPPING_CONTEXT_SIGNATURE_INVALID',registry:'MAPPING_BUSINESS_CONFLICT',journal:'MAPPING_RECONCILIATION_REQUIRED'};
+          const rejected = assert.rejects(w.apply(plan.planDigest, f.actor), { code: codes[kind] });
           let blocked = false;
           for (let n=0;n<100;n++) { blocked = (await admin.query("SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=$1 AND wait_event_type='Lock') AS blocked", [database])).rows[0].blocked;
             if(blocked)break; await new Promise(resolve=>setTimeout(resolve,20)); }
@@ -95,6 +99,17 @@ test('pinned real reader/writer/fence SQL integration (not an injected-evidence 
         } finally { await c.query('ROLLBACK'); }
       });
       assert.equal(await count(), 3);
+    });
+    await run('inverse_cleanup_order',async f=>{
+      // Legitimate pre-repair state: repaired rows cannot acquire cleanup
+      // reservations at all because history is protected. Do not fake one.
+      let external=0;
+      await f.fence.withRemovalGuard(f.readStore,[hashOperationalTarget({signupAttemptId:f.policy.sourceId})],async()=>{
+        await assert.rejects(f.writer(prisma).prepare(),{code:'ASSOCIATION_REPAIR_BUSY'});
+        assert.equal(await count(),3);assert.equal(external,0);
+      });
+      await assert.rejects(f.writer(prisma).prepare(),{code:'MAPPING_RECONCILIATION_REQUIRED'});
+      assert.equal(external,0);
     });
     await run('lifecycle_before_external', async f => {
       let external = 0;

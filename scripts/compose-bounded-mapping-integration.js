@@ -10,7 +10,8 @@ const OVERLAYS = [
 ];
 const REQUIRED_CASES = ['commit_identity_readiness', 'source_changed_before', 'context_changed_before', 'receipt_changed_before',
   'source_update_during', 'source_insert_during', 'context_update_during', 'receipt_update_during',
-  'context_lock_wait', 'source_lock_wait', 'lifecycle_before_external', 'file_mutation_during',
+  'context_lock_wait', 'source_lock_wait', 'registry_lock_wait', 'journal_lock_wait', 'inverse_cleanup_order',
+  'lifecycle_before_external', 'file_mutation_during',
   'atomicity_restart', 'uncertain_commit', 'conflict_refusal', 'override_refusal'];
 const hash = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 const archiveArgs = (tree, output) => ['-c', 'core.autocrlf=false', 'archive', '--format=tar', ...(output ? ['--output', output] : []), tree];

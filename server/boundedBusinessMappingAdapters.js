@@ -66,6 +66,12 @@ function createBoundedMappingEvidenceReader({ readStore, getProviderSnapshot, ge
     const keys = ['signup-association-repair:v1:' + repairId, 'signup-business:' + identity,
       ...['twilio-number', 'vapi-assistant', 'vapi-import'].map(kind => require('./provisioningState').provisioningStateKey(kind, identity))].sort();
     for (const key of keys) await tx.$queryRaw`SELECT key FROM "RuntimeStore" WHERE key = ${key} FOR SHARE`;
+    // FOR SHARE stabilizes existing proof rows, not absent keys. Registry
+    // insertion/closure is coordinated by the writer's global
+    // signup-business-bindings:v1 lock, which both normal registry writers use.
+    // Arbitrary noncooperating direct SQL can insert an absent registry key;
+    // neither this adapter nor a boolean singleProcess claim prevents that.
+    // Production requires verified single-writer/fence + advisory coordination.
     const [association, registry, ...stages] = await Promise.all([
       tx.runtimeStore.findUnique({ where: { key: 'signup-association-repair:v1:' + repairId } }),
       tx.runtimeStore.findUnique({ where: { key: 'signup-business:' + identity } }),
