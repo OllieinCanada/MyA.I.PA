@@ -1,0 +1,58 @@
+name: Isolated public browser quality
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  public-browser-quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CI: "true"
+      REACT_APP_API_BASE_URL: https://api.myaipa.ca
+      REACT_APP_GOOGLE_MAPS_API_KEY: ${{ vars.GOOGLE_MAPS_BROWSER_KEY }}
+      REACT_APP_RELEASE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.22.3"
+          cache: npm
+      - name: Restore unchanged locked dependencies
+        run: npm ci --include=dev --legacy-peer-deps
+      - name: Install isolated regression browsers
+        run: npx playwright install --with-deps chromium firefox webkit
+      - name: Verify inventory and focused tooling regressions
+        run: |
+          node scripts/verify-installed-lock.js
+          node --test tests/keyboard-focus-evidence.test.js tests/browser-quality-network.test.js tests/browser-quality-coverage.test.js tests/operational-incident-inspection.test.js tests/installed-lock-inventory.test.js
+      - name: Verify real browser route precedence without external traffic
+        env:
+          RUN_BROWSER_NETWORK_TEST: "1"
+        run: node --test tests/browser-network-routing.test.js
+      - name: Build local frontend artifact
+        run: npm run build:pages
+      - name: Verify isolated public browser quality in every engine
+        env:
+          BUILD_PREVIEW_DIR: docs
+          BROWSER_ENGINES: chromium,firefox,webkit
+        run: npm run test:browser:quality
+      - name: Preserve evidence including failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: public-browser-quality-${{ github.event.pull_request.head.sha || github.sha }}
+          retention-days: 7
+          path: |
+            diagnostics/shipping-readiness/browser-quality-gate.json
+            diagnostics/browser-drive/navigation-*.json
+            diagnostics/browser-drive/focus-*.json
+            diagnostics/browser-drive/focus-*.png
+          if-no-files-found: ignore

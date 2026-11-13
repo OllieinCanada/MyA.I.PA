@@ -48,6 +48,11 @@ test("cross-browser diagnostics remain available without blocking the required g
   const browserGate = fs.readFileSync(path.join(root, "scripts", "test-browser-quality.js"), "utf8");
   assert.equal(packageJson.scripts["test:browser:quality"], "node scripts/test-browser-quality.js");
   assert.doesNotMatch(workflow, /npm run test:browser:quality/);
+  const diagnostic = fs.readFileSync(path.join(root, '.github', 'workflows', 'public-browser-quality.yml'), 'utf8');
+  assert.match(diagnostic, /BROWSER_ENGINES: chromium,firefox,webkit/);
+  assert.match(diagnostic, /npm run test:browser:quality/);
+  assert.match(diagnostic, /if: always\(\)/);
+  assert.doesNotMatch(diagnostic, /continue-on-error/);
   assert.match(browserGate, /deferred: true/);
   assert.match(browserGate, /process\.exitCode = 1/);
 });
