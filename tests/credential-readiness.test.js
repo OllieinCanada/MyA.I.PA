@@ -181,6 +181,6 @@ test('CLI is offline, import is side-effect free, raw input/JSON errors never le
   const same=spawnSync(process.execPath,args.map(x=>x.startsWith('--out=')?'--out='+runtime:x),{encoding:'utf8',env,timeout:10000});
   assert.equal(same.status,1);assert.equal(fs.readFileSync(runtime,'utf8'),original,'audit cannot overwrite an input');
   const script=fs.readFileSync(cli,'utf8');assert.doesNotMatch(script,/loadProjectEnv|readRenderCredentials|fetch\(|validateTwilio|cli\.yaml/);
-  const imported=spawnSync(process.execPath,['-e',`global.fetch=()=>{throw Error('network forbidden')};require(${JSON.stringify(cli)});`],{encoding:'utf8',env,timeout:10000});
+  const imported=spawnSync(process.execPath,['-e',"global.fetch=()=>{throw Error('network forbidden')};require(process.argv[1]);",cli],{encoding:'utf8',env,timeout:10000});
   assert.equal(imported.status,0,imported.stderr);assert.equal(imported.stdout,'');
 });
