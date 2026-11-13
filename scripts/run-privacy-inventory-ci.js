@@ -23,7 +23,8 @@ function validateEnvironment(env){
 function verifyReport(r,p){return /^[a-f0-9]{40}$/.test(p?.head||'')&&r?.head===p.head&&r.base===BASE&&r.scope==='synthetic-readonly-privacy-inventory-ci'
  &&r.passed===true&&r.modelsFingerprinted===36&&r.adapterModels===4&&r.missingSurfaces===36&&r.fileStores===4&&r.ownedDatabases===2
  &&r.sourceSha256&&Object.keys(r.sourceSha256).length===SOURCES.length&&SOURCES.every(f=>r.sourceSha256[f]===p.sourceSha256[f])
- &&Array.isArray(p.models)&&p.models.length===36&&Array.isArray(r.modelHashes)&&r.modelHashes.length===p.models.length&&new Set(r.modelHashes.map(m=>m.model)).size===p.models.length
+ &&Array.isArray(p.models)&&p.models.length===36&&Array.isArray(r.models)&&r.models.length===p.models.length&&new Set(r.models).size===p.models.length&&p.models.every(n=>r.models.includes(n))
+ &&Array.isArray(r.modelHashes)&&r.modelHashes.length===p.models.length&&new Set(r.modelHashes.map(m=>m.model)).size===p.models.length
  &&p.models.every(n=>r.modelHashes.some(m=>m.model===n&&Number.isSafeInteger(m.rows)&&m.rows>=0&&/^[a-f0-9]{64}$/.test(m.sourceSha256)&&m.sourceSha256===m.targetSha256))
  &&Array.isArray(r.fileHashes)&&r.fileHashes.length===4&&new Set(r.fileHashes.map(f=>f.name)).size===4&&require('../server/recoveryFileStore').NAMES.every(n=>r.fileHashes.some(f=>f.name===n&&/^[a-f0-9]{64}$/.test(f.sourceSha256)&&f.sourceSha256===f.targetSha256))
  &&Array.isArray(r.checks)&&r.checks.length===CHECKS.length&&new Set(r.checks.map(c=>c.name)).size===CHECKS.length&&CHECKS.every(n=>r.checks.some(c=>c.name===n&&c.passed===true))
