@@ -106,6 +106,24 @@ test('a stale target revision stops before file correction and leaves an inspect
   await assert.rejects(f.apply(), { code: 'ASSOCIATION_UNCERTAIN_INSPECT_FIRST' }); assert.equal(f.control.commits, 0);
 });
 
+test('a concurrent third-row resource claim is rechecked at the atomic file commit', async () => {
+  for (const field of ['twilioPhoneNumber', 'vapiAssistantId', 'vapiPhoneNumberId']) {
+    const f = fixture();
+    f.control.beforeFile = () => { f.store.other[field] = f.store.phantom[field]; };
+    await assert.rejects(f.apply(), { code: 'ASSOCIATION_UNCERTAIN_INSPECT_FIRST' });
+    assert.equal(f.control.commits, 0); assert.equal(f.attempt.assignedPhone, null);
+    assert.equal([...f.journal.values()][0].phase, 'prepared');
+  }
+});
+
+test('ordinary writes cannot introduce a third resource owner after reconciliation', async () => {
+  const f = fixture(); await f.apply();
+  for (const field of ['twilioPhoneNumber', 'vapiAssistantId', 'vapiPhoneNumberId']) {
+    const next = structuredClone(f.store); next.other[field] = next.source[field];
+    assert.throws(() => f.fence.check(f.store, next), { code: 'ASSOCIATION_THIRD_OWNER' });
+  }
+});
+
 test('lost prepared-journal acknowledgement is inspected and never automatically reapplied', async () => {
   const f = fixture(); f.control.loseAcknowledgement = 1;
   await assert.rejects(f.apply(), { code: 'ASSOCIATION_UNCERTAIN_INSPECT_FIRST' });

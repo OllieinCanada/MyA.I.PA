@@ -37,6 +37,8 @@ function createAssociationFence() {
         const replacement = next[key];
         if (!replacement || digest(mark) !== digest(replacement.resourceAssociationRepair)) fail('ASSOCIATION_HISTORY_PROTECTED');
         if (ASSOCIATIONS.some(f => (row[f] || '') !== (replacement[f] || ''))) fail('ASSOCIATION_OWNERSHIP_PROTECTED');
+        if (Object.values(next).some(r => r?.signupAttemptId !== mark.sourceId
+          && ASSOCIATIONS.some(f => r?.[f] && r[f] === mark.values[f]))) fail('ASSOCIATION_THIRD_OWNER');
       }
     },
   };
@@ -101,6 +103,8 @@ function buildAssociationPlan({ store, evidence, scope }) {
 
 function projectAssociationMove(store, plan) {
   if (digest(selected(store, [plan.scope.sourceId, plan.scope.phantomId])) !== plan.targetDigest) fail('ASSOCIATION_STALE_PLAN');
+  if (Object.values(store).some(r => ![plan.scope.sourceId, plan.scope.phantomId].includes(r?.signupAttemptId)
+    && ASSOCIATIONS.some(f => r?.[f] && r[f] === plan.values[f]))) fail('ASSOCIATION_THIRD_OWNER');
   const next = structuredClone(store), source = next[plan.sourceKey], phantom = next[plan.phantomKey];
   const mark = { id: plan.repairId, sourceId: plan.scope.sourceId, phantomId: plan.scope.phantomId, values: plan.values };
   next[plan.sourceKey] = { ...source, ...plan.values, resourceAssociationRepair: mark };
