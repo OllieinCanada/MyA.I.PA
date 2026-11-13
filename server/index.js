@@ -10,6 +10,9 @@ const { dispatchHandler: notificationDispatchHandler, dispatchReadinessHandler }
 const { createFinanceService, registerFinanceRoutes } = require('./providerFinance');
 const { trackProgress: trackAdminSignupProgress, registerTrackerRoutes, createStallProcessor, createTrackerBatchSaver } = require('./adminSignupTracker');
 const { readSetupEvidence, createNumberSearchTracker } = require('./adminSignupSetup');
+const { createAssociationFence, createAssociationRepairService, atomicCommitAssociationFile,
+  registerAssociationRepairRoutes } = require('./signupAssociationRepair');
+const signupAssociationFence = createAssociationFence();
 const signupNumberSearchTracker = createNumberSearchTracker();
 const { createPrismaObservationStore, createObservationService, registerObservationRoutes, observationBodyGuard } = require('./signupFormObservation');
 const { runtimeDependencySecurity } = require('./runtimeDependencySecurity');
@@ -2023,6 +2026,7 @@ function readSignupDashboardStore() {
 
 function writeSignupDashboardStore(store) {
   ensureSignupDashboardStore();
+  signupAssociationFence.check(JSON.parse(fs.readFileSync(signupDashboardPath, 'utf8')), store);
   fs.writeFileSync(signupDashboardPath, `${JSON.stringify(store, null, 2)}\n`);
 }
 
@@ -6503,6 +6507,7 @@ async function inspectSignupSetForDecommission({
     error.code = "SIGNUP_DECOMMISSION_TARGET_NOT_FOUND";
     throw error;
   }
+  signupAssociationFence.assertRemovalAllowed(JSON.parse(fs.readFileSync(signupDashboardPath, 'utf8')), targetIds);
   const identity = assertSharedSignupIdentity(targets);
   const targetIdSet = new Set(targetIds);
   const ownerEmails = new Set(identity.ownerEmails);
@@ -6675,6 +6680,8 @@ async function decommissionSignupSetAndRebuild({
     };
   }
 
+  return signupAssociationFence.withRemovalGuard(
+    () => JSON.parse(fs.readFileSync(signupDashboardPath, 'utf8')), inspection.targetIds, async () => {
   const billingResults = { subscriptions: [], checkoutSessions: [], customers: [] };
   for (const subscriptionId of inspection.subscriptionIds) {
     billingResults.subscriptions.push(await cancelStripeSubscriptionIfPresent(subscriptionId));
@@ -6809,6 +6816,7 @@ async function decommissionSignupSetAndRebuild({
     },
     recovery,
   };
+  });
 }
 
 async function inspectFailedSuperdavesRebuildRollback({ targetId, expectedBusinessName }) {
@@ -6820,6 +6828,7 @@ async function inspectFailedSuperdavesRebuildRollback({ targetId, expectedBusine
     error.code = "FAILED_REBUILD_TARGET_NOT_FOUND";
     throw error;
   }
+  signupAssociationFence.assertRemovalAllowed(JSON.parse(fs.readFileSync(signupDashboardPath, 'utf8')), [targetId]);
   if (String(target.businessName || "").trim() !== expectedBusinessName) {
     const error = new Error("The failed rebuild business name does not match the exact rollback target.");
     error.statusCode = 409;
@@ -6924,6 +6933,8 @@ async function rollbackFailedSuperdavesRebuild({ targetId, expectedBusinessName,
   const inspection = await inspectFailedSuperdavesRebuildRollback({ targetId, expectedBusinessName });
   if (!apply) return { ok: true, action: "dry_run", summary: inspection.summary };
 
+  return signupAssociationFence.withRemovalGuard(
+    () => JSON.parse(fs.readFileSync(signupDashboardPath, 'utf8')), [inspection.targetId], async () => {
   const billingResults = { subscriptions: [], checkoutSessions: [], customers: [] };
   for (const subscriptionId of inspection.subscriptionIds) {
     billingResults.subscriptions.push(await cancelStripeSubscriptionIfPresent(subscriptionId));
@@ -6978,6 +6989,7 @@ async function rollbackFailedSuperdavesRebuild({ targetId, expectedBusinessName,
     removedSignupRecords: removed.removed,
     providerResults: { billing: billingResults, vapi: vapiResults, twilio: twilioResults },
   };
+  });
 }
 
 function getSignupProviderRecoveryDiagnostics({ signup = {}, pendingSignup = null, vapiNumbers = [], twilioNumbers = [], providerLookup = "not_needed" } = {}) {
@@ -11168,6 +11180,58 @@ function requireProvisioningAuthorization(req, res, next) {
   }
   req.provisioningAuthorization = input;
   return next();
+}
+
+// Strictly read-only proof collection for the isolated association writer.
+// No provisioning callbacks, durable claims, trial creation or message helpers.
+async function readSignupAssociationDatabaseEvidence(scope, db = prisma) {
+  const refuse = code => { throw Object.assign(new Error(code), { code, statusCode: 409 }); };
+  if (![scope.sourceId, scope.phantomId].every(id => /^signup_[a-f0-9]{32}$/.test(id || ''))
+    || scope.sourceId === scope.phantomId || !/^\+1[2-9]\d{9}$/.test(scope.number || '')
+    || !/^PN[a-f0-9]{32}$/i.test(scope.twilioSid || '')
+    || ![scope.assistantId, scope.phoneId].every(id => /^[a-z0-9-]{1,160}$/i.test(id || ''))) refuse('ASSOCIATION_SCOPE_INVALID');
+  const [sourceAttempt, phantomAttempt, otherAttempts] = await Promise.all([
+    db.signupAttempt.findUnique({ where: { eventKey: scope.sourceId } }),
+    db.signupAttempt.findUnique({ where: { eventKey: scope.phantomId }, select: { eventKey: true } }),
+    db.signupAttempt.findMany({ where: { eventKey: { notIn: [scope.sourceId, scope.phantomId] }, OR: [
+      { assignedPhone: scope.number }, { vapiAssistantId: scope.assistantId }, { vapiPhoneNumberId: scope.phoneId },
+    ] }, select: { eventKey: true } }),
+  ]);
+  const businessKey = signupBusinessKey(sourceAttempt || {});
+  if (!businessKey || phantomAttempt || otherAttempts.length) refuse('ASSOCIATION_BINDING_UNPROVEN');
+  const context = (await db.runtimeStore.findUnique({ where: { key: contextStoreKey(businessKey) } }))?.data;
+  if (!context?.payload || registeredSignupEventKey(context) !== scope.sourceId
+    || buildMakeSignupEventKey(context.payload) !== scope.phantomId) refuse('ASSOCIATION_BINDING_UNPROVEN');
+  const signatureVerified = verifySignupProvisioningAuthorization(context.payload, getProvisioningSigningSecret());
+  if (!signatureVerified) refuse('ASSOCIATION_CONTEXT_UNPROVEN');
+  const receipts = {};
+  await Promise.all(['twilio-number', 'vapi-assistant', 'vapi-import'].map(async kind => {
+    receipts[kind] = (await readProvisioningStep({ prisma: db, kind, idempotencyKey: businessKey })).data;
+  }));
+  if (Object.values(receipts).some(r => r?.status !== 'completed' || r.contextHash !== context.contextHash)
+    || receipts['twilio-number'].result?.twilioPhoneNumber !== scope.number
+    || (receipts['twilio-number'].result?.sid || receipts['twilio-number'].result?.twilioSid) !== scope.twilioSid
+    || receipts['vapi-assistant'].result?.assistantId !== scope.assistantId
+    || receipts['vapi-import'].result?.id !== scope.phoneId) refuse('ASSOCIATION_RECEIPTS_UNPROVEN');
+  return { sourceAttempt, phantomAttempt, otherAttempts, context, receipts, signatureVerified };
+}
+
+async function readSignupAssociationEvidence(scope) {
+  const evidence = await readSignupAssociationDatabaseEvidence(scope);
+  const [numbers, phone, assistant] = await Promise.all([
+    fetchTwilioIncomingPhoneNumbers({ requireComplete: true }),
+    requestVapiResource(`phone-number/${encodeURIComponent(scope.phoneId)}`),
+    requestVapiResource(`assistant/${encodeURIComponent(scope.assistantId)}`),
+  ]);
+  const matches = numbers.filter(n => n.sid === scope.twilioSid || n.phone_number === scope.number);
+  if (matches.length !== 1) throw Object.assign(new Error('Provider identity conflict.'), { code: 'ASSOCIATION_PROVIDER_CONFLICT', statusCode: 409 });
+  const twilio = matches[0];
+  return { ...evidence,
+    provider: { twilio: { sid: twilio.sid, number: twilio.phone_number, name: twilio.friendly_name },
+      phone: { id: phone.id, number: getVapiPhoneNumber(phone), assistantId: getVapiAssistantId(phone), status: phone.status },
+      assistant: { id: assistant.id, contentFingerprint: fingerprintAssistantContent(assistant) } },
+    reserveNumbers: numbers.filter(n => /^myaipa-reserve-held-20261110-[1-5]$/.test(n.friendly_name || '')).map(n => n.phone_number),
+  };
 }
 
 async function loadTrustedProvisioningContext(req) {
@@ -17582,6 +17646,17 @@ require('./smsNotificationDrafts').registerNotificationDraftRoutes({ app, prisma
 registerTrackerRoutes({ app, requireAdmin, isAllowedOrigin, list: listSignupDashboardRecords, save: upsertSignupDashboardRecord,
   audit: event => recordAdminAuditEvent({ prisma, ...event }), actorHash: getAdminActorHash, observations: () => signupFormObservations.listAdmin(),
   setupEvidence: record => readSetupEvidence({ prisma, record, searchTracker: signupNumberSearchTracker }) });
+const signupAssociationRepair = createAssociationRepairService({ prisma,
+  readStore: () => JSON.parse(fs.readFileSync(signupDashboardPath, 'utf8')),
+  commitStore: project => atomicCommitAssociationFile(signupDashboardPath, project), fence: signupAssociationFence,
+  readEvidence: readSignupAssociationEvidence,
+  readDatabaseEvidence: (tx, scope) => readSignupAssociationDatabaseEvidence(scope, tx),
+  enabled: () => process.env.SIGNUP_ASSOCIATION_REPAIR_ENABLED === 'true',
+  singleWriter: () => process.env.SIGNUP_ASSOCIATION_REPAIR_SINGLE_WRITER_CONFIRMED === 'true'
+    && !require('node:cluster').isWorker && Number(process.env.WEB_CONCURRENCY || 1) === 1,
+});
+registerAssociationRepairRoutes({ app, requireAdmin, limiter: adminSignupRepairProcessRateLimiter,
+  isAllowedOrigin, actorHash: getAdminActorHash, service: signupAssociationRepair });
 const signupFormObservations = createObservationService({ store: createPrismaObservationStore(prisma),
   authenticateAttempt: (id, token) => signupAttempts ? signupAttempts.authenticate(id, token) : null });
 registerObservationRoutes({ app, service: signupFormObservations, isAllowedOrigin, requireAdmin,
