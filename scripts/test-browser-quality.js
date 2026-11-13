@@ -4,7 +4,13 @@ const net = require("net");
 const path = require("path");
 const { chromium, firefox, webkit } = require("./playwright-runtime");
 const { rootPath } = require("./_helpers");
-const reportPath = rootPath("diagnostics", "shipping-readiness", "browser-quality-gate.json");
+const { captureFocusSurfaces, assessKeyboardFocus } = require('./keyboard-focus-evidence');
+const { installNetworkIsolation } = require('./browser-quality-network');
+const { coversCatalog } = require('./browser-quality-coverage');
+const networkEvidence = { unexpectedWrites: [], blockedSockets: 0 };
+const reportPath = process.env.BROWSER_QUALITY_REPORT_PATH
+  ? path.resolve(process.env.BROWSER_QUALITY_REPORT_PATH)
+  : rootPath("diagnostics", "shipping-readiness", "browser-quality-gate.json");
 
 const defaultBuildDir = rootPath("build");
 const pagesBuildDir = rootPath("docs");
@@ -244,17 +250,33 @@ async function auditPage({ browser, baseUrl, engineName, route, viewport }) {
     viewport: { width: viewport.width, height: viewport.height },
     serviceWorkers: "block",
   });
+  await installNetworkIsolation(context, baseUrl, networkEvidence);
   const page = await context.newPage();
   page.setDefaultTimeout(15_000);
   page.setDefaultNavigationTimeout(15_000);
   const runtimeErrors = [];
+  const navigationTrace = [];
+  const requestLabel = request => { const url = new URL(request.url()); return { host: url.hostname, path: url.pathname, type: request.resourceType() }; };
+  page.on('request', request => navigationTrace.push({ event: 'request', ...requestLabel(request) }));
+  page.on('requestfinished', request => navigationTrace.push({ event: 'finished', ...requestLabel(request) }));
+  page.on('requestfailed', request => navigationTrace.push({ event: 'failed', ...requestLabel(request), error: request.failure()?.errorText }));
+  page.on('domcontentloaded', () => navigationTrace.push({ event: 'domcontentloaded' }));
   page.on("pageerror", (error) => runtimeErrors.push(error.message));
   page.on("console", (message) => {
     if (message.type() === "error" && !/service worker/i.test(message.text())) runtimeErrors.push(message.text());
   });
 
   try {
-    await page.goto(`${baseUrl}${route.hash}`, { waitUntil: "domcontentloaded" });
+    try { await page.goto(`${baseUrl}${route.hash}`, { waitUntil: "domcontentloaded" }); }
+    catch (error) {
+      const diagnosticDir = rootPath('diagnostics', 'browser-drive'); fs.mkdirSync(diagnosticDir, { recursive: true });
+      const dom = await withTimeout(page.evaluate(() => ({ readyState: document.readyState, title: document.title,
+        h1Count: document.querySelectorAll('h1').length, rootChildren: document.getElementById('root')?.childElementCount || 0 })),
+        3000, 'navigation evidence').catch(e => ({ unavailable: e.message }));
+      fs.writeFileSync(path.join(diagnosticDir, `navigation-${engineName}-${route.name}-${viewport.name}.json`),
+        JSON.stringify({ error: error.message, navigationTrace, runtimeErrors, dom }, null, 2));
+      throw error;
+    }
     console.log(`[browser-quality] loaded ${engineName}/${route.name}/${viewport.name}`);
     try {
       await page.locator("h1").first().waitFor({ state: "visible" });
@@ -301,18 +323,14 @@ async function auditPage({ browser, baseUrl, engineName, route, viewport }) {
     const surface = await auditAssetsAndControls(page, route);
     console.log(`[browser-quality] assets ${engineName}/${route.name}/${viewport.name}`);
 
+    const beforeFocus = await page.evaluate(captureFocusSurfaces, false);
     await page.keyboard.press("Tab");
-    const focus = await page.evaluate(() => ({
-      tag: document.activeElement?.tagName || "",
-      tabIndex: document.activeElement?.tabIndex,
-      outlineStyle: document.activeElement ? window.getComputedStyle(document.activeElement).outlineStyle : "",
-      outlineWidth: document.activeElement ? window.getComputedStyle(document.activeElement).outlineWidth : "",
-      boxShadow: document.activeElement ? window.getComputedStyle(document.activeElement).boxShadow : "",
-    }));
-    if (["", "BODY", "HTML"].includes(focus.tag) || focus.tabIndex === -1) {
-      throw new Error(`${route.name} does not expose a keyboard-reachable first control`);
-    }
-    if ((focus.outlineStyle === "none" || focus.outlineWidth === "0px") && (!focus.boxShadow || focus.boxShadow === "none")) {
+    const afterFocus = await page.evaluate(captureFocusSurfaces, true);
+    const focus = { before: beforeFocus, after: afterFocus, assessment: assessKeyboardFocus(beforeFocus, afterFocus) };
+    if (!focus.assessment.passed) {
+      const diagnosticDir = rootPath('diagnostics', 'browser-drive'); fs.mkdirSync(diagnosticDir, { recursive: true });
+      fs.writeFileSync(path.join(diagnosticDir, `focus-${engineName}-${route.name}-${viewport.name}.json`), JSON.stringify(focus, null, 2));
+      await page.screenshot({ path: path.join(diagnosticDir, `focus-${engineName}-${route.name}-${viewport.name}.png`) });
       throw new Error(`${route.name} does not visibly identify the keyboard-focused control`);
     }
 
@@ -340,6 +358,7 @@ async function auditPage({ browser, baseUrl, engineName, route, viewport }) {
 
 async function testSignupJourney(browser, baseUrl, viewport) {
   const context = await browser.newContext({ viewport: { width: viewport.width, height: viewport.height }, serviceWorkers: "block" });
+  await installNetworkIsolation(context, baseUrl, networkEvidence);
   // This is UI QA only: never provision resources or send verification texts.
   await context.route("**/api/integrations/signup-complete", (route) => route.abort());
   const page = await context.newPage();
@@ -428,6 +447,7 @@ async function testSignupJourney(browser, baseUrl, viewport) {
 
 async function testTradeImageFailureFallback(browser, baseUrl) {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: "block" });
+  await installNetworkIsolation(context, baseUrl, networkEvidence, { expectedResourceFailure: true });
   await context.route("**/trade-heroes/**", (route) => route.abort());
   const page = await context.newPage();
   page.setDefaultTimeout(15_000);
@@ -446,6 +466,7 @@ async function testTradeImageFailureFallback(browser, baseUrl) {
 
 async function testSlowTradeImageLayout(browser, baseUrl) {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: "block" });
+  await installNetworkIsolation(context, baseUrl, networkEvidence);
   await context.route("**/trade-heroes/**", async (route) => {
     await new Promise((resolve) => setTimeout(resolve, 1200));
     await route.continue();
@@ -474,6 +495,7 @@ async function testSlowTradeImageLayout(browser, baseUrl) {
 
 async function testLargeTextReflow(browser, baseUrl) {
   const context = await browser.newContext({ viewport: { width: 320, height: 800 }, reducedMotion: "reduce", serviceWorkers: "block" });
+  await installNetworkIsolation(context, baseUrl, networkEvidence);
   const page = await context.newPage();
   page.setDefaultTimeout(15_000);
   try {
@@ -520,6 +542,11 @@ async function main() {
 
   const { server, baseUrl } = await createStaticServer();
   const results = [];
+  const recordCheck = result => {
+    results.push(result);
+    runReport = { ...runReport, checks: [...results], completedChecks: results.length, networkIsolation: networkEvidence };
+    writeReport();
+  };
   try {
     for (const engineName of requestedEngines) {
       const channel = engineName === "chromium" ? String(process.env.PLAYWRIGHT_CHANNEL || "").trim() : "";
@@ -528,7 +555,7 @@ async function main() {
         for (const route of routes) {
           for (const viewport of viewports) {
             console.log(`[browser-quality] ${engineName}/${route.name}/${viewport.name}`);
-            results.push(await withTimeout(
+            recordCheck(await withTimeout(
               auditPage({ browser, baseUrl, engineName, route, viewport }),
               120_000,
               `${engineName}/${route.name}/${viewport.name}`,
@@ -538,14 +565,14 @@ async function main() {
         if (engineName === "chromium") {
           for (const viewport of viewports) {
             console.log(`[browser-quality] chromium/signup-journey/${viewport.name}`);
-            results.push(await withTimeout(testSignupJourney(browser, baseUrl, viewport), 120_000, `chromium/signup-journey/${viewport.name}`));
+            recordCheck(await withTimeout(testSignupJourney(browser, baseUrl, viewport), 120_000, `chromium/signup-journey/${viewport.name}`));
           }
           console.log("[browser-quality] chromium/trade-image-fallback/mobile");
-          results.push(await withTimeout(testTradeImageFailureFallback(browser, baseUrl), 60_000, "chromium/trade-image-fallback/mobile"));
+          recordCheck(await withTimeout(testTradeImageFailureFallback(browser, baseUrl), 60_000, "chromium/trade-image-fallback/mobile"));
           console.log("[browser-quality] chromium/trade-slow-image-layout/mobile");
-          results.push(await withTimeout(testSlowTradeImageLayout(browser, baseUrl), 60_000, "chromium/trade-slow-image-layout/mobile"));
+          recordCheck(await withTimeout(testSlowTradeImageLayout(browser, baseUrl), 60_000, "chromium/trade-slow-image-layout/mobile"));
           console.log("[browser-quality] chromium/large-text-reflow/320px");
-          results.push(await withTimeout(testLargeTextReflow(browser, baseUrl), 60_000, "chromium/large-text-reflow/320px"));
+          recordCheck(await withTimeout(testLargeTextReflow(browser, baseUrl), 60_000, "chromium/large-text-reflow/320px"));
         }
       } finally {
         await withTimeout(browser.close(), 15_000, `${engineName} browser shutdown`).catch((error) => {
@@ -557,6 +584,8 @@ async function main() {
     await new Promise((resolve) => server.close(resolve));
   }
 
+  if (networkEvidence.unexpectedWrites.length) throw new Error('UI QA attempted an unexpected application/provider write; blocked before transmission');
+  if (networkEvidence.clientErrors?.some(row => !row.expectedNegativeTest)) throw new Error('Unexpected browser error telemetry captured locally; inspect networkIsolation.clientErrors');
   const warnings = results.flatMap((result) => result.accessibilityWarnings.map((warning) => ({ ...result, warning })));
   console.log(`Browser quality checks passed: ${results.length} page/journey checks across ${requestedEngines.join(", ")}.`);
   if (warnings.length) {
@@ -566,16 +595,19 @@ async function main() {
   runReport = {
     ...runReport,
     checkedAt: new Date().toISOString(),
-    ready: true,
+    ready: coversCatalog(requestedRoutes, routeCatalog.map(route => route.name)),
+    completeRouteCoverage: coversCatalog(requestedRoutes, routeCatalog.map(route => route.name)),
     completedChecks: results.length,
     checks: results,
     warningCount: warnings.length,
+    networkIsolation: networkEvidence,
   };
   writeReport();
+  if (!runReport.ready) console.log('Focused checks passed; this subset does not satisfy the complete browser shipping gate.');
 }
 
 main().catch((error) => {
-  runReport = { ...runReport, checkedAt: new Date().toISOString(), ready: false, failure: String(error?.message || error) };
+  runReport = { ...runReport, checkedAt: new Date().toISOString(), ready: false, failure: String(error?.message || error), networkIsolation: networkEvidence };
   writeReport();
   console.error(`Browser quality checks failed: ${error.message || error}`);
   process.exitCode = 1;
