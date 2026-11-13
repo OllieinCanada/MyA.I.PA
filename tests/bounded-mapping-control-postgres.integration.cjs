@@ -63,7 +63,7 @@ test('disabled maintenance entry point with actual reader/writer/fence and dispo
       const nativeFetch=global.fetch,dir=path.dirname(x.f.file),policyFile=path.join(dir,'bounded-mapping-operator-policy.json');
       fs.copyFileSync(x.f.file,path.join(dir,'signup-dashboard.json'));
       Object.assign(process.env,{NODE_ENV:'test',DATA_DIR:dir,ADMIN_PASSWORD:'synthetic-entry-admin',ADMIN_SESSION_SECRET:'synthetic-entry-session-secret',
-        ADMIN_TOTP_SECRET:'',ADMIN_SIGNUP_REPAIR_MAX_REQUESTS:'200',PROVISIONING_SIGNING_SECRET:'synthetic-integration-signing-secret',
+        ADMIN_TOTP_SECRET:'',ADMIN_SIGNUP_REPAIR_MAX_REQUESTS:'200',ADMIN_LOGIN_IP_MAX_REQUESTS:'200',PROVISIONING_SIGNING_SECRET:'synthetic-integration-signing-secret',
         RENDER_GIT_COMMIT:x.f.policy.release,TWILIO_ACCOUNT_SID:'AC'+'a'.repeat(32),TWILIO_AUTH_TOKEN:'synthetic-no-send',VAPI_API_KEY:'synthetic-no-send',
         SIGNUP_ASSOCIATION_REPAIR_SINGLE_WRITER_CONFIRMED:'true',WEB_CONCURRENCY:'1',TRIAL_REMINDER_DISABLE:'true',VAPI_AUTO_SYNC_ENABLED:'false'});
       delete process.env.BOUNDED_MAPPING_CONTROL_ENABLED;delete process.env.BOUNDED_MAPPING_APPLY_ENABLED;
@@ -137,6 +137,7 @@ test('disabled maintenance entry point with actual reader/writer/fence and dispo
         fs.writeFileSync(policyFile,JSON.stringify(policy));
         if(mode.startsWith('ownership_')){
           const result=await post(route,dryBody,cookie);
+          if(result.status===200&&result.body.dryRun===true)throw Object.assign(new Error('Actual HTTP dry run accepted conflicting provider ownership'),{code:'REPRO_PROVIDER_CONFLICT_ACCEPTED'});
           assert.equal(result.body.code,'MAPPING_RESOURCE_CONFLICT','conflicting tenant metadata must survive the actual server proof projection');
           assert.equal(await db.vapiBusinessMapping.count(),3);assert.equal(actualExclusions,0);return;
         }
@@ -165,6 +166,8 @@ test('disabled maintenance entry point with actual reader/writer/fence and dispo
           if(waiting[2]==='approval'){delete policy.approvedPlanDigest;fs.writeFileSync(policyFile,JSON.stringify(policy));}
           if(waiting[2]==='flag')delete process.env.BOUNDED_MAPPING_APPLY_ENABLED;
           await blocker.query('COMMIT');const result=await pending;
+          if(result.status===200&&await db.vapiBusinessMapping.count()===6&&actualExclusions===3)
+            throw Object.assign(new Error('Actual HTTP apply dispatched mappings after revocation during verified advisory wait'),{code:'REPRO_REVOKED_ADMISSION_DISPATCHED'});
           assert.notEqual(result.status,200,'revoked admission cannot report applied');assert.equal(await db.vapiBusinessMapping.count(),3);
           assert.equal(actualExclusions,0,'zero mapping INSERT dispatch after revoked admission');assert.equal(forbidden,0);return;
         }

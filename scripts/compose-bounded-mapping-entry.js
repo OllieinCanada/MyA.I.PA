@@ -64,7 +64,8 @@ function compose({root=path.resolve(__dirname,'..'),composeOnly=false}={}){
     const old=JSON.parse(fs.readFileSync(baselineReport));
     const expected=SQL_CASES.filter(id=>id.startsWith('ownership_')||id.startsWith('wait_'));
     if(baseline.error||baseline.status===0||old.disposableDatabaseRemoved!==true||old.outcomes.length!==SQL_CASES.length
-      ||!SQL_CASES.every(id=>old.outcomes.some(x=>x.id===id&&x.status===(expected.includes(id)?'failed':'passed'))))throw Error('Baseline regression reproduction incomplete; inspect preserved evidence');
+      ||!SQL_CASES.every(id=>old.outcomes.some(x=>x.id===id&&x.status===(expected.includes(id)?'failed':'passed')
+        &&(!expected.includes(id)||x.code===(id.startsWith('ownership_')?'REPRO_PROVIDER_CONFLICT_ACCEPTED':'REPRO_REVOKED_ADMISSION_DISPATCHED')))))throw Error('Baseline regression reproduction incomplete; inspect preserved evidence');
     report.baselineReproduced=expected;
     applySafety();
     const r=spawnSync(process.execPath,['--test','--test-reporter=tap','tests/bounded-mapping-control.integration.cjs','tests/bounded-mapping-control-postgres.integration.cjs'],
