@@ -2486,7 +2486,13 @@ function summarizeCompositeNotificationHealth({ toolResults = [], aiNumber, owne
 }
 
 async function resolveBusinessIdForVapiCall(call) {
+  // The webhook middleware authenticates the configured channel, not each ID's
+  // ownership. These are provider-payload claims, not model tool arguments.
+  // Server-owned mappings/overrides supply tenant authority; this resolver
+  // does not fetch fresh provider inventory or prove a compromised sender safe.
   const businessMap = parseVapiBusinessMap();
+  const providerIds = [call.assistantId, call.assistant?.id, call.phoneNumberId, call.phoneNumber?.id]
+    .map(value => String(value || "").trim().toLowerCase()).filter(Boolean);
   const keys = [
     call.assistantId,
     call.assistant?.id,
@@ -2502,17 +2508,37 @@ async function resolveBusinessIdForVapiCall(call) {
     .map((item) => String(item || "").trim().toLowerCase())
     .filter(Boolean);
 
-  for (const key of keys) {
-    if (businessMap[key]) return businessMap[key];
-  }
-
+  // Routing is a consistency check, not an ordered preference list. An
+  // override must not hide a conflicting durable assistant/phone association.
+  const routedIds = keys.filter(key => businessMap[key]).map(key => businessMap[key]);
+  const knownKeys = new Set(keys.filter(key => businessMap[key]));
   if (keys.length) {
-    const mapping = await prisma.vapiBusinessMapping.findFirst({
+    const mappings = await prisma.vapiBusinessMapping.findMany({
       where: { matchValue: { in: keys } },
-      select: { businessId: true },
+      select: { businessId: true, matchValue: true },
+      take: new Set(keys).size + 1,
     });
-    if (mapping?.businessId) return mapping.businessId;
+    if (!Array.isArray(mappings) || mappings.length > new Set(keys).size
+      || mappings.some(row => !keys.includes(row.matchValue) || !Number.isSafeInteger(row.businessId) || row.businessId <= 0)
+      || new Set(mappings.map(row => row.matchValue)).size !== mappings.length) {
+      throw Object.assign(new Error("Complete business routing evidence is required."), { statusCode: 422, code: "VAPI_BUSINESS_ROUTE_INCOMPLETE" });
+    }
+    routedIds.push(...mappings.map(row => row.businessId));
+    mappings.forEach(row => knownKeys.add(row.matchValue));
   }
+  if (routedIds.some(id => !Number.isSafeInteger(id) || id <= 0)) {
+    throw Object.assign(new Error("Valid business routing evidence is required."), { statusCode: 422, code: "VAPI_BUSINESS_ROUTE_INCOMPLETE" });
+  }
+  if (new Set(routedIds).size > 1) {
+    throw Object.assign(new Error("Conflicting business routes require inspection."), { statusCode: 422, code: "VAPI_BUSINESS_ROUTE_CONFLICT" });
+  }
+  // Omitted optional IDs are not the same as a supplied unknown provider ID.
+  // A known assistant must not hide a stale/foreign unregistered phone (or vice
+  // versa), including when a called-number fallback could otherwise match.
+  if (providerIds.some(id => !knownKeys.has(id))) {
+    throw Object.assign(new Error("Supplied provider identifier is not registered."), { statusCode: 422, code: "VAPI_BUSINESS_ROUTE_UNKNOWN_IDENTIFIER" });
+  }
+  if (routedIds.length) return routedIds[0];
 
   const calledNumber = normalizePhoneForMatch(
     call.phoneNumber?.number ||
@@ -2523,17 +2549,14 @@ async function resolveBusinessIdForVapiCall(call) {
   );
   if (calledNumber) {
     const businesses = await prisma.business.findMany({ select: { id: true, phone: true } });
-    const matched = businesses.find((business) => normalizePhoneForMatch(business.phone) === calledNumber);
-    if (matched) return matched.id;
+    const matched = businesses.filter((business) => normalizePhoneForMatch(business.phone) === calledNumber);
+    if (matched.length > 1) throw Object.assign(new Error("Called number matches conflicting businesses."), { statusCode: 422, code: "VAPI_BUSINESS_ROUTE_CONFLICT" });
+    if (matched.length === 1) return matched[0].id;
   }
 
-  if (VAPI_REQUIRE_BUSINESS_MAPPING) {
-    const error = new Error("No trusted business mapping matched this Vapi call.");
-    error.statusCode = 422;
-    error.code = "VAPI_BUSINESS_ROUTE_REQUIRED";
-    throw error;
-  }
-  return VAPI_DEFAULT_BUSINESS_ID;
+  // Call-derived actions never inherit an unrelated default tenant, even when
+  // the legacy optional-mapping setting is false. No runtime setting is changed.
+  throw Object.assign(new Error("No trusted business mapping matched this Vapi call."), { statusCode: 422, code: "VAPI_BUSINESS_ROUTE_REQUIRED" });
 }
 
 function getVapiVoiceSignupExecutionBusinessId(call = {}) {
@@ -13952,7 +13975,9 @@ app.post(
               sourceEventId: `vapi-tool:${claim.identity.idempotencyKey}`,
               message: parameters.message || "",
             });
-            const executionResult = { ok: true, leadId: lead.id, handoffId: handoff.handoffId, status: handoff.status };
+            const executionResult = { ok: handoff.accepted === true, leadId: lead.id, handoffId: handoff.handoffId, status: handoff.status,
+              executionState: handoff.outcomeUncertain ? "uncertain" : handoff.accepted === true ? "accepted" : "not_accepted",
+              requiresInspection: handoff.requiresInspection === true };
             await completeVapiToolExecution({ prisma, id: claim.execution.id, result: executionResult });
             results.push({ name: toolCall.name, toolCallId: toolCall.id, result: JSON.stringify(executionResult) });
           } catch (error) {

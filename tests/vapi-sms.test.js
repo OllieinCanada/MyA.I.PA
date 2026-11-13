@@ -52,3 +52,16 @@ test("production requires the three Vapi SMS settings", async () => {
     /Vapi SMS is not configured/
   );
 });
+
+const fixtureEnv={NODE_ENV:'test',VAPI_API_KEY:'fixture-only',VAPI_SMS_ASSISTANT_ID:'fixture-assistant',VAPI_SMS_PHONE_NUMBER_ID:'fixture-phone'};
+test('network loss and identifier-free responses retain uncertain attempted state',async()=>{
+ for(const fetchImpl of [async()=>{throw Error('fixture timeout');},async()=>({ok:true,json:async()=>({})})]){
+  await assert.rejects(sendSmsViaVapi({to:'+15555550100',message:'Fixture',env:fixtureEnv,fetchImpl}),e=>e.providerActionAttempted===true&&e.providerCode==='VAPI_SMS_OUTCOME_UNCERTAIN');
+ }
+});
+test('input validation refuses before transport and explicitly proves no provider attempt',async()=>{let calls=0;
+ await assert.rejects(sendSmsViaVapi({to:'invalid',message:'Fixture',env:fixtureEnv,fetchImpl:async()=>{calls++;}}),e=>e.providerActionAttempted===false);assert.equal(calls,0);
+});
+test('an HTTP error is not silently treated as a supported safe-to-resend guarantee',async()=>{
+ await assert.rejects(sendSmsViaVapi({to:'+15555550100',message:'Fixture',env:fixtureEnv,fetchImpl:async()=>({ok:false,status:500,json:async()=>({code:'fixture'})})}),e=>e.providerActionAttempted===true&&e.providerStatus===500);
+});
