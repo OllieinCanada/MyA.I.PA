@@ -46,8 +46,20 @@ function classifyInventoryPurpose(...values) {
     : "customer_or_unknown";
 }
 
-function buildMappingReadinessReport({ phones = [], assistants = [], mappings = [], businesses = [], customerAccounts = [], warnings = [] }) {
-  const mappedValues = mappingValueSet(mappings);
+function buildMappingReadinessReport({ phones = [], assistants = [], mappings = [], businesses = [], customerAccounts = [], warnings = [], inventoryEvidence }) {
+  const businessId = value => /^[1-9]\d*$/.test(String(value ?? '')) ? String(value) : '';
+  const knownBusinesses = new Set(businesses.map(b => businessId(b.id)).filter(Boolean));
+  const validBusiness = value => Boolean(businessId(value) && knownBusinesses.has(businessId(value)));
+  const mappingIds = (values, type) => mappings.filter(m => (!m.matchType || String(m.matchType).toLowerCase().includes(type))
+    && values.filter(Boolean).some(v => String(m.matchValue || '').trim().toLowerCase() === String(v).trim().toLowerCase()))
+    .map(m => businessId(m.businessId ?? m.business?.id));
+  const mapped = (values, type) => mappingIds(values, type).some(validBusiness);
+  const inventoryComplete = ['phoneNumbers', 'assistants'].every((key, index) => {
+    const rows = index ? assistants : phones, proof = inventoryEvidence?.[key];
+    return proof?.successful === true && proof.complete === true && Number.isSafeInteger(proof.count) && proof.count === rows.length
+      && rows.every(r => typeof r?.id === 'string' && r.id.trim()) && new Set(rows.map(r => r.id)).size === rows.length;
+  });
+  const missingReferencedAssistants = [], tenantConflicts = [];
   const assistantsById = new Map(assistants.map((assistant) => [String(assistant.id || ""), assistant]));
   const businessesByPhone = new Map(
     businesses
@@ -71,15 +83,17 @@ function buildMappingReadinessReport({ phones = [], assistants = [], mappings = 
     const assistantId = String(phone.assistantId || "").trim();
     const assistant = assistantsById.get(assistantId);
     const directPhoneMapping = Boolean(
-      phone.mappedBusiness ||
-      mappedValues.has(id.toLowerCase()) ||
-      (number && mappedValues.has(number.toLowerCase()))
+      validBusiness(phone.mappedBusiness?.id) || mapped([id, phone.number, number], 'phone')
     );
     const assistantMapping = Boolean(
-      assistant?.mappedBusiness ||
-      (assistantId && mappedValues.has(assistantId.toLowerCase()))
+      validBusiness(assistant?.mappedBusiness?.id) || mapped([assistantId], 'assistant')
     );
     const businessPhoneMatch = businessesByPhone.get(number);
+    if (assistantId && !assistant) missingReferencedAssistants.push({ phoneId: safeId(id), assistantId: safeId(assistantId) });
+    const ownership = [phone.mappedBusiness?.id, assistant?.mappedBusiness?.id, phone.providerBusinessId, assistant?.providerBusinessId,
+      ...businesses.filter(b => number && normalizePhone(b.phone) === number).map(b => b.id),
+      ...mappingIds([id, phone.number, number], 'phone'), ...mappingIds([assistantId], 'assistant')].filter(v => v !== undefined && v !== null);
+    if (ownership.some(v => !validBusiness(v)) || new Set(ownership.map(businessId)).size > 1) tenantConflicts.push({ phoneId: safeId(id), assistantId: safeId(assistantId), reason: 'business_ownership_unproven_or_conflicting' });
     const mappedBusiness = phone.mappedBusiness || assistant?.mappedBusiness || businessPhoneMatch || null;
     const businessName = String(mappedBusiness?.name || mappedBusiness?.businessName || "").trim();
     const accountStates = accountStateByBusinessName.get(businessName.toLowerCase()) || [];
@@ -108,7 +122,7 @@ function buildMappingReadinessReport({ phones = [], assistants = [], mappings = 
       directPhoneMapping,
       assistantMapping,
       businessPhoneFallback: Boolean(businessPhoneMatch),
-      effectivelyMapped: directPhoneMapping || assistantMapping || Boolean(businessPhoneMatch),
+      effectivelyMapped: directPhoneMapping || assistantMapping || validBusiness(businessPhoneMatch?.id),
     };
   });
 
@@ -123,8 +137,7 @@ function buildMappingReadinessReport({ phones = [], assistants = [], mappings = 
       phoneCount: Array.isArray(assistant.phoneNumbers) ? assistant.phoneNumbers.length : 0,
       purpose: classifyInventoryPurpose(assistant.name, assistant.firstMessage),
       mapped: Boolean(
-        assistant.mappedBusiness ||
-        mappedValues.has(String(assistant.id || "").trim().toLowerCase())
+        validBusiness(assistant.mappedBusiness?.id) || mapped([assistant.id], 'assistant')
       ),
       business: assistant.mappedBusiness?.name || "",
     }));
@@ -146,6 +159,13 @@ function buildMappingReadinessReport({ phones = [], assistants = [], mappings = 
 
   return {
     checkedAt: new Date().toISOString(),
+    inventoryComplete,
+    assessmentStatus: !inventoryComplete ? 'unverified_provider_inventory' : warnings.length ? 'provider_warnings'
+      : phones.length === 0 ? 'confirmed_empty_inventory' : customerPhones.length === 0 ? 'no_customer_routes' : 'mapping_assessed',
+    applicability: phones.length === 0 ? 'empty_inventory' : customerPhones.length === 0 ? 'no_customer_routes' : 'customer_routes',
+    activeServiceProven: false,
+    missingReferencedAssistants,
+    tenantConflicts,
     policy: "Customer calls must match a trusted phone, assistant, metadata, or business-number mapping. Demos and canaries are reported separately and never treated as customer-ready.",
     summary: {
       phoneNumbers: phones.length,
@@ -162,8 +182,11 @@ function buildMappingReadinessReport({ phones = [], assistants = [], mappings = 
       unmappedCustomerAssistants: unmappedAttachedAssistants.length,
       databaseMappings: mappings.length,
       providerWarnings: warnings.length,
+      missingReferencedAssistants: missingReferencedAssistants.length,
+      tenantConflicts: tenantConflicts.length,
     },
-    ready: unmappedPhones.length === 0
+    ready: inventoryComplete && warnings.length === 0 && customerPhones.length > 0
+      && missingReferencedAssistants.length === 0 && tenantConflicts.length === 0 && unmappedPhones.length === 0
       && unmappedAttachedAssistants.length === 0
       && customerPhonesWithoutAssistants.length === 0,
     unmappedPhones,
@@ -218,6 +241,8 @@ async function main() {
   const assistants = Array.isArray(inventory.assistants) ? inventory.assistants : [];
   const mappings = Array.isArray(mappingPayload.mappings) ? mappingPayload.mappings : [];
   const businesses = Array.isArray(mappingPayload.businesses) ? mappingPayload.businesses : [];
+  const warnings = Array.isArray(inventory.warnings) ? [...inventory.warnings] : ['Inventory warning status unavailable.'];
+  if (!Array.isArray(mappingPayload.mappings) || !Array.isArray(mappingPayload.businesses) || mappings.length >= 300 || businesses.length >= 300) warnings.push('Database mapping inventory is malformed or cap-saturated.');
   const report = {
     apiBaseUrl,
     ...buildMappingReadinessReport({
@@ -226,7 +251,8 @@ async function main() {
       mappings,
       businesses,
       customerAccounts: Array.isArray(customerSetupPayload.customers) ? customerSetupPayload.customers : [],
-      warnings: Array.isArray(inventory.warnings) ? inventory.warnings : [],
+      warnings,
+      inventoryEvidence: inventory.collectionReads,
     }),
   };
 

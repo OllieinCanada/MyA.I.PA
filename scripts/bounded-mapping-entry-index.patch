@@ -1,0 +1,35 @@
+diff --git a/server/index.js b/server/index.js
+index cd3344f..2fc58ab 100644
+--- a/server/index.js
++++ b/server/index.js
+@@ -13,6 +13,7 @@ const { readSetupEvidence, createNumberSearchTracker } = require('./adminSignupS
+ const { createAssociationFence, createAssociationRepairService, atomicCommitAssociationFile,
+   registerAssociationRepairRoutes } = require('./signupAssociationRepair');
+ const signupAssociationFence = createAssociationFence();
++const { createBoundedMappingControl, registerBoundedMappingControlRoutes, readOperatorPolicy } = require('./boundedMappingControl');
+ const signupNumberSearchTracker = createNumberSearchTracker();
+ const { createPrismaObservationStore, createObservationService, registerObservationRoutes, observationBodyGuard } = require('./signupFormObservation');
+ const { runtimeDependencySecurity } = require('./runtimeDependencySecurity');
+@@ -17657,6 +17658,22 @@ const signupAssociationRepair = createAssociationRepairService({ prisma,
+ });
+ registerAssociationRepairRoutes({ app, requireAdmin, limiter: adminSignupRepairProcessRateLimiter,
+   isAllowedOrigin, actorHash: getAdminActorHash, service: signupAssociationRepair });
++const boundedMappingControl = createBoundedMappingControl({ prisma, fence: signupAssociationFence,
++  readStore: () => JSON.parse(fs.readFileSync(signupDashboardPath, 'utf8')),
++  getSigningSecret: getProvisioningSigningSecret, getRelease: () => process.env.RENDER_GIT_COMMIT,
++  getOperatorPolicy: () => readOperatorPolicy(path.dirname(signupDashboardPath)),
++  readOverrides: () => process.env.VAPI_BUSINESS_MAP || '',
++  enabled: () => process.env.BOUNDED_MAPPING_CONTROL_ENABLED === 'true',
++  applyEnabled: () => process.env.BOUNDED_MAPPING_APPLY_ENABLED === 'true',
++  singleWriter: () => process.env.SIGNUP_ASSOCIATION_REPAIR_SINGLE_WRITER_CONFIRMED === 'true'
++    && !require('node:cluster').isWorker && Number(process.env.WEB_CONCURRENCY || 1) === 1,
++  probe: async target => { const evidence = await readSignupAssociationEvidence(target);
++    return {complete:true,scope:target,release:process.env.RENDER_GIT_COMMIT,checkedAt:new Date().toISOString(),
++      provider:evidence.provider,reserveNumbers:evidence.reserveNumbers}; },
++});
++registerBoundedMappingControlRoutes({ app, requireAdmin, limiter: adminSignupRepairProcessRateLimiter, isAllowedOrigin,
++  actorHash: req => hasValidAdminSession(req) ? crypto.createHash('sha256').update('bounded-mapping-session:v1\0')
++    .update(parseCookies(req)[ADMIN_SESSION_COOKIE]).digest('hex') : '', service: boundedMappingControl });
+ const signupFormObservations = createObservationService({ store: createPrismaObservationStore(prisma),
+   authenticateAttempt: (id, token) => signupAttempts ? signupAttempts.authenticate(id, token) : null });
+ registerObservationRoutes({ app, service: signupFormObservations, isAllowedOrigin, requireAdmin,

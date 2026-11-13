@@ -1,0 +1,50 @@
+name: Actual combined mapping adapter PostgreSQL integration
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: mapping-adapter-integration-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  mapping-adapter-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: synthetic-ci-only
+          POSTGRES_DB: ci
+        ports: [5432:5432]
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      CI: 'true'
+      DISABLE_LOCAL_ENV_FILES: '1'
+      DATABASE_URL: postgresql://ci:synthetic-ci-only@127.0.0.1:5432/ci
+      COMBINED_EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.22.3'
+          cache: npm
+      - run: npm ci --include=dev --legacy-peer-deps
+      - run: node --test tests/bounded-mapping-composition.test.js
+      - name: Test real reader writer and lifecycle fence from actual checkout
+        run: node scripts/run-combined-pilot-repair-ci.js reader
+      - name: Verify exact-head complete reader evidence
+        run: node scripts/run-combined-pilot-repair-ci.js reader --verify
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mapping-adapter-integration-${{ github.event.pull_request.head.sha || github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: diagnostics/combined-pilot-repair/reader/
+          if-no-files-found: error
+          retention-days: 14

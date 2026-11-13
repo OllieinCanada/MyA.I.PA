@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "base": "8f218834361f5ec22de23c5cedd6690897d40f99",
+  "association": "f452de511657c41b3ced081aed07b49379656cf3",
+  "writer": "932346e199636732d19ccb8bb73c80059447530e",
+  "adapter": "0765667d0226db61eec81ec08f8de373922987b9",
+  "combinedTree": "54e86809b13504f777e82135e6517ae8c44fb534",
+  "node": "24.22.3",
+  "publication": "Preparation delta only. The index patch is applied only inside sealed CI, not to the standalone main-based publication tree. Actual release wiring requires a separately reviewed combined landing."
+}

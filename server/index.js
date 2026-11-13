@@ -10,6 +10,10 @@ const { dispatchHandler: notificationDispatchHandler, dispatchReadinessHandler }
 const { createFinanceService, registerFinanceRoutes } = require('./providerFinance');
 const { trackProgress: trackAdminSignupProgress, registerTrackerRoutes, createStallProcessor, createTrackerBatchSaver } = require('./adminSignupTracker');
 const { readSetupEvidence, createNumberSearchTracker } = require('./adminSignupSetup');
+const { createAssociationFence, createAssociationRepairService, atomicCommitAssociationFile,
+  registerAssociationRepairRoutes } = require('./signupAssociationRepair');
+const signupAssociationFence = createAssociationFence();
+const { createBoundedMappingControl, registerBoundedMappingControlRoutes, readOperatorPolicy } = require('./boundedMappingControl');
 const signupNumberSearchTracker = createNumberSearchTracker();
 const { createPrismaObservationStore, createObservationService, registerObservationRoutes, observationBodyGuard } = require('./signupFormObservation');
 const { runtimeDependencySecurity } = require('./runtimeDependencySecurity');
@@ -2023,6 +2027,7 @@ function readSignupDashboardStore() {
 
 function writeSignupDashboardStore(store) {
   ensureSignupDashboardStore();
+  signupAssociationFence.check(JSON.parse(fs.readFileSync(signupDashboardPath, 'utf8')), store);
   fs.writeFileSync(signupDashboardPath, `${JSON.stringify(store, null, 2)}\n`);
 }
 
@@ -2486,7 +2491,17 @@ function summarizeCompositeNotificationHealth({ toolResults = [], aiNumber, owne
 }
 
 async function resolveBusinessIdForVapiCall(call) {
+  // The webhook middleware authenticates the configured channel, not each ID's
+  // ownership. These are provider-payload claims, not model tool arguments.
+  // Server-owned mappings/overrides supply tenant authority; this resolver
+  // does not fetch fresh provider inventory or prove a compromised sender safe.
   const businessMap = parseVapiBusinessMap();
+  const suppliedIds = [call.assistantId, call.assistant?.id, call.phoneNumberId, call.phoneNumber?.id];
+  if (suppliedIds.some(value => value != null && typeof value !== "string")) {
+    throw Object.assign(new Error("Provider identifiers must be strings."), { statusCode: 422, code: "VAPI_BUSINESS_ROUTE_INVALID_IDENTIFIER" });
+  }
+  const providerIds = suppliedIds
+    .map(value => String(value || "").trim().toLowerCase()).filter(Boolean);
   const keys = [
     call.assistantId,
     call.assistant?.id,
@@ -2502,17 +2517,37 @@ async function resolveBusinessIdForVapiCall(call) {
     .map((item) => String(item || "").trim().toLowerCase())
     .filter(Boolean);
 
-  for (const key of keys) {
-    if (businessMap[key]) return businessMap[key];
-  }
-
+  // Routing is a consistency check, not an ordered preference list. An
+  // override must not hide a conflicting durable assistant/phone association.
+  const routedIds = keys.filter(key => businessMap[key]).map(key => businessMap[key]);
+  const knownKeys = new Set(keys.filter(key => businessMap[key]));
   if (keys.length) {
-    const mapping = await prisma.vapiBusinessMapping.findFirst({
+    const mappings = await prisma.vapiBusinessMapping.findMany({
       where: { matchValue: { in: keys } },
-      select: { businessId: true },
+      select: { businessId: true, matchValue: true },
+      take: new Set(keys).size + 1,
     });
-    if (mapping?.businessId) return mapping.businessId;
+    if (!Array.isArray(mappings) || mappings.length > new Set(keys).size
+      || mappings.some(row => !keys.includes(row.matchValue) || !Number.isSafeInteger(row.businessId) || row.businessId <= 0)
+      || new Set(mappings.map(row => row.matchValue)).size !== mappings.length) {
+      throw Object.assign(new Error("Complete business routing evidence is required."), { statusCode: 422, code: "VAPI_BUSINESS_ROUTE_INCOMPLETE" });
+    }
+    routedIds.push(...mappings.map(row => row.businessId));
+    mappings.forEach(row => knownKeys.add(row.matchValue));
   }
+  if (routedIds.some(id => !Number.isSafeInteger(id) || id <= 0)) {
+    throw Object.assign(new Error("Valid business routing evidence is required."), { statusCode: 422, code: "VAPI_BUSINESS_ROUTE_INCOMPLETE" });
+  }
+  if (new Set(routedIds).size > 1) {
+    throw Object.assign(new Error("Conflicting business routes require inspection."), { statusCode: 422, code: "VAPI_BUSINESS_ROUTE_CONFLICT" });
+  }
+  // Omitted optional IDs are not the same as a supplied unknown provider ID.
+  // A known assistant must not hide a stale/foreign unregistered phone (or vice
+  // versa), including when a called-number fallback could otherwise match.
+  if (providerIds.some(id => !knownKeys.has(id))) {
+    throw Object.assign(new Error("Supplied provider identifier is not registered."), { statusCode: 422, code: "VAPI_BUSINESS_ROUTE_UNKNOWN_IDENTIFIER" });
+  }
+  if (routedIds.length) return routedIds[0];
 
   const calledNumber = normalizePhoneForMatch(
     call.phoneNumber?.number ||
@@ -2523,17 +2558,14 @@ async function resolveBusinessIdForVapiCall(call) {
   );
   if (calledNumber) {
     const businesses = await prisma.business.findMany({ select: { id: true, phone: true } });
-    const matched = businesses.find((business) => normalizePhoneForMatch(business.phone) === calledNumber);
-    if (matched) return matched.id;
+    const matched = businesses.filter((business) => normalizePhoneForMatch(business.phone) === calledNumber);
+    if (matched.length > 1) throw Object.assign(new Error("Called number matches conflicting businesses."), { statusCode: 422, code: "VAPI_BUSINESS_ROUTE_CONFLICT" });
+    if (matched.length === 1) return matched[0].id;
   }
 
-  if (VAPI_REQUIRE_BUSINESS_MAPPING) {
-    const error = new Error("No trusted business mapping matched this Vapi call.");
-    error.statusCode = 422;
-    error.code = "VAPI_BUSINESS_ROUTE_REQUIRED";
-    throw error;
-  }
-  return VAPI_DEFAULT_BUSINESS_ID;
+  // Call-derived actions never inherit an unrelated default tenant, even when
+  // the legacy optional-mapping setting is false. No runtime setting is changed.
+  throw Object.assign(new Error("No trusted business mapping matched this Vapi call."), { statusCode: 422, code: "VAPI_BUSINESS_ROUTE_REQUIRED" });
 }
 
 function getVapiVoiceSignupExecutionBusinessId(call = {}) {
@@ -2813,7 +2845,7 @@ async function patchVapiAssistant(assistantId, patch) {
   return data && typeof data === "object" ? data : null;
 }
 
-async function fetchVapiCollection(resourcePath, collectionKeys = [], { requireComplete = false } = {}) {
+async function fetchVapiCollection(resourcePath, collectionKeys = [], { requireComplete = false, auditEvidence = false } = {}) {
   if (!VAPI_API_KEY) {
     const err = new Error("VAPI_API_KEY is not configured.");
     err.statusCode = 503;
@@ -2835,6 +2867,7 @@ async function fetchVapiCollection(resourcePath, collectionKeys = [], { requireC
     throw createProviderHttpError({ provider: "Vapi", operation: `${resourcePath} collection`, status: response.status, data, fallbackCode: "VAPI_COLLECTION_FAILED" });
   }
 
+  if (auditEvidence) return require('./vapiInventoryCoverage').completeInventoryRead(data, collectionKeys);
   const checkedCollection = (records) => {
     if (requireComplete && (records.length >= 1000 || data?.hasMore || data?.has_more || data?.nextCursor || data?.nextPage || data?.pagination?.nextCursor)) {
       const err = new Error("Vapi inventory completeness could not be established. No replacement may be created.");
@@ -3282,17 +3315,18 @@ function findVapiInventoryMapping(record, mappings, type) {
 
 async function getVapiAccountInventory() {
   const warnings = [];
-  const [phoneResult, assistantResult, mappings] = await Promise.all([
-    fetchVapiCollection("phone-number", ["phoneNumbers", "phone_numbers"]).catch((error) => {
+  const [phoneRead, assistantRead, mappings] = await Promise.all([
+    fetchVapiCollection("phone-number", ["phoneNumbers", "phone_numbers"], { auditEvidence: true }).catch((error) => {
       warnings.push(`Could not load Vapi phone numbers: ${error.message}`);
-      return [];
+      return { records: [], evidence: { successful: false, complete: false, count: 0 } };
     }),
-    fetchVapiCollection("assistant", ["assistants", "agents"]).catch((error) => {
+    fetchVapiCollection("assistant", ["assistants", "agents"], { auditEvidence: true }).catch((error) => {
       warnings.push(`Could not load Vapi agents: ${error.message}`);
-      return [];
+      return { records: [], evidence: { successful: false, complete: false, count: 0 } };
     }),
     prisma.vapiBusinessMapping.findMany({ include: { business: true }, orderBy: { updatedAt: "desc" }, take: 500 }),
   ]);
+  const phoneResult = phoneRead.records, assistantResult = assistantRead.records;
 
   const assistantsById = new Map(
     assistantResult
@@ -3319,6 +3353,7 @@ async function getVapiAccountInventory() {
       provider: phone.provider || phone.providerName || phone.type || "",
       status: phone.status || phone.state || "",
       assistantId,
+      providerBusinessId: phone.businessId ?? phone.metadata?.businessId ?? null,
       assistantName: getVapiAssistantName(assistant || phone),
       routeMode,
       createdAt: phone.createdAt || phone.created_at || "",
@@ -3334,6 +3369,7 @@ async function getVapiAccountInventory() {
     return {
       id,
       name: getVapiAssistantName(assistant) || id || "Unnamed agent",
+      providerBusinessId: assistant.businessId ?? assistant.metadata?.businessId ?? null,
       model: getVapiNestedString(assistant, ["model.model", "model.provider", "model.name"]) || "",
       voice: getVapiNestedString(assistant, ["voice.voiceId", "voice.provider", "voice.name"]) || "",
       firstMessage: getVapiNestedString(assistant, ["firstMessage"]) || "",
@@ -3348,6 +3384,7 @@ async function getVapiAccountInventory() {
   return {
     phoneNumbers,
     assistants,
+    collectionReads: { phoneNumbers: phoneRead.evidence, assistants: assistantRead.evidence },
     warnings,
     totals: {
       phoneNumbers: phoneNumbers.length,
@@ -6503,6 +6540,7 @@ async function inspectSignupSetForDecommission({
     error.code = "SIGNUP_DECOMMISSION_TARGET_NOT_FOUND";
     throw error;
   }
+  signupAssociationFence.assertRemovalAllowed(JSON.parse(fs.readFileSync(signupDashboardPath, 'utf8')), targetIds);
   const identity = assertSharedSignupIdentity(targets);
   const targetIdSet = new Set(targetIds);
   const ownerEmails = new Set(identity.ownerEmails);
@@ -6675,6 +6713,8 @@ async function decommissionSignupSetAndRebuild({
     };
   }
 
+  return signupAssociationFence.withRemovalGuard(
+    () => JSON.parse(fs.readFileSync(signupDashboardPath, 'utf8')), inspection.targetIds, async () => {
   const billingResults = { subscriptions: [], checkoutSessions: [], customers: [] };
   for (const subscriptionId of inspection.subscriptionIds) {
     billingResults.subscriptions.push(await cancelStripeSubscriptionIfPresent(subscriptionId));
@@ -6809,6 +6849,7 @@ async function decommissionSignupSetAndRebuild({
     },
     recovery,
   };
+  });
 }
 
 async function inspectFailedSuperdavesRebuildRollback({ targetId, expectedBusinessName }) {
@@ -6820,6 +6861,7 @@ async function inspectFailedSuperdavesRebuildRollback({ targetId, expectedBusine
     error.code = "FAILED_REBUILD_TARGET_NOT_FOUND";
     throw error;
   }
+  signupAssociationFence.assertRemovalAllowed(JSON.parse(fs.readFileSync(signupDashboardPath, 'utf8')), [targetId]);
   if (String(target.businessName || "").trim() !== expectedBusinessName) {
     const error = new Error("The failed rebuild business name does not match the exact rollback target.");
     error.statusCode = 409;
@@ -6924,6 +6966,8 @@ async function rollbackFailedSuperdavesRebuild({ targetId, expectedBusinessName,
   const inspection = await inspectFailedSuperdavesRebuildRollback({ targetId, expectedBusinessName });
   if (!apply) return { ok: true, action: "dry_run", summary: inspection.summary };
 
+  return signupAssociationFence.withRemovalGuard(
+    () => JSON.parse(fs.readFileSync(signupDashboardPath, 'utf8')), [inspection.targetId], async () => {
   const billingResults = { subscriptions: [], checkoutSessions: [], customers: [] };
   for (const subscriptionId of inspection.subscriptionIds) {
     billingResults.subscriptions.push(await cancelStripeSubscriptionIfPresent(subscriptionId));
@@ -6978,6 +7022,7 @@ async function rollbackFailedSuperdavesRebuild({ targetId, expectedBusinessName,
     removedSignupRecords: removed.removed,
     providerResults: { billing: billingResults, vapi: vapiResults, twilio: twilioResults },
   };
+  });
 }
 
 function getSignupProviderRecoveryDiagnostics({ signup = {}, pendingSignup = null, vapiNumbers = [], twilioNumbers = [], providerLookup = "not_needed" } = {}) {
@@ -11170,6 +11215,60 @@ function requireProvisioningAuthorization(req, res, next) {
   return next();
 }
 
+// Strictly read-only proof collection for the isolated association writer.
+// No provisioning callbacks, durable claims, trial creation or message helpers.
+async function readSignupAssociationDatabaseEvidence(scope, db = prisma) {
+  const refuse = code => { throw Object.assign(new Error(code), { code, statusCode: 409 }); };
+  if (![scope.sourceId, scope.phantomId].every(id => /^signup_[a-f0-9]{32}$/.test(id || ''))
+    || scope.sourceId === scope.phantomId || !/^\+1[2-9]\d{9}$/.test(scope.number || '')
+    || !/^PN[a-f0-9]{32}$/i.test(scope.twilioSid || '')
+    || ![scope.assistantId, scope.phoneId].every(id => /^[a-z0-9-]{1,160}$/i.test(id || ''))) refuse('ASSOCIATION_SCOPE_INVALID');
+  const [sourceAttempt, phantomAttempt, otherAttempts] = await Promise.all([
+    db.signupAttempt.findUnique({ where: { eventKey: scope.sourceId } }),
+    db.signupAttempt.findUnique({ where: { eventKey: scope.phantomId }, select: { eventKey: true } }),
+    db.signupAttempt.findMany({ where: { eventKey: { notIn: [scope.sourceId, scope.phantomId] }, OR: [
+      { assignedPhone: scope.number }, { vapiAssistantId: scope.assistantId }, { vapiPhoneNumberId: scope.phoneId },
+    ] }, select: { eventKey: true } }),
+  ]);
+  const businessKey = signupBusinessKey(sourceAttempt || {});
+  if (!businessKey || phantomAttempt || otherAttempts.length) refuse('ASSOCIATION_BINDING_UNPROVEN');
+  const context = (await db.runtimeStore.findUnique({ where: { key: contextStoreKey(businessKey) } }))?.data;
+  if (!context?.payload || registeredSignupEventKey(context) !== scope.sourceId
+    || buildMakeSignupEventKey(context.payload) !== scope.phantomId) refuse('ASSOCIATION_BINDING_UNPROVEN');
+  const signatureVerified = verifySignupProvisioningAuthorization(context.payload, getProvisioningSigningSecret());
+  if (!signatureVerified) refuse('ASSOCIATION_CONTEXT_UNPROVEN');
+  const receipts = {};
+  await Promise.all(['twilio-number', 'vapi-assistant', 'vapi-import'].map(async kind => {
+    receipts[kind] = (await readProvisioningStep({ prisma: db, kind, idempotencyKey: businessKey })).data;
+  }));
+  if (Object.values(receipts).some(r => r?.status !== 'completed' || r.contextHash !== context.contextHash)
+    || receipts['twilio-number'].result?.twilioPhoneNumber !== scope.number
+    || (receipts['twilio-number'].result?.sid || receipts['twilio-number'].result?.twilioSid) !== scope.twilioSid
+    || receipts['vapi-assistant'].result?.assistantId !== scope.assistantId
+    || receipts['vapi-import'].result?.id !== scope.phoneId) refuse('ASSOCIATION_RECEIPTS_UNPROVEN');
+  return { sourceAttempt, phantomAttempt, otherAttempts, context, receipts, signatureVerified };
+}
+
+async function readSignupAssociationEvidence(scope) {
+  const evidence = await readSignupAssociationDatabaseEvidence(scope);
+  const [numbers, phone, assistant] = await Promise.all([
+    fetchTwilioIncomingPhoneNumbers({ requireComplete: true }),
+    requestVapiResource(`phone-number/${encodeURIComponent(scope.phoneId)}`),
+    requestVapiResource(`assistant/${encodeURIComponent(scope.assistantId)}`),
+  ]);
+  const matches = numbers.filter(n => n.sid === scope.twilioSid || n.phone_number === scope.number);
+  if (matches.length !== 1) throw Object.assign(new Error('Provider identity conflict.'), { code: 'ASSOCIATION_PROVIDER_CONFLICT', statusCode: 409 });
+  const twilio = matches[0];
+  return { ...evidence,
+    provider: { twilio: { sid: twilio.sid, number: twilio.phone_number, name: twilio.friendly_name },
+      phone: { id: phone.id, number: getVapiPhoneNumber(phone), assistantId: getVapiAssistantId(phone), status: phone.status,
+        businessId: phone.businessId, metadata: { businessId: phone.metadata?.businessId } },
+      assistant: { id: assistant.id, contentFingerprint: fingerprintAssistantContent(assistant),
+        businessId: assistant.businessId, metadata: { businessId: assistant.metadata?.businessId } } },
+    reserveNumbers: numbers.filter(n => /^myaipa-reserve-held-20261110-[1-5]$/.test(n.friendly_name || '')).map(n => n.phone_number),
+  };
+}
+
 async function loadTrustedProvisioningContext(req) {
   const authorization = req.provisioningAuthorization || getProvisioningAuthorizationInput(req);
   const registered = await loadSignupProvisioningContextForAttempt({
@@ -13952,7 +14051,9 @@ app.post(
               sourceEventId: `vapi-tool:${claim.identity.idempotencyKey}`,
               message: parameters.message || "",
             });
-            const executionResult = { ok: true, leadId: lead.id, handoffId: handoff.handoffId, status: handoff.status };
+            const executionResult = { ok: handoff.accepted === true, leadId: lead.id, handoffId: handoff.handoffId, status: handoff.status,
+              executionState: handoff.outcomeUncertain ? "uncertain" : handoff.accepted === true ? "accepted" : "not_accepted",
+              requiresInspection: handoff.requiresInspection === true };
             await completeVapiToolExecution({ prisma, id: claim.execution.id, result: executionResult });
             results.push({ name: toolCall.name, toolCallId: toolCall.id, result: JSON.stringify(executionResult) });
           } catch (error) {
@@ -17582,6 +17683,33 @@ require('./smsNotificationDrafts').registerNotificationDraftRoutes({ app, prisma
 registerTrackerRoutes({ app, requireAdmin, isAllowedOrigin, list: listSignupDashboardRecords, save: upsertSignupDashboardRecord,
   audit: event => recordAdminAuditEvent({ prisma, ...event }), actorHash: getAdminActorHash, observations: () => signupFormObservations.listAdmin(),
   setupEvidence: record => readSetupEvidence({ prisma, record, searchTracker: signupNumberSearchTracker }) });
+const signupAssociationRepair = createAssociationRepairService({ prisma,
+  readStore: () => JSON.parse(fs.readFileSync(signupDashboardPath, 'utf8')),
+  commitStore: project => atomicCommitAssociationFile(signupDashboardPath, project), fence: signupAssociationFence,
+  readEvidence: readSignupAssociationEvidence,
+  readDatabaseEvidence: (tx, scope) => readSignupAssociationDatabaseEvidence(scope, tx),
+  enabled: () => process.env.SIGNUP_ASSOCIATION_REPAIR_ENABLED === 'true',
+  singleWriter: () => process.env.SIGNUP_ASSOCIATION_REPAIR_SINGLE_WRITER_CONFIRMED === 'true'
+    && !require('node:cluster').isWorker && Number(process.env.WEB_CONCURRENCY || 1) === 1,
+});
+registerAssociationRepairRoutes({ app, requireAdmin, limiter: adminSignupRepairProcessRateLimiter,
+  isAllowedOrigin, actorHash: getAdminActorHash, service: signupAssociationRepair });
+const boundedMappingControl = createBoundedMappingControl({ prisma, fence: signupAssociationFence,
+  readStore: () => JSON.parse(fs.readFileSync(signupDashboardPath, 'utf8')),
+  getSigningSecret: getProvisioningSigningSecret, getRelease: () => process.env.RENDER_GIT_COMMIT,
+  getOperatorPolicy: () => readOperatorPolicy(path.dirname(signupDashboardPath)),
+  readOverrides: () => process.env.VAPI_BUSINESS_MAP || '',
+  enabled: () => process.env.BOUNDED_MAPPING_CONTROL_ENABLED === 'true',
+  applyEnabled: () => process.env.BOUNDED_MAPPING_APPLY_ENABLED === 'true',
+  singleWriter: () => process.env.SIGNUP_ASSOCIATION_REPAIR_SINGLE_WRITER_CONFIRMED === 'true'
+    && !require('node:cluster').isWorker && Number(process.env.WEB_CONCURRENCY || 1) === 1,
+  probe: async target => { const evidence = await readSignupAssociationEvidence(target);
+    return {complete:true,scope:target,release:process.env.RENDER_GIT_COMMIT,checkedAt:new Date().toISOString(),
+      provider:evidence.provider,reserveNumbers:evidence.reserveNumbers}; },
+});
+registerBoundedMappingControlRoutes({ app, requireAdmin, limiter: adminSignupRepairProcessRateLimiter, isAllowedOrigin,
+  actorHash: req => hasValidAdminSession(req) ? crypto.createHash('sha256').update('bounded-mapping-session:v1\0')
+    .update(parseCookies(req)[ADMIN_SESSION_COOKIE]).digest('hex') : '', service: boundedMappingControl });
 const signupFormObservations = createObservationService({ store: createPrismaObservationStore(prisma),
   authenticateAttempt: (id, token) => signupAttempts ? signupAttempts.authenticate(id, token) : null });
 registerObservationRoutes({ app, service: signupFormObservations, isAllowedOrigin, requireAdmin,
