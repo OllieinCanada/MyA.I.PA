@@ -1,350 +1,132 @@
-const fs = require("fs");
-const path = require("path");
-
-const { loadProjectEnv, rootPath } = require("./_helpers");
-
-const localEnv = loadProjectEnv();
-const serviceId = String(localEnv.RENDER_SERVICE_ID || "srv-d92503a8qa3s73crdpog").trim();
-const renderConfigPath = path.join(
-  process.env.USERPROFILE || process.env.HOME || "",
-  ".render",
-  "cli.yaml"
-);
-const reportPath = rootPath("diagnostics", "security", "credential-readiness-latest.json");
-
-const groups = [
-  {
-    id: "twilio-reporting",
-    label: "Twilio cost reporting",
-    priority: "required-now",
-    source: "Twilio Console",
-    keys: ["TWILIO_ACCOUNT_SID", "TWILIO_API_KEY_SID", "TWILIO_API_KEY_SECRET"],
-  },
-  {
-    id: "twilio-runtime",
-    label: "Twilio calling, texting, and webhook verification",
-    priority: "required-now",
-    source: "Twilio Console",
-    keys: ["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_FROM_NUMBER"],
-  },
-  {
-    id: "vapi",
-    label: "AI phone system",
-    priority: "required-now",
-    source: "Vapi Dashboard",
-    keys: ["VAPI_API_KEY"],
-  },
-  {
-    id: "stripe",
-    label: "Trials and paid checkout",
-    priority: "required-before-sales",
-    source: "Stripe Dashboard",
-    keys: ["STRIPE_SECRET_KEY", "STRIPE_PRICE_ID", "STRIPE_WEBHOOK_SECRET"],
-  },
-  {
-    id: "openai",
-    label: "AI support suggestions and transcription helpers",
-    priority: "required-for-feature",
-    source: "OpenAI Platform",
-    keys: ["OPENAI_API_KEY"],
-  },
-  {
-    id: "make-runtime",
-    label: "Signup workflow handoff",
-    priority: "required-now",
-    source: "Make scenario/webhook settings",
-    keys: ["MAKE_SIGNUP_WEBHOOK_URL", "MAKE_SIGNUP_WEBHOOK_API_KEY"],
-  },
-  {
-    id: "make-ops",
-    label: "Make scenario administration by local automation",
-    priority: "operator-only",
-    source: "Make API Tokens",
-    scope: "local",
-    keys: ["MAKE_API_TOKEN"],
-  },
-  {
-    id: "integration-auth",
-    label: "Protected backend integration routes",
-    priority: "required-now",
-    source: "Generate a long random secret",
-    keys: ["INTEGRATION_API_KEY"],
-  },
-  {
-    id: "admin-mfa",
-    label: "Admin authenticator-app protection",
-    priority: "required-before-sales",
-    source: "Generate a strong TOTP seed and enrol an authenticator app",
-    keys: ["ADMIN_TOTP_SECRET"],
-  },
-  {
-    id: "encrypted-backups",
-    label: "Encrypted database backups and restore drills",
-    priority: "required-before-sales",
-    source: "Generate a strong backup encryption key",
-    keys: ["BACKUP_ENCRYPTION_KEY"],
-  },
-  {
-    id: "vapi-webhook-auth",
-    label: "Vapi webhook authentication",
-    priority: "derived-if-missing",
-    source: "Generate a separate random secret",
-    keys: ["VAPI_WEBHOOK_SECRET"],
-  },
-  {
-    id: "bot-protection",
-    label: "Public signup bot protection (server)",
-    priority: "recommended-before-sales",
-    source: "Cloudflare Turnstile",
-    keys: ["TURNSTILE_SECRET_KEY"],
-  },
-  {
-    id: "bot-protection-frontend",
-    label: "Public signup bot protection (website)",
-    priority: "recommended-before-sales",
-    source: "Cloudflare Turnstile",
-    scope: "local",
-    keys: ["REACT_APP_TURNSTILE_SITE_KEY"],
-  },
-  {
-    id: "email",
-    label: "Email verification and trial reminders",
-    priority: "required-if-enabled",
-    source: "Transactional email provider",
-    keys: ["SMTP_HOST", "SMTP_USER", "SMTP_PASS", "EMAIL_FROM"],
-  },
-  {
-    id: "telegram",
-    label: "High-priority support alerts",
-    priority: "optional",
-    source: "Telegram BotFather / destination chat",
-    keys: ["TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"],
-  },
-  {
-    id: "github-support",
-    label: "One-click GitHub support issues",
-    priority: "optional",
-    source: "GitHub fine-grained access token",
-    keys: ["GITHUB_SUPPORT_TOKEN", "GITHUB_SUPPORT_REPO"],
-  },
-  {
-    id: "google-calendar",
-    label: "Google Calendar connection",
-    priority: "optional",
-    source: "Google Cloud Console",
-    keys: ["GOOGLE_CALENDAR_CLIENT_ID", "GOOGLE_CALENDAR_CLIENT_SECRET"],
-  },
-  {
-    id: "microsoft-calendar",
-    label: "Microsoft Outlook Calendar connection",
-    priority: "optional",
-    source: "Microsoft Entra app registration",
-    keys: ["MICROSOFT_CALENDAR_CLIENT_ID", "MICROSOFT_CALENDAR_CLIENT_SECRET"],
-  },
-  {
-    id: "jobber",
-    label: "Jobber connection",
-    priority: "optional",
-    source: "Jobber Developer Center",
-    keys: ["JOBBER_CLIENT_ID", "JOBBER_CLIENT_SECRET"],
-  },
-  {
-    id: "google-maps",
-    label: "Google Maps-assisted address entry",
-    priority: "optional",
-    source: "Google Cloud Console",
-    scope: "local",
-    keys: ["REACT_APP_GOOGLE_MAPS_API_KEY"],
-  },
-  {
-    id: "x-operator",
-    label: "Local X job-finder automation",
-    priority: "operator-only",
-    source: "X Developer Portal",
-    scope: "local",
-    keys: ["X_BEARER_TOKEN"],
-  },
-];
-
-function stripYamlValue(value) {
-  const text = String(value || "").trim();
-  if (
-    (text.startsWith("\"") && text.endsWith("\""))
-    || (text.startsWith("'") && text.endsWith("'"))
-  ) {
-    return text.slice(1, -1);
-  }
-  return text;
+// Presence-only, offline audit. Never loads .env, CLI profiles, credentials,
+// provider clients or private runtime values; no automatic collection or sends.
+const fs=require('node:fs'),path=require('node:path');
+const {configuredCaptchaProvider}=require('../server/signupCaptcha');
+const MAX_AGE_MS=60*60*1000;
+const MODES=['turnstile','recaptcha','turnstile+recaptcha'];
+const PRESENCE_KEYS=['TURNSTILE_SECRET_KEY','RECAPTCHA_SECRET_KEY','GOOGLE_RECAPTCHA_SECRET_KEY',
+  'SMTP_HOST','SMTP_USER','SMTP_PASS','EMAIL_FROM','SMTP_FROM','ADMIN_TOTP_SECRET','BACKUP_ENCRYPTION_KEY'];
+const object=x=>x!==null&&typeof x==='object'&&!Array.isArray(x)&&[Object.prototype,null].includes(Object.getPrototypeOf(x));
+const exact=(x,keys)=>object(x)&&Object.keys(x).length===keys.length&&keys.every(k=>Object.hasOwn(x,k));
+const sha=x=>typeof x==='string'&&/^[a-f0-9]{64}$/.test(x);
+const release=x=>typeof x==='string'&&/^[a-f0-9]{40}$/.test(x);
+const stamp=x=>typeof x==='string'&&/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(x)&&Number.isFinite(Date.parse(x));
+const fresh=(x,now)=>stamp(x)&&now-Date.parse(x)>=0&&now-Date.parse(x)<=MAX_AGE_MS;
+function origin(x){try{const u=new URL(x);return u.protocol==='https:'&&!u.username&&!u.password&&!u.search&&!u.hash&&u.pathname==='/'?u.origin:null;}catch{return null;}}
+const mode=x=>MODES.includes(x)||x==='unsupported';
+function validExpected(e){return exact(e,['releaseCommit','serviceId','frontendOrigin','publicArtifactSha256'])&&release(e.releaseCommit)
+  &&/^srv-[a-z0-9]{10,64}$/.test(e.serviceId)&&origin(e.frontendOrigin)===e.frontendOrigin&&sha(e.publicArtifactSha256);}
+function validRuntime(r){return exact(r,['schemaVersion','source','presence','settings','effective'])&&r.schemaVersion===1
+  &&exact(r.source,['kind','serviceId','releaseCommit','checkedAt'])&&r.source.kind==='server-runtime-presence'
+  &&/^srv-[a-z0-9]{10,64}$/.test(r.source.serviceId)&&release(r.source.releaseCommit)&&stamp(r.source.checkedAt)
+  &&exact(r.presence,PRESENCE_KEYS)&&PRESENCE_KEYS.every(k=>typeof r.presence[k]==='boolean')
+  &&exact(r.settings,['CAPTCHA_PROVIDER','configuredCaptchaProvider','SIGNUP_REQUIRE_VERIFICATION','SIGNUP_REQUIRE_MANUAL_APPROVAL'])
+  &&(r.settings.CAPTCHA_PROVIDER===null||mode(r.settings.CAPTCHA_PROVIDER))&&mode(r.settings.configuredCaptchaProvider)
+  &&['SIGNUP_REQUIRE_VERIFICATION','SIGNUP_REQUIRE_MANUAL_APPROVAL'].every(k=>r.settings[k]===null||typeof r.settings[k]==='boolean')
+  &&exact(r.effective,['recaptchaSecretPresent','smtpFromPresent'])&&Object.values(r.effective).every(x=>typeof x==='boolean');}
+function validPublic(p){
+  if(!exact(p,['schemaVersion','source','selection'])||p.schemaVersion!==1
+    ||!exact(p.source,['kind','origin','releaseCommit','checkedAt','artifactSha256','artifactUrl','method'])
+    ||p.source.kind!=='deployed-public-configuration'||p.source.method!=='verified-deployed-bundle'
+    ||origin(p.source.origin)!==p.source.origin||!release(p.source.releaseCommit)||!stamp(p.source.checkedAt)||!sha(p.source.artifactSha256)
+    ||!exact(p.selection,['provider','turnstileSiteKeyPresent','recaptchaSiteKeyPresent'])||!mode(p.selection.provider)
+    ||typeof p.selection.turnstileSiteKeyPresent!=='boolean'||typeof p.selection.recaptchaSiteKeyPresent!=='boolean')return false;
+  try{const u=new URL(p.source.artifactUrl);return u.origin===p.source.origin&&!u.username&&!u.password&&!u.search&&!u.hash
+    &&/^\/static\/js\/main\.[a-f0-9]{6,128}\.js$/.test(u.pathname);}catch{return false;}
 }
-
-function isUsable(value) {
-  const text = String(value || "").trim();
-  return Boolean(
-    text
-    && !/^(?:change-me|your[_ -]?key|replace[_ -]?me|todo|example)$/i.test(text)
-    && !/^<.+>$/.test(text)
-  );
+function evaluateCredentialReadiness({runtimeEvidence:r,publicEvidence:p,expected:e,now=Date.now()}={}){
+  const report={schemaVersion:2,scope:'configuration-presence-only',checkedAt:new Date(now).toISOString(),releaseCommit:null,
+    secretValuesCollected:false,secretValuesPrinted:false,evidenceStatus:'unverified',issues:[],
+    signupControls:{configurationReady:false,publicSelfServiceReady:false},
+    functionalProof:{captchaChallenge:'not_run',smsDelivery:'not_run',emailDelivery:'not_run',adminMfaChallenge:'not_run',backupRestore:'not_run'},
+    limitations:['Inputs are explicitly sourced operator-supplied sanitized attestations, not authenticated by this offline evaluator.',
+      'Presence does not establish credential validity, key type/hostname alignment, challenge success, delivery or recovery.',
+      'Local frontend environment variables and repository defaults are not evidence of deployed public selection.',
+      'General signup verification is not email-only; the web path requires SMS and optionally sends email when configured.']};
+  const issue=c=>{if(!report.issues.includes(c))report.issues.push(c);};
+  if(!validExpected(e)){issue('EXPECTED_SCOPE_REQUIRED');return report;}
+  report.releaseCommit=e.releaseCommit;
+  if(!validRuntime(r))issue('RUNTIME_PRESENCE_EVIDENCE_INVALID');
+  if(!validPublic(p))issue('DEPLOYED_PUBLIC_EVIDENCE_INVALID');
+  if(report.issues.length)return report;
+  if(r.source.releaseCommit!==e.releaseCommit||r.source.serviceId!==e.serviceId)issue('RUNTIME_SCOPE_MISMATCH');
+  if(p.source.releaseCommit!==e.releaseCommit||p.source.origin!==e.frontendOrigin||p.source.artifactSha256!==e.publicArtifactSha256)issue('DEPLOYED_PUBLIC_SCOPE_MISMATCH');
+  if(!fresh(r.source.checkedAt,now))issue('RUNTIME_EVIDENCE_STALE_OR_FUTURE');
+  if(!fresh(p.source.checkedAt,now))issue('DEPLOYED_PUBLIC_EVIDENCE_STALE_OR_FUTURE');
+  report.evidence={runtime:{...r.source},deployedPublic:{...p.source},expected:{...e}};
+  const bindingValid=report.issues.length===0;
+  if(bindingValid)report.evidenceStatus='source-bound-presence-attestation';
+  const presence=r.presence,s=r.settings,effective=r.effective;
+  const provider=configuredCaptchaProvider({CAPTCHA_PROVIDER:s.CAPTCHA_PROVIDER===null?'':s.CAPTCHA_PROVIDER});
+  if(provider!==s.configuredCaptchaProvider)issue('CAPTCHA_RUNTIME_RESOLUTION_MISMATCH');
+  // Effective fallback selection must be observed, not guessed with boolean OR:
+  // a truthy whitespace primary value can suppress the runtime fallback.
+  if((presence.RECAPTCHA_SECRET_KEY&&!effective.recaptchaSecretPresent)
+    ||(!presence.RECAPTCHA_SECRET_KEY&&!presence.GOOGLE_RECAPTCHA_SECRET_KEY&&effective.recaptchaSecretPresent)
+    ||(presence.EMAIL_FROM&&!effective.smtpFromPresent)
+    ||(!presence.EMAIL_FROM&&!presence.SMTP_FROM&&effective.smtpFromPresent))issue('EFFECTIVE_PRESENCE_INCONSISTENT');
+  const supported=MODES.includes(provider)&&MODES.includes(p.selection.provider);
+  if(!supported)issue('CAPTCHA_MODE_UNSUPPORTED');
+  if(provider!==p.selection.provider)issue('CAPTCHA_DEPLOYED_RUNTIME_MISMATCH');
+  const needTurnstile=provider==='turnstile'||provider==='turnstile+recaptcha',needRecaptcha=provider==='recaptcha'||provider==='turnstile+recaptcha';
+  const secrets=supported&&(!needTurnstile||presence.TURNSTILE_SECRET_KEY)&&(!needRecaptcha||effective.recaptchaSecretPresent);
+  const siteKeys=supported&&(!needTurnstile||p.selection.turnstileSiteKeyPresent)&&(!needRecaptcha||p.selection.recaptchaSiteKeyPresent);
+  if(!secrets)issue('CAPTCHA_SERVER_SECRET_ABSENT');if(!siteKeys)issue('CAPTCHA_DEPLOYED_SITE_KEY_ABSENT');
+  const smtpTransport=presence.SMTP_HOST&&effective.smtpFromPresent;
+  const smtpAuth=presence.SMTP_USER&&presence.SMTP_PASS?'authenticated':!presence.SMTP_USER&&!presence.SMTP_PASS?'anonymous':'incomplete';
+  const smtpConfigured=smtpTransport&&smtpAuth!=='incomplete';
+  if(!smtpConfigured)issue('SMTP_NOT_CONFIGURED');
+  const verification=s.SIGNUP_REQUIRE_VERIFICATION===true,manual=s.SIGNUP_REQUIRE_MANUAL_APPROVAL===true;
+  if(!verification)issue('SIGNUP_CONTACT_VERIFICATION_DISABLED');if(manual)issue('MANUAL_APPROVAL_ENABLED');
+  if(!presence.ADMIN_TOTP_SECRET)issue('ADMIN_MFA_NOT_CONFIGURED');if(!presence.BACKUP_ENCRYPTION_KEY)issue('BACKUP_KEY_NOT_CONFIGURED');
+  report.signupControls={runtimeCaptchaProvider:provider,deployedCaptchaProvider:p.selection.provider,
+    captchaProviderSelected:bindingValid&&supported&&provider===p.selection.provider&&provider===s.configuredCaptchaProvider,
+    captchaConfigured:bindingValid&&supported&&provider===p.selection.provider&&secrets&&siteKeys&&!report.issues.includes('CAPTCHA_RUNTIME_RESOLUTION_MISMATCH')&&!report.issues.includes('EFFECTIVE_PRESENCE_INCONSISTENT'),
+    smtpTransportConfigured:smtpTransport,smtpAuthentication:smtpAuth,smtpConfigured,
+    signupVerificationEnabled:verification,manualApprovalEnabled:manual,adminTotpConfigured:presence.ADMIN_TOTP_SECRET,
+    adminMfaEnabled:presence.ADMIN_TOTP_SECRET,backupEncryptionConfigured:presence.BACKUP_ENCRYPTION_KEY,
+    configurationReady:report.issues.length===0,publicSelfServiceReady:false};
+  report.defaultsApplied=Object.entries(s).filter(([k,v])=>k!=='configuredCaptchaProvider'&&v===null).map(([k])=>k);
+  return report;
 }
-
-function readRenderCredentials() {
-  const source = fs.readFileSync(renderConfigPath, "utf8");
-  const apiBlock = source.match(/(?:^|\r?\n)api:\s*\r?\n([\s\S]*?)(?=\r?\n\S|\s*$)/);
-  if (!apiBlock) throw new Error("The signed-in Render CLI profile has no API section.");
-  const key = stripYamlValue(apiBlock[1].match(/^\s+key:\s*(.+)$/m)?.[1]);
-  const host = stripYamlValue(apiBlock[1].match(/^\s+host:\s*(.+)$/m)?.[1]).replace(/\/+$/, "");
-  if (!key || !host) throw new Error("The signed-in Render CLI profile is incomplete.");
-  return { key, host };
+function credentialConfigurationPassed(r,expectedRelease,now=Date.now()){
+  const c=r?.signupControls,b=r?.evidence;
+  return r?.schemaVersion===2&&r.scope==='configuration-presence-only'&&release(expectedRelease)&&r.releaseCommit===expectedRelease
+    &&r.evidenceStatus==='source-bound-presence-attestation'&&r.secretValuesCollected===false&&r.secretValuesPrinted===false
+    &&Array.isArray(r.issues)&&r.issues.length===0&&c?.configurationReady===true&&c.captchaConfigured===true
+    &&c.captchaProviderSelected===true&&c.smtpConfigured===true&&c.signupVerificationEnabled===true&&c.manualApprovalEnabled===false
+    &&c.adminMfaEnabled===true&&c.adminTotpConfigured===true&&c.backupEncryptionConfigured===true
+    &&validExpected(b?.expected)&&b.expected.releaseCommit===expectedRelease
+    &&b.runtime?.kind==='server-runtime-presence'&&b.runtime.serviceId===b.expected.serviceId&&b.runtime.releaseCommit===expectedRelease
+    &&b.deployedPublic?.kind==='deployed-public-configuration'&&b.deployedPublic.origin===b.expected.frontendOrigin
+    &&b.deployedPublic.releaseCommit===expectedRelease&&b.deployedPublic.artifactSha256===b.expected.publicArtifactSha256
+    &&fresh(r.checkedAt,now)&&fresh(b.runtime.checkedAt,now)&&fresh(b.deployedPublic.checkedAt,now);
 }
-
-async function renderRequest(credentials, endpoint) {
-  const response = await fetch(`${credentials.host}${endpoint}`, {
-    headers: {
-      authorization: `Bearer ${credentials.key}`,
-      accept: "application/json",
-    },
-  });
-  if (response.status === 404) return null;
-  if (!response.ok) throw new Error(`Render request failed with HTTP ${response.status}.`);
-  return response.json();
+function readEvidenceFile(file){
+  const stat=fs.lstatSync(file);if(!stat.isFile()||stat.isSymbolicLink()||stat.size>65536)throw Error('CREDENTIAL_EVIDENCE_FILE_INVALID');
+  try{return JSON.parse(fs.readFileSync(file,'utf8'));}catch{throw Error('CREDENTIAL_EVIDENCE_JSON_INVALID');}
 }
-
-function envValue(payload) {
-  return String(payload?.value ?? payload?.envVar?.value ?? "").trim();
+function main(argv=process.argv.slice(2)){
+  if(argv.length===1&&argv[0]==='--help'){console.log('Offline presence-only audit: --runtime-presence=FILE --deployed-public=FILE --release=SHA --service=ID --origin=HTTPS_ORIGIN --public-artifact-sha256=SHA256 [--out=FILE]. No collection or provider validation.');return;}
+  const keys=['runtime-presence','deployed-public','release','service','origin','public-artifact-sha256','out'],options={};
+  for(const arg of argv){const m=/^--([a-z0-9-]+)=(.+)$/.exec(arg);if(!m||!keys.includes(m[1])||Object.hasOwn(options,m[1]))throw Error('CREDENTIAL_AUDIT_ARGUMENTS_INVALID');options[m[1]]=m[2];}
+  if(keys.slice(0,6).some(k=>!options[k]))throw Error('CREDENTIAL_AUDIT_EVIDENCE_REQUIRED');
+  const out=path.resolve(options.out||path.join(__dirname,'../diagnostics/security/credential-readiness-latest.json'));
+  if(!/^credential-readiness(?:-[a-z0-9]+)*\.json$/i.test(path.basename(out))
+    ||[options['runtime-presence'],options['deployed-public']].some(input=>path.resolve(input)===out))throw Error('CREDENTIAL_AUDIT_OUTPUT_INVALID');
+  if(fs.existsSync(out)){const stat=fs.lstatSync(out);if(!stat.isFile()||stat.isSymbolicLink()||stat.nlink>1)throw Error('CREDENTIAL_AUDIT_OUTPUT_INVALID');}
+  const expected={releaseCommit:options.release,serviceId:options.service,frontendOrigin:options.origin,publicArtifactSha256:options['public-artifact-sha256']};
+  const failed=evaluateCredentialReadiness({expected});failed.issues=['AUDIT_INPUT_NOT_YET_VALIDATED'];
+  fs.mkdirSync(path.dirname(out),{recursive:true});
+  // Invalidate a previous latest green before reading new inputs. A failed
+  // collection/parse must not silently preserve old success as this run's result.
+  fs.writeFileSync(out,JSON.stringify(failed,null,2)+'\n');
+  let report;
+  try{report=evaluateCredentialReadiness({runtimeEvidence:readEvidenceFile(options['runtime-presence']),publicEvidence:readEvidenceFile(options['deployed-public']),expected});}
+  catch(error){failed.issues=[/^CREDENTIAL_[A-Z_]+$/.test(error.message||'')?error.message:'CREDENTIAL_AUDIT_INPUT_UNAVAILABLE'];
+    fs.writeFileSync(out,JSON.stringify(failed,null,2)+'\n');throw Error(failed.issues[0]);}
+  fs.writeFileSync(out,JSON.stringify(report,null,2)+'\n');
+  console.log(JSON.stringify(report,null,2));if(!report.signupControls.configurationReady)process.exitCode=2;
 }
-
-async function getRemotePresence(credentials, key) {
-  const payload = await renderRequest(
-    credentials,
-    `/services/${encodeURIComponent(serviceId)}/env-vars/${encodeURIComponent(key)}`
-  );
-  return isUsable(envValue(payload));
-}
-
-async function validateTwilio(remotePresence, remoteValues) {
-  const accountSid = remoteValues.TWILIO_ACCOUNT_SID;
-  const apiKeySid = remoteValues.TWILIO_API_KEY_SID;
-  const apiKeySecret = remoteValues.TWILIO_API_KEY_SECRET;
-  const authToken = remoteValues.TWILIO_AUTH_TOKEN;
-  let username = "";
-  let password = "";
-  let mode = "";
-
-  if (
-    remotePresence.TWILIO_ACCOUNT_SID
-    && remotePresence.TWILIO_API_KEY_SID
-    && remotePresence.TWILIO_API_KEY_SECRET
-  ) {
-    username = apiKeySid;
-    password = apiKeySecret;
-    mode = "api-key";
-  } else if (remotePresence.TWILIO_ACCOUNT_SID && remotePresence.TWILIO_AUTH_TOKEN) {
-    username = accountSid;
-    password = authToken;
-    mode = "auth-token";
-  } else {
-    return { checked: false, valid: false, mode: "incomplete", status: null };
-  }
-
-  const response = await fetch(
-    `https://api.twilio.com/2010-04-01/Accounts/${encodeURIComponent(accountSid)}/Usage/Records.json?PageSize=1`,
-    {
-      headers: {
-        authorization: `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`,
-        accept: "application/json",
-      },
-    }
-  );
-  return {
-    checked: true,
-    valid: response.ok,
-    mode,
-    status: response.status,
-  };
-}
-
-async function main() {
-  if (!serviceId) throw new Error("RENDER_SERVICE_ID is not configured.");
-  const renderCredentials = readRenderCredentials();
-  const remoteKeys = [...new Set([
-    ...groups.filter((group) => group.scope !== "local").flatMap((group) => group.keys),
-    "SIGNUP_REQUIRE_VERIFICATION",
-    "SIGNUP_REQUIRE_MANUAL_APPROVAL",
-  ])];
-  const remoteValues = {};
-  const remotePresence = {};
-
-  await Promise.all(remoteKeys.map(async (key) => {
-    const payload = await renderRequest(
-      renderCredentials,
-      `/services/${encodeURIComponent(serviceId)}/env-vars/${encodeURIComponent(key)}`
-    );
-    const value = envValue(payload);
-    remoteValues[key] = value;
-    remotePresence[key] = isUsable(value);
-  }));
-
-  const localPresence = Object.fromEntries(
-    [...new Set(groups.flatMap((group) => group.keys))]
-      .map((key) => [key, isUsable(localEnv[key])])
-  );
-  const twilio = await validateTwilio(remotePresence, remoteValues);
-
-  const inventory = groups.map((group) => {
-    const presence = group.keys.map((key) => ({
-      key,
-      present: group.scope === "local" ? localPresence[key] : remotePresence[key],
-    }));
-    const missing = presence.filter((item) => !item.present).map((item) => item.key);
-    return {
-      id: group.id,
-      label: group.label,
-      priority: group.priority,
-      source: group.source,
-      scope: group.scope || "render",
-      ready: missing.length === 0,
-      present: presence.filter((item) => item.present).map((item) => item.key),
-      missing,
-      availableLocally: group.scope === "local"
-        ? []
-        : missing.filter((key) => localPresence[key]),
-      missingEverywhere: missing.filter((key) => !localPresence[key]),
-    };
-  });
-
-  const report = {
-    schemaVersion: 1,
-    checkedAt: new Date().toISOString(),
-    serviceId,
-    secretValuesPrinted: false,
-    validation: { twilio },
-    signupControls: {
-      captchaProviderSelected: Boolean(remotePresence.TURNSTILE_SECRET_KEY && localPresence.REACT_APP_TURNSTILE_SITE_KEY),
-      captchaConfigured: Boolean(remotePresence.TURNSTILE_SECRET_KEY && localPresence.REACT_APP_TURNSTILE_SITE_KEY),
-      smtpConfigured: ["SMTP_HOST", "SMTP_USER", "SMTP_PASS", "EMAIL_FROM"].every((key) => remotePresence[key]),
-      emailVerificationEnabled: /^(1|true|yes|on)$/i.test(String(remoteValues.SIGNUP_REQUIRE_VERIFICATION || "")),
-      manualApprovalEnabled: !/^(0|false|no|off)$/i.test(String(remoteValues.SIGNUP_REQUIRE_MANUAL_APPROVAL || "true")),
-      adminTotpConfigured: Boolean(remotePresence.ADMIN_TOTP_SECRET),
-      backupEncryptionConfigured: Boolean(remotePresence.BACKUP_ENCRYPTION_KEY),
-    },
-    inventory,
-  };
-  report.signupControls.publicSelfServiceReady = Boolean(
-    report.signupControls.captchaProviderSelected
-    && report.signupControls.captchaConfigured
-    && report.signupControls.smtpConfigured
-    && report.signupControls.emailVerificationEnabled
-    && !report.signupControls.manualApprovalEnabled
-    && report.signupControls.adminTotpConfigured
-    && report.signupControls.backupEncryptionConfigured
-  );
-
-  fs.mkdirSync(path.dirname(reportPath), { recursive: true });
-  fs.writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
-  console.log(JSON.stringify(report, null, 2));
-  console.log(`Report saved: ${reportPath}`);
-}
-
-main().catch((error) => {
-  console.error(error?.message || String(error));
-  process.exitCode = 1;
-});
+if(require.main===module){try{main();}catch(error){console.error(/^CREDENTIAL_[A-Z_]+$/.test(error.message||'')?error.message:'CREDENTIAL_AUDIT_INPUT_UNAVAILABLE');process.exitCode=1;}}
+module.exports={MAX_AGE_MS,PRESENCE_KEYS,evaluateCredentialReadiness,credentialConfigurationPassed,readEvidenceFile,main};

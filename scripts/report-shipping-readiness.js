@@ -4,6 +4,7 @@ const { rootPath } = require("./_helpers");
 const { spawnSync } = require("node:child_process");
 const proof = require("./launch-evidence");
 const { browserQualityPassed } = require('./browser-quality-coverage');
+const { credentialConfigurationPassed } = require('./audit-credential-readiness');
 const expectedRelease = process.env.READINESS_RELEASE_COMMIT || String(spawnSync("git", ["rev-parse", "HEAD"], {
   cwd: rootPath(), encoding: "utf8", windowsHide: true, timeout: 10000,
 }).stdout || "").trim();
@@ -69,8 +70,9 @@ const gates = [
     id: "signup_security",
     title: "Public signup security configuration",
     evidence: "../security/credential-readiness-latest.json",
-    pass: (value) => value.signupControls?.publicSelfServiceReady === true,
-    requirement: "Turnstile, SMTP, email verification, admin TOTP, encrypted backups, and automatic self-service mode are all explicitly configured.",
+    pass: (value) => credentialConfigurationPassed(value, expectedRelease),
+    requirement: "Selected CAPTCHA providers, SMTP transport, general contact verification, admin TOTP, backup encryption key and automatic mode have fresh matching runtime/deployed-public configuration evidence.",
+    limitation: "Presence-only configuration evidence does not prove a successful CAPTCHA challenge, SMS/email delivery, MFA challenge or backup restore.",
   }),
   makeGate({
     id: "operations",
