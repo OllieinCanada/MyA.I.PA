@@ -32,10 +32,10 @@ function createBoundedMappingControl({ prisma, fence, readStore, getSigningSecre
     if(!/^[a-f0-9]{40}$/.test(getRelease()||''))fail('MAPPING_CONTROL_RELEASE_REQUIRED');
     return actor;
   }
-  function makeWriter(doc,snapshot) {
+  function makeWriter(doc,snapshot,assertAdmission=()=>fail('MAPPING_CONTROL_APPLY_NOT_APPROVED',403)) {
     return writerFactory({prisma,policy:doc.target,enabled:()=>enabled()&&applyEnabled(),singleWriter,
       withAssociationLease:createBoundedMappingLease({fence,readStore,policy:doc.target,singleProcess:singleWriter}),
-      readEvidence:createBoundedMappingEvidenceReader({readStore,getProviderSnapshot:()=>snapshot,getSigningSecret,getRelease,now}),readOverrides,now});
+      readEvidence:createBoundedMappingEvidenceReader({readStore,getProviderSnapshot:()=>snapshot,getSigningSecret,getRelease,now}),readOverrides,now,assertAdmission});
   }
   const proofHash = s => digest({release:s.release,scope:s.scope,provider:s.provider,reserveNumbers:[...(s.reserveNumbers||[])].sort()});
   async function freshProbe(doc) {
@@ -76,7 +76,15 @@ function createBoundedMappingControl({ prisma, fence, readStore, getSigningSecre
         if(entry.attempted)fail('MAPPING_CONTROL_INSPECT_FIRST');
         const snapshot=await freshProbe(doc);authorize(auth);
         if(policy(actor,doc.policyId).version!==version)fail('MAPPING_CONTROL_POLICY_CHANGED');
-        const writer=makeWriter(doc,snapshot),plan=await writer.prepare();
+        const assertAdmission=()=>{
+          authorize(auth);
+          const current=policy(actor,doc.policyId);
+          if(!applyEnabled()||!singleWriter()||current.version!==version||!entry.plan
+            ||!equal(current.doc.approvedPlanDigest,entry.plan.planDigest)||now()-entry.createdAt>240000
+            ||now()-Date.parse(snapshot.checkedAt)>240000)fail('MAPPING_CONTROL_APPLY_NOT_APPROVED',403);
+          return true;
+        };
+        const writer=makeWriter(doc,snapshot,assertAdmission),plan=await writer.prepare();
         Object.assign(entry,{version,snapshot,writer,plan,createdAt:now()});
         return {policyId:doc.policyId,...plan,expiresAt:new Date(Math.min(Date.parse(doc.expiresAt),entry.createdAt+240000)).toISOString(),
           dryRun:true,databaseWrites:0,readinessGranted:false};

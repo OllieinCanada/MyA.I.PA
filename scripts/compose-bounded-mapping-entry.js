@@ -3,10 +3,12 @@ const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),cryp
 const {spawnSync}=require('node:child_process');
 const FILES=['server/boundedMappingControl.js','tests/bounded-mapping-control.integration.cjs',
   'tests/bounded-mapping-control-postgres.integration.cjs','scripts/bounded-mapping-entry-index.patch',
-  'scripts/bounded-mapping-entry-pins.json','scripts/compose-bounded-mapping-entry.js',
+  'scripts/bounded-mapping-entry-pins.json','scripts/bounded-mapping-entry-safety.patch','scripts/compose-bounded-mapping-entry.js',
   'tests/bounded-mapping-entry-composition.test.js','.github/workflows/bounded-mapping-entry.yml'];
 const SQL_CASES=['default_refusal','dry_run_zero_writes','explicit_guarded_admission','fresh_receipt_refusal',
-  'atomicity_uncertainty','lost_commit_acknowledgement','shared_running_fence','actual_signed_session_http'];
+  'atomicity_uncertainty','lost_commit_acknowledgement','shared_running_fence','actual_signed_session_http',
+  ...['phone','assistant'].flatMap(r=>['businessId','metadata'].map(f=>`ownership_${r}_${f}`)),
+  ...['gate','mapping'].flatMap(s=>['session','session_expiry','policy','approval','flag'].map(c=>`wait_${s}_${c}`))];
 const hash=x=>crypto.createHash('sha256').update(x).digest('hex');
 function validCoverage(r){return r?.sqlMode==='real-postgresql'&&r.providerMode==='synthetic-no-send'
   &&r.disposableDatabaseRemoved===true&&r.outcomes?.length===SQL_CASES.length
@@ -37,9 +39,17 @@ function compose({root=path.resolve(__dirname,'..'),composeOnly=false}={}){
     if((patch.match(/^diff --git /gm)||[]).length!==1||!patch.startsWith('diff --git a/server/index.js b/server/index.js\n'))throw Error('Unexpected index patch scope');
     run('git',['apply','--check',path.join(workspace,'scripts/bounded-mapping-entry-index.patch')],{cwd:workspace});
     run('git',['apply',path.join(workspace,'scripts/bounded-mapping-entry-index.patch')],{cwd:workspace});
-    report.wiredIndexHash=hash(fs.readFileSync(path.join(workspace,'server/index.js')));
+    report.baselineWiredIndexHash=hash(fs.readFileSync(path.join(workspace,'server/index.js')));
     run(process.execPath,['--check','server/index.js'],{cwd:workspace});
-    if(composeOnly)return report;
+    const applySafety=()=>{
+      const file=path.join(workspace,'scripts/bounded-mapping-entry-safety.patch'),body=fs.readFileSync(file,'utf8');
+      const diffs=body.match(/^diff --git .+$/gm)||[];
+      if(JSON.stringify(diffs)!==JSON.stringify(['diff --git a/server/index.js b/server/index.js','diff --git a/server/boundedBusinessMappingWriter.js b/server/boundedBusinessMappingWriter.js']))throw Error('Unexpected safety patch scope');
+      run('git',['apply','--check',file],{cwd:workspace});run('git',['apply',file],{cwd:workspace});
+      report.wiredIndexHash=hash(fs.readFileSync(path.join(workspace,'server/index.js')));
+      report.patchedWriterHash=hash(fs.readFileSync(path.join(workspace,'server/boundedBusinessMappingWriter.js')));
+    };
+    if(composeOnly){applySafety();return report;}
     const {validateSqlTarget}=require(path.join(workspace,'scripts/compose-bounded-mapping-integration'));validateSqlTarget(process.env.DATABASE_URL,process.env);
     const deps=path.resolve(process.env.MAPPING_APPROVED_NODE_MODULES||path.join(root,'node_modules'));
     if(!fs.existsSync(path.join(deps,'@prisma/client/package.json')))throw Error('Locked dependencies required');
@@ -47,6 +57,16 @@ function compose({root=path.resolve(__dirname,'..'),composeOnly=false}={}){
     const env=Object.fromEntries(['PATH','HOME','SystemRoot','TEMP','TMP'].filter(k=>process.env[k]).map(k=>[k,process.env[k]]));
     Object.assign(env,{CI:'true',GITHUB_ACTIONS:'true',DISABLE_LOCAL_ENV_FILES:'1',DATABASE_URL:process.env.DATABASE_URL,
       RUN_BOUNDED_MAPPING_CONTROL_POSTGRES:'1',MAPPING_CONTROL_SQL_REPORT:path.join(out,'entry-sql.json')});
+    const baselineReport=path.join(out,'baseline-entry-sql.json');
+    const baseline=spawnSync(process.execPath,['--test','--test-reporter=tap','tests/bounded-mapping-control-postgres.integration.cjs'],
+      {cwd:workspace,env:{...env,MAPPING_CONTROL_SQL_REPORT:baselineReport},encoding:'utf8',timeout:180000,maxBuffer:32*1024*1024});
+    fs.writeFileSync(path.join(out,'baseline.tap'),baseline.stdout||'');fs.writeFileSync(path.join(out,'baseline.stderr.log'),baseline.stderr||'');
+    const old=JSON.parse(fs.readFileSync(baselineReport));
+    const expected=SQL_CASES.filter(id=>id.startsWith('ownership_')||id.startsWith('wait_'));
+    if(baseline.error||baseline.status===0||old.disposableDatabaseRemoved!==true||old.outcomes.length!==SQL_CASES.length
+      ||!SQL_CASES.every(id=>old.outcomes.some(x=>x.id===id&&x.status===(expected.includes(id)?'failed':'passed'))))throw Error('Baseline regression reproduction incomplete; inspect preserved evidence');
+    report.baselineReproduced=expected;
+    applySafety();
     const r=spawnSync(process.execPath,['--test','--test-reporter=tap','tests/bounded-mapping-control.integration.cjs','tests/bounded-mapping-control-postgres.integration.cjs'],
       {cwd:workspace,env,encoding:'utf8',timeout:180000,maxBuffer:32*1024*1024});
     fs.writeFileSync(path.join(out,'tests.tap'),r.stdout||'');fs.writeFileSync(path.join(out,'tests.stderr.log'),r.stderr||'');

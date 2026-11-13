@@ -56,7 +56,7 @@ test('disabled maintenance entry point with actual reader/writer/fence and dispo
       await assert.rejects(s.execute(x.body(p),x.auth),{code:'MAPPING_UNCERTAIN_INSPECT_FIRST'});assert.equal((await s.execute({action:'inspect',policyId:x.doc.policyId},x.auth)).state,'committed_exact');assert.equal(await db.vapiBusinessMapping.count(),6);});
     await run('shared_running_fence',async x=>{let excluded=false;x.config.prisma=instrument(db,{onCreate:async({index})=>{if(index===1){assert.throws(()=>x.f.fence.hold([x.f.policy.sourceId,x.f.policy.phantomId]),{code:'ASSOCIATION_REPAIR_BUSY'});excluded=true;}}});const s=createBoundedMappingControl(x.config);
       const p=await s.execute({action:'dry_run',policyId:x.doc.policyId},x.auth);x.doc.approvedPlanDigest=p.planDigest;x.state.apply=true;await s.execute(x.body(p),x.auth);assert.equal(excluded,true);});
-    await run('actual_signed_session_http',async x=>{
+    async function actualHttp(x,mode='success'){
       // Load the real patched app and auth middleware, not a replacement auth
       // callback. No startServer/background jobs; provider fetch is intercepted
       // in-process and only exact GET fixture reads are accepted.
@@ -68,10 +68,22 @@ test('disabled maintenance entry point with actual reader/writer/fence and dispo
         SIGNUP_ASSOCIATION_REPAIR_SINGLE_WRITER_CONFIRMED:'true',WEB_CONCURRENCY:'1',TRIAL_REMINDER_DISABLE:'true',VAPI_AUTO_SYNC_ENABLED:'false'});
       delete process.env.BOUNDED_MAPPING_CONTROL_ENABLED;delete process.env.BOUNDED_MAPPING_APPLY_ENABLED;
       const repair=require('../server/signupAssociationRepair'),makeFence=repair.createAssociationFence;
-      let runningFence,fenceCreations=0,actualExclusions=0;
+      let runningFence,fenceCreations=0,actualExclusions=0,blocker,waitingApply=false,heldAfterIntent=false;
+      const waiting=/^wait_(gate|mapping)_(session_expiry|session|policy|approval|flag)$/.exec(mode);
       repair.createAssociationFence=(...args)=>{fenceCreations++;return runningFence=makeFence(...args);};
-      global.__myAiPaPrisma=instrument(db,{onCreate:async()=>{
+      const instrumented=instrument(db,{onCreate:async()=>{
         assert.throws(()=>runningFence.hold([x.f.policy.sourceId,x.f.policy.phantomId]),{code:'ASSOCIATION_REPAIR_BUSY'});actualExclusions++;
+      },afterCommit:async()=>{
+        if(waiting?.[1]==='mapping'&&waitingApply&&!heldAfterIntent){
+          const rows=await db.runtimeStore.findMany({where:{key:{startsWith:'bounded-business-mapping:v1:'}}});
+          if(rows.some(r=>r.data.phase==='attempt_started')){
+            await blocker.query('BEGIN');await blocker.query("SELECT pg_advisory_xact_lock(hashtext('signup-business-bindings:v1'))");heldAfterIntent=true;
+          }
+        }
+      }});
+      global.__myAiPaPrisma=new Proxy(db,{get(target,key){
+        if(key==='$transaction')return instrumented.$transaction.bind(instrumented);
+        const value=target[key];return typeof value==='function'?value.bind(target):value;
       }});let providerReads=0,forbidden=0,server;
       global.fetch=async(input,options={})=>{
         const u=new URL(String(input));
@@ -84,9 +96,14 @@ test('disabled maintenance entry point with actual reader/writer/fence and dispo
         else if(u.hostname==='api.vapi.ai'&&u.pathname===`/phone-number/${x.f.policy.phoneId}`)body={...x.f.snapshot.provider.phone};
         else if(u.hostname==='api.vapi.ai'&&u.pathname===`/assistant/${x.f.policy.assistantId}`)body={id:x.f.policy.assistantId,model:{messages:[]}};
         else {forbidden++;throw Error('Non-fixture network refused');}
+        const ownership=/^ownership_(phone|assistant)_(businessId|metadata)$/.exec(mode);
+        if(ownership&&u.hostname==='api.vapi.ai'&&u.pathname===`/${ownership[1]==='phone'?'phone-number':'assistant'}/${ownership[1]==='phone'?x.f.policy.phoneId:x.f.policy.assistantId}`){
+          if(ownership[2]==='metadata')body.metadata={businessId:8};else body.businessId=8;
+        }
         providerReads++;return new Response(JSON.stringify(body),{status:200,headers:{'content-type':'application/json'}});
       };
       try{
+        delete require.cache[require.resolve('../server/index')];delete require.cache[require.resolve('../server/prisma')];
         const {app}=require('../server/index');assert.equal(fenceCreations,1,'actual app creates precisely one shared fence');
         repair.createAssociationFence=makeFence;
         server=app.listen(0,'127.0.0.1');await require('node:events').once(server,'listening');
@@ -95,7 +112,11 @@ test('disabled maintenance entry point with actual reader/writer/fence and dispo
         const post=async(url,body,cookie='',extra={})=>{const r=await nativeFetch(base+url,{method:'POST',headers:{...headers,...(cookie?{cookie}:{}),...extra},body:JSON.stringify(body)});return{status:r.status,body:await r.json(),cookie:r.headers.get('set-cookie')};};
         assert.equal((await post(route,{action:'identify'})).status,401);
         const login=await post('/api/admin/login',{password:'synthetic-entry-admin'});assert.equal(login.status,200);
-        const cookie=login.cookie.split(';')[0];
+        let cookie=login.cookie.split(';')[0],sessionDeadline;
+        if(waiting?.[2]==='session_expiry'){
+          sessionDeadline=Date.now()+2000;const encoded=Buffer.from(JSON.stringify({exp:sessionDeadline})).toString('base64url');
+          cookie='myaipa_admin_session='+encoded+'.'+crypto.createHmac('sha256',process.env.ADMIN_SESSION_SECRET).update(encoded).digest('hex');
+        }
         assert.equal((await post(route,{action:'identify'},cookie)).body.code,'MAPPING_CONTROL_DISABLED');
         assert.equal(providerReads,0);process.env.BOUNDED_MAPPING_CONTROL_ENABLED='true';
         // A bare admin password is not the exact operator-bound signed session.
@@ -114,6 +135,11 @@ test('disabled maintenance entry point with actual reader/writer/fence and dispo
         fs.writeFileSync(policyFile,JSON.stringify({...policy,operatorSessionHash:'3'.repeat(64)}));
         assert.equal((await post(route,dryBody,cookie)).status,403);assert.equal(providerReads,0);
         fs.writeFileSync(policyFile,JSON.stringify(policy));
+        if(mode.startsWith('ownership_')){
+          const result=await post(route,dryBody,cookie);
+          assert.equal(result.body.code,'MAPPING_RESOURCE_CONFLICT','conflicting tenant metadata must survive the actual server proof projection');
+          assert.equal(await db.vapiBusinessMapping.count(),3);assert.equal(actualExclusions,0);return;
+        }
         runningFence.hold([x.f.policy.sourceId,x.f.policy.phantomId]);
         try{assert.equal((await post(route,dryBody,cookie)).status,503);assert.equal(await db.vapiBusinessMapping.count(),3);}
         finally{runningFence.release([x.f.policy.sourceId,x.f.policy.phantomId]);}
@@ -123,15 +149,41 @@ test('disabled maintenance entry point with actual reader/writer/fence and dispo
         const apply={action:'apply',policyId:policy.policyId,planDigest:dry.body.planDigest,confirmation:'APPLY_EXISTING_BUSINESS_MAPPINGS_ONLY'};
         assert.equal((await post(route,apply,cookie)).status,403);assert.equal(await db.vapiBusinessMapping.count(),3);
         policy.approvedPlanDigest=dry.body.planDigest;fs.writeFileSync(policyFile,JSON.stringify(policy));process.env.BOUNDED_MAPPING_APPLY_ENABLED='true';
+        if(waiting){
+          blocker=new Client({connectionString:url.toString()});await blocker.connect();
+          if(waiting[1]==='gate'){await blocker.query('BEGIN');await blocker.query("SELECT pg_advisory_xact_lock(hashtext('signup-business-bindings:v1'))");}
+          waitingApply=true;const pending=post(route,apply,cookie);
+          let blocked=false;
+          for(let i=0;i<100;i++){
+            const rows=(await admin.query("SELECT pid FROM pg_stat_activity WHERE datname=$1 AND wait_event='advisory' AND pid<>$2",[name,blocker.processID])).rows;
+            if(rows.length){blocked=true;break;}await new Promise(r=>setTimeout(r,20));
+          }
+          assert.equal(blocked,true,'prove actual apply is waiting on the real advisory lock before revocation');
+          if(waiting[2]==='session')process.env.ADMIN_SESSION_SECRET='synthetic-revoked-session-secret';
+          if(waiting[2]==='session_expiry')await new Promise(r=>setTimeout(r,Math.max(1,sessionDeadline-Date.now()+25)));
+          if(waiting[2]==='policy'){policy.expiresAt=new Date(Date.now()-1000).toISOString();fs.writeFileSync(policyFile,JSON.stringify(policy));}
+          if(waiting[2]==='approval'){delete policy.approvedPlanDigest;fs.writeFileSync(policyFile,JSON.stringify(policy));}
+          if(waiting[2]==='flag')delete process.env.BOUNDED_MAPPING_APPLY_ENABLED;
+          await blocker.query('COMMIT');const result=await pending;
+          assert.notEqual(result.status,200,'revoked admission cannot report applied');assert.equal(await db.vapiBusinessMapping.count(),3);
+          assert.equal(actualExclusions,0,'zero mapping INSERT dispatch after revoked admission');assert.equal(forbidden,0);return;
+        }
         const applied=await post(route,apply,cookie);assert.equal(applied.status,200,JSON.stringify(applied.body));assert.equal(applied.body.applied,true);assert.equal(await db.vapiBusinessMapping.count(),6);
         assert.equal((await post(route,apply,cookie)).body.code,'MAPPING_CONTROL_INSPECT_FIRST');
         assert.equal((await post(route,{action:'inspect',policyId:policy.policyId},cookie)).body.state,'committed_exact');
         assert.equal(forbidden,0);assert.equal(providerReads,9);assert.equal(actualExclusions,3,'actual HTTP apply holds the actual running fence throughout all mapping inserts');
-      }finally{if(server){server.closeAllConnections();await new Promise(r=>server.close(r));}global.fetch=nativeFetch;delete global.__myAiPaPrisma;
+      }finally{if(blocker){await blocker.query('ROLLBACK').catch(()=>{});await blocker.end();}if(server){server.closeAllConnections();await new Promise(r=>server.close(r));}global.fetch=nativeFetch;delete global.__myAiPaPrisma;
         repair.createAssociationFence=makeFence;
         delete process.env.BOUNDED_MAPPING_CONTROL_ENABLED;delete process.env.BOUNDED_MAPPING_APPLY_ENABLED;}
-    });
-    assert.equal(outcomes.length,8);assert.ok(outcomes.every(x=>x.status==='passed'));
+    }
+    await run('actual_signed_session_http',x=>actualHttp(x));
+    for(const resource of ['phone','assistant'])for(const field of ['businessId','metadata']){
+      const mode=`ownership_${resource}_${field}`;await run(mode,x=>actualHttp(x,mode));
+    }
+    for(const stage of ['gate','mapping'])for(const change of ['session','session_expiry','policy','approval','flag']){
+      const mode=`wait_${stage}_${change}`;await run(mode,x=>actualHttp(x,mode));
+    }
+    assert.equal(outcomes.length,22);assert.ok(outcomes.every(x=>x.status==='passed'));
   }finally{if(db)await db.$disconnect();try{if(created){await admin.query(`DROP DATABASE "${name}"`);removed=true;}}finally{await admin.end();
     if(process.env.MAPPING_CONTROL_SQL_REPORT)fs.writeFileSync(process.env.MAPPING_CONTROL_SQL_REPORT,JSON.stringify({sqlMode:'real-postgresql',providerMode:'synthetic-no-send',disposableDatabaseRemoved:removed,outcomes},null,2));}}
 });

@@ -1,7 +1,7 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const {FILES,SQL_CASES,validCoverage}=require('../scripts/compose-bounded-mapping-entry');
 test('entry publication allowlist excludes operational evidence and pins exact dependencies',()=>{
-  assert.equal(FILES.length,8);assert.equal(new Set(FILES).size,8);assert.ok(FILES.every(x=>!x.includes('diagnostics/')));
+  assert.equal(FILES.length,9);assert.equal(new Set(FILES).size,9);assert.ok(FILES.every(x=>!x.includes('diagnostics/')));
   const pins=require('../scripts/bounded-mapping-entry-pins.json');
   assert.equal(pins.association,'f452de511657c41b3ced081aed07b49379656cf3');
   assert.equal(pins.writer,'932346e199636732d19ccb8bb73c80059447530e');
