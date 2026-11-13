@@ -2,8 +2,7 @@
 const { buildSignupProgress } = require('./signupProgress');
 const { buildAgentReadiness, buildAgentTestFingerprint } = require('./signupAgentTesting');
 const { buildProvisioningAccountKey } = require('./signupProvisioning');
-const { buildMakeSignupEventKey } = require('./makeSignupWebhook');
-const { contextStoreKey } = require('./signupProvisioningContext');
+const { contextStoreKey, registeredSignupEventKey } = require('./signupProvisioningContext');
 const { provisioningStateKey } = require('./provisioningState');
 const { allowedAreaCodes } = require('./numberAreaPolicy');
 const { isContactVerified } = require('./signupVerificationChannel');
@@ -143,8 +142,12 @@ async function readSetupEvidence({ prisma, record, searchTracker }) {
   try { key = buildProvisioningAccountKey(record.ownerEmail, record.ownerPhone, record.businessName); }
   catch (_) { return projectSetup(record, { business }); }
   context = (await prisma.runtimeStore.findUnique({ where: { key: contextStoreKey(key) } }))?.data;
-  // An owner match is insufficient: require the exact signed attempt and context.
-  if (!context?.payload || buildMakeSignupEventKey(context.payload) !== record.signupAttemptId
+  // Use the same server-owned attempt binding as provider authorization. Never
+  // substitute a normalized payload hash or an owner-email match.
+  let eventKey;
+  try { eventKey = registeredSignupEventKey(context); }
+  catch (_) { return projectSetup(record, { coverage: 'exact_context_unavailable', business }); }
+  if (!context?.payload || eventKey !== record.signupAttemptId
     || context.payload.provisioning?.idempotencyKey !== key || context.contextHash !== context.payload.provisioning.contextHash) {
     return projectSetup(record, { coverage: 'exact_context_unavailable', business });
   }

@@ -52,3 +52,21 @@ test('live search status is context-bound, stale at thirty seconds, bounded and 
  assert.equal(tracker.read(key,hash).areaCode,'905');assert.equal(tracker.read(key,'c'.repeat(64)),null);assert.doesNotMatch(JSON.stringify(tracker.read(key,hash)),/never stored/);
  now+=30001;assert.equal(tracker.read(key,hash).stale,true);now+=600000;assert.equal(tracker.read(key,hash),null);assert.equal(createNumberSearchTracker().read(key,hash),null);
 });
+
+test('saved source binding exposes exact receipts without accepting the normalized phantom ID',async()=>{
+ const raw={event:'signup.completed',business:{name:input.businessName,phone:input.businessPhone},owner:{email:input.ownerEmail,phone:input.ownerPhone},verification:{smsVerified:true,emailVerified:false}};
+ const payload=normalizeSignupProvisioningPayload(raw,{signingSecret:'fixture-number-policy-signing-secret'});
+ const sourceId=buildMakeSignupEventKey(raw),normalizedId=buildMakeSignupEventKey(payload),key=payload.provisioning.idempotencyKey;
+ assert.notEqual(sourceId,normalizedId);
+ const context={payload,signupEventKey:sourceId,contextHash:payload.provisioning.contextHash};
+ const store=new Map([[contextStoreKey(key),{data:context}]]);let reads=0;
+ for(const kind of ['twilio-number','vapi-assistant','vapi-import'])store.set(provisioningStateKey(kind,key),{data:{status:'completed',contextHash:context.contextHash}});
+ const prisma={runtimeStore:{findUnique:async({where})=>{reads++;return store.get(where.key);}}};
+ const canonical={...input,signupAttemptId:sourceId};
+ let result=await readSetupEvidence({prisma,record:canonical});
+ assert.equal(result.coverage,'exact_context_and_saved_receipts');assert.equal(reads,4);
+ result=await readSetupEvidence({prisma,record:{...input,signupAttemptId:normalizedId}});
+ assert.equal(result.coverage,'exact_context_unavailable');
+ context.signupEventKey='invalid-binding';
+ result=await readSetupEvidence({prisma,record:canonical});assert.equal(result.coverage,'exact_context_unavailable');
+});
