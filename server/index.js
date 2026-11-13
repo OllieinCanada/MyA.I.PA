@@ -7135,7 +7135,14 @@ function buildProvisioningReadbackAssessment({
 
 async function reconcileAcknowledgedSignupProvisioning({ signup, payload }) {
   const identity = assertPendingSignupRecoveryIdentity(signup, payload);
-  const accountKey = buildProvisioningAccountKey(identity.ownerEmail, identity.ownerPhone);
+  const accountKey = buildProvisioningAccountKey(identity.ownerEmail, identity.ownerPhone, identity.businessName);
+  const context = (await prisma.runtimeStore.findUnique({ where: { key: contextStoreKey(accountKey) } }))?.data;
+  if (!context?.payload || registeredSignupEventKey(context) !== identity.eventKey
+    || signupBusinessKey(context.payload) !== accountKey
+    || context.payload.provisioning?.idempotencyKey !== accountKey
+    || context.contextHash !== context.payload.provisioning?.contextHash) {
+    throw signupRecoveryError("The saved provisioning context does not belong to this exact signup.", "SIGNUP_RECOVERY_CONTEXT_MISMATCH");
+  }
   const [twilioState, assistantState, importState, twilioNumbers, vapiNumbers, vapiAssistants] = await Promise.all([
     readProvisioningStep({ prisma, kind: "twilio-number", idempotencyKey: accountKey }),
     readProvisioningStep({ prisma, kind: "vapi-assistant", idempotencyKey: accountKey }),
@@ -7145,6 +7152,11 @@ async function reconcileAcknowledgedSignupProvisioning({ signup, payload }) {
     fetchVapiCollection("assistant", ["assistants", "agents"]),
   ]);
   const assistantId = String(assistantState.data?.result?.assistantId || "").trim();
+  for (const state of [twilioState, assistantState, importState]) {
+    if (state.data?.contextHash !== context.contextHash) {
+      throw signupRecoveryError("A saved provisioning receipt belongs to a different context.", "SIGNUP_RECOVERY_CONTEXT_MISMATCH");
+    }
+  }
   const vapiPhoneNumberId = String(importState.data?.result?.id || importState.data?.result?.phoneNumberId || "").trim();
   const expectedPhoneNumber = normalizeVapiImportPhone(importState.data?.result?.number || twilioState.data?.result?.twilioPhoneNumber);
   const liveVapiPhone = vapiNumbers.find((record) => (
@@ -11190,6 +11202,9 @@ async function loadTrustedProvisioningContext(req) {
       && signupBusinessKey(item) && signupBusinessKey(item) !== identity);
     if (ambiguous) throw Object.assign(new Error("Legacy owner-scoped resources require business identity migration."), { code: "SIGNUP_BUSINESS_MIGRATION_REQUIRED", statusCode: 409 });
   }
+  // Provider callbacks must keep the server-owned binding. Normalization can
+  // change the payload hash for legacy signups that have no explicit ID.
+  req.signupProvisioningAttemptId = attemptId;
   return payload;
 }
 
@@ -14673,7 +14688,7 @@ app.post(
 
     const ownerEmail = String(trustedPayload.owner?.email || trustedPayload.setupDetails?.ownerEmail || "").trim();
     const ownerPhone = String(trustedPayload.owner?.phone || trustedPayload.setupDetails?.ownerPhone || "").trim();
-    const signupAttemptId = buildMakeSignupEventKey(trustedPayload);
+    const signupAttemptId = req.signupProvisioningAttemptId;
     const syntheticCanary = isTrustedSignupProvisioningCanary(trustedPayload);
     if (!syntheticCanary && ownerEmail && isValidEmailAddress(ownerEmail)) {
       upsertSignupDashboardRecord({
