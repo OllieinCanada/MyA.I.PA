@@ -15,6 +15,13 @@ test('actual runtime and corrected safety bytes are pinned separately from histo
   assert.throws(()=>policy('main'),/HEAD_REQUIRED/);
   assert.throws(()=>policy(head,p=>p==='server/boundedBusinessMappingWriter.js'?Buffer.from('uncorrected'):require('node:fs').readFileSync(require('node:path').resolve(__dirname,'..',p))),/RUNTIME_BYTES_CHANGED/);
 });
+test('index pin describes canonical committed bytes and refuses CRLF-transformed evidence',()=>{
+  const fs=require('node:fs'),path=require('node:path'),{spawnSync}=require('node:child_process');
+  const r=spawnSync('git',['show','HEAD:server/index.js'],{cwd:path.resolve(__dirname,'..'),shell:false});
+  assert.equal(r.status,0);const read=p=>p==='server/index.js'?r.stdout:fs.readFileSync(path.resolve(__dirname,'..',p));
+  assert.doesNotThrow(()=>policy(head,read));
+  assert.throws(()=>policy(head,p=>p==='server/index.js'?Buffer.from(r.stdout.toString().replace(/\n/g,'\r\n')):read(p)),/RUNTIME_BYTES_CHANGED/);
+});
 test('independently bound head and source digests are required for every phase',()=>{
   for(const phase of ['entry','reader','focused']){
     assert.equal(valid(fixture(phase),expected,phase),true);

@@ -17,7 +17,7 @@
     "server/boundedBusinessMappingAdapters.js": "69cc5596edc20e8a2e689ff826bb2e424e4beaff8f41fa970ee40efa4aed3744",
     "server/boundedBusinessMappingWriter.js": "c8b129211d807e780d55600695362cbcb813c29ac784a147dbed1b9ca746db6a",
     "server/boundedMappingControl.js": "6bdf571cea3fc1d2a52c20e8bc89a49d10ffbe069a7d2fd463eaadb25354b36a",
-    "server/index.js": "8d9fc2a2a51f3aadd068f6ddcf924b1cc1d3d4df36d6e4934137f1056aed9709"
+    "server/index.js": "bfb4515b5ad5ba401732c65fa584ab2b81f5f23306613d457da4f4110ce68749"
   },
   "scope": "Actual combined runtime, not reconstructed historical code. Synthetic CI only. No release, activation or production correction authorized."
 }
