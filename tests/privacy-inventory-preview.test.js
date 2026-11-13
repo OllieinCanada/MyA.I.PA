@@ -47,3 +47,16 @@ test('invented-policy preview never clears full/live privacy or recovery gates',
  const r=await fixture().preview()(target),p=require('../scripts/launch-evidence');for(const name of ['privacyApplicationPassed','logicalRestorePassed','fullRecoveryPassed'])assert.equal(p[name](r,'8f218834361f5ec22de23c5cedd6690897d40f99'),false);
 });
 module.exports={fixture};
+function readerFixture(){
+ const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),{NAMES}=require('../server/recoveryFileStore');
+ const directory=fs.mkdtempSync(path.join(os.tmpdir(),'myaipa-privacy-reader-'));for(const n of NAMES)fs.writeFileSync(path.join(directory,n),'{}');
+ const state={calls:[{id:1,...target}],foreign:[],changeFile:false},commands=[];
+ const tx={business:{findUnique:async()=>({id:target.businessId})},caller:{findUnique:async()=>({id:target.callerId,phone:'+15555550100'})},
+  call:{findMany:async({where})=>typeof where.businessId==='object'?state.foreign:state.calls},lead:{findMany:async()=>[]},smsSuppression:{findUnique:async()=>null},
+  $executeRawUnsafe:async sql=>{commands.push(sql);assert.equal(sql,'SET TRANSACTION READ ONLY');}};
+ const prisma={$transaction:async(work,options)=>{assert.equal(options.isolationLevel,'RepeatableRead');const result=await work(tx);if(state.changeFile)fs.writeFileSync(path.join(directory,NAMES[0]),'{"changed":true}');return result;}};
+ const read=require('../server/privacyInventoryReader').createReadOnlyInventoryReader({prisma,directory});return {read,state,commands,directory};
+}
+test('actual reader uses read-only repeatable-read and retains explicit missing file adapters',async()=>{const f=readerFixture(),r=await f.read(target);assert.deepEqual(f.commands,['SET TRANSACTION READ ONLY']);assert.equal(r.coveredSurfaces.length,4);assert.ok(!r.coveredSurfaces.some(x=>x.startsWith('file:')));});
+test('actual reader rejects empty identity binding and truncated inventories',async()=>{for(const rows of [[],Array.from({length:1001},(_,i)=>({id:i,...target}))]){const f=readerFixture();f.state.calls=rows;await assert.rejects(f.read(target),e=>['PRIVACY_TARGET_NOT_OWNED','PRIVACY_INVENTORY_TRUNCATED'].includes(e.code));}});
+test('actual reader refuses changed file values across SQL snapshot',async()=>{const f=readerFixture();f.state.changeFile=true;await assert.rejects(f.read(target),e=>e.code==='PRIVACY_FILE_SNAPSHOT_CHANGED');});
