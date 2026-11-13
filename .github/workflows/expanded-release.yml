@@ -1,0 +1,60 @@
+name: Expanded pinned release composition
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: expanded-release-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  expanded:
+    name: expanded-${{ matrix.phase }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        phase: [sql, quality, browser]
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ci
+        ports: [5432:5432]
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      CI: 'true'
+      DISABLE_LOCAL_ENV_FILES: '1'
+      DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/ci
+      EXPANDED_EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.22.3'
+          cache: npm
+      - name: Fetch immutable public dependency ancestry
+        run: git fetch --no-tags --depth=64 origin f452de511657c41b3ced081aed07b49379656cf3 932346e199636732d19ccb8bb73c80059447530e 0765667d0226db61eec81ec08f8de373922987b9 96c6752e8b857ce291212c04ab875f7b280798e9 7efebcba8c33c9651c8c1ddbe36a8a7ab00f5be0 842aac6dfc9772bae1a1d50a3b189e808ffe8e8f 8f218834361f5ec22de23c5cedd6690897d40f99
+      - name: Restore unchanged locked dependencies
+        run: npm ci --include=dev --legacy-peer-deps
+      - name: Install isolated regression browsers
+        if: matrix.phase != 'sql'
+        run: npx playwright install --with-deps chromium firefox webkit
+      - name: Verify composition/proof controls
+        run: node --test tests/expanded-release-composition.test.js
+      - name: Exercise exact combined tree, not standalone PR tree
+        run: node scripts/compose-expanded-release.js --phase=${{ matrix.phase }}
+      - name: Preserve exact-head evidence, including failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: expanded-${{ matrix.phase }}-${{ github.event.pull_request.head.sha || github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: diagnostics/expanded-release/
+          if-no-files-found: error
+          retention-days: 14

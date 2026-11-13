@@ -1,0 +1,27 @@
+{
+  "schemaVersion":1,
+  "repository":"OllieinCanada/MyA.I.PA",
+  "base":"8f218834361f5ec22de23c5cedd6690897d40f99",
+  "node":"24.22.3",
+  "entry":{"pr":241,"head":"842aac6dfc9772bae1a1d50a3b189e808ffe8e8f"},
+  "dependencies":[
+    {"pr":235,"head":"f452de511657c41b3ced081aed07b49379656cf3"},
+    {"pr":239,"head":"932346e199636732d19ccb8bb73c80059447530e"},
+    {"pr":240,"head":"0765667d0226db61eec81ec08f8de373922987b9"},
+    {"pr":237,"head":"96c6752e8b857ce291212c04ab875f7b280798e9"},
+    {"pr":238,"head":"7efebcba8c33c9651c8c1ddbe36a8a7ab00f5be0"}
+  ],
+  "sourceTree":"8534e8851c18c122c46cf8eb741e3b3194e22b98",
+  "requiredBytes":{
+    "server/index.js":"90fccc0b064198b84babd15b347b4dfb397255005da5f62b29d21b362f0e9524",
+    "server/boundedBusinessMappingWriter.js":"c8b129211d807e780d55600695362cbcb813c29ac784a147dbed1b9ca746db6a",
+    "server/boundedMappingControl.js":"6bdf571cea3fc1d2a52c20e8bc89a49d10ffbe069a7d2fd463eaadb25354b36a",
+    "scripts/bounded-mapping-entry-safety.patch":"db9b7a82312bc4929a687e81f4bef8bed4d091fa17d3b9826185ed9a7e1b8d98",
+    "scripts/bounded-mapping-entry-index.patch":"e82a90a925ef4f103373c8edf31bcfff74d7db75c4173e6143e766d3415099e8"
+  },
+  "workflowHashes":{
+    "quality":"18fa206f082d0e9a25ef4a8ac63e729de5cab37efb5ca72de2836e32c88d98df",
+    "public-browser-quality":"20c5c1fa0615f16fb6c27ac4d90e2da678d82238aefa4492df9a78fc7f43d5dc"
+  },
+  "meaning":"Preparation only. Five unchanged dependency PRs plus exact241 entry corrections. Expanded index bytes differ from241 three-dependency CI; corrected writer/control/safety bytes must remain identical. No merge, release or live readiness implied."
+}
