@@ -1,7 +1,14 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { decision, installNetworkIsolation } = require('../scripts/browser-quality-network');
+const { decision, installNetworkIsolation, installSlowImageDelay } = require('../scripts/browser-quality-network');
 const local = 'http://127.0.0.1:4179';
+test('slow-image override delegates back to the earlier guard, never directly forwards', async () => {
+  let handler;
+  await installSlowImageDelay({ route: async (_pattern, fn) => { handler = fn; } }, 1);
+  let fallback = 0;
+  await handler({ fallback: async () => { fallback++; }, continue: () => assert.fail('Bypasses earlier guard') });
+  assert.equal(fallback, 1);
+});
 test('only static loopback reads and explicitly allowed static assets can reach the network', () => {
   assert.equal(decision(local + '/static/main.js', 'GET', local), 'local_static');
   assert.equal(decision('https://fonts.googleapis.com/css2?family=Inter', 'GET', local), 'readonly_asset');

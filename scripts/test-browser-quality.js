@@ -5,8 +5,8 @@ const path = require("path");
 const { chromium, firefox, webkit } = require("./playwright-runtime");
 const { rootPath } = require("./_helpers");
 const { captureFocusSurfaces, assessKeyboardFocus } = require('./keyboard-focus-evidence');
-const { installNetworkIsolation } = require('./browser-quality-network');
-const { coversCatalog } = require('./browser-quality-coverage');
+const { installNetworkIsolation, installSlowImageDelay } = require('./browser-quality-network');
+const { assessCoverage } = require('./browser-quality-coverage');
 const networkEvidence = { unexpectedWrites: [], blockedSockets: 0 };
 const reportPath = process.env.BROWSER_QUALITY_REPORT_PATH
   ? path.resolve(process.env.BROWSER_QUALITY_REPORT_PATH)
@@ -356,7 +356,7 @@ async function auditPage({ browser, baseUrl, engineName, route, viewport }) {
   }
 }
 
-async function testSignupJourney(browser, baseUrl, viewport) {
+async function testSignupJourney(browser, baseUrl, viewport, engineName) {
   const context = await browser.newContext({ viewport: { width: viewport.width, height: viewport.height }, serviceWorkers: "block" });
   await installNetworkIsolation(context, baseUrl, networkEvidence);
   // This is UI QA only: never provision resources or send verification texts.
@@ -439,7 +439,7 @@ async function testSignupJourney(browser, baseUrl, viewport) {
       throw new Error("Back from final review did not return to service-call details");
     }
 
-    return { engine: "chromium", route: "signup-journey", viewport: viewport.name, accessibilityWarnings: [] };
+    return { engine: engineName, route: "signup-journey", viewport: viewport.name, accessibilityWarnings: [] };
   } finally {
     await context.close();
   }
@@ -467,10 +467,7 @@ async function testTradeImageFailureFallback(browser, baseUrl) {
 async function testSlowTradeImageLayout(browser, baseUrl) {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: "block" });
   await installNetworkIsolation(context, baseUrl, networkEvidence);
-  await context.route("**/trade-heroes/**", async (route) => {
-    await new Promise((resolve) => setTimeout(resolve, 1200));
-    await route.continue();
-  });
+  await installSlowImageDelay(context);
   const page = await context.newPage();
   page.setDefaultTimeout(15_000);
   try {
@@ -562,11 +559,11 @@ async function main() {
             ));
           }
         }
+        if (routes.some(route => route.name === 'signup')) for (const viewport of viewports) {
+          console.log(`[browser-quality] ${engineName}/signup-journey/${viewport.name}`);
+          recordCheck(await withTimeout(testSignupJourney(browser, baseUrl, viewport, engineName), 120_000, `${engineName}/signup-journey/${viewport.name}`));
+        }
         if (engineName === "chromium") {
-          for (const viewport of viewports) {
-            console.log(`[browser-quality] chromium/signup-journey/${viewport.name}`);
-            recordCheck(await withTimeout(testSignupJourney(browser, baseUrl, viewport), 120_000, `chromium/signup-journey/${viewport.name}`));
-          }
           console.log("[browser-quality] chromium/trade-image-fallback/mobile");
           recordCheck(await withTimeout(testTradeImageFailureFallback(browser, baseUrl), 60_000, "chromium/trade-image-fallback/mobile"));
           console.log("[browser-quality] chromium/trade-slow-image-layout/mobile");
@@ -595,8 +592,8 @@ async function main() {
   runReport = {
     ...runReport,
     checkedAt: new Date().toISOString(),
-    ready: coversCatalog(requestedRoutes, routeCatalog.map(route => route.name)),
-    completeRouteCoverage: coversCatalog(requestedRoutes, routeCatalog.map(route => route.name)),
+    ready: assessCoverage({ requestedEngines, requestedRoutes, checks: results }).complete,
+    coverage: assessCoverage({ requestedEngines, requestedRoutes, checks: results }),
     completedChecks: results.length,
     checks: results,
     warningCount: warnings.length,

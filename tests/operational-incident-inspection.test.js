@@ -23,3 +23,11 @@ test('a business name alone is not proof of a synthetic artifact', () => {
   const item = projectIssue({ title: 'Synthetic fixture test' }); assert.equal(item.syntheticLabelPresent, true);
   assert.equal(classifyIssue(item, deployed), 'synthetic_label_present_origin_unverified_not_excluded');
 });
+test('non-signup attention is not mislabeled signup state or a new runtime outage', () => {
+  for (const kind of ['call_tool_failed', 'owner_text_failed', 'high_priority_support', 'unknown_future_kind']) {
+    const item = Object.freeze({ kind });
+    assert.equal(classifyIssue(item, deployed), 'current_attention_record_underlying_state_needs_verification');
+    assert.deepEqual(item, { kind });
+  }
+  assert.equal(classifyIssue({ kind: 'signup_failed' }, deployed), 'current_signup_state_underlying_record_needs_verification');
+});

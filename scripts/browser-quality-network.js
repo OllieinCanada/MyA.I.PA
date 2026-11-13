@@ -50,4 +50,12 @@ async function installNetworkIsolation(context, baseUrl, evidence, { expectedRes
   // future preview feature from opening a live provider socket during UI QA.
   await context.routeWebSocket('**/*', socket => { evidence.blockedSockets++; socket.close(); });
 }
-module.exports = { decision, installNetworkIsolation };
+async function installSlowImageDelay(context, delayMs = 1200) {
+  await context.route('**/trade-heroes/**', async route => {
+    await new Promise(resolve => setTimeout(resolve, delayMs));
+    // Playwright runs the most recently registered handler first. Continue
+    // would bypass the earlier method/origin policy; fallback must reach it.
+    await route.fallback();
+  });
+}
+module.exports = { decision, installNetworkIsolation, installSlowImageDelay };

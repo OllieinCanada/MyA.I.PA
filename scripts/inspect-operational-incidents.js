@@ -30,7 +30,8 @@ function classifyIssue(item, deployedAt) {
   if (item.syntheticLabelPresent) return 'synthetic_label_present_origin_unverified_not_excluded';
   if (item.kind === 'subscription_paused') return 'paused_account_state_not_a_new_runtime_failure';
   if (item.kind === 'signup_duplicate') return 'current_duplicate_projection_not_a_stored_new_occurrence';
-  if (item.kind !== 'runtime_incident') return 'current_signup_state_underlying_record_needs_verification';
+  if (['signup_failed', 'signup_stuck'].includes(item.kind)) return 'current_signup_state_underlying_record_needs_verification';
+  if (item.kind !== 'runtime_incident') return 'current_attention_record_underlying_state_needs_verification';
   const detected = Date.parse(item.lastDetectedAt), deployed = Date.parse(deployedAt);
   if (!Number.isFinite(detected) || !Number.isFinite(deployed)) return 'unresolved_incident_age_unverified';
   return detected < deployed ? 'historical_occurrence_unresolved_not_reproduced_now' : 'recorded_since_deploy_not_reproduced_now';

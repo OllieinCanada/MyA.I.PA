@@ -3,6 +3,7 @@ const path = require("path");
 const { rootPath } = require("./_helpers");
 const { spawnSync } = require("node:child_process");
 const proof = require("./launch-evidence");
+const { browserQualityPassed } = require('./browser-quality-coverage');
 const expectedRelease = process.env.READINESS_RELEASE_COMMIT || String(spawnSync("git", ["rev-parse", "HEAD"], {
   cwd: rootPath(), encoding: "utf8", windowsHide: true, timeout: 10000,
 }).stdout || "").trim();
@@ -61,8 +62,8 @@ const gates = [
     id: "browser",
     title: "Public-page browser and accessibility quality",
     evidence: "browser-quality-gate.json",
-    pass: (value) => value.ready === true && Number(value.completedChecks || 0) >= 31,
-    requirement: "Homepage, signup, trade hub, and all six trade pages pass desktop, tablet, mobile, keyboard, accessibility, image-failure, slow-image, and narrow reflow checks.",
+    pass: browserQualityPassed,
+    requirement: "All three engines pass every required page/viewport and signup journey; Chromium image-failure, slow-image and narrow reflow checks also pass, with no unhandled errors or unexpected writes.",
   }),
   makeGate({
     id: "signup_security",
