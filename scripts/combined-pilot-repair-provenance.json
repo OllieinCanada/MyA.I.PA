@@ -2,6 +2,11 @@
   "schemaVersion": 1,
   "base": "8f218834361f5ec22de23c5cedd6690897d40f99",
   "node": "24.22.3",
+  "continuation": {
+    "baseRelease": "cd61ef55ad5527636dc494d9920ae55004acdad6",
+    "previousIndexSha256": "bfb4515b5ad5ba401732c65fa584ab2b81f5f23306613d457da4f4110ce68749",
+    "scope": "History-sync quarantine accounting and sanitized Telegram webhook timeout diagnostics; routing authorization and repair-control defaults unchanged."
+  },
   "dependencies": {
     "235": "f452de511657c41b3ced081aed07b49379656cf3",
     "237": "96c6752e8b857ce291212c04ab875f7b280798e9",
@@ -17,7 +22,9 @@
     "server/boundedBusinessMappingAdapters.js": "69cc5596edc20e8a2e689ff826bb2e424e4beaff8f41fa970ee40efa4aed3744",
     "server/boundedBusinessMappingWriter.js": "c8b129211d807e780d55600695362cbcb813c29ac784a147dbed1b9ca746db6a",
     "server/boundedMappingControl.js": "6bdf571cea3fc1d2a52c20e8bc89a49d10ffbe069a7d2fd463eaadb25354b36a",
-    "server/index.js": "bfb4515b5ad5ba401732c65fa584ab2b81f5f23306613d457da4f4110ce68749"
+    "server/index.js": "11f55bc16db46d84e8d85d199b80a0ef10c1b126eb4e07f66f3b8d695ac10e46",
+    "server/callSyncHealth.js": "169ff1f1b3dd316c5e138c98dfa0465d694c1a80a3d67ca6b06efcfca611a1b0",
+    "server/telegramBotApi.js": "057dd526a4f5078d89bca7343ac517d733e503f6846c6aae2d77b1e17b8ee50b"
   },
   "scope": "Actual combined runtime, not reconstructed historical code. Synthetic CI only. No release, activation or production correction authorized."
 }

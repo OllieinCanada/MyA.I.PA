@@ -4,6 +4,16 @@ const WORKFLOW = 'Vapi call sync background job';
 const isSyncIncident = item => item?.snapshot?.Workflow === WORKFLOW;
 const isActive = item => !['resolved', 'recovered', 'not_required'].includes(item?.remediation?.status);
 const requiresSyncRecovery = item => isSyncIncident(item) && isActive(item);
+const ROUTING_REFUSALS = new Set([
+  'VAPI_BUSINESS_ROUTE_REQUIRED', 'VAPI_BUSINESS_ROUTE_UNKNOWN_IDENTIFIER',
+  'VAPI_BUSINESS_ROUTE_INVALID_IDENTIFIER', 'VAPI_BUSINESS_ROUTE_CONFLICT',
+  'VAPI_BUSINESS_ROUTE_INCOMPLETE',
+]);
+const isCallSyncRoutingRefusal = error => ROUTING_REFUSALS.has(error?.code);
+// Preserve the older intentionally-unmapped accounting, but never turn a
+// rejected supplied identity/conflict into completed coverage or recovery.
+const hasQuarantinedRouting = result => Array.isArray(result?.routingErrors)
+  && result.routingErrors.some(item => item?.code && item.code !== 'VAPI_BUSINESS_ROUTE_REQUIRED');
 
 function failureContext(previous, now, error) {
   const failures = previous.filter(item => isSyncIncident(item) && isActive(item));
@@ -31,6 +41,7 @@ function completeSync(result) {
     && Number.isInteger(result.synced) && result.synced >= 0
     && Array.isArray(result.detailErrors) && result.detailErrors.length === 0
     && Array.isArray(result.routingErrors)
+    && !hasQuarantinedRouting(result)
     && result.synced + result.routingErrors.length === result.fetched;
 }
 
@@ -56,8 +67,8 @@ function createCallSyncMonitor({ listIncidents, notifyFailure, recoverIncident, 
         });
         const detail = result?.detailErrors?.find(item => failureContext([], now(), detailError(item)).severity === 'critical')
           || result?.detailErrors?.[0];
-        const error = failure || Object.assign(new Error('Vapi call sync returned incomplete call details.'), {
-          code: detail?.code || 'VAPI_CALL_SYNC_PARTIAL', providerStatus: detail?.providerStatus,
+        const error = failure || Object.assign(new Error('Vapi call sync has unresolved coverage.'), {
+          code: detail?.code || (hasQuarantinedRouting(result) ? 'VAPI_CALL_SYNC_ROUTING_BLOCKED' : 'VAPI_CALL_SYNC_PARTIAL'), providerStatus: detail?.providerStatus,
         });
         try {
           const recorded = await notifyFailure(error, failureContext(previous || [], now(), error));
@@ -87,4 +98,4 @@ function createCallSyncMonitor({ listIncidents, notifyFailure, recoverIncident, 
   };
 }
 
-module.exports = { WORKFLOW, isSyncIncident, requiresSyncRecovery, failureContext, completeSync, createCallSyncMonitor };
+module.exports = { WORKFLOW, isSyncIncident, requiresSyncRecovery, failureContext, completeSync, createCallSyncMonitor, isCallSyncRoutingRefusal };
