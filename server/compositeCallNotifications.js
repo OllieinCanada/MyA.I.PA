@@ -616,6 +616,7 @@ module.exports = {
   buildOwnerBody,
   checkSmsPermission,
   submitTwilioMessage,
+  sendTwilioMessage,
   executeCompositeNotifications,
   getVapiCompositeToolCode,
   getVapiCompositeToolDefinition,

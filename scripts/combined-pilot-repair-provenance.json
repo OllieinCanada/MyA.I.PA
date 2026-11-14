@@ -2,6 +2,11 @@
   "schemaVersion": 1,
   "base": "8f218834361f5ec22de23c5cedd6690897d40f99",
   "node": "24.22.3",
+  "automaticNotificationContinuation": {
+    "baseRelease": "24d419cd4801f78978fb8f38e16b80f58ff2b850",
+    "previousIndexSha256": "9f3b36c672ae8eb6683b7bc49499fb7d7b4336f6c477ab95b010bf2873af43a2",
+    "scope": "Default-off automatic summary webhook admission and read-only outcome inspection. Existing repair/lifecycle/writer modules and all prior pins remain unchanged. Candidate hashes are provenance, not human release approval."
+  },
   "reportingContinuation": {
     "baseRelease": "f2f80ee6c6d5b84ddc8bbc6ad385e159e0e2a5c9",
     "previousIndexSha256": "11f55bc16db46d84e8d85d199b80a0ef10c1b126eb4e07f66f3b8d695ac10e46",
@@ -27,7 +32,12 @@
     "server/boundedBusinessMappingAdapters.js": "69cc5596edc20e8a2e689ff826bb2e424e4beaff8f41fa970ee40efa4aed3744",
     "server/boundedBusinessMappingWriter.js": "c8b129211d807e780d55600695362cbcb813c29ac784a147dbed1b9ca746db6a",
     "server/boundedMappingControl.js": "6bdf571cea3fc1d2a52c20e8bc89a49d10ffbe069a7d2fd463eaadb25354b36a",
-    "server/index.js": "9f3b36c672ae8eb6683b7bc49499fb7d7b4336f6c477ab95b010bf2873af43a2",
+    "server/index.js": "3f2f8cbdf1980c6694c80f8912d245be475cee3985781026637332d64be9e663",
+    "server/automaticCallNotifications.js": "d0e1e2b410a09a4eb815f840598c5a9de2d3444cc06ff49f1d64bb5b4a72c2b6",
+    "server/automaticNotificationContext.js": "c46dca9c6a30bd530266e87fc077973c0937c0e57da48711822b543eac43a591",
+    "server/notificationOutcomes.js": "f076cbf603264e58aa076f72fa797f6b8b9e760919ea1ce37f2598a03fd08eff",
+    "server/compositeCallNotifications.js": "9ae28c95f78f2e1e32c626ed0e40fa719ddb2f6911f2e4513e014777a38c1b95",
+    "server/callNotificationEvidence.js": "9a4e9435e85ceebd3f3587f8ae05358552dc94730e9db541e7b4aa958fd33839",
     "server/callSyncReporting.js": "0a82dcafa58497bed49a88b061baadb9b5b41c89b432df3eb1d8b3f1852d2ece",
     "server/callSyncHealth.js": "169ff1f1b3dd316c5e138c98dfa0465d694c1a80a3d67ca6b06efcfca611a1b0",
     "server/telegramBotApi.js": "057dd526a4f5078d89bca7343ac517d733e503f6846c6aae2d77b1e17b8ee50b"

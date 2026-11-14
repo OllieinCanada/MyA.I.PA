@@ -102,6 +102,8 @@
     "test:twilio-receipts": "node --test tests/twilio-status-inbox.test.js tests/twilio-receipt-health.test.js tests/operational-error-classifier.test.js",
     "test:twilio-receipts:postgres": "cross-env RUN_TWILIO_RECEIPT_DATABASE=1 node --test tests/twilio-status-postgres.test.js",
     "test:sms-dispatch:postgres": "node --max-old-space-size=128 scripts/run-sms-dispatch-postgres-drill.js",
+    "test:automatic-call-notifications": "node --test --test-concurrency=1 tests/automatic-call-notifications.test.js tests/automatic-call-notifications-api.test.js tests/automatic-notification-failures.test.js tests/notification-outcomes.test.js tests/call-notification-evidence.test.js tests/sms-notification-dispatch.test.js tests/notification-once-integration.test.js tests/vapi-tool-admission-api.test.js",
+    "test:automatic-call-notifications:postgres": "node --test tests/automatic-notification-failures-postgres.test.js",
     "test:trial-reservation:postgres": "node --max-old-space-size=128 scripts/run-trial-reservation-postgres-drill.js",
     "test:twilio-receipts:browser": "node scripts/test-receipt-health-browser.js",
     "test:release": "node scripts/release-gate.js",

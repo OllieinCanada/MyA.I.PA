@@ -3656,8 +3656,8 @@ export default function AdminDashboard() {
                       <p>{selectedCall.aiSummary || "No call summary yet. Choose Check for New Calls after the call has ended."}</p>
                       <div className="admin-call-detail-meta">
                         <div><span>Request handoff</span><strong>{selectedCall.notificationEvidence?.submissionLabel || "Not verified"}</strong></div>
-                        <div><span>Owner text</span><strong>{selectedCall.notificationEvidence?.owner?.label || "Not verified"}</strong></div>
-                        <div><span>Customer text</span><strong>{selectedCall.notificationEvidence?.customer?.label || "Not verified"}</strong></div>
+                        <div><span>Owner text</span><strong>{selectedCall.notificationEvidence?.owner?.label || "Not verified"}</strong><small role="status">{selectedCall.notificationEvidence?.owner?.outcomeAlert?.label}</small></div>
+                        <div><span>Customer text</span><strong>{selectedCall.notificationEvidence?.customer?.label || "Not verified"}</strong><small role="status">{selectedCall.notificationEvidence?.customer?.outcomeAlert?.label}</small></div>
                         <div><span>Unique tool invocations</span><strong>{selectedCall.notificationEvidence?.countIsExact ? selectedCall.notificationEvidence.uniqueToolCalls : "Not fully verified"}</strong></div>
                         <div><span>Provider call ID</span><strong>{selectedCall.externalProvider === "vapi" ? selectedCall.externalId || "—" : "Not linked"}</strong></div>
                         <div><span>Transcript</span><strong>{selectedCall.transcriptAvailable ? selectedCall.transcript ? "Visible" : "Stored privately" : "Missing"}</strong></div>
