@@ -59,6 +59,10 @@ jobs:
         env:
           RUN_SMS_MANUAL_APPROVAL_POSTGRES: "1"
         run: node --test tests/sms-notification-drafts-postgres.test.js
+      - name: Verify automatic admission failures, restart holds and read-only receipt inspection
+        env:
+          RUN_AUTOMATIC_NOTIFICATION_POSTGRES: "1"
+        run: node --test tests/automatic-notification-failures-postgres.test.js
       - name: Save exact-head synthetic evidence
         if: always()
         uses: actions/upload-artifact@v4

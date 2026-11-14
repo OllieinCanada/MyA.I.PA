@@ -7,6 +7,9 @@ if (process.env.DISABLE_LOCAL_ENV_FILES !== "1") {
 const crypto = require("crypto");
 const { rejectCompressedRequests } = require('./requestSecurity');
 const { dispatchHandler: notificationDispatchHandler, dispatchReadinessHandler } = require('./smsNotificationDispatch');
+const { executeAutomaticCallNotifications, SUMMARY_TOOL: AUTOMATIC_SUMMARY_TOOL } = require('./automaticCallNotifications');
+const { createAutomaticNotificationContextReader } = require('./automaticNotificationContext');
+const { automaticNotificationAlert, listNotificationOutcomeAlerts } = require('./notificationOutcomes');
 const { createFinanceService, registerFinanceRoutes } = require('./providerFinance');
 const { trackProgress: trackAdminSignupProgress, registerTrackerRoutes, createStallProcessor, createTrackerBatchSaver } = require('./adminSignupTracker');
 const { readSetupEvidence, createNumberSearchTracker } = require('./adminSignupSetup');
@@ -14033,6 +14036,19 @@ app.post(
           const result = await handleStagingIntakeTool({ prisma, authenticated: req.vapiWebhookAuthenticated === true,
             businessId: routedBusinessId, call: vapiMessage.call || {}, toolCall });
           results.push({ name: toolCall.name, toolCallId: toolCall.id, result: JSON.stringify({ ok: true, ...result }) });
+        } else if (AUTOMATIC_SUMMARY_TOOL.test(toolName)) {
+          // Normal automatic-confirmation path. It is inert unless explicitly
+          // enabled; it never falls through to legacy lead/provider execution.
+          const result = await executeAutomaticCallNotifications({ prisma,
+            authenticated: req.vapiWebhookAuthenticated === true, message: vapiMessage, toolCall,
+            readContext: createAutomaticNotificationContextReader({ prisma,
+              readGate: readTrialGateConfiguration, listSignups: listSignupDashboardRecords,
+              resolveBusinessId: resolveBusinessIdForVapiCall }),
+            suppressionChecker: phone => isSmsSuppressed(phone), env: process.env });
+          const alert = automaticNotificationAlert(result, vapiMessage.call?.id);
+          console.info('[sms:outcome]', JSON.stringify(alert));
+          result.outcomeAlert = alert;
+          results.push({ name: toolCall.name, toolCallId: toolCall.id, result: JSON.stringify(result) });
         } else if (isVapiNotificationTool(toolName)) {
           const routedBusinessId = await resolveBusinessIdForVapiCall(vapiMessage.call || vapiMessage);
           const claim = await claimVapiToolExecution({
@@ -17689,6 +17705,13 @@ app.get(
 );
 
 registerFinanceRoutes({ app, requireAdmin, isAllowedOrigin, service: createFinanceService({ prisma }) });
+// Read-only inspection of saved claims and authenticated status receipts. Never
+// polls a provider, clears a claim, approves a draft, or submits a message.
+app.get('/api/admin/call-notification-outcomes', requireAdmin, asyncRoute(async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  if (!/^[1-9]\d*$/.test(String(req.query.businessId || ''))) return res.status(400).json({ error: 'Exact business ID required' });
+  res.json(await listNotificationOutcomeAlerts({ prisma, businessId: Number(req.query.businessId) }));
+}));
 require('./smsNotificationDrafts').registerNotificationDraftRoutes({ app, prisma, requireAdmin, isAllowedOrigin,
   actorHash: getAdminActorHash, suppressionChecker: phone => isSmsSuppressed(phone) });
 registerTrackerRoutes({ app, requireAdmin, isAllowedOrigin, list: listSignupDashboardRecords, save: upsertSignupDashboardRecord,

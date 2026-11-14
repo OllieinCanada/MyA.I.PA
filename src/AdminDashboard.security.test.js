@@ -6,6 +6,8 @@ test("call details distinguish conversation completion, handoff, SMS acceptance 
   for (const label of ["Request handoff", "Owner text", "Customer text", "Unique tool invocations"]) expect(source).toContain(label);
   expect(source).toMatch(/notificationEvidence\?\.countIsExact/);
   expect(source).toContain("notificationEvidence?.customer?.label");
+  expect(source).toContain("notificationEvidence?.owner?.outcomeAlert?.label");
+  expect(source).toContain("notificationEvidence?.customer?.outcomeAlert?.label");
 });
 
 test("the admin browser retains only the secure cookie, not the master password", () => {

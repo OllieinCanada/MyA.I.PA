@@ -1,4 +1,5 @@
 const { receiptKey, normalizeReceipt } = require('./twilioStatusInbox');
+const { classifyNotificationOutcome } = require('./notificationOutcomes');
 const SID = /^(?:SM|MM)[a-f0-9]{32}$/i;
 const REJECTED = 'Tool call rejected based on configured rejection plan';
 const STATES = ['accepted', 'scheduled', 'queued', 'sending', 'sent', 'failed', 'undelivered', 'canceled', 'delivered', 'read'];
@@ -10,6 +11,9 @@ function roleResult(value) {
     attempted: typeof value.attempted === 'boolean' ? value.attempted : null,
     sent: typeof value.sent === 'boolean' ? value.sent : null,
     skipped: value.skipped === true,
+    requiresReconciliation: value.requiresReconciliation === true,
+    dispatchReceiptStored: typeof value.dispatchReceiptStored === 'boolean' ? value.dispatchReceiptStored : undefined,
+    providerStatus: Number.isInteger(value.providerStatus) ? value.providerStatus : undefined,
     status: STATES.includes(value.status) || ['rejected', 'transport_error', 'suppressed', 'disabled_by_policy', 'waiting_for_customer_number', 'waiting_for_intake', 'rejected_before_execution'].includes(value.status) ? value.status : 'unknown',
     errorCode: /^[a-z0-9_-]{1,80}$/i.test(String(value.errorCode || '')) ? String(value.errorCode) : '',
     messageId: SID.test(id) ? id : '',
@@ -78,7 +82,10 @@ function recipientEvidence(result, receipt, receiptsAvailable) {
     needs_number: 'Waiting for a confirmed mobile number', failed: 'Messaging failed', delivered: 'Carrier reported delivered' };
   return { state, label: labels[state], accepted: Boolean((result?.sent === true && result.messageIdSet) || receipt), delivered: state === 'delivered',
     receiptStatus: receipt?.status || '', receiptAt: receipt?.at || null,
-    errorCode: receipt?.errorCode || result?.errorCode || '', receiptsAvailable };
+    errorCode: receipt?.errorCode || result?.errorCode || '', receiptsAvailable,
+    outcomeAlert: { ...classifyNotificationOutcome(result),
+      ...(['failed','undelivered','canceled'].includes(receipt?.status)
+        ? { label: 'Carrier reported delivery failure — inspect, do not resend automatically', severity: 'warning', requiresInspection: true } : {}) } };
 }
 
 function notificationEvidence(summary, receipts = new Map(), receiptsAvailable = false) {
