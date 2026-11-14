@@ -1,4 +1,5 @@
 const COMPOSITE_TOOL_NAME = "send_call_summaries_dynamic";
+const AUTOMATIC_NOTIFICATION_TOOL = 'confirm_call_request';
 const POST_SEND_CLOSING_MARKER = "## MYAIPA NATURAL POST-SEND CLOSING";
 
 function cleanText(value, maxLength = 500) {
@@ -404,15 +405,7 @@ async function executeCompositeNotifications({ args, env, fetchImpl, btoaImpl, U
   const ownerNumber = normalizeE164(settings.DEFAULT_OWNER_TO_NUMBER);
   const customerNumber = normalizeE164(settings.CALLER_NUMBER) || normalizeE164(input.rawPhoneNumber || input.callbackNumber);
   const keys = buildNotificationKeys(settings.CALL_ID || input.notificationId || "missing-call-id");
-  const workRequest = ['installation', 'new installation', 'new_installation', 'service', 'repair', 'maintenance', 'quote'].includes(String(input.requestType || '').toLowerCase());
-  const missingFields = [];
-  if (typeof input.pricingDiscussed !== 'boolean') missingFields.push('pricingDiscussed');
-  if (workRequest && input.safetyConcern !== 'reported_hazard') {
-    for (const field of ['jobDetails', 'streetAddress', 'city', 'preferredStartDate', 'bestCallbackTime']) {
-      if (!cleanText(input[field], 500)) missingFields.push(field);
-    }
-    if (input.workDetailsConfirmed !== true) missingFields.push('workDetailsConfirmed');
-  }
+  const missingFields = notificationIntakeMissingFields(input);
   if (missingFields.length) {
     const leg = { attempted: false, sent: false, skipped: true, status: 'waiting_for_intake', errorCode: 'intake_confirmation_required' };
     return { ok: false, complete: false, needsIntakeDetails: true, missingFields, executionOrder: [],
@@ -543,6 +536,19 @@ function compositeToolParameters() {
   };
 }
 
+function notificationIntakeMissingFields(input) {
+  const missing = [];
+  if (typeof input.pricingDiscussed !== 'boolean') missing.push('pricingDiscussed');
+  const work = ['installation', 'new installation', 'new_installation', 'service', 'repair', 'maintenance', 'quote'].includes(String(input.requestType || '').toLowerCase());
+  if (work && input.safetyConcern !== 'reported_hazard') {
+    for (const field of ['jobDetails', 'streetAddress', 'city', 'preferredStartDate', 'bestCallbackTime']) {
+      if (!cleanText(input[field], 500)) missing.push(field);
+    }
+    if (input.workDetailsConfirmed !== true) missing.push('workDetailsConfirmed');
+  }
+  return missing;
+}
+
 function getVapiCompositeToolCode() {
   return [
     cleanText,
@@ -556,12 +562,31 @@ function getVapiCompositeToolCode() {
     discussedPricingReminder,
     buildOwnerBody,
     buildCustomerBody,
+    notificationIntakeMissingFields,
     executeCompositeNotifications,
   ].map((fn) => fn.toString()).join("\n\n") + '\n' +
     preparePhoneNotificationDraft.toString().replace('function preparePhoneNotificationDraft(', 'function sendTwilioMessage(') +
     "\nconst result = await executeCompositeNotifications({ args, env, fetchImpl: fetch, btoaImpl: btoa, URLSearchParamsImpl: URLSearchParams });" +
     "\nconst draftStored = Boolean((result.owner?.draftStored || result.owner?.status === 'disabled_by_policy') && result.customer?.draftStored);" +
     "\nreturn { ...result, ok: draftStored, complete: false, draftStored, requiresApproval: draftStored, requiresReconciliation: false, status: draftStored ? 'awaiting_manual_approval' : 'draft_not_saved' };";
+}
+
+function getAutomaticVapiCompositeToolDefinition() {
+  return { type: 'function', async: false, timeoutSeconds: 30,
+    rejectionPlan: require('./callConfirmation').toolRejectionPlan(),
+    function: { name: AUTOMATIC_NOTIFICATION_TOOL, parameters: compositeToolParameters(),
+      description: 'After a fresh clear approval, submit the owner summary and customer confirmation once through the authenticated server webhook. Never retry an uncertain result.' } };
+}
+
+function automaticConfirmationPrompt(toolName = AUTOMATIC_NOTIFICATION_TOOL) {
+  return `AUTOMATIC CALLER CONFIRMATION — replaces draft-only/manual-review instructions.
+Read back the complete current request. Ask exactly "Should I send this request to the team now?" Wait for clear approval before calling ${toolName} once.
+Never use "Should I save this request for review?" as permission to send. Refusal, uncertainty, a correction, or a request to wait means do not send; clarify and obtain fresh approval after corrected details.
+Keep work-start timing separate from callback timing. Never invent missing fields, prices, credentials, a city or a phone number. Preserve the established intake and business policies.
+Use trusted caller ID. If it is unavailable, explain that automatic confirmation cannot be verified; do not invent or silently substitute a recipient.
+Do not close or call endCall until the tool returns. Say a text was submitted only for a leg with sent true, a valid messageId and dispatchReceiptStored true. Provider acceptance is not handset delivery.
+If the result is missing, held, failed or uncertain, explain that sending could not be confirmed. Never retry automatically or claim success from a completed tool call.
+Clear caller approval authorizes automatic sending; no admin approval is required. A refusal not received before submission cannot recall a submitted text.`;
 }
 
 // The only transport function included in provider-generated code saves drafts.
@@ -607,6 +632,7 @@ function getVapiCompositeToolDefinition() {
 
 module.exports = {
   COMPOSITE_TOOL_NAME,
+  AUTOMATIC_NOTIFICATION_TOOL,
   POST_SEND_CLOSING_MARKER,
   buildCustomerBody,
   buildNextAction,
@@ -619,6 +645,9 @@ module.exports = {
   executeCompositeNotifications,
   getVapiCompositeToolCode,
   getVapiCompositeToolDefinition,
+  getAutomaticVapiCompositeToolDefinition,
+  notificationIntakeMissingFields,
+  automaticConfirmationPrompt,
   normalizeE164,
   postSendClosingPrompt,
   removeLegacyAbruptClosingInstructions,

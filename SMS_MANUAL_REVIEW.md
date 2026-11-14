@@ -1,5 +1,57 @@
 # Manual review before notification texts
 
+## Local automatic-confirmation candidate (not released)
+
+The owner has clarified that ordinary confirmation texts must not require admin
+approval. `automaticCallNotifications.js` and
+`getAutomaticVapiCompositeToolDefinition()` prepare that replacement. The existing
+manual tool builder remains unchanged for an explicit, separately verified
+migration; deploying backend code alone must not silently rewrite live tools.
+
+The candidate is now a synchronous Function tool named `confirm_call_request`
+using the existing authenticated `/api/webhooks/voice` route. It uses the live
+`message.artifact` plus explicit `toolCallList`; it never polls `GET /call` or
+requires undocumented `tool_calls` inside OpenAI-formatted messages. Vapi's
+[official server-message schema](https://github.com/VapiAI/server-sdk-typescript/blob/main/src/api/types/ServerMessageToolCalls.ts)
+explicitly describes this artifact as live. Either documented native messages
+or OpenAI-formatted messages work; when both exist, neither can hide a refusal.
+
+`SMS_AUTOMATIC_DISPATCH_ENABLED=true` and the exact assistant allowlist in
+`SMS_AUTOMATIC_ASSISTANT_IDS` remain required and default inactive. The existing
+saved active voice-route snapshot must contain reviewed `automaticSms` policy
+`{version: 1, ownerEnabled: boolean}`. The backend selects its exact open signup
+and business, uses the saved snapshot's pricing policy, and verifies owner and
+caller routing. Model arguments cannot choose the sender, owner, tenant or
+approval. Inline trial assistants use their saved route without requiring a
+provider assistantId that Vapi does not promise for inline assistants.
+
+Fresh explicit approval admits the existing locked draft/one-time send/receipt
+workflow without an admin approval. The legacy generic notification branch is
+not used: it creates a lead handoff, not this customer confirmation. The Function
+response returns HTTP 200 with one result/error matching each toolCallId.
+
+Observed refusals, missing evidence, mismatched arguments, missing intake,
+opt-outs and cancelled drafts block admission. Unknown provider outcomes remain
+held without resubmission. Missing live history does not trigger manual review
+as a hidden fallback, or fall back to a stale persisted artifact.
+
+Before release: run fresh CI including the real-PostgreSQL webhook/concurrency
+case and HTTP-level no-send cases. Before live enablement: review exact assistant
+Function-tool migration, webhook secret, prompt replacement, saved automaticSms
+policy, backend sender account and rollback. Confirm the target assistant's live
+artifact configuration in a separately approved provider check. The contract is
+documented; this is not a claim that a new live call has been tested. Unknown
+caller ID still fails closed; alternate-number confirmation needs separate
+evidence-backed support. There is no longer an arbitrary four-tool limit.
+
+This is not a provider guarantee of complete or correctly ordered speech. A
+withdrawal absent from the observed snapshot, or received after admission, may be
+too late. Approval of this candidate is not permission to claim that limitation
+is eliminated. No live settings, calls or real texts are changed by local tests.
+
+The remainder below describes the currently deployed manual-review release,
+not a requirement for the replacement automatic workflow.
+
 Classic Vapi calls cannot certify that the latest caller speech has reached the
 backend. A spoken approval now saves draft texts; it cannot grant send admission.
 For example, a delayed “wait” after a spoken “yes” may still leave a draft, but
