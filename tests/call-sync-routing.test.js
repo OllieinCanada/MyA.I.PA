@@ -4,20 +4,25 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const { createCallSyncMonitor, completeSync, isCallSyncRoutingRefusal, WORKFLOW } = require('../server/callSyncHealth');
+const { parseSimulationEvidence, classifyCallSyncExclusion, summarizeCallSyncReporting } = require('../server/callSyncReporting');
 const source = fs.readFileSync(path.join(__dirname, '../server/index.js'), 'utf8');
 const syncSource = source.slice(source.indexOf('async function performVapiCallSync('), source.indexOf('async function fetchTwilioCalls('));
 const resolverSource = source.slice(source.indexOf('async function resolveBusinessIdForVapiCall('), source.indexOf('function getVapiVoiceSignupExecutionBusinessId('));
 
-function fixture(kind = 'unknown', fatalCode) {
+function fixture(kind = 'unknown', fatalCode, reporting = {}) {
   const known = id => ({ id, assistantId: 'fixture-assistant' });
   const bad = { id: 'fixture-blocked', assistantId: 'fixture-assistant', phoneNumberId: 'fixture-unknown-phone' };
   if (kind === 'required') { delete bad.assistantId; delete bad.phoneNumberId; }
   if (kind === 'invalid') bad.phoneNumberId = { id: 'not-a-string' };
   if (kind === 'conflict') bad.phoneNumberId = 'fixture-other-phone';
-  const calls = [known('fixture-before'), bad, known('fixture-after')];
+  const calls = reporting.calls || [known('fixture-before'), bad, known('fixture-after')];
   const writes = [], usage = [], warnings = [];
   let fileWrites = 0, active;
   const context = {
+    path, dataDir: 'unused-fixture-directory',
+    readSimulationEvidence: () => reporting.simulationEvidence || { status: 'absent' },
+    classifyCallSyncExclusion, summarizeCallSyncReporting,
+    VAPI_VOICE_SIGNUP_ASSISTANT_ID: 'fixture-intake-assistant', VAPI_VOICE_SIGNUP_PHONE_NUMBER_ID: 'fixture-intake-phone',
     parseVapiBusinessMap: () => ({}), normalizePhoneForMatch: value => String(value || ''),
     prisma: {
       vapiBusinessMapping: { findMany: async ({where}) => {
@@ -68,4 +73,27 @@ for(const code of ['P1001','UNEXPECTED_IMPLEMENTATION_FAILURE'])test(`sync does 
 test('monitor refuses unknown future routing codes, without relaxing legacy intentionally unmapped results',()=>{
   assert.equal(completeSync({fetched:1,synced:0,detailErrors:[],routingErrors:[{code:'FUTURE_ROUTE_FAILURE'}]}),false);
   assert.equal(isCallSyncRoutingRefusal({code:'VAPI_BUSINESS_ROUTE_FUTURE_FAILURE'}),false);
+});
+
+test('actual sync reports eight attested simulation legs and three exact intake calls without authorizing them',async()=>{
+  const ids=Array.from({length:8},(_,i)=>'00000000-0000-4000-8000-'+String(i+1).padStart(12,'0'));
+  const simulationEvidence=parseSimulationEvidence({schemaVersion:1,reportingOnly:true,sources:[{sha256:'a'.repeat(64)}],
+    calls:ids.map((callId,i)=>({callId,type:'vapi.websocketCall',role:i%2?'target':'tester',sourceSha256:'a'.repeat(64)}))});
+  const calls=[...ids.map(id=>({id,type:'vapi.websocketCall'})),...Array.from({length:3},(_,i)=>({id:'fixture-intake-'+i,
+    type:'inboundPhoneCall',assistantId:'fixture-intake-assistant',phoneNumberId:'fixture-intake-phone'})),
+    {id:'fixture-customer',assistantId:'fixture-assistant',type:'inboundPhoneCall'}];
+  const f=fixture('unknown',null,{calls,simulationEvidence}),result=await f.run();
+  assert.deepEqual(JSON.parse(JSON.stringify(result.reporting.counts)),{verified_simulation:8,signup_intake:3,unresolved_routing:0});
+  assert.equal(result.fetched,12);assert.equal(result.synced,1);assert.equal(result.routingErrors.length,11);
+  assert.equal(result.skippedUnmapped,8);assert.equal(result.quarantinedRouting,3);
+  assert.deepEqual(f.writes,[{id:'fixture-customer',businessId:1}]);
+  assert.equal(completeSync(result),false,'reporting labels cannot create completion or incident recovery');
+  assert.equal(result.reporting.grantsRouting,false);assert.equal(result.reporting.completionEvidence,false);
+});
+
+test('absent private attestation cannot silently label arbitrary websocket calls as simulations',async()=>{
+  const f=fixture('unknown',null,{calls:[{id:'fixture-websocket',type:'vapi.websocketCall',metadata:{synthetic:true,purpose:'simulation'}}]});
+  const r=await f.run();assert.equal(r.reporting.counts.unresolved_routing,1);
+  assert.equal(r.reporting.counts.verified_simulation,0);assert.equal(r.reporting.simulationEvidenceStatus,'absent');
+  assert.equal(f.writes.length,0);
 });
