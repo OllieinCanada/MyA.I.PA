@@ -110,6 +110,7 @@ const {
 } = require("./signupDashboardIdentity");
 const { buildRuntimeIncident } = require("./runtimeAlerts");
 const { createCallSyncMonitor, isCallSyncRoutingRefusal } = require("./callSyncHealth");
+const { readSimulationEvidence, classifyCallSyncExclusion, summarizeCallSyncReporting } = require('./callSyncReporting');
 const { assessIncidentSlo } = require("./incidentSlo");
 const {
   createIncidentRemediationPlan,
@@ -3583,6 +3584,10 @@ const monitoredCallSync = createCallSyncMonitor({
 });
 
 async function performVapiCallSync(options = {}) {
+  const simulationEvidence = readSimulationEvidence(path.join(dataDir, 'call-sync-simulation-evidence.json'));
+  const reportingContext = { simulationEvidence, signupIntake: {
+    assistantId: VAPI_VOICE_SIGNUP_ASSISTANT_ID, phoneNumberId: VAPI_VOICE_SIGNUP_PHONE_NUMBER_ID,
+  } };
   const calls = await fetchVapiCalls(options);
   const store = readVapiCallSyncStore();
   const results = [];
@@ -3622,6 +3627,7 @@ async function performVapiCallSync(options = {}) {
       routingErrors.push({
         vapiCallId,
         code: error.code,
+        reportingCategory: classifyCallSyncExclusion(fullCall, error.code, reportingContext),
         assistantId: String(fullCall?.assistantId || fullCall?.assistant?.id || "").trim(),
         phoneNumberId: String(fullCall?.phoneNumberId || fullCall?.phoneNumber?.id || "").trim(),
         destinationLast4: normalizePhoneForMatch(
@@ -3636,10 +3642,12 @@ async function performVapiCallSync(options = {}) {
   }
 
   writeVapiCallSyncStore(store);
+  const reporting = summarizeCallSyncReporting(routingErrors, simulationEvidence);
   if (routingErrors.length) {
     console.warn("[vapi:sync] calls quarantined by business routing safeguards", {
       skipped: routingErrors.length,
       codes: [...new Set(routingErrors.map(item => item.code))],
+      reporting,
     });
   }
   return {
@@ -3650,6 +3658,7 @@ async function performVapiCallSync(options = {}) {
     synced: results.length,
     skippedUnmapped: routingErrors.filter(item => item.code === 'VAPI_BUSINESS_ROUTE_REQUIRED').length,
     quarantinedRouting: routingErrors.filter(item => item.code !== 'VAPI_BUSINESS_ROUTE_REQUIRED').length,
+    reporting,
     results,
   };
 }

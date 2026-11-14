@@ -2,6 +2,11 @@
   "schemaVersion": 1,
   "base": "8f218834361f5ec22de23c5cedd6690897d40f99",
   "node": "24.22.3",
+  "reportingContinuation": {
+    "baseRelease": "f2f80ee6c6d5b84ddc8bbc6ad385e159e0e2a5c9",
+    "previousIndexSha256": "11f55bc16db46d84e8d85d199b80a0ef10c1b126eb4e07f66f3b8d695ac10e46",
+    "scope": "Separate reporting categories only; prior routing refusals, completion evidence and repair controls are unchanged. No private simulation attestation is published."
+  },
   "continuation": {
     "baseRelease": "cd61ef55ad5527636dc494d9920ae55004acdad6",
     "previousIndexSha256": "bfb4515b5ad5ba401732c65fa584ab2b81f5f23306613d457da4f4110ce68749",
@@ -22,7 +27,8 @@
     "server/boundedBusinessMappingAdapters.js": "69cc5596edc20e8a2e689ff826bb2e424e4beaff8f41fa970ee40efa4aed3744",
     "server/boundedBusinessMappingWriter.js": "c8b129211d807e780d55600695362cbcb813c29ac784a147dbed1b9ca746db6a",
     "server/boundedMappingControl.js": "6bdf571cea3fc1d2a52c20e8bc89a49d10ffbe069a7d2fd463eaadb25354b36a",
-    "server/index.js": "11f55bc16db46d84e8d85d199b80a0ef10c1b126eb4e07f66f3b8d695ac10e46",
+    "server/index.js": "9f3b36c672ae8eb6683b7bc49499fb7d7b4336f6c477ab95b010bf2873af43a2",
+    "server/callSyncReporting.js": "0a82dcafa58497bed49a88b061baadb9b5b41c89b432df3eb1d8b3f1852d2ece",
     "server/callSyncHealth.js": "169ff1f1b3dd316c5e138c98dfa0465d694c1a80a3d67ca6b06efcfca611a1b0",
     "server/telegramBotApi.js": "057dd526a4f5078d89bca7343ac517d733e503f6846c6aae2d77b1e17b8ee50b"
   },
