@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const UUID = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/;
 const HASH = /^[a-f0-9]{64}$/;
 const proofs = new WeakMap();
+const exclusionProofs = new WeakMap();
 const categories = ['verified_simulation', 'signup_intake', 'unresolved_routing'];
 const id = value => typeof value === 'string' ? value.trim().toLowerCase() : '';
 
@@ -58,4 +59,25 @@ function summarizeCallSyncReporting(rows, simulationEvidence) {
     simulationEvidenceStatus: ['loaded', 'absent', 'invalid'].includes(simulationEvidence?.status) ? simulationEvidence.status : 'absent',
     grantsRouting: false, completionEvidence: false };
 }
-module.exports = { parseSimulationEvidence, readSimulationEvidence, classifyCallSyncExclusion, summarizeCallSyncReporting };
+
+// Health may distinguish a verified non-customer exclusion, but never infer it
+// from a serialized category/count or caller-supplied metadata. Bind the proof
+// to this exact in-process routing refusal and its original provider call.
+function attestCallSyncExclusion(row, call, context) {
+  const category = classifyCallSyncExclusion(call, row.code, context);
+  const result = Object.freeze({ ...row, reportingCategory: category });
+  if (UUID.test(call?.id || '') && row.vapiCallId === call.id
+    && ['verified_simulation', 'signup_intake'].includes(category)) {
+    exclusionProofs.set(result, { callId: call.id, code: row.code, category });
+  }
+  return result;
+}
+
+function verifiedNonCustomerExclusion(row) {
+  const proof = exclusionProofs.get(row);
+  return proof && row.vapiCallId === proof.callId && row.code === proof.code
+    && row.reportingCategory === proof.category ? proof.category : null;
+}
+
+module.exports = { parseSimulationEvidence, readSimulationEvidence, classifyCallSyncExclusion, summarizeCallSyncReporting,
+  attestCallSyncExclusion, verifiedNonCustomerExclusion };
