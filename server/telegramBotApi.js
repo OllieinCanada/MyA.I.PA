@@ -17,7 +17,10 @@ async function telegramBotRequest(method, payload, { token, fetchImpl = fetch } 
       ? AbortSignal.timeout(REQUEST_TIMEOUT_MS)
       : undefined,
   });
-  const body = await response.json().catch(() => ({}));
+  const body = await response.json().catch(error => {
+    if (error?.name === 'TimeoutError' || error?.name === 'AbortError') throw error;
+    return {};
+  });
   if (!response.ok || body?.ok !== true || (method === 'sendPhoto' && (!Number.isSafeInteger(body?.result?.message_id) || body.result.message_id <= 0))) {
     const error = new Error(`Telegram ${method} was not accepted (${response.status}).`);
     error.code = "TELEGRAM_ACTION_RESPONSE_FAILED";
@@ -76,24 +79,50 @@ async function ensureTelegramActionWebhook({ webhookUrl, webhookSecret } = {}, o
   if (url.protocol !== "https:" || url.username || url.password || secret.length < 32) {
     throw new TypeError("Telegram guarded actions require a credential-free HTTPS URL and a 32-character webhook secret.");
   }
-  const configured = await telegramBotRequest("setWebhook", {
+  // No retry: a timed-out configuration request may already have completed.
+  async function stageRequest(stage, payload) {
+    try { return await telegramBotRequest(stage, payload, options); } catch (cause) {
+      const timeout = cause?.name === 'TimeoutError';
+      const error = new Error('Telegram webhook request did not complete verification.');
+      error.code = timeout ? 'TELEGRAM_WEBHOOK_REQUEST_TIMEOUT'
+        : cause?.code === 'TELEGRAM_ACTION_RESPONSE_FAILED' ? cause.code : 'TELEGRAM_WEBHOOK_REQUEST_FAILED';
+      error.stage = stage;
+      throw error;
+    }
+  }
+  const configured = await stageRequest("setWebhook", {
     url: url.toString(),
     secret_token: secret,
     allowed_updates: ["callback_query"],
     drop_pending_updates: false,
-  }, options);
+  });
   if (configured.result !== true) {
     const error = new Error("Telegram did not accept the guarded-actions webhook.");
     error.code = "TELEGRAM_WEBHOOK_CONFIGURATION_FAILED";
+    error.stage = 'setWebhook';
     throw error;
   }
-  const verified = await telegramBotRequest("getWebhookInfo", {}, options);
+  const verified = await stageRequest("getWebhookInfo", {});
   if (String(verified.result?.url || "") !== url.toString()) {
     const error = new Error("Telegram did not retain the guarded-actions webhook URL.");
     error.code = "TELEGRAM_WEBHOOK_VERIFICATION_FAILED";
+    error.stage = 'getWebhookInfo';
     throw error;
   }
   return { configured: true, url: url.toString() };
+}
+
+function telegramWebhookFailureDiagnostics(error) {
+  const stage = ['setWebhook', 'getWebhookInfo'].includes(error?.stage) ? error.stage : 'configuration_validation';
+  const codes = ['TELEGRAM_WEBHOOK_REQUEST_TIMEOUT', 'TELEGRAM_WEBHOOK_REQUEST_FAILED',
+    'TELEGRAM_ACTION_RESPONSE_FAILED', 'TELEGRAM_WEBHOOK_CONFIGURATION_FAILED', 'TELEGRAM_WEBHOOK_VERIFICATION_FAILED'];
+  return {
+    code: codes.includes(error?.code) ? error.code : 'TELEGRAM_WEBHOOK_CONFIGURATION_FAILED',
+    stage,
+    outcome: stage === 'setWebhook' ? 'configuration_unconfirmed'
+      : stage === 'getWebhookInfo' ? 'verification_unavailable' : 'not_requested',
+    automaticRetry: false,
+  };
 }
 
 module.exports = {
@@ -102,4 +131,5 @@ module.exports = {
   ensureTelegramActionWebhook,
   sendTelegramOwnerStatus,
   telegramBotRequest,
+  telegramWebhookFailureDiagnostics,
 };

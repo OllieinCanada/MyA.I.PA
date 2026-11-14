@@ -14,7 +14,8 @@ const PHASES=['entry','reader','focused'];
 const TESTS={entry:['tests/bounded-mapping-control.integration.cjs','tests/bounded-mapping-control-postgres.integration.cjs'],
   reader:['tests/bounded-business-mapping-integration.test.js'],
   focused:[...REGRESSIONS,'tests/signup-association-repair.test.js','tests/bounded-mapping-composition.test.js',
-    'tests/bounded-mapping-entry-composition.test.js','tests/expanded-release-composition.test.js','tests/combined-pilot-repair-ci.test.js']};
+    'tests/bounded-mapping-entry-composition.test.js','tests/expanded-release-composition.test.js','tests/combined-pilot-repair-ci.test.js',
+    'tests/call-sync-routing.test.js','tests/call-sync-health.test.js','tests/postrelease-verification.test.js','tests/telegram-bot-api.test.js']};
 const SOURCES=[...new Set([...Object.keys(provenance.runtimeSha256),...Object.values(TESTS).flat(),
   'server/leadHandoffs.js','server/vapiSms.js','server/vapiInventoryCoverage.js','scripts/recovery-notification-state.js',
   'scripts/audit-vapi-business-mappings.js','scripts/combined-pilot-repair-provenance.json','scripts/run-combined-pilot-repair-ci.js',

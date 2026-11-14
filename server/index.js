@@ -109,7 +109,7 @@ const {
   selectSignupDashboardRecordForProvisioning,
 } = require("./signupDashboardIdentity");
 const { buildRuntimeIncident } = require("./runtimeAlerts");
-const { createCallSyncMonitor } = require("./callSyncHealth");
+const { createCallSyncMonitor, isCallSyncRoutingRefusal } = require("./callSyncHealth");
 const { assessIncidentSlo } = require("./incidentSlo");
 const {
   createIncidentRemediationPlan,
@@ -159,6 +159,7 @@ const {
   answerTelegramCallback,
   clearTelegramApprovalButtons,
   ensureTelegramActionWebhook,
+  telegramWebhookFailureDiagnostics,
   sendTelegramOwnerStatus,
 } = require("./telegramBotApi");
 const {
@@ -3617,7 +3618,7 @@ async function performVapiCallSync(options = {}) {
       results.push(result);
       if (result.usageChanged) await reconcileTrialUsageAfterCall(result);
     } catch (error) {
-      if (error?.code !== "VAPI_BUSINESS_ROUTE_REQUIRED") throw error;
+      if (!isCallSyncRoutingRefusal(error)) throw error;
       routingErrors.push({
         vapiCallId,
         code: error.code,
@@ -3636,9 +3637,9 @@ async function performVapiCallSync(options = {}) {
 
   writeVapiCallSyncStore(store);
   if (routingErrors.length) {
-    console.warn("[vapi:sync] calls skipped because no trusted business mapping matched", {
+    console.warn("[vapi:sync] calls quarantined by business routing safeguards", {
       skipped: routingErrors.length,
-      callIds: routingErrors.slice(0, 20).map((item) => item.vapiCallId),
+      codes: [...new Set(routingErrors.map(item => item.code))],
     });
   }
   return {
@@ -3647,7 +3648,8 @@ async function performVapiCallSync(options = {}) {
     detailErrors,
     routingErrors,
     synced: results.length,
-    skippedUnmapped: routingErrors.length,
+    skippedUnmapped: routingErrors.filter(item => item.code === 'VAPI_BUSINESS_ROUTE_REQUIRED').length,
+    quarantinedRouting: routingErrors.filter(item => item.code !== 'VAPI_BUSINESS_ROUTE_REQUIRED').length,
     results,
   };
 }
@@ -19275,9 +19277,7 @@ function startServer(port = PORT, host) {
         webhookUrl: TELEGRAM_WEBHOOK_URL,
         webhookSecret: TELEGRAM_WEBHOOK_SECRET,
       }, { token: TELEGRAM_BOT_TOKEN }).catch((error) => {
-        console.error("[telegram:approval] guarded webhook configuration failed", {
-          code: String(error?.code || "TELEGRAM_WEBHOOK_CONFIGURATION_FAILED").slice(0, 80),
-        });
+        console.error("[telegram:approval] guarded webhook configuration failed", telegramWebhookFailureDiagnostics(error));
       });
     }
   });
