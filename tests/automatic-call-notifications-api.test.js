@@ -50,11 +50,11 @@ after(async()=>{
  fs.rmSync(directory,{recursive:true,force:true});assert.equal(fs.existsSync(directory),false);
 });
 const args={businessName:'Do not trust model name',name:'Synthetic Caller',requestType:'message',pricingDiscussed:false,message:'Fictitious request',rawPhoneNumber:'+19055550999'};
-async function request({answer='Perfect. Yes.',auth=true,toolId='fixture-tool',parameters=args,artifact=true}={}){
+async function request({answer='Perfect. Yes.',auth=true,toolId='fixture-tool',parameters=args,artifact=true,timestamp=Date.now()}={}){
  const response=await fetch(base+'/api/webhooks/voice',{method:'POST',headers:{'content-type':'application/json',...(auth?{'x-vapi-secret':'synthetic-auto-webhook'}:{})},body:JSON.stringify({message:{
-  type:'tool-calls',call:{id:'fixture-call',assistantId:'fixture-assistant',phoneNumberId:'fixture-phone',customer:{number:'+19055550102'}},
+  type:'tool-calls',timestamp,call:{id:'fixture-call',assistantId:'fixture-assistant',phoneNumberId:'fixture-phone',customer:{number:'+19055550102'}},
   ...(artifact?{artifact:{messages:[{role:'bot',message:'Should I send this request to the team now?'},{role:'user',message:answer}]}}:{}),
-  toolCallList:[{id:toolId,function:{name:'send_call_summaries_0100_deadbeef_v2',arguments:typeof parameters==='string'?parameters:JSON.stringify(parameters)}}]}})});
+  toolCallList:[{id:toolId,function:{name:'send_call_summaries_auto_0100_deadbeef_v2',arguments:typeof parameters==='string'?parameters:JSON.stringify(parameters)}}]}})});
  const body=await response.json();return{status:response.status,body,result:body.results?JSON.parse(body.results[0].result):null};
 }
 test('actual authenticated HTTP route uses real context reader and automatic claims with fake provider only',async()=>{
@@ -79,6 +79,10 @@ test('concurrent HTTP invocations share one admission per recipient',async()=>{
 });
 test('HTTP lost acknowledgement never causes provider resubmission',async()=>{mode='lost-ack';assert.equal((await request()).result.complete,false);assert.equal((await request()).result.complete,false);assert.equal(posts.length,2);});
 test('HTTP suppression prevents provider posts',async()=>{mode='suppressed';assert.equal((await request()).result.complete,false);assert.equal(posts.length,0);});
+test('actual HTTP route refuses stale or missing provider timestamps without admissions',async()=>{
+ for(const timestamp of [Date.now()-120000,null]){assert.equal((await request({timestamp})).result.errorCode,'notification_conversation_stale_or_unverified');}
+ assert.equal(posts.length,0);assert.equal(gate.rows.size,2);
+});
 test('authenticated outcome alerts and saved-receipt inspection are read-only; anonymous access refused',async()=>{
  await request();const before=JSON.stringify([...gate.rows]),count=posts.length;
  const url=base+'/api/admin/call-notification-outcomes?businessId=7';

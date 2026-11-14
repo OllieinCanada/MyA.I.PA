@@ -7,8 +7,8 @@ function fixture(){
  const gate=createDispatchStub(),posts=[];
  const options={prisma:gate.db,authenticated:true,
   env:{SMS_AUTOMATIC_NOTIFICATION_ENABLED:'true',SMS_NOTIFICATION_DISPATCH_ENABLED:'true',SMS_AUTOMATIC_NOTIFICATION_BUSINESS_IDS:'[7]',TWILIO_ACCOUNT_SID:'AC_INERT',TWILIO_AUTH_TOKEN:'INERT'},
-  message:{call:{id:'failure-fixture-call',assistantId:'fixture-assistant',phoneNumberId:'fixture-phone',customer:{number:'+19055550102'}},toolCallList:[{}],artifact:{messages:[{role:'bot',message:'Should I send this request to the team now?'},{role:'user',message:'Yes, please.'}]}},
-  toolCall:{id:'fixture-tool',name:'send_call_summaries_0100_deadbeef_v2',parameters:{requestType:'message',name:'Fictitious Caller',pricingDiscussed:false,message:'Fictitious content'}},
+  message:{timestamp:Date.now(),call:{id:'failure-fixture-call',assistantId:'fixture-assistant',phoneNumberId:'fixture-phone',customer:{number:'+19055550102'}},toolCallList:[{}],artifact:{messages:[{role:'bot',message:'Should I send this request to the team now?'},{role:'user',message:'Yes, please.'}]}},
+  toolCall:{id:'fixture-tool',name:'send_call_summaries_auto_0100_deadbeef_v2',parameters:{requestType:'message',name:'Fictitious Caller',pricingDiscussed:false,message:'Fictitious content'}},
   readContext:async()=>({businessId:7,businessName:'Synthetic Electric',eligible:true,assistantId:'fixture-assistant',phoneNumberId:'fixture-phone',from:'+19055550100',owner:'+19055550101'}),
   suppressionChecker:async()=>false,fetchImpl:async(_url,request)=>{posts.push(request.body);return{ok:true,status:201,json:async()=>({sid:'SM'+String(posts.length).padStart(32,'0'),status:'queued'})};}};
  return{gate,posts,options,run:()=>execute(options)};

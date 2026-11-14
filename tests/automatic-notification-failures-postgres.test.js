@@ -27,8 +27,8 @@ test('automatic admission failures on isolated PostgreSQL with fake transport on
   const parameters={requestType:'message',name:'Fictitious caller',message:'Fictitious SQL request',pricingDiscussed:false};
   const options={prisma:db,authenticated:true,
    env:{SMS_AUTOMATIC_NOTIFICATION_ENABLED:'true',SMS_NOTIFICATION_DISPATCH_ENABLED:'true',SMS_AUTOMATIC_NOTIFICATION_BUSINESS_IDS:'[7]',TWILIO_ACCOUNT_SID:'AC_INERT',TWILIO_AUTH_TOKEN:'INERT'},
-   message:{call:{id,assistantId:'fixture-assistant',phoneNumberId:'fixture-phone',customer:{number:'+19055550102'}},toolCallList:[{}],artifact:{messages:[{role:'bot',message:'Should I send this request to the team now?'},{role:'user',message:'Perfect. Yes.'}]}},
-   toolCall:{id:'fixture-tool',name:'send_call_summaries_0100_deadbeef_v2',parameters},
+   message:{timestamp:Date.now(),call:{id,assistantId:'fixture-assistant',phoneNumberId:'fixture-phone',customer:{number:'+19055550102'}},toolCallList:[{}],artifact:{messages:[{role:'bot',message:'Should I send this request to the team now?'},{role:'user',message:'Perfect. Yes.'}]}},
+   toolCall:{id:'fixture-tool',name:'send_call_summaries_auto_0100_deadbeef_v2',parameters},
    readContext:async()=>({businessId:7,businessName:'Synthetic Electric',eligible:true,assistantId:'fixture-assistant',phoneNumberId:'fixture-phone',from:'+19055550100',owner:'+19055550101'}),
    suppressionChecker:async()=>false,fetchImpl:async(endpoint,request)=>{
     assert.equal(endpoint,'https://api.twilio.com/2010-04-01/Accounts/AC_INERT/Messages.json');
@@ -88,7 +88,12 @@ test('automatic admission failures on isolated PostgreSQL with fake transport on
    assert.equal((await inspectNotificationReceipts({prisma:db,result:{attempted:true,sent:false}})).receiptCheck,'missing_message_id');
    assert.deepEqual(await db.runtimeStore.findMany({where:{key:{startsWith:'call-notification-dispatch:v1:'}},orderBy:{key:'asc'}}),before);assert.equal(await f.count(),2);
   });
-  report.passed=report.cases.length===8&&report.cases.every(row=>row.passed);
+  await check('revocation during final authority read prevents fake provider submission',async()=>{
+   const f=await fixture(),read=f.options.readContext;let reads=0;
+   f.options.readContext=async()=>{if(++reads===4)f.options.env.SMS_AUTOMATIC_NOTIFICATION_ENABLED='false';return read();};
+   assert.equal((await f.run()).complete,false);assert.equal(await f.count(),0);
+  });
+  report.passed=report.cases.length===9&&report.cases.every(row=>row.passed);
   assert.equal(report.passed,true);
  }finally{
   try{

@@ -1,6 +1,6 @@
 'use strict';
 const test = require('node:test'), assert = require('node:assert/strict');
-const { executeAutomaticCallNotifications: execute, automaticSummaryToolDefinition } = require('../server/automaticCallNotifications');
+const { executeAutomaticCallNotifications: execute, automaticSummaryToolDefinition, SUMMARY_TOOL } = require('../server/automaticCallNotifications');
 const { createAutomaticNotificationContextReader } = require('../server/automaticNotificationContext');
 const { createDispatchStub } = require('../scripts/stub-notification-dispatch');
 const args = { businessName: 'Untrusted replacement', requestType: 'message', name: 'Fictitious Caller',
@@ -13,9 +13,9 @@ function fixture() {
   const gate = createDispatchStub();
   const env = { SMS_NOTIFICATION_DISPATCH_ENABLED: 'true', SMS_AUTOMATIC_NOTIFICATION_ENABLED: 'true', SMS_AUTOMATIC_NOTIFICATION_BUSINESS_IDS: '[7]', TWILIO_ACCOUNT_SID: 'AC'+'0'.repeat(32), TWILIO_AUTH_TOKEN: 'INERT' };
   const posts = [];
-  const options = { prisma: gate.db, authenticated: true, env, message: { call: structuredClone(call),
+  const options = { prisma: gate.db, authenticated: true, env, message: { timestamp: Date.now(), call: structuredClone(call),
     toolCallList: [{}], artifact: { messages: history('Perfect. Yes.') } },
-    toolCall: { id: 'fixture-tool-1', name: 'send_call_summaries_0100_deadbeef_v2', parameters: { ...args } },
+    toolCall: { id: 'fixture-tool-1', name: 'send_call_summaries_auto_0100_deadbeef_v2', parameters: { ...args } },
     readContext: async () => structuredClone(context), suppressionChecker: async () => false,
     fetchImpl: async (url, request) => {
       assert.equal(url, 'https://api.twilio.com/2010-04-01/Accounts/AC'+'0'.repeat(32)+'/Messages.json');
@@ -38,6 +38,18 @@ for(const answer of ['No.','Yes, but wait.','Stop','Maybe','What?']) test('refus
   assert.equal(r.complete,false); assert.equal(f.posts.length,0); assert.equal(f.gate.rows.size,0);
 });
 test('a later refusal consumes prior approval',async()=>{ const f=fixture(); f.options.message.artifact.messages.push({role:'user',message:'Do not send it.'}); assert.equal((await f.run()).complete,false); assert.equal(f.posts.length,0); });
+test('review: stale authenticated conversation cannot authorize a first send',async()=>{const f=fixture();f.options.message.timestamp=Date.now()-120000;assert.equal((await f.run()).complete,false);assert.equal(f.posts.length,0);});
+test('review: disabling during final authority lookup prevents the provider POST',async()=>{
+ const f=fixture();let reads=0;f.options.readContext=async()=>{if(++reads===4)f.env.SMS_AUTOMATIC_NOTIFICATION_ENABLED='false';return structuredClone(context);};
+ assert.equal((await f.run()).complete,false);assert.equal(f.posts.length,0);
+});
+test('review: automatic route cannot intercept an existing legacy summary function',()=>{assert.equal(SUMMARY_TOOL.test('send_call_summaries_0100_deadbeef_v2'),false);});
+for(const timestamp of [null,'2026-01-01',1.5,0,Date.now()+60000])test('review: absent/invalid/future timestamp refuses '+timestamp,async()=>{const f=fixture();f.options.message.timestamp=timestamp;assert.equal((await f.run()).complete,false);assert.equal(f.posts.length,0);});
+test('review: expiry during final authority lookup prevents sending',async t=>{
+ const f=fixture();let reads=0,clock=Date.now();t.mock.method(Date,'now',()=>clock);
+ f.options.readContext=async()=>{if(++reads===4)clock+=61000;return structuredClone(context);};
+ assert.equal((await f.run()).complete,false);assert.equal(f.posts.length,0);
+});
 test('a yes to draft review cannot authorize automatic sending',async()=>{const f=fixture();f.options.message.artifact.messages[0].message='Should I save this request for review?';assert.equal((await f.run()).complete,false);assert.equal(f.posts.length,0);assert.equal(f.gate.rows.size,0);});
 for(const ids of ['', 'null', '[]', '[8]', '["7"]', 'broken'])test('business opt-in must be exact and server-owned: '+ids,async()=>{const f=fixture();f.env.SMS_AUTOMATIC_NOTIFICATION_BUSINESS_IDS=ids;assert.equal((await f.run()).complete,false);assert.equal(f.posts.length,0);});
 for(const kind of ['auth','flag','artifact','forged-arguments','ambiguous-text','missing-caller','multi-tool','route','eligibility']) test('missing/untrusted authority refuses: '+kind,async()=>{
@@ -88,12 +100,13 @@ test('uncertain claim commit acknowledgement permits no provider attempt or retr
  assert.equal((await f.run()).complete,false);assert.equal(f.posts.length,0);
  f.gate.db.$transaction=transaction;assert.equal((await f.run()).complete,false);assert.equal(f.posts.length,0);
 });
-test('migration definition uses the same function name/schema, no credential-bearing code tool or manual review',()=>{
- const definition=automaticSummaryToolDefinition('send_call_summaries_0100_deadbeef_v2');
+test('migration definition requires a distinct opt-in function name and schema, no credential-bearing code or manual review',()=>{
+ const definition=automaticSummaryToolDefinition('send_call_summaries_auto_0100_deadbeef_v2');
  assert.equal(definition.type,'function');assert.equal(definition.function.parameters.type,'object');
  assert.equal(definition.code,undefined);assert.equal(definition.environmentVariables,undefined);
  assert.doesNotMatch(JSON.stringify(definition),/manual review|requiresApproval|TWILIO_AUTH_TOKEN/);
  assert.throws(()=>automaticSummaryToolDefinition('unmanaged'),/tool_name_invalid/);
+ assert.throws(()=>automaticSummaryToolDefinition('send_call_summaries_0100_deadbeef_v2'),/tool_name_invalid/);
 });
 
 function readerFixture(){

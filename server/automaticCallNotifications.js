@@ -7,7 +7,13 @@ const { withDispatchLock, claimNotificationDispatch, completeNotificationDispatc
 const crypto = require('node:crypto');
 const fail = code => Object.assign(new Error(code), { code });
 const hash = value => crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
-const SUMMARY_TOOL = /^send_call_summaries_\d{4}_[a-f0-9]{8}_v\d+$/i;
+// A distinct name prevents this default-off path from changing legacy tools.
+const SUMMARY_TOOL = /^send_call_summaries_auto_\d{4}_[a-f0-9]{8}_v\d+$/i;
+const CONVERSATION_MAX_AGE_MS = 60000;
+function requireFreshConversation(timestamp) {
+  if (!Number.isSafeInteger(timestamp) || timestamp <= 0 || Date.now()-timestamp > CONVERSATION_MAX_AGE_MS
+    || timestamp-Date.now() > 5000) throw fail('notification_conversation_stale_or_unverified');
+}
 function targetEnabled(env, businessId) {
   if (env.SMS_AUTOMATIC_NOTIFICATION_ENABLED !== 'true') throw fail('automatic_notification_disabled');
   if (env.SMS_NOTIFICATION_DISPATCH_ENABLED !== 'true') throw fail('notification_dispatch_disabled');
@@ -64,6 +70,10 @@ async function executeAutomaticCallNotifications({ prisma, authenticated, messag
       || !SUMMARY_TOOL.test(toolCall?.name || '') || typeof toolCall?.id !== 'string' || !toolCall.id
       || typeof readContext !== 'function' || typeof suppressionChecker !== 'function') throw fail('notification_context_invalid');
     if (message.toolCallList?.length !== 1) throw fail('notification_single_tool_required');
+    // Provider SDK timestamp is optional. Missing timestamps must refuse here,
+    // not silently turn an old artifact into current send authorization.
+    const conversationTimestamp = message.timestamp;
+    requireFreshConversation(conversationTimestamp);
     const conversation = confirmationMessages(message);
     // A yes to saving a draft is NOT a yes to send it. Keep the shared legacy
     // draft conversation guard intact; only this automatic path excludes it.
@@ -78,7 +88,11 @@ async function executeAutomaticCallNotifications({ prisma, authenticated, messag
     if (args.pricingDiscussed === true && !context.pricingOptions) throw fail('notification_pricing_policy_unproven');
     const fresh = async () => {
       targetEnabled(env, context.businessId);
+      requireFreshConversation(conversationTimestamp);
       if (hash(validateContext(await readContext(call), call)) !== fingerprint) throw fail('notification_authority_changed');
+      // Eligibility reads can wait. Recheck mutable controls after the await.
+      targetEnabled(env, context.businessId);
+      requireFreshConversation(conversationTimestamp);
     };
     const endpoint = 'https://notification-dispatch.internal/dispatch';
     const check = 'https://notification-suppression.internal/check';
@@ -101,6 +115,7 @@ async function executeAutomaticCallNotifications({ prisma, authenticated, messag
               authorization: { version: 1, source: 'authenticated_vapi_conversation', businessId: context.businessId,
                 leg: input.leg, callReference: crypto.createHash('sha256').update(call.id).digest('hex'),
                 routeHash: fingerprint, conversationHash: hash(conversation), toolCallHash: hash(toolCall.id),
+                providerTimestamp: conversationTimestamp,
                 authorizedAt: new Date().toISOString() } } } });
           }
           return admission;
@@ -115,6 +130,8 @@ async function executeAutomaticCallNotifications({ prisma, authenticated, messag
       }
       if (url !== provider || request.method !== 'POST') throw fail('notification_transport_refused');
       await fresh();
+      targetEnabled(env, context.businessId);
+      requireFreshConversation(conversationTimestamp);
       actionAttempted = true;
       return fetchImpl(url, { ...request, redirect: 'error', signal: AbortSignal.timeout(10000) });
     };
