@@ -1,5 +1,6 @@
 // Only a completed call sync can recover this job. Connectivity probes cannot.
 const { classifyOperationalError } = require('./operationalErrorClassifier');
+const { verifiedNonCustomerExclusion } = require('./callSyncReporting');
 const WORKFLOW = 'Vapi call sync background job';
 const isSyncIncident = item => item?.snapshot?.Workflow === WORKFLOW;
 const isActive = item => !['resolved', 'recovered', 'not_required'].includes(item?.remediation?.status);
@@ -36,16 +37,41 @@ function failureContext(previous, now, error) {
   };
 }
 
-function completeSync(result) {
-  return result && Number.isInteger(result.fetched) && result.fetched >= 0
-    && Number.isInteger(result.synced) && result.synced >= 0
+function validAccounting(result) {
+  if (!(result && Number.isSafeInteger(result.fetched) && result.fetched >= 0
+    && Number.isSafeInteger(result.synced) && result.synced >= 0
     && Array.isArray(result.detailErrors) && result.detailErrors.length === 0
     && Array.isArray(result.routingErrors)
-    && !hasQuarantinedRouting(result)
-    && result.synced + result.routingErrors.length === result.fetched;
+    && result.synced + result.routingErrors.length === result.fetched)) return false;
+  const seen = new Set();
+  for (const row of result.routingErrors) {
+    if (!row || typeof row !== 'object') return false;
+    if (row.vapiCallId) {
+      if (seen.has(row.vapiCallId)) return false;
+      seen.add(row.vapiCallId);
+    }
+  }
+  return true;
 }
 
-function createCallSyncMonitor({ listIncidents, notifyFailure, recoverIncident, recordCompletion = async () => {}, now = Date.now, log = console.error }) {
+function completeSync(result) {
+  return validAccounting(result) && !hasQuarantinedRouting(result);
+}
+
+function accountedNonCustomerSync(result) {
+  if (!validAccounting(result) || !result.routingErrors.length) return null;
+  const counts = { verified_simulation: 0, signup_intake: 0 };
+  for (const row of result.routingErrors) {
+    const category = verifiedNonCustomerExclusion(row);
+    if (!category) return null;
+    counts[category]++;
+  }
+  return { status: 'verified_non_customer_exclusions', fetched: result.fetched, synced: result.synced,
+    excluded: result.routingErrors.length, counts, completionEvidence: false, grantsRouting: false };
+}
+
+function createCallSyncMonitor({ listIncidents, notifyFailure, recoverIncident, recordCompletion = async () => {},
+  reportAccounting = () => {}, now = Date.now, log = console.error }) {
   let running = null;
   return function run(task) {
     // Coalesce overlapping scheduled ticks; never start an extra retry loop.
@@ -60,6 +86,14 @@ function createCallSyncMonitor({ listIncidents, notifyFailure, recoverIncident, 
       let result;
       let failure;
       try { result = await task(); } catch (error) { failure = error; }
+      const accounting = !failure && accountedNonCustomerSync(result);
+      if (accounting) {
+        // Customer reads are accounted for, but strict routing still refused
+        // these calls. Do not issue a full completion receipt, recover/clear an
+        // earlier incident, or repeat failure alerts for proven non-customer work.
+        reportAccounting(accounting);
+        return result;
+      }
       if (failure || !completeSync(result)) {
         // Do not hide a credential/implementation failure behind an earlier timeout.
         const detailError = detail => Object.assign(new Error('Vapi call detail lookup failed.'), {
@@ -98,4 +132,5 @@ function createCallSyncMonitor({ listIncidents, notifyFailure, recoverIncident, 
   };
 }
 
-module.exports = { WORKFLOW, isSyncIncident, requiresSyncRecovery, failureContext, completeSync, createCallSyncMonitor, isCallSyncRoutingRefusal };
+module.exports = { WORKFLOW, isSyncIncident, requiresSyncRecovery, failureContext, completeSync, accountedNonCustomerSync,
+  createCallSyncMonitor, isCallSyncRoutingRefusal };

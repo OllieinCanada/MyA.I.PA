@@ -113,7 +113,7 @@ const {
 } = require("./signupDashboardIdentity");
 const { buildRuntimeIncident } = require("./runtimeAlerts");
 const { createCallSyncMonitor, isCallSyncRoutingRefusal } = require("./callSyncHealth");
-const { readSimulationEvidence, classifyCallSyncExclusion, summarizeCallSyncReporting } = require('./callSyncReporting');
+const { readSimulationEvidence, attestCallSyncExclusion, summarizeCallSyncReporting } = require('./callSyncReporting');
 const { assessIncidentSlo } = require("./incidentSlo");
 const {
   createIncidentRemediationPlan,
@@ -3584,6 +3584,7 @@ const monitoredCallSync = createCallSyncMonitor({
   recoverIncident: (id, transition) => updateRuntimeIncidentRemediation(runtimeIncidentPath, id, transition),
   recordCompletion: completion => require('./callSyncReceipt').saveCompletion({ prisma, ...completion,
     releaseCommit: process.env.RENDER_GIT_COMMIT || process.env.GITHUB_SHA || 'unknown' }),
+  reportAccounting: accounting => console.info('[vapi:sync] verified non-customer exclusions; no full completion or incident recovery', accounting),
 });
 
 async function performVapiCallSync(options = {}) {
@@ -3627,10 +3628,9 @@ async function performVapiCallSync(options = {}) {
       if (result.usageChanged) await reconcileTrialUsageAfterCall(result);
     } catch (error) {
       if (!isCallSyncRoutingRefusal(error)) throw error;
-      routingErrors.push({
+      routingErrors.push(attestCallSyncExclusion({
         vapiCallId,
         code: error.code,
-        reportingCategory: classifyCallSyncExclusion(fullCall, error.code, reportingContext),
         assistantId: String(fullCall?.assistantId || fullCall?.assistant?.id || "").trim(),
         phoneNumberId: String(fullCall?.phoneNumberId || fullCall?.phoneNumber?.id || "").trim(),
         destinationLast4: normalizePhoneForMatch(
@@ -3640,7 +3640,7 @@ async function performVapiCallSync(options = {}) {
             fullCall?.to ||
             ""
         ).slice(-4),
-      });
+      }, fullCall, reportingContext));
     }
   }
 

@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const { createCallSyncMonitor, completeSync, isCallSyncRoutingRefusal, WORKFLOW } = require('../server/callSyncHealth');
-const { parseSimulationEvidence, classifyCallSyncExclusion, summarizeCallSyncReporting } = require('../server/callSyncReporting');
+const { parseSimulationEvidence, attestCallSyncExclusion, summarizeCallSyncReporting } = require('../server/callSyncReporting');
 const source = fs.readFileSync(path.join(__dirname, '../server/index.js'), 'utf8');
 const syncSource = source.slice(source.indexOf('async function performVapiCallSync('), source.indexOf('async function fetchTwilioCalls('));
 const resolverSource = source.slice(source.indexOf('async function resolveBusinessIdForVapiCall('), source.indexOf('function getVapiVoiceSignupExecutionBusinessId('));
@@ -21,7 +21,7 @@ function fixture(kind = 'unknown', fatalCode, reporting = {}) {
   const context = {
     path, dataDir: 'unused-fixture-directory',
     readSimulationEvidence: () => reporting.simulationEvidence || { status: 'absent' },
-    classifyCallSyncExclusion, summarizeCallSyncReporting,
+    attestCallSyncExclusion, summarizeCallSyncReporting,
     VAPI_VOICE_SIGNUP_ASSISTANT_ID: 'fixture-intake-assistant', VAPI_VOICE_SIGNUP_PHONE_NUMBER_ID: 'fixture-intake-phone',
     parseVapiBusinessMap: () => ({}), normalizePhoneForMatch: value => String(value || ''),
     prisma: {
@@ -31,7 +31,10 @@ function fixture(kind = 'unknown', fatalCode, reporting = {}) {
         return kind === 'incomplete' && active === 'fixture-blocked' ? [...rows,...rows] : rows;
       } }, business: {findMany:async()=>[]}
     },
-    fetchVapiCalls:async()=>calls, fetchVapiCallDetail:async()=>null,
+    fetchVapiCalls:async()=>calls, fetchVapiCallDetail:async()=> {
+      if (reporting.detailError) throw Object.assign(Error('synthetic detail failure'), { code: 'ETIMEDOUT' });
+      return null;
+    },
     readVapiCallSyncStore:()=>({}), writeVapiCallSyncStore:()=>{fileWrites++;},
     reconcileTrialUsageAfterCall:async r=>usage.push(r.id), isCallSyncRoutingRefusal,
     console:{warn:(...args)=>warnings.push(args)},
@@ -79,16 +82,32 @@ test('actual sync reports eight attested simulation legs and three exact intake 
   const ids=Array.from({length:8},(_,i)=>'00000000-0000-4000-8000-'+String(i+1).padStart(12,'0'));
   const simulationEvidence=parseSimulationEvidence({schemaVersion:1,reportingOnly:true,sources:[{sha256:'a'.repeat(64)}],
     calls:ids.map((callId,i)=>({callId,type:'vapi.websocketCall',role:i%2?'target':'tester',sourceSha256:'a'.repeat(64)}))});
-  const calls=[...ids.map(id=>({id,type:'vapi.websocketCall'})),...Array.from({length:3},(_,i)=>({id:'fixture-intake-'+i,
+  const calls=[...ids.map(id=>({id,type:'vapi.websocketCall'})),...Array.from({length:3},(_,i)=>({id:'00000000-0000-4000-8000-'+String(i+9).padStart(12,'0'),
     type:'inboundPhoneCall',assistantId:'fixture-intake-assistant',phoneNumberId:'fixture-intake-phone'})),
     {id:'fixture-customer',assistantId:'fixture-assistant',type:'inboundPhoneCall'}];
-  const f=fixture('unknown',null,{calls,simulationEvidence}),result=await f.run();
+  const f=fixture('unknown',null,{calls,simulationEvidence}),reports=[],failures=[],receipts=[],recoveries=[];
+  const monitor=createCallSyncMonitor({listIncidents:async()=>[{id:'historical',snapshot:{Workflow:WORKFLOW},remediation:{status:'needs_user'}}],
+    reportAccounting:r=>reports.push(r),notifyFailure:async r=>failures.push(r),recordCompletion:async r=>receipts.push(r),recoverIncident:async r=>recoveries.push(r)});
+  const result=await monitor(f.run);
   assert.deepEqual(JSON.parse(JSON.stringify(result.reporting.counts)),{verified_simulation:8,signup_intake:3,unresolved_routing:0});
   assert.equal(result.fetched,12);assert.equal(result.synced,1);assert.equal(result.routingErrors.length,11);
   assert.equal(result.skippedUnmapped,8);assert.equal(result.quarantinedRouting,3);
   assert.deepEqual(f.writes,[{id:'fixture-customer',businessId:1}]);
   assert.equal(completeSync(result),false,'reporting labels cannot create completion or incident recovery');
   assert.equal(result.reporting.grantsRouting,false);assert.equal(result.reporting.completionEvidence,false);
+  assert.equal(reports.length,1);assert.deepEqual(reports[0].counts,{verified_simulation:8,signup_intake:3});
+  assert.equal(failures.length,0);assert.equal(receipts.length,0);assert.equal(recoveries.length,0);
+});
+
+test('actual sync with recognized intake still fails health if its provider detail read failed',async()=>{
+  const call={id:'00000000-0000-4000-8000-000000000020',type:'inboundPhoneCall',
+    assistantId:'fixture-intake-assistant',phoneNumberId:'fixture-intake-phone'};
+  const f=fixture('unknown',null,{calls:[call],detailError:true}),reports=[],failures=[];
+  const monitor=createCallSyncMonitor({listIncidents:async()=>[],reportAccounting:r=>reports.push(r),
+    notifyFailure:async e=>failures.push(e),recoverIncident:async()=>assert.fail('no recovery'),recordCompletion:async()=>assert.fail('no completion')});
+  const result=await monitor(f.run);
+  assert.equal(result.reporting.counts.signup_intake,1);assert.equal(result.detailErrors.length,1);
+  assert.equal(f.writes.length,0);assert.equal(reports.length,0);assert.equal(failures.length,1);
 });
 
 test('absent private attestation cannot silently label arbitrary websocket calls as simulations',async()=>{
