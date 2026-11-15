@@ -25,7 +25,9 @@ test('automatic admission failures on isolated PostgreSQL with fake transport on
  async function fixture(){
   const id='sms-drill-'+crypto.randomUUID(),posts=[];owned.push(id);
   const parameters={requestType:'message',name:'Fictitious caller',message:'Fictitious SQL request',pricingDiscussed:false};
-  const options={prisma:db,authenticated:true,
+  // Dispatch-only SQL failure injection; the new joint capture/schema SQL suite
+  // exercises the default real capture implementation separately.
+  const options={prisma:db,authenticated:true,captureRequest:async()=>({requestSaved:true,state:'pending_call',leadSaved:false}),
    env:{SMS_AUTOMATIC_NOTIFICATION_ENABLED:'true',SMS_NOTIFICATION_DISPATCH_ENABLED:'true',SMS_AUTOMATIC_NOTIFICATION_BUSINESS_IDS:'[7]',TWILIO_ACCOUNT_SID:'AC_INERT',TWILIO_AUTH_TOKEN:'INERT'},
    message:{timestamp:Date.now(),call:{id,assistantId:'fixture-assistant',phoneNumberId:'fixture-phone',customer:{number:'+19055550102'}},toolCallList:[{}],artifact:{messages:[{role:'bot',message:'Should I send this request to the team now?'},{role:'user',message:'Perfect. Yes.'}]}},
    toolCall:{id:'fixture-tool',name:'send_call_summaries_auto_0100_deadbeef_v2',parameters},

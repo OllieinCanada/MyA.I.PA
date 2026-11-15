@@ -5,6 +5,7 @@ const { assessConfirmationHistory } = require('./callConfirmation');
 const { executeCompositeNotifications, getVapiCompositeToolDefinition } = require('./compositeCallNotifications');
 const { withDispatchLock, claimNotificationDispatch, completeNotificationDispatch, dispatchContext } = require('./smsNotificationDispatch');
 const crypto = require('node:crypto');
+const { captureConfirmedRequest } = require('./confirmedCallRequest');
 const fail = code => Object.assign(new Error(code), { code });
 const hash = value => crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
 // A distinct name prevents this default-off path from changing legacy tools.
@@ -58,8 +59,9 @@ function validateArguments(input) {
   if (!input.name.trim() || !input.requestType || input.requestType === 'message' && !String(input.message || '').trim()) throw fail('notification_arguments_invalid');
 }
 async function executeAutomaticCallNotifications({ prisma, authenticated, message, toolCall, readContext,
-  suppressionChecker, env = process.env, fetchImpl = global.fetch }) {
+  suppressionChecker, env = process.env, fetchImpl = global.fetch, captureRequest = captureConfirmedRequest }) {
   let actionAttempted = false;
+  let requestCapture = { state: 'not_saved', requestSaved: false, leadSaved: false };
   try {
     if (authenticated !== true) throw fail('notification_webhook_unauthorized');
     if (env.SMS_AUTOMATIC_NOTIFICATION_ENABLED !== 'true') throw fail('automatic_notification_disabled');
@@ -94,6 +96,11 @@ async function executeAutomaticCallNotifications({ prisma, authenticated, messag
       targetEnabled(env, context.businessId);
       requireFreshConversation(conversationTimestamp);
     };
+    requestCapture = { state: 'unconfirmed', requestSaved: null, leadSaved: false };
+    requestCapture = await captureRequest({ prisma, call, context, args, assertFresh: fresh,
+      authorization: { source: 'authenticated_vapi_conversation', providerTimestamp: conversationTimestamp,
+        conversationHash: hash(conversation), toolCallHash: hash(toolCall.id) } });
+    if (requestCapture?.requestSaved !== true) throw fail('notification_request_not_saved');
     const endpoint = 'https://notification-dispatch.internal/dispatch';
     const check = 'https://notification-suppression.internal/check';
     const provider = `https://api.twilio.com/2010-04-01/Accounts/${encodeURIComponent(String(env.TWILIO_ACCOUNT_SID || '').trim())}/Messages.json`;
@@ -144,10 +151,11 @@ async function executeAutomaticCallNotifications({ prisma, authenticated, messag
         SMS_SUPPRESSION_CHECK_URL: check, SMS_SUPPRESSION_API_KEY: 'backend-local',
         PRICING_SUMMARY_OPTIONS: context.pricingOptions ? JSON.stringify(context.pricingOptions) : '' },
       fetchImpl: transport, btoaImpl: value => Buffer.from(value).toString('base64'), URLSearchParamsImpl: URLSearchParams });
-    return { ...result, actionAttempted, authorization: 'authenticated_provider_conversation', deliveryProven: false };
+    return { ...result, requestCapture, actionAttempted, authorization: 'authenticated_provider_conversation', deliveryProven: false };
   } catch (e) {
     // Never expose raw provider/database errors or treat uncertainty as success.
-    return { ok: false, complete: false, actionAttempted, requiresInspection: actionAttempted,
+    return { ok: false, complete: false, actionAttempted, requestCapture,
+      requiresInspection: actionAttempted || requestCapture.state === 'unconfirmed',
       errorCode: /^notification_|^automatic_notification_/.test(e.code || '') ? e.code : 'notification_authority_unavailable' };
   }
 }

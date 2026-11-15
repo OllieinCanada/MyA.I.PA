@@ -19,8 +19,9 @@ test('partial restored HTTP evidence cannot clear live or full recovery predicat
 });
 test('canonical pinned dependencies are exact; corruption refused',()=>{
  const pins=require('../scripts/restored-http-pins.json'),sha=require('../scripts/composite-recovery-fixture').sha;
- assert.equal(pins.reviewedHead,BASE_HEAD);assert.equal(Object.keys(pins.sha256).length,7);
- assert.equal(pins.runtimeSourceHead,'c1129814f557a1ea4d6fc2aa45b3064b2951bbdf');
+ assert.equal(pins.reviewedHead,BASE_HEAD);assert.equal(Object.keys(pins.sha256).length,9);
+ assert.equal(pins.runtimeSourceHead,'57258312afb60ee5d81ffcdcb46616c2af723569');
+ assert.ok(pins.sha256['server/confirmedCallRequest.js']);assert.ok(pins.sha256['server/agentTools.js']);
  assert.ok(pins.sha256['server/notificationOutcomes.js']);
  // Windows checkout conversion is not canonical-byte proof; Linux CI checks raw bytes.
  for(const [file,hash]of Object.entries(pins.sha256))assert.equal(sha(fs.readFileSync(path.join(__dirname,'..',file),'utf8').replace(/\r\n/g,'\n')),hash,file);

@@ -5,7 +5,9 @@ const {automaticNotificationAlert:alert}=require('../server/notificationOutcomes
 const {createDispatchStub}=require('../scripts/stub-notification-dispatch');
 function fixture(){
  const gate=createDispatchStub(),posts=[];
- const options={prisma:gate.db,authenticated:true,
+ // This suite isolates dispatch/receipt failure boundaries. Real capture and
+ // joint SQL atomicity are mandatory in confirmed-call-request tests.
+ const options={prisma:gate.db,authenticated:true,captureRequest:async()=>({requestSaved:true,state:'pending_call',leadSaved:false}),
   env:{SMS_AUTOMATIC_NOTIFICATION_ENABLED:'true',SMS_NOTIFICATION_DISPATCH_ENABLED:'true',SMS_AUTOMATIC_NOTIFICATION_BUSINESS_IDS:'[7]',TWILIO_ACCOUNT_SID:'AC_INERT',TWILIO_AUTH_TOKEN:'INERT'},
   message:{timestamp:Date.now(),call:{id:'failure-fixture-call',assistantId:'fixture-assistant',phoneNumberId:'fixture-phone',customer:{number:'+19055550102'}},toolCallList:[{}],artifact:{messages:[{role:'bot',message:'Should I send this request to the team now?'},{role:'user',message:'Yes, please.'}]}},
   toolCall:{id:'fixture-tool',name:'send_call_summaries_auto_0100_deadbeef_v2',parameters:{requestType:'message',name:'Fictitious Caller',pricingDiscussed:false,message:'Fictitious content'}},
