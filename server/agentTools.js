@@ -178,7 +178,7 @@ async function logCall(payload) {
     // These relations were already verified before the transaction. Do not
     // re-fetch them while holding the call-row lock.
     let requestCapture;
-    if (externalProvider === 'vapi' && externalId) {
+    if (payload.persistenceMode === 'post_call' && externalProvider === 'vapi' && externalId) {
       try { requestCapture = await require('./confirmedCallRequest').reconcileConfirmedRequest({ prisma, callId: externalId }); }
       catch (error) {
         requestCapture = { state: 'unconfirmed', requestSaved: null, leadSaved: false,

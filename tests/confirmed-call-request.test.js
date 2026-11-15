@@ -70,3 +70,9 @@ test('call committed while request was invisible is linked by the post-commit re
  f.db.$transaction=async fn=>{const r=await transaction(fn);if(first){first=false;f.canonical();}return r;};
  assert.equal((await f.run()).leadSaved,true);assert.equal(f.leads.size,1);
 });
+test('JSONB property reordering preserves fingerprint but a changed value still refuses',async()=>{
+ const f=fixture();await f.run();const data=f.rows.get(keyFor(f.options.call.id)).data;
+ data.fields=Object.fromEntries(Object.entries(data.fields).reverse());f.canonical();assert.equal((await f.link()).leadSaved,true);
+ f.options.context=Object.fromEntries(Object.entries(f.options.context).reverse());assert.equal((await f.run()).leadSaved,true);
+ f.options.args.message='Changed value';await assert.rejects(f.run());assert.equal(f.leads.size,1);
+});

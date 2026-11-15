@@ -2,7 +2,14 @@
 // Database-only bridge. Never imports a provider, sends a notification or replays one.
 const crypto = require('node:crypto');
 const { buildOwnerBody } = require('./compositeCallNotifications');
-const hash = value => crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
+// JSONB does not preserve object insertion order. Array order remains semantic.
+function canonical(value) {
+  if (Array.isArray(value)) return value.map(canonical);
+  if (value && typeof value === 'object') return Object.fromEntries(Object.keys(value).sort()
+    .filter(key => value[key] !== undefined).map(key => [key, canonical(value[key])]));
+  return value;
+}
+const hash = value => crypto.createHash('sha256').update(JSON.stringify(canonical(value))).digest('hex');
 const fail = suffix => Object.assign(new Error('Confirmed request requires inspection.'), { code: 'notification_request_' + suffix });
 const keyFor = callId => 'confirmed-call-request:v1:' + hash(callId);
 const phone = value => /^\+[1-9]\d{7,14}$/.test(value || '');
