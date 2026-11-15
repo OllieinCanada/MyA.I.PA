@@ -45,7 +45,7 @@
     "server/boundedBusinessMappingWriter.js": "c8b129211d807e780d55600695362cbcb813c29ac784a147dbed1b9ca746db6a",
     "server/boundedMappingControl.js": "6bdf571cea3fc1d2a52c20e8bc89a49d10ffbe069a7d2fd463eaadb25354b36a",
     "server/index.js": "e7617671865fdfefdc1ec074a0c1d0bfabd759b526b596d7158162749bf753bd",
-    "server/trialCalendarPolicy.js": "780182189ac34361d0fb71cb148fb00b64ecdbefa71c86fec308feebdd3da9c8",
+    "server/trialCalendarPolicy.js": "c1c7340b49fc85a35f1fa222a3abc6d5ebff43e60143adadb92df9867712c40e",
     "server/stripeTrialBilling.js": "bf14c9e88e23e91bc702f6f9f9eea2189eae993dbdd0c9ee3214014df50d84bc",
     "server/trialUsagePolicy.js": "8bc0a71f814852e3a525720998b2da249bc1fdc0c078f72fb1c98690c701fe81",
     "server/automaticCallNotifications.js": "d0e1e2b410a09a4eb815f840598c5a9de2d3444cc06ff49f1d64bb5b4a72c2b6",

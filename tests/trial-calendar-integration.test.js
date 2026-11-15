@@ -108,3 +108,11 @@ test('the full-application recovery fake honors requested calendar expiry while 
   assert.throws(()=>syntheticTrialFields({trial_end:end,trial_period_days:14},start));
   assert.throws(()=>syntheticTrialFields({trial_end:start-1},start));
 });
+
+test('an existing empty or malformed enrollment row is never treated as permission for a new clock',async()=>{
+  for(const data of [null,false,0,{},[]]) {
+    const f=memoryCalendarDb();const key=enrollmentKey(businessKey);f.rows.set(key,data);
+    await assert.rejects(prepareEnrollment({db:f.db,businessKey,priceId:'price_fixture',now}),{code:'TRIAL_CALENDAR_PROOF_INVALID'});
+    assert.deepEqual(f.rows.get(key),data);
+  }
+});

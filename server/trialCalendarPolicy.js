@@ -64,9 +64,10 @@ async function prepareEnrollment({ db, businessKey, priceId, now = Date.now() })
   return db.$transaction(async tx => {
     await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))::text AS lock_result`;
     const row = await tx.runtimeStore.findUnique({where:{key}});
-    const plan = row?.data || { version:VERSION, businessKey, priceId,
+    const plan = row ? row.data : { version:VERSION, businessKey, priceId,
       anchorAt:new Date(Math.floor(now / 1000) * 1000).toISOString() };
-    if (plan.version !== VERSION || plan.businessKey !== businessKey || plan.priceId !== priceId) throw invalid();
+    if (!plan || typeof plan !== 'object' || Array.isArray(plan)
+        || plan.version !== VERSION || plan.businessKey !== businessKey || plan.priceId !== priceId) throw invalid();
     const calendar = calendarForAnchor({trialStartAt:plan.anchorAt});
     // A stale creation attempt must not silently shorten a later customer's
     // trial or invent a fresh request under an existing Stripe idempotency key.

@@ -11,12 +11,13 @@ test('disposable PostgreSQL calendar enrollment: concurrency, restart, conflict,
   assert.equal(process.env.CI,'true');
   assert.ok(['localhost','127.0.0.1'].includes(url.hostname));
   assert.equal(url.pathname,'/ci'); assert.equal(url.username,'ci');
-  const {PrismaClient} = require('@prisma/client');
+  const {PrismaClient,Prisma} = require('@prisma/client');
   const a=new PrismaClient(),b=new PrismaClient();
   const businessKey=crypto.randomBytes(32).toString('hex'),rollbackBusiness=crypto.randomBytes(32).toString('hex');
   const key=enrollmentKey(businessKey),rollbackKey=enrollmentKey(rollbackBusiness);
   const sentinelKey=`trial-calendar-fixture-sentinel:${crypto.randomUUID()}`;
-  const owned=[key,rollbackKey,sentinelKey];
+  const malformedBusiness=crypto.randomBytes(32).toString('hex'),malformedKey=enrollmentKey(malformedBusiness);
+  const owned=[key,rollbackKey,sentinelKey,malformedKey];
   const now=Date.parse('2026-11-15T04:59:59Z');
   const results=[];let passed=false,cleanup=false;
   const check=async(name,fn)=>{await fn();results.push({name,passed:true});};
@@ -69,6 +70,11 @@ test('disposable PostgreSQL calendar enrollment: concurrency, restart, conflict,
     });
     await check('expired enrollment cannot restart a historical clock',async()=>{
       await assert.rejects(prepareEnrollment({db:a,businessKey,priceId:'price_fixture',now:Date.parse(first.serviceCutoffAt)}),{code:'TRIAL_CALENDAR_ENROLLMENT_STALE'});
+    });
+    await check('an existing JSON-null enrollment is refused and preserved, not replaced by a fresh clock',async()=>{
+      await a.runtimeStore.create({data:{key:malformedKey,data:Prisma.JsonNull}});
+      await assert.rejects(prepareEnrollment({db:a,businessKey:malformedBusiness,priceId:'price_fixture',now}),{code:'TRIAL_CALENDAR_PROOF_INVALID'});
+      assert.equal((await a.runtimeStore.findUnique({where:{key:malformedKey}})).data,null);
     });
     await check('unrelated sentinel is preserved',async()=>{
       assert.deepEqual((await a.runtimeStore.findUnique({where:{key:sentinelKey}})).data,{untouched:true});
