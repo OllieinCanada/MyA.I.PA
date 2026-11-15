@@ -1,0 +1,2 @@
+"use strict";(globalThis.webpackChunkmyaipa_website=globalThis.webpackChunkmyaipa_website||[]).push([[853],{524(i,t,e){e.r(t),e.d(t,{default:()=>l});e(43);var a=e(374),n=e(781),s=e(579);function l(){const i=(0,n.b$)();return(0,s.jsx)(a.Ay,{token:(0,n.gz)(window.location.href),initialStep:i.step,initialEdit:i.edit})}}}]);
+//# sourceMappingURL=853.128b1eff.chunk.js.map
