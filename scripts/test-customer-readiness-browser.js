@@ -81,9 +81,9 @@ async function run(){
      await page.getByRole('button',{name:'Review Call',exact:true}).first().click({timeout:20000});
      const adminTimeline=page.getByRole('region',{name:'Call outcome evidence'});await adminTimeline.waitFor();
      assert.equal(await adminTimeline.locator('li').count(),5);
-     const bounds=await adminTimeline.boundingBox();
-     for(const card of await adminTimeline.locator('li').all())assert.ok((await card.boundingBox()).width>=Math.min(200,bounds.width-40),'Timeline cards squeezed by parent layout');
      await adminTimeline.screenshot({path:path.join(out,engine+'-'+width+'-admin-timeline.png')});
+     const contentWidth=await adminTimeline.evaluate(el=>{const css=getComputedStyle(el);return el.clientWidth-parseFloat(css.paddingLeft)-parseFloat(css.paddingRight);});
+     for(const card of await adminTimeline.locator('li').all())assert.ok(require('./customer-readiness-browser-coverage').roomyCard((await card.boundingBox()).width,contentWidth),'Timeline cards squeezed by parent layout');
      assert.deepEqual(errors,[]);report.cases.push({engine,width,passed:true,adminTimelinePassed:true,routeChunkLoaded:assets.some(p=>/\/customer\./.test(p))&&assets.some(p=>/\/admin\./.test(p))});
     }catch(e){report.failures.push({engine,width,message:String(e.message).slice(0,300)});}
     finally{await bounded(context.close(),10000);}

@@ -8,4 +8,9 @@ function complete(report){
  return pairs.size===9&&ENGINES.every(e=>WIDTHS.every(w=>pairs.has(e+':'+w)))
   &&report.cases.every(c=>c.passed===true&&c.routeChunkLoaded===true&&c.adminTimelinePassed===true);
 }
-module.exports={complete,ENGINES,WIDTHS};
+// Measure usable content, not border-box minus an assumed padding constant.
+function roomyCard(cardWidth,contentWidth){
+ return Number.isFinite(cardWidth)&&Number.isFinite(contentWidth)&&contentWidth>0
+  &&cardWidth>=Math.min(200,contentWidth)-1;
+}
+module.exports={complete,ENGINES,WIDTHS,roomyCard};
