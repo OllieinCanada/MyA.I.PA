@@ -99,3 +99,12 @@ test('saving a card during calendar grace does not resume/invoice/charge early o
   assert.equal(result.subscription.status,'trialing');
   assert.equal(result.subscription.trial_end,subscription.trial_end);
 });
+
+test('the full-application recovery fake honors requested calendar expiry while preserving legacy durations',()=>{
+  const {syntheticTrialFields}=require('./helpers/synthetic-stripe-trial');
+  const start=1800000000, end=start+15*86400-123;
+  assert.equal(syntheticTrialFields({trial_end:end},start).trial_end,end);
+  assert.equal(syntheticTrialFields({trial_period_days:14},start).trial_end,start+14*86400);
+  assert.throws(()=>syntheticTrialFields({trial_end:end,trial_period_days:14},start));
+  assert.throws(()=>syntheticTrialFields({trial_end:start-1},start));
+});

@@ -3,6 +3,7 @@
 const crypto=require('node:crypto');
 const fs=require('node:fs');
 const path=require('node:path');
+const {syntheticTrialFields}=require('./synthetic-stripe-trial');
 const caseId=process.argv.find(v=>v.startsWith('--case='))?.slice(7);
 if(!/^[1-9]$/.test(caseId||''))throw Error('Isolated case ID required');
 const target=new URL(process.env.DATABASE_URL);
@@ -41,7 +42,7 @@ class FakeStripe{
       retrieve:async id=>load(kind+':'+id),
       update:async(id,patch)=>{const data={...await load(kind+':'+id),...patch};await save(kind+':'+id,data);return data;},
       create:async data=>{await count(kind);const id=(kind==='customers'?'cus_':'sub_')+crypto.randomBytes(8).toString('hex');
-        const result={...data,id,...(kind==='subscriptions'?{status:'trialing',trial_start:Math.floor(Date.now()/1000),trial_end:Math.floor(Date.now()/1000)+14*86400}: {})};await save(kind+':'+id,result);return result;},
+        const result={...data,id,...(kind==='subscriptions'?syntheticTrialFields(data): {})};await save(kind+':'+id,result);return result;},
     };
   }
 }
