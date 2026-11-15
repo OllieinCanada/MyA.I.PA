@@ -67,7 +67,7 @@ async function captureConfirmedRequest({ prisma, call, context, args, authorizat
     || !['conversationHash','toolCallHash'].every(k => /^[a-f0-9]{64}$/.test(authorization[k] || ''))) throw fail('authorization_required');
   const routeHash = hash(context);
   const fingerprint = hash([context.businessId, call.id, context.assistantId, context.phoneNumberId, routeHash, fields]);
-  return transaction(prisma, call.id, async tx => {
+  const captured = await transaction(prisma, call.id, async tx => {
     await assertFresh(); // Recheck after waiting for both locks.
     const stored = await tx.runtimeStore.findUnique({ where: { key } });
     const row = stored?.data;
@@ -86,6 +86,10 @@ async function captureConfirmedRequest({ prisma, call, context, args, authorizat
     await assertFresh();
     return result;
   });
+  // If call creation committed while this request was still invisible, its
+  // post-call reader could legitimately see no request. Re-read after commit.
+  // Conversely, a later call commit sees this receipt in logCall. No sending.
+  return captured.state === 'pending_call' ? reconcileConfirmedRequest({ prisma, callId: call.id }) : captured;
 }
 async function reconcileConfirmedRequest({ prisma, callId }) {
   // No historical backfill and no extra locked transaction for ordinary calls.

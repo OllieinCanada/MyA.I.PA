@@ -65,3 +65,8 @@ test('missing linked canonical call is not a queued recreation',async()=>{
 test('stale authorization cannot create a fresh capture record',async()=>{
  const f=fixture();f.options.authorization.providerTimestamp=Date.now()-120000;await assert.rejects(f.run());assert.equal(f.rows.size,0);
 });
+test('call committed while request was invisible is linked by the post-commit read',async()=>{
+ const f=fixture(),transaction=f.db.$transaction;let first=true;
+ f.db.$transaction=async fn=>{const r=await transaction(fn);if(first){first=false;f.canonical();}return r;};
+ assert.equal((await f.run()).leadSaved,true);assert.equal(f.leads.size,1);
+});
