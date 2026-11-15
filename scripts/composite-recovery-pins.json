@@ -1,0 +1,12 @@
+{
+  "reviewedHead": "ed4007709d04e0c2c3ef028a6590520d9567c4d8",
+  "sha256": {
+    "scripts/run-synthetic-backup-ci.js": "68f515457576fdf131f5b578a7b693fe094a324fd1f03823c0d00c57052577b5",
+    "scripts/synthetic-backup-loopback-relay.js": "948380af82a88da9c1fc4ef128147e6eb70b96e223f5123fa3c504d74a69de4b",
+    "scripts/restore-backup-drill.js": "d8f26a87064a0fed9f66b0d3ac4cd7f5c1cec63be1db7147d2eb8596d1edca3d",
+    "scripts/backup-safety.js": "d243619269d7fa6905662a4b795f636eabf6f0db695545fe107343fbd8f3fb7f",
+    "scripts/database-backup.js": "82d047850303a5edf4578bc572eaa9525aada7792abea0fe16962b5fd5f1396c",
+    "prisma/schema.prisma": "6a19cd2039bf9113bf55d237a0d5aa47f7e3ef9adb1221f1a662c3d419c62973",
+    "package-lock.json": "9af219e3a768c83a1fd5bfb4d6a61ca0deffe716dac978df550d4009716a7f6f"
+  }
+}

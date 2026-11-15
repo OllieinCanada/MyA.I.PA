@@ -1,0 +1,71 @@
+name: Synthetic encrypted PostgreSQL 18 restore
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: synthetic-backup-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  synthetic-backup-restore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Matching native PG18 client tools, without installing them on a developer PC.
+    container:
+      image: postgres:18
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: backup_fixture
+          POSTGRES_PASSWORD: synthetic-ci-only
+          POSTGRES_DB: myaipa_backup_control_ci
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.22.3'
+          cache: npm
+      - run: npm ci --include=dev --legacy-peer-deps --ignore-scripts
+      - name: Verify sealed driver contracts
+        run: node --test tests/synthetic-backup-ci.test.js tests/backup-restore-safety.test.js
+      - name: Rehearse only generated synthetic rows and ephemeral encryption keys
+        env:
+          CI: 'true'
+          RUN_SYNTHETIC_BACKUP_RESTORE: '1'
+          SYNTHETIC_BACKUP_TEST_PASSWORD: synthetic-ci-only
+          SYNTHETIC_BACKUP_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: node scripts/run-synthetic-backup-ci.js
+      - name: Verify exact-head complete synthetic proof
+        env:
+          SYNTHETIC_BACKUP_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: node -e "const p=require('./scripts/run-synthetic-backup-ci');if(!p.verifyReport(require('./diagnostics/synthetic-backup-ci/result.json'),process.env.SYNTHETIC_BACKUP_HEAD))process.exit(1)"
+      - name: Require cleanup after a deliberately aborted fixture
+        env:
+          CI: 'true'
+          RUN_SYNTHETIC_BACKUP_RESTORE: '1'
+          SYNTHETIC_BACKUP_TEST_PASSWORD: synthetic-ci-only
+          SYNTHETIC_BACKUP_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+          SYNTHETIC_BACKUP_EXPECTED_ABORT: '1'
+        run: |
+          if node scripts/run-synthetic-backup-ci.js; then
+            echo 'Expected deliberate synthetic failure did not occur'
+            exit 1
+          fi
+          node -e "const p=require('./scripts/run-synthetic-backup-ci');if(!p.verifyReport(require('./diagnostics/synthetic-backup-ci/expected-abort.json'),process.env.SYNTHETIC_BACKUP_HEAD,true))process.exit(1)"
+      - name: Preserve sanitized proof only never archive contents or keys
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: synthetic-backup-${{ github.event.pull_request.head.sha || github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            diagnostics/synthetic-backup-ci/result.json
+            diagnostics/synthetic-backup-ci/expected-abort.json
+          if-no-files-found: error
+          retention-days: 14

@@ -1,0 +1,74 @@
+name: Restored application HTTP synthetic recovery
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: restored-http-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  restored-http:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container:
+      image: postgres:18
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: backup_fixture
+          POSTGRES_PASSWORD: synthetic-ci-only
+          POSTGRES_DB: myaipa_backup_control_ci
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.22.3'
+          cache: npm
+      - run: npm ci --include=dev --legacy-peer-deps --ignore-scripts
+      - name: Generate unchanged actual-schema client for disposable service only
+        env:
+          DATABASE_URL: postgresql://backup_fixture:synthetic-ci-only@postgres:5432/myaipa_backup_control_ci
+        run: npm run backend:prepare
+      - name: Verify fixture and evidence contracts
+        run: node --test tests/restored-http-ci.test.js tests/recovery-file-store.test.js tests/recovery-file-key.test.js tests/backup-restore-safety.test.js
+      - name: Capture and restore actual schema and four fake file stores
+        env:
+          CI: 'true'
+          RUN_SYNTHETIC_BACKUP_RESTORE: '1'
+          SYNTHETIC_BACKUP_TEST_PASSWORD: synthetic-ci-only
+          SYNTHETIC_BACKUP_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: node scripts/run-restored-http-ci.js
+      - name: Require complete exact-head synthetic proof without live claims
+        env:
+          SYNTHETIC_BACKUP_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: node scripts/run-restored-http-ci.js --verify-evidence
+      - name: Deliberately abort after capture and require owned-resource cleanup
+        env:
+          CI: 'true'
+          RUN_SYNTHETIC_BACKUP_RESTORE: '1'
+          SYNTHETIC_BACKUP_TEST_PASSWORD: synthetic-ci-only
+          SYNTHETIC_BACKUP_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+          SYNTHETIC_BACKUP_EXPECTED_ABORT: '1'
+        run: |
+          if node scripts/run-restored-http-ci.js; then
+            echo 'Expected synthetic abort did not occur'
+            exit 1
+          fi
+          node scripts/run-restored-http-ci.js --verify-evidence --aborted
+      - name: Preserve sanitized proof never fake archives keys or row contents
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: restored-http-${{ github.event.pull_request.head.sha || github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            diagnostics/restored-http-ci/result.json
+            diagnostics/restored-http-ci/expected-abort.json
+          if-no-files-found: error
+          retention-days: 14
