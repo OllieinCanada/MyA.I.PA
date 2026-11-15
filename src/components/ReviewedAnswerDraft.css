@@ -1,0 +1,11 @@
+.reviewed-answer-draft { margin-top:1.5rem; padding:1.25rem; border:1px solid #b9ccc7; border-radius:16px; background:#f8fbfa; color:#16352e; }
+.reviewed-answer-draft h3 { margin-top:0; }
+.reviewed-answer-draft p,.reviewed-answer-draft dd { line-height:1.6; overflow-wrap:anywhere; }
+.reviewed-answer-draft label { display:block; font-weight:700; margin-top:1rem; }
+.reviewed-answer-draft input,.reviewed-answer-draft textarea { box-sizing:border-box; display:block; width:100%; max-width:100%; padding:.75rem; margin-top:.4rem; border:1px solid #6d8b82; border-radius:8px; color:#16352e; background:#fff; font:inherit; }
+.reviewed-answer-draft button { padding:.8rem 1rem; border:0; border-radius:8px; background:#175c48; color:white; font:inherit; font-weight:700; }
+.reviewed-answer-draft button:disabled { opacity:.55; cursor:not-allowed; }
+.reviewed-answer-draft :focus-visible { outline:3px solid #9b5b00; outline-offset:3px; }
+.reviewed-answer-preview { margin-top:1rem; padding:1rem; background:white; border-radius:8px; }
+.reviewed-answer-preview dt { font-weight:700; margin-top:.8rem; }
+.reviewed-answer-preview dd { margin:.3rem 0 0; white-space:pre-wrap; }

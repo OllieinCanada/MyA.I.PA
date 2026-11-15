@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getApiBaseUrl, normalizeApiBase } from "./config/apiBase";
 import CustomerHelpActions from "./components/CustomerHelpActions";
+import CallOutcomeTimeline from './components/CallOutcomeTimeline';
+import ReviewedAnswerDraft from './components/ReviewedAnswerDraft';
 import ForwardingSetupGuide from "./components/ForwardingSetupGuide";
 import "./components/CustomerSetupActions.css";
 import "./CustomerDashboard.css";
@@ -867,6 +869,7 @@ function CallDetails({ call, onReport }) {
         ) : <p>No consent-backed recording is available for this call.</p>}
       </section>
 
+      <CallOutcomeTimeline call={call}/>
       <div className="customer-call-detail-grid">
         <section>
           <h3>Activity</h3>
@@ -1418,6 +1421,7 @@ function CustomerDashboardView({ dashboard, onSignOut, onRefresh, refreshing, re
 
             <section id="faqs" className="customer-panel">
               <div className="customer-panel-head"><h2>Answers your assistant uses</h2><span>{dashboard.faqs?.length || 0} saved</span></div>
+              <ReviewedAnswerDraft businessId={dashboard.businessId} businessName={signup.businessName}/>
               <div className="customer-faq-grid">{dashboard.faqs?.length ? dashboard.faqs.map((faq) => <div key={faq.id}><strong>{faq.question}</strong><p>{faq.answer}</p></div>) : <p className="customer-empty">No answers added yet.</p>}</div>
             </section>
 

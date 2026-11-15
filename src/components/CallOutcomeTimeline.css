@@ -1,0 +1,12 @@
+.call-outcome-evidence { grid-column:1/-1; padding:1.25rem; margin:1rem 0; border:1px solid #b9ccc7; border-radius:16px; background:#f8fbfa; color:#16352e; }
+.call-outcome-evidence h3 { margin:0 0 .5rem; }
+.call-outcome-evidence p,.call-outcome-evidence small { line-height:1.55; }
+.call-outcome-evidence ol { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,360px),1fr)); gap:1rem; padding:0; list-style:none; }
+.call-outcome-evidence li { padding:1rem; background:white; border-left:4px solid #64748b; border-radius:8px; overflow-wrap:anywhere; }
+.call-outcome-evidence li > div { display:flex; justify-content:space-between; flex-wrap:wrap; gap:.5rem; }
+.call-outcome-evidence li span { font-weight:700; text-transform:capitalize; }
+.call-outcome-evidence li[data-state=delivered],.call-outcome-evidence li[data-state=recorded] { border-color:#147552; }
+.call-outcome-evidence li[data-state=failed] { border-color:#b91c1c; }
+.call-outcome-evidence li[data-state=unknown],.call-outcome-evidence li[data-state=accepted] { border-color:#ad6800; }
+.call-outcome-evidence li p { margin:.5rem 0 0; }
+.customer-call-details .call-outcome-evidence p,.call-outcome-evidence p { font-weight:400; color:#344f48; }

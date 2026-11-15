@@ -5,6 +5,7 @@ import TwilioReceiptHealthPanel from './TwilioReceiptHealthPanel';
 import ProviderFinancePanel from './ProviderFinancePanel';
 import AdminSignupTracker from './AdminSignupTracker';
 import NotificationDraftsPanel from './NotificationDraftsPanel';
+import CallOutcomeTimeline from './components/CallOutcomeTimeline';
 
 const CONFIGURED_API_BASE = process.env.REACT_APP_API_BASE_URL || "";
 const API_BASE = normalizeApiBase(getApiBaseUrl(CONFIGURED_API_BASE));
@@ -3654,6 +3655,7 @@ export default function AdminDashboard() {
                       <strong>{selectedCall.business?.name || `Business ${selectedCall.businessId}`}</strong>
                       <span>{dt(selectedCall.startedAt)} · {callDurationText(selectedCall.durationSec)}</span>
                       <p>{selectedCall.aiSummary || "No call summary yet. Choose Check for New Calls after the call has ended."}</p>
+                      <CallOutcomeTimeline call={selectedCall}/>
                       <div className="admin-call-detail-meta">
                         <div><span>Request handoff</span><strong>{selectedCall.notificationEvidence?.submissionLabel || "Not verified"}</strong></div>
                         <div><span>Owner text</span><strong>{selectedCall.notificationEvidence?.owner?.label || "Not verified"}</strong><small role="status">{selectedCall.notificationEvidence?.owner?.outcomeAlert?.label}</small></div>

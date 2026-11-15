@@ -1,0 +1,53 @@
+name: Customer dashboard and loading evidence
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: customer-readiness-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  customer-readiness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CI: 'true'
+      CUSTOMER_READINESS_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+      REACT_APP_RELEASE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      REACT_APP_API_BASE_URL: https://api.myaipa.ca
+      REACT_APP_GOOGLE_MAPS_API_KEY: ${{ vars.GOOGLE_MAPS_BROWSER_KEY }}
+      BUILD_PATH: build-candidate
+      GENERATE_SOURCEMAP: 'false'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.22.3'
+          cache: npm
+      - run: npm ci --include=dev --legacy-peer-deps
+      - name: Deterministic evidence and route contracts
+        run: node --test tests/call-outcome-timeline.test.js tests/frontend-route-loading.test.js tests/customer-readiness-browser-coverage.test.js tests/customer-readiness-artifact.test.js
+      - name: Review and page-recovery component tests
+        run: npm test -- --watchAll=false --runInBand --runTestsByPath src/components/ReviewedAnswerDraft.test.js src/components/CallOutcomeTimeline.test.js src/components/RouteBoundary.test.js src/CustomerDashboard.security.test.js src/CustomerDashboard.login.test.js src/features/onboarding/BusinessDetailsEditor.test.js
+      - name: Build actual application
+        run: npm run build
+      - name: Install regression browsers
+        run: npx playwright install --with-deps chromium firefox webkit
+      - name: Exercise all required engines and widths with inert fixtures
+        run: node scripts/test-customer-readiness-browser.js
+      - name: Require exact-head complete evidence
+        run: node scripts/verify-customer-readiness-evidence.js
+      - name: Preserve only synthetic UI evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: customer-readiness-${{ github.event.pull_request.head.sha || github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          retention-days: 7
+          if-no-files-found: error
+          path: |
+            diagnostics/customer-readiness/browser-*/result.json
+            diagnostics/customer-readiness/browser-*/*.png
