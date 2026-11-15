@@ -1,0 +1,53 @@
+name: Synthetic Toronto trial calendar integration
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  trial-calendar-postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      CI: "true"
+      DISABLE_LOCAL_ENV_FILES: "1"
+      DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/ci
+      TRIAL_CALENDAR_EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.22.3"
+          cache: npm
+      - run: npm ci --include=dev --legacy-peer-deps
+      - run: npm run backend:prepare
+      - run: npx prisma db push --skip-generate
+      - name: Exercise no-send calendar and actual application worker contracts
+        run: node --test tests/trial-calendar-plan.test.js tests/trial-calendar-integration.test.js tests/trial-calendar-http.test.js tests/trial-reminder-worker.test.js tests/stripe-trial-billing.test.js
+      - name: Exercise real SQL enrollment and cleanup
+        env:
+          RUN_TRIAL_CALENDAR_POSTGRES: "1"
+        run: node --test tests/trial-calendar-postgres.test.js
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: trial-calendar-${{ github.event.pull_request.head.sha || github.sha }}
+          path: diagnostics/trial-calendar-ci/postgres.json
+          if-no-files-found: error
+          retention-days: 7

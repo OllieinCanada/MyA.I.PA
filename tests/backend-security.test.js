@@ -79,15 +79,17 @@ test("business-scoped Stripe customer and trial keys prevent double billing for 
   const identity = { ownerEmail: "same-owner@example.test", ownerPhone: "+19055550111", businessName: "North Electric" };
   const { signupBusinessKey } = require("../server/signupBusinessIdentity");
   const key = signupBusinessKey(identity);
+  const {db} = require('./helpers/trial-calendar-fixture').memoryCalendarDb();
+  const calendarOptions = {db,priceId:'price_synthetic_trial',calendarEligible:true};
   const [one, two] = await Promise.all([
-    __test.createBusinessStripeTrial({ ...identity, signupAttemptId: "one" }, key, client),
-    __test.createBusinessStripeTrial({ ...identity, signupAttemptId: "two" }, key, client),
+    __test.createBusinessStripeTrial({ ...identity, signupAttemptId: "one" }, key, client, calendarOptions),
+    __test.createBusinessStripeTrial({ ...identity, signupAttemptId: "two" }, key, client, calendarOptions),
   ]);
   assert.equal(one.subscription.id, two.subscription.id);
   assert.equal(customers.length, 1);
   assert.equal(subscriptions.length, 1);
   const secondBusiness = { ...identity, businessName: "South Plumbing" };
-  const south = await __test.createBusinessStripeTrial(secondBusiness, signupBusinessKey(secondBusiness), client);
+  const south = await __test.createBusinessStripeTrial(secondBusiness, signupBusinessKey(secondBusiness), client, calendarOptions);
   assert.notEqual(south.customer.id, one.customer.id);
   assert.equal(subscriptions.length, 2);
 });

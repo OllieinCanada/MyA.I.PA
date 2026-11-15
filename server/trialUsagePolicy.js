@@ -47,6 +47,12 @@ function getTrialLifecycle(signup = {}, now = Date.now()) {
 
   if (PAID_STATUSES.has(status)) return { state: "paid", status, ...window };
   if (CLOSED_STATUSES.has(status)) return { state: "ended", status, ...window };
+  try {
+    if (signup.trialCalendarProofStatus === 'invalid') throw new Error('Calendar proof unavailable');
+    require('./trialCalendarPolicy').policyFromSignup(signup);
+  } catch (_) {
+    return {state:'unmanaged',status:'trial-calendar-unverified',...window};
+  }
   if (window.endAt && window.endAt <= now) return { state: "ended", status: status || "expired", ...window };
   if (
     status === "trialing"

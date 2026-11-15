@@ -269,6 +269,9 @@ const {
   updateSelections: updateForwardingSelections,
 } = require("./callForwardingService");
 const { FORWARDING_TEST_CALLS_DISABLED } = require("./twilioCallVerification");
+const { VERSION:TRIAL_CALENDAR_VERSION, prepareEnrollment: prepareTrialCalendarEnrollment, metadataForCalendar,
+  policyFromSubscription: trialCalendarFromSubscription, policyFromSignup: trialCalendarFromSignup,
+  calendarTrialCopy, subscriptionPolicyFields } = require('./trialCalendarPolicy');
 const {
   buildTrialReminderSchedule,
   buildTrialPaymentCheckoutParams,
@@ -981,8 +984,8 @@ app.post("/api/payments/stripe-webhook", express.raw({ type: "application/json" 
     }
 
     if (["customer.subscription.created", "customer.subscription.updated", "customer.subscription.trial_will_end"].includes(event.type)) {
-      scheduleTrialReminderFromSubscription(object);
       upsertSignupDashboardFromSubscription(object);
+      scheduleTrialReminderFromSubscription(object);
     }
 
     if (event.type === "customer.subscription.deleted") {
@@ -5453,11 +5456,18 @@ function upsertSignupDashboardRecord(record) {
   const existingKey = findSignupDashboardExistingKey(store, record) || `signup:${crypto.randomUUID()}`;
   const existing = withoutBillingAliases(store)[existingKey] || store[existingKey] || {};
   if (isClosedSignup(existing)) return existing;
+  const enrollCalendar = !Object.keys(existing).length && record.signupAttemptId && signupBusinessKey(record)
+    && !record.subscriptionId && !record.customerId;
+  // The server enrolls only a newly created signup. Payloads and later edits
+  // cannot opt historical accounts into a new clock.
+  record = {...record};
+  delete record.trialCalendarEnrollmentVersion;
   record = preserveSignupWorkflowForBilling(existing, record);
   const signedUpAt = existing.signedUpAt || record.signedUpAt || record.createdAt || new Date().toISOString();
   const merged = enforceAgentTestReadyStatus(compactObject({
     ...existing,
     ...record,
+    ...(enrollCalendar ? {trialCalendarEnrollmentVersion:TRIAL_CALENDAR_VERSION} : {}),
     signedUpAt,
     createdAt: existing.createdAt || record.createdAt || signedUpAt,
     updatedAt: new Date().toISOString(),
@@ -5867,6 +5877,9 @@ function upsertSignupDashboardFromCheckoutSession(session, extra = {}) {
 
 function upsertSignupDashboardFromSubscription(subscription, extra = {}) {
   const metadata = subscription?.metadata || {};
+  const calendarFields = subscriptionPolicyFields(subscription);
+  const trustedExtra = {...extra};
+  delete trustedExtra.trialCalendarPolicy;
   const periodStartMs = getUnixMs(subscription?.trial_start) || getUnixMs(subscription?.current_period_start);
   const periodEndMs = getSubscriptionPeriodEndMs(subscription);
   return upsertSignupDashboardRecord({
@@ -5890,7 +5903,9 @@ function upsertSignupDashboardFromSubscription(subscription, extra = {}) {
     canceledAt: getUnixMs(subscription?.canceled_at),
     cancelAtPeriodEnd: Boolean(subscription?.cancel_at_period_end),
     status: extra.status || (subscription?.status ? `subscription_${subscription.status}` : "subscription_updated"),
-    ...extra,
+    ...trustedExtra,
+    // Only the trusted subscription response/event supplies policy proof.
+    ...calendarFields,
   });
 }
 
@@ -9530,6 +9545,8 @@ async function getCustomerDashboard({ email, phone }) {
   ];
   const trialUsage = await getTrialUsageSnapshot(signup, business?.id || null);
   const billingState = getStoredTrialPaymentState(signup);
+  let trialCalendar = null;
+  try {trialCalendar = trialCalendarFromSignup(signup);} catch (_) { /* Billing reports the blocked proof without fabricating access. */ }
   const forwardingMatches = [
     ...(business?.id ? [{ businessId: business.id }] : []),
     ...(signup.twilioPhoneNumber ? [{ assignedMyAiPaNumber: normalizePhoneForMatch(signup.twilioPhoneNumber) }] : []),
@@ -9590,12 +9607,15 @@ async function getCustomerDashboard({ email, phone }) {
       paymentFailed: Boolean(billingState.paymentFailed || signup.paymentStatus === "payment_failed"),
       paused: billingState.paused,
       trialEnded: billingState.trialEnded,
+      calendarProofInvalid: Boolean(billingState.calendarProofInvalid),
       checkoutAvailable: Boolean(billingState.checkoutAvailable && signup.subscriptionId && signup.customerId && !signup.cancelAtPeriodEnd),
       canAddPaymentMethod: Boolean(billingState.canAddPaymentMethod && signup.subscriptionId && signup.customerId && !signup.cancelAtPeriodEnd),
       cancelAtPeriodEnd: Boolean(signup.cancelAtPeriodEnd),
       planDisplay: STRIPE_PLAN_DISPLAY,
       trialEndAt: signup.trialEndAt || null,
-      disclosure: billingState.trialEnded
+      disclosure: billingState.calendarProofInvalid
+        ? 'Trial calendar details require review; no access extension or payment setup is inferred from missing proof.'
+        : trialCalendar ? calendarTrialCopy(trialCalendar,{paymentDue:billingState.trialEnded}).disclosure : billingState.trialEnded
         ? `Your free trial is complete. Continue securely through Stripe for ${STRIPE_PLAN_DISPLAY}.`
         : `No card is required during your 14-day trial. Stripe Checkout becomes available after the trial ends.`,
     },
@@ -10145,7 +10165,7 @@ function upsertTrialReminder(record) {
   if (!record?.subscriptionId || !record?.ownerEmail || !record?.trialEndAt) return;
   const store = readTrialReminderStore();
   const existing = store[record.subscriptionId] || {};
-  const reminders = buildTrialReminderSchedule(record.trialEndAt, existing.reminders);
+  const reminders = buildTrialReminderSchedule(record.trialEndAt, existing.reminders, record.trialCalendarPolicy);
 
   store[record.subscriptionId] = {
     ...existing,
@@ -10189,6 +10209,16 @@ async function scheduleTrialReminderFromCheckoutSession(session) {
 function scheduleTrialReminderFromSubscription(subscription, fallback = {}) {
   if (!subscription?.id || !subscription?.trial_end) return;
   if (subscription.status && !["trialing", "active"].includes(String(subscription.status))) return;
+  const calendarFields = subscriptionPolicyFields(subscription);
+  if (calendarFields.trialCalendarProofStatus === 'invalid') {
+    const store = readTrialReminderStore();
+    if (store[subscription.id]) {
+      store[subscription.id] = {...store[subscription.id],status:'proof_blocked',lastError:'TRIAL_CALENDAR_PROOF_INVALID'};
+      writeTrialReminderStore(store);
+    }
+    console.warn('[stripe:trial-reminder] calendar proof unavailable; reminder held', {subscriptionRefHash:hashKey(subscription.id).slice(0,16)});
+    return;
+  }
 
   const trialEndAt = Number(subscription.trial_end || 0) * 1000;
   const metadata = subscription.metadata || {};
@@ -10217,6 +10247,7 @@ function scheduleTrialReminderFromSubscription(subscription, fallback = {}) {
     paymentMethodReady: hasPaymentMethod(subscription),
     trialEndAt,
     trialStartAt: Number(subscription.trial_start || 0) * 1000 || null,
+    ...calendarFields,
     status: "scheduled",
     createdAt: new Date().toISOString(),
   });
@@ -10286,12 +10317,22 @@ async function sendTrialPaymentReminder(record, reminder) {
     </div>
   `;
 
+  const calendarCopy = record.trialCalendarPolicy
+    ? calendarTrialCopy(record.trialCalendarPolicy,{paymentDue}) : null;
+  const messageSubject = calendarCopy?.subject || subject;
+  const messageText = calendarCopy ? [
+    `Hi ${ownerName},`, '', `For ${businessName}: ${calendarCopy.description}`,
+    calendarCopy.paymentMessage, `Paid service is ${STRIPE_PLAN_DISPLAY}.`, '',
+    `Dashboard: ${FRONTEND_APP_URL}/#/dashboard`, '', 'My AI PA',
+  ].join('\n') : text;
+  const messageHtml = calendarCopy ? `<div style="font-family:Arial,sans-serif;line-height:1.55">${escapeHtml(messageText).replace(/\n/g,'<br>')}</div>` : html;
+
   if (!emailConfig) {
     if (process.env.NODE_ENV !== "production" || isEnabled(process.env.EMAIL_VERIFICATION_DEV_MODE)) {
       console.warn("[stripe:trial-reminder] SMTP is not configured. Dev reminder email:", {
         to: record.ownerEmail,
-        subject,
-        text,
+        subject:messageSubject,
+        text:messageText,
       });
       return { sent: false, devOnly: true };
     }
@@ -10304,9 +10345,9 @@ async function sendTrialPaymentReminder(record, reminder) {
   await transporter.sendMail({
     from: emailConfig.from,
     to: record.ownerEmail,
-    subject,
-    text,
-    html,
+    subject:messageSubject,
+    text:messageText,
+    html:messageHtml,
   });
 
   return { sent: true };
@@ -10320,14 +10361,22 @@ async function processTrialReminders() {
   let changed = false;
 
   for (const [subscriptionId, record] of Object.entries(store)) {
-    if (!record || ["cancelled", "payment_ready"].includes(record.status) || record.paymentMethodReady) continue;
+    if (!record || ["cancelled", "payment_ready", "proof_blocked"].includes(record.status) || record.paymentMethodReady) continue;
     // Rebuild from the canonical schedule so older trials gain the post-trial
     // payment-due reminder without losing previously sent reminder state.
-    const reminders = buildTrialReminderSchedule(record.trialEndAt, record.reminders);
+    const reminders = buildTrialReminderSchedule(record.trialEndAt, record.reminders, record.trialCalendarPolicy);
     for (const [key, reminder] of Object.entries(reminders)) {
-      if (!reminder || reminder.status === "sent" || Number(reminder.dueAt || 0) > now) continue;
+      if (!reminder || ['sent','missed'].includes(reminder.status) || Number(reminder.dueAt || 0) > now) continue;
+      if (reminder.expiresAt && Number(reminder.expiresAt) <= now) {
+        reminders[key] = {...reminder,status:'missed',missedAt:new Date(now).toISOString()};
+        changed = true;
+        continue;
+      }
       try {
-        await sendTrialPaymentReminder(record, reminder);
+        const delivery = await sendTrialPaymentReminder(record, reminder);
+        if (delivery?.sent !== true) {
+          throw new Error("Trial reminder mail function did not confirm it was sent.");
+        }
         reminders[key] = {
           ...reminder,
           status: "sent",
@@ -10678,11 +10727,17 @@ async function createNoCardStripeTrialForSignup(payload, extra = {}) {
       const subscription = await stripe.subscriptions.retrieve(result.subscription.id);
       return subscription.metadata?.businessKey === businessKey && !["canceled", "incomplete_expired", "unpaid"].includes(subscription.status);
     },
-    execute: () => createBusinessStripeTrial(identity, businessKey),
+    execute: () => createBusinessStripeTrial(identity, businessKey, stripe,
+      {calendarEligible:record?.trialCalendarEnrollmentVersion === TRIAL_CALENDAR_VERSION}),
   });
 }
 
-async function createBusinessStripeTrial(identity, businessKey, client = stripe) {
+async function createBusinessStripeTrial(identity, businessKey, client = stripe, options = {}) {
+  const priceId = options.priceId || STRIPE_PRICE_ID;
+  if (options.calendarEligible === true && STRIPE_TRIAL_DAYS !== 14) {
+    throw Object.assign(new Error('Calendar enrollment requires the standard 14-day trial configuration.'),
+      {code:'TRIAL_CALENDAR_CONFIG_CONFLICT'});
+  }
 
   const metadata = compactObject({
     businessKey,
@@ -10742,17 +10797,25 @@ async function createBusinessStripeTrial(identity, businessKey, client = stripe)
     return { ok: true, customer, subscription: existingSubscription, reused: true };
   }
 
+  // Only genuinely new standard trials enroll. A durable anchor keeps retry
+  // parameters stable across process restarts and Toronto midnight.
+  const calendar = options.calendarEligible === true && STRIPE_TRIAL_DAYS === 14 ? await prepareTrialCalendarEnrollment({
+    db: options.db || prisma, businessKey, priceId,
+    ...(options.now == null ? {} : {now:options.now}),
+  }) : null;
   const subscription = await client.subscriptions.create({
     customer: customer.id,
-    items: [{ price: STRIPE_PRICE_ID }],
-    trial_period_days: STRIPE_TRIAL_DAYS,
+    items: [{ price: priceId }],
+    ...(calendar ? {trial_end:Date.parse(calendar.serviceCutoffAt) / 1000} : {trial_period_days:STRIPE_TRIAL_DAYS}),
     trial_settings: {
       end_behavior: {
         missing_payment_method: "pause",
       },
     },
-    metadata,
+    metadata: {...metadata,...(calendar ? metadataForCalendar(calendar) : {})},
   }, { idempotencyKey: `signup-trial:${businessKey}` });
+
+  if (calendar) trialCalendarFromSubscription(subscription);
 
   return { ok: true, customer, subscription, reused: false };
 }
@@ -16448,6 +16511,9 @@ app.post(
       return res.status(409).json({ error: "This subscription is set to end. Contact My AI PA before adding a card.", code: "SUBSCRIPTION_ENDING" });
     }
     const billingState = getTrialPaymentState(subscription);
+    if (billingState.calendarProofInvalid) return res.status(409).json({
+      error:'This trial requires a calendar-policy check before opening payment setup.',code:'TRIAL_CALENDAR_PROOF_INVALID',
+    });
     if (billingState.paymentReady && signup.paymentStatus !== "payment_failed") {
       upsertSignupDashboardFromSubscription(subscription, { paymentMethodReady: true });
       return res.json({ ok: true, alreadyReady: true });
@@ -16455,7 +16521,9 @@ app.post(
     if (!billingState.checkoutAvailable) {
       const trialEndAt = Number(subscription.trial_end || 0) * 1000;
       return res.status(409).json({
-        error: "No card is needed yet. Stripe Checkout becomes available after your 14-day free trial ends.",
+        error: trialCalendarFromSubscription(subscription)
+          ? "No card is needed yet. Secure payment setup opens on day 14, with trial service through the end of day 15 in Toronto."
+          : "No card is needed yet. Stripe Checkout becomes available after your 14-day free trial ends.",
         code: "TRIAL_STILL_ACTIVE",
         trialEndAt: trialEndAt ? new Date(trialEndAt).toISOString() : null,
       });
@@ -19335,6 +19403,7 @@ module.exports = {
     processTwilioStatusInbox,
     signupDeliveryGatePassed,
     createBusinessStripeTrial,
+    upsertSignupDashboardFromSubscription,
     upsertSignupDashboardRecord,
     deriveCustomerSetupStep,
     getVapiCost,
