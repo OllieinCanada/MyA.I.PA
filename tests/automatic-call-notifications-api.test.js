@@ -34,7 +34,7 @@ global.__myAiPaPrisma=new Proxy(gate.db,{get(target,key){
 const {app}=require('../server/index');
 before(async()=>{server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));egress.allowPort(server.address().port);base='http://127.0.0.1:'+server.address().port;});
 beforeEach(()=>{
- mode='';posts.length=0;gate.rows.clear();process.env.SMS_AUTOMATIC_NOTIFICATION_ENABLED='true';
+ mode='';posts.length=0;gate.rows.clear();gate.calls.clear();gate.leads.clear();process.env.SMS_AUTOMATIC_NOTIFICATION_ENABLED='true';
  signup={signupAttemptId:'fixture-signup',businessId:7,businessName:'Synthetic Electric',ownerPhone:'+19055550101',
   subscriptionId:'fixture-sub',subscriptionStatus:'active',status:'active',twilioPhoneNumber:'+19055550100',
   vapiAssistantId:'fixture-assistant',vapiPhoneNumberId:'fixture-phone'};
@@ -62,6 +62,19 @@ test('actual authenticated HTTP route uses real context reader and automatic cla
  assert.deepEqual(posts.map(x=>x.To),['+19055550101','+19055550102']);
  assert.match(posts[1].Body,/Synthetic Electric/);assert.doesNotMatch(posts[1].Body,/Do not trust model name/);
  assert.equal((await request({toolId:'changed-tool-id'})).result.complete,true);assert.equal(posts.length,2);
+});
+
+test('actual HTTP approval saves one business-bound lead and never duplicates texts on replay',async()=>{
+ gate.calls.set(11,{id:11,businessId:7,callerId:12,caller:{id:12,phone:'+19055550102'},externalProvider:'vapi',externalId:'fixture-call',status:'STARTED'});
+ const r=await request();assert.equal(r.result.complete,true);assert.equal(r.result.requestCapture.leadSaved,true);
+ assert.equal(gate.leads.size,1);const lead=[...gate.leads.values()][0];assert.equal(lead.businessId,7);assert.equal(lead.callId,11);assert.match(lead.summary,/Fictitious request/);
+ await request({toolId:'fresh-tool-id'});assert.equal(gate.leads.size,1);assert.equal(posts.length,2);
+});
+
+test('actual HTTP capture failure permits zero SMS and preserves existing call',async()=>{
+ gate.calls.set(11,{id:11,businessId:8,callerId:12,caller:{id:12,phone:'+19055550102'},externalProvider:'vapi',externalId:'fixture-call',status:'STARTED'});
+ const r=await request();assert.equal(r.result.complete,false);assert.equal(r.result.errorCode,'notification_request_call_conflict');
+ assert.equal(posts.length,0);assert.equal(gate.leads.size,0);assert.equal(gate.calls.get(11).businessId,8);
 });
 test('actual route default-disabled, bad auth, refusal, missing artifact and malformed arguments have no sends',async()=>{
  process.env.SMS_AUTOMATIC_NOTIFICATION_ENABLED='false';assert.equal((await request()).result.errorCode,'automatic_notification_disabled');

@@ -1,0 +1,54 @@
+name: Confirmed request lead PostgreSQL proof
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: confirmed-request-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  confirmed-request-postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: request_fixture
+          POSTGRES_PASSWORD: synthetic-ci-only
+          POSTGRES_DB: myaipa_confirmed_request_ci
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      CI: 'true'
+      DISABLE_LOCAL_ENV_FILES: '1'
+      RUN_CONFIRMED_REQUEST_POSTGRES: '1'
+      CONFIRMED_REQUEST_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+      DATABASE_URL: postgresql://request_fixture:synthetic-ci-only@127.0.0.1:5432/myaipa_confirmed_request_ci?connection_limit=8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.22.3'
+          cache: npm
+      - run: npm ci --include=dev --legacy-peer-deps --ignore-scripts
+      - run: npm run backend:prepare
+      - name: Initialize unchanged schema in execution-owned empty CI service
+        run: npm run db:push
+      - name: Unit and actual authenticated HTTP tests with fake transport
+        run: node --test --test-concurrency=1 tests/confirmed-call-request.test.js tests/automatic-call-notifications.test.js tests/automatic-call-notifications-api.test.js tests/automatic-notification-failures.test.js
+      - name: Real SQL capture, call linkage, rollback and concurrency
+        run: node --test tests/confirmed-call-request-postgres.test.js
+      - name: Preserve synthetic exact-head evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: confirmed-request-${{ github.event.pull_request.head.sha || github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          retention-days: 7
+          if-no-files-found: error
+          path: diagnostics/confirmed-request-ci/report.json

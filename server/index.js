@@ -3529,6 +3529,7 @@ async function upsertVapiCall(fullCall, store) {
     businessId,
     businessName: localCall.business?.name || "",
     notificationEvidence: notificationEvidence(localCall.toolCallSummary),
+    requestCapture: localCall.requestCapture,
     durationSec: localCall.durationSec,
     transcriptAvailable: Boolean(transcript),
     recordingAvailable: Boolean(recordingUrl),

@@ -29,7 +29,8 @@ test('clear approval automatically admits both roles without manual approval and
   assert.deepEqual(f.posts.map(x=>x.To),[context.owner,call.customer.number]);
   assert.ok(f.posts.every(x=>x.From===context.from));
   assert.match(f.posts[1].Body,/Synthetic Electric/); assert.doesNotMatch(f.posts[1].Body,/Untrusted replacement/);
-  const rows=[...f.gate.rows.values()]; assert.equal(rows.length,2);
+  const rows=[...f.gate.rows.values()].filter(r=>r.key.startsWith('call-notification-dispatch:')); assert.equal(rows.length,2);
+  assert.equal([...f.gate.rows.values()].filter(r=>r.key.startsWith('confirmed-call-request:')).length,1);
   assert.ok(rows.every(x=>x.data.authorization?.source==='authenticated_vapi_conversation'));
   assert.doesNotMatch(JSON.stringify(rows),/Fictitious Caller|Perfect|A fictitious request/);
 });
@@ -96,6 +97,9 @@ for(const change of [{name:{}},{requestType:'unknown'},{pricingDiscussed:'true'}
 test('existing dispatch kill switch is preserved',async()=>{const f=fixture();f.env.SMS_NOTIFICATION_DISPATCH_ENABLED='false';assert.equal((await f.run()).complete,false);assert.equal(f.posts.length,0);});
 test('uncertain claim commit acknowledgement permits no provider attempt or retry',async()=>{
  const f=fixture(),transaction=f.gate.db.$transaction;
+ // Keep this existing injection at the dispatch-claim boundary rather than
+ // moving it to the newly earlier database-only capture transaction.
+ f.options.captureRequest=async()=>({requestSaved:true,state:'pending_call',leadSaved:false});
  f.gate.db.$transaction=async fn=>{await transaction(fn);throw Error('synthetic committed but acknowledgement lost');};
  assert.equal((await f.run()).complete,false);assert.equal(f.posts.length,0);
  f.gate.db.$transaction=transaction;assert.equal((await f.run()).complete,false);assert.equal(f.posts.length,0);

@@ -177,7 +177,16 @@ async function logCall(payload) {
     });
     // These relations were already verified before the transaction. Do not
     // re-fetch them while holding the call-row lock.
-    return { ...saved, business, caller };
+    let requestCapture;
+    if (payload.persistenceMode === 'post_call' && externalProvider === 'vapi' && externalId) {
+      try { requestCapture = await require('./confirmedCallRequest').reconcileConfirmedRequest({ prisma, callId: externalId }); }
+      catch (error) {
+        requestCapture = { state: 'unconfirmed', requestSaved: null, leadSaved: false,
+          errorCode: /^notification_request_/.test(error.code || '') ? error.code : 'notification_request_store_unavailable' };
+        console.warn('[call:request-capture]', JSON.stringify({ state: requestCapture.state, errorCode: requestCapture.errorCode }));
+      }
+    }
+    return { ...saved, business, caller, requestCapture };
   } catch (error) {
     error.businessId = business.id;
     error.businessName = business.name;
