@@ -1,20 +1,22 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";
-import AdminDashboard from "./AdminDashboard";
-import CustomerDashboard from "./CustomerDashboard";
-import Signup from "./Signup";
-import Privacy from "./Privacy";
-import Terms from "./Terms";
-import LinksPage from "./LinksPage";
-import TryDemo from "./TryDemo";
-import TradePages from "./TradePages";
-import FirstClassRentalsDemo from "./FirstClassRentalsDemo";
-import DeanAllisonDemo from "./DeanAllisonDemo";
-import ForwardingSetup from "./ForwardingSetup";
+import RouteBoundary from './components/RouteBoundary';
 import { installClientErrorReporting } from "./clientErrorReporter";
 import "./tailwind.generated.css";
 import "./style.css";
+
+const AdminDashboard=React.lazy(()=>import(/* webpackChunkName: "admin" */ './AdminDashboard'));
+const CustomerDashboard=React.lazy(()=>import(/* webpackChunkName: "customer" */ './CustomerDashboard'));
+const Signup=React.lazy(()=>import(/* webpackChunkName: "signup" */ './Signup'));
+const Privacy=React.lazy(()=>import('./Privacy'));
+const Terms=React.lazy(()=>import('./Terms'));
+const LinksPage=React.lazy(()=>import('./LinksPage'));
+const TryDemo=React.lazy(()=>import('./TryDemo'));
+const TradePages=React.lazy(()=>import('./TradePages'));
+const FirstClassRentalsDemo=React.lazy(()=>import('./FirstClassRentalsDemo'));
+const DeanAllisonDemo=React.lazy(()=>import('./DeanAllisonDemo'));
+const ForwardingSetup=React.lazy(()=>import('./ForwardingSetup'));
 
 const getRoute = () => {
   const hashRoute = window.location.hash
@@ -53,7 +55,7 @@ function RouterRoot() {
   else if (route === "trades") page = <TradePages />;
   else if (route.startsWith("trades/")) page = <TradePages slug={route.slice("trades/".length)} />;
 
-  return page;
+  return <RouteBoundary route={route}><React.Suspense fallback={<main role="status" style={{padding:'2rem'}}>Loading your page…</main>}>{page}</React.Suspense></RouteBoundary>;
 }
 
 installClientErrorReporting();

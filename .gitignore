@@ -131,6 +131,8 @@ scripts/x-job-finder.js
 
 # Local asset-generation and preview helpers
 tools/
+/build-baseline/
+/build-candidate/
 scripts/make-gif.py
 scripts/start-frontend-3000.cmd
 
