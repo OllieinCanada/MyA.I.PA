@@ -8,3 +8,22 @@ test('green mock tests cannot clear actual pilot blockers or public launch',()=>
 test('absent cleanup or outbound proof cannot become a local journey pass',()=>{for(const override of [{cleanup:false},{unexpectedOutboundAttempts:1},{scope:'live'}])assert.equal(checklist({journey:{scope:'actual-http-inmemory-loopback',cleanup:true,unexpectedOutboundAttempts:0,happyPath:true,...override}}).checks.localJourney.status,'unknown');});
 test('local TAP summary distinguishes skips and failures rather than counting proposals',()=>{const {summary}=require('../scripts/run-supervised-pilot-local');assert.deepEqual(summary('# tests 3\n# pass 1\n# fail 1\n# skipped 1\n# cancelled 0\n'),{tests:3,pass:1,fail:1,skipped:1,cancelled:0});assert.ok(Number.isNaN(summary('').tests));});
 test('a failed regression run cannot validate local fix flags or create a real target decision',()=>{const r=checklist({journey:{scope:'actual-http-inmemory-loopback',cleanup:true,unexpectedOutboundAttempts:0,happyPath:true,uncertainOutcomeHeld:true,routeConflictRefused:true},regressions:{passed:false}});assert.equal(r.checks.localJourney.status,'unknown');assert.equal(r.checks.uncertainOwnerOutcome.status,'unknown');assert.equal(r.checks.routeConflict.status,'unknown');assert.equal(r.checks.exactTestTarget.status,'unknown');});
+
+test('pilot runner binds evidence to the actual checkout, not a historical constant',()=>{
+ const {sourceIdentity}=require('../scripts/run-supervised-pilot-local');
+ const head='a'.repeat(40),git=args=>({status:0,stdout:args[0]==='rev-parse'?head+'\n':''});
+ assert.deepEqual(sourceIdentity(git),{sourceHead:head,workingTreeDirty:false,sourceScope:'local-working-tree'});
+ const dirty=args=>({status:0,stdout:args[0]==='rev-parse'?head:' M scripts/run-supervised-pilot-local.js\n'});
+ assert.equal(sourceIdentity(dirty).workingTreeDirty,true);
+ for(const broken of [()=>({status:1,stdout:''}),()=>({status:0,stdout:'main'}),args=>args[0]==='rev-parse'?{status:0,stdout:head}:{status:1,stdout:''}])
+  assert.throws(()=>sourceIdentity(broken),/SOURCE_IDENTITY_UNAVAILABLE/);
+});
+
+test('isolated checklist cannot assert current deployment or historical repair state',()=>{
+ const r=checklist();
+ assert.match(r.checks.existingSignupRepair.detail,/does not inspect current production/);
+ assert.doesNotMatch(r.checks.existingSignupRepair.detail,/PR235.*unmerged/);
+ assert.match(r.checks.routeConflict.detail,/does not establish deployment state/);
+ assert.doesNotMatch(r.checks.routeConflict.detail,/not a deployed correction/);
+ assert.equal(r.readyForLivePilot,false);assert.equal(r.productionActionsAuthorized,false);
+});
