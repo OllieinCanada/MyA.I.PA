@@ -2,6 +2,11 @@
   "schemaVersion": 1,
   "base": "8f218834361f5ec22de23c5cedd6690897d40f99",
   "node": "24.22.3",
+  "trialCalendarContinuation": {
+    "baseRelease": "951ffbbe631da76a1f867f2a1d43f5626ec2ebed",
+    "previousIndexSha256": "158a26caef2064136863546c0516b4e4f8a57e79c103736c6a72814ab6f7b161",
+    "scope": "Versioned enrollment for new Toronto calendar trials, same app/Stripe cutoff and truthful reminders. Historical signup enrollment, routing protections, repair/lifecycle/writer modules and notification controls are not upgraded or relaxed. Candidate hashes are source provenance, not human release approval."
+  },
   "syncAccountingContinuation": {
     "baseRelease": "4a9cdbca1143812ea109e85858a04db4de4e8ed4",
     "previousIndexSha256": "3f2f8cbdf1980c6694c80f8912d245be475cee3985781026637332d64be9e663",
@@ -39,7 +44,10 @@
     "server/boundedBusinessMappingAdapters.js": "69cc5596edc20e8a2e689ff826bb2e424e4beaff8f41fa970ee40efa4aed3744",
     "server/boundedBusinessMappingWriter.js": "c8b129211d807e780d55600695362cbcb813c29ac784a147dbed1b9ca746db6a",
     "server/boundedMappingControl.js": "6bdf571cea3fc1d2a52c20e8bc89a49d10ffbe069a7d2fd463eaadb25354b36a",
-    "server/index.js": "158a26caef2064136863546c0516b4e4f8a57e79c103736c6a72814ab6f7b161",
+    "server/index.js": "e7617671865fdfefdc1ec074a0c1d0bfabd759b526b596d7158162749bf753bd",
+    "server/trialCalendarPolicy.js": "780182189ac34361d0fb71cb148fb00b64ecdbefa71c86fec308feebdd3da9c8",
+    "server/stripeTrialBilling.js": "bf14c9e88e23e91bc702f6f9f9eea2189eae993dbdd0c9ee3214014df50d84bc",
+    "server/trialUsagePolicy.js": "8bc0a71f814852e3a525720998b2da249bc1fdc0c078f72fb1c98690c701fe81",
     "server/automaticCallNotifications.js": "d0e1e2b410a09a4eb815f840598c5a9de2d3444cc06ff49f1d64bb5b4a72c2b6",
     "server/automaticNotificationContext.js": "c46dca9c6a30bd530266e87fc077973c0937c0e57da48711822b543eac43a591",
     "server/notificationOutcomes.js": "f076cbf603264e58aa076f72fa797f6b8b9e760919ea1ce37f2598a03fd08eff",

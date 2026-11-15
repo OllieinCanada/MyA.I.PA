@@ -24,8 +24,9 @@ test('disposable PostgreSQL calendar enrollment: concurrency, restart, conflict,
     await a.runtimeStore.create({data:{key:sentinelKey,data:{untouched:true}}});
     let first;
     await check('eight concurrent clients/calls persist one anchor',async()=>{
-      const plans=await Promise.all(Array.from({length:8},(_,i)=>prepareEnrollment({db:i%2?a:b,businessKey,priceId:'price_fixture',now:now+i*1000})));
+      const plans=await Promise.all(Array.from({length:8},(_,i)=>prepareEnrollment({db:i%2?a:b,businessKey,priceId:'price_fixture',now})));
       first=plans[0];for(const p of plans)assert.deepEqual(p,first);
+      assert.equal(first.trialStartAt,new Date(now).toISOString());
       assert.equal(await a.runtimeStore.count({where:{key}}),1);
     });
     await check('fresh connection after restart reuses the exact original plan across midnight',async()=>{
