@@ -15,6 +15,9 @@ test('official source binding, Toronto window, redaction and provider attributio
  assert.equal(notice.sourceUrl,'https://status.render.com/incidents/fixture1');assert.match(text,/Nov 17, 2026, 9:00 p.m./);assert.match(text,/not proof/);assert.doesNotMatch(JSON.stringify(report),/private-secret|email@private/);
  assert.equal(notice.kind,'maintenance');assert.match(notice.customerImpact,/Not verified/);
 });
+test('malformed/nested tag delimiters cannot survive the plain-text notice projection',()=>{
+ const body=feed();body.scheduled_maintenances[0].incident_updates[0].body='<scr<script>ipt>malformed</script <script';const report=normalizeFeed('render',body,now);assert.doesNotMatch(report.notices[0].description,/[<>]/);assert.doesNotMatch(maintenanceMessage(report.notices[0]),/[<>]/);
+});
 test('Toronto windows retain cross-midnight dates and distinguish the repeated DST hour',()=>{
  const body=feed(),event=body.scheduled_maintenances[0];event.scheduled_for='2026-11-01T05:30:00Z';event.scheduled_until='2026-11-01T06:30:00Z';
  let text=maintenanceMessage(normalizeFeed('render',body,now).notices[0]);assert.match(text,/1:30 a.m. EDT/);assert.match(text,/1:30 a.m. EST/);

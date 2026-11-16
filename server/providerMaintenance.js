@@ -10,7 +10,9 @@ const PROVIDERS=Object.freeze({
 });
 const PREFIX='provider-status:v1:',HISTORY='provider-status-history:v1:',MAX_BYTES=1024*1024,STALE_MS=15*60*1000;
 const digest=v=>crypto.createHash('sha256').update(JSON.stringify(v)).digest('hex');
-const safe=(v,n=1600)=>redactIncidentText(typeof v==='string'?v:'',{multiline:true,maxLength:n}).replace(/<[^>]*>/g,'');
+// Plain-text projection, not an HTML sanitizer. Remove all tag delimiters,
+// including malformed/nested tags; React escapes rendered text independently.
+const safe=(v,n=1600)=>redactIncidentText(typeof v==='string'?v:'',{multiline:true,maxLength:n}).replace(/[<>]/g,'');
 const stamp=v=>typeof v==='string'&&Number.isFinite(Date.parse(v))?new Date(v).toISOString():null;
 const reject=()=>{throw Object.assign(Error('Public provider evidence is incomplete or invalid.'),{code:'PROVIDER_STATUS_INVALID'});};
 function publicNotice(notice,provider){

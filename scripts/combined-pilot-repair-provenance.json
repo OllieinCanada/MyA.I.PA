@@ -2,6 +2,12 @@
   "schemaVersion": 1,
   "base": "8f218834361f5ec22de23c5cedd6690897d40f99",
   "node": "24.22.3",
+  "observabilityContinuation": {
+    "baseRelease": "b43abfbe846dd239e17b61d6128fa018cf1a3530",
+    "candidateSourceHead": "36a8dd0688895f088ec17dd58eab5c82e8efacdc",
+    "previousIndexSha256": "977c4c439d4207b4004bf995c0dc1c459b4bb3f5762cf4c06be04d809aaa7783",
+    "scope": "Append-only redacted diagnostic capture and read-only public status polling. Dispatch, eligibility, repair flags, lifecycle and mapping guards remain unchanged. Candidate pins require fresh full SQL/browser CI and review; they are not release approval."
+  },
   "signupLiveDiagnosticsContinuation": {
     "baseRelease": "a95830d5a18eeb14ae499168716d9c836445d390",
     "scope": "Candidate explicit read-only signup diagnostics with exact-context, provider GET, changed-evidence and no-replay guards. New bytes require fresh CI and review; no release or real provider checks implied."
@@ -56,7 +62,10 @@
     "server/boundedBusinessMappingAdapters.js": "69cc5596edc20e8a2e689ff826bb2e424e4beaff8f41fa970ee40efa4aed3744",
     "server/boundedBusinessMappingWriter.js": "c8b129211d807e780d55600695362cbcb813c29ac784a147dbed1b9ca746db6a",
     "server/boundedMappingControl.js": "6bdf571cea3fc1d2a52c20e8bc89a49d10ffbe069a7d2fd463eaadb25354b36a",
-    "server/index.js": "977c4c439d4207b4004bf995c0dc1c459b4bb3f5762cf4c06be04d809aaa7783",
+    "server/index.js": "574399ca75b75161e229f28dee0492a82189bf3da155f6253d8c9a73a412dbfe",
+    "server/providerMaintenance.js": "fbc171eb4f243a37787f5b389b02c47e15f0a543727b7bc4d3b2b2567a7d3f94",
+    "server/signupBugHistory.js": "c0227f3bdbc87c47914fb0092e2aa62f62d8563b9ee59d456ebc6dc15985dc31",
+    "server/signupDiagnosticError.js": "c1453aac8939b475b9445ff37db8e8ead607460bf3f3cbaa03e5e7ae3c015aa2",
     "server/signupDiagnosticProviders.js": "1e419751d3cba2375956d9f4791863a0958a19590323ad3c1cd5927edaf5a89a",
     "server/signupLiveDiagnosticRoutes.js": "458df17b067aa4166d31b2aeeb7788cfa139a302ba56ce62575aa125521a1109",
     "server/signupLiveDiagnostics.js": "f488d7c7221b89e261f615c5d15e68c201b6c8051138377de133969931aff215",

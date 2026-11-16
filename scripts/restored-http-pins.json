@@ -1,11 +1,14 @@
 {
   "reviewedHead": "81a50f70214e28d6d8579d4c028375e1d7620606",
-  "runtimeSourceHead": "a95830d5a18eeb14ae499168716d9c836445d390",
-  "qualification": "Live-read signup diagnostic candidate continued from runtimeSourceHead baseline; pinned candidate bytes below need fresh SQL and review. reviewedHead identifies unchanged fixture dependencies, not candidate runtime approval.",
+  "runtimeSourceHead": "36a8dd0688895f088ec17dd58eab5c82e8efacdc",
+  "qualification": "Observability runtime candidate from baseline b43abfbe846dd239e17b61d6128fa018cf1a3530; pinned bytes below need fresh SQL and review. reviewedHead identifies unchanged fixture dependencies, not candidate runtime approval.",
   "sha256": {
     "scripts/run-composite-recovery-ci.js": "9a3c2069cb268c25d8add52cbf4884d076cca9a7f4e8db55b9d4ee3d60d4c4ae",
     "scripts/composite-recovery-fixture.js": "46085044ab3ef3df77401c0c7f954691206ea52d5d71893a5f7ed1f02cd1d4e7",
-    "server/index.js": "977c4c439d4207b4004bf995c0dc1c459b4bb3f5762cf4c06be04d809aaa7783",
+    "server/index.js": "574399ca75b75161e229f28dee0492a82189bf3da155f6253d8c9a73a412dbfe",
+    "server/providerMaintenance.js": "fbc171eb4f243a37787f5b389b02c47e15f0a543727b7bc4d3b2b2567a7d3f94",
+    "server/signupBugHistory.js": "c0227f3bdbc87c47914fb0092e2aa62f62d8563b9ee59d456ebc6dc15985dc31",
+    "server/signupDiagnosticError.js": "c1453aac8939b475b9445ff37db8e8ead607460bf3f3cbaa03e5e7ae3c015aa2",
     "server/signupDiagnosticProviders.js": "1e419751d3cba2375956d9f4791863a0958a19590323ad3c1cd5927edaf5a89a",
     "server/signupLiveDiagnosticRoutes.js": "458df17b067aa4166d31b2aeeb7788cfa139a302ba56ce62575aa125521a1109",
     "server/signupLiveDiagnostics.js": "f488d7c7221b89e261f615c5d15e68c201b6c8051138377de133969931aff215",

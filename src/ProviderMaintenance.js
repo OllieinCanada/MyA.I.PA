@@ -1,4 +1,4 @@
-import React,{useEffect,useRef,useState} from 'react';
+import React,{useCallback,useEffect,useRef,useState} from 'react';
 import './ProviderMaintenance.css';
 const time=value=>value?new Date(value).toLocaleString('en-CA',{timeZone:'America/Toronto',year:'numeric',month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZoneName:'short'}):'Not checked';
 export function MaintenanceNotice({notice,historical=false,observedAt}){
@@ -13,7 +13,7 @@ export function MaintenanceNotice({notice,historical=false,observedAt}){
 export default function ProviderMaintenance({apiBase=''}){
  const [report,setReport]=useState(null),[error,setError]=useState(''),[busy,setBusy]=useState(false),[clock,setClock]=useState(Date.now());
  const active=useRef(null),generation=useRef(0),cursor=useRef(null);
- async function load(older=null){
+ const load=useCallback(async(older=null)=>{
   active.current?.abort();const controller=new AbortController(),version=++generation.current;active.current=controller;setBusy(true);
   const timer=setTimeout(()=>controller.abort(),6500);
   try{const r=await fetch(apiBase+'/api/admin/provider-status'+(older?'?cursor='+encodeURIComponent(older):''),{credentials:'include',signal:controller.signal}),body=await r.json();
@@ -21,13 +21,11 @@ export default function ProviderMaintenance({apiBase=''}){
    if(version===generation.current&&!controller.signal.aborted){setReport(body);setError('');cursor.current=older;setClock(Date.now());}
   }catch{if(version===generation.current)setError('Provider evidence could not be refreshed. Any displayed information is last-known—not an all-clear.');}
   finally{clearTimeout(timer);if(active.current===controller){active.current=null;setBusy(false);}}
- }
+ },[apiBase]);
  useEffect(()=>{
   setReport(null);load();const timer=setInterval(()=>{setClock(Date.now());if(document.visibilityState==='visible'&&!active.current&&!cursor.current)load();},60000);
   return()=>{clearInterval(timer);generation.current++;active.current?.abort();};
-  // Each API scope owns its request generation. No customer/provider mutations.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
- },[apiBase]);
+ },[load]);
  return <section className="provider-maintenance" aria-label="Upcoming maintenance and provider status" aria-busy={busy}>
   <header><div><h3>Upcoming maintenance & provider status</h3><p>Official notices, Toronto-time windows and saved history. Planned work is separate from bugs and confirmed application outages.</p></div><button type="button" disabled={busy} onClick={()=>load()}>{busy?'Reading status…':'Refresh saved status'}</button></header>
   {error?<p role="alert">{error}</p>:null}

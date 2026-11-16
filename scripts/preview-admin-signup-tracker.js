@@ -69,7 +69,9 @@ async function main() {
   let fixtureSaves = 0, audits = 0, requests = 0, base, failReads = false, failSetupReads = false, failLiveReads = false, liveReads = 0;
   let failStatusReads=false;
   const publicStatus=normalizeFeed('render',{page:{url:'https://status.render.com'},status:{indicator:'none'},components:[{id:'fixture-component',name:'Administration',status:'operational'}],incidents:[],scheduled_maintenances:[{id:'fixture-maintenance',name:'Synthetic administration maintenance',status:'scheduled',scheduled_for:'2026-11-18T02:00:00Z',scheduled_until:'2026-11-18T03:00:00Z',components:[{name:'Administration'}],incident_updates:[{created_at:stamp(1),body:'Synthetic provider report only. No application uptime is verified.'}]}]},at);
-  registerProviderStatusRoutes({app,requireAdmin:(_req,_res,next)=>next(),prisma:{runtimeStore:{findMany:async({where})=>{if(failStatusReads)throw Error('Synthetic outage');return where.key.startsWith===STATUS_PREFIX?[{key:STATUS_PREFIX+'render',data:{...publicStatus,lastGood:publicStatus}}]:[];}}});
+  registerProviderStatusRoutes({app,requireAdmin:(_req,_res,next)=>next(),prisma:{runtimeStore:{
+    findMany:async({where})=>{if(failStatusReads)throw Error('Synthetic outage');return where.key.startsWith===STATUS_PREFIX?[{key:STATUS_PREFIX+'render',data:{...publicStatus,lastGood:publicStatus}}]:[];},
+  }}});
   // Presentation fixture; real journal authentication/ownership/SQL are separate tests.
   app.get('/api/admin/signup-bugs',(req,res)=>{
     const issueId='a'.repeat(64),attemptId=rows[0].signupAttemptId;
