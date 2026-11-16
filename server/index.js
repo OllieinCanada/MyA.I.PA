@@ -10,7 +10,7 @@ const { dispatchHandler: notificationDispatchHandler, dispatchReadinessHandler }
 const { executeAutomaticCallNotifications, SUMMARY_TOOL: AUTOMATIC_SUMMARY_TOOL } = require('./automaticCallNotifications');
 const { createAutomaticNotificationContextReader } = require('./automaticNotificationContext');
 const { automaticNotificationAlert, listNotificationOutcomeAlerts } = require('./notificationOutcomes');
-const {safelyRecordSignupBug,registerSignupBugRoutes,runtimeBugStage}=require('./signupBugHistory');
+const {safelyRecordSignupBug,registerSignupBugRoutes,runtimeBugStage,shouldCaptureRuntimeBug}=require('./signupBugHistory');
 const {registerProviderStatusRoutes,refreshProviderStatuses}=require('./providerMaintenance');
 const { createFinanceService, registerFinanceRoutes } = require('./providerFinance');
 const { trackProgress: trackAdminSignupProgress, registerTrackerRoutes, createStallProcessor, createTrackerBatchSaver } = require('./adminSignupTracker');
@@ -18650,10 +18650,12 @@ async function runAutomatedRuntimeRemediationInternal(incident, recordedItem) {
 }
 
 async function safelyNotifyRuntimeFailure(error, context = {}) {
-  const bug=await safelyRecordSignupBug({prisma,listSignups:listSignupDashboardRecords,error,
-    stage:runtimeBugStage({stage:context.signupStage,route:context.route}),attemptId:context.signupAttemptId,
-    release:process.env.RENDER_GIT_COMMIT||''});
-  if(!bug.recorded)console.warn('[bug-history] runtime capture unconfirmed; no capture retry');
+  if(shouldCaptureRuntimeBug(context)){
+    const bug=await safelyRecordSignupBug({prisma,listSignups:listSignupDashboardRecords,error,
+      stage:runtimeBugStage({stage:context.signupStage,route:context.route}),attemptId:context.signupAttemptId,
+      release:process.env.RENDER_GIT_COMMIT||''});
+    if(!bug.recorded)console.warn('[bug-history] runtime capture unconfirmed; no capture retry');
+  }
   const baseIncident = buildRuntimeIncident(error, context);
   const remediation = context.reasonCode === 'VAPI_CALL_SYNC_DELAYED' ? {
     action: 'none', status: 'verifying', automatic: false, requiresUser: false,
@@ -18822,6 +18824,7 @@ async function reportPreviousFatalIncident() {
 app.use((err, req, res, _next) => {
   const status = err.statusCode || 500;
   const message = err.message || "Internal server error";
+  const journalAllowed=shouldCaptureRuntimeBug({method:req.method});
   if (status >= 500 || err.code === "CALL_RECORD_IDENTITY_CONFLICT") {
     console.error(err);
     if (!err.telegramIncidentHandled) {
@@ -18858,9 +18861,9 @@ app.use((err, req, res, _next) => {
           ? "Open Needs Attention, review the signup snapshot and provider state, then recover it only after duplicate provisioning is ruled out."
           : "Open Needs Attention and the server logs, verify the affected provider state, then retry only when duplicate work is ruled out.",
       });
-    } else void safelyRecordSignupBug({prisma,listSignups:listSignupDashboardRecords,error:err,
+    } else if(journalAllowed)void safelyRecordSignupBug({prisma,listSignups:listSignupDashboardRecords,error:err,
       stage:runtimeBugStage({route:req.route?.path}),attemptId:req.signupProvisioningAttemptId||req.signupDiagnosticAttemptId,release:process.env.RENDER_GIT_COMMIT||''});
-  } else if(status>=400&&(req.signupProvisioningAttemptId||req.signupDiagnosticAttemptId)){
+  } else if(journalAllowed&&status>=400&&(req.signupProvisioningAttemptId||req.signupDiagnosticAttemptId)){
     void safelyRecordSignupBug({prisma,listSignups:listSignupDashboardRecords,error:err,
       stage:runtimeBugStage({route:req.route?.path}),attemptId:req.signupProvisioningAttemptId||req.signupDiagnosticAttemptId,release:process.env.RENDER_GIT_COMMIT||''});
   }

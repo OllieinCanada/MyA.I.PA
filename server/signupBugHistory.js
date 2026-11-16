@@ -12,6 +12,11 @@ const hash=value=>crypto.createHash('sha256').update(JSON.stringify(value)).dige
 const validAttempt=value=>typeof value==='string'&&/^signup_[a-f0-9]{32}$/.test(value);
 const validHash=value=>typeof value==='string'&&/^[a-f0-9]{64}$/.test(value);
 const fail=(code,statusCode=409)=>{throw Object.assign(new Error('Bug history could not be verified.'),{code,statusCode});};
+// Diagnostic storage must not add transactions to the answering safeguard or
+// turn a read-only request into a write. Existing incident/log paths remain.
+function shouldCaptureRuntimeBug(context={}){
+ return context.readOnly!==true&&context.area!=='AI call setup'&&!['GET','HEAD','OPTIONS'].includes(String(context.method||'').toUpperCase());
+}
 function runtimeBugStage({stage,route}={}){
  if(Object.hasOwn(STAGES,stage))return stage;
  return ({'/api/integrations/twilio/purchase-number':'purchase','/api/integrations/vapi/create-signup-assistant':'assistant-create',
@@ -97,4 +102,4 @@ function registerSignupBugRoutes({app,requireAdmin,prisma,listSignups}){
   catch(error){res.status(error.statusCode===400?400:503).json({error:'Bug history is unavailable or the filter is invalid. A missing history read is not proof that no bugs occurred.'});}
  });
 }
-module.exports={PREFIX,recordSignupBug,safelyRecordSignupBug,listSignupBugs,registerSignupBugRoutes,runtimeBugStage};
+module.exports={PREFIX,recordSignupBug,safelyRecordSignupBug,listSignupBugs,registerSignupBugRoutes,runtimeBugStage,shouldCaptureRuntimeBug};

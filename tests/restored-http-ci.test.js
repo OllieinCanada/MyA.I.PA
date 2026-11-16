@@ -21,7 +21,7 @@ test('canonical pinned dependencies are exact; corruption refused',()=>{
  const pins=require('../scripts/restored-http-pins.json'),sha=require('../scripts/composite-recovery-fixture').sha;
  assert.equal(pins.reviewedHead,BASE_HEAD);assert.equal(Object.keys(pins.sha256).length,20);
  for(const file of ['server/providerMaintenance.js','server/signupBugHistory.js','server/signupDiagnosticError.js'])assert.ok(pins.sha256[file]);
- assert.equal(pins.runtimeSourceHead,'36a8dd0688895f088ec17dd58eab5c82e8efacdc');
+ assert.equal(pins.runtimeSourceHead,'b43abfbe846dd239e17b61d6128fa018cf1a3530');
  assert.ok(pins.sha256['server/signupLiveDiagnostics.js']);assert.ok(pins.sha256['server/signupLiveDiagnosticRoutes.js']);assert.ok(pins.sha256['server/signupDiagnosticProviders.js']);
  assert.ok(pins.sha256['server/confirmedCallRequest.js']);assert.ok(pins.sha256['server/agentTools.js']);
  assert.ok(pins.sha256['server/notificationOutcomes.js']);

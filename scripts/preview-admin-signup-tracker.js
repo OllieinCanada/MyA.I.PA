@@ -132,6 +132,9 @@ async function main() {
       await bugHistory.getByText(/transaction expired or closed/).waitFor();await bugHistory.getByRole('button',{name:'View matching report history'}).click();await bugHistory.getByRole('button',{name:'Show all signatures again'}).waitFor();
       await bugHistory.getByText('BUG-AAAAAAAA · Number purchase',{exact:true}).click();
       await bugHistory.getByRole('button',{name:'Open signup: Harbour Electrical'}).click();await bugHistory.screenshot({path:path.join(output,`${width}-bug-history.png`)});
+      // Opening a saved report deliberately selects All so older signups are
+      // reachable. Restore Active before checking the original active-row count.
+      await panel.getByLabel('Show signups',{exact:true}).selectOption('active');
       assert.match(await panel.locator('h2').evaluate(el=>getComputedStyle(el).fontFamily),/Georgia/,'Shared admin styling cannot replace the approved heading font');
       assert.equal(await panel.getByRole('button',{name:'Edit business info',exact:true}).first().evaluate(el=>getComputedStyle(el).color),'rgb(255, 255, 255)','Primary editor button remains readable inside admin shell');
       assert.equal(await panel.locator('.signup-tracker-row').count(), 3);
