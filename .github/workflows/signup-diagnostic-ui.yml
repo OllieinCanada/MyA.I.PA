@@ -1,0 +1,43 @@
+name: Signup diagnostic dashboard proof
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: signup-diagnostic-ui-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  signup-diagnostic-ui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CI: 'true'
+      DISABLE_LOCAL_ENV_FILES: '1'
+      SIGNUP_DIAGNOSTIC_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.22.3'
+          cache: npm
+      - run: npm ci --include=dev --legacy-peer-deps --ignore-scripts
+      - name: Verify saved-evidence, exact target, callback and read-only API contracts
+        run: node --test tests/signup-purchase-evidence.test.js tests/signup-diagnostic-check.test.js tests/admin-signup-setup.test.js tests/signup-control-room.test.js tests/admin-signup-tracker-api.test.js tests/telegram-approval-actions.test.js
+      - name: Install isolated regression browser
+        run: npx playwright install --with-deps chromium
+      - name: Actual dashboard and routes at desktop and both phone widths
+        run: npm run test:signup-tracker:browser
+      - name: Preserve synthetic screenshots and browser report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: signup-diagnostic-ui-${{ github.event.pull_request.head.sha || github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          retention-days: 7
+          if-no-files-found: error
+          path: |
+            diagnostics/signup-tracker-preview/*.png
+            diagnostics/signup-tracker-preview/browser-report.json

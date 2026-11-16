@@ -34,6 +34,8 @@ test('detailed setup analysis is admin-only, no-store and performs no saved-stat
  const url=base+'/api/admin/signup-tracker/'+id+'/setup',before=JSON.stringify(rows);
  assert.equal((await fetch(url)).status,401);const r=await fetch(url,{headers:headers()}),body=await r.json();
  assert.equal(r.status,200);assert.equal(r.headers.get('cache-control'),'no-store');assert.equal(body.setup.readOnly,true);assert.equal(body.setup.groups.length,4);assert.equal(JSON.stringify(rows),before);
+ assert.equal(body.setup.purchaseEvidence.readOnly,true);assert.equal(body.setup.purchaseEvidence.outcome,'unknown');
+ assert.equal(body.setup.purchaseEvidence.resumeAllowed,false);assert.equal(body.setup.purchaseEvidence.liveProviderVerified,false);
  assert.doesNotMatch(JSON.stringify(body),/private@example|5550101|billing-do-not-change/);
  assert.equal((await fetch(base+'/api/admin/signup-tracker/not-valid/setup',{headers:headers()})).status,400);
  assert.equal((await fetch(base+'/api/admin/signup-tracker/signup_'+'f'.repeat(32)+'/setup',{headers:headers()})).status,409);

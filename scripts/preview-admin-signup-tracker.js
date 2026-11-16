@@ -34,10 +34,21 @@ rows[0].onboardingStallAlertRevision = rows[0].onboardingTracker.revision; rows[
 rows[0].onboardingStallAlertEpisode = episodeKey(rows[0].onboardingTracker);
 
 async function build() {
+  const extraModules = String(process.env.NODE_PATH || '').split(path.delimiter).filter(Boolean);
+  // An isolated checkout may use the existing locked dependency tree without
+  // a junction. Do not borrow an incompatible user-wide React installation.
+  if (extraModules.length) {
+    const lock = JSON.parse(fs.readFileSync(path.join(__dirname, '../package-lock.json'), 'utf8'));
+    for (const name of ['react', 'react-dom']) {
+      const installed = JSON.parse(fs.readFileSync(path.join(extraModules[0], name, 'package.json'), 'utf8'));
+      assert.equal(installed.version, lock.packages['node_modules/' + name].version, `Preview ${name} must match the unchanged lock`);
+    }
+  }
   require('@babel/core').transformFileSync(path.join(__dirname, '../src/AdminDashboard.js'), { configFile: false, babelrc: false, presets: [require.resolve('@babel/preset-react')] });
   fs.mkdirSync(bundleDir, { recursive: true });
   await new Promise((resolve, reject) => {
     const compiler = webpack({ mode: 'development', devtool: false, entry: path.join(__dirname, 'admin-signup-tracker-preview-entry.js'),
+      resolve: { modules: [...extraModules, 'node_modules'] },
       output: { path: bundleDir, filename: 'tracker.js' }, optimization: { minimize: false },
       module: { rules: [{ test: /\.js$/, exclude: /node_modules/, use: { loader: require.resolve('babel-loader'), options: { presets: [require.resolve('@babel/preset-react')] } } },
         { test: /\.css$/, use: [require.resolve('style-loader'), require.resolve('css-loader')] }] },
@@ -71,13 +82,14 @@ async function main() {
   base = `http://127.0.0.1:${server.address().port}`;
   if (!process.argv.includes('--test')) { console.log('Synthetic preview: ' + base); return; }
   const { chromium } = require('./playwright-runtime');
-  let browser, externalBlocked = 0;
+  let browser, lastPage, externalBlocked = 0;
   try {
     browser = await chromium.launch({ headless: true });
     for (const width of [1440, 390, 320]) {
       console.log(`Checking control-room interactions at ${width}px…`);
       const context = await browser.newContext({ viewport: { width, height: 1050 }, reducedMotion: 'reduce' }); const page = await context.newPage(); const errors = [];
-      page.on('pageerror', e => errors.push(e.message));
+      lastPage = page;
+      page.on('pageerror', e => { errors.push(e.message); console.error('Synthetic preview page error:', e.message); });
       await page.route('**/*', route => new URL(route.request().url()).origin === base ? route.continue() : (externalBlocked++, route.abort()));
       await page.goto(base); const panel = page.getByRole('region', { name: 'Signup progress tracker' });
       await panel.getByRole('heading', { name: 'Harbour Electrical' }).waitFor();
@@ -108,6 +120,23 @@ async function main() {
       assert.equal(await setup.locator('.control-room-groups li').first().evaluate(el=>getComputedStyle(el).fontSize),'14px','Checklist text is readable rather than miniature');
       await setup.locator('.control-room-groups').screenshot({path:path.join(output,`${width}-spacious-setup.png`)});
       await setup.getByRole('button', { name: 'Analyze saved setup' }).click();
+      const failedPurchase = setup.getByRole('button', { name: 'Number purchase failed', exact: true });
+      await failedPurchase.click();
+      assert.equal(await failedPurchase.getAttribute('aria-expanded'), 'true');
+      const failureDetails = setup.getByRole('region', { name: 'Number purchase failure details' });
+      await failureDetails.getByText('Purchase outcome unconfirmed', { exact: true }).waitFor();
+      await failureDetails.getByText('Live provider check: not performed', { exact: true }).waitFor();
+      assert.equal(await failureDetails.getByRole('button', { name: 'Resume setup unavailable' }).isDisabled(), true);
+      await failureDetails.screenshot({ path: path.join(output, `${width}-purchase-failure.png`) });
+      failSetupReads = true;
+      await failureDetails.getByRole('button', { name: 'Refresh saved receipts' }).click();
+      await failureDetails.getByText(/Last-known evidence; refresh failed/).waitFor();
+      assert.equal(await failureDetails.getByRole('button', { name: 'Resume setup unavailable' }).isDisabled(), true);
+      failSetupReads = false;
+      await failureDetails.getByRole('button', { name: 'Refresh saved receipts' }).click();
+      await failureDetails.getByText('Live provider check: not performed', { exact: true }).waitFor();
+      await failedPurchase.click();
+      assert.equal(await failedPurchase.getAttribute('aria-expanded'), 'false');
       await setup.getByText('289', { exact: true }).first().waitFor();
       await setup.getByText('Stale observation: failed', { exact: true }).waitFor();
       assert.match(await setup.locator('.control-search-detail').innerText(),/Locked request: the original area-code policy is preserved/);
@@ -156,8 +185,17 @@ async function main() {
       assert.deepEqual(violations, [], `Accessibility ${width}`);
       await context.close(); console.log(`PASS ${width}px: real component/routes, filters, checkpoints, canonical fixture edit, stale-draft/error retention, no overflow or WCAG2A/AA violations.`);
     }
-    const report = { passed: true, widths: [1440, 390, 320], journeyStages: 9, clickableSteps:9, keyboardStepSelection:true, timeline:true, fixtureSaves, auditEvents: audits, externalBlocked, requests, productionRequests: 0, telegramSends: 0, calls: 0, sms: 0, limitations: 'Synthetic preview, not a production deployment; existing generated dependency tree reused and full exact-lock CI remains required.' };
+    const sources = ['src/SignupControlRoom.js','src/SignupFailureDetails.js','src/SignupFailureDetails.css','server/adminSignupSetup.js','server/signupPurchaseEvidence.js','scripts/preview-admin-signup-tracker.js'];
+    const report = { passed: true, scope: 'synthetic-dashboard-only', sourceHead: process.env.SIGNUP_DIAGNOSTIC_HEAD || require('node:child_process').execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),
+      sourceSha256: Object.fromEntries(sources.map(file => [file,require('node:crypto').createHash('sha256').update(fs.readFileSync(path.resolve(file))).digest('hex')])),
+      widths: [1440, 390, 320], purchaseFailureInspector:true, receiptRefreshFailureRetained:true, journeyStages: 9, clickableSteps:9, keyboardStepSelection:true, timeline:true, fixtureSaves, auditEvents: audits, externalBlocked, requests, productionRequests: 0, telegramSends: 0, calls: 0, sms: 0, limitations: 'Synthetic preview, not a production deployment; full exact-lock CI remains required. Saved receipt refresh is not a live provider check or recovery.' };
     fs.writeFileSync(path.join(output, 'browser-report.json'), JSON.stringify(report, null, 2)); console.log(JSON.stringify(report));
+  } catch (error) {
+    if (lastPage && !lastPage.isClosed()) {
+      await lastPage.screenshot({ path: path.join(output, `failure-${Date.now()}.png`), fullPage: true }).catch(() => {});
+      console.error('Synthetic preview visible state:', (await lastPage.locator('body').innerText().catch(() => '')).slice(0,2000));
+    }
+    throw error;
   } finally { await browser?.close(); await new Promise(resolve => server.close(resolve)); }
 }
 main().catch(error => { console.error(error.message); process.exitCode = 1; });

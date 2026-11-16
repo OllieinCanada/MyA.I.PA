@@ -1,5 +1,6 @@
 import React, {useCallback,useEffect,useRef,useState} from 'react';
 import SignupJourneyMap from './SignupJourneyMap';
+import SignupFailureDetails from './SignupFailureDetails';
 import {controlRoomModel} from './signupControlRoomModel';
 import './SignupControlRoom.css';
 
@@ -8,10 +9,11 @@ const stateLabel=state=>({verified:'Backend verified',observed:'Browser / proces
 const mark=state=>['verified','observed','recorded'].includes(state)?'✓':state==='blocked'?'!':'−';
 export default function SignupControlRoom({row,apiBase=''}) {
   const [report,setReport]=useState(null),[selected,setSelected]=useState('number'),[busy,setBusy]=useState(false),[error,setError]=useState('');
+  const [expandedFailure,setExpandedFailure]=useState(null);
   const request=useRef(null),generation=useRef(0),inspector=useRef(null);
   const [now,setNow]=useState(Date.now());
   useEffect(()=>{const timer=setInterval(()=>setNow(Date.now()),5000);return()=>{clearInterval(timer);generation.current++;request.current?.abort();};},[]);
-  useEffect(()=>{generation.current++;request.current?.abort();request.current=null;setBusy(false);setReport(null);setError('');},[row.infoRevision]);
+  useEffect(()=>{generation.current++;request.current?.abort();request.current=null;setBusy(false);setReport(null);setError('');setExpandedFailure(null);},[row.infoRevision,row.attemptId]);
   const load=useCallback(async()=>{
     if(request.current)return;
     const controller=new AbortController(),version=generation.current;request.current=controller;setBusy(true);setError('');
@@ -49,7 +51,7 @@ export default function SignupControlRoom({row,apiBase=''}) {
       {selected==='number'?<div className="control-search-detail"><strong>{model.freshSearch&&search?.phase==='searching'?`Searching ${search.areaCode || 'regional inventory'}`:search?`${search.stale || !model.freshSearch?'Stale observation':'Last observed search'}: ${search.phase.replaceAll('_',' ')}`:'Current search not observed'}</strong><p>Preferred area: {setup.number.preferredAreaCode || 'Unknown'}. {setup.number.locked?'Locked request: the original area-code policy is preserved.':''}</p><p>{setup.number.assignedLast4?`Assigned area ${setup.number.assignedAreaCode} · ending ${setup.number.assignedLast4}`:'No number assignment saved.'}</p></div>:null}
       <ul className="control-selected-checks">{model.detailChecks.map(check=><li key={check.id} className={'is-'+check.state}><strong><span aria-hidden="true">{mark(check.state)} </span>{check.label}</strong><small>{stateLabel(check.state)}</small><p>{check.detail}</p>{check.at?<time dateTime={check.at}>{time(check.at)}</time>:null}</li>)}</ul>
       {model.selected?.note?<p>{model.selected.note}</p>:null}
-      <section className="control-room-timeline" aria-label="Signup event timeline"><h5>Event timeline</h5><p>Only recorded events with timestamps. Gaps do not mean nothing happened.</p><ol>{model.timeline.map(event=><li key={event.id} className={'is-'+event.state}><span aria-hidden="true">{mark(event.state)}</span><div><time dateTime={event.at}>{time(event.at)}</time><strong>{event.label}</strong><small>{event.source}</small></div></li>)}</ol>{!model.timeline.length?<p>No timestamped events recorded for this signup.</p>:null}</section>
+      <section className="control-room-timeline" aria-label="Signup event timeline"><h5>Event timeline</h5><p>Only recorded events with timestamps. Gaps do not mean nothing happened.</p><ol>{model.timeline.map(event=><li key={event.id} className={'is-'+event.state}><span aria-hidden="true">{mark(event.state)}</span><div><time dateTime={event.at}>{time(event.at)}</time>{event.id==='twilio-number-failed'?<><button type="button" className="timeline-evidence-toggle" aria-expanded={expandedFailure===event.id} aria-controls={'purchase-details-'+row.attemptId} onClick={()=>{setExpandedFailure(expandedFailure===event.id?null:event.id);if(!report)load();}}>{event.label}<span aria-hidden="true">{expandedFailure===event.id?'−':'+'}</span></button>{expandedFailure===event.id?<div id={'purchase-details-'+row.attemptId}><SignupFailureDetails evidence={setup.purchaseEvidence} busy={busy} onRefresh={load} stale={Boolean(error)}/></div>:null}</>:<strong>{event.label}</strong>}<small>{event.source}</small></div></li>)}</ol>{!model.timeline.length?<p>No timestamped events recorded for this signup.</p>:null}</section>
       <div className="control-evidence-warning">Saved evidence ≠ guaranteed delivery. A search observation is not a purchase receipt.</div><p className="control-room-limitations">{setup.limitation}</p>
     </aside></div>
   </section>;

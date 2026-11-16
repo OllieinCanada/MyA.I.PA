@@ -13,6 +13,7 @@ const { automaticNotificationAlert, listNotificationOutcomeAlerts } = require('.
 const { createFinanceService, registerFinanceRoutes } = require('./providerFinance');
 const { trackProgress: trackAdminSignupProgress, registerTrackerRoutes, createStallProcessor, createTrackerBatchSaver } = require('./adminSignupTracker');
 const { readSetupEvidence, createNumberSearchTracker } = require('./adminSignupSetup');
+const { inspectSignup } = require('./signupDiagnosticCheck');
 const { createAssociationFence, createAssociationRepairService, atomicCommitAssociationFile,
   registerAssociationRepairRoutes } = require('./signupAssociationRepair');
 const signupAssociationFence = createAssociationFence();
@@ -5620,6 +5621,10 @@ async function safelyNotifySignupOperations(payload, {
         code: String(error?.code || "TELEGRAM_APPROVAL_CREATE_FAILED").slice(0, 80),
       });
     }
+  }
+  if (!replyMarkup && ['provisioning_failed', 'customer_followup_failed', 'customer_followup_partial'].includes(state) && current) {
+    try { replyMarkup = await signupDiagnosticKeyboard(current, alertKey); }
+    catch (_) { /* Diagnosis is unavailable; retain the ordinary protected details link. */ }
   }
   const markSignupAlertHandled = (delivery) => {
     if (!current || !(delivery?.sent || delivery?.queued || delivery?.duplicate)) return;
@@ -12561,6 +12566,13 @@ async function startOwnerAuthorizedIncidentInvestigation(approval) {
 
 async function executeTelegramApproval(approval) {
   const action = String(approval?.decidedAction || "");
+  if (approval.purpose === 'SIGNUP_CHECK') {
+    const result = await inspectSignup({ approval, list: listSignupDashboardRecords,
+      targetFor: record => hashOperationalTarget(signupOperationalIdentity(record)),
+      readSetup: record => readSetupEvidence({ prisma, record, searchTracker: signupNumberSearchTracker }) });
+    await finishTelegramApproval(prisma, approval.id, { status: 'COMPLETED', result: result.report });
+    return { terminal: true, text: result.text, openLabel: 'Open signup tracker' };
+  }
   if (approval.purpose === "SIGNUP_REVIEW") {
     const expectedSignupAttemptId = String(approval?.context?.signupAttemptId || "").trim();
     const result = action === "approve"
@@ -17822,8 +17834,19 @@ registerObservationRoutes({ app, service: signupFormObservations, isAllowedOrigi
 // per tick, preserving provider progress that changed while alerts were queued.
 const saveAdminSignupTrackerChanges = createTrackerBatchSaver({ read: readSignupDashboardStore, write: writeSignupDashboardStore,
   findKey: findSignupDashboardExistingKey, normalize: enforceAgentTestReadyStatus });
+async function signupDiagnosticKeyboard(record, episode) {
+  if (!TELEGRAM_GUARDED_ACTIONS_ENABLED || !/^signup_[a-f0-9]{32}$/.test(record.signupAttemptId || '')) return null;
+  const targetId = hashOperationalTarget(signupOperationalIdentity(record));
+  const approval = await createTelegramApproval({ prismaClient: prisma, purpose: 'SIGNUP_CHECK',
+    targetType: 'signup', targetId, expiresInMs: 15 * 60000,
+    context: { signupAttemptId: record.signupAttemptId, openUrl: `${FRONTEND_APP_URL}/#/admin?tab=signups` },
+    dedupeKey: `signup-check:${targetId}:${crypto.createHash('sha256').update(String(episode)).digest('hex')}` });
+  return approval?.status === 'PENDING' && new Date(approval.expiresAt).getTime() > Date.now()
+    ? buildApprovalKeyboard(approval, TELEGRAM_ACTION_SIGNING_SECRET) : null;
+}
 const processAdminSignupStalls = createStallProcessor({ list: listSignupDashboardRecords, saveMany: saveAdminSignupTrackerChanges,
-  enqueue: queueTelegramAlertSafely, frontendUrl: FRONTEND_APP_URL, describeObservation: id => signupFormObservations.describeAttempt(id) });
+  enqueue: queueTelegramAlertSafely, frontendUrl: FRONTEND_APP_URL, describeObservation: id => signupFormObservations.describeAttempt(id),
+  diagnosticKeyboard: signupDiagnosticKeyboard });
 async function processSignupProgressAlerts() {
   const submitted = await processAdminSignupStalls();
   const drafts = await signupFormObservations.processStalls({ enqueue: queueTelegramAlertSafely, frontendUrl: FRONTEND_APP_URL });

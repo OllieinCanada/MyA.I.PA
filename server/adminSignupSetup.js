@@ -6,6 +6,7 @@ const { contextStoreKey, registeredSignupEventKey } = require('./signupProvision
 const { provisioningStateKey } = require('./provisioningState');
 const { allowedAreaCodes } = require('./numberAreaPolicy');
 const { isContactVerified } = require('./signupVerificationChannel');
+const { purchaseEvidence } = require('./signupPurchaseEvidence');
 const iso = value => Number.isFinite(Date.parse(value)) ? new Date(value).toISOString() : null;
 const kinds = ['twilio-number', 'vapi-assistant', 'vapi-import'];
 function setupTimeline(record, receipts, search, groups) {
@@ -132,6 +133,7 @@ function projectSetup(record = {}, { context, receipts = {}, search = null, cove
     ],
     limitation: 'Saved evidence, not continuous live provider verification. Historical search history may be absent; process-local search status becomes stale after 30 seconds and disappears on restart. This dashboard never buys numbers, retries setup or sends practice texts.' };
   result.timeline = setupTimeline(record,receipts,search,result.groups);
+  result.purchaseEvidence = purchaseEvidence(record, receipts, coverage);
   return result;
 }
 

@@ -4,6 +4,11 @@ const CALLBACK_PREFIX = "tg1";
 const DEFAULT_TTL_MS = 24 * 60 * 60 * 1000;
 const MAX_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const PURPOSES = Object.freeze({
+  SIGNUP_CHECK: {
+    actions: Object.freeze({ c: 'check' }),
+    labels: Object.freeze({ c: 'Check this signup' }),
+    openLabel: 'Open signup tracker',
+  },
   SIGNUP_REVIEW: {
     actions: Object.freeze({ a: "approve", r: "reject" }),
     labels: Object.freeze({ a: "Approve and continue", r: "Reject without provisioning" }),
@@ -59,8 +64,9 @@ function validSignupAttemptId(value) {
 function sanitizeContext(purpose, value = {}) {
   const input = value && typeof value === "object" && !Array.isArray(value) ? value : {};
   const openUrl = validOpenUrl(input.openUrl);
-  if (purpose === "SIGNUP_REVIEW") {
+  if (purpose === "SIGNUP_REVIEW" || purpose === 'SIGNUP_CHECK') {
     const signupAttemptId = validSignupAttemptId(input.signupAttemptId);
+    if (purpose === 'SIGNUP_CHECK' && !signupAttemptId) throw new TypeError('An exact signup reference is required.');
     return {
       ...(signupAttemptId ? { signupAttemptId } : {}),
       ...(openUrl ? { openUrl } : {}),
