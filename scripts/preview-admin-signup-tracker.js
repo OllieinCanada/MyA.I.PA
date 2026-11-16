@@ -127,6 +127,7 @@ async function main() {
       await failureDetails.getByText('Purchase outcome unconfirmed', { exact: true }).waitFor();
       await failureDetails.getByText('Live provider check: not performed', { exact: true }).waitFor();
       assert.equal(await failureDetails.getByRole('button', { name: 'Resume setup unavailable' }).isDisabled(), true);
+      assert.equal(await failureDetails.getByRole('button', { name: 'Refresh saved receipts' }).evaluate(el=>getComputedStyle(el).color), 'rgb(255, 255, 255)', 'Admin shell must not override primary-action contrast');
       await failureDetails.screenshot({ path: path.join(output, `${width}-purchase-failure.png`) });
       failSetupReads = true;
       await failureDetails.getByRole('button', { name: 'Refresh saved receipts' }).click();
