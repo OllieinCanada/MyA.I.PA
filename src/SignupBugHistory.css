@@ -9,5 +9,7 @@
 .signup-bug-history li { padding: .8rem 0; border-bottom: 1px solid #e2ebe8; }
 .signup-bug-history time { font-weight: 700; }
 .signup-bug-history button { margin: .3rem .6rem .3rem 0; }
+.signup-tracker .signup-bug-history button { white-space: normal; max-width: 100%; margin-right: 0; overflow-wrap: anywhere; }
+.signup-bug-history ol { padding-left: 1.25rem; }
 .signup-bug-history [role=alert] { color: #8b2729; border-left: 4px solid #b63c40; padding-left: 1rem; }
 @media(max-width:600px) { .signup-bug-history { padding: 1rem .75rem; } }

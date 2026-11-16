@@ -7,6 +7,11 @@ test('actual bug-history component starts unknown with no repair, resend or dele
  const Component=load('SignupBugHistory.js').default,html=renderToStaticMarkup(React.createElement(Component,{attemptId:'signup_'+'a'.repeat(32)}));
  assert.match(html,/Bug history for this signup/);assert.match(html,/No automatic repair/);assert.match(html,/History is not loaded/);assert.doesNotMatch(html,/No captured reports|Resend|Buy number|Delete history/);
 });
+test('bug-history buttons override the tracker nowrap rule instead of hiding 320px overflow',()=>{
+ const css=require('node:fs').readFileSync(path.resolve(__dirname,'../src/SignupBugHistory.css'),'utf8');
+ assert.match(css,/\.signup-tracker \.signup-bug-history button\s*\{[^}]*white-space:\s*normal;[^}]*max-width:\s*100%/);
+ assert.doesNotMatch(css,/overflow-x:\s*hidden/);
+});
 test('actual maintenance component and notices use Toronto time and do not promise application health',()=>{
  const {default:Component,MaintenanceNotice}=load('ProviderMaintenance.js'),initial=renderToStaticMarkup(React.createElement(Component));
  assert.match(initial,/availability is not verified/);assert.doesNotMatch(initial,/All systems operational/);
