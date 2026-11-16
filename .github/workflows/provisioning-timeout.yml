@@ -1,0 +1,50 @@
+name: Provisioning timeout safety
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  provisioning-timeout-postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: myaipa_recovery_drill_timeout_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      CI: "true"
+      DISABLE_LOCAL_ENV_FILES: "1"
+      DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/myaipa_recovery_drill_timeout_ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.22.3
+          cache: npm
+      - name: Restore locked dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Prepare disposable schema
+        run: |
+          npm run backend:prepare
+          npx prisma db push --skip-generate
+      - name: Verify deterministic provisioning regressions
+        run: node --test tests/provisioning-timeout.test.js tests/provisioning-state.test.js
+      - name: Verify real transaction timing and no duplicate dispatch
+        env:
+          RUN_DATABASE_INTEGRATION: "1"
+        run: node --test tests/provisioning-timeout-postgres.test.js

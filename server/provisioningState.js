@@ -273,7 +273,9 @@ async function markProvisioningDispatch({ prisma, key, claimToken, recoveryActor
         authorizedAt: new Date().toISOString(), priorDispatchStartedAt: data.dispatchStartedAt || 'unknown',
         reason: 'admin_verified_missing_assistant', inventoryVerified: true } } : {}) };
     await tx.runtimeStore.upsert({ where: { key }, update: { data: next }, create: { key, data: next } });
-  });
+  // Allow bounded database latency before dispatch. The provider call remains
+  // outside this transaction; expiry still refuses dispatch without a retry.
+  }, { timeout: 10_000 });
 }
 
 async function verifyCompletedProvisioningResult({ prisma, key, result, verifyCompleted }) {
