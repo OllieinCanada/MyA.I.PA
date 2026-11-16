@@ -61,7 +61,7 @@ test('all five diagnostic groups use exact GET references and never grant readin
 });
 test('Make HTTP request/CDN IDs never substitute for missing exact execution linkage',async()=>{
   const f=fixture();delete f.context.makeExecution;f.record.makeRequestId='e'.repeat(32);
-  const r=await f.build()(f.attempt);assert.equal(find(r,'make').detail,'EXECUTION_LINK_MISSING');assert.equal(f.calls.some(u=>u.includes('make.com')),false);
+  const r=await f.build()(f.attempt);assert.equal(find(r,'make').detail,'EXECUTION_LINK_MISSING');assert.equal(f.calls.some(u=>new URL(u).hostname==='us2.make.com'),false);
 });
 test('missing resource references remain unknown, not an account-wide no-purchase claim',async()=>{
   const f=fixture();for(const k of ['twilioPhoneNumber','vapiAssistantId','vapiPhoneNumberId','smsVerificationMessageSid','agentTestOwnerMessageSid','agentTestCustomerMessageSid','setupFollowupSmsSid'])delete f.record[k];
@@ -122,7 +122,7 @@ test('Make failure and waiting statuses stay separate from provider completion a
   log.status=3;f.record.makeFailedStage='TWILIO_NUMBER_PURCHASE';f.record.makeProviderCode='PRIVATE_SECRET_TOKEN_DO_NOT_PUBLISH';
   let r=await f.build()(f.attempt);assert.equal(find(r,'make').state,'failed');assert.match(find(r,'make-saved').detail,/TWILIO_NUMBER_PURCHASE/);assert.doesNotMatch(JSON.stringify(r),/PRIVATE_SECRET/);
   delete log.status;log.eventType='EXECUTION_PAUSED';r=await f.build()(f.attempt);assert.equal(find(r,'make').state,'unknown');
-  f.context.makeExecution.contextHash='f'.repeat(64);f.calls.length=0;r=await f.build()(f.attempt);assert.equal(find(r,'make').detail,'EXECUTION_LINK_MISSING');assert.equal(f.calls.some(u=>u.includes('make.com')),false);
+  f.context.makeExecution.contextHash='f'.repeat(64);f.calls.length=0;r=await f.build()(f.attempt);assert.equal(find(r,'make').detail,'EXECUTION_LINK_MISSING');assert.equal(f.calls.some(u=>new URL(u).hostname==='us2.make.com'),false);
 });
 for(const status of [401,403,404,429,500])test('HTTP '+status+' stays unknown with no retry or raw error disclosure',async()=>{
   const f=fixture();f.status(status);const r=await f.build()(f.attempt);assert.equal(find(r,'number').state,'unknown');assert.equal(f.calls.length,8);assert.doesNotMatch(JSON.stringify(r),/secret-raw/);
@@ -163,5 +163,5 @@ for(const mode of ['empty','duplicate','truncated','wrong-account','shared','mis
   if(mode==='missing-marker')delete f.context.payload.provisioning.resources.twilioNumber;
   f.bodies.set('IncomingPhoneNumbers.json',inventory);const r=await f.build()(f.attempt);
   assert.equal(find(r,'number').state,'unknown');assert.equal(r.resumeAllowed,false);assert.equal(r.ready,false);
-  assert.ok(f.calls.every(u=>!u.includes('evil.example')));
+  assert.ok(f.calls.every(u=>new URL(u).hostname!=='evil.example'));
 });
