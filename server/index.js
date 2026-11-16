@@ -13,6 +13,8 @@ const { automaticNotificationAlert, listNotificationOutcomeAlerts } = require('.
 const { createFinanceService, registerFinanceRoutes } = require('./providerFinance');
 const { trackProgress: trackAdminSignupProgress, registerTrackerRoutes, createStallProcessor, createTrackerBatchSaver } = require('./adminSignupTracker');
 const { readSetupEvidence, createNumberSearchTracker } = require('./adminSignupSetup');
+const { createSignupLiveDiagnostics } = require('./signupLiveDiagnostics');
+const { registerLiveDiagnosticRoutes } = require('./signupLiveDiagnosticRoutes');
 const { inspectSignup } = require('./signupDiagnosticCheck');
 const { createAssociationFence, createAssociationRepairService, atomicCommitAssociationFile,
   registerAssociationRepairRoutes } = require('./signupAssociationRepair');
@@ -12569,7 +12571,8 @@ async function executeTelegramApproval(approval) {
   if (approval.purpose === 'SIGNUP_CHECK') {
     const result = await inspectSignup({ approval, list: listSignupDashboardRecords,
       targetFor: record => hashOperationalTarget(signupOperationalIdentity(record)),
-      readSetup: record => readSetupEvidence({ prisma, record, searchTracker: signupNumberSearchTracker }) });
+      readSetup: record => readSetupEvidence({ prisma, record, searchTracker: signupNumberSearchTracker }),
+      readLive: record => signupLiveDiagnostics(record.signupAttemptId) });
     await finishTelegramApproval(prisma, approval.id, { status: 'COMPLETED', result: result.report });
     return { terminal: true, text: result.text, openLabel: 'Open signup tracker' };
   }
@@ -17795,6 +17798,8 @@ app.get('/api/admin/call-notification-outcomes', requireAdmin, asyncRoute(async 
 }));
 require('./smsNotificationDrafts').registerNotificationDraftRoutes({ app, prisma, requireAdmin, isAllowedOrigin,
   actorHash: getAdminActorHash, suppressionChecker: phone => isSmsSuppressed(phone) });
+const signupLiveDiagnostics = createSignupLiveDiagnostics({ prisma, list: listSignupDashboardRecords });
+registerLiveDiagnosticRoutes({ app, requireAdmin, isAllowedOrigin, inspect: signupLiveDiagnostics });
 registerTrackerRoutes({ app, requireAdmin, isAllowedOrigin, list: listSignupDashboardRecords, save: upsertSignupDashboardRecord,
   audit: event => recordAdminAuditEvent({ prisma, ...event }), actorHash: getAdminActorHash, observations: () => signupFormObservations.listAdmin(),
   setupEvidence: record => readSetupEvidence({ prisma, record, searchTracker: signupNumberSearchTracker }) });

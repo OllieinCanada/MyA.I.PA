@@ -44,6 +44,18 @@ test('transport/read errors fail closed; nothing invokes a recovery or sender ca
   const f = fixture(); f.readSetup = async () => { throw Error('synthetic read failure'); };
   await assert.rejects(inspectSignup(f), /synthetic read failure/);
 });
+
+test('new live read is exact-target bound and separate from saved claims and recovery', async () => {
+  const f=fixture();let reads=0;
+  f.readLive=async r=>{reads++;assert.equal(r.signupAttemptId,attempt);return {readOnly:true,attemptId:attempt,
+    checkedAt:new Date().toISOString(),groups:[{title:'Live Twilio',checks:[{state:'unknown',detail:'Resource reference missing.'}]}]};};
+  const result=await inspectSignup(f);assert.equal(reads,1);assert.equal(result.report.scope,'saved_and_exact_provider_reads');
+  assert.equal(result.report.resumeAllowed,false);assert.equal(result.report.liveProviderVerified,false);assert.match(result.text,/UNKNOWN: Resource reference missing/);
+  f.readLive=async()=>({readOnly:true,attemptId:'signup_'+'f'.repeat(32),groups:[]});
+  await assert.rejects(inspectSignup(f),e=>e.code==='SIGNUP_CHECK_EVIDENCE_UNAVAILABLE');
+  f.readLive=async()=>{f.record.businessId=99;return {readOnly:true,attemptId:attempt,groups:[]};};
+  await assert.rejects(inspectSignup(f),e=>e.code==='SIGNUP_CHECK_EVIDENCE_CHANGED');
+});
 test('new keyboard exposes check only, retains protected link and requires exact attempt', () => {
   assert.throws(() => sanitizeContext('SIGNUP_CHECK', {}), /exact signup/);
   const context = sanitizeContext('SIGNUP_CHECK', { signupAttemptId: attempt, openUrl: 'https://www.myaipa.ca/#/admin?tab=signups', sendSms: true });
