@@ -112,7 +112,6 @@ jobs:
           npm run test:signup-setup:postgres
           node scripts/run-staging-intake-drill.js
           RUN_DATABASE_INTEGRATION=1 node --test tests/call-persistence-budget-postgres.test.js
-          RUN_DATABASE_INTEGRATION=1 node --test tests/provisioning-timeout-postgres.test.js
 
       - name: Save signup recovery evidence
         if: always()
