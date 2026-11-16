@@ -10,6 +10,8 @@ const { dispatchHandler: notificationDispatchHandler, dispatchReadinessHandler }
 const { executeAutomaticCallNotifications, SUMMARY_TOOL: AUTOMATIC_SUMMARY_TOOL } = require('./automaticCallNotifications');
 const { createAutomaticNotificationContextReader } = require('./automaticNotificationContext');
 const { automaticNotificationAlert, listNotificationOutcomeAlerts } = require('./notificationOutcomes');
+const {safelyRecordSignupBug,registerSignupBugRoutes,runtimeBugStage}=require('./signupBugHistory');
+const {registerProviderStatusRoutes,refreshProviderStatuses}=require('./providerMaintenance');
 const { createFinanceService, registerFinanceRoutes } = require('./providerFinance');
 const { trackProgress: trackAdminSignupProgress, registerTrackerRoutes, createStallProcessor, createTrackerBatchSaver } = require('./adminSignupTracker');
 const { readSetupEvidence, createNumberSearchTracker } = require('./adminSignupSetup');
@@ -15330,6 +15332,7 @@ app.post(
       reviewReasons: securityDecision.reviewReasons,
     });
     const signupStatus = buildSignupStatusResponse(attemptRegistration);
+    req.signupDiagnosticAttemptId=attemptRegistration?.record?.eventKey;
 
     if (attemptRegistration?.reused) {
       const publicAttempt = attemptRegistration.public || {};
@@ -15901,6 +15904,9 @@ async function processVerifiedSignupJobs({ force = false } = {}) {
       return processVerifiedSignupSetup({ record, tokenHash: job.tokenHash, verificationChannel: job.channel, job }, ctl);
     },
     onFailure: async ({ job, code, uncertain, exhausted }) => {
+      const bug=await safelyRecordSignupBug({prisma,listSignups:listSignupDashboardRecords,
+        attemptId:job.eventKey,stage:'worker',source:'worker',error:{code},release:process.env.RENDER_GIT_COMMIT||''});
+      if(!bug.recorded)console.warn('[bug-history] worker capture unconfirmed; no capture retry');
       const attempt = await prisma.signupAttempt.findUnique({ where: { eventKey: job.eventKey } });
       if (!attempt || isClosedSignup(attempt)) return;
       if (attempt.status === "setup_ready") {
@@ -17799,6 +17805,8 @@ app.get('/api/admin/call-notification-outcomes', requireAdmin, asyncRoute(async 
 require('./smsNotificationDrafts').registerNotificationDraftRoutes({ app, prisma, requireAdmin, isAllowedOrigin,
   actorHash: getAdminActorHash, suppressionChecker: phone => isSmsSuppressed(phone) });
 const signupLiveDiagnostics = createSignupLiveDiagnostics({ prisma, list: listSignupDashboardRecords });
+registerSignupBugRoutes({app,requireAdmin,prisma,listSignups:listSignupDashboardRecords});
+registerProviderStatusRoutes({app,requireAdmin,prisma});
 registerLiveDiagnosticRoutes({ app, requireAdmin, isAllowedOrigin, inspect: signupLiveDiagnostics });
 registerTrackerRoutes({ app, requireAdmin, isAllowedOrigin, list: listSignupDashboardRecords, save: upsertSignupDashboardRecord,
   audit: event => recordAdminAuditEvent({ prisma, ...event }), actorHash: getAdminActorHash, observations: () => signupFormObservations.listAdmin(),
@@ -18642,6 +18650,10 @@ async function runAutomatedRuntimeRemediationInternal(incident, recordedItem) {
 }
 
 async function safelyNotifyRuntimeFailure(error, context = {}) {
+  const bug=await safelyRecordSignupBug({prisma,listSignups:listSignupDashboardRecords,error,
+    stage:runtimeBugStage({stage:context.signupStage,route:context.route}),attemptId:context.signupAttemptId,
+    release:process.env.RENDER_GIT_COMMIT||''});
+  if(!bug.recorded)console.warn('[bug-history] runtime capture unconfirmed; no capture retry');
   const baseIncident = buildRuntimeIncident(error, context);
   const remediation = context.reasonCode === 'VAPI_CALL_SYNC_DELAYED' ? {
     action: 'none', status: 'verifying', automatic: false, requiresUser: false,
@@ -18816,6 +18828,8 @@ app.use((err, req, res, _next) => {
       const route = typeof req?.route?.path === "string" ? req.route.path : req?.path || "";
       const area = runtimeAreaForRoute(route);
       safelyNotifyRuntimeFailure(err, {
+        signupAttemptId:req.signupProvisioningAttemptId||req.signupDiagnosticAttemptId,
+        signupStage:runtimeBugStage({route}),
         area,
         method: req?.method,
         route,
@@ -18844,7 +18858,11 @@ app.use((err, req, res, _next) => {
           ? "Open Needs Attention, review the signup snapshot and provider state, then recover it only after duplicate provisioning is ruled out."
           : "Open Needs Attention and the server logs, verify the affected provider state, then retry only when duplicate work is ruled out.",
       });
-    }
+    } else void safelyRecordSignupBug({prisma,listSignups:listSignupDashboardRecords,error:err,
+      stage:runtimeBugStage({route:req.route?.path}),attemptId:req.signupProvisioningAttemptId||req.signupDiagnosticAttemptId,release:process.env.RENDER_GIT_COMMIT||''});
+  } else if(status>=400&&(req.signupProvisioningAttemptId||req.signupDiagnosticAttemptId)){
+    void safelyRecordSignupBug({prisma,listSignups:listSignupDashboardRecords,error:err,
+      stage:runtimeBugStage({route:req.route?.path}),attemptId:req.signupProvisioningAttemptId||req.signupDiagnosticAttemptId,release:process.env.RENDER_GIT_COMMIT||''});
   }
   const body = { error: message };
   if (String(err.code || "").startsWith("MAKE_SIGNUP_")) {
@@ -19321,6 +19339,14 @@ async function drainTelegramOutbox(phase = "scheduled") {
 }
 
 function startBackgroundJobs() {
+  // Fixed public GET feeds only. No sends, private provider APIs or repair actions.
+  let providerStatusReading=false;
+  const refreshStatus=async()=>{if(providerStatusReading)return;providerStatusReading=true;
+    try{await refreshProviderStatuses({prisma});}finally{providerStatusReading=false;}};
+  if(process.env.PROVIDER_STATUS_POLL_ENABLED!=='false'){
+    runBackgroundJob('public provider status',refreshStatus,'initial');
+    setInterval(()=>runBackgroundJob('public provider status',refreshStatus),5*60*1000);
+  }
   // Explicit staging-only opt-in. The production service is denied even if a
   // configuration mistake sets every staging flag. No production route change.
   if (stagingWorkerEnabled(process.env)) {

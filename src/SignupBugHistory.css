@@ -1,0 +1,13 @@
+.signup-bug-history { margin: 1.5rem 0; padding: 1.3rem; border: 1px solid #cbded8; border-radius: 16px; background: #f8fbfa; color: #193d36; overflow-wrap: anywhere; }
+.signup-bug-history header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap; }
+.signup-bug-history h4 { margin: 0 0 .6rem; font-size: 1.15rem; }
+.signup-bug-history p,.signup-bug-history small { line-height: 1.6; }
+.signup-bug-history details { margin: .9rem 0; background: #fff; border: 1px solid #d5e1dd; border-radius: 12px; }
+.signup-bug-history summary { padding: 1rem; cursor: pointer; line-height: 1.6; }
+.signup-bug-history summary span { display: block; color: #546963; font-size: .85rem; }
+.signup-bug-history .bug-group-body { padding: 0 1rem 1rem; }
+.signup-bug-history li { padding: .8rem 0; border-bottom: 1px solid #e2ebe8; }
+.signup-bug-history time { font-weight: 700; }
+.signup-bug-history button { margin: .3rem .6rem .3rem 0; }
+.signup-bug-history [role=alert] { color: #8b2729; border-left: 4px solid #b63c40; padding-left: 1rem; }
+@media(max-width:600px) { .signup-bug-history { padding: 1rem .75rem; } }

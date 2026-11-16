@@ -10,8 +10,11 @@ const { buildAgentTestFingerprint, buildAgentRouteFingerprint, AGENT_TEST_VERSIO
 const { FIELDS: OBSERVED_FIELDS } = require('../server/signupFormObservation');
 const { projectSetup } = require('../server/adminSignupSetup');
 const { registerLiveDiagnosticRoutes } = require('../server/signupLiveDiagnosticRoutes');
+const {registerProviderStatusRoutes,normalizeFeed,PREFIX:STATUS_PREFIX}=require('../server/providerMaintenance');
+const {signupDiagnosticError}=require('../server/signupDiagnosticError');
 const output = path.resolve('diagnostics/signup-tracker-preview');
 const proofSources=['src/SignupControlRoom.js','src/SignupLiveDiagnostics.js','src/SignupLiveDiagnostics.css','server/signupLiveDiagnosticRoutes.js','server/signupLiveDiagnostics.js','server/signupDiagnosticProviders.js','src/SignupFailureDetails.js','src/SignupFailureDetails.css','server/adminSignupSetup.js','server/signupPurchaseEvidence.js','scripts/preview-admin-signup-tracker.js'];
+proofSources.push('src/ProviderMaintenance.js','src/ProviderMaintenance.css','src/SignupBugHistory.js','src/SignupBugHistory.css','server/providerMaintenance.js','server/signupBugHistory.js','server/signupDiagnosticError.js');
 const sourceHashes=()=>Object.fromEntries(proofSources.map(file=>[file,require('node:crypto').createHash('sha256').update(fs.readFileSync(path.resolve(file))).digest('hex')]));
 const bundleDir = path.join(output, 'public');
 const at = Date.now();
@@ -64,6 +67,15 @@ async function main() {
   await build(); const app = express(); app.use(express.json());
   app.use((req,res,next)=>{const started=Date.now();res.on('finish',()=>{httpTrace.push({method:req.method,path:req.path,status:res.statusCode,elapsedMs:Date.now()-started});if(httpTrace.length>100)httpTrace.shift();});next();});
   let fixtureSaves = 0, audits = 0, requests = 0, base, failReads = false, failSetupReads = false, failLiveReads = false, liveReads = 0;
+  let failStatusReads=false;
+  const publicStatus=normalizeFeed('render',{page:{url:'https://status.render.com'},status:{indicator:'none'},components:[{id:'fixture-component',name:'Administration',status:'operational'}],incidents:[],scheduled_maintenances:[{id:'fixture-maintenance',name:'Synthetic administration maintenance',status:'scheduled',scheduled_for:'2026-11-18T02:00:00Z',scheduled_until:'2026-11-18T03:00:00Z',components:[{name:'Administration'}],incident_updates:[{created_at:stamp(1),body:'Synthetic provider report only. No application uptime is verified.'}]}]},at);
+  registerProviderStatusRoutes({app,requireAdmin:(_req,_res,next)=>next(),prisma:{runtimeStore:{findMany:async({where})=>{if(failStatusReads)throw Error('Synthetic outage');return where.key.startsWith===STATUS_PREFIX?[{key:STATUS_PREFIX+'render',data:{...publicStatus,lastGood:publicStatus}}]:[];}}});
+  // Presentation fixture; real journal authentication/ownership/SQL are separate tests.
+  app.get('/api/admin/signup-bugs',(req,res)=>{
+    const issueId='a'.repeat(64),attemptId=rows[0].signupAttemptId;
+    const events=req.query.attemptId&&req.query.attemptId!==attemptId||req.query.issueId&&req.query.issueId!==issueId?[]:[{eventRef:'b'.repeat(64),issueId,reference:'BUG-AAAAAAAA',stage:'purchase',operation:'Number purchase',diagnostic:signupDiagnosticError({code:'P2028'}),capturedAt:stamp(1),release:null,signupAttemptId:attemptId,association:'verified',confirmedSoftwareBug:false,nextAction:'Synthetic fixture only. Inspect receipts; no replay.'}];
+    res.set('Cache-Control','no-store').json({readOnly:true,ready:false,events,groups:events.length?[{issueId,reference:'BUG-AAAAAAAA',operation:'Number purchase',reportsOnPage:1}]:[],hasMore:false,nextCursor:null,limitation:'Sealed synthetic presentation fixture; no provider or production evidence.'});
+  });
   app.use((req, res, next) => { requests++; if (req.method === 'GET' && ((failReads && req.path === '/api/admin/signup-tracker') || (failSetupReads && req.path.endsWith('/setup')))) return res.status(503).json({ error: 'Synthetic outage' }); next(); });
   registerLiveDiagnosticRoutes({ app, requireAdmin: (_req,_res,next)=>next(), isAllowedOrigin: origin=>origin===base,
     inspect: async attemptId=>{
@@ -108,6 +120,16 @@ async function main() {
       await page.route('**/*', route => new URL(route.request().url()).origin === base ? route.continue() : (externalBlocked++, route.abort()));
       await page.goto(base); const panel = page.getByRole('region', { name: 'Signup progress tracker' });
       await panel.getByRole('heading', { name: 'Harbour Electrical' }).waitFor();
+      const maintenance=panel.getByRole('region',{name:'Upcoming maintenance and provider status'});
+      await maintenance.getByText('Provider reports: none',{exact:true}).waitFor();await maintenance.locator('summary').filter({hasText:'Render'}).click();
+      await maintenance.getByText('Synthetic administration maintenance',{exact:true}).waitFor();assert.match(await maintenance.innerText(),/Nov 17, 2026, 9:00 p.m. EST/);
+      await maintenance.screenshot({path:path.join(output,`${width}-provider-maintenance.png`)});
+      failStatusReads=true;await maintenance.getByRole('button',{name:'Refresh saved status'}).click();await maintenance.getByRole('alert').waitFor();assert.equal(await maintenance.getByText('Provider reports: none',{exact:true}).count(),0,'Last-known status is not an all-clear after refresh failure');
+      failStatusReads=false;await maintenance.getByRole('button',{name:'Refresh saved status'}).click();await maintenance.getByText('Provider reports: none',{exact:true}).waitFor();
+      const bugHistory=panel.getByRole('region',{name:'Application bug history'});await bugHistory.getByText('BUG-AAAAAAAA · Number purchase',{exact:true}).click();
+      await bugHistory.getByText(/transaction expired or closed/).waitFor();await bugHistory.getByRole('button',{name:'View matching report history'}).click();await bugHistory.getByRole('button',{name:'Show all signatures again'}).waitFor();
+      await bugHistory.getByText('BUG-AAAAAAAA · Number purchase',{exact:true}).click();
+      await bugHistory.getByRole('button',{name:'Open signup: Harbour Electrical'}).click();await bugHistory.screenshot({path:path.join(output,`${width}-bug-history.png`)});
       assert.match(await panel.locator('h2').evaluate(el=>getComputedStyle(el).fontFamily),/Georgia/,'Shared admin styling cannot replace the approved heading font');
       assert.equal(await panel.getByRole('button',{name:'Edit business info',exact:true}).first().evaluate(el=>getComputedStyle(el).color),'rgb(255, 255, 255)','Primary editor button remains readable inside admin shell');
       assert.equal(await panel.locator('.signup-tracker-row').count(), 3);
