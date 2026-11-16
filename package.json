@@ -22,6 +22,10 @@
     "stripe": "^22.3.2"
   },
   "scripts": {
+    "test:provider-maintenance": "node --test --test-concurrency=1 tests/provider-maintenance.test.js tests/provider-maintenance-api.test.js tests/signup-observability-ui.test.js",
+    "test:signup-bugs": "node --test --test-concurrency=1 tests/signup-bug-history.test.js tests/signup-bug-history-api.test.js tests/signup-observability-ui.test.js",
+    "diagnose:provider-maintenance": "node scripts/check-provider-maintenance.js",
+    "telegram:maintenance": "node scripts/send-provider-maintenance-alert.js",
     "admin:owner-link": "node scripts/create-admin-owner-link.js",
     "test:admin-owner-links": "node --test tests/admin-owner-links.test.js tests/admin-owner-links-api.test.js",
     "test:admin-owner-links:postgres": "node --test tests/admin-owner-links-postgres.test.js",

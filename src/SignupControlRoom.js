@@ -2,6 +2,7 @@ import React, {useCallback,useEffect,useRef,useState} from 'react';
 import SignupJourneyMap from './SignupJourneyMap';
 import SignupFailureDetails from './SignupFailureDetails';
 import SignupLiveDiagnostics from './SignupLiveDiagnostics';
+import SignupBugHistory from './SignupBugHistory';
 import {controlRoomModel} from './signupControlRoomModel';
 import './SignupControlRoom.css';
 
@@ -37,6 +38,7 @@ export default function SignupControlRoom({row,apiBase=''}) {
   return <section className="signup-control-room" aria-label={`Setup analysis for ${row.businessName}`}>
     <div className={'control-room-summary '+(row.stalled?'is-stalled':'')}><span className="control-summary-icon" aria-hidden="true">{row.stalled?'!':'i'}</span><div><h4>{model.headline}</h4><p>{model.explanation}</p></div><span className="control-read-only">Read-only</span></div>
     {error?<p role="alert" className="signup-tracker-error">{error}</p>:null}
+    <SignupBugHistory apiBase={apiBase} attemptId={row.attemptId}/>
     <div className="control-room-layout"><div className="control-room-main">
       <SignupJourneyMap row={row} onSelect={choose} selectedId={selected}/>
       <div className="setup-analysis-groups control-room-groups">{model.groups.map((group,index)=><section key={group.id} aria-label={group.title} className={selected===group.id?'is-selected':''}><h5><button type="button" aria-pressed={selected===group.id} onClick={()=>choose(group.id)}><span aria-hidden="true">{index+1}</span>{['Number','Assistant & script','Practice texts','Trial & readiness'][index]}</button></h5>

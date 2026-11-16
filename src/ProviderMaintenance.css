@@ -1,0 +1,13 @@
+.provider-maintenance { margin: 1.5rem 0; padding: 1.4rem; border: 1px solid #cbd9e6; border-radius: 18px; background: #f6f9fc; color: #203c53; overflow-wrap: anywhere; }
+.provider-maintenance header { display: flex; justify-content: space-between; gap: 1.4rem; align-items: flex-start; flex-wrap: wrap; }
+.provider-maintenance h3 { margin: 0 0 .6rem; }
+.provider-maintenance p,.provider-maintenance small { line-height: 1.65; white-space: pre-wrap; }
+.provider-status-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,260px),1fr)); gap: 1rem; margin: 1rem 0; align-items: start; }
+.provider-maintenance details { background: white; border: 1px solid #d4dfe7; border-radius: 12px; padding: 1rem; }
+.provider-maintenance summary { cursor: pointer; line-height: 1.7; }
+.provider-maintenance summary span,.provider-maintenance summary small { display: block; }
+.provider-notice { margin: 1rem 0; padding: 1rem; border-left: 4px solid #cf9c38; background: #fffbef; border-radius: 6px; }
+.provider-notice.is-incident { border-color: #c36753; background: #fff5f2; }
+.provider-maintenance [role=alert] { color: #8b2729; }
+.provider-maintenance a { color: #175574; text-decoration: underline; }
+@media(max-width:600px) { .provider-maintenance { padding: 1rem .75rem; } }

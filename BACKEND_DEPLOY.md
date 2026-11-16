@@ -1,5 +1,19 @@
 # My AI PA Backend
 
+## Signup observability and public provider notices
+
+The admin signup tracker includes a separate append-only bug-reference log and maintenance/status panel. `/api/admin/signup-bugs` and `/api/admin/provider-status` require the existing admin session and are read-only/no-store. They cannot repair, resend, purchase, acknowledge, clear incidents or authorize launch. No schema change is introduced.
+
+Eligible new runtime/worker failures are captured best-effort as redacted codes, fixed operation labels, server timestamps and release references in `application-bug-history:v1:` RuntimeStore rows. Call-answering safeguards and read-only HTTP paths retain their existing diagnostics but do not write this journal: reporting must not add transactions before answering or break read-only guarantees. An exact server-owned SignupAttempt and unique matching business record are required for attribution; links are rechecked when read. Unknown/changed associations remain unlinked. Repeated signatures group captured reports, not proven distinct bugs. There is no raw-log/transcript capture or historical backfill, and no automatic expiry/incident-acknowledgement deletion. Retention/legal policy and backup coverage are separate. Database/process failures can prevent capture; an absent report is not proof nothing failed. A capture budget expiry never authorizes a provider retry.
+
+The background poll reads only fixed official public Render, Twilio and Make feeds every five minutes, unless `PROVIDER_STATUS_POLL_ENABLED=false`. It sends no messages, invokes no private account/provider APIs and starts no repairs. No runtime setting is changed by preparation. `provider-status:v1:` retains the latest observation and last successful read; `provider-status-history:v1:` retains distinct notice versions. Missing notices are not automatically resolved. Data over 15 minutes old or incomplete/failed evidence is unknown, not healthy. Toronto windows show date and timezone. Vapi's feed adapter is not verified; its official page remains available for manual review. Private account notices are not ingested.
+
+`npm run diagnose:provider-maintenance` reads public feeds independently of the app, but is not an external outage-monitor installation. No independent monitor or monitoring account/settings changes are included. The app cannot announce its own total hosting outage. Provider notices do not establish impact on a particular signup or prove recovery.
+
+`npm run telegram:maintenance -- --provider=render --event=EVENT_ID` previews a current exact public notice. A single send requires configured owner credentials, `--apply --confirm=SEND_ONE_OWNER_MAINTENANCE_ALERT --ledger=PRIVATE_PATH`. An exclusive local attempt ledger prevents repeating that same attempt after uncertainty; do not remove it or blindly retry. Keep credentials and receipt files private. There is no recurring Telegram schedule/automatic provider alert dispatch in this release; deduplicated alerts are a separate next change.
+
+Validation: `npm run test:provider-maintenance`, `npm run test:signup-bugs`, existing tracker browser regression, and `.github/workflows/signup-observability.yml` with disposable PostgreSQL. Synthetic results do not prove live availability or provider delivery. This release leaves signup/purchase/recovery, billing, account eligibility, feature flags and incident cleanup unchanged. Broader signup-trace and storage-migration preparation is excluded.
+
 The backend is the Express API in `server/index.js`. It must run as a separate public web service because GitHub Pages only hosts the static frontend.
 
 ## Local Run

@@ -98,6 +98,7 @@ test('snapshot publication requires admin authentication and same-origin JSON ed
 test('two conflicting route aliases fail closed before any allowance or provider action',async()=>{
   rows.set(keys[1],{...gate,assistantId:'other-business-assistant'});
   const response=await call();assert.ok((await response.json()).error);assert.equal(transactions,0);
+  assert.equal([...rows.keys()].filter(k=>k.startsWith('application-bug-history:')).length,0,'Call-setup reporting never starts journal writes');
 });
 
 test('one paused route alias cannot be bypassed using the active phone-ID alias',async()=>{

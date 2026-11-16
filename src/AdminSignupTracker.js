@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './AdminSignupTracker.css';
 import SignupControlRoom from './SignupControlRoom';
+import SignupBugHistory from './SignupBugHistory';
+import ProviderMaintenance from './ProviderMaintenance';
 
 const FIELDS = { serviceSummary: ['Services', 400], serviceArea: ['Service area', 160], businessWebsite: ['Business website', 300], businessAddress: ['Business address', 400], specializationNotes: ['Business notes', 2000] };
 const time = value => value && Number.isFinite(new Date(value).getTime()) ? new Date(value).toLocaleString('en-CA', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/Toronto', timeZoneName: 'short' }) : 'Not recorded';
@@ -70,6 +72,8 @@ export default function AdminSignupTracker({ apiBase = '' }) {
     </header>
     {error ? <p role="alert" className="signup-tracker-error">{error}</p> : null}
     {message ? <p role="status" className="signup-tracker-saved">{message}</p> : null}
+    <ProviderMaintenance apiBase={apiBase}/>
+    <SignupBugHistory apiBase={apiBase} signupNames={Object.fromEntries((data?.rows||[]).map(row=>[row.attemptId,row.businessName]))} onInspectSignup={data?attempt=>{setFilter('all');setSearch('');setFocused(attempt);}:undefined}/>
     <div className="signup-tracker-kpis">
       {[['Active setup', data?.summary?.active, 'People still onboarding'], ['Needs attention', data?.summary?.stalled, '10+ minutes with no progress'], ['Waiting on customer', data?.summary?.waitingCustomer, 'Verification still needed'], ['Setup ready', data?.summary?.ready, 'No stuck-signup alerts']].map(([label, value, note]) => <div key={label}><span>{label}</span><strong>{value ?? '—'}</strong><small>{note}</small></div>)}
     </div>
