@@ -1,0 +1,9 @@
+.signup-tracker .signup-live-diagnostics{padding:18px;margin:22px 0;border:1px solid #cdd8e8;border-radius:12px;background:#f7f9fd;overflow-wrap:anywhere;min-width:0}
+.signup-tracker .signup-live-diagnostics h5{font:650 16px/1.5 system-ui;color:#182940;margin:0 0 12px}.signup-tracker .signup-live-diagnostics h6{font:650 14px/1.5 system-ui;margin:0 0 10px;color:#182940}
+.signup-tracker .signup-live-diagnostics p{font:400 13px/1.6 system-ui;margin:8px 0;color:#43556e}.signup-tracker .signup-live-diagnostics small{display:block;font:400 11px/1.6 system-ui;color:#52627a}
+.signup-tracker .signup-live-diagnostics button{display:block;width:100%;padding:13px;margin:14px 0;border:1px solid #19243a;border-radius:8px;white-space:normal;font:600 13px/1.5 system-ui;color:#fff!important;background:#19243a!important}
+.signup-tracker .signup-live-diagnostics button:disabled{background:#e8edf5!important;color:#526076!important;cursor:not-allowed;border-color:#cdd8e8}.signup-tracker .signup-live-diagnostics button:focus-visible{outline:3px solid #527ce3;outline-offset:3px}
+.signup-tracker .signup-live-group{margin:20px 0;padding-top:18px;border-top:1px solid #d8e0ed}.signup-tracker .signup-live-group ul{list-style:none;padding:0;margin:0}.signup-tracker .signup-live-group li{display:block;padding:12px 0;border-bottom:1px solid #e0e6ef}
+.signup-tracker .diagnostic-state{font:650 12px/1.5 system-ui;color:#44556e}.signup-tracker .diagnostic-state.is-verified{color:#175b43}.signup-tracker .diagnostic-state.is-failed{color:#a0283b}.signup-tracker .diagnostic-state.is-unknown{color:#795015}
+.myai-admin .signup-tracker .signup-live-diagnostics button:not(:disabled){color:#fff!important;background:#19243a!important}
+.myai-admin .signup-tracker .signup-live-diagnostics button:disabled{color:#526076!important;background:#e8edf5!important}

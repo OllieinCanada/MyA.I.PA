@@ -2,6 +2,10 @@
   "schemaVersion": 1,
   "base": "8f218834361f5ec22de23c5cedd6690897d40f99",
   "node": "24.22.3",
+  "signupLiveDiagnosticsContinuation": {
+    "baseRelease": "a95830d5a18eeb14ae499168716d9c836445d390",
+    "scope": "Candidate explicit read-only signup diagnostics with exact-context, provider GET, changed-evidence and no-replay guards. New bytes require fresh CI and review; no release or real provider checks implied."
+  },
   "signupDiagnosticsContinuation": {
     "baseRelease": "9cb3f689379e7e46ffe9cdf03aa0be1a927abc7b",
     "scope": "Read-only signup diagnostics and saved purchase evidence; no provider read adapter, recovery, customer sending or security-setting changes. Candidate bytes require fresh CI."
@@ -52,11 +56,14 @@
     "server/boundedBusinessMappingAdapters.js": "69cc5596edc20e8a2e689ff826bb2e424e4beaff8f41fa970ee40efa4aed3744",
     "server/boundedBusinessMappingWriter.js": "c8b129211d807e780d55600695362cbcb813c29ac784a147dbed1b9ca746db6a",
     "server/boundedMappingControl.js": "6bdf571cea3fc1d2a52c20e8bc89a49d10ffbe069a7d2fd463eaadb25354b36a",
-    "server/index.js": "b9a7ffeb2d7ae29331bf952d92d8f470c77b3c5a1fe3e1acf8942565cfe3635b",
+    "server/index.js": "977c4c439d4207b4004bf995c0dc1c459b4bb3f5762cf4c06be04d809aaa7783",
+    "server/signupDiagnosticProviders.js": "1e419751d3cba2375956d9f4791863a0958a19590323ad3c1cd5927edaf5a89a",
+    "server/signupLiveDiagnosticRoutes.js": "458df17b067aa4166d31b2aeeb7788cfa139a302ba56ce62575aa125521a1109",
+    "server/signupLiveDiagnostics.js": "f488d7c7221b89e261f615c5d15e68c201b6c8051138377de133969931aff215",
     "server/adminSignupSetup.js": "bdf0e379c6e714f7f7c6baf7d281d2c4860ec1b8cda447068380c454a8f720d7",
     "server/adminSignupTracker.js": "540624f48e430a1577aeb60a960b3da7dfb0d62b252b8446dccdf3b91017fc49",
     "server/telegramApprovalActions.js": "b7410951d5b41dd75cf7caeff7770170df61b5e7b5ff1d10a5b72fcf7bab7b82",
-    "server/signupDiagnosticCheck.js": "2a2b383f5fcfada1ddf3f1b57e684b2704b98b52bba5f96da75ef204e2262499",
+    "server/signupDiagnosticCheck.js": "220226bb0daf6b460fe43b16adfbacfe5c74166e6ecd5e6c6cc10ae084c29f50",
     "server/signupPurchaseEvidence.js": "be1d01063d570fb6bd4c80bc9076db2650b724f49d1a6c35c48800d932f82b7f",
     "server/confirmedCallRequest.js": "d83c474b57d5bd9a56e3988bbf9c46fde15abdcd1b5d15fa4c696c18962ad928",
     "server/agentTools.js": "a670231ccd6b00e2fb4acf4063398076f8e0e0180561d2c7971d1226ffe61bb0",

@@ -1,6 +1,7 @@
 import React, {useCallback,useEffect,useRef,useState} from 'react';
 import SignupJourneyMap from './SignupJourneyMap';
 import SignupFailureDetails from './SignupFailureDetails';
+import SignupLiveDiagnostics from './SignupLiveDiagnostics';
 import {controlRoomModel} from './signupControlRoomModel';
 import './SignupControlRoom.css';
 
@@ -47,6 +48,7 @@ export default function SignupControlRoom({row,apiBase=''}) {
     <aside className="control-room-inspector" aria-label="Selected step evidence" tabIndex={-1} ref={inspector}>
       <span className="signup-tracker-eyebrow">Step inspector</span><h4>Selected step: {model.selected?.title || 'Number search'}</h4><p className="control-evidence-stamp">Saved evidence checked {time(setup.checkedAt)}</p>
       <button type="button" disabled={busy} onClick={load}>{busy?'Reading saved evidence…':'Analyze saved setup'}</button>
+      <SignupLiveDiagnostics key={row.attemptId+':'+row.infoRevision} attemptId={row.attemptId} apiBase={apiBase} now={now}/>
       <p className="control-coverage">{report?setup.coverage.replaceAll('_',' '):'Summary only · read detailed evidence for search history'}</p>
       {selected==='number'?<div className="control-search-detail"><strong>{model.freshSearch&&search?.phase==='searching'?`Searching ${search.areaCode || 'regional inventory'}`:search?`${search.stale || !model.freshSearch?'Stale observation':'Last observed search'}: ${search.phase.replaceAll('_',' ')}`:'Current search not observed'}</strong><p>Preferred area: {setup.number.preferredAreaCode || 'Unknown'}. {setup.number.locked?'Locked request: the original area-code policy is preserved.':''}</p><p>{setup.number.assignedLast4?`Assigned area ${setup.number.assignedAreaCode} · ending ${setup.number.assignedLast4}`:'No number assignment saved.'}</p></div>:null}
       <ul className="control-selected-checks">{model.detailChecks.map(check=><li key={check.id} className={'is-'+check.state}><strong><span aria-hidden="true">{mark(check.state)} </span>{check.label}</strong><small>{stateLabel(check.state)}</small><p>{check.detail}</p>{check.at?<time dateTime={check.at}>{time(check.at)}</time>:null}</li>)}</ul>

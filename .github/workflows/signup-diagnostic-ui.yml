@@ -26,7 +26,7 @@ jobs:
           cache: npm
       - run: npm ci --include=dev --legacy-peer-deps --ignore-scripts
       - name: Verify saved-evidence, exact target, callback and read-only API contracts
-        run: node --test tests/signup-purchase-evidence.test.js tests/signup-diagnostic-check.test.js tests/admin-signup-setup.test.js tests/signup-control-room.test.js tests/admin-signup-tracker-api.test.js tests/telegram-approval-actions.test.js
+        run: node --test tests/signup-live-diagnostics.test.js tests/signup-live-diagnostic-routes.test.js tests/signup-purchase-evidence.test.js tests/signup-diagnostic-check.test.js tests/admin-signup-setup.test.js tests/signup-control-room.test.js tests/admin-signup-tracker-api.test.js tests/telegram-approval-actions.test.js
       - name: Install isolated regression browser
         run: npx playwright install --with-deps chromium
       - name: Actual dashboard and routes at desktop and both phone widths

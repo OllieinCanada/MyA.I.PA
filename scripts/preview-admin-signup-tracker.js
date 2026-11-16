@@ -9,7 +9,10 @@ const { registerTrackerRoutes, trackProgress, episodeKey } = require('../server/
 const { buildAgentTestFingerprint, buildAgentRouteFingerprint, AGENT_TEST_VERSION } = require('../server/signupAgentTesting');
 const { FIELDS: OBSERVED_FIELDS } = require('../server/signupFormObservation');
 const { projectSetup } = require('../server/adminSignupSetup');
+const { registerLiveDiagnosticRoutes } = require('../server/signupLiveDiagnosticRoutes');
 const output = path.resolve('diagnostics/signup-tracker-preview');
+const proofSources=['src/SignupControlRoom.js','src/SignupLiveDiagnostics.js','src/SignupLiveDiagnostics.css','server/signupLiveDiagnosticRoutes.js','server/signupLiveDiagnostics.js','server/signupDiagnosticProviders.js','src/SignupFailureDetails.js','src/SignupFailureDetails.css','server/adminSignupSetup.js','server/signupPurchaseEvidence.js','scripts/preview-admin-signup-tracker.js'];
+const sourceHashes=()=>Object.fromEntries(proofSources.map(file=>[file,require('node:crypto').createHash('sha256').update(fs.readFileSync(path.resolve(file))).digest('hex')]));
 const bundleDir = path.join(output, 'public');
 const at = Date.now();
 const stamp = ago => new Date(at - ago * 60000).toISOString();
@@ -57,9 +60,20 @@ async function build() {
   });
 }
 async function main() {
+  const initialSourceHashes=sourceHashes(), httpTrace=[], browserFailures=[];
   await build(); const app = express(); app.use(express.json());
-  let fixtureSaves = 0, audits = 0, requests = 0, base, failReads = false, failSetupReads = false;
+  app.use((req,res,next)=>{const started=Date.now();res.on('finish',()=>{httpTrace.push({method:req.method,path:req.path,status:res.statusCode,elapsedMs:Date.now()-started});if(httpTrace.length>100)httpTrace.shift();});next();});
+  let fixtureSaves = 0, audits = 0, requests = 0, base, failReads = false, failSetupReads = false, failLiveReads = false, liveReads = 0;
   app.use((req, res, next) => { requests++; if (req.method === 'GET' && ((failReads && req.path === '/api/admin/signup-tracker') || (failSetupReads && req.path.endsWith('/setup')))) return res.status(503).json({ error: 'Synthetic outage' }); next(); });
+  registerLiveDiagnosticRoutes({ app, requireAdmin: (_req,_res,next)=>next(), isAllowedOrigin: origin=>origin===base,
+    inspect: async attemptId=>{
+      liveReads++; if(failLiveReads)throw Error('Synthetic provider-read outage');
+      return {version:1,attemptId,readOnly:true,ready:false,resumeAllowed:false,checkedAt:new Date().toISOString(),
+        groups:[['saved','1. Saved request and purchase outcome'],['twilio','2. Live Twilio number ownership'],
+          ['make','3. Make execution and failed step'],['vapi','4. Live Vapi assistant, script and route'],['delivery','5. Existing message delivery receipts']]
+          .map(([id,title])=>({id,title,checks:[{id,state:id==='saved'?'failed':id==='twilio'?'verified':'unknown',detail:id==='twilio'?'Synthetic exact number found (no real provider).':id==='make'?'EXECUTION_LINK_MISSING':'Synthetic evidence only.',source:'Sealed synthetic fixture'}]})),
+        nextAction:'Resolve unknown evidence before any separately approved repair.',limitations:'Synthetic UI proof only. No provider requests or recovery.'};
+    }});
   registerTrackerRoutes({ app, requireAdmin: (_req, _res, next) => next(), isAllowedOrigin: origin => origin === base,
     list: () => rows, save: record => { const previous = rows.find(r => r.signupAttemptId === record.signupAttemptId); const next = { ...record, onboardingTracker: trackProgress(previous, record) }; rows = rows.map(r => r.signupAttemptId === next.signupAttemptId ? next : r); fixtureSaves++; return next; },
     audit: async () => { audits++; }, actorHash: () => 'synthetic-preview',
@@ -90,6 +104,7 @@ async function main() {
       const context = await browser.newContext({ viewport: { width, height: 1050 }, reducedMotion: 'reduce' }); const page = await context.newPage(); const errors = [];
       lastPage = page;
       page.on('pageerror', e => { errors.push(e.message); console.error('Synthetic preview page error:', e.message); });
+      page.on('requestfailed',r=>{if(new URL(r.url()).origin===base)browserFailures.push({path:new URL(r.url()).pathname,error:r.failure()?.errorText});});
       await page.route('**/*', route => new URL(route.request().url()).origin === base ? route.continue() : (externalBlocked++, route.abort()));
       await page.goto(base); const panel = page.getByRole('region', { name: 'Signup progress tracker' });
       await panel.getByRole('heading', { name: 'Harbour Electrical' }).waitFor();
@@ -112,6 +127,19 @@ async function main() {
       await panel.locator('.journey-business .is-blocked').filter({ hasText: 'City' }).waitFor();
       assert.equal(await panel.locator('.journey-trial').getByText('Activation not verified', { exact: true }).count(), 1);
       const setup = panel.getByRole('region', { name: 'Setup analysis for Harbour Electrical' });
+      const livePanel=setup.getByRole('region',{name:'Read-only signup provider diagnostics'});
+      const beforeLive=liveReads;assert.equal(await livePanel.getByText('No live check has been run. Saved progress remains separate.',{exact:true}).count(),1);
+      assert.equal(await livePanel.getByRole('button',{name:'Run read-only checks',exact:true}).evaluate(el=>getComputedStyle(el).color),'rgb(255, 255, 255)','Global admin styles cannot lower diagnostic-button contrast');
+      assert.equal(liveReads,beforeLive,'Mounting/polling saved evidence never starts provider checks');
+      await livePanel.getByRole('button',{name:'Run read-only checks',exact:true}).click();
+      await livePanel.getByRole('status').filter({hasText:'Point-in-time snapshot'}).waitFor();assert.equal(liveReads,beforeLive+1);
+      assert.equal(await livePanel.locator('.signup-live-group').count(),5);
+      await livePanel.getByText('No exact Make execution is linked. A request ID or matching time is not sufficient.',{exact:true}).waitFor();
+      assert.equal(await livePanel.getByRole('button',{name:'Recovery not authorized by a diagnostic check'}).isDisabled(),true);
+      await livePanel.screenshot({path:path.join(output,`${width}-live-diagnostics.png`)});
+      failLiveReads=true;await livePanel.getByRole('button',{name:'Run read-only checks',exact:true}).click();
+      await livePanel.getByRole('alert').filter({hasText:'last-known only'}).waitFor();
+      await livePanel.getByRole('status').filter({hasText:'Last-known snapshot'}).waitFor();assert.equal(await livePanel.locator('.signup-live-group').count(),5);failLiveReads=false;
       assert.equal(await setup.locator('.setup-analysis-groups > section').count(), 4);
       assert.equal(await setup.locator('.setup-analysis-groups li').count(), 18);
       const cardBounds=await setup.locator('.control-room-groups > section').evaluateAll(cards=>cards.map(card=>{const r=card.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width};}));
@@ -186,12 +214,16 @@ async function main() {
       assert.deepEqual(violations, [], `Accessibility ${width}`);
       await context.close(); console.log(`PASS ${width}px: real component/routes, filters, checkpoints, canonical fixture edit, stale-draft/error retention, no overflow or WCAG2A/AA violations.`);
     }
-    const sources = ['src/SignupControlRoom.js','src/SignupFailureDetails.js','src/SignupFailureDetails.css','server/adminSignupSetup.js','server/signupPurchaseEvidence.js','scripts/preview-admin-signup-tracker.js'];
+    assert.deepEqual(sourceHashes(),initialSourceHashes,'Do not certify source files changed during browser execution');
     const report = { passed: true, scope: 'synthetic-dashboard-only', sourceHead: process.env.SIGNUP_DIAGNOSTIC_HEAD || require('node:child_process').execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),
-      sourceSha256: Object.fromEntries(sources.map(file => [file,require('node:crypto').createHash('sha256').update(fs.readFileSync(path.resolve(file))).digest('hex')])),
-      widths: [1440, 390, 320], purchaseFailureInspector:true, receiptRefreshFailureRetained:true, journeyStages: 9, clickableSteps:9, keyboardStepSelection:true, timeline:true, fixtureSaves, auditEvents: audits, externalBlocked, requests, productionRequests: 0, telegramSends: 0, calls: 0, sms: 0, limitations: 'Synthetic preview, not a production deployment; full exact-lock CI remains required. Saved receipt refresh is not a live provider check or recovery.' };
+      sourceSha256: initialSourceHashes,
+      sourceState: process.env.CI ? 'ci-checkout' : 'uncommitted-local-working-tree',
+      widths: [1440, 390, 320], liveDiagnosticUi:true, liveDiagnosticFixtureReads:liveReads, providerAdapterExercisedByBrowser:false,
+      purchaseFailureInspector:true, receiptRefreshFailureRetained:true, journeyStages: 9, clickableSteps:9, keyboardStepSelection:true, timeline:true, fixtureSaves, auditEvents: audits, externalBlocked, requests, productionRequests: 0, telegramSends: 0, calls: 0, sms: 0, limitations: 'Synthetic preview, not a production deployment; full exact-lock CI remains required. Saved receipt refresh and live-diagnostic fixture responses are not live provider verification or recovery.' };
     fs.writeFileSync(path.join(output, 'browser-report.json'), JSON.stringify(report, null, 2)); console.log(JSON.stringify(report));
   } catch (error) {
+    fs.writeFileSync(path.join(output,`failure-${Date.now()}.json`),JSON.stringify({passed:false,scope:'synthetic-dashboard-only',initialSourceHashes,httpTrace,browserFailures},null,2));
+    console.error('Synthetic loopback trace:',JSON.stringify({httpTrace,browserFailures}));
     if (lastPage && !lastPage.isClosed()) {
       await lastPage.screenshot({ path: path.join(output, `failure-${Date.now()}.png`), fullPage: true }).catch(() => {});
       console.error('Synthetic preview visible state:', (await lastPage.locator('body').innerText().catch(() => '')).slice(0,2000));
