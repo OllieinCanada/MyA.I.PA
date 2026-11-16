@@ -161,7 +161,7 @@ function createTrackerBatchSaver({ read, write, findKey, normalize = record => r
     return { changed };
   };
 }
-function createStallProcessor({ list, saveMany, enqueue, frontendUrl, describeObservation = async () => null, now = () => Date.now(), yieldControl = () => new Promise(resolve => setImmediate(resolve)) }) {
+function createStallProcessor({ list, saveMany, enqueue, frontendUrl, describeObservation = async () => null, diagnosticKeyboard = async () => null, now = () => Date.now(), yieldControl = () => new Promise(resolve => setImmediate(resolve)) }) {
   let running = false;
   return async function processSignupStalls() {
     if (running) return { skipped: true, reason: 'already_running' };
@@ -189,9 +189,11 @@ function createStallProcessor({ list, saveMany, enqueue, frontendUrl, describeOb
         const detectedAt = new Date(now()).toISOString();
         await yieldControl();
         let observation = null; try { observation = await describeObservation(record.signupAttemptId); } catch (_) { /* Unknown coverage is not blank. */ }
+        let inlineKeyboard = null;
+        try { inlineKeyboard = await diagnosticKeyboard(record, episode); } catch (_) { /* Existing protected tracker link remains available. */ }
         const result = await enqueue({ text: stallMessage(row, detectedAt) + '\n' + formObservationLines(observation).join('\n'),
           adminUrl: `${String(frontendUrl).replace(/\/$/, '')}/#/admin?tab=signups`, buttonText: 'Open signup tracker',
-          dedupeKey: `signup-stall:${record.signupAttemptId}:${episode}` });
+          dedupeKey: `signup-stall:${record.signupAttemptId}:${episode}`, ...(inlineKeyboard ? { inlineKeyboard } : {}) });
         await yieldControl();
         if (!(result?.queued || result?.duplicate)) continue;
         changes.push({ kind: 'alert_queued', attemptId: record.signupAttemptId, expectedEpisode: episode, detectedAt });
