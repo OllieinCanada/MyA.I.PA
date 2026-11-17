@@ -12,6 +12,16 @@ test('bug-history buttons override the tracker nowrap rule instead of hiding 320
  assert.match(css,/\.signup-tracker \.signup-bug-history button\s*\{[^}]*white-space:\s*normal;[^}]*max-width:\s*100%/);
  assert.doesNotMatch(css,/overflow-x:\s*hidden/);
 });
+
+test('recovery guidance shows failed/unknown steps with no execute controls and marks stale evidence',()=>{
+ const {RecoveryGuidance}=load('SignupLiveDiagnostics.js');
+ const guidance=require('../server/signupRecoveryGuidance').buildSignupRecoveryGuidance({live:{readOnly:true,groups:[{checks:[{id:'route',state:'failed'}]}]}});
+ const html=renderToStaticMarkup(React.createElement(RecoveryGuidance,{guidance}));
+ assert.match(html,/Phone routing<\/strong><small>Failed/);assert.match(html,/Unknown/);assert.match(html,/No automatic resend/);
+ assert.match(html,/<details><summary>/);assert.doesNotMatch(html,/<details open/);
+ assert.doesNotMatch(html,/<button|<a\b|<form/);
+ const stale=renderToStaticMarkup(React.createElement(RecoveryGuidance,{guidance,stale:true}));assert.match(stale,/Last-known guidance/);
+});
 test('actual maintenance component and notices use Toronto time and do not promise application health',()=>{
  const {default:Component,MaintenanceNotice}=load('ProviderMaintenance.js'),initial=renderToStaticMarkup(React.createElement(Component));
  assert.match(initial,/availability is not verified/);assert.doesNotMatch(initial,/All systems operational/);
