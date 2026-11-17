@@ -40,6 +40,18 @@ test('detailed setup analysis is admin-only, no-store and performs no saved-stat
  assert.equal((await fetch(base+'/api/admin/signup-tracker/not-valid/setup',{headers:headers()})).status,400);
  assert.equal((await fetch(base+'/api/admin/signup-tracker/signup_'+'f'.repeat(32)+'/setup',{headers:headers()})).status,409);
 });
+test('verification preview is authenticated, no-store and cannot execute actions even with action parameters',async()=>{
+ const url=base+'/api/admin/signup-tracker/'+id+'/verification-preview',before=JSON.stringify({rows,audits});
+ assert.equal((await fetch(url)).status,401);
+ const r=await fetch(url+'?apply=true&send=true&activateTrial=true',{headers:headers()}),data=await r.json();
+ assert.equal(r.status,200);assert.equal(r.headers.get('cache-control'),'no-store');
+ for(const key of ['ready','applyAllowed','sendAllowed','trialActivationAllowed','liveProviderVerified'])assert.equal(data.verification[key],false);
+ assert.equal(JSON.stringify({rows,audits}),before);
+ assert.doesNotMatch(JSON.stringify(data),/private@example|5550101|billing-do-not-change/);
+ assert.equal((await fetch(base+'/api/admin/signup-tracker/'+other+'/verification-preview',{headers:headers()})).status,409);
+ assert.equal((await fetch(url,{method:'POST',headers:headers(),body:'{}'})).status,404);
+});
+
 test('business edits require authentication plus trusted origin and anti-CSRF header', async () => {
   const body = { expectedRevision: infoRevision(rows[0]), details: businessInfo(rows[0]) };
   assert.equal((await patch(body, { 'x-test-admin': 'no' })).status, 401);
