@@ -17,7 +17,8 @@ test('recovery guidance shows failed/unknown steps with no execute controls and 
  const {RecoveryGuidance}=load('SignupLiveDiagnostics.js');
  const guidance=require('../server/signupRecoveryGuidance').buildSignupRecoveryGuidance({live:{readOnly:true,groups:[{checks:[{id:'route',state:'failed'}]}]}});
  const html=renderToStaticMarkup(React.createElement(RecoveryGuidance,{guidance}));
- assert.match(html,/Phone routing: Failed/);assert.match(html,/Unknown/);assert.match(html,/No automatic resend/);
+ assert.match(html,/Phone routing<\/strong><small>Failed/);assert.match(html,/Unknown/);assert.match(html,/No automatic resend/);
+ assert.match(html,/<details><summary>/);assert.doesNotMatch(html,/<details open/);
  assert.doesNotMatch(html,/<button|<a\b|<form/);
  const stale=renderToStaticMarkup(React.createElement(RecoveryGuidance,{guidance,stale:true}));assert.match(stale,/Last-known guidance/);
 });

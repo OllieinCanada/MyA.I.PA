@@ -165,6 +165,11 @@ async function main() {
       await livePanel.getByRole('status').filter({hasText:'Point-in-time snapshot'}).waitFor();assert.equal(liveReads,beforeLive+1);
       assert.equal(await livePanel.locator('.signup-live-group').count(),6);
       await livePanel.getByRole('region',{name:'Safe recovery steps'}).getByText('What happens next',{exact:true}).waitFor();
+      const recovery=livePanel.getByRole('region',{name:'Safe recovery steps'});
+      assert.equal(await recovery.locator('details[open]').count(),0,'Guidance starts compact on every viewport');
+      await recovery.locator('summary').filter({hasText:'Number purchase'}).click();
+      await recovery.getByText('Check the existing purchase receipt and current number ownership before any recovery. Never buy another number for an uncertain attempt.',{exact:true}).waitFor();
+      await recovery.locator('summary').filter({hasText:'Number purchase'}).click();
       await livePanel.getByText('No exact Make execution is linked. A request ID or matching time is not sufficient.',{exact:true}).waitFor();
       assert.equal(await livePanel.getByRole('button',{name:'Recovery not authorized by a diagnostic check'}).isDisabled(),true);
       await livePanel.screenshot({path:path.join(output,`${width}-live-diagnostics.png`)});

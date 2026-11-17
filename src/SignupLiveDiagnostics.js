@@ -13,9 +13,9 @@ const codes={RESOURCE_REFERENCE_MISSING:'No exact saved resource reference. Chec
 const time=value=>value&&Number.isFinite(Date.parse(value))?new Date(value).toLocaleString('en-CA',{timeZone:'America/Toronto'}):'Not recorded';
 export function RecoveryGuidance({guidance,stale=false}){
  if(guidance?.version!==1||guidance.readOnly!==true||guidance.applyAllowed!==false||!Array.isArray(guidance.steps))return null;
- return <section className="signup-live-group" aria-label="Safe recovery steps"><h6>What happens next</h6>
+ return <section className="signup-live-group signup-recovery-guidance" aria-label="Safe recovery steps"><h6>What happens next</h6>
   <p>{stale?'Last-known guidance — refresh checks before taking any action.':guidance.nextAction}</p>
-  <ol>{guidance.steps.filter(s=>s.state!=='observed_checks_verified').map(s=><li key={s.id}><strong>{s.label}: {s.state==='failed'?'Failed':'Unknown — check needed'}</strong><p>{s.next}</p></li>)}</ol>
+  <ol>{guidance.steps.filter(s=>s.state!=='observed_checks_verified').map(s=><li key={s.id}><details><summary><strong>{s.label}</strong><small>{s.state==='failed'?'Failed':'Unknown — check needed'}</small></summary><p>{s.next}</p></details></li>)}</ol>
   <p>No automatic resend, purchase or trial activation. Any fix must be verified before setup advances.</p><small>{guidance.limitation}</small>
  </section>;
 }

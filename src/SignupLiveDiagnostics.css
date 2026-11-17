@@ -7,3 +7,8 @@
 .signup-tracker .diagnostic-state{font:650 12px/1.5 system-ui;color:#44556e}.signup-tracker .diagnostic-state.is-verified{color:#175b43}.signup-tracker .diagnostic-state.is-failed{color:#a0283b}.signup-tracker .diagnostic-state.is-unknown{color:#795015}
 .myai-admin .signup-tracker .signup-live-diagnostics button:not(:disabled){color:#fff!important;background:#19243a!important}
 .myai-admin .signup-tracker .signup-live-diagnostics button:disabled{color:#526076!important;background:#e8edf5!important}
+.signup-tracker .signup-recovery-guidance ol{padding:0;margin:12px 0;list-style:none}
+.signup-tracker .signup-recovery-guidance summary{cursor:pointer;padding:4px 0;font:600 13px/1.5 system-ui;color:#182940;overflow-wrap:anywhere}
+.signup-tracker .signup-recovery-guidance summary strong{font:inherit}
+.signup-tracker .signup-recovery-guidance summary small{margin-top:3px}
+.signup-tracker .signup-recovery-guidance summary:focus-visible{outline:3px solid #527ce3;outline-offset:3px}
