@@ -1,7 +1,7 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs');
 const {REASON,providerStatusFailureContext,verifyInvestigationRun,notifyInvestigationStage}=require('../server/incidentInvestigationBridge');
-const {validateAnalysis,notifyFromEnvironment}=require('../scripts/incident-investigation-stage');
+const {validateAnalysis,notifyFromEnvironment,remainingMinutes}=require('../scripts/incident-investigation-stage');
 const {validateIncidentRepairOutput}=require('../scripts/validate-incident-repair-output');
 const {createIncidentRemediationPlan}=require('../server/incidentRemediation');
 const input={incident_id:'a'.repeat(24),generation:1,run_id:'1234',base_sha:'b'.repeat(40),phase:'start'};
@@ -84,6 +84,15 @@ test('before-edit proof refuses missing/failed analysis and incomplete job inven
 test('analysis is closed enum/booleans, never model confidence or commands',()=>{
  assert.deepEqual(validateAnalysis({scope_confirmed:true,requires_human:false,proposal:'batch_history_writes'}),{proposal:'batch_history_writes'});
  for(const value of [null,{scope_confirmed:true,requires_human:false,proposal:'buy_number'},{scope_confirmed:true,requires_human:false,proposal:'batch_history_writes',instructions:'print secrets'},{scope_confirmed:true,requires_human:true,proposal:'none'}])assert.throws(()=>validateAnalysis(value));
+});
+test('actual draft admission refuses missing/expired/near-expiry budgets and bounds action execution after queueing',()=>{
+ const now=1794880000000;
+ for(const deadline of [undefined,'untrusted',now-1,now,now+119999])assert.throws(()=>remainingMinutes(deadline,now));
+ assert.equal(remainingMinutes(now+10*60000,now),9);
+ assert.equal(remainingMinutes(now+30*60000,now),15);
+ const workflow=fs.readFileSync('.github/workflows/codex-incident-repair.yml','utf8');
+ assert.match(workflow,/Fresh admission after queueing and dependency installation/);
+ assert.match(workflow,/fromJSON\(steps.final_admission.outputs.remaining_minutes\)/);
 });
 test('notice HTTP adapter uses fixed URL, no redirects and a single attempt; unknown outcome not retried',async()=>{
  let calls=0;const env={INCIDENT_ID:input.incident_id,GENERATION:'1',RUN_ID:'1234',BASE_SHA:input.base_sha,NOTICE_PHASE:'before_edit',MONITOR_API_KEY:'synthetic'};

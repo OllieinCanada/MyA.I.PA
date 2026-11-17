@@ -1,6 +1,13 @@
 'use strict';
 const fs=require('node:fs');
 const {validateStageInput}=require('../server/incidentInvestigationBridge');
+function remainingMinutes(deadline,now=Date.now()){
+  if(!/^\d{13}$/.test(String(deadline||'')))throw Error('Investigation deadline is absent.');
+  // Reserve one minute for action startup; never round a partial minute up.
+  const remaining=Math.min(15,Math.floor((Number(deadline)-now)/60000)-1);
+  if(remaining<1)throw Error('Investigation admission window exhausted.');
+  return remaining;
+}
 function validateAnalysis(value){
   const keys=Object.keys(value||{}).sort();
   if(JSON.stringify(keys)!==JSON.stringify(['proposal','requires_human','scope_confirmed'])
@@ -24,10 +31,16 @@ if(require.main===module){
   Promise.resolve().then(()=>{
     if(process.argv[2]==='validate-analysis')return validateAnalysis(JSON.parse(fs.readFileSync(process.argv[3],'utf8')));
     if(process.argv[2]==='notify')return notifyFromEnvironment();
+    if(process.argv[2]==='admit'){
+      const minutes=remainingMinutes(process.env.INVESTIGATION_DEADLINE);
+      if(!process.env.GITHUB_OUTPUT)throw Error('Workflow output is absent.');
+      fs.appendFileSync(process.env.GITHUB_OUTPUT,`remaining_minutes=${minutes}\n`);
+      return {admitted:true};
+    }
     throw Error('Unknown investigation stage.');
   }).then(()=>console.log('Investigation stage verified.')).catch(()=>{
     // Never serialize transport errors, headers, URLs with credentials or model prose.
     console.error('Investigation stage did not verify; inspect the sealed run.');process.exitCode=1;
   });
 }
-module.exports={validateAnalysis,notifyFromEnvironment};
+module.exports={validateAnalysis,notifyFromEnvironment,remainingMinutes};
