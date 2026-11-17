@@ -5,6 +5,7 @@ const { redactIncidentText } = require('./incidentAlerts');
 const { isContactVerified } = require('./signupVerificationChannel');
 const { formObservationLines } = require('./signupFormObservation');
 const { projectSetup } = require('./adminSignupSetup');
+const { signupVerificationPreview } = require('./signupVerificationPreview');
 
 const STALL_MS = 10 * 60 * 1000;
 const EDIT_FIELDS = Object.freeze({ serviceSummary: 400, serviceArea: 160, businessWebsite: 300, businessAddress: 400, specializationNotes: 2000 });
@@ -230,6 +231,16 @@ function registerTrackerRoutes({ app, requireAdmin, isAllowedOrigin, list, save,
     if (matches.length !== 1) return res.status(409).json({ error: 'Exactly one saved signup must match.' });
     try { res.json({ ok: true, setup: setupEvidence ? await setupEvidence(matches[0]) : projectSetup(matches[0]) }); }
     catch (_) { res.status(503).json({ error: 'Detailed setup evidence is unavailable. No setup action was run.' }); }
+  });
+  app.get('/api/admin/signup-tracker/:attemptId/verification-preview', requireAdmin, async (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    if (!validAttempt(req.params.attemptId)) return res.status(400).json({ error: 'Invalid signup reference.' });
+    const matches = list().filter(r => r.signupAttemptId === req.params.attemptId);
+    if (matches.length !== 1 || isClosedSignup(matches[0])) return res.status(409).json({ error: 'Exactly one active saved signup must match.' });
+    try {
+      const setup = setupEvidence ? await setupEvidence(matches[0]) : projectSetup(matches[0]);
+      res.json({ ok: true, verification: signupVerificationPreview(matches[0], setup) });
+    } catch (_) { res.status(503).json({ error: 'Verification evidence is unavailable. No setup action was run.' }); }
   });
   app.patch('/api/admin/signups/:attemptId/business-info', requireAdmin, async (req, res) => {
     res.set('Cache-Control', 'no-store');
