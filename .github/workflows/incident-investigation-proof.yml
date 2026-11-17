@@ -1,0 +1,57 @@
+name: Sealed synthetic incident investigation proof
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  investigation-proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ci
+        ports: [5432:5432]
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+    env:
+      DISABLE_LOCAL_ENV_FILES: '1'
+      DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/ci
+      RUN_INVESTIGATION_POSTGRES: '1'
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24.22.3'
+          cache: npm
+      - run: npm ci --include=dev --legacy-peer-deps
+      - run: npx prisma db push --skip-generate
+      - name: Synthetic contracts and actual authenticated loopback handler
+        run: npm run test:incident-investigation
+      - name: Actual isolated SQL concurrency and restart proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p diagnostics/incident-investigation-proof
+          node --test --test-reporter=tap tests/incident-investigation-postgres.test.js | tee diagnostics/incident-investigation-proof/postgres.txt
+          grep -q '# pass 3' diagnostics/incident-investigation-proof/postgres.txt
+          grep -q '# skipped 0' diagnostics/incident-investigation-proof/postgres.txt
+      - name: Exact source identity (also retain failed proof)
+        if: always()
+        run: |
+          mkdir -p diagnostics/incident-investigation-proof
+          git rev-parse HEAD > diagnostics/incident-investigation-proof/head.txt
+          sha256sum server/incidentInvestigationBridge.js server/index.js scripts/incident-investigation-stage.js tests/incident-investigation-postgres.test.js .github/workflows/codex-incident-repair.yml .github/workflows/incident-investigation-proof.yml > diagnostics/incident-investigation-proof/source-hashes.txt
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: incident-investigation-${{ github.event.pull_request.head.sha || github.sha }}
+          path: diagnostics/incident-investigation-proof/
+          if-no-files-found: error

@@ -1,0 +1,10 @@
+{
+  "type":"object",
+  "additionalProperties":false,
+  "required":["scope_confirmed","proposal","requires_human"],
+  "properties":{
+    "scope_confirmed":{"type":"boolean"},
+    "proposal":{"type":"string","enum":["batch_history_writes","none"]},
+    "requires_human":{"type":"boolean"}
+  }
+}

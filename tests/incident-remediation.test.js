@@ -99,8 +99,9 @@ test("automatic policy allowlists read-only readiness but never funding, payment
   }
 });
 
-test("only exact reviewed application-defect codes can enter the guarded code-repair allowlist", () => {
+test("only exact application-defect and separately enabled investigation codes enter guarded drafting", () => {
   assert.deepEqual([...CODE_REPAIR_CODES], [
+    'PROVIDER_STATUS_SAVE_TIMEOUT',
     "DATABASE_QUERY_IMPLEMENTATION_FAILED",
     "AGENT_TEST_SETUP_INCOMPLETE",
     "AGENT_TEST_SIGNUP_ATTEMPT_MISSING",
