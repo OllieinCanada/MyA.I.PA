@@ -34,7 +34,7 @@ function assertPublicSafeText(value, label) {
   }
 }
 
-function validateIncidentRepairOutput(output, patchContent) {
+function validateIncidentRepairOutput(output, patchContent, request) {
   if (!output || typeof output !== "object" || Array.isArray(output)) {
     throw new Error("Codex output must be one JSON object.");
   }
@@ -71,6 +71,10 @@ function validateIncidentRepairOutput(output, patchContent) {
   }
   const patch = validateIncidentRepairPatch(patchContent);
   const actualFiles = [...patch.files].sort();
+  if (request?.reason_code === 'PROVIDER_STATUS_SAVE_TIMEOUT'
+    && actualFiles.some(file => !['server/providerMaintenance.js', 'tests/provider-maintenance.test.js'].includes(file))) {
+    throw new Error('Provider-status investigation patch exceeded its exact source/test scope.');
+  }
   const expectedFiles = [...claimedFiles].sort();
   if (JSON.stringify(actualFiles) !== JSON.stringify(expectedFiles)) {
     throw new Error("Codex changed_files does not exactly match the independently parsed patch.");
@@ -97,7 +101,8 @@ function main() {
   if (outputBuffer.length > 128 * 1024) throw new Error("Codex output exceeds the 128 KB policy limit.");
   const result = validateIncidentRepairOutput(
     JSON.parse(outputBuffer.toString("utf8")),
-    fs.readFileSync(patchPath)
+    fs.readFileSync(patchPath),
+    process.argv[4] ? JSON.parse(fs.readFileSync(process.argv[4], 'utf8')) : undefined
   );
   process.stdout.write(`${JSON.stringify(result)}\n`);
 }

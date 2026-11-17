@@ -172,7 +172,7 @@ test("incident output validator requires independently matching, public-safe sou
 test("Codex workflow is sandboxed, independently verified, draft-only, and reports through the API", () => {
   const workflow = fs.readFileSync(path.join(root, ".github/workflows/codex-incident-repair.yml"), "utf8");
   const prompt = fs.readFileSync(path.join(root, ".github/codex/prompts/incident-repair.md"), "utf8");
-  const codexStart = workflow.indexOf("uses: openai/codex-action@");
+  const codexStart = workflow.indexOf("uses: openai/codex-action@", workflow.indexOf('\n  draft:'));
   assert.notEqual(codexStart, -1);
   const codexBlock = workflow.slice(Math.max(0, codexStart - 250), codexStart + 1_800);
   const verifyStart = workflow.indexOf("\n  verify:");

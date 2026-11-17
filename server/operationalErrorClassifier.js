@@ -291,6 +291,19 @@ function classifyOperationalError(error = {}, context = {}) {
     });
   }
 
+  if (provider === 'DATABASE' && code === 'P2028'
+    && context.reasonCode === 'PROVIDER_STATUS_SAVE_TIMEOUT'
+    && context.route === '/background/public-provider-status') {
+    return result(details, 'public_status_persistence', {
+      reasonCode: 'PROVIDER_STATUS_SAVE_TIMEOUT',
+      reason: 'Saving public provider-status observations exceeded the database transaction budget.',
+      retryable: true,
+      whatFailed: 'Public maintenance information could not be saved',
+      impact: 'Maintenance information may be stale; no customer failure or external mutation is established.',
+      nextAction: 'Inspect public-status persistence and its bounded scheduled refresh. Do not replay customer operations. An isolated code investigation may propose a tested draft only.',
+    });
+  }
+
   if (provider === 'DATABASE' && code === 'P2028') {
     return result(details, 'database_transaction_timeout', {
       reasonCode: 'DATABASE_TRANSACTION_TIMEOUT',

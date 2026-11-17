@@ -20,6 +20,7 @@ const TELEGRAM_RETRY_CODES = new Set([
 ]);
 
 const CODE_REPAIR_CODES = new Set([
+  'PROVIDER_STATUS_SAVE_TIMEOUT',
   "DATABASE_QUERY_IMPLEMENTATION_FAILED",
   "AGENT_TEST_SETUP_INCOMPLETE",
   "AGENT_TEST_SIGNUP_ATTEMPT_MISSING",
@@ -173,8 +174,8 @@ function createIncidentRemediationPlan(incident = {}, options = {}) {
   }
 
   if (isProbableCodeDefect(reasonCode)) {
-    const enabled = codeRepairEnabled;
-    const configured = codeRepairEnabled && codeRepairConfigured;
+    const enabled = codeRepairEnabled && (reasonCode !== 'PROVIDER_STATUS_SAVE_TIMEOUT' || options.investigationEnabled === true);
+    const configured = enabled && codeRepairConfigured;
     return {
       ...base,
       confidence: "medium",
@@ -183,7 +184,9 @@ function createIncidentRemediationPlan(incident = {}, options = {}) {
       requiresUser: !enabled,
       action: "codex_draft_repair",
       status: enabled ? "queued" : "needs_user",
-      hypothesis: "The failure is most consistent with an application-code or query defect rather than a provider-account action.",
+      hypothesis: reasonCode === 'PROVIDER_STATUS_SAVE_TIMEOUT'
+        ? 'Public-status persistence exceeded its database budget. Repeated database work is an investigation hypothesis, not a proven live root cause.'
+        : "The failure is most consistent with an application-code or query defect rather than a provider-account action.",
       proposedSolution: configured
         ? "My AI PA will send a sanitized repair brief to an isolated Codex GitHub job. Codex may draft a patch, but independent tests must pass and the result remains a draft pull request—never an automatic production deploy."
         : enabled

@@ -117,6 +117,7 @@ const {
   selectSignupDashboardRecordForProvisioning,
 } = require("./signupDashboardIdentity");
 const { buildRuntimeIncident } = require("./runtimeAlerts");
+const { REASON: INVESTIGATION_REASON, providerStatusFailureContext, registerInvestigationNoticeRoute } = require('./incidentInvestigationBridge');
 const { createCallSyncMonitor, isCallSyncRoutingRefusal } = require("./callSyncHealth");
 const { readSimulationEvidence, attestCallSyncExclusion, summarizeCallSyncReporting } = require('./callSyncReporting');
 const { assessIncidentSlo } = require("./incidentSlo");
@@ -700,6 +701,8 @@ const INCIDENT_SAFE_AUTO_REPAIR_ENABLED = process.env.INCIDENT_SAFE_AUTO_REPAIR_
   ? false
   : isEnabled(process.env.INCIDENT_SAFE_AUTO_REPAIR_ENABLED);
 const INCIDENT_CODE_REPAIR_ENABLED = isEnabled(process.env.INCIDENT_CODE_REPAIR_ENABLED);
+// Separate opt-in; deploying code does not activate hosted investigations.
+const INCIDENT_INVESTIGATION_ENABLED = process.env.INCIDENT_INVESTIGATION_ENABLED === 'true';
 const INCIDENT_CODE_REPAIR_MAX_DAILY = parsePositiveInt(process.env.INCIDENT_CODE_REPAIR_MAX_DAILY, 3);
 const INCIDENT_CODE_REPAIR_COOLDOWN_MS = parsePositiveInt(
   process.env.INCIDENT_CODE_REPAIR_COOLDOWN_MS,
@@ -12749,6 +12752,12 @@ app.post(
   })
 );
 
+registerInvestigationNoticeRoute({app,requireMonitorKey,prisma,
+  listIncidents:()=>listRuntimeIncidents(runtimeIncidentPath),
+  getEnabled:()=>INCIDENT_INVESTIGATION_ENABLED,
+  getGitHubCredentials:async()=>({repository:GITHUB_INCIDENT_REPAIR_REPO,token:await getIncidentRepairGitHubToken()}),
+  getTelegramCredentials:()=>({token:TELEGRAM_BOT_TOKEN,chatId:TELEGRAM_CHAT_ID})});
+
 app.post(
   "/api/internal/operations/incident-repair-result",
   requireMonitorKey,
@@ -18504,6 +18513,8 @@ async function runAutomatedRuntimeRemediation(incident, recordedItem) {
 }
 
 async function runAutomatedRuntimeRemediationInternal(incident, recordedItem) {
+  if(incident.reasonCode===INVESTIGATION_REASON&&!INCIDENT_INVESTIGATION_ENABLED)
+    return {skipped:true,reason:'investigation_disabled'};
   const remediation = recordedItem?.remediation || incident.remediation || {};
   const generation = Math.max(1, Number(remediation.generation || 1));
   if (remediation.status === "not_required") return { skipped: true, reason: "not_required" };
@@ -18663,7 +18674,8 @@ async function safelyNotifyRuntimeFailure(error, context = {}) {
     safetyBoundary: 'Do not replay customer texts, signups, payments, or resource purchases.',
   } : createIncidentRemediationPlan(baseIncident, {
     safeAutoRepairEnabled: INCIDENT_SAFE_AUTO_REPAIR_ENABLED && !TELEGRAM_GUARDED_ACTIONS_ENABLED,
-    codeRepairEnabled: INCIDENT_CODE_REPAIR_ENABLED,
+    codeRepairEnabled: INCIDENT_CODE_REPAIR_ENABLED && (baseIncident.reasonCode !== INVESTIGATION_REASON || INCIDENT_INVESTIGATION_ENABLED),
+    investigationEnabled: INCIDENT_INVESTIGATION_ENABLED,
     codeRepairConfigured: Boolean(
       incidentRepairCredentialConfigured()
       && GITHUB_INCIDENT_REPAIR_REPO
@@ -18896,6 +18908,7 @@ function runBackgroundJob(jobName, task, phase = "scheduled") {
         impact: "Scheduled My AI PA follow-up or maintenance work may be delayed until the next successful run.",
         lastCheckpoint: `The ${phase} job started but did not finish normally.`,
         nextAction: "Open the server logs and Needs Attention, confirm whether any partial provider action occurred, then run or wait for a safe retry.",
+        ...(jobName === 'public provider status' ? providerStatusFailureContext(err) : {}),
       });
       return null;
     });
