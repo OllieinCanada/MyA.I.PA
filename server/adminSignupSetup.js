@@ -139,7 +139,7 @@ function projectSetup(record = {}, { context, receipts = {}, search = null, cove
 
 async function readSetupEvidence({ prisma, record, searchTracker }) {
   let key, context;
-  const business = Number.isSafeInteger(record.businessId) && record.businessId > 0 && prisma.business
+  let business = Number.isSafeInteger(record.businessId) && record.businessId > 0 && prisma.business
     ? await prisma.business.findUnique({ where: { id: record.businessId }, select: { id: true, vapiMappings: { select: { matchType: true, matchValue: true } } } }) : undefined;
   try { key = buildProvisioningAccountKey(record.ownerEmail, record.ownerPhone, record.businessName); }
   catch (_) { return projectSetup(record, { business }); }
@@ -159,6 +159,26 @@ async function readSetupEvidence({ prisma, record, searchTracker }) {
     if (data && data.contextHash !== context.contextHash) return projectSetup(record, { coverage: 'receipt_context_mismatch', business });
     receipts[kind] = data;
   }
-  return projectSetup(record, { context, receipts, search: searchTracker?.read(key, context.contextHash), coverage: 'exact_context_and_saved_receipts', business });
+  let reconciled=false;
+  if(record.resourceAssociationRepair){
+    const verified=await require('./reconciledTrackerEvidence').readReconciledBusiness({prisma,record,context,receipts});
+    // A completed repair with changed/incomplete evidence must not fall back to
+    // an unverified business-ID projection.
+    business=verified||undefined;reconciled=Boolean(verified);
+  }
+  const projected=reconciled?{...record,businessId:business.id}:record;
+  const result=projectSetup(projected, { context, receipts, search: searchTracker?.read(key, context.contextHash), coverage: 'exact_context_and_saved_receipts', business });
+  if(reconciled){
+    result.businessEvidenceSource='completed_guarded_reconciliation_and_current_mappings';
+    const ready=result.groups.flatMap(g=>g.checks).find(c=>c.id==='ready');
+    ready.state='pending';ready.detail='Routing evidence recovered from completed journals. Overall readiness still requires separate canonical verification.';
+  }
+  const content=result.groups.flatMap(g=>g.checks).find(c=>c.id==='script');
+  if(content?.state==='pending'&&receipts['vapi-assistant']?.status==='completed'
+    &&receipts['vapi-assistant'].result?.assistantId===record.vapiAssistantId
+    &&/^[a-f0-9]{64}$/.test(receipts['vapi-assistant'].result?.contentFingerprint||'')){
+    content.detail='Completed assistant receipt includes a saved script fingerprint. Current script verification has not been recorded on this signup; this is not a live comparison.';
+  }
+  return result;
 }
 module.exports = { projectSetup, readSetupEvidence, createNumberSearchTracker };

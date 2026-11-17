@@ -19,7 +19,8 @@ test('partial restored HTTP evidence cannot clear live or full recovery predicat
 });
 test('canonical pinned dependencies are exact; corruption refused',()=>{
  const pins=require('../scripts/restored-http-pins.json'),sha=require('../scripts/composite-recovery-fixture').sha;
- assert.equal(pins.reviewedHead,BASE_HEAD);assert.equal(Object.keys(pins.sha256).length,22);
+ assert.equal(pins.reviewedHead,BASE_HEAD);assert.equal(Object.keys(pins.sha256).length,23);
+ assert.ok(pins.sha256['server/reconciledTrackerEvidence.js'],'The new actual tracker dependency must be exact-source pinned too');
  for(const file of ['server/incidentInvestigationBridge.js','server/operationalErrorClassifier.js'])assert.ok(pins.sha256[file]);
  for(const file of ['server/providerMaintenance.js','server/signupBugHistory.js','server/signupDiagnosticError.js'])assert.ok(pins.sha256[file]);
  assert.equal(pins.runtimeSourceHead,'b43abfbe846dd239e17b61d6128fa018cf1a3530');
