@@ -342,6 +342,12 @@
       "type": "operational",
       "checkName": "operational_health",
       "firstDetectedAt": "2026-11-17T01:57:20.542Z"
+    },
+    "issue:operational_health:public_26ef58ac9f15f98353a4b5c5ec1334eb": {
+      "lifecycleId": "public_10337e67ef7752d6030238b0",
+      "type": "operational",
+      "checkName": "operational_health",
+      "firstDetectedAt": "2026-11-17T10:31:45.060Z"
     }
   }
 }
