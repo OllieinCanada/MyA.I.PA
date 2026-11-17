@@ -64,6 +64,15 @@ test('new keyboard exposes check only, retains protected link and requires exact
   assert.equal(k.inline_keyboard[0].length, 1); assert.equal(k.inline_keyboard[0][0].text, 'Check this signup');
   assert.equal(k.inline_keyboard[1][0].text, 'Open signup tracker');
 });
+
+test('existing Telegram check reports live failures and safe next steps without recovery or sending',async()=>{
+ const f=fixture(),before=JSON.stringify(f.record);
+ f.readLive=async()=>({readOnly:true,attemptId:attempt,groups:[{title:'Live Vapi',checks:[{id:'route',state:'failed',detail:'Wrong assistant binding'}]}]});
+ const r=await inspectSignup(f);assert.deepEqual(r.report.liveFailedChecks,['route']);
+ assert.match(r.text,/Live failed checks: route/);assert.match(r.text,/Phone routing: FAILED/);
+ assert.match(r.text,/Conflicting ownership must stop recovery/);assert.equal(r.report.recovery.providerReplayAllowed,false);
+ assert.equal(r.report.resumeAllowed,false);assert.equal(JSON.stringify(f.record),before);
+});
 test('diagnostic decision is claimed once and never admits recovery action', async () => {
   const f = fixture(); let state = 'PENDING', writes = 0;
   const row = { ...f.approval, id: 'fixture', publicId: 'a'.repeat(16), expiresAt: new Date(Date.now()+60000) };

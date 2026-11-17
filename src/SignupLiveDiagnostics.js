@@ -11,6 +11,14 @@ const codes={RESOURCE_REFERENCE_MISSING:'No exact saved resource reference. Chec
   PROVIDER_ACCESS_DENIED:'Provider denied this read.',READ_TIMEOUT:'Provider read timed out. Outcome remains unknown.',
   PROVIDER_RATE_LIMITED:'Provider rate limit reached. No retry was attempted.'};
 const time=value=>value&&Number.isFinite(Date.parse(value))?new Date(value).toLocaleString('en-CA',{timeZone:'America/Toronto'}):'Not recorded';
+export function RecoveryGuidance({guidance,stale=false}){
+ if(guidance?.version!==1||guidance.readOnly!==true||guidance.applyAllowed!==false||!Array.isArray(guidance.steps))return null;
+ return <section className="signup-live-group" aria-label="Safe recovery steps"><h6>What happens next</h6>
+  <p>{stale?'Last-known guidance — refresh checks before taking any action.':guidance.nextAction}</p>
+  <ol>{guidance.steps.filter(s=>s.state!=='observed_checks_verified').map(s=><li key={s.id}><strong>{s.label}: {s.state==='failed'?'Failed':'Unknown — check needed'}</strong><p>{s.next}</p></li>)}</ol>
+  <p>No automatic resend, purchase or trial activation. Any fix must be verified before setup advances.</p><small>{guidance.limitation}</small>
+ </section>;
+}
 export default function SignupLiveDiagnostics({attemptId,apiBase='',now=Date.now()}){
   const [report,setReport]=useState(null),[busy,setBusy]=useState(false),[error,setError]=useState('');
   const request=useRef(null),mounted=useRef(true);
@@ -41,6 +49,7 @@ export default function SignupLiveDiagnostics({attemptId,apiBase='',now=Date.now
         <p>{codes[c.detail]||(/^[A-Z_]+$/.test(c.detail||'')?'Provider read unavailable; outcome remains unknown.':c.detail)}</p>
         <small>{c.source} · Evidence time: {time(c.evidenceAt)}{c.checkedAt?` · Read: ${time(c.checkedAt)}`:''}</small>
       </li>)}</ul></section>)}
+      <RecoveryGuidance guidance={report.recovery} stale={stale}/>
       <p>{report.nextAction}</p><small>{report.limitations}</small></>:<small>No live check has been run. Saved progress remains separate.</small>}
     <button type="button" disabled>Recovery not authorized by a diagnostic check</button>
   </section>;

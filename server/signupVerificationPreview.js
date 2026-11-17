@@ -1,5 +1,6 @@
 'use strict';
 const {isClosedSignup}=require('./signupBusinessIdentity');
+const {buildSignupRecoveryGuidance}=require('./signupRecoveryGuidance');
 
 // Saved-evidence inspection only. Deliberately accepts no sender, provider
 // client, billing client, writer, callback or action argument.
@@ -15,6 +16,7 @@ function signupVerificationPreview(record, setup) {
  return {readOnly:true,evidenceScope:'saved_evidence_only',liveProviderVerified:false,
   ready:false,applyAllowed:false,sendAllowed:false,trialActivationAllowed:false,
   coverage:setup.coverage||'unknown',savedChecks,
+  recovery:buildSignupRecoveryGuidance({setup,reasonCode:record.phoneProvisioningCode,uncertainPurchase:setup.number?.stage?.uncertain===true}),
   nextActions:[
    {id:'verify-current-configuration',requiresApproval:false,effects:[],status:'required',description:'Compare exact saved signup/context and receipts with current assistant, phone, script and owner bindings; refuse conflicts.'},
    {id:'record-verification',requiresApproval:true,effects:['signup_record_write'],status:'not_authorized'},

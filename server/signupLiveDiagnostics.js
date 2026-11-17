@@ -8,6 +8,7 @@ const { fingerprintAssistantContent } = require('./signupAssistantVerification')
 const { purchaseEvidence } = require('./signupPurchaseEvidence');
 const { sanitizeMakeFailureEnvelope } = require('./makeSignupWebhook');
 const { createProviderReader, PN, SM, UUID, problem } = require('./signupDiagnosticProviders');
+const { buildSignupRecoveryGuidance } = require('./signupRecoveryGuidance');
 const digest = value => crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const validAttempt = id => /^signup_[a-f0-9]{32}$/.test(id || '');
 const validNumber = n => /^\+1\d{10}$/.test(n || '');
@@ -180,7 +181,9 @@ function createSignupLiveDiagnostics({ prisma, list, env = process.env, fetchImp
       if (digest({ record: exact(), source: await readSource(prisma, exact()) }) !== before) throw problem('DIAGNOSTIC_EVIDENCE_CHANGED');
       if (shared()) throw problem('SIGNUP_RESOURCE_SHARED');
       const all = groups.flatMap(g => g.checks);
-      return { version: 1, attemptId, readOnly: true, checkedAt: observed(), staleAfterMs: 60000,
+      const recovery = buildSignupRecoveryGuidance({live:{readOnly:true,groups},reasonCode:record.phoneProvisioningCode,
+        uncertainPurchase:Boolean(source.receipts['twilio-number']?.dispatchStartedAt && source.receipts['twilio-number']?.status!=='completed')});
+      return { version: 1, attemptId, readOnly: true, checkedAt: observed(), staleAfterMs: 60000, recovery,
         groups, providerReads: provider.count(), ready: false, resumeAllowed: false,
         state: all.some(c => c.state === 'failed') ? 'failed' : 'unknown',
         nextAction: all.some(c => c.state === 'failed') ? 'Review failed evidence before a separately approved bounded repair. Do not replay signup.'

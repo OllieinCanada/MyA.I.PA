@@ -12,9 +12,11 @@ const { projectSetup } = require('../server/adminSignupSetup');
 const { registerLiveDiagnosticRoutes } = require('../server/signupLiveDiagnosticRoutes');
 const {registerProviderStatusRoutes,normalizeFeed,PREFIX:STATUS_PREFIX}=require('../server/providerMaintenance');
 const {signupDiagnosticError}=require('../server/signupDiagnosticError');
+const {buildSignupRecoveryGuidance}=require('../server/signupRecoveryGuidance');
 const output = path.resolve('diagnostics/signup-tracker-preview');
 const proofSources=['src/SignupControlRoom.js','src/SignupLiveDiagnostics.js','src/SignupLiveDiagnostics.css','server/signupLiveDiagnosticRoutes.js','server/signupLiveDiagnostics.js','server/signupDiagnosticProviders.js','src/SignupFailureDetails.js','src/SignupFailureDetails.css','server/adminSignupSetup.js','server/signupPurchaseEvidence.js','scripts/preview-admin-signup-tracker.js'];
 proofSources.push('src/ProviderMaintenance.js','src/ProviderMaintenance.css','src/SignupBugHistory.js','src/SignupBugHistory.css','server/providerMaintenance.js','server/signupBugHistory.js','server/signupDiagnosticError.js');
+proofSources.push('server/signupRecoveryGuidance.js');
 const sourceHashes=()=>Object.fromEntries(proofSources.map(file=>[file,require('node:crypto').createHash('sha256').update(fs.readFileSync(path.resolve(file))).digest('hex')]));
 const bundleDir = path.join(output, 'public');
 const at = Date.now();
@@ -82,11 +84,12 @@ async function main() {
   registerLiveDiagnosticRoutes({ app, requireAdmin: (_req,_res,next)=>next(), isAllowedOrigin: origin=>origin===base,
     inspect: async attemptId=>{
       liveReads++; if(failLiveReads)throw Error('Synthetic provider-read outage');
-      return {version:1,attemptId,readOnly:true,ready:false,resumeAllowed:false,checkedAt:new Date().toISOString(),
+      const report={version:1,attemptId,readOnly:true,ready:false,resumeAllowed:false,checkedAt:new Date().toISOString(),
         groups:[['saved','1. Saved request and purchase outcome'],['twilio','2. Live Twilio number ownership'],
           ['make','3. Make execution and failed step'],['vapi','4. Live Vapi assistant, script and route'],['delivery','5. Existing message delivery receipts']]
           .map(([id,title])=>({id,title,checks:[{id,state:id==='saved'?'failed':id==='twilio'?'verified':'unknown',detail:id==='twilio'?'Synthetic exact number found (no real provider).':id==='make'?'EXECUTION_LINK_MISSING':'Synthetic evidence only.',source:'Sealed synthetic fixture'}]})),
-        nextAction:'Resolve unknown evidence before any separately approved repair.',limitations:'Synthetic UI proof only. No provider requests or recovery.'};
+      nextAction:'Resolve unknown evidence before any separately approved repair.',limitations:'Synthetic UI proof only. No provider requests or recovery.'};
+      report.recovery=buildSignupRecoveryGuidance({live:report,uncertainPurchase:true});return report;
     }});
   registerTrackerRoutes({ app, requireAdmin: (_req, _res, next) => next(), isAllowedOrigin: origin => origin === base,
     list: () => rows, save: record => { const previous = rows.find(r => r.signupAttemptId === record.signupAttemptId); const next = { ...record, onboardingTracker: trackProgress(previous, record) }; rows = rows.map(r => r.signupAttemptId === next.signupAttemptId ? next : r); fixtureSaves++; return next; },
@@ -160,13 +163,15 @@ async function main() {
       assert.equal(liveReads,beforeLive,'Mounting/polling saved evidence never starts provider checks');
       await livePanel.getByRole('button',{name:'Run read-only checks',exact:true}).click();
       await livePanel.getByRole('status').filter({hasText:'Point-in-time snapshot'}).waitFor();assert.equal(liveReads,beforeLive+1);
-      assert.equal(await livePanel.locator('.signup-live-group').count(),5);
+      assert.equal(await livePanel.locator('.signup-live-group').count(),6);
+      await livePanel.getByRole('region',{name:'Safe recovery steps'}).getByText('What happens next',{exact:true}).waitFor();
       await livePanel.getByText('No exact Make execution is linked. A request ID or matching time is not sufficient.',{exact:true}).waitFor();
       assert.equal(await livePanel.getByRole('button',{name:'Recovery not authorized by a diagnostic check'}).isDisabled(),true);
       await livePanel.screenshot({path:path.join(output,`${width}-live-diagnostics.png`)});
       failLiveReads=true;await livePanel.getByRole('button',{name:'Run read-only checks',exact:true}).click();
       await livePanel.getByRole('alert').filter({hasText:'last-known only'}).waitFor();
-      await livePanel.getByRole('status').filter({hasText:'Last-known snapshot'}).waitFor();assert.equal(await livePanel.locator('.signup-live-group').count(),5);failLiveReads=false;
+      await livePanel.getByRole('status').filter({hasText:'Last-known snapshot'}).waitFor();assert.equal(await livePanel.locator('.signup-live-group').count(),6);
+      await livePanel.getByText('Last-known guidance — refresh checks before taking any action.',{exact:true}).waitFor();failLiveReads=false;
       assert.equal(await setup.locator('.setup-analysis-groups > section').count(), 4);
       assert.equal(await setup.locator('.setup-analysis-groups li').count(), 18);
       const cardBounds=await setup.locator('.control-room-groups > section').evaluateAll(cards=>cards.map(card=>{const r=card.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width};}));

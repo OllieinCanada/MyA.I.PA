@@ -2,6 +2,7 @@
 const crypto = require('node:crypto');
 const { trackerRow } = require('./adminSignupTracker');
 const { safeLabel, signupContext } = require('./signupAlerts');
+const { buildSignupRecoveryGuidance } = require('./signupRecoveryGuidance');
 const digest = value => crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const fail = code => Object.assign(new Error('Signup diagnostic could not bind exact saved evidence.'), { code });
 const validAttempt = value => /^signup_[a-f0-9]{32}$/.test(value || '');
@@ -27,6 +28,7 @@ async function inspectSignup({ approval, list, readSetup, readLive, targetFor, n
   const row = trackerRow(record, now()), context = signupContext({ record });
   const blocked = setup.groups.flatMap(g => Array.isArray(g.checks) ? g.checks : []).filter(c => c.state === 'blocked');
   const code = /^[A-Z0-9_.:-]{3,100}$/.test(record.phoneProvisioningCode || '') ? record.phoneProvisioningCode : null;
+  const recovery=buildSignupRecoveryGuidance({setup,live,reasonCode:code,uncertainPurchase:setup.number?.stage?.uncertain===true});
   const report = {
     version: 1, checkedAt: new Date(now()).toISOString(), scope: live ? 'saved_and_exact_provider_reads' : 'saved_signup_evidence_only',
     attemptId, currentStep: row.currentStep, failedChecks: blocked.map(c => safeLabel(c.label)),
@@ -39,14 +41,20 @@ async function inspectSignup({ approval, list, readSetup, readLive, targetFor, n
     assistantRecorded: Boolean(record.vapiAssistantId),
     uncertainPurchase: setup.number?.stage?.uncertain === true,
     liveProviderVerified: false, resumeAllowed: false,
+    recovery,
+    liveFailedChecks: live ? live.groups.flatMap(g=>g.checks||[]).filter(c=>c.state==='failed').map(c=>safeLabel(c.id,'Unidentified live check',60)) : [],
     ...(live ? { diagnostics: live } : {}),
-    nextAction: 'Verify current provider ownership and purchase receipts before a separately approved bounded recovery. Do not repeat signup or buy another number.',
+    nextAction: recovery.nextAction,
   };
   return { report, text: [
     'MY AI PA — SIGNUP CHECK (read-only)',
+    'No automatic resend, purchase, billing or recovery. Unknown outcomes require receipt inspection.',
+    `Next: ${report.nextAction}`,
+    ...[...recovery.steps.filter(s=>s.state==='failed'),...recovery.steps.filter(s=>s.state==='unknown')].slice(0,2).map(s=>`${s.label}: ${s.state==='failed'?'FAILED':'UNKNOWN'} — ${s.next}`),
     `Business: ${safeLabel(record.businessName, 'Name unavailable', 100)}`,
     `Saved step: ${safeLabel(report.currentStep)}`,
     `Failed checks: ${report.failedChecks.join('; ') || 'No specific failed check proven; missing checks are not passes.'}`,
+    `Live failed checks: ${report.liveFailedChecks.join('; ') || 'None proven; unknown checks remain unresolved.'}`,
     `Recorded cause: ${safeLabel(report.cause, 'Unknown', 240)}${code ? ` (${code})` : ''}`,
     `Saved number: ${report.numberRecorded ? 'present' : 'not recorded'} · Saved assistant: ${report.assistantRecorded ? 'present' : 'not recorded'}`,
     `Saved area-code order: ${report.areaOrder.join(' → ') || 'unknown'} · Purchase receipt: ${report.purchaseStatus}`,
