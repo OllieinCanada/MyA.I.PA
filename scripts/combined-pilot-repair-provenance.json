@@ -1,4 +1,9 @@
 {
+  "trackerEvidenceContinuation": {
+    "base": "93e901408814afc7471531806fdcd4c66a11a2ce",
+    "previousAdminSignupSetupSha256": "bdf0e379c6e714f7f7c6baf7d281d2c4860ec1b8cda447068380c454a8f720d7",
+    "scope": "Read-only completed-journal/current-mapping projection only; new candidate bytes require fresh CI and review, not activation or readiness promotion."
+  },
   "schemaVersion": 1,
   "base": "8f218834361f5ec22de23c5cedd6690897d40f99",
   "node": "24.22.3",
@@ -81,7 +86,8 @@
     "server/signupDiagnosticProviders.js": "1e419751d3cba2375956d9f4791863a0958a19590323ad3c1cd5927edaf5a89a",
     "server/signupLiveDiagnosticRoutes.js": "458df17b067aa4166d31b2aeeb7788cfa139a302ba56ce62575aa125521a1109",
     "server/signupLiveDiagnostics.js": "f488d7c7221b89e261f615c5d15e68c201b6c8051138377de133969931aff215",
-    "server/adminSignupSetup.js": "bdf0e379c6e714f7f7c6baf7d281d2c4860ec1b8cda447068380c454a8f720d7",
+    "server/adminSignupSetup.js": "1a4ad7fbd3c51f2c8ab1f84476b3cca154a96d0e6dd22c76dea00154c5ee7051",
+    "server/reconciledTrackerEvidence.js": "78e00a4ae25d90f18b0885583bd0f78594ff2fd05815602c08d8290be1b5a746",
     "server/adminSignupTracker.js": "540624f48e430a1577aeb60a960b3da7dfb0d62b252b8446dccdf3b91017fc49",
     "server/telegramApprovalActions.js": "b7410951d5b41dd75cf7caeff7770170df61b5e7b5ff1d10a5b72fcf7bab7b82",
     "server/signupDiagnosticCheck.js": "220226bb0daf6b460fe43b16adfbacfe5c74166e6ecd5e6c6cc10ae084c29f50",

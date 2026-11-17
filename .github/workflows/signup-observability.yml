@@ -40,13 +40,13 @@ jobs:
       - name: Real isolated SQL concurrency and uncertainty (no providers)
         env:
           RUN_OBSERVABILITY_POSTGRES: '1'
-        run: node --test --test-reporter=tap tests/signup-observability-postgres.test.js | tee diagnostics/signup-observability-ci/postgres.txt
+        run: node --test --test-reporter=tap tests/signup-observability-postgres.test.js tests/reconciled-tracker-postgres.test.js | tee diagnostics/signup-observability-ci/postgres.txt
       - name: Record exact-head source provenance
         if: always()
         run: |
           mkdir -p diagnostics/signup-observability-ci
           git rev-parse HEAD > diagnostics/signup-observability-ci/head.txt
-          sha256sum server/providerMaintenance.js server/signupBugHistory.js server/signupDiagnosticError.js server/index.js tests/signup-observability-postgres.test.js tests/signup-observability-ui.test.js .github/workflows/signup-observability.yml > diagnostics/signup-observability-ci/source-hashes.txt
+          sha256sum server/providerMaintenance.js server/signupBugHistory.js server/signupDiagnosticError.js server/index.js server/adminSignupSetup.js server/reconciledTrackerEvidence.js tests/reconciled-tracker-postgres.test.js tests/signup-observability-postgres.test.js tests/signup-observability-ui.test.js .github/workflows/signup-observability.yml > diagnostics/signup-observability-ci/source-hashes.txt
       - uses: actions/upload-artifact@v4
         if: always()
         with:
