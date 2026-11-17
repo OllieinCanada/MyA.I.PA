@@ -42,3 +42,24 @@ test('real SQL provider history: concurrent snapshots, rollback, stale failures,
   await saveObservation(db,{...observation,checkedAt:new Date(now+3000).toISOString(),notices:[]});report=await readProviderStatuses({prisma:db,now:()=>now+3000});assert.equal(report.providers[0].notices.length,0);assert.equal(report.history.find(r=>r.notice.id===eventId).notice.status,'scheduled');
  }finally{try{if(owns){const row=await db.runtimeStore.findUnique({where:{key}});if(row)assert.equal(row.data.fixtureOwner,marker);await db.runtimeStore.deleteMany({where:{key:{in:[key,historyKey]}}});assert.equal(await db.runtimeStore.count({where:{key:{in:[key,historyKey]}}}),0);}}finally{await Promise.all([db.$disconnect(),other.$disconnect()]);}}
 });
+
+test('real SQL large provider history: bulk save preserves all rows, duplicate clients, rollback and owned cleanup',{skip:!enabled,timeout:30000},async()=>{
+ const [db,other]=clients(),marker=crypto.randomUUID(),key=STATUS+'make',now=Date.now();let owns=false;
+ const body={page:{url:'https://status.make.com'},status:{indicator:'none'},components:[{id:'fixture',name:'Synthetic component',status:'operational'}],incidents:[],scheduled_maintenances:Array.from({length:120},(_,i)=>({id:'fixture-'+marker+'-'+i,name:'Synthetic maintenance',status:'scheduled',scheduled_for:'2026-11-18T02:00:00Z',scheduled_until:'2026-11-18T03:00:00Z',components:[{name:'Synthetic component'}],incident_updates:[{created_at:'2026-11-16T12:00:00Z',body:'Fake notice, no provider requests.'}]}))};
+ const observation={...normalizeFeed('make',body,now),fixtureOwner:marker};
+ const revisedNotice={...observation.notices[0],title:'Synthetic revised notice'};
+ const revised={...observation,checkedAt:new Date(now+1000).toISOString(),notices:[revisedNotice,...observation.notices.slice(1)]};
+ const revisedKey=HISTORY+hash(['make',revisedNotice.id,revisedNotice]);
+ const keys=[key,...observation.notices.map(n=>HISTORY+hash(['make',n.id,n])),revisedKey];
+ try{
+  assert.equal(await db.runtimeStore.count({where:{key:{in:keys}}}),0,'Never overwrite another test or real target');owns=true;
+  await Promise.all([saveObservation(db,observation),saveObservation(other,observation)]);
+  assert.equal(await db.runtimeStore.count({where:{key:{in:keys}}}),121);
+  const previous=await db.runtimeStore.findUnique({where:{key}});
+  const fault={$transaction:(fn,options)=>db.$transaction(async tx=>{await fn(tx);throw Error('synthetic post-bulk rollback');},options)};
+  await assert.rejects(saveObservation(fault,revised),/synthetic post-bulk rollback/);
+  assert.equal(await db.runtimeStore.findUnique({where:{key:revisedKey}}),null);
+  assert.deepEqual(await db.runtimeStore.findUnique({where:{key}}),previous);
+  assert.equal(await db.runtimeStore.count({where:{key:{in:keys}}}),121);
+ }finally{try{if(owns){const row=await db.runtimeStore.findUnique({where:{key}});if(row)assert.equal(row.data.fixtureOwner,marker);await db.runtimeStore.deleteMany({where:{key:{in:keys}}});assert.equal(await db.runtimeStore.count({where:{key:{in:keys}}}),0);}}finally{await Promise.all([db.$disconnect(),other.$disconnect()]);}}
+});
