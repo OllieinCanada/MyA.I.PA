@@ -5,7 +5,7 @@ const {sendOnce}=require('../scripts/send-provider-maintenance-alert');
 const now=Date.parse('2026-11-16T12:00:00Z');
 function feed(provider='render'){return {page:{url:PROVIDERS[provider].origin},status:{indicator:'none'},components:[{id:'fixture-component',name:'Public API',status:'operational'}],incidents:[],scheduled_maintenances:[{id:'fixture1',name:'Scheduled fixture',status:'scheduled',scheduled_for:'2026-11-18T02:00:00Z',scheduled_until:'2026-11-18T03:00:00Z',components:[{name:'Administration'}],incident_updates:[{created_at:'2026-11-16T11:00:00Z',body:'Dashboard unavailable. Deployed services are not expected to be interrupted. password=private-secret email@private.invalid'}]}]};}
 function db(){const rows=new Map();let tail=Promise.resolve(),writes=0,ordinal=0;
- const store=map=>({findUnique:async({where})=>structuredClone(map.get(where.key)||null),create:async({data})=>{writes++;if(map.has(data.key))throw Error('duplicate');map.set(data.key,{...structuredClone(data),createdAt:new Date(++ordinal)});},upsert:async({where,create,update})=>{writes++;const old=map.get(where.key);map.set(where.key,old?{...old,...structuredClone(update)}:{...structuredClone(create),createdAt:new Date(++ordinal)});},findMany:async({where,orderBy,take,cursor,skip=0})=>{
+ const store=map=>({createMany:async({data,skipDuplicates})=>{let count=0;for(const row of data){if(map.has(row.key)){if(skipDuplicates)continue;throw Error('duplicate');}writes++;count++;map.set(row.key,{...structuredClone(row),createdAt:new Date(++ordinal)});}return {count};},findUnique:async({where})=>structuredClone(map.get(where.key)||null),create:async({data})=>{writes++;if(map.has(data.key))throw Error('duplicate');map.set(data.key,{...structuredClone(data),createdAt:new Date(++ordinal)});},upsert:async({where,create,update})=>{writes++;const old=map.get(where.key);map.set(where.key,old?{...old,...structuredClone(update)}:{...structuredClone(create),createdAt:new Date(++ordinal)});},findMany:async({where,orderBy,take,cursor,skip=0})=>{
  let found=[...map.values()].filter(r=>r.key.startsWith(where.key.startsWith));if(orderBy)found.sort((a,b)=>b.createdAt-a.createdAt||b.key.localeCompare(a.key));if(cursor)found=found.slice(found.findIndex(r=>r.key===cursor.key)+skip);return structuredClone(found.slice(0,take));}});
  const prisma={runtimeStore:store(rows),$transaction:fn=>{const op=tail.then(async()=>{const copy=new Map(structuredClone([...rows]));const value=await fn({runtimeStore:store(copy),$queryRaw:async()=>[]});rows.clear();for(const row of copy)rows.set(...row);return value;});tail=op.catch(()=>{});return op;}};
  return {prisma,rows,get writes(){return writes;}};
@@ -61,7 +61,7 @@ test('stored source links cannot redirect admin users; corrupt provider ownershi
  snapshot.lastGood.notices[0].provider='twilio';await assert.rejects(readProviderStatuses({prisma:f.prisma,now:()=>now}),{code:'PROVIDER_STATUS_INVALID'});
 });
 test('incomplete archive persistence rolls back the snapshot rather than implying history was captured',async()=>{
- const f=db(),run=f.prisma.$transaction;f.prisma.$transaction=fn=>run(tx=>fn({...tx,runtimeStore:{...tx.runtimeStore,create:async()=>{throw Error('synthetic database failure');}}}));
+ const f=db(),run=f.prisma.$transaction;f.prisma.$transaction=fn=>run(tx=>fn({...tx,runtimeStore:{...tx.runtimeStore,createMany:async()=>{throw Error('synthetic database failure');}}}));
  await assert.rejects(saveObservation(f.prisma,normalizeFeed('render',feed(),now)),/synthetic database failure/);assert.equal(f.rows.size,0);
 });
 test('one-shot Telegram alert records acceptance, blocks repeats and fences uncertain outcomes without exposing credentials',async t=>{
@@ -72,3 +72,30 @@ test('one-shot Telegram alert records acceptance, blocks repeats and fences unce
  await assert.rejects(sendOnce(uncertain),/unconfirmed/);await assert.rejects(sendOnce(uncertain),{code:'EEXIST'});assert.equal(calls,2);assert.equal(JSON.parse(fs.readFileSync(uncertain.ledger)).outcome,'attempt_recorded');
 });
 module.exports={db,feed};
+
+test('large status histories fit the unchanged transaction budget with bounded database round trips',async()=>{
+ const body=feed();body.scheduled_maintenances=Array.from({length:120},(_,i)=>({...body.scheduled_maintenances[0],id:'fixture'+i}));
+ const observation=normalizeFeed('render',body,now);let trips=0,inserted=0,budget;
+ const step=()=>{trips++;if(trips*100>budget)throw Object.assign(Error('synthetic transaction expired'),{code:'P2028'});};
+ const prisma={$transaction:async(fn,options)=>{budget=options.timeout;return fn({$queryRaw:async()=>{step();return [];},runtimeStore:{
+   findUnique:async()=>{step();return null;},create:async()=>{step();inserted++;},
+   createMany:async({data,skipDuplicates})=>{step();assert.equal(skipDuplicates,true);inserted+=data.length;return {count:data.length};},
+   upsert:async()=>{step();},
+ }});}};
+ assert.equal((await saveObservation(prisma,observation)).saved,true);
+ assert.equal(budget,5000,'Keep the existing bound; do not hide repeated work by increasing it');
+ assert.equal(inserted,120);assert.ok(trips<=4,'History size must not increase database round trips');
+});
+test('oversized batches refuse before database work and duplicate revisions retain one archive row',async()=>{
+ const observation=normalizeFeed('render',feed(),now);let transactions=0;
+ await assert.rejects(saveObservation({$transaction:async()=>{transactions++;}},{...observation,notices:Array(301).fill(observation.notices[0])}),{code:'PROVIDER_STATUS_INVALID'});
+ assert.equal(transactions,0);
+ const f=db();await saveObservation(f.prisma,{...observation,notices:[observation.notices[0],observation.notices[0]]});
+ assert.equal([...f.rows.keys()].filter(k=>k.startsWith(HISTORY)).length,1);
+});
+test('snapshot failure after bulk insertion rolls back the complete archive batch',async()=>{
+ const f=db(),run=f.prisma.$transaction;
+ f.prisma.$transaction=fn=>run(tx=>fn({...tx,runtimeStore:{...tx.runtimeStore,upsert:async()=>{throw Error('synthetic snapshot failure');}}}));
+ await assert.rejects(saveObservation(f.prisma,normalizeFeed('render',feed(),now)),/synthetic snapshot failure/);
+ assert.equal(f.rows.size,0);
+});

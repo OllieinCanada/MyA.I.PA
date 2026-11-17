@@ -50,18 +50,21 @@ async function fetchProviderStatus(provider,{fetchImpl=fetch,now=Date.now}={}){
 }
 async function saveObservation(prisma,observation){
  if(observation.version!==1||!Object.hasOwn(PROVIDERS,observation.provider)||!stamp(observation.checkedAt)||!['observed','unavailable','unsupported'].includes(observation.outcome))reject();
- if(observation.outcome==='observed'&&(!Array.isArray(observation.notices)||!['none','minor','major','critical','maintenance'].includes(observation.indicator)))reject();
+ if(observation.outcome==='observed'&&(!Array.isArray(observation.notices)||observation.notices.length>300||!['none','minor','major','critical','maintenance'].includes(observation.indicator)))reject();
  if(observation.outcome==='observed')observation={...observation,notices:observation.notices.map(n=>publicNotice(n,observation.provider))};
+ // Build immutable archive rows before acquiring the database lock. One bulk
+ // insert preserves every distinct revision without per-notice read/write trips.
+ const history=observation.outcome==='observed'?[...new Map(observation.notices.map(notice=>{
+  const key=HISTORY+digest([observation.provider,notice.id,notice]);
+  return [key,{key,data:{version:1,provider:observation.provider,observedAt:observation.checkedAt,notice}}];
+ })).values()]:[];
  return prisma.$transaction(async tx=>{
   const key=PREFIX+observation.provider;
   await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))::text AS lock_result`;
   const old=await tx.runtimeStore.findUnique({where:{key}});
   if(old?.data?.checkedAt>observation.checkedAt)return {saved:false,superseded:true};
   const lastGood=observation.outcome==='observed'?observation:old?.data?.lastGood||null;
-  if(observation.outcome==='observed')for(const notice of observation.notices){
-   const historyKey=HISTORY+digest([observation.provider,notice.id,notice]);
-   if(!await tx.runtimeStore.findUnique({where:{key:historyKey}}))await tx.runtimeStore.create({data:{key:historyKey,data:{version:1,provider:observation.provider,observedAt:observation.checkedAt,notice}}});
-  }
+  if(history.length)await tx.runtimeStore.createMany({data:history,skipDuplicates:true});
   const data={...observation,lastGood};await tx.runtimeStore.upsert({where:{key},create:{key,data},update:{data}});return {saved:true};
  },{maxWait:2000,timeout:5000});
 }
