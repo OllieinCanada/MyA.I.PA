@@ -45,6 +45,8 @@ for(const [name,change] of [
  ['disabled',f=>f.state.flag=false],['unauthorized',f=>f.state.allowed=false],['missing proof adapter',f=>delete f.options.withStableProof],
  ['missing single-writer confirmation',f=>f.options.singleWriter=()=>false],['wrong confirmation',f=>f.request.confirmation='activate'],
  ['stale approval',f=>f.state.clock='2026-11-17T23:32:00.000Z'],['wrong plan',f=>f.request.expectedPlanDigest='0'.repeat(64)],
+ ['invalid clock',f=>f.state.clock='invalid'],['promise authorization',f=>f.options.authorized=async()=>true],
+ ['truthy nonboolean flag',f=>f.options.enabled=()=> 'false'],
  ['changed script',f=>f.state.proof.assistant.firstMessage='Changed'],['changed source',f=>f.state.proof.attempt.payload.business.name='Different']
 ])test(name+' refuses zero file writes',async()=>{const f=fixture();change(f);await assert.rejects(createActivationSave(f.options)(f.request));assert.equal(f.writes(),0);});
 test('authorization revoked while waiting on lock refuses before file write',async()=>{

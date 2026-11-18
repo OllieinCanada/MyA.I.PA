@@ -11,7 +11,7 @@ const PREFIX='signup-verified-save:v1:';
 function createActivationSave({prisma,fence,readStore,commitStore,withStableProof,
  getPolicy,authorized=()=>false,enabled=()=>false,singleWriter=()=>false,now=()=>new Date().toISOString()}){
  function admission(actor,policy){
-  if(!enabled()||!singleWriter()||!authorized(actor,policy))fail('ACTIVATION_SAVE_DISABLED');
+  if(enabled()!==true||singleWriter()!==true||authorized(actor,policy)!==true)fail('ACTIVATION_SAVE_DISABLED');
  }
  return async function save({actor,expectedPlanDigest,verifiedAt,confirmation}){
   const policy=structuredClone(getPolicy());
@@ -19,7 +19,7 @@ function createActivationSave({prisma,fence,readStore,commitStore,withStableProo
    ||!/^signup_[a-f0-9]{32}$/.test(policy.phantomId||'')||policy.phantomId===policy.signupAttemptId)fail('ACTIVATION_POLICY_REQUIRED');
   admission(actor,policy);
   if(confirmation!=='SAVE_VERIFIED_SETUP_ONLY'||!/^[a-f0-9]{64}$/.test(expectedPlanDigest||'')
-   ||!Number.isFinite(Date.parse(verifiedAt))||Date.parse(now())-Date.parse(verifiedAt)>60000
+   ||!Number.isFinite(Date.parse(now()))||!Number.isFinite(Date.parse(verifiedAt))||Date.parse(now())-Date.parse(verifiedAt)>60000
    ||Date.parse(verifiedAt)>Date.parse(now()))fail('ACTIVATION_SAVE_CONFIRMATION_REQUIRED');
   if(typeof withStableProof!=='function')fail('ACTIVATION_LOCKED_PROOF_REQUIRED');
   const ids=[policy.signupAttemptId,policy.phantomId],key=PREFIX+digest(policy);
@@ -48,7 +48,8 @@ function createActivationSave({prisma,fence,readStore,commitStore,withStableProo
      // Final admission AFTER database locks/provider reads; never use the
      // authorization decision made before a potentially long lock wait.
      admission(actor,policy);
-     if(digest(getPolicy())!==digest(policy)||Date.parse(now())-Date.parse(verifiedAt)>60000)fail('ACTIVATION_POLICY_CHANGED');
+     if(digest(getPolicy())!==digest(policy)||!Number.isFinite(Date.parse(now()))
+      ||Date.parse(now())-Date.parse(verifiedAt)>60000||Date.parse(now())<Date.parse(verifiedAt))fail('ACTIVATION_POLICY_CHANGED');
      fileAttempted=true;
      const result=commitStore(current=>projectPreparedVerification(current,plan));
      if(result&&typeof result.then==='function')fail('ACTIVATION_SYNCHRONOUS_COMMIT_REQUIRED');
