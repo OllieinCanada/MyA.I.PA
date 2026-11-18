@@ -211,6 +211,9 @@ async function main() {
       await failureDetails.getByText('Live provider check: not performed', { exact: true }).waitFor();
       await failedPurchase.click();
       assert.equal(await failedPurchase.getAttribute('aria-expanded'), 'false');
+      // The overview regression deliberately selected Assistant earlier. Restore
+      // Number before asserting its station-specific saved search evidence.
+      await setup.getByRole('button',{name:'Number',exact:true}).click();
       await setup.getByText('289', { exact: true }).first().waitFor();
       await setup.getByText('Stale observation: failed', { exact: true }).waitFor();
       assert.match(await setup.locator('.control-search-detail').innerText(),/Locked request: the original area-code policy is preserved/);
