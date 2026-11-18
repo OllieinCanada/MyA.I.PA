@@ -18,7 +18,7 @@ function createActivationPreview({readStore,readProof,fence,getPolicy,now=()=>ne
    if(digest(getPolicy())!==digest(policy)||digest(readStore())!==before)fail('ACTIVATION_PREVIEW_CHANGED');
    const plan=prepareVerifiedSignupRecord({...proof,records:Object.values(store),consent:policy,now:now()});
    return {readOnly:true,applyAllowed:false,ready:false,trialStarted:false,messagesSent:0,
-    signupAttemptId:plan.signupAttemptId,planDigest:plan.planDigest,proposedFields:Object.keys(plan.patch),
+    signupAttemptId:plan.signupAttemptId,planDigest:plan.planDigest,verifiedAt:plan.patch.agentContentVerifiedAt,proposedFields:Object.keys(plan.patch),
     remaining:plan.remaining,limitation:plan.limitation};
   }finally{fence.release(ids);}
  };

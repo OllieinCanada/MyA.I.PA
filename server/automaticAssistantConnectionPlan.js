@@ -4,18 +4,29 @@ const {automaticSummaryToolDefinition}=require('./automaticCallNotifications');
 const {getTrialLifecycle}=require('./trialUsagePolicy');
 const {PROMPT_MARKER}=require('./vapiIsolatedSmsProvisioning');
 const {INTAKE_POLICY}=require('./serviceIntakePrompt');
+const {fingerprintAssistantContent}=require('./signupAssistantVerification');
 const intakeStart='## MYAIPA CONFIRMED SERVICE INTAKE',intakeEnd='## END MYAIPA CONFIRMED SERVICE INTAKE';
 
 // Local preparation only: no provider client, writes, flags or dispatch.
-function prepareAutomaticAssistantConnection({assistant,legacyTool,phone,signup,businessId,gate,webhookVerified=false}) {
+function prepareAutomaticAssistantConnection({assistant,legacyTool,phone,signup,businessId,gate,gateWebhookUrl='',webhookVerified=false}) {
  const refuse=()=>{throw Error('AUTOMATIC_CONNECTION_IDENTITY_UNPROVEN');};
  const legacyToolId=legacyTool?.id;
  const bindings=Object.fromEntries((legacyTool?.environmentVariables||[]).map(v=>[v.name,v.value]));
  if(!Number.isSafeInteger(businessId)||businessId<1||signup?.businessId!==businessId
   ||assistant?.id!==signup.vapiAssistantId||phone?.id!==signup.vapiPhoneNumberId||phone?.number!==signup.twilioPhoneNumber
-  ||phone.assistantId!==assistant.id||!/^\+1[2-9]\d{9}$/.test(phone.number||'')||!legacyToolId
+  ||!/^\+1[2-9]\d{9}$/.test(phone.number||'')||!legacyToolId
   ||legacyTool.type!=='code'||!/^send_call_summaries_\d{4}_[a-f0-9]{8}_v\d+$/i.test(legacyTool.function?.name||'')
   ||bindings.DEFAULT_FROM_NUMBER!==phone.number||bindings.DEFAULT_OWNER_TO_NUMBER!==signup.ownerPhone)refuse();
+ for(const resource of [assistant,phone])for(const claim of [resource.businessId,resource.metadata?.businessId])
+  if(claim!=null&&String(claim)!==String(businessId))refuse();
+ if(gate?.signupAttemptId&&gate.signupAttemptId!==signup.signupAttemptId)refuse();
+ const exactGate=gate?.status==='active'&&gate.businessId===businessId&&gate.assistantId===assistant.id
+  &&gate.phoneNumberId===phone.id&&gate.phoneNumber===phone.number&&Boolean(signup.subscriptionId)&&gate.subscriptionId===signup.subscriptionId;
+ const serverUrl=phone.server?.url||phone.serverUrl||'';
+ const protectedRoute=!phone.assistantId&&!phone.squadId&&exactGate&&webhookVerified===true
+  &&/^https:\/\//.test(gateWebhookUrl)&&serverUrl===gateWebhookUrl&&gate.assistantSnapshot
+  &&fingerprintAssistantContent(gate.assistantSnapshot)===fingerprintAssistantContent(assistant);
+ if(phone.squadId||!(phone.assistantId===assistant.id&&!serverUrl||protectedRoute))refuse();
  const model=structuredClone(assistant.model||{});
  if(model.toolRefs?.length||assistant.toolRefs?.length||assistant.toolIds?.length||!Array.isArray(model.toolIds)
    ||model.toolIds.filter(id=>id===legacyToolId).length!==1||new Set(model.toolIds).size!==model.toolIds.length)refuse();
@@ -50,11 +61,12 @@ function prepareAutomaticAssistantConnection({assistant,legacyTool,phone,signup,
  const lifecycle=getTrialLifecycle(signup);
  const missing=[];
  if(!['trial','paid'].includes(lifecycle.state))missing.push('verified_normal_account_eligibility');
- if(!gate||gate.status!=='active'||gate.businessId!==businessId||gate.assistantId!==assistant.id||gate.phoneNumberId!==phone.id
-   ||gate.phoneNumber!==phone.number||!signup.subscriptionId||gate.subscriptionId!==signup.subscriptionId)missing.push('normal_active_phone_gate');
+ if(!exactGate)missing.push('normal_active_phone_gate');
  if(!webhookVerified)missing.push('authenticated_webhook_configuration');
  return {candidatePrepared:true,applyAllowed:false,liveTestAllowed:false,missingPrerequisites:missing,
-   toolName:name,assistantPatch:{model},requiresSeparateApproval:['provider_configuration_change','scoped_automatic_and_dispatch_flags','live_test'],
+   toolName:name,assistantPatch:{model},requiresGateSnapshotRefresh:Boolean(protectedRoute),
+   ...(protectedRoute?{protectedGatePatch:{assistantSnapshot:{...structuredClone(gate.assistantSnapshot),model:structuredClone(model)}}}:{}),
+   requiresSeparateApproval:['provider_configuration_change','scoped_automatic_and_dispatch_flags','live_test'],
    limitation:'Preparation only. Does not attach billing, activate a trial, install a gate, change webhook credentials or send anything.'};
 }
 module.exports={prepareAutomaticAssistantConnection};

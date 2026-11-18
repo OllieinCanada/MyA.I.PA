@@ -128,6 +128,24 @@ async function request(path, options = {}) {
   });
 }
 
+test('wired verified-setup control defaults off and requires a real signed session rather than password-only access',async()=>{
+  const endpoint='/api/admin/signups/verified-setup',body={action:'identify'};
+  const headers={'x-admin-password':process.env.ADMIN_PASSWORD,origin:'https://www.myaipa.ca','x-myaipa-verified-setup':'1'};
+  assert.equal((await request(endpoint,{method:'POST',body})).status,401);
+  const disabled=await request(endpoint,{method:'POST',headers,body});assert.equal(disabled.status,403);assert.equal((await disabled.json()).code,'ACTIVATION_CONTROL_DISABLED');
+  const prior=process.env.SIGNUP_VERIFIED_SETUP_CONTROL_ENABLED;
+  try{
+    process.env.SIGNUP_VERIFIED_SETUP_CONTROL_ENABLED='true';
+    assert.equal((await request(endpoint,{method:'POST',headers,body})).status,401);
+    const payload=Buffer.from(JSON.stringify({exp:Date.now()+60000})).toString('base64url');
+    const signature=require('node:crypto').createHmac('sha256',process.env.ADMIN_SESSION_SECRET).update(payload).digest('hex');
+    const sessionHeaders={...headers,cookie:`myaipa_admin_session=${payload}.${signature}`};
+    const identify=await request(endpoint,{method:'POST',headers:sessionHeaders,body});assert.equal(identify.status,200);
+    const result=await identify.json();assert.match(result.operatorSessionHash,/^[a-f0-9]{64}$/);assert.equal(result.applyAllowed,false);assert.equal(result.readOnly,true);
+    assert.equal((await request(endpoint,{method:'POST',headers:{...sessionHeaders,cookie:`myaipa_admin_session=${payload}.tampered`},body})).status,401);
+  }finally{if(prior===undefined)delete process.env.SIGNUP_VERIFIED_SETUP_CONTROL_ENABLED;else process.env.SIGNUP_VERIFIED_SETUP_CONTROL_ENABLED=prior;}
+});
+
 test('record-only reconciliation requires admin auth and explicit origin/confirmation, with apply disabled by default', async () => {
   const endpoint = '/api/admin/signups/reconcile-resource-associations';
   const body = { action: 'apply', sourceId: 'signup_' + 'a'.repeat(32), phantomId: 'signup_' + 'b'.repeat(32),
