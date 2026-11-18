@@ -130,8 +130,11 @@ async function request(path, options = {}) {
 
 test('wired verified-setup control defaults off and requires a real signed session rather than password-only access',async()=>{
   const endpoint='/api/admin/signups/verified-setup',body={action:'identify'};
-  const headers={'x-admin-password':process.env.ADMIN_PASSWORD,origin:'https://www.myaipa.ca','x-myaipa-verified-setup':'1'};
-  assert.equal((await request(endpoint,{method:'POST',body})).status,401);
+  // This app trusts one proxy hop. Give this fixture its own documented test
+  // client, preserving the real shared limiter without exhausting older tests.
+  const clientHeaders={'x-forwarded-for':'192.0.2.72'};
+  const headers={...clientHeaders,'x-admin-password':process.env.ADMIN_PASSWORD,origin:'https://www.myaipa.ca','x-myaipa-verified-setup':'1'};
+  assert.equal((await request(endpoint,{method:'POST',headers:clientHeaders,body})).status,401);
   const disabled=await request(endpoint,{method:'POST',headers,body});assert.equal(disabled.status,403);assert.equal((await disabled.json()).code,'ACTIVATION_CONTROL_DISABLED');
   const prior=process.env.SIGNUP_VERIFIED_SETUP_CONTROL_ENABLED;
   try{
