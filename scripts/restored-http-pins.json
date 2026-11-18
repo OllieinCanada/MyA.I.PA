@@ -1,11 +1,21 @@
 {
+  "verifiedSetupControlContinuation": {
+    "baseRelease": "5c3992d45215cc618d52ed6d664435846e44eca5",
+    "scope": "New disabled-by-default control and protected-gate candidate bytes require fresh sealed HTTP/SQL CI and review; not live activation or recovery proof."
+  },
   "reviewedHead": "81a50f70214e28d6d8579d4c028375e1d7620606",
   "runtimeSourceHead": "b43abfbe846dd239e17b61d6128fa018cf1a3530",
   "qualification": "runtimeSourceHead identifies the unchanged source baseline; exact candidate bytes are pinned below and the actual candidate head is bound separately in each CI report. New bytes require fresh SQL/review; reviewedHead identifies unchanged fixture dependencies, not candidate runtime approval.",
   "sha256": {
     "scripts/run-composite-recovery-ci.js": "9a3c2069cb268c25d8add52cbf4884d076cca9a7f4e8db55b9d4ee3d60d4c4ae",
     "scripts/composite-recovery-fixture.js": "46085044ab3ef3df77401c0c7f954691206ea52d5d71893a5f7ed1f02cd1d4e7",
-    "server/index.js": "d75676e976aeddca25bf7cbe4af36ca954af8fb6d7cea906e54ff3026d96e548",
+    "server/index.js": "6b9f7b71b9975befc2694cee426b993c2ce3e21e299c43ba655cef9fdf000b44",
+    "server/signupActivationControl.js": "858d2dd3eb13a380f7583a00d9bf450f794869e10f38a960a6ef4fdd6c3246f0",
+    "server/signupActivationPreparation.js": "17d495125a32fb598d7ae1d334e9431743bda9ddc5bbae3ac27df967be1a7d30",
+    "server/signupActivationEvidence.js": "683b139dce181d72507f62225990d8fe04ca11250e0b94517c24a07e39913478",
+    "server/signupActivationSave.js": "ba9c565929bcee0654ccf4acc30be98d38162c7ff68b24a599806dda70177700",
+    "server/signupActivationPreview.js": "e2d774ff038bc2195d09a23c4daa63bfa5cc44be840fe60bbdf9399320611f3a",
+    "server/automaticAssistantConnectionPlan.js": "99362dd0d98590ec01c8952ba5d3e3306bafc4638b337936da28b2a545d66fd2",
     "server/incidentInvestigationBridge.js": "06b9d43752e95c2bccedefd78350a662c5483ef107a9eb5e041eefbbdfd0eb3b",
     "server/operationalErrorClassifier.js": "1f9b079c6ec4ba9181816a8676e1e9cf1daa4341d8e9f092a6c13f752f58a941",
     "server/providerMaintenance.js": "f3b0fedbf566fd3305696483c8b320bea548af756b5c8cb46681b041d5491dfa",

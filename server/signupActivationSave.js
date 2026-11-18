@@ -4,7 +4,7 @@ const {prepareVerifiedSignupRecord,projectPreparedVerification}=require('./signu
 const fail=code=>{throw Object.assign(new Error(code),{code,statusCode:409});};
 const PREFIX='signup-verified-save:v1:';
 
-// Local integration component, deliberately not registered with the live server.
+// Narrow saving component; the running control is disabled by default.
 // withStableProof must hold the real source/context/receipt/business locks through
 // the synchronous file projection and journal completion. Preview readers do NOT
 // satisfy that adapter contract. No billing/provider mutation/message callbacks.

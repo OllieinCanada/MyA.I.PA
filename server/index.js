@@ -22,6 +22,7 @@ const { createAssociationFence, createAssociationRepairService, atomicCommitAsso
   registerAssociationRepairRoutes } = require('./signupAssociationRepair');
 const signupAssociationFence = createAssociationFence();
 const { createBoundedMappingControl, registerBoundedMappingControlRoutes, readOperatorPolicy } = require('./boundedMappingControl');
+const { createActivationControl, registerActivationControl, readActivationPolicy } = require('./signupActivationControl');
 const signupNumberSearchTracker = createNumberSearchTracker();
 const { createPrismaObservationStore, createObservationService, registerObservationRoutes, observationBodyGuard } = require('./signupFormObservation');
 const { runtimeDependencySecurity } = require('./runtimeDependencySecurity');
@@ -17831,6 +17832,21 @@ const signupAssociationRepair = createAssociationRepairService({ prisma,
 });
 registerAssociationRepairRoutes({ app, requireAdmin, limiter: adminSignupRepairProcessRateLimiter,
   isAllowedOrigin, actorHash: getAdminActorHash, service: signupAssociationRepair });
+const activationControl = createActivationControl({prisma,fence:signupAssociationFence,
+ readStore:()=>JSON.parse(fs.readFileSync(signupDashboardPath,'utf8')),
+ commitStore:project=>atomicCommitAssociationFile(signupDashboardPath,project),
+ getSigningSecret:getProvisioningSigningSecret,getRelease:()=>process.env.RENDER_GIT_COMMIT,
+ getPolicy:()=>readActivationPolicy(path.dirname(signupDashboardPath)),
+ readAssistant:id=>requestVapiResource(`assistant/${encodeURIComponent(id)}`),
+ readPhone:async id=>{const phone=await requestVapiResource(`phone-number/${encodeURIComponent(id)}`);return {...phone,number:getVapiPhoneNumber(phone),assistantId:getVapiAssistantId(phone)};},
+ enabled:()=>process.env.SIGNUP_VERIFIED_SETUP_CONTROL_ENABLED==='true',
+ applyEnabled:()=>process.env.SIGNUP_VERIFIED_SETUP_APPLY_ENABLED==='true',
+ singleWriter:()=>process.env.SIGNUP_ASSOCIATION_REPAIR_SINGLE_WRITER_CONFIRMED==='true'
+  &&!require('node:cluster').isWorker&&Number(process.env.WEB_CONCURRENCY||1)===1,
+});
+registerActivationControl({app,requireAdmin,limiter:adminSignupRepairProcessRateLimiter,isAllowedOrigin,
+ actorHash:req=>hasValidAdminSession(req)?crypto.createHash('sha256').update('signup-verified-setup-session:v1\0')
+  .update(parseCookies(req)[ADMIN_SESSION_COOKIE]).digest('hex'):'',service:activationControl});
 const boundedMappingControl = createBoundedMappingControl({ prisma, fence: signupAssociationFence,
   readStore: () => JSON.parse(fs.readFileSync(signupDashboardPath, 'utf8')),
   getSigningSecret: getProvisioningSigningSecret, getRelease: () => process.env.RENDER_GIT_COMMIT,

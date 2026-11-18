@@ -1,4 +1,9 @@
 {
+  "verifiedSetupControlContinuation": {
+    "baseRelease": "5c3992d45215cc618d52ed6d664435846e44eca5",
+    "previousIndexSha256": "d75676e976aeddca25bf7cbe4af36ca954af8fb6d7cea906e54ff3026d96e548",
+    "scope": "Candidate disabled-by-default signed-session verified-setup control using the running lifecycle fence. Includes prepared exact protected-gate automatic-tool migration. Requires fresh SQL/full CI and review; no live settings, record saves, sends, billing or activation performed."
+  },
   "recoveryGuidanceContinuation": {
     "baseRelease": "c6eabe3e206a15d47c1b07abc7915286d27cb934",
     "scope": "Local candidate: deterministic read-only recovery guidance and truthful live-failure reporting. No new sender, repair executor, billing action or activation. Pins require fresh CI/review before release."
@@ -86,7 +91,13 @@
     "server/boundedBusinessMappingAdapters.js": "69cc5596edc20e8a2e689ff826bb2e424e4beaff8f41fa970ee40efa4aed3744",
     "server/boundedBusinessMappingWriter.js": "c8b129211d807e780d55600695362cbcb813c29ac784a147dbed1b9ca746db6a",
     "server/boundedMappingControl.js": "6bdf571cea3fc1d2a52c20e8bc89a49d10ffbe069a7d2fd463eaadb25354b36a",
-    "server/index.js": "d75676e976aeddca25bf7cbe4af36ca954af8fb6d7cea906e54ff3026d96e548",
+    "server/index.js": "6b9f7b71b9975befc2694cee426b993c2ce3e21e299c43ba655cef9fdf000b44",
+    "server/signupActivationControl.js": "858d2dd3eb13a380f7583a00d9bf450f794869e10f38a960a6ef4fdd6c3246f0",
+    "server/signupActivationPreparation.js": "17d495125a32fb598d7ae1d334e9431743bda9ddc5bbae3ac27df967be1a7d30",
+    "server/signupActivationEvidence.js": "683b139dce181d72507f62225990d8fe04ca11250e0b94517c24a07e39913478",
+    "server/signupActivationSave.js": "ba9c565929bcee0654ccf4acc30be98d38162c7ff68b24a599806dda70177700",
+    "server/signupActivationPreview.js": "e2d774ff038bc2195d09a23c4daa63bfa5cc44be840fe60bbdf9399320611f3a",
+    "server/automaticAssistantConnectionPlan.js": "99362dd0d98590ec01c8952ba5d3e3306bafc4638b337936da28b2a545d66fd2",
     "server/incidentInvestigationBridge.js": "06b9d43752e95c2bccedefd78350a662c5483ef107a9eb5e041eefbbdfd0eb3b",
     "server/operationalErrorClassifier.js": "1f9b079c6ec4ba9181816a8676e1e9cf1daa4341d8e9f092a6c13f752f58a941",
     "server/providerMaintenance.js": "f3b0fedbf566fd3305696483c8b320bea548af756b5c8cb46681b041d5491dfa",

@@ -11,6 +11,7 @@ const {fingerprintAssistantContent}=require('../server/signupAssistantVerificati
 const {contextStoreKey}=require('../server/signupProvisioningContext');
 const {provisioningStateKey}=require('../server/provisioningState');
 const {VERSION}=require('../server/trialCalendarPolicy');
+const {createActivationControl}=require('../server/signupActivationControl');
 
 test('disposable PostgreSQL: real reader, locked save, duplicate/refusal and preserved records',
  {skip:process.env.RUN_ACTIVATION_POSTGRES!=='1',timeout:60000},async t=>{
@@ -38,8 +39,18 @@ test('disposable PostgreSQL: real reader, locked save, duplicate/refusal and pre
   const plan=prepareVerifiedSignupRecord({...proof,records:Object.values(store),consent:policy,now:time});
   const options={prisma,fence:createAssociationFence(),readStore:()=>structuredClone(store),commitStore:project=>{store=project(store);writes++;},withStableProof:createStableActivationProof(deps),getPolicy:()=>policy,authorized:()=>true,enabled:()=>true,singleWriter:()=>true,now:()=>new Date().toISOString()};
   const request={actor:'synthetic-operator',expectedPlanDigest:plan.planDigest,verifiedAt:time,confirmation:'SAVE_VERIFIED_SETUP_ONLY'};
+  const actor='a'.repeat(64),release='b'.repeat(40),operatorPolicy={schemaVersion:1,policyId:'c'.repeat(64),operatorSessionHash:actor,release,
+   target:policy,expiresAt:new Date(Date.now()+600000).toISOString()};
+  const control=createActivationControl({...options,...deps,getPolicy:()=>operatorPolicy,getRelease:()=>release,applyEnabled:()=>true,now:()=>Date.now()});
+  const auth={actorHash:actor,reauthorize:()=>actor};let controlPlan;
+  await t.test('real control preview is no-write and returns a server-issued timestamp/digest',async()=>{
+   controlPlan=await control.execute({action:'preview',policyId:operatorPolicy.policyId},auth);
+   assert.equal(controlPlan.readOnly,true);assert.equal(controlPlan.applyAllowed,false);assert.equal(writes,0);
+   assert.equal(await prisma.runtimeStore.count({where:{key:journalKey}}),0);assert.deepEqual(store,before);
+  });
   await t.test('actual SQL proof and save succeed without readiness/trial/delivery claims',async()=>{
-   assert.equal((await createActivationSave(options)(request)).saved,true);assert.equal(writes,1);
+   operatorPolicy.approvedPlanDigest=controlPlan.planDigest;
+   assert.equal((await control.execute({action:'apply',policyId:operatorPolicy.policyId,planDigest:controlPlan.planDigest,confirmation:'SAVE_VERIFIED_SETUP_ONLY'},auth)).saved,true);assert.equal(writes,1);
    assert.equal(store.original.agentContentStatus,'verified');assert.equal(store.original.trialCalendarEnrollmentVersion,VERSION);
    assert.equal(store.original.status,'setup_error');assert.equal(store.original.trialStartAt,undefined);
    assert.equal((await prisma.runtimeStore.findUnique({where:{key:journalKey}})).data.phase,'completed');

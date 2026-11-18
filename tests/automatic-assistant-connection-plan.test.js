@@ -25,3 +25,18 @@ test('candidate uncertain fake provider response never causes a repeat',async()=
 test('the actual shared draft intake block is migrated only in the candidate, preserving required work facts',()=>{const f=fixture();f.assistant.model.messages[0].content+='\n'+INTAKE_POLICY;const original=JSON.stringify(f),p=prepare(f),text=p.assistantPatch.model.messages[0].content;assert.equal(JSON.stringify(f),original);assert.doesNotMatch(text,/Should I save this request for review\?|saved for manual review|An authenticated human must/);for(const field of ['preferredStartDate','bestCallbackTime','streetAddress','city','jobDetails','workDetailsConfirmed'])assert.ok(text.includes(field));});
 test('unknown manual instructions outside managed blocks require review instead of a contradictory candidate',()=>{const f=fixture();f.assistant.model.messages[0].content+='\nShould I save this request for review?';assert.throws(()=>prepare(f),/PROMPT_REVIEW_REQUIRED/);});
 test('a modified managed intake block is not silently rewritten',()=>{const f=fixture();f.assistant.model.messages[0].content+='\n'+INTAKE_POLICY.replace('CURRENT DRAFT CONSENT','CHANGED DRAFT CONSENT');assert.throws(()=>prepare(f),/PROMPT_REVIEW_REQUIRED/);});
+
+function protectedFixture(){const f=fixture();f.signup.subscriptionStatus='active';f.signup.subscriptionId='fake-subscription';
+ f.gate={status:'active',businessId:7,assistantId:f.assistant.id,phoneNumberId:f.phone.id,phoneNumber:f.phone.number,subscriptionId:f.signup.subscriptionId,assistantSnapshot:structuredClone(f.assistant)};
+ f.phone.assistantId=null;f.gateWebhookUrl='https://fixture.test/api/webhooks/voice';f.phone.server={url:f.gateWebhookUrl};f.webhookVerified=true;return f;}
+test('normal protected trial route prepares both model and exact snapshot changes, never activation',()=>{
+ const f=protectedFixture(),before=JSON.stringify(f),p=prepare(f);assert.equal(JSON.stringify(f),before);assert.deepEqual(p.missingPrerequisites,[]);
+ assert.equal(p.requiresGateSnapshotRefresh,true);assert.deepEqual(p.protectedGatePatch.assistantSnapshot.model,p.assistantPatch.model);
+ assert.equal(p.protectedGatePatch.assistantSnapshot.firstMessage,f.assistant.firstMessage);assert.equal(p.applyAllowed,false);assert.equal(p.liveTestAllowed,false);
+});
+for(const [name,change]of[
+ ['wrong subscription',f=>f.gate.subscriptionId='other'],['wrong tenant',f=>f.gate.businessId=8],['stale snapshot',f=>f.gate.assistantSnapshot.firstMessage='Changed'],
+ ['unverified webhook',f=>f.webhookVerified=false],['wrong server URL',f=>f.phone.server.url='https://foreign.test/hook'],
+ ['another direct assistant',f=>f.phone.assistantId='other'],['squad routing',f=>f.phone.squadId='other'],['missing expected URL',f=>f.gateWebhookUrl=''],
+ ['provider ownership conflict',f=>f.phone.metadata={businessId:8}],['signup binding conflict',f=>f.gate.signupAttemptId='other-signup']
+])test('protected candidate refuses '+name,()=>{const f=protectedFixture();change(f);assert.throws(()=>prepare(f),/IDENTITY_UNPROVEN/);});
