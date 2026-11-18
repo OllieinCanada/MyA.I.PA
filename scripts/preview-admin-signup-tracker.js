@@ -15,6 +15,7 @@ const {signupDiagnosticError}=require('../server/signupDiagnosticError');
 const {buildSignupRecoveryGuidance}=require('../server/signupRecoveryGuidance');
 const output = path.resolve('diagnostics/signup-tracker-preview');
 const proofSources=['src/SignupControlRoom.js','src/SignupLiveDiagnostics.js','src/SignupLiveDiagnostics.css','server/signupLiveDiagnosticRoutes.js','server/signupLiveDiagnostics.js','server/signupDiagnosticProviders.js','src/SignupFailureDetails.js','src/SignupFailureDetails.css','server/adminSignupSetup.js','server/signupPurchaseEvidence.js','scripts/preview-admin-signup-tracker.js'];
+proofSources.push('src/signupControlRoomModel.js','src/SignupControlRoom.css');
 proofSources.push('src/ProviderMaintenance.js','src/ProviderMaintenance.css','src/SignupBugHistory.js','src/SignupBugHistory.css','server/providerMaintenance.js','server/signupBugHistory.js','server/signupDiagnosticError.js');
 proofSources.push('server/signupRecoveryGuidance.js');
 const sourceHashes=()=>Object.fromEntries(proofSources.map(file=>[file,require('node:crypto').createHash('sha256').update(fs.readFileSync(path.resolve(file))).digest('hex')]));
@@ -152,6 +153,13 @@ async function main() {
       await panel.getByText('Paused · no alerts', { exact: true }).waitFor();
       await panel.getByLabel('Show signups', { exact: true }).selectOption('active');
       await panel.getByLabel('Search signups').fill('Harbour'); assert.equal(await panel.locator('.signup-tracker-row').count(), 1);
+      await panel.locator('.control-earlier-journey > summary').click();
+      const overview=panel.getByRole('navigation',{name:'Setup station status'});
+      assert.equal(await overview.getByRole('button').count(),4);
+      await overview.getByRole('button').nth(1).click();
+      await panel.getByRole('heading',{name:'Expected',exact:true}).waitFor();
+      await panel.getByRole('heading',{name:'Found',exact:true}).waitFor();
+      await panel.getByRole('heading',{name:'Next safe step',exact:true}).waitFor();
       assert.equal(await panel.locator('.signup-journey-map > li').count(), 9, 'All nine sketch stages remain in reading order');
       assert.equal(await panel.locator('.journey-business .journey-fields > li').count(), 8);
       await panel.locator('.journey-business .is-blocked').filter({ hasText: 'City' }).waitFor();
@@ -203,6 +211,9 @@ async function main() {
       await failureDetails.getByText('Live provider check: not performed', { exact: true }).waitFor();
       await failedPurchase.click();
       assert.equal(await failedPurchase.getAttribute('aria-expanded'), 'false');
+      // The overview regression deliberately selected Assistant earlier. Restore
+      // Number before asserting its station-specific saved search evidence.
+      await setup.getByRole('button',{name:'Number',exact:true}).click();
       await setup.getByText('289', { exact: true }).first().waitFor();
       await setup.getByText('Stale observation: failed', { exact: true }).waitFor();
       assert.match(await setup.locator('.control-search-detail').innerText(),/Locked request: the original area-code policy is preserved/);

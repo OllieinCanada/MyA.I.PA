@@ -2,6 +2,21 @@ const test=require('node:test');const assert=require('node:assert/strict');
 const {controlRoomModel}=require('../src/signupControlRoomModel');
 const {projectSetup}=require('../server/adminSignupSetup');
 const row={businessName:'Fixture',currentStep:'Waiting for verification',nextAction:'Review the saved record',steps:[]};
+test('station summary requires every nonoptional check to be backend verified',()=>{
+ const {stationState}=require('../src/signupControlRoomModel');
+ assert.equal(stationState([]),'pending');assert.equal(stationState([{state:'optional'}]),'pending');
+ for(const state of ['pending','unknown','present','observed','recorded'])assert.equal(stationState([{state:'verified'},{state}]),'pending');
+ assert.equal(stationState([{state:'verified'},{state:'optional'}]),'verified');
+ assert.equal(stationState([{state:'verified'},{state:'blocked'}]),'blocked');
+});
+test('blocker summary and inspector preserve actual evidence without inventing provider completion',()=>{
+ const setup=projectSetup({});setup.groups[1].checks[0]={id:'assistant',label:'Assistant creation',state:'blocked',detail:'Saved timeout; completion unknown.'};
+ const view=controlRoomModel(row,setup,'assistant');
+ assert.equal(view.headline,'Assistant creation needs attention');assert.equal(view.explanation,'Saved timeout; completion unknown.');
+ assert.equal(view.stations[1].state,'blocked');assert.match(view.inspector.next,/receipts before any retry/);
+ assert.equal(view.inspector.found[0].detail,'Saved timeout; completion unknown.');
+ assert.match(view.inspector.expected,/matching script/);assert.equal(view.verified,0);
+});
 test('click selection resolves every journey and backend group to its own evidence',()=>{
  const setup=projectSetup({});
  for(const id of ['start','trade','property','area','business','pricing','review','captcha','trial','number','assistant','texts','activation']) {
