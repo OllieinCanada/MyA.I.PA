@@ -30,6 +30,16 @@ test('missing browser coverage is unknown, never an all-clear zero',async()=>{
  await act(async()=>{root.render(<SignupNowOverview data={{rows:[],summary:{},formObservations:{rows:[],coverage:{unavailable:true}}}}/>);await flush();});
  expect(container.querySelector('.signup-now-counts strong').textContent).toBe('—');expect(container.querySelector('[role="alert"]').textContent).toContain('Missing drafts are not proof nobody started');
 });
+
+test('short phone labels preserve the full accessible step names and expanded evidence',async()=>{
+ await act(async()=>{root.render(<SignupNowOverview data={data(draft())}/>);await flush();});
+ const details=container.querySelector('[aria-label="Inspect Details form step"]');
+ expect(details.querySelector('.signup-now-label-short').textContent).toBe('Info');
+ expect(details.querySelector('.signup-now-label-full').textContent).toBe('Details');
+ expect(container.querySelector('[aria-label="Inspect Pricing form step"] .signup-now-label-short').textContent).toBe('Rates');
+ expect(container.querySelector('[aria-label="Inspect Review form step"] .signup-now-label-short').textContent).toBe('Final');
+ act(()=>details.click());expect(container.querySelector('.signup-now-inspector h4').textContent).toContain('Details');
+});
 test('the actual tracker exposes anonymous progress before named rows and keeps huge setup workspaces collapsed',async()=>{
  const row={attemptId:'signup_'+'a'.repeat(32),businessName:'Older Fixture Electrical',ownerName:'Invented Owner',active:true,stalled:true,mode:'working',currentStep:'Assigning number',signedUpAt:new Date(Date.now()-3600000).toISOString(),steps:[],completedSteps:0,totalSteps:10,info:{},setup:null};
  global.fetch=jest.fn(async url=>({ok:true,status:200,json:async()=>url.endsWith('/signup-tracker')?{...data(draft()),rows:[row]}:url.endsWith('/provider-status')?{readOnly:true,providers:[],history:[]}:{readOnly:true,events:[],groups:[]}}));

@@ -15,6 +15,9 @@ jobs:
       CI: 'true'
       DISABLE_LOCAL_ENV_FILES: '1'
       SIGNUP_DIAGNOSTIC_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+      REACT_APP_API_BASE_URL: https://api.myaipa.ca
+      REACT_APP_GOOGLE_MAPS_API_KEY: ${{ vars.GOOGLE_MAPS_BROWSER_KEY }}
+      REACT_APP_RELEASE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -37,6 +40,23 @@ jobs:
         run: npm run test:signup-tracker:browser
       - name: Actual Start Trial click and automatic compact tracker updates
         run: npm run test:signup-form-observation:browser
+      - name: Build the publication candidate with the existing public configuration
+        run: npm run build:pages
+      - name: Archive the tested publication candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: signup-now-pages-build-${{ github.event.pull_request.head.sha || github.sha }}
+          retention-days: 3
+          if-no-files-found: error
+          path: |
+            docs/index.html
+            docs/404.html
+            docs/asset-manifest.json
+            docs/static-asset-history.json
+            docs/cookies.html
+            docs/proof/index.html
+            docs/illustrations/canadian-flag.png
+            docs/static/
       - name: Preserve synthetic screenshots and browser report
         if: always()
         uses: actions/upload-artifact@v4
