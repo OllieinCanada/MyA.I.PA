@@ -7,6 +7,7 @@ import OnboardingWizard from "./features/onboarding/OnboardingWizard";
 import { canonicalPhone, readWizardLocation } from "./features/onboarding/onboardingApi";
 import "./components/CustomerSetupActions.css";
 import { createFormObservationClient, observedFormSnapshot, observedSignupStep } from './features/signup/formObservationClient';
+import { consumeSignupStart, noteSignupStart } from './features/signup/signupStartIntent';
 
 import {
   AREA_GROUPS,
@@ -2133,6 +2134,7 @@ export default function Signup() {
   const [reviewReturnStep, setReviewReturnStep] = useState(1);
   const [details, setDetails] = useState(() => ({ ...DEFAULT_DETAILS }));
   const [observationEngaged, setObservationEngaged] = useState(false);
+  const [startIntentRevision, setStartIntentRevision] = useState(0);
   const [observationTouched, setObservationTouched] = useState({});
   const [observationAttempted, setObservationAttempted] = useState({});
   const [observationWide, setObservationWide] = useState(() => typeof window === 'undefined' || !window.matchMedia || window.matchMedia('(min-width: 640px)').matches);
@@ -2228,6 +2230,12 @@ export default function Signup() {
     return observedFormSnapshot({ step, details, validation: businessValidation, touched: observationTouched,
       attemptedAdvance: attempted || Boolean(observationAttempted[step]) || (step === 'business_details' && businessStepAttempted), selectedTradeId, selectedSpecializationIds, selectedAreas, pricing, humanVerified, wide: observationWide });
   }, [currentStep, businessSlide, tradeSetupPanel, captchaToken, details, businessValidation, observationTouched, observationAttempted, businessStepAttempted, selectedTradeId, selectedSpecializationIds, selectedAreas, pricing, observationWide]);
+  useEffect(() => {
+    if (signupResult || isSignupQaTurnstileMode || !consumeSignupStart()) return;
+    setObservationEngaged(true);
+    // A CTA click is a start event, not an attempted field advance.
+    void observationRef.current.observe({ ...observationSnapshot(), started: true }, true);
+  }, [signupResult, isSignupQaTurnstileMode, observationSnapshot, startIntentRevision]);
   useEffect(() => {
     if (!observationEngaged || signupResult || isSignupQaTurnstileMode) return undefined;
     const snapshot = observationSnapshot();
@@ -2415,6 +2423,7 @@ export default function Signup() {
 
   const resetSignup = () => {
     observationRef.current.reset();
+    noteSignupStart(); setStartIntentRevision(value => value + 1);
     setObservationEngaged(false);
     setObservationTouched({});
     setObservationAttempted({});

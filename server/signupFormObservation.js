@@ -17,7 +17,8 @@ function slotFor(id, slots = MAX_SLOTS) { return parseInt(digest(id).slice(0, 8)
 function keyFor(id, slots) { return PREFIX + String(slotFor(id, slots)).padStart(4, '0'); }
 function safeEqual(a, b) { const x = Buffer.from(String(a || '')), y = Buffer.from(String(b || '')); return x.length === y.length && crypto.timingSafeEqual(x, y); }
 function validateSnapshot(input) {
-  if (!keysOnly(input, ['schemaVersion', 'sequence', 'expectedRevision', 'currentStep', 'attemptedAdvance', 'fields']) || input.schemaVersion !== 1
+  if (!keysOnly(input, ['schemaVersion', 'sequence', 'expectedRevision', 'currentStep', 'attemptedAdvance', 'fields', 'started']) || input.schemaVersion !== 1
+    || (Object.hasOwn(input, 'started') && typeof input.started !== 'boolean')
     || !Number.isSafeInteger(input.sequence) || input.sequence < 1 || input.sequence > 10000
     || !Number.isSafeInteger(input.expectedRevision) || input.expectedRevision < 0 || input.expectedRevision > 10000
     || !Object.hasOwn(STEPS, input.currentStep) || typeof input.attemptedAdvance !== 'boolean'
@@ -60,6 +61,8 @@ function projectObservation(record, now = Date.now()) {
   return { id: record.id, linkedAttemptId: record.linkedAttemptId || null, identity: record.linkedAttemptId ? 'exact_attempt_link' : 'unlinked_visitor_unknown_identity',
     currentStep: record.currentStep, currentStepLabel: STEPS[record.currentStep]?.label || 'Not observed', revision: record.revision,
     engaged: Boolean(record.engaged), createdAt: record.createdAt, expiresAt: record.expiresAt, lastObservedAt: record.lastObservedAt || null,
+    startedAt: record.startedAt || null, startSource: record.startSource || null,
+    startAlertQueuedAt: record.startAlertQueuedAt || null,
     lastProgressAt: record.lastProgressAt || null, observedAgeMs: record.lastObservedAt ? Math.max(0, now - record.lastObservedAt) : null,
     coverage: { source: 'client_reported_metadata', instrumentedSteps: Object.keys(STEPS), observedFields: fields.filter(f => f.observedAt).length, totalFields: fields.length, notObservedIsNotBlank: true,
       termsAgreement: 'not_collected_by_this_form', checkout: 'not_observed_use_trusted_backend_receipts', verificationCodes: 'never_collected', setupCheckpoints: 'trusted_backend_evidence_only' },
@@ -113,11 +116,12 @@ function createObservationService({ store, authenticateAttempt, now = () => Date
     validateSnapshot(input); const previous = await authenticate(id, token);
     if (input.sequence <= previous.sequence) return { revision: previous.revision, sequence: previous.sequence, ignored: 'stale_sequence' };
     if (input.expectedRevision !== previous.revision) throw fail('FORM_OBSERVATION_STALE', 409);
-    const engaged = previous.engaged || input.attemptedAdvance || input.fields.some(f => f.interacted);
+    const engaged = previous.engaged || input.started === true || input.attemptedAdvance || input.fields.some(f => f.interacted);
     if (!engaged) return { revision: previous.revision, sequence: previous.sequence, ignored: 'not_engaged' };
     const signature = digest(JSON.stringify({ currentStep: input.currentStep, fields: input.fields }));
     const meaningful = signature !== previous.signature;
     const at = now(), next = { ...previous, sequence: input.sequence, revision: previous.revision + 1, engaged,
+      ...(input.started === true && !previous.startedAt ? { startedAt: at, startSource: 'trial_button' } : {}),
       currentStep: input.currentStep, lastObservedAt: at, signature,
       lastProgressAt: meaningful ? at : previous.lastProgressAt, progressRevision: meaningful ? previous.progressRevision + 1 : previous.progressRevision,
       steps: { ...previous.steps, [input.currentStep]: { observedAt: at, revision: previous.revision + 1, attemptedAdvance: input.attemptedAdvance, fields: input.fields } } };
@@ -150,7 +154,29 @@ function createObservationService({ store, authenticateAttempt, now = () => Date
     processingStalls = true;
     try {
     await store.purgeExpired(now() - TTL_MS);
-    const records = await store.list(now() - TTL_MS, MAX_SLOTS); let queued = 0;
+    const records = await store.list(now() - TTL_MS, MAX_SLOTS); let queued = 0, startsQueued = 0;
+    // Same durable Telegram outbox as stall alerts. Queue a start event once per
+    // exact draft, not per keystroke, poll, refresh, process or claimed person.
+    // Legacy engaged records have no startedAt: never backfill them as new starts.
+    for (const candidate of records) {
+      if (startsQueued >= 5) break;
+      if (!candidate.engaged || !Number.isSafeInteger(candidate.startedAt) || candidate.startAlertQueuedAt
+        || !['trial_button','form_interaction'].includes(candidate.startSource) || candidate.expiresAt <= now()) continue;
+      await new Promise(resolve => setImmediate(resolve));
+      const record = await store.get(keyFor(candidate.id, slots));
+      if (!record || record.id !== candidate.id || !record.engaged || record.startedAt !== candidate.startedAt
+        || record.startSource !== candidate.startSource || record.startAlertQueuedAt || record.expiresAt <= now()) continue;
+      const result = await enqueue({ text: ['MY AI PA — NEW SIGNUP STARTED',
+        record.startSource === 'trial_button' ? 'A visitor clicked Start Trial and opened the signup form.' : 'A visitor began interacting with the signup form.',
+        `Reference: ${record.id.slice(-8)}`, 'Identity: anonymous until an exact submitted-signup link exists.',
+        'This is a browser start event, not a verified new customer or completed signup.',
+        'The visitor may have progressed since this event. Open the tracker for the latest saved step.',
+        'No signup, call, customer text, payment or setup action was retried.'].join('\n'),
+        adminUrl: `${String(frontendUrl).replace(/\/$/, '')}/#/admin?tab=signups`, buttonText: 'Open signup tracker', dedupeKey: `signup-form-start:${record.id}` });
+      if (!(result?.queued || result?.duplicate)) continue;
+      await store.compareSwap(keyFor(record.id, slots), record, { ...record, startAlertQueuedAt: now() });
+      startsQueued++;
+    }
     for (const candidate of records) {
       if (queued >= 5) break;
       if (!candidate.engaged || candidate.linkedAttemptId || candidate.expiresAt <= now() || candidate.alertedRevision === candidate.progressRevision) continue;
@@ -171,7 +197,7 @@ function createObservationService({ store, authenticateAttempt, now = () => Date
       queued++;
       await new Promise(resolve => setImmediate(resolve));
     }
-    return { queued, source: 'client_reported_metadata', candidatesBound: MAX_SLOTS };
+    return { queued, startsQueued, source: 'client_reported_metadata', candidatesBound: MAX_SLOTS };
     } finally { processingStalls = false; }
   }
   return { create, read, observe, link, listAdmin, describeAttempt, processStalls, authenticate };

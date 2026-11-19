@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { tradePageOrder, tradePages } from "./tradePageData";
 import { propertyManagementAudience } from "./firstClassRentalsData";
 import { TimsElectricalLiveDemo } from "./TimsElectricalDemo";
+import { navigateToSignup } from './features/signup/signupStartIntent';
 import heroTranscriptTimings from "./timsElectricalHeroTranscriptTimings.json";
 
 const proofFeatureCards = [
@@ -2862,7 +2863,7 @@ function ForwardingSetupWizard() {
             </p>
             <button
               type="button"
-              onClick={() => { window.location.hash = "#/signup"; }}
+              onClick={navigateToSignup}
               className="mt-4 inline-flex min-h-[46px] w-full items-center justify-center rounded-[8px] bg-[linear-gradient(180deg,#ff8b1f,#ff6b00)] px-3 text-[0.72rem] font-black uppercase tracking-[0.08em] text-white shadow-[0_16px_34px_-24px_rgba(255,106,0,0.92)] transition hover:-translate-y-0.5"
             >
               Start secure setup
@@ -3712,7 +3713,7 @@ function LandingPage() {
     transcriptMoments.find((item) => audioTime >= item.start && audioTime < item.end) || transcriptMoments[transcriptMoments.length - 1];
 
   const goToSignup = () => {
-    window.location.hash = "/signup";
+    navigateToSignup();
   };
 
   const scrollToRef = (ref) => {

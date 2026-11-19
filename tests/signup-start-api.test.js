@@ -1,0 +1,21 @@
+const {test}=require('node:test'),assert=require('node:assert/strict'),express=require('express');
+const {createObservationService,registerObservationRoutes,observationBodyGuard}=require('../server/signupFormObservation');
+const memory=require('./helpers/form-observation-memory');
+test('actual HTTP start admission preserves origin, capability, admin privacy and no-send boundaries',async t=>{
+ const store=memory(),service=createObservationService({store,authenticateAttempt:async()=>null}),app=express(),pass=(_req,_res,next)=>next();let base;
+ app.use('/api/signup/form-observation',observationBodyGuard({jsonParser:express.json({limit:'8kb'}),isAllowedOrigin:o=>o===base,createLimiter:pass,updateLimiter:pass}));
+ registerObservationRoutes({app,service,isAllowedOrigin:o=>o===base,createLimiter:pass,updateLimiter:pass,requireAdmin:(req,res,next)=>req.headers['x-fixture-admin']==='yes'?next():res.status(401).json({error:'unauthorized'})});
+ const server=await new Promise(resolve=>{const s=app.listen(0,'127.0.0.1',()=>resolve(s));});t.after(async()=>{server.closeAllConnections?.();await new Promise(resolve=>server.close(resolve));});base='http://127.0.0.1:'+server.address().port;
+ const headers={'content-type':'application/json',origin:base,'x-myaipa-form-observation':'1'};
+ const create=await fetch(base+'/api/signup/form-observation',{method:'POST',headers,body:'{"schemaVersion":1}'});assert.equal(create.status,200);const access=await create.json();
+ const event={schemaVersion:1,sequence:1,expectedRevision:0,started:true,currentStep:'trade',attemptedAdvance:false,fields:[]},url=base+'/api/signup/form-observation/'+access.id;
+ assert.equal((await fetch(url,{method:'PUT',headers,body:JSON.stringify(event)})).status,401);
+ assert.equal((await fetch(url,{method:'PUT',headers:{...headers,authorization:'SignupDraft '+access.token,origin:'https://foreign.test'},body:JSON.stringify(event)})).status,403);
+ assert.equal((await fetch(url,{method:'PUT',headers:{...headers,authorization:'SignupDraft '+access.token},body:JSON.stringify({...event,businessName:'PRIVATE_FIELD_VALUE'})})).status,400);
+ const accepted=await fetch(url,{method:'PUT',headers:{...headers,authorization:'SignupDraft '+access.token},body:JSON.stringify(event)});assert.equal(accepted.status,200);
+ assert.equal((await fetch(base+'/api/admin/signup-form-observations')).status,401);
+ const admin=await fetch(base+'/api/admin/signup-form-observations',{headers:{'x-fixture-admin':'yes'}}),report=await admin.json();assert.equal(admin.status,200);assert.equal(report.rows.length,1);assert.equal(report.rows[0].startSource,'trial_button');assert.deepEqual(report.rows[0].blockers,[]);assert.equal(admin.headers.get('cache-control'),'no-store');
+ assert.doesNotMatch(JSON.stringify(report),new RegExp(access.token+'|tokenHash|PRIVATE_FIELD_VALUE'));
+ const replay=await fetch(url,{method:'PUT',headers:{...headers,authorization:'SignupDraft '+access.token},body:JSON.stringify(event)});assert.equal((await replay.json()).ignored,'stale_sequence');assert.equal(store.rows.size,1);
+ const queued=[];assert.equal((await service.processStalls({enqueue:async x=>{queued.push(x);return{queued:true};},frontendUrl:'https://fixture.test'})).startsQueued,1);assert.equal(queued.length,1);assert.ok(queued[0].dedupeKey.startsWith('signup-form-start:'));assert.equal((await service.processStalls({enqueue:async()=>{throw Error('No second enqueue');},frontendUrl:'https://fixture.test'})).startsQueued,0);
+});

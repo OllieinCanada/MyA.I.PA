@@ -19,6 +19,7 @@ proofSources.push('src/signupControlRoomModel.js','src/SignupControlRoom.css');
 proofSources.push('src/ProviderMaintenance.js','src/ProviderMaintenance.css','src/SignupBugHistory.js','src/SignupBugHistory.css','server/providerMaintenance.js','server/signupBugHistory.js','server/signupDiagnosticError.js');
 proofSources.push('server/signupRecoveryGuidance.js');
 proofSources.push('src/AdminSignupTracker.js','src/useSavedEvidence.js','src/features/admin/savedEvidencePolling.js','src/SavedEvidenceStatus.js','src/SavedEvidenceStatus.css','server/adminSignupTracker.js');
+proofSources.push('src/SignupTrackerCompact.css','src/SignupNowOverview.js','src/SignupNowOverview.css','src/features/admin/signupNowModel.js');
 const sourceHashes=()=>Object.fromEntries(proofSources.map(file=>[file,require('node:crypto').createHash('sha256').update(fs.readFileSync(path.resolve(file))).digest('hex')]));
 const bundleDir = path.join(output, 'public');
 const at = Date.now();
