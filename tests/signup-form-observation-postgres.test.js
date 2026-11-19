@@ -43,6 +43,17 @@ test('actual PostgreSQL metadata CAS, exact JSON linkage, cap and namespace-only
   await t.test('a full fixed slot refuses creation without evicting the active record', async () => {
     await assert.rejects(service.create(), { code: 'FORM_OBSERVATION_CAPACITY' }); assert.equal((await service.read(access.id, access.token)).revision, 1);
   });
+  await t.test('real JSON/CAS persists only the admitted labels and refuses stale correction without losing the exact association',async()=>{
+    const cursor=await service.read(access.id,access.token);
+    const fields=['business_name','owner_name'].map(id=>({id,presence:'present',visible:'visible',required:true,interacted:true,validation:'valid',reason:'none'}));
+    const update={...snapshot,fields,sequence:cursor.sequence+1,expectedRevision:cursor.revision,draftNames:{businessName:'Invented SQL Beacon',ownerName:'Alex Fixture'}};
+    await service.observe(access.id,access.token,update);
+    const restarted=createObservationService(options),row=(await restarted.describeAttempt(attemptId));
+    assert.deepEqual(row.draftNames,update.draftNames);assert.equal(row.linkedAttemptId,attemptId);assert.equal(row.draftNamesVerified,false);assert.equal(row.expiresAt,access.expiresAt);
+    await assert.rejects(restarted.observe(access.id,access.token,{...update,sequence:update.sequence+1,draftNames:{businessName:'Wrong Stale Fixture',ownerName:'Alex Fixture'}}),{code:'FORM_OBSERVATION_STALE'});
+    assert.equal((await restarted.describeAttempt(attemptId)).draftNames.businessName,'Invented SQL Beacon');
+    assert.equal((await restarted.read(access.id,access.token)).draftNames,undefined);
+  });
   await t.test('fixed TTL reuse and purge remove only expired scoped telemetry, not history', async () => {
     await prisma.runtimeStore.create({ data: { key: unrelated, data: { preserve: true }, createdAt: new Date(at - TTL_MS - 1000) } });
     at += TTL_MS + 1; await assert.rejects(service.read(access.id, access.token), { code: 'FORM_OBSERVATION_UNAUTHORIZED' });

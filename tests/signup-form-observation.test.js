@@ -26,6 +26,51 @@ test('page load/untouched snapshots do not create an engaged report or a fake va
   const result = await f.service.observe(access.id, access.token, event({ fields: [field({ interacted: false, validation: 'not_observed', reason: 'not_observed' })] }));
   assert.equal(result.ignored, 'not_engaged'); assert.equal((await f.service.listAdmin()).rows.length, 0);
 });
+
+test('only two unverified names reach the admin projection; corrections and clearing update without linking or extending expiry',async()=>{
+ const f=fixture(),a=await f.service.create();
+ const fields=[field({presence:'present',validation:'valid',reason:'none'}),field({id:'owner_name',presence:'present',validation:'valid',reason:'none'})];
+ const snapshot=event({fields,draftNames:{businessName:'Invented Beacon Electrical',ownerName:'Alex Fixture'}});
+ await f.service.observe(a.id,a.token,snapshot);let row=(await f.service.listAdmin()).rows[0];
+ assert.deepEqual(row.draftNames,snapshot.draftNames);assert.equal(row.draftNamesVerified,false);assert.equal(row.linkedAttemptId,null);assert.equal(row.identity,'unlinked_visitor_unknown_identity');
+ assert.deepEqual(await f.service.read(a.id,a.token),{revision:1,sequence:1,expiresAt:a.expiresAt},'Capability GET never exposes names or field values');
+ f.advance(1000);await f.service.observe(a.id,a.token,{...snapshot,sequence:2,expectedRevision:1,draftNames:{...snapshot.draftNames,businessName:'Corrected Beacon Electrical'}});
+ row=(await f.service.listAdmin()).rows[0];assert.equal(row.draftNames.businessName,'Corrected Beacon Electrical');assert.equal(row.lastProgressAt,f.now());assert.equal(row.expiresAt,a.expiresAt);
+ await f.service.observe(a.id,a.token,event({sequence:3,expectedRevision:2,currentStep:'pricing',fields:[]}));
+ assert.equal((await f.service.listAdmin()).rows[0].draftNames.businessName,'Corrected Beacon Electrical','Navigation preserves labels, not a guessed identity');
+ await f.service.observe(a.id,a.token,event({sequence:4,expectedRevision:3,draftNames:{businessName:'',ownerName:''}}));
+ assert.deepEqual((await f.service.listAdmin()).rows[0].draftNames,{businessName:'',ownerName:''});assert.equal((await f.service.listAdmin()).rows[0].linkedAttemptId,null);
+});
+
+test('name payload rejects unrelated contact/security fields, wrong shapes, oversized/control text and impossible field presence',async()=>{
+ const f=fixture(),a=await f.service.create(),before=JSON.stringify([...f.store.rows.values()]);
+ const names={businessName:'Invented',ownerName:''},present=field({presence:'present',validation:'valid',reason:'none'});
+ for(const draftNames of [null,[],{businessName:'Invented'},{...names,phone:'PRIVATE_PHONE'}, {...names,email:'PRIVATE_EMAIL'}, {...names,otp:'PRIVATE_CODE'}, {...names,businessName:'x'.repeat(121)}, {...names,ownerName:'x'.repeat(81)}, {...names,businessName:'\nInvented'}, {...names,businessName:'Hidden\u202eName'}, {...names,businessName:3}]){
+  await assert.rejects(f.service.observe(a.id,a.token,event({fields:[present],draftNames})),{code:'FORM_OBSERVATION_INVALID'});
+ }
+ await assert.rejects(f.service.observe(a.id,a.token,event({draftNames:names})),{code:'FORM_OBSERVATION_INVALID'});
+ await assert.rejects(f.service.observe(a.id,a.token,event({currentStep:'trade',fields:[],draftNames:names})),{code:'FORM_OBSERVATION_INVALID'});
+ assert.equal(JSON.stringify([...f.store.rows.values()]),before);
+});
+
+test('old clients remain supported without inventing names; concurrent/stale writers cannot restore superseded display names',async()=>{
+ const f=fixture(),a=await f.service.create(),fields=[field({presence:'present',validation:'valid',reason:'none'})];
+ await f.service.observe(a.id,a.token,event({fields,draftNames:{businessName:'Before Fixture',ownerName:''}}));
+ await f.service.observe(a.id,a.token,event({sequence:2,expectedRevision:1,fields,draftNames:{businessName:'After Fixture',ownerName:''}}));
+ assert.equal((await f.service.observe(a.id,a.token,event({fields,draftNames:{businessName:'Before Fixture',ownerName:''}}))).ignored,'stale_sequence');
+ await assert.rejects(f.service.observe(a.id,a.token,event({sequence:3,expectedRevision:0,fields,draftNames:{businessName:'Wrong Fixture',ownerName:''}})),{code:'FORM_OBSERVATION_STALE'});
+ assert.equal((await f.service.listAdmin()).rows[0].draftNames.businessName,'After Fixture');
+ await f.service.observe(a.id,a.token,event({sequence:3,expectedRevision:2,fields}));assert.equal((await f.service.listAdmin()).rows[0].draftNames,null,'A legacy current business snapshot must not retain stale names');
+});
+
+test('entered names never enter start/stall messages and exact linking remains a separate capability check',async()=>{
+ const f=fixture(),a=await f.service.create(),name='Sealed Fictitious Name';
+ await f.service.observe(a.id,a.token,event({started:true,fields:[field({presence:'present',validation:'valid',reason:'none'})],draftNames:{businessName:name,ownerName:''}}));
+ f.advance(600001);const entries=[];await f.service.processStalls({enqueue:async item=>{entries.push(item);return{queued:true};},frontendUrl:'https://example.invalid'});
+ assert.ok(entries.length>0);assert.ok(!JSON.stringify(entries).includes(name));assert.ok(!JSON.stringify(entries).includes(a.token));assert.equal((await f.service.listAdmin()).rows[0].linkedAttemptId,null);
+ await assert.rejects(f.service.link(a.id,a.token,{attemptId:'attempt_'+'a'.repeat(20),attemptToken:'wrong'}),{code:'FORM_OBSERVATION_UNAUTHORIZED'});
+ f.advance(TTL_MS);assert.equal((await f.service.listAdmin()).rows.length,0);
+});
 test('visible blank, untouched and not-visited fields stay distinct, and no psychological reason is invented', async () => {
   const f = fixture(), a = await f.service.create();
   await f.service.observe(a.id,a.token,event({ fields: [field(), field({ id:'street_address',interacted:false,validation:'not_observed',reason:'not_observed' })] }));

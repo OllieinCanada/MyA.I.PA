@@ -57,3 +57,15 @@ test('HTTP linkage requires both capabilities and the admin report joins only th
  assert.doesNotMatch(JSON.stringify(report),new RegExp(access.token+'|synthetic-status-capability|tokenHash'));
  const cursor=await(await fetch(base+'/api/signup/form-observation/'+access.id,{headers:{Authorization:'SignupDraft '+access.token}})).json();assert.ok(!cursor.fields&&!cursor.linkedAttemptId&&!cursor.rows);
 });
+
+test('real HTTP admits only two bounded draft labels and exposes them only behind admin authentication',async()=>{
+ const draft=await service.create(),url=base+'/api/signup/form-observation/'+draft.id;
+ const names={businessName:'Invented Live Beacon',ownerName:'Alex Fixture'};
+ const fields=['business_name','owner_name'].map(id=>({id,presence:'present',visible:'visible',required:true,interacted:true,validation:'valid',reason:'none'}));
+ const update=await fetch(url,{method:'PUT',headers:headers({Authorization:'SignupDraft '+draft.token}),body:JSON.stringify({...snapshot,fields,draftNames:names})});assert.equal(update.status,200);assert.ok(!(await update.text()).includes(names.businessName));
+ const denied=await fetch(base+'/api/admin/signup-form-observations');assert.equal(denied.status,401);assert.ok(!(await denied.text()).includes(names.businessName));
+ const cursor=await fetch(url,{headers:headers({Authorization:'SignupDraft '+draft.token})});assert.equal(cursor.status,200);assert.ok(!(await cursor.text()).includes(names.businessName));
+ const admin=await fetch(base+'/api/admin/signup-form-observations',{headers:{'x-test-admin':'yes'}});assert.equal(admin.headers.get('cache-control'),'no-store');
+ const row=(await admin.json()).rows.find(r=>r.id===draft.id);assert.deepEqual(row.draftNames,names);assert.equal(row.draftNamesVerified,false);assert.equal(row.linkedAttemptId,null);
+ const rejected=await fetch(url,{method:'PUT',headers:headers({Authorization:'SignupDraft '+draft.token}),body:JSON.stringify({...snapshot,sequence:2,expectedRevision:1,fields,draftNames:{...names,email:'PRIVATE_CONTACT_MARKER'}})});assert.equal(rejected.status,400);assert.ok(!(await rejected.text()).includes('PRIVATE_CONTACT_MARKER'));assert.equal(leakedErrors,0);
+});

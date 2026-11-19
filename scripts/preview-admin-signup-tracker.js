@@ -27,7 +27,7 @@ const stamp = ago => new Date(at - ago * 60000).toISOString();
 function fixture(index, extra) {
   const row = { signupAttemptId: 'signup_' + String(index).repeat(32), businessId: index,
     businessName: ['','Harbour Electrical','Maple Home Services','Oak & Stone Plumbing','Lakeside Heating','Preview Paused Trial'][index],
-    ownerName: ['','Morgan','Jamie','Taylor','Alex','Sam'][index], signedUpAt: stamp(50), createdAt: stamp(50), status: 'setup_started',
+    ownerName: ['','Morgan','Jamie','Taylor','Alex','Sam'][index], signedUpAt: stamp(60-index*8), createdAt: stamp(60-index*8), status: 'setup_started',
     serviceSummary: 'Repairs, installations and estimates', serviceArea: 'Hamilton and Burlington', businessWebsite: 'https://example.test', businessAddress: '', specializationNotes: '',
     ...extra };
   row.onboardingTracker = trackProgress({}, row, at - (extra.minutesAgo || 3) * 60000);
@@ -136,6 +136,30 @@ async function main() {
       await page.route('**/*', route => new URL(route.request().url()).origin === base ? route.continue() : (externalBlocked++, route.abort()));
       await page.goto(base,{waitUntil:'domcontentloaded',timeout:60000}); const panel = page.getByRole('region', { name: 'Signup progress tracker' });
       await panel.getByRole('heading', { name: 'Harbour Electrical' }).waitFor();
+      const beforeViewSaves=fixtureSaves,beforeViewLive=liveReads;
+      const savedNames=()=>panel.locator('.signup-tracker-business h3').allTextContents();
+      const overviewNames=()=>panel.locator('.signup-now-visitors strong').allTextContents();
+      assert.deepEqual(await savedNames(),['Lakeside Heating','Oak & Stone Plumbing','Maple Home Services','Harbour Electrical']);
+      assert.deepEqual(await overviewNames(),await savedNames(),'One view controls both overview and saved list');
+      await panel.getByLabel('Sort signups',{exact:true}).selectOption('oldest');
+      assert.deepEqual(await savedNames(),['Harbour Electrical','Maple Home Services','Oak & Stone Plumbing','Lakeside Heating']);
+      assert.deepEqual(await overviewNames(),await savedNames());
+      await panel.getByLabel('Sort signups',{exact:true}).selectOption('progress');
+      assert.deepEqual(await savedNames(),['Oak & Stone Plumbing','Lakeside Heating','Maple Home Services','Harbour Electrical']);
+      await panel.getByLabel('Sort signups',{exact:true}).selectOption('name');
+      assert.deepEqual(await savedNames(),['Harbour Electrical','Lakeside Heating','Maple Home Services','Oak & Stone Plumbing']);
+      await panel.getByLabel('Sort signups',{exact:true}).selectOption('stuck');
+      assert.equal((await savedNames())[0],'Harbour Electrical');
+      await panel.getByLabel('Signup start date',{exact:true}).selectOption('24h');
+      assert.equal((await savedNames()).length,4);
+      await panel.getByLabel('Search signups',{exact:true}).fill('not-a-fixture');
+      assert.equal((await savedNames()).length,0);assert.equal((await overviewNames()).length,0);
+      await panel.getByRole('button',{name:'Reset view',exact:true}).click();
+      assert.equal(await panel.getByLabel('Sort signups',{exact:true}).inputValue(),'newest');
+      assert.equal(await panel.getByLabel('Signup start date',{exact:true}).inputValue(),'all');
+      assert.equal((await savedNames()).length,4);assert.equal(fixtureSaves,beforeViewSaves);assert.equal(liveReads,beforeViewLive);
+      await panel.getByRole('group',{name:'Find and sort signups',exact:true}).screenshot({path:path.join(output,`${width}-sorting-toolbar.png`)});
+      assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
       assert.match(await panel.innerText(),/every 5 seconds/,'The actual tracker discloses its saved-read cadence');
       const originalName=rows[2].businessName;
       rows=rows.map((r,i)=>i===2?{...r,businessName:originalName+' — live fixture update'}:r);

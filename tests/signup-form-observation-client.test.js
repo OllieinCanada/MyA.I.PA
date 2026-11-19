@@ -21,6 +21,41 @@ test('actual browser builder excludes all typed values and opaque security field
  for(const secret of Object.values(details))assert.ok(!output.includes(secret));assert.equal(metadata.length,8);assert.equal(metadata.find(f=>f.id==='business_name').presence,'present');
  assert.equal(metadata.find(f=>f.id==='owner_name').validation,'not_observed');
 });
+
+test('actual snapshot allowlists only bounded business/owner labels; other typed values remain excluded',()=>{
+ const snapshot=observedFormSnapshot({step:'business_details',details,validation,touched:{businessName:true}});
+ assert.deepEqual(snapshot.draftNames,{businessName:details.businessName,ownerName:details.ownerName});
+ for(const [key,secret] of Object.entries(details))if(!['businessName','ownerName'].includes(key))assert.ok(!JSON.stringify(snapshot).includes(secret),key);
+ const normalized=observedFormSnapshot({step:'business_details',details:{...details,businessName:' \n'+ 'x'.repeat(200),ownerName:'Alex\u202e\nFixture '},validation});
+ assert.equal(normalized.draftNames.businessName.length,120);assert.equal(normalized.draftNames.ownerName,'Alex Fixture');
+ assert.equal(observedFormSnapshot({step:'trade',details,validation}).draftNames,undefined);
+});
+
+test('same-validity name edits and clearing flow through the real client/service without leaking names into the saved capability or public read',async()=>{
+ const h=harness(),input={step:'business_details',details,validation,touched:{businessName:true,ownerName:true}};
+ await h.client.observe(observedFormSnapshot(input),true);await h.client.settled();
+ let row=(await h.service.listAdmin()).rows[0];assert.equal(row.draftNames.businessName,details.businessName);assert.equal(row.linkedAttemptId,null);
+ const id=row.id,expiry=row.expiresAt;
+ await h.client.observe(observedFormSnapshot({...input,details:{...details,businessName:'Changed Fictional Name'}}),true);await h.client.settled();
+ row=(await h.service.listAdmin()).rows[0];assert.equal(row.id,id);assert.equal(row.draftNames.businessName,'Changed Fictional Name');assert.equal(row.revision,2);assert.equal(row.expiresAt,expiry);
+ await h.client.observe(observedFormSnapshot({...input,details:{...details,businessName:'',ownerName:''},validation:{errors:{...validation.errors,businessName:'Required',ownerName:'Required'}}}),true);await h.client.settled();
+ assert.deepEqual((await h.service.listAdmin()).rows[0].draftNames,{businessName:'',ownerName:''});
+ const pointer=JSON.parse([...h.saved.values()][0]);assert.deepEqual(Object.keys(pointer).sort(),['expiresAt','id','revision','sequence','token']);assert.ok(!JSON.stringify([...h.saved.values()]).includes('PRIVATE'));
+ assert.equal((await h.service.read(pointer.id,pointer.token)).draftNames,undefined);
+ for(const request of h.requests)for(const key of ['phone','email','streetAddress','city','postalCode','otp','password','captchaToken'])assert.ok(!request.body.includes(details[key]),key);
+});
+
+test('rapid name edits keep the newest snapshot after a slow metadata write, without submitting or linking signup',async()=>{
+ const h=harness();let enter,release,held=false;const entered=new Promise(r=>{enter=r;}),gate=new Promise(r=>{release=r;});
+ const client=createFormObservationClient({apiBase:'https://api.example.test',storage:h.storage,fetchImpl:async(url,options)=>{if(options.method==='PUT'&&!held){held=true;enter();await gate;}return h.fetchImpl(url,options);}});
+ const input={step:'business_details',details,validation,touched:{businessName:true,ownerName:true}};
+ const first=client.observe(observedFormSnapshot(input),true);await entered;
+ await client.observe(observedFormSnapshot({...input,details:{...details,businessName:'Intermediate Fixture'}}),true);
+ await client.observe(observedFormSnapshot({...input,details:{...details,businessName:'Latest Fixture'}}),true);
+ release();await first;await client.settled();const rows=(await h.service.listAdmin()).rows;
+ assert.equal(rows.length,1);assert.equal(rows[0].draftNames.businessName,'Latest Fixture');assert.equal(rows[0].linkedAttemptId,null);assert.equal(h.requests.filter(r=>r.body.includes('Intermediate Fixture')).length,0);
+ assert.ok(h.requests.every(r=>r.path.startsWith('/api/signup/form-observation')));
+});
 test('blank observed/touched and untouched differ and corrected fields retain only validation enums',()=>{
  const blank={...details,businessName:'',streetAddress:''},invalid={errors:{...validation.errors,businessName:'Enter name',streetAddress:'Enter address'}};
  let fields=observedBusinessFields({details:blank,validation:invalid,touched:{businessName:true}});
@@ -74,7 +109,9 @@ test('optional pricing is not a blocker; only enabled missing/invalid rates are 
 test('final review distinguishes hidden mobile fields and incomplete human verification without collecting proof',()=>{
  const input={step:'final_review',details,validation,attemptedAdvance:true,humanVerified:false,wide:false,captchaToken:'PRIVATE_PROOF',otp:'123456',payment:{card:'4111111111111111'},termsAccepted:true};
  let snapshot=observedFormSnapshot(input);assert.equal(snapshot.fields[0].visible,'hidden');assert.equal(snapshot.fields[0].presence,'unknown');assert.equal(snapshot.fields.at(-1).id,'human_verification');assert.equal(snapshot.fields.at(-1).reason,'required_missing');
- assert.doesNotMatch(JSON.stringify(snapshot),/PRIVATE|123456|4111111111111111|termsAccepted|captchaToken/);
+ assert.deepEqual(snapshot.draftNames,{businessName:details.businessName,ownerName:details.ownerName});
+ assert.doesNotMatch(JSON.stringify(snapshot),/PRIVATE_PROOF|123456|4111111111111111|termsAccepted|captchaToken/);
+ for(const [key,value] of Object.entries(details))if(!['businessName','ownerName'].includes(key))assert.ok(!JSON.stringify(snapshot).includes(value),key);
  snapshot=observedFormSnapshot({...input,humanVerified:true,wide:true});assert.equal(snapshot.fields.at(-1).validation,'valid');assert.equal(snapshot.fields[0].visible,'visible');
 });
 test('all actual form steps fit the bounded record and the admin report keeps checkout/terms coverage honest',async()=>{
@@ -82,7 +119,9 @@ test('all actual form steps fit the bounded record and the admin report keeps ch
   await h.client.observe(observedFormSnapshot({step,details,validation,attemptedAdvance:true,selectedTradeId:'PRIVATE_TRADE',selectedSpecializationIds:['PRIVATE_TYPE'],selectedAreas:['PRIVATE_AREA'],pricing:{includeVisitFee:true,repairVisitFee:'91.73'},humanVerified:false}),true);
  }
  const report=(await h.service.listAdmin()).rows[0];assert.equal(report.currentStep,'final_review');assert.equal(report.coverage.termsAgreement,'not_collected_by_this_form');assert.equal(report.coverage.checkout,'not_observed_use_trusted_backend_receipts');assert.equal(report.blockers[0].id,'human_verification');
- assert.ok(Buffer.byteLength(JSON.stringify([...h.store.rows.values()][0]))<=8192);assert.doesNotMatch(JSON.stringify([...h.store.rows.values()]),/PRIVATE|91\.73|private@example/);assert.equal(report.coverage.instrumentedSteps.length,6);
+ assert.ok(Buffer.byteLength(JSON.stringify([...h.store.rows.values()][0]))<=8192);assert.deepEqual(report.draftNames,{businessName:details.businessName,ownerName:details.ownerName});
+ for(const [key,value] of Object.entries(details))if(!['businessName','ownerName'].includes(key))assert.ok(!JSON.stringify([...h.store.rows.values()]).includes(value),key);
+ assert.doesNotMatch(JSON.stringify([...h.store.rows.values()]),/PRIVATE_TRADE|PRIVATE_TYPE|PRIVATE_AREA|91\.73|private@example/);assert.equal(report.coverage.instrumentedSteps.length,6);
 });
 test('a newly interacted draft after fixed expiry is observed even when its enum states match the expired draft',async()=>{
  let at=1800000000000;const h=harness({now:()=>at}),snapshot={currentStep:'business_details',attemptedAdvance:false,fields:observedBusinessFields({details,validation,touched:{businessName:true}})};

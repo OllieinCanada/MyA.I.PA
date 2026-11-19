@@ -1,5 +1,6 @@
 const STORAGE_KEY = 'myaipa_signup_observation_v1';
 const BUSINESS_IDS = Object.freeze({ ownerName: 'owner_name', businessName: 'business_name', phone: 'business_phone', email: 'business_email', streetAddress: 'street_address', city: 'city', province: 'province', postalCode: 'postal_code' });
+const draftName = (value, limit) => String(value || '').replace(/[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/gu,' ').replace(/\s+/gu,' ').trim().slice(0,limit).trim();
 export function observedBusinessFields({ details, validation, touched = {}, attemptedAdvance = false, visible = true }) {
   // Values are inspected only in this pure browser function. Only fixed IDs,
   // booleans and enum states leave it; never concatenate a value into metadata.
@@ -30,7 +31,8 @@ export function observedFormSnapshot({ step, details, validation, touched = {}, 
       })];
   }
   if (step === 'final_review') fields.push(observedField('human_verification', Boolean(humanVerified), { interacted: Boolean(touched.human_verification || attemptedAdvance) }));
-  return { currentStep: step, attemptedAdvance, fields };
+  return { currentStep: step, attemptedAdvance, fields,
+    ...(['business_details','final_review'].includes(step) ? {draftNames:{businessName:draftName(details?.businessName,120),ownerName:draftName(details?.ownerName,80)}} : {}) };
 }
 export function observedSignupStep(currentStep, businessSlide, tradePanel) {
   if (currentStep === 3) return 'final_review';
