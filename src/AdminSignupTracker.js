@@ -1,8 +1,12 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import './AdminSignupTracker.css';
 import SignupControlRoom from './SignupControlRoom';
 import SignupBugHistory from './SignupBugHistory';
 import ProviderMaintenance from './ProviderMaintenance';
+import useSavedEvidence from './useSavedEvidence';
+import SavedEvidenceStatus from './SavedEvidenceStatus';
+import { matchesSignupView } from './features/admin/savedEvidencePolling';
+const validTracker = body => body?.ok === true && Array.isArray(body.rows);
 
 const FIELDS = { serviceSummary: ['Services', 400], serviceArea: ['Service area', 160], businessWebsite: ['Business website', 300], businessAddress: ['Business address', 400], specializationNotes: ['Business notes', 2000] };
 const time = value => value && Number.isFinite(new Date(value).getTime()) ? new Date(value).toLocaleString('en-CA', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/Toronto', timeZoneName: 'short' }) : 'Not recorded';
@@ -16,32 +20,14 @@ export function FormObservationReport({ observation }) {
 }
 
 export default function AdminSignupTracker({ apiBase = '' }) {
-  const [data, setData] = useState(null), [error, setError] = useState(''), [busy, setBusy] = useState(false);
-  const [filter, setFilter] = useState('active'), [search, setSearch] = useState(''), [expanded, setExpanded] = useState(''), [draftExpanded, setDraftExpanded] = useState('');
+  const {data,setData,busy,state,load,pause,resume} = useSavedEvidence({url:apiBase+'/api/admin/signup-tracker',validate:validTracker});
+  const [filter, setFilter] = useState('watching'), [search, setSearch] = useState(''), [expanded, setExpanded] = useState(''), [draftExpanded, setDraftExpanded] = useState('');
   const [focused, setFocused] = useState('');
   const [editor, setEditor] = useState(null), [saving, setSaving] = useState(false), [saveError, setSaveError] = useState(''), [message, setMessage] = useState('');
-  const reading = useRef(null), writing = useRef(null), editorSection = useRef(null), readGeneration = useRef(0);
-  const load = useCallback(async () => {
-    if (reading.current || writing.current || document.visibilityState === 'hidden') return;
-    const generation = readGeneration.current;
-    const controller = new AbortController(); reading.current = controller; setBusy(true);
-    const timeout = setTimeout(() => controller.abort(), 6500);
-    try {
-      const response = await fetch(apiBase + '/api/admin/signup-tracker', { credentials: 'include', signal: controller.signal });
-      const body = await response.json();
-      if (!response.ok || !Array.isArray(body.rows)) throw new Error('unavailable');
-      if (!controller.signal.aborted && generation === readGeneration.current) { setData(body); setError(''); }
-    } catch (_) { if (generation === readGeneration.current && reading.current === controller) setError('Signup updates are unavailable. Displayed rows are last-known information, not a fresh check.'); }
-    finally { clearTimeout(timeout); if (reading.current === controller) { reading.current = null; setBusy(false); } }
-  }, [apiBase]);
-  useEffect(() => {
-    load(); const timer = setInterval(load, 60000);
-    const visible = () => { if (document.visibilityState === 'visible') load(); };
-    document.addEventListener('visibilitychange', visible);
-    return () => { clearInterval(timer); document.removeEventListener('visibilitychange', visible); reading.current?.abort(); writing.current?.abort(); };
-  }, [load]);
+  const writing = useRef(null), editorSection = useRef(null);
+  useEffect(() => () => writing.current?.abort(), []);
   const rows = useMemo(() => (data?.rows || []).filter(row => {
-    const matches = filter === 'all' || (filter === 'active' ? row.active : filter === 'stalled' ? row.stalled : row.mode === filter);
+    const matches = matchesSignupView(row, filter);
     return matches && `${row.businessName} ${row.ownerName} ${row.currentStep} ${row.status} ${row.attemptId}`.toLowerCase().includes(search.trim().toLowerCase());
   }), [data, filter, search]);
   const draftRows = (data?.formObservations?.rows || []).filter(row => !row.linkedAttemptId && row.engaged && (!search.trim() || row.id.toLowerCase().includes(search.trim().toLowerCase())));
@@ -49,7 +35,7 @@ export default function AdminSignupTracker({ apiBase = '' }) {
   useEffect(() => { if (editor?.attemptId) { editorSection.current?.focus({ preventScroll: true }); editorSection.current?.scrollIntoView({ block: 'start' }); } }, [editor?.attemptId]);
   const save = async event => {
     event.preventDefault(); if (writing.current || !editor) return;
-    readGeneration.current++; reading.current?.abort();
+    pause();
     const controller = new AbortController(); writing.current = controller; setSaving(true); setSaveError('');
     const timeout = setTimeout(() => controller.abort(), 6500);
     try {
@@ -63,22 +49,20 @@ export default function AdminSignupTracker({ apiBase = '' }) {
       setData(current => ({ ...current, rows: current.rows.map(row => row.attemptId === body.row.attemptId ? body.row : row) }));
       setMessage(`Saved business information for ${editor.businessName}. The live receptionist was not changed.${body.auditRecorded === false ? ' The audit log could not be confirmed; please check with support.' : ''}`); setEditor(null);
     } catch (e) { setSaveError(e.name === 'AbortError' ? 'The save result is uncertain. Keep this draft and check the saved information; do not repeat signup.' : e.message); }
-    finally { clearTimeout(timeout); writing.current = null; setSaving(false); }
+    finally { clearTimeout(timeout); writing.current = null; setSaving(false); resume(); }
   };
   return <section className="signup-tracker" aria-label="Signup progress tracker" aria-busy={busy}>
     <header className="signup-tracker-header">
       <div><span className="signup-tracker-eyebrow">My AI PA · Admin</span><h2>Signup control room</h2><p>One clear journey. Every recorded check. The exact step that needs you.</p></div>
       <div className="signup-tracker-refresh"><button type="button" disabled={busy} onClick={load}>{busy ? 'Checking…' : 'Refresh signups'}</button><small>Last checked {time(data?.generatedAt)}</small></div>
     </header>
-    {error ? <p role="alert" className="signup-tracker-error">{error}</p> : null}
+    <SavedEvidenceStatus state={state}/>
     {message ? <p role="status" className="signup-tracker-saved">{message}</p> : null}
-    <ProviderMaintenance apiBase={apiBase}/>
-    <SignupBugHistory apiBase={apiBase} signupNames={Object.fromEntries((data?.rows||[]).map(row=>[row.attemptId,row.businessName]))} onInspectSignup={data?attempt=>{setFilter('all');setSearch('');setFocused(attempt);}:undefined}/>
     <div className="signup-tracker-kpis">
       {[['Active setup', data?.summary?.active, 'People still onboarding'], ['Needs attention', data?.summary?.stalled, '10+ minutes with no progress'], ['Waiting on customer', data?.summary?.waitingCustomer, 'Verification still needed'], ['Setup ready', data?.summary?.ready, 'No stuck-signup alerts']].map(([label, value, note]) => <div key={label}><span>{label}</span><strong>{value ?? '—'}</strong><small>{note}</small></div>)}
     </div>
     <details className="signup-tracker-policy"><summary>How to read this dashboard · evidence, alerts and safety</summary><span>A 10-minute heads-up, not an automatic retry. Admin + Telegram alerts once per stalled setup episode. Paused, closed and ready accounts are excluded. Waiting for customer verification is not proof of a technical failure.</span><span>Submitted verification, trial and setup checkpoints use saved backend evidence. A checkout return URL is not payment proof; external checkout is not observed by this form tracker. This form has no separate terms-agreement checkbox, and showing a notice is not proof of agreement.</span></details>
-    <div className="signup-tracker-toolbar"><label>Search signups<input type="search" value={search} placeholder="Business, owner or setup step" onChange={e => setSearch(e.target.value)} /></label><label>Show<select aria-label="Show signups" value={filter} onChange={e => setFilter(e.target.value)}><option value="active">Active setup</option><option value="stalled">Needs attention</option><option value="waiting_customer">Waiting for customer</option><option value="ready">Ready</option><option value="paused">Paused</option><option value="all">All records</option></select></label><span>{rows.length} {rows.length === 1 ? 'signup' : 'signups'}</span></div>
+    <div className="signup-tracker-toolbar"><label>Search signups<input type="search" value={search} placeholder="Business, owner or setup step" onChange={e => setSearch(e.target.value)} /></label><label>Show<select aria-label="Show signups" value={filter} onChange={e => setFilter(e.target.value)}><option value="watching">Active + ready in last 24 hours</option><option value="active">Active setup</option><option value="stalled">Needs attention</option><option value="waiting_customer">Waiting for customer</option><option value="ready">Ready</option><option value="paused">Paused</option><option value="all">All records</option></select></label><span>{rows.length} {rows.length === 1 ? 'signup' : 'signups'}</span></div>
     <div className="signup-tracker-rows">
       {rows.map(row => <article key={row.attemptId || row.businessName} className={'signup-tracker-row ' + (row.stalled ? 'is-stalled ' : '') + (row.attemptId === (rows.some(r=>r.attemptId===focused)?focused:rows[0]?.attemptId) ? 'is-focused' : '')}>
         <div className="signup-tracker-row-main">
@@ -99,6 +83,8 @@ export default function AdminSignupTracker({ apiBase = '' }) {
       {!draftRows.length && !data.formObservations.coverage?.unavailable ? <p>No engaged unlinked drafts match this view. Unobserved visitors are not counted.</p> : null}
     </section> : null}
     {editor ? <section ref={editorSection} tabIndex={-1} className="signup-tracker-editor" aria-label="Edit saved business information"><header><div><span className="signup-tracker-eyebrow">Saved business information</span><h3>{editor.businessName}</h3></div><button type="button" disabled={saving} onClick={() => setEditor(null)}>Close editor</button></header><p className="signup-tracker-editor-notice"><strong>Admin record only — not published to the receptionist.</strong> These changes update this signup’s saved business information. Phone/email, identity-linked business name, routing and billing are protected. Publishing new receptionist answers is a separate reviewed action.</p><form onSubmit={save}><fieldset disabled={saving}>{Object.entries(FIELDS).map(([key, [label, limit]]) => <label key={key}>{label}{['serviceSummary', 'specializationNotes'].includes(key) ? <textarea maxLength={limit} rows={key === 'specializationNotes' ? 4 : 3} value={editor.details[key]} onChange={e => setEditor(current => ({ ...current, details: { ...current.details, [key]: e.target.value } }))} /> : <input type={key === 'businessWebsite' ? 'url' : 'text'} maxLength={limit} value={editor.details[key]} onChange={e => setEditor(current => ({ ...current, details: { ...current.details, [key]: e.target.value } }))} />}</label>)}</fieldset>{saveError ? <p role="alert" className="signup-tracker-error">{saveError}</p> : null}<div className="signup-tracker-editor-actions"><button type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save business information'}</button><button type="button" disabled={saving} onClick={() => { const fresh = data?.rows.find(row => row.attemptId === editor.attemptId); if (fresh) openEditor(fresh); }}>Discard draft and load last checked info</button></div></form></section> : null}
-    <footer className="signup-tracker-footer">Checks once a minute while this page is visible. Background alerts do not require this page to stay open. No call, text, payment or provisioning action runs from this tracker.</footer>
+    <ProviderMaintenance apiBase={apiBase}/>
+    <SignupBugHistory apiBase={apiBase} signupNames={Object.fromEntries((data?.rows||[]).map(row=>[row.attemptId,row.businessName]))} onInspectSignup={data?attempt=>{setFilter('all');setSearch('');setFocused(attempt);}:undefined}/>
+    <footer className="signup-tracker-footer">Checks saved signup progress about every five seconds while this page is visible; errors slow the read cadence. Background alerts do not require this page to stay open. No call, text, payment or provisioning action runs automatically from this tracker.</footer>
   </section>;
 }

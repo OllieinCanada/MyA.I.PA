@@ -18,6 +18,7 @@ const proofSources=['src/SignupControlRoom.js','src/SignupLiveDiagnostics.js','s
 proofSources.push('src/signupControlRoomModel.js','src/SignupControlRoom.css');
 proofSources.push('src/ProviderMaintenance.js','src/ProviderMaintenance.css','src/SignupBugHistory.js','src/SignupBugHistory.css','server/providerMaintenance.js','server/signupBugHistory.js','server/signupDiagnosticError.js');
 proofSources.push('server/signupRecoveryGuidance.js');
+proofSources.push('src/AdminSignupTracker.js','src/useSavedEvidence.js','src/features/admin/savedEvidencePolling.js','src/SavedEvidenceStatus.js','src/SavedEvidenceStatus.css','server/adminSignupTracker.js');
 const sourceHashes=()=>Object.fromEntries(proofSources.map(file=>[file,require('node:crypto').createHash('sha256').update(fs.readFileSync(path.resolve(file))).digest('hex')]));
 const bundleDir = path.join(output, 'public');
 const at = Date.now();
@@ -118,14 +119,28 @@ async function main() {
   try {
     browser = await chromium.launch({ headless: true });
     for (const width of [1440, 390, 320]) {
+      // Each viewport starts with the same invented relative ages. A slow
+      // earlier viewport must not turn the six-minute wait fixture into a
+      // second ten-minute stall. Real threshold boundaries have unit coverage.
+      rows=rows.map(record=>{
+        const next={...record,onboardingTracker:trackProgress({},record,Date.now()-(record.minutesAgo||3)*60000)};
+        if(record.onboardingStallAlertEpisode)next.onboardingStallAlertEpisode=episodeKey(next.onboardingTracker);
+        return next;
+      });
       console.log(`Checking control-room interactions at ${width}px…`);
       const context = await browser.newContext({ viewport: { width, height: 1050 }, reducedMotion: 'reduce' }); const page = await context.newPage(); const errors = [];
       lastPage = page;
       page.on('pageerror', e => { errors.push(e.message); console.error('Synthetic preview page error:', e.message); });
       page.on('requestfailed',r=>{if(new URL(r.url()).origin===base)browserFailures.push({path:new URL(r.url()).pathname,error:r.failure()?.errorText});});
       await page.route('**/*', route => new URL(route.request().url()).origin === base ? route.continue() : (externalBlocked++, route.abort()));
-      await page.goto(base); const panel = page.getByRole('region', { name: 'Signup progress tracker' });
+      await page.goto(base,{waitUntil:'domcontentloaded',timeout:60000}); const panel = page.getByRole('region', { name: 'Signup progress tracker' });
       await panel.getByRole('heading', { name: 'Harbour Electrical' }).waitFor();
+      assert.match(await panel.innerText(),/every 5 seconds/,'The actual tracker discloses its saved-read cadence');
+      const originalName=rows[2].businessName;
+      rows=rows.map((r,i)=>i===2?{...r,businessName:originalName+' — live fixture update'}:r);
+      await panel.getByRole('heading',{name:originalName+' — live fixture update',exact:true}).waitFor({timeout:15000});
+      rows=rows.map((r,i)=>i===2?{...r,businessName:originalName}:r);
+      await panel.getByRole('heading',{name:originalName,exact:true}).waitFor({timeout:15000});
       const maintenance=panel.getByRole('region',{name:'Upcoming maintenance and provider status'});
       await maintenance.getByText('Provider reports: none',{exact:true}).waitFor();await maintenance.locator('summary').filter({hasText:'Render'}).click();
       await maintenance.getByText('Synthetic administration maintenance',{exact:true}).waitFor();assert.match(await maintenance.innerText(),/Nov 17, 2026, 9:00 p.m. EST/);
@@ -142,7 +157,7 @@ async function main() {
       assert.match(await panel.locator('h2').evaluate(el=>getComputedStyle(el).fontFamily),/Georgia/,'Shared admin styling cannot replace the approved heading font');
       assert.equal(await panel.getByRole('button',{name:'Edit business info',exact:true}).first().evaluate(el=>getComputedStyle(el).color),'rgb(255, 255, 255)','Primary editor button remains readable inside admin shell');
       assert.equal(await panel.locator('.signup-tracker-row').count(), 3);
-      assert.equal(await panel.locator('.signup-tracker-row.is-stalled').count(), 1);
+      assert.equal(await panel.locator('.signup-tracker-row.is-stalled').count(), 1, 'Only the invented fourteen-minute fixture is stalled at viewport start');
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
       await panel.screenshot({ path: path.join(output, `${width}-tracker.png`) });
       await panel.getByRole('button',{name:'Inspect Maple Home Services',exact:true}).click();
@@ -233,7 +248,8 @@ async function main() {
       await panel.screenshot({path:path.join(output,`${width}-control-room.png`)});
       const priorEvents=await setup.locator('.control-room-timeline li').count();failSetupReads=true;
       await setup.getByRole('button',{name:'Analyze saved setup',exact:true}).click();
-      await setup.getByRole('alert').filter({hasText:'Detailed evidence is unavailable'}).waitFor();
+      const detailError=setup.getByRole('alert').filter({hasText:'Detailed updates are unavailable'});
+      await detailError.waitFor();assert.match(await detailError.innerText(),/HTTP 503/);assert.match(await detailError.innerText(),/last-known/);
       assert.equal(await setup.locator('.control-room-timeline li').count(),priorEvents,'Detailed read failure preserves last-known timeline');failSetupReads=false;
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
       await panel.locator('.signup-tracker-row').screenshot({ path: path.join(output, `${width}-journey.png`) });
@@ -255,6 +271,8 @@ async function main() {
       await panel.getByRole('alert').filter({ hasText: 'Signup updates are unavailable' }).waitFor();
       assert.equal(await panel.locator('.signup-tracker-row').count(), 1, 'Keep last-known rows when refresh fails');
       failReads = false;
+      await panel.locator(':scope > .saved-evidence-status.is-connected').waitFor({timeout:15000});
+      assert.equal(await panel.locator('.signup-tracker-row').count(),1,'Safe automatic read recovery retains the selected view');
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
       assert.deepEqual(errors, []);
       await page.addScriptTag({ path: require.resolve('axe-core/axe.min.js') });
@@ -266,11 +284,11 @@ async function main() {
     const report = { passed: true, scope: 'synthetic-dashboard-only', sourceHead: process.env.SIGNUP_DIAGNOSTIC_HEAD || require('node:child_process').execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),
       sourceSha256: initialSourceHashes,
       sourceState: process.env.CI ? 'ci-checkout' : 'uncommitted-local-working-tree',
-      widths: [1440, 390, 320], liveDiagnosticUi:true, liveDiagnosticFixtureReads:liveReads, providerAdapterExercisedByBrowser:false,
+      widths: [1440, 390, 320], savedProgressAutoRefresh:true, automaticReadFailureRecovery:true, liveDiagnosticUi:true, liveDiagnosticFixtureReads:liveReads, providerAdapterExercisedByBrowser:false,
       purchaseFailureInspector:true, receiptRefreshFailureRetained:true, journeyStages: 9, clickableSteps:9, keyboardStepSelection:true, timeline:true, fixtureSaves, auditEvents: audits, externalBlocked, requests, productionRequests: 0, telegramSends: 0, calls: 0, sms: 0, limitations: 'Synthetic preview, not a production deployment; full exact-lock CI remains required. Saved receipt refresh and live-diagnostic fixture responses are not live provider verification or recovery.' };
     fs.writeFileSync(path.join(output, 'browser-report.json'), JSON.stringify(report, null, 2)); console.log(JSON.stringify(report));
   } catch (error) {
-    fs.writeFileSync(path.join(output,`failure-${Date.now()}.json`),JSON.stringify({passed:false,scope:'synthetic-dashboard-only',initialSourceHashes,httpTrace,browserFailures},null,2));
+    fs.writeFileSync(path.join(output,`failure-${Date.now()}.json`),JSON.stringify({passed:false,scope:'synthetic-dashboard-only',failure:{message:String(error.message),stack:String(error.stack)},initialSourceHashes,httpTrace,browserFailures},null,2));
     console.error('Synthetic loopback trace:',JSON.stringify({httpTrace,browserFailures}));
     if (lastPage && !lastPage.isClosed()) {
       await lastPage.screenshot({ path: path.join(output, `failure-${Date.now()}.png`), fullPage: true }).catch(() => {});
