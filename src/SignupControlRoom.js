@@ -1,43 +1,37 @@
-import React, {useCallback,useEffect,useRef,useState} from 'react';
+import React, {useEffect,useRef,useState} from 'react';
 import SignupJourneyMap from './SignupJourneyMap';
 import SignupFailureDetails from './SignupFailureDetails';
 import SignupLiveDiagnostics from './SignupLiveDiagnostics';
 import SignupBugHistory from './SignupBugHistory';
 import {controlRoomModel} from './signupControlRoomModel';
 import './SignupControlRoom.css';
+import useSavedEvidence from './useSavedEvidence';
+import SavedEvidenceStatus from './SavedEvidenceStatus';
+const validSetup=body=>body?.setup?.readOnly===true&&Array.isArray(body.setup.groups);
 
 const time=value=>value && Number.isFinite(Date.parse(value))?new Date(value).toLocaleString('en-CA',{timeZone:'America/Toronto',month:'short',day:'numeric',hour:'numeric',minute:'2-digit',second:'2-digit'}):'No timestamp recorded';
 const stateLabel=state=>({verified:'Backend verified',observed:'Browser / process observed',recorded:'Recorded',blocked:'Needs attention',pending:'Not verified',unknown:'Not observed',optional:'Not required',present:'Not validated'}[state]||'Unknown');
 const mark=state=>['verified','observed','recorded'].includes(state)?'✓':state==='blocked'?'!':'−';
 export default function SignupControlRoom({row,apiBase=''}) {
-  const [report,setReport]=useState(null),[selected,setSelected]=useState('number'),[busy,setBusy]=useState(false),[error,setError]=useState('');
+  const [selected,setSelected]=useState('number');
+  const progressKey=JSON.stringify([row.infoRevision,row.status,row.blockerCode,row.lastProgressAt,row.completedSteps,row.steps]);
+  const {data:report,state,error,busy,load}=useSavedEvidence({url:apiBase+'/api/admin/signup-tracker/'+encodeURIComponent(row.attemptId)+'/setup',validate:validSetup,intervalMs:10000,revision:progressKey});
   const [expandedFailure,setExpandedFailure]=useState(null);
-  const request=useRef(null),generation=useRef(0),inspector=useRef(null);
+  const inspector=useRef(null);
   const [now,setNow]=useState(Date.now());
-  useEffect(()=>{const timer=setInterval(()=>setNow(Date.now()),5000);return()=>{clearInterval(timer);generation.current++;request.current?.abort();};},[]);
-  useEffect(()=>{generation.current++;request.current?.abort();request.current=null;setBusy(false);setReport(null);setError('');setExpandedFailure(null);},[row.infoRevision,row.attemptId]);
-  const load=useCallback(async()=>{
-    if(request.current)return;
-    const controller=new AbortController(),version=generation.current;request.current=controller;setBusy(true);setError('');
-    const timer=setTimeout(()=>controller.abort(),6500);
-    try {
-      const response=await fetch(apiBase+'/api/admin/signup-tracker/'+encodeURIComponent(row.attemptId)+'/setup',{credentials:'include',signal:controller.signal});
-      const body=await response.json();
-      if(!response.ok||body.setup?.readOnly!==true||!Array.isArray(body.setup.groups))throw Error('unavailable');
-      if(version===generation.current&&!controller.signal.aborted){setReport(body.setup);setNow(Date.now());}
-    } catch(_){if(version===generation.current)setError('Detailed evidence is unavailable. Showing last-known information, not a fresh check. No setup action was run.');}
-    finally{clearTimeout(timer);if(request.current===controller){request.current=null;setBusy(false);}}
-  },[apiBase,row.attemptId]);
-  // Only the selected signup has this mounted workspace. Poll saved evidence,
-  // never providers, and never while the browser is hidden.
-  useEffect(()=>{const timer=setInterval(()=>{if(document.visibilityState==='visible')load();},60000);return()=>clearInterval(timer);},[load]);
-  const setup=report||row.setup,model=controlRoomModel(row,setup,selected,now);
+  useEffect(()=>{const timer=setInterval(()=>setNow(Date.now()),5000);return()=>clearInterval(timer);},[]);
+  useEffect(()=>setExpandedFailure(null),[row.infoRevision,row.attemptId]);
+  // Changed saved progress invalidates the prior detail request immediately.
+  // A later projection timestamp alone must not replace exact-context receipts
+  // with a less complete saved-record-only projection.
+  const setup=report?.setup||row.setup;
+  const model=controlRoomModel(row,setup,selected,now);
   const choose=id=>{setSelected(id);if(window.matchMedia('(max-width: 800px)').matches){requestAnimationFrame(()=>{inspector.current?.focus({preventScroll:true});inspector.current?.scrollIntoView({block:'start',behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});});}};
   if(!setup)return null;
   const search=setup.number.search;
   return <section className="signup-control-room" aria-label={`Setup analysis for ${row.businessName}`}>
     <div className={'control-room-summary '+(row.stalled||model.stations.some(s=>s.state==='blocked')?'is-stalled':'')}><span className="control-summary-icon" aria-hidden="true">!</span><div><span className="control-summary-question">What’s stopping this signup?</span><h4>{model.headline}</h4><p>{model.explanation}</p></div><span className="control-read-only">Read-only · saved evidence</span></div>
-    {error?<p role="alert" className="signup-tracker-error">{error}</p>:null}
+    <SavedEvidenceStatus state={state} label="Detailed updates" intervalMs={10000}/>
     <div className="control-room-layout"><div className="control-room-main">
       <nav className="control-station-overview" aria-label="Setup station status">{model.stations.map(station=><button key={station.id} type="button" aria-pressed={selected===station.id} onClick={()=>choose(station.id)}><span aria-hidden="true" className={'setup-check-symbol is-'+station.state}>{mark(station.state)}</span><span><strong>{station.title}</strong><small>{station.state==='verified'?'Backend checks verified':station.state==='blocked'?'Needs attention':'Not verified'}</small></span></button>)}</nav>
       <details className="control-earlier-journey"><summary>Earlier signup steps</summary><SignupJourneyMap row={row} onSelect={choose} selectedId={selected}/></details>

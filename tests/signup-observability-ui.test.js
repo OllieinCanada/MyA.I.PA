@@ -1,8 +1,12 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict'),path=require('node:path'),Module=require('node:module');
 const React=Module.createRequire(require.resolve('react-dom/package.json'))('react'),{renderToStaticMarkup}=require('react-dom/server');
-function load(file){const full=path.resolve(__dirname,'../src',file),code=require('@babel/core').transformFileSync(full,{configFile:false,babelrc:false,presets:[require.resolve('@babel/preset-react')],plugins:[require.resolve('@babel/plugin-transform-modules-commonjs')]}).code;
- const mod=new Module(full,module);mod.filename=full;mod.paths=Module._nodeModulePaths(path.dirname(full));const original=mod.require.bind(mod);mod.require=name=>name==='react'?React:name.endsWith('.css')?{}:original(name);mod._compile(code,full);return mod.exports;}
+const loaded=new Map();
+function load(file){const full=path.resolve(__dirname,'../src',file);if(loaded.has(full))return loaded.get(full).exports;
+ const code=require('@babel/core').transformFileSync(full,{configFile:false,babelrc:false,presets:[require.resolve('@babel/preset-react')],plugins:[require.resolve('@babel/plugin-transform-modules-commonjs')]}).code;
+ const mod=new Module(full,module);loaded.set(full,mod);mod.filename=full;mod.paths=Module._nodeModulePaths(path.dirname(full));const original=mod.require.bind(mod);
+ mod.require=name=>name==='react'?React:name.endsWith('.css')?{}:name.startsWith('.')?load(path.resolve(path.dirname(full),name.endsWith('.js')?name:name+'.js')):original(name);
+ mod._compile(code,full);return mod.exports;}
 test('actual bug-history component starts unknown with no repair, resend or deletion controls',()=>{
  const Component=load('SignupBugHistory.js').default,html=renderToStaticMarkup(React.createElement(Component,{attemptId:'signup_'+'a'.repeat(32)}));
  assert.match(html,/Bug history for this signup/);assert.match(html,/No automatic repair/);assert.match(html,/History is not loaded/);assert.doesNotMatch(html,/No captured reports|Resend|Buy number|Delete history/);

@@ -94,7 +94,7 @@ function trackerRow(record, now = Date.now()) {
 function dashboard(records = [], now = Date.now()) {
   const rows = records.map(record => trackerRow(record, now));
   rows.sort((a, b) => Number(b.stalled) - Number(a.stalled) || Number(b.active) - Number(a.active) || (Date.parse(b.signedUpAt) || 0) - (Date.parse(a.signedUpAt) || 0));
-  return { generatedAt: new Date(now).toISOString(), stallAfterMinutes: 10, pollIntervalSeconds: 60,
+  return { generatedAt: new Date(now).toISOString(), stallAfterMinutes: 10, pollIntervalSeconds: 5,
     summary: { active: rows.filter(r => r.active).length, stalled: rows.filter(r => r.stalled).length,
       waitingCustomer: rows.filter(r => r.mode === 'waiting_customer').length, ready: rows.filter(r => r.mode === 'ready').length }, rows };
 }

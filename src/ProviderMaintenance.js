@@ -1,5 +1,8 @@
-import React,{useCallback,useEffect,useRef,useState} from 'react';
+import React,{useEffect,useState} from 'react';
 import './ProviderMaintenance.css';
+import useSavedEvidence from './useSavedEvidence';
+import SavedEvidenceStatus from './SavedEvidenceStatus';
+const validStatus=body=>body?.readOnly===true&&Array.isArray(body.providers)&&Array.isArray(body.history);
 const time=value=>value?new Date(value).toLocaleString('en-CA',{timeZone:'America/Toronto',year:'numeric',month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZoneName:'short'}):'Not checked';
 export function MaintenanceNotice({notice,historical=false,observedAt}){
  return <article className={'provider-notice is-'+notice.kind}>
@@ -11,24 +14,13 @@ export function MaintenanceNotice({notice,historical=false,observedAt}){
  </article>;
 }
 export default function ProviderMaintenance({apiBase=''}){
- const [report,setReport]=useState(null),[error,setError]=useState(''),[busy,setBusy]=useState(false),[clock,setClock]=useState(Date.now());
- const active=useRef(null),generation=useRef(0),cursor=useRef(null);
- const load=useCallback(async(older=null)=>{
-  active.current?.abort();const controller=new AbortController(),version=++generation.current;active.current=controller;setBusy(true);
-  const timer=setTimeout(()=>controller.abort(),6500);
-  try{const r=await fetch(apiBase+'/api/admin/provider-status'+(older?'?cursor='+encodeURIComponent(older):''),{credentials:'include',signal:controller.signal}),body=await r.json();
-   if(!r.ok||body.readOnly!==true||!Array.isArray(body.providers)||!Array.isArray(body.history))throw Error('unavailable');
-   if(version===generation.current&&!controller.signal.aborted){setReport(body);setError('');cursor.current=older;setClock(Date.now());}
-  }catch{if(version===generation.current)setError('Provider evidence could not be refreshed. Any displayed information is last-known—not an all-clear.');}
-  finally{clearTimeout(timer);if(active.current===controller){active.current=null;setBusy(false);}}
- },[apiBase]);
- useEffect(()=>{
-  setReport(null);load();const timer=setInterval(()=>{setClock(Date.now());if(document.visibilityState==='visible'&&!active.current&&!cursor.current)load();},60000);
-  return()=>{clearInterval(timer);generation.current++;active.current?.abort();};
- },[load]);
+ const [cursor,setCursor]=useState(null),[clock,setClock]=useState(Date.now());
+ const {data:report,state,error,busy,load:refresh}=useSavedEvidence({url:apiBase+'/api/admin/provider-status'+(cursor?'?cursor='+encodeURIComponent(cursor):''),validate:validStatus,intervalMs:60000,auto:!cursor});
+ const load=(older=null)=>cursor===older?refresh():setCursor(older);
+ useEffect(()=>{const timer=setInterval(()=>setClock(Date.now()),5000);return()=>clearInterval(timer);},[]);
  return <section className="provider-maintenance" aria-label="Upcoming maintenance and provider status" aria-busy={busy}>
   <header><div><h3>Upcoming maintenance & provider status</h3><p>Official notices, Toronto-time windows and saved history. Planned work is separate from bugs and confirmed application outages.</p></div><button type="button" disabled={busy} onClick={()=>load()}>{busy?'Reading status…':'Refresh saved status'}</button></header>
-  {error?<p role="alert">{error}</p>:null}
+  <SavedEvidenceStatus state={state} label="Provider updates" intervalMs={60000} historical={Boolean(cursor)}/>
   {!report?<p>Not loaded. Provider availability is not verified.</p>:<>
    <div className="provider-status-grid">{report.providers.map(provider=>{
     const fresh=!error&&provider.fresh&&clock-Date.parse(provider.lastSuccessfulAt)>=0&&clock-Date.parse(provider.lastSuccessfulAt)<=15*60000;
