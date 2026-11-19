@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import App from "./App";
 import RouteBoundary from './components/RouteBoundary';
 import { installClientErrorReporting } from "./clientErrorReporter";
+import { installSignupStartLinks } from './features/signup/signupStartIntent';
 import "./tailwind.generated.css";
 import "./style.css";
 
@@ -59,6 +60,7 @@ function RouterRoot() {
 }
 
 installClientErrorReporting();
+installSignupStartLinks();
 createRoot(document.getElementById("root")).render(<RouterRoot />);
 
 if ("serviceWorker" in navigator) {

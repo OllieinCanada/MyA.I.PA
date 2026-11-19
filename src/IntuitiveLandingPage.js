@@ -5,6 +5,7 @@ import heroTranscriptTimings from "./timsElectricalHeroTranscriptTimings.json";
 import "./IntuitiveLandingPage.css";
 import MyAiPaBrand from "./components/MyAiPaBrand";
 import usePublicDemoAudio from "./usePublicDemoAudio";
+import { navigateToSignup } from './features/signup/signupStartIntent';
 
 const coreBenefits = [
   ["phone", "Picks up after three rings."],
@@ -87,7 +88,7 @@ function Brand() {
 }
 
 function StartButton({ children = "Start Your Free Trial", className = "" }) {
-  return <button type="button" className={`simple-primary ${className}`} onClick={() => { window.location.hash = "/signup"; }}>{children}</button>;
+  return <button type="button" className={`simple-primary ${className}`} onClick={navigateToSignup}>{children}</button>;
 }
 
 function SectionHeading({ number, eyebrow, title, body }) {
@@ -420,7 +421,7 @@ export default function IntuitiveLandingPage() {
             </div>
             <div className="simple-trust" aria-label="Trial details"><span>✓ 14-Day Free Trial</span><span>✓ No Card Required for Trial</span><span>✓ Cancel Anytime</span></div>
           </div>
-          <AnimatedHeroProof onSampleCall={scrollToDemo} onStartTrial={() => { window.location.hash = "/signup"; }} />
+          <AnimatedHeroProof onSampleCall={scrollToDemo} onStartTrial={navigateToSignup} />
         </div>
       </section>
 
@@ -453,7 +454,7 @@ export default function IntuitiveLandingPage() {
       </section>
 
       <div id="see-it-work" className="simple-demo-wrap">
-        <TimsElectricalLiveDemo embedded onSignup={() => { window.location.hash = "/signup"; }} />
+        <TimsElectricalLiveDemo embedded onSignup={navigateToSignup} />
       </div>
 
       <section className="simple-section simple-receive">

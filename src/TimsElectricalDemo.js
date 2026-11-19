@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { navigateToSignup, noteSignupStart } from './features/signup/signupStartIntent';
 import {
   timsElectricalBoundaries,
   timsElectricalCompany,
@@ -393,8 +394,8 @@ export function TimsElectricalLiveDemo({ embedded = false, onSignup }) {
   };
 
   const startSignup = () => {
-    if (onSignup) onSignup();
-    else window.location.hash = "/signup";
+    if (onSignup) { noteSignupStart(); onSignup(); }
+    else navigateToSignup();
   };
 
   return (
