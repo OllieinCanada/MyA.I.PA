@@ -89,7 +89,7 @@ test('default watch view retains recent completed signups without guessing missi
  for(const lastProgressAt of [undefined,'bad','2026-11-17T01:00:00Z','2026-11-20T01:00:00Z'])assert.equal(Boolean(matchesSignupView({active:false,mode:'ready',lastProgressAt},'watching',now)),false);
  assert.equal(matchesSignupView({mode:'ready'},'ready',now),true);assert.equal(matchesSignupView({},'all',now),true);
 });
-test('the saved tracker advertises the same five-second read cadence without changing stall policy',()=>{
+test('the adaptive frontend leaves the existing backend and ten-minute stall contract unchanged',()=>{
  const report=require('../server/adminSignupTracker').dashboard([]);
- assert.equal(report.pollIntervalSeconds,5);assert.equal(report.stallAfterMinutes,10);
+ assert.equal(report.pollIntervalSeconds,60);assert.equal(report.stallAfterMinutes,10);
 });

@@ -119,6 +119,14 @@ async function main() {
   try {
     browser = await chromium.launch({ headless: true });
     for (const width of [1440, 390, 320]) {
+      // Each viewport starts with the same invented relative ages. A slow
+      // earlier viewport must not turn the six-minute wait fixture into a
+      // second ten-minute stall. Real threshold boundaries have unit coverage.
+      rows=rows.map(record=>{
+        const next={...record,onboardingTracker:trackProgress({},record,Date.now()-(record.minutesAgo||3)*60000)};
+        if(record.onboardingStallAlertEpisode)next.onboardingStallAlertEpisode=episodeKey(next.onboardingTracker);
+        return next;
+      });
       console.log(`Checking control-room interactions at ${width}px…`);
       const context = await browser.newContext({ viewport: { width, height: 1050 }, reducedMotion: 'reduce' }); const page = await context.newPage(); const errors = [];
       lastPage = page;
@@ -149,7 +157,7 @@ async function main() {
       assert.match(await panel.locator('h2').evaluate(el=>getComputedStyle(el).fontFamily),/Georgia/,'Shared admin styling cannot replace the approved heading font');
       assert.equal(await panel.getByRole('button',{name:'Edit business info',exact:true}).first().evaluate(el=>getComputedStyle(el).color),'rgb(255, 255, 255)','Primary editor button remains readable inside admin shell');
       assert.equal(await panel.locator('.signup-tracker-row').count(), 3);
-      assert.equal(await panel.locator('.signup-tracker-row.is-stalled').count(), 1);
+      assert.equal(await panel.locator('.signup-tracker-row.is-stalled').count(), 1, 'Only the invented fourteen-minute fixture is stalled at viewport start');
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
       await panel.screenshot({ path: path.join(output, `${width}-tracker.png`) });
       await panel.getByRole('button',{name:'Inspect Maple Home Services',exact:true}).click();
@@ -280,7 +288,7 @@ async function main() {
       purchaseFailureInspector:true, receiptRefreshFailureRetained:true, journeyStages: 9, clickableSteps:9, keyboardStepSelection:true, timeline:true, fixtureSaves, auditEvents: audits, externalBlocked, requests, productionRequests: 0, telegramSends: 0, calls: 0, sms: 0, limitations: 'Synthetic preview, not a production deployment; full exact-lock CI remains required. Saved receipt refresh and live-diagnostic fixture responses are not live provider verification or recovery.' };
     fs.writeFileSync(path.join(output, 'browser-report.json'), JSON.stringify(report, null, 2)); console.log(JSON.stringify(report));
   } catch (error) {
-    fs.writeFileSync(path.join(output,`failure-${Date.now()}.json`),JSON.stringify({passed:false,scope:'synthetic-dashboard-only',initialSourceHashes,httpTrace,browserFailures},null,2));
+    fs.writeFileSync(path.join(output,`failure-${Date.now()}.json`),JSON.stringify({passed:false,scope:'synthetic-dashboard-only',failure:{message:String(error.message),stack:String(error.stack)},initialSourceHashes,httpTrace,browserFailures},null,2));
     console.error('Synthetic loopback trace:',JSON.stringify({httpTrace,browserFailures}));
     if (lastPage && !lastPage.isClosed()) {
       await lastPage.screenshot({ path: path.join(output, `failure-${Date.now()}.png`), fullPage: true }).catch(() => {});
