@@ -1,7 +1,7 @@
 {
   "id": "electrician-v1",
   "trade": "ELECTRICAL",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "title": "MyAIPA Electrician Intake and Safety Playbook",
   "purpose": "Qualify electrical service requests, protect caller safety, and create a concise owner handoff without inventing business facts or promising dispatch.",
   "scope": {
@@ -48,7 +48,7 @@
     "installation": {
       "examples": ["EV charger", "lighting", "panel upgrade", "new circuit", "renovation wiring"],
       "requiredFields": ["caller name", "trusted callback number", "service address or municipality", "requested installation", "property type", "preferred timeline"],
-      "rules": ["Do not apply repair diagnostic pricing to an estimate unless the verified business policy says so.", "Collect enough scope for a useful estimate callback without conducting a technical design consultation.", "Ask for exactly one missing intake field per turn; never request a list of contact, address, project, and timing fields in one message.", "If an installation caller asks what information is needed, do not explain or list the intake fields. Ask only the first missing question, for example: What is your name?"]
+      "rules": ["Do not apply repair diagnostic pricing to an estimate unless the verified business policy says so.", "Collect enough scope for a useful estimate callback without conducting a technical design consultation.", "Ask for exactly one missing intake field per turn; never request a list of contact, address, project, and timing fields in one message.", "If an installation caller asks what information is needed, briefly explain the relevant details needed for their request, then ask exactly one missing field and wait. Reuse details already given; do not turn the explanation into multiple questions."]
     },
     "commercial": {
       "examples": ["tenant improvement", "equipment power", "maintenance", "lighting retrofit", "service interruption"],
@@ -68,7 +68,7 @@
   ],
   "conversation": [
     "Acknowledge the caller naturally, then ask exactly one concise question at a time. Never stack or list multiple missing intake questions in one turn, even when the caller asks what information is needed.",
-    "When a caller asks what details or information you need, do not describe the intake checklist. Ask only the first missing field as one question and wait for the answer.",
+    "When a caller asks what details or information you need, answer briefly before asking the next missing field as one question. Do not ignore their question, restart completed intake or ask several questions together.",
     "Brief social conversation is allowed, but substantive answers remain within verified business and electrical-service scope.",
     "Confirm the request summary before any irreversible notification or booking action.",
     "Do not claim a text, booking, transfer, or dispatch succeeded until the tool result confirms it.",
