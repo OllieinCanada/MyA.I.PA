@@ -9,6 +9,7 @@ const output=path.resolve('diagnostics/signup-form-observation-phase-b'),publicD
 const sourceFiles=['server/signupFormObservation.js','src/Signup.js','src/features/signup/formObservationClient.js','src/features/signup/signupStartIntent.js','src/IntuitiveLandingPage.js','src/AdminSignupTracker.js','src/SignupTrackerCompact.css','src/SignupNowOverview.js','src/SignupNowOverview.css','src/features/admin/signupNowModel.js','src/useSavedEvidence.js','src/features/admin/savedEvidencePolling.js','scripts/signup-observation-preview-entry.js','scripts/test-signup-form-observation-browser.js'];
 const sourceHashes=()=>Object.fromEntries(sourceFiles.map(file=>[file,require('node:crypto').createHash('sha256').update(fs.readFileSync(path.resolve(file))).digest('hex')]));
 sourceFiles.push('src/AdminDashboard.css');
+sourceFiles.push('src/signupTradeDisplay.js');
 async function main(){
  const initialSourceHashes=sourceHashes();
  const extraModules=String(process.env.NODE_PATH||'').split(path.delimiter).filter(Boolean);
@@ -142,6 +143,17 @@ async function main(){
   await businessForm();await wait(async()=> (await service.listAdmin()).rows.find(r=>r.id===startPointer.id)?.currentStep==='business_details');
   await admin.bringToFront();
   await overview.locator('.signup-now-selected').getByText('Business details',{exact:true}).waitFor({timeout:15000});
+  assert.equal((await service.listAdmin()).rows.find(r=>r.id===startPointer.id).selectedTradeId,'electrician');
+  await overview.locator('.signup-now-trade-summary').first().getByText('Electrician',{exact:true}).waitFor();
+  assert.equal(await overview.locator('.signup-now-stages button').first().locator('svg').count(),1);
+  for(const width of [1440,390,320]){
+   await admin.setViewportSize({width,height:1000});
+   const arrows=await overview.locator('.signup-now-stages button').evaluateAll(buttons=>buttons.map((b,i)=>{const box=b.getBoundingClientRect(),line=getComputedStyle(b,'::after'),tip=getComputedStyle(b,'::before');return {last:i===buttons.length-1,line:line.content,tip:tip.content,gap:parseFloat(line.width),distance:i<buttons.length-1?buttons[i+1].getBoundingClientRect().left-box.right:0};}));
+   for(const a of arrows.slice(0,-1)){assert.notEqual(a.line,'none');assert.notEqual(a.tip,'none');assert.ok(Math.abs(a.gap-a.distance)<=2,'Arrow must reach the next box');}
+   assert.equal(arrows.at(-1).line,'none');
+   await overview.screenshot({path:path.join(output,`${width}-connected-trade-steps.png`)});
+  }
+  await admin.setViewportSize({width:390,height:844});
   // The same real visitor can be recognized by entered display names before
   // submission, and valid-to-valid corrections must not be deduplicated away.
   await visitor.bringToFront();const liveDetails=visitor.locator('#signup-business-details');

@@ -3,7 +3,7 @@ import React from "react";
 const sections = [
   {
     title: "Signup progress preview",
-    body: ["While you fill out the signup form, authorized My AI PA admins can see the business and owner names you enter, your current setup step, and field completion or validation status to help diagnose a stuck signup. The progress preview does not copy other entered values, such as phone, email, address, payment details or verification codes. Unsubmitted progress records expire after 24 hours. Entered names do not verify identity or prove that signup was submitted."],
+    body: ["While you fill out the signup form, authorized My AI PA admins can see the business and owner names you enter, your selected trade, your current setup step, and field completion or validation status to help diagnose a stuck signup. The progress preview does not copy other entered values, such as phone, email, address, payment details or verification codes. Unsubmitted progress records expire after 24 hours. Entered names and trade selections do not verify identity or prove that signup was submitted."],
   },
   {
     title: "Address suggestions from Google Maps",

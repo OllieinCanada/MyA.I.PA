@@ -9,6 +9,15 @@ afterEach(()=>{try{act(()=>root.unmount());}finally{container.remove();global.fe
 const flush=async()=>{for(let i=0;i<24;i++)await Promise.resolve();};
 const draft=(extra={})=>({id:'fd_00000000-0000-4000-8000-000000000001',identity:'unlinked_visitor_unknown_identity',engaged:true,createdAt:Date.now(),startedAt:Date.now(),lastObservedAt:Date.now(),observedAgeMs:0,currentStep:'trade',currentStepLabel:'Trade',fields:[],blockerLabels:[],blockers:[],coverage:{},...extra});
 const data=d=>({ok:true,rows:[],summary:{active:0,stalled:0,ready:0},formObservations:{rows:[d],coverage:{hasMore:false}}});
+test('trade symbol and label follow only the recorded selection, not names; expanded evidence updates and clears',async()=>{
+ const show=async id=>{await act(async()=>{root.render(<SignupNowOverview data={data(draft({selectedTradeId:id,draftNames:{businessName:'Electrical Named Fixture',ownerName:''}}))}/>);await flush();});};
+ await show('electrician');expect(container.querySelector('.signup-now-trade-summary').textContent).toContain('Electrician');
+ expect(container.querySelector('.signup-now-stages button svg')).not.toBeNull();
+ act(()=>container.querySelector('[aria-label="Inspect Trade form step"]').click());expect(container.querySelector('.signup-now-inspector').textContent).toContain('Electrician');
+ await show('plumber');expect(container.querySelector('.signup-now-inspector').textContent).toContain('Plumber');expect(container.textContent).not.toContain('Electrician');
+ await show(null);expect(container.querySelector('.signup-now-trade-summary').textContent).toContain('Trade not recorded');expect(container.querySelector('.signup-now-stages button svg')).toBeNull();
+ await show('<img>');expect(container.querySelector('img')).toBeNull();expect(container.textContent).not.toContain('<img>');
+});
 test('six small boxes remain collapsed until clicked and update the actual field inspector without guessing a name',async()=>{
  let d=draft();await act(async()=>{root.render(<SignupNowOverview data={data(d)}/>);await flush();});
  expect(container.querySelectorAll('.signup-now-stages button')).toHaveLength(6);expect(container.querySelector('.signup-now-inspector')).toBeNull();
