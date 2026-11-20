@@ -2669,7 +2669,7 @@ export default function Signup() {
 
   return (
     <main className="min-h-screen bg-[linear-gradient(135deg,#f8fbff_0%,#ffffff_45%,#edf4ff_100%)] text-slate-950">
-      <p className="mx-auto max-w-6xl px-5 pt-3 text-xs leading-5 text-slate-600" data-signup-observation-disclosure>To help with a stuck signup, we record which setup step you reach and whether fields are complete or invalid—not what you type. Unsubmitted progress records expire after 24 hours.</p>
+      <p className="mx-auto max-w-6xl px-5 pt-3 text-xs leading-5 text-slate-600" data-signup-observation-disclosure>To help with a stuck signup, authorized admins can see your entered business and owner names, the setup step you reach, and which fields are complete or invalid. Other typed values—including phone, email, address, payment details and verification codes—are not copied into this progress preview. Unsubmitted progress records expire after 24 hours.</p>
       <style>
         {`
           @keyframes businessSlideIn {

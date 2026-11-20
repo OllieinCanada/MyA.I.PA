@@ -31,6 +31,17 @@ test('missing browser coverage is unknown, never an all-clear zero',async()=>{
  expect(container.querySelector('.signup-now-counts strong').textContent).toBe('—');expect(container.querySelector('[role="alert"]').textContent).toContain('Missing drafts are not proof nobody started');
 });
 
+test('draft names update as escaped text, stay unsubmitted and never borrow another same-name business',async()=>{
+ let d=draft({draftNames:{businessName:'Invented Beacon',ownerName:'Alex Fixture'}});
+ await act(async()=>{root.render(<SignupNowOverview data={data(d)}/>);await flush();});
+ expect(container.querySelector('.signup-now-selected strong').textContent).toBe('Invented Beacon');expect(container.textContent).toContain('Owner entered: Alex Fixture');expect(container.textContent).toContain('Unsubmitted draft');expect(container.querySelector('.signup-now-open')).toBeNull();
+ d={...d,draftNames:{businessName:'<img src=x onerror=alert(1)>',ownerName:'Corrected Fixture'}};
+ await act(async()=>{root.render(<SignupNowOverview data={data(d)}/>);await flush();});
+ expect(container.querySelector('.signup-now-selected strong').textContent).toBe(d.draftNames.businessName);expect(container.querySelector('img')).toBeNull();expect(container.textContent).not.toContain('Alex Fixture');
+ d={...d,draftNames:{businessName:'',ownerName:''}};await act(async()=>{root.render(<SignupNowOverview data={data(d)}/>);await flush();});
+ expect(container.querySelector('.signup-now-selected strong').textContent).toContain('Visitor');expect(container.querySelector('.signup-now-open')).toBeNull();
+});
+
 test('short phone labels preserve the full accessible step names and expanded evidence',async()=>{
  await act(async()=>{root.render(<SignupNowOverview data={data(draft())}/>);await flush();});
  const details=container.querySelector('[aria-label="Inspect Details form step"]');
@@ -46,4 +57,41 @@ test('the actual tracker exposes anonymous progress before named rows and keeps 
  await act(async()=>{root.render(<AdminSignupTracker/>);await flush();});
  expect(container.querySelector('.signup-now')).not.toBeNull();expect(container.querySelector('.signup-now-selected').textContent).toContain('Visitor');expect(container.querySelector('.signup-tracker-row').className).toContain('is-compact');expect(global.fetch.mock.calls.some(([url])=>url.endsWith('/setup'))).toBe(false);
  const inspect=[...container.querySelectorAll('button')].find(b=>b.textContent==='Inspect '+row.businessName);await act(async()=>{inspect.click();await flush();});expect(global.fetch.mock.calls.some(([url])=>url.endsWith('/setup'))).toBe(true);
+});
+
+test('one toolbar sorts the actual overview and saved list together and survives saved-data refresh',async()=>{
+ const at=Date.now();
+ const row=(id,name,age,extra={})=>({attemptId:id,businessName:name,ownerName:'Fictional Owner',active:true,mode:'working',currentStep:'Assigning number',signedUpAt:new Date(at-age).toISOString(),steps:[],completedSteps:0,totalSteps:10,info:{},setup:null,...extra});
+ const rows=[row('old','Zulu Fixture',7200000,{stalled:true,elapsedMs:1200000}),row('new','Alpha Fixture',60000,{lastProgressAt:new Date(at-1000).toISOString()})];
+ let body={ok:true,rows,summary:{active:2,stalled:1,ready:0},formObservations:{rows:[],coverage:{}}};
+ global.fetch=jest.fn(async url=>({ok:true,status:200,json:async()=>url.endsWith('/signup-tracker')?body:url.endsWith('/provider-status')?{readOnly:true,providers:[],history:[]}:{readOnly:true,events:[],groups:[]}}));
+ await act(async()=>{root.render(<AdminSignupTracker/>);await flush();});
+ const names=()=>[...container.querySelectorAll('.signup-tracker-business h3')].map(n=>n.textContent);
+ const overviewNames=()=>[...container.querySelectorAll('.signup-now-visitors strong')].map(n=>n.textContent);
+ const change=async(selector,value)=>{await act(async()=>{const input=container.querySelector(selector);input.value=value;input.dispatchEvent(new Event('change',{bubbles:true}));await flush();});};
+ expect(container.querySelectorAll('[aria-label="Find and sort signups"]')).toHaveLength(1);
+ expect(names()).toEqual(['Alpha Fixture','Zulu Fixture']);expect(overviewNames()).toEqual(names());
+ await change('[aria-label="Sort signups"]','oldest');expect(names()).toEqual(['Zulu Fixture','Alpha Fixture']);expect(overviewNames()).toEqual(names());
+ await change('[aria-label="Sort signups"]','name');expect(names()).toEqual(['Alpha Fixture','Zulu Fixture']);
+ await change('[aria-label="Sort signups"]','stuck');expect(names()[0]).toBe('Zulu Fixture');
+ body={...body,rows:[rows[1],{...rows[0],lastProgressAt:new Date().toISOString()}]};
+ await act(async()=>{[...container.querySelectorAll('button')].find(b=>b.textContent==='Refresh signups').click();await flush();});
+ expect(container.querySelector('[aria-label="Sort signups"]').value).toBe('stuck');expect(names()[0]).toBe('Zulu Fixture');
+ expect(global.fetch.mock.calls.every(([,init])=>!init?.method||init.method==='GET')).toBe(true);
+});
+
+test('search/status/date filters include anonymous drafts honestly, expose empty results and reset without writes',async()=>{
+ const at=Date.now(),d=draft({createdAt:at-2*86400000,lastObservedAt:at-1000});
+ const row={attemptId:'signup_fixture',businessName:'Fictional Recent',ownerName:'Invented Owner',active:true,mode:'working',currentStep:'Assigning number',signedUpAt:new Date(at-60000).toISOString(),steps:[],completedSteps:0,totalSteps:10,info:{},setup:null};
+ global.fetch=jest.fn(async url=>({ok:true,status:200,json:async()=>url.endsWith('/signup-tracker')?{...data(d),rows:[row]}:url.endsWith('/provider-status')?{readOnly:true,providers:[],history:[]}:{readOnly:true,events:[],groups:[]}}));
+ await act(async()=>{root.render(<AdminSignupTracker/>);await flush();});
+ const select=async(selector,value)=>{await act(async()=>{const el=container.querySelector(selector);el.value=value;el.dispatchEvent(new Event('change',{bubbles:true}));await flush();});};
+ await select('[aria-label="Signup start date"]','24h');expect(container.querySelectorAll('.signup-now-visitors button')).toHaveLength(1);expect(container.querySelector('.signup-tracker-view-summary').textContent).toContain('1 signup · 0 drafts');
+ await select('[aria-label="Show signups"]','ready');expect(container.querySelector('.signup-tracker-empty')).not.toBeNull();expect(container.textContent).toContain('No observed starts match this view');
+ await act(async()=>{[...container.querySelectorAll('button')].find(b=>b.textContent==='Reset view').click();await flush();});
+ expect(container.querySelector('[aria-label="Signup start date"]').value).toBe('all');expect(container.querySelector('[aria-label="Show signups"]').value).toBe('watching');expect(container.querySelectorAll('.signup-now-visitors button')).toHaveLength(2);
+ // Native setter exercises React's controlled search input rather than editing state directly.
+ await act(async()=>{const el=container.querySelector('input[type="search"]');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(el,'visitor');el.dispatchEvent(new Event('input',{bubbles:true}));await flush();});
+ expect(container.querySelectorAll('.signup-tracker-row')).toHaveLength(0);expect(container.querySelectorAll('.signup-now-visitors button')).toHaveLength(1);
+ expect(global.fetch.mock.calls.every(([,init])=>!init?.method||init.method==='GET')).toBe(true);
 });

@@ -39,7 +39,7 @@ function buildJourney(row) {
     choice('trade', 'Trade chosen', 'trade_choice'),
     choice('property', 'Property types', 'property_types'),
     choice('area', 'Service area', 'service_areas'),
-    { id: 'business', title: 'Business details', fields: business, state: groupState(business), source: 'Browser observations · no typed values' },
+    { id: 'business', title: 'Business details', fields: business, state: groupState(business), source: 'Browser-reported field status' },
     { id: 'pricing', title: 'Service-call pricing', fields: pricing, state: groupState(pricing),
       note: 'Assessment, free-quote and parts-extra choices are grouped in pricing announcements; individual selections are not recorded here.', source: 'Optional choices · not payment proof' },
     { id: 'review', title: 'Final review', state: observation?.currentStep === 'final_review' ? 'observed' : 'unknown',

@@ -1,4 +1,5 @@
-// Metadata only. This namespace never receives form values or provider secrets.
+// Progress metadata plus two bounded, unverified draft display names. Other
+// form values, security proofs and provider secrets are never accepted here.
 const crypto = require('node:crypto');
 const TTL_MS = 24 * 60 * 60 * 1000;
 const MAX_SLOTS = 2000;
@@ -13,11 +14,17 @@ const digest = value => crypto.createHash('sha256').update(String(value)).digest
 const fail = (code, status = 400) => Object.assign(new Error('Signup progress observation is unavailable.'), { code, statusCode: status });
 const keysOnly = (value, allowed) => value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).every(k => allowed.includes(k));
 const idValid = id => /^fd_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(String(id || ''));
+function validDraftNames(value) {
+  return keysOnly(value,['businessName','ownerName']) && Object.keys(value).length === 2
+    && Object.entries({businessName:120,ownerName:80}).every(([key,limit]) => typeof value[key] === 'string'
+      && value[key].length <= limit && value[key] === value[key].trim()
+      && !/[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/u.test(value[key]));
+}
 function slotFor(id, slots = MAX_SLOTS) { return parseInt(digest(id).slice(0, 8), 16) % slots; }
 function keyFor(id, slots) { return PREFIX + String(slotFor(id, slots)).padStart(4, '0'); }
 function safeEqual(a, b) { const x = Buffer.from(String(a || '')), y = Buffer.from(String(b || '')); return x.length === y.length && crypto.timingSafeEqual(x, y); }
 function validateSnapshot(input) {
-  if (!keysOnly(input, ['schemaVersion', 'sequence', 'expectedRevision', 'currentStep', 'attemptedAdvance', 'fields', 'started']) || input.schemaVersion !== 1
+  if (!keysOnly(input, ['schemaVersion', 'sequence', 'expectedRevision', 'currentStep', 'attemptedAdvance', 'fields', 'started', 'draftNames']) || input.schemaVersion !== 1
     || (Object.hasOwn(input, 'started') && typeof input.started !== 'boolean')
     || !Number.isSafeInteger(input.sequence) || input.sequence < 1 || input.sequence > 10000
     || !Number.isSafeInteger(input.expectedRevision) || input.expectedRevision < 0 || input.expectedRevision > 10000
@@ -39,6 +46,13 @@ function validateSnapshot(input) {
     if (field.validation === 'not_observed' && field.reason !== 'not_observed') throw fail('FORM_OBSERVATION_INVALID');
     if (field.reason === 'required_missing' && (!field.required || field.presence !== 'blank' || field.visible !== 'visible')) throw fail('FORM_OBSERVATION_INVALID');
   }
+  if (Object.hasOwn(input,'draftNames')) {
+    if (!['business_details','final_review'].includes(input.currentStep) || !validDraftNames(input.draftNames)) throw fail('FORM_OBSERVATION_INVALID');
+    for (const [key,id] of [['businessName','business_name'],['ownerName','owner_name']]) {
+      const field=input.fields.find(f=>f.id===id);
+      if (input.draftNames[key] && (!field || field.visible === 'visible' && field.presence !== 'present')) throw fail('FORM_OBSERVATION_INVALID');
+    }
+  }
   return input;
 }
 function projectObservation(record, now = Date.now()) {
@@ -59,6 +73,8 @@ function projectObservation(record, now = Date.now()) {
   });
   const blockers = fields.filter(f => f.currentStepVisible && f.required && f.interacted && f.validation === 'invalid');
   return { id: record.id, linkedAttemptId: record.linkedAttemptId || null, identity: record.linkedAttemptId ? 'exact_attempt_link' : 'unlinked_visitor_unknown_identity',
+    draftNames: validDraftNames(record.draftNames) ? { businessName: record.draftNames.businessName, ownerName: record.draftNames.ownerName } : null,
+    draftNamesVerified: false,
     currentStep: record.currentStep, currentStepLabel: STEPS[record.currentStep]?.label || 'Not observed', revision: record.revision,
     engaged: Boolean(record.engaged), createdAt: record.createdAt, expiresAt: record.expiresAt, lastObservedAt: record.lastObservedAt || null,
     startedAt: record.startedAt || null, startSource: record.startSource || null,
@@ -118,11 +134,13 @@ function createObservationService({ store, authenticateAttempt, now = () => Date
     if (input.expectedRevision !== previous.revision) throw fail('FORM_OBSERVATION_STALE', 409);
     const engaged = previous.engaged || input.started === true || input.attemptedAdvance || input.fields.some(f => f.interacted);
     if (!engaged) return { revision: previous.revision, sequence: previous.sequence, ignored: 'not_engaged' };
-    const signature = digest(JSON.stringify({ currentStep: input.currentStep, fields: input.fields }));
+    const draftNames = Object.hasOwn(input,'draftNames') ? input.draftNames
+      : ['business_details','final_review'].includes(input.currentStep) ? null : previous.draftNames || null;
+    const signature = digest(JSON.stringify({ currentStep: input.currentStep, fields: input.fields, draftNames }));
     const meaningful = signature !== previous.signature;
     const at = now(), next = { ...previous, sequence: input.sequence, revision: previous.revision + 1, engaged,
       ...(input.started === true && !previous.startedAt ? { startedAt: at, startSource: 'trial_button' } : {}),
-      currentStep: input.currentStep, lastObservedAt: at, signature,
+      currentStep: input.currentStep, lastObservedAt: at, signature, draftNames,
       lastProgressAt: meaningful ? at : previous.lastProgressAt, progressRevision: meaningful ? previous.progressRevision + 1 : previous.progressRevision,
       steps: { ...previous.steps, [input.currentStep]: { observedAt: at, revision: previous.revision + 1, attemptedAdvance: input.attemptedAdvance, fields: input.fields } } };
     if (Buffer.byteLength(JSON.stringify(next)) > MAX_BYTES) throw fail('FORM_OBSERVATION_INVALID');
@@ -188,7 +206,7 @@ function createObservationService({ store, authenticateAttempt, now = () => Date
       if (!record || record.id !== candidate.id || !record.engaged || record.linkedAttemptId || record.expiresAt <= now()
         || record.progressRevision !== candidate.progressRevision || record.alertedRevision === record.progressRevision) continue;
       const row = projectObservation(record, now()); if (!row.stalled) continue;
-      const result = await enqueue({ text: ['MY AI PA — UNLINKED SIGNUP PROGRESS NEEDS ATTENTION', 'Identity: unknown; no business name or contact value collected.',
+      const result = await enqueue({ text: ['MY AI PA — UNLINKED SIGNUP PROGRESS NEEDS ATTENTION', 'Identity: unknown; entered names, when available, appear only in the authenticated tracker.',
         'Submission link is unconfirmed; this is not proof that signup failed or was never submitted.',
         `Reference: ${record.id.slice(-8)}`, `Step: ${row.currentStepLabel}`, 'No observed progress for at least 10 minutes.', ...formObservationLines(row), 'No signup, text, payment or provider action was retried.'].join('\n'),
         adminUrl: `${String(frontendUrl).replace(/\/$/, '')}/#/admin?tab=signups`, buttonText: 'Open signup tracker', dedupeKey: `signup-form-stall:${record.id}:${record.progressRevision}` });
