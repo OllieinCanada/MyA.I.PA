@@ -8,3 +8,4 @@
 .signup-now-trade-summary{display:flex;align-items:center;gap:10px;padding:10px 12px;margin:10px 0 14px;background:#f1f7f3;border:1px solid #ccded4;border-radius:10px;font-size:13px;flex-wrap:wrap}
 .signup-now-trade-summary>div{display:flex;flex-direction:column;gap:2px}
 @media(max-width:580px){.signup-now-stages{--connector-gap:7px;gap:var(--connector-gap)}.signup-now-trade-summary{font-size:12px}.signup-now-trade-icon{width:21px;height:21px}}
+@media(max-width:360px){.signup-now-stages button>strong{font-size:9px;letter-spacing:-.15px;white-space:nowrap;overflow-wrap:normal}}

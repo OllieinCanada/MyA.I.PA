@@ -151,6 +151,8 @@ async function main(){
    const arrows=await overview.locator('.signup-now-stages button').evaluateAll(buttons=>buttons.map((b,i)=>{const box=b.getBoundingClientRect(),line=getComputedStyle(b,'::after'),tip=getComputedStyle(b,'::before');return {last:i===buttons.length-1,line:line.content,tip:tip.content,gap:parseFloat(line.width),distance:i<buttons.length-1?buttons[i+1].getBoundingClientRect().left-box.right:0};}));
    for(const a of arrows.slice(0,-1)){assert.notEqual(a.line,'none');assert.notEqual(a.tip,'none');assert.ok(Math.abs(a.gap-a.distance)<=2,'Arrow must reach the next box');}
    assert.equal(arrows.at(-1).line,'none');
+   const singleLine=await overview.locator('.signup-now-stages button>strong').evaluateAll(labels=>labels.every(label=>label.getBoundingClientRect().height<=parseFloat(getComputedStyle(label).lineHeight)+1 && label.scrollWidth<=label.clientWidth+1));
+   assert.ok(singleLine,'Every compact step label stays on one readable line at '+width+'px');
    await overview.screenshot({path:path.join(output,`${width}-connected-trade-steps.png`)});
   }
   await admin.setViewportSize({width:390,height:844});
