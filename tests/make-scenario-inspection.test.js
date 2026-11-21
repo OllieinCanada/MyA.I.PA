@@ -37,3 +37,13 @@ test("secret-labelled Make fields are redacted recursively", () => {
     { headers: [{ name: "[redacted]", value: "[redacted]" }] }
   );
 });
+
+test('all header values are private regardless of their name or nesting', () => {
+  for (const name of ['x-myaipa-integration-key', 'x-custom-auth', 'Cookie', 'Accept']) {
+    const secret = 'PRIVATE_HEADER_CANARY';
+    const output = safeObject({ mapper: { headers: [{ name, value: secret }, { key: name, value: secret }] } });
+    assert.doesNotMatch(JSON.stringify(output), /PRIVATE_HEADER_CANARY/);
+    assert.equal(output.mapper.headers[0].value, '[redacted]');
+    assert.equal(output.mapper.headers[1].value, '[redacted]');
+  }
+});

@@ -4,6 +4,9 @@ const test = require("node:test");
 const {
   mutateBlueprint,
   verifyBlueprint,
+  inspectFailureTemplate,
+  buildSafeFailureCodeMapping,
+  repairFailureReporting,
 } = require("../scripts/repair-make-signup-provisioning");
 
 function fixture() {
@@ -83,20 +86,41 @@ test("rewrites the three paid provisioning stages and fail-closed response mappi
     assert.equal(module.onerror.length, 1);
     const handler = module.onerror[0];
     assert.equal(handler.module, "gateway:WebhookRespond");
-    const failure = JSON.parse(handler.mapper.body);
+    const failure = inspectFailureTemplate(handler.mapper.body);
     assert.equal(failure.ok, false);
     assert.equal(failure.success, false);
     assert.equal(failure.code, "MAKE_PROVISIONING_STAGE_FAILED");
     assert.ok(["TWILIO_NUMBER_PURCHASE", "VAPI_ASSISTANT_CREATE", "VAPI_NUMBER_IMPORT"].includes(failure.failedStage));
     assert.equal(failure.retryable, false);
     assert.equal(failure.provider, id === 9 ? "TWILIO" : "VAPI");
-    assert.match(failure.providerCode, /UND_ERR_SOCKET/);
-    assert.match(failure.providerCode, /SIGNUP_ARCHIVED_RESOURCES_STILL_OWNED/);
-    assert.match(failure.providerCode, /SIGNUP_BUSINESS_MIGRATION_REQUIRED/);
-    assert.doesNotMatch(failure.providerCode, /parseJSON|\.error\.body|\.error\.headers/);
+    assert.match(handler.mapper.body, /UND_ERR_SOCKET/);
+    assert.match(handler.mapper.body, /SIGNUP_ARCHIVED_RESOURCES_STILL_OWNED/);
+    assert.match(handler.mapper.body, /SIGNUP_BUSINESS_MIGRATION_REQUIRED/);
+    assert.doesNotMatch(handler.mapper.body, /parseJSON|\.error\.body|\.error\.headers/);
     assert.ok(["number_purchase", "assistant_creation", "number_binding"].includes(failure.stage));
     assert.ok(!handlerIds.has(handler.id));
     handlerIds.add(handler.id);
+  }
+});
+
+test('failure templates preserve unescaped IML syntax and render valid fail-closed JSON for every allowed result', () => {
+  const repaired = mutateBlueprint(fixture());
+  for (const id of [9, 25, 28]) {
+    const template = repaired.flow.find(m => m.id === id).onerror[0].mapper.body;
+    const expression = buildSafeFailureCodeMapping(id);
+    assert.ok(template.includes(expression), 'Make must receive the original expression, not JSON-escaped IML');
+    assert.doesNotMatch(expression, /\\"/);
+    const literals = [...expression.matchAll(/"([A-Z][A-Z_]+)"/g)].map(m => m[1]);
+    assert.ok(literals.length > 10);
+    // Models the template substitution boundary, not a live Make execution.
+    for (const code of new Set(literals)) {
+      const rendered = JSON.parse(template.replace(expression, code));
+      assert.equal(rendered.providerCode, code);
+      assert.equal(rendered.success, false);
+      assert.equal(rendered.retryable, false);
+    }
+    const oldBroken = JSON.stringify({ success: false, providerCode: expression });
+    assert.equal(inspectFailureTemplate(oldBroken), null);
   }
 });
 
@@ -104,4 +128,24 @@ test("refuses to rewrite an unexpected paid module", () => {
   const current = fixture();
   current.flow.find((item) => item.id === 25).module = "unknown:destructive-module";
   assert.throws(() => mutateBlueprint(current), /refusing an unsafe automatic rewrite/i);
+});
+
+test('reporting-only repair changes only three response bodies and is idempotent', () => {
+  const broken = mutateBlueprint(fixture());
+  for (const id of [9, 25, 28]) {
+    const handler = broken.flow.find(m => m.id === id).onerror[0];
+    const envelope = inspectFailureTemplate(handler.mapper.body);
+    envelope.providerCode = buildSafeFailureCodeMapping(id);
+    handler.mapper.body = JSON.stringify(envelope);
+  }
+  const repaired = repairFailureReporting(broken);
+  assert.ok(Object.values(verifyBlueprint(repaired)).every(Boolean));
+  assert.deepEqual(repairFailureReporting(repaired), repaired);
+  const restored = structuredClone(repaired);
+  for (const id of [9, 25, 28]) {
+    restored.flow.find(m => m.id === id).onerror[0].mapper.body = broken.flow.find(m => m.id === id).onerror[0].mapper.body;
+  }
+  assert.deepEqual(restored, broken, 'All non-response settings must be byte-for-byte unchanged');
+  broken.flow.find(m => m.id === 9).onerror[0].mapper.body = '{"success":true}';
+  assert.throws(() => repairFailureReporting(broken), /Unknown failure envelope/);
 });

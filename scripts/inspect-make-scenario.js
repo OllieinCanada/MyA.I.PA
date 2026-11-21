@@ -75,6 +75,11 @@ function safeString(value) {
 function safeObject(value, parentKey = "") {
   if (Array.isArray(value)) return value.slice(0, 20).map((item) => safeObject(item, parentKey));
   if (!value || typeof value !== "object") return safeString(value);
+  // Header names do not necessarily contain "key" or "token" (for example
+  // x-myaipa-integration-key). Never expose ANY literal header value.
+  if (/(?:^|\.)headers$/.test(parentKey)) {
+    return Object.fromEntries(Object.keys(value).map(key => [key, '[redacted]']));
+  }
   const secretLabel = [value.name, value.key, value.label, parentKey]
     .map((item) => String(item || ""))
     .join(".");
