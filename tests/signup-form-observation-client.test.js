@@ -11,6 +11,15 @@ const compiled=new Module(filename,module);compiled.filename=filename;compiled.p
 const { observedBusinessFields, observedSignupStep, observedFormSnapshot, createFormObservationClient }=compiled.exports;
 const details={ownerName:'PRIVATE OWNER NAME',businessName:'PRIVATE BUSINESS NAME',phone:'+19055550199',email:'private@example.test',streetAddress:'87 PRIVATE STREET',city:'Private City',province:'ON',postalCode:'L8P 1A1',otp:'899123',password:'private-password',captchaToken:'private-captcha'};
 const validation={errors:{ownerName:'',businessName:'',phone:'',email:'',streetAddress:'',city:'',province:'',postalCode:''}};
+test('actual browser emits only catalog trade IDs; a valid-to-valid choice change is saved and a reset clears it',async()=>{
+ const h=harness();
+ for(const selectedTradeId of ['electrician','plumber','hvac','contractor','roofer','painter','']){
+  await h.client.observe(observedFormSnapshot({step:'trade',details,validation,selectedTradeId,touched:{trade_choice:true}}),true);await h.client.settled();
+  assert.equal((await h.service.listAdmin()).rows[0].selectedTradeId,selectedTradeId||null);
+ }
+ for(const selectedTradeId of ['PRIVATE',null,{},'__proto__'])assert.equal(observedFormSnapshot({step:'trade',details,validation,selectedTradeId}).selectedTradeId,'');
+ assert.equal((await h.service.listAdmin()).rows[0].linkedAttemptId,null);
+});
 function harness({now=()=>Date.now(),authenticateAttempt=async()=>null}={}){const store=memory(),service=createObservationService({store,authenticateAttempt,now});const saved=new Map(),requests=[];const storage={getItem:k=>saved.get(k),setItem:(k,v)=>saved.set(k,v),removeItem:k=>saved.delete(k)};
  const fetchImpl=async(url,options={})=>{const u=new URL(url);assert.equal(u.origin,'https://api.example.test');requests.push({path:u.pathname,body:options.body||'',headers:options.headers});const body=options.body?JSON.parse(options.body):{};const token=String(options.headers.Authorization||'').slice(12);let data;
   try{if(options.method==='POST'&&u.pathname==='/api/signup/form-observation')data=await service.create();else if(options.method==='POST'&&u.pathname.endsWith('/link'))data=await service.link(u.pathname.split('/').at(-2),token,body);else if(options.method==='PUT')data=await service.observe(u.pathname.split('/').at(-1),token,body);else data=await service.read(u.pathname.split('/').at(-1),token);return{ok:true,status:200,json:async()=>data};}

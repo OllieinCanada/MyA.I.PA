@@ -1,6 +1,7 @@
-// Progress metadata plus two bounded, unverified draft display names. Other
+// Progress metadata, a catalog trade ID and two unverified draft display names. Other
 // form values, security proofs and provider secrets are never accepted here.
 const crypto = require('node:crypto');
+const {tradeDisplay}=require('../src/signupTradeDisplay');
 const TTL_MS = 24 * 60 * 60 * 1000;
 const MAX_SLOTS = 2000;
 const MAX_BYTES = 8192;
@@ -24,12 +25,14 @@ function slotFor(id, slots = MAX_SLOTS) { return parseInt(digest(id).slice(0, 8)
 function keyFor(id, slots) { return PREFIX + String(slotFor(id, slots)).padStart(4, '0'); }
 function safeEqual(a, b) { const x = Buffer.from(String(a || '')), y = Buffer.from(String(b || '')); return x.length === y.length && crypto.timingSafeEqual(x, y); }
 function validateSnapshot(input) {
-  if (!keysOnly(input, ['schemaVersion', 'sequence', 'expectedRevision', 'currentStep', 'attemptedAdvance', 'fields', 'started', 'draftNames']) || input.schemaVersion !== 1
+  if (!keysOnly(input, ['schemaVersion', 'sequence', 'expectedRevision', 'currentStep', 'attemptedAdvance', 'fields', 'started', 'draftNames', 'selectedTradeId']) || input.schemaVersion !== 1
     || (Object.hasOwn(input, 'started') && typeof input.started !== 'boolean')
     || !Number.isSafeInteger(input.sequence) || input.sequence < 1 || input.sequence > 10000
     || !Number.isSafeInteger(input.expectedRevision) || input.expectedRevision < 0 || input.expectedRevision > 10000
     || !Object.hasOwn(STEPS, input.currentStep) || typeof input.attemptedAdvance !== 'boolean'
     || !Array.isArray(input.fields) || input.fields.length > Object.keys(FIELDS).length || Buffer.byteLength(JSON.stringify(input)) > MAX_BYTES) throw fail('FORM_OBSERVATION_INVALID');
+  if(Object.hasOwn(input,'selectedTradeId') && input.selectedTradeId!=='' && !tradeDisplay(input.selectedTradeId)) throw fail('FORM_OBSERVATION_INVALID');
+  if(input.currentStep==='trade' && tradeDisplay(input.selectedTradeId) && !input.fields.some(f=>f?.id==='trade_choice' && f.presence==='present' && f.visible==='visible')) throw fail('FORM_OBSERVATION_INVALID');
   const seen = new Set(), allowed = STEPS[input.currentStep].fields;
   for (const field of input.fields) {
     if (!keysOnly(field, ['id', 'presence', 'visible', 'required', 'interacted', 'validation', 'reason']) || !allowed.includes(field.id) || seen.has(field.id)
@@ -75,6 +78,7 @@ function projectObservation(record, now = Date.now()) {
   return { id: record.id, linkedAttemptId: record.linkedAttemptId || null, identity: record.linkedAttemptId ? 'exact_attempt_link' : 'unlinked_visitor_unknown_identity',
     draftNames: validDraftNames(record.draftNames) ? { businessName: record.draftNames.businessName, ownerName: record.draftNames.ownerName } : null,
     draftNamesVerified: false,
+    selectedTradeId:tradeDisplay(record.selectedTradeId)?record.selectedTradeId:null, tradeSelectionVerified:false,
     currentStep: record.currentStep, currentStepLabel: STEPS[record.currentStep]?.label || 'Not observed', revision: record.revision,
     engaged: Boolean(record.engaged), createdAt: record.createdAt, expiresAt: record.expiresAt, lastObservedAt: record.lastObservedAt || null,
     startedAt: record.startedAt || null, startSource: record.startSource || null,
@@ -136,11 +140,12 @@ function createObservationService({ store, authenticateAttempt, now = () => Date
     if (!engaged) return { revision: previous.revision, sequence: previous.sequence, ignored: 'not_engaged' };
     const draftNames = Object.hasOwn(input,'draftNames') ? input.draftNames
       : ['business_details','final_review'].includes(input.currentStep) ? null : previous.draftNames || null;
-    const signature = digest(JSON.stringify({ currentStep: input.currentStep, fields: input.fields, draftNames }));
+    const selectedTradeId=Object.hasOwn(input,'selectedTradeId')?input.selectedTradeId:input.currentStep==='trade'?'':previous.selectedTradeId||'';
+    const signature = digest(JSON.stringify({ currentStep: input.currentStep, fields: input.fields, draftNames, selectedTradeId }));
     const meaningful = signature !== previous.signature;
     const at = now(), next = { ...previous, sequence: input.sequence, revision: previous.revision + 1, engaged,
       ...(input.started === true && !previous.startedAt ? { startedAt: at, startSource: 'trial_button' } : {}),
-      currentStep: input.currentStep, lastObservedAt: at, signature, draftNames,
+      currentStep: input.currentStep, lastObservedAt: at, signature, draftNames, selectedTradeId,
       lastProgressAt: meaningful ? at : previous.lastProgressAt, progressRevision: meaningful ? previous.progressRevision + 1 : previous.progressRevision,
       steps: { ...previous.steps, [input.currentStep]: { observedAt: at, revision: previous.revision + 1, attemptedAdvance: input.attemptedAdvance, fields: input.fields } } };
     if (Buffer.byteLength(JSON.stringify(next)) > MAX_BYTES) throw fail('FORM_OBSERVATION_INVALID');

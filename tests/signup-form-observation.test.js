@@ -14,6 +14,32 @@ function memory() {
 }
 const field = extra => ({ id: 'business_name', presence: 'blank', visible: 'visible', required: true, interacted: true, validation: 'invalid', reason: 'required_missing', ...extra });
 const event = extra => ({ schemaVersion: 1, sequence: 1, expectedRevision: 0, currentStep: 'business_details', attemptedAdvance: false, fields: [field()], ...extra });
+
+test('trade catalog is fixed, consistent with actual signup options, and rejects arbitrary metadata',()=>{
+ const {TRADES}=require('../src/signupTradeDisplay'),fs=require('node:fs');
+ const source=fs.readFileSync(require.resolve('../src/features/signup/signupConfig'),'utf8').split('export const TRADE_OPTIONS = [')[1].split('export const AREA_GROUPS')[0];
+ assert.deepEqual([...source.matchAll(/id: "([a-z]+)"/g)].map(m=>m[1]).sort(),Object.keys(TRADES).sort());
+ for(const id of Object.keys(TRADES))assert.doesNotThrow(()=>validateSnapshot(event({selectedTradeId:id})));
+ for(const id of [null,123,{},'PRIVATE','toString','__proto__','<script>'])assert.throws(()=>validateSnapshot(event({selectedTradeId:id})),{code:'FORM_OBSERVATION_INVALID'});
+ assert.throws(()=>validateSnapshot(event({currentStep:'trade',fields:[],selectedTradeId:'electrician'})),{code:'FORM_OBSERVATION_INVALID'});
+ assert.throws(()=>validateSnapshot(event({currentStep:'trade',fields:[null],selectedTradeId:'electrician'})),{code:'FORM_OBSERVATION_INVALID'});
+});
+
+test('trade changes persist across steps and restart, clear safely, reject stale edits and never become verified identity',async()=>{
+ const f=fixture(),a=await f.service.create();
+ const tradeField=field({id:'trade_choice',presence:'present',validation:'valid',reason:'none'});
+ await f.service.observe(a.id,a.token,event({currentStep:'trade',fields:[tradeField],selectedTradeId:'electrician'}));
+ const restarted=createObservationService({store:f.store,authenticateAttempt:async()=>null,now:f.now});
+ assert.equal((await restarted.listAdmin()).rows[0].selectedTradeId,'electrician');
+ await restarted.observe(a.id,a.token,event({sequence:2,expectedRevision:1,currentStep:'trade',fields:[tradeField],selectedTradeId:'plumber'}));
+ await assert.rejects(restarted.observe(a.id,a.token,event({sequence:3,expectedRevision:1,selectedTradeId:'roofer'})),{code:'FORM_OBSERVATION_STALE'});
+ await restarted.observe(a.id,a.token,event({sequence:3,expectedRevision:2,fields:[]}));
+ const row=(await restarted.listAdmin()).rows[0];assert.equal(row.selectedTradeId,'plumber');assert.equal(row.tradeSelectionVerified,false);assert.equal(row.linkedAttemptId,null);
+ assert.equal((await restarted.read(a.id,a.token)).selectedTradeId,undefined);
+ await restarted.observe(a.id,a.token,event({sequence:4,expectedRevision:3,currentStep:'trade',fields:[],selectedTradeId:''}));
+ assert.equal((await restarted.listAdmin()).rows[0].selectedTradeId,null);
+ assert.equal(projectObservation({id:a.id,steps:{},createdAt:f.now(),engaged:true},f.now()).selectedTradeId,null);
+});
 function fixture(options = {}) { let at = 1800000000000; const store = memory(); const service = createObservationService({ store, authenticateAttempt: async (id, token) => token === 'synthetic-attempt-capability' ? { eventKey: id.endsWith('b') ? 'signup_'+'b'.repeat(32) : 'signup_'+'a'.repeat(32), status: 'provisioning', expiresAt: new Date(at+100000) } : null, now: () => at, ...options }); return { store, service, advance: ms => { at += ms; }, now: () => at }; }
 test('anonymous capability creation stores only a hash, and wrong/lost tokens cannot read metadata', async () => {
   const { store, service } = fixture(), access = await service.create();
