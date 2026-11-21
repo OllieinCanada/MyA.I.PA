@@ -11376,6 +11376,10 @@ async function loadTrustedProvisioningContext(req) {
     throw error;
   }
   const attemptId = registered.eventKey;
+  // Bind diagnostics only after server-owned context and signature verification,
+  // but before lifecycle/legacy checks that can fail before a provider claim.
+  // This is attribution, not permission to provision or mark setup complete.
+  req.signupProvisioningAttemptId = attemptId;
   const attempt = await prisma.signupAttempt.findUnique({ where: { eventKey: attemptId } });
   assertSignupOpen(attempt || {});
   const record = listSignupDashboardRecords().find((item) => item.signupAttemptId === attemptId);
