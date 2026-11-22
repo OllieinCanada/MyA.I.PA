@@ -5,6 +5,7 @@ const {
   mutateBlueprint,
   verifyBlueprint,
 } = require("../scripts/repair-make-signup-provisioning");
+const { inspectFailureBodyTemplate, buildSafeFailureCodeMapping } = require("../scripts/make-provisioning-failure-format");
 
 function fixture() {
   const httpMapper = {
@@ -83,17 +84,20 @@ test("rewrites the three paid provisioning stages and fail-closed response mappi
     assert.equal(module.onerror.length, 1);
     const handler = module.onerror[0];
     assert.equal(handler.module, "gateway:WebhookRespond");
-    const failure = JSON.parse(handler.mapper.body);
+    const failure = inspectFailureBodyTemplate(handler.mapper.body, id);
+    assert.ok(failure, "the exact safe template must validate before any update");
     assert.equal(failure.ok, false);
     assert.equal(failure.success, false);
     assert.equal(failure.code, "MAKE_PROVISIONING_STAGE_FAILED");
     assert.ok(["TWILIO_NUMBER_PURCHASE", "VAPI_ASSISTANT_CREATE", "VAPI_NUMBER_IMPORT"].includes(failure.failedStage));
     assert.equal(failure.retryable, false);
     assert.equal(failure.provider, id === 9 ? "TWILIO" : "VAPI");
-    assert.match(failure.providerCode, /UND_ERR_SOCKET/);
-    assert.match(failure.providerCode, /SIGNUP_ARCHIVED_RESOURCES_STILL_OWNED/);
-    assert.match(failure.providerCode, /SIGNUP_BUSINESS_MIGRATION_REQUIRED/);
-    assert.doesNotMatch(failure.providerCode, /parseJSON|\.error\.body|\.error\.headers/);
+    const mapping = buildSafeFailureCodeMapping(id);
+    assert.ok(handler.mapper.body.includes(mapping), "IML must not be JSON-escaped");
+    assert.match(mapping, /UND_ERR_SOCKET/);
+    assert.match(mapping, /SIGNUP_ARCHIVED_RESOURCES_STILL_OWNED/);
+    assert.match(mapping, /SIGNUP_BUSINESS_MIGRATION_REQUIRED/);
+    assert.doesNotMatch(mapping, /parseJSON|\.error\.body|\.error\.headers/);
     assert.ok(["number_purchase", "assistant_creation", "number_binding"].includes(failure.stage));
     assert.ok(!handlerIds.has(handler.id));
     handlerIds.add(handler.id);
