@@ -19,7 +19,8 @@ test('partial restored HTTP evidence cannot clear live or full recovery predicat
 });
 test('canonical pinned dependencies are exact; corruption refused',()=>{
  const pins=require('../scripts/restored-http-pins.json'),sha=require('../scripts/composite-recovery-fixture').sha;
- assert.equal(pins.reviewedHead,BASE_HEAD);assert.equal(Object.keys(pins.sha256).length,31);
+ assert.equal(pins.reviewedHead,BASE_HEAD);assert.equal(Object.keys(pins.sha256).length,34);
+ for(const file of ['server/serviceIntakePrompt.js','server/confirmationConversationPolicy.js','server/compositeCallNotifications.js'])assert.ok(pins.sha256[file],file);
  for(const file of ['server/signupActivationControl.js','server/signupActivationPreparation.js','server/signupActivationEvidence.js',
   'server/signupActivationSave.js','server/signupActivationPreview.js','server/automaticAssistantConnectionPlan.js'])assert.ok(pins.sha256[file],file);
  assert.ok(pins.sha256['server/signupRecoveryGuidance.js'],'Read-only guidance must be exact-source pinned');
@@ -39,6 +40,17 @@ test('current-runtime consumer refuses old or absent runtime provenance',()=>{
  const {verifyReport}=require('../scripts/run-restored-http-ci');
  for(const runtimeSourceHead of [undefined,BASE_HEAD,'a'.repeat(40)])
   assert.equal(verifyReport({scope:'restored-disposable-http-synthetic-recovery-only',httpDependencyHead:BASE_HEAD,runtimeSourceHead},{}),false);
+});
+
+test('restored HTTP pins reject tampering with every confirmation prompt dependency',()=>{
+ const {verifyPins}=require('../scripts/run-restored-http-ci');
+ // Local canonical-LF contract only; sealed Linux CI verifies raw checkout bytes.
+ const read=file=>Buffer.from(fs.readFileSync(path.join(__dirname,'..',file),'utf8').replace(/\r\n/g,'\n'));
+ assert.equal(verifyPins(read),true);
+ for(const file of ['server/automaticAssistantConnectionPlan.js','server/compositeCallNotifications.js',
+  'server/serviceIntakePrompt.js','server/confirmationConversationPolicy.js']){
+  assert.throws(()=>verifyPins(p=>p===file?Buffer.from('unreviewed prompt change'):read(p)),/DEPENDENCY_BYTES_CHANGED/);
+ }
 });
 test('sealed workflow uses disposable PG18 and publishes only result summaries',()=>{
  const source=fs.readFileSync(path.join(__dirname,'../.github/workflows/restored-http.yml'),'utf8');

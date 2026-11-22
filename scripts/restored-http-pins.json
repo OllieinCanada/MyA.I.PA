@@ -1,4 +1,8 @@
 {
+  "standaloneConfirmationContinuation": {
+    "baseRelease": "f24d3798097f946d0797231d88d63d65dcc67196",
+    "scope": "Pin the updated prompt candidate and its shared dependencies for fresh sealed synthetic HTTP/SQL validation; no live recovery or assistant migration proof."
+  },
   "verifiedSetupControlContinuation": {
     "baseRelease": "5c3992d45215cc618d52ed6d664435846e44eca5",
     "scope": "New disabled-by-default control and protected-gate candidate bytes require fresh sealed HTTP/SQL CI and review; not live activation or recovery proof."
@@ -15,7 +19,10 @@
     "server/signupActivationEvidence.js": "683b139dce181d72507f62225990d8fe04ca11250e0b94517c24a07e39913478",
     "server/signupActivationSave.js": "ba9c565929bcee0654ccf4acc30be98d38162c7ff68b24a599806dda70177700",
     "server/signupActivationPreview.js": "e2d774ff038bc2195d09a23c4daa63bfa5cc44be840fe60bbdf9399320611f3a",
-    "server/automaticAssistantConnectionPlan.js": "99362dd0d98590ec01c8952ba5d3e3306bafc4638b337936da28b2a545d66fd2",
+    "server/automaticAssistantConnectionPlan.js": "a7e8ba99aa10031bc3b2aa572855591c39fa999b10d146c62190511fba0df8f5",
+    "server/serviceIntakePrompt.js": "ecae2e4379cfb408cb3840a0146cff4bb0792f48f37f51d4cd4ef1d6dc9243c0",
+    "server/confirmationConversationPolicy.js": "4896fd407b6ee60f7c56541ec9b1bf14dd9888b59266ec8f938a1df4a06ac4fe",
+    "server/compositeCallNotifications.js": "746f8c3395480278e209304eef194f7b423472c68ca0b0da6602a479aeea23be",
     "server/incidentInvestigationBridge.js": "06b9d43752e95c2bccedefd78350a662c5483ef107a9eb5e041eefbbdfd0eb3b",
     "server/operationalErrorClassifier.js": "1f9b079c6ec4ba9181816a8676e1e9cf1daa4341d8e9f092a6c13f752f58a941",
     "server/providerMaintenance.js": "f3b0fedbf566fd3305696483c8b320bea548af756b5c8cb46681b041d5491dfa",

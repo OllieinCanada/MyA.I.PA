@@ -22,7 +22,8 @@ test('actual runtime and corrected safety bytes are pinned separately from histo
   assert.ok(SOURCES.includes('tests/call-sync-accounting.test.js'));
   for(const file of ['server/automaticCallNotifications.js','server/automaticNotificationContext.js','server/notificationOutcomes.js',
     'server/callSyncHealth.js','server/callSyncReporting.js','server/trialCalendarPolicy.js',
-    'server/stripeTrialBilling.js','server/trialUsagePolicy.js','server/providerMaintenance.js','server/signupBugHistory.js','server/signupDiagnosticError.js']){
+    'server/stripeTrialBilling.js','server/trialUsagePolicy.js','server/providerMaintenance.js','server/signupBugHistory.js','server/signupDiagnosticError.js',
+    'server/automaticAssistantConnectionPlan.js','server/compositeCallNotifications.js','server/serviceIntakePrompt.js','server/confirmationConversationPolicy.js']){
     assert.ok(SOURCES.includes(file));
     assert.throws(()=>policy(head,p=>p===file?Buffer.from('unreviewed-change'):require('node:fs').readFileSync(require('node:path').resolve(__dirname,'..',p))),/RUNTIME_BYTES_CHANGED/);
   }
