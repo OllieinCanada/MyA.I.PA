@@ -384,6 +384,18 @@
       "type": "operational",
       "checkName": "operational_health",
       "firstDetectedAt": "2026-11-21T10:14:54.321Z"
+    },
+    "issue:operational_health:public_76fff743617ea78e586215f5cfea61b1": {
+      "lifecycleId": "public_d700558d0a8fe1392a2b28c8",
+      "type": "operational",
+      "checkName": "operational_health",
+      "firstDetectedAt": "2026-11-22T10:17:50.636Z"
+    },
+    "issue:operational_health:public_d7dbbd780dc76d0826a2edcf90a2f790": {
+      "lifecycleId": "public_cec30fa57c00563d8fad5bc7",
+      "type": "operational",
+      "checkName": "operational_health",
+      "firstDetectedAt": "2026-11-22T10:17:50.636Z"
     }
   }
 }
