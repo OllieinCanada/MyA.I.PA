@@ -1,4 +1,8 @@
 {
+  "standaloneConfirmationContinuation": {
+    "baseRelease": "f24d3798097f946d0797231d88d63d65dcc67196",
+    "scope": "Separate recap and permission turns with one definite-pre-execution clarification. Prompt-only changes require fresh exact-source CI; deterministic consent, dispatch, lifecycle and mapping guards remain unchanged. No live assistant migration or sending proof."
+  },
   "verifiedSetupControlContinuation": {
     "baseRelease": "5c3992d45215cc618d52ed6d664435846e44eca5",
     "previousIndexSha256": "d75676e976aeddca25bf7cbe4af36ca954af8fb6d7cea906e54ff3026d96e548",
@@ -97,7 +101,9 @@
     "server/signupActivationEvidence.js": "683b139dce181d72507f62225990d8fe04ca11250e0b94517c24a07e39913478",
     "server/signupActivationSave.js": "ba9c565929bcee0654ccf4acc30be98d38162c7ff68b24a599806dda70177700",
     "server/signupActivationPreview.js": "e2d774ff038bc2195d09a23c4daa63bfa5cc44be840fe60bbdf9399320611f3a",
-    "server/automaticAssistantConnectionPlan.js": "99362dd0d98590ec01c8952ba5d3e3306bafc4638b337936da28b2a545d66fd2",
+    "server/automaticAssistantConnectionPlan.js": "a7e8ba99aa10031bc3b2aa572855591c39fa999b10d146c62190511fba0df8f5",
+    "server/serviceIntakePrompt.js": "ecae2e4379cfb408cb3840a0146cff4bb0792f48f37f51d4cd4ef1d6dc9243c0",
+    "server/confirmationConversationPolicy.js": "4896fd407b6ee60f7c56541ec9b1bf14dd9888b59266ec8f938a1df4a06ac4fe",
     "server/incidentInvestigationBridge.js": "06b9d43752e95c2bccedefd78350a662c5483ef107a9eb5e041eefbbdfd0eb3b",
     "server/operationalErrorClassifier.js": "1f9b079c6ec4ba9181816a8676e1e9cf1daa4341d8e9f092a6c13f752f58a941",
     "server/providerMaintenance.js": "f3b0fedbf566fd3305696483c8b320bea548af756b5c8cb46681b041d5491dfa",
@@ -122,7 +128,7 @@
     "server/automaticCallNotifications.js": "965b4e2d233b66f13d8170d55e146a65ffce450cbc0beafc74e09ddbe0017663",
     "server/automaticNotificationContext.js": "c46dca9c6a30bd530266e87fc077973c0937c0e57da48711822b543eac43a591",
     "server/notificationOutcomes.js": "f076cbf603264e58aa076f72fa797f6b8b9e760919ea1ce37f2598a03fd08eff",
-    "server/compositeCallNotifications.js": "9ae28c95f78f2e1e32c626ed0e40fa719ddb2f6911f2e4513e014777a38c1b95",
+    "server/compositeCallNotifications.js": "746f8c3395480278e209304eef194f7b423472c68ca0b0da6602a479aeea23be",
     "server/callNotificationEvidence.js": "9a4e9435e85ceebd3f3587f8ae05358552dc94730e9db541e7b4aa958fd33839",
     "server/callSyncReporting.js": "d0114112140f33a8937c3b6a4066fc33d5a27f293eb52fee1a6fb934d241f300",
     "server/callSyncHealth.js": "3742054dc588a565107c1d4514f897336a20a6e52dc21c54074b99da19d02a1e",

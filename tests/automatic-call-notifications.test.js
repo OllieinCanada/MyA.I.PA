@@ -39,6 +39,45 @@ for(const answer of ['No.','Yes, but wait.','Stop','Maybe','What?']) test('refus
   assert.equal(r.complete,false); assert.equal(f.posts.length,0); assert.equal(f.gate.rows.size,0);
 });
 test('a later refusal consumes prior approval',async()=>{ const f=fixture(); f.options.message.artifact.messages.push({role:'user',message:'Do not send it.'}); assert.equal((await f.run()).complete,false); assert.equal(f.posts.length,0); });
+
+test('truncated question has zero writes; fresh standalone permission recovers once without duplicate dispatch',async()=>{
+ const f=fixture();
+ f.options.message.artifact.messages=[{role:'bot',message:'Your callback preference is anytime'}, {role:'user',message:'Yes, please.'}];
+ const blocked=await f.run();
+ assert.equal(blocked.actionAttempted,false);assert.equal(blocked.needsClarification,true);
+ assert.equal(blocked.errorCode,'FRESH_SEND_CONFIRMATION_REQUIRED');
+ assert.equal(f.posts.length,0);assert.equal(f.gate.rows.size,0);
+ f.options.message.artifact.messages.push(...history('Yes, please.'));
+ f.options.toolCall.id='synthetic-clarified-attempt';
+ const recovered=await f.run();assert.equal(recovered.complete,true);assert.equal(recovered.deliveryProven,false);
+ await f.run();f.options.toolCall.id='synthetic-duplicate-attempt';await f.run();
+ assert.equal(f.posts.length,2);
+ assert.deepEqual(f.posts.map(p=>p.To),[context.owner,call.customer.number]);
+});
+
+test('a recap yes does not authorize dispatch before standalone permission and a new yes',async()=>{
+ const f=fixture();f.options.message.artifact.messages=[{role:'bot',message:'A fictitious request. Is that right?'},{role:'user',message:'Yes.'}];
+ assert.equal((await f.run()).complete,false);assert.equal(f.gate.rows.size,0);assert.equal(f.posts.length,0);
+ f.options.message.artifact.messages.push(history('Yes.')[0]);
+ assert.equal((await f.run()).complete,false);assert.equal(f.gate.rows.size,0);assert.equal(f.posts.length,0);
+ f.options.message.artifact.messages.push(history('Yes.')[1]);
+ assert.equal((await f.run()).complete,true);assert.equal(f.posts.length,2);
+});
+
+for(const reply of ['No.','Wait.','Yes, but change the city.','Yes?'])test('standalone re-ask cannot override refusal/correction/uncertainty: '+reply,async()=>{
+ const f=fixture();f.options.message.artifact.messages=[{role:'bot',message:'Truncated recap'},
+  {role:'user',message:'Yes, please.'},...history(reply)];
+ assert.equal((await f.run()).complete,false);assert.equal(f.gate.rows.size,0);assert.equal(f.posts.length,0);
+});
+
+test('fresh permission after unknown transport outcome cannot reset claims or resend',async()=>{
+ const f=fixture(),provider=f.options.fetchImpl;
+ f.options.fetchImpl=async(...input)=>{await provider(...input);throw Error('synthetic lost acknowledgement');};
+ assert.equal((await f.run()).complete,false);assert.equal(f.posts.length,2);
+ f.options.message.artifact.messages.push(...history('Yes, please.'));
+ f.options.toolCall.id='synthetic-reapproval-after-unknown';
+ assert.equal((await f.run()).complete,false);assert.equal(f.posts.length,2);
+});
 test('review: stale authenticated conversation cannot authorize a first send',async()=>{const f=fixture();f.options.message.timestamp=Date.now()-120000;assert.equal((await f.run()).complete,false);assert.equal(f.posts.length,0);});
 test('review: disabling during final authority lookup prevents the provider POST',async()=>{
  const f=fixture();let reads=0;f.options.readContext=async()=>{if(++reads===4)f.env.SMS_AUTOMATIC_NOTIFICATION_ENABLED='false';return structuredClone(context);};

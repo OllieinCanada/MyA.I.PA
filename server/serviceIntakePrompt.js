@@ -1,3 +1,4 @@
+const { confirmationConversationPolicy } = require('./confirmationConversationPolicy');
 const MARKER = '## MYAIPA CONFIRMED SERVICE INTAKE';
 const END = '## END MYAIPA CONFIRMED SERVICE INTAKE';
 const INTAKE_POLICY = `${MARKER}
@@ -16,7 +17,8 @@ COMPLETE, CALLER-CONFIRMED DETAILS:
 - Read back job type, work details, street and city, full preferred start timing and callback preference before asking permission to save a draft. If corrected, update the same request, read back the corrected details and ask permission again.
 - Set workDetailsConfirmed true only after required work details and location were read back and confirmed. If a work field is missing or uncertain, ask for it; do not set that flag or invoke notification tools yet.
 CURRENT DRAFT CONSENT AND CLARIFICATION:
-- Ask "Should I save this request for review?" after the current recap. Pricing agreement or an earlier yes is not approval to save changed details, and no spoken approval can authorize an SMS.
+${confirmationConversationPolicy('draft')}
+- Pricing agreement or an earlier yes is not approval to save changed details, and no spoken approval can authorize an SMS.
 - Clarify ambiguous or split replies. A visible cancellation or correction blocks saving until a fresh corrected readback and clear approval to save. Never merge arbitrary caller turns.
 - BEFORE EXECUTION ONLY: a definite rejection permits one clarification and fresh approval to save. DO NOT retry a send or assume success from unknown results.
 - draftStored true means only saved for manual review. complete never authorizes a success claim during a phone call. Say "I've saved your request for review. No text messages have been sent." only after a verified save; otherwise say the save could not be confirmed.
