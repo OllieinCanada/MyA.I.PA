@@ -110,7 +110,7 @@ test("template validation refuses escaped IML, altered evidence and appended dat
     const body = buildFailureBody(id);
     assert.equal(inspectFailureBodyTemplate(body, id).success, false);
     const altered = [
-      body.replace(buildSafeFailureCodeMapping(id), buildSafeFailureCodeMapping(id).replace(/"/g, '\\"')),
+      body.replace(buildSafeFailureCodeMapping(id), JSON.stringify(buildSafeFailureCodeMapping(id)).slice(1, -1)),
       body.replace('"success":false', '"success":true'),
       body.replace('"retryable":false', '"retryable":true'),
       body.replace(`${id}.error.message`, `${id}.error.body`),
