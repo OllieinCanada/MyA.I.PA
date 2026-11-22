@@ -33,6 +33,17 @@ async function run({messages=history('Yes, please.'),input={},settings={},failRe
  return{allowed:true,posts,checks,result};
 }
 test('generated phone tool saves drafts but cannot submit provider messages',async()=>{assert.deepEqual(tool.rejectionPlan,toolRejectionPlan());const r=await run();assert.equal(r.result.complete,false);assert.equal(r.result.draftStored,true);assert.equal(r.posts.length,0);assert.equal(r.checks.length,0);assert.equal(evidence(r.result).customer.accepted,false);});
+
+test('compiled draft tool stays unexecuted for truncated consent and saves only after a fresh standalone reply',async()=>{
+ const messages=[{role:'assistant',content:'Your callback preference is anytime'},{role:'user',content:'Yes, please.'}];
+ const refused=await run({messages});assert.equal(refused.allowed,false);assert.equal(refused.posts.length,0);
+ assert.equal(evidence(refused.result).rejectedBeforeExecution,true);
+ messages.push({role:'assistant',content:'Should I save this request for review?'});
+ assert.equal((await run({messages})).allowed,false);
+ messages.push({role:'user',content:'Yes, please.'});
+ const saved=await run({messages});assert.equal(saved.result.draftStored,true);
+ assert.equal(saved.result.complete,false);assert.equal(saved.posts.length,0);assert.equal(saved.checks.length,0);
+});
 for(const answer of ['Perfect. Yes.','Yes, you can send it.','No worries, send it.'])test('approval only prepares a draft '+answer,async()=>{const r=await run({messages:history(answer)});assert.equal(r.result.draftStored,true);assert.equal(r.result.complete,false);assert.equal(r.posts.length,0);});
 for(const answer of ['No.','Wait.','Yes, but change the address.','If I say yes, will you send it?'])test('blocked consent never reaches compiled sender '+answer,async()=>{const r=await run({messages:history(answer)});assert.equal(r.allowed,false);assert.equal(r.posts.length,0);assert.equal(r.checks.length,0);assert.equal(evidence(r.result).rejectedBeforeExecution,true);});
 test('available later cancellation blocks before transport',async()=>{const r=await run({messages:[...history('Yes.'),{role:'user',content:'No, wait.'}]});assert.equal(r.allowed,false);assert.equal(r.posts.length,0);});

@@ -1,3 +1,4 @@
+const { confirmationConversationPolicy } = require('./confirmationConversationPolicy');
 const COMPOSITE_TOOL_NAME = "send_call_summaries_dynamic";
 const POST_SEND_CLOSING_MARKER = "## MYAIPA NATURAL POST-SEND CLOSING";
 
@@ -216,14 +217,14 @@ This overrides earlier SMS sending and closing instructions. Use only ${toolName
 - Never accept a caller-provided businessId or routing override. Routing comes from environment variables.
 - Ask "What is the address where the work needs to be done?" and "When would you ideally like the work to begin?" Preserve preferredStartDate separately from callback time.
 - Job type and job details are separate required facts. Include the job type in the spoken read-back.
-- Read back the current details. Ask exactly "Should I save this request for review?" Wait for a clear answer before saving. A correction requires a fresh readback and approval to save.
+${confirmationConversationPolicy('draft')}
 - If transcription splits a reply, or the caller cancels, asks to wait, corrects a detail, or sounds uncertain, clarify before saving. Never merge a previous yes into a later correction.
 - Use the trusted caller number when available. Say "I'll use the number you're calling from." Do not claim you can see or recite the digits; the silent tool will verify caller-ID availability. If needsCustomerNumber is true, explain that caller ID is unavailable, confirm the full fallback mobile number, and retry saving once. Do not invent a number.
 - Set workDetailsConfirmed true only after the details were read back and confirmed; set pricingDiscussed only from the actual conversation. Missing details require clarification.
 - The tool's draftStored true means only that drafts were saved for manual review. Say "I've saved your request for review. No text messages have been sent."
 - If draftStored is not true, say "I couldn't confirm that your request was saved for review." Do not claim submission or delivery, and do not retry automatically after an unknown result.
 - Never claim that the team received an SMS, that messages were sent, or that the request was approved. Do not promise when someone will respond. A human must separately review exact recipients and content.
-- A definite pre-execution rejection permits one clarification attempt: read back the corrected details and wait for fresh approval to SAVE, not send.
+- After a definite pre-execution rejection, wait for fresh approval to SAVE, not send, following the single clarification limit above.
 - Do not retry automatically or resend an accepted or unconfirmed message. The phone tool has no send capability.
 - Last-second speech can arrive too late or be missing. This draft workflow does not prove the caller's latest instructions or consent. A human must review independently.
 - Never invent business credentials, policies, prices, discounts, warranties or arrival times. Use only verified Business context.

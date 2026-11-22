@@ -23,6 +23,16 @@ test('candidate prompt and function actually authorize once through the unchange
 for(const answer of ['No.','Yes, but wait.'])test('candidate journey blocks '+answer,async()=>{const f=journey(answer);assert.equal((await execute(f.options)).complete,false);assert.equal(f.posts.length,0);});
 test('candidate uncertain fake provider response never causes a repeat',async()=>{const f=journey(),original=f.options.fetchImpl;f.options.fetchImpl=async(...args)=>{await original(...args);throw Error('synthetic lost acknowledgement');};assert.equal((await execute(f.options)).complete,false);await execute(f.options);assert.equal(f.posts.length,2);});
 test('the actual shared draft intake block is migrated only in the candidate, preserving required work facts',()=>{const f=fixture();f.assistant.model.messages[0].content+='\n'+INTAKE_POLICY;const original=JSON.stringify(f),p=prepare(f),text=p.assistantPatch.model.messages[0].content;assert.equal(JSON.stringify(f),original);assert.doesNotMatch(text,/Should I save this request for review\?|saved for manual review|An authenticated human must/);for(const field of ['preferredStartDate','bestCallbackTime','streetAddress','city','jobDetails','workDetailsConfirmed'])assert.ok(text.includes(field));});
+
+test('automatic candidate uses standalone send consent and one safe clarification, not draft or manual approval',()=>{
+ const f=fixture();f.assistant.model.messages[0].content+='\n'+INTAKE_POLICY;
+ const p=prepare(f),text=p.assistantPatch.model.messages[0].content;
+ for(const rule of ['Is that right?','standalone assistant turn','Do not append the permission question',
+  'one clarification attempt','Never treat a refusal as missing consent','unknown, timed out, accepted or already completed',
+  'submission includes owner and caller confirmation texts','Should I send this request to the team now?'])assert.ok(text.includes(rule),rule);
+ assert.doesNotMatch(text,/Should I save this request for review\?|Human review is still required/);
+ assert.equal(p.applyAllowed,false);assert.equal(p.liveTestAllowed,false);
+});
 test('unknown manual instructions outside managed blocks require review instead of a contradictory candidate',()=>{const f=fixture();f.assistant.model.messages[0].content+='\nShould I save this request for review?';assert.throws(()=>prepare(f),/PROMPT_REVIEW_REQUIRED/);});
 test('a modified managed intake block is not silently rewritten',()=>{const f=fixture();f.assistant.model.messages[0].content+='\n'+INTAKE_POLICY.replace('CURRENT DRAFT CONSENT','CHANGED DRAFT CONSENT');assert.throws(()=>prepare(f),/PROMPT_REVIEW_REQUIRED/);});
 

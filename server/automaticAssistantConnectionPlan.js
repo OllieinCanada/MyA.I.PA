@@ -4,6 +4,7 @@ const {automaticSummaryToolDefinition}=require('./automaticCallNotifications');
 const {getTrialLifecycle}=require('./trialUsagePolicy');
 const {PROMPT_MARKER}=require('./vapiIsolatedSmsProvisioning');
 const {INTAKE_POLICY}=require('./serviceIntakePrompt');
+const {confirmationConversationPolicy}=require('./confirmationConversationPolicy');
 const {fingerprintAssistantContent}=require('./signupAssistantVerification');
 const intakeStart='## MYAIPA CONFIRMED SERVICE INTAKE',intakeEnd='## END MYAIPA CONFIRMED SERVICE INTAKE';
 
@@ -39,7 +40,7 @@ function prepareAutomaticAssistantConnection({assistant,legacyTool,phone,signup,
  if((model.tools||[]).some(t=>/^send_call_summaries_/i.test(t.function?.name||'')))refuse();
  // Keep the existing server-recognized confirmation sentence exactly. A novel
  // question would sound reasonable but fail the deterministic admission guard.
- const block=`## MYAIPA AUTOMATIC CONFIRMATION\nRead back the service request, explain that submission includes owner and caller confirmation texts, then ask exactly: "Should I send this request to the team now?"\nOnly after clear caller approval, call ${name} once. A refusal before submission prevents it; a correction requires a new read-back and approval. Never ask for manual operator approval. Do not retry an unknown outcome. Provider acceptance is not delivery. Report the tool result honestly; never promise delivery or claim submission if it failed.\n## END MYAIPA AUTOMATIC CONFIRMATION`;
+ const block=`## MYAIPA AUTOMATIC CONFIRMATION\n${confirmationConversationPolicy('automatic')}\nOnly after clear caller approval, call ${name} once. A refusal before submission prevents it; a correction requires a new read-back and approval. Never ask for manual operator approval. Do not retry an unknown outcome. Provider acceptance is not delivery. Report the tool result honestly; never promise delivery or claim submission if it failed.\n## END MYAIPA AUTOMATIC CONFIRMATION`;
  let updated=prompt.slice(0,prompt.indexOf(PROMPT_MARKER))+block+prompt.slice(prompt.indexOf(end)+end.length);
  // The shared intake policy intentionally remains draft-only for legacy tools.
  // Migrate its exact known block in this candidate only; never append a
@@ -49,7 +50,7 @@ function prepareAutomaticAssistantConnection({assistant,legacyTool,phone,signup,
    const prefix=INTAKE_POLICY.slice(0,INTAKE_POLICY.indexOf('CURRENT DRAFT CONSENT AND CLARIFICATION:'))
     .replaceAll('permission to save a draft','permission to submit the request');
    const policy=prefix+'CURRENT AUTOMATIC CONSENT AND CLARIFICATION:\n'
-    +'- Ask exactly "Should I send this request to the team now?" after the current recap and explain owner/caller texts. An earlier yes never approves changed details.\n'
+    +confirmationConversationPolicy('automatic')+'\n'
     +'- A refusal or correction before submission blocks execution until fresh corrected readback and clear approval.\n'
     +'- Invoke the automatic tool once. Unknown outcomes require receipt inspection, never retries.\n'
     +'- Distinguish requestSaved, accepted, not sent and unknown from verified delivery. Do not claim completion when the tool reports failure. No manual operator approval is required.\n'+intakeEnd;
