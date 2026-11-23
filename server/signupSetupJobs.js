@@ -2,6 +2,17 @@ const crypto = require('node:crypto');
 const PREFIX = 'signup-setup-job:v1:';
 const LEASE_MS = 120000;
 const fail = code => Object.assign(new Error(code), { code });
+// This is control-flow proof, not a flag a provider response can supply. Only
+// handoff() can attest that this error preceded dispatch admission.
+const preHandoffDatabaseRetries = new WeakSet();
+const transientDatabaseCodes = new Set(['P1001', 'P1002', 'P1008', 'P1017', 'P2024', 'P2028', 'P2034']);
+function isSetupDatabaseError(error) {
+  const provider = String(error?.provider || '').toUpperCase();
+  return (!provider || provider === 'DATABASE') && /^P[12]\d{3}$/.test(String(error?.code || ''));
+}
+function isPreHandoffDatabaseRetry(error) {
+  return preHandoffDatabaseRetries.has(error);
+}
 function jobKey(eventKey) {
   if (!/^signup_[a-f0-9]{32}$/.test(eventKey)) throw fail('SIGNUP_JOB_ID_INVALID');
   return PREFIX + eventKey;
@@ -80,14 +91,20 @@ async function drainSignupSetupJobs({prisma,secret,processJob,onFailure=async()=
         return value;
       },
       async handoff(dispatch,reconcile) {
-        return ctl.memoize('handoff',async()=>{
+        let admissionAttempted = false;
+        try { return await ctl.memoize('handoff',async()=>{
           if(job.phase==='handoff') {
             const recovered=await reconcile();
             if(!recovered)throw fail('SIGNUP_HANDOFF_OUTCOME_UNCERTAIN');
             return recovered;
           }
           try {
-            return await dispatch(async()=>{await change(current=>({...current,phase:'handoff',dispatchStartedAt:now()}));});
+            return await dispatch(async()=>{
+              // Set this BEFORE writing the fence. A lost database commit
+              // acknowledgement is not proof the durable fence was absent.
+              admissionAttempted = true;
+              await change(current=>({...current,phase:'handoff',dispatchStartedAt:now()}));
+            });
           }catch(error){
             if(error.code==='SIGNUP_JOB_LEASE_LOST')throw error;
             if(job.phase==='handoff') {
@@ -96,14 +113,26 @@ async function drainSignupSetupJobs({prisma,secret,processJob,onFailure=async()=
             }
             throw error;
           }
-        });
+        }); } catch (error) {
+          if (error && typeof error === 'object') {
+            preHandoffDatabaseRetries.delete(error);
+            if (!admissionAttempted && job.phase === 'queued' && !job.dispatchStartedAt
+              && isSetupDatabaseError(error) && transientDatabaseCodes.has(error.code)) {
+              preHandoffDatabaseRetries.add(error);
+            }
+          }
+          throw error;
+        }
       },
     };
-    let failure;
-    try {await processJob(job,ctl);}catch(error){failure=error;}
+    let failure, outcome;
+    try {outcome=await processJob(job,ctl);}catch(error){failure=error;}
     clearInterval(timer);await heartbeat;
     if(!lost) {
-      const originalCode=failure?.providerCode||failure?.code||'SIGNUP_JOB_FAILED';
+      // These explicit outcomes have already been persisted/reported by the
+      // application. They are held failures, not success or permission to replay.
+      const held = !failure && (outcome?.state === 'needs_attention' || outcome?.ok === false);
+      const originalCode=failure?.providerCode||failure?.code||outcome?.failureCode||(held?'SIGNUP_SETUP_NEEDS_ATTENTION':'SIGNUP_JOB_FAILED');
       const code=String(originalCode==='SIGNUP_HANDOFF_OUTCOME_UNCERTAIN'&&job.lastErrorCode?job.lastErrorCode:originalCode).replace(/[^A-Z0-9_]/gi,'_').slice(0,100);
       const uncertain=job.phase==='handoff'&&!unseal(job.checkpoints,secret,row.key).handoff;
       // A lost response permits only read-only reconciliation, not another
@@ -111,13 +140,13 @@ async function drainSignupSetupJobs({prisma,secret,processJob,onFailure=async()=
       const exhausted=job.attempts>=(uncertain?10:5);
       try {
         let reportingFailed=false;
-        if(failure)try{await onFailure({job,code,uncertain,exhausted});}catch(_){reportingFailed=true;}
-        await change(current=>({...current,status:failure?(exhausted&&!reportingFailed?'failed':'pending'):'completed',token:null,leaseExpiresAt:0,
-          nextAttemptAt:failure?now()+Math.min(300000,5000*2**(job.attempts-1)):0,lastErrorCode:failure?code:'',completedAt:failure?null:now()}));
+        if(failure)try{await onFailure({job,code,uncertain,exhausted,error:failure});}catch(_){reportingFailed=true;}
+        await change(current=>({...current,status:held?'failed':failure?(exhausted&&!reportingFailed?'failed':'pending'):'completed',token:null,leaseExpiresAt:0,
+          nextAttemptAt:failure?now()+Math.min(300000,5000*2**(job.attempts-1)):0,lastErrorCode:failure||held?code:'',completedAt:failure||held?null:now()}));
       }catch(error){if(error.code!=='SIGNUP_JOB_LEASE_LOST')throw error;}
     }
     processed++;
   }));
   return {processed};
 }
-module.exports={enqueueSignupSetupJob,drainSignupSetupJobs,jobKey,PREFIX};
+module.exports={enqueueSignupSetupJob,drainSignupSetupJobs,jobKey,PREFIX,isSetupDatabaseError,isPreHandoffDatabaseRetry};

@@ -1,0 +1,87 @@
+name: Signup pre-handoff recovery proof
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: signup-prehandoff-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  signup-prehandoff-postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: signup_fixture
+          POSTGRES_PASSWORD: synthetic-ci-only
+          POSTGRES_DB: myaipa_recovery_drill_ci
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      CI: 'true'
+      NODE_ENV: test
+      DISABLE_LOCAL_ENV_FILES: '1'
+      DATABASE_URL: postgresql://signup_fixture:synthetic-ci-only@127.0.0.1:5432/myaipa_recovery_drill_ci?connection_limit=2
+      SIGNUP_RECOVERY_DRILL_DATABASE_URL: postgresql://signup_fixture:synthetic-ci-only@127.0.0.1:5432/myaipa_recovery_drill_ci?connection_limit=2
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.22.3'
+          cache: npm
+      - run: npm ci --include=dev --legacy-peer-deps --ignore-scripts
+      - run: npm run backend:prepare
+      - name: Apply unchanged application schema only to disposable CI PostgreSQL
+        run: npx prisma db push --skip-generate
+      - name: Bind server identity to this execution's exact disposable service container
+        env:
+          SIGNUP_DRILL_SERVICE_CONTAINER_ID: ${{ job.services.postgres.id }}
+        run: |
+          signup_service_ip=$(docker inspect --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$SIGNUP_DRILL_SERVICE_CONTAINER_ID")
+          test -n "$signup_service_ip"
+          echo "SIGNUP_DRILL_SERVICE_CONTAINER_ID=$SIGNUP_DRILL_SERVICE_CONTAINER_ID" >> "$GITHUB_ENV"
+          echo "SIGNUP_DRILL_EXPECTED_SERVER_HOST=$signup_service_ip" >> "$GITHUB_ENV"
+      - name: Refuse unsafe targets and missing container identity
+        run: node --test tests/signup-prehandoff-target.test.js
+      - name: Preserve exact source fingerprints
+        run: |
+          mkdir -p diagnostics/signup-prehandoff-ci
+          git rev-parse HEAD > diagnostics/signup-prehandoff-ci/head.txt
+          sha256sum server/index.js server/signupSetupJobs.js scripts/run-local-signup-postgres-drill.js scripts/run-signup-timing-simulation.js tests/signup-prehandoff-failures.test.js tests/signup-prehandoff-postgres.test.js tests/helpers/signup-prehandoff-postgres-worker.js tests/signup-prehandoff-target.test.js tests/signup-timing-simulation.test.js .github/workflows/signup-prehandoff.yml > diagnostics/signup-prehandoff-ci/source-sha256.txt
+      - name: Native expiry, rollback, retry exhaustion and independent-process duplicate protection
+        env:
+          RUN_SIGNUP_PREHANDOFF_POSTGRES: '1'
+        run: node --test --test-concurrency=1 --test-reporter=tap --test-reporter-destination=diagnostics/signup-prehandoff-ci/postgres.tap tests/signup-prehandoff-postgres.test.js
+      - name: Recovery and diagnostic regressions with no sending
+        run: node --test --test-concurrency=1 --test-reporter=tap --test-reporter-destination=diagnostics/signup-prehandoff-ci/regressions.tap tests/signup-prehandoff-failures.test.js tests/signup-timing-simulation.test.js tests/signup-setup-jobs.test.js tests/signup-status-api.test.js tests/intake-recovery-journal.test.js tests/signup-recovery-hardening.test.js tests/make-signup-webhook.test.js tests/provisioning-state.test.js tests/operational-error-classifier.test.js tests/signup-live-diagnostics.test.js tests/signup-purchase-evidence.test.js
+      - name: Twenty queued fixtures per timing/failure profile with refused external transports
+        run: npm run simulate:signup-timing
+      - name: Refuse missing, skipped or incomplete database proof
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs'), assert = require('node:assert/strict');
+          for (const [file, count] of [['postgres.tap', 5], ['regressions.tap', 151]]) {
+            const text = fs.readFileSync('diagnostics/signup-prehandoff-ci/' + file, 'utf8');
+            assert.match(text, new RegExp('# tests ' + count + '\\r?\\n'));
+            assert.match(text, new RegExp('# pass ' + count + '\\r?\\n'));
+            assert.match(text, /# fail 0\r?\n/); assert.match(text, /# skipped 0\r?\n/);
+            assert.match(text, /# cancelled 0\r?\n/);
+          }
+          NODE
+      - name: Preserve synthetic proof only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: signup-prehandoff-${{ github.event.pull_request.head.sha || github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            diagnostics/signup-prehandoff-ci/
+            diagnostics/signup-timing-simulation-*/report.json
+          if-no-files-found: error
+          retention-days: 14

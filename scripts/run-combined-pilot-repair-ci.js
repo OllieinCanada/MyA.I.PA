@@ -16,10 +16,12 @@ const TESTS={entry:['tests/bounded-mapping-control.integration.cjs','tests/bound
   focused:[...REGRESSIONS,'tests/signup-association-repair.test.js','tests/bounded-mapping-composition.test.js',
     'tests/bounded-mapping-entry-composition.test.js','tests/expanded-release-composition.test.js','tests/combined-pilot-repair-ci.test.js',
     'tests/call-sync-routing.test.js','tests/call-sync-health.test.js','tests/postrelease-verification.test.js','tests/telegram-bot-api.test.js',
-    'tests/call-sync-reporting.test.js','tests/call-sync-accounting.test.js','tests/signup-assistant-failure-evidence.test.js']};
+    'tests/call-sync-reporting.test.js','tests/call-sync-accounting.test.js','tests/signup-assistant-failure-evidence.test.js',
+    'tests/signup-prehandoff-failures.test.js','tests/signup-timing-simulation.test.js','tests/signup-prehandoff-target.test.js']};
 const SOURCES=[...new Set([...Object.keys(provenance.runtimeSha256),...Object.values(TESTS).flat(),
   'server/leadHandoffs.js','server/vapiSms.js','server/vapiInventoryCoverage.js','scripts/recovery-notification-state.js',
   'scripts/prepare-call-sync-simulation-evidence.js',
+  'scripts/run-signup-timing-simulation.js','tests/helpers/twilio-status-memory-db.js','tests/helpers/signup-prehandoff-postgres-worker.js',
   'scripts/audit-vapi-business-mappings.js','scripts/combined-pilot-repair-provenance.json','scripts/run-combined-pilot-repair-ci.js',
   'scripts/compose-bounded-mapping-entry.js','scripts/compose-bounded-mapping-integration.js','scripts/compose-expanded-release.js',
   'scripts/bounded-mapping-entry-pins.json','scripts/bounded-mapping-integration-pins.json','scripts/expanded-release-pins.json',

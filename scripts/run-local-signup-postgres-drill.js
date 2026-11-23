@@ -112,7 +112,17 @@ async function main(){
     }
     const env={...process.env,DATABASE_URL:url,SIGNUP_RECOVERY_DRILL_DATABASE_URL:url,DISABLE_LOCAL_ENV_FILES:'1'};
     console.log('Applying the application schema to the new disposable database.');
-    run(process.execPath,[path.join(ROOT,'node_modules','prisma','build','index.js'),'db','push','--skip-generate'],env);
+    run(process.execPath,[require.resolve('prisma/build/index.js'),'db','push','--skip-generate'],env);
+    if(process.argv.includes('--pre-handoff-only')){
+      console.log('Checking native transaction expiry, bounded signup retries, concurrent restart and uncertain admission.');
+      const evidence=path.join(ROOT,'diagnostics',`signup-prehandoff-postgres-${Date.now()}.tap`);
+      fs.mkdirSync(path.dirname(evidence),{recursive:true});
+      console.log('Preserving the SQL test result at '+path.relative(ROOT,evidence));
+      const result=run(process.execPath,['--test','--test-concurrency=1','--test-reporter=tap',`--test-reporter-destination=${evidence}`,path.join(ROOT,'tests','signup-prehandoff-postgres.test.js')],{
+        ...env,RUN_SIGNUP_PREHANDOFF_POSTGRES:'1',NODE_ENV:'test'});
+      console.log(result.stdout.replaceAll(password,'[redacted]'));
+      return;
+    }
     if(process.argv.includes('--call-persistence-only')){
       console.log('Checking canonical call persistence, contention and transaction expiry against isolated PostgreSQL.');
       const tested=run(process.execPath,['--test','--test-concurrency=1',path.join(ROOT,'tests','database-integration.test.js'),path.join(ROOT,'tests','call-persistence-startup-postgres.test.js'),path.join(ROOT,'tests','call-persistence-budget-postgres.test.js')],{...env,RUN_DATABASE_INTEGRATION:'1'});
