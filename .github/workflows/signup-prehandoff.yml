@@ -40,11 +40,21 @@ jobs:
       - run: npm run backend:prepare
       - name: Apply unchanged application schema only to disposable CI PostgreSQL
         run: npx prisma db push --skip-generate
+      - name: Bind server identity to this execution's exact disposable service container
+        env:
+          SIGNUP_DRILL_SERVICE_CONTAINER_ID: ${{ job.services.postgres.id }}
+        run: |
+          signup_service_ip=$(docker inspect --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$SIGNUP_DRILL_SERVICE_CONTAINER_ID")
+          test -n "$signup_service_ip"
+          echo "SIGNUP_DRILL_SERVICE_CONTAINER_ID=$SIGNUP_DRILL_SERVICE_CONTAINER_ID" >> "$GITHUB_ENV"
+          echo "SIGNUP_DRILL_EXPECTED_SERVER_HOST=$signup_service_ip" >> "$GITHUB_ENV"
+      - name: Refuse unsafe targets and missing container identity
+        run: node --test tests/signup-prehandoff-target.test.js
       - name: Preserve exact source fingerprints
         run: |
           mkdir -p diagnostics/signup-prehandoff-ci
           git rev-parse HEAD > diagnostics/signup-prehandoff-ci/head.txt
-          sha256sum server/index.js server/signupSetupJobs.js scripts/run-local-signup-postgres-drill.js scripts/run-signup-timing-simulation.js tests/signup-prehandoff-failures.test.js tests/signup-prehandoff-postgres.test.js tests/helpers/signup-prehandoff-postgres-worker.js tests/signup-timing-simulation.test.js .github/workflows/signup-prehandoff.yml > diagnostics/signup-prehandoff-ci/source-sha256.txt
+          sha256sum server/index.js server/signupSetupJobs.js scripts/run-local-signup-postgres-drill.js scripts/run-signup-timing-simulation.js tests/signup-prehandoff-failures.test.js tests/signup-prehandoff-postgres.test.js tests/helpers/signup-prehandoff-postgres-worker.js tests/signup-prehandoff-target.test.js tests/signup-timing-simulation.test.js .github/workflows/signup-prehandoff.yml > diagnostics/signup-prehandoff-ci/source-sha256.txt
       - name: Native expiry, rollback, retry exhaustion and independent-process duplicate protection
         env:
           RUN_SIGNUP_PREHANDOFF_POSTGRES: '1'

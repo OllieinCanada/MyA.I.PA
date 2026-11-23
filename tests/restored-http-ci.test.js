@@ -19,7 +19,7 @@ test('partial restored HTTP evidence cannot clear live or full recovery predicat
 });
 test('canonical pinned dependencies are exact; corruption refused',()=>{
  const pins=require('../scripts/restored-http-pins.json'),sha=require('../scripts/composite-recovery-fixture').sha;
- assert.equal(pins.reviewedHead,BASE_HEAD);assert.equal(Object.keys(pins.sha256).length,34);
+ assert.equal(pins.reviewedHead,BASE_HEAD);assert.equal(Object.keys(pins.sha256).length,35);
  for(const file of ['server/serviceIntakePrompt.js','server/confirmationConversationPolicy.js','server/compositeCallNotifications.js'])assert.ok(pins.sha256[file],file);
  for(const file of ['server/signupActivationControl.js','server/signupActivationPreparation.js','server/signupActivationEvidence.js',
   'server/signupActivationSave.js','server/signupActivationPreview.js','server/automaticAssistantConnectionPlan.js'])assert.ok(pins.sha256[file],file);
@@ -47,7 +47,7 @@ test('restored HTTP pins reject tampering with every confirmation prompt depende
  // Local canonical-LF contract only; sealed Linux CI verifies raw checkout bytes.
  const read=file=>Buffer.from(fs.readFileSync(path.join(__dirname,'..',file),'utf8').replace(/\r\n/g,'\n'));
  assert.equal(verifyPins(read),true);
- for(const file of ['server/automaticAssistantConnectionPlan.js','server/compositeCallNotifications.js',
+ for(const file of ['server/signupSetupJobs.js','server/automaticAssistantConnectionPlan.js','server/compositeCallNotifications.js',
   'server/serviceIntakePrompt.js','server/confirmationConversationPolicy.js']){
   assert.throws(()=>verifyPins(p=>p===file?Buffer.from('unreviewed prompt change'):read(p)),/DEPENDENCY_BYTES_CHANGED/);
  }

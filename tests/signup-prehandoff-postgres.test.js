@@ -4,7 +4,7 @@ const crypto = require('node:crypto');
 const path = require('node:path');
 const { fork } = require('node:child_process');
 const jobs = require('../server/signupSetupJobs');
-const { client, actualSetup, classifier, recordDispatch, expireTransaction, secret } = require('./helpers/signup-prehandoff-postgres-worker');
+const { client, expectedServerHost, actualSetup, classifier, recordDispatch, expireTransaction, secret } = require('./helpers/signup-prehandoff-postgres-worker');
 const enabled = process.env.RUN_SIGNUP_PREHANDOFF_POSTGRES === '1';
 
 async function fixture(t) {
@@ -24,7 +24,7 @@ async function fixture(t) {
     current_setting('server_version') AS version`;
   const expected = new URL(url);
   assert.equal(identity.database, expected.pathname.slice(1));
-  assert.equal(identity.host, '127.0.0.1'); assert.equal(identity.port, Number(expected.port));
+  assert.equal(identity.host, expectedServerHost()); assert.equal(identity.port, Number(expected.port));
   assert.match(identity.version, /^18\./);
   t.diagnostic('Verified real loopback PostgreSQL ' + identity.version + ' and exact disposable database identity');
   const eventKey = 'signup_' + crypto.randomBytes(16).toString('hex');

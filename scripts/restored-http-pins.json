@@ -1,4 +1,9 @@
 {
+  "signupPreparationRetryContinuation": {
+    "baseRelease": "ae341bbdca71f45dc398fd3c97f886c51d7cb00f",
+    "previousIndexSha256": "13c03544c2946e1129392bd7e421bf781d8a06b8617a1e2d6df63471487662d3",
+    "scope": "Pin candidate pre-handoff retry/reporting index and worker bytes for fresh sealed restored HTTP/SQL validation; no live recovery, activation or sending proof."
+  },
   "standaloneConfirmationContinuation": {
     "baseRelease": "f24d3798097f946d0797231d88d63d65dcc67196",
     "scope": "Pin the updated prompt candidate and its shared dependencies for fresh sealed synthetic HTTP/SQL validation; no live recovery or assistant migration proof."
@@ -13,7 +18,8 @@
   "sha256": {
     "scripts/run-composite-recovery-ci.js": "9a3c2069cb268c25d8add52cbf4884d076cca9a7f4e8db55b9d4ee3d60d4c4ae",
     "scripts/composite-recovery-fixture.js": "46085044ab3ef3df77401c0c7f954691206ea52d5d71893a5f7ed1f02cd1d4e7",
-    "server/index.js": "13c03544c2946e1129392bd7e421bf781d8a06b8617a1e2d6df63471487662d3",
+    "server/index.js": "8135da04bee792f8a0928207bcd09ea5b6a19709991dd3a36d21ee6d89802b35",
+    "server/signupSetupJobs.js": "9f5a51124b9481f271af107629fcbce76f2d6b11f7d063e25712f62b09472236",
     "server/signupActivationControl.js": "858d2dd3eb13a380f7583a00d9bf450f794869e10f38a960a6ef4fdd6c3246f0",
     "server/signupActivationPreparation.js": "17d495125a32fb598d7ae1d334e9431743bda9ddc5bbae3ac27df967be1a7d30",
     "server/signupActivationEvidence.js": "683b139dce181d72507f62225990d8fe04ca11250e0b94517c24a07e39913478",

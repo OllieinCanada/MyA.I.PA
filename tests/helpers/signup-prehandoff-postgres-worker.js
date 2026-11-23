@@ -14,6 +14,16 @@ function validateTarget(value) {
   assert.ok(Number(url.port) > 0);
   return url.toString();
 }
+function expectedServerHost(env = process.env) {
+  if (env.CI === 'true' && env.GITHUB_ACTIONS === 'true') {
+    assert.match(env.SIGNUP_DRILL_SERVICE_CONTAINER_ID || '', /^[a-f0-9]{12,64}$/);
+    assert.equal(require('node:net').isIP(env.SIGNUP_DRILL_EXPECTED_SERVER_HOST || ''), 4);
+    return env.SIGNUP_DRILL_EXPECTED_SERVER_HOST;
+  }
+  assert.ok(!env.SIGNUP_DRILL_SERVICE_CONTAINER_ID && !env.SIGNUP_DRILL_EXPECTED_SERVER_HOST,
+    'Container address overrides are only accepted in the disposable GitHub service job');
+  return '127.0.0.1';
+}
 function client(url) {
   return new PrismaClient({ datasources: { db: { url: validateTarget(url) } },
     __internal: { configOverride: c => ({ ...c, relativeEnvPaths: {} }) } });
@@ -86,4 +96,4 @@ async function main() {
   } finally { global.fetch = originalFetch; await prisma.$disconnect(); }
 }
 if (require.main === module) main().catch(() => { console.error('Isolated PostgreSQL worker failed'); process.exitCode = 1; });
-module.exports = { client, validateTarget, actualSetup, classifier, recordDispatch, expireTransaction, secret };
+module.exports = { client, validateTarget, expectedServerHost, actualSetup, classifier, recordDispatch, expireTransaction, secret };
