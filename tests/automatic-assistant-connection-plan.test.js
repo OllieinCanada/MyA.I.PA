@@ -36,6 +36,26 @@ test('automatic candidate uses standalone send consent and one safe clarificatio
 test('unknown manual instructions outside managed blocks require review instead of a contradictory candidate',()=>{const f=fixture();f.assistant.model.messages[0].content+='\nShould I save this request for review?';assert.throws(()=>prepare(f),/PROMPT_REVIEW_REQUIRED/);});
 test('a modified managed intake block is not silently rewritten',()=>{const f=fixture();f.assistant.model.messages[0].content+='\n'+INTAKE_POLICY.replace('CURRENT DRAFT CONSENT','CHANGED DRAFT CONSENT');assert.throws(()=>prepare(f),/PROMPT_REVIEW_REQUIRED/);});
 
+test('actual generated acknowledgement survives automatic preparation without changing submission authorization',()=>{
+ const {buildSignupAssistantConfig}=require('../server/signupAssistantTemplate');
+ const {updateMessages}=require('../server/vapiIsolatedSmsProvisioning');
+ const {CONSENT_POLICY}=require('../server/signupSpeechPolicy');
+ const f=fixture();
+ const config=buildSignupAssistantConfig({business:{name:'Invented Electric'},owner:{phone:f.signup.ownerPhone},
+  aiAssistant:{businessType:'Electrical contractor',serviceArea:'Fixture Town'}},{assignedPhone:f.phone.number});
+ f.assistant.model.messages=updateMessages(config.model.messages,f.legacyTool.function.name);
+ const before=JSON.stringify(f),p=prepare(f),prompt=p.assistantPatch.model.messages[0].content;
+ assert.equal(JSON.stringify(f),before);
+ assert.equal(prompt.split(CONSENT_POLICY).length,2);
+ assert.match(prompt,/Only if the caller's request type is still unclear, briefly acknowledge/);
+ assert.doesNotMatch(prompt,/After the recording notice, say exactly:|Should I save this request for review\?/);
+ assert.match(prompt,/ask exactly: "Should I send this request to the team now\?"/);
+ assert.match(prompt,/An earlier yes never approves changed details/);
+ assert.match(prompt,/Unknown outcomes require receipt inspection, never retries/);
+ assert.match(prompt,/Never ask for manual operator approval/);
+ assert.equal(p.applyAllowed,false);assert.equal(p.liveTestAllowed,false);
+});
+
 function protectedFixture(){const f=fixture();f.signup.subscriptionStatus='active';f.signup.subscriptionId='fake-subscription';
  f.gate={status:'active',businessId:7,assistantId:f.assistant.id,phoneNumberId:f.phone.id,phoneNumber:f.phone.number,subscriptionId:f.signup.subscriptionId,assistantSnapshot:structuredClone(f.assistant)};
  f.phone.assistantId=null;f.gateWebhookUrl='https://fixture.test/api/webhooks/voice';f.phone.server={url:f.gateWebhookUrl};f.webhookVerified=true;return f;}

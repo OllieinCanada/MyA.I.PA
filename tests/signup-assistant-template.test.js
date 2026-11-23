@@ -105,6 +105,20 @@ test("uses a caller-supplied resource name without changing the voice stack", ()
   assert.equal(config.transcriber.model, "nova-3");
 });
 
+test("routing and field questions are conditional instead of restarting an already answered checklist", () => {
+  const config = buildSignupAssistantConfig(normalizedPayload, { assignedPhone: '+12895550123' });
+  const prompt = config.model.messages[0].content;
+  assert.match(prompt, /Only if the caller's request type is still unclear, briefly acknowledge/);
+  assert.match(prompt, /If the caller already included the request type, do not ask the routing question again/);
+  assert.match(prompt, /Use one routing clarification, not both/);
+  assert.match(prompt, /Only if the work location is needed and missing, ask exactly/);
+  assert.match(prompt, /Only if relevant start timing is missing, ask exactly/);
+  assert.doesNotMatch(prompt, /After the recording notice, say exactly:|Only then say exactly:|How are you today/);
+  assert.match(prompt, /ask exactly: "Would you like to continue\?" Stop and wait/);
+  assert.match(prompt, /If corrected, update the same request, read back the corrected details and ask permission again/);
+  assert.match(prompt, /Should I save this request for review\?/);
+});
+
 test("accepts the canonical business, owner, and aiAssistant payload shape", () => {
   const config = buildSignupAssistantConfig({
     business: { name: "Canonical Electric" },
