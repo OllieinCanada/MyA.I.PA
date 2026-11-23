@@ -30,7 +30,7 @@ const { signupReviewPolicy } = require("./signupReviewPolicy");
 const { buildSignupProgress } = require("./signupProgress");
 const { resolveSignupResume, resumedSignupStatus } = require("./signupResume");
 const { readMakeSignupHandoff } = require("./makeSignupHandoff");
-const { enqueueSignupSetupJob, drainSignupSetupJobs } = require("./signupSetupJobs");
+const { enqueueSignupSetupJob, drainSignupSetupJobs, isSetupDatabaseError, isPreHandoffDatabaseRetry } = require("./signupSetupJobs");
 const { buildTwilioImportRequest } = require('./vapiTwilioImportRequest');
 const { providerFailureDetail } = require("./providerFailureDetail");
 const { TOOL_NAME: STAGING_INTAKE_TOOL, handleStagingIntakeTool } = require('./stagingIntake');
@@ -5549,9 +5549,10 @@ function makeFailureRecordFields(value) {
 }
 
 function makeFailureFromError(error, failedStage = "MAKE_WEBHOOK") {
+  const database = isSetupDatabaseError(error);
   return sanitizeMakeFailureEnvelope({
-    failedStage: error?.failedStage || failedStage,
-    provider: error?.provider || "make",
+    failedStage: error?.failedStage || (database ? "DATABASE_IDEMPOTENCY" : failedStage),
+    provider: error?.provider || (database ? "DATABASE" : "make"),
     providerStatus: Number(error?.upstreamStatus || error?.providerStatus || error?.statusCode || 0),
     providerCode: error?.providerCode || error?.code || "MAKE_SIGNUP_FAILED",
   });
@@ -15917,7 +15918,7 @@ async function processVerifiedSignupJobs({ force = false } = {}) {
       assertSignupOpen(attempt || {});
       return processVerifiedSignupSetup({ record, tokenHash: job.tokenHash, verificationChannel: job.channel, job }, ctl);
     },
-    onFailure: async ({ job, code, uncertain, exhausted }) => {
+    onFailure: async ({ job, code, uncertain, exhausted, error }) => {
       const bug=await safelyRecordSignupBug({prisma,listSignups:listSignupDashboardRecords,
         attemptId:job.eventKey,stage:'worker',source:'worker',error:{code},release:process.env.RENDER_GIT_COMMIT||''});
       if(!bug.recorded)console.warn('[bug-history] worker capture unconfirmed; no capture retry');
@@ -15940,7 +15941,8 @@ async function processVerifiedSignupJobs({ force = false } = {}) {
       }
       await updateSignupAttempt(attempt.payload, { status: "setup_error", stage: "needs_attention", reviewRequired: true, lastErrorCode: code });
       const record = upsertSignupDashboardFromPayload(attempt.payload, { status: "setup_error", reviewRequired: true,
-        makeError: code, identityVerified: true, smsVerified: Boolean(attempt.payload?.verification?.smsVerified), emailVerified: Boolean(attempt.payload?.verification?.emailVerified) });
+        makeError: code, ...makeFailureRecordFields(makeFailureFromError(error || { code })),
+        identityVerified: true, smsVerified: Boolean(attempt.payload?.verification?.smsVerified), emailVerified: Boolean(attempt.payload?.verification?.emailVerified) });
       await safelyNotifySignupOperations(attempt.payload, { state: "provisioning_failed", record,
         reasonCode: code, detail: "The saved signup job could not finish. Its resources must be reconciled before retrying." });
     },
@@ -16015,7 +16017,7 @@ async function processVerifiedSignupSetup({ record, tokenHash, verificationChann
         reviewReasons: record.reviewReasons,
         emailHash: hashKey(record.ownerEmail),
       });
-      return { state: "needs_attention" };
+      return { state: "needs_attention", failureCode: "SIGNUP_REVIEW_REQUIRED" };
     }
 
     let makeResult;
@@ -16027,6 +16029,10 @@ async function processVerifiedSignupSetup({ record, tokenHash, verificationChann
     } catch (error) {
       if (error.code === "SIGNUP_JOB_LEASE_LOST") throw error;
       if (error.signupHandoffUncertain || error.code === "SIGNUP_HANDOFF_OUTCOME_UNCERTAIN") throw error;
+      // The worker alone proves this transient database error happened before
+      // dispatch admission. Its existing budget/backoff may retry preparation;
+      // uncertain or completed provider actions never gain that permission.
+      if (isPreHandoffDatabaseRetry(error)) throw error;
       const providerFailure = makeFailureFromError(error);
       await retainPendingSignupRecoveryPayload({ tokenHash, record, payload, reviewReasons: ["provisioning_unreachable"] });
       const failedRecord = upsertSignupDashboardFromPayload(payload, {
@@ -16056,7 +16062,7 @@ async function processVerifiedSignupSetup({ record, tokenHash, verificationChann
       if (telegramAlert?.sent || telegramAlert?.queued || telegramAlert?.duplicate || telegramAlert?.reason === "already_alerted") {
         error.telegramIncidentHandled = true;
       }
-      return { state: "needs_attention" };
+      return { state: "needs_attention", failureCode: providerFailure.providerCode || "MAKE_SIGNUP_FAILED" };
     }
     if (makeResult.existingSignup) return { state: "existing_setup_resumed" };
     const makeData = makeResult.data || {};
@@ -16101,7 +16107,7 @@ async function processVerifiedSignupSetup({ record, tokenHash, verificationChann
         providerCode: makeAssessment.providerCode || makeAssessment.code || "MAKE_SIGNUP_INCOMPLETE",
         emailHash: hashKey(record.ownerEmail),
       });
-      return { state: "needs_attention" };
+      return { state: "needs_attention", failureCode: makeAssessment.providerCode || makeAssessment.code || "MAKE_SIGNUP_INCOMPLETE" };
     }
 
     const phoneProvisioning = await inspectSignupPhoneProvisioning(makeData, makeResult.body);
@@ -16208,6 +16214,7 @@ async function processVerifiedSignupSetup({ record, tokenHash, verificationChann
     // Continue action, not an automatic redirect that bypasses this screen.
     return {
       ok: phoneProvisioning.status === "ready",
+      ...(phoneProvisioning.status === "ready" ? {} : { failureCode: phoneProvisioning.code || "PHONE_PROVISIONING_NOT_READY" }),
       title: phoneProvisioning.status === "ready" ? "Your setup is ready" : "Contact verified, number setup needs attention",
       body: phoneProvisioning.status === "ready"
         ? `Your contact details are verified. Your assigned number is ready to test${completionDelivery?.status === "failed" ? ", but we could not deliver the separate follow-up message" : ""}.`
