@@ -15,7 +15,9 @@
 .signup-senior .signup-task-content>p,.signup-senior .signup-mobile-task-heading>p,.signup-senior .signup-number-box{font-size:1.125rem}
 .signup-senior .signup-mobile-action-bar button,.signup-senior .signup-inline-actions button,.signup-senior .signup-desktop-action-footer button{min-height:3rem;font-size:1rem}
 .signup-senior .signup-mobile-progress [class],.signup-senior .signup-desktop-tabs button,.signup-senior .signup-desktop-tabs button>span{font-size:1rem;line-height:1.5}
-.signup-senior .signup-mobile-action-bar,.signup-senior .signup-inline-actions{grid-template-columns:repeat(auto-fit,minmax(min(100%,9rem),1fr));overflow-wrap:anywhere}
+.signup-senior .signup-mobile-action-bar{grid-template-columns:repeat(auto-fit,minmax(min(100%,9rem),1fr));overflow-wrap:anywhere}
+.signup-senior #signup-business-details .signup-inline-actions{width:100%;max-width:44rem;justify-self:center;grid-template-columns:repeat(auto-fit,minmax(min(100%,18rem),1fr));align-items:stretch}
+.signup-senior #signup-business-details .signup-inline-actions>button{margin-top:0;align-self:stretch}
 .signup-senior .signup-mobile-action-bar.is-first-step{grid-template-columns:1fr}
 .signup-senior .signup-mobile-primary{white-space:normal;word-break:normal;overflow-wrap:normal}
 .signup-senior .signup-visible-progress .signup-mobile-progress-copy{flex-wrap:wrap;align-items:flex-start}
