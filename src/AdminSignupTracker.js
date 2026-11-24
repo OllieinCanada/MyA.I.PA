@@ -7,7 +7,7 @@ import ProviderMaintenance from './ProviderMaintenance';
 import useSavedEvidence from './useSavedEvidence';
 import SavedEvidenceStatus from './SavedEvidenceStatus';
 import SignupNowOverview from './SignupNowOverview';
-import { signupNowEntries, draftLabel, SORT_OPTIONS, DATE_OPTIONS } from './features/admin/signupNowModel';
+import { signupNowEntries, draftLabel, SORT_OPTIONS, DATE_OPTIONS, QUICK_VIEWS, quickSignupView } from './features/admin/signupNowModel';
 const validTracker = body => body?.ok === true && Array.isArray(body.rows);
 
 const FIELDS = { serviceSummary: ['Services', 400], serviceArea: ['Service area', 160], businessWebsite: ['Business website', 300], businessAddress: ['Business address', 400], specializationNotes: ['Business notes', 2000] };
@@ -25,6 +25,7 @@ export default function AdminSignupTracker({ apiBase = '' }) {
   const {data,setData,busy,state,load,pause,resume} = useSavedEvidence({url:apiBase+'/api/admin/signup-tracker',validate:validTracker});
   const [filter, setFilter] = useState('watching'), [search, setSearch] = useState(''), [expanded, setExpanded] = useState(''), [draftExpanded, setDraftExpanded] = useState('');
   const [sort, setSort] = useState('newest'), [dateRange, setDateRange] = useState('all');
+  const [quickView, setQuickView] = useState(null);
   const [focused, setFocused] = useState('');
   const [editor, setEditor] = useState(null), [saving, setSaving] = useState(false), [saveError, setSaveError] = useState(''), [message, setMessage] = useState('');
   const writing = useRef(null), editorSection = useRef(null);
@@ -32,7 +33,8 @@ export default function AdminSignupTracker({ apiBase = '' }) {
   const entries = useMemo(() => signupNowEntries(data, Date.now(), { filter, search, sort, dateRange }), [data, filter, search, sort, dateRange]);
   const rows = entries.filter(entry => entry.row).map(entry => entry.row);
   const draftRows = entries.filter(entry => entry.draft).map(entry => entry.draft);
-  const inspectSignup = attempt => { setFilter('all'); setSearch(''); setDateRange('all'); setFocused(attempt); requestAnimationFrame(()=>document.getElementById('saved-signup-'+attempt)?.scrollIntoView({block:'start'})); };
+  const chooseQuickView = id => { const view=quickSignupView(id,{sort}); if(!view)return; setSearch(view.search);setFilter(view.filter);setSort(view.sort);setDateRange(view.dateRange);setQuickView(id); };
+  const inspectSignup = attempt => { setQuickView(null);setFilter('all'); setSearch(''); setDateRange('all'); setFocused(attempt); requestAnimationFrame(()=>document.getElementById('saved-signup-'+attempt)?.scrollIntoView({block:'start'})); };
   const openEditor = row => { setEditor({ attemptId: row.attemptId, businessName: row.businessName, expectedRevision: row.infoRevision, details: { ...row.info } }); setSaveError(''); setMessage(''); };
   useEffect(() => { if (editor?.attemptId) { editorSection.current?.focus({ preventScroll: true }); editorSection.current?.scrollIntoView({ block: 'start' }); } }, [editor?.attemptId]);
   const save = async event => {
@@ -59,15 +61,16 @@ export default function AdminSignupTracker({ apiBase = '' }) {
       <div className="signup-tracker-refresh"><button type="button" disabled={busy} onClick={load}>{busy ? 'Checking…' : 'Refresh signups'}</button><small>Last checked {time(data?.generatedAt)}</small></div>
     </header>
     <SavedEvidenceStatus state={state}/>
+    <div className="signup-tracker-quick-views" role="group" aria-label="Quick signup views">{QUICK_VIEWS.map(([id,label])=><button type="button" key={id} aria-pressed={quickView===id} onClick={()=>chooseQuickView(id)}>{label}</button>)}</div>
     <div className="signup-tracker-toolbar" role="group" aria-label="Find and sort signups">
-      <label>Search signups<input type="search" value={search} placeholder="Business, owner, visitor ID or setup step" onChange={e => setSearch(e.target.value)} /></label>
-      <label>Show<select aria-label="Show signups" value={filter} onChange={e => setFilter(e.target.value)}><option value="watching">Active setup + recently ready</option><option value="active">Active setup</option><option value="stalled">Needs attention</option><option value="waiting_customer">Waiting for customer</option><option value="ready">Ready</option><option value="paused">Paused</option><option value="all">All records</option></select></label>
-      <label>Sort by<select aria-label="Sort signups" value={sort} onChange={e => setSort(e.target.value)}>{SORT_OPTIONS.map(([id,label])=><option key={id} value={id}>{label}</option>)}</select></label>
-      <label>Started<select aria-label="Signup start date" value={dateRange} onChange={e => setDateRange(e.target.value)}>{DATE_OPTIONS.map(([id,label])=><option key={id} value={id}>{label}</option>)}</select></label>
+      <label>Search signups<input type="search" value={search} placeholder="Business, owner, visitor ID or setup step" onChange={e => {setQuickView(null);setSearch(e.target.value);}} /></label>
+      <label>Show<select aria-label="Show signups" value={filter} onChange={e => {setQuickView(null);setFilter(e.target.value);}}><option value="watching">Active setup + recently ready</option><option value="active">Active setup</option><option value="stalled">Needs attention</option><option value="waiting_customer">Waiting for customer</option><option value="ready">Ready</option><option value="paused">Paused</option><option value="all">All records</option></select></label>
+      <label>Sort by<select aria-label="Sort signups" value={sort} onChange={e => {setQuickView(null);setSort(e.target.value);}}>{SORT_OPTIONS.map(([id,label])=><option key={id} value={id}>{label}</option>)}</select></label>
+      <label>Started<select aria-label="Signup start date" value={dateRange} onChange={e => {setQuickView(null);setDateRange(e.target.value);}}>{DATE_OPTIONS.map(([id,label])=><option key={id} value={id}>{label}</option>)}</select></label>
     </div>
-    <div className="signup-tracker-view-summary"><p role="status">Showing {rows.length} {rows.length === 1 ? 'signup' : 'signups'} · {draftRows.length} {draftRows.length === 1 ? 'draft' : 'drafts'}</p><button type="button" onClick={()=>{setFilter('watching');setSearch('');setSort('newest');setDateRange('all');}}>Reset view</button></div>
+    <div className="signup-tracker-view-summary"><p role="status">Showing {rows.length} {rows.length === 1 ? 'signup' : 'signups'} · {draftRows.length} {draftRows.length === 1 ? 'draft' : 'drafts'}</p><button type="button" onClick={()=>{setQuickView(null);setFilter('watching');setSearch('');setSort('newest');setDateRange('all');}}>Reset view</button></div>
     <p className="signup-tracker-view-help">Newest first uses the original start, not the latest refresh. Latest progress uses recorded progress only. Unknown dates sort last and are excluded from date ranges. Active setup + recently ready includes all active setups and accounts ready in the last 24 hours. Filters cover loaded records only.</p>
-    <SignupNowOverview data={data} entries={entries} onInspectSignup={inspectSignup}/>
+    <SignupNowOverview data={data} entries={entries} evidenceState={state} onInspectSignup={inspectSignup}/>
     {message ? <p role="status" className="signup-tracker-saved">{message}</p> : null}
     <details className="signup-tracker-totals"><summary>More setup totals</summary><div className="signup-tracker-kpis">
       {[['Active setup', data?.summary?.active, 'People still onboarding'], ['Needs attention', data?.summary?.stalled, '10+ minutes with no progress'], ['Waiting on customer', data?.summary?.waitingCustomer, 'Verification still needed'], ['Setup ready', data?.summary?.ready, 'No stuck-signup alerts']].map(([label, value, note]) => <div key={label}><span>{label}</span><strong>{value ?? '—'}</strong><small>{note}</small></div>)}

@@ -92,3 +92,21 @@ test('unknown view options fall back safely and ties remain deterministic across
  assert.deepEqual(ids(a),['signup:a','signup:b']);
  assert.deepEqual(ids(signupNowEntries({rows:[...rows].reverse()},now)),ids(a));
 });
+test('quick views explicitly clear hidden search/status/date exclusions and retain the intended sort only',()=>{
+ const {quickSignupView}=require('../src/features/admin/signupNowModel');
+ const current={search:'hidden old search',filter:'ready',dateRange:'7d',sort:'name'};
+ assert.deepEqual(quickSignupView('newest',current),{search:'',filter:'all',dateRange:'all',sort:'newest'});
+ assert.deepEqual(quickSignupView('today',current),{search:'',filter:'all',dateRange:'today',sort:'newest'});
+ assert.deepEqual(quickSignupView('attention',current),{search:'',filter:'stalled',dateRange:'all',sort:'stuck'});
+ assert.deepEqual(quickSignupView('all',current),{search:'',filter:'all',dateRange:'all',sort:'name'});
+ assert.deepEqual(current,{search:'hidden old search',filter:'ready',dateRange:'7d',sort:'name'});
+ assert.equal(quickSignupView('unexpected',current),null);
+ assert.equal(quickSignupView('all',{sort:'unexpected'}).sort,'newest');
+});
+test('quick-view integration never calls unknown dates Today or hides the newest signup behind an old search',()=>{
+ const {quickSignupView}=require('../src/features/admin/signupNowModel');
+ const data={rows:[saved('new'),saved('unknown',{signedUpAt:null}),saved('older',{signedUpAt:new Date(now-3*24*hour).toISOString(),stalled:true,elapsedMs:3*24*hour})]};
+ assert.deepEqual(ids(signupNowEntries(data,now,quickSignupView('newest',{search:'older',filter:'paused'}))),['signup:new','signup:older','signup:unknown']);
+ assert.deepEqual(ids(signupNowEntries(data,now,quickSignupView('today'))),['signup:new']);
+ assert.deepEqual(ids(signupNowEntries(data,now,quickSignupView('attention'))),['signup:older']);
+});

@@ -104,3 +104,57 @@ test('search/status/date filters include anonymous drafts honestly, expose empty
  expect(container.querySelectorAll('.signup-tracker-row')).toHaveLength(0);expect(container.querySelectorAll('.signup-now-visitors button')).toHaveLength(1);
  expect(global.fetch.mock.calls.every(([,init])=>!init?.method||init.method==='GET')).toBe(true);
 });
+
+test('quick view buttons reset the actual toolbar and overview without any writes or diagnostic calls',async()=>{
+ const at=Date.now();
+ const rows=[{attemptId:'old',businessName:'Older Fixture',active:true,stalled:true,mode:'working',currentStep:'Assigning number',signedUpAt:new Date(at-3*86400000).toISOString(),elapsedMs:3*86400000,steps:[],info:{}},
+ {attemptId:'recent',businessName:'Recent Fixture',active:true,mode:'working',currentStep:'Assigning number',signedUpAt:new Date(at-1000).toISOString(),steps:[],info:{}}];
+ global.fetch=jest.fn(async url=>({ok:true,status:200,json:async()=>url.endsWith('/signup-tracker')?{ok:true,rows,summary:{},formObservations:{rows:[],coverage:{}}}:url.endsWith('/provider-status')?{readOnly:true,providers:[],history:[]}:{readOnly:true,events:[],groups:[]}}));
+ await act(async()=>{root.render(<AdminSignupTracker/>);await flush();});
+ const select=async(label,value)=>{await act(async()=>{const el=container.querySelector('[aria-label="'+label+'"]');el.value=value;el.dispatchEvent(new Event('change',{bubbles:true}));await flush();});};
+ const quick=async label=>{await act(async()=>{[...container.querySelectorAll('[aria-label="Quick signup views"] button')].find(b=>b.textContent===label).click();await flush();});};
+ await select('Show signups','ready');await select('Signup start date','7d');await select('Sort signups','name');
+ await quick('Newest');expect(container.querySelector('[aria-label="Show signups"]').value).toBe('all');expect(container.querySelector('[aria-label="Signup start date"]').value).toBe('all');expect(container.querySelector('[aria-label="Sort signups"]').value).toBe('newest');
+ expect(container.querySelector('.signup-now-visitors strong').textContent).toBe('Recent Fixture');
+ await quick('Needs attention');expect(container.querySelector('[aria-label="Sort signups"]').value).toBe('stuck');expect(container.querySelectorAll('.signup-tracker-row')).toHaveLength(1);
+ await quick('Today');expect(container.querySelectorAll('.signup-tracker-row')).toHaveLength(1);expect(container.querySelector('.signup-tracker-business h3').textContent).toBe('Recent Fixture');
+ await select('Sort signups','oldest');await quick('All');expect(container.querySelector('[aria-label="Sort signups"]').value).toBe('oldest');expect(container.querySelectorAll('.signup-tracker-row')).toHaveLength(2);
+ expect(global.fetch.mock.calls.every(([,init])=>init.method==='GET')).toBe(true);expect(global.fetch.mock.calls.some(([url])=>url.endsWith('/setup'))).toBe(false);
+});
+
+test('pinned selected-signup summary preserves last-known evidence on read failure and never invents a cause',async()=>{
+ const row={attemptId:'saved',businessName:'Synthetic Selected',active:true,mode:'working',currentStep:'Assigning number',nextAction:'Inspect saved receipts before retrying.',signedUpAt:new Date().toISOString(),setup:null};
+ const body={ok:true,rows:[row],formObservations:{rows:[],coverage:{}}};
+ await act(async()=>{root.render(<SignupNowOverview data={body} evidenceState={{phase:'connected',lastSuccessAt:Date.now()}}/>);await flush();});
+ let summary=container.querySelector('[aria-label="Signup status summary"]');expect(summary.textContent).toContain('Assigning number');expect(summary.textContent).toContain('No exact technical failure cause');expect(summary.textContent).not.toContain('Database transaction expired');
+ await act(async()=>{root.render(<SignupNowOverview data={body} evidenceState={{phase:'retrying',lastSuccessAt:Date.now()-10000,reason:{code:'server'}}}/>);await flush();});
+ summary=container.querySelector('[aria-label="Signup status summary"]');expect(summary.textContent).toContain('Last-known recorded reason');expect(summary.textContent).toContain('last-known information');expect(summary.textContent).toContain(row.nextAction);expect(summary.querySelector('button')).toBeNull();
+ await act(async()=>{root.render(<SignupNowOverview data={{...body,rows:[{...row,mode:'waiting_customer',currentStep:'Waiting for phone verification'}]}}/>);await flush();});
+ expect(container.querySelector('[aria-label="Signup status summary"]').textContent).toContain('not proof of a technical failure');
+});
+
+test('saved stage lights require backend verification and keep selected inspection separate from current workflow',async()=>{
+ const groups=[{id:'number',checks:[{id:'one',label:'Saved policy',state:'verified'}]},{id:'assistant',checks:[{id:'two',label:'Script observation',state:'observed'}]}];
+ const row={attemptId:'saved',businessName:'Synthetic Lights',active:true,mode:'working',currentStep:'Checking assistant',steps:[{key:'assistant',status:'current'}],signedUpAt:new Date().toISOString(),setup:{groups}};
+ await act(async()=>{root.render(<SignupNowOverview data={{ok:true,rows:[row],formObservations:{rows:[]}}}/>);await flush();});
+ const buttons=container.querySelectorAll('.signup-now-stages button');expect(buttons[0].classList.contains('is-verified')).toBe(true);expect(buttons[1].classList.contains('is-pending')).toBe(true);expect(buttons[1].getAttribute('aria-current')).toBe('step');
+ act(()=>buttons[0].click());expect(buttons[0].getAttribute('aria-expanded')).toBe('true');expect(buttons[0].getAttribute('aria-current')).toBeNull();expect(buttons[1].getAttribute('aria-current')).toBe('step');expect(document.getElementById(buttons[1].getAttribute('aria-describedby')).textContent).toBe('Not verified');
+});
+
+test('partial and malformed saved groups remain readable and unverified instead of crashing or turning green',async()=>{
+ for(const checks of [undefined,{},[null],[{id:'one',label:'Known check',state:'verified'},null]]){
+  const row={attemptId:'partial',businessName:'Partial Fixture',active:true,mode:'working',currentStep:'Evidence incomplete',signedUpAt:new Date().toISOString(),setup:{groups:[{id:'number',title:'Number',checks}]}};
+  await act(async()=>{root.render(<SignupNowOverview data={{rows:[row]}}/>);await flush();});
+  const button=container.querySelector('.signup-now-stages button');expect(button.classList.contains('is-verified')).toBe(false);expect(button.textContent).toContain('Not verified');
+  act(()=>button.click());expect(container.textContent).not.toContain('Backend verified');
+ }
+});
+test('partial or reordered backend groups keep their canonical station labels, never array-position guesses',async()=>{
+ for(const groups of [[{id:'assistant',title:'Assistant setup'}],[{id:'activation',title:'Trial setup'},{id:'number',title:'Number setup'}]]){
+  const row={attemptId:'partial',businessName:'Reordered Fixture',active:true,mode:'working',currentStep:'Checking saved evidence',signedUpAt:new Date().toISOString(),setup:{groups}};
+  await act(async()=>{root.render(<SignupNowOverview data={{rows:[row]}}/>);await flush();});
+  const buttons=[...container.querySelectorAll('.signup-now-stages button')];
+  expect(buttons.map(button=>button.getAttribute('aria-label'))).toEqual(groups.map(group=>'Inspect '+({number:'Number',assistant:'Agent',texts:'Texts',activation:'Trial'})[group.id]+' saved checks'));
+  expect(buttons.every(button=>!button.classList.contains('is-verified'))).toBe(true);
+ }
+});

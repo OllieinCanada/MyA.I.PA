@@ -8,4 +8,30 @@
 .signup-now-trade-summary{display:flex;align-items:center;gap:10px;padding:10px 12px;margin:10px 0 14px;background:#f1f7f3;border:1px solid #ccded4;border-radius:10px;font-size:13px;flex-wrap:wrap}
 .signup-now-trade-summary>div{display:flex;flex-direction:column;gap:2px}
 @media(max-width:580px){.signup-now-stages{--connector-gap:7px;gap:var(--connector-gap)}.signup-now-trade-summary{font-size:12px}.signup-now-trade-icon{width:21px;height:21px}}
-@media(max-width:360px){.signup-now-stages button>strong{font-size:9px;letter-spacing:-.15px;white-space:nowrap;overflow-wrap:normal}}
+/* Senior-friendly overview: keep text readable and let the grid wrap. */
+.signup-now{font-size:1.125rem;line-height:1.6}
+.signup-now .signup-now-note,.signup-now small,.signup-now .signup-now-hint,.signup-now .signup-now-alert-status,.signup-now .signup-now-counts span,.signup-now .signup-now-visitors span,.signup-now .signup-now-selected span,.signup-now .signup-now-trade-summary{font-size:1rem;line-height:1.6}
+.signup-now .signup-now-visitors button{min-width:min(100%,9rem);max-width:100%;flex:0 0 min(100%,11rem);min-height:3rem}
+.signup-now .signup-now-visitors strong{font-size:1.125rem;white-space:normal;overflow-wrap:anywhere}
+.signup-now .signup-now-inspector h4{font-size:1.25rem}
+.signup-now .signup-now-inspector li,.signup-now .signup-now-inspector p{font-size:1.125rem;line-height:1.6}
+.signup-now .signup-now-stages{gap:var(--connector-gap);grid-template-columns:repeat(var(--stages),minmax(0,1fr))}
+.signup-now .signup-now-stages button{border:2px solid #6b897b;min-height:7.5rem;min-width:3rem;padding:12px 7px;gap:6px;overflow-wrap:anywhere}
+.signup-now .signup-now-stages button>strong{font-size:1rem;line-height:1.5;letter-spacing:normal;white-space:normal}
+.signup-now .signup-now-stages button>span{font-size:1.5rem;line-height:1.2}
+.signup-now .signup-now-stages button>small{font-size:1rem;line-height:1.4;color:inherit}
+.signup-now .signup-now-stages .is-current{border:3px solid #147354;box-shadow:0 0 0 3px #14735422,0 0 14px #14735433}
+.signup-now .signup-now-stages .is-current.is-blocked{border-color:#9d5900;box-shadow:0 0 0 3px #9d590022,0 0 14px #9d590033}
+.signup-now .signup-now-stages .is-blocked{color:#704108;border-color:#9d5900}
+.signup-now .signup-now-stages .is-verified{color:#174f37;border-color:#2d7c55;background:#eaf6ed}
+.signup-now .signup-now-stages button[aria-expanded=true]{outline:3px dashed #164c88;outline-offset:4px}
+.signup-progress-summary{background:#f7faf8;border:2px solid #739784;border-radius:12px;padding:16px;margin:12px 0 18px;overflow-wrap:anywhere}
+.signup-progress-summary.is-stale{background:#fff6e5;border-color:#9d5900}
+.signup-progress-summary.is-waiting{background:#edf4fc;border-color:#55769a}
+.signup-progress-summary h4{font-size:1.25rem;margin:0 0 12px;color:#163f32;line-height:1.5}
+.signup-progress-summary dl{margin:0}.signup-progress-summary dl>div{display:grid;grid-template-columns:minmax(8rem,.4fr) minmax(0,1fr);gap:10px;padding:10px 0;border-bottom:1px solid #cbded2}
+.signup-progress-summary dt{font-weight:750}.signup-progress-summary dd{margin:0;min-width:0}.signup-progress-summary p{margin:12px 0 0}
+.signup-tracker .signup-progress-summary dd{font-size:1.125rem!important}
+@media(max-width:1050px){.signup-now .signup-now-stages{grid-template-columns:repeat(3,minmax(0,1fr))}.signup-now-stages button:nth-child(3n)::after,.signup-now-stages button:nth-child(3n)::before{display:none}}
+@media(max-width:580px){.signup-now .signup-now-stages{grid-template-columns:repeat(2,minmax(0,1fr));--connector-gap:12px}.signup-now-stages button:nth-child(3n):not(:last-child)::after,.signup-now-stages button:nth-child(3n):not(:last-child)::before{display:block}.signup-now-stages button:nth-child(2n)::after,.signup-now-stages button:nth-child(2n)::before{display:none}.signup-progress-summary dl>div{grid-template-columns:1fr;gap:4px}.signup-now .signup-now-counts{grid-template-columns:1fr 1fr}.signup-now .signup-now-counts>div{flex-direction:row;justify-content:flex-start;gap:9px;padding:10px}}
+@media(max-width:360px){.signup-now .signup-now-stages{grid-template-columns:minmax(0,1fr)}.signup-now .signup-now-stages button:not(:last-child)::after,.signup-now .signup-now-stages button:not(:last-child)::before{display:none}.signup-now .signup-now-visitors button{flex-basis:100%}}

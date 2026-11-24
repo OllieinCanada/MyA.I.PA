@@ -59,3 +59,43 @@ test('only explicit durable event timestamps enter timeline; search history is q
  assert.deepEqual(setup.timeline.map(e=>e.label),['Number purchase started','Searching · 289','Number purchase failed']);
  assert.match(setup.timeline[1].source,/incomplete history/);assert.doesNotMatch(JSON.stringify(setup.timeline),/evil-secret/);
 });
+test('pinned summary uses existing saved failure evidence and separately qualified next action',()=>{
+ const {progressSummary}=require('../src/signupControlRoomModel');
+ const setup=projectSetup({});setup.number.stage.status='failed';
+ setup.purchaseEvidence={explanation:'Synthetic saved purchase failure; provider outcome is unknown.',nextAction:'Inspect the exact saved receipts. Do not replay.'};
+ const summary=progressSummary({...row,currentStep:'Assigning number',active:true},setup);
+ assert.equal(summary.currentStep,'Assigning number');
+ assert.equal(summary.reason,setup.purchaseEvidence.explanation);assert.equal(summary.nextAction,setup.purchaseEvidence.nextAction);
+ assert.doesNotMatch(JSON.stringify(summary),/delivered|purchased successfully|live check passed/i);
+});
+test('customer waiting and missing evidence do not become technical failure diagnoses',()=>{
+ const {progressSummary}=require('../src/signupControlRoomModel');
+ const waiting=progressSummary({...row,mode:'waiting_customer',nextAction:'Wait for the customer to verify.'},null);
+ assert.equal(waiting.waitingCustomer,true);assert.match(waiting.reason,/not proof of a technical failure/);
+ assert.equal(waiting.nextAction,'Wait for the customer to verify.');
+ const missing=progressSummary({...row,mode:'working'},null);
+ assert.match(missing.reason,/No exact technical failure cause/);assert.equal(missing.checkedAt,null);
+});
+test('a saved blocked check supplies its existing detail rather than an invented cause',()=>{
+ const {progressSummary}=require('../src/signupControlRoomModel');
+ const setup=projectSetup({});setup.groups[1].checks[0]={id:'assistant',state:'blocked',detail:'Saved assistant access refusal; ownership not verified.',label:'Assistant'};
+ assert.equal(progressSummary({...row,mode:'working'},setup).reason,setup.groups[1].checks[0].detail);
+});
+test('workflow-position lights preserve the difference between verified completion and current incomplete work',()=>{
+ const {currentStationId}=require('../src/signupControlRoomModel');
+ const groups=[{id:'number',checks:[{state:'verified'}]},{id:'assistant',checks:[{state:'pending'}]}];
+ assert.equal(currentStationId({active:true,steps:[{key:'content',status:'current'}]},groups),'assistant');
+ assert.equal(currentStationId({active:true,mode:'working'},groups),'assistant');
+ for(const mode of ['waiting_customer','paused','closed','ready'])assert.equal(currentStationId({active:true,mode},groups),null);
+ assert.equal(currentStationId({},groups),null);
+ assert.equal(currentStationId({active:true},groups.map(g=>({...g,checks:[{state:'verified'}]}))),null);
+});
+test('missing and malformed group checks stay unknown and cannot collapse partial evidence into success',()=>{
+ const {progressSummary}=require('../src/signupControlRoomModel');
+ for(const checks of [undefined,null,{},[null],[{id:'one',label:'Known check',state:'verified'},null]]){
+  const setup={groups:[{id:'number',title:'Number',checks}]};
+  const view=controlRoomModel({...row,active:true},setup);
+  assert.equal(view.stations[0].state,'pending');assert.ok(view.verified<Math.max(1,view.total));
+  assert.match(progressSummary({...row,active:true},setup).reason,/No exact technical failure cause/);
+ }
+});

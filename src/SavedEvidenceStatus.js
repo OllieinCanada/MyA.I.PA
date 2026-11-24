@@ -11,14 +11,18 @@ const messages = {
 };
 export default function SavedEvidenceStatus({ state, label = 'Signup updates', intervalMs = 5000, historical = false }) {
   const failed = Boolean(state.reason) || ['retrying', 'auth_required', 'offline'].includes(state.phase);
-  return <div className={'saved-evidence-status is-' + state.phase} role={failed ? 'alert' : 'status'}>
+  return <div className={'saved-evidence-status is-' + state.phase}>
+    <div className="saved-evidence-announcement" role={failed ? 'alert' : 'status'} aria-atomic="true">
     <strong>{failed ? `${label} are unavailable.` : state.phase === 'connected' ? `${label}: connected` : state.phase === 'paused' ? `${label}: paused` : `${label}: checking…`}</strong>
     <span>{state.phase === 'offline' ? 'You are offline. Reads resume when the connection returns.'
       : failed ? messages[state.reason?.code] || messages.network
       : historical ? 'Historical page. Automatic refresh is paused; refresh latest to return.'
       : `Saved progress is checked every ${intervalMs / 1000} seconds while this tab is visible. Not an instant event stream.`}</span>
     {state.reason?.status ? <span>HTTP {state.reason.status}.</span> : null}
+    {failed ? <span>Displayed information is last-known—not a fresh check.</span> : null}
+    </div>
+    {/* The read clock changes on every poll; it is not a new status event. */}
     <small>Last successful read: {state.lastSuccessAt ? new Date(state.lastSuccessAt).toLocaleTimeString('en-CA', { timeZone: 'America/Toronto', hour: 'numeric', minute: '2-digit', second: '2-digit' }) + ' Toronto' : 'Not yet loaded'}.
-      {failed ? ' Displayed information is last-known—not a fresh check.' : ''} No setup action is retried.</small>
+      {' '}No setup action is retried.</small>
   </div>;
 }

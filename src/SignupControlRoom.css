@@ -52,3 +52,30 @@
 .control-room-groups .control-readiness>small{font-size:12px}
 .control-room-groups .control-readiness-meter{margin:13px 0}
 @media(max-width:700px){.signup-control-room .control-room-groups{grid-template-columns:minmax(0,1fr);gap:20px}.signup-tracker .control-room-groups h5 button{padding:17px 18px;font-size:16px}.control-room-groups ul{padding:5px 18px}.control-room-groups .control-area-policy,.control-room-groups .control-readiness{padding:17px 18px}}
+
+/* Readable setup evidence and steady workflow-position lighting. */
+.signup-control-room .control-room-summary{display:flex;flex-wrap:wrap;font-size:1.125rem;gap:14px}
+.control-room-summary.is-waiting{background:#edf4fc;border-color:#55769a}
+.control-room-summary>div{min-width:0;flex:1 1 18rem}
+.control-progress-summary{margin:14px 0;overflow-wrap:anywhere}
+.control-progress-summary>div{display:grid;grid-template-columns:minmax(8rem,.35fr) minmax(0,1fr);gap:10px;padding:8px 0;border-bottom:1px solid #ccdacc}
+.control-progress-summary dt{font-weight:750}.control-progress-summary dd{margin:0;min-width:0}
+.signup-tracker .control-progress-summary dd,.signup-tracker .signup-control-room .signup-journey-footnote{font-size:1.125rem!important;line-height:1.6!important}
+.signup-tracker .control-station-overview{gap:12px;padding:14px;grid-template-columns:repeat(4,minmax(0,1fr));background:transparent;border:0}
+.signup-tracker .control-station-overview button{position:relative;border:2px solid #6b897b!important;border-radius:10px;background:#fff;padding:14px;min-width:3rem;min-height:6rem;line-height:1.5;overflow-wrap:anywhere}
+.signup-tracker .control-station-overview button.is-current{border:3px solid #147354!important;box-shadow:0 0 0 3px #14735422,0 0 14px #14735433}
+.signup-tracker .control-station-overview button.is-blocked{border-color:#9d5900!important;background:#fff4dc;color:#704108!important}
+.signup-tracker .control-station-overview button.is-current.is-blocked{box-shadow:0 0 0 3px #9d590022,0 0 14px #9d590033}
+.signup-tracker .control-station-overview button.is-verified{border-color:#2d7c55!important;background:#eaf6ed}
+.signup-tracker .control-station-overview button[aria-pressed=true]{outline:3px dashed #164c88;outline-offset:4px;text-decoration:none}
+.signup-tracker .control-station-overview strong,.signup-tracker .control-station-overview small,.signup-tracker .control-read-only,.signup-tracker .control-inspector-section h5,.signup-tracker .control-source-badge,.signup-tracker .control-coverage,.signup-tracker .control-selected-checks strong,.signup-tracker .control-selected-checks small,.signup-tracker .control-selected-checks time,.signup-tracker .control-room-timeline time,.signup-tracker .control-room-timeline small,.signup-tracker .control-room-timeline strong,.signup-tracker .control-evidence-warning,.signup-tracker .control-area-chips b,.signup-tracker .signup-journey-legend,.signup-tracker .journey-number,.signup-tracker .journey-state,.signup-tracker .journey-business .journey-fields strong{font-size:1rem!important;line-height:1.6!important}
+.signup-tracker .control-room-groups li{font-size:1.125rem!important;line-height:1.6}
+.signup-tracker .control-room-groups li small{font-size:1rem!important}
+.signup-tracker .journey-inspect{min-height:3rem;min-width:3rem;font-size:1rem!important}
+.signup-control-room .signup-journey-map{grid-template-columns:repeat(4,minmax(0,1fr)) minmax(12rem,1.1fr)}
+.signup-tracker .signup-journey-readonly{font-size:1rem!important;line-height:1.6;white-space:normal;overflow-wrap:anywhere}
+.signup-control-room .signup-journey-heading{flex-wrap:wrap}
+.signup-control-room .signup-journey-heading>div{min-width:0}
+@media(max-width:1200px){.signup-tracker .control-station-overview{grid-template-columns:repeat(2,minmax(0,1fr))}.signup-control-room .signup-journey-map{display:flex;flex-direction:column;gap:20px}.signup-control-room .journey-node{width:100%}.signup-control-room .journey-arrow{display:none}}
+@media(max-width:580px){.control-progress-summary>div{grid-template-columns:minmax(0,1fr);gap:4px}.signup-tracker .control-station-overview button{flex-wrap:wrap}.signup-control-room .control-room-summary h4{font-size:1.25rem}.signup-control-room .control-read-only{display:block;white-space:normal;margin-left:0}.signup-tracker .control-readiness strong{font-size:1.125rem}.signup-control-room .journey-business .journey-fields{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:360px){.signup-tracker .control-station-overview{grid-template-columns:minmax(0,1fr)}}
