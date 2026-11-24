@@ -120,6 +120,16 @@ async function main(){
      assert.ok(enlarged.buttonFont>=32&&enlarged.headingFont>=32,'Reflow must not shrink the enlarged important text');
      assert.equal(enlarged.headingText,'Business details');assert.notEqual(enlarged.headingOverflow,'ellipsis','The current step must not be truncated');
      assert.ok(enlarged.headingFits&&enlarged.buttonsStack,'At200% text, heading wraps and action buttons stack');
+     // Platform fallback metrics differ. A large unbroken headline word must
+     // wrap within its own box, not merely fit inside the viewport's margin.
+     const originalBodyFont=await page.evaluate(()=>document.body.style.fontFamily);
+     for(const font of ['Arial','Verdana']){
+      await page.evaluate(value=>document.body.style.fontFamily=value,font);
+      const fit=await page.locator('.signup-page-header h1').evaluate(el=>({width:el.clientWidth,content:el.scrollWidth,root:document.documentElement.scrollWidth,viewport:innerWidth,font:parseFloat(getComputedStyle(el).fontSize)}));
+      assert.ok(fit.content<=fit.width&&fit.root<=fit.viewport,'Enlarged headline must reflow with '+font+' fallback metrics');
+      assert.ok(fit.font>=64,'Wrapping must not shrink the enlarged headline');
+     }
+     await page.evaluate(value=>document.body.style.fontFamily=value,originalBodyFont);
      await page.screenshot({path:path.join(output,'senior-signup-320-text-200.png'),fullPage:true});
      await page.evaluate(()=>document.documentElement.style.fontSize='');
     }

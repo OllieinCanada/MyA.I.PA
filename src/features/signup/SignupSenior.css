@@ -32,6 +32,7 @@
 .signup-senior .signup-home-row>span,.signup-senior .signup-mobile-offer,.signup-senior .signup-page-benefits{font-size:1rem;line-height:1.5}
 .signup-senior .signup-number-box p{font-size:1rem}
 .signup-senior button{font-size:1rem;min-height:3rem}
+.signup-senior .signup-page-header h1{overflow-wrap:anywhere}
 .signup-senior label>span.border-slate-200{border-color:#64748b}
 .signup-senior label>span.border-slate-200:focus-within{border-color:#1d4ed8}
 .signup-senior label>span.border-rose-300{border-color:#9f1239}
