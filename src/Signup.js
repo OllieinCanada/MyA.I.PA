@@ -8,6 +8,10 @@ import { canonicalPhone, readWizardLocation } from "./features/onboarding/onboar
 import "./components/CustomerSetupActions.css";
 import { createFormObservationClient, observedFormSnapshot, observedSignupStep } from './features/signup/formObservationClient';
 import { consumeSignupStart, noteSignupStart } from './features/signup/signupStartIntent';
+import SignupNumberBox from './features/signup/SignupNumberBox';
+import { createSignupNavigation, FIRST_POSITION, previousSignupPosition, signupPositionIndex, signupPositionForIndex } from './features/signup/signupNavigation';
+import { signupMissingRequirement } from './features/signup/signupMissingRequirement';
+import { signupNumberState, isSignupStatusSnapshot } from './features/signup/signupNumberState';
 
 import {
   AREA_GROUPS,
@@ -1660,8 +1664,8 @@ export function SignupSuccessPage({ result: initialResult, onStartAnother }) {
   const [result, setResult] = useState(initialResult);
   const businessName = result?.businessName || "your business";
   const provisioningStatus = String(result?.phoneProvisioning?.status || (result?.twilioPhoneNumber ? "ready" : "pending")).toLowerCase();
-  const statusAllowsNumber = !result?.signupStatus || result.signupStatus.state === "ready";
-  const assignedNumber = provisioningStatus === "ready" && statusAllowsNumber ? String(result?.twilioPhoneNumber || result?.phoneProvisioning?.e164 || "").trim() : "";
+  const numberEvidence = signupNumberState(result);
+  const assignedNumber = numberEvidence.state === 'assigned' ? numberEvidence.number : '';
   const signupClosed = result?.signupStatus?.state === "closed";
   const reviewRequired = Boolean(result?.reviewRequired);
   const verificationRequired = Boolean(result?.verificationRequired || result?.smsVerificationRequired || result?.emailVerificationRequired);
@@ -1679,6 +1683,7 @@ export function SignupSuccessPage({ result: initialResult, onStartAnother }) {
   const [copiedNumber, setCopiedNumber] = useState(false);
   const [statusBusy, setStatusBusy] = useState(false);
   const [statusNotice, setStatusNotice] = useState("");
+  const [assignmentUnavailable, setAssignmentUnavailable] = useState(false);
   const [supportDescription, setSupportDescription] = useState("");
   const [supportState, setSupportState] = useState("");
   const statusRequestRef = useRef(false);
@@ -1694,12 +1699,15 @@ export function SignupSuccessPage({ result: initialResult, onStartAnother }) {
         cache: "no-store",
       });
       const data = await parseApiResponse(response, "Signup status could not be checked");
+      if (!isSignupStatusSnapshot(data?.signup)) throw new Error('Setup status could not be checked. Your signup is still saved.');
       const status = data?.signup || {};
       const next = mergeSignupStatus(result, status);
       setResult(next);
+      setAssignmentUnavailable(false);
       storeSignupResult(next);
       setStatusNotice(status.message || "Setup status updated.");
     } catch (requestError) {
+      setAssignmentUnavailable(true);
       if (!quiet) setStatusNotice(requestError?.message || "Status could not be checked. Your signup is still saved.");
     } finally {
       statusRequestRef.current = false;
@@ -1745,8 +1753,10 @@ export function SignupSuccessPage({ result: initialResult, onStartAnother }) {
           cache: "no-store",
         });
         const data = await parseApiResponse(response, "Signup status could not be checked");
-        if (cancelled || !data?.signup) return;
+        if (cancelled) return;
+        if (!isSignupStatusSnapshot(data?.signup)) throw new Error('Setup status is unavailable.');
         const status = data.signup;
+        setAssignmentUnavailable(false);
         setResult((current) => {
           const next = mergeSignupStatus(current, status);
           storeSignupResult(next);
@@ -1754,6 +1764,7 @@ export function SignupSuccessPage({ result: initialResult, onStartAnother }) {
         });
         setStatusNotice(status.message || "Setup status updated.");
       } catch (_error) {
+        if (!cancelled) setAssignmentUnavailable(true);
         // Automatic checks stay quiet; the manual button shows actionable errors.
       } finally {
         statusRequestRef.current = false;
@@ -1844,7 +1855,7 @@ export function SignupSuccessPage({ result: initialResult, onStartAnother }) {
   ];
 
   return (
-    <main className="min-h-screen bg-[linear-gradient(135deg,#eef6ff_0%,#ffffff_42%,#f3f7ff_100%)] text-slate-950">
+    <main className="signup-senior min-h-screen bg-[linear-gradient(135deg,#eef6ff_0%,#ffffff_42%,#f3f7ff_100%)] text-slate-950">
       <header className="min-h-16 bg-[#020918] shadow-[0_24px_60px_-48px_rgba(15,23,42,0.85)]">
         <div className="mx-auto flex min-h-16 max-w-[1440px] items-center px-4 py-3 sm:px-12">
           <BrandLogo />
@@ -1880,6 +1891,7 @@ export function SignupSuccessPage({ result: initialResult, onStartAnother }) {
             </p>
           </div>
 
+          <div className="px-5 sm:px-8"><SignupNumberBox result={result} unavailable={assignmentUnavailable} /></div>
           {!verificationRequired || signupClosed ? <>
           <div className="grid gap-5 p-5 sm:p-8 lg:grid-cols-[1.18fr_0.82fr]">
             <div className="rounded-3xl border border-blue-200 bg-[linear-gradient(180deg,#f7fbff,#edf5ff)] p-5 shadow-[0_30px_80px_-60px_rgba(37,99,235,0.9)] sm:p-7">
@@ -2139,6 +2151,8 @@ export default function Signup() {
   const [observationAttempted, setObservationAttempted] = useState({});
   const [observationWide, setObservationWide] = useState(() => typeof window === 'undefined' || !window.matchMedia || window.matchMedia('(min-width: 640px)').matches);
   const observationRef = useRef(null);
+  const navigationRef = useRef(null);
+  const navigationLatest = useRef(null);
   if (!observationRef.current) {
     let storage; try { storage = window.sessionStorage; } catch (_) { /* memory-only */ }
     observationRef.current = createFormObservationClient({ apiBase: API_BASE, storage });
@@ -2307,7 +2321,46 @@ export default function Signup() {
         : currentStep === 1 && businessSlide === 4 ? "Choose service calls and complete any required prices."
           : "Complete the verification above to start your trial.";
 
+  const navigationPosition = { currentStep, businessSlide, tradeSetupPanel, returnToReviewAfterEdit, reviewReturnStep };
+  const furthestPosition = tradeStepDisabled ? 0 : specializationStepDisabled ? 1 : !selectedAreas.length ? 2 : !businessValidation.isValid ? 3 : pricingStepDisabled ? 4 : 5;
+  navigationLatest.current = { active: !signupResult && !busy, furthestPosition };
+  const applyNavigationPosition = useCallback(position => {
+    setCurrentStep(position.currentStep); setBusinessSlide(position.businessSlide); setTradeSetupPanel(position.tradeSetupPanel);
+    setReturnToReviewAfterEdit(position.returnToReviewAfterEdit); setReviewReturnStep(position.reviewReturnStep);
+    setCaptchaToken(""); setError("");
+  }, []);
+  useEffect(() => {
+    const navigation = createSignupNavigation({ window, initialPosition: FIRST_POSITION, onNavigate: applyNavigationPosition,
+      canNavigate: () => navigationLatest.current.active,
+      guard: position => signupPositionIndex(position) > navigationLatest.current.furthestPosition
+        ? signupPositionForIndex(navigationLatest.current.furthestPosition) : position });
+    navigationRef.current = navigation;
+    return () => { navigation.dispose(); if (navigationRef.current === navigation) navigationRef.current = null; };
+  }, [applyNavigationPosition]);
+  useEffect(() => {
+    navigationRef.current?.observe({ currentStep, businessSlide, tradeSetupPanel, returnToReviewAfterEdit, reviewReturnStep });
+  }, [currentStep, businessSlide, tradeSetupPanel, returnToReviewAfterEdit, reviewReturnStep, signupResult, busy]);
+
+  const missingRequirement = signupMissingRequirement({ currentStep, businessSlide, tradeSetupPanel,
+    tradeMissing: tradeStepDisabled, propertyMissing: specializationStepDisabled, areaMissing: !selectedAreas.length,
+    businessErrors: businessValidation.errors, pricing, securityMissing: securityStepDisabled });
+  const focusMissingRequirement = () => {
+    if (!missingRequirement || busy) return;
+    if (missingRequirement.field) setTouchedDetails(previous => ({ ...previous, [missingRequirement.field]: true }));
+    if (missingRequirement.pricing) setError(missingRequirement.message);
+    window.requestAnimationFrame?.(() => {
+      const field = document.querySelector(missingRequirement.selector);
+      field?.focus({ preventScroll: true }); field?.scrollIntoView?.({ behavior: 'auto', block: 'center' });
+    });
+  };
+  const missingShortcut = missingRequirement ? <button type="button" className="signup-missing-shortcut" onClick={focusMissingRequirement} disabled={busy}>
+    <strong>What's missing?</strong><span>{missingRequirement.message}</span>
+  </button> : null;
+
   const goBackFromMobileStep = () => {
+    if (busy || signupResult) return;
+    const target = previousSignupPosition(navigationPosition);
+    if (target && navigationRef.current?.back(target)) return;
     setError("");
     if (returnToReviewAfterEdit) {
       setReturnToReviewAfterEdit(false);
@@ -2422,6 +2475,7 @@ export default function Signup() {
   };
 
   const resetSignup = () => {
+    navigationRef.current?.reset(FIRST_POSITION);
     observationRef.current.reset();
     noteSignupStart(); setStartIntentRevision(value => value + 1);
     setObservationEngaged(false);
@@ -2649,6 +2703,7 @@ export default function Signup() {
         trialDays: 14,
       };
       clearSignupSubmissionId();
+      navigationRef.current?.submitted();
       setSignupResult(completedSignup);
       storeSignupResult(completedSignup);
       setBusy(false);
@@ -2668,7 +2723,7 @@ export default function Signup() {
   }
 
   return (
-    <main className="min-h-screen bg-[linear-gradient(135deg,#f8fbff_0%,#ffffff_45%,#edf4ff_100%)] text-slate-950">
+    <main className="signup-senior min-h-screen bg-[linear-gradient(135deg,#f8fbff_0%,#ffffff_45%,#edf4ff_100%)] text-slate-950">
       <p className="mx-auto max-w-6xl px-5 pt-3 text-xs leading-5 text-slate-600" data-signup-observation-disclosure>To help with a stuck signup, authorized admins can see your entered business and owner names, your selected trade, the setup step you reach, and which fields are complete or invalid. Other typed values—including phone, email, address, payment details and verification codes—are not copied into this progress preview. Unsubmitted progress records expire after 24 hours.</p>
       <style>
         {`
@@ -4064,8 +4119,10 @@ export default function Signup() {
         ) : null}
 
         {currentStep === 3 ? (
-          <HumanVerificationCheck key={captchaResetKey} onVerify={handleHumanVerification} />
+          <div id="signup-human-verification" tabIndex={-1}><HumanVerificationCheck key={captchaResetKey} onVerify={handleHumanVerification} /></div>
         ) : null}
+
+        {missingShortcut ? <div className="signup-desktop-shortcut">{missingShortcut}</div> : null}
 
         <div
           className={
@@ -4091,6 +4148,7 @@ export default function Signup() {
               {actionDisabledReason}
             </p>
           ) : null}
+          {missingShortcut}
           {currentStep === 3 ? (
             <p className="signup-mobile-trial-note">14 days free · No card needed · Cancel anytime</p>
           ) : null}

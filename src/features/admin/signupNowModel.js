@@ -13,6 +13,14 @@ const DATE_OPTIONS = [
   ['7d', 'Last 7 days'], ['30d', 'Last 30 days'],
 ];
 const FILTERS = new Set(['watching', 'all', 'active', 'stalled', 'waiting_customer', 'ready', 'paused']);
+const QUICK_VIEWS = [['newest','Newest'],['today','Today'],['attention','Needs attention'],['all','All']];
+function quickSignupView(id, current = {}) {
+  const sort = SORT_OPTIONS.some(([value]) => value === current.sort) ? current.sort : 'newest';
+  if (!QUICK_VIEWS.some(([value]) => value === id)) return null;
+  return { search: '', filter: id === 'attention' ? 'stalled' : 'all',
+    dateRange: id === 'today' ? 'today' : 'all',
+    sort: id === 'attention' ? 'stuck' : id === 'all' ? sort : 'newest' };
+}
 const timestamp = (value, now) => {
   const n = typeof value === 'number' ? value : typeof value === 'string' && value.trim() ? Date.parse(value) : NaN;
   return Number.isFinite(n) && n > 0 && n <= now ? n : null;
@@ -73,4 +81,4 @@ function draftStages(draft) {
     return {id,label,fields,state,current:id===draft.currentStep};
   });
 }
-module.exports={FORM_STEPS,SORT_OPTIONS,DATE_OPTIONS,draftLabel,signupNowEntries,draftStages};
+module.exports={FORM_STEPS,SORT_OPTIONS,DATE_OPTIONS,QUICK_VIEWS,quickSignupView,draftLabel,signupNowEntries,draftStages};

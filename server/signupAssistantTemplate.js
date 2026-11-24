@@ -4,7 +4,7 @@ const SIGNUP_ASSISTANT_TOOL_IDS = Object.freeze([
   "1bf11961-f731-43b7-9f97-d765acdb51cd",
 ]);
 const { classifySignupAssistantPlaybook } = require("./signupVoiceQuality");
-const { signupSpeechPatch, normalizeConsentPrompt } = require("./signupSpeechPolicy");
+const { signupSpeechPatch, normalizeConsentPrompt, isResidentialElectrical } = require("./signupSpeechPolicy");
 const { consolidateServicePrompt } = require('./serviceIntakePrompt');
 const { CHOICE_KEYS, hasIndividualPricingChoices, individualPricingPolicy } = require("../src/features/signup/pricingPolicy");
 
@@ -214,6 +214,13 @@ ${policy.pricingScript || "No pricing statements selected. Collect the service r
 
 function buildSystemPrompt(values) {
   const routingQuestion = buildServiceRoutingQuestion(values);
+  const openingInstructions = isResidentialElectrical(values)
+    ? `The fixed first message has already greeted the caller, stated the recording notice, described the residential electrical service and asked how the business can help. Wait for the caller's answer. Briefly acknowledge it and reuse information already supplied. Do not repeat an answered routing question; ask only for a concrete missing detail.`
+    : `The first message has already greeted the caller and asked: "How are you today?" Wait for the caller's answer before asking what they need.
+After the caller answers how they are, briefly acknowledge it, then give the exact recording notice and ask for consent required by the FINAL OVERRIDE. Do not begin routing or intake until the caller explicitly agrees.
+After the recording notice, say exactly: "${routingQuestion}"
+If the caller already included the request type, do not ask the routing question again; acknowledge briefly and continue the matching installation, repair, maintenance, or message path.
+If unclear, ask once: "Is that for a new installation, service, or repair?"`;
   return `You are the voice agent for ${values.businessName}.
 
 MYAIPA_AGENT_VERSION: 2026-09-10-red-pen-intake-v3
@@ -249,11 +256,7 @@ Examples:
 Do not ignore the social cue, but do not get stuck in small talk.
 
 ## Opening
-The first message has already greeted the caller and asked: "How are you today?" Wait for the caller's answer before asking what they need.
-After the caller answers how they are, briefly acknowledge it, then give the exact recording notice and ask for consent required by the FINAL OVERRIDE. Do not begin routing or intake until the caller explicitly agrees.
-After the recording notice, say exactly: "${routingQuestion}"
-If the caller already included the request type, do not ask the routing question again; acknowledge briefly and continue the matching installation, repair, maintenance, or message path.
-If unclear, ask once: "Is that for a new installation, service, or repair?"
+${openingInstructions}
 
 ## Safety and priority gate before pricing
 Before quoting any repair, maintenance, or service-call price, first check whether the caller has described a safety hazard or business interruption.
@@ -412,7 +415,7 @@ function buildSignupAssistantConfig(normalizedPayload, options) {
   const config = {
     name: values.resourceName,
     firstMessage: `Thanks for calling ${values.businessName}. How are you today?`,
-    ...signupSpeechPatch({ firstMessage: `Thanks for calling ${values.businessName}. How are you today?` }),
+    ...signupSpeechPatch({ firstMessage: `Thanks for calling ${values.businessName}. How are you today?` }, values),
     model: {
       provider: "openai",
       model: "gpt-4o",
@@ -421,7 +424,7 @@ function buildSignupAssistantConfig(normalizedPayload, options) {
       messages: [
         {
           role: "system",
-          content: normalizeConsentPrompt(consolidateServicePrompt(buildIndustryAwarePrompt(values))),
+          content: normalizeConsentPrompt(consolidateServicePrompt(buildIndustryAwarePrompt(values)), values),
         },
       ],
     },

@@ -1,18 +1,27 @@
-import React,{useState} from 'react';
+import React,{useId,useState} from 'react';
 import {signupNowEntries,draftStages} from './features/admin/signupNowModel';
+import {currentStationId,progressSummary,stationState,safeGroups} from './signupControlRoomModel';
 import './SignupNowOverview.css';
 import {tradeDisplay} from './signupTradeDisplay';
 function TradeIcon({trade}){return <svg className="signup-now-trade-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d={trade.path}/></svg>;}
 const clock=value=>value?new Date(value).toLocaleTimeString('en-CA',{timeZone:'America/Toronto',hour:'numeric',minute:'2-digit',second:'2-digit'}):'Not observed';
-const marks={blocked:'!',observed:'✓',partial:'·',unknown:'−',verified:'✓'};
+const marks={blocked:'!',observed:'✓',partial:'·',unknown:'−',pending:'−',verified:'✓'};
+const stageLabel=state=>({blocked:'Needs attention',observed:'Browser observed',partial:'Partly observed',unknown:'Not observed',pending:'Not verified',verified:'Backend verified'}[state]||'Unknown');
 const shortLabels={business_details:'Info',pricing:'Rates',final_review:'Final'};
-export default function SignupNowOverview({data,entries:visibleEntries,onInspectSignup}){
+export default function SignupNowOverview({data,entries:visibleEntries,evidenceState,onInspectSignup}){
  const [selection,setSelection]=useState(''),[inspector,setInspector]=useState(null);
+ const descriptionId=useId();
  const entries=visibleEntries||signupNowEntries(data),selected=entries.find(e=>e.key===selection)||entries[0];
  const drafts=signupNowEntries(data,Date.now(),{filter:'all'}).filter(e=>e.kind==='draft');
- const draft=selected?.draft,groups=selected?.row?.setup?.groups||[];
+ const draft=selected?.draft,groups=safeGroups(selected?.row?.setup?.groups);
  const trade=tradeDisplay(draft?.selectedTradeId);
- const stages=draft?draftStages(draft):groups.map((g,i)=>({id:g.id,label:['Number','Agent','Texts','Trial'][i]||g.title,fields:g.checks||[],state:(g.checks||[]).some(c=>c.state==='blocked')?'blocked':'unknown'}));
+ const currentStation=selected?.row?currentStationId(selected.row,groups):null;
+ const stages=draft?draftStages(draft):groups.map(g=>({id:g.id,label:({number:'Number',assistant:'Agent',texts:'Texts',activation:'Trial'})[g.id]||g.title,fields:g.checks||[],state:stationState(g.checks),current:g.id===currentStation}));
+ const summary=selected?.row?progressSummary(selected.row,selected.row.setup):draft?{
+  currentStep:draft.currentStepLabel||'Form step not observed',
+  reason:draft.blockerLabels?.length?draft.blockerLabels.join('; '):'No required field failure was observed. Unobserved fields remain unknown.',
+  nextAction:'Review the current field observations. This unsubmitted draft is not a verified signup.'}:null;
+ const stale=Boolean(evidenceState?.reason)||['retrying','auth_required','offline'].includes(evidenceState?.phase);
  const opened=inspector?.key===selected?.key?stages.find(s=>s.id===inspector.step):null;
  return <section className="signup-now" aria-label="Signups happening now">
   <header><div><span className="signup-tracker-eyebrow">Live signup watch</span><h3>Signups happening now</h3></div><span className="signup-now-note">Saved events · not continuous presence</span></header>
@@ -22,9 +31,10 @@ export default function SignupNowOverview({data,entries:visibleEntries,onInspect
   {!entries.length?<p>{data?'No observed starts match this view. Try Reset view. Unobserved visitors are not counted.':'Reading saved signup starts…'}</p>:<>
    <div className="signup-now-visitors" role="group" aria-label="Choose signup to follow">{entries.map(entry=><button type="button" key={entry.key} aria-pressed={selected?.key===entry.key} title={entry.label} onClick={()=>{setSelection(entry.key);setInspector(null);}}><span>{entry.kind==='draft'?'Draft':'Saved'}</span><strong>{entry.label}</strong></button>)}</div>
    <div className="signup-now-selected"><div><strong>{selected.label}</strong>{draft?.draftNames?.ownerName?<span>Owner entered: {draft.draftNames.ownerName}</span>:null}<span>{draft?draft.currentStepLabel:selected.row.currentStep}</span></div><small>Last {draft?'browser event':'saved progress'}: {clock(draft?.lastObservedAt||selected.row?.lastProgressAt)} Toronto</small></div>
+   {summary?<section className={'signup-progress-summary'+(stale?' is-stale':'')+(selected.row?.mode==='waiting_customer'?' is-waiting':'')} aria-label="Signup status summary"><h4>Selected signup: {selected.label}</h4><dl><div><dt>Current step</dt><dd>{summary.currentStep}</dd></div><div><dt>{stale?'Last-known recorded reason':'Recorded reason'}</dt><dd>{summary.reason}</dd></div><div><dt>Next safe step</dt><dd>{summary.nextAction}</dd></div></dl><p>{stale?'Updates are unavailable. This is last-known information; refresh before taking action.':evidenceState?.lastSuccessAt?`Saved evidence read ${clock(evidenceState.lastSuccessAt)} Toronto.`:'Saved evidence; freshness is not established here.'} {draft?'Browser observations are not backend completion.':'Not a live provider or delivery check.'}</p></section>:null}
    {draft?<p className="signup-now-alert-status">{draft.startAlertQueuedAt?`Start alert queued ${clock(draft.startAlertQueuedAt)} Toronto; delivery not confirmed here.`:draft.startedAt?'Start alert awaits the next background check (normally within a minute).':'Older/interacted draft: no Start Trial alert is recorded.'} Unsubmitted draft · entered names are not verified identity. Only exact submission linkage can associate a saved signup.</p>:null}
    {draft?<div className="signup-now-trade-summary">{trade?<><TradeIcon trade={trade}/><div><strong>{trade.label}</strong><small>Visitor-selected trade · not verified</small></div></>:<span>Trade not recorded</span>}</div>:null}
-   <nav className="signup-now-stages" style={{'--stages':stages.length||6}} aria-label="Compact signup steps">{stages.map((step,i)=><button key={step.id} type="button" className={'is-'+step.state+(step.current?' is-current':'')} aria-expanded={opened?.id===step.id} aria-label={'Inspect '+(draft?step.label+' form step':step.label+' saved checks')} onClick={()=>setInspector(opened?.id===step.id?null:{key:selected.key,step:step.id})}><span aria-hidden="true">{step.id==='trade'&&trade?<TradeIcon trade={trade}/>:marks[step.state]||i+1}</span><strong className={draft&&shortLabels[step.id]?'has-short-label':undefined}><span className="signup-now-label-full">{step.label}</span>{draft&&shortLabels[step.id]?<span className="signup-now-label-short" aria-hidden="true">{shortLabels[step.id]}</span>:null}</strong></button>)}</nav>
+   <nav className="signup-now-stages" style={{'--stages':stages.length||6}} aria-label="Compact signup steps">{stages.map((step,i)=><button key={step.id} type="button" className={'is-'+step.state+(step.current?' is-current':'')} aria-current={step.current?'step':undefined} aria-expanded={opened?.id===step.id} aria-describedby={descriptionId+'-'+step.id} aria-label={'Inspect '+(draft?step.label+' form step':step.label+' saved checks')} onClick={()=>setInspector(opened?.id===step.id?null:{key:selected.key,step:step.id})}><span aria-hidden="true">{step.id==='trade'&&trade?<TradeIcon trade={trade}/>:marks[step.state]||i+1}</span><strong className={draft&&shortLabels[step.id]?'has-short-label':undefined}><span className="signup-now-label-full">{step.label}</span>{draft&&shortLabels[step.id]?<span className="signup-now-label-short" aria-hidden="true">{shortLabels[step.id]}</span>:null}</strong><small id={descriptionId+'-'+step.id}>{stageLabel(step.state)}</small></button>)}</nav>
    <p className="signup-now-hint">Tap a small box to expand its evidence. No setup action runs.</p>
    {opened?<section className="signup-now-inspector" aria-label="Expanded signup step"><header><h4>{opened.label} · {draft?'browser observations':'saved setup checks'}</h4><button type="button" onClick={()=>setInspector(null)}>Close</button></header>
     {opened.id==='trade'?<p className="signup-now-trade-summary">{trade?<><TradeIcon trade={trade}/><strong>{trade.label}</strong><span>Selected in browser, not verified business identity.</span></>: 'Trade not recorded. Older status-only records cannot tell us which trade was selected.'}</p>:null}

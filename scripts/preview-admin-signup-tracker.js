@@ -118,7 +118,7 @@ async function main() {
   const { chromium } = require('./playwright-runtime');
   let browser, lastPage, externalBlocked = 0;
   try {
-    browser = await chromium.launch({ headless: true });
+    browser = await chromium.launch({ headless: true, executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE || undefined });
     for (const width of [1440, 390, 320]) {
       // Each viewport starts with the same invented relative ages. A slow
       // earlier viewport must not turn the six-minute wait fixture into a
@@ -154,10 +154,71 @@ async function main() {
       assert.equal((await savedNames()).length,4);
       await panel.getByLabel('Search signups',{exact:true}).fill('not-a-fixture');
       assert.equal((await savedNames()).length,0);assert.equal((await overviewNames()).length,0);
+      // Large mobile controls place Reset below the first viewport. Position
+      // it explicitly before the normal trusted click; never force or retry a
+      // click whose outcome is uncertain. All reset assertions remain below.
+      await panel.getByRole('button',{name:'Reset view',exact:true}).scrollIntoViewIfNeeded();
       await panel.getByRole('button',{name:'Reset view',exact:true}).click();
       assert.equal(await panel.getByLabel('Sort signups',{exact:true}).inputValue(),'newest');
       assert.equal(await panel.getByLabel('Signup start date',{exact:true}).inputValue(),'all');
       assert.equal((await savedNames()).length,4);assert.equal(fixtureSaves,beforeViewSaves);assert.equal(liveReads,beforeViewLive);
+      const quickViews=panel.getByRole('group',{name:'Quick signup views',exact:true});
+      await panel.getByLabel('Show signups',{exact:true}).selectOption('paused');
+      await panel.getByLabel('Search signups',{exact:true}).fill('not-a-fixture');
+      await panel.getByLabel('Signup start date',{exact:true}).selectOption('7d');
+      await quickViews.getByRole('button',{name:'Newest',exact:true}).click();
+      assert.equal(await panel.getByLabel('Show signups',{exact:true}).inputValue(),'all');
+      assert.equal(await panel.getByLabel('Search signups',{exact:true}).inputValue(),'');
+      assert.equal(await panel.getByLabel('Signup start date',{exact:true}).inputValue(),'all');
+      assert.equal(await panel.getByLabel('Sort signups',{exact:true}).inputValue(),'newest');
+      assert.equal((await savedNames()).length,5,'Newest is not hidden behind old status/search/date filters');
+      await quickViews.getByRole('button',{name:'Needs attention',exact:true}).click();
+      assert.equal(await panel.getByLabel('Show signups',{exact:true}).inputValue(),'stalled');
+      assert.equal(await panel.getByLabel('Sort signups',{exact:true}).inputValue(),'stuck');
+      assert.deepEqual(await savedNames(),['Harbour Electrical']);
+      await quickViews.getByRole('button',{name:'Today',exact:true}).click();
+      assert.equal(await panel.getByLabel('Show signups',{exact:true}).inputValue(),'all');
+      assert.equal(await panel.getByLabel('Signup start date',{exact:true}).inputValue(),'today');
+      await panel.getByLabel('Sort signups',{exact:true}).selectOption('name');
+      await quickViews.getByRole('button',{name:'All',exact:true}).click();
+      assert.equal(await panel.getByLabel('Sort signups',{exact:true}).inputValue(),'name','All preserves the chosen sort');
+      assert.equal((await savedNames()).length,5);
+      assert.ok((await quickViews.getByRole('button').evaluateAll(buttons=>buttons.map(button=>{const rect=button.getBoundingClientRect();return rect.width>=48&&rect.height>=48&&parseFloat(getComputedStyle(button).fontSize)>=16;}))).every(Boolean),'Quick views retain readable labels and 48px targets');
+      const statusSizes=await panel.locator('.saved-evidence-status:visible strong,.saved-evidence-status:visible span').evaluateAll(labels=>labels.map(label=>parseFloat(getComputedStyle(label).fontSize)));
+      assert.ok(statusSizes.length>0&&statusSizes.every(size=>size>=16),'Actual saved-read status headings and explanations retain at least16px text');
+      const pinned=panel.getByRole('region',{name:'Signup status summary'});
+      await pinned.getByText('Current step',{exact:true}).waitFor();await pinned.getByText('Recorded reason',{exact:true}).waitFor();await pinned.getByText('Next safe step',{exact:true}).waitFor();
+      assert.equal(await pinned.getByRole('button').count(),0,'Pinned guidance cannot execute recovery');
+      assert.equal(fixtureSaves,beforeViewSaves);assert.equal(liveReads,beforeViewLive);
+      if(process.argv.includes('--senior-proof-only')){
+        await quickViews.getByRole('button',{name:'Needs attention',exact:true}).click();
+        await panel.getByRole('button',{name:'Inspect Harbour Electrical',exact:true}).click();
+        await panel.getByRole('button',{name:'Edit business info',exact:true}).click();
+        const editor=panel.getByRole('region',{name:'Edit saved business information'});
+        await editor.waitFor();
+        await page.evaluate(()=>document.documentElement.style.fontSize='200%');
+        await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+        const geometry=await editor.locator('header').evaluate(el=>{const r=el.getBoundingClientRect();return {left:r.left,right:r.right,width:innerWidth};});
+        assert.ok(geometry.left>=-1&&geometry.right<=geometry.width+1,'Expanded editor fits at200% text');
+        assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'Full page reflows at200% text');
+        await page.screenshot({path:path.join(output,`${width}-senior-expanded-text.png`)});
+        await page.evaluate(()=>document.documentElement.style.fontSize='');
+        await editor.getByRole('button',{name:'Close editor',exact:true}).click();
+        const overview=panel.getByRole('region',{name:'Signups happening now'});
+        const stepBounds=await overview.locator('.signup-now-stages button').evaluateAll(buttons=>buttons.map(button=>{const r=button.getBoundingClientRect();return {width:r.width,height:r.height,label:parseFloat(getComputedStyle(button.querySelector('strong')).fontSize)};}));
+        assert.ok(stepBounds.length>0&&stepBounds.every(v=>v.width>=48&&v.height>=48&&v.label>=16),'Real step boxes retain readable48px targets');
+        await overview.scrollIntoViewIfNeeded();
+        await page.screenshot({path:path.join(output,`${width}-senior-tracker.png`)});
+        await page.addScriptTag({path:require.resolve('axe-core/axe.min.js')});
+        const issues=await page.evaluate(async()=>(await window.axe.run('.signup-tracker',{runOnly:{type:'tag',values:['wcag2a','wcag2aa']}})).violations.map(v=>({id:v.id,targets:v.nodes.map(n=>n.target)})));
+        assert.deepEqual(issues,[],'Focused tracker accessibility');
+        assert.deepEqual(errors,[]);assert.equal(fixtureSaves,beforeViewSaves);assert.equal(liveReads,beforeViewLive);
+        await context.close();
+        console.log(`PASS focused senior tracker ${width}px: presets, pinned evidence, editor200%, readable steps and axe; no writes.`);
+        continue;
+      }
+      await panel.getByRole('button',{name:'Reset view',exact:true}).scrollIntoViewIfNeeded();
+      await panel.getByRole('button',{name:'Reset view',exact:true}).click();
       await panel.getByRole('group',{name:'Find and sort signups',exact:true}).screenshot({path:path.join(output,`${width}-sorting-toolbar.png`)});
       assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
       assert.match(await panel.innerText(),/every 5 seconds/,'The actual tracker discloses its saved-read cadence');
@@ -225,12 +286,14 @@ async function main() {
       await livePanel.getByRole('alert').filter({hasText:'last-known only'}).waitFor();
       await livePanel.getByRole('status').filter({hasText:'Last-known snapshot'}).waitFor();assert.equal(await livePanel.locator('.signup-live-group').count(),6);
       await livePanel.getByText('Last-known guidance — refresh checks before taking any action.',{exact:true}).waitFor();failLiveReads=false;
+      const diagnosticStateFonts=await livePanel.locator('.diagnostic-state').evaluateAll(labels=>labels.map(label=>parseFloat(getComputedStyle(label).fontSize)));
+      assert.ok(diagnosticStateFonts.length>0&&diagnosticStateFonts.every(size=>size>=16),'Provider outcome labels remain at least16px');
       assert.equal(await setup.locator('.setup-analysis-groups > section').count(), 4);
       assert.equal(await setup.locator('.setup-analysis-groups li').count(), 18);
       const cardBounds=await setup.locator('.control-room-groups > section').evaluateAll(cards=>cards.map(card=>{const r=card.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width};}));
       if(width>700){assert.ok(Math.abs(cardBounds[0].y-cardBounds[1].y)<2,'Desktop setup uses two wide columns');assert.ok(cardBounds[2].y>cardBounds[0].y,'Third card starts a new row');assert.ok(cardBounds[0].width>350,'Number card has comfortable desktop width');}
       else{assert.ok(cardBounds[1].y>cardBounds[0].y,'Phone setup cards stack, never squeeze side by side');assert.ok(Math.abs(cardBounds[1].x-cardBounds[0].x)<2);}
-      assert.equal(await setup.locator('.control-room-groups li').first().evaluate(el=>getComputedStyle(el).fontSize),'14px','Checklist text is readable rather than miniature');
+      assert.equal(await setup.locator('.control-room-groups li').first().evaluate(el=>getComputedStyle(el).fontSize),'18px','Senior-friendly checklist body text');
       await setup.locator('.control-room-groups').screenshot({path:path.join(output,`${width}-spacious-setup.png`)});
       await setup.getByRole('button', { name: 'Analyze saved setup' }).click();
       const failedPurchase = setup.getByRole('button', { name: 'Number purchase failed', exact: true });
@@ -238,6 +301,7 @@ async function main() {
       assert.equal(await failedPurchase.getAttribute('aria-expanded'), 'true');
       const failureDetails = setup.getByRole('region', { name: 'Number purchase failure details' });
       await failureDetails.getByText('Purchase outcome unconfirmed', { exact: true }).waitFor();
+      assert.ok((await failureDetails.locator('h6,.purchase-outcome strong').evaluateAll(labels=>labels.map(label=>parseFloat(getComputedStyle(label).fontSize)))).every(size=>size>=16),'Purchase failure labels remain at least16px');
       await failureDetails.getByText('Live provider check: not performed', { exact: true }).waitFor();
       assert.equal(await failureDetails.getByRole('button', { name: 'Resume setup unavailable' }).isDisabled(), true);
       assert.equal(await failureDetails.getByRole('button', { name: 'Refresh saved receipts' }).evaluate(el=>getComputedStyle(el).color), 'rgb(255, 255, 255)', 'Admin shell must not override primary-action contrast');
@@ -294,6 +358,7 @@ async function main() {
       catch (error) { await page.screenshot({ path: path.join(output, `${width}-conflict-failure.png`), fullPage: true }); throw error; }
       failReads = true; await panel.getByRole('button', { name: 'Refresh signups' }).click();
       await panel.getByRole('alert').filter({ hasText: 'Signup updates are unavailable' }).waitFor();
+      await panel.getByRole('region',{name:'Signup status summary'}).getByText('Last-known recorded reason',{exact:true}).waitFor();
       assert.equal(await panel.locator('.signup-tracker-row').count(), 1, 'Keep last-known rows when refresh fails');
       failReads = false;
       await panel.locator(':scope > .saved-evidence-status.is-connected').waitFor({timeout:15000});
@@ -303,13 +368,29 @@ async function main() {
       await page.addScriptTag({ path: require.resolve('axe-core/axe.min.js') });
       const violations = await page.evaluate(async () => (await window.axe.run('.signup-tracker', { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa'] } })).violations.map(v => ({ id: v.id, description: v.description, nodes:v.nodes.map(n=>({target:n.target,summary:n.failureSummary})) })));
       assert.deepEqual(violations, [], `Accessibility ${width}`);
+      await panel.locator('.signup-tracker-totals>summary').scrollIntoViewIfNeeded();
+      await panel.locator('.signup-tracker-totals>summary').click();
+      await page.evaluate(()=>{document.documentElement.style.fontSize='200%';});
+      assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,`No page-wide horizontal overflow at 200% text size, ${width}px`);
+      const enlargedEditor=await panel.getByRole('region',{name:'Edit saved business information'}).evaluate(editor=>{const outer=editor.getBoundingClientRect(),header=editor.querySelector('header'),controls=[...header.children];return controls.every(control=>{const rect=control.getBoundingClientRect();return rect.left>=outer.left&&rect.right<=outer.right;});});
+      assert.equal(enlargedEditor,true,'Enlarged editor header and Close control stay inside their container');
+      const enlargedStatusFonts=await panel.locator('.saved-evidence-status:visible strong,.saved-evidence-status:visible span').evaluateAll(labels=>labels.map(label=>parseFloat(getComputedStyle(label).fontSize)));
+      assert.ok(enlargedStatusFonts.length>0&&enlargedStatusFonts.every(size=>size>=32),'Actual status heading/explanation respond to200% text enlargement');
+      const enlargedTargets=await panel.getByRole('group',{name:'Quick signup views'}).getByRole('button').evaluateAll(buttons=>buttons.map(button=>{const rect=button.getBoundingClientRect();return rect.width>=48&&rect.height>=48;}));
+      assert.ok(enlargedTargets.every(Boolean),'Enlarged quick controls stay tappable');
+      await panel.getByRole('region',{name:'Signup status summary'}).screenshot({path:path.join(output,`${width}-senior-200-percent-summary.png`)});
+      await page.evaluate(()=>{document.documentElement.style.fontSize='';});
       await context.close(); console.log(`PASS ${width}px: real component/routes, filters, checkpoints, canonical fixture edit, stale-draft/error retention, no overflow or WCAG2A/AA violations.`);
     }
     assert.deepEqual(sourceHashes(),initialSourceHashes,'Do not certify source files changed during browser execution');
+    if(process.argv.includes('--senior-proof-only')){
+      fs.writeFileSync(path.join(output,'senior-partial-report.json'),JSON.stringify({passed:true,ready:false,partial:true,scope:'synthetic-chromium-tracker-senior-only',sourceSha256:initialSourceHashes,widths:[1440,390,320],browserVersion:browser.version(),presets:true,pinnedSummary:true,editorReflow200:true,readableSteps:true,axeViolations:0,fixtureSaves,liveReads,productionRequests:0,providerTrafficAllowed:0,limitations:['Not the full canonical tracker gate','Not Firefox or WebKit','No live provider, delivery or OS isolation proof']},null,2));
+      return;
+    }
     const report = { passed: true, scope: 'synthetic-dashboard-only', sourceHead: process.env.SIGNUP_DIAGNOSTIC_HEAD || require('node:child_process').execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),
       sourceSha256: initialSourceHashes,
       sourceState: process.env.CI ? 'ci-checkout' : 'uncommitted-local-working-tree',
-      widths: [1440, 390, 320], savedProgressAutoRefresh:true, automaticReadFailureRecovery:true, liveDiagnosticUi:true, liveDiagnosticFixtureReads:liveReads, providerAdapterExercisedByBrowser:false,
+      widths: [1440, 390, 320], seniorTextEnlargementPercent:200, quickViewControls:true, pinnedEvidenceSummary:true, savedProgressAutoRefresh:true, automaticReadFailureRecovery:true, liveDiagnosticUi:true, liveDiagnosticFixtureReads:liveReads, providerAdapterExercisedByBrowser:false,
       purchaseFailureInspector:true, receiptRefreshFailureRetained:true, journeyStages: 9, clickableSteps:9, keyboardStepSelection:true, timeline:true, fixtureSaves, auditEvents: audits, externalBlocked, requests, productionRequests: 0, telegramSends: 0, calls: 0, sms: 0, limitations: 'Synthetic preview, not a production deployment; full exact-lock CI remains required. Saved receipt refresh and live-diagnostic fixture responses are not live provider verification or recovery.' };
     fs.writeFileSync(path.join(output, 'browser-report.json'), JSON.stringify(report, null, 2)); console.log(JSON.stringify(report));
   } catch (error) {

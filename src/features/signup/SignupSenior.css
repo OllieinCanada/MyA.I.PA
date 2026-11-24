@@ -1,0 +1,37 @@
+.signup-number-box{box-sizing:border-box;width:100%;max-width:72rem;margin:1rem auto;padding:1rem 1.25rem;border:3px solid #bd233d;border-radius:1.125rem;background:#fff1f3;color:#71132a;box-shadow:0 0 0 3px #fee1e8,0 0 18px 2px rgb(189 35 61 / 18%);overflow-wrap:anywhere;line-height:1.5;font-size:1.125rem}
+.signup-number-box strong{display:block;font-size:1.125rem;line-height:1.5}
+.signup-number-box p{font-size:1rem;margin:.35rem 0 0;color:#71132a}
+.signup-number-box .signup-number-box-value{display:block;font-size:clamp(1.5rem,6vw,2.25rem);font-weight:800}
+.signup-number-box.is-assigned{border-color:#17654f;background:#edf7ef;color:#123f2d;box-shadow:0 0 0 3px #d8ecdf}
+.signup-number-box.is-assigned p{color:#123f2d}
+.signup-number-box.is-failed,.signup-number-box.is-closed{border-style:double;border-width:4px}
+.signup-missing-shortcut{display:flex;flex-wrap:wrap;gap:.4rem;align-items:center;justify-content:center;min-height:3rem;padding:.75rem 1rem;border:2px solid #2453b6;border-radius:.875rem;background:#fff;color:#173e91;font-size:1rem;font-weight:700;line-height:1.5;white-space:normal;text-align:center;overflow-wrap:anywhere}
+.signup-missing-shortcut:focus-visible{outline:3px solid #0b3f97;outline-offset:3px}
+.signup-missing-shortcut strong{text-decoration:underline}
+.signup-mobile-action-bar>.signup-missing-shortcut{grid-column:1/-1}
+.signup-desktop-shortcut{display:none;margin:1rem 0}
+.signup-senior input:not([type=checkbox]):not([type=radio]),.signup-senior select,.signup-senior textarea{font-size:1rem;min-height:3rem}
+.signup-senior .signup-business-fields label>span:first-child,.signup-senior .signup-business-fields label>span[id$=-error],.signup-senior .signup-pricing-choice>span,.signup-senior .signup-desktop-action-footer p,.signup-senior .signup-privacy-footer,.signup-senior .signup-mobile-disabled-reason,.signup-senior .signup-desktop-disabled-reason,.signup-senior .signup-mobile-trial-note{font-size:1rem!important;line-height:1.5}
+.signup-senior .signup-task-content>p,.signup-senior .signup-mobile-task-heading>p,.signup-senior .signup-number-box{font-size:1.125rem}
+.signup-senior .signup-mobile-action-bar button,.signup-senior .signup-inline-actions button,.signup-senior .signup-desktop-action-footer button{min-height:3rem;font-size:1rem}
+.signup-senior .signup-mobile-progress [class],.signup-senior .signup-desktop-tabs button,.signup-senior .signup-desktop-tabs button>span{font-size:1rem;line-height:1.5}
+.signup-senior .signup-mobile-action-bar,.signup-senior .signup-inline-actions{grid-template-columns:repeat(auto-fit,minmax(min(100%,9rem),1fr));overflow-wrap:anywhere}
+.signup-senior .signup-mobile-action-bar.is-first-step{grid-template-columns:1fr}
+.signup-senior .signup-mobile-primary{white-space:normal;word-break:normal;overflow-wrap:normal}
+.signup-senior .signup-visible-progress .signup-mobile-progress-copy{flex-wrap:wrap;align-items:flex-start}
+.signup-senior .signup-visible-progress .signup-mobile-progress-copy span,.signup-senior .signup-visible-progress .signup-mobile-progress-copy strong{font-size:1rem;line-height:1.5;max-width:100%;white-space:normal;overflow:visible;text-overflow:clip}
+.signup-senior .signup-visible-progress .signup-mobile-progress-copy span{flex:0 1 auto}
+.signup-senior .signup-visible-progress .signup-mobile-progress-copy strong{flex:1 1 12rem;min-width:0;overflow-wrap:normal}
+.signup-senior .signup-trade-grid button,.signup-senior .signup-specialization-grid button{min-height:3rem;min-width:3rem}
+.signup-senior .signup-task-content{scroll-margin-top:1rem}
+@media(min-width:640px){.signup-desktop-shortcut{display:block}}
+@media(max-width:400px){.signup-number-box{padding:.875rem}}
+@media(prefers-reduced-motion:reduce){.signup-senior *{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
+.signup-senior{font-size:1.125rem;line-height:1.5}
+.signup-senior p{font-size:1.125rem;line-height:1.5}
+.signup-senior .signup-home-row>span,.signup-senior .signup-mobile-offer,.signup-senior .signup-page-benefits{font-size:1rem;line-height:1.5}
+.signup-senior .signup-number-box p{font-size:1rem}
+.signup-senior button{font-size:1rem;min-height:3rem}
+.signup-senior label>span.border-slate-200{border-color:#64748b}
+.signup-senior label>span.border-slate-200:focus-within{border-color:#1d4ed8}
+.signup-senior label>span.border-rose-300{border-color:#9f1239}

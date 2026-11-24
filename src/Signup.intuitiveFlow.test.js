@@ -62,7 +62,7 @@ describe("intuitive signup presentation", () => {
     }
   });
 
-  test("continues past service-call pricing after both prices are entered", () => {
+  test("continues past service-call pricing after both prices are entered", async () => {
     act(() => root.render(<Signup />));
     const form = container.querySelector("form");
     const submit = () => act(() => form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
@@ -124,6 +124,7 @@ describe("intuitive signup presentation", () => {
     expect(container.textContent).toMatch(/Step 5 of 7/i);
     expect(container.textContent).toMatch(/What should your assistant include\?/i);
     const pricingChoices = () => Array.from(container.querySelectorAll('#signup-pricing input[type="checkbox"]'));
+    expect(container.querySelector('.signup-number-box')).toBeNull();
     expect(pricingChoices()).toHaveLength(5);
     expect(pricingChoices().every((checkbox) => !checkbox.checked)).toBe(true);
     expect(container.querySelector(".signup-mobile-primary").disabled).toBe(false);
@@ -143,6 +144,7 @@ describe("intuitive signup presentation", () => {
     expect(container.textContent).not.toMatch(/Check your setup|Continue to final review/i);
     expect(container.textContent).not.toMatch(/Assistant voice|voice preview/i);
     expect(container.textContent).toMatch(/Final review/i);
+    expect(container.querySelector('.signup-number-box')).toBeNull();
     expect(container.querySelectorAll(".signup-review-step")).toHaveLength(1);
     expect(container.querySelector('[aria-label="Secure signup verification"]')).not.toBeNull();
     expect(container.querySelector(".signup-review-step")).not.toBeNull();
@@ -161,9 +163,9 @@ describe("intuitive signup presentation", () => {
     expect(container.querySelector(".signup-review-step").textContent).toMatch(/95/);
     expect(container.querySelector(".signup-review-step")).not.toBeNull();
     clickButton("Change", container.querySelector(".signup-review-step"));
-    act(() => container.querySelector(".signup-mobile-back").dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    await act(async () => { container.querySelector(".signup-mobile-back").dispatchEvent(new MouseEvent("click", { bubbles: true })); await new Promise(resolve => setTimeout(resolve, 25)); });
     expect(container.textContent).toMatch(/Step 6 of 7/i);
-    act(() => container.querySelector(".signup-mobile-back").dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    await act(async () => { container.querySelector(".signup-mobile-back").dispatchEvent(new MouseEvent("click", { bubbles: true })); await new Promise(resolve => setTimeout(resolve, 25)); });
     expect(container.textContent).toMatch(/Step 5 of 7/i);
     expect(container.querySelector(".signup-review-step")).toBeNull();
     submit();

@@ -10,6 +10,8 @@ const sourceFiles=['server/signupFormObservation.js','src/Signup.js','src/featur
 const sourceHashes=()=>Object.fromEntries(sourceFiles.map(file=>[file,require('node:crypto').createHash('sha256').update(fs.readFileSync(path.resolve(file))).digest('hex')]));
 sourceFiles.push('src/AdminDashboard.css');
 sourceFiles.push('src/signupTradeDisplay.js');
+sourceFiles.push('src/SavedEvidenceStatus.js','src/SavedEvidenceStatus.css');
+sourceFiles.push('src/features/signup/signupNavigation.js','src/features/signup/signupNumberState.js','src/features/signup/signupMissingRequirement.js','src/features/signup/SignupNumberBox.js','src/features/signup/SignupSenior.css');
 async function main(){
  const initialSourceHashes=sourceHashes();
  const extraModules=String(process.env.NODE_PATH||'').split(path.delimiter).filter(Boolean);
@@ -35,7 +37,7 @@ async function main(){
   const stub=path.join(publicDir,'inert-vapi.js');fs.writeFileSync(stub,'module.exports=class InertVapi {constructor(){throw new Error("Voice is forbidden in this form-only fixture");}};');
   await new Promise((resolve,reject)=>{const compiler=webpack({mode:'development',devtool:false,entry:path.join(__dirname,'signup-observation-preview-entry.js'),output:{path:publicDir,filename:'form.js'},optimization:{minimize:false},resolve:{modules:[...extraModules,'node_modules'],alias:{'@vapi-ai/web':stub}},plugins:[new webpack.DefinePlugin({'process.env':JSON.stringify({NODE_ENV:'development',REACT_APP_API_BASE_URL:base,PUBLIC_URL:'',REACT_APP_GOOGLE_MAPS_API_KEY:''})})],module:{rules:[{test:/\.js$/,exclude:/node_modules/,use:{loader:require.resolve('babel-loader'),options:{presets:[require.resolve('@babel/preset-react')]}}},{test:/\.css$/,use:[require.resolve('style-loader'),require.resolve('css-loader')]}]}});compiler.run((err,stats)=>compiler.close(closeErr=>err||closeErr||stats.hasErrors()?reject(err||closeErr||Error(stats.toString({all:false,errors:true}))):resolve()));});
   console.log('Phase B: synthetic bundle ready; launching browser.');
-  const {chromium}=require('./playwright-runtime');browser=await chromium.launch({headless:true,timeout:60000});const context=await browser.newContext({viewport:{width:1440,height:1100}});page=await context.newPage();page.setDefaultTimeout(30000);page.setDefaultNavigationTimeout(60000);page.on('pageerror',e=>{errors.push(e.message);console.error('Synthetic page error:',e.message);});
+  const {chromium}=require('./playwright-runtime');browser=await chromium.launch({headless:true,timeout:60000,executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE||undefined});const context=await browser.newContext({viewport:{width:1440,height:1100}});page=await context.newPage();page.setDefaultTimeout(30000);page.setDefaultNavigationTimeout(60000);page.on('pageerror',e=>{errors.push(e.message);console.error('Synthetic page error:',e.message);});
   await page.route('**/*',route=>new URL(route.request().url()).origin===base?route.continue():(externalBlocked++,route.abort()));
   const wait=async predicate=>{for(let i=0;i<200;i++){if(await predicate())return;await new Promise(r=>setTimeout(r,50));}throw Error('Expected metadata condition was not observed');};
   const row=async()=> (await service.listAdmin()).rows[0];
@@ -46,6 +48,91 @@ async function main(){
    await page.locator('#signup-business-details').waitFor();return page.locator('#signup-business-details');}
   // Focused local proof is deliberately partial. Default/full CI still runs
   // every journey below; this artifact cannot stand in for the full gate.
+  async function checkSeniorSignup(){
+   const checked=[],initialBlockedWrites=blockedWrites;
+   const contrast=(a,b)=>{
+    const luminance=value=>{
+     const rgb=value.match(/[\d.]+/g).slice(0,3).map(Number).map(n=>{const s=n/255;return s<=0.04045?s/12.92:((s+0.055)/1.055)**2.4;});
+     return rgb[0]*0.2126+rgb[1]*0.7152+rgb[2]*0.0722;
+    };
+    const x=luminance(a),y=luminance(b);return (Math.max(x,y)+0.05)/(Math.min(x,y)+0.05);
+   };
+   for(const width of [390,320,1440]){
+    await page.setViewportSize({width,height:1000});
+    // A changed query forces a new document per viewport; a same-hash goto
+    // alone retains the prior React form and is not a clean fixture reset.
+    await page.goto(base+'/?seniorViewport='+width+'#/signup',{waitUntil:'domcontentloaded'});
+    await page.locator('.signup-mobile-flow').waitFor();
+    assert.equal(await page.locator('.signup-number-box').count(),0,'Forwarding-number box must not appear before signup submission');
+    let detailsPanel=await businessForm();
+    const shortcut=page.locator('.signup-missing-shortcut:visible').first();
+    await shortcut.waitFor();
+    assert.equal(await shortcut.isEnabled(),true,'Missing-field shortcut remains enabled');
+    const bounds=await shortcut.boundingBox();assert.ok(bounds.width>=48&&bounds.height>=48,'Shortcut touch target');
+    await shortcut.click();
+    await page.waitForFunction(()=>document.activeElement?.getAttribute('autocomplete')==='name');
+    assert.equal(await page.evaluate(()=>document.activeElement?.getAttribute('autocomplete')),'name','Shortcut focuses actual first missing field');
+    await detailsPanel.getByPlaceholder('e.g., Jamie Smith').fill('Taylor Morgan');
+    await detailsPanel.getByPlaceholder('e.g., Smith Electrical Services').fill('Harbour Light Electrical');
+    await shortcut.click();
+    await page.waitForFunction(()=>document.activeElement?.getAttribute('autocomplete')==='tel');
+    assert.equal(await page.evaluate(()=>document.activeElement?.getAttribute('autocomplete')),'tel','Shortcut advances to business phone');
+    const snapshot=await page.evaluate(()=>JSON.stringify(history.state));
+    assert.ok(!/Taylor Morgan|Harbour Light Electrical|@|token|cursor/i.test(snapshot),'Navigation stores no entered identity or access capability');
+    await page.goBack();
+    await page.getByRole('button',{name:'Hamilton',exact:true}).waitFor({state:'visible'});
+    await page.goForward();
+    await page.locator('#signup-business-details').waitFor();
+    detailsPanel=page.locator('#signup-business-details');
+    assert.equal(await detailsPanel.getByPlaceholder('e.g., Jamie Smith').inputValue(),'Taylor Morgan','Browser Back/Forward preserves entered name');
+    assert.equal(await detailsPanel.getByPlaceholder('e.g., Smith Electrical Services').inputValue(),'Harbour Light Electrical','Browser Back/Forward preserves business');
+    await page.getByRole('button',{name:'Back',exact:true}).filter({visible:true}).first().click();
+    await page.getByRole('button',{name:'Hamilton',exact:true}).waitFor({state:'visible'});
+    await page.getByRole('button',{name:width<640?'Next':'Continue to business details',exact:true}).filter({visible:true}).first().click();
+    await page.locator('#signup-business-details').waitFor();
+    assert.equal(await page.locator('#signup-business-details').getByPlaceholder('e.g., Jamie Smith').inputValue(),'Taylor Morgan','In-form Back also preserves input');
+    const typography=await page.locator('.signup-missing-shortcut:visible').first().evaluate(el=>({font:parseFloat(getComputedStyle(el).fontSize),animation:getComputedStyle(el).animationName}));
+    assert.ok(typography.font>=16,'Task-critical shortcut text at least16px');
+    assert.equal(typography.animation,'none','No flashing shortcut');
+    await page.waitForTimeout(250); // Measure the final border, not its colour transition.
+    const boundaries=await page.locator('#signup-business-details').evaluate(section=>{
+     const snapshot=selector=>{const wrapper=section.querySelector(selector).parentElement,s=getComputedStyle(wrapper);return{border:s.borderColor,background:s.backgroundColor};};
+     return{normal:snapshot('#business-name-input'),invalid:snapshot('#business-phone-number-input')};
+    });
+    for(const [kind,colours]of Object.entries(boundaries))assert.ok(contrast(colours.border,colours.background)>=3,kind+' input boundary must meet measured3:1 contrast');
+    for(const selector of ['.signup-missing-shortcut:visible']){
+     const colours=await page.locator(selector).first().evaluate(el=>{const s=getComputedStyle(el);return {text:s.color,background:s.backgroundColor};});
+     assert.ok(contrast(colours.text,colours.background)>=4.5,selector+' text must meet measured4.5:1 contrast');
+    }
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'No page-wide horizontal overflow');
+    await page.screenshot({path:path.join(output,`senior-signup-${width}.png`),fullPage:true});
+    if(width===320){
+     await page.evaluate(()=>document.documentElement.style.fontSize='200%');
+     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'200% enlarged text must reflow');
+     const enlarged=await page.evaluate(()=>{
+      const visible=selector=>[...document.querySelectorAll(selector)].find(el=>el.getBoundingClientRect().height&&getComputedStyle(el).visibility!=='hidden');
+      const primary=visible('.signup-mobile-primary'),back=visible('.signup-mobile-back'),heading=visible('.signup-mobile-progress-copy strong');
+      const walker=document.createTreeWalker(primary,NodeFilter.SHOW_TEXT),brokenWords=[];
+      while(walker.nextNode()){const node=walker.currentNode;for(const match of node.textContent.matchAll(/\S+/g)){const range=document.createRange();range.setStart(node,match.index);range.setEnd(node,match.index+match[0].length);if(range.getClientRects().length>1)brokenWords.push(match[0]);}}
+      return{brokenWords,buttonFont:parseFloat(getComputedStyle(primary).fontSize),headingFont:parseFloat(getComputedStyle(heading).fontSize),headingText:heading.textContent,headingOverflow:getComputedStyle(heading).textOverflow,headingFits:heading.scrollWidth<=heading.clientWidth+1,buttonsStack:primary.getBoundingClientRect().y>=back.getBoundingClientRect().bottom-1};
+     });
+     assert.deepEqual(enlarged.brokenWords,[],'At200% text, action words must not split into letter fragments');
+     assert.ok(enlarged.buttonFont>=32&&enlarged.headingFont>=32,'Reflow must not shrink the enlarged important text');
+     assert.equal(enlarged.headingText,'Business details');assert.notEqual(enlarged.headingOverflow,'ellipsis','The current step must not be truncated');
+     assert.ok(enlarged.headingFits&&enlarged.buttonsStack,'At200% text, heading wraps and action buttons stack');
+     await page.screenshot({path:path.join(output,'senior-signup-320-text-200.png'),fullPage:true});
+     await page.evaluate(()=>document.documentElement.style.fontSize='');
+    }
+    assert.equal(await page.locator('.signup-number-box').count(),0,'Forwarding-number box remains absent during business entry and navigation');
+    checked.push({width,history:true,valuesPreserved:true,shortcut:true,forwardingHiddenBeforeSubmission:true});
+    console.log('PASS senior Signup '+width+'px: actual history, preserved values, missing-field focus, post-submission-only forwarding display and reflow.');
+   }
+   assert.equal(blockedWrites,initialBlockedWrites,'No additional signup/provider/billing write even attempted');
+   assert.deepEqual(errors,[]);assert.deepEqual(sourceHashes(),initialSourceHashes,'Sources stable throughout proof');
+   fs.writeFileSync(path.join(output,'senior-ux-partial-report.json'),JSON.stringify({passed:true,ready:false,partial:true,scope:'synthetic-chromium-signup-only',checked,sourceSha256:initialSourceHashes,productionRequests:0,providerTrafficAllowed:0,signupSubmissions:0,calls:0,sms:0,limitations:['No live provider, real delivery or call audio proof','Not the full multi-engine browser/shipping gate','No OS network sandbox claimed']},null,2));
+   return;
+  }
+  if(process.argv.includes('--senior-ux-proof-only')){await checkSeniorSignup();return;}
   if(process.argv.includes('--start-proof-only')){
    await context.route('**/*',route=>new URL(route.request().url()).origin===base?route.continue():(externalBlocked++,route.abort()));
    await page.setViewportSize({width:390,height:844});
@@ -138,7 +225,7 @@ async function main(){
   const admin=await startContext.newPage();admin.on('pageerror',e=>errors.push(e.message));await admin.goto(base+'/#/admin',{waitUntil:'domcontentloaded'});
   const overview=admin.getByRole('region',{name:'Signups happening now'});await overview.getByText('Visitor '+startPointer.id.slice(-8),{exact:true}).first().waitFor();
   assert.equal(await overview.locator('.signup-now-stages button').count(),6);assert.equal(await overview.getByRole('region',{name:'Expanded signup step'}).count(),0);
-  const compactBounds=await overview.locator('.signup-now-stages button').evaluateAll(items=>items.map(e=>{const r=e.getBoundingClientRect();return{x:r.x,y:r.y,right:r.right};}));assert.ok(compactBounds.every(r=>Math.abs(r.y-compactBounds[0].y)<2),'All six steps fit one line');assert.ok(compactBounds.at(-1).right<=390,'No off-screen step');
+  const compactBounds=await overview.locator('.signup-now-stages button').evaluateAll(items=>items.map(e=>{const r=e.getBoundingClientRect();return{x:r.x,y:r.y,right:r.right,width:r.width,height:r.height};}));assert.ok(new Set(compactBounds.map(r=>Math.round(r.y))).size>1,'Readable steps wrap instead of shrinking at390px');assert.ok(compactBounds.every(r=>r.x>=0&&r.right<=390&&r.width>=48&&r.height>=48),'All wrapped steps remain visible and tappable');
   await overview.screenshot({path:path.join(output,'390-start-saved-before-typing.png')});
   await businessForm();await wait(async()=> (await service.listAdmin()).rows.find(r=>r.id===startPointer.id)?.currentStep==='business_details');
   await admin.bringToFront();
@@ -148,11 +235,11 @@ async function main(){
   assert.equal(await overview.locator('.signup-now-stages button').first().locator('svg').count(),1);
   for(const width of [1440,390,320]){
    await admin.setViewportSize({width,height:1000});
-   const arrows=await overview.locator('.signup-now-stages button').evaluateAll(buttons=>buttons.map((b,i)=>{const box=b.getBoundingClientRect(),line=getComputedStyle(b,'::after'),tip=getComputedStyle(b,'::before');return {last:i===buttons.length-1,line:line.content,tip:tip.content,gap:parseFloat(line.width),distance:i<buttons.length-1?buttons[i+1].getBoundingClientRect().left-box.right:0};}));
-   for(const a of arrows.slice(0,-1)){assert.notEqual(a.line,'none');assert.notEqual(a.tip,'none');assert.ok(Math.abs(a.gap-a.distance)<=2,'Arrow must reach the next box');}
+   const arrows=await overview.locator('.signup-now-stages button').evaluateAll(buttons=>buttons.map((b,i)=>{const box=b.getBoundingClientRect(),next=buttons[i+1]?.getBoundingClientRect(),line=getComputedStyle(b,'::after'),tip=getComputedStyle(b,'::before');return {last:i===buttons.length-1,line:line.content,tip:tip.content,display:line.display,gap:parseFloat(line.width),sameRow:next&&Math.abs(next.y-box.y)<2,distance:next?next.left-box.right:0};}));
+   for(const a of arrows.slice(0,-1)){if(a.sameRow){assert.notEqual(a.line,'none');assert.notEqual(a.tip,'none');assert.notEqual(a.display,'none');assert.ok(Math.abs(a.gap-a.distance)<=2,'Same-row arrow reaches the next box');}else assert.equal(a.display,'none','No misleading connector across a wrapped row');}
    assert.equal(arrows.at(-1).line,'none');
-   const singleLine=await overview.locator('.signup-now-stages button>strong').evaluateAll(labels=>labels.every(label=>label.getBoundingClientRect().height<=parseFloat(getComputedStyle(label).lineHeight)+1 && label.scrollWidth<=label.clientWidth+1));
-   assert.ok(singleLine,'Every compact step label stays on one readable line at '+width+'px');
+   const readable=await overview.locator('.signup-now-stages button').evaluateAll(buttons=>buttons.every(button=>{const label=button.querySelector('strong'),rect=button.getBoundingClientRect();return parseFloat(getComputedStyle(label).fontSize)>=16&&label.scrollWidth<=label.clientWidth+1&&rect.width>=48&&rect.height>=48;}));
+   assert.ok(readable,'Step labels retain16px size and48px targets without clipping at '+width+'px');
    await overview.screenshot({path:path.join(output,`${width}-connected-trade-steps.png`)});
   }
   await admin.setViewportSize({width:390,height:844});
@@ -168,11 +255,12 @@ async function main(){
   await visitor.bringToFront();await liveDetails.getByPlaceholder('e.g., Smith Electrical Services').fill('');await liveDetails.getByPlaceholder('e.g., Jamie Smith').fill('');
   await admin.bringToFront();await admin.waitForFunction(label=>document.querySelector('.signup-now-selected strong')?.textContent===label,'Visitor '+startPointer.id.slice(-8),{timeout:15000});
   await overview.getByRole('button',{name:'Inspect Details form step',exact:true}).click();await overview.getByRole('region',{name:'Expanded signup step'}).getByText('Business phone',{exact:true}).waitFor();
-  for(const width of [1440,390,320]){await admin.setViewportSize({width,height:844});await overview.screenshot({path:path.join(output,`${width}-signup-now-expanded.png`)});assert.equal(await admin.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);const boxes=await overview.locator('.signup-now-stages button').evaluateAll(items=>items.map(e=>{const r=e.getBoundingClientRect(),label=e.querySelector('strong'),l=label.getBoundingClientRect();return{y:r.y,right:r.right,labelFits:label.scrollWidth<=label.clientWidth+1&&l.x>=r.x&&l.right<=r.right+1};}));assert.ok(boxes.every(b=>Math.abs(b.y-boxes[0].y)<2));assert.ok(boxes.at(-1).right<=width);assert.ok(boxes.every(b=>b.labelFits),'Step text must fit inside its own box at '+width+'px');assert.deepEqual(await overview.locator('.signup-now-label-short:visible').allTextContents(),width<=580?['Info','Rates','Final']:[]);}
+  for(const width of [1440,390,320]){await admin.setViewportSize({width,height:844});await overview.screenshot({path:path.join(output,`${width}-signup-now-expanded.png`)});assert.equal(await admin.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);const boxes=await overview.locator('.signup-now-stages button').evaluateAll(items=>items.map(e=>{const r=e.getBoundingClientRect(),label=e.querySelector('strong'),l=label.getBoundingClientRect();return{y:r.y,right:r.right,width:r.width,height:r.height,font:parseFloat(getComputedStyle(label).fontSize),labelFits:label.scrollWidth<=label.clientWidth+1&&l.x>=r.x&&l.right<=r.right+1};}));if(width<=580)assert.ok(new Set(boxes.map(b=>Math.round(b.y))).size>1,'Phone step boxes wrap');assert.ok(boxes.every(b=>b.right<=width&&b.width>=48&&b.height>=48&&b.font>=16&&b.labelFits),'Readable step boxes fit without shrinking at '+width+'px');assert.deepEqual(await overview.locator('.signup-now-label-short:visible').allTextContents(),width<=580?['Info','Rates','Final']:[]);await admin.evaluate(()=>{document.documentElement.style.fontSize='200%';});assert.equal(await admin.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'No horizontal overflow at200% text, '+width+'px');await admin.evaluate(()=>{document.documentElement.style.fontSize='';});}
   await overview.getByRole('button',{name:'Close',exact:true}).click();await overview.screenshot({path:path.join(output,'320-signup-now-compact.png')});
   await admin.addScriptTag({path:require.resolve('axe-core/axe.min.js')});const accessibility=await admin.evaluate(async()=>(await window.axe.run('.signup-now',{runOnly:{type:'tag',values:['wcag2a','wcag2aa']}})).violations.map(v=>({id:v.id,targets:v.nodes.map(n=>n.target)})));assert.deepEqual(accessibility,[]);
   await startContext.close();
   assert.deepEqual(errors,[]);assert.equal(blockedWrites,0);
+  await checkSeniorSignup();
   assert.deepEqual(sourceHashes(),initialSourceHashes,'Sources changed during synthetic rehearsal');
   fs.writeFileSync(path.join(output,'signup-now-browser-report.json'),JSON.stringify({passed:true,scope:'synthetic-actual-form-and-dashboard',sourceState:process.env.CI?'ci-checkout':'uncommitted-local-working-tree',sourceHead:process.env.SIGNUP_DIAGNOSTIC_HEAD||process.env.REACT_APP_RELEASE_SHA||null,sourceSha256:initialSourceHashes,actualHomepageCta:true,actualMobileAreaNext:true,startBeforeTyping:true,noPassivePageStart:true,unverifiedUntilExactLink:true,liveDraftNameCorrections:true,automaticAdminProgress:true,compactStepWidths:[1440,390,320],allSixStepsOneRow:true,stepLabelsFit:true,clickToExpand:true,refreshDoesNotReenqueue:true,syntheticOutboxOnly:true,accessibilityViolations:accessibility.length,providerTrafficAllowed:0,productionRequests:0,telegramSends:0,calls:0,sms:0,limitation:'Memory fixture and blocked browser routes, not OS isolation, real PostgreSQL concurrency, Telegram delivery or live release proof.'},null,2));
   fs.writeFileSync(path.join(output,'phase-b-browser-report.json'),JSON.stringify({passed:true,actualSignupComponent:true,actualObservationRoutes:true,scenarios:['passive page load does not create a draft','genuine trade/property/service-area interaction','blank business name','untouched visible street address','bad address format','corrected name/address','invalid postal metadata','back navigation hides prior blockers','refresh/resume exact cursor with no value restoration','optional unchecked pricing not blocked','selected missing/negative/corrected amount','unchecking hides rate without blocker','final review incomplete human verification','mobile hidden review fields not blockers','terms and checkout explicitly unproven','unverified draft names in authenticated admin report','live display-name corrections and clearing without identity linkage','desktop/mobile no overflow','no non-name typed-value leaks','real Start another signup resets without stale state or capability'],observationWrites,blockedWrites,externalBlocked,allowedProviderRequests:0,signupSubmissions:0,telegramSends:0,displayNameFieldsAllowed:['businessName','ownerName'],otherRawValuesPersisted:0},null,2));console.log('PASS Phase B actual Signup/privacy/pricing/final-review/admin field-report browser checks.');
