@@ -130,7 +130,7 @@ async function main(){
    assert.equal(blockedWrites,initialBlockedWrites,'No additional signup/provider/billing write even attempted');
    assert.deepEqual(errors,[]);assert.deepEqual(sourceHashes(),initialSourceHashes,'Sources stable throughout proof');
    fs.writeFileSync(path.join(output,'senior-ux-partial-report.json'),JSON.stringify({passed:true,ready:false,partial:true,scope:'synthetic-chromium-signup-only',checked,sourceSha256:initialSourceHashes,productionRequests:0,providerTrafficAllowed:0,signupSubmissions:0,calls:0,sms:0,limitations:['No live provider, real delivery or call audio proof','Not the full multi-engine browser/shipping gate','No OS network sandbox claimed']},null,2));
-   return;
+   return checked;
   }
   if(process.argv.includes('--senior-ux-proof-only')){await checkSeniorSignup();return;}
   if(process.argv.includes('--start-proof-only')){
@@ -212,6 +212,7 @@ async function main(){
   await wait(async()=> (await service.listAdmin()).rows.some(r=>r.id!==initialId&&r.startSource==='trial_button'));
   const resetPointer=await page.evaluate(()=>JSON.parse(sessionStorage.getItem('myaipa_signup_observation_v1')));assert.notEqual(resetPointer.id,initialId);assert.equal(await page.evaluate(()=>sessionStorage.getItem('myaipa_signup_result_v2')),null);
   // Click the actual homepage CTA before typing any form field.
+  const guardedFormPage=page;
   const startContext=await browser.newContext({viewport:{width:390,height:844}});
   await startContext.route('**/*',route=>new URL(route.request().url()).origin===base?route.continue():(externalBlocked++,route.abort()));
   const visitor=await startContext.newPage();visitor.on('pageerror',e=>errors.push(e.message));page=visitor;const beforeStarts=(await service.listAdmin()).rows.length;
@@ -259,10 +260,24 @@ async function main(){
   await overview.getByRole('button',{name:'Close',exact:true}).click();await overview.screenshot({path:path.join(output,'320-signup-now-compact.png')});
   await admin.addScriptTag({path:require.resolve('axe-core/axe.min.js')});const accessibility=await admin.evaluate(async()=>(await window.axe.run('.signup-now',{runOnly:{type:'tag',values:['wcag2a','wcag2aa']}})).violations.map(v=>({id:v.id,targets:v.nodes.map(n=>n.target)})));assert.deepEqual(accessibility,[]);
   await startContext.close();
+  // businessForm uses the current page. The CTA journey temporarily switched
+  // it to its visitor, which is now closed; restore the original still-guarded
+  // page before the required senior/history checks, rather than skipping them.
+  page=guardedFormPage;
+  assert.equal(page.isClosed(),false,'Required signup proof must own an open guarded page');
   assert.deepEqual(errors,[]);assert.equal(blockedWrites,0);
-  await checkSeniorSignup();
+  const seniorSignupChecks=await checkSeniorSignup();
   assert.deepEqual(sourceHashes(),initialSourceHashes,'Sources changed during synthetic rehearsal');
-  fs.writeFileSync(path.join(output,'signup-now-browser-report.json'),JSON.stringify({passed:true,scope:'synthetic-actual-form-and-dashboard',sourceState:process.env.CI?'ci-checkout':'uncommitted-local-working-tree',sourceHead:process.env.SIGNUP_DIAGNOSTIC_HEAD||process.env.REACT_APP_RELEASE_SHA||null,sourceSha256:initialSourceHashes,actualHomepageCta:true,actualMobileAreaNext:true,startBeforeTyping:true,noPassivePageStart:true,unverifiedUntilExactLink:true,liveDraftNameCorrections:true,automaticAdminProgress:true,compactStepWidths:[1440,390,320],allSixStepsOneRow:true,stepLabelsFit:true,clickToExpand:true,refreshDoesNotReenqueue:true,syntheticOutboxOnly:true,accessibilityViolations:accessibility.length,providerTrafficAllowed:0,productionRequests:0,telegramSends:0,calls:0,sms:0,limitation:'Memory fixture and blocked browser routes, not OS isolation, real PostgreSQL concurrency, Telegram delivery or live release proof.'},null,2));
+  fs.writeFileSync(path.join(output,'signup-now-browser-report.json'),JSON.stringify({
+   passed:true,scope:'synthetic-actual-form-and-dashboard',sourceState:process.env.CI?'ci-checkout':'uncommitted-local-working-tree',
+   sourceHead:process.env.SIGNUP_DIAGNOSTIC_HEAD||process.env.REACT_APP_RELEASE_SHA||null,sourceSha256:initialSourceHashes,
+   actualHomepageCta:true,actualMobileAreaNext:true,startBeforeTyping:true,noPassivePageStart:true,unverifiedUntilExactLink:true,
+   liveDraftNameCorrections:true,automaticAdminProgress:true,compactStepWidths:[1440,390,320],
+   allSixStepsOneRow:false,readableStepsWrapOnPhones:true,stepLabelsFit:true,seniorSignupChecks,
+   clickToExpand:true,refreshDoesNotReenqueue:true,syntheticOutboxOnly:true,accessibilityViolations:accessibility.length,
+   providerTrafficAllowed:0,productionRequests:0,telegramSends:0,calls:0,sms:0,
+   limitation:'Memory fixture and blocked browser routes, not OS isolation, real PostgreSQL concurrency, Telegram delivery or live release proof.'
+  },null,2));
   fs.writeFileSync(path.join(output,'phase-b-browser-report.json'),JSON.stringify({passed:true,actualSignupComponent:true,actualObservationRoutes:true,scenarios:['passive page load does not create a draft','genuine trade/property/service-area interaction','blank business name','untouched visible street address','bad address format','corrected name/address','invalid postal metadata','back navigation hides prior blockers','refresh/resume exact cursor with no value restoration','optional unchecked pricing not blocked','selected missing/negative/corrected amount','unchecking hides rate without blocker','final review incomplete human verification','mobile hidden review fields not blockers','terms and checkout explicitly unproven','unverified draft names in authenticated admin report','live display-name corrections and clearing without identity linkage','desktop/mobile no overflow','no non-name typed-value leaks','real Start another signup resets without stale state or capability'],observationWrites,blockedWrites,externalBlocked,allowedProviderRequests:0,signupSubmissions:0,telegramSends:0,displayNameFieldsAllowed:['businessName','ownerName'],otherRawValuesPersisted:0},null,2));console.log('PASS Phase B actual Signup/privacy/pricing/final-review/admin field-report browser checks.');
  }catch(error){const failureAt=Date.now();console.error('Synthetic rehearsal failed:',error.message);fs.writeFileSync(path.join(output,`failure-${failureAt}.json`),JSON.stringify({passed:false,scope:'synthetic-only',error:{message:String(error.message),stack:String(error.stack)},pageErrors:errors,sourceSha256:initialSourceHashes},null,2));if(page&&!page.isClosed())await page.screenshot({path:path.join(output,`failure-${failureAt}.png`),timeout:10000}).catch(()=>{});throw error;}
  finally{await browser?.close();server.closeAllConnections?.();await new Promise(resolve=>server.close(resolve));}
