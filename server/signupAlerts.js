@@ -7,6 +7,7 @@ const { sanitizeMakeFailureEnvelope } = require("./makeSignupWebhook");
 const { classifyOperationalError } = require("./operationalErrorClassifier");
 const { card } = require("./providerNotifications");
 const { validAdminUrl } = require("./incidentAlerts");
+const { describeSavedSignupDiagnosis } = require('./signupSavedDiagnosis');
 
 function safeLabel(value, fallback = "unknown", maxLength = 160) {
   const text = redactIncidentText(String(value || ""), { maxLength })
@@ -169,6 +170,7 @@ function signupNextAction(state) {
 
 function buildSignupIncidentInput(input = {}) {
   const context = signupContext(input);
+  const savedDiagnosis = describeSavedSignupDiagnosis(input.savedDiagnosis);
   const providerFailure = context.providerClassification;
   const eventKey = /^signup_[a-f0-9]{32}$/i.test(String(input.eventKey || ""))
     ? String(input.eventKey).slice(-10)
@@ -186,8 +188,9 @@ function buildSignupIncidentInput(input = {}) {
         ? "The assigned number was created, but the setup-complete SMS or email did not fully reach the customer."
       : providerFailure?.whatFailed
         || "The 14-day trial signup did not produce a verified callable number and assigned assistant.",
-    reasonCode: providerFailure?.reasonCode || signupReasonCode(input, context),
-    reason: providerFailure?.reason || input.detail || "The signup workflow stopped without verified completion proof.",
+    reasonCode: savedDiagnosis ? 'SIGNUP_SAVED_DATABASE_DIAGNOSIS' : providerFailure?.reasonCode || signupReasonCode(input, context),
+    reason: savedDiagnosis?.reason || providerFailure?.reason || input.detail || "The signup workflow stopped without verified completion proof.",
+    savedDiagnosis: input.savedDiagnosis,
     impact: providerFailure?.impact || (review
       ? "Setup is paused, not confirmed live."
       : deliveryFailure
@@ -196,9 +199,10 @@ function buildSignupIncidentInput(input = {}) {
     snapshot: {
       ...buildSignupSnapshot(input),
       "Attempt reference": eventKey,
+      ...(savedDiagnosis ? { 'Saved diagnosis': savedDiagnosis.reference, 'Database code': savedDiagnosis.code } : {}),
     },
     lastCheckpoint: signupLastCheckpoint(context),
-    nextAction: providerFailure?.nextAction || signupNextAction(input.state),
+    nextAction: savedDiagnosis?.nextAction || providerFailure?.nextAction || signupNextAction(input.state),
     signInDestination: providerFailure?.signInDestination,
     incidentId: input.incidentId || eventKey,
     affectedCustomer: input.record?.businessName || input.businessName,

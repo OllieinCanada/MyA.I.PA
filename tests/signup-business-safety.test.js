@@ -15,7 +15,7 @@ function database() {
   let state = { businesses: [], mappings: [], rows: new Map(), settings: [] };
   let tail = Promise.resolve();
   const tx = {
-    $queryRaw: async () => [{ lock_result: "" }],
+    $queryRaw: async sql => sql.join('').includes('pg_try_advisory_xact_lock') ? [{ acquired: true }] : [{ lock_result: "" }],
     runtimeStore: {
       findUnique: async ({ where }) => state.rows.has(where.key) ? structuredClone(state.rows.get(where.key)) : null,
       upsert: async ({ where, create, update }) => {

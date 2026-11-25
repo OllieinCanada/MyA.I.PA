@@ -252,7 +252,10 @@ function buildIncidentTelegramAlert(input = {}) {
       `Reference: ${incidentReference(input.incidentId)}`,
     ].join("\n");
   }
-  const reason = capText(['INVALID_HEALTH_RESPONSE', 'CLIENT_RESOURCE_ERROR'].includes(code) && input.reason
+  // Lazy require avoids the existing signup/incident modules' dependency cycle.
+  // Only a server-owned, read-verified projection can replace canned guidance.
+  const savedDiagnosis = require('./signupSavedDiagnosis').describeSavedSignupDiagnosis(input.savedDiagnosis);
+  const reason = capText(savedDiagnosis ? savedDiagnosis.reason : ['INVALID_HEALTH_RESPONSE', 'CLIENT_RESOURCE_ERROR'].includes(code) && input.reason
     ? redactIncidentText(input.reason, { maxLength: 160 })
     : briefReasons[code] || INCIDENT_REASON_CATALOG[code] || 'Cause not confirmed. Open details for the recorded error.', 160);
   const impact = redactIncidentText(input.impact, { multiline: true, maxLength: 300 }) || "The customer or operational impact has not been confirmed yet.";
@@ -265,6 +268,7 @@ function buildIncidentTelegramAlert(input = {}) {
     `Issue: ${title}`,
     "",
     `Cause: ${reason}`,
+    ...(savedDiagnosis ? [`Saved diagnosis: ${savedDiagnosis.reference}`] : []),
     `Business: ${capText(affectedCustomer(input), 80)}`,
     ...(input.snapshot?.["Call ID"] ? [`Call: ${redactIncidentText(String(input.snapshot["Call ID"]), { maxLength: 120 })}`] : []),
     `Impact: ${capText(impact, 120)}`,

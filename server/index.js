@@ -11,6 +11,7 @@ const { executeAutomaticCallNotifications, SUMMARY_TOOL: AUTOMATIC_SUMMARY_TOOL 
 const { createAutomaticNotificationContextReader } = require('./automaticNotificationContext');
 const { automaticNotificationAlert, listNotificationOutcomeAlerts } = require('./notificationOutcomes');
 const {safelyRecordSignupBug,registerSignupBugRoutes,runtimeBugStage,shouldCaptureRuntimeBug}=require('./signupBugHistory');
+const {readSavedSignupDiagnosis}=require('./signupSavedDiagnosis');
 const {assistantErrorEvidence,privateStrings}=require('./signupAssistantError');
 const {provisioningErrorEvidence,createProvisioningAuthFailureCapture}=require('./signupProvisioningError');
 const {registerProviderStatusRoutes,refreshProviderStatuses}=require('./providerMaintenance');
@@ -948,6 +949,7 @@ app.post("/api/payments/stripe-webhook", express.raw({ type: "application/json" 
               detail: `Checkout provisioning response was ${makeAssessment.kind}`,
               record: incompleteRecord,
               makeAssessment,
+              diagnosticOperationId: makeResult.diagnosticOperationId,
             });
           } else {
             const phoneProvisioning = await inspectSignupPhoneProvisioning(makeData, makeResult.body);
@@ -1014,6 +1016,7 @@ app.post("/api/payments/stripe-webhook", express.raw({ type: "application/json" 
             detail: "Checkout provisioning webhook failed",
             record: failedRecord,
             providerFailure,
+            diagnosticOperationId: error.signupDiagnosticOperationId,
           });
         }
       }
@@ -5602,6 +5605,7 @@ async function safelyNotifySignupOperations(payload, {
   record = null,
   makeAssessment = null,
   providerFailure = null,
+  diagnosticOperationId = "",
   reasonCode = "",
   supportDescription = "",
   supportEventKey = "",
@@ -5630,6 +5634,10 @@ async function safelyNotifySignupOperations(payload, {
   const adminUrl = incidentId
     ? `${FRONTEND_APP_URL}/#/admin?tab=attention&incident=${incidentId}`
     : `${FRONTEND_APP_URL}/#/admin?tab=signups`;
+  const savedDiagnosis = state === 'provisioning_failed' ? await readSavedSignupDiagnosis({
+    prisma, listSignups: listSignupDashboardRecords, record: current, operationId: diagnosticOperationId,
+    failedStage: sanitizeMakeFailureEnvelope(providerFailure || makeAssessment || { failedStage: current?.makeFailedStage }).failedStage,
+  }) : null;
   const alertInput = {
     businessName: payload?.business?.name || payload?.businessProfile?.businessName || current?.businessName || supportBusinessName,
     state,
@@ -5643,6 +5651,7 @@ async function safelyNotifySignupOperations(payload, {
     record: current,
     incidentId,
     adminUrl,
+    savedDiagnosis,
   };
   let telegramApproval = null;
   let replyMarkup = null;
@@ -11171,59 +11180,65 @@ async function sendMakeSignupCompleted(payload, { resumeExistingOnly = false, be
   const timeoutMs = parseMakeSignupTimeoutMs(process.env.MAKE_SIGNUP_TIMEOUT_MS);
   const startedAt = Date.now();
 
-  let response, rawText;
   try {
-    await beforeDispatch();
-    const handoff = await readMakeSignupHandoff({ url: safeUrl, options: {
-      method: "POST",
-      headers,
-      body: JSON.stringify(normalizedPayload),
-      signal: createTimeoutSignal(timeoutMs),
-    }, onUncertain: ({ code }) => recordRecoveryOperation({ prisma, identity: recoveryIdentity, operationId: recoveryOperationId, kind: "handoff", status: "uncertain", failureCode: code }) });
-    response = handoff.response; rawText = handoff.text;
-  } catch (error) {
-    console.error("[make:signup] webhook request failed", {
-      eventKey,
-      durationMs: Date.now() - startedAt,
-      reason: error?.name === "TimeoutError" || error?.name === "AbortError" ? "timeout" : "network_error",
-    });
-    if (error.provider === "MAKE" || error.code === "SIGNUP_JOB_LEASE_LOST") throw error;
-    const err = new Error("Make webhook could not be reached.", { cause: error });
-    err.statusCode = 502;
-    err.code = error?.name === "TimeoutError" || error?.name === "AbortError"
-      ? "MAKE_SIGNUP_TIMEOUT"
-      : "MAKE_SIGNUP_UNREACHABLE";
-    err.providerCode = error?.code || error?.cause?.code || err.code;
-    throw err;
-  }
+    let response, rawText;
+    try {
+      await beforeDispatch();
+      const handoff = await readMakeSignupHandoff({ url: safeUrl, options: {
+        method: "POST",
+        headers,
+        body: JSON.stringify(normalizedPayload),
+        signal: createTimeoutSignal(timeoutMs),
+      }, onUncertain: ({ code }) => recordRecoveryOperation({ prisma, identity: recoveryIdentity, operationId: recoveryOperationId, kind: "handoff", status: "uncertain", failureCode: code }) });
+      response = handoff.response; rawText = handoff.text;
+    } catch (error) {
+      console.error("[make:signup] webhook request failed", {
+        eventKey,
+        durationMs: Date.now() - startedAt,
+        reason: error?.name === "TimeoutError" || error?.name === "AbortError" ? "timeout" : "network_error",
+      });
+      if (error.provider === "MAKE" || error.code === "SIGNUP_JOB_LEASE_LOST") throw error;
+      const err = new Error("Make webhook could not be reached.", { cause: error });
+      err.statusCode = 502;
+      err.code = error?.name === "TimeoutError" || error?.name === "AbortError"
+        ? "MAKE_SIGNUP_TIMEOUT"
+        : "MAKE_SIGNUP_UNREACHABLE";
+      err.providerCode = error?.code || error?.cause?.code || err.code;
+      throw err;
+    }
 
-  // Accepted is not delivered, provisioned, or ready. The existing downstream
-  // provider checks still determine completion. A timeout remains uncertain.
-  await recordRecoveryOperation({ prisma, identity: recoveryIdentity, operationId: recoveryOperationId, kind: "handoff", status: response.ok ? "accepted" : "uncertain" });
-  const requestId = getMakeRequestId(response);
-  if (!response.ok) {
-    console.error("[make:signup] webhook rejected request", {
+    // Accepted is not delivered, provisioned, or ready. The existing downstream
+    // provider checks still determine completion. A timeout remains uncertain.
+    await recordRecoveryOperation({ prisma, identity: recoveryIdentity, operationId: recoveryOperationId, kind: "handoff", status: response.ok ? "accepted" : "uncertain" });
+    const requestId = getMakeRequestId(response);
+    if (!response.ok) {
+      console.error("[make:signup] webhook rejected request", {
+        status: response.status,
+        eventKey,
+        requestId,
+        durationMs: Date.now() - startedAt,
+      });
+      const err = new Error("Make webhook rejected the signup handoff.");
+      err.statusCode = 502;
+      err.code = "MAKE_SIGNUP_REJECTED";
+      err.upstreamStatus = response.status;
+      throw err;
+    }
+
+    return {
       status: response.status,
+      body: rawText,
+      data: parseJsonObject(rawText),
       eventKey,
       requestId,
       durationMs: Date.now() - startedAt,
-    });
-    const err = new Error("Make webhook rejected the signup handoff.");
-    err.statusCode = 502;
-    err.code = "MAKE_SIGNUP_REJECTED";
-    err.upstreamStatus = response.status;
-    throw err;
+      diagnosticOperationId: recoveryOperationId,
+      provisioningIdempotencyKey: normalizedPayload.provisioning.idempotencyKey,
+    };
+  } catch (error) {
+    error.signupDiagnosticOperationId = recoveryOperationId;
+    throw error;
   }
-
-  return {
-    status: response.status,
-    body: rawText,
-    data: parseJsonObject(rawText),
-    eventKey,
-    requestId,
-    durationMs: Date.now() - startedAt,
-    provisioningIdempotencyKey: normalizedPayload.provisioning.idempotencyKey,
-  };
 }
 
 function requireAdmin(req, res, next) {
@@ -15074,7 +15089,15 @@ app.post(
           normalizedPayload: trustedPayload,
         });
       } catch (error) {
+        if (error.signupDiagnosticStage === 'business-mapping') {
+          req.signupProvisioningFailureCaptureAttempted = true;
+          const capture = await safelyRecordSignupBug({ prisma, listSignups: listSignupDashboardRecords,
+            error, stage: 'business-mapping', attemptId: signupAttemptId, release: process.env.RENDER_GIT_COMMIT || '' });
+          if (!capture.recorded) console.warn('[bug-history] mapping capture unconfirmed; no capture retry');
+        }
         safelyNotifyRuntimeFailure(error, {
+          signupAttemptId, signupStage: error.signupDiagnosticStage,
+          signupBugCaptureAttempted: req.signupProvisioningFailureCaptureAttempted === true,
           area: "new agent delivery test",
           operation: "verify business mapping and send owner/customer sample texts",
           whatFailed: "A newly built signup agent did not pass its mandatory text test",
@@ -15599,6 +15622,7 @@ app.post(
         detail: "Provisioning webhook could not be reached",
         record: failedRecord,
         providerFailure,
+        diagnosticOperationId: error.signupDiagnosticOperationId,
       });
       if (telegramAlert?.sent || telegramAlert?.queued || telegramAlert?.duplicate || telegramAlert?.reason === "already_alerted") {
         error.telegramIncidentHandled = true;
@@ -15648,6 +15672,7 @@ app.post(
         detail: `Provisioning response was ${makeAssessment.kind}`,
         record: incompleteRecord,
         makeAssessment,
+        diagnosticOperationId: makeResult.diagnosticOperationId,
       });
       await createPendingSignupVerification({
         payload: makePayload,
@@ -16152,6 +16177,7 @@ async function processVerifiedSignupSetup({ record, tokenHash, verificationChann
         detail: "Verified signup could not reach provisioning",
         record: failedRecord,
         providerFailure,
+        diagnosticOperationId: error.signupDiagnosticOperationId,
       });
       if (telegramAlert?.sent || telegramAlert?.queued || telegramAlert?.duplicate || telegramAlert?.reason === "already_alerted") {
         error.telegramIncidentHandled = true;
@@ -16195,6 +16221,7 @@ async function processVerifiedSignupSetup({ record, tokenHash, verificationChann
         detail: `Verified signup response was ${makeAssessment.kind}`,
         record: incompleteRecord,
         makeAssessment,
+        diagnosticOperationId: makeResult.diagnosticOperationId,
       });
       console.error("[signup:verification] Make webhook did not complete after contact verification", {
         status: makeResult.status,
@@ -18784,7 +18811,7 @@ async function runAutomatedRuntimeRemediationInternal(incident, recordedItem) {
 async function safelyNotifyRuntimeFailure(error, context = {}) {
   if(!context.signupBugCaptureAttempted&&shouldCaptureRuntimeBug(context)){
     const bug=await safelyRecordSignupBug({prisma,listSignups:listSignupDashboardRecords,error,
-      stage:runtimeBugStage({stage:context.signupStage,route:context.route}),attemptId:context.signupAttemptId,assistantFailure:context.assistantFailure,provisioningFailure:context.provisioningFailure,
+      stage:runtimeBugStage({stage:error?.signupDiagnosticStage||context.signupStage,route:context.route}),attemptId:context.signupAttemptId,assistantFailure:context.assistantFailure,provisioningFailure:context.provisioningFailure,
       release:process.env.RENDER_GIT_COMMIT||''});
     if(!bug.recorded)console.warn('[bug-history] runtime capture unconfirmed; no capture retry');
   }
@@ -18966,7 +18993,7 @@ app.use((err, req, res, _next) => {
       const area = runtimeAreaForRoute(route);
       safelyNotifyRuntimeFailure(err, {
         signupAttemptId:req.signupProvisioningAttemptId||req.signupDiagnosticAttemptId,
-        signupStage:runtimeBugStage({route}),
+        signupStage:runtimeBugStage({stage:err.signupDiagnosticStage,route}),
         assistantFailure:req.signupAssistantFailure,
         provisioningFailure:req.signupProvisioningFailure,
         signupBugCaptureAttempted:captureAttempted,
@@ -18999,10 +19026,10 @@ app.use((err, req, res, _next) => {
           : "Open Needs Attention and the server logs, verify the affected provider state, then retry only when duplicate work is ruled out.",
       });
     } else if(journalAllowed)void safelyRecordSignupBug({prisma,listSignups:listSignupDashboardRecords,error:err,
-      stage:runtimeBugStage({route:req.route?.path}),attemptId:req.signupProvisioningAttemptId||req.signupDiagnosticAttemptId,assistantFailure:req.signupAssistantFailure,provisioningFailure:req.signupProvisioningFailure,release:process.env.RENDER_GIT_COMMIT||''});
+      stage:runtimeBugStage({stage:err.signupDiagnosticStage,route:req.route?.path}),attemptId:req.signupProvisioningAttemptId||req.signupDiagnosticAttemptId,assistantFailure:req.signupAssistantFailure,provisioningFailure:req.signupProvisioningFailure,release:process.env.RENDER_GIT_COMMIT||''});
   } else if(journalAllowed&&status>=400&&(req.signupProvisioningAttemptId||req.signupDiagnosticAttemptId||req.signupAssistantFailure)){
     void safelyRecordSignupBug({prisma,listSignups:listSignupDashboardRecords,error:err,
-      stage:runtimeBugStage({route:req.route?.path}),attemptId:req.signupProvisioningAttemptId||req.signupDiagnosticAttemptId,assistantFailure:req.signupAssistantFailure,provisioningFailure:req.signupProvisioningFailure,release:process.env.RENDER_GIT_COMMIT||''});
+      stage:runtimeBugStage({stage:err.signupDiagnosticStage,route:req.route?.path}),attemptId:req.signupProvisioningAttemptId||req.signupDiagnosticAttemptId,assistantFailure:req.signupAssistantFailure,provisioningFailure:req.signupProvisioningFailure,release:process.env.RENDER_GIT_COMMIT||''});
   }
   const body = { error: message };
   if (String(err.code || "").startsWith("MAKE_SIGNUP_")) {
