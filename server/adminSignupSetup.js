@@ -7,6 +7,9 @@ const { provisioningStateKey } = require('./provisioningState');
 const { allowedAreaCodes } = require('./numberAreaPolicy');
 const { isContactVerified } = require('./signupVerificationChannel');
 const { purchaseEvidence } = require('./signupPurchaseEvidence');
+const { assistantFailure } = require('./signupAssistantError');
+const { purchaseFailure } = require('./signupProvisioningError');
+const { listSignupBugs } = require('./signupBugHistory');
 const iso = value => Number.isFinite(Date.parse(value)) ? new Date(value).toISOString() : null;
 const kinds = ['twilio-number', 'vapi-assistant', 'vapi-import'];
 function setupTimeline(record, receipts, search, groups) {
@@ -62,7 +65,7 @@ function createNumberSearchTracker({ now = Date.now } = {}) {
   };
 }
 
-function projectSetup(record = {}, { context, receipts = {}, search = null, coverage = 'saved_record_only', business } = {}) {
+function projectSetup(record = {}, { context, receipts = {}, search = null, coverage = 'saved_record_only', business, assistantError = null, purchaseError = null } = {}) {
   const contactVerified = isContactVerified(record) && !(record.smsVerificationRequired && !(record.smsVerified || record.smsVerifiedAt))
     && !(record.emailVerificationRequired && !(record.emailVerified || record.emailVerifiedAt));
   const progress = buildSignupProgress({ signup: record, contactVerified, ready: record.status === 'setup_ready' });
@@ -104,6 +107,8 @@ function projectSetup(record = {}, { context, receipts = {}, search = null, cove
       delivered ? 'Provider delivery receipt matches this setup. Both practice copies go to the owner; this is not a real customer send.' : currentTests ? `Awaiting matching delivery proof; status: ${status}.` : 'Missing or stale configuration-bound delivery proof.', delivered ? at(prefix + 'DeliveredAt') : null, failed)];
   };
   const assigned = /^\+1\d{10}$/.test(record.twilioPhoneNumber || '') ? record.twilioPhoneNumber : null;
+  const failure=assistantFailure(record);
+  const purchase=purchaseFailure(record);
   const result = { checkedAt: new Date().toISOString(), coverage, readOnly: true,
     number: { preferredAreaCode, areaOrder, policyValid, locked: Boolean(context?.lockedAt),
       assignedAreaCode: assigned ? assigned.slice(2,5) : null, assignedLast4: assigned ? assigned.slice(-4) : null,
@@ -111,10 +116,16 @@ function projectSetup(record = {}, { context, receipts = {}, search = null, cove
     groups: [
       { id: 'number', title: 'Find and assign a new number', checks: [
         check('policy','Exact area-code policy saved',policyValid,policyValid ? `${areaOrder.join(' → ') || 'Regional / Canadian inventory'}${context.lockedAt ? ' · locked request; not broadened by current settings' : ''}` : 'No exact registered context available. Preferred/current area code is unknown.'),
+        ...(purchase?[check('purchase-failure',purchase.label,false,
+          purchaseError?`${purchaseError.phaseLabel}${purchaseError.code?' · '+purchaseError.code:''}${purchaseError.httpStatus?' · HTTP '+purchaseError.httpStatus:''}. ${purchaseError.detail||purchase.detail} ${purchase.nextAction}`:purchase.detail+' '+purchase.nextAction,
+          purchaseError?.capturedAt,true)]:[]),
         check('purchase','Number purchase saved',stages['twilio-number'].status === 'completed',`Durable stage: ${stages['twilio-number'].status}. Attempts: ${stages['twilio-number'].attempts ?? 'unknown'}.${stages['twilio-number'].uncertain ? ' Provider dispatch occurred; inspect receipts before any retry.' : ''}`,stages['twilio-number'].at,stages['twilio-number'].status === 'failed'),
         check('assigned','Number assigned to this signup',Boolean(assigned),assigned ? `Area code ${assigned.slice(2,5)} · ending ${assigned.slice(-4)}. Saved assignment, not a fresh provider lookup.` : 'No assigned number saved. Held reserves are not automatically used.'),
       ] },
       { id: 'assistant', title: 'Build the assistant and install its script', checks: [
+        ...(failure?[check('assistant-failure',failure.label,false,
+          assistantError?`${assistantError.phaseLabel}${assistantError.code?' · '+assistantError.code:''}${assistantError.httpStatus?' · HTTP '+assistantError.httpStatus:''}. ${assistantError.detail || failure.detail} ${failure.nextAction}`:failure.detail,
+          assistantError?.capturedAt,true)]:[]),
         check('assistant-created','Assistant created',done('assistant'),`Saved assistant stage: ${stages['vapi-assistant'].status}.`,stages['vapi-assistant'].at,stages['vapi-assistant'].status === 'failed'),
         check('script','Business script installed and matched',done('content'),done('content') ? 'Stored content fingerprint and verification timestamp match the saved script. Individual greeting/pricing sections are not separately certified.' : 'Script installation/readback has not been verified against the saved business answers.',at('agentContentVerifiedAt'),record.agentContentStatus === 'failed'),
         check('import','Number imported into Vapi',Boolean(record.vapiPhoneNumberId),`Saved import stage: ${stages['vapi-import'].status}.`,stages['vapi-import'].at,stages['vapi-import'].status === 'failed'),
@@ -134,10 +145,16 @@ function projectSetup(record = {}, { context, receipts = {}, search = null, cove
     limitation: 'Saved evidence, not continuous live provider verification. Historical search history may be absent; process-local search status becomes stale after 30 seconds and disappears on restart. This dashboard never buys numbers, retries setup or sends practice texts.' };
   result.timeline = setupTimeline(record,receipts,search,result.groups);
   result.purchaseEvidence = purchaseEvidence(record, receipts, coverage);
+  if(purchase){result.purchaseFailure={...purchase,evidence:purchaseError,readOnly:true,resumeAllowed:false};
+    if(purchaseError?.capturedAt)result.timeline.push({id:'purchase-request-failed',label:'Purchase request failed'+(purchaseError.code?' · '+purchaseError.code:''),at:purchaseError.capturedAt,state:'blocked',source:'Exact-context saved error; not a new provider check'});
+    result.timeline.sort((a,b)=>Date.parse(a.at)-Date.parse(b.at)||a.id.localeCompare(b.id));}
+  if(failure){result.assistantFailure={...failure,evidence:assistantError,readOnly:true,resumeAllowed:false};
+    if(assistantError?.capturedAt)result.timeline.push({id:'assistant-request-failed',label:'Assistant request failed'+(assistantError.code?' · '+assistantError.code:''),at:assistantError.capturedAt,state:'blocked',source:'Exact-context saved error; not a new provider check'});
+    result.timeline.sort((a,b)=>Date.parse(a.at)-Date.parse(b.at)||a.id.localeCompare(b.id));}
   return result;
 }
 
-async function readSetupEvidence({ prisma, record, searchTracker }) {
+async function readSetupEvidence({ prisma, record, searchTracker, listSignups }) {
   let key, context;
   let business = Number.isSafeInteger(record.businessId) && record.businessId > 0 && prisma.business
     ? await prisma.business.findUnique({ where: { id: record.businessId }, select: { id: true, vapiMappings: { select: { matchType: true, matchValue: true } } } }) : undefined;
@@ -167,7 +184,40 @@ async function readSetupEvidence({ prisma, record, searchTracker }) {
     business=verified||undefined;reconciled=Boolean(verified);
   }
   const projected=reconciled?{...record,businessId:business.id}:record;
-  const result=projectSetup(projected, { context, receipts, search: searchTracker?.read(key, context.contextHash), coverage: 'exact_context_and_saved_receipts', business });
+  let purchaseError=null,purchaseErrorRead='not_needed';
+  if(purchaseFailure(record)){
+    purchaseErrorRead='unavailable';
+    if(typeof listSignups==='function'&&typeof prisma.runtimeStore.findMany==='function')try{
+      const history=await listSignupBugs({prisma,listSignups,attemptId:record.signupAttemptId,limit:50});
+      const event=history.events.find(e=>e.signupAttemptId===record.signupAttemptId&&e.stage==='purchase'
+        &&e.provisioningFailure?.operation==='purchase'&&e.provisioningFailure.contextHash===context.contextHash);
+      purchaseError=event?{...event.provisioningFailure,capturedAt:event.capturedAt,reference:event.reference}:null;
+      purchaseErrorRead=event?'exact_context_captured_error':history.hasMore?'partial_history':'not_captured';
+    }catch(_){/* Unavailable history is not proof that no error was captured. */}
+  }
+  let assistantError=null,assistantErrorRead='not_needed';
+  if(assistantFailure(record)){
+    assistantErrorRead='unavailable';
+    if(typeof listSignups==='function'&&typeof prisma.runtimeStore.findMany==='function')try{
+      const history=await listSignupBugs({prisma,listSignups,attemptId:record.signupAttemptId,limit:50});
+      const event=history.events.find(e=>e.signupAttemptId===record.signupAttemptId&&e.stage==='assistant-create'
+        &&e.assistantFailure?.contextHash===context.contextHash);
+      assistantError=event?{...event.assistantFailure,capturedAt:event.capturedAt,reference:event.reference}:null;
+      assistantErrorRead=event?'exact_context_captured_error':history.hasMore?'partial_history':'not_captured';
+    }catch(_){/* Missing history is unknown, never an empty successful diagnosis. */}
+  }
+  const result=projectSetup(projected, { context, receipts, search: searchTracker?.read(key, context.contextHash), coverage: 'exact_context_and_saved_receipts', business,assistantError,purchaseError });
+  if(result.purchaseFailure){
+    result.purchaseFailure.errorRead=purchaseErrorRead;
+    const blocked=result.groups.find(g=>g.id==='number').checks.find(c=>c.id==='purchase-failure');
+    if(purchaseErrorRead==='unavailable')blocked.detail+=' Detailed error history could not be read; this is not proof that no error was saved.';
+    if(purchaseErrorRead==='partial_history')blocked.detail+=' No matching detail in the latest 50 reports. Older history remains unread; this is not proof that no error was saved.';
+  }
+  if(result.assistantFailure){
+    result.assistantFailure.errorRead=assistantErrorRead;
+    if(assistantErrorRead==='unavailable')result.groups.find(g=>g.id==='assistant').checks.find(c=>c.id==='assistant-failure').detail+=' Detailed error history could not be read; this is not proof that no error was saved.';
+    if(assistantErrorRead==='partial_history')result.groups.find(g=>g.id==='assistant').checks.find(c=>c.id==='assistant-failure').detail+=' No matching detail in the latest 50 reports. Older history remains unread; this is not proof that no error was saved.';
+  }
   if(reconciled){
     result.businessEvidenceSource='completed_guarded_reconciliation_and_current_mappings';
     const ready=result.groups.flatMap(g=>g.checks).find(c=>c.id==='ready');

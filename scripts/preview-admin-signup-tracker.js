@@ -12,12 +12,22 @@ const { projectSetup } = require('../server/adminSignupSetup');
 const { registerLiveDiagnosticRoutes } = require('../server/signupLiveDiagnosticRoutes');
 const {registerProviderStatusRoutes,normalizeFeed,PREFIX:STATUS_PREFIX}=require('../server/providerMaintenance');
 const {signupDiagnosticError}=require('../server/signupDiagnosticError');
+const {assistantErrorEvidence}=require('../server/signupAssistantError');
+const assistantProof=process.argv.includes('--assistant-error-proof-only');
+const purchaseAuthProof=process.argv.includes('--purchase-auth-error-proof-only');
+const purchaseProof=purchaseAuthProof||process.argv.includes('--purchase-error-proof-only');
+if(assistantProof&&purchaseProof)throw Error('Choose one focused error-proof scenario');
+const errorProof=assistantProof||purchaseProof,errorProofName=assistantProof?'assistant-error':purchaseAuthProof?'purchase-auth-error':'purchase-error';
+const {provisioningErrorEvidence}=require('../server/signupProvisioningError');
 const {buildSignupRecoveryGuidance}=require('../server/signupRecoveryGuidance');
 const output = path.resolve('diagnostics/signup-tracker-preview');
 const proofSources=['src/SignupControlRoom.js','src/SignupLiveDiagnostics.js','src/SignupLiveDiagnostics.css','server/signupLiveDiagnosticRoutes.js','server/signupLiveDiagnostics.js','server/signupDiagnosticProviders.js','src/SignupFailureDetails.js','src/SignupFailureDetails.css','server/adminSignupSetup.js','server/signupPurchaseEvidence.js','scripts/preview-admin-signup-tracker.js'];
 proofSources.push('src/signupControlRoomModel.js','src/SignupControlRoom.css');
 proofSources.push('src/ProviderMaintenance.js','src/ProviderMaintenance.css','src/SignupBugHistory.js','src/SignupBugHistory.css','server/providerMaintenance.js','server/signupBugHistory.js','server/signupDiagnosticError.js');
 proofSources.push('server/signupRecoveryGuidance.js');
+proofSources.push('server/signupAssistantError.js');
+proofSources.push('server/signupProvisioningError.js');
+proofSources.push('scripts/admin-signup-tracker-preview-entry.js');
 proofSources.push('src/AdminSignupTracker.js','src/useSavedEvidence.js','src/features/admin/savedEvidencePolling.js','src/SavedEvidenceStatus.js','src/SavedEvidenceStatus.css','server/adminSignupTracker.js');
 proofSources.push('src/SignupTrackerCompact.css','src/SignupNowOverview.js','src/SignupNowOverview.css','src/features/admin/signupNowModel.js');
 const sourceHashes=()=>Object.fromEntries(proofSources.map(file=>[file,require('node:crypto').createHash('sha256').update(fs.readFileSync(path.resolve(file))).digest('hex')]));
@@ -43,6 +53,10 @@ let rows = [fixture(1, { status: 'setup_error', identityVerified: true, twilioPh
   fixture(4, { ...ready, minutesAgo: 5 }), fixture(5, { subscriptionStatus: 'paused', minutesAgo: 1000 })];
 rows[0].onboardingStallAlertRevision = rows[0].onboardingTracker.revision; rows[0].onboardingStallAlertQueuedAt = stamp(3);
 rows[0].onboardingStallAlertEpisode = episodeKey(rows[0].onboardingTracker);
+if(assistantProof)Object.assign(rows[0],{twilioPhoneNumber:'',vapiAssistantId:'',smsVerified:true,
+  makeFailedStage:'VAPI_ASSISTANT_CREATE',makeProviderCode:'PROVIDER_REQUEST_FAILED'});
+if(purchaseProof)Object.assign(rows[0],{twilioPhoneNumber:'',vapiAssistantId:'',smsVerified:true,
+  makeFailedStage:'TWILIO_NUMBER_PURCHASE',makeProviderCode:purchaseAuthProof?'PROVISIONING_AUTHORIZATION_INVALID':'PROVIDER_REQUEST_FAILED'});
 
 async function build() {
   const extraModules = String(process.env.NODE_PATH || '').split(path.delimiter).filter(Boolean);
@@ -80,6 +94,14 @@ async function main() {
   // Presentation fixture; real journal authentication/ownership/SQL are separate tests.
   app.get('/api/admin/signup-bugs',(req,res)=>{
     const issueId='a'.repeat(64),attemptId=rows[0].signupAttemptId;
+    if(purchaseAuthProof){
+      const event={eventRef:'b'.repeat(64),issueId,reference:'BUG-AAAAAAAA',stage:'authorization',operation:'Signup authorization',
+        diagnostic:signupDiagnosticError({code:'PROVISIONING_AUTHORIZATION_INVALID',statusCode:401}),capturedAt:stamp(1),release:null,signupAttemptId:null,association:'unattributed',
+        provisioningFailure:provisioningErrorEvidence({operation:'purchase',phase:'signature-auth',env:{},error:{code:'PROVISIONING_AUTHORIZATION_INVALID',statusCode:401,message:'Invalid signed provisioning request.'}}),
+        confirmedSoftwareBug:false,nextAction:'Synthetic fixture only. Never guess signup ownership or retry.'};
+      const events=req.query.attemptId||req.query.issueId&&req.query.issueId!==issueId?[]:[event];
+      return res.set('Cache-Control','no-store').json({readOnly:true,ready:false,events,groups:events.length?[{issueId,reference:'BUG-AAAAAAAA',operation:'Signup authorization',reportsOnPage:1}]:[],hasMore:false,nextCursor:null,limitation:'Unlinked synthetic authentication fixture, not a live incident.'});
+    }
     const events=req.query.attemptId&&req.query.attemptId!==attemptId||req.query.issueId&&req.query.issueId!==issueId?[]:[{eventRef:'b'.repeat(64),issueId,reference:'BUG-AAAAAAAA',stage:'purchase',operation:'Number purchase',diagnostic:signupDiagnosticError({code:'P2028'}),capturedAt:stamp(1),release:null,signupAttemptId:attemptId,association:'verified',confirmedSoftwareBug:false,nextAction:'Synthetic fixture only. Inspect receipts; no replay.'}];
     res.set('Cache-Control','no-store').json({readOnly:true,ready:false,events,groups:events.length?[{issueId,reference:'BUG-AAAAAAAA',operation:'Number purchase',reportsOnPage:1}]:[],hasMore:false,nextCursor:null,limitation:'Sealed synthetic presentation fixture; no provider or production evidence.'});
   });
@@ -99,8 +121,10 @@ async function main() {
     audit: async () => { audits++; }, actorHash: () => 'synthetic-preview',
     setupEvidence: async record => projectSetup(record, { coverage: 'synthetic_exact_context_and_saved_receipts',
       context: { lockedAt: stamp(14), payload: { provisioning: { preferredAreaCode: '289', preferredRegion: 'ON' } } },
-      receipts: { 'twilio-number': {status:'failed',attempts:1,dispatchStartedAt:stamp(14),failedAt:stamp(14)} },
-      search: {phase:'failed',areaCode:'289',at:stamp(14),stale:true,history:[{phase:'searching',areaCode:'289',at:stamp(14)},{phase:'empty',areaCode:'289',at:stamp(14)}]},
+      receipts: { 'twilio-number': assistantProof?{status:'completed',attempts:1,completedAt:stamp(14),result:{twilioPhoneNumber:'+12895550123'}}:purchaseAuthProof?undefined:{status:'failed',attempts:1,dispatchStartedAt:stamp(14),failedAt:stamp(14)} },
+      search: assistantProof||purchaseAuthProof?null:{phase:'failed',areaCode:'289',at:stamp(14),stale:true,history:[{phase:'searching',areaCode:'289',at:stamp(14)},{phase:'empty',areaCode:'289',at:stamp(14)}]},
+      assistantError:assistantProof?{...assistantErrorEvidence({phase:'create',contextHash:'b'.repeat(64),env:{},error:{code:'ETIMEDOUT',statusCode:504,message:'Synthetic assistant request timed out; outcome unknown'}}),capturedAt:stamp(13)}:null,
+      purchaseError:purchaseProof&&!purchaseAuthProof?{...provisioningErrorEvidence({operation:'purchase',phase:'purchase',contextHash:'b'.repeat(64),env:{},error:{code:'ETIMEDOUT',statusCode:504,message:'Synthetic purchase request timed out; outcome unknown'}}),capturedAt:stamp(13)}:null,
     }),
     observations: async () => ({ rows: [{ id: 'synthetic-browser-observation', linkedAttemptId: rows[0].signupAttemptId,
       engaged: true, currentStep: 'business_details', currentStepLabel: 'Business details', lastObservedAt: stamp(14), observedAgeMs: 14 * 60000,
@@ -136,6 +160,36 @@ async function main() {
       await page.route('**/*', route => new URL(route.request().url()).origin === base ? route.continue() : (externalBlocked++, route.abort()));
       await page.goto(base,{waitUntil:'domcontentloaded',timeout:60000}); const panel = page.getByRole('region', { name: 'Signup progress tracker' });
       await panel.getByRole('heading', { name: 'Harbour Electrical' }).waitFor();
+      if(errorProof){
+        await panel.getByRole('button',{name:'Inspect Harbour Electrical',exact:true}).click();
+        const room=panel.getByRole('region',{name:'Setup analysis for Harbour Electrical'}),summary=room.locator('.control-room-summary');
+        const expectedCode=purchaseAuthProof?'PROVISIONING_AUTHORIZATION_INVALID':'ETIMEDOUT';
+        await summary.getByText(new RegExp(expectedCode)).waitFor();
+        assert.match(await summary.innerText(),assistantProof?/Needs attention · Assistant creation/:/Needs attention · Number purchase request/);
+        if(purchaseAuthProof)assert.match(await summary.innerText(),/signed provisioning request was rejected/);
+        else{assert.match(await summary.innerText(),/HTTP 504/);assert.match(await summary.innerText(),assistantProof?/Synthetic assistant request timed out; outcome unknown/:/Synthetic purchase request timed out; outcome unknown/);}
+        const station=room.getByRole('navigation',{name:'Setup station status'}).getByRole('button',{name:assistantProof?/Assistant & script/:/^Number/});
+        assert.equal(await station.getAttribute('aria-current'),'step');await station.click();
+        assert.match(await room.getByRole('complementary',{name:'Selected step evidence'}).innerText(),new RegExp(expectedCode));
+        if(purchaseAuthProof){
+          const history=page.getByRole('region',{name:'Application bug history'});
+          await history.getByText('BUG-AAAAAAAA · Signup authorization',{exact:true}).click();
+          await history.getByText(/Failed checkpoint: Verify signed provisioning request/).waitFor();
+          assert.match(await history.innerText(),/Not linked to a currently verified signup/);
+          assert.match(await history.innerText(),/Invalid signed provisioning request/);
+          assert.equal(await history.getByRole('button',{name:/Open signup:/}).count(),0);
+          await room.getByRole('region',{name:'Bug history for this signup'}).getByText(/No captured reports on this page/).waitFor();
+        }
+        for(const zoom of [100,200]){
+          await page.evaluate(percent=>{document.documentElement.style.fontSize=percent+'%';},zoom);
+          assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true,`${width}px / ${zoom}% overflow`);
+        }
+        await page.evaluate(()=>{document.documentElement.style.fontSize='';});
+        await room.screenshot({path:path.join(output,`${errorProofName}-${width}.png`),animations:'disabled'});
+        if(purchaseAuthProof)await page.getByRole('region',{name:'Application bug history'}).screenshot({path:path.join(output,`unlinked-auth-history-${width}.png`),animations:'disabled'});
+        assert.deepEqual(errors,[]);assert.equal(fixtureSaves,0);assert.equal(liveReads,0);
+        await context.close();continue;
+      }
       const beforeViewSaves=fixtureSaves,beforeViewLive=liveReads;
       const savedNames=()=>panel.locator('.signup-tracker-business h3').allTextContents();
       const overviewNames=()=>panel.locator('.signup-now-visitors strong').allTextContents();
@@ -383,6 +437,7 @@ async function main() {
       await context.close(); console.log(`PASS ${width}px: real component/routes, filters, checkpoints, canonical fixture edit, stale-draft/error retention, no overflow or WCAG2A/AA violations.`);
     }
     assert.deepEqual(sourceHashes(),initialSourceHashes,'Do not certify source files changed during browser execution');
+    if(errorProof){fs.writeFileSync(path.join(output,`${errorProofName}-partial-report.json`),JSON.stringify({passed:true,ready:false,partial:true,scope:`synthetic-chromium-${errorProofName}-only`,sourceSha256:initialSourceHashes,widths:[1440,390,320],textReflowPercent:[100,200],browserVersion:browser.version(),fixtureSaves,liveReads,externalBlocked,productionRequests:0,limitations:['Presentation fixture, not PostgreSQL or full application proof','Not full tracker/browser matrix','No provider or real delivery proof','No OS network sandbox claim']},null,2));return;}
     if(process.argv.includes('--senior-proof-only')){
       fs.writeFileSync(path.join(output,'senior-partial-report.json'),JSON.stringify({passed:true,ready:false,partial:true,scope:'synthetic-chromium-tracker-senior-only',sourceSha256:initialSourceHashes,widths:[1440,390,320],browserVersion:browser.version(),presets:true,pinnedSummary:true,editorReflow200:true,readableSteps:true,axeViolations:0,fixtureSaves,liveReads,productionRequests:0,providerTrafficAllowed:0,limitations:['Not the full canonical tracker gate','Not Firefox or WebKit','No live provider, delivery or OS isolation proof']},null,2));
       return;

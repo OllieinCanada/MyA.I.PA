@@ -49,3 +49,14 @@ test('existing or conflicting Vapi resources must be reconciled, never replaced'
     const f=fixture();change(f);assert.throws(()=>assertMissingAssistantRecovery(f),/must be reconciled/);
   }
 });
+
+test('preparation refuses an original-source binding different from the normalized hash; never substitutes a phantom ID',()=>{
+ const f=fixture(),sourceId='signup_'+'e'.repeat(32);assert.notEqual(sourceId,f.signupAttemptId);
+ f.signupAttemptId=sourceId;f.records[0].signupAttemptId=sourceId;
+ assert.throws(()=>assertMissingAssistantRecovery(f),{code:'ASSISTANT_RECOVERY_UNSAFE'});
+});
+test('no saved assistant claim is a separate recovery-contract blocker, not permission to buy or replay',()=>{
+ const f=fixture();f.assistantStage={};
+ assert.throws(()=>assertMissingAssistantRecovery(f),{code:'ASSISTANT_RECOVERY_UNSAFE'});
+ assert.equal(f.numberStage.status,'completed');assert.equal(f.assistants.length,0);
+});

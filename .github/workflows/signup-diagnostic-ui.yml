@@ -38,6 +38,11 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Actual dashboard and routes at desktop and both phone widths
         run: npm run test:signup-tracker:browser
+      - name: Redacted assistant, purchase and unlinked-auth error presentation (partial synthetic proof only)
+        run: |
+          npm run test:signup-tracker:browser -- --assistant-error-proof-only
+          npm run test:signup-tracker:browser -- --purchase-error-proof-only
+          npm run test:signup-tracker:browser -- --purchase-auth-error-proof-only
       - name: Actual Start Trial click and automatic compact tracker updates
         run: npm run test:signup-form-observation:browser
       - name: Build the publication candidate with the existing public configuration
@@ -67,6 +72,7 @@ jobs:
           path: |
             diagnostics/signup-tracker-preview/*.png
             diagnostics/signup-tracker-preview/browser-report.json
+            diagnostics/signup-tracker-preview/*-partial-report.json
             diagnostics/signup-form-observation-phase-b/*.png
             diagnostics/signup-form-observation-phase-b/*browser-report.json
             diagnostics/signup-form-observation-phase-b/failure-*.json

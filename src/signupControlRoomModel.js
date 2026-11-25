@@ -22,6 +22,8 @@ function stationState(checks=[]) {
 }
 function currentStationId(row={}, groups=[]) {
   if (row.mode === 'waiting_customer' || row.mode === 'paused' || row.mode === 'closed' || row.mode === 'ready') return null;
+  const blocked=groups.find(group=>stationState(group.checks)==='blocked');
+  if(blocked)return blocked.id;
   const key = row.steps?.find(step => step.status === 'current')?.key;
   const id = ({ number:'number', assistant:'assistant', content:'assistant', 'call-route':'assistant',
     'text-routing':'texts', 'owner-text':'texts', 'customer-text':'texts', trial:'activation', ready:'activation' })[key];
@@ -39,8 +41,8 @@ function progressSummary(row={}, setup, now=Date.now()) {
   const purchaseFailed = setup?.number?.stage?.status === 'failed';
   const reason = waitingCustomer
     ? 'Waiting for customer verification. This is not proof of a technical failure.'
-    : purchaseFailed ? setup?.purchaseEvidence?.explanation || model.explanation
-      : blocked?.detail || (row.mode === 'working' || row.active === true
+    : blocked?.id==='purchase-failure'?blocked.detail:purchaseFailed ? setup?.purchaseEvidence?.explanation || model.explanation
+      : blocked?.detail || row.failure?.detail || (row.mode === 'working' || row.active === true
         ? 'No exact technical failure cause is established by the saved evidence.'
         : 'No technical failure is established by this saved status.');
   return { currentStep:row.currentStep || model.headline, reason,
@@ -57,8 +59,8 @@ function controlRoomModel(row,setup,selected='number',now=Date.now()) {
   if (freshSearch && search.phase==='searching') { headline=`Searching ${search.areaCode || 'regional inventory'} for a phone number`; explanation='The current process reported this search. No number is assigned until its purchase and assignment are saved.'; }
   else if (setup?.number?.stage?.status==='failed') { headline='Phone-number setup needs review'; explanation='A failed purchase stage was saved. Inspect the existing receipts before any retry; this dashboard does not retry it.'; }
   const blocked=checks.find(c=>c.state==='blocked');
-  if(blocked && setup?.number?.stage?.status!=='failed' && !(freshSearch&&search.phase==='searching')) {
-    headline=blocked.label+' needs attention';
+  if(blocked && (blocked.id==='purchase-failure'||setup?.number?.stage?.status!=='failed') && !(freshSearch&&search.phase==='searching')) {
+    headline=['assistant-failure','purchase-failure'].includes(blocked.id)?blocked.label:blocked.label+' needs attention';
     explanation=blocked.detail || 'Saved evidence identifies a blocker. Inspect its receipts before taking action.';
   }
   const current=groups.find(g=>g.id===selected) || nodes.find(n=>n.id===selected) || groups[0];

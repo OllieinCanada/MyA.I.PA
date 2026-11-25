@@ -11,6 +11,8 @@ const { executeAutomaticCallNotifications, SUMMARY_TOOL: AUTOMATIC_SUMMARY_TOOL 
 const { createAutomaticNotificationContextReader } = require('./automaticNotificationContext');
 const { automaticNotificationAlert, listNotificationOutcomeAlerts } = require('./notificationOutcomes');
 const {safelyRecordSignupBug,registerSignupBugRoutes,runtimeBugStage,shouldCaptureRuntimeBug}=require('./signupBugHistory');
+const {assistantErrorEvidence,privateStrings}=require('./signupAssistantError');
+const {provisioningErrorEvidence,createProvisioningAuthFailureCapture}=require('./signupProvisioningError');
 const {registerProviderStatusRoutes,refreshProviderStatuses}=require('./providerMaintenance');
 const { createFinanceService, registerFinanceRoutes } = require('./providerFinance');
 const { trackProgress: trackAdminSignupProgress, registerTrackerRoutes, createStallProcessor, createTrackerBatchSaver } = require('./adminSignupTracker');
@@ -11240,6 +11242,17 @@ function requireVapiWebhookKey(req, res, next) {
   return next();
 }
 
+const captureProvisioningAuthFailure=createProvisioningAuthFailureCapture({record:input=>
+  safelyRecordSignupBug({prisma,listSignups:listSignupDashboardRecords,...input,release:process.env.RENDER_GIT_COMMIT||''})});
+function rejectProvisioningAuthentication(req,res,{phase,code,status,message}) {
+  // Preserve the public response and admission rules. No caller-supplied ID or
+  // token is attributed to a signup. Sampling prevents anonymous DB-write floods.
+  const error=Object.assign(new Error(message),{code,statusCode:status});
+  void captureProvisioningAuthFailure(req,phase,error).then(result=>{
+    if(!result?.recorded&&!result?.suppressed&&!result?.ignored)console.warn('[bug-history] authentication diagnostic save unconfirmed; no capture retry');
+  }).catch(()=>{});
+  return res.status(status).json({error:message});
+}
 function requireProvisioningKey(req, res, next) {
   const makeSignupKey = getMakeSignupWebhookConfig().apiKey;
   const suppliedMakeKey = String(req.headers["x-make-apikey"] || "").trim();
@@ -11253,9 +11266,9 @@ function requireProvisioningKey(req, res, next) {
     return next();
   }
   if (!INTEGRATION_API_KEY && !makeSignupKey && !makeWebhookToken) {
-    return res.status(503).json({ error: "Provisioning authentication is not configured." });
+    return rejectProvisioningAuthentication(req,res,{phase:'key-auth',code:'PROVISIONING_AUTH_NOT_CONFIGURED',status:503,message:'Provisioning authentication is not configured.'});
   }
-  return res.status(401).json({ error: "Invalid provisioning key." });
+  return rejectProvisioningAuthentication(req,res,{phase:'key-auth',code:'PROVISIONING_AUTH_INVALID',status:401,message:'Invalid provisioning key.'});
 }
 
 function getProvisioningSigningSecret() {
@@ -11290,10 +11303,10 @@ function getProvisioningAuthorizationInput(req) {
 
 function requireProvisioningAuthorization(req, res, next) {
   const secret = getProvisioningSigningSecret();
-  if (!secret) return res.status(503).json({ error: "Provisioning request signing is not configured." });
+  if (!secret) return rejectProvisioningAuthentication(req,res,{phase:'signature-auth',code:'PROVISIONING_SIGNING_NOT_CONFIGURED',status:503,message:'Provisioning request signing is not configured.'});
   const input = getProvisioningAuthorizationInput(req);
   if (!/^[a-f0-9]{64}$/.test(input.idempotencyKey) || !/^[a-f0-9]{64}$/.test(input.contextHash)) {
-    return res.status(401).json({ error: "Invalid signed provisioning request." });
+    return rejectProvisioningAuthentication(req,res,{phase:'signature-auth',code:'PROVISIONING_AUTHORIZATION_INVALID',status:401,message:'Invalid signed provisioning request.'});
   }
   if (!verifyProvisioningContextToken(
     input.contextHash,
@@ -11301,7 +11314,7 @@ function requireProvisioningAuthorization(req, res, next) {
     input.authorizationToken,
     secret
   )) {
-    return res.status(401).json({ error: "Invalid signed provisioning request." });
+    return rejectProvisioningAuthentication(req,res,{phase:'signature-auth',code:'PROVISIONING_AUTHORIZATION_INVALID',status:401,message:'Invalid signed provisioning request.'});
   }
   req.provisioningAuthorization = input;
   return next();
@@ -12582,7 +12595,7 @@ async function executeTelegramApproval(approval) {
   if (approval.purpose === 'SIGNUP_CHECK') {
     const result = await inspectSignup({ approval, list: listSignupDashboardRecords,
       targetFor: record => hashOperationalTarget(signupOperationalIdentity(record)),
-      readSetup: record => readSetupEvidence({ prisma, record, searchTracker: signupNumberSearchTracker }),
+      readSetup: record => readSetupEvidence({ prisma, record, searchTracker: signupNumberSearchTracker, listSignups:listSignupDashboardRecords }),
       readLive: record => signupLiveDiagnostics(record.signupAttemptId) });
     await finishTelegramApproval(prisma, approval.id, { status: 'COMPLETED', result: result.report });
     return { terminal: true, text: result.text, openLabel: 'Open signup tracker' };
@@ -14800,9 +14813,13 @@ app.post(
   requireProvisioningKey,
   requireProvisioningAuthorization,
   asyncRoute(async (req, res) => {
+    let purchasePhase='context',purchasePayload;
+    try {
     const input = { ...(req.query || {}), ...(req.body || {}) };
     const authorization = req.provisioningAuthorization;
     const trustedPayload = await loadTrustedProvisioningContext(req);
+    purchasePayload=trustedPayload;
+    purchasePhase='preference';
     const preferredAreaCode = String(trustedPayload.provisioning?.preferredAreaCode || "").trim();
     const preferredRegion = String(trustedPayload.provisioning?.preferredRegion || "ON").trim();
     if (String(input.areaCode || "").trim() !== preferredAreaCode || String(input.region || "").trim() !== preferredRegion) {
@@ -14812,6 +14829,7 @@ app.post(
       throw error;
     }
     const friendlyName = buildProvisioningResourceName("twilio-number", authorization.idempotencyKey);
+    purchasePhase='claim';
     const result = await runProvisioningStep({
       prisma,
       kind: "twilio-number",
@@ -14819,7 +14837,7 @@ app.post(
       contextHash: authorization.contextHash,
       verifyCompleted: (result) => verifySavedProvisioningResources("twilio-number", result),
       reconcile: null,
-      execute: () => purchaseTwilioPhoneNumber({
+      execute: () => { purchasePhase='purchase'; return purchaseTwilioPhoneNumber({
         areaCode: preferredAreaCode,
         region: preferredRegion,
         allowedAreaCodes: trustedPayload.provisioning?.allowedAreaCodes,
@@ -14829,10 +14847,25 @@ app.post(
       }, { onProgress: event => signupNumberSearchTracker.record(authorization.idempotencyKey, authorization.contextHash, event) }).catch(error => {
         try { signupNumberSearchTracker.record(authorization.idempotencyKey, authorization.contextHash, { phase: 'failed' }); } catch (_) { /* Preserve the original provider failure. */ }
         throw error;
-      }),
+      }); },
     });
 
     res.status(result.reused ? 200 : 201).json({ success: true, ok: true, ...result });
+    } catch(error) {
+      try {
+        req.signupProvisioningFailure=provisioningErrorEvidence({operation:'purchase',phase:purchasePhase,error,
+          contextHash:req.signupProvisioningAttemptId?req.provisioningAuthorization?.contextHash:null,
+          privateValues:privateStrings([purchasePayload,req.body,req.query,req.headers])});
+        if(req.signupProvisioningFailure){
+          req.signupProvisioningFailureCaptureAttempted=true;
+          const capture=await safelyRecordSignupBug({prisma,listSignups:listSignupDashboardRecords,error,stage:'purchase',
+            attemptId:req.signupProvisioningAttemptId,provisioningFailure:req.signupProvisioningFailure,
+            release:process.env.RENDER_GIT_COMMIT||''});
+          if(!capture?.recorded)console.warn('[bug-history] purchase diagnostic save unconfirmed; no capture retry');
+        }
+      } catch(_) { /* Diagnostics must not replace the original failure or retry storage/provider work. */ }
+      throw error;
+    }
   })
 );
 
@@ -14841,9 +14874,13 @@ app.post(
   requireProvisioningKey,
   requireProvisioningAuthorization,
   asyncRoute(async (req, res) => {
+    let assistantPhase='context', assistantPayload;
+    try {
     const input = { ...(req.query || {}), ...(req.body || {}) };
     const authorization = req.provisioningAuthorization;
     const trustedPayload = await loadTrustedProvisioningContext(req);
+    assistantPayload=trustedPayload;
+    assistantPhase='phone';
     const assignedPhone = normalizeVapiImportPhone(input.assignedPhone);
     if (!assignedPhone) {
       const error = new Error("A valid assigned Canadian phone number is required.");
@@ -14851,10 +14888,12 @@ app.post(
       error.code = "ASSIGNED_PHONE_REQUIRED";
       throw error;
     }
+    assistantPhase='prerequisite';
     await requireCompletedProvisioningStage(authorization, "twilio-number", {
       twilioPhoneNumber: assignedPhone,
     });
     const resourceName = buildProvisioningResourceName("vapi-assistant", authorization.idempotencyKey);
+    assistantPhase='claim';
     const result = await runProvisioningStep({
       prisma,
       kind: "vapi-assistant",
@@ -14862,6 +14901,7 @@ app.post(
       contextHash: authorization.contextHash,
       verifyCompleted: (result) => verifySavedProvisioningResources("vapi-assistant", result),
       reconcile: async () => {
+        assistantPhase='reconcile';
         return createSignupVapiAssistant({
           normalizedPayload: trustedPayload,
           assignedPhone,
@@ -14869,13 +14909,26 @@ app.post(
           reconcileOnly: true,
         });
       },
-      execute: () => createSignupVapiAssistant({
+      execute: () => { assistantPhase='create'; return createSignupVapiAssistant({
         normalizedPayload: trustedPayload,
         assignedPhone,
         resourceName,
-      }),
+      }); },
     });
     res.status(result.reused ? 200 : 201).json({ success: true, ok: true, ...result });
+    } catch (error) {
+      try { req.signupAssistantFailure=assistantErrorEvidence({error,phase:assistantPhase,
+        contextHash:req.signupProvisioningAttemptId?req.provisioningAuthorization?.contextHash:null,
+        privateValues:privateStrings([assistantPayload,req.body,req.query,req.headers])});
+        if(req.signupAssistantFailure){
+          req.signupAssistantFailureCaptureAttempted=true;
+          await safelyRecordSignupBug({prisma,listSignups:listSignupDashboardRecords,error,
+            stage:'assistant-create',attemptId:req.signupProvisioningAttemptId,assistantFailure:req.signupAssistantFailure,
+            release:process.env.RENDER_GIT_COMMIT||''});
+        }
+      } catch (_) { /* Preserve original error if diagnostics fail; never retry uncertain storage. */ }
+      throw error; // Preserve failure/status and all uncertain-outcome guards. No retry.
+    }
   })
 );
 
@@ -17831,7 +17884,7 @@ registerProviderStatusRoutes({app,requireAdmin,prisma});
 registerLiveDiagnosticRoutes({ app, requireAdmin, isAllowedOrigin, inspect: signupLiveDiagnostics });
 registerTrackerRoutes({ app, requireAdmin, isAllowedOrigin, list: listSignupDashboardRecords, save: upsertSignupDashboardRecord,
   audit: event => recordAdminAuditEvent({ prisma, ...event }), actorHash: getAdminActorHash, observations: () => signupFormObservations.listAdmin(),
-  setupEvidence: record => readSetupEvidence({ prisma, record, searchTracker: signupNumberSearchTracker }) });
+  setupEvidence: record => readSetupEvidence({ prisma, record, searchTracker: signupNumberSearchTracker, listSignups:listSignupDashboardRecords }) });
 const signupAssociationRepair = createAssociationRepairService({ prisma,
   readStore: () => JSON.parse(fs.readFileSync(signupDashboardPath, 'utf8')),
   commitStore: project => atomicCommitAssociationFile(signupDashboardPath, project), fence: signupAssociationFence,
@@ -18688,9 +18741,9 @@ async function runAutomatedRuntimeRemediationInternal(incident, recordedItem) {
 }
 
 async function safelyNotifyRuntimeFailure(error, context = {}) {
-  if(shouldCaptureRuntimeBug(context)){
+  if(!context.signupBugCaptureAttempted&&shouldCaptureRuntimeBug(context)){
     const bug=await safelyRecordSignupBug({prisma,listSignups:listSignupDashboardRecords,error,
-      stage:runtimeBugStage({stage:context.signupStage,route:context.route}),attemptId:context.signupAttemptId,
+      stage:runtimeBugStage({stage:context.signupStage,route:context.route}),attemptId:context.signupAttemptId,assistantFailure:context.assistantFailure,provisioningFailure:context.provisioningFailure,
       release:process.env.RENDER_GIT_COMMIT||''});
     if(!bug.recorded)console.warn('[bug-history] runtime capture unconfirmed; no capture retry');
   }
@@ -18863,7 +18916,8 @@ async function reportPreviousFatalIncident() {
 app.use((err, req, res, _next) => {
   const status = err.statusCode || 500;
   const message = err.message || "Internal server error";
-  const journalAllowed=shouldCaptureRuntimeBug({method:req.method});
+  const captureAttempted=req.signupAssistantFailureCaptureAttempted===true||req.signupProvisioningFailureCaptureAttempted===true;
+  const journalAllowed=!captureAttempted&&shouldCaptureRuntimeBug({method:req.method});
   if (status >= 500 || err.code === "CALL_RECORD_IDENTITY_CONFLICT") {
     console.error(err);
     if (!err.telegramIncidentHandled) {
@@ -18872,6 +18926,9 @@ app.use((err, req, res, _next) => {
       safelyNotifyRuntimeFailure(err, {
         signupAttemptId:req.signupProvisioningAttemptId||req.signupDiagnosticAttemptId,
         signupStage:runtimeBugStage({route}),
+        assistantFailure:req.signupAssistantFailure,
+        provisioningFailure:req.signupProvisioningFailure,
+        signupBugCaptureAttempted:captureAttempted,
         area,
         method: req?.method,
         route,
@@ -18901,10 +18958,10 @@ app.use((err, req, res, _next) => {
           : "Open Needs Attention and the server logs, verify the affected provider state, then retry only when duplicate work is ruled out.",
       });
     } else if(journalAllowed)void safelyRecordSignupBug({prisma,listSignups:listSignupDashboardRecords,error:err,
-      stage:runtimeBugStage({route:req.route?.path}),attemptId:req.signupProvisioningAttemptId||req.signupDiagnosticAttemptId,release:process.env.RENDER_GIT_COMMIT||''});
-  } else if(journalAllowed&&status>=400&&(req.signupProvisioningAttemptId||req.signupDiagnosticAttemptId)){
+      stage:runtimeBugStage({route:req.route?.path}),attemptId:req.signupProvisioningAttemptId||req.signupDiagnosticAttemptId,assistantFailure:req.signupAssistantFailure,provisioningFailure:req.signupProvisioningFailure,release:process.env.RENDER_GIT_COMMIT||''});
+  } else if(journalAllowed&&status>=400&&(req.signupProvisioningAttemptId||req.signupDiagnosticAttemptId||req.signupAssistantFailure)){
     void safelyRecordSignupBug({prisma,listSignups:listSignupDashboardRecords,error:err,
-      stage:runtimeBugStage({route:req.route?.path}),attemptId:req.signupProvisioningAttemptId||req.signupDiagnosticAttemptId,release:process.env.RENDER_GIT_COMMIT||''});
+      stage:runtimeBugStage({route:req.route?.path}),attemptId:req.signupProvisioningAttemptId||req.signupDiagnosticAttemptId,assistantFailure:req.signupAssistantFailure,provisioningFailure:req.signupProvisioningFailure,release:process.env.RENDER_GIT_COMMIT||''});
   }
   const body = { error: message };
   if (String(err.code || "").startsWith("MAKE_SIGNUP_")) {
