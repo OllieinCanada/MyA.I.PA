@@ -446,6 +446,32 @@ const smsNotificationDispatchProcessRateLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: "Too many notification-dispatch requests. Try again later." },
 });
+// Only failed/unknown provisioning authentication consumes this process limit.
+// Valid connection keys plus signed proof (where required) bypass it, so a busy
+// Make egress IP cannot starve unrelated valid signup callbacks. This performs
+// no database/provider work and preserves the existing public refusal response.
+const provisioningRequestProcessRateLimiter = rateLimit({
+  windowMs: 60_000,
+  limit: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: req => {
+    if (req.method !== 'POST') return true;
+    if (!hasValidProvisioningConnectionKey(req)) return false;
+    const route = String(req.originalUrl || req.path || '').split('?')[0].replace(/\/$/, '').toLowerCase();
+    if (!/^\/api\/integrations\/(?:twilio\/purchase-number|vapi\/(?:create-signup-assistant|import-twilio-number))$/.test(route)) return true;
+    const input = getProvisioningAuthorizationInput(req);
+    return /^[a-f0-9]{64}$/.test(input.idempotencyKey) && /^[a-f0-9]{64}$/.test(input.contextHash)
+      && verifyProvisioningContextToken(input.contextHash, input.idempotencyKey, input.authorizationToken, getProvisioningSigningSecret());
+  },
+  handler: (req, res) => {
+    const configured = INTEGRATION_API_KEY || getMakeSignupWebhookConfig().apiKey || getMakeSignupWebhookToken();
+    if (!configured) return res.status(503).json({ error: 'Provisioning authentication is not configured.' });
+    if (!hasValidProvisioningConnectionKey(req)) return res.status(401).json({ error: 'Invalid provisioning key.' });
+    return res.status(getProvisioningSigningSecret() ? 401 : 503).json({ error: getProvisioningSigningSecret()
+      ? 'Invalid signed provisioning request.' : 'Provisioning request signing is not configured.' });
+  },
+});
 const adminLoginProcessRateLimiter = rateLimit({
   windowMs: PUBLIC_ROUTE_WINDOW_MS,
   limit: ADMIN_LOGIN_IP_MAX_REQUESTS,
@@ -1071,6 +1097,16 @@ app.use('/api/admin/owner-sign-in', (req, res, next) => {
   });
 });
 app.use(express.json({ limit: JSON_BODY_LIMIT }));
+// Body-carried signed proof must be parsed before the skip decision, otherwise
+// valid JSON callbacks would accidentally consume the failed-auth budget.
+app.use([
+  '/api/integrations/provisioning/audit-latest-call',
+  '/api/integrations/vapi/repair-sms-routing',
+  '/api/integrations/vapi/sync-now',
+  '/api/integrations/twilio/purchase-number',
+  '/api/integrations/vapi/create-signup-assistant',
+  '/api/integrations/vapi/import-twilio-number',
+], provisioningRequestProcessRateLimiter);
 
 function normalizeClientErrorType(value) {
   const type = String(value || "browser_error").trim().toLowerCase().replace(/[^a-z0-9_-]+/g, "_");
@@ -11252,6 +11288,11 @@ function rejectProvisioningAuthentication(req,res,{phase,code,status,message}) {
     if(!result?.recorded&&!result?.suppressed&&!result?.ignored)console.warn('[bug-history] authentication diagnostic save unconfirmed; no capture retry');
   }).catch(()=>{});
   return res.status(status).json({error:message});
+}
+function hasValidProvisioningConnectionKey(req) {
+  return hasValidIntegrationKey(req)
+    || safeEqualString(String(req.headers['x-make-apikey'] || '').trim(), getMakeSignupWebhookConfig().apiKey)
+    || safeEqualString(String(req.headers['x-make-webhook-token'] || '').trim(), getMakeSignupWebhookToken());
 }
 function requireProvisioningKey(req, res, next) {
   const makeSignupKey = getMakeSignupWebhookConfig().apiKey;

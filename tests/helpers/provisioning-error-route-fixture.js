@@ -13,6 +13,7 @@ const source=fs.readFileSync(require.resolve('../../server/index'),'utf8').repla
 function section(start,end){const a=source.indexOf(start),b=source.indexOf(end,a+start.length);assert.ok(a>=0&&b>a,'Actual source boundaries must exist');return source.slice(a,b);}
 const auth=section('function rejectProvisioningAuthentication(','\n// Strictly read-only proof collection');
 const integrationKeyGuard=section('function hasValidIntegrationKey(','\nfunction getVapiWebhookSecret(');
+const limiter=section('const provisioningRequestProcessRateLimiter = rateLimit({','\nconst adminLoginProcessRateLimiter = rateLimit({');
 const loader=section('async function loadTrustedProvisioningContext(','\nasync function assertSignupLegacyResourcesSafe(');
 const route=section('app.post(\n  "/api/integrations/twilio/purchase-number",','\napp.post(');
 const errors=section('app.use((err, req, res, _next) => {','\nfunction runBackgroundJob(');
@@ -45,6 +46,7 @@ function fixture(mode='valid'){
  vm.createContext(ctx);vm.runInContext(integrationKeyGuard+'\n'+auth+'\n'+loader+'\n'+route+'\n'+errors,ctx);
  const defaultBody={areaCode:payload.provisioning.preferredAreaCode,region:payload.provisioning.preferredRegion,provisioning:payload.provisioning};
  return {db,target,payload,ctx,counts,captures,handlers:()=>handlers,errorHandler:()=>errorHandler,defaultBody,path,
+  limiter:()=>{ctx.rateLimit=require('express-rate-limit').rateLimit;return vm.runInContext(limiter+'\nprovisioningRequestProcessRateLimiter',ctx);},
   settle:()=>Promise.all(captures),
   async run({body=defaultBody,headers={'x-myaipa-integration-key':'synthetic-connection-key'}}={}){
    const req={method:'POST',path,route:{path},query:{},headers,body};let status,response;

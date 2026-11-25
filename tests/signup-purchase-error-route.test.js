@@ -62,6 +62,26 @@ test('actual loopback HTTP middleware saves auth refusal unlinked and admitted p
  assert.equal(r.status,504);assert.equal((await r.json()).code,'ETIMEDOUT');await f.settle();
  const saved=await history(f);assert.equal(saved.events.length,2);assert.equal(saved.events.find(e=>e.stage==='authorization').signupAttemptId,null);assert.equal(saved.events.find(e=>e.stage==='purchase').signupAttemptId,f.target.attemptId);assert.equal(f.counts.purchases,1);
 });
+
+test('actual failed-auth limiter preserves refusals and cannot starve a valid signed request from the same IP',async t=>{
+ const source=require('node:fs').readFileSync(require.resolve('../server/index'),'utf8');
+ assert.ok(source.indexOf('], provisioningRequestProcessRateLimiter);')>source.indexOf('app.use(express.json({ limit: JSON_BODY_LIMIT }));'),'Real app must parse body-carried proof before deciding whether a valid request consumes the failed-auth budget');
+ const express=require('express'),f=fixture(),app=express(),guards=f.handlers();app.use(express.json());
+ const limiter=f.limiter();app.use(f.path,limiter);
+ app.post(f.path,guards[0],guards[1],(req,res,next)=>Promise.resolve(guards[2](req,res)).catch(next));app.use(f.errorHandler());
+ const server=await new Promise(resolve=>{const s=app.listen(0,'127.0.0.1',()=>resolve(s));});t.after(()=>new Promise(resolve=>server.close(resolve)));
+ const url='http://127.0.0.1:'+server.address().port+f.path;
+ for(let i=0;i<32;i++){const r=await fetch(url,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(f.defaultBody)});assert.equal(r.status,401);assert.deepEqual(await r.json(),{error:'Invalid provisioning key.'});}
+ assert.equal(f.counts.claims,0);assert.equal(f.counts.purchases,0);await f.settle();assert.equal((await history(f)).events.length,1);
+ const headers={'content-type':'application/json','x-myaipa-integration-key':'synthetic-connection-key'};
+ let r=await fetch(url,{method:'POST',headers,body:JSON.stringify(f.defaultBody)});assert.equal(r.status,201);assert.equal(f.counts.purchases,1);
+ r=await fetch(url,{method:'POST',headers,body:JSON.stringify({...f.defaultBody,provisioning:{...f.payload.provisioning,authorizationToken:'f'.repeat(64)}})});
+ assert.equal(r.status,401);assert.deepEqual(await r.json(),{error:'Invalid signed provisioning request.'});assert.equal(f.counts.purchases,1);
+ f.ctx.process.env={};r=await fetch(url,{method:'POST',headers,body:JSON.stringify(f.defaultBody)});
+ assert.equal(r.status,503);assert.deepEqual(await r.json(),{error:'Provisioning request signing is not configured.'});assert.equal(f.counts.purchases,1);
+ f.ctx.INTEGRATION_API_KEY='';f.ctx.getMakeSignupWebhookConfig=()=>({apiKey:''});
+ r=await fetch(url,{method:'POST',headers,body:JSON.stringify(f.defaultBody)});assert.equal(r.status,503);assert.deepEqual(await r.json(),{error:'Provisioning authentication is not configured.'});
+});
 test('real claim algorithm with actual purchase route prevents concurrent and restarted duplicate purchases',async()=>{
  const {memoryDb}=require('./helpers/twilio-status-memory-db'),{runProvisioningStep}=require('../server/provisioningState');
  const db=memoryDb(),first=fixture();first.ctx.runProvisioningStep=options=>runProvisioningStep({...options,prisma:db.prisma});
