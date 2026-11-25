@@ -1,4 +1,8 @@
 {
+  "telegramWebhookReadbackContinuation": {
+    "baseRelease": "e032da41d819052b21f7271420521e2449b70902",
+    "scope": "Local candidate: read-first webhook inspection, exact configuration acknowledgement receipts and durable uncertainty exclusion. Requires fresh SQL and full CI; no live callback proof, production configuration or release authorization. Historical repair and lifecycle pins are unchanged."
+  },
   "signupMappingTimeoutContinuation": {
     "baseRelease": "745be3393ef48816214cfb67444d736057274b37",
     "initialCandidateHead": "2f93dd8da5af89ec1e4c6d1f16abf20947fbd984",
@@ -112,7 +116,7 @@
     "server/boundedBusinessMappingAdapters.js": "69cc5596edc20e8a2e689ff826bb2e424e4beaff8f41fa970ee40efa4aed3744",
     "server/boundedBusinessMappingWriter.js": "c8b129211d807e780d55600695362cbcb813c29ac784a147dbed1b9ca746db6a",
     "server/boundedMappingControl.js": "6bdf571cea3fc1d2a52c20e8bc89a49d10ffbe069a7d2fd463eaadb25354b36a",
-    "server/index.js": "136982b559028f3ad3418ac3388fddc372ab7f503044155e51833370cdb0d77c",
+    "server/index.js": "12b5e51d78b19b5155fa30158103cd6e50c1658c4ae4debdb965d45bcf0c809f",
     "server/signupBusinessRegistry.js": "711435f20381715f6c085ca7e08f7e32e1064093e5e0cd19551bf30f0656942a",
     "server/signupBindingTransaction.js": "909bd8800a2b8c7c81678b13746def69f3481ee0e8182553480091c8842fd010",
     "server/signupSavedDiagnosis.js": "8ebe5b93529e000a69aa7f0d44112df0da4bf89ee7457351b050cedefd9d7138",
@@ -157,7 +161,8 @@
     "server/callNotificationEvidence.js": "9a4e9435e85ceebd3f3587f8ae05358552dc94730e9db541e7b4aa958fd33839",
     "server/callSyncReporting.js": "d0114112140f33a8937c3b6a4066fc33d5a27f293eb52fee1a6fb934d241f300",
     "server/callSyncHealth.js": "3742054dc588a565107c1d4514f897336a20a6e52dc21c54074b99da19d02a1e",
-    "server/telegramBotApi.js": "057dd526a4f5078d89bca7343ac517d733e503f6846c6aae2d77b1e17b8ee50b"
+    "server/telegramBotApi.js": "332d2fe63926ca1973bc064f7345612c19c4f477cd85dbf81749cc787332ebfc",
+    "server/telegramWebhookState.js": "18473c0a569fb2eb768cad0245b4646885a4f0a006016d196e82b7503903b876"
   },
   "scope": "Actual combined runtime, not reconstructed historical code. Synthetic CI only. No release, activation or production correction authorized."
 }

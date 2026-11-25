@@ -1,4 +1,8 @@
 {
+  "telegramWebhookReadbackContinuation": {
+    "baseRelease": "e032da41d819052b21f7271420521e2449b70902",
+    "scope": "Pin the new webhook acknowledgement/state dependency and candidate index for fresh sealed restored HTTP/SQL verification. No live readiness or release approval is implied."
+  },
   "signupMappingTimeoutContinuation": {
     "baseRelease": "745be3393ef48816214cfb67444d736057274b37",
     "initialCandidateHead": "2f93dd8da5af89ec1e4c6d1f16abf20947fbd984",
@@ -30,7 +34,9 @@
   "sha256": {
     "scripts/run-composite-recovery-ci.js": "9a3c2069cb268c25d8add52cbf4884d076cca9a7f4e8db55b9d4ee3d60d4c4ae",
     "scripts/composite-recovery-fixture.js": "46085044ab3ef3df77401c0c7f954691206ea52d5d71893a5f7ed1f02cd1d4e7",
-    "server/index.js": "136982b559028f3ad3418ac3388fddc372ab7f503044155e51833370cdb0d77c",
+    "server/index.js": "12b5e51d78b19b5155fa30158103cd6e50c1658c4ae4debdb965d45bcf0c809f",
+    "server/telegramBotApi.js": "332d2fe63926ca1973bc064f7345612c19c4f477cd85dbf81749cc787332ebfc",
+    "server/telegramWebhookState.js": "18473c0a569fb2eb768cad0245b4646885a4f0a006016d196e82b7503903b876",
     "server/signupBusinessRegistry.js": "711435f20381715f6c085ca7e08f7e32e1064093e5e0cd19551bf30f0656942a",
     "server/signupBindingTransaction.js": "909bd8800a2b8c7c81678b13746def69f3481ee0e8182553480091c8842fd010",
     "server/signupSavedDiagnosis.js": "8ebe5b93529e000a69aa7f0d44112df0da4bf89ee7457351b050cedefd9d7138",
