@@ -24,7 +24,7 @@ function database() {
   const prisma = {
     runtimeStore: store(rows),
     async $transaction(work, options) {
-      assert.deepEqual(options, { maxWait: 1000, timeout: 2000 });
+      assert.deepEqual(options, { maxWait: 2000, timeout: 5000 });
       const staged = new Map(structuredClone([...rows])); let ownsLock = false;
       try {
         const value = await work({ runtimeStore: store(staged), async $queryRaw(strings) {

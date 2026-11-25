@@ -1,4 +1,8 @@
 {
+  "telegramWebhookStateDiagnosticsContinuation": {
+    "baseRelease": "50452c64936de51a7de0b17ff02f6416c30ced03",
+    "scope": "Local candidate only: redacted database operation/phase/code/timing and bounded 2-second admission/5-second metadata transaction. Durable uncertainty and no provider retry are unchanged. These candidate bytes require fresh real SQL and full CI; no live or release proof is implied. Historical repair/lifecycle pins remain unchanged."
+  },
   "telegramWebhookReadbackContinuation": {
     "baseRelease": "e032da41d819052b21f7271420521e2449b70902",
     "scope": "Local candidate: read-first webhook inspection, exact configuration acknowledgement receipts and durable uncertainty exclusion. Requires fresh SQL and full CI; no live callback proof, production configuration or release authorization. Historical repair and lifecycle pins are unchanged."
@@ -161,8 +165,8 @@
     "server/callNotificationEvidence.js": "9a4e9435e85ceebd3f3587f8ae05358552dc94730e9db541e7b4aa958fd33839",
     "server/callSyncReporting.js": "d0114112140f33a8937c3b6a4066fc33d5a27f293eb52fee1a6fb934d241f300",
     "server/callSyncHealth.js": "3742054dc588a565107c1d4514f897336a20a6e52dc21c54074b99da19d02a1e",
-    "server/telegramBotApi.js": "332d2fe63926ca1973bc064f7345612c19c4f477cd85dbf81749cc787332ebfc",
-    "server/telegramWebhookState.js": "18473c0a569fb2eb768cad0245b4646885a4f0a006016d196e82b7503903b876"
+    "server/telegramBotApi.js": "ef6c99b197e6251945213d5c42af03d50bf4c6d1dadf4c98c2a9915a72e478c7",
+    "server/telegramWebhookState.js": "e0a178d73a2b5a8b8484d7c4c151fad11ff6e984139420b35cf59fc11474ac8c"
   },
   "scope": "Actual combined runtime, not reconstructed historical code. Synthetic CI only. No release, activation or production correction authorized."
 }

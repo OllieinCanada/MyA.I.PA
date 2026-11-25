@@ -213,3 +213,135 @@ test(`actual startServer source: ${mode} uses guarded adapter without crashing t
     assert.doesNotMatch(JSON.stringify(errors), /PRIVATE|wwww|example.invalid/);
   }
 });
+
+// Inject failures at the Prisma boundary, not at the state-store API. These
+// reproduce the formerly indistinguishable errors without provider traffic.
+for (const operation of ['claim', 'acknowledge', 'verify'])
+for (const phase of ['transaction_start', 'lock', 'read', 'write', 'commit'])
+test(`database diagnostics preserve ${operation}/${phase}, redact raw errors and never retry`, async () => {
+  const f = fixture(), state = f.options.stateStore;
+  let attempt;
+  if (operation !== 'claim') attempt = await state.claim(null);
+  if (operation === 'verify') await state.acknowledge(attempt.operationId);
+  const original = f.db.prisma.$transaction.bind(f.db.prisma);
+  let transactions = 0;
+  const raw = Object.assign(Error('PRIVATE postgresql://user:password@private.invalid/db SQL SELECT secret'), {
+    code: 'P2028', meta: { token: 'PRIVATE' }, cause: Error('PRIVATE'), privateToken: 'PRIVATE',
+  });
+  f.db.prisma.$transaction = async (work, options) => {
+    transactions++;
+    assert.deepEqual(options, { maxWait: 2000, timeout: 5000 });
+    if (phase === 'transaction_start') throw raw;
+    const result = await original(tx => work({
+      $queryRaw: (...args) => { if (phase === 'lock') throw raw; return tx.$queryRaw(...args); },
+      runtimeStore: {
+        findUnique: (...args) => { if (phase === 'read') throw raw; return tx.runtimeStore.findUnique(...args); },
+        upsert: (...args) => { if (phase === 'write') throw raw; return tx.runtimeStore.upsert(...args); },
+      },
+    }), options);
+    if (phase === 'commit') throw raw; // The write committed; acknowledgement is unknown to the caller.
+    return result;
+  };
+  await assert.rejects(operation === 'claim' ? state.claim(null) : state[operation](attempt.operationId), error => {
+    const d = diagnostics(error);
+    assert.equal(d.code, 'TELEGRAM_WEBHOOK_STATE_UNAVAILABLE');
+    assert.equal(d.databaseCode, 'P2028'); assert.equal(d.databaseOperation, operation); assert.equal(d.databasePhase, phase);
+    assert.equal(d.maxWaitMs, 2000); assert.equal(d.timeoutMs, 5000);
+    assert.ok(Number.isSafeInteger(d.elapsedMs) && d.elapsedMs >= 0);
+    assert.equal(d.outcome, 'state_inspection_required'); assert.equal(d.automaticRetry, false);
+    assert.equal(error.cause, undefined); assert.equal(error.meta, undefined);
+    assert.doesNotMatch(JSON.stringify([error, d]), /PRIVATE|postgresql|password|SELECT|private.invalid/);
+    return true;
+  });
+  assert.equal(transactions, 1); assert.equal(f.calls.length, 0);
+  const expected = phase === 'commit' ? { claim: 'uncertain', acknowledge: 'acknowledged', verify: 'verified' }[operation]
+    : { claim: undefined, acknowledge: 'uncertain', verify: 'acknowledged' }[operation];
+  assert.equal([...f.db.rows.values()][0]?.status, expected);
+});
+
+for (const code of ['P1001', 'P2024', 'P2034', 'P2010', 'PRIVATE', 'P9999', 'TELEGRAM_WEBHOOK_STATE_PRIVATE'])
+test(`database read diagnostics allowlist ${code} without secrets or invented retry permission`, async () => {
+  const f = fixture();
+  f.db.prisma.runtimeStore.findUnique = async () => { throw Object.assign(Error('PRIVATE'), { code, meta: { secret: 'PRIVATE' } }); };
+  await assert.rejects(ensure(config, f.options), error => {
+    const d = diagnostics(error);
+    assert.equal(d.databaseOperation, 'read'); assert.equal(d.databasePhase, 'read');
+    assert.equal(d.databaseCode, ['P1001', 'P2024', 'P2034', 'P2010'].includes(code) ? code : undefined);
+    assert.equal(d.code, 'TELEGRAM_WEBHOOK_STATE_UNAVAILABLE');
+    assert.equal(d.automaticRetry, false); assert.equal(d.timeoutMs, undefined);
+    assert.doesNotMatch(JSON.stringify([error, d]), /PRIVATE|P9999/); return true;
+  });
+  assert.deepEqual(f.methods(), ['getWebhookInfo']);
+});
+
+test('database diagnostics use monotonic elapsed time and ignore caller-supplied raw metadata', async () => {
+  const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
+  const { createRequire } = require('node:module');
+  const file = path.resolve(__dirname, '../server/telegramWebhookState.js'), native = createRequire(file);
+  const module = { exports: {} }; let tick = 100;
+  vm.runInNewContext(fs.readFileSync(file, 'utf8'), { module, require: name => name === 'node:perf_hooks'
+    ? { performance: { now: () => { const value = tick; tick += 25.6; return value; } } } : native(name) });
+  const f = fixture();
+  const state = module.exports.createTelegramWebhookState({ prisma: {
+    ...f.db.prisma, $transaction: async () => { throw Object.assign(Error('PRIVATE'), { code: 'P2024' }); },
+  }, token: f.options.token, ...config });
+  await assert.rejects(state.claim(null), error => {
+    assert.equal(diagnostics(error).elapsedMs, 26); assert.equal(diagnostics(error).databaseCode, 'P2024'); return true;
+  });
+  const unsafe = { code: 'TELEGRAM_WEBHOOK_STATE_UNAVAILABLE', stage: 'configuration_state',
+    databaseOperation: 'PRIVATE', databasePhase: 'PRIVATE', databaseCode: 'PRIVATE',
+    maxWaitMs: Infinity, timeoutMs: -1, elapsedMs: 'PRIVATE', cause: 'PRIVATE', meta: 'PRIVATE' };
+  assert.deepEqual(diagnostics(unsafe), { code: unsafe.code, stage: unsafe.stage,
+    outcome: 'state_inspection_required', automaticRetry: false });
+  assert.doesNotMatch(JSON.stringify(diagnostics({ ...unsafe, stage: 'setWebhook', databaseCode: 'P2028',
+    databaseOperation: 'verify', databasePhase: 'write', maxWaitMs: 2000, timeoutMs: 5000 })), /database|timeoutMs|maxWaitMs/);
+});
+
+test('local startup logging includes sanitized database operation, code and phase', async () => {
+  const fs = require('node:fs'), vm = require('node:vm');
+  const source = fs.readFileSync(require('node:path').resolve(__dirname, '../server/index.js'), 'utf8');
+  const start = source.indexOf('function startServer('), end = source.indexOf('\nif (require.main === module)', start);
+  assert.ok(start > 0 && end > start);
+  const f = fixture(), errors = [];
+  f.db.prisma.runtimeStore.findUnique = async () => { throw Object.assign(Error('PRIVATE password'), { code: 'P1001' }); };
+  vm.runInNewContext(source.slice(start, end) + '\nstartServer(0, "127.0.0.1");', {
+    app: { listen(port, host, cb) { cb(); return {}; } }, startBackgroundJobs() {}, reportPreviousFatalIncident: async () => {},
+    console: { log() {}, error(...args) { errors.push(args); } }, URL,
+    TELEGRAM_GUARDED_ACTIONS_ENABLED: true, TELEGRAM_WEBHOOK_URL: config.webhookUrl,
+    TELEGRAM_WEBHOOK_SECRET: config.webhookSecret, TELEGRAM_BOT_TOKEN: f.options.token,
+    prisma: f.db.prisma, createTelegramWebhookState, telegramWebhookFailureDiagnostics: diagnostics,
+    ensureTelegramActionWebhook: (settings, options) => ensure(settings, { ...options, fetchImpl: f.options.fetchImpl }),
+  });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(errors.length, 1);
+  assert.equal(errors[0][1].databaseCode, 'P1001'); assert.equal(errors[0][1].databaseOperation, 'read');
+  assert.equal(errors[0][1].databasePhase, 'read'); assert.equal(errors[0][1].automaticRetry, false);
+  assert.doesNotMatch(JSON.stringify(errors), /PRIVATE|password|synthetic_token|https:/);
+  assert.deepEqual(f.methods(), ['getWebhookInfo']);
+});
+
+test('synthetic deadline model admits 3000ms but refuses work beyond the fixed 5000ms budget', async () => {
+  // Deterministic protocol/deadline model, NOT PostgreSQL timing proof. The real
+  // SQL counterpart below the CI opt-in exercises Prisma's actual deadline.
+  for (const elapsed of [3000, 5001]) {
+    const f = fixture(), original = f.db.prisma.$transaction.bind(f.db.prisma);
+    let transactions = 0;
+    f.db.prisma.$transaction = (work, settings) => {
+      transactions++;
+      assert.deepEqual(settings, { maxWait: 2000, timeout: 5000 });
+      return original(async tx => {
+        if (elapsed > settings.timeout) throw Object.assign(Error('PRIVATE synthetic deadline'), { code: 'P2028' });
+        return work(tx);
+      }, settings);
+    };
+    if (elapsed < 5000) {
+      assert.equal((await ensure(config, f.options)).configured, true);
+      assert.equal(transactions, 3); assert.equal(f.methods().filter(m => m === 'setWebhook').length, 1);
+    } else {
+      await assert.rejects(ensure(config, f.options), error => {
+        assert.equal(diagnostics(error).databaseCode, 'P2028'); return true;
+      });
+      assert.equal(transactions, 1); assert.deepEqual(f.methods(), ['getWebhookInfo']); assert.equal(f.db.rows.size, 0);
+    }
+  }
+});

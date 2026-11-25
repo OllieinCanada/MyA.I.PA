@@ -186,6 +186,13 @@ function telegramWebhookFailureDiagnostics(error) {
     outcome: stage === 'setWebhook' ? 'configuration_unconfirmed'
       : stage === 'getWebhookInfo' ? 'verification_unavailable' : stage === 'configuration_state' ? 'state_inspection_required' : 'not_requested',
     automaticRetry: false,
+    ...(stage === 'configuration_state' ? {
+      ...(['read', 'claim', 'acknowledge', 'verify'].includes(error?.databaseOperation) ? { databaseOperation: error.databaseOperation } : {}),
+      ...(['transaction_start', 'lock', 'read', 'validate', 'write', 'commit'].includes(error?.databasePhase) ? { databasePhase: error.databasePhase } : {}),
+      ...(['P1000', 'P1001', 'P1002', 'P1008', 'P1010', 'P1011', 'P1017', 'P2002', 'P2010', 'P2024', 'P2028', 'P2034'].includes(error?.databaseCode)
+        ? { databaseCode: error.databaseCode } : {}),
+      ...(error?.maxWaitMs === 2_000 && error?.timeoutMs === 5_000 ? { maxWaitMs: error.maxWaitMs, timeoutMs: error.timeoutMs } : {}),
+    } : {}),
     ...(['awaiting_headers', 'response_body'].includes(error?.phase) ? { phase: error.phase } : {}),
     ...(Number.isSafeInteger(error?.elapsedMs) && error.elapsedMs >= 0 ? { elapsedMs: error.elapsedMs } : {}),
     ...(['matches_public_configuration', 'configuration_mismatch', 'unavailable'].includes(error?.readback) ? { readback: error.readback } : {}),
