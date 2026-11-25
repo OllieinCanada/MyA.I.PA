@@ -39,7 +39,7 @@
     "server/operationalErrorClassifier.js": "1f9b079c6ec4ba9181816a8676e1e9cf1daa4341d8e9f092a6c13f752f58a941",
     "server/providerMaintenance.js": "f3b0fedbf566fd3305696483c8b320bea548af756b5c8cb46681b041d5491dfa",
     "server/signupBugHistory.js": "09525b42664595f8d62262276b6fdfda1261b96e177042daa2c1b7490575736c",
-    "server/signupAssistantError.js": "362c0bc954a993c0ad88a42a78762e02f4bef8e9fd91a24643fd91ff3de84a4e",
+    "server/signupAssistantError.js": "d09f209068b22aea1c782df3d4689af58a597c7feb16d8a056822dd6b05c2a30",
     "server/signupProvisioningError.js": "f4a64014f00b7dc6841bc48c44a3152ab9913efd6780055d9ca73f2a9c78def2",
     "server/signupDiagnosticError.js": "607dc1ddf9f4e8b62f4388ea7a4ff4d32f98ab4af345309d61ec4557ab6099fb",
     "server/signupDiagnosticProviders.js": "1e419751d3cba2375956d9f4791863a0958a19590323ad3c1cd5927edaf5a89a",

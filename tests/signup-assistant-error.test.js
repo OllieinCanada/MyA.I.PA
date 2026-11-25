@@ -26,6 +26,14 @@ test('unknown codes are not published as credentials; reference distinguishes me
  assert.equal(evidence({phase:'future-private'}),null);assert.equal(readAssistantError({...one,retryAllowed:true}),null);assert.equal(readAssistantError({...one,contextHash:'foreign'}),null);
  assert.deepEqual(readAssistantError({...one,headers:{authorization:'not-publishable'},stack:'not-publishable'}),one,'Stored optional metadata must not expand the public projection');
 });
+
+test('redaction covers short customer labels and case-changed echoes without matching inside ordinary words',()=>{
+ const e=evidence({privateValues:privateStrings({name:'Bo',business:'Fixture Electrical'}),env:{},error:{code:'ETIMEDOUT',message:'Body rejected for Bo at fixture electrical; status unknown'}});
+ assert.doesNotMatch(e.detail,/\bBo\b|fixture electrical/i);
+ assert.match(e.detail,/Body rejected/);
+ const literal=evidence({privateValues:privateStrings({name:'A+',business:'AC[ME]'}),env:{},error:{message:'Body rejected for A+ at ac[me]; status unknown'}});
+ assert.doesNotMatch(literal.detail,/A\+|ac\[me\]/i);assert.match(literal.detail,/Body rejected/);
+});
 test('durable journal preserves exact redacted assistant error idempotently and rechecks attribution',async()=>{
  const f=fixture(),target=f.add(),eventId=crypto.randomUUID(),e=evidence();
  const input={prisma:f.prisma,listSignups:f.listSignups,stage:'assistant-create',attemptId:target.attemptId,eventId,assistantFailure:e,error:{code:'ETIMEDOUT',statusCode:504}};

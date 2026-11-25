@@ -7,14 +7,20 @@ const PHASES = Object.freeze({context:'Validate saved signup context', phone:'Va
   reconcile:'Inspect existing assistant', create:'Create and verify assistant'});
 function privateStrings(value, output = [], depth = 0) {
   if (depth > 12 || output.length > 500) return output;
-  if (typeof value === 'string' && value.length >= 3) output.push(value);
+  if (typeof value === 'string' && value.length >= 1) output.push(value);
   else if (value && typeof value === 'object') for (const item of Object.values(value)) privateStrings(item, output, depth + 1);
   return output;
 }
 function redactDetail(value, secrets = []) {
   let text = typeof value === 'string' ? value : '';
   // Redact before bounding. Never copy bodies, headers, prompts or stacks.
-  for (const secret of [...new Set(secrets.filter(x=>typeof x==='string'&&x.length>=3))].sort((a,b)=>b.length-a.length)) text=text.split(secret).join('[removed]');
+  for (const secret of [...new Set(secrets.filter(x=>typeof x==='string'&&x.length>=1))].sort((a,b)=>b.length-a.length)) {
+    // Literal escaping prevents regex injection; case-folded echoes must not
+    // leak. Short labels match only whole tokens, not e.g. "Bo" inside "Body".
+    const literal=secret.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+    const pattern=secret.length<3?'(?<![\\p{L}\\p{N}_])'+literal+'(?![\\p{L}\\p{N}_])':literal;
+    text=text.replace(new RegExp(pattern,'giu'),'[removed]');
+  }
   text=text.replace(/(?:https?|postgres(?:ql)?):\/\/[^\s<>"']+/gi,'[URL removed]');
   // The shared redactor's multiword markers can be matched as credential values
   // on a later read. Normalize before AND after it to keep reads idempotent.
