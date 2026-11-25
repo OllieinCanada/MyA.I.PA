@@ -19,7 +19,8 @@ test('partial restored HTTP evidence cannot clear live or full recovery predicat
 });
 test('canonical pinned dependencies are exact; corruption refused',()=>{
  const pins=require('../scripts/restored-http-pins.json'),sha=require('../scripts/composite-recovery-fixture').sha;
- assert.equal(pins.reviewedHead,BASE_HEAD);assert.equal(Object.keys(pins.sha256).length,42);
+ assert.equal(pins.reviewedHead,BASE_HEAD);assert.equal(Object.keys(pins.sha256).length,44);
+ for(const file of ['server/telegramBotApi.js','server/telegramWebhookState.js'])assert.ok(pins.sha256[file],file);
  for(const file of ['server/signupBusinessRegistry.js','server/signupBindingTransaction.js','server/signupSavedDiagnosis.js',
    'server/signupAlerts.js','server/incidentAlerts.js'])assert.ok(pins.sha256[file],file);
  for(const file of ['server/serviceIntakePrompt.js','server/confirmationConversationPolicy.js','server/compositeCallNotifications.js'])assert.ok(pins.sha256[file],file);

@@ -176,6 +176,7 @@ const {
   telegramWebhookFailureDiagnostics,
   sendTelegramOwnerStatus,
 } = require("./telegramBotApi");
+const { createTelegramWebhookState } = require('./telegramWebhookState');
 const {
   dispatchTelegramApprovedPrLanding,
   inspectPullRequestLandingReadiness,
@@ -19596,10 +19597,12 @@ function startServer(port = PORT, host) {
   const server = app.listen(port, host, () => {
     console.log(`My AI PA API listening on http://localhost:${port}`);
     if (TELEGRAM_GUARDED_ACTIONS_ENABLED) {
-      void ensureTelegramActionWebhook({
+      void Promise.resolve().then(() => ensureTelegramActionWebhook({
         webhookUrl: TELEGRAM_WEBHOOK_URL,
         webhookSecret: TELEGRAM_WEBHOOK_SECRET,
-      }, { token: TELEGRAM_BOT_TOKEN }).catch((error) => {
+      }, { token: TELEGRAM_BOT_TOKEN, stateStore: createTelegramWebhookState({
+        prisma, token: TELEGRAM_BOT_TOKEN, webhookUrl: new URL(TELEGRAM_WEBHOOK_URL).toString(), webhookSecret: TELEGRAM_WEBHOOK_SECRET,
+      }) })).catch((error) => {
         console.error("[telegram:approval] guarded webhook configuration failed", telegramWebhookFailureDiagnostics(error));
       });
     }

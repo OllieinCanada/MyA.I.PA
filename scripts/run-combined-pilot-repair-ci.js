@@ -19,10 +19,13 @@ const TESTS={entry:['tests/bounded-mapping-control.integration.cjs','tests/bound
     'tests/call-sync-reporting.test.js','tests/call-sync-accounting.test.js','tests/signup-assistant-failure-evidence.test.js',
     'tests/signup-prehandoff-failures.test.js','tests/signup-timing-simulation.test.js','tests/signup-prehandoff-target.test.js',
     'tests/signup-assistant-error.test.js','tests/signup-purchase-error.test.js','tests/signup-purchase-error-route.test.js',
-    'tests/signup-binding-transaction.test.js','tests/signup-business-safety.test.js','tests/signup-saved-diagnosis.test.js']};
+    'tests/signup-binding-transaction.test.js','tests/signup-business-safety.test.js','tests/signup-saved-diagnosis.test.js',
+    'tests/telegram-webhook-readback.test.js']};
 const SOURCES=[...new Set([...Object.keys(provenance.runtimeSha256),...Object.values(TESTS).flat(),
   'server/leadHandoffs.js','server/vapiSms.js','server/vapiInventoryCoverage.js','scripts/recovery-notification-state.js',
   'scripts/prepare-call-sync-simulation-evidence.js',
+  'tests/helpers/telegram-webhook-fixture.js',
+  'tests/fixtures/telegram-bot-api-e032da4.cjs',
   'scripts/run-signup-timing-simulation.js','tests/helpers/twilio-status-memory-db.js','tests/helpers/signup-prehandoff-postgres-worker.js','tests/helpers/provisioning-error-route-fixture.js',
   'scripts/audit-vapi-business-mappings.js','scripts/combined-pilot-repair-provenance.json','scripts/run-combined-pilot-repair-ci.js',
   'scripts/compose-bounded-mapping-entry.js','scripts/compose-bounded-mapping-integration.js','scripts/compose-expanded-release.js',
