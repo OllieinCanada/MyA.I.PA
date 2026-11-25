@@ -18,7 +18,8 @@ const TESTS={entry:['tests/bounded-mapping-control.integration.cjs','tests/bound
     'tests/call-sync-routing.test.js','tests/call-sync-health.test.js','tests/postrelease-verification.test.js','tests/telegram-bot-api.test.js',
     'tests/call-sync-reporting.test.js','tests/call-sync-accounting.test.js','tests/signup-assistant-failure-evidence.test.js',
     'tests/signup-prehandoff-failures.test.js','tests/signup-timing-simulation.test.js','tests/signup-prehandoff-target.test.js',
-    'tests/signup-assistant-error.test.js','tests/signup-purchase-error.test.js','tests/signup-purchase-error-route.test.js']};
+    'tests/signup-assistant-error.test.js','tests/signup-purchase-error.test.js','tests/signup-purchase-error-route.test.js',
+    'tests/signup-binding-transaction.test.js','tests/signup-business-safety.test.js','tests/signup-saved-diagnosis.test.js']};
 const SOURCES=[...new Set([...Object.keys(provenance.runtimeSha256),...Object.values(TESTS).flat(),
   'server/leadHandoffs.js','server/vapiSms.js','server/vapiInventoryCoverage.js','scripts/recovery-notification-state.js',
   'scripts/prepare-call-sync-simulation-evidence.js',
