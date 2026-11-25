@@ -6,6 +6,8 @@ const { isContactVerified } = require('./signupVerificationChannel');
 const { formObservationLines } = require('./signupFormObservation');
 const { projectSetup } = require('./adminSignupSetup');
 const { signupVerificationPreview } = require('./signupVerificationPreview');
+const { assistantFailure } = require('./signupAssistantError');
+const { purchaseFailure } = require('./signupProvisioningError');
 
 const STALL_MS = 10 * 60 * 1000;
 const EDIT_FIELDS = Object.freeze({ serviceSummary: 400, serviceArea: 160, businessWebsite: 300, businessAddress: 400, specializationNotes: 2000 });
@@ -44,11 +46,13 @@ function checkpoint(record = {}) {
   if (mode === 'waiting_customer') { label = 'Waiting for contact verification'; nextAction = 'Check whether the verification message arrived. Contact the owner only after reviewing this signup.'; }
   else if (record.reviewRequired || /review/.test(record.status || '')) { label = 'Waiting for admin review'; nextAction = 'Review the exact signup and resolve its recorded blocker. Do not automatically approve or retry it.'; }
   else if (/error|failed|partial/.test(record.status || '')) label = `Needs attention · ${current?.working || 'checking setup'}`;
+  const assistantError=mode==='working'?(assistantFailure(record)||purchaseFailure(record)):null;
+  if(assistantError){label='Needs attention · '+(assistantError.stage==='number'?'Number purchase request':'Assistant creation');nextAction=assistantError.nextAction;}
   if (mode === 'ready') label = 'Setup ready';
   if (mode === 'paused') label = 'Deliberately paused / inactive service';
   if (mode === 'closed') label = 'Closed or superseded';
   const code = String(record.phoneProvisioningCode || record.makeProviderCode || record.agentTestError || record.smsRoutingError || '').trim();
-  return { mode, label, nextAction, progress, blockerCode: /^[A-Z0-9_.:-]{3,100}$/i.test(code) ? code : '' };
+  return { mode, label, nextAction, progress, failure:assistantError, blockerCode: /^[A-Z0-9_.:-]{3,100}$/i.test(code) ? code : '' };
 }
 function progressSignature(record) {
   const c = checkpoint(record);
@@ -82,7 +86,7 @@ function trackerRow(record, now = Date.now()) {
   return { attemptId: record.signupAttemptId || '', businessId: record.businessId || null,
     businessName: String(record.businessName || 'Unnamed business'), ownerName: String(record.ownerName || ''),
     status: String(record.status || 'unknown'), mode: c.mode, active, currentStep: c.label, nextAction: c.nextAction,
-    blockerCode: c.blockerCode, steps: c.progress.steps, completedSteps: c.progress.completed, totalSteps: c.progress.total,
+    blockerCode: c.blockerCode, failure:c.failure, steps: c.progress.steps, completedSteps: c.progress.completed, totalSteps: c.progress.total,
     signedUpAt: iso(record.signedUpAt || record.createdAt), lastProgressAt: iso(tracking.lastProgressAt),
     trackingStartedAt: iso(tracking.trackingStartedAt), timerStartedAt: timer, timeBasis: tracking.timeBasis || 'unknown', elapsedMs,
     stalled: active && elapsedMs != null && elapsedMs >= STALL_MS,

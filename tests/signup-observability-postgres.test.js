@@ -1,6 +1,8 @@
 'use strict';
 const {test}=require('node:test'),assert=require('node:assert/strict'),crypto=require('node:crypto');
 const {recordSignupBug,listSignupBugs,safelyRecordSignupBug,PREFIX}=require('../server/signupBugHistory');
+const {provisioningErrorEvidence}=require('../server/signupProvisioningError');
+const {assistantErrorEvidence}=require('../server/signupAssistantError');
 const {normalizeFeed,saveObservation,readProviderStatuses,PREFIX:STATUS,HISTORY}=require('../server/providerMaintenance');
 const enabled=process.env.RUN_OBSERVABILITY_POSTGRES==='1';
 const hash=v=>crypto.createHash('sha256').update(JSON.stringify(v)).digest('hex');
@@ -14,9 +16,14 @@ test('real SQL bug journal: concurrent clients deduplicate, exact attribution is
  try{
   assert.equal(await db.signupAttempt.findUnique({where:{eventKey:attemptId}}),null);assert.equal(await db.runtimeStore.findUnique({where:{key}}),null);
   await db.signupAttempt.create({data:{eventKey:attemptId,publicId:'attempt_'+hash(marker).slice(0,20),statusTokenHash:hash(marker+'status'),businessName:payload.business.name,ownerEmail:payload.owner.email,ownerPhone:payload.owner.phone,payload,status:'provisioning',expiresAt:new Date(Date.now()+3600000)}});ownsAttempt=true;
-  const input={listSignups:()=>[record],attemptId,eventId,stage:'purchase',error:{code:'P2028',message:'private synthetic raw error'},release:'a'.repeat(40)};
+  const provisioningFailure=provisioningErrorEvidence({operation:'purchase',phase:'context',contextHash:'c'.repeat(64),env:{},privateValues:['invented-sensitive-fixture-value'],error:{code:'P2028',statusCode:503,message:'Synthetic transaction failed for invented-sensitive-fixture-value'}});
+  const input={listSignups:()=>[record],attemptId,eventId,stage:'purchase',provisioningFailure,error:{code:'P2028',message:'private synthetic raw error'},release:'a'.repeat(40)};
   const results=await Promise.all([recordSignupBug({...input,prisma:db}),recordSignupBug({...input,prisma:other})]);assert.equal(results.filter(r=>r.replayed).length,1);assert.equal(await db.runtimeStore.count({where:{key}}),1);
   const before=await db.runtimeStore.findUnique({where:{key}}),report=await listSignupBugs({prisma:db,listSignups:()=>[record],attemptId});assert.equal(report.events[0].signupAttemptId,attemptId);assert.doesNotMatch(JSON.stringify(report),/fake@example|5550123|private synthetic raw/);
+  assert.deepEqual(report.events[0].provisioningFailure,provisioningFailure);
+  assert.equal(report.events[0].provisioningFailure.requestOutcome,'request_not_dispatched');
+  assert.equal(report.events[0].provisioningFailure.retryAllowed,false);
+  assert.doesNotMatch(JSON.stringify(before.data),/invented-sensitive-fixture-value/);
   assert.equal((await listSignupBugs({prisma:other,listSignups:()=>[],attemptId})).events[0].association,'historical_unverified');assert.deepEqual(await db.runtimeStore.findUnique({where:{key}}),before);
   await assert.rejects(recordSignupBug({...input,prisma:db,error:{code:'ETIMEDOUT'}}),{code:'BUG_HISTORY_EVENT_CONFLICT'});assert.deepEqual(await db.runtimeStore.findUnique({where:{key}}),before);
  }finally{try{const row=await db.runtimeStore.findUnique({where:{key}});if(row){assert.equal(row.data.target.attemptId,attemptId);await db.runtimeStore.deleteMany({where:{key}});}if(ownsAttempt)await db.signupAttempt.deleteMany({where:{eventKey:attemptId,publicId:'attempt_'+hash(marker).slice(0,20)}});assert.equal(await db.runtimeStore.count({where:{key}}),0);}finally{await Promise.all([db.$disconnect(),other.$disconnect()]);}}
@@ -25,8 +32,12 @@ test('real SQL capture budget: an admitted blocked journal write can complete la
  const [db,locker]=clients(),eventId=crypto.randomUUID(),key=PREFIX+hash(eventId);let release,held;
  const acquired=new Promise(resolve=>{held=resolve;}),unlock=new Promise(resolve=>{release=resolve;});
  const lock=locker.$transaction(async tx=>{await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))::text AS lock_result`;held();await unlock;},{timeout:10000});
- try{await acquired;const result=await safelyRecordSignupBug({prisma:db,listSignups:()=>[],eventId,error:{code:'ETIMEDOUT'}},{budgetMs:30});assert.equal(result.recorded,false);
+ const assistantFailure=assistantErrorEvidence({phase:'create',contextHash:null,env:{},error:{code:'ETIMEDOUT',statusCode:504,message:'Synthetic assistant timeout; outcome unknown'}});
+ try{await acquired;const result=await safelyRecordSignupBug({prisma:db,listSignups:()=>[],eventId,stage:'assistant-create',assistantFailure,error:{code:'ETIMEDOUT'}},{budgetMs:30});assert.equal(result.recorded,false);
   assert.equal(await db.runtimeStore.findUnique({where:{key}}),null);release();await lock;await waitFor(()=>db.runtimeStore.findUnique({where:{key}}));assert.equal(await db.runtimeStore.count({where:{key}}),1);
+  const report=await listSignupBugs({prisma:db,listSignups:()=>[],issueId:(await db.runtimeStore.findUnique({where:{key}})).data.issueId});
+  assert.equal(report.events.length,1);assert.deepEqual(report.events[0].assistantFailure,assistantFailure);
+  assert.equal(report.events[0].assistantFailure.providerOutcome,'uncertain_inspect_receipts');
  }finally{release();await lock;try{await db.runtimeStore.deleteMany({where:{key}});assert.equal(await db.runtimeStore.count({where:{key}}),0);}finally{await Promise.all([db.$disconnect(),locker.$disconnect()]);}}
 });
 test('real SQL provider history: concurrent snapshots, rollback, stale failures, absence is not resolution and owned cleanup',{skip:!enabled,timeout:30000},async()=>{

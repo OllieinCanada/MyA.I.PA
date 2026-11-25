@@ -1,9 +1,13 @@
 'use strict';
 // Append-only technical reports, separate from active incident TTL/acknowledgement.
 // No raw errors, contacts, transcripts, provider bodies, sends or repair actions.
+// Assistant requests additionally retain bounded, redacted technical detail
+// and their server-selected checkpoint; never a request body or stack trace.
 const crypto=require('node:crypto');
 const {signupDiagnosticError}=require('./signupDiagnosticError');
 const {signupBusinessKey}=require('./signupBusinessIdentity');
+const {readAssistantError}=require('./signupAssistantError');
+const {readProvisioningError}=require('./signupProvisioningError');
 const PREFIX='application-bug-history:v1:';
 const STAGES=Object.freeze({authorization:'Signup authorization',handoff:'Make handoff',purchase:'Number purchase',
  'assistant-create':'Assistant creation','assistant-import':'Number import','provider-readback':'Provider resource inspection',
@@ -36,11 +40,15 @@ function nextAction(diagnostic){
  if(diagnostic.httpStatus===401||diagnostic.httpStatus===403||diagnostic.code==='EAUTH')return 'Check the relevant account access/configuration without exposing credentials. Any live test needs separate approval.';
  return 'Inspect this operation and its existing receipts. No automatic resend, purchase, billing action or repair is authorized by this report.';
 }
-async function recordSignupBug({prisma,listSignups,error={},stage='runtime',attemptId,eventId=crypto.randomUUID(),source='runtime',release='',now=Date.now}){
+async function recordSignupBug({prisma,listSignups,error={},assistantFailure,provisioningFailure,stage='runtime',attemptId,eventId=crypto.randomUUID(),source='runtime',release='',now=Date.now}){
  if(typeof eventId!=='string'||!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(eventId))fail('BUG_HISTORY_EVENT_ID_INVALID',400);
  stage=Object.hasOwn(STAGES,stage)?stage:'runtime';
  source=['runtime','worker'].includes(source)?source:'runtime';
  const diagnostic=signupDiagnosticError(error),key=PREFIX+hash(eventId);
+ const assistant=stage==='assistant-create'?readAssistantError(assistantFailure):null;
+ const checkedProvisioning=readProvisioningError(provisioningFailure);
+ const provisioning=checkedProvisioning&&(checkedProvisioning.operation===stage||stage==='authorization'&&['key-auth','signature-auth'].includes(checkedProvisioning.phase))?checkedProvisioning:null;
+ if(provisioning&&['key-auth','signature-auth'].includes(provisioning.phase))attemptId=undefined;
  return prisma.$transaction(async tx=>{
   await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))::text AS lock_result`;
   let target=null,association=attemptId?'unverified':'none';
@@ -50,13 +58,15 @@ async function recordSignupBug({prisma,listSignups,error={},stage='runtime',atte
    let records=[];try{records=listSignups();}catch{/* Save an unlinked report instead of guessing from contacts or a damaged file. */}
    target=targetProof(attemptId,attempt,Array.isArray(records)?records:[]);if(target)association='verified_at_capture';
   }
-  const signature={stage,code:diagnostic.code,httpStatus:diagnostic.httpStatus,reference:diagnostic.reference};
+  const signature={stage,code:diagnostic.code,httpStatus:diagnostic.httpStatus,reference:diagnostic.reference,...(assistant?{assistant}: {}),...(provisioning?{provisioning}: {})};
   const issueId=hash([target||'unattributed',signature]);
   const identity=hash([target,association,signature,source]);
   const previous=await tx.runtimeStore.findUnique({where:{key}});
   if(previous){if(previous.data?.version!==1||previous.data.identity!==identity)fail('BUG_HISTORY_EVENT_CONFLICT');return {recorded:true,replayed:true};}
   const data={version:1,identity,issueId,target,attemptHash:target?hash(target.attemptId):null,association,stage,source,
    diagnostic:{code:diagnostic.code,httpStatus:diagnostic.httpStatus,reference:diagnostic.reference},
+   ...(assistant?{assistantFailure:assistant}:{}),
+   ...(provisioning?{provisioningFailure:provisioning}:{}),
    capturedAt:new Date(now()).toISOString(),release:/^[a-f0-9]{40}$/.test(release)?release:null};
   await tx.runtimeStore.create({data:{key,data}});
   return {recorded:true,replayed:false};
@@ -86,14 +96,19 @@ async function listSignupBugs({prisma,listSignups,attemptId,issueId,cursor,limit
   const proof=data.target?targetProof(data.target.attemptId,attempts.find(attempt=>attempt.eventKey===data.target.attemptId),records):null;
   const verified=proof&&proof.businessKey===data.target.businessKey;
   const diagnostic=signupDiagnosticError(data.diagnostic||{});
+  const assistant=data.assistantFailure===undefined?null:readAssistantError(data.assistantFailure);
+  if(data.assistantFailure!==undefined&&!assistant)fail('BUG_HISTORY_ROW_INVALID',503);
+  const provisioning=data.provisioningFailure===undefined?null:readProvisioningError(data.provisioningFailure);
+  if(data.provisioningFailure!==undefined&&(!provisioning||!(provisioning.operation===data.stage||data.stage==='authorization'&&['key-auth','signature-auth'].includes(provisioning.phase))))fail('BUG_HISTORY_ROW_INVALID',503);
+  if(provisioning&&['key-auth','signature-auth'].includes(provisioning.phase)&&data.target)fail('BUG_HISTORY_ROW_INVALID',503);
   return {eventRef:row.key.slice(PREFIX.length),issueId:data.issueId,reference:'BUG-'+data.issueId.slice(0,8).toUpperCase(),
-   stage:data.stage,operation:STAGES[data.stage],diagnostic,capturedAt:data.capturedAt,release:/^[a-f0-9]{40}$/.test(data.release||'')?data.release:null,
+   stage:data.stage,operation:STAGES[data.stage],diagnostic,...(assistant?{assistantFailure:assistant}:{}),...(provisioning?{provisioningFailure:provisioning}:{}),capturedAt:data.capturedAt,release:/^[a-f0-9]{40}$/.test(data.release||'')?data.release:null,
    signupAttemptId:verified?proof.attemptId:null,association:verified?'verified':data.target?'historical_unverified':'unattributed',
    status:'needs_investigation',confirmedSoftwareBug:false,nextAction:nextAction(diagnostic)};
  });
  const groups=new Map();for(const event of events){const group=groups.get(event.issueId)||{issueId:event.issueId,reference:event.reference,operation:event.operation,reportsOnPage:0};group.reportsOnPage++;groups.set(event.issueId,group);}
  return {readOnly:true,ready:false,events,groups:[...groups.values()],hasMore:rows.length>size,nextCursor:rows.length>size?page.at(-1).key.slice(PREFIX.length):null,
-  limitation:'Counts describe captured reports on this page, not proven distinct failures or root causes. Matching signatures are grouped, not diagnosed by a model. Historical/unknown associations stay unlinked. No automatic expiry or incident acknowledgement deletes this journal; storage failure, backups and an explicit future retention policy remain separate concerns. Raw log messages are not stored.'};
+  limitation:'Counts describe captured reports on this page, not proven distinct failures or root causes. Matching signatures are grouped, not diagnosed by a model. Historical/unknown associations stay unlinked. No automatic expiry or incident acknowledgement deletes this journal; storage failure, backups and an explicit future retention policy remain separate concerns. Provisioning reports may include bounded redacted technical detail, never raw payloads or stacks. Unauthenticated refusals are sampled per route/checkpoint per process; missing samples do not prove no failure.'};
 }
 function registerSignupBugRoutes({app,requireAdmin,prisma,listSignups}){
  app.get('/api/admin/signup-bugs',requireAdmin,async(req,res)=>{

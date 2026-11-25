@@ -11,10 +11,30 @@ test('actual bug-history component starts unknown with no repair, resend or dele
  const Component=load('SignupBugHistory.js').default,html=renderToStaticMarkup(React.createElement(Component,{attemptId:'signup_'+'a'.repeat(32)}));
  assert.match(html,/Bug history for this signup/);assert.match(html,/No automatic repair/);assert.match(html,/History is not loaded/);assert.doesNotMatch(html,/No captured reports|Resend|Buy number|Delete history/);
 });
+
+test('actual tracker control room clearly renders recorded assistant error and preserves uncertain outcome wording',()=>{
+ const record={signupAttemptId:'signup_'+'a'.repeat(32),identityVerified:true,smsVerified:true,status:'setup_error',makeFailedStage:'VAPI_ASSISTANT_CREATE',makeProviderCode:'PROVIDER_REQUEST_FAILED'};
+ const e=require('../server/signupAssistantError').assistantErrorEvidence({phase:'create',contextHash:'b'.repeat(64),env:{},error:{code:'ETIMEDOUT',statusCode:504,message:'Assistant request timed out; outcome unknown'}});
+ const setup=require('../server/adminSignupSetup').projectSetup(record,{assistantError:{...e,capturedAt:'2026-01-01T12:00:00Z'}}),row={...require('../server/adminSignupTracker').trackerRow(record),setup};
+ const Component=load('SignupControlRoom.js').default,html=renderToStaticMarkup(React.createElement(Component,{row}));
+ assert.match(html,/Assistant creation/);assert.match(html,/ETIMEDOUT/);assert.match(html,/HTTP 504/);assert.match(html,/Assistant request timed out; outcome unknown/);assert.match(html,/Do not buy another number or rerun signup/);assert.doesNotMatch(html,/>Retry assistant|>Recover now|>Buy number/);
+ const legacy={...row,setup:require('../server/adminSignupSetup').projectSetup(record)};
+ assert.match(renderToStaticMarkup(React.createElement(Component,{row:legacy})),/underlying error is unavailable/);
+});
 test('bug-history buttons override the tracker nowrap rule instead of hiding 320px overflow',()=>{
  const css=require('node:fs').readFileSync(path.resolve(__dirname,'../src/SignupBugHistory.css'),'utf8');
  assert.match(css,/\.signup-tracker \.signup-bug-history button\s*\{[^}]*white-space:\s*normal;[^}]*max-width:\s*100%/);
  assert.doesNotMatch(css,/overflow-x:\s*hidden/);
+});
+
+test('actual tracker renders purchase checkpoint, redacted error and unknown outcome even with a failed receipt',()=>{
+ const record={signupAttemptId:'signup_'+'a'.repeat(32),identityVerified:true,smsVerified:true,status:'setup_error',makeFailedStage:'TWILIO_NUMBER_PURCHASE',makeProviderCode:'PROVIDER_REQUEST_FAILED'};
+ const e=require('../server/signupProvisioningError').provisioningErrorEvidence({operation:'purchase',phase:'purchase',contextHash:'b'.repeat(64),env:{},error:{code:'ETIMEDOUT',statusCode:504,message:'Synthetic purchase timeout; outcome unknown'}});
+ const setup=require('../server/adminSignupSetup').projectSetup(record,{purchaseError:{...e,capturedAt:'2026-01-01T12:00:00Z'},receipts:{'twilio-number':{status:'failed',dispatchStartedAt:'2026-01-01T11:59:00Z'}}});
+ const row={...require('../server/adminSignupTracker').trackerRow(record),setup},Component=load('SignupControlRoom.js').default;
+ const html=renderToStaticMarkup(React.createElement(Component,{row}));assert.match(html,/Number purchase request failed/);assert.match(html,/HTTP 504/);assert.match(html,/Synthetic purchase timeout; outcome unknown/);assert.match(html,/Do not buy another number or rerun signup/);assert.doesNotMatch(html,/>Buy number|>Retry purchase|>Recover now/);
+ const {BugErrorDetail}=load('SignupBugHistory.js');const auth={...e,operation:'purchase',phaseLabel:'Verify signed provisioning request',detail:'Invalid signed request <script>unsafe</script>'};
+ const detail=renderToStaticMarkup(React.createElement(BugErrorDetail,{event:{provisioningFailure:auth}}));assert.match(detail,/Verify signed provisioning request/);assert.match(detail,/&lt;script&gt;/);assert.doesNotMatch(detail,/<script|<button|<form/);assert.match(detail,/does not authorize a retry/);
 });
 
 test('recovery guidance shows failed/unknown steps with no execute controls and marks stale evidence',()=>{

@@ -19,7 +19,7 @@ test('partial restored HTTP evidence cannot clear live or full recovery predicat
 });
 test('canonical pinned dependencies are exact; corruption refused',()=>{
  const pins=require('../scripts/restored-http-pins.json'),sha=require('../scripts/composite-recovery-fixture').sha;
- assert.equal(pins.reviewedHead,BASE_HEAD);assert.equal(Object.keys(pins.sha256).length,35);
+ assert.equal(pins.reviewedHead,BASE_HEAD);assert.equal(Object.keys(pins.sha256).length,37);
  for(const file of ['server/serviceIntakePrompt.js','server/confirmationConversationPolicy.js','server/compositeCallNotifications.js'])assert.ok(pins.sha256[file],file);
  for(const file of ['server/signupActivationControl.js','server/signupActivationPreparation.js','server/signupActivationEvidence.js',
   'server/signupActivationSave.js','server/signupActivationPreview.js','server/automaticAssistantConnectionPlan.js'])assert.ok(pins.sha256[file],file);
@@ -28,7 +28,7 @@ test('canonical pinned dependencies are exact; corruption refused',()=>{
  assert.ok(pins.sha256['server/reconciledTrackerEvidence.js'],'The new actual tracker dependency must be exact-source pinned too');
  for(const file of ['server/incidentInvestigationBridge.js','server/operationalErrorClassifier.js'])assert.ok(pins.sha256[file]);
  for(const file of ['server/providerMaintenance.js','server/signupBugHistory.js','server/signupDiagnosticError.js'])assert.ok(pins.sha256[file]);
- assert.equal(pins.runtimeSourceHead,'b43abfbe846dd239e17b61d6128fa018cf1a3530');
+ assert.equal(pins.runtimeSourceHead,'bb2e52b4781c0c470899135572aad604b8af341c');
  assert.ok(pins.sha256['server/signupLiveDiagnostics.js']);assert.ok(pins.sha256['server/signupLiveDiagnosticRoutes.js']);assert.ok(pins.sha256['server/signupDiagnosticProviders.js']);
  assert.ok(pins.sha256['server/confirmedCallRequest.js']);assert.ok(pins.sha256['server/agentTools.js']);
  assert.ok(pins.sha256['server/notificationOutcomes.js']);
@@ -48,7 +48,7 @@ test('restored HTTP pins reject tampering with every confirmation prompt depende
  const read=file=>Buffer.from(fs.readFileSync(path.join(__dirname,'..',file),'utf8').replace(/\r\n/g,'\n'));
  assert.equal(verifyPins(read),true);
  for(const file of ['server/signupSetupJobs.js','server/automaticAssistantConnectionPlan.js','server/compositeCallNotifications.js',
-  'server/serviceIntakePrompt.js','server/confirmationConversationPolicy.js']){
+    'server/serviceIntakePrompt.js','server/confirmationConversationPolicy.js','server/signupAssistantError.js','server/signupProvisioningError.js']){
   assert.throws(()=>verifyPins(p=>p===file?Buffer.from('unreviewed prompt change'):read(p)),/DEPENDENCY_BYTES_CHANGED/);
  }
 });
