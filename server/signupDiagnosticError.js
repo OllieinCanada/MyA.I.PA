@@ -8,6 +8,8 @@ const MESSAGES=Object.freeze({
  '20003':'Twilio rejected access. Credentials, account scope or permissions require inspection.',
  P2028:'The database transaction expired or closed; this code alone does not establish the exact cause.',
  P2024:'The database connection pool timed out.',
+ SIGNUP_BUSINESS_MAPPING_BUSY:'Business mapping could not obtain its database lock within the bounded wait. No mapping callback was admitted by this attempt; inspect existing receipts before recovery.',
+ SIGNUP_BUSINESS_LOCK_UNVERIFIED:'The business mapping database lock could not be verified. Mapping was refused; no provider retry is authorized.',
  ETIMEDOUT:'The request timed out. Its external outcome must be checked before retrying.',
  UND_ERR_SOCKET:'The connection closed before the response was confirmed. Do not assume the action did not happen.',
  UND_ERR_CONNECT_TIMEOUT:'The connection could not be established within its time limit.',

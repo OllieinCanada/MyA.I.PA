@@ -1,4 +1,10 @@
 {
+  "signupMappingTimeoutContinuation": {
+    "baseRelease": "745be3393ef48816214cfb67444d736057274b37",
+    "initialCandidateHead": "2f93dd8da5af89ec1e4c6d1f16abf20947fbd984",
+    "previousIndexSha256": "6f13e97bace05dda99539d6af1175fc1aec51599d8a00ad57335d865325b91e2",
+    "scope": "Candidate bounded shared-lock mapping admission and exact saved-diagnosis Telegram projection. Fresh full SQL/HTTP/CI and review are required for these pinned bytes; no release, provider retry, production correction or live delivery proof. Historical repair and lifecycle pins remain unchanged."
+  },
   "signupErrorCaptureContinuation": {
     "baseRelease": "bb2e52b4781c0c470899135572aad604b8af341c",
     "initialCandidateHead": "037b2edec5ec278ec8018838844a21ae1a749d13",
@@ -106,7 +112,12 @@
     "server/boundedBusinessMappingAdapters.js": "69cc5596edc20e8a2e689ff826bb2e424e4beaff8f41fa970ee40efa4aed3744",
     "server/boundedBusinessMappingWriter.js": "c8b129211d807e780d55600695362cbcb813c29ac784a147dbed1b9ca746db6a",
     "server/boundedMappingControl.js": "6bdf571cea3fc1d2a52c20e8bc89a49d10ffbe069a7d2fd463eaadb25354b36a",
-    "server/index.js": "6f13e97bace05dda99539d6af1175fc1aec51599d8a00ad57335d865325b91e2",
+    "server/index.js": "136982b559028f3ad3418ac3388fddc372ab7f503044155e51833370cdb0d77c",
+    "server/signupBusinessRegistry.js": "711435f20381715f6c085ca7e08f7e32e1064093e5e0cd19551bf30f0656942a",
+    "server/signupBindingTransaction.js": "909bd8800a2b8c7c81678b13746def69f3481ee0e8182553480091c8842fd010",
+    "server/signupSavedDiagnosis.js": "8ebe5b93529e000a69aa7f0d44112df0da4bf89ee7457351b050cedefd9d7138",
+    "server/signupAlerts.js": "d3a477afca35674d0f000120ab15bffc4d5ddf92c317e6b2e019ecf1c87ee94f",
+    "server/incidentAlerts.js": "958bb418a1bc4a6bc516e2c807b5f8b824eeb30a3cc1b137a415d08accdc51db",
     "server/signupSetupJobs.js": "9f5a51124b9481f271af107629fcbce76f2d6b11f7d063e25712f62b09472236",
     "server/signupActivationControl.js": "858d2dd3eb13a380f7583a00d9bf450f794869e10f38a960a6ef4fdd6c3246f0",
     "server/signupActivationPreparation.js": "17d495125a32fb598d7ae1d334e9431743bda9ddc5bbae3ac27df967be1a7d30",
@@ -119,10 +130,10 @@
     "server/incidentInvestigationBridge.js": "06b9d43752e95c2bccedefd78350a662c5483ef107a9eb5e041eefbbdfd0eb3b",
     "server/operationalErrorClassifier.js": "1f9b079c6ec4ba9181816a8676e1e9cf1daa4341d8e9f092a6c13f752f58a941",
     "server/providerMaintenance.js": "f3b0fedbf566fd3305696483c8b320bea548af756b5c8cb46681b041d5491dfa",
-    "server/signupBugHistory.js": "09525b42664595f8d62262276b6fdfda1261b96e177042daa2c1b7490575736c",
+    "server/signupBugHistory.js": "7fb39247816963e189183bb7212bbba386ef1bcf2dec0e76f0f6c92931b782f0",
     "server/signupAssistantError.js": "d09f209068b22aea1c782df3d4689af58a597c7feb16d8a056822dd6b05c2a30",
     "server/signupProvisioningError.js": "f4a64014f00b7dc6841bc48c44a3152ab9913efd6780055d9ca73f2a9c78def2",
-    "server/signupDiagnosticError.js": "607dc1ddf9f4e8b62f4388ea7a4ff4d32f98ab4af345309d61ec4557ab6099fb",
+    "server/signupDiagnosticError.js": "9b3c8e1f7f1cdac8f22224dabe3a94679cb37281f5e18a748411371d59706da4",
     "server/signupDiagnosticProviders.js": "1e419751d3cba2375956d9f4791863a0958a19590323ad3c1cd5927edaf5a89a",
     "server/signupLiveDiagnosticRoutes.js": "458df17b067aa4166d31b2aeeb7788cfa139a302ba56ce62575aa125521a1109",
     "server/signupLiveDiagnostics.js": "c93b418196752527b96e9323e384870750a6ee5fa3bde641b214689bbc53e365",

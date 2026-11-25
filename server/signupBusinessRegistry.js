@@ -1,4 +1,5 @@
 const { signupBusinessKey, assertSignupOpen } = require("./signupBusinessIdentity");
+const { bindingTransaction } = require('./signupBindingTransaction');
 
 function conflict(code, message) {
   return Object.assign(new Error(message), { code, statusCode: 409 });
@@ -11,8 +12,7 @@ async function ensureSignupBusinessBindings({ prisma, signup, mappings, fallback
   const businessKey = signupBusinessKey(signup);
   if (!businessKey) throw conflict("SIGNUP_BUSINESS_IDENTITY_REQUIRED", "Complete business and owner identity is required.");
   const key = `signup-business:${businessKey}`;
-  return prisma.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${"signup-business-bindings:v1"}))::text AS lock_result`;
+  return bindingTransaction(prisma, async (tx) => {
     if (signup.signupAttemptId && tx.signupAttempt) {
       assertSignupOpen(await tx.signupAttempt.findUnique({ where: { eventKey: signup.signupAttemptId } }) || {});
     }
@@ -44,8 +44,7 @@ async function closeSignupBusinessIdentity({ prisma, signup }) {
   const businessKey = signupBusinessKey(signup);
   if (!businessKey) return;
   const key = `signup-business:${businessKey}`;
-  await prisma.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${"signup-business-bindings:v1"}))::text AS lock_result`;
+  await bindingTransaction(prisma, async (tx) => {
     const current = await tx.runtimeStore.findUnique({ where: { key } });
     const data = { ...current?.data, businessKey, closed: true, closedAt: new Date().toISOString() };
     await tx.runtimeStore.upsert({ where: { key }, create: { key, data }, update: { data } });
@@ -53,8 +52,7 @@ async function closeSignupBusinessIdentity({ prisma, signup }) {
 }
 
 async function upsertOwnedProviderMapping({ prisma, businessId, matchType, matchValue, label = null, include }) {
-  return prisma.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${"signup-business-bindings:v1"}))::text AS lock_result`;
+  return bindingTransaction(prisma, async (tx) => {
     const existing = await tx.vapiBusinessMapping.findUnique({ where: { matchValue } });
     if (existing && existing.businessId !== businessId) throw conflict("AGENT_MAPPING_OWNERSHIP_CONFLICT", "This phone or assistant already belongs to another business. Unbind it explicitly before reassignment.");
     return tx.vapiBusinessMapping.upsert({ where: { matchValue }, create: { businessId, matchType, matchValue, label }, update: { matchType, label }, ...(include ? { include } : {}) });

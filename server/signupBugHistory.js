@@ -11,7 +11,7 @@ const {readProvisioningError}=require('./signupProvisioningError');
 const PREFIX='application-bug-history:v1:';
 const STAGES=Object.freeze({authorization:'Signup authorization',handoff:'Make handoff',purchase:'Number purchase',
  'assistant-create':'Assistant creation','assistant-import':'Number import','provider-readback':'Provider resource inspection',
- trial:'Trial activation',forwarding:'Forwarding preparation',completion:'Completion notification',verification:'Contact verification',worker:'Setup worker',runtime:'Application runtime'});
+ 'business-mapping':'Business/owner resource mapping',trial:'Trial activation',forwarding:'Forwarding preparation',completion:'Completion notification',verification:'Contact verification',worker:'Setup worker',runtime:'Application runtime'});
 const hash=value=>crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const validAttempt=value=>typeof value==='string'&&/^signup_[a-f0-9]{32}$/.test(value);
 const validHash=value=>typeof value==='string'&&/^[a-f0-9]{64}$/.test(value);
