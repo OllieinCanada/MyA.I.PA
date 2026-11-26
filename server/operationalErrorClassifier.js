@@ -200,6 +200,15 @@ function result(details, category, overrides = {}) {
 
 function classifyOperationalError(error = {}, context = {}) {
   const details = providerDetails(error, context);
+  const readiness=require('./smsDispatchReadiness').safeReadinessDiagnostic(error.readinessDiagnostic);
+  if(readiness&&error.code===readiness.code)return result({...details,provider:'MYAIPA',code:readiness.code,status:readiness.httpStatus},'sms_backend_readiness',{
+    reasonCode:readiness.code,providerLabel:'My AI PA SMS backend',retryable:false,
+    reason:`My AI PA's SMS-backend readiness GET failed (${readiness.phase}${readiness.httpStatus?', HTTP '+readiness.httpStatus:''}; ${readiness.elapsedMs} ms / ${readiness.timeoutMs} ms limit). This does not prove a Vapi or Twilio message rejection.`,
+    whatFailed:'The signup text-routing readiness check did not pass',
+    impact:'Signup finalization is unverified. Existing delivered receipts and saved notification drafts remain separate evidence.',
+    nextAction:'Inspect this exact signup and saved check timing. A read-only readiness check is safe; do not replay signup, provisioning or message sends.',
+    signInDestination:'My AI PA signup tracker → Text routing; Render → request timing',
+  });
   if (context.reasonCode === 'CALL_RECORD_SAVE_FAILED' || error.callPersistenceFailure === true) {
     return result(details, 'call_record_persistence', {
       reasonCode: 'CALL_RECORD_SAVE_FAILED', retryable: true,

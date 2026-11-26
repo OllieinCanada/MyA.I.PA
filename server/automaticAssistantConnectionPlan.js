@@ -65,6 +65,12 @@ function prepareAutomaticAssistantConnection({assistant,legacyTool,phone,signup,
  if(!exactGate)missing.push('normal_active_phone_gate');
  if(!webhookVerified)missing.push('authenticated_webhook_configuration');
  return {candidatePrepared:true,applyAllowed:false,liveTestAllowed:false,missingPrerequisites:missing,
+   notificationMode:'automatic_after_caller_approval',existingDraftsWillBeSent:false,
+   maximumMessagesPerNewApprovedCall:{owner:1,customer:1},
+   preparedFor:{businessId,signupAttemptId:signup.signupAttemptId||null,assistantId:assistant.id,phoneNumberId:phone.id},
+   sourceFingerprint:crypto.createHash('sha256').update(JSON.stringify({assistant,legacyTool,phone,signup,businessId,gate,gateWebhookUrl,webhookVerified})).digest('hex'),
+   configurationProposal:{enableOnlyAfterSeparateApproval:['SMS_AUTOMATIC_NOTIFICATION_ENABLED','SMS_NOTIFICATION_DISPATCH_ENABLED'],
+     targetAllowlistBusinessId:businessId,preserveUnrelatedAllowlistEntries:true},
    toolName:name,assistantPatch:{model},requiresGateSnapshotRefresh:Boolean(protectedRoute),
    ...(protectedRoute?{protectedGatePatch:{assistantSnapshot:{...structuredClone(gate.assistantSnapshot),model:structuredClone(model)}}}:{}),
    requiresSeparateApproval:['provider_configuration_change','scoped_automatic_and_dispatch_flags','live_test'],

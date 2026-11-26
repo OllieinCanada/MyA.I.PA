@@ -10,6 +10,7 @@ const { purchaseEvidence } = require('./signupPurchaseEvidence');
 const { assistantFailure } = require('./signupAssistantError');
 const { purchaseFailure } = require('./signupProvisioningError');
 const { listSignupBugs } = require('./signupBugHistory');
+const { safeReadinessDiagnostic } = require('./smsDispatchReadiness');
 const iso = value => Number.isFinite(Date.parse(value)) ? new Date(value).toISOString() : null;
 const kinds = ['twilio-number', 'vapi-assistant', 'vapi-import'];
 function setupTimeline(record, receipts, search, groups) {
@@ -109,6 +110,10 @@ function projectSetup(record = {}, { context, receipts = {}, search = null, cove
   const assigned = /^\+1\d{10}$/.test(record.twilioPhoneNumber || '') ? record.twilioPhoneNumber : null;
   const failure=assistantFailure(record);
   const purchase=purchaseFailure(record);
+  const smsCheck=safeReadinessDiagnostic(record.smsRoutingReadinessDiagnostic);
+  const routingDetail=smsCheck?`My AI PA SMS-backend readiness GET: ${smsCheck.phase} · ${smsCheck.code}${smsCheck.httpStatus?' · HTTP '+smsCheck.httpStatus:''} · ${smsCheck.elapsedMs} ms elapsed / ${smsCheck.timeoutMs} ms timeout. This does not establish a Vapi/Twilio rejection. No sending or retry runs here.`
+    :record.smsNotificationMode==='draft_only'?'Saved draft-only routing assessment. Draft saving is not automatic sending or delivery; this page sends nothing.'
+      :'Uses the saved text-routing assessment; this page sends nothing. Automatic post-call sending is not verified by practice-text delivery.';
   const result = { checkedAt: new Date().toISOString(), coverage, readOnly: true,
     number: { preferredAreaCode, areaOrder, policyValid, locked: Boolean(context?.lockedAt),
       assignedAreaCode: assigned ? assigned.slice(2,5) : null, assignedLast4: assigned ? assigned.slice(-4) : null,
@@ -134,7 +139,7 @@ function projectSetup(record = {}, { context, receipts = {}, search = null, cove
           check(key,label,readiness.checks.some(c=>c.key===key&&c.done),business ? 'Checked against saved business mappings; not a live provider request.' : 'Business mapping evidence not read yet; use Analyze saved setup.')),
       ] },
       { id: 'texts', title: 'Check routing and both practice texts', checks: [
-        check('text-routing','Owner and caller text routes checked',done('text-routing'),'Uses the saved text-routing assessment; this page sends nothing.',null,record.smsRoutingStatus === 'failed'),
+        check('text-routing','Owner and caller text routes checked',done('text-routing'),routingDetail,null,record.smsRoutingStatus === 'failed'),
         ...message('Owner'), ...message('Customer'),
       ] },
       { id: 'activation', title: 'Activate the trial and finish setup', checks: [

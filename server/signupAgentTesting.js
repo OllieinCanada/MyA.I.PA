@@ -265,6 +265,7 @@ function enforceAgentTestReadyStatus(record = {}) {
     && ["delivered", "read"].includes(String(record.agentTestOwnerProviderStatus || "").trim().toLowerCase())
     && ["delivered", "read"].includes(String(record.agentTestCustomerProviderStatus || "").trim().toLowerCase())
     && (!currentVersionRequiresRouteProof || routeProofReady)
+    && record.smsRoutingStatus === 'healthy'
     && !terminalFailure
   ) {
     return record;
@@ -272,7 +273,7 @@ function enforceAgentTestReadyStatus(record = {}) {
   return {
     ...record,
     status: "agent_testing",
-    setupReadyBlockedReason: "MANDATORY_AGENT_TEST_NOT_PASSED",
+    setupReadyBlockedReason: record.agentTestStatus === 'passed' && record.smsRoutingStatus !== 'healthy' ? "SMS_ROUTING_NOT_VERIFIED" : "MANDATORY_AGENT_TEST_NOT_PASSED",
   };
 }
 

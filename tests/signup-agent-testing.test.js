@@ -212,6 +212,7 @@ test("setup-ready is globally held until the mandatory agent test passes", () =>
 
   const ready = enforceAgentTestReadyStatus({
     status: "setup_ready",
+    smsRoutingStatus: 'healthy',
     agentTestStatus: "passed",
     vapiAssistantId: signup.vapiAssistantId,
     twilioPhoneNumber: signup.twilioPhoneNumber,
