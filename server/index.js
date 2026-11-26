@@ -26,6 +26,8 @@ const { createAssociationFence, createAssociationRepairService, atomicCommitAsso
 const signupAssociationFence = createAssociationFence();
 const { createBoundedMappingControl, registerBoundedMappingControlRoutes, readOperatorPolicy } = require('./boundedMappingControl');
 const { createActivationControl, registerActivationControl, readActivationPolicy } = require('./signupActivationControl');
+const {createConnectionControl,registerConnectionControl,readConnectionPolicy}=require('./signupConnectionControl');
+const {createConnectionTransport}=require('./signupConnectionTransport');
 const signupNumberSearchTracker = createNumberSearchTracker();
 const { createPrismaObservationStore, createObservationService, registerObservationRoutes, observationBodyGuard } = require('./signupFormObservation');
 const { runtimeDependencySecurity } = require('./runtimeDependencySecurity');
@@ -17980,6 +17982,21 @@ const activationControl = createActivationControl({prisma,fence:signupAssociatio
 registerActivationControl({app,requireAdmin,limiter:adminSignupRepairProcessRateLimiter,isAllowedOrigin,
  actorHash:req=>hasValidAdminSession(req)?crypto.createHash('sha256').update('signup-verified-setup-session:v1\0')
   .update(parseCookies(req)[ADMIN_SESSION_COOKIE]).digest('hex'):'',service:activationControl});
+const noSendConnectionControl=createConnectionControl({prisma,fence:signupAssociationFence,
+ readStore:()=>JSON.parse(fs.readFileSync(signupDashboardPath,'utf8')),
+ commitStore:project=>atomicCommitAssociationFile(signupDashboardPath,project),
+ getSigningSecret:getProvisioningSigningSecret,getRelease:()=>process.env.RENDER_GIT_COMMIT,
+ getPolicy:()=>readConnectionPolicy(path.dirname(signupDashboardPath)),readOverrides:()=>process.env.VAPI_BUSINESS_MAP||'',
+ transport:createConnectionTransport({getVapiKey:()=>VAPI_API_KEY,
+  getTwilioCredentials:()=>({accountSid:TWILIO_ACCOUNT_SID,authToken:TWILIO_AUTH_TOKEN})}),
+ enabled:()=>process.env.SIGNUP_CONNECTION_CONTROL_ENABLED==='true',
+ applyEnabled:()=>process.env.SIGNUP_CONNECTION_APPLY_ENABLED==='true',
+ singleWriter:()=>process.env.SIGNUP_ASSOCIATION_REPAIR_SINGLE_WRITER_CONFIRMED==='true'
+  &&!require('node:cluster').isWorker&&Number(process.env.WEB_CONCURRENCY||1)===1,
+});
+registerConnectionControl({app,requireAdmin,limiter:adminSignupRepairProcessRateLimiter,isAllowedOrigin,
+ actorHash:req=>hasValidAdminSession(req)?crypto.createHash('sha256').update('signup-no-send-connection-session:v1\0')
+  .update(parseCookies(req)[ADMIN_SESSION_COOKIE]).digest('hex'):'',service:noSendConnectionControl});
 const boundedMappingControl = createBoundedMappingControl({ prisma, fence: signupAssociationFence,
   readStore: () => JSON.parse(fs.readFileSync(signupDashboardPath, 'utf8')),
   getSigningSecret: getProvisioningSigningSecret, getRelease: () => process.env.RENDER_GIT_COMMIT,
