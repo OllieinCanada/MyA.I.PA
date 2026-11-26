@@ -114,7 +114,7 @@ test('disposable PostgreSQL 18: real no-send reader/control/import receipt and S
    x.state.assistant.metadata={businessId:999};await assertNoDispatch(x,x.preview());
   });
   await run('existing foreign routing mapping is never reassigned',{},async x=>{
-   const b=await prisma.business.create({data:{name:'Fictitious foreign tenant',phone:'+19055550124',vapiMappings:{create:{matchType:'assistantId',matchValue:x.target.assistantId}}}});
+   const b=await prisma.business.create({data:{name:'Fictitious foreign tenant',phone:'+19055550124',timezone:'America/Toronto',vapiMappings:{create:{matchType:'assistantId',matchValue:x.target.assistantId}}}});
    try{await assertNoDispatch(x,x.preview());}finally{await prisma.business.delete({where:{id:b.id}});}
   });
   await run('lost provider acknowledgement leaves durable uncertainty across restart even with absent receipt/resource',{},async x=>{
