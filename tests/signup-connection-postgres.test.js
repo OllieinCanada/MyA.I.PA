@@ -120,6 +120,9 @@ test('disposable PostgreSQL 18: real no-send reader/control/import receipt and S
   await run('lost provider acknowledgement leaves durable uncertainty across restart even with absent receipt/resource',{},async x=>{
    x.state.lost=true;const p=await x.preview();await assert.rejects(x.service.execute(x.approve(p),x.auth),/INSPECT_FIRST/);assert.equal(x.state.imports,1);
    x.state.phones=[];await prisma.runtimeStore.deleteMany({where:{key:provisioningStateKey('vapi-import',x.target.idempotencyKey)}});
+   // A newly deployed/reapproved release cannot manufacture a fresh attempt
+   // by changing the operation-key inputs while the earlier outcome is unknown.
+   x.target.release='d'.repeat(40);x.state.policy.release=x.target.release;
    const restarted=x.make(),next=await x.preview(restarted);await assert.rejects(restarted.execute(x.approve(next),x.auth),/INSPECT_FIRST/);assert.equal(x.state.imports,1);
   });
   await run('two independent control instances with prepared plans cannot dispatch twice',{},async x=>{

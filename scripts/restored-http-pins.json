@@ -44,7 +44,7 @@
     "scripts/run-composite-recovery-ci.js": "9a3c2069cb268c25d8add52cbf4884d076cca9a7f4e8db55b9d4ee3d60d4c4ae",
     "scripts/composite-recovery-fixture.js": "46085044ab3ef3df77401c0c7f954691206ea52d5d71893a5f7ed1f02cd1d4e7",
     "server/index.js": "48569f0665177129fa236df01fa9c95b65a035668250c3f946e55b72bce989ec",
-    "server/signupConnectionControl.js": "6651a2124f47a0deecef8103eed9ff11849e8293be962c8f1876611e23bac38a",
+    "server/signupConnectionControl.js": "74769b6551511ad3e38123f059d255b290c27ce084b7068619e2c1a69584e528",
     "server/signupConnectionEvidence.js": "373a451f33c81d98641ba9a166030a330a1073cf940205be33de4c5ab206292c",
     "server/signupConnectionPreparation.js": "e8179070e5a5ee973725f1125deb07e5da9424698b53ef61fb67b6037fa97bbf",
     "server/signupConnectionTransport.js": "d5a72f464e2fc4883653a17ccd11d3146ac8b229c89a90d657fa4bb4a4587089",

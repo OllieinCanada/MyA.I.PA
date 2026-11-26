@@ -126,7 +126,7 @@
     "server/boundedBusinessMappingWriter.js": "c8b129211d807e780d55600695362cbcb813c29ac784a147dbed1b9ca746db6a",
     "server/boundedMappingControl.js": "6bdf571cea3fc1d2a52c20e8bc89a49d10ffbe069a7d2fd463eaadb25354b36a",
     "server/index.js": "48569f0665177129fa236df01fa9c95b65a035668250c3f946e55b72bce989ec",
-    "server/signupConnectionControl.js": "6651a2124f47a0deecef8103eed9ff11849e8293be962c8f1876611e23bac38a",
+    "server/signupConnectionControl.js": "74769b6551511ad3e38123f059d255b290c27ce084b7068619e2c1a69584e528",
     "server/signupConnectionEvidence.js": "373a451f33c81d98641ba9a166030a330a1073cf940205be33de4c5ab206292c",
     "server/signupConnectionPreparation.js": "e8179070e5a5ee973725f1125deb07e5da9424698b53ef61fb67b6037fa97bbf",
     "server/signupConnectionTransport.js": "d5a72f464e2fc4883653a17ccd11d3146ac8b229c89a90d657fa4bb4a4587089",

@@ -5,6 +5,11 @@ const {fixture,registerFixtureHttp}=require('./helpers/signup-connection-fixture
 const {journalKey}=require('../server/signupConnectionControl');
 const {hashOperationalTarget}=require('../server/signupDecommission');
 async function f(t,options){const value=await fixture(options);t.after(()=>value.cleanup());return value;}
+test('durable intent identity survives a new release/configuration approval for the same original operation',()=>{
+ const target={attemptId:'signup_'+'a'.repeat(32),idempotencyKey:'b'.repeat(64),release:'c'.repeat(40),configFingerprint:'d'.repeat(64)};
+ assert.equal(journalKey('connect',target),journalKey('connect',{...target,release:'e'.repeat(40),configFingerprint:'f'.repeat(64)}));
+ assert.notEqual(journalKey('connect',target),journalKey('associate',target));
+});
 test('real control preview is no-write; separately approved connection imports once and never saves associations or starts trial',async t=>{
  const x=await f(t),before=x.readStore(),source=await x.prisma.signupAttempt.findUnique({where:{eventKey:x.target.attemptId}}),p=await x.preview();
  assert.equal(p.applyAllowed,false);assert.equal(x.state.imports,0);assert.equal(x.state.fileWrites,0);

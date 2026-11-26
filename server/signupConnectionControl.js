@@ -8,7 +8,10 @@ const {runProvisioningStep}=require('./provisioningState');
 const {getTrialLifecycle}=require('./trialUsagePolicy');
 const PREFIX='signup-connection:v1:';
 const fail=(code,statusCode=409)=>{throw Object.assign(new Error(code),{code,statusCode});};
-const journalKey=(operation,target)=>PREFIX+digest({operation,target});
+// A new release/configuration/approval must not reset an uncertain original
+// operation. Bind intent identity to the original signup and durable account key;
+// store the full target/plan digest inside the record for conflict inspection.
+const journalKey=(operation,target)=>PREFIX+digest({operation,attemptId:target?.attemptId,idempotencyKey:target?.idempotencyKey});
 function readConnectionPolicy(directory){
  const file=path.join(path.resolve(directory),'signup-connection-policy.json');
  if(!fs.existsSync(file))return null;
