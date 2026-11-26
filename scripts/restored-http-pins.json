@@ -1,4 +1,9 @@
 {
+  "noSendConnectionContinuation": {
+    "baseRelease": "65e6ae6d7a014257b44681c9825d71777834b91c",
+    "previousIndexSha256": "12b5e51d78b19b5155fa30158103cd6e50c1658c4ae4debdb965d45bcf0c809f",
+    "scope": "Pin the candidate disabled no-send control and its new runtime dependencies for fresh sealed restored HTTP/SQL validation. Existing historical source/fixture provenance is unchanged. No live recovery, activation or release proof."
+  },
   "telegramWebhookStateDiagnosticsContinuation": {
     "baseRelease": "50452c64936de51a7de0b17ff02f6416c30ced03",
     "scope": "Candidate webhook metadata-only timeout and sanitized diagnostics pinned for fresh sealed restored HTTP/SQL validation. No provider retry, live callback/recovery claim or release authorization. Historical source provenance is unchanged."
@@ -38,7 +43,11 @@
   "sha256": {
     "scripts/run-composite-recovery-ci.js": "9a3c2069cb268c25d8add52cbf4884d076cca9a7f4e8db55b9d4ee3d60d4c4ae",
     "scripts/composite-recovery-fixture.js": "46085044ab3ef3df77401c0c7f954691206ea52d5d71893a5f7ed1f02cd1d4e7",
-    "server/index.js": "12b5e51d78b19b5155fa30158103cd6e50c1658c4ae4debdb965d45bcf0c809f",
+    "server/index.js": "48569f0665177129fa236df01fa9c95b65a035668250c3f946e55b72bce989ec",
+    "server/signupConnectionControl.js": "6651a2124f47a0deecef8103eed9ff11849e8293be962c8f1876611e23bac38a",
+    "server/signupConnectionEvidence.js": "373a451f33c81d98641ba9a166030a330a1073cf940205be33de4c5ab206292c",
+    "server/signupConnectionPreparation.js": "e8179070e5a5ee973725f1125deb07e5da9424698b53ef61fb67b6037fa97bbf",
+    "server/signupConnectionTransport.js": "d5a72f464e2fc4883653a17ccd11d3146ac8b229c89a90d657fa4bb4a4587089",
     "server/telegramBotApi.js": "ef6c99b197e6251945213d5c42af03d50bf4c6d1dadf4c98c2a9915a72e478c7",
     "server/telegramWebhookState.js": "e0a178d73a2b5a8b8484d7c4c151fad11ff6e984139420b35cf59fc11474ac8c",
     "server/signupBusinessRegistry.js": "711435f20381715f6c085ca7e08f7e32e1064093e5e0cd19551bf30f0656942a",

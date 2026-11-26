@@ -19,7 +19,8 @@ test('partial restored HTTP evidence cannot clear live or full recovery predicat
 });
 test('canonical pinned dependencies are exact; corruption refused',()=>{
  const pins=require('../scripts/restored-http-pins.json'),sha=require('../scripts/composite-recovery-fixture').sha;
- assert.equal(pins.reviewedHead,BASE_HEAD);assert.equal(Object.keys(pins.sha256).length,44);
+ assert.equal(pins.reviewedHead,BASE_HEAD);assert.equal(Object.keys(pins.sha256).length,48);
+ for(const file of ['server/signupConnectionControl.js','server/signupConnectionEvidence.js','server/signupConnectionPreparation.js','server/signupConnectionTransport.js'])assert.ok(pins.sha256[file],file);
  for(const file of ['server/telegramBotApi.js','server/telegramWebhookState.js'])assert.ok(pins.sha256[file],file);
  for(const file of ['server/signupBusinessRegistry.js','server/signupBindingTransaction.js','server/signupSavedDiagnosis.js',
    'server/signupAlerts.js','server/incidentAlerts.js'])assert.ok(pins.sha256[file],file);
@@ -52,7 +53,8 @@ test('restored HTTP pins reject tampering with every confirmation prompt depende
  assert.equal(verifyPins(read),true);
  for(const file of ['server/signupSetupJobs.js','server/automaticAssistantConnectionPlan.js','server/compositeCallNotifications.js',
     'server/serviceIntakePrompt.js','server/confirmationConversationPolicy.js','server/signupAssistantError.js','server/signupProvisioningError.js',
-    'server/signupBusinessRegistry.js','server/signupBindingTransaction.js','server/signupSavedDiagnosis.js','server/signupAlerts.js','server/incidentAlerts.js']){
+    'server/signupBusinessRegistry.js','server/signupBindingTransaction.js','server/signupSavedDiagnosis.js','server/signupAlerts.js','server/incidentAlerts.js',
+    'server/signupConnectionControl.js','server/signupConnectionEvidence.js','server/signupConnectionPreparation.js','server/signupConnectionTransport.js']){
   assert.throws(()=>verifyPins(p=>p===file?Buffer.from('unreviewed prompt change'):read(p)),/DEPENDENCY_BYTES_CHANGED/);
  }
 });

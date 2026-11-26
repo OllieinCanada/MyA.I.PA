@@ -1,4 +1,9 @@
 {
+  "noSendConnectionContinuation": {
+    "baseRelease": "65e6ae6d7a014257b44681c9825d71777834b91c",
+    "previousIndexSha256": "12b5e51d78b19b5155fa30158103cd6e50c1658c4ae4debdb965d45bcf0c809f",
+    "scope": "Candidate disabled-by-default no-send connection and record-only writer using the running lifecycle singleton. Exact candidate index and new dependencies require fresh sealed SQL/HTTP/full CI and review. Historical repair/safety dependencies are unchanged. No live application, readiness or release approval is implied."
+  },
   "telegramWebhookStateDiagnosticsContinuation": {
     "baseRelease": "50452c64936de51a7de0b17ff02f6416c30ced03",
     "scope": "Local candidate only: redacted database operation/phase/code/timing and bounded 2-second admission/5-second metadata transaction. Durable uncertainty and no provider retry are unchanged. These candidate bytes require fresh real SQL and full CI; no live or release proof is implied. Historical repair/lifecycle pins remain unchanged."
@@ -120,7 +125,11 @@
     "server/boundedBusinessMappingAdapters.js": "69cc5596edc20e8a2e689ff826bb2e424e4beaff8f41fa970ee40efa4aed3744",
     "server/boundedBusinessMappingWriter.js": "c8b129211d807e780d55600695362cbcb813c29ac784a147dbed1b9ca746db6a",
     "server/boundedMappingControl.js": "6bdf571cea3fc1d2a52c20e8bc89a49d10ffbe069a7d2fd463eaadb25354b36a",
-    "server/index.js": "12b5e51d78b19b5155fa30158103cd6e50c1658c4ae4debdb965d45bcf0c809f",
+    "server/index.js": "48569f0665177129fa236df01fa9c95b65a035668250c3f946e55b72bce989ec",
+    "server/signupConnectionControl.js": "6651a2124f47a0deecef8103eed9ff11849e8293be962c8f1876611e23bac38a",
+    "server/signupConnectionEvidence.js": "373a451f33c81d98641ba9a166030a330a1073cf940205be33de4c5ab206292c",
+    "server/signupConnectionPreparation.js": "e8179070e5a5ee973725f1125deb07e5da9424698b53ef61fb67b6037fa97bbf",
+    "server/signupConnectionTransport.js": "d5a72f464e2fc4883653a17ccd11d3146ac8b229c89a90d657fa4bb4a4587089",
     "server/signupBusinessRegistry.js": "711435f20381715f6c085ca7e08f7e32e1064093e5e0cd19551bf30f0656942a",
     "server/signupBindingTransaction.js": "909bd8800a2b8c7c81678b13746def69f3481ee0e8182553480091c8842fd010",
     "server/signupSavedDiagnosis.js": "8ebe5b93529e000a69aa7f0d44112df0da4bf89ee7457351b050cedefd9d7138",
