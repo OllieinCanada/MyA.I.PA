@@ -22,7 +22,8 @@
     "stripe": "^22.3.2"
   },
   "scripts": {
-    "test:signup-connection-control": "node --test --test-concurrency=1 tests/signup-connection-control.test.js tests/signup-connection-preparation.test.js tests/signup-connection-artifact.test.js tests/vapi-twilio-import-request.test.js tests/signup-association-lifecycle.test.js",
+    "test:signup-recovery-ordering": "node --test --test-concurrency=1 tests/signup-recovery-ordering.test.js tests/signup-connection-control.test.js tests/signup-connection-preparation.test.js tests/signup-completion-reconciliation.test.js tests/provisioning-state.test.js tests/vapi-twilio-import-request.test.js",
+    "test:signup-connection-control": "node --test --test-concurrency=1 tests/signup-recovery-ordering.test.js tests/signup-connection-control.test.js tests/signup-connection-preparation.test.js tests/signup-connection-artifact.test.js tests/vapi-twilio-import-request.test.js tests/signup-association-lifecycle.test.js",
     "test:signup-connection:postgres": "node --test tests/signup-connection-postgres.test.js",
     "test:signup-connection-preparation": "node --test --test-concurrency=1 tests/signup-connection-preparation.test.js tests/vapi-twilio-import-request.test.js tests/signup-business-safety.test.js tests/signup-binding-transaction.test.js",
     "test:signup-activation-preparation": "node --test tests/signup-activation-preparation.test.js tests/signup-activation-evidence.test.js tests/signup-activation-preview.test.js tests/signup-activation-save.test.js tests/signup-activation-control.test.js tests/trial-calendar-plan.test.js",

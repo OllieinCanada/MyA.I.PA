@@ -25,6 +25,8 @@ async function verifyVapiPhoneAssistantBinding({
   }
 
   let liveRecord = await requestResource(`phone-number/${encodeURIComponent(recordId)}`);
+  let pending=false;try{pending=new URL(liveRecord?.server?.url||liveRecord?.serverUrl).pathname===require('./signupPendingConnection').PATH;}catch{}
+  if(pending)throw createBindingError('This staged number must not be activated by automatic binding repair.', 'VAPI_PHONE_PENDING_SETUP',409);
   const liveAssistantId = String(getAssistantId(liveRecord) || "").trim();
   if (liveAssistantId && liveAssistantId !== expectedAssistantId) {
     throw createBindingError(

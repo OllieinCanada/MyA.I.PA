@@ -6,12 +6,13 @@ const {prepareNumberConnection,projectConnectionAssociations}=require('./signupC
 const {createConnectionReader,readConnectionDatabase,databaseDigest}=require('./signupConnectionEvidence');
 const {runProvisioningStep}=require('./provisioningState');
 const {getTrialLifecycle}=require('./trialUsagePolicy');
+const {pendingGateProof}=require('./signupPendingConnection');
 const PREFIX='signup-connection:v1:';
 const fail=(code,statusCode=409)=>{throw Object.assign(new Error(code),{code,statusCode});};
 // A new release/configuration/approval must not reset an uncertain original
 // operation. Bind intent identity to the original signup and durable account key;
 // store the full target/plan digest inside the record for conflict inspection.
-const journalKey=(operation,target)=>PREFIX+digest({operation,attemptId:target?.attemptId,idempotencyKey:target?.idempotencyKey});
+const journalKey=(operation,target)=>PREFIX+digest({operation:operation==='stage'?'connect':operation,attemptId:target?.attemptId,idempotencyKey:target?.idempotencyKey});
 function readConnectionPolicy(directory){
  const file=path.join(path.resolve(directory),'signup-connection-policy.json');
  if(!fs.existsSync(file))return null;
@@ -22,8 +23,8 @@ function readConnectionPolicy(directory){
 // Disabled by default. Neither module construction nor preview invokes a writer.
 // connect and associate have separate operator-bound policies and fresh previews.
 function createConnectionControl({prisma,fence,readStore,commitStore,transport,getSigningSecret,getRelease,getPolicy,
- readOverrides=()=>'',enabled=()=>false,applyEnabled=()=>false,singleWriter=()=>false,now=()=>Date.now(),elapsedNow=()=>performance.now()}){
- const reader=createConnectionReader({prisma,readStore,transport,getSigningSecret,getRelease,readOverrides,now});
+ getPendingGate=()=>null,readOverrides=()=>'',enabled=()=>false,applyEnabled=()=>false,singleWriter=()=>false,now=()=>Date.now(),elapsedNow=()=>performance.now()}){
+ const reader=createConnectionReader({prisma,readStore,transport,getSigningSecret,getRelease,getPendingGate,readOverrides,now});
  const cache=new Map();
  function authorize(auth,applying=false){
   if(enabled()!==true||applying&&(applyEnabled()!==true||singleWriter()!==true))fail('CONNECTION_DISABLED',403);
@@ -34,7 +35,7 @@ function createConnectionControl({prisma,fence,readStore,commitStore,transport,g
  function policy(auth,id,applying=false){
   const actor=authorize(auth,applying),doc=structuredClone(getPolicy());
   if(!doc||doc.version!==1||doc.policyId!==id||!/^[a-f0-9]{64}$/.test(id||'')||doc.operatorSessionHash!==actor
-   ||doc.release!==getRelease()||doc.target?.release!==doc.release||!['connect','associate'].includes(doc.operation)
+   ||doc.release!==getRelease()||doc.target?.release!==doc.release||!['stage','connect','associate'].includes(doc.operation)
    ||!Number.isFinite(Date.parse(doc.expiresAt))||Date.parse(doc.expiresAt)<=now()||Date.parse(doc.expiresAt)>now()+900000)fail('CONNECTION_POLICY_REQUIRED',403);
   return {doc,version:digest({id,actor,target:doc.target,operation:doc.operation,release:doc.release,expiresAt:doc.expiresAt})};
  }
@@ -52,6 +53,8 @@ function createConnectionControl({prisma,fence,readStore,commitStore,transport,g
    const fresh=policy(auth,body.policyId,applying);
    if(fresh.version!==version||applying&&fresh.doc.approvedPlanDigest!==body.planDigest)fail('CONNECTION_POLICY_CHANGED');
    if(applying&&(!Number.isFinite(entry?.at)||now()-entry.at>60000||now()<entry.at))fail('CONNECTION_PREVIEW_EXPIRED');
+   if(applying&&entry?.plan?.binding.routeMode==='setup-pending'
+    &&digest(pendingGateProof(getPendingGate()))!==digest(entry.plan.binding.pendingGate))fail('CONNECTION_PENDING_GATE_CHANGED');
    // Leave at least 25 seconds of the 45-second SQL allowance for the bounded
    // provider POST/readback and receipt persistence. Prisma cannot cancel JS
    // callbacks when a transaction expires: do not dispatch after a long wait.
@@ -78,7 +81,7 @@ function createConnectionControl({prisma,fence,readStore,commitStore,transport,g
   try{
    const evidence=await reader(p,doc.operation),plan=prepareNumberConnection(evidence);
    recheck(body.action==='apply');
-   const wanted=doc.operation==='connect'?'prepare_phone_connection':'prepare_associations_only';
+   const wanted=doc.operation!=='associate'?'prepare_phone_connection':'prepare_associations_only';
    if(plan.phase!==wanted||plan.alreadyAssociated)fail('CONNECTION_STAGE_CHANGED');
    if(body.action==='preview'){
     Object.assign(entry,{plan,version,at:now()});
@@ -89,6 +92,7 @@ function createConnectionControl({prisma,fence,readStore,commitStore,transport,g
    // existing normal account lifecycle is required; this path cannot start or
    // extend a trial to satisfy it. Association-only saving cannot grant access.
    if(doc.operation==='connect'&&!['trial','paid'].includes(getTrialLifecycle(evidence.store[plan.targetKey],now()).state))fail('CONNECTION_ACCOUNT_ELIGIBILITY_REQUIRED');
+   if(doc.operation==='stage'&&typeof transport.importPending!=='function')fail('CONNECTION_PENDING_GATE_UNPROVEN');
    if(typeof fence?.hold!=='function'||typeof fence?.release!=='function'||typeof commitStore!=='function')fail('CONNECTION_RUNTIME_FENCE_REQUIRED');
    fence.hold([p.attemptId]);held=true;
    entry.attempted=true;
@@ -111,7 +115,7 @@ function createConnectionControl({prisma,fence,readStore,commitStore,transport,g
     // source/provider observation age at actual dispatch, not at apply entry.
     prepareNumberConnection({...evidence,...locked,store:readStore(),now:now()});recheck(true);
     let result;
-    if(doc.operation==='connect'){
+    if(doc.operation!=='associate'){
      result=await runProvisioningStep({prisma,kind:'vapi-import',idempotencyKey:p.idempotencyKey,contextHash:p.contextHash,
       // A completion appearing after the approved absent-stage snapshot is a
       // changed scope, not a definitive negative about that existing resource.
@@ -122,7 +126,10 @@ function createConnectionControl({prisma,fence,readStore,commitStore,transport,g
        const fresh=prepareNumberConnection({...evidence,...locked,...current,store:readStore(),now:now()});
        if(fresh.planDigest!==plan.planDigest)fail('CONNECTION_PLAN_CHANGED');return null;
       },
-      execute:()=>transport.importExisting(p,()=>{prepareNumberConnection({...evidence,...locked,store:readStore(),now:now()});recheck(true);})});
+      execute:()=>{
+       const admission=()=>{prepareNumberConnection({...evidence,...locked,store:readStore(),now:now()});recheck(true);};
+       return doc.operation==='stage'?transport.importPending(p,admission,plan.binding.pendingGate):transport.importExisting(p,admission);
+      }});
     }else{
      // Fresh explicit provider evidence was fetched before the transaction.
      // Locks stabilize the canonical source and all three completed receipts.

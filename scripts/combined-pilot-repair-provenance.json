@@ -1,4 +1,8 @@
 {
+  "pendingSetupOrderingContinuation": {
+    "baseRelease": "cb62f55788e41fc59f3c185167c226599a0c99b7",
+    "scope": "Local candidate: separately approved pre-trial staging with no attached assistant and a terminal authenticated call-refusal endpoint. Direct live admission, trial clocks, billing and readiness remain unchanged. Pending receipts cannot be auto-repaired into a live route. Candidate source pins require fresh sealed SQL/HTTP/full CI and review; they are not release or production-application proof."
+  },
   "noSendConnectionContinuation": {
     "baseRelease": "65e6ae6d7a014257b44681c9825d71777834b91c",
     "previousIndexSha256": "12b5e51d78b19b5155fa30158103cd6e50c1658c4ae4debdb965d45bcf0c809f",
@@ -125,11 +129,14 @@
     "server/boundedBusinessMappingAdapters.js": "69cc5596edc20e8a2e689ff826bb2e424e4beaff8f41fa970ee40efa4aed3744",
     "server/boundedBusinessMappingWriter.js": "c8b129211d807e780d55600695362cbcb813c29ac784a147dbed1b9ca746db6a",
     "server/boundedMappingControl.js": "6bdf571cea3fc1d2a52c20e8bc89a49d10ffbe069a7d2fd463eaadb25354b36a",
-    "server/index.js": "48569f0665177129fa236df01fa9c95b65a035668250c3f946e55b72bce989ec",
-    "server/signupConnectionControl.js": "74769b6551511ad3e38123f059d255b290c27ce084b7068619e2c1a69584e528",
-    "server/signupConnectionEvidence.js": "373a451f33c81d98641ba9a166030a330a1073cf940205be33de4c5ab206292c",
-    "server/signupConnectionPreparation.js": "e8179070e5a5ee973725f1125deb07e5da9424698b53ef61fb67b6037fa97bbf",
-    "server/signupConnectionTransport.js": "d5a72f464e2fc4883653a17ccd11d3146ac8b229c89a90d657fa4bb4a4587089",
+    "server/index.js": "bac64b5c54dee70fc9ab85de2bbb90652a09e983dfd56c0d9c0ac3599122c825",
+    "server/signupConnectionControl.js": "cf7c8869017bb30d654861496fd5d7c7800d6bd0742a7e5592dd4a231167f524",
+    "server/signupConnectionEvidence.js": "9c955f7873ae307cb1545f5eecef8a39af465611794d52765eb13d5967671ef9",
+    "server/signupConnectionPreparation.js": "fcf26f48c739575fb38d23697b12fdd16aac93c5873535f636148d7787cbf463",
+    "server/signupConnectionTransport.js": "c58ee644c29a7bb6765ea817e181c9d69b40dcf54069007498cad8e83a617f76",
+    "server/provisioningState.js": "122cda07216308a7d0fe628e346d03bcadf545b161aad20fe837ec5e77528513",
+    "server/vapiPhoneImportVerification.js": "bbde15745c31f6dbd7ec60be6b21bc146f3fb52502d07e282e3b2ac7db6f7277",
+    "server/signupPendingConnection.js": "07e4913ca545cda715a632dda3a20495f8e21c02f28351107363d69098f05f47",
     "server/signupBusinessRegistry.js": "711435f20381715f6c085ca7e08f7e32e1064093e5e0cd19551bf30f0656942a",
     "server/signupBindingTransaction.js": "909bd8800a2b8c7c81678b13746def69f3481ee0e8182553480091c8842fd010",
     "server/signupSavedDiagnosis.js": "8ebe5b93529e000a69aa7f0d44112df0da4bf89ee7457351b050cedefd9d7138",
