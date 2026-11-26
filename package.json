@@ -22,6 +22,7 @@
     "stripe": "^22.3.2"
   },
   "scripts": {
+    "test:signup-notification-readiness": "node --test --test-concurrency=1 tests/signup-notification-readiness-regression.test.js tests/sms-dispatch-readiness.test.js tests/signup-agent-testing.test.js tests/admin-signup-setup.test.js tests/automatic-assistant-connection-plan.test.js tests/operational-error-classifier.test.js tests/incident-alerts.test.js",
     "test:signup-recovery-ordering": "node --test --test-concurrency=1 tests/signup-recovery-ordering.test.js tests/signup-connection-control.test.js tests/signup-connection-preparation.test.js tests/signup-completion-reconciliation.test.js tests/provisioning-state.test.js tests/vapi-twilio-import-request.test.js",
     "test:signup-connection-control": "node --test --test-concurrency=1 tests/signup-recovery-ordering.test.js tests/signup-connection-control.test.js tests/signup-connection-preparation.test.js tests/signup-connection-artifact.test.js tests/vapi-twilio-import-request.test.js tests/signup-association-lifecycle.test.js",
     "test:signup-connection:postgres": "node --test tests/signup-connection-postgres.test.js",

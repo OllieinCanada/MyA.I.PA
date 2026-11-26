@@ -39,6 +39,23 @@ test('a modified managed intake block is not silently rewritten',()=>{const f=fi
 function protectedFixture(){const f=fixture();f.signup.subscriptionStatus='active';f.signup.subscriptionId='fake-subscription';
  f.gate={status:'active',businessId:7,assistantId:f.assistant.id,phoneNumberId:f.phone.id,phoneNumber:f.phone.number,subscriptionId:f.signup.subscriptionId,assistantSnapshot:structuredClone(f.assistant)};
  f.phone.assistantId=null;f.gateWebhookUrl='https://fixture.test/api/webhooks/voice';f.phone.server={url:f.gateWebhookUrl};f.webhookVerified=true;return f;}
+
+test('prepared automatic connection binds exact source and target without enabling flags or replaying saved drafts',()=>{
+ const f=protectedFixture(),original=JSON.stringify(f),p=prepare(f);
+ assert.equal(JSON.stringify(f),original);assert.equal(p.notificationMode,'automatic_after_caller_approval');
+ assert.equal(p.preparedFor.businessId,7);assert.equal(p.preparedFor.assistantId,f.assistant.id);assert.equal(p.preparedFor.phoneNumberId,f.phone.id);
+ assert.match(p.sourceFingerprint,/^[a-f0-9]{64}$/);assert.equal(p.existingDraftsWillBeSent,false);
+ assert.deepEqual(p.maximumMessagesPerNewApprovedCall,{owner:1,customer:1});
+ assert.equal(p.configurationProposal.targetAllowlistBusinessId,7);assert.equal(p.configurationProposal.preserveUnrelatedAllowlistEntries,true);
+ assert.equal(p.applyAllowed,false);assert.equal(p.liveTestAllowed,false);
+ f.signup.history=['changed'];assert.notEqual(prepare(f).sourceFingerprint,p.sourceFingerprint);
+});
+test('automatic candidate is still blocked by disabled flags, omitted business admission and refusal; zero fake sends',async()=>{
+ for(const patch of [{SMS_AUTOMATIC_NOTIFICATION_ENABLED:'false'},{SMS_NOTIFICATION_DISPATCH_ENABLED:'false'},{SMS_AUTOMATIC_NOTIFICATION_BUSINESS_IDS:'[8]'}]){
+  const f=journey();Object.assign(f.options.env,patch);const result=await execute(f.options);
+  assert.equal(result.complete,false);assert.equal(f.posts.length,0);
+ }
+});
 test('normal protected trial route prepares both model and exact snapshot changes, never activation',()=>{
  const f=protectedFixture(),before=JSON.stringify(f),p=prepare(f);assert.equal(JSON.stringify(f),before);assert.deepEqual(p.missingPrerequisites,[]);
  assert.equal(p.requiresGateSnapshotRefresh,true);assert.deepEqual(p.protectedGatePatch.assistantSnapshot.model,p.assistantPatch.model);

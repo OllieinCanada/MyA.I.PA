@@ -19,6 +19,8 @@ test('actual runtime and corrected safety bytes are pinned separately from histo
   assert.throws(()=>policy('main'),/HEAD_REQUIRED/);
   assert.throws(()=>policy(head,p=>p==='server/boundedBusinessMappingWriter.js'?Buffer.from('uncorrected'):require('node:fs').readFileSync(require('node:path').resolve(__dirname,'..',p))),/RUNTIME_BYTES_CHANGED/);
   assert.ok(TESTS.focused.includes('tests/call-sync-accounting.test.js'));
+  assert.ok(TESTS.focused.includes('tests/signup-notification-readiness-regression.test.js'));
+  for(const file of ['server/signupAgentTesting.js','server/smsDispatchReadiness.js'])assert.ok(SOURCES.includes(file));
   assert.ok(SOURCES.includes('tests/call-sync-accounting.test.js'));
   for(const file of ['server/signupSetupJobs.js','server/automaticCallNotifications.js','server/automaticNotificationContext.js','server/notificationOutcomes.js',
     'server/callSyncHealth.js','server/callSyncReporting.js','server/trialCalendarPolicy.js',

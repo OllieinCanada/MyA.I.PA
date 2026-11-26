@@ -36,6 +36,7 @@ jobs:
       - run: npm run db:generate
       - run: npm run db:push
       - run: npm run test:signup-connection-control
+      - run: npm run test:signup-notification-readiness
       - run: npm run test:signup-connection:postgres
       - run: node scripts/verify-no-send-connection-evidence.js diagnostics/no-send-connection/result.json
       - name: Preserve exact-head synthetic result including failures

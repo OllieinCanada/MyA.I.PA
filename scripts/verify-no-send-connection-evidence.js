@@ -6,7 +6,9 @@ const SOURCE_FILES=['server/index.js','server/signupConnectionControl.js','serve
  'server/trialUsagePolicy.js','prisma/schema.prisma','tests/helpers/signup-connection-fixture.js','tests/signup-connection-postgres.test.js',
  'tests/signup-connection-control.test.js','.github/workflows/signup-no-send-connection.yml',
  'scripts/verify-no-send-connection-evidence.js','tests/signup-connection-artifact.test.js',
- 'server/signupPendingConnection.js','server/vapiPhoneImportVerification.js','tests/signup-recovery-ordering.test.js'];
+ 'server/signupPendingConnection.js','server/vapiPhoneImportVerification.js','tests/signup-recovery-ordering.test.js',
+ 'server/signupAgentTesting.js','server/smsDispatchReadiness.js','server/adminSignupSetup.js','server/incidentAlerts.js',
+ 'server/operationalErrorClassifier.js','server/automaticAssistantConnectionPlan.js','tests/signup-notification-readiness-regression.test.js'];
 const CRITICAL=['actual HTTP signed session expires during SQL lock wait: zero import',
  'lost provider acknowledgement leaves durable uncertainty across restart even with absent receipt/resource',
  'two independent control instances with prepared plans cannot dispatch twice',

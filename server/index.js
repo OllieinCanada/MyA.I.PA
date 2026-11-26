@@ -10,6 +10,7 @@ const { dispatchHandler: notificationDispatchHandler, dispatchReadinessHandler }
 const { executeAutomaticCallNotifications, SUMMARY_TOOL: AUTOMATIC_SUMMARY_TOOL } = require('./automaticCallNotifications');
 const { createAutomaticNotificationContextReader } = require('./automaticNotificationContext');
 const { automaticNotificationAlert, listNotificationOutcomeAlerts } = require('./notificationOutcomes');
+const { safeReadinessDiagnostic } = require('./smsDispatchReadiness');
 const {safelyRecordSignupBug,registerSignupBugRoutes,runtimeBugStage,shouldCaptureRuntimeBug}=require('./signupBugHistory');
 const {readSavedSignupDiagnosis}=require('./signupSavedDiagnosis');
 const {assistantErrorEvidence,privateStrings}=require('./signupAssistantError');
@@ -3090,6 +3091,12 @@ async function safelyProvisionIsolatedSmsForSignup(input, dependencies = {}) {
       notify(error, {...context,snapshot:{...context.snapshot,
         "Provider status":Number(error?.providerStatus)||"Not available",
         "Provider validation":String(error?.providerDetail||"Not supplied").slice(0,1000),
+        ...(safeReadinessDiagnostic(error?.readinessDiagnostic)?{
+          "Failed check":"My AI PA SMS-backend readiness GET",
+          "Check result":error.readinessDiagnostic.phase,
+          "Elapsed ms":error.readinessDiagnostic.elapsedMs,
+          "Timeout ms":error.readinessDiagnostic.timeoutMs,
+        }:{}),
       }});
     } catch (notificationError) {
       console.error("[signup:sms-routing] failure alert could not be prepared", {
@@ -3105,6 +3112,7 @@ async function safelyProvisionIsolatedSmsForSignup(input, dependencies = {}) {
       providerCode: String(error?.providerCode || error?.code || "VAPI_REQUEST_FAILED").slice(0, 80),
       providerStatus: Number(error?.providerStatus || error?.statusCode) || 0,
       providerDetail: String(error?.providerDetail || "").slice(0, 1000),
+      readinessDiagnostic: safeReadinessDiagnostic(error?.readinessDiagnostic),
     };
   }
 }
@@ -5529,6 +5537,7 @@ function upsertSignupDashboardRecord(record) {
   }));
   if (record.makeError === "") delete merged.makeError;
   if (record.smsRoutingStatus === "healthy") delete merged.smsRoutingError;
+  if (record.smsRoutingStatus === "healthy") delete merged.smsRoutingReadinessDiagnostic;
 
   // Only changed setup checkpoints reset this clock. Polls, admin profile edits
   // and notification bookkeeping must not hide a genuinely stuck signup.
@@ -7965,6 +7974,8 @@ async function recoverSignupByOperationalTarget(targetId, expectedSignupAttemptI
         twilioPhoneNumber: aiNumber,
         vapiPhoneNumberId: String(vapiPhone?.id || "").trim(),
         smsRoutingStatus: smsRouting.healthy ? "healthy" : smsRouting.skipped ? "waiting" : "failed",
+        smsRoutingReadinessDiagnostic: smsRouting.readinessDiagnostic || null,
+        smsNotificationMode: 'draft_only',
         smsRoutingToolId: smsRouting.toolId || "",
         smsRoutingToolName: smsRouting.toolName || "",
         smsRoutingVerifiedAt: smsRouting.healthy ? new Date().toISOString() : "",
@@ -8003,6 +8014,8 @@ async function recoverSignupByOperationalTarget(targetId, expectedSignupAttemptI
         vapiPhoneNumberId: String(vapiPhone?.id || "").trim(),
         vapiAssistantId: assistantId,
         smsRoutingStatus: smsRouting.healthy ? "healthy" : smsRouting.skipped ? "waiting" : "failed",
+        smsRoutingReadinessDiagnostic: smsRouting.readinessDiagnostic || null,
+        smsNotificationMode: 'draft_only',
         smsRoutingToolId: smsRouting.toolId || "",
         smsRoutingToolName: smsRouting.toolName || "",
         smsRoutingVerifiedAt: smsRouting.healthy ? new Date().toISOString() : "",
@@ -8589,6 +8602,8 @@ async function testSignupAgentBeforeDelivery({ signup, vapiPhone, smsRouting = n
     smsRoutingProviderCode: currentRouting.healthy ? "" : currentRouting.providerCode || "",
     smsRoutingProviderStatus: currentRouting.healthy ? 0 : currentRouting.providerStatus || 0,
     smsRoutingProviderDetail: currentRouting.healthy ? "" : currentRouting.providerDetail || "",
+    smsRoutingReadinessDiagnostic: currentRouting.healthy ? null : safeReadinessDiagnostic(currentRouting.readinessDiagnostic),
+    smsNotificationMode: 'draft_only',
     smsRoutingToolId: currentRouting.toolId || "",
     smsRoutingToolName: currentRouting.toolName || "",
     smsRoutingVerifiedAt: currentRouting.healthy ? new Date().toISOString() : "",
@@ -8602,6 +8617,10 @@ async function testSignupAgentBeforeDelivery({ signup, vapiPhone, smsRouting = n
     error.providerCode = currentRouting.providerCode;
     error.providerStatus = currentRouting.providerStatus;
     error.providerDetail = currentRouting.providerDetail;
+    error.readinessDiagnostic = safeReadinessDiagnostic(currentRouting.readinessDiagnostic);
+    error.signupAttemptId=storedSignup.signupAttemptId;
+    error.businessName=storedSignup.businessName;
+    if(error.readinessDiagnostic){error.code=error.readinessDiagnostic.code;error.provider='myaipa';}
     throw error;
   }
 
@@ -8746,13 +8765,16 @@ async function continueSignupAgentTextTestAfterDelivery(ownerEmail, signupAttemp
     const readiness = buildAgentReadiness({ signup: latestSignup, business });
     if (readiness.passed) {
       const readyAt = new Date().toISOString();
+      // A duplicate delivered/read callback must not demote an already-finalized
+      // setup. This saved row has already passed the central routing proof guard.
+      const alreadyFinalized=latestSignup.status==='setup_ready'
+        && ['sent','delivered'].includes(String(latestSignup.setupFollowupStatus||''));
       upsertSignupDashboardRecord({
         ...latestSignup,
-        status: "setup_ready",
+        status: alreadyFinalized ? 'setup_ready' : "agent_testing",
         agentTestStatus: "passed",
         agentTestPassedAt: readyAt,
-        setupReadyAt: latestSignup.setupReadyAt || readyAt,
-        setupReadyBlockedReason: "",
+        setupReadyBlockedReason: alreadyFinalized ? '' : "FINALIZATION_CHECKS_PENDING",
       });
       if (expectedAttemptId && isContactVerified(latestSignup) && latestSignup.reviewRequired !== true
         && !["sent", "delivered"].includes(String(latestSignup.setupFollowupStatus || ""))) {
@@ -13635,9 +13657,15 @@ app.post(
     }
     // The DB inbox is both the receipt and the replay guard. ACK only after
     // commit. No provider calls, notifications or continuation on this path.
+    const receiptStartedAt=Date.now();
     try { await enqueueTwilioStatus({ prisma, body: req.body }); }
     catch (error) {
       if (error.code === 'TWILIO_RECEIPT_INVALID') return res.status(400).json({ error: error.message });
+      const rawCode=String(error?.meta?.code||error?.code||'');
+      // Never log callback bodies, signatures, customer data or raw DB errors.
+      console.warn('[twilio:receipt-inbox]',{operation:'enqueue_delivery_receipt',outcome:'commit_unconfirmed',
+        code:/^(?:P\d{4}|40001|40P01|55P03)$/.test(rawCode)?rawCode:'RECEIPT_SAVE_UNAVAILABLE',
+        elapsedMs:Math.max(0,Date.now()-receiptStartedAt)});
       return res.status(503).json({ error: 'Delivery receipt could not be saved. Retry safely.' });
     }
     return res.type('application/xml').send('<Response></Response>');
@@ -14817,6 +14845,8 @@ app.post(
       upsertSignupDashboardRecord({
         ownerEmail,
         smsRoutingStatus: smsRouting.healthy ? "healthy" : smsRouting.skipped ? "waiting" : "failed",
+        smsRoutingReadinessDiagnostic: smsRouting.readinessDiagnostic || null,
+        smsNotificationMode: 'draft_only',
         smsRoutingToolId: smsRouting.toolId || "",
         smsRoutingToolName: smsRouting.toolName || "",
         smsRoutingVerifiedAt: smsRouting.healthy ? new Date().toISOString() : "",
@@ -15059,6 +15089,8 @@ app.post(
         smsRoutingProviderCode: smsRouting.healthy ? "" : smsRouting.providerCode || "",
         smsRoutingProviderStatus: smsRouting.healthy ? 0 : smsRouting.providerStatus || 0,
         smsRoutingProviderDetail: smsRouting.healthy ? "" : smsRouting.providerDetail || "",
+        smsRoutingReadinessDiagnostic: smsRouting.readinessDiagnostic || null,
+        smsNotificationMode: 'draft_only',
         smsRoutingToolId: smsRouting.toolId || "",
         smsRoutingToolName: smsRouting.toolName || "",
         smsRoutingVerifiedAt: smsRouting.healthy ? new Date().toISOString() : "",
@@ -19081,6 +19113,11 @@ function runBackgroundJob(jobName, task, phase = "scheduled") {
         area: `${jobName} background job`,
         phase,
         whatFailed: `${jobName} background job failed`,
+        ...(safeReadinessDiagnostic(err.readinessDiagnostic)?{
+          signupAttemptId:err.signupAttemptId,businessName:err.businessName,
+          snapshot:{'Failed check':'My AI PA SMS-backend readiness GET','Check result':err.readinessDiagnostic.phase,
+            'Elapsed ms':err.readinessDiagnostic.elapsedMs,'Timeout ms':err.readinessDiagnostic.timeoutMs},
+        }:{}),
         impact: "Scheduled My AI PA follow-up or maintenance work may be delayed until the next successful run.",
         lastCheckpoint: `The ${phase} job started but did not finish normally.`,
         nextAction: "Open the server logs and Needs Attention, confirm whether any partial provider action occurred, then run or wait for a safe retry.",
