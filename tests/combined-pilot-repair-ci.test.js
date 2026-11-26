@@ -27,7 +27,8 @@ test('actual runtime and corrected safety bytes are pinned separately from histo
     'server/signupAssistantError.js','server/signupProvisioningError.js','server/signupBusinessRegistry.js',
     'server/signupBindingTransaction.js','server/signupSavedDiagnosis.js','server/signupAlerts.js','server/incidentAlerts.js',
     'server/telegramBotApi.js','server/telegramWebhookState.js',
-    'server/signupConnectionControl.js','server/signupConnectionEvidence.js','server/signupConnectionPreparation.js','server/signupConnectionTransport.js']){
+    'server/signupConnectionControl.js','server/signupConnectionEvidence.js','server/signupConnectionPreparation.js','server/signupConnectionTransport.js',
+    'server/signupPendingConnection.js','server/vapiPhoneImportVerification.js']){
     assert.ok(SOURCES.includes(file));
     assert.throws(()=>policy(head,p=>p===file?Buffer.from('unreviewed-change'):require('node:fs').readFileSync(require('node:path').resolve(__dirname,'..',p))),/RUNTIME_BYTES_CHANGED/);
   }

@@ -194,9 +194,15 @@ async function runProvisioningStep({
   verifyCompleted,
   missingAssistantRecovery,
 }) {
-  const reuse = (key, result) => ["twilio-number", "vapi-assistant", "vapi-import"].includes(kind) || verifyCompleted
-    ? verifyCompletedProvisioningResult({ prisma, key, result, verifyCompleted })
-    : { ...result, reused: true };
+  const reuse = (key, result) => {
+    // A staged import is real but deliberately not live. Legacy verification
+    // must never invalidate its receipt or attach an assistant as a "repair".
+    if(kind==='vapi-import'&&result?.routeMode==='setup-pending')throw provisioningError(
+      'The staged phone requires separate guarded routing review.', 'PROVISIONING_PENDING_SETUP_INSPECTION_REQUIRED');
+    return ["twilio-number", "vapi-assistant", "vapi-import"].includes(kind) || verifyCompleted
+      ? verifyCompletedProvisioningResult({ prisma, key, result, verifyCompleted })
+      : { ...result, reused: true };
+  };
   const existing = await readProvisioningStep({ prisma, kind, idempotencyKey });
   validateContext(existing.data, contextHash);
   if (existing.data.status === "completed" && existing.data.result && typeof existing.data.result === "object") {

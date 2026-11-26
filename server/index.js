@@ -28,6 +28,7 @@ const { createBoundedMappingControl, registerBoundedMappingControlRoutes, readOp
 const { createActivationControl, registerActivationControl, readActivationPolicy } = require('./signupActivationControl');
 const {createConnectionControl,registerConnectionControl,readConnectionPolicy}=require('./signupConnectionControl');
 const {createConnectionTransport}=require('./signupConnectionTransport');
+const {PATH:SIGNUP_PENDING_GATE_PATH,registerPendingSetupGate}=require('./signupPendingConnection');
 const signupNumberSearchTracker = createNumberSearchTracker();
 const { createPrismaObservationStore, createObservationService, registerObservationRoutes, observationBodyGuard } = require('./signupFormObservation');
 const { runtimeDependencySecurity } = require('./runtimeDependencySecurity');
@@ -8367,6 +8368,9 @@ async function ensureSignupAgentRoute({ signup, vapiPhone, business } = {}, depe
 
   const liveAssistant = await requestResource(`assistant/${encodeURIComponent(expectedAssistantId)}`);
   let livePhone = await requestResource(`phone-number/${encodeURIComponent(expectedPhoneNumberId)}`);
+  let setupPending=false;try{setupPending=new URL(getVapiNestedString(livePhone,['server.url','serverUrl'])).pathname===SIGNUP_PENDING_GATE_PATH;}catch{}
+  if(setupPending)throw createAgentRouteError({code:'AGENT_SETUP_PENDING_SEPARATE_APPROVAL'},
+    'This staged number requires separate protected owner-routing review. It was not activated.');
   const trialGate = await readGate({
     phoneNumberId: expectedPhoneNumberId,
     phoneNumber: { id: expectedPhoneNumberId, number: expectedPhoneNumber },
@@ -17982,12 +17986,14 @@ const activationControl = createActivationControl({prisma,fence:signupAssociatio
 registerActivationControl({app,requireAdmin,limiter:adminSignupRepairProcessRateLimiter,isAllowedOrigin,
  actorHash:req=>hasValidAdminSession(req)?crypto.createHash('sha256').update('signup-verified-setup-session:v1\0')
   .update(parseCookies(req)[ADMIN_SESSION_COOKIE]).digest('hex'):'',service:activationControl});
-const noSendConnectionControl=createConnectionControl({prisma,fence:signupAssociationFence,
+const getSignupPendingGate=()=>({url:new URL(SIGNUP_PENDING_GATE_PATH,TRIAL_USAGE_GATE_WEBHOOK_URL).href,secret:getVapiWebhookSecret()});
+registerPendingSetupGate({app,authenticate:requireVapiWebhookKey,limiter:adminSignupRepairProcessRateLimiter});
+const noSendConnectionControl=createConnectionControl({prisma,fence:signupAssociationFence,getPendingGate:getSignupPendingGate,
  readStore:()=>JSON.parse(fs.readFileSync(signupDashboardPath,'utf8')),
  commitStore:project=>atomicCommitAssociationFile(signupDashboardPath,project),
  getSigningSecret:getProvisioningSigningSecret,getRelease:()=>process.env.RENDER_GIT_COMMIT,
  getPolicy:()=>readConnectionPolicy(path.dirname(signupDashboardPath)),readOverrides:()=>process.env.VAPI_BUSINESS_MAP||'',
- transport:createConnectionTransport({getVapiKey:()=>VAPI_API_KEY,
+ transport:createConnectionTransport({getVapiKey:()=>VAPI_API_KEY,getPendingGate:getSignupPendingGate,
   getTwilioCredentials:()=>({accountSid:TWILIO_ACCOUNT_SID,authToken:TWILIO_AUTH_TOKEN})}),
  enabled:()=>process.env.SIGNUP_CONNECTION_CONTROL_ENABLED==='true',
  applyEnabled:()=>process.env.SIGNUP_CONNECTION_APPLY_ENABLED==='true',

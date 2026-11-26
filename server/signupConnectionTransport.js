@@ -1,10 +1,12 @@
 'use strict';
 const {buildTwilioImportRequest}=require('./vapiTwilioImportRequest');
 const {buildProvisioningResourceName}=require('./signupProvisioning');
+const {pendingGateProof,pendingServer,assertPendingPhone}=require('./signupPendingConnection');
+const {digest}=require('./signupAssociationRepair');
 const fail=code=>{throw Object.assign(new Error(code),{code,statusCode:503});};
 // Deliberately has no purchase, assistant mutation, SMS, call, email, billing or
 // Make operation. Fixed HTTPS origins; no caller-selected URLs or redirects.
-function createConnectionTransport({fetchImpl=fetch,getVapiKey,getTwilioCredentials}){
+function createConnectionTransport({fetchImpl=fetch,getVapiKey,getTwilioCredentials,getPendingGate=()=>null}){
  async function request(url,headers,options={}){
   const r=await fetchImpl(url,{...options,headers:{Accept:'application/json',...headers},redirect:'error',signal:AbortSignal.timeout(5000)});
   if(!r.ok)fail('CONNECTION_PROVIDER_REQUEST_FAILED');
@@ -36,6 +38,26 @@ function createConnectionTransport({fetchImpl=fetch,getVapiKey,getTwilioCredenti
    ||live.metadata?.contextHash&&live.metadata.contextHash!==p.contextHash)fail('CONNECTION_PHONE_BINDING_UNPROVEN');
   return {id:live.id,number:live.number,assistantId:live.assistantId,name:live.name};
  }
- return {readInventories,importExisting};
+ async function importPending(p,beforeDispatch,approvedGate){
+  const gate=getPendingGate(),proof=pendingGateProof(gate);
+  if(digest(proof)!==digest(approvedGate))fail('CONNECTION_PENDING_GATE_CHANGED');
+  const c=getTwilioCredentials(),body=buildTwilioImportRequest({phoneNumber:p.number,assistantId:p.assistantId,accountSid:c.accountSid,
+   authToken:c.authToken,name:buildProvisioningResourceName('vapi-phone',p.idempotencyKey)});
+  // Documented Twilio-import variant of POST /phone-number, never a Vapi
+  // number purchase. No assistant/squad/workflow/fallback is attached at import.
+  delete body.assistantId;delete body.twilioPhoneNumber;body.provider='twilio';body.number=p.number;body.server=pendingServer(gate);
+  if(typeof beforeDispatch!=='function')fail('CONNECTION_DISPATCH_AUTH_REQUIRED');
+  beforeDispatch();
+  const created=await vapi('phone-number',{method:'POST',body:JSON.stringify(body)});
+  if(!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(created?.id||''))fail('CONNECTION_PHONE_ID_UNVERIFIED');
+  const live=await vapi('phone-number/'+encodeURIComponent(created.id));
+  if(live.id!==created.id||live.provider!=='twilio'||live.number!==p.number||live.name!==body.name||live.twilioAccountSid!==c.accountSid
+   ||[live.businessId,live.metadata?.businessId].some(x=>x!==undefined&&x!==null&&x!=='')
+   ||live.metadata?.businessKey&&live.metadata.businessKey!==p.idempotencyKey
+   ||live.metadata?.contextHash&&live.metadata.contextHash!==p.contextHash)fail('CONNECTION_PHONE_BINDING_UNPROVEN');
+  assertPendingPhone(live,gate);
+  return {id:live.id,number:live.number,assistantId:p.assistantId,attachedAssistantId:null,name:live.name,routeMode:'setup-pending',pendingGate:proof};
+ }
+ return {readInventories,importExisting,importPending};
 }
 module.exports={createConnectionTransport};

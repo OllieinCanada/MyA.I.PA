@@ -1,10 +1,10 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict');
-const {validate,SOURCE_FILES,CRITICAL}=require('../scripts/verify-no-send-connection-evidence');
+const {validate,SOURCE_FILES,CRITICAL,REQUIRED_SQL_CASES}=require('../scripts/verify-no-send-connection-evidence');
 function fixture(){const expectedHead='a'.repeat(40),sourceHashes=Object.fromEntries(SOURCE_FILES.map(f=>[f,'b'.repeat(64)]));
  return{binding:{expectedHead,sourceHashes},report:{head:expectedHead,scope:'synthetic-no-send-connection-only',passed:true,skips:0,postgresVersion:'18.6',providerNetworkRequests:0,
-  realMessages:0,productionUsed:false,liveReadinessProven:false,cleanup:{fixtures:23,failures:0},sourceFiles:{...sourceHashes},
-  cases:[...CRITICAL,...Array.from({length:23-CRITICAL.length},(_,i)=>'invented-case-'+i)].map(name=>({name,passed:true}))}};}
+  realMessages:0,productionUsed:false,liveReadinessProven:false,cleanup:{fixtures:REQUIRED_SQL_CASES,failures:0},sourceFiles:{...sourceHashes},
+  cases:[...CRITICAL,...Array.from({length:REQUIRED_SQL_CASES-CRITICAL.length},(_,i)=>'invented-case-'+i)].map(name=>({name,passed:true}))}};}
 test('complete independently exact-head/source-bound artifact grants only synthetic proof',()=>{
  const x=fixture(),r=validate(x.report,x.binding);assert.equal(r.accepted,true);assert.equal(r.liveReadinessProven,false);
 });

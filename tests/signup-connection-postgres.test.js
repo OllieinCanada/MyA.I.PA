@@ -7,13 +7,12 @@ const {createAssociationFence,digest}=require('../server/signupAssociationRepair
 const {hashOperationalTarget}=require('../server/signupDecommission');
 const {contextStoreKey}=require('../server/signupProvisioningContext');
 const {provisioningStateKey}=require('../server/provisioningState');
+const {runProvisioningStep}=require('../server/provisioningState');
+const {PATH:pendingPath}=require('../server/signupPendingConnection');
+const {SOURCE_FILES,REQUIRED_SQL_CASES}=require('../scripts/verify-no-send-connection-evidence');
 const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 const deferred=()=>{let resolve;const promise=new Promise(r=>resolve=r);return{resolve,promise};};
-const sources=['server/index.js','server/signupConnectionControl.js','server/signupConnectionEvidence.js','server/signupConnectionTransport.js',
- 'server/signupConnectionPreparation.js','server/signupAssociationRepair.js','server/provisioningState.js','server/vapiTwilioImportRequest.js',
- 'server/trialUsagePolicy.js','prisma/schema.prisma','tests/helpers/signup-connection-fixture.js','tests/signup-connection-postgres.test.js',
- 'tests/signup-connection-control.test.js','.github/workflows/signup-no-send-connection.yml',
- 'scripts/verify-no-send-connection-evidence.js','tests/signup-connection-artifact.test.js'];
+const sources=SOURCE_FILES;
 if(process.env.CONNECTION_ARTIFACT&&process.env.RUN_CONNECTION_POSTGRES!=='1')throw Error('Required SQL proof cannot be skipped');
 test('disposable PostgreSQL 18: real no-send reader/control/import receipt and SQL/file writer',
  {skip:process.env.RUN_CONNECTION_POSTGRES!=='1',timeout:180000},async t=>{
@@ -57,6 +56,7 @@ test('disposable PostgreSQL 18: real no-send reader/control/import receipt and S
   const endpoint='http://127.0.0.1:'+server.address().port+'/api/admin/signups/no-send-connection';
   const headers={Origin:'https://fixture.invalid','Content-Type':'application/json','x-myaipa-no-send-connection':'1',Cookie:'fixture_session='+x.token};
   return{post:(body,extra={})=>fetch(endpoint,{method:'POST',headers:{...headers,...extra},body:JSON.stringify(body)}),
+   pending:secret=>fetch('http://127.0.0.1:'+server.address().port+pendingPath,{method:'POST',headers:{'Content-Type':'application/json','x-vapi-secret':secret},body:JSON.stringify({message:{type:'assistant-request'},assistantId:x.target.assistantId,paid:true})}),
    close:()=>new Promise(resolve=>server.close(resolve))};
  }
  try{
@@ -191,7 +191,63 @@ test('disposable PostgreSQL 18: real no-send reader/control/import receipt and S
    const receipt=await prisma.runtimeStore.findUnique({where:{key:provisioningStateKey('vapi-import',x.target.idempotencyKey)}});
    assert.equal(receipt.data.status,'failed');assert.equal(x.state.fileWrites,0);assert.equal(x.readStore().original.vapiAssistantId,undefined);
   });
-  report.passed=report.cases.length===23&&report.cases.every(c=>c.passed)&&report.cleanup.failures===0;
+  await run('pending setup stages via actual HTTP without trial or record promotion',{pending:true},async x=>{
+   const before=await prisma.signupAttempt.findUnique({where:{eventKey:x.target.attemptId}}),bytes=fs.readFileSync(x.file),h=await http(x);
+   try{
+    const pr=await h.post({action:'preview',policyId:x.state.policy.policyId}),plan=await pr.json();assert.equal(pr.status,200);assert.equal(plan.callAdmission,'blocked');
+    const r=await h.post(x.approve(plan));assert.equal(r.status,200);assert.equal((await r.json()).trialStarted,false);
+    assert.equal(x.state.phones[0].assistantId,undefined);assert.equal(x.state.imports,1);
+    assert.deepEqual(await prisma.signupAttempt.findUnique({where:{eventKey:x.target.attemptId}}),before);assert.deepEqual(fs.readFileSync(x.file),bytes);
+    assert.equal(await prisma.runtimeStore.findUnique({where:{key:provisioningStateKey('stripe-trial',x.target.idempotencyKey)}}),null);
+   }finally{await h.close();}
+  });
+  await run('pending authenticated call endpoint cannot grant assistant or transfer and has no SQL/file effects',{pending:true},async x=>{
+   const row=await prisma.signupAttempt.findUnique({where:{eventKey:x.target.attemptId}}),bytes=fs.readFileSync(x.file),count=await prisma.runtimeStore.count({where:{key:{in:x.keys}}}),h=await http(x);
+   try{
+    assert.equal((await h.pending('')).status,401);const r=await h.pending(x.state.pendingGate.secret);assert.equal(r.status,200);
+    const body=await r.json();assert.ok(body.error);assert.equal(body.assistantId,undefined);assert.equal(body.destination,undefined);
+    assert.deepEqual(await prisma.signupAttempt.findUnique({where:{eventKey:x.target.attemptId}}),row);assert.deepEqual(fs.readFileSync(x.file),bytes);
+    assert.equal(await prisma.runtimeStore.count({where:{key:{in:x.keys}}}),count);assert.equal(x.state.imports,0);
+   }finally{await h.close();}
+  });
+  await run('pending association writes only original resource references and preserves incomplete trial/history',{pending:true,imported:true},async x=>{
+   const before=await prisma.signupAttempt.findUnique({where:{eventKey:x.target.attemptId}}),store=x.readStore(),p=await x.preview();
+   await x.service.execute(x.approve(p),x.auth);const after=await prisma.signupAttempt.findUnique({where:{eventKey:x.target.attemptId}}),updated=x.readStore();
+   for(const key of ['assignedPhone','vapiAssistantId','vapiPhoneNumberId','updatedAt']){delete before[key];delete after[key];}assert.deepEqual(after,before);
+   assert.equal(updated.original.twilioPhoneNumber,x.target.number);for(const key of ['twilioPhoneNumber','vapiAssistantId','vapiPhoneNumberId'])delete updated.original[key];
+   assert.deepEqual(updated,store);assert.equal(x.state.imports,0);
+  });
+  await run('pending gate secret changed during SQL lock wait refuses actual dispatch',{pending:true},async x=>{
+   const p=await x.preview(),body=x.approve(p);
+   await underBindingLock(x,async release=>{
+    const outcome=x.service.execute(body,x.auth).then(value=>({value}),error=>({error}));await waitForAdvisoryWait();
+    x.state.pendingGate.secret+='changed';release.resolve();assert.ok((await outcome).error);assert.equal(x.state.imports,0);
+   });
+  });
+  await run('pending import uncertainty survives missing receipt, restart and direct-mode switch',{pending:true},async x=>{
+   x.state.lost=true;const p=await x.preview();await assert.rejects(x.service.execute(x.approve(p),x.auth),/INSPECT_FIRST/);
+   x.state.phones=[];x.state.lost=false;await prisma.runtimeStore.deleteMany({where:{key:provisioningStateKey('vapi-import',x.target.idempotencyKey)}});
+   let fresh=x.make(),plan=await x.preview(fresh);await assert.rejects(fresh.execute(x.approve(plan),x.auth),/INSPECT_FIRST/);
+   const store=x.readStore();store.original.trialStartAt=new Date(x.state.now-1000).toISOString();store.original.trialEndAt=new Date(x.state.now+60000).toISOString();x.writeFixture(store);
+   x.state.policy.operation='connect';fresh=x.make();plan=await x.preview(fresh);await assert.rejects(fresh.execute(x.approve(plan),x.auth),/INSPECT_FIRST/);assert.equal(x.state.imports,1);
+  });
+  await run('normal verifier cannot invalidate a completed pending SQL receipt',{pending:true,imported:true},async x=>{
+   const key=provisioningStateKey('vapi-import',x.target.idempotencyKey),before=await prisma.runtimeStore.findUnique({where:{key}});let verified=0;
+   await assert.rejects(runProvisioningStep({prisma,kind:'vapi-import',idempotencyKey:x.target.idempotencyKey,contextHash:x.target.contextHash,
+    verifyCompleted:async()=>{verified++;return false;},execute:async()=>{throw Error('no dispatch');}}),{code:'PROVISIONING_PENDING_SETUP_INSPECTION_REQUIRED'});
+   assert.equal(verified,0);assert.deepEqual(await prisma.runtimeStore.findUnique({where:{key}}),before);
+  });
+  await run('pending staging respects an already-held lifecycle cleanup reservation',{pending:true},async x=>{
+   const p=await x.preview(),id=hashOperationalTarget({signupAttemptId:x.target.attemptId});
+   await x.options.fence.withRemovalGuard(x.readStore,[id],()=>assertNoDispatch(x,x.service.execute(x.approve(p),x.auth)));
+  });
+  await run('pending association file refusal rolls back SQL and preserves uncertainty',{pending:true,imported:true},async x=>{
+   const row=await prisma.signupAttempt.findUnique({where:{eventKey:x.target.attemptId}}),bytes=fs.readFileSync(x.file),p=await x.preview();x.state.failFile=true;
+   await assert.rejects(x.service.execute(x.approve(p),x.auth),/INSPECT_FIRST/);
+   assert.deepEqual(await prisma.signupAttempt.findUnique({where:{eventKey:x.target.attemptId}}),row);assert.deepEqual(fs.readFileSync(x.file),bytes);
+   assert.equal((await prisma.runtimeStore.findUnique({where:{key:journalKey('associate',x.target)}})).data.phase,'prepared');
+  });
+  report.passed=report.cases.length===REQUIRED_SQL_CASES&&report.cases.every(c=>c.passed)&&report.cleanup.failures===0;
   assert.equal(report.passed,true,'Every required SQL case must pass; no omitted cases');
  }finally{
   report.completedAt=new Date().toISOString();report.syntheticImports=totalImports;report.syntheticFileWriteAttempts=totalFileWrites;

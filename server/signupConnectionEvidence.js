@@ -32,7 +32,7 @@ async function readConnectionDatabase(tx,p,{lock=false,operation}={}){
  return {context,attempt,registry,otherAttempts,numberStage:stages[0]?.data||null,assistantStage:stages[1]?.data||null,importStage:stages[2]?.data||null};
 }
 const databaseDigest=e=>digest(Object.fromEntries(['context','attempt','registry','otherAttempts','numberStage','assistantStage','importStage'].map(k=>[k,e[k]])));
-function createConnectionReader({prisma,readStore,transport,getSigningSecret,getRelease,readOverrides=()=>'',now=()=>Date.now()}){
+function createConnectionReader({prisma,readStore,transport,getSigningSecret,getRelease,getPendingGate=()=>null,readOverrides=()=>'',now=()=>Date.now()}){
  return async(p,operation)=>{
   const startedAt=now();
   const db=await prisma.$transaction(async tx=>{
@@ -47,7 +47,7 @@ function createConnectionReader({prisma,readStore,transport,getSigningSecret,get
    const keys=[p.number,p.assistantId,db.importStage?.result?.id].filter(Boolean);
    if(Object.keys(parsed).some(k=>keys.includes(k.trim().toLowerCase())))fail('CONNECTION_MAPPING_SCOPE_CHANGED');
   }
-  return {...db,...providers,policy:p,store,observedRelease:getRelease(),signingSecret:getSigningSecret(),
+  return {...db,...providers,policy:p,store,operation,pendingGate:getPendingGate(),observedRelease:getRelease(),signingSecret:getSigningSecret(),
    readWindow:{startedAt,finishedAt:now()},now:now()};
  };
 }

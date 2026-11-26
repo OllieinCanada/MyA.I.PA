@@ -9,6 +9,7 @@ const { verifySignupProvisioningAuthorization, buildProvisioningResourceName } =
 const { buildSignupAssistantConfig } = require('./signupAssistantTemplate');
 const { assessSignupAssistantContent } = require('./signupAssistantVerification');
 const { completeInventoryRead } = require('./vapiInventoryCoverage');
+const {pendingGateProof,assertNeverStartedSignup,assertPendingPhone}=require('./signupPendingConnection');
 const fail = code => { throw Object.assign(new Error(code), { code }); };
 const stable = x => x instanceof Date ? x.toISOString() : Array.isArray(x) ? x.map(stable)
   : x && typeof x === 'object' ? Object.fromEntries(Object.keys(x).sort().map(k => [k, stable(x[k])])) : x;
@@ -54,6 +55,9 @@ function prepareNumberConnection(input) {
   if (target.identityVerified !== true || target.status !== 'setup_error' || isClosedSignup(target)
     || signupBusinessKey(target) !== p.idempotencyKey || hasBilling(target)
     || target.resourceAssociationRepair) fail('CONNECTION_TARGET_UNPROVEN');
+  const pending=input.operation==='stage'||importStage?.result?.routeMode==='setup-pending';
+  const gateProof=pending?pendingGateProof(input.pendingGate):null;
+  if(pending)assertNeverStartedSignup(target);
   // This plan is for an unmapped original signup, not the older phantom-move
   // writer. Never create/substitute a tenant from a name/phone match.
   if (registry !== null || attempt.businessId || target.businessId) fail('CONNECTION_BUSINESS_SCOPE_CHANGED');
@@ -97,8 +101,13 @@ function prepareNumberConnection(input) {
     phoneId=importStage.result.id;
     const n=matching[0];
     if (matching.length !== 1 || n.id !== phoneId || (n.number || n.twilioPhoneNumber) !== p.number
-      || n.assistantId !== p.assistantId || n.name !== phoneName || n.smsEnabled !== false || !ownershipOK(n)
+      || !pending&&n.assistantId !== p.assistantId || n.name !== phoneName || n.smsEnabled !== false || !ownershipOK(n)
       || n.twilioAccountSid && n.twilioAccountSid !== twilioAccountSid) fail('CONNECTION_PHONE_BINDING_UNPROVEN');
+    if(pending){
+      assertPendingPhone(n,input.pendingGate);
+      if(n.provider!=='twilio'||n.twilioAccountSid!==twilioAccountSid||importStage.result.attachedAssistantId!==null
+        ||digest(importStage.result.pendingGate)!==digest(gateProof))fail('CONNECTION_PENDING_ROUTE_UNPROVEN');
+    }
     if ([attempt,target].some(r => Object.entries({assignedPhone:p.number,twilioPhoneNumber:p.number,vapiAssistantId:p.assistantId,vapiPhoneNumberId:phoneId})
       .some(([k,v]) => r[k] && r[k] !== v))) fail('CONNECTION_ASSOCIATION_CONFLICT');
   }
@@ -109,15 +118,16 @@ function prepareNumberConnection(input) {
   const attemptFields=phoneId ? {assignedPhone:p.number,vapiAssistantId:p.assistantId,vapiPhoneNumberId:phoneId} : null;
   const dashboardFields=phoneId ? {twilioPhoneNumber:p.number,vapiAssistantId:p.assistantId,vapiPhoneNumberId:phoneId} : null;
   const sourceDigest=digest({context,attempt,store,registry,numberStage,assistantStage,importStage,otherAttempts});
-  const binding={...Object.fromEntries(scopeFields.map(k=>[k,p[k]])),phoneId};
+  const binding={...Object.fromEntries(scopeFields.map(k=>[k,p[k]])),phoneId,...pending?{routeMode:'setup-pending',pendingGate:gateProof}: {}};
   return {version:1,readOnly:true,ready:false,applyAllowed:false,liveReadinessProven:false,
     phase:phoneId?'prepare_associations_only':'prepare_phone_connection',binding,targetKey,sourceDigest,
     planDigest:digest({binding,sourceDigest}),observedAt:new Date(readWindow.finishedAt).toISOString(),
     proposedAttemptFields:attemptFields,proposedDashboardFields:dashboardFields,
     alreadyAssociated:!!phoneId && Object.entries(attemptFields).every(([k,v])=>attempt[k]===v) && Object.entries(dashboardFields).every(([k,v])=>target[k]===v),
-    maximumPhoneImports:phoneId?0:1,numbersPurchased:0,signupReplays:0,messages:0,calls:0,billingChanges:0,
+    callAdmission:pending?'blocked':'not-granted',maximumPhoneImports:phoneId?0:1,numbersPurchased:0,signupReplays:0,messages:0,calls:0,billingChanges:0,
     requirements:['Separate explicit approval before application','Fresh exact source/receipt/provider checks at final dispatch',
-      'Prove normal account eligibility and call-admission routing before changing inbound routing; no trial/security bypass',
+      pending?'Setup-only import has no attached assistant or fallback; terminal authenticated gate always refuses calls':
+        'Prove normal account eligibility and call-admission routing before changing inbound routing; no trial/security bypass',
       'Use durable vapi-import lease/dispatch/uncertainty safeguards; inspect unknown outcomes without another import',
       'Narrow authenticated no-send entry point; NEVER the broad import/recovery route',
       'Existing running dashboard lifecycle fence and single-writer coordination; no independent fence instance',
