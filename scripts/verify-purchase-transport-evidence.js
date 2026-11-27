@@ -1,0 +1,16 @@
+'use strict';
+const fs=require('node:fs'),crypto=require('node:crypto');
+const SOURCE_FILES=Object.freeze(['server/index.js','server/signupProvisioning.js','server/signupProvisioningContext.js','server/provisioningState.js','server/signupProvisioningError.js','tests/helpers/provisioning-error-route-fixture.js','tests/helpers/purchase-transport-fixture.js','tests/helpers/signup-bug-memory-db.js','tests/helpers/twilio-status-memory-db.js','tests/purchase-transport-comparison.test.js','tests/purchase-transport-http.test.js','tests/purchase-transport-postgres.test.js','scripts/local-staging-egress.js','scripts/provider-hardening-evidence.js','scripts/verify-purchase-transport-evidence.js','.github/workflows/purchase-transport.yml']);
+const REQUIRED_CASES=Object.freeze(['form SQL purchase and completed restart','json SQL purchase and completed restart','form invalid auth zero SQL writes','json invalid auth zero SQL writes','form changed context zero dispatch','json changed context zero dispatch','form context rollback before commit','json context rollback before commit','form real lock timeout zero dispatch','json real lock timeout zero dispatch','two SQL clients concurrent cross-format requests','unknown outcome survives a new SQL client','completed commit acknowledgement loss preserves receipt','unrelated rows and instrumented transports preserved']);
+function sourceHashes(){return Object.fromEntries(SOURCE_FILES.map(p=>[p,crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex')]));}
+function validate(v,{expectedHead,expectedSources}={}){
+ if(!/^[a-f0-9]{40}$/.test(expectedHead||'')||v?.head!==expectedHead)throw Error('EXACT_HEAD_REQUIRED');
+ if(v.scope!=='synthetic-purchase-transport-sql-http-only'||v.passed!==true||v.skips!==0||!/^18\./.test(v.postgresVersion||''))throw Error('SQL_PROOF_REQUIRED');
+ if(v.productionUsed!==false||v.providerRequests!==0||v.messages!==0||v.makeEngineVerified!==false||v.originalFailureCauseProven!==false||v.osSandboxProven!==false||v.unexpectedOutboundAttempts!==0)throw Error('SCOPE_OR_TRANSPORT');
+ if(!Array.isArray(v.cases)||v.cases.length!==REQUIRED_CASES.length||new Set(v.cases.map(c=>c.name)).size!==REQUIRED_CASES.length||REQUIRED_CASES.some(name=>!v.cases.some(c=>c.name===name&&c.passed===true)))throw Error('MISSING_CASE');
+ if(v.cleanup?.complete!==true||v.cleanup.ownedRowsRemaining!==0||v.cleanup.serversClosed!==true||v.cleanup.connectionsClosed!==true||v.cleanup.unrelatedPreserved!==true)throw Error('CLEANUP_REQUIRED');
+ if(!expectedSources||Object.keys(v.sourceFiles||{}).length!==SOURCE_FILES.length||SOURCE_FILES.some(p=>!/^[a-f0-9]{64}$/.test(expectedSources[p]||'')||v.sourceFiles[p]!==expectedSources[p]))throw Error('SOURCE_MISMATCH');
+ return {accepted:true,head:expectedHead,sqlCases:REQUIRED_CASES.length,makeEngineVerified:false,originalFailureCauseProven:false};
+}
+module.exports={SOURCE_FILES,REQUIRED_CASES,sourceHashes,validate};
+if(require.main===module){try{if(process.argv.length!==3)throw Error('ONE_ARTIFACT_REQUIRED');console.log(JSON.stringify(validate(JSON.parse(fs.readFileSync(process.argv[2],'utf8')),{expectedHead:process.env.PURCHASE_TRANSPORT_EXPECTED_HEAD,expectedSources:sourceHashes()})));}catch(e){console.error(e.message);process.exitCode=1;}}

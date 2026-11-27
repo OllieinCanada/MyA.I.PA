@@ -434,6 +434,10 @@ async function testSignupJourney(browser, baseUrl, viewport, engineName) {
     }
     await page.screenshot({ path: path.join(screenshotDir, `notes-final-review-${viewport.name}.png`), fullPage: true, animations: "disabled" });
     await clickVisibleByText(page, "Back");
+    // A click completing does not imply React has committed the next screen.
+    // Wait for the required destination, retaining the same bounded timeout
+    // and the existing exact step/visibility assertions below.
+    await page.locator('#signup-pricing').waitFor({ state: 'visible' });
     if (!/Step 5 of 7/.test(await page.locator("form").innerText())
       || !await page.locator('#signup-pricing').isVisible()) {
       throw new Error("Back from final review did not return to service-call details");

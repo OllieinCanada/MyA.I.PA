@@ -22,6 +22,9 @@
     "stripe": "^22.3.2"
   },
   "scripts": {
+    "test:purchase-transport": "node --test --test-concurrency=1 tests/purchase-transport-comparison.test.js tests/purchase-handoff-preflight.test.js tests/purchase-transport-evidence.test.js",
+    "test:purchase-transport:postgres": "node --test tests/purchase-transport-postgres.test.js",
+    "test:purchase-transport:http": "node --test tests/purchase-transport-http.test.js",
     "test:provisioning-preflight-diagnostic": "node --test --test-concurrency=1 tests/provisioning-preflight-diagnostic.test.js tests/provider-disabled-make-blueprint.test.js tests/purchase-handoff-preflight.test.js tests/provider-disabled-diagnostic-evidence.test.js",
     "test:signup-notification-readiness": "node --test --test-concurrency=1 tests/signup-notification-readiness-regression.test.js tests/sms-dispatch-readiness.test.js tests/signup-agent-testing.test.js tests/admin-signup-setup.test.js tests/automatic-assistant-connection-plan.test.js tests/operational-error-classifier.test.js tests/incident-alerts.test.js",
     "test:signup-recovery-ordering": "node --test --test-concurrency=1 tests/signup-recovery-ordering.test.js tests/signup-connection-control.test.js tests/signup-connection-preparation.test.js tests/signup-completion-reconciliation.test.js tests/provisioning-state.test.js tests/vapi-twilio-import-request.test.js",
