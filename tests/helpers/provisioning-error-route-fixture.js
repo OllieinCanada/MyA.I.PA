@@ -46,7 +46,7 @@ function fixture(mode='valid'){
  vm.createContext(ctx);vm.runInContext(integrationKeyGuard+'\n'+auth+'\n'+loader+'\n'+route+'\n'+errors,ctx);
  const defaultBody={areaCode:payload.provisioning.preferredAreaCode,region:payload.provisioning.preferredRegion,provisioning:payload.provisioning};
  return {db,target,payload,ctx,counts,captures,handlers:()=>handlers,errorHandler:()=>errorHandler,defaultBody,path,
-  limiter:()=>{ctx.rateLimit=require('express-rate-limit').rateLimit;return vm.runInContext(limiter+'\nprovisioningRequestProcessRateLimiter',ctx);},
+  limiter:(rateLimitFactory)=>{ctx.rateLimit=rateLimitFactory||require('express-rate-limit').rateLimit;return vm.runInContext(limiter+'\nprovisioningRequestProcessRateLimiter',ctx);},
   settle:()=>Promise.all(captures),
   async run({body=defaultBody,query={},headers={'x-myaipa-integration-key':'synthetic-connection-key'}}={}){
    const req={method:'POST',path,route:{path},query,headers,body};let status,response;
