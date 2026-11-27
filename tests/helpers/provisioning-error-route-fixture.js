@@ -17,6 +17,7 @@ const limiter=section('const provisioningRequestProcessRateLimiter = rateLimit({
 const loader=section('async function loadTrustedProvisioningContext(','\nasync function assertSignupLegacyResourcesSafe(');
 const route=section('app.post(\n  "/api/integrations/twilio/purchase-number",','\napp.post(');
 const errors=section('app.use((err, req, res, _next) => {','\nfunction runBackgroundJob(');
+const runtimeArea=section('function runtimeAreaForRoute(','\nasync function preserveIncidentRemediationUpdate(');
 const path='/api/integrations/twilio/purchase-number',secret='synthetic-signing-secret';
 function fixture(mode='valid'){
  const db=memoryJournal(),target=db.add();
@@ -43,7 +44,7 @@ function fixture(mode='valid'){
   safelyNotifyRuntimeFailure:()=>{counts.incidents++;},sanitizeMakeFailureEnvelope,
   app:{post:(_path,...all)=>{handlers=all;},use:fn=>{errorHandler=fn;}},asyncRoute:fn=>fn,
  };
- vm.createContext(ctx);vm.runInContext(integrationKeyGuard+'\n'+auth+'\n'+loader+'\n'+route+'\n'+errors,ctx);
+ vm.createContext(ctx);vm.runInContext(integrationKeyGuard+'\n'+auth+'\n'+loader+'\n'+route+'\n'+runtimeArea+'\n'+errors,ctx);
  const defaultBody={areaCode:payload.provisioning.preferredAreaCode,region:payload.provisioning.preferredRegion,provisioning:payload.provisioning};
  return {db,target,payload,ctx,counts,captures,handlers:()=>handlers,errorHandler:()=>errorHandler,defaultBody,path,
   limiter:(rateLimitFactory)=>{ctx.rateLimit=rateLimitFactory||require('express-rate-limit').rateLimit;return vm.runInContext(limiter+'\nprovisioningRequestProcessRateLimiter',ctx);},

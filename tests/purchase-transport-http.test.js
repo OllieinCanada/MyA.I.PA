@@ -37,6 +37,9 @@ test('real HTTP form/JSON comparison with provider transports refused',{timeout:
  await t.test('malformed JSON refuses before any fake provider request or receipt claim',async t=>{
   const f=create(),http=await boot(f,t),r=await http.send('json',{body:'{"provisioning":'});assert.equal(r.status,400);assert.equal(f.shared.providerCalls.length,0);assert.equal(f.shared.claimCalls,0);
  });
+ await t.test('unhandled database failure retains JSON diagnosis and fake alert without transport',async t=>{
+  const f=create();f.shared.fault='before-commit';const http=await boot(f,t),r=await http.send('json');assert.equal(r.status,500);assert.equal(r.body.code,'P2028');assert.equal(f.counts.incidents,1);assert.equal(f.shared.providerCalls.length,0);assert.equal(f.shared.claimCalls,0);
+ });
  await t.test('wrong JSON proof retains authentication refusal and zero fake dispatch',async t=>{
   const f=create(),http=await boot(f,t),request=wire(f,'json'),body=JSON.parse(request.body);body.provisioning.contextHash='f'.repeat(64);const r=await http.send('json',{body:JSON.stringify(body)});assert.equal(r.status,401);assert.equal(f.shared.providerCalls.length,0);assert.equal(f.shared.claimCalls,0);
  });

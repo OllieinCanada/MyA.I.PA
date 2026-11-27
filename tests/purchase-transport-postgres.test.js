@@ -51,9 +51,11 @@ test('actual purchase transport and durable SQL behavior',{skip:!enabled,timeout
    await reset();const wrapped={runtimeStore:prisma.runtimeStore,$transaction:(fn,opts)=>prisma.$transaction(async tx=>{await fn(tx);throw Object.assign(Error('Invented pre-commit failure'),{code:'P2028'});},opts)},h=await boot({seed:true,contextDb:wrapped}),saved=await prisma.runtimeStore.findUnique({where:{key:ck}});const r=await h.send(format);assert.equal(r.body.code,'P2028');assert.deepEqual(await prisma.runtimeStore.findUnique({where:{key:ck}}),saved);assert.equal(h.f.shared.providerCalls.length,0);assert.equal(await prisma.runtimeStore.count({where:{key:rk}}),0);
   });
   for(const format of ['empty-multipart','json'])await run(REQUIRED_CASES[i++],async()=>{
-   await reset();const wrapped={runtimeStore:prisma.runtimeStore,$transaction:(fn,opts)=>prisma.$transaction(fn,{...opts,timeout:800})},h=await boot({seed:true,contextDb:wrapped}),entered=deferred(),release=deferred();
+   // A Prisma callback deadline alone does not interrupt a blocked SQL query.
+   // Bound this test's lock wait in PostgreSQL itself; no runtime setting is changed.
+   await reset();const wrapped={runtimeStore:prisma.runtimeStore,$transaction:(fn,opts)=>prisma.$transaction(async tx=>{await tx.$executeRaw`SET LOCAL lock_timeout = '250ms'`;return fn(tx);},{...opts,timeout:2000})},h=await boot({seed:true,contextDb:wrapped}),entered=deferred(),release=deferred();
    const hold=observer.$transaction(async tx=>{await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${ck}))::text AS lock_result`;entered.resolve();await release.promise;},{timeout:15000}),outcome=hold.then(()=>({}),error=>({error}));
-   try{assert.equal(await Promise.race([entered.promise.then(()=>true),outcome.then(()=>false)]),true);const r=await h.send(format);assert.equal(r.body.code,'P2028');assert.equal(h.f.shared.providerCalls.length,0);assert.equal(await prisma.runtimeStore.count({where:{key:rk}}),0);}finally{release.resolve();const end=await outcome;if(end.error)throw end.error;}
+   try{assert.equal(await Promise.race([entered.promise.then(()=>true),outcome.then(()=>false)]),true);const r=await h.send(format);assert.equal(r.status,500);assert.equal(r.body.code,'P2010');assert.equal(h.f.shared.providerCalls.length,0);assert.equal(await prisma.runtimeStore.count({where:{key:rk}}),0);}finally{release.resolve();const end=await outcome;if(end.error)throw end.error;}
    assert.equal((await prisma.runtimeStore.findUnique({where:{key:ck}})).data.lockedAt,undefined);
   });
   await run(REQUIRED_CASES[i++],async()=>{
