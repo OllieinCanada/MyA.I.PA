@@ -14901,6 +14901,17 @@ app.post(
   })
 );
 
+// Dedicated synthetic diagnostic: shared authentication decisions, but no auth
+// incident writer, customer context loader, purchase claim or provider callback.
+require('./provisioningPreflightDiagnostic').registerRoutes({
+  app,rateLimit,prisma,
+  connectionConfigured:()=>Boolean(INTEGRATION_API_KEY||getMakeSignupWebhookConfig().apiKey||getMakeSignupWebhookToken()),
+  connectionValid:hasValidProvisioningConnectionKey,
+  getSigningSecret:getProvisioningSigningSecret,
+  parseAuthorization:getProvisioningAuthorizationInput,
+  getRelease:()=>process.env.RENDER_GIT_COMMIT||null,
+});
+
 app.post(
   "/api/integrations/twilio/purchase-number",
   requireProvisioningKey,

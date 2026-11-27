@@ -19,7 +19,8 @@ test('partial restored HTTP evidence cannot clear live or full recovery predicat
 });
 test('canonical pinned dependencies are exact; corruption refused',()=>{
  const pins=require('../scripts/restored-http-pins.json'),sha=require('../scripts/composite-recovery-fixture').sha;
- assert.equal(pins.reviewedHead,BASE_HEAD);assert.equal(Object.keys(pins.sha256).length,53);
+ assert.equal(pins.reviewedHead,BASE_HEAD);assert.equal(Object.keys(pins.sha256).length,54);
+ assert.ok(pins.sha256['server/provisioningPreflightDiagnostic.js'],'The added read-only controller must be exact-source pinned');
  for(const file of ['server/signupAgentTesting.js','server/smsDispatchReadiness.js'])assert.ok(pins.sha256[file]);
  for(const file of ['server/signupPendingConnection.js','server/vapiPhoneImportVerification.js','server/provisioningState.js'])assert.ok(pins.sha256[file],file);
  for(const file of ['server/signupConnectionControl.js','server/signupConnectionEvidence.js','server/signupConnectionPreparation.js','server/signupConnectionTransport.js'])assert.ok(pins.sha256[file],file);
