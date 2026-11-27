@@ -22,6 +22,8 @@
     "stripe": "^22.3.2"
   },
   "scripts": {
+    "test:signup-verification-resilience": "node --test --test-concurrency=1 tests/signup-verification-resilience.test.js tests/signup-verification-progress.test.js tests/signup-verification-page-client.test.js tests/signup-setup-jobs.test.js",
+    "test:signup-verification-resilience:browser": "node scripts/test-signup-verification-resilience-browser.js",
     "test:purchase-transport": "node --test --test-concurrency=1 tests/purchase-transport-comparison.test.js tests/purchase-handoff-preflight.test.js tests/purchase-transport-evidence.test.js",
     "test:purchase-transport:postgres": "node --test tests/purchase-transport-postgres.test.js",
     "test:purchase-transport:http": "node --test tests/purchase-transport-http.test.js",

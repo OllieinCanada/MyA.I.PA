@@ -39,6 +39,7 @@ function verificationProgressScript(url, { awaitConfirmation = false } = {}) {
     const initial=${JSON.stringify(buildSignupProgress().steps).replace(/</g,'\\u003c')};
     let busy=false,finished=false,started=${!awaitConfirmation},seenStatus=false,confirmed=${!awaitConfirmation};
     let lastProgress=null,nextAllowedAt=0;
+    let timer=null,recheckTimer=null,activeRequest=null,epoch=0,suspended=false,disposed=false;
     const panel=document.getElementById("signup-progress-panel"),bar=document.getElementById("signup-progress-bar"),fill=document.getElementById("signup-progress-fill"),label=document.getElementById("signup-progress-label");
     function show(s){
       if(!panel)return;
@@ -61,31 +62,55 @@ function verificationProgressScript(url, { awaitConfirmation = false } = {}) {
     }
     show({state:started?"processing":"confirming"});
     async function refresh(){
-      if(!started||busy||finished||Date.now()<nextAllowedAt||document.visibilityState!=="visible")return;
+      if(disposed||suspended||!started||busy||finished||Date.now()<nextAllowedAt||document.visibilityState!=="visible")return;
       busy=true;
+      const requestEpoch=epoch;
       const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),10000);
+      activeRequest={controller,timeout};
       try{
         const r=await fetch(endpoint,{credentials:"same-origin",cache:"no-store",redirect:"error",signal:controller.signal});
-        if(!r.ok){const form=document.querySelector("form");if(r.status===410&&!seenStatus&&form&&!form.hidden)return;if(r.status===429){const wait=Number(r.headers?.get("retry-after"));nextAllowedAt=Date.now()+Math.max(15000,Math.min(900000,(Number.isFinite(wait)&&wait>0?wait:60)*1000));show({state:"connection_lost"});document.getElementById("verification-description").textContent="Your signup is saved. Progress checks will resume automatically shortly—do not sign up again.";return;}if(r.status===401||r.status===410){finished=true;show({state:"expired"});document.getElementById("verification-description").textContent="This link expired. Contact support—do not sign up again.";}else show({state:"connection_lost"});return;}
+        if(disposed||suspended||requestEpoch!==epoch)return;
+        if(!r.ok){const form=document.querySelector("form");if(r.status===410&&!seenStatus&&form&&!form.hidden)return;if(r.status===429){const wait=Number(r.headers?.get("retry-after"));nextAllowedAt=Date.now()+Math.max(15000,Math.min(900000,(Number.isFinite(wait)&&wait>0?wait:60)*1000));show({state:"connection_lost"});document.getElementById("verification-description").textContent="Your signup is saved. Progress checks will resume automatically shortly—do not sign up again.";return;}if(r.status===401||r.status===410){finished=true;show({state:"expired"});document.getElementById("verification-description").textContent="This link expired. Contact support—do not sign up again.";dispose();}else show({state:"connection_lost"});return;}
         const data=await r.json(),s=data.signup;
+        if(disposed||suspended||requestEpoch!==epoch)return;
         if(!s)return;
         seenStatus=true;confirmed=s.state!=="verification_required";show(s);
         document.getElementById("verification-title").textContent=s.title;
         document.getElementById("verification-description").textContent=s.message;
         if(s.state==="ready"&&/^\\+1\\d{10}$/.test(s.assignedPhone||"")){
           // Reload the same capability link to get the server-rendered number/actions.
-          finished=true;window.location.reload();
+          finished=true;dispose();window.location.reload();
         }
-        if(s.state==="closed")finished=true;
-      }catch(_){show({state:"connection_lost"});document.getElementById("verification-description").textContent="Connection lost. Your signup is saved. Reopen this link to check progress—do not sign up again.";}
-      finally{busy=false;clearTimeout(timeout);}
+        if(s.state==="closed"){finished=true;dispose();}
+      }catch(_){if(disposed||suspended||requestEpoch!==epoch)return;show({state:"connection_lost"});document.getElementById("verification-description").textContent="Connection lost. Your signup is saved. Reopen this link to check progress—do not sign up again.";}
+      finally{clearTimeout(timeout);if(requestEpoch===epoch){busy=false;activeRequest=null;}}
+    }
+    function suspend(){
+      suspended=true;epoch++;busy=false;
+      if(timer!==null){clearInterval(timer);timer=null;}
+      if(recheckTimer!==null){clearTimeout(recheckTimer);recheckTimer=null;}
+      if(activeRequest){clearTimeout(activeRequest.timeout);activeRequest.controller.abort();activeRequest=null;}
+    }
+    function resume(){
+      if(disposed||finished||(!suspended&&timer!==null))return;
+      suspended=false;timer=setInterval(refresh,10000);refresh();
+    }
+    function onStarted(){if(disposed)return;started=true;if(recheckTimer===null)recheckTimer=setTimeout(()=>{recheckTimer=null;refresh();},1000);}
+    function onProblem(){if(!disposed&&!suspended)show({state:"connection_lost"});}
+    function dispose(){
+      if(disposed)return;disposed=true;suspend();
+      document.removeEventListener("visibilitychange",refresh);
+      document.removeEventListener("signup-verification-started",onStarted);
+      document.removeEventListener("signup-verification-problem",onProblem);
+      document.removeEventListener("signup-verification-replacing",dispose);
+      window.removeEventListener("pagehide",suspend);window.removeEventListener("pageshow",resume);
     }
     document.addEventListener("visibilitychange",refresh);
-    document.addEventListener("signup-verification-started",()=>{started=true;setTimeout(refresh,1000);});
-    document.addEventListener("signup-verification-problem",()=>show({state:"connection_lost"}));
+    document.addEventListener("signup-verification-started",onStarted);
+    document.addEventListener("signup-verification-problem",onProblem);
+    document.addEventListener("signup-verification-replacing",dispose);
     // At most 90 regular checks per 15-minute window, below the 120 limit.
-    const timer=setInterval(refresh,10000);
-    window.addEventListener("pagehide",()=>clearInterval(timer),{once:true});refresh();
+    window.addEventListener("pagehide",suspend);window.addEventListener("pageshow",resume);resume();
   })();</script>`;
 }
 module.exports={verificationProgressScript,verificationProgressMarkup,verificationNumberMarkup};

@@ -17,9 +17,14 @@ function verificationPageClientScript({ automaticSmsConfirmation = false } = {})
         form.querySelectorAll("button").forEach(button => { button.disabled = true; });
         document.getElementById("verification-title").textContent = "Setting up your assistant";
         document.getElementById("verification-description").textContent = "Keep this page open. Your AI number will appear above when assignment finishes. This may take a few minutes. This will take less than 3 minutes. Thank you for your patience.";
+        // A lost response is unknown, not permission to submit another POST.
+        // Bound both fetch and body reading; saved progress remains GET-only.
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 15000);
         try {
           const response = await fetch(form.action, {
             method: "POST", credentials: "same-origin", redirect: "error",
+            signal: controller.signal,
             headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "text/html" },
             body: new URLSearchParams(new FormData(form)).toString()
           });
@@ -29,6 +34,7 @@ function verificationPageClientScript({ automaticSmsConfirmation = false } = {})
           if (!result.querySelector("main #verification-title")) throw new Error("Setup page unavailable");
           // Server-rendered result, including Call/Copy/Continue, replaces this
           // page at the same URL. No numbers or tokens go into browser storage.
+          document.dispatchEvent(new Event("signup-verification-replacing"));
           document.open(); document.write(html); document.close();
         } catch (_) {
           document.dispatchEvent(new Event("signup-verification-problem"));
@@ -38,6 +44,8 @@ function verificationPageClientScript({ automaticSmsConfirmation = false } = {})
           form.hidden = true;
           const support = document.getElementById("verification-support");
           if (support) support.hidden = false;
+        } finally {
+          clearTimeout(timeout);
         }
       }
       form.addEventListener("submit", continueSignup);
