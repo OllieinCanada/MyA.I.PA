@@ -48,8 +48,8 @@ function fixture(mode='valid'){
  return {db,target,payload,ctx,counts,captures,handlers:()=>handlers,errorHandler:()=>errorHandler,defaultBody,path,
   limiter:()=>{ctx.rateLimit=require('express-rate-limit').rateLimit;return vm.runInContext(limiter+'\nprovisioningRequestProcessRateLimiter',ctx);},
   settle:()=>Promise.all(captures),
-  async run({body=defaultBody,headers={'x-myaipa-integration-key':'synthetic-connection-key'}}={}){
-   const req={method:'POST',path,route:{path},query:{},headers,body};let status,response;
+  async run({body=defaultBody,query={},headers={'x-myaipa-integration-key':'synthetic-connection-key'}}={}){
+   const req={method:'POST',path,route:{path},query,headers,body};let status,response;
    const res={status(value){status=value;return this;},json(value){response=value;return this;}};
    try{let pass=false;handlers[0](req,res,()=>{pass=true;});if(pass){pass=false;handlers[1](req,res,()=>{pass=true;});if(pass)await handlers[2](req,res);}}
    catch(error){error.telegramIncidentHandled=true;errorHandler(error,req,res,()=>{});}
