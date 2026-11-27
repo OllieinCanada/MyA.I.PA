@@ -1,4 +1,10 @@
 {
+  "providerDisabledDiagnosticContinuation": {
+    "baseRelease": "9ad9ebc0f0049be94f184f6d3a4366e5baba1c7a",
+    "initialCandidateHead": "7712f8371b559004887855c81e1b106d2b503e87",
+    "previousIndexSha256": "299ad67fe6f8eb1f354507a6cee53470ae640367cc421ed53804f18f3bfe1c21",
+    "scope": "Pin the provider-disabled diagnostic registration and read-only controller for fresh exact-head SQL/HTTP/full CI. Existing purchase, mapping, lifecycle and no-replay guards are unchanged. No hosted Make execution, historical failure diagnosis, production action or release approval is implied."
+  },
   "notificationReadinessContinuation": {
     "baseRelease": "eb8fbf54013e1c73a3a279711742ec7ca8e28ce9",
     "scope": "Candidate readiness-state correction, sanitized backend self-check/callback timing and pure automatic-notification preparation. Exact candidate bytes require fresh sealed CI/SQL/review. Historical repair pins and disabled live-application boundaries are preserved; no root cause, activation or delivery proof is implied."
@@ -133,7 +139,8 @@
     "server/boundedBusinessMappingAdapters.js": "69cc5596edc20e8a2e689ff826bb2e424e4beaff8f41fa970ee40efa4aed3744",
     "server/boundedBusinessMappingWriter.js": "c8b129211d807e780d55600695362cbcb813c29ac784a147dbed1b9ca746db6a",
     "server/boundedMappingControl.js": "6bdf571cea3fc1d2a52c20e8bc89a49d10ffbe069a7d2fd463eaadb25354b36a",
-    "server/index.js": "299ad67fe6f8eb1f354507a6cee53470ae640367cc421ed53804f18f3bfe1c21",
+    "server/index.js": "aa286733a606d13c153242bac7a08aff0ca0bc644ae9c0cd49f0daa30612900f",
+    "server/provisioningPreflightDiagnostic.js": "840eb18d0e2611783a720accc6e1a040832d8f94403d7e372d6cd9d4021e663c",
     "server/signupAgentTesting.js": "a64bbb94e6e14b245446726bb8ef414649e47c4ebd3b06720e88cc0250fe241f",
     "server/smsDispatchReadiness.js": "f3a2e3ff5ce8f6ba7619c196778c4c2588330fd4eb351033e81a20646c7ee148",
     "server/signupConnectionControl.js": "cf7c8869017bb30d654861496fd5d7c7800d6bd0742a7e5592dd4a231167f524",

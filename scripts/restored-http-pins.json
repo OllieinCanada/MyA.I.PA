@@ -1,4 +1,10 @@
 {
+  "providerDisabledDiagnosticContinuation": {
+    "baseRelease": "9ad9ebc0f0049be94f184f6d3a4366e5baba1c7a",
+    "initialCandidateHead": "7712f8371b559004887855c81e1b106d2b503e87",
+    "previousIndexSha256": "299ad67fe6f8eb1f354507a6cee53470ae640367cc421ed53804f18f3bfe1c21",
+    "scope": "Pin the read-only diagnostic candidate and registration for fresh sealed restored SQL/HTTP validation; historical fixture/source provenance and all sending/repair guards are unchanged. Not hosted Make proof, live recovery or release approval."
+  },
   "notificationReadinessContinuation": {
     "baseRelease": "eb8fbf54013e1c73a3a279711742ec7ca8e28ce9",
     "scope": "Pin candidate readiness-state, safe diagnostic and pure automatic-plan dependencies for fresh sealed restored HTTP/SQL checks. Existing fixture provenance and historical repairs are unchanged. This is not live recovery, activation or release approval."
@@ -47,7 +53,8 @@
   "sha256": {
     "scripts/run-composite-recovery-ci.js": "9a3c2069cb268c25d8add52cbf4884d076cca9a7f4e8db55b9d4ee3d60d4c4ae",
     "scripts/composite-recovery-fixture.js": "46085044ab3ef3df77401c0c7f954691206ea52d5d71893a5f7ed1f02cd1d4e7",
-    "server/index.js": "299ad67fe6f8eb1f354507a6cee53470ae640367cc421ed53804f18f3bfe1c21",
+    "server/index.js": "aa286733a606d13c153242bac7a08aff0ca0bc644ae9c0cd49f0daa30612900f",
+    "server/provisioningPreflightDiagnostic.js": "840eb18d0e2611783a720accc6e1a040832d8f94403d7e372d6cd9d4021e663c",
     "server/signupAgentTesting.js": "a64bbb94e6e14b245446726bb8ef414649e47c4ebd3b06720e88cc0250fe241f",
     "server/smsDispatchReadiness.js": "f3a2e3ff5ce8f6ba7619c196778c4c2588330fd4eb351033e81a20646c7ee148",
     "server/signupConnectionControl.js": "cf7c8869017bb30d654861496fd5d7c7800d6bd0742a7e5592dd4a231167f524",
