@@ -66,6 +66,13 @@ async function claimProvisioningStep({
   const safeLeaseMs = Math.max(30_000, Math.min(30 * 60 * 1000, Number(leaseMs) || DEFAULT_LEASE_MS));
 
   return prisma.$transaction(async (tx) => {
+    // Allow modest latency in the assistant's short database-only claim. Give
+    // only this claim a bounded budget; never retry a failed claim or
+    // move provider work into the transaction. Bound SQL lock waits separately:
+    // Prisma's callback deadline alone cannot interrupt a blocked SQL query.
+    if (kind === 'vapi-assistant' && typeof tx.$executeRaw === 'function') {
+      await tx.$executeRaw`SET LOCAL lock_timeout = '5s'`;
+    }
     if (typeof tx.$queryRaw === "function") {
       await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))::text AS lock_result`;
     }
@@ -113,7 +120,7 @@ async function claimProvisioningStep({
       create: { key, data: next },
     });
     return { claimed: true, completed: false, inProgress: false, claimToken, key, data: next };
-  });
+  }, kind === 'vapi-assistant' ? { maxWait: 2000, timeout: 15_000 } : undefined);
 }
 
 async function completeProvisioningStep({ prisma, key, claimToken, result, now = Date.now() }) {
