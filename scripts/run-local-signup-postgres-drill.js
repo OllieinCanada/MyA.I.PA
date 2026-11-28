@@ -113,6 +113,12 @@ async function main(){
     const env={...process.env,DATABASE_URL:url,SIGNUP_RECOVERY_DRILL_DATABASE_URL:url,DISABLE_LOCAL_ENV_FILES:'1'};
     console.log('Applying the application schema to the new disposable database.');
     run(process.execPath,[require.resolve('prisma/build/index.js'),'db','push','--skip-generate'],env);
+    if(process.argv.includes('--assistant-claim-only')){
+      console.log('Checking assistant claim expiry, lock contention and uncertain outcomes against disposable PostgreSQL; providers are fake.');
+      const tested=run(process.execPath,['--test','--test-concurrency=1',path.join(ROOT,'tests','provisioning-assistant-claim-postgres.test.js'),path.join(ROOT,'tests','provisioning-timeout-postgres.test.js')],{...env,RUN_DATABASE_INTEGRATION:'1'});
+      console.log(tested.stdout.replaceAll(password,'[redacted]'));
+      return;
+    }
     if(process.argv.includes('--pre-handoff-only')){
       console.log('Checking native transaction expiry, bounded signup retries, concurrent restart and uncertain admission.');
       const evidence=path.join(ROOT,'diagnostics',`signup-prehandoff-postgres-${Date.now()}.tap`);

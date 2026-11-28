@@ -1,4 +1,8 @@
 {
+  "assistantClaimBudgetContinuation": {
+    "baseRelease": "b56dbc3e9167094a8d19c67711da1808f94f2991",
+    "scope": "Candidate assistant-only database claim budget: maxWait 2 seconds, transaction timeout 15 seconds and transaction-local lock timeout 5 seconds. No provider retry, signature, lease, dispatch, purchase, message or recovery-application guard changes. Requires fresh sealed CI and review; not production recovery proof."
+  },
   "provisioningTraceContinuation": {
     "baseRelease": "2e471c7a752d43200162eb5d5949fa3a36da571f",
     "previousIndexSha256": "e03fa825d3697058675692eaf2089c82da80e35b0d043df22e7b37d93b87b1b4",
@@ -75,7 +79,7 @@
     "server/signupConnectionEvidence.js": "9c955f7873ae307cb1545f5eecef8a39af465611794d52765eb13d5967671ef9",
     "server/signupConnectionPreparation.js": "fcf26f48c739575fb38d23697b12fdd16aac93c5873535f636148d7787cbf463",
     "server/signupConnectionTransport.js": "c58ee644c29a7bb6765ea817e181c9d69b40dcf54069007498cad8e83a617f76",
-    "server/provisioningState.js": "122cda07216308a7d0fe628e346d03bcadf545b161aad20fe837ec5e77528513",
+    "server/provisioningState.js": "8587b2077bd46706d0fb18c4aa80cd563e9da571024fc3f7e1de8f9e75ff78d4",
     "server/vapiPhoneImportVerification.js": "bbde15745c31f6dbd7ec60be6b21bc146f3fb52502d07e282e3b2ac7db6f7277",
     "server/signupPendingConnection.js": "07e4913ca545cda715a632dda3a20495f8e21c02f28351107363d69098f05f47",
     "server/telegramBotApi.js": "ef6c99b197e6251945213d5c42af03d50bf4c6d1dadf4c98c2a9915a72e478c7",

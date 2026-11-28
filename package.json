@@ -22,6 +22,8 @@
     "stripe": "^22.3.2"
   },
   "scripts": {
+    "test:assistant-claim": "node --test --test-concurrency=1 tests/provisioning-assistant-claim.test.js tests/provisioning-state.test.js tests/provisioning-timeout.test.js tests/signup-assistant-failure-evidence.test.js",
+    "test:assistant-claim:postgres:local": "node scripts/run-local-signup-postgres-drill.js --assistant-claim-only",
     "test:purchase-transport": "node --test --test-concurrency=1 tests/purchase-transport-comparison.test.js tests/purchase-handoff-preflight.test.js tests/purchase-transport-evidence.test.js",
     "test:purchase-transport:postgres": "node --test tests/purchase-transport-postgres.test.js",
     "test:purchase-transport:http": "node --test tests/purchase-transport-http.test.js",

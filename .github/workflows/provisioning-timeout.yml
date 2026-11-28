@@ -32,6 +32,8 @@ jobs:
       DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/myaipa_recovery_drill_timeout_ci
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: 24.22.3
@@ -43,8 +45,19 @@ jobs:
           npm run backend:prepare
           npx prisma db push --skip-generate
       - name: Verify deterministic provisioning regressions
-        run: node --test tests/provisioning-timeout.test.js tests/provisioning-state.test.js
+        run: node --test tests/provisioning-timeout.test.js tests/provisioning-state.test.js tests/provisioning-assistant-claim.test.js
       - name: Verify real transaction timing and no duplicate dispatch
         env:
           RUN_DATABASE_INTEGRATION: "1"
-        run: node --test tests/provisioning-timeout-postgres.test.js
+        run: |
+          mkdir -p diagnostics/assistant-claim-ci
+          node -e 'const fs=require("node:fs"),crypto=require("node:crypto"),cp=require("node:child_process");const files=["server/provisioningState.js","tests/provisioning-assistant-claim.test.js","tests/provisioning-assistant-claim-postgres.test.js","tests/provisioning-timeout-postgres.test.js"];fs.writeFileSync("diagnostics/assistant-claim-ci/source.json",JSON.stringify({head:cp.execFileSync("git",["rev-parse","HEAD"],{encoding:"utf8"}).trim(),node:process.versions.node,scope:"synthetic-providers-real-disposable-postgres",productionRecoveryProven:false,sourceSha256:Object.fromEntries(files.map(p=>[p,crypto.createHash("sha256").update(fs.readFileSync(p)).digest("hex")]))},null,2));'
+          node --test --test-concurrency=1 --test-reporter=tap tests/provisioning-timeout-postgres.test.js tests/provisioning-assistant-claim-postgres.test.js | tee diagnostics/assistant-claim-ci/result.tap
+      - name: Save exact-source database timing evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: assistant-claim-${{ github.event.pull_request.head.sha || github.sha }}
+          retention-days: 7
+          path: diagnostics/assistant-claim-ci/
+          if-no-files-found: error
