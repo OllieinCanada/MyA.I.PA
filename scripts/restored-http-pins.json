@@ -1,4 +1,9 @@
 {
+  "provisioningTraceContinuation": {
+    "baseRelease": "2e471c7a752d43200162eb5d5949fa3a36da571f",
+    "previousIndexSha256": "e03fa825d3697058675692eaf2089c82da80e35b0d043df22e7b37d93b87b1b4",
+    "scope": "Pin candidate redacted tracing and passive context checkpoints for fresh sealed restored HTTP/SQL checks. No signup replay, provider action, historical-cause claim or release proof."
+  },
   "callSyncWorkloadContinuation": {
     "baseRelease": "ed3287c3b99f3251f339cec5511fcb6e834f0c7a",
     "initialCandidateHead": "57e460a13542481b937f6ab68df02a544759b9a8",
@@ -59,7 +64,9 @@
   "sha256": {
     "scripts/run-composite-recovery-ci.js": "9a3c2069cb268c25d8add52cbf4884d076cca9a7f4e8db55b9d4ee3d60d4c4ae",
     "scripts/composite-recovery-fixture.js": "46085044ab3ef3df77401c0c7f954691206ea52d5d71893a5f7ed1f02cd1d4e7",
-    "server/index.js": "e03fa825d3697058675692eaf2089c82da80e35b0d043df22e7b37d93b87b1b4",
+    "server/index.js": "5fcb907c0d40398f2be5c0f8f68099e713eb98ca1a6d7490970e8d9287a56584",
+    "server/provisioningRequestTrace.js": "f2aded5ef6db274a4da620f889ef5f9735089e084abd12d6e32ba59694fd0dbe",
+    "server/signupProvisioningContext.js": "99b58dcfd7a0f51c8ad5cc4a7c7a6c1e1fffa11e758c7eaf8c3a2bd8d318d617",
     "server/callSyncWorkload.js": "6dda338d4e4d65a1ea3c637a7916e584346e21ab3bbb10f345d9bc7cfd470ac6",
     "server/provisioningPreflightDiagnostic.js": "840eb18d0e2611783a720accc6e1a040832d8f94403d7e372d6cd9d4021e663c",
     "server/signupAgentTesting.js": "a64bbb94e6e14b245446726bb8ef414649e47c4ebd3b06720e88cc0250fe241f",

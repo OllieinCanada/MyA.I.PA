@@ -22,6 +22,7 @@ function fixture(mode='valid',baseline=false){
  const payload=normalizeSignupProvisioningPayload({business:{name:'Fixture Electric',phone:'+12895550111'},owner:{name:'Fixture Owner',email:'fixture@example.invalid',phone:'+19055550112'},aiAssistant:{serviceArea:'Niagara'}},{signingSecret:secret});
  const reports=[],counts={execute:0,claim:0,reconcile:0};let handler,errorHandler;
  const ctx={console:{error(){}},process:{env:{}},Object,String,Number,Error,normalizePhoneForMatch:x=>x,
+  provisioningRequestTrace:require('../server/provisioningRequestTrace').createProvisioningRequestTrace({write(){}}),
   assistantErrorEvidence:baseline?()=>null:assistantErrorEvidence,privateStrings,
   getProvisioningAuthorizationInput:()=>payload.provisioning,
   loadSignupProvisioningContextForAttempt:async()=>{if(mode==='missing-context')throw Object.assign(Error('private context'),{code:'PROVISIONING_CONTEXT_NOT_REGISTERED',statusCode:409});return {payload:mode==='bad-signature'?{...payload,business:{name:'tampered'}}:payload,eventKey:attemptId};},

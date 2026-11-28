@@ -34,10 +34,12 @@ jobs:
       - run: npx prisma db push --skip-generate
       - name: Synthetic core and actual authenticated loopback handlers
         run: |
+          set -euo pipefail
           mkdir -p diagnostics/signup-observability-ci
           npm run test:provider-maintenance | tee diagnostics/signup-observability-ci/maintenance.txt
           npm run test:signup-bugs | tee diagnostics/signup-observability-ci/bugs.txt
           node --test tests/signup-assistant-error.test.js tests/signup-purchase-error.test.js tests/signup-assistant-failure-evidence.test.js tests/signup-purchase-error-route.test.js | tee diagnostics/signup-observability-ci/provisioning-errors.txt
+          npm run test:provisioning-request-trace | tee diagnostics/signup-observability-ci/provisioning-request-trace.txt
       - name: Real isolated SQL concurrency and uncertainty (no providers)
         env:
           RUN_OBSERVABILITY_POSTGRES: '1'
@@ -51,6 +53,7 @@ jobs:
         run: |
           mkdir -p diagnostics/signup-observability-ci
           git rev-parse HEAD > diagnostics/signup-observability-ci/head.txt
+          sha256sum server/provisioningRequestTrace.js server/index.js tests/provisioning-request-trace.test.js tests/provisioning-request-trace-http.test.js tests/helpers/provisioning-error-route-fixture.js package.json > diagnostics/signup-observability-ci/provisioning-trace-source-hashes.txt
           sha256sum server/telegramBotApi.js server/telegramWebhookState.js server/index.js tests/telegram-bot-api.test.js tests/telegram-webhook-readback.test.js tests/telegram-webhook-postgres.test.js tests/helpers/telegram-webhook-fixture.js tests/fixtures/telegram-bot-api-e032da4.cjs package.json .github/workflows/signup-observability.yml > diagnostics/signup-observability-ci/webhook-source-hashes.txt
           sha256sum server/signupBindingTransaction.js server/signupBusinessRegistry.js server/signupSavedDiagnosis.js server/signupAlerts.js server/incidentAlerts.js tests/signup-binding-transaction.test.js tests/signup-business-safety.test.js tests/signup-saved-diagnosis.test.js tests/signup-mapping-timeout-postgres.test.js package.json > diagnostics/signup-observability-ci/mapping-source-hashes.txt
           sha256sum server/providerMaintenance.js server/signupBugHistory.js server/signupDiagnosticError.js server/signupAssistantError.js server/signupProvisioningError.js server/index.js server/adminSignupSetup.js server/adminSignupTracker.js server/reconciledTrackerEvidence.js src/SignupBugHistory.js src/signupControlRoomModel.js scripts/preview-admin-signup-tracker.js tests/reconciled-tracker-postgres.test.js tests/signup-observability-postgres.test.js tests/signup-observability-ui.test.js tests/signup-assistant-error.test.js tests/signup-purchase-error.test.js tests/signup-assistant-failure-evidence.test.js tests/signup-purchase-error-route.test.js tests/helpers/provisioning-error-route-fixture.js tests/signup-assistant-recovery.test.js .github/workflows/signup-observability.yml > diagnostics/signup-observability-ci/source-hashes.txt

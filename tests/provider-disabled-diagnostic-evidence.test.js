@@ -2,6 +2,11 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const {SOURCE_FILES,REQUIRED_CASES,validate}=require('../scripts/verify-provider-disabled-diagnostic-evidence');
 const expectedHead='a'.repeat(40),expectedSources=Object.fromEntries(SOURCE_FILES.map(p=>[p,'b'.repeat(64)]));
+test('diagnostic proof covers the shared guard trace dependency',()=>{
+ assert.ok(SOURCE_FILES.includes('server/provisioningRequestTrace.js'));
+ const value=fixture();value.sourceFiles['server/provisioningRequestTrace.js']='c'.repeat(64);
+ assert.throws(()=>validate(value,{expectedHead,expectedSources}));
+});
 function fixture(){return{head:expectedHead,scope:'provider-disabled-diagnostic-disposable-sql-only',passed:true,skips:0,postgresVersion:'18.6',productionUsed:false,providerRequests:0,forbiddenTransportAttempts:0,messages:0,originalHistoricalCauseProven:false,makeEngineVerified:false,osSandboxProven:false,cleanup:{ownedRowsRemaining:0,connectionsClosed:true,httpServerClosed:true,complete:true},cases:REQUIRED_CASES.map(name=>({name,passed:true})),sourceFiles:{...expectedSources}};}
 test('complete exact-source SQL fixture proof is accepted only in its synthetic scope',()=>{const r=validate(fixture(),{expectedHead,expectedSources});assert.equal(r.sqlCases,8);assert.equal(r.makeEngineVerified,false);assert.equal(r.originalHistoricalCauseProven,false);});
 for(const [name,mutate]of [

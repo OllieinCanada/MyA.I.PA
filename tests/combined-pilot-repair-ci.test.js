@@ -24,7 +24,7 @@ test('actual runtime and corrected safety bytes are pinned separately from histo
   assert.ok(TESTS.focused.includes('tests/signup-notification-readiness-regression.test.js'));
   for(const file of ['server/signupAgentTesting.js','server/smsDispatchReadiness.js'])assert.ok(SOURCES.includes(file));
   assert.ok(SOURCES.includes('tests/call-sync-accounting.test.js'));
-  for(const file of ['server/signupSetupJobs.js','server/automaticCallNotifications.js','server/automaticNotificationContext.js','server/notificationOutcomes.js',
+  for(const file of ['server/provisioningRequestTrace.js','server/signupProvisioningContext.js','server/signupSetupJobs.js','server/automaticCallNotifications.js','server/automaticNotificationContext.js','server/notificationOutcomes.js',
     'server/callSyncHealth.js','server/callSyncReporting.js','server/callSyncWorkload.js','server/trialCalendarPolicy.js',
     'server/stripeTrialBilling.js','server/trialUsagePolicy.js','server/providerMaintenance.js','server/signupBugHistory.js','server/signupDiagnosticError.js',
     'server/automaticAssistantConnectionPlan.js','server/compositeCallNotifications.js','server/serviceIntakePrompt.js','server/confirmationConversationPolicy.js',
