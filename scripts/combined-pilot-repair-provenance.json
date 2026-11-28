@@ -1,4 +1,10 @@
 {
+  "callSyncWorkloadContinuation": {
+    "baseRelease": "ed3287c3b99f3251f339cec5511fcb6e834f0c7a",
+    "initialCandidateHead": "57e460a13542481b937f6ab68df02a544759b9a8",
+    "previousIndexSha256": "aa286733a606d13c153242bac7a08aff0ca0bc644ae9c0cd49f0daa30612900f",
+    "scope": "Pin reviewed background pacing, bounded unchanged-terminal-call digests and touched-row file merging for fresh exact-source SQL/HTTP/full CI. Routing, authenticated request linking, usage reconciliation and provider no-replay protections remain intact. These pins are source provenance, not production capacity, historical root-cause or release proof."
+  },
   "providerDisabledDiagnosticContinuation": {
     "baseRelease": "9ad9ebc0f0049be94f184f6d3a4366e5baba1c7a",
     "initialCandidateHead": "7712f8371b559004887855c81e1b106d2b503e87",
@@ -139,7 +145,8 @@
     "server/boundedBusinessMappingAdapters.js": "69cc5596edc20e8a2e689ff826bb2e424e4beaff8f41fa970ee40efa4aed3744",
     "server/boundedBusinessMappingWriter.js": "c8b129211d807e780d55600695362cbcb813c29ac784a147dbed1b9ca746db6a",
     "server/boundedMappingControl.js": "6bdf571cea3fc1d2a52c20e8bc89a49d10ffbe069a7d2fd463eaadb25354b36a",
-    "server/index.js": "aa286733a606d13c153242bac7a08aff0ca0bc644ae9c0cd49f0daa30612900f",
+    "server/index.js": "e03fa825d3697058675692eaf2089c82da80e35b0d043df22e7b37d93b87b1b4",
+    "server/callSyncWorkload.js": "6dda338d4e4d65a1ea3c637a7916e584346e21ab3bbb10f345d9bc7cfd470ac6",
     "server/provisioningPreflightDiagnostic.js": "840eb18d0e2611783a720accc6e1a040832d8f94403d7e372d6cd9d4021e663c",
     "server/signupAgentTesting.js": "a64bbb94e6e14b245446726bb8ef414649e47c4ebd3b06720e88cc0250fe241f",
     "server/smsDispatchReadiness.js": "f3a2e3ff5ce8f6ba7619c196778c4c2588330fd4eb351033e81a20646c7ee148",
