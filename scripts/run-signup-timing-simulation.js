@@ -16,16 +16,18 @@ const journal = require('../server/intakeRecoveryJournal');
 const make = require('../server/makeSignupWebhook');
 const { readMakeSignupHandoff } = require('../server/makeSignupHandoff');
 const { assertLegacyBusinessResourcesSafe } = require('../server/signupLegacyResourceSafety');
+const { createFixture: createHistoryFixture } = require('../tests/helpers/call-sync-workload-fixture');
 const { writeManifest } = require('./provider-hardening-evidence');
 
 const ROOT = path.resolve(__dirname, '..');
 const PROFILES = ['baseline', 'slow-model-read', 'transient-model-timeout',
-  'event-loop-pause', 'lost-provider-response', 'lost-admission-ack'];
+  'event-loop-pause', 'lost-provider-response', 'lost-admission-ack', 'unpaced-history-control', 'paced-history'];
 const INDEX = fs.readFileSync(path.join(ROOT, 'server/index.js'), 'utf8');
 const SOURCE_FILES = ['scripts/run-signup-timing-simulation.js', 'server/index.js',
   'server/signupSetupJobs.js', 'server/signupProvisioningContext.js', 'server/signupProvisioning.js',
   'server/intakeRecoveryJournal.js', 'server/makeSignupWebhook.js', 'server/makeSignupHandoff.js',
-  'server/signupLegacyResourceSafety.js', 'tests/helpers/twilio-status-memory-db.js'];
+  'server/signupLegacyResourceSafety.js', 'tests/helpers/twilio-status-memory-db.js',
+  'server/callSyncWorkload.js', 'tests/helpers/call-sync-workload-fixture.js'];
 
 // Instrumentation, not an OS sandbox. The extracted application function also
 // receives a closed require map, synthetic env, and no native fetch reference.
@@ -169,6 +171,19 @@ async function runScenario(profile, count) {
   }
   const loop = monitorEventLoopDelay({ resolution: 5 }); loop.enable();
   const elapsed = performance.now(), cpu = process.cpuUsage();
+  const history = ['unpaced-history-control', 'paced-history'].includes(profile)
+    ? createHistoryFixture({ count, unoptimizedControl: profile === 'unpaced-history-control', writeCpuMs: 2 }) : null;
+  let historyCompleted = false, handoffsWhileHistoryPending = 0;
+  // The same application sweep and synthetic records, with only pacing/cache
+  // disabled in the control. This is not an older-build or PostgreSQL benchmark.
+  const historyRun = history ? (async () => {
+    const rounds = [];
+    for (let i = 0; i < 3; i++) rounds.push(await history.run());
+    historyCompleted = true;
+    return rounds.map(({ fetched, synced, unchanged, rewritten }) => ({ fetched, synced, unchanged, rewritten }));
+  })() : Promise.resolve(null);
+  // Observe failures immediately; await below still propagates the original.
+  historyRun.catch(() => {});
   try {
     await delay(15); // Let the event-loop sampler start before injecting CPU work.
     const worker = () => jobs.drainSignupSetupJobs({ prisma, secret, now: () => logicalNow, batchSize: 3,
@@ -181,6 +196,7 @@ async function runScenario(profile, count) {
             beforeDispatch: () => stage('dispatch_admission', beforeDispatch),
           })), () => stage('receipt_reconciliation', async () => recoveryVisible ? receipts.get(job.eventKey) || null : null));
           assert.equal(result.data?.accepted, true, 'Stub acceptance is not signup readiness');
+          if (history && !historyCompleted) handoffsWhileHistoryPending++;
           finishes.set(job.eventKey, performance.now());
           return { ok: true };
         } finally { active--; }
@@ -194,6 +210,15 @@ async function runScenario(profile, count) {
       const pending = [...rows.values()].filter(x => x.key.startsWith(jobs.PREFIX) && ['pending', 'processing'].includes(x.data.status));
       if (!pending.length) break;
       logicalNow += 310000;
+    }
+    const handoffBatchWallMs = performance.now() - elapsed;
+    const historyRounds = await historyRun;
+    if (history) {
+      assert.equal(history.counts.writes, count * (profile === 'paced-history' ? 1 : 3));
+      assert.equal(history.counts.details, count * 3, 'Late artifacts still get fresh detail reads');
+      assert.equal(history.counts.requestLinks, count * 3, 'Request linking is not disabled');
+      assert.equal(history.counts.fileWrites, profile === 'paced-history' ? 1 : 3);
+      if (profile === 'paced-history') assert.ok(handoffsWhileHistoryPending > 0, 'Signup worker progresses while history yields');
     }
     await delay(15); // Capture the scheduled sampler tick after the final pause.
     for (const id of payloads.keys()) {
@@ -216,6 +241,9 @@ async function runScenario(profile, count) {
     const usage = process.cpuUsage(cpu);
     return { profile, fakeSignups: count, assertionsPassed: true, wallMs: performance.now() - elapsed,
       cpuMs: (usage.user + usage.system) / 1000, peakActiveJobs: peakActive, injectedFaults: faultCount,
+      handoffBatchWallMs,
+      backgroundHistory: history ? { mode: profile, rounds: historyRounds, counts: { ...history.counts }, handoffsWhileHistoryPending,
+        syntheticCpuMsPerWrite: 2, providerReadsAreStubs: true, databaseIsInMemory: true } : null,
       simulatedHandoffs: [...posts.values()].reduce((a, b) => a + b, 0), duplicateHandoffs: [...posts.values()].filter(x => x > 1).length,
       completedHandoffJobs: outcomes.filter(x => x.status === 'completed').length,
       heldHandoffJobs: outcomes.filter(x => x.status === 'failed').length,
@@ -224,7 +252,7 @@ async function runScenario(profile, count) {
       serializedModelQueueWait: summary(queueWaits.map(x => x.durationMs)),
       perJobObservedElapsed: summary([...finishes].map(([id, t]) => t - starts.get(id))), stages, outcomes,
     };
-  } finally { loop.disable(); }
+  } finally { try { await historyRun; } finally { loop.disable(); } }
 }
 
 async function runSimulation({ count = 20, profiles = PROFILES } = {}) {
@@ -240,6 +268,7 @@ async function runSimulation({ count = 20, profiles = PROFILES } = {}) {
       ready: false, applyAllowed: false, fullSignupCompletionProven: false, productionRootCauseProven: false,
       database: 'transactionally rolled-back serialized in-memory model; not PostgreSQL',
       controlledFaults: { asynchronousModelDelayMs: 20, timeoutDelayMs: 60, synchronousPauseMs: 60, scaledModelBudgetMs: 25,
+        historyRounds: 3, syntheticCpuMsPerHistoryWrite: 2, backgroundPauseMs: 100,
         workerBackoffClock: 'advanced between rounds, not real elapsed wait' },
       protections: { applicationStartupImported: false, workersStarted: false, productionConnections: 0,
         liveProviderCalls: 0, realMessages: 0, paidActions: 0, blockedUnexpectedTransportAttempts: networkAttempts(),
@@ -250,6 +279,7 @@ async function runSimulation({ count = 20, profiles = PROFILES } = {}) {
         'Archived/shared-resource discovery is not exercised: fixtures have no prior resources.',
         'Event-loop and stage timings describe this local process only. Model queue wait is not measured production pool/lock wait.',
         'Artificial delays and scaled timeouts demonstrate mechanisms; they do not reproduce or prove the cause of a historical production incident.',
+        'History control disables the new pacing/cache in the same application sweep; it is not a historical-build comparison or production capacity test.',
         'Stub handoff acceptance/job completion is not full signup readiness or live delivery proof.'], scenarios };
   });
 }
@@ -262,8 +292,8 @@ async function main(argv = process.argv.slice(2)) {
   const directory = fs.mkdtempSync(path.join(parent, 'signup-timing-simulation-'));
   const output = path.join(directory, 'report.json'); writeManifest(output, report);
   console.log(JSON.stringify({ output, assertionsPassed: report.assertionsPassed, ready: false,
-    scenarios: report.scenarios.map(({ profile, fakeSignups, wallMs, eventLoop, simulatedHandoffs, heldHandoffJobs, duplicateHandoffs, stages }) =>
-      ({ profile, fakeSignups, wallMs, eventLoop, simulatedHandoffs, heldHandoffJobs, duplicateHandoffs, stages })),
+    scenarios: report.scenarios.map(({ profile, fakeSignups, wallMs, handoffBatchWallMs, backgroundHistory, eventLoop, simulatedHandoffs, heldHandoffJobs, duplicateHandoffs, stages }) =>
+      ({ profile, fakeSignups, wallMs, handoffBatchWallMs, backgroundHistory, eventLoop, simulatedHandoffs, heldHandoffJobs, duplicateHandoffs, stages })),
     limitations: report.limitations }, null, 2));
 }
 if (require.main === module) main().catch(error => { console.error(error.code || error.message); process.exitCode = 1; });

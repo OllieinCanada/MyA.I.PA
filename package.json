@@ -142,6 +142,7 @@
     "test:signup-setup-jobs": "node --test --test-concurrency=1 tests/signup-setup-jobs.test.js tests/signup-prehandoff-failures.test.js tests/signup-status-api.test.js tests/intake-recovery-journal.test.js",
     "test:signup-setup:postgres": "node --max-old-space-size=64 scripts/run-signup-setup-chain-drill.js",
     "simulate:signup-timing": "node scripts/run-signup-timing-simulation.js --count=20",
+    "test:call-sync-workload": "node --test --test-concurrency=1 tests/call-sync-workload.test.js tests/call-sync-health.test.js tests/call-sync-routing.test.js tests/call-sync-accounting.test.js tests/signup-timing-simulation.test.js",
     "test:signup-recovery:postgres:local": "node scripts/run-local-signup-postgres-drill.js",
     "test:database:disposable-render": "node scripts/run-disposable-postgres-drill.js --confirm=CREATE_DELETE_FREE_DATABASE",
     "start": "react-scripts start",
