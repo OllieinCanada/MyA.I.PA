@@ -2,6 +2,11 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const {SOURCE_FILES,REQUIRED_CASES,validate}=require('../scripts/verify-purchase-transport-evidence');
 const head='a'.repeat(40),sources=Object.fromEntries(SOURCE_FILES.map(p=>[p,'b'.repeat(64)]));
+test('purchase proof covers the database-independent trace dependency',()=>{
+ assert.ok(SOURCE_FILES.includes('server/provisioningRequestTrace.js'));
+ const value=good();value.sourceFiles['server/provisioningRequestTrace.js']='c'.repeat(64);
+ assert.throws(()=>check(value));
+});
 function good(){return {head,sourceFiles:{...sources},scope:'synthetic-purchase-transport-sql-http-only',passed:true,skips:0,postgresVersion:'18.1',productionUsed:false,providerRequests:0,messages:0,makeEngineVerified:false,originalFailureCauseProven:false,osSandboxProven:false,unexpectedOutboundAttempts:0,cases:REQUIRED_CASES.map(name=>({name,passed:true})),cleanup:{complete:true,ownedRowsRemaining:0,serversClosed:true,connectionsClosed:true,unrelatedPreserved:true}};}
 const check=v=>validate(v,{expectedHead:head,expectedSources:sources});
 test('only complete exact-head synthetic SQL evidence is accepted',()=>assert.equal(check(good()).accepted,true));

@@ -1,6 +1,6 @@
 'use strict';
 const fs=require('node:fs'),crypto=require('node:crypto');
-const SOURCE_FILES=Object.freeze(['server/index.js','server/provisioningPreflightDiagnostic.js','server/signupProvisioning.js','server/signupProvisioningContext.js','scripts/prepare-provider-disabled-make-diagnostic.js','scripts/verify-provider-disabled-diagnostic-evidence.js','tests/provisioning-preflight-diagnostic-postgres.test.js','tests/helpers/provisioning-error-route-fixture.js','.github/workflows/provider-disabled-diagnostic.yml']);
+const SOURCE_FILES=Object.freeze(['server/index.js','server/provisioningRequestTrace.js','server/provisioningPreflightDiagnostic.js','server/signupProvisioning.js','server/signupProvisioningContext.js','scripts/prepare-provider-disabled-make-diagnostic.js','scripts/verify-provider-disabled-diagnostic-evidence.js','tests/provisioning-preflight-diagnostic-postgres.test.js','tests/helpers/provisioning-error-route-fixture.js','.github/workflows/provider-disabled-diagnostic.yml']);
 const REQUIRED_CASES=Object.freeze(['read-only SQL preserves unrelated fixture','SQL refuses and rolls back an injected write','synthetic key conflict refuses without mutation','nonblocking lock conflict and release','SQL timeout retains P2028 checkpoint','invalid auth never reaches SQL','real HTTP empty multipart','real HTTP marker multipart']);
 function sourceHashes(){return Object.fromEntries(SOURCE_FILES.map(p=>[p,crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex')]));}
 function validate(value,{expectedHead,expectedSources}={}){

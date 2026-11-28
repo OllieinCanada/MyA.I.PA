@@ -25,19 +25,31 @@ function rowData(row) {
   return row?.data && typeof row.data === "object" && !Array.isArray(row.data) ? row.data : {};
 }
 
-async function withContextLock(prisma, key, callback) {
+function noteContext(trace, checkpoint) {
+  if (typeof trace !== 'function') return;
+  try { const pending = trace(checkpoint); if (pending && typeof pending.catch === 'function') pending.catch(() => {}); }
+  catch (_) { /* Observability cannot alter locks, writes, results or failures. */ }
+}
+
+async function withContextLock(prisma, key, callback, trace) {
   if (!prisma?.runtimeStore || typeof prisma.$transaction !== "function") {
     throw contextError("Durable provisioning context storage is unavailable.", "PROVISIONING_CONTEXT_STORE_UNAVAILABLE", 503);
   }
-  return prisma.$transaction(async (tx) => {
+  noteContext(trace, 'context_transaction_wait');
+  const result = await prisma.$transaction(async (tx) => {
+    noteContext(trace, 'context_transaction_admitted');
     if (typeof tx.$queryRaw === "function") {
       // PostgreSQL returns `void` from pg_advisory_xact_lock. Prisma cannot
       // deserialize that unsupported result type, so project the lock result
       // as text while retaining the same transaction-scoped lock semantics.
+      noteContext(trace, 'context_lock_wait');
       await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))::text AS lock_result`;
+      noteContext(trace, 'context_lock_acquired');
     }
     return callback(tx);
   });
+  noteContext(trace, 'context_transaction_completed');
+  return result;
 }
 
 function registeredSignupEventKey(record) {
@@ -102,11 +114,13 @@ async function registerSignupProvisioningContextForAttempt(options) {
   return { payload: record.payload, eventKey: registeredSignupEventKey(record) };
 }
 
-async function loadContext({ prisma, idempotencyKey, contextHash, lock = true }) {
+async function loadContext({ prisma, idempotencyKey, contextHash, lock = true, trace }) {
   const key = contextStoreKey(idempotencyKey);
   const expectedHash = String(contextHash || "").trim().toLowerCase();
   return withContextLock(prisma, key, async (tx) => {
+    noteContext(trace, 'context_read_started');
     const row = await tx.runtimeStore.findUnique({ where: { key } });
+    noteContext(trace, 'context_read_completed');
     const current = rowData(row);
     if (!current.payload || current.contextHash !== expectedHash) {
       throw contextError(
@@ -117,15 +131,17 @@ async function loadContext({ prisma, idempotencyKey, contextHash, lock = true })
     }
     if (lock && !current.lockedAt) {
       const next = { ...current, lockedAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+      noteContext(trace, 'context_update_started');
       await tx.runtimeStore.upsert({
         where: { key },
         update: { data: next },
         create: { key, data: next },
       });
+      noteContext(trace, 'context_update_completed');
       return next;
     }
     return current;
-  });
+  }, trace);
 }
 
 async function loadSignupProvisioningContext(options) {

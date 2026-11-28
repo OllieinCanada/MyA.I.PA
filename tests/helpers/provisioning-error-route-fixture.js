@@ -8,6 +8,7 @@ const {provisioningErrorEvidence,createProvisioningAuthFailureCapture}=require('
 const {privateStrings}=require('../../server/signupAssistantError');
 const journal=require('../../server/signupBugHistory');
 const {sanitizeMakeFailureEnvelope}=require('../../server/makeSignupWebhook');
+const {createProvisioningRequestTrace}=require('../../server/provisioningRequestTrace');
 const {fixture:memoryJournal}=require('./signup-bug-memory-db');
 const source=fs.readFileSync(require.resolve('../../server/index'),'utf8').replace(/\r\n/g,'\n');
 function section(start,end){const a=source.indexOf(start),b=source.indexOf(end,a+start.length);assert.ok(a>=0&&b>a,'Actual source boundaries must exist');return source.slice(a,b);}
@@ -22,9 +23,10 @@ const path='/api/integrations/twilio/purchase-number',secret='synthetic-signing-
 function fixture(mode='valid'){
  const db=memoryJournal(),target=db.add();
  const payload=provision.normalizeSignupProvisioningPayload(target.payload,{signingSecret:secret});
- const counts={claims:0,purchases:0,incidents:0,warnings:0},captures=[];let handlers,errorHandler;
+ const counts={claims:0,purchases:0,incidents:0,warnings:0},captures=[],traceEvents=[];let handlers,errorHandler;
  const record=options=>{const job=journal.safelyRecordSignupBug({...options,prisma:db.prisma,listSignups:db.listSignups});captures.push(job);return job;};
  const ctx={console:{error(){},warn(){counts.warnings++;}},process:{env:{PROVISIONING_SIGNING_SECRET:secret}},Object,String,Number,Error,
+  provisioningRequestTrace:createProvisioningRequestTrace({write:e=>traceEvents.push(e)}),
   INTEGRATION_API_KEY:'synthetic-connection-key',
   getMakeSignupWebhookConfig:()=>({apiKey:'synthetic-make-key'}),getMakeSignupWebhookToken:()=>'',
   hasValidIntegrationKey:req=>req.headers['x-myaipa-integration-key']==='synthetic-connection-key',
@@ -46,7 +48,7 @@ function fixture(mode='valid'){
  };
  vm.createContext(ctx);vm.runInContext(integrationKeyGuard+'\n'+auth+'\n'+loader+'\n'+route+'\n'+runtimeArea+'\n'+errors,ctx);
  const defaultBody={areaCode:payload.provisioning.preferredAreaCode,region:payload.provisioning.preferredRegion,provisioning:payload.provisioning};
- return {db,target,payload,ctx,counts,captures,handlers:()=>handlers,errorHandler:()=>errorHandler,defaultBody,path,
+ return {db,target,payload,ctx,counts,captures,traceEvents,handlers:()=>handlers,errorHandler:()=>errorHandler,defaultBody,path,
   limiter:(rateLimitFactory)=>{ctx.rateLimit=rateLimitFactory||require('express-rate-limit').rateLimit;return vm.runInContext(limiter+'\nprovisioningRequestProcessRateLimiter',ctx);},
   settle:()=>Promise.all(captures),
   async run({body=defaultBody,query={},headers={'x-myaipa-integration-key':'synthetic-connection-key'}}={}){

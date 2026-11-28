@@ -5,6 +5,7 @@ if (process.env.DISABLE_LOCAL_ENV_FILES !== "1") {
 }
 
 const crypto = require("crypto");
+const { createProvisioningRequestTrace } = require('./provisioningRequestTrace');
 const { rejectCompressedRequests } = require('./requestSecurity');
 const { dispatchHandler: notificationDispatchHandler, dispatchReadinessHandler } = require('./smsNotificationDispatch');
 const { executeAutomaticCallNotifications, SUMMARY_TOOL: AUTOMATIC_SUMMARY_TOOL } = require('./automaticCallNotifications');
@@ -428,6 +429,10 @@ const {
 if (process.env.DISABLE_LOCAL_ENV_FILES !== "1") loadPowerShellEnvAssignments(path.join(__dirname, "..", ".env.local"));
 
 const app = express();
+const provisioningRequestTrace = createProvisioningRequestTrace();
+// Before body parsing, compressed-request rejection and process admission. No
+// database dependency: even parser/auth failures leave a redacted breadcrumb.
+app.use(provisioningRequestTrace.middleware);
 const PORT = Number(process.env.PORT || 8787);
 const dataDir = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.join(__dirname, "..", "data");
 const signupDuplicateSubmissions = new Map();
@@ -474,8 +479,15 @@ const provisioningRequestProcessRateLimiter = rateLimit({
   },
   handler: (req, res) => {
     const configured = INTEGRATION_API_KEY || getMakeSignupWebhookConfig().apiKey || getMakeSignupWebhookToken();
-    if (!configured) return res.status(503).json({ error: 'Provisioning authentication is not configured.' });
-    if (!hasValidProvisioningConnectionKey(req)) return res.status(401).json({ error: 'Invalid provisioning key.' });
+    if (!configured) {
+      provisioningRequestTrace.failure(req, { code: 'PROVISIONING_AUTH_NOT_CONFIGURED' });
+      return res.status(503).json({ error: 'Provisioning authentication is not configured.' });
+    }
+    if (!hasValidProvisioningConnectionKey(req)) {
+      provisioningRequestTrace.failure(req, { code: 'PROVISIONING_AUTH_INVALID' });
+      return res.status(401).json({ error: 'Invalid provisioning key.' });
+    }
+    provisioningRequestTrace.failure(req, { code: getProvisioningSigningSecret() ? 'PROVISIONING_AUTHORIZATION_INVALID' : 'PROVISIONING_SIGNING_NOT_CONFIGURED' });
     return res.status(getProvisioningSigningSecret() ? 401 : 503).json({ error: getProvisioningSigningSecret()
       ? 'Invalid signed provisioning request.' : 'Provisioning request signing is not configured.' });
   },
@@ -11251,8 +11263,10 @@ async function sendMakeSignupCompleted(payload, { resumeExistingOnly = false, be
 
   try {
     let response, rawText;
+    let handoffTrace;
     try {
       await beforeDispatch();
+      handoffTrace = provisioningRequestTrace.startHandoff(canonicalEventKey, normalizedPayload.provisioning);
       const handoff = await readMakeSignupHandoff({ url: safeUrl, options: {
         method: "POST",
         headers,
@@ -11260,7 +11274,9 @@ async function sendMakeSignupCompleted(payload, { resumeExistingOnly = false, be
         signal: createTimeoutSignal(timeoutMs),
       }, onUncertain: ({ code }) => recordRecoveryOperation({ prisma, identity: recoveryIdentity, operationId: recoveryOperationId, kind: "handoff", status: "uncertain", failureCode: code }) });
       response = handoff.response; rawText = handoff.text;
+      handoffTrace.finish(response.status); // HTTP receipt, never setup-success proof.
     } catch (error) {
+      if (handoffTrace) handoffTrace.failure(error);
       console.error("[make:signup] webhook request failed", {
         eventKey,
         durationMs: Date.now() - startedAt,
@@ -11368,6 +11384,7 @@ function rejectProvisioningAuthentication(req,res,{phase,code,status,message}) {
   // Preserve the public response and admission rules. No caller-supplied ID or
   // token is attributed to a signup. Sampling prevents anonymous DB-write floods.
   const error=Object.assign(new Error(message),{code,statusCode:status});
+  provisioningRequestTrace.failure(req, error); // Before the fallible DB capture.
   void captureProvisioningAuthFailure(req,phase,error).then(result=>{
     if(!result?.recorded&&!result?.suppressed&&!result?.ignored)console.warn('[bug-history] authentication diagnostic save unconfirmed; no capture retry');
   }).catch(()=>{});
@@ -11379,6 +11396,7 @@ function hasValidProvisioningConnectionKey(req) {
     || safeEqualString(String(req.headers['x-make-webhook-token'] || '').trim(), getMakeSignupWebhookToken());
 }
 function requireProvisioningKey(req, res, next) {
+  provisioningRequestTrace.observeProof(req, getProvisioningAuthorizationInput(req));
   const makeSignupKey = getMakeSignupWebhookConfig().apiKey;
   const suppliedMakeKey = String(req.headers["x-make-apikey"] || "").trim();
   const makeWebhookToken = getMakeSignupWebhookToken();
@@ -11388,6 +11406,7 @@ function requireProvisioningKey(req, res, next) {
     || safeEqualString(suppliedMakeKey, makeSignupKey)
     || safeEqualString(suppliedWebhookToken, makeWebhookToken)
   ) {
+    provisioningRequestTrace.checkpoint(req, 'connection_verified');
     return next();
   }
   if (!INTEGRATION_API_KEY && !makeSignupKey && !makeWebhookToken) {
@@ -11442,6 +11461,7 @@ function requireProvisioningAuthorization(req, res, next) {
     return rejectProvisioningAuthentication(req,res,{phase:'signature-auth',code:'PROVISIONING_AUTHORIZATION_INVALID',status:401,message:'Invalid signed provisioning request.'});
   }
   req.provisioningAuthorization = input;
+  provisioningRequestTrace.verifiedProof(req, input);
   return next();
 }
 
@@ -11501,12 +11521,13 @@ async function readSignupAssociationEvidence(scope) {
 
 async function loadTrustedProvisioningContext(req) {
   const authorization = req.provisioningAuthorization || getProvisioningAuthorizationInput(req);
-  const registered = await loadSignupProvisioningContextForAttempt({
+  const registered = await provisioningRequestTrace.step(req, 'context_load', () => loadSignupProvisioningContextForAttempt({
     prisma,
     idempotencyKey: authorization.idempotencyKey,
     contextHash: authorization.contextHash,
     lock: true,
-  });
+    trace: checkpoint => provisioningRequestTrace.contextCheckpoint(req, checkpoint),
+  }));
   const payload = registered.payload;
   if (!verifySignupProvisioningAuthorization(payload, getProvisioningSigningSecret())) {
     const error = new Error("The registered provisioning context failed authorization.");
@@ -11519,7 +11540,8 @@ async function loadTrustedProvisioningContext(req) {
   // but before lifecycle/legacy checks that can fail before a provider claim.
   // This is attribution, not permission to provision or mark setup complete.
   req.signupProvisioningAttemptId = attemptId;
-  const attempt = await prisma.signupAttempt.findUnique({ where: { eventKey: attemptId } });
+  provisioningRequestTrace.bindSignup(req, attemptId);
+  const attempt = await provisioningRequestTrace.step(req, 'lifecycle_check', () => prisma.signupAttempt.findUnique({ where: { eventKey: attemptId } }));
   assertSignupOpen(attempt || {});
   const record = listSignupDashboardRecords().find((item) => item.signupAttemptId === attemptId);
   assertSignupOpen(record || {});
@@ -11538,6 +11560,7 @@ async function loadTrustedProvisioningContext(req) {
   // Provider callbacks must keep the server-owned binding. Normalization can
   // change the payload hash for legacy signups that have no explicit ID.
   req.signupProvisioningAttemptId = attemptId;
+  provisioningRequestTrace.checkpoint(req, 'context_validation_completed');
   return payload;
 }
 
@@ -14973,15 +14996,16 @@ app.post(
       throw error;
     }
     const friendlyName = buildProvisioningResourceName("twilio-number", authorization.idempotencyKey);
+    provisioningRequestTrace.checkpoint(req, 'preferences_verified');
     purchasePhase='claim';
-    const result = await runProvisioningStep({
+    const result = await provisioningRequestTrace.step(req, 'provisioning_step', () => runProvisioningStep({
       prisma,
       kind: "twilio-number",
       idempotencyKey: authorization.idempotencyKey,
       contextHash: authorization.contextHash,
       verifyCompleted: (result) => verifySavedProvisioningResources("twilio-number", result),
       reconcile: null,
-      execute: () => { purchasePhase='purchase'; return purchaseTwilioPhoneNumber({
+      execute: () => { purchasePhase='purchase'; return provisioningRequestTrace.step(req, 'provider_dispatch', () => purchaseTwilioPhoneNumber({
         areaCode: preferredAreaCode,
         region: preferredRegion,
         allowedAreaCodes: trustedPayload.provisioning?.allowedAreaCodes,
@@ -14991,11 +15015,12 @@ app.post(
       }, { onProgress: event => signupNumberSearchTracker.record(authorization.idempotencyKey, authorization.contextHash, event) }).catch(error => {
         try { signupNumberSearchTracker.record(authorization.idempotencyKey, authorization.contextHash, { phase: 'failed' }); } catch (_) { /* Preserve the original provider failure. */ }
         throw error;
-      }); },
-    });
+      })); },
+    }));
 
     res.status(result.reused ? 200 : 201).json({ success: true, ok: true, ...result });
     } catch(error) {
+      provisioningRequestTrace.failure(req, error); // Log before any DB save attempt.
       try {
         req.signupProvisioningFailure=provisioningErrorEvidence({operation:'purchase',phase:purchasePhase,error,
           contextHash:req.signupProvisioningAttemptId?req.provisioningAuthorization?.contextHash:null,
@@ -15036,9 +15061,10 @@ app.post(
     await requireCompletedProvisioningStage(authorization, "twilio-number", {
       twilioPhoneNumber: assignedPhone,
     });
+    provisioningRequestTrace.checkpoint(req, 'prerequisites_verified');
     const resourceName = buildProvisioningResourceName("vapi-assistant", authorization.idempotencyKey);
     assistantPhase='claim';
-    const result = await runProvisioningStep({
+    const result = await provisioningRequestTrace.step(req, 'provisioning_step', () => runProvisioningStep({
       prisma,
       kind: "vapi-assistant",
       idempotencyKey: authorization.idempotencyKey,
@@ -15046,21 +15072,22 @@ app.post(
       verifyCompleted: (result) => verifySavedProvisioningResources("vapi-assistant", result),
       reconcile: async () => {
         assistantPhase='reconcile';
-        return createSignupVapiAssistant({
+        return provisioningRequestTrace.step(req, 'provider_reconcile', () => createSignupVapiAssistant({
           normalizedPayload: trustedPayload,
           assignedPhone,
           resourceName,
           reconcileOnly: true,
-        });
+        }));
       },
-      execute: () => { assistantPhase='create'; return createSignupVapiAssistant({
+      execute: () => { assistantPhase='create'; return provisioningRequestTrace.step(req, 'provider_dispatch', () => createSignupVapiAssistant({
         normalizedPayload: trustedPayload,
         assignedPhone,
         resourceName,
-      }); },
-    });
+      })); },
+    }));
     res.status(result.reused ? 200 : 201).json({ success: true, ok: true, ...result });
     } catch (error) {
+      provisioningRequestTrace.failure(req, error); // Independent of saved diagnosis.
       try { req.signupAssistantFailure=assistantErrorEvidence({error,phase:assistantPhase,
         contextHash:req.signupProvisioningAttemptId?req.provisioningAuthorization?.contextHash:null,
         privateValues:privateStrings([assistantPayload,req.body,req.query,req.headers])});
@@ -15088,24 +15115,25 @@ app.post(
     const assistantId = String(body.assistantId || "").trim();
     await requireCompletedProvisioningStage(authorization, "twilio-number", { twilioPhoneNumber });
     await requireCompletedProvisioningStage(authorization, "vapi-assistant", { assistantId });
+    provisioningRequestTrace.checkpoint(req, 'prerequisites_verified');
     const resourceName = buildProvisioningResourceName("vapi-phone", authorization.idempotencyKey);
-    const result = await runProvisioningStep({
+    const result = await provisioningRequestTrace.step(req, 'provisioning_step', () => runProvisioningStep({
       prisma,
       kind: "vapi-import",
       idempotencyKey: authorization.idempotencyKey,
       contextHash: authorization.contextHash,
       verifyCompleted: (result) => verifySavedProvisioningResources("vapi-import", result),
-      reconcile: () => reconcileVapiPhoneNumberImport({
+      reconcile: () => provisioningRequestTrace.step(req, 'provider_reconcile', () => reconcileVapiPhoneNumberImport({
         twilioPhoneNumber,
         assistantId,
         name: resourceName,
-      }),
-      execute: () => importTwilioPhoneNumberToVapi({
+      })),
+      execute: () => provisioningRequestTrace.step(req, 'provider_dispatch', () => importTwilioPhoneNumberToVapi({
         twilioPhoneNumber,
         assistantId,
         name: resourceName,
-      }),
-    });
+      })),
+    }));
 
     const ownerEmail = String(trustedPayload.owner?.email || trustedPayload.setupDetails?.ownerEmail || "").trim();
     const ownerPhone = String(trustedPayload.owner?.phone || trustedPayload.setupDetails?.ownerPhone || "").trim();
@@ -15125,12 +15153,12 @@ app.post(
       });
     }
 
-    const smsRouting = await safelyProvisionIsolatedSmsForSignup({
+    const smsRouting = await provisioningRequestTrace.step(req, 'routing_setup', () => safelyProvisionIsolatedSmsForSignup({
       ownerEmail,
       assistantId: result.assistantId || assistantId,
       aiNumber: result.number,
       ownerNumber: ownerPhone,
-    });
+    }));
     if (!syntheticCanary && ownerEmail && isValidEmailAddress(ownerEmail)) {
       upsertSignupDashboardRecord({
         signupAttemptId,
@@ -15168,7 +15196,7 @@ app.post(
             "AGENT_TEST_SIGNUP_ATTEMPT_MISSING"
           );
         }
-        agentDeliveryTest = await testSignupAgentBeforeDelivery({
+        agentDeliveryTest = await provisioningRequestTrace.step(req, 'delivery_check', () => testSignupAgentBeforeDelivery({
           signup,
           vapiPhone: {
             id: result.id,
@@ -15177,8 +15205,9 @@ app.post(
           },
           smsRouting,
           normalizedPayload: trustedPayload,
-        });
+        }));
       } catch (error) {
+        provisioningRequestTrace.failure(req, error);
         if (error.signupDiagnosticStage === 'business-mapping') {
           req.signupProvisioningFailureCaptureAttempted = true;
           const capture = await safelyRecordSignupBug({ prisma, listSignups: listSignupDashboardRecords,
@@ -15207,7 +15236,7 @@ app.post(
       }
     }
 
-    await completeSignupProvisioningContext({
+    await provisioningRequestTrace.step(req, 'context_complete', () => completeSignupProvisioningContext({
       prisma,
       idempotencyKey: authorization.idempotencyKey,
       contextHash: authorization.contextHash,
@@ -15216,7 +15245,7 @@ app.post(
         phoneNumberId: result.id,
         assistantId: result.assistantId || assistantId,
       },
-    });
+    }));
 
     res.status(result.reused ? 200 : 201).json({
       success: true,
@@ -19089,12 +19118,13 @@ async function reportPreviousFatalIncident() {
 }
 
 app.use((err, req, res, _next) => {
+  const tracedProvisioningFailure = provisioningRequestTrace.failure(req, err);
   const status = err.statusCode || 500;
   const message = err.message || "Internal server error";
   const captureAttempted=req.signupAssistantFailureCaptureAttempted===true||req.signupProvisioningFailureCaptureAttempted===true;
   const journalAllowed=!captureAttempted&&shouldCaptureRuntimeBug({method:req.method});
   if (status >= 500 || err.code === "CALL_RECORD_IDENTITY_CONFLICT") {
-    console.error(err);
+    if (!tracedProvisioningFailure) console.error(err);
     if (!err.telegramIncidentHandled) {
       const route = typeof req?.route?.path === "string" ? req.route.path : req?.path || "";
       const area = runtimeAreaForRoute(route);

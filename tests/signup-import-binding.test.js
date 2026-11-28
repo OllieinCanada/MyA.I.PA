@@ -103,6 +103,7 @@ async function fixture({ routeCode = routeSource } = {}) {
     safelyNotifyRuntimeFailure: () => {},
     signupRecoveryError: (message, code) => Object.assign(Error(message), { code }),
     requireProvisioningKey: () => {}, requireProvisioningAuthorization: () => {}, asyncRoute: fn => fn,
+    provisioningRequestTrace:require('../server/provisioningRequestTrace').createProvisioningRequestTrace({write(){}}),
     app: { post(_path, ...handlers) { context.handler = handlers.at(-1); } },
   };
   vm.createContext(context);

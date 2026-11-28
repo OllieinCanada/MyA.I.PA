@@ -119,6 +119,7 @@ async function runScenario(profile, count) {
     safeBeforeDispatch: jobs.isPreHandoffDatabaseRetry(failure.error),
     uncertain: failure.uncertain, exhausted: failure.exhausted });
   const handoff = extractHandoff({
+    provisioningRequestTrace:require('../server/provisioningRequestTrace').createProvisioningRequestTrace({write(){}}),
     crypto, Date, AbortSignal, process: { env: {} },
     console: { error() {} },
     getMakeSignupWebhookConfig: () => ({ url: 'https://hook.us1.make.com/synthetic-timing-only', apiKey: '' }),

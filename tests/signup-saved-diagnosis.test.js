@@ -173,6 +173,7 @@ test('actual import error path saves mapping checkpoint before the response and 
     const ctx = { Object, String, Number, Error, process: { env: {} }, console: { warn() {}, error() {} },
       app: { post: (_path, ...handlers) => { handler = handlers.at(-1); }, use: fn => { errorHandler = fn; } },
       requireProvisioningKey() {}, requireProvisioningAuthorization() {}, asyncRoute: fn => fn,
+      provisioningRequestTrace:require('../server/provisioningRequestTrace').createProvisioningRequestTrace({write(){}}),
       loadTrustedProvisioningContext: async () => f.target.payload, normalizeVapiImportPhone: value => value,
       requireCompletedProvisioningStage: async () => {}, buildProvisioningResourceName: () => 'synthetic',
       runProvisioningStep: async () => ({ id: 'synthetic-phone', number: '+12895550123', assistantId: 'synthetic-assistant', reused: true }),

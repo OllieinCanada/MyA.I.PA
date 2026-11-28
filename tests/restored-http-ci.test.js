@@ -19,7 +19,8 @@ test('partial restored HTTP evidence cannot clear live or full recovery predicat
 });
 test('canonical pinned dependencies are exact; corruption refused',()=>{
  const pins=require('../scripts/restored-http-pins.json'),sha=require('../scripts/composite-recovery-fixture').sha;
- assert.equal(pins.reviewedHead,BASE_HEAD);assert.equal(Object.keys(pins.sha256).length,55);
+ assert.equal(pins.reviewedHead,BASE_HEAD);assert.equal(Object.keys(pins.sha256).length,57);
+ for(const file of ['server/provisioningRequestTrace.js','server/signupProvisioningContext.js'])assert.ok(pins.sha256[file]);
  assert.ok(pins.sha256['server/callSyncWorkload.js'],'Background workload dependency must also be exact-source pinned');
  assert.ok(pins.sha256['server/provisioningPreflightDiagnostic.js'],'The added read-only controller must be exact-source pinned');
  for(const file of ['server/signupAgentTesting.js','server/smsDispatchReadiness.js'])assert.ok(pins.sha256[file]);
@@ -55,7 +56,7 @@ test('restored HTTP pins reject tampering with every confirmation prompt depende
  // Local canonical-LF contract only; sealed Linux CI verifies raw checkout bytes.
  const read=file=>Buffer.from(fs.readFileSync(path.join(__dirname,'..',file),'utf8').replace(/\r\n/g,'\n'));
  assert.equal(verifyPins(read),true);
- for(const file of ['server/callSyncWorkload.js','server/signupSetupJobs.js','server/automaticAssistantConnectionPlan.js','server/compositeCallNotifications.js',
+ for(const file of ['server/provisioningRequestTrace.js','server/signupProvisioningContext.js','server/callSyncWorkload.js','server/signupSetupJobs.js','server/automaticAssistantConnectionPlan.js','server/compositeCallNotifications.js',
     'server/serviceIntakePrompt.js','server/confirmationConversationPolicy.js','server/signupAssistantError.js','server/signupProvisioningError.js',
     'server/signupBusinessRegistry.js','server/signupBindingTransaction.js','server/signupSavedDiagnosis.js','server/signupAlerts.js','server/incidentAlerts.js',
     'server/signupConnectionControl.js','server/signupConnectionEvidence.js','server/signupConnectionPreparation.js','server/signupConnectionTransport.js',
