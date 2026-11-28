@@ -92,5 +92,38 @@ function stripeCheckoutPassed(value, commit) {
     && checksPass(value, ['hosted_checkout_completed', 'signed_webhook_received', 'customer_subscription_scoped',
       'duplicate_webhook_safe', 'late_canceled_setup_rejected', 'invoice_failure_not_ready', 'cancellation_preserved']);
 }
+const CREDENTIAL_MAX_AGE_MS=60*60*1000;
+function credentialExpectedScopeValid(e){
+  if(!e||typeof e!=='object'||Array.isArray(e)||Object.keys(e).length!==4
+    ||!['releaseCommit','serviceId','frontendOrigin','publicArtifactSha256'].every(k=>Object.hasOwn(e,k))
+    ||!/^[a-f0-9]{40}$/.test(e.releaseCommit||'')||!/^srv-[a-z0-9]{10,64}$/.test(e.serviceId||'')
+    ||!/^[a-f0-9]{64}$/.test(e.publicArtifactSha256||''))return false;
+  try{const u=new URL(e.frontendOrigin);return u.protocol==='https:'&&u.origin===e.frontendOrigin&&!u.username&&!u.password&&!u.search&&!u.hash&&u.pathname==='/';}catch{return false;}
+}
+function credentialReportDigest(r){return require('node:crypto').createHash('sha256').update(JSON.stringify(r)).digest('hex');}
+function credentialConfigurationPassed(r,expected,attempt,now=Date.now()){
+  const fresh=x=>typeof x==='string'&&/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(x)
+    &&Number.isFinite(Date.parse(x))&&now-Date.parse(x)>=0&&now-Date.parse(x)<=CREDENTIAL_MAX_AGE_MS;
+  const c=r?.signupControls,b=r?.evidence,current=attempt?.current,completed=attempt?.completed;
+  const uuid=x=>/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(x||'');
+  return credentialExpectedScopeValid(expected)&&r?.schemaVersion===2&&r.scope==='configuration-presence-only'
+    &&r.releaseCommit===expected.releaseCommit&&r.evidenceStatus==='source-bound-presence-attestation'
+    &&r.secretValuesCollected===false&&r.secretValuesPrinted===false&&Array.isArray(r.issues)&&r.issues.length===0
+    &&c?.configurationReady===true&&c.publicSelfServiceReady===false&&c.captchaConfigured===true&&c.captchaProviderSelected===true
+    &&c.smtpConfigured===true&&c.signupVerificationEnabled===true&&c.manualApprovalEnabled===false
+    &&c.adminMfaEnabled===true&&c.adminTotpConfigured===true&&c.backupEncryptionConfigured===true
+    &&credentialExpectedScopeValid(b?.expected)&&Object.keys(expected).every(k=>b.expected[k]===expected[k])
+    &&b.runtime?.kind==='server-runtime-presence'&&b.runtime.serviceId===expected.serviceId&&b.runtime.releaseCommit===expected.releaseCommit
+    &&b.deployedPublic?.kind==='deployed-public-configuration'&&b.deployedPublic.origin===expected.frontendOrigin
+    &&b.deployedPublic.releaseCommit===expected.releaseCommit&&b.deployedPublic.artifactSha256===expected.publicArtifactSha256
+    &&fresh(r.checkedAt)&&fresh(b.runtime.checkedAt)&&fresh(b.deployedPublic.checkedAt)
+    &&Date.parse(b.runtime.checkedAt)<=Date.parse(r.checkedAt)&&Date.parse(b.deployedPublic.checkedAt)<=Date.parse(r.checkedAt)
+    &&current?.schemaVersion===1&&current.kind==='credential-audit-attempt'&&current.state==='started'&&uuid(current.attemptId)
+    &&completed?.schemaVersion===1&&completed.kind==='credential-audit-attempt'&&completed.state==='completed'
+    &&current.attemptId===r.auditAttemptId&&completed.attemptId===current.attemptId
+    &&fresh(current.checkedAt)&&fresh(completed.checkedAt)&&Date.parse(current.checkedAt)<=Date.parse(r.checkedAt)
+    &&Date.parse(completed.checkedAt)>=Date.parse(r.checkedAt)&&completed.reportSha256===credentialReportDigest(r);
+}
 module.exports = { checksPass, localStripePassed, privacyModelPassed, privacyApplicationPassed,
+  CREDENTIAL_MAX_AGE_MS,credentialExpectedScopeValid,credentialReportDigest,credentialConfigurationPassed,
   logicalRestorePassed, fullRecoveryPassed, alertDeliveryPassed, legalApprovalPassed, stripeProviderPassed, stripeCheckoutPassed };
