@@ -5,6 +5,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const { createCallSyncMonitor, completeSync, isCallSyncRoutingRefusal, WORKFLOW } = require('../server/callSyncHealth');
 const { parseSimulationEvidence, attestCallSyncExclusion, summarizeCallSyncReporting } = require('../server/callSyncReporting');
+const { createCallSyncWorkload } = require('../server/callSyncWorkload');
 const source = fs.readFileSync(path.join(__dirname, '../server/index.js'), 'utf8');
 const syncSource = source.slice(source.indexOf('async function performVapiCallSync('), source.indexOf('async function fetchTwilioCalls('));
 const resolverSource = source.slice(source.indexOf('async function resolveBusinessIdForVapiCall('), source.indexOf('function getVapiVoiceSignupExecutionBusinessId('));
@@ -19,6 +20,7 @@ function fixture(kind = 'unknown', fatalCode, reporting = {}) {
   const writes = [], usage = [], warnings = [];
   let fileWrites = 0, active;
   const context = {
+    callSyncWorkload: createCallSyncWorkload({ wait: async () => {} }),
     path, dataDir: 'unused-fixture-directory',
     readSimulationEvidence: () => reporting.simulationEvidence || { status: 'absent' },
     attestCallSyncExclusion, summarizeCallSyncReporting,

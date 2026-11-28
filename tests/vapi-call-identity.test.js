@@ -5,6 +5,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const { persistCall, resolveCallRecord } = require('../server/callPersistence');
 const { notificationEvidence } = require('../server/callNotificationEvidence');
+const { createCallSyncWorkload } = require('../server/callSyncWorkload');
 
 // Execute the actual ingestion function without loading the Express server,
 // provider clients, background jobs, environment bindings, or production data.
@@ -44,6 +45,7 @@ function fixture(overrides = {}, cost = 0.2) {
   prisma.$transaction = async callback => callback({ call: prisma.call,
     $queryRaw: async query => (query.strings || query).join('').includes('FOR UPDATE') ? [structuredClone(row)] : [] });
   const context = {
+    callSyncWorkload: createCallSyncWorkload({ wait: async () => {} }),
     require(name) {
       assert.equal(name, './callPersistence');
       return { resolveCallRecord };

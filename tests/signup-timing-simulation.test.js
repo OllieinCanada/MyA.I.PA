@@ -25,6 +25,15 @@ test('timing simulation exercises all profiles and never promotes mocked handoff
       assert.equal(scenario.preparationFailures, 3);
       assert.ok(scenario.stages.some(x => x.stage === 'recovery_copy' && x.failures === 3));
     }
+    if (scenario.backgroundHistory) {
+      assert.equal(scenario.backgroundHistory.counts.details, 9);
+      assert.equal(scenario.backgroundHistory.counts.requestLinks, 9);
+      assert.equal(scenario.backgroundHistory.counts.writes, scenario.profile === 'paced-history' ? 3 : 9);
+      if (scenario.profile === 'paced-history') {
+        assert.equal(scenario.backgroundHistory.rounds[1].unchanged, 3);
+        assert.ok(scenario.backgroundHistory.handoffsWhileHistoryPending > 0);
+      }
+    }
   }
 });
 

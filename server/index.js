@@ -127,6 +127,8 @@ const {
 const { buildRuntimeIncident } = require("./runtimeAlerts");
 const { REASON: INVESTIGATION_REASON, providerStatusFailureContext, registerInvestigationNoticeRoute } = require('./incidentInvestigationBridge');
 const { createCallSyncMonitor, isCallSyncRoutingRefusal } = require("./callSyncHealth");
+const { createCallSyncWorkload } = require('./callSyncWorkload');
+const callSyncWorkload = createCallSyncWorkload();
 const { readSimulationEvidence, attestCallSyncExclusion, summarizeCallSyncReporting } = require('./callSyncReporting');
 const { assessIncidentSlo } = require("./incidentSlo");
 const {
@@ -2112,9 +2114,16 @@ function readVapiCallSyncStore() {
   }
 }
 
-function writeVapiCallSyncStore(store) {
-  ensureVapiCallSyncStore();
-  fs.writeFileSync(vapiCallSyncPath, `${JSON.stringify(store, null, 2)}\n`);
+function writeVapiCallSyncStore(store, changedCallIds) {
+  // The paced sweep can span incoming webhooks. Merge only its touched rows
+  // into a fresh file snapshot, without overwriting a newer webhook stamp.
+  const current = readVapiCallSyncStore();
+  for (const id of changedCallIds) {
+    if (!store[id]) continue;
+    if (Date.parse(current[id]?.syncedAt) > Date.parse(store[id]?.syncedAt)) continue;
+    current[id] = store[id];
+  }
+  fs.writeFileSync(vapiCallSyncPath, `${JSON.stringify(current, null, 2)}\n`);
 }
 
 function getWebhookReplayKey(provider, eventId) {
@@ -3487,7 +3496,7 @@ function mergeVapiEndOfCallReport(message) {
   };
 }
 
-async function upsertVapiCall(fullCall, store) {
+async function upsertVapiCall(fullCall, store, { skipUnchanged = false } = {}) {
   const vapiCallId = String(fullCall?.id || fullCall?.callId || "").trim();
   if (!vapiCallId) {
     const err = new Error("Vapi call id is required.");
@@ -3501,6 +3510,21 @@ async function upsertVapiCall(fullCall, store) {
   const existingCall = await resolveCallRecord(prisma, { businessId,
     callId: existingStore.localCallId, externalProvider: "vapi", externalId: vapiCallId,
     twilioCallSid: getVapiTwilioCallSid(fullCall) || null });
+  // Routing and canonical DB identity are always rechecked. Fresh detail reads
+  // also catch late artifacts even when Vapi's updatedAt has not changed.
+  if (skipUnchanged && callSyncWorkload.unchanged(fullCall, existingCall)) {
+    // A confirmed request can arrive independently of the provider Call record.
+    // Keep its database-only link/recovery path; never replay notifications.
+    const requestCapture = await require('./confirmedCallRequest').reconcileConfirmedRequest({ prisma, callId: vapiCallId });
+    return {
+      duplicate: true, unchanged: true, vapiCallId, localCallId: existingCall.id, businessId,
+      businessName: existingCall.business?.name || '',
+      notificationEvidence: notificationEvidence(existingCall.toolCallSummary), requestCapture,
+      durationSec: existingCall.durationSec, transcriptAvailable: Boolean(existingCall.transcript),
+      recordingAvailable: Boolean(existingCall.recordingUrl), usageChanged: false,
+    };
+  }
+  callSyncWorkload.invalidate(fullCall);
   const callerPhone =
     getVapiNestedString(fullCall, ["customer.number", "customer.phoneNumber", "caller.number", "from", "fromNumber"]) ||
     existingCall?.caller?.phone ||
@@ -3584,7 +3608,7 @@ async function upsertVapiCall(fullCall, store) {
     syncedAt: new Date().toISOString(),
   };
 
-  return {
+  const result = {
     duplicate: Boolean(existingCall),
     vapiCallId,
     localCallId: localCall.id,
@@ -3597,6 +3621,8 @@ async function upsertVapiCall(fullCall, store) {
     recordingAvailable: Boolean(recordingUrl),
     usageChanged,
   };
+  if (skipUnchanged) callSyncWorkload.stage(fullCall, localCall, result);
+  return result;
 }
 
 async function ingestVapiEndOfCallReport(message) {
@@ -3633,7 +3659,7 @@ async function ingestVapiEndOfCallReport(message) {
         'Request handoff': notification.submission, 'Owner text': notification.owner.state, 'Customer text': notification.customer.state },
     });
   }
-  writeVapiCallSyncStore(store);
+  writeVapiCallSyncStore(store, [result.vapiCallId]);
   if (result.usageChanged) await reconcileTrialUsageAfterCall(result);
   return result;
 }
@@ -3654,6 +3680,7 @@ const monitoredCallSync = createCallSyncMonitor({
 });
 
 async function performVapiCallSync(options = {}) {
+  const background = Object.keys(options).length === 0;
   const simulationEvidence = readSimulationEvidence(path.join(dataDir, 'call-sync-simulation-evidence.json'));
   const reportingContext = { simulationEvidence, signupIntake: {
     assistantId: VAPI_VOICE_SIGNUP_ASSISTANT_ID, phoneNumberId: VAPI_VOICE_SIGNUP_PHONE_NUMBER_ID,
@@ -3669,10 +3696,16 @@ async function performVapiCallSync(options = {}) {
     const vapiCallId = String(call?.id || call?.callId || "").trim();
     if (!vapiCallId) continue;
 
+    // Cooperative pacing leaves room for signup requests on the same CPU.
+    // Manual limited reads and live end-of-call webhooks are not delayed.
+    if (background) await callSyncWorkload.pace();
+
     let fullCall = call;
+    let detailVerified = false;
     try {
       const detail = await fetchVapiCallDetail(vapiCallId);
       if (detail) {
+        detailVerified = String(detail.id || detail.callId || '').trim() === vapiCallId;
         detailsFetched += 1;
         fullCall = {
           ...call,
@@ -3689,9 +3722,11 @@ async function performVapiCallSync(options = {}) {
     }
 
     try {
-      const result = await upsertVapiCall(fullCall, store);
+      const result = await upsertVapiCall(fullCall, store, { skipUnchanged: background && detailVerified });
       results.push(result);
-      if (result.usageChanged) await reconcileTrialUsageAfterCall(result);
+      // On a cache miss, reconcile even if a previous write succeeded but its
+      // usage update failed. Never certify that incomplete run as unchanged.
+      if (result.usageChanged || (background && !result.unchanged)) await reconcileTrialUsageAfterCall(result);
     } catch (error) {
       if (!isCallSyncRoutingRefusal(error)) throw error;
       routingErrors.push(attestCallSyncExclusion({
@@ -3710,7 +3745,10 @@ async function performVapiCallSync(options = {}) {
     }
   }
 
-  writeVapiCallSyncStore(store);
+  const rewritten = results.filter(result => !result.unchanged);
+  if (rewritten.length) writeVapiCallSyncStore(store, rewritten.map(result => result.vapiCallId));
+  // No cache certification before both usage reconciliation and file save.
+  if (background) for (const result of results) callSyncWorkload.commit(result);
   const reporting = summarizeCallSyncReporting(routingErrors, simulationEvidence);
   if (routingErrors.length) {
     console.warn("[vapi:sync] calls quarantined by business routing safeguards", {
@@ -3725,6 +3763,8 @@ async function performVapiCallSync(options = {}) {
     detailErrors,
     routingErrors,
     synced: results.length,
+    unchanged: results.filter(result => result.unchanged).length,
+    rewritten: results.filter(result => !result.unchanged).length,
     skippedUnmapped: routingErrors.filter(item => item.code === 'VAPI_BUSINESS_ROUTE_REQUIRED').length,
     quarantinedRouting: routingErrors.filter(item => item.code !== 'VAPI_BUSINESS_ROUTE_REQUIRED').length,
     reporting,
@@ -19643,7 +19683,8 @@ function startBackgroundJobs() {
   }, 60 * 1000);
 
   if (VAPI_AUTO_SYNC_ENABLED) {
-    runBackgroundJob("Vapi call sync", syncVapiCalls, "initial");
+    // Do not put the first history sweep on the API's startup critical path.
+    setTimeout(() => runBackgroundJob("Vapi call sync", syncVapiCalls, "initial"), 30_000);
     setInterval(() => {
       runBackgroundJob("Vapi call sync", syncVapiCalls);
     }, VAPI_AUTO_SYNC_INTERVAL_MS);
